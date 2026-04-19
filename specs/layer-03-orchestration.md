@@ -42,8 +42,14 @@ See `ref-v1-reuse.md` for the full lifting protocol.
 
 **Arguments:**
 ```
-mill-spawn <slug> [--from <base-branch>]
+mill-spawn [<slug>] [--from <base-branch>] [--short <task-short-name>]
 ```
+
+If `<slug>` is omitted, the script runs in **interactive mode**: reads Home.md, prints all tasks numbered, prompts the user to pick one, optionally prompts for a `short-name` override. This is deliberately kept in the script (not in a separate skill) because "pick from numbered list + optional short" is a mechanical prompt, not judgment-heavy work.
+
+`--short` overrides the auto-derived short-name (which defaults to the first kebab-case segment of the slug, capitalised: `python-skills-improvements` → `Python`). Stored in `.millhouse/.<slug>.slug.md` frontmatter as `short-name:`, used by `_vscode.py::worktree_title()` to build `window.title` as `<repo.short-name>: <task-short-name>`.
+
+User can edit `<worktree>/.vscode/settings.json` directly post-spawn if the auto-derived short is wrong — the file is gitignored and the short-name field in slug.md is a hint, not a binding source.
 
 **Behaviour:**
 
