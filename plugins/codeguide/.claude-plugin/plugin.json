@@ -1,0 +1,9 @@
+{
+  "name": "codeguide",
+  "description": "Per-file documentation guide — keeps _codeguide/ docs in sync with source. Triggered by mill's git-commit skill.",
+  "version": "1.0.0",
+  "license": "Apache-2.0",
+  "author": {
+    "name": "Knatte18"
+  }
+}
