@@ -16,8 +16,9 @@ Delivers the minimum viable infrastructure: wiki clone + tasks list + `.millhous
 | ID | Milestone | Status |
 |---|---|---|
 | M1.1 | Lift v1 primitives | [x] done (commit `72af20b`) |
-| M1.2 | `mill-setup` skill | [x] skill + templates written (runtime test deferred to M1.5) |
-| M1.3 | `mill-add` script | [ ] not started |
+| M1.2 | `mill-setup` skill | [x] skill + templates + `_vscode.py` helper done; all 8 phases verified end-to-end against real wiki + hub (commits `d81d74c`, `06b1497`) |
+| M1.3 | `mill-add` script + `_sidebar.py` helper | [x] done; bracketed-slug format + `_sidebar.regenerate` + `--proposal-body` landed; end-to-end push against real wiki still pending |
+| M1.3.5 | `mill-add/SKILL.md` — thin skill for long-discussion → split task | [x] done |
 | M1.4 | `mill-list` script | [ ] not started |
 | M1.5 | Layer 01 integration test | [ ] not started |
 
@@ -41,7 +42,7 @@ Carry over, strip, clean:
 - [x] Each file runs standalone if `python <file>.py` is called (prints a usage message at minimum)
 - [x] Hand-test: create a junction, remove it; acquire wiki lock, release it; render a template
 
-**Report:** [specs/_starter/m1.1-result.md](../_starter/m1.1-result.md). Committed in `72af20b`.
+Committed in `72af20b`.
 
 ---
 
@@ -61,9 +62,13 @@ The skill tells Claude to:
 
 ### Exit criteria
 
-- [ ] Running `/mill-setup` from an empty `hub/` produces a working `.millhouse/` + `wiki/` junction *(verified end-to-end in M1.5 integration test)*
-- [ ] Running it a second time is a no-op *(verified in M1.5)*
-- [x] Skill file is under 200 lines *(143 lines)*
+- [x] Running `/mill-setup` from an empty `hub/` produces a working `.millhouse/` + `wiki/` junction *(verified against real wiki: cloned to `C:\Code\millhouse\wiki`, junction created at `.millhouse/wiki`, Home.md normalised from GitHub-default, VS Code green applied correctly)*
+- [x] Running it a second time is a no-op *(verified via `.millhouse/scratch/m1.2-idempotency-test.ps1` — all phases SKIP or pull-no-op on re-run)*
+- [x] Skill file is under 200 lines *(186 lines after `_vscode.py` refactor and spec-driven extensions — still under the 200-line cap)*
+- [x] `.millhouse/config.local.yaml` exists *(template copied)*
+- [x] `.vscode/settings.json` exists with `titleBar.activeBackground == "#2d7d46"` *(pre-existing green detected by regex, SKIP fired correctly)*
+
+**Note:** Phase 6a (regenerate `_Sidebar.md` via `_sidebar.regenerate`) is now implemented alongside M1.3 — the SKILL.md describes it and the helper exists.
 
 ---
 
@@ -75,9 +80,16 @@ Write `plugins/mill/scripts/mill-add.py`. Under ~60 LOC. Uses `_wiki.py` for com
 
 ### Exit criteria
 
-- [ ] `python plugins/mill/scripts/mill-add.py foo --description "do foo"` appends to Home.md
-- [ ] Wiki gets commit pushed
-- [ ] Lock acquired/released
+- [x] Initial `mill-add.py` appends to Home.md *(verified with real task `skills-index-rebuild` commit `e444de8`, old format `## <slug>`)*
+- [x] Wiki gets commit pushed
+- [x] Lock acquired/released *(verified happy-path and duplicate-reject path — lock released via `finally` in both)*
+- [x] Heading format is `## <Title> [<slug>]` (plain) or `## <Title> [[<slug>]](proposal-<slug>)` (linked) — single regex parses both
+- [x] `_sidebar.py` helper exists (`parse_home_tasks`, `render_sidebar`, `regenerate`) and regenerates `_Sidebar.md` idempotently
+- [x] `mill-add` accepts `--title`, `--summary`, `--proposal-body`; writes `proposal-<slug>.md` at wiki root when `--proposal-body` is given
+- [x] `mill-add` commits Home.md + `_Sidebar.md` (+ proposal when present) in **one commit** under **one** `_wiki.acquire_lock` acquisition
+- [x] `mill-setup/SKILL.md` has Phase 6a calling `_sidebar.regenerate()`
+- [x] `mill-add/SKILL.md` exists (thin skill for long-discussion → split task — M1.3.5)
+- [x] End-to-end re-test against real wiki *(added `m1-4-mill-list` task, commit `7355e2c` pushed to `origin/master` — `Home.md` + `_Sidebar.md` in a single commit; proposal code path verified in unit smoke test)*
 
 ---
 
