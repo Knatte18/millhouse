@@ -1,0 +1,61 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "millhouse",
+  "version": "2.0.0",
+  "description": "Multi-plugin marketplace for Claude Code (mill-v2)",
+  "owner": {
+    "name": "Knatte18"
+  },
+  "plugins": [
+    {
+      "name": "mill",
+      "description": "Task orchestration, code quality, git workflow, and documentation for Claude Code",
+      "version": "2.0.0",
+      "author": {
+        "name": "Knatte18"
+      },
+      "source": "./plugins/mill",
+      "category": "productivity"
+    },
+    {
+      "name": "codeguide",
+      "description": "Repo documentation generation and maintenance",
+      "version": "1.0.0",
+      "author": {
+        "name": "Knatte18"
+      },
+      "source": "./plugins/codeguide",
+      "category": "productivity"
+    },
+    {
+      "name": "python",
+      "description": "Python build, comments, and testing conventions",
+      "version": "1.0.0",
+      "author": {
+        "name": "Knatte18"
+      },
+      "source": "./plugins/python",
+      "category": "productivity"
+    },
+    {
+      "name": "csharp",
+      "description": "C# build, comments, and testing conventions",
+      "version": "1.0.0",
+      "author": {
+        "name": "Knatte18"
+      },
+      "source": "./plugins/csharp",
+      "category": "productivity"
+    },
+    {
+      "name": "weblens",
+      "description": "Fetch blocked/restricted web pages and output readable markdown",
+      "version": "1.0.0",
+      "author": {
+        "name": "Knatte18"
+      },
+      "source": "./plugins/weblens",
+      "category": "productivity"
+    }
+  ]
+}

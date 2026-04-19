@@ -28,15 +28,52 @@ delivers: signed-off spec
 
 Before writing code, confirm these decisions with yourself:
 
-- [ ] Plan format: cards (placeholder) or bundles (likely). If leaning bundles: update `layer-03-orchestration.md` and `ref-formats.md` before implementing Layer 03.
-- [ ] Gemini-in-v2.0: yes (per current spec) or deferred. Decides Layer 02 scope.
-- [ ] Repo name (settled: `millhouse`). Container path (`C:\Code\millhouse\`).
-- [ ] Primary-clone folder name (settled: `hub`).
-- [ ] `.millhouse/` layout details (dot-prefix `.active` and `.<slug>.slug.md` — settled).
+- [x] Plan format: **bundles**. `layer-03-orchestration.md` and `ref-formats.md` must be updated to reflect bundles before implementing Layer 03.
+- [x] Gemini-in-v2.0: **yes** (per current spec). Layer 02 includes the Gemini provider at M2.4.
+- [x] Repo name (settled: `millhouse`). Container path (`C:\Code\millhouse\`).
+- [x] Primary-clone folder name (settled: `hub`).
+- [x] `.millhouse/` layout details (dot-prefix `.active` and `.<slug>.slug.md` — settled).
 
 **Exit:** every checkbox is ticked. If any can't be ticked, update the relevant spec until it can.
 
 ⛔ **Gate: don't start M1 until M0 is green.**
+
+---
+
+## M0.5 — Scaffolding pass (before M1.1)
+
+```yaml
+depends-on: M0
+delivers: marketplace + mill plugin skeleton + lifted support skills
+```
+
+Before lifting code in M1.1, set up plugin structure and carry over the language-agnostic support skills so later layers have them available.
+
+### M0.5.1 — Marketplace + mill plugin skeleton
+
+- `.claude-plugin/marketplace.json` at hub root listing `mill`, `codeguide`, `python`, `csharp`, `weblens`
+- `plugins/mill/.claude-plugin/plugin.json`
+- `plugins/mill/{skills,scripts,templates}/` directories created (empty)
+
+### M0.5.2 — Lift support skills as-is from legacy
+
+Carry from `C:\Code\millhouse-legacy\plugins\mill\skills\` into `plugins/mill/skills/`, **unmodified**:
+
+- `conversation`, `workflow`
+- `code-quality`, `cli`, `testing`, `linting`, `markdown`
+- `git-clone`, `git-commit`, `git-issue`, `git-log`, `git-pr`, `git-workflow`
+- `millhouse-issue`
+
+`mill-skills-index` is **NOT** carried — it will be rebuilt fresh when needed.
+
+**Exit criteria:**
+
+- `.claude-plugin/marketplace.json` exists and lists all five plugins
+- `plugins/mill/skills/` contains the 14 carried skills above
+- Hub root contains no stray `conversation/` or `workflow/` directories
+- All four already-carried plugins (`codeguide`, `csharp`, `python`, `weblens`) have `.claude-plugin/plugin.json`
+
+⛔ **Gate: don't start M1.1 until M0.5 exit criteria are met.**
 
 ---
 
@@ -342,7 +379,7 @@ Write `plugins/mill/scripts/mill-merge.py` (~150 LOC). Git sequence: switch to m
 
 ### Skills index
 
-Carry over `mill-skills-index/SKILL.md` from v1. Run it after adding each new skill file so `SKILLS.md` stays current. Do this at the end of each layer.
+`mill-skills-index` is **not lifted from v1** — it will be rebuilt fresh when needed. Until then, `SKILLS.md` is hand-maintained or absent. Re-add this milestone (run at the end of each layer) once the rewrite lands.
 
 ### `.gitignore`
 
@@ -357,7 +394,7 @@ At M1.2 (mill-setup), commit `.gitignore` with:
 
 ### `marketplace.json` and cross-plugin setup
 
-When you set up the new repo structure initially, copy `marketplace.json` from v1 and update paths. Link csharp, python, weblens, codeguide plugins via symlinks or subfolders. Do this as part of M1.2 (setup establishes the repo structure) or earlier.
+Done in M0.5.1. `.claude-plugin/marketplace.json` lists `mill`, `codeguide`, `python`, `csharp`, `weblens`. The four non-mill plugins are already present under `plugins/` as full subfolders (not symlinks).
 
 ---
 
