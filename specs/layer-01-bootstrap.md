@@ -57,6 +57,8 @@ See `ref-v1-reuse.md` for the full lifting protocol.
 3. Create `.millhouse/` directory structure (layout per `ref-formats.md`)
 4. Call `_junction.py create` helper to make `.millhouse/wiki` → `../../wiki`
 5. Copy `plugins/mill/templates/config.local.yaml` → `.millhouse/config.local.yaml` if missing
+6a. Initialise `wiki/_Sidebar.md` via `_sidebar.regenerate(wiki_path)` — this produces a sidebar with just the Navigation section on a fresh wiki (no tasks yet), and populates the Tasks section as soon as `mill-add` runs. Commit + push alongside any other Phase 6 wiki changes.
+
 6. Initialise `wiki/Home.md` if needed:
    - **Missing:** write minimal Home.md from template and commit/push.
    - **GitHub-default content** (file matches the literal pattern `Welcome to the <repo> wiki!` followed by optional whitespace — exactly what GitHub creates when the user clicks "Create the first page" with no edits): overwrite from template and commit/push. This is safe because no human ever wrote this content; GitHub did.
@@ -86,30 +88,80 @@ See `ref-v1-reuse.md` for the full lifting protocol.
 **Exit criteria:**
 - `.millhouse/wiki` junction exists and points at the wiki clone
 - `wiki/Home.md` exists and starts with `# Tasks`
+- `wiki/_Sidebar.md` exists with Navigation + Tasks sections
 - `.millhouse/config.local.yaml` exists
 - `.vscode/settings.json` exists with `titleBar.activeBackground == "#2d7d46"`
+
+**Deferred to M2 (when `wiki/config.yaml` first lands):**
+- Prompt user for `repo.short-name` (default: derived from origin URL initials), store in `wiki/config.yaml`. Used by `_vscode.py` for window titles instead of the current "take last URL segment" heuristic.
 
 ### 2. `mill-add` — add a task to the wiki tasks list
 
 **Arguments:**
 ```
-mill-add <slug> [--description "..."]
+mill-add <slug> --title "Human-readable title" [--summary "..."] [--proposal-body "..."]
 ```
 
 **Behaviour:**
 - Open `.millhouse/wiki/Home.md`
-- Append a new task section with the given slug and description
-- Commit + push to wiki repo
-- Acquire/release wiki lock (simple `.lock` file with retry)
+- Append a new task section: `## <title> [<slug>]` (or `[[<slug>]](proposal-<slug>)` if `--proposal-body` given)
+- If `--proposal-body` given: write `wiki/proposal-<slug>.md` with the long-form content
+- Regenerate `wiki/_Sidebar.md` from the updated Home.md (via `_sidebar.py`)
+- Commit Home.md + _Sidebar.md (+ proposal-<slug>.md if present) in **one commit** under one wiki-lock acquisition
+- Acquire/release wiki lock (`.mill-lock` with retry, per `_wiki.py`)
 
 **Task format in Home.md:**
-```markdown
-## <slug>
 
-<description>
+Without proposal:
+```markdown
+## <Human-readable title> [<slug>]
+
+<summary, ~1 paragraph>
 ```
 
-That's it. No statuses, no metadata. Statuses come later in Layer 03 or 04 when tasks get claimed and have lifecycle.
+With proposal:
+```markdown
+## <Human-readable title> [[<slug>]](proposal-<slug>)
+
+<summary, ~1 paragraph>
+```
+
+The double-bracket syntax keeps `[<slug>]` visible in rendered output while making it a link to `proposal-<slug>.md` at wiki root. Flat namespace because GitHub Wiki does not reliably render subdirectory pages — see `ref-formats.md`.
+
+That's it. No statuses, no metadata in the heading. Statuses come later in Layer 03 or 04 when tasks get claimed and have lifecycle.
+
+### 2.5 `mill-add` skill (M1.3.5)
+
+`plugins/mill/skills/mill-add/SKILL.md` — thin skill that wraps `mill-add.py` for the *long-discussion* case. Workflow:
+
+1. User has a discussion with Claude that ends "log this as a task".
+2. Claude (via the skill) decides:
+   - A short slug (kebab-case, derived from the agreed-upon topic)
+   - A title (one-line human-readable)
+   - A summary (~1 paragraph) for Home.md
+   - Whether the discussion produced enough background to warrant a `proposal-<slug>.md` (heuristic: >150 words or >3 paragraphs of substantive content)
+3. Claude calls `mill-add.py <slug> --title "..." --summary "..."` (with optional `--proposal-body "..."` if step 2 said so).
+4. The script handles wiki lock, commit, push, sidebar regen.
+
+Skill is judgment-heavy (deciding slug, title, when to extract proposal). Script is mechanical (write files, commit, push).
+
+### 3. `_sidebar.py` — regenerate `_Sidebar.md`
+
+Helper used by `mill-add` (M1.3) and `mill-setup` (M1.2). Layer 04 commands (`mill-merge`, `mill-abandon`, `mill-groom`) call it too once they land.
+
+API:
+```python
+def parse_home_tasks(home_path: Path) -> list[dict]:
+    """Return list of {slug, title, has_proposal} parsed from Home.md."""
+
+def render_sidebar(tasks: list[dict]) -> str:
+    """Build _Sidebar.md content: Navigation section first, Tasks section after."""
+
+def regenerate(wiki_path: Path) -> None:
+    """Read Home.md, scan for proposal-*.md files, write _Sidebar.md."""
+```
+
+Tasks with a proposal get a link in the sidebar (`[<title>](proposal-<slug>)`); tasks without get plain text.
 
 ### 3. `mill-list` — list tasks from Home.md
 

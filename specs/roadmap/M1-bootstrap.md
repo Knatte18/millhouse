@@ -17,7 +17,8 @@ Delivers the minimum viable infrastructure: wiki clone + tasks list + `.millhous
 |---|---|---|
 | M1.1 | Lift v1 primitives | [x] done (commit `72af20b`) |
 | M1.2 | `mill-setup` skill | [x] skill + templates written (runtime test deferred to M1.5) |
-| M1.3 | `mill-add` script | [x] written + end-to-end tested (added `skills-index-rebuild` to real wiki) |
+| M1.3 | `mill-add` script + `_sidebar.py` helper | [x] initial version done; **extension in progress** (new bracketed-slug format, sidebar regeneration, `--proposal-body`) |
+| M1.3.5 | `mill-add/SKILL.md` — thin skill for long-discussion → split task | [ ] not started |
 | M1.4 | `mill-list` script | [ ] not started |
 | M1.5 | Layer 01 integration test | [ ] not started |
 
@@ -75,9 +76,24 @@ Write `plugins/mill/scripts/mill-add.py`. Under ~60 LOC. Uses `_wiki.py` for com
 
 ### Exit criteria
 
-- [x] `python plugins/mill/scripts/mill-add.py foo --description "do foo"` appends to Home.md *(verified with real task `skills-index-rebuild`)*
-- [x] Wiki gets commit pushed *(commit on wiki master: `add task: skills-index-rebuild`)*
+- [x] Initial `mill-add.py` appends to Home.md *(verified with real task `skills-index-rebuild` commit `e444de8`, old format `## <slug>`)*
+- [x] Wiki gets commit pushed
 - [x] Lock acquired/released *(verified happy-path and duplicate-reject path — lock released via `finally` in both)*
+
+### Extension work (not yet done — resume here)
+
+Format-discussion during this session produced a new Home.md task shape:
+`## <Title> [<slug>]` (plain) or `## <Title> [[<slug>]](proposal-<slug>)` (linked when proposal exists).
+Plus a `_Sidebar.md` regenerator and an optional `--proposal-body` flag for long-discussion splitting.
+
+Specs are updated; code is not. To land the extension:
+
+- [ ] Write `plugins/mill/scripts/_sidebar.py` — `parse_home_tasks`, `render_sidebar`, `regenerate` (see `layer-01-bootstrap.md` section "3. `_sidebar.py`")
+- [ ] Rewrite `plugins/mill/scripts/mill-add.py` — new args (`--title`, `--summary`, `--proposal-body`), new heading format, call `_sidebar.regenerate()` after appending, commit all wiki files in one commit under one lock
+- [ ] Update `plugins/mill/skills/mill-setup/SKILL.md` — Phase 6a to call `_sidebar.regenerate()` on fresh setup
+- [ ] Write `plugins/mill/skills/mill-add/SKILL.md` — thin skill for long-discussion → split task (M1.3.5)
+- [ ] Re-test against real wiki (wiki is **already manually updated** to the new format — `## Rebuild skills index [[skills-index-rebuild]](proposal-skills-index-rebuild)` + `proposal-skills-index-rebuild.md` + `_Sidebar.md`). Verify the new mill-add.py produces matching output when re-adding a task.
+- [ ] Update exit criteria above to check boxes and add "heading format is `## <Title> [<slug>]` / `[[<slug>]](proposal-<slug>)`"
 
 ---
 
