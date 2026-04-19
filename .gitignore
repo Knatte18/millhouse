@@ -22,6 +22,9 @@ env/
 # Mill local state (per-worktree, never tracked)
 **/.millhouse/
 
+# Mill task worktrees (live at container level, never inside a clone)
+**/worktrees/
+
 # Secrets (at repo root of each clone)
 **/.env
 **/.env.local
@@ -33,4 +36,6 @@ desktop.ini
 
 # Misc local overrides
 *.local.*
+# Plugin templates ARE tracked (e.g. config.local.yaml — used by mill-setup)
+!plugins/*/templates/*.local.*
 nul

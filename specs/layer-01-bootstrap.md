@@ -57,21 +57,36 @@ See `ref-v1-reuse.md` for the full lifting protocol.
 3. Create `.millhouse/` directory structure (layout per `ref-formats.md`)
 4. Call `_junction.py create` helper to make `.millhouse/wiki` → `../../wiki`
 5. Copy `plugins/mill/templates/config.local.yaml` → `.millhouse/config.local.yaml` if missing
-6. If `wiki/Home.md` doesn't exist: write minimal Home.md from template and commit/push
+6. Initialise `wiki/Home.md` if needed:
+   - **Missing:** write minimal Home.md from template and commit/push.
+   - **GitHub-default content** (file matches the literal pattern `Welcome to the <repo> wiki!` followed by optional whitespace — exactly what GitHub creates when the user clicks "Create the first page" with no edits): overwrite from template and commit/push. This is safe because no human ever wrote this content; GitHub did.
+   - **Already in v2 shape** (first non-blank line is `# Tasks`): skip.
+   - **Anything else** (custom user content): skip with a warning that the wiki Home.md is non-standard and `mill-add` may behave unexpectedly. Do not overwrite — user content is sacred.
 7. Verify the setup end-to-end; print summary
+8. **VS Code window colour for the hub** — write `.vscode/settings.json` from `templates/vscode-settings.json` with:
+   - `<COLOR_HEX>` → `#2d7d46` (the canonical "main = green" invariant; mill-spawn picks non-green colours per worktree in M3.1)
+   - `<WINDOW_TITLE>` → `<short-name>: ${activeEditorShort}` where `<short-name>` is derived from the origin URL (the repo name without the `.git` suffix)
+
+   Behaviour:
+   - File missing → create.
+   - File present with `titleBar.activeBackground == "#2d7d46"` → no-op (idempotent).
+   - File present with a non-green colour → back up to `.vscode/settings.json.bak`, then overwrite from template.
 
 **Idempotent:** re-running produces no changes if already set up.
 
 **Helper scripts the skill uses:**
 - `plugins/mill/scripts/_junction.py` (create/remove junctions)
 - `plugins/mill/scripts/_wiki.py` (acquire_lock, write_commit_push) — for Home.md init
+- `plugins/mill/scripts/_render.py` (template substitution) — for `.vscode/settings.json`
 - `plugins/mill/templates/config.local.yaml` — copied verbatim
-- `plugins/mill/templates/Home.md` — initial wiki landing page
+- `plugins/mill/templates/Home.md` — initial wiki landing page (also used to normalise GitHub-default Home.md)
+- `plugins/mill/templates/vscode-settings.json` — VS Code colour + title template
 
 **Exit criteria:**
 - `.millhouse/wiki` junction exists and points at the wiki clone
-- `wiki/Home.md` exists
+- `wiki/Home.md` exists and starts with `# Tasks`
 - `.millhouse/config.local.yaml` exists
+- `.vscode/settings.json` exists with `titleBar.activeBackground == "#2d7d46"`
 
 ### 2. `mill-add` — add a task to the wiki tasks list
 

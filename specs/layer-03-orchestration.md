@@ -60,7 +60,15 @@ mill-spawn <slug> [--from <base-branch>]
    - Write `wiki/active/<slug>/status.md` from `templates/status.md`
    - Commit + push
 6. Create `.millhouse/.active` junction → `../../wiki/active/<slug>/`
-7. Print worktree path to stdout
+7. **VS Code window colour for the worktree** — write `<worktree>/.vscode/settings.json` from `templates/vscode-settings.json` with:
+   - `<COLOR_HEX>` → a deterministic, non-green colour picked per slug (see "Colour pick" below)
+   - `<WINDOW_TITLE>` → `<short-name> [<slug>]: ${activeEditorShort}`
+
+   Skip if the file already exists with a non-green `titleBar.activeBackground` (idempotent).
+
+8. Print worktree path to stdout
+
+**Colour pick:** ~20 LOC inline in `mill-spawn.py`. Take a fixed palette of ~10 distinct colours (excluding `#2d7d46` which is reserved for the hub). Pick one deterministically by hashing the slug — same slug always gets the same colour, so re-spawning a worktree on another machine matches the colour the operator already mentally associates with it. The "main = green" invariant is preserved by both ends: `mill-setup` always writes green for the hub, `mill-spawn` excludes green from the palette.
 
 **Exit codes:** 0 success, 1 slug not found in tasks, 2 branch already exists
 
