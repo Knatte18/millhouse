@@ -2,7 +2,7 @@
 
 ```yaml
 status: draft
-depends-on: [01-bootstrap, 02-review, 03-orchestration, 04-extras]
+depends-on: [layer-01-bootstrap, layer-02-review, layer-03-orchestration, layer-04-extras]
 ```
 
 ## Purpose

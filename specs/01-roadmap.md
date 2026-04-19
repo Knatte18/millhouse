@@ -28,7 +28,7 @@ delivers: signed-off spec
 
 Before writing code, confirm these decisions with yourself:
 
-- [ ] Plan format: cards (placeholder) or bundles (likely). If leaning bundles: update `03-orchestration.md` and `05-formats.md` before implementing Layer 03.
+- [ ] Plan format: cards (placeholder) or bundles (likely). If leaning bundles: update `layer-03-orchestration.md` and `ref-formats.md` before implementing Layer 03.
 - [ ] Gemini-in-v2.0: yes (per current spec) or deferred. Decides Layer 02 scope.
 - [ ] Repo name (settled: `millhouse`). Container path (`C:\Code\millhouse\`).
 - [ ] Primary-clone folder name (settled: `hub`).
@@ -202,7 +202,7 @@ decisions-needed-before-start:
   - plan format (cards vs bundles) finalised
 ```
 
-⛔ **Gate 2.5 — plan format decision.** Before starting Layer 03, decide: cards or bundles? Update `03-orchestration.md` and `05-formats.md` to reflect the decision before writing code.
+⛔ **Gate 2.5 — plan format decision.** Before starting Layer 03, decide: cards or bundles? Update `layer-03-orchestration.md` and `ref-formats.md` to reflect the decision before writing code.
 
 ### M3.1 — mill-spawn
 

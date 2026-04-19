@@ -2,7 +2,7 @@
 
 ```yaml
 status: draft
-depends-on: [01-bootstrap, 02-review, 03-orchestration]
+depends-on: [layer-01-bootstrap, layer-02-review, layer-03-orchestration]
 delivers: [mill-start, mill-plan, mill-merge, mill-cleanup, mill-status, mill-abandon, mill-groom]
 loc-budget: 900
 ```
@@ -29,7 +29,7 @@ From `C:\Code\millhouse-legacy\plugins\mill\scripts\millpy\`:
 | `skills/mill-abandon/SKILL.md` | `skills/mill-abandon/SKILL.md` | **Reference** — abandon flow. v2 differs: task returns to Home.md backlog, `active/<slug>/` is deleted (not archived). |
 | `templates/status-discussing.md`, `status-abandoned.md` | `templates/status.md` | **Consolidate** — v1 had multiple status-file variants. v2 has ONE status.md; phase is a field, not a file name. |
 
-See `06-v1-reuse.md` for the full lifting protocol.
+See `ref-v1-reuse.md` for the full lifting protocol.
 
 ## Deliverables
 

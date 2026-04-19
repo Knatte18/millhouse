@@ -78,10 +78,10 @@ Any skill over 200 lines → split or trim.
 
 When CC helps write code for a layer, give it this minimal context:
 
-> Read `specs/00-overview.md`, `specs/0N-<layer>.md`, `specs/06-v1-reuse.md`, `specs/08-legacy-index.md`. Then implement the scripts listed under "Deliverables" in the layer spec.
+> Read `specs/00-overview.md`, `specs/0N-<layer>.md`, `specs/ref-v1-reuse.md`, `specs/ref-legacy-index.md`. Then implement the scripts listed under "Deliverables" in the layer spec.
 
 Tell CC explicitly:
-- "Before writing any new code, lift v1 primitives per 06-v1-reuse.md"
+- "Before writing any new code, lift v1 primitives per ref-v1-reuse.md"
 - "Keep each file under 300 lines — if it's getting bigger, stop and show me the structure"
 - "No pytest, no test files beyond what 01/02/... specs list"
 - "No abstractions — dict dispatch over class hierarchies"

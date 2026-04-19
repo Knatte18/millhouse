@@ -2,7 +2,7 @@
 
 ```yaml
 status: draft
-depends-on: 01-bootstrap
+depends-on: layer-01-bootstrap
 delivers: [mill-review, providers/claude.py, providers/gemini.py]
 loc-budget: 750
 ```
@@ -34,7 +34,7 @@ From `C:\Code\millhouse-legacy\plugins\mill\scripts\millpy\`:
 | `reviewers/base.py` | — | **Do NOT carry over.** Class hierarchy and Protocol. Replace with plain `ReviewResult` dataclass. |
 | `doc/prompts/*.md` | `templates/review-prompt-*.md` | **Reference.** The v1 prompts have been iterated on. Lift the evaluation criteria wording, drop the dispatch-mode-specific variants. |
 
-See `06-v1-reuse.md` for the full lifting protocol.
+See `ref-v1-reuse.md` for the full lifting protocol.
 
 ## Deliverables
 

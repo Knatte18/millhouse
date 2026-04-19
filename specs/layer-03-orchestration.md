@@ -2,7 +2,7 @@
 
 ```yaml
 status: draft
-depends-on: [01-bootstrap, 02-review]
+depends-on: [layer-01-bootstrap, layer-02-review]
 delivers: [mill-spawn, mill-go]
 loc-budget: 600
 ```
@@ -34,7 +34,7 @@ From `C:\Code\millhouse-legacy\plugins\mill\scripts\millpy\`:
 | `reviewers/engine.py` | — | **Do NOT carry.** The dispatch engine is over-engineered. v2's orchestration is 30 lines: loop over cards, spawn, check result. |
 | `skills/mill-go/SKILL.md` | `skills/mill-go/SKILL.md` | **Reference for the workflow phases.** Drop the DAG-executor and plan-v2/v3 sections. |
 
-See `06-v1-reuse.md` for the full lifting protocol.
+See `ref-v1-reuse.md` for the full lifting protocol.
 
 ## Deliverables
 

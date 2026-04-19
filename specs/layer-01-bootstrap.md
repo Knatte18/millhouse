@@ -37,7 +37,7 @@ Before writing new code, lift these from `C:\Code\millhouse-legacy\plugins\mill\
 | `skills/mill-setup/SKILL.md` | `skills/mill-setup/SKILL.md` | **Reference heavily.** Lift the setup phases (order: derive wiki URL → clone → junction → config) and conflict-handling branches. Drop v1's orphan-tasks-branch era steps. |
 | `entrypoints/spawn_task.py` lines 260–290 | Reference for `mill-setup` skill | Setup-sequence order (mkdir → junction → config copy). The skill describes these steps; no Python script implements them. |
 
-See `06-v1-reuse.md` for the full lifting protocol.
+See `ref-v1-reuse.md` for the full lifting protocol.
 
 ## Deliverables
 
@@ -54,7 +54,7 @@ See `06-v1-reuse.md` for the full lifting protocol.
    - Valid clone of the wiki repo: skip clone, just verify junctions
    - Something else: stop and ask the user
    - Not present: `git clone <wiki-url> ../wiki`
-3. Create `.millhouse/` directory structure (layout per `05-formats.md`)
+3. Create `.millhouse/` directory structure (layout per `ref-formats.md`)
 4. Call `_junction.py create` helper to make `.millhouse/wiki` → `../../wiki`
 5. Copy `plugins/mill/templates/config.local.yaml` → `.millhouse/config.local.yaml` if missing
 6. If `wiki/Home.md` doesn't exist: write minimal Home.md from template and commit/push

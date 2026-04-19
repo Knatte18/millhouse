@@ -430,7 +430,7 @@ Free-form markdown. No schema beyond "it's markdown". Used as input to `mill-pla
 
 ### config.yaml and config.local.yaml
 
-See `02-review.md` for models section.
+See `layer-02-review.md` for models section.
 
 Shared (`wiki/config.yaml`, tracked in wiki):
 ```yaml

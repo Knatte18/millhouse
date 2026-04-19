@@ -51,7 +51,7 @@ Each working clone (hub or worktree) contains:
     wiki       → <container>\wiki          (junction to the single wiki clone)
 ```
 
-**`.millhouse/` is gitignored.** Wiki content lives in the wiki repo (tracked there). Everything else inside `.millhouse/` is local-only. See `05-formats.md` for the full directory contract and the `.env` vs `config.local.yaml` distinction.
+**`.millhouse/` is gitignored.** Wiki content lives in the wiki repo (tracked there). Everything else inside `.millhouse/` is local-only. See `ref-formats.md` for the full directory contract and the `.env` vs `config.local.yaml` distinction.
 
 ## Language and discipline
 
@@ -72,10 +72,10 @@ Each working clone (hub or worktree) contains:
 
 ## v1 reuse (mandatory check before writing)
 
-Before writing any new code, consult `specs/06-v1-reuse.md`. It lists which v1 components to lift as-is, which to rewrite with v1 as reference, and which to ignore entirely. Lifting battle-tested v1 code is the default; rewriting from scratch is the exception.
+Before writing any new code, consult `specs/ref-v1-reuse.md`. It lists which v1 components to lift as-is, which to rewrite with v1 as reference, and which to ignore entirely. Lifting battle-tested v1 code is the default; rewriting from scratch is the exception.
 
 Each layer spec lists its specific v1 reuse candidates. When the worker begins a layer, they should:
-1. Read `specs/06-v1-reuse.md`
+1. Read `specs/ref-v1-reuse.md`
 2. Open each v1 file listed for that layer in `C:\Code\millhouse-legacy\`
 3. Copy, clean (strip imports, package scaffolding), paste into v2
 4. Only then write the remaining new logic
