@@ -36,7 +36,7 @@ Rule of thumb: **roadmap = WHAT and WHEN; layer spec = HOW.** Skipping step 4 la
 |---|---|---|---|---|
 | M0 | [M0-decisions.md](M0-decisions.md) | Signed-off spec | — | [x] complete |
 | M0.5 | [M0.5-scaffolding.md](M0.5-scaffolding.md) | Marketplace + skill carry | — | [x] complete |
-| Layer 01 | [M1-bootstrap.md](M1-bootstrap.md) | `mill-setup`, `mill-add`, `mill-list` | `layer-01-done` | [ ] in progress (M1.1 done, not committed) |
+| Layer 01 | [M1-bootstrap.md](M1-bootstrap.md) | `mill-setup`, `mill-add`, `mill-list` | `layer-01-done` | [ ] in progress (M1.1 done; M1.2 in progress) |
 | Layer 02 | [M2-review.md](M2-review.md) | `mill-review` + Claude + Gemini providers | `layer-02-done` | [ ] not started |
 | Layer 03 | [M3-orchestration.md](M3-orchestration.md) | `mill-spawn`, `mill-go` (linear) | `layer-03-done` | [ ] not started |
 | Layer 04 | [M4-extras.md](M4-extras.md) | `mill-start`, `mill-plan`, `mill-merge`, `mill-cleanup`, `mill-status`, `mill-abandon`, `mill-groom` | `v2.0` | [ ] not started |
@@ -44,7 +44,7 @@ Rule of thumb: **roadmap = WHAT and WHEN; layer spec = HOW.** Skipping step 4 la
 ## Cross-cutting checklist (resolve inline during layers)
 
 - [ ] **Skills index** — rebuild `mill-skills-index` fresh once the skill catalog is stable. Until then `SKILLS.md` is hand-maintained or absent.
-- [ ] **.gitignore** — at M1.2, commit `.gitignore` covering `**/.millhouse/`, `**/.env`, `**/worktrees/`.
+- [x] **.gitignore** — covers `**/.millhouse/`, `**/.env`, `**/worktrees/` (added during M1.2).
 - [x] **marketplace.json + cross-plugin setup** — done in M0.5.1.
 
 ## Estimated effort (very rough)
