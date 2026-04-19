@@ -16,7 +16,7 @@ Delivers the minimum viable infrastructure: wiki clone + tasks list + `.millhous
 | ID | Milestone | Status |
 |---|---|---|
 | M1.1 | Lift v1 primitives | [x] done (commit `72af20b`) |
-| M1.2 | `mill-setup` skill | [x] skill + templates written (runtime test deferred to M1.5) |
+| M1.2 | `mill-setup` skill | [x] skill + templates + `_vscode.py` helper done; all 8 phases verified end-to-end against real wiki + hub (commits `d81d74c`, `06b1497`) |
 | M1.3 | `mill-add` script + `_sidebar.py` helper | [x] initial version done; **extension in progress** (new bracketed-slug format, sidebar regeneration, `--proposal-body`) |
 | M1.3.5 | `mill-add/SKILL.md` — thin skill for long-discussion → split task | [ ] not started |
 | M1.4 | `mill-list` script | [ ] not started |
@@ -62,9 +62,13 @@ The skill tells Claude to:
 
 ### Exit criteria
 
-- [ ] Running `/mill-setup` from an empty `hub/` produces a working `.millhouse/` + `wiki/` junction *(verified end-to-end in M1.5 integration test)*
-- [ ] Running it a second time is a no-op *(verified in M1.5)*
-- [x] Skill file is under 200 lines *(143 lines)*
+- [x] Running `/mill-setup` from an empty `hub/` produces a working `.millhouse/` + `wiki/` junction *(verified against real wiki: cloned to `C:\Code\millhouse\wiki`, junction created at `.millhouse/wiki`, Home.md normalised from GitHub-default, VS Code green applied correctly)*
+- [x] Running it a second time is a no-op *(verified via `.millhouse/scratch/m1.2-idempotency-test.ps1` — all phases SKIP or pull-no-op on re-run)*
+- [x] Skill file is under 200 lines *(186 lines after `_vscode.py` refactor and spec-driven extensions — still under the 200-line cap)*
+- [x] `.millhouse/config.local.yaml` exists *(template copied)*
+- [x] `.vscode/settings.json` exists with `titleBar.activeBackground == "#2d7d46"` *(pre-existing green detected by regex, SKIP fired correctly)*
+
+**Note:** `wiki/_Sidebar.md` is listed as a Phase 6a deliverable in `layer-01-bootstrap.md` but is currently hand-written in the wiki. The automated regeneration lands with `_sidebar.py` in the M1.3 extension (see below). Until then, Phase 6a is a spec-only contract.
 
 ---
 
