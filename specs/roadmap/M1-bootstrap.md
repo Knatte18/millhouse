@@ -15,8 +15,8 @@ Delivers the minimum viable infrastructure: wiki clone + tasks list + `.millhous
 
 | ID | Milestone | Status |
 |---|---|---|
-| M1.1 | Lift v1 primitives | [x] code done, tests pass, **not committed** |
-| M1.2 | `mill-setup` skill | [ ] not started |
+| M1.1 | Lift v1 primitives | [x] done (commit `72af20b`) |
+| M1.2 | `mill-setup` skill | [x] skill + templates written (runtime test deferred to M1.5) |
 | M1.3 | `mill-add` script | [ ] not started |
 | M1.4 | `mill-list` script | [ ] not started |
 | M1.5 | Layer 01 integration test | [ ] not started |
@@ -41,7 +41,7 @@ Carry over, strip, clean:
 - [x] Each file runs standalone if `python <file>.py` is called (prints a usage message at minimum)
 - [x] Hand-test: create a junction, remove it; acquire wiki lock, release it; render a template
 
-**Report:** [specs/_starter/m1.1-result.md](../_starter/m1.1-result.md). Ready to commit.
+**Report:** [specs/_starter/m1.1-result.md](../_starter/m1.1-result.md). Committed in `72af20b`.
 
 ---
 
@@ -61,9 +61,9 @@ The skill tells Claude to:
 
 ### Exit criteria
 
-- [ ] Running `/mill-setup` from an empty `hub/` produces a working `.millhouse/` + `wiki/` junction
-- [ ] Running it a second time is a no-op
-- [ ] Skill file is under 200 lines
+- [ ] Running `/mill-setup` from an empty `hub/` produces a working `.millhouse/` + `wiki/` junction *(verified end-to-end in M1.5 integration test)*
+- [ ] Running it a second time is a no-op *(verified in M1.5)*
+- [x] Skill file is under 200 lines *(143 lines)*
 
 ---
 

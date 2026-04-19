@@ -60,7 +60,17 @@ mill-spawn <slug> [--from <base-branch>]
    - Write `wiki/active/<slug>/status.md` from `templates/status.md`
    - Commit + push
 6. Create `.millhouse/.active` junction → `../../wiki/active/<slug>/`
-7. Print worktree path to stdout
+7. **VS Code window colour for the worktree** — call `_vscode.write_settings(color_hex, window_title, worktree/'.vscode/settings.json')`:
+   - `color_hex`: a deterministic, non-green colour picked per slug (see "Colour pick" below)
+   - `window_title`: `<short-name>: <slug>` — example: `millhouse: refactor-parser`. Deliberately short — must read clearly in the Windows 11 taskbar at small sizes. No `${activeEditorShort}` or other VS Code variables.
+
+   The worktree directory is freshly created in step 3, so no existing `.vscode/settings.json` exists — write unconditionally. (mill-setup, the skill, handles the existing-file judgment for the hub; mill-spawn, the script, has no such case.)
+
+8. Print worktree path to stdout
+
+**Colour pick:** ~20 LOC inline in `mill-spawn.py`. Fixed palette of ~10 distinct colours (excluding `#2d7d46` which is reserved for the hub). Pick deterministically by hashing the slug — same slug always gets the same colour, so re-spawning a worktree on another machine matches the colour the operator already mentally associates with it. The "main = green" invariant is preserved by both ends: `mill-setup` always writes green for the hub, `mill-spawn` excludes green from the palette.
+
+**Helper used:** `plugins/mill/scripts/_vscode.py` (`render_settings`, `write_settings`) — same helper that `mill-setup` uses in M1.2's Phase 7. Lifted into a shared module precisely so that the rendering+writing of `.vscode/settings.json` is in one place.
 
 **Exit codes:** 0 success, 1 slug not found in tasks, 2 branch already exists
 
