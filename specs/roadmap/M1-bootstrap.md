@@ -17,7 +17,7 @@ Delivers the minimum viable infrastructure: wiki clone + tasks list + `.millhous
 |---|---|---|
 | M1.1 | Lift v1 primitives | [x] done (commit `72af20b`) |
 | M1.2 | `mill-setup` skill | [x] skill + templates written (runtime test deferred to M1.5) |
-| M1.3 | `mill-add` script | [ ] not started |
+| M1.3 | `mill-add` script | [x] written + end-to-end tested (added `skills-index-rebuild` to real wiki) |
 | M1.4 | `mill-list` script | [ ] not started |
 | M1.5 | Layer 01 integration test | [ ] not started |
 
@@ -75,9 +75,9 @@ Write `plugins/mill/scripts/mill-add.py`. Under ~60 LOC. Uses `_wiki.py` for com
 
 ### Exit criteria
 
-- [ ] `python plugins/mill/scripts/mill-add.py foo --description "do foo"` appends to Home.md
-- [ ] Wiki gets commit pushed
-- [ ] Lock acquired/released
+- [x] `python plugins/mill/scripts/mill-add.py foo --description "do foo"` appends to Home.md *(verified with real task `skills-index-rebuild`)*
+- [x] Wiki gets commit pushed *(commit on wiki master: `add task: skills-index-rebuild`)*
+- [x] Lock acquired/released *(verified happy-path and duplicate-reject path — lock released via `finally` in both)*
 
 ---
 
