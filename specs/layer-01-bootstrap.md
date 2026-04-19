@@ -65,7 +65,7 @@ See `ref-v1-reuse.md` for the full lifting protocol.
 7. Verify the setup end-to-end; print summary
 8. **VS Code window colour for the hub** — write `.vscode/settings.json` from `templates/vscode-settings.json` with:
    - `<COLOR_HEX>` → `#2d7d46` (the canonical "main = green" invariant; mill-spawn picks non-green colours per worktree in M3.1)
-   - `<WINDOW_TITLE>` → `<short-name>: ${activeEditorShort}` where `<short-name>` is derived from the origin URL (the repo name without the `.git` suffix)
+   - `<WINDOW_TITLE>` → just `<short-name>`, derived from the origin URL (the repo name without the `.git` suffix). Example: `millhouse`. Deliberately short — must be readable in the Windows 11 taskbar at small sizes. No `${activeEditorShort}` or other VS Code variables; the active file changes constantly and the title should not.
 
    Behaviour:
    - File missing → create.
@@ -77,10 +77,11 @@ See `ref-v1-reuse.md` for the full lifting protocol.
 **Helper scripts the skill uses:**
 - `plugins/mill/scripts/_junction.py` (create/remove junctions)
 - `plugins/mill/scripts/_wiki.py` (acquire_lock, write_commit_push) — for Home.md init
-- `plugins/mill/scripts/_render.py` (template substitution) — for `.vscode/settings.json`
+- `plugins/mill/scripts/_vscode.py` (`render_settings`, `write_settings`) — VS Code workspace settings; shared with `mill-spawn` (M3.1) for worktree colours
+- `plugins/mill/scripts/_render.py` — used transitively by `_vscode` and `_wiki`
 - `plugins/mill/templates/config.local.yaml` — copied verbatim
 - `plugins/mill/templates/Home.md` — initial wiki landing page (also used to normalise GitHub-default Home.md)
-- `plugins/mill/templates/vscode-settings.json` — VS Code colour + title template
+- `plugins/mill/templates/vscode-settings.json` — VS Code colour + title template (consumed by `_vscode`)
 
 **Exit criteria:**
 - `.millhouse/wiki` junction exists and points at the wiki clone

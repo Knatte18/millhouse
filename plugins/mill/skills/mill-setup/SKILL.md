@@ -30,7 +30,7 @@ Bootstrap the mill infrastructure from nothing. Produces a working `.millhouse/`
 
 Every path below is relative to `cwd` unless noted. Use absolute paths when calling the Python helpers (resolve via `Path(...).resolve()`).
 
-## How to invoke the M1.1 helpers
+## How to invoke the helpers
 
 The helpers in `plugins/mill/scripts/` are flat modules. Set `PYTHONPATH` once at the top of the session, then call them directly:
 
@@ -38,7 +38,9 @@ The helpers in `plugins/mill/scripts/` are flat modules. Set `PYTHONPATH` once a
 $env:PYTHONPATH = (Resolve-Path 'plugins/mill/scripts').Path
 ```
 
-After that you can use `python -c "..."` with plain `import _junction` / `import _wiki` etc., no `sys.path` gymnastics inside the snippet.
+After that you can use `python -c "..."` with plain `import _junction`, `import _wiki`, `import _vscode`, etc. — no `sys.path` gymnastics inside the snippet.
+
+Helpers used by this skill: `_junction` (Phase 4), `_wiki` (Phase 6), `_vscode` (Phase 7), `_render` (transitively via `_vscode`).
 
 ## Phases
 
@@ -125,13 +127,15 @@ Behaviour:
 | Present with a different `titleBar.activeBackground` colour | Back up to `.vscode/settings.json.bak`, then overwrite from template. |
 | Present but no `titleBar.activeBackground` key at all | Back up to `.vscode/settings.json.bak`, then overwrite from template. |
 
-Render via `_render.py`:
+Render and write via `_vscode.write_settings` (which wraps `_render` and the file write):
 
 ```powershell
-python -c "from pathlib import Path; import _render; out = _render.render(Path('plugins/mill/templates/vscode-settings.json'), {'COLOR_HEX': '#2d7d46', 'WINDOW_TITLE': '<short-name>: `${activeEditorShort}'}); Path('.vscode').mkdir(exist_ok=True); Path('.vscode/settings.json').write_text(out, encoding='utf-8')"
+python -c "from pathlib import Path; import _vscode; _vscode.write_settings('#2d7d46', '<short-name>', Path('.vscode/settings.json'))"
 ```
 
-Note: `${activeEditorShort}` is a literal VS Code variable that must reach the rendered file unchanged. Inside a PowerShell double-quoted string, `$` triggers variable expansion — escape it with a backtick: write `` `${activeEditorShort} `` (backtick + `$` + braces). The backtick is consumed by PowerShell; the rendered JSON contains the literal `${activeEditorShort}`.
+Title format for the hub: **just the repo short-name** (e.g. `millhouse`). No `${activeEditorShort}`, no slug — this is the main workspace and the title must read clearly in the Windows 11 taskbar at small sizes. Worktrees use `<short-name>: <slug>` (mill-spawn, M3.1).
+
+`_vscode.write_settings` overwrites unconditionally; the *decision* to write (skip vs back-up vs render) is this skill's job above. mill-spawn (M3.1) calls the same helper for worktree colours.
 
 ### Phase 8 — Verify + report
 
