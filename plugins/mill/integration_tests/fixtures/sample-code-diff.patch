@@ -1,0 +1,48 @@
+diff --git a/base-file.py b/base-file.py
+index 1234567..abcdef0 100644
+--- a/base-file.py
++++ b/base-file.py
+@@ -1,20 +1,30 @@
+ """base-file.py — simple utility module used as a code-review test fixture."""
+ from __future__ import annotations
+
++import re
++from functools import lru_cache
++
+
+ def greet(name: str) -> str:
+     """Return a greeting string for the given name."""
+-    return f"Hello, {name}!"
++    if not name or not name.strip():
++        raise ValueError("name must not be empty or whitespace")
++    return f"Hello, {name.strip()}!"
+
+
+-def add(a: int, b: int) -> int:
+-    """Return the sum of two integers."""
+-    return a + b
++_SLUG_RE = re.compile(r"^[a-z][a-z0-9-]*$")
++
++
++@lru_cache(maxsize=128)
++def slugify(text: str) -> str:
++    """Convert text to a lowercase slug.
++
++    Replaces whitespace runs with hyphens, strips non-alnum characters,
++    lowercases the result.  The result is cached so repeated calls with
++    the same input are free.
++    """
++    slug = re.sub(r"\s+", "-", text.strip().lower())
++    slug = re.sub(r"[^a-z0-9-]", "", slug)
++    return slug
+
+
+ def main() -> None:
+-    print(greet("world"))
+-    print(add(1, 2))
++    print(greet("world"))
++    print(slugify("Hello World"))
++    print(slugify("Hello World"))  # cached hit
+
+
+ if __name__ == "__main__":
