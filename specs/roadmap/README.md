@@ -36,7 +36,7 @@ Rule of thumb: **roadmap = WHAT and WHEN; layer spec = HOW.** Skipping step 4 la
 |---|---|---|---|---|
 | M0 | [M0-decisions.md](M0-decisions.md) | Signed-off spec | — | [x] complete |
 | M0.5 | [M0.5-scaffolding.md](M0.5-scaffolding.md) | Marketplace + skill carry | — | [x] complete |
-| Layer 01 | [M1-bootstrap.md](M1-bootstrap.md) | `mill-setup`, `mill-add`, `mill-list` | `layer-01-done` | [ ] in progress — M1.1 + M1.2 + initial M1.3 done; **M1.3 extension + M1.3.5 + M1.4 + M1.5 left** |
+| Layer 01 | [M1-bootstrap.md](M1-bootstrap.md) | `mill-setup`, `mill-add`, `mill-list` | `layer-01-done` | [x] done — all M1.x ticked; integration test passes |
 | Layer 02 | [M2-review.md](M2-review.md) | `mill-review` + Claude + Gemini providers | `layer-02-done` | [ ] not started |
 | Layer 03 | [M3-orchestration.md](M3-orchestration.md) | `mill-spawn`, `mill-go` (linear) | `layer-03-done` | [ ] not started |
 | Layer 04 | [M4-extras.md](M4-extras.md) | `mill-start`, `mill-plan`, `mill-merge`, `mill-cleanup`, `mill-status`, `mill-abandon`, `mill-groom` | `v2.0` | [ ] not started |
