@@ -1,0 +1,110 @@
+"""
+Review backend for discussion artefacts.
+
+Single holistic review call using a tool-use reviewer. The LLM reads the
+discussion file itself (tool-use mode) and returns its review as text.
+The backend writes the review file; the LLM does not use Write.
+
+Public API:
+    run(cfg, slug, mill_dir, wiki_root, project_root) -> ReviewResult
+"""
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+from _llm_claude import LLMError
+from _review_common import (
+    ReviewError,
+    ReviewResult,
+    aggregate_verdict,
+    check_mode,
+    discover_round,
+    load_reviewer,
+    load_task_title,
+    parse_verdict,
+    read_constraints_md,
+    render_prompt,
+    resolve_path,
+    write_review_file,
+)
+
+
+def run(
+    cfg: dict,
+    slug: str,
+    mill_dir: Path,
+    wiki_root: Path,
+    project_root: Path,
+) -> ReviewResult:
+    """Run a holistic discussion review.
+
+    Steps:
+    1. Resolve paths.
+    2. Determine round number; enforce round cap.
+    3. Load reviewer; verify it is tool-use.
+    4. Render prompt.
+    5. Call reviewer (catch LLMError → total-fail → raise ReviewError).
+    6. Parse verdict, write review file, return ReviewResult.
+    """
+    # 1. Resolve paths
+    discussion_path = resolve_path(cfg["paths"]["discussion_file"], slug, wiki_root)
+    reviews_dir = resolve_path(cfg["paths"]["reviews_dir"], slug, wiki_root)
+
+    # 2. Round discovery and cap check
+    round_n = discover_round(reviews_dir, "discussion")
+    max_rounds = cfg["review"]["discussion"]["rounds"]
+    if round_n > max_rounds:
+        raise ReviewError(
+            f"Round {round_n} exceeds max {max_rounds} for discussion review"
+        )
+
+    print(
+        f"[_review_discussion] slug={slug!r} round={round_n}",
+        file=sys.stderr,
+    )
+
+    # 3. Load reviewer; enforce tool-use mode
+    reviewer_name = cfg["review"]["discussion"]["holistic"]
+    reviewer = load_reviewer(reviewer_name)
+    check_mode(reviewer, "tool-use", "discussion")
+
+    # 4. Render prompt
+    prompt_text = render_prompt(
+        "review-discussion",
+        task_title=load_task_title(mill_dir, slug),
+        artefact_path=str(discussion_path),
+        constraints=read_constraints_md(project_root),
+        round=round_n,
+        reviewer_model=reviewer_name,
+    )
+
+    # 5. Invoke reviewer — for discussion a single sub-review, so any LLMError
+    #    means zero successes → total failure → raise ReviewError so the API
+    #    exits 1 with empty stdout.
+    try:
+        raw = reviewer.run(prompt_text)
+    except LLMError as exc:
+        raise ReviewError(f"All sub-reviews failed: {exc}") from exc
+
+    # 6. Parse, write, return
+    verdict = parse_verdict(raw)
+    review_file = write_review_file(reviews_dir, "discussion", round_n, raw)
+
+    print(
+        f"[_review_discussion] wrote {review_file.name} verdict={verdict}",
+        file=sys.stderr,
+    )
+
+    return ReviewResult(
+        type="discussion",
+        round=round_n,
+        verdict=verdict,
+        reviews=[
+            {
+                "scope": "holistic",
+                "verdict": verdict,
+                "file": str(review_file),
+            }
+        ],
+    )
