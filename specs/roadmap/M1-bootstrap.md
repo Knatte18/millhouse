@@ -17,8 +17,8 @@ Delivers the minimum viable infrastructure: wiki clone + tasks list + `.millhous
 |---|---|---|
 | M1.1 | Lift v1 primitives | [x] done (commit `72af20b`) |
 | M1.2 | `mill-setup` skill | [x] skill + templates + `_vscode.py` helper done; all 8 phases verified end-to-end against real wiki + hub (commits `d81d74c`, `06b1497`) |
-| M1.3 | `mill-add` script + `_sidebar.py` helper | [x] initial version done; **extension in progress** (new bracketed-slug format, sidebar regeneration, `--proposal-body`) |
-| M1.3.5 | `mill-add/SKILL.md` — thin skill for long-discussion → split task | [ ] not started |
+| M1.3 | `mill-add` script + `_sidebar.py` helper | [x] done; bracketed-slug format + `_sidebar.regenerate` + `--proposal-body` landed; end-to-end push against real wiki still pending |
+| M1.3.5 | `mill-add/SKILL.md` — thin skill for long-discussion → split task | [x] done |
 | M1.4 | `mill-list` script | [ ] not started |
 | M1.5 | Layer 01 integration test | [ ] not started |
 
@@ -42,7 +42,7 @@ Carry over, strip, clean:
 - [x] Each file runs standalone if `python <file>.py` is called (prints a usage message at minimum)
 - [x] Hand-test: create a junction, remove it; acquire wiki lock, release it; render a template
 
-**Report:** [specs/_starter/m1.1-result.md](../_starter/m1.1-result.md). Committed in `72af20b`.
+Committed in `72af20b`.
 
 ---
 
@@ -68,7 +68,7 @@ The skill tells Claude to:
 - [x] `.millhouse/config.local.yaml` exists *(template copied)*
 - [x] `.vscode/settings.json` exists with `titleBar.activeBackground == "#2d7d46"` *(pre-existing green detected by regex, SKIP fired correctly)*
 
-**Note:** `wiki/_Sidebar.md` is listed as a Phase 6a deliverable in `layer-01-bootstrap.md` but is currently hand-written in the wiki. The automated regeneration lands with `_sidebar.py` in the M1.3 extension (see below). Until then, Phase 6a is a spec-only contract.
+**Note:** Phase 6a (regenerate `_Sidebar.md` via `_sidebar.regenerate`) is now implemented alongside M1.3 — the SKILL.md describes it and the helper exists.
 
 ---
 
@@ -83,21 +83,13 @@ Write `plugins/mill/scripts/mill-add.py`. Under ~60 LOC. Uses `_wiki.py` for com
 - [x] Initial `mill-add.py` appends to Home.md *(verified with real task `skills-index-rebuild` commit `e444de8`, old format `## <slug>`)*
 - [x] Wiki gets commit pushed
 - [x] Lock acquired/released *(verified happy-path and duplicate-reject path — lock released via `finally` in both)*
-
-### Extension work (not yet done — resume here)
-
-Format-discussion during this session produced a new Home.md task shape:
-`## <Title> [<slug>]` (plain) or `## <Title> [[<slug>]](proposal-<slug>)` (linked when proposal exists).
-Plus a `_Sidebar.md` regenerator and an optional `--proposal-body` flag for long-discussion splitting.
-
-Specs are updated; code is not. To land the extension:
-
-- [ ] Write `plugins/mill/scripts/_sidebar.py` — `parse_home_tasks`, `render_sidebar`, `regenerate` (see `layer-01-bootstrap.md` section "3. `_sidebar.py`")
-- [ ] Rewrite `plugins/mill/scripts/mill-add.py` — new args (`--title`, `--summary`, `--proposal-body`), new heading format, call `_sidebar.regenerate()` after appending, commit all wiki files in one commit under one lock
-- [ ] Update `plugins/mill/skills/mill-setup/SKILL.md` — Phase 6a to call `_sidebar.regenerate()` on fresh setup
-- [ ] Write `plugins/mill/skills/mill-add/SKILL.md` — thin skill for long-discussion → split task (M1.3.5)
-- [ ] Re-test against real wiki (wiki is **already manually updated** to the new format — `## Rebuild skills index [[skills-index-rebuild]](proposal-skills-index-rebuild)` + `proposal-skills-index-rebuild.md` + `_Sidebar.md`). Verify the new mill-add.py produces matching output when re-adding a task.
-- [ ] Update exit criteria above to check boxes and add "heading format is `## <Title> [<slug>]` / `[[<slug>]](proposal-<slug>)`"
+- [x] Heading format is `## <Title> [<slug>]` (plain) or `## <Title> [[<slug>]](proposal-<slug>)` (linked) — single regex parses both
+- [x] `_sidebar.py` helper exists (`parse_home_tasks`, `render_sidebar`, `regenerate`) and regenerates `_Sidebar.md` idempotently
+- [x] `mill-add` accepts `--title`, `--summary`, `--proposal-body`; writes `proposal-<slug>.md` at wiki root when `--proposal-body` is given
+- [x] `mill-add` commits Home.md + `_Sidebar.md` (+ proposal when present) in **one commit** under **one** `_wiki.acquire_lock` acquisition
+- [x] `mill-setup/SKILL.md` has Phase 6a calling `_sidebar.regenerate()`
+- [x] `mill-add/SKILL.md` exists (thin skill for long-discussion → split task — M1.3.5)
+- [x] End-to-end re-test against real wiki *(added `m1-4-mill-list` task, commit `7355e2c` pushed to `origin/master` — `Home.md` + `_Sidebar.md` in a single commit; proposal code path verified in unit smoke test)*
 
 ---
 

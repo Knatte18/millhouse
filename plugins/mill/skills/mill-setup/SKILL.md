@@ -40,7 +40,7 @@ $env:PYTHONPATH = (Resolve-Path 'plugins/mill/scripts').Path
 
 After that you can use `python -c "..."` with plain `import _junction`, `import _wiki`, `import _vscode`, etc. — no `sys.path` gymnastics inside the snippet.
 
-Helpers used by this skill: `_junction` (Phase 4), `_wiki` (Phase 6), `_vscode` (Phase 7), `_render` (transitively via `_vscode`).
+Helpers used by this skill: `_junction` (Phase 4), `_wiki` (Phase 6, 6a), `_sidebar` (Phase 6a), `_vscode` (Phase 7), `_render` (transitively via `_vscode`).
 
 ## Phases
 
@@ -112,6 +112,30 @@ For "missing" and "GitHub default" cases:
 
 **GitHub-default detection:** read the file, strip outer whitespace, match the pattern `^Welcome to the .+ wiki!$` (single line). The `<repo>` name varies per project; the surrounding text is fixed. This pattern is what GitHub writes when the user clicks "Create the first page" without editing.
 
+### Phase 6a — Initialise `_Sidebar.md` via `_sidebar.regenerate()`
+
+The wiki sidebar is auto-generated from `Home.md` and the set of `proposal-*.md` files at wiki root. Regenerate it every time `mill-setup` runs so a fresh clone gets a Navigation-only sidebar, and any hand-edited sidebar drift is healed.
+
+Run:
+
+```powershell
+python -c "from pathlib import Path; import _sidebar; _sidebar.regenerate(Path(r'<container>/wiki').resolve())"
+```
+
+Then commit + push if the file changed:
+
+1. Check `git -C <container>/wiki status --porcelain _Sidebar.md`.
+2. If the command prints nothing, the sidebar is already correct — skip the commit. (Idempotency: second and later runs land here.)
+3. Otherwise, commit via `_wiki.write_commit_push`:
+
+   ```powershell
+   python -c "from pathlib import Path; import _wiki; _wiki.write_commit_push(Path(r'<container>/wiki').resolve(), ['_Sidebar.md'], 'chore: regenerate _Sidebar.md')"
+   ```
+
+**Why separate from Phase 6:** Phase 6 only writes `Home.md` on the missing / GitHub-default branches. When Phase 6 skips (Home.md already in v2 shape), the sidebar still needs to be regenerated the first time `mill-setup` runs against a clone that was bootstrapped before this phase existed. Running it unconditionally is cheap and keeps the two commits separate in history: one says "init Home.md", the other says "regenerate _Sidebar.md".
+
+**On `_sidebar.regenerate` semantics:** the function is pure on wiki state — it reads `Home.md` and the on-disk `proposal-*.md` set, writes `_Sidebar.md`, performs no git operations. Calling it when the sidebar is already correct produces a byte-identical file; `git status` in step 1 above will report no changes and the commit is skipped.
+
 ### Phase 7 — VS Code window colour (hub = green)
 
 The hub is the canonical "main" workspace, always coloured `#2d7d46` so the operator can spot it instantly when several VS Code windows are open. mill-spawn picks non-green colours per worktree (M3.1).
@@ -145,6 +169,7 @@ Check every invariant; halt with a specific error if any fails:
 - `.millhouse/wiki` junction exists and resolves to `<container>/wiki`
 - `.millhouse/config.local.yaml` exists
 - `<container>/wiki/Home.md` exists and starts with `# Tasks`
+- `<container>/wiki/_Sidebar.md` exists and begins with `### Navigation`
 - `.vscode/settings.json` exists with `titleBar.activeBackground == "#2d7d46"`
 
 On success, print:
@@ -157,10 +182,11 @@ mill-setup complete.
   Wiki clone:    <container>/wiki
   Wiki junction: .millhouse/wiki -> <container>/wiki
   Tasks (Home):  <container>/wiki/Home.md
+  Sidebar:       <container>/wiki/_Sidebar.md
   Local config:  .millhouse/config.local.yaml
   VS Code:       .vscode/settings.json (titleBar = #2d7d46 green)
 
-Next: /mill-add <slug> --description "..." to add tasks, /mill-list to list them.
+Next: /mill-add <slug> --title "..." [--summary "..."] [--proposal-body "..."] to add tasks, /mill-list to list them.
 ```
 
 ## Error conditions
@@ -181,6 +207,7 @@ Every phase checks current state before acting. Re-running after a partial or co
 - Junction correct → skipped.
 - `config.local.yaml` present → skipped.
 - `Home.md` non-empty (and v2-shape or user-custom) → skipped; only GitHub-default content is overwritten.
+- `_Sidebar.md` regenerated unconditionally; commit only if bytes changed.
 - `.vscode/settings.json` already green → skipped.
 
 A second `/mill-setup` run on a fully-set-up clone makes no changes and prints the same summary block.

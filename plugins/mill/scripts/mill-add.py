@@ -1,16 +1,25 @@
 """
-mill-add — append a single task entry to the wiki's Home.md.
+mill-add — append a task entry to the wiki's Home.md and regenerate the sidebar.
 
-Reads the wiki clone path via the `.millhouse/wiki` junction in cwd, acquires
-the shared `.mill-lock` (since Home.md is a multi-writer file per
-`ref-formats.md`), appends a `## <slug>` section with the given description,
-commits and pushes the wiki, then releases the lock.
+Resolves the wiki clone via the `.millhouse/wiki` junction in cwd, acquires
+the shared `.mill-lock` (Home.md is a multi-writer file per `ref-formats.md`),
+appends a `## <Title> [<slug>]` section to Home.md — or `## <Title> [[<slug>]]
+(proposal-<slug>)` with a companion ``proposal-<slug>.md`` when
+``--proposal-body`` is given — then regenerates `_Sidebar.md` and commits all
+wiki changes in ONE commit. Finally releases the lock and exits.
 
-Slug rules (`Home.schema.md`): kebab-case, must match `[a-z][a-z0-9-]*`,
+Slug rules (``Home.schema.md``): kebab-case matching ``[a-z][a-z0-9-]*``,
 unique within Home.md. Duplicate slugs are rejected before any write.
 
+Proposals live at wiki root as ``proposal-<slug>.md`` (flat namespace, per
+``ref-formats.md`` — GitHub Wiki does not render subdirectory pages
+reliably).
+
 Usage:
-    python plugins/mill/scripts/mill-add.py <slug> [--description "..."]
+    python plugins/mill/scripts/mill-add.py <slug> \\
+        --title "Human-readable title" \\
+        [--summary "one-paragraph summary for Home.md"] \\
+        [--proposal-body "long-form background"]
 
 Exit codes:
     0 — task added and pushed
@@ -23,16 +32,27 @@ import re
 import sys
 from pathlib import Path
 
+import _sidebar
 import _wiki
 
 _SLUG_RE = re.compile(r"^[a-z][a-z0-9-]*$")
+
+# Matches both ``## <Title> [<slug>]`` and
+# ``## <Title> [[<slug>]](proposal-<slug>)`` — same regex as _sidebar, kept in
+# sync by design. Used here only for duplicate-slug detection; the capture
+# groups are unused.
+_TASK_HEADING_RE = re.compile(
+    r"^##\s+.+?\s+\[\[?([a-z][a-z0-9-]*)\]?\](?:\([^)]+\))?\s*$",
+    re.MULTILINE,
+)
 
 
 def _validate_slug(slug: str) -> None:
     """Reject anything that is not a valid v2 task slug."""
     if not _SLUG_RE.match(slug):
         raise SystemExit(
-            f"Invalid slug {slug!r}: must match [a-z][a-z0-9-]* (kebab-case, lowercase, digits and hyphens)."
+            f"Invalid slug {slug!r}: must match [a-z][a-z0-9-]* "
+            "(kebab-case, lowercase, digits and hyphens)."
         )
 
 
@@ -41,21 +61,70 @@ def _resolve_wiki_path() -> Path:
     junction = Path(".millhouse/wiki")
     if not junction.exists():
         raise SystemExit(
-            "No .millhouse/wiki junction found. Run /mill-setup from this clone first."
+            "No .millhouse/wiki junction found. Run /mill-setup from this "
+            "clone first."
         )
     return junction.resolve()
 
 
-def _has_slug(home_text: str, slug: str) -> bool:
-    """True if Home.md already contains a `## <slug>` heading on its own line."""
-    pattern = re.compile(rf"^##\s+{re.escape(slug)}\s*$", re.MULTILINE)
-    return bool(pattern.search(home_text))
+def _slug_already_present(home_text: str, slug: str) -> bool:
+    """True if Home.md already contains a task heading for ``slug``."""
+    return any(match.group(1) == slug for match in _TASK_HEADING_RE.finditer(home_text))
+
+
+def _render_task_section(
+    slug: str,
+    title: str,
+    summary: str,
+    has_proposal: bool,
+) -> str:
+    """
+    Build the markdown block that gets appended to Home.md.
+
+    Heading form switches on ``has_proposal``:
+        - plain:  ``## <title> [<slug>]``
+        - linked: ``## <title> [[<slug>]](proposal-<slug>)``
+
+    A leading blank line is included so the new section is visually separated
+    from whatever preceded it; callers do not have to manage spacing.
+    """
+    if has_proposal:
+        heading = f"## {title} [[{slug}]](proposal-{slug})"
+    else:
+        heading = f"## {title} [{slug}]"
+
+    body = summary.strip()
+    if body:
+        return f"\n{heading}\n\n{body}\n"
+    return f"\n{heading}\n"
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Append a task to the wiki Home.md.")
-    parser.add_argument("slug", help="Task slug (kebab-case, e.g. 'fix-foo').")
-    parser.add_argument("--description", default="", help="One-line task description (optional).")
+    parser = argparse.ArgumentParser(
+        description="Append a task to the wiki Home.md (with optional proposal)."
+    )
+    parser.add_argument(
+        "slug",
+        help="Task slug — kebab-case, e.g. 'fix-foo'. Must be unique in Home.md.",
+    )
+    parser.add_argument(
+        "--title",
+        required=True,
+        help="Human-readable task title shown as the heading.",
+    )
+    parser.add_argument(
+        "--summary",
+        default="",
+        help="One-paragraph description written below the heading.",
+    )
+    parser.add_argument(
+        "--proposal-body",
+        default=None,
+        help=(
+            "Long-form background. When provided, creates "
+            "proposal-<slug>.md at wiki root and links the heading to it."
+        ),
+    )
     args = parser.parse_args(argv)
 
     _validate_slug(args.slug)
@@ -64,22 +133,53 @@ def main(argv: list[str] | None = None) -> int:
     if not home_path.exists():
         raise SystemExit(f"Home.md not found at {home_path}. Run /mill-setup first.")
 
-    # Acquire the shared wiki lock before any read or write — Home.md is a
-    # multi-writer file, so another mill-add running concurrently must wait.
+    has_proposal = args.proposal_body is not None
+    proposal_path = wiki_path / f"proposal-{args.slug}.md"
+    # Guard against clobbering an existing proposal file even when the slug is
+    # absent from Home.md (can happen after a bad abort): we'd overwrite the
+    # user's content otherwise.
+    if has_proposal and proposal_path.exists():
+        raise SystemExit(
+            f"Proposal file {proposal_path} already exists; refusing to overwrite."
+        )
+
+    # Acquire the shared wiki lock before any read or write. Home.md and
+    # _Sidebar.md are both multi-writer shared resources per `ref-formats.md`
+    # so the entire read-append-regenerate-commit sequence runs under one
+    # lock acquisition to avoid another writer interleaving.
     _wiki.acquire_lock(wiki_path, args.slug)
     try:
         home_text = home_path.read_text(encoding="utf-8")
-        if _has_slug(home_text, args.slug):
+        if _slug_already_present(home_text, args.slug):
             raise SystemExit(f"Slug {args.slug!r} already present in Home.md.")
 
-        # Ensure trailing newline before appending so the new section is
-        # cleanly separated from existing content.
+        # Ensure trailing newline so the appended section starts on its own
+        # line regardless of how the previous editor left the file.
         if not home_text.endswith("\n"):
             home_text += "\n"
-        new_section = f"\n## {args.slug}\n\n{args.description}\n"
+        new_section = _render_task_section(
+            args.slug, args.title, args.summary, has_proposal
+        )
         home_path.write_text(home_text + new_section, encoding="utf-8")
 
-        _wiki.write_commit_push(wiki_path, ["Home.md"], f"add task: {args.slug}")
+        changed_paths = ["Home.md", "_Sidebar.md"]
+        if has_proposal:
+            # Strip a single trailing newline if present, then re-add exactly
+            # one, so we do not accumulate blanks when the caller already
+            # terminated the string with ``\n``.
+            body = args.proposal_body.rstrip("\n") + "\n"
+            proposal_path.write_text(body, encoding="utf-8")
+            changed_paths.append(proposal_path.name)
+
+        # Regenerate _Sidebar.md *after* Home.md is written so the sidebar
+        # reflects the new task. _sidebar scans the wiki root for
+        # proposal-*.md files itself, so writing the proposal above is enough
+        # for the heading to render as a link.
+        _sidebar.regenerate(wiki_path)
+
+        _wiki.write_commit_push(
+            wiki_path, changed_paths, f"add task: {args.slug}"
+        )
     finally:
         _wiki.release_lock(wiki_path)
 
