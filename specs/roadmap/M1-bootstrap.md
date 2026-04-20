@@ -19,7 +19,7 @@ Delivers the minimum viable infrastructure: wiki clone + tasks list + `.millhous
 | M1.2 | `mill-setup` skill | [x] skill + templates + `_vscode.py` helper done; all 8 phases verified end-to-end against real wiki + hub (commits `d81d74c`, `06b1497`) |
 | M1.3 | `mill-add` script + `_sidebar.py` helper | [x] done; bracketed-slug format + `_sidebar.regenerate` + `--proposal-body` landed; end-to-end push against real wiki still pending |
 | M1.3.5 | `mill-add/SKILL.md` — thin skill for long-discussion → split task | [x] done |
-| M1.4 | `mill-list` script | [ ] not started |
+| M1.4 | `mill-list` script | [x] done |
 | M1.5 | Layer 01 integration test | [ ] not started |
 
 ---
@@ -101,7 +101,8 @@ Write `plugins/mill/scripts/mill-list.py`. Under ~30 LOC.
 
 ### Exit criteria
 
-- [ ] `python plugins/mill/scripts/mill-list.py` prints tasks, one per line
+- [x] `python plugins/mill/scripts/mill-list.py` prints tasks, one per line *(verified against real wiki — `[P]` marker shows for tasks with a proposal file; empty 3-space column when none; output aligns on slug width)*
+- [x] Error paths: missing `.millhouse/wiki` junction exits 1 with clear message; empty Home.md prints `(no tasks)`
 
 ---
 
