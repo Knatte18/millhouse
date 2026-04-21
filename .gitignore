@@ -22,6 +22,9 @@ env/
 # Mill local state (per-worktree, never tracked)
 **/.millhouse/
 
+# Per-worktree shortcut junction to wiki/active/<slug>/ (created by mill-spawn, or manually)
+/.active
+
 # Mill task worktrees (live at container level, never inside a clone)
 **/worktrees/
 
