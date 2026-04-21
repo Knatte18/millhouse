@@ -22,6 +22,8 @@ purpose: "High-level status tracker for the mill-v2 build. Layer-level detail li
 | Implemented | hub + wiki commits; per-layer canonical spec at `specs/<layer>-*.md` (TBD after audit) |
 | Legacy ideas | `specs/_legacy/` — not authoritative, kept for reference |
 
+`specs/active/<layer>/` is the in-design layer spec (exists now); `wiki/active/<slug>/` is the per-task runtime directory created by `mill-spawn` when a task is started (post-Layer-03, does not exist yet).
+
 ## Cross-cutting checklist
 
 - [ ] **Skills index** — rebuild `mill-skills-index` once the v2 skill catalog is stable. Tracked as task `skills-index-rebuild` in Home.md.

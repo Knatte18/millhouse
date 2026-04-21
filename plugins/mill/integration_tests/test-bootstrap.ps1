@@ -20,7 +20,11 @@ $millRoot  = Split-Path -Parent $PSScriptRoot
 $scripts   = Join-Path $millRoot 'scripts'
 $templates = Join-Path $millRoot 'templates'
 
-$tmp       = Join-Path $env:TEMP ('mill-bootstrap-' + [Guid]::NewGuid().ToString('N').Substring(0,8))
+# Per conversation/SKILL.md: never use $env:TEMP; use .millhouse/scratch/ instead.
+$hubRoot   = Split-Path -Parent $millRoot
+$scratch   = Join-Path $hubRoot '.millhouse' 'scratch'
+New-Item -ItemType Directory -Path $scratch -Force | Out-Null
+$tmp       = Join-Path $scratch ('bootstrap-test-' + [Guid]::NewGuid().ToString('N').Substring(0,8))
 $container = Join-Path $tmp       'container'
 $bare      = Join-Path $container 'wiki.git'
 $wiki      = Join-Path $container 'wiki'
@@ -208,15 +212,7 @@ try {
         }
     } finally { Pop-Location }
 
-    Write-Host 'PASS'
-    exit 0
-}
-catch {
-    Write-Host "FAIL: $_"
-    exit 1
-}
-finally {
-    # Best-effort cleanup. The junction must come out before
+    # Cleanup on success. The junction must come out before
     # Remove-Item can recurse into the hub, otherwise PowerShell follows
     # it into the wiki and fails on the bare repo's locked files.
     $junction = Join-Path $hub '.millhouse/wiki'
@@ -228,4 +224,13 @@ finally {
     if (Test-Path $tmp) {
         Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue
     }
+
+    Write-Host 'PASS'
+    exit 0
+}
+catch {
+    # Leave scratch dir on failure for inspection.
+    Write-Host "FAIL: $_"
+    Write-Host "Scratch left at: $tmp"
+    exit 1
 }

@@ -1,11 +1,11 @@
----
+# Batch 05: API scripts + config
+
+```yaml
 kind: plan-batch
 batch-name: api-and-config
 batch-depends: [backends]
 approved: false
----
-
-# Batch 05: API scripts + config
+```
 
 ## Batch-Specific Context
 

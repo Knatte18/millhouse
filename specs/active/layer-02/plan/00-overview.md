@@ -1,4 +1,6 @@
----
+# Layer 02 — Review API
+
+```yaml
 kind: plan-overview
 task: Layer 02 — Review API
 verify: N/A
@@ -7,9 +9,7 @@ approved: true
 started: 20260420-120000
 batches: [foundation, reviewers, templates, backends, api-and-config, integration-tests]
 root: plugins/mill
----
-
-# Layer 02 — Review API
+```
 
 ## Context
 

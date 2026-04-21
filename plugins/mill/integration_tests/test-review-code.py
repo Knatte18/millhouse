@@ -31,22 +31,25 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
-import tempfile
+import uuid
 from pathlib import Path
 
-import yaml
 
 # Resolve paths relative to this file
 _INTEGRATION_TESTS_DIR = Path(__file__).resolve().parent
 _MILL_ROOT = _INTEGRATION_TESTS_DIR.parent
+_HUB = _MILL_ROOT.parent.parent          # plugins/mill -> plugins -> hub
 _SCRIPTS = _MILL_ROOT / "scripts"
 _FIXTURES = _INTEGRATION_TESTS_DIR / "fixtures"
+_SCRATCH = _HUB / ".millhouse" / "scratch"
 
 # Ensure scripts/ is importable
 sys.path.insert(0, str(_SCRIPTS))
 import _junction  # noqa: E402  (after sys.path manipulation)
+import _review_common  # noqa: E402
 
 
 _CONFIG_YAML = """\
@@ -126,6 +129,58 @@ if __name__ == "__main__":
     main()
 '''
 
+_MODIFIED_FILE_CONTENT = '''\
+"""base-file.py — simple utility module used as a code-review test fixture."""
+from __future__ import annotations
+
+import re
+from functools import lru_cache
+
+
+def greet(name: str) -> str:
+    """Return a greeting string for the given name."""
+    if not name:
+        raise ValueError("name must not be empty")
+    return f"Hello, {name}!"
+
+
+@lru_cache(maxsize=128)
+def slugify(text: str) -> str:
+    """Return a URL-safe slug of text."""
+    slug = re.sub(r"\\s+", "-", text.strip().lower())
+    slug = re.sub(r"[^a-z0-9-]", "", slug)
+    return slug
+
+
+def main() -> None:
+    print(greet("world"))
+    print(slugify("Hello World"))
+    print(slugify("Hello World"))  # cached hit
+
+
+if __name__ == "__main__":
+    main()
+'''
+
+
+def _remove_tree(root: Path) -> None:
+    """Remove a scratch tree, detaching NTFS junctions and clearing read-only flags."""
+    import stat
+
+    junction = root / "project" / ".millhouse" / "wiki"
+    if junction.exists() or junction.is_symlink():
+        _junction.remove(junction)
+
+    def _on_error(func, path, exc_info):  # noqa: ANN001
+        # Clear read-only bit and retry (common for .git object files on Windows)
+        try:
+            os.chmod(path, stat.S_IWRITE)
+            func(path)
+        except Exception:
+            pass
+
+    shutil.rmtree(root, onerror=_on_error)
+
 
 def _git(project_root: Path, *args: str) -> None:
     """Run a git command inside project_root, raise on non-zero exit."""
@@ -159,8 +214,9 @@ def _run_script(script: Path, cwd: Path) -> tuple[int, str, str]:
 
 
 def main() -> int:
-    tmp_obj = tempfile.TemporaryDirectory(prefix="mill-layer02-test-code-")
-    tmp = Path(tmp_obj.name)
+    _SCRATCH.mkdir(parents=True, exist_ok=True)
+    tmp = _SCRATCH / f"mill-layer02-test-code-{uuid.uuid4().hex[:8]}"
+    tmp.mkdir()
     failed = False
     try:
         project_root = tmp / "project"
@@ -180,8 +236,10 @@ def main() -> int:
 
         _git(project_root, "checkout", "-b", "task-branch")
 
-        fixture_patch = str(_FIXTURES / "sample-code-diff.patch").replace("\\", "/")
-        _git(project_root, "apply", fixture_patch)
+        # Instead of applying a brittle patch fixture, write the modified
+        # base-file.py directly and commit. Diff is generated naturally by
+        # `git diff main..HEAD` inside the code-review backend.
+        base_file.write_text(_MODIFIED_FILE_CONTENT, encoding="utf-8")
         _git(project_root, "add", "base-file.py")
         _git(project_root, "commit", "-m", "apply diff")
 
@@ -267,21 +325,14 @@ def main() -> int:
             failed = True
             return 1
 
-        review_text = review_file.read_text(encoding="utf-8")
-        if review_text.startswith("---"):
-            fm_end = review_text.index("---", 3)
-            fm = yaml.safe_load(review_text[3:fm_end])
-        else:
-            fm = {}
+        # Use production parse_verdict — no duplicate YAML-block parser in tests.
+        file_verdict = _review_common.parse_verdict(review_file.read_text(encoding="utf-8"))
         entry_verdict = reviews[0]["verdict"]
-        if fm.get("verdict") != entry_verdict:
+        if file_verdict != entry_verdict:
             print(
-                f"FAIL: review file frontmatter verdict={fm.get('verdict')!r}, "
-                f"expected {entry_verdict!r}"
+                f"FAIL: review file verdict={file_verdict!r}, "
+                f"expected {entry_verdict!r} (matching reviews[0].verdict)"
             )
-            print("Review file contents (first 20 lines):")
-            for line in review_text.splitlines()[:20]:
-                print(f"  {line}")
             failed = True
             return 1
 
@@ -315,12 +366,9 @@ def main() -> int:
         raise
     finally:
         if failed:
-            tmp_obj._finalizer.detach()  # type: ignore[attr-defined]
-            print(
-                f"Temp dir preserved for inspection: {tmp}", file=sys.stderr
-            )
+            print(f"Scratch dir preserved for inspection: {tmp}", file=sys.stderr)
         else:
-            tmp_obj.cleanup()
+            _remove_tree(tmp)
 
     print("PASS — all code review tests passed")
     return 0
