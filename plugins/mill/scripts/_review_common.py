@@ -18,7 +18,7 @@ Public API:
     discover_round()     — determine next review round number from filesystem
     bulk_files()         — concatenate file contents with FILE delimiters
     render_prompt()      — render a template from plugins/mill/templates/
-    parse_verdict()      — extract APPROVE/REQUEST_CHANGES from YAML frontmatter
+    parse_verdict()      — extract APPROVE/REQUEST_CHANGES from fenced yaml block
     write_review_file()  — write a review file with a canonical timestamp name
     aggregate_verdict()  — worst-case verdict across a list of sub-verdicts
     load_reviewer()      — import a _reviewer_<name>.py module by name
@@ -255,39 +255,73 @@ def render_prompt(template_name: str, **tokens) -> str:
 
 
 def parse_verdict(raw_output: str) -> str:
-    """Extract 'APPROVE' or 'REQUEST_CHANGES' from YAML frontmatter.
+    """Extract a valid verdict value from a fenced yaml block.
 
-    Expects the raw_output to begin with a YAML block delimited by '---'
-    lines, containing a 'verdict:' field.
+    Scans raw_output for the first fenced ```yaml block (on its own line,
+    possibly with trailing whitespace). Extracts the 'verdict:' field from
+    inside the block (between the opening ```yaml and closing ``` fences).
 
-    Raises ReviewError if the frontmatter is missing, verdict is absent, or
-    the value is not one of the expected verdicts.
+    Valid verdict values:
+    - 'APPROVE'          — any review type
+    - 'REQUEST_CHANGES'  — plan and code review
+    - 'GAPS_FOUND'       — discussion review (v1 convention; a missing
+                           criterion is not a must-fix defect)
+
+    Raises ReviewError if:
+    - No ```yaml opening fence is found.
+    - The yaml block is not closed by a ``` line.
+    - The 'verdict:' field is absent from the block.
+    - The verdict value is not one of the three above.
+
+    The first ~400 chars of raw_output are included in error messages for
+    debuggability.
     """
-    if not raw_output.lstrip().startswith("---"):
-        raise ReviewError("Could not parse verdict: no YAML frontmatter found")
+    preview = raw_output[:400].strip()
+    lines = raw_output.splitlines()
 
-    lines = raw_output.lstrip().splitlines()
-    end_idx = None
-    for i, line in enumerate(lines[1:], start=1):
-        if line.strip() == "---":
-            end_idx = i
+    # Find the first ```yaml opening fence.
+    open_idx = None
+    for i, line in enumerate(lines):
+        if line.rstrip() == "```yaml":
+            open_idx = i
             break
 
-    if end_idx is None:
-        raise ReviewError("Could not parse verdict: YAML frontmatter not closed")
+    if open_idx is None:
+        raise ReviewError(
+            f"Could not parse verdict: no ```yaml block found.\n"
+            f"Raw output preview:\n{preview}"
+        )
 
-    for line in lines[1:end_idx]:
+    # Find the closing ``` fence after the opening.
+    close_idx = None
+    for i, line in enumerate(lines[open_idx + 1:], start=open_idx + 1):
+        if line.rstrip() == "```":
+            close_idx = i
+            break
+
+    if close_idx is None:
+        raise ReviewError(
+            f"Could not parse verdict: ```yaml block not closed.\n"
+            f"Raw output preview:\n{preview}"
+        )
+
+    # Scan block body for verdict: field.
+    for line in lines[open_idx + 1:close_idx]:
         stripped = line.strip()
         if stripped.startswith("verdict:"):
             value = stripped[len("verdict:"):].strip().strip('"').strip("'")
-            if value in ("APPROVE", "REQUEST_CHANGES"):
+            if value in ("APPROVE", "REQUEST_CHANGES", "GAPS_FOUND"):
                 return value
             raise ReviewError(
                 f"Could not parse verdict: invalid value {value!r}; "
-                "expected APPROVE or REQUEST_CHANGES"
+                f"expected APPROVE, REQUEST_CHANGES, or GAPS_FOUND.\n"
+                f"Raw output preview:\n{preview}"
             )
 
-    raise ReviewError("Could not parse verdict: 'verdict:' key not found in frontmatter")
+    raise ReviewError(
+        f"Could not parse verdict: 'verdict:' key not found in ```yaml block.\n"
+        f"Raw output preview:\n{preview}"
+    )
 
 
 def write_review_file(
@@ -492,24 +526,49 @@ if __name__ == "__main__":
     print(f"PASS: resolve_path: {p}")
 
     # --- parse_verdict: valid APPROVE ---
-    raw = "---\nverdict: APPROVE\n---\n\nSome review text.\n"
+    raw = "# Review: My Task\n\n```yaml\nverdict: APPROVE\nreviewer_model: sonnetmax\n```\n\nSome review text.\n"
     v = parse_verdict(raw)
     assert v == "APPROVE", f"Expected APPROVE, got {v!r}"
     print("PASS: parse_verdict APPROVE")
 
     # --- parse_verdict: valid REQUEST_CHANGES ---
-    raw = "---\nverdict: REQUEST_CHANGES\n---\n"
+    raw = "# Review: My Task\n\n```yaml\nverdict: REQUEST_CHANGES\nreviewer_model: sonnetmax\n```\n"
     v = parse_verdict(raw)
     assert v == "REQUEST_CHANGES"
     print("PASS: parse_verdict REQUEST_CHANGES")
 
-    # --- parse_verdict: no frontmatter -> ReviewError ---
+    # --- parse_verdict: yaml block not at top (still found by scan) ---
+    raw = "# Review: My Task\n\nSome preamble.\n\n```yaml\nverdict: APPROVE\n```\n"
+    v = parse_verdict(raw)
+    assert v == "APPROVE", f"Expected APPROVE, got {v!r}"
+    print("PASS: parse_verdict yaml block not at top of document")
+
+    # --- parse_verdict: no yaml block -> ReviewError ---
     try:
-        parse_verdict("No frontmatter here.")
+        parse_verdict("No yaml block here.")
         print("FAIL: expected ReviewError", file=sys.stderr)
         errors += 1
     except ReviewError as e:
-        print("PASS: parse_verdict no frontmatter -> ReviewError")
+        assert "```yaml" in str(e) or "no ```yaml" in str(e)
+        print("PASS: parse_verdict no yaml block -> ReviewError")
+
+    # --- parse_verdict: unclosed yaml block -> ReviewError ---
+    try:
+        parse_verdict("# Review: X\n\n```yaml\nverdict: APPROVE\n")
+        print("FAIL: expected ReviewError for unclosed block", file=sys.stderr)
+        errors += 1
+    except ReviewError as e:
+        assert "not closed" in str(e)
+        print("PASS: parse_verdict unclosed yaml block -> ReviewError")
+
+    # --- parse_verdict: invalid verdict value -> ReviewError ---
+    try:
+        parse_verdict("# Review: X\n\n```yaml\nverdict: MAYBE\n```\n")
+        print("FAIL: expected ReviewError for invalid verdict", file=sys.stderr)
+        errors += 1
+    except ReviewError as e:
+        assert "MAYBE" in str(e)
+        print("PASS: parse_verdict invalid verdict value -> ReviewError")
 
     # --- write_review_file: creates file ---
     with tempfile.TemporaryDirectory() as tmpdir:
