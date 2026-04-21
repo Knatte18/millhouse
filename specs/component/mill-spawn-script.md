@@ -4,9 +4,11 @@
 type: script
 layer: 03
 v1_ref: plugins/mill/scripts/spawn_task.py + skills/mill-spawn/
-status: discussed — awaiting full-write
+status: partially discussed — key decisions captured, not ready for full-write
 note: "No skill wrapper. All logic is mechanical and lives in mill-spawn.py."
 ```
+
+**For the thread that will do the full-write:** these notes are *starting points*, not a finished spec. Grill Henrik further on edge cases before writing code — follow the approach used by v1 `skills/mill-start/` (interactive design discussion that exposes assumptions, corners, failure modes). Known underspecified areas are listed in *Open design points*; there will be more.
 
 ## Purpose
 
@@ -55,6 +57,10 @@ Claim one task from the wiki's Home.md, create a git worktree for it, and set up
 - `_wiki.py` — sync_pull, write_commit_push, lock.
 - `_sidebar.py` — regenerate.
 - `_render.py` — template substitusjon.
+
+## Templates
+
+- `templates/status-discussing.md` — initial `status.md` ved spawn. Tokens: `<TASK_TITLE>`, `<TASK_DESCRIPTION>`, `<TIMESTAMP>`. (Eksisterer i v1 og kan kopieres inn direkte.)
 
 ## Out of scope vs v1
 
