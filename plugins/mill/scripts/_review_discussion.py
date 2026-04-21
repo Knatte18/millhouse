@@ -1,9 +1,10 @@
 """
 Review backend for discussion artefacts.
 
-Single holistic review call using a tool-use reviewer. The LLM reads the
-discussion file itself (tool-use mode) and returns its review as text.
-The backend writes the review file; the LLM does not use Write.
+Single holistic review call. The reviewer's MODE (bulk vs tool-use) decides
+whether the discussion file is inlined into the prompt or the reviewer is
+pointed at its path and reads it via Read/Grep/Glob. The backend writes the
+review file; the LLM does not use Write.
 
 Public API:
     run(cfg, slug, mill_dir, wiki_root, project_root) -> ReviewResult
@@ -18,7 +19,7 @@ from _review_common import (
     ReviewError,
     ReviewResult,
     aggregate_verdict,
-    check_mode,
+    build_tool_rule,
     discover_round,
     load_reviewer,
     load_task_title,
@@ -64,16 +65,31 @@ def run(
         file=sys.stderr,
     )
 
-    # 3. Load reviewer; enforce tool-use mode
+    # 3. Load reviewer; accept bulk or tool-use
     reviewer_name = cfg["review"]["discussion"]["holistic"]
     reviewer = load_reviewer(reviewer_name)
-    check_mode(reviewer, "tool-use", "discussion")
+    tool_rule = build_tool_rule(reviewer.MODE)
 
-    # 4. Render prompt
+    # 4. Build mode-specific artefact section + render prompt
+    if reviewer.MODE == "tool-use":
+        artefact_section = (
+            f"Read the discussion at `{discussion_path}`. The discussion "
+            f"file is the authoritative scope. Read files referenced in "
+            f"`## Technical Context` to verify claims."
+        )
+    else:
+        discussion_text = discussion_path.read_text(encoding="utf-8")
+        artefact_section = (
+            "Evaluate the discussion below. The inlined content is the "
+            "authoritative scope.\n\n## Discussion\n"
+            f"{discussion_text}"
+        )
+
     prompt_text = render_prompt(
         "review-discussion",
         task_title=load_task_title(mill_dir, slug),
-        artefact_path=str(discussion_path),
+        tool_rule=tool_rule,
+        artefact_section=artefact_section,
         constraints=read_constraints_md(project_root),
         round=round_n,
         reviewer_model=reviewer_name,

@@ -19,8 +19,8 @@ from _review_common import (
     ReviewError,
     ReviewResult,
     aggregate_verdict,
+    build_tool_rule,
     bulk_files,
-    check_mode,
     discover_round,
     load_reviewer,
     load_task_title,
@@ -125,23 +125,40 @@ def run(
         if (project_root / p).exists()
     ]
 
-    # 5. Load reviewer; enforce bulk mode
+    # 5. Load reviewer (accept bulk or tool-use)
     reviewer_name = cfg["review"]["code"]["reviewer"]
     reviewer = load_reviewer(reviewer_name)
-    check_mode(reviewer, "bulk", "code")
 
     style = cfg["review"]["code"]["style"]
     template_name = f"review-code-{style}"
 
-    # 6. Bulk, render, dispatch
-    bulked = bulk_files([*plan_files, *touched_files])
+    # 6. Build prompt sections based on reviewer mode
+    tool_rule = build_tool_rule(reviewer.MODE)
+    if reviewer.MODE == "tool-use":
+        plan_list = "\n".join(f"- `{p}`" for p in plan_files) or "(none)"
+        touched_list = "\n".join(f"- `{p}`" for p in touched_files) or "(none)"
+        plan_section = (
+            f"## Approved plan files (read each)\n{plan_list}"
+        )
+        artefact_section = (
+            f"## Source files in the diff (read each for full context)\n"
+            f"{touched_list}"
+        )
+    else:
+        bulked = bulk_files([*plan_files, *touched_files])
+        plan_section = f"## Approved plan\n{plan_content}"
+        artefact_section = (
+            "## Source files (primary file + supporting context)\n"
+            f"{bulked}"
+        )
 
     prompt_text = render_prompt(
         template_name,
         task_title=load_task_title(mill_dir, slug),
         diff=diff,
-        plan_content=plan_content,
-        artefact_content=bulked,
+        tool_rule=tool_rule,
+        plan_section=plan_section,
+        artefact_section=artefact_section,
         constraints=read_constraints_md(project_root),
         round=round_n,
         reviewer_model=reviewer_name,

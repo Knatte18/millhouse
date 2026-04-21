@@ -22,8 +22,8 @@ from _review_common import (
     ReviewError,
     ReviewResult,
     aggregate_verdict,
+    build_tool_rule,
     bulk_files,
-    check_mode,
     discover_round,
     load_reviewer,
     load_task_title,
@@ -137,13 +137,30 @@ def _review_one_batch(
     """Review a single plan batch file. Returns a reviews[] entry dict."""
     raw_refs = _parse_batch_refs(batch_path)
     reads = _resolve_ref_paths(raw_refs, project_root, root)
-    bulked = bulk_files([overview_path, batch_path, *reads])
+
+    tool_rule = build_tool_rule(batch_reviewer.MODE)
+    if batch_reviewer.MODE == "tool-use":
+        read_list = "\n".join(f"- {p}" for p in reads) or "(none)"
+        artefact_section = (
+            f"## Plan files to review\n"
+            f"- Overview: `{overview_path}`\n"
+            f"- Batch:    `{batch_path}`\n\n"
+            f"Read both files above. Then read the source files listed under "
+            f"`Reads:` / `Modifies:` / `Creates:` in the batch:\n{read_list}"
+        )
+    else:
+        bulked = bulk_files([overview_path, batch_path, *reads])
+        artefact_section = (
+            "## Plan content (overview + batch + Reads/Modifies files)\n"
+            f"{bulked}"
+        )
 
     prompt_text = render_prompt(
         "review-plan-batch",
         task_title=task_title,
         batch_name=batch_path.stem,
-        artefact_content=bulked,
+        tool_rule=tool_rule,
+        artefact_section=artefact_section,
         constraints=constraints,
         round=round_n,
         reviewer_model=batch_reviewer_name,
@@ -217,15 +234,13 @@ def run(
 
     root = _load_root_from_overview(overview_path)
 
-    # 3. Load reviewers
+    # 3. Load reviewers (accept bulk or tool-use)
     batch_reviewer_name = cfg["review"]["plan"]["batch"]
     batch_reviewer = load_reviewer(batch_reviewer_name)
-    check_mode(batch_reviewer, "bulk", "plan")
 
     holistic_name = cfg["review"]["plan"].get("holistic")
     if holistic_name is not None:
         holistic_reviewer = load_reviewer(holistic_name)
-        check_mode(holistic_reviewer, "bulk", "plan")
     else:
         holistic_reviewer = None
 
@@ -273,12 +288,29 @@ def run(
                 all_raw_refs[ref] = None
         all_reads = _resolve_ref_paths(list(all_raw_refs.keys()), project_root, root)
 
-        bulked_all = bulk_files([overview_path, *batch_files, *all_reads])
+        tool_rule = build_tool_rule(holistic_reviewer.MODE)
+        if holistic_reviewer.MODE == "tool-use":
+            batch_list = "\n".join(f"- `{p}`" for p in batch_files) or "(none)"
+            read_list = "\n".join(f"- `{p}`" for p in all_reads) or "(none)"
+            artefact_section = (
+                f"## Plan files to review\n"
+                f"- Overview: `{overview_path}`\n"
+                f"- Batches:\n{batch_list}\n\n"
+                f"Read the overview and every batch listed above. Then read the "
+                f"source files referenced across all batches:\n{read_list}"
+            )
+        else:
+            bulked_all = bulk_files([overview_path, *batch_files, *all_reads])
+            artefact_section = (
+                "## Plan content (overview + all batches + referenced files)\n"
+                f"{bulked_all}"
+            )
 
         prompt_text = render_prompt(
             "review-plan-holistic",
             task_title=task_title,
-            artefact_content=bulked_all,
+            tool_rule=tool_rule,
+            artefact_section=artefact_section,
             constraints=constraints,
             round=round_n,
             reviewer_model=holistic_name,

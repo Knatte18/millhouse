@@ -17,12 +17,12 @@ Public API:
     resolve_path()       — substitute <SLUG> in a config path template
     discover_round()     — determine next review round number from filesystem
     bulk_files()         — concatenate file contents with FILE delimiters
+    build_tool_rule()    — mode-specific <TOOL_RULE> block (bulk / tool-use)
     render_prompt()      — render a template from plugins/mill/templates/
     parse_verdict()      — extract APPROVE/REQUEST_CHANGES from fenced yaml block
     write_review_file()  — write a review file with a canonical timestamp name
     aggregate_verdict()  — worst-case verdict across a list of sub-verdicts
     load_reviewer()      — import a _reviewer_<name>.py module by name
-    check_mode()         — assert reviewer.MODE matches the expected mode
     load_config()        — load wiki/config.yaml + optional config.local.yaml
 """
 from __future__ import annotations
@@ -232,6 +232,36 @@ def bulk_files(file_paths: list[Path]) -> str:
     return "\n\n".join(parts)
 
 
+_TOOL_RULE_BULK = (
+    "**CRITICAL: Do NOT request tool calls. All content you need is in this prompt.**\n"
+    "**CRITICAL: Review-only. Do NOT suggest modifications. Findings only.**\n"
+    "**CRITICAL: Do NOT read `reviews/`. Evaluate fresh each round.**\n"
+    "**CRITICAL: Do NOT use Write. Return review as text.**"
+)
+
+_TOOL_RULE_TOOL_USE = (
+    "**You MAY use Read, Grep, and Glob to verify claims against source files.**\n"
+    "**CRITICAL: Do NOT use Write, Edit, or run git/bash. Return review as text.**\n"
+    "**CRITICAL: Review-only. Do NOT suggest modifications. Findings only.**\n"
+    "**CRITICAL: Do NOT read `reviews/`. Evaluate fresh each round.**"
+)
+
+
+def build_tool_rule(mode: str) -> str:
+    """Return the <TOOL_RULE> block for a reviewer's MODE.
+
+    Templates embed this as the top-of-prompt directive. In bulk mode the
+    reviewer is told all content is inline; in tool-use mode it is granted
+    Read/Grep/Glob. Write, Edit, and shell access are forbidden in both modes
+    — the backend owns file writes and git.
+    """
+    if mode == "bulk":
+        return _TOOL_RULE_BULK
+    if mode == "tool-use":
+        return _TOOL_RULE_TOOL_USE
+    raise ValueError(f"Unknown reviewer mode: {mode!r} (expected 'bulk' or 'tool-use')")
+
+
 def render_prompt(template_name: str, **tokens) -> str:
     """Render a review prompt template from plugins/mill/templates/.
 
@@ -384,21 +414,6 @@ def load_reviewer(name: str):
     except ModuleNotFoundError:
         raise ReviewError(
             f"Unknown reviewer '{name}': no _reviewer_{name}.py found"
-        )
-
-
-def check_mode(reviewer, expected_mode: str, review_type: str) -> None:
-    """Assert that reviewer.MODE matches expected_mode.
-
-    Raises ReviewError on mismatch with the exact message format specified
-    in the design:
-        "No {reviewer.MODE} template exists for {review_type} review.
-         Configure a {expected_mode} reviewer."
-    """
-    if reviewer.MODE != expected_mode:
-        raise ReviewError(
-            f"No {reviewer.MODE} template exists for {review_type} review. "
-            f"Configure a {expected_mode} reviewer."
         )
 
 
@@ -625,29 +640,20 @@ if __name__ == "__main__":
         assert "nonexistent_xyz_abc" in str(e)
         print("PASS: load_reviewer nonexistent -> ReviewError")
 
-    # --- check_mode: mismatch -> ReviewError with correct message ---
-    class _FakeBulkReviewer:
-        MODE = "bulk"
-    try:
-        check_mode(_FakeBulkReviewer, "tool-use", "discussion")
-        print("FAIL: expected ReviewError for mode mismatch", file=sys.stderr)
-        errors += 1
-    except ReviewError as e:
-        msg = str(e)
-        assert "bulk" in msg, f"Expected 'bulk' in error, got: {msg!r}"
-        assert "tool-use" in msg, f"Expected 'tool-use' in error, got: {msg!r}"
-        assert "discussion" in msg, f"Expected 'discussion' in error, got: {msg!r}"
-        print(f"PASS: check_mode mismatch -> ReviewError: {msg!r}")
+    # --- build_tool_rule: both modes ---
+    assert "Do NOT request tool calls" in build_tool_rule("bulk")
+    assert "MAY use Read, Grep, and Glob" in build_tool_rule("tool-use")
+    print("PASS: build_tool_rule bulk + tool-use")
 
-    # --- check_mode: matching mode -> no error ---
     try:
-        check_mode(_FakeBulkReviewer, "bulk", "plan")
-        print("PASS: check_mode matching mode -> no error")
-    except ReviewError as e:
-        print(f"FAIL: unexpected ReviewError: {e}", file=sys.stderr)
+        build_tool_rule("weird")
+        print("FAIL: expected ValueError for unknown mode", file=sys.stderr)
         errors += 1
+    except ValueError as e:
+        assert "weird" in str(e)
+        print("PASS: build_tool_rule unknown mode -> ValueError")
 
-    # --- load_config: valid YAML + local override ---
+# --- load_config: valid YAML + local override ---
     with tempfile.TemporaryDirectory() as tmpdir:
         wiki = Path(tmpdir) / "wiki"
         wiki.mkdir()
