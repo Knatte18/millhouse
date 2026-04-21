@@ -22,14 +22,64 @@ Public API:
         Remove a junction/symlink at ``link_path``. Idempotent; refuses to
         touch a path that is a regular file or directory to prevent
         accidentally deleting real content.
+
+    resolve_target(template, tokens)
+        Substitute ``<name>`` tokens in a junction target template. Used by
+        mill-setup and mill-spawn to turn entries from the wiki config's
+        ``junctions:`` block into concrete paths.
+
+    has_slug_token(template)
+        True if a target template contains the ``<SLUG>`` task-variable.
+        Used to decide scope: present → per-worktree (mill-spawn), absent →
+        hub/worktree-wide (mill-setup).
 """
 from __future__ import annotations
 
 import os
+import re
 import sys
 from pathlib import Path
 
 import _subprocess_util
+
+
+_TOKEN_RE = re.compile(r"<([A-Za-z][A-Za-z0-9_]*)>")
+
+
+def resolve_target(template: str, tokens: dict[str, str]) -> str:
+    """Substitute ``<NAME>`` tokens in ``template`` using ``tokens``.
+
+    All tokens are UPPERCASE. Path tokens carry a ``_PATH`` suffix
+    (``<HUB_PATH>``, ``<WIKI_PATH>``, ...); plain names do not
+    (``<REPO>``, ``<SLUG>``). Matching is case-sensitive.
+
+    Raises ``ValueError`` if the template references a token that is not
+    in ``tokens``. This is a hard error: mill-setup should surface it so
+    the user can correct the config, rather than silently creating a
+    junction with a literal ``<UNKNOWN>`` segment in its path.
+    """
+    missing: list[str] = []
+
+    def _replace(m: re.Match[str]) -> str:
+        name = m.group(1)
+        if name not in tokens:
+            missing.append(name)
+            return m.group(0)
+        return tokens[name]
+
+    substituted = _TOKEN_RE.sub(_replace, template)
+    if missing:
+        known = ", ".join(sorted(tokens)) or "(none)"
+        raise ValueError(
+            f"Unknown token(s) in junction target {template!r}: "
+            f"{', '.join(sorted(set(missing)))}. Known tokens: {known}."
+        )
+    return substituted
+
+
+def has_slug_token(template: str) -> bool:
+    """True if ``template`` contains the ``<SLUG>`` task-variable token."""
+    return "<SLUG>" in template
 
 
 def create(target: Path, link_path: Path) -> None:

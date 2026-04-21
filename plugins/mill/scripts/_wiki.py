@@ -49,9 +49,38 @@ import sys
 import time
 from pathlib import Path
 
+import yaml
+
 import _subprocess_util
 
 _STALE_SECONDS = 5 * 60  # 5 minutes
+
+_JUNCTION_DEFAULTS: dict[str, str] = {
+    ".millhouse/wiki": "<WIKI_PATH>",
+    ".active": "<WIKI_PATH>/active/<SLUG>/",
+}
+
+
+def read_junctions(wiki_root: Path) -> dict[str, str]:
+    """Read the ``junctions:`` block from ``<wiki_root>/config.yaml``.
+
+    Returns an ordered dict mapping junction-path → unresolved target
+    template. Tokens in the target are NOT substituted here — callers pass
+    the raw template through ``_junction.resolve_target`` with the token
+    map appropriate to their scope (mill-setup lacks ``<SLUG>``, mill-spawn
+    has it).
+
+    Missing config file or missing ``junctions:`` block falls back to
+    ``_JUNCTION_DEFAULTS``.
+    """
+    cfg_path = wiki_root / "config.yaml"
+    if not cfg_path.exists():
+        return dict(_JUNCTION_DEFAULTS)
+    cfg = yaml.safe_load(cfg_path.read_text(encoding="utf-8")) or {}
+    raw = cfg.get("junctions")
+    if not raw:
+        return dict(_JUNCTION_DEFAULTS)
+    return {str(k): str(v) for k, v in raw.items()}
 
 
 class WikiPushError(RuntimeError):

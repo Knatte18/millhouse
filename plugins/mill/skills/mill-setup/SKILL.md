@@ -40,7 +40,7 @@ $env:PYTHONPATH = (Resolve-Path 'plugins/mill/scripts').Path
 
 After that you can use `python -c "..."` with plain `import _junction`, `import _wiki`, `import _vscode`, etc. — no `sys.path` gymnastics inside the snippet.
 
-Helpers used by this skill: `_junction` (Phase 4), `_wiki` (Phase 6, 6a), `_sidebar` (Phase 6a), `_vscode` (Phase 7), `_render` (transitively via `_vscode`).
+Helpers used by this skill: `_junction` (Phase 4), `_wiki` (Phase 3.5, 6, 6a — incl. `read_junctions`), `_sidebar` (Phase 6a), `_vscode` (Phase 7), `_render` (transitively via `_vscode`).
 
 ## Phases
 
@@ -68,20 +68,60 @@ Run `git ls-remote <wiki-url>`. If it fails (exit non-zero), halt with:
 3. If `<container>/wiki/` exists but is not a git repo: halt with:
    > `<container>/wiki/` exists but is not a git repository. Move it aside or remove it, then re-run `/mill-setup`. mill-setup never overwrites user data.
 
-### Phase 4 — Create the `.millhouse/wiki` junction
+### Phase 3.5 — Resolve junctions from wiki config
 
-Call `_junction.create` from M1.1:
+After the wiki is cloned (Phase 3) but before any junction is created, read the `junctions:` block from `<container>/wiki/config.yaml`:
 
 ```powershell
-python -c "from pathlib import Path; import _junction; _junction.create(Path(r'<container>/wiki').resolve(), Path('.millhouse/wiki').resolve())"
+python -c "from pathlib import Path; import _wiki; import json; print(json.dumps(_wiki.read_junctions(Path(r'<container>/wiki').resolve())))"
 ```
 
-Before calling, check state:
+`read_junctions` returns a dict of `{junction-path: target-template}`. Defaults when the config file or `junctions:` block is absent:
 
-1. If `.millhouse/wiki` does not exist: create it via the call above.
-2. If it exists and already resolves to `<container>/wiki`: skip.
+- `.millhouse/wiki` → `<WIKI_PATH>`
+- `.active` → `<WIKI_PATH>/active/<SLUG>/`
+
+**Compute the token map** for this run. All tokens are UPPERCASE; paths carry the `_PATH` suffix.
+
+- `<HUB_PATH>` — the primary clone. Derive via `git rev-parse --show-toplevel` (and, in future, worktree-detect to fall back to the primary from a worktree subfolder).
+- `<CWD_PATH>` — current working directory (absolute).
+- `<CONTAINER_PATH>` — parent of `<HUB_PATH>` (holds hub/, wiki/, worktrees/).
+- `<WIKI_PATH>` — the wiki clone. Default: `<CONTAINER_PATH>/<REPO>.wiki/`. Override if `.millhouse/config.local.yaml` has a `wiki_path:` key (future).
+- `<REPO>` — short repo name from origin URL (last path segment, stripped of `.git`).
+
+Do **NOT** add `<SLUG>` — mill-setup only handles hub-scope junctions. Entries whose template contains `<SLUG>` belong to mill-spawn.
+
+Partition the junction entries:
+
+- **Hub junctions**: template does not contain `<SLUG>`. These are created now (Phase 4).
+- **Per-worktree junctions**: template contains `<SLUG>`. Skipped by mill-setup; reported in Phase 8 summary so the user can confirm they exist in config.
+
+For each hub junction, substitute tokens via `_junction.resolve_target`:
+
+```powershell
+python -c "import _junction; print(_junction.resolve_target('<WIKI_PATH>/active/<SLUG>/', {'HUB_PATH': 'C:/path', 'CWD_PATH': '.', 'CONTAINER_PATH': 'C:/', 'REPO': 'millhouse', 'WIKI_PATH': 'C:/path/../millhouse.wiki'}))"
+```
+
+Unknown tokens raise `ValueError` — halt and tell the user to correct the `junctions:` block.
+
+**Invariant:** Junctions are IDE/terminal convenience. Scripts MUST resolve to the real wiki repo (`<WIKI_PATH>`-token value) and never treat the junction path as authoritative.
+
+### Phase 4 — Create the hub junctions
+
+For each hub-scope entry resolved in Phase 3.5 (the ones without `<SLUG>`), call `_junction.create`:
+
+```powershell
+python -c "from pathlib import Path; import _junction; _junction.create(Path(r'<resolved-target>').resolve(), Path(r'<junction-path>').resolve())"
+```
+
+Before creating, check state per junction:
+
+1. If `<junction-path>` does not exist: create it. Parent dir (e.g. `.millhouse/`) is auto-created by `_junction.create`.
+2. If it exists and already resolves to `<resolved-target>`: skip.
 3. If it exists but resolves elsewhere: halt with:
-   > `.millhouse/wiki` junction points at `<current-target>`. Expected `<container>/wiki`. Remove `.millhouse/wiki`, then re-run `/mill-setup`.
+   > `<junction-path>` points at `<current-target>`. Expected `<resolved-target>`. Remove `<junction-path>`, then re-run `/mill-setup`.
+
+Iterate until all hub junctions are present. Entries with `<SLUG>` are left to mill-spawn per worktree.
 
 ### Phase 5 — Seed `.millhouse/config.local.yaml`
 
@@ -165,26 +205,31 @@ Title format for the hub: **just the repo short-name** (e.g. `millhouse`). No `$
 
 Check every invariant; halt with a specific error if any fails:
 
-- `<container>/wiki/` is a git repo
-- `.millhouse/wiki` junction exists and resolves to `<container>/wiki`
+- `<WIKI_PATH>` is a git repo (the cloned wiki)
+- Every hub junction (Phase 4 entry) exists and resolves to its expected target
 - `.millhouse/config.local.yaml` exists
-- `<container>/wiki/Home.md` exists and starts with `# Tasks`
-- `<container>/wiki/_Sidebar.md` exists and begins with `### Navigation`
+- `<WIKI_PATH>/Home.md` exists and starts with `# Tasks`
+- `<WIKI_PATH>/_Sidebar.md` exists and begins with `### Navigation`
 - `.vscode/settings.json` exists with `titleBar.activeBackground == "#2d7d46"`
 
-On success, print:
+On success, print a summary listing all configured junctions. Hub junctions show their resolved target; per-worktree (`<SLUG>`) junctions show the unresolved template so the user can verify the config:
 
 ```
 mill-setup complete.
 
-  Container:     <container>
-  Hub:           <cwd>
-  Wiki clone:    <container>/wiki
-  Wiki junction: .millhouse/wiki -> <container>/wiki
-  Tasks (Home):  <container>/wiki/Home.md
-  Sidebar:       <container>/wiki/_Sidebar.md
+  Hub:           <HUB_PATH>
+  Wiki clone:    <WIKI_PATH>
   Local config:  .millhouse/config.local.yaml
+  Tasks (Home):  <WIKI_PATH>/Home.md
+  Sidebar:       <WIKI_PATH>/_Sidebar.md
   VS Code:       .vscode/settings.json (titleBar = #2d7d46 green)
+
+Junctions (from wiki config.yaml):
+  Hub-scope (created now):
+    <path-a> -> <resolved-target-a>
+    <path-b> -> <resolved-target-b>
+  Per-worktree (created by mill-spawn):
+    <path-c> -> <template-c>    (contains <SLUG>)
 
 Next: /mill-add <slug> --title "..." [--summary "..."] [--proposal-body "..."] to add tasks, /mill-list to list them.
 ```
@@ -204,7 +249,8 @@ Next: /mill-add <slug> --title "..." [--summary "..."] [--proposal-body "..."] t
 Every phase checks current state before acting. Re-running after a partial or complete setup is always safe:
 
 - Wiki already cloned → pulls latest.
-- Junction correct → skipped.
+- Junction-prefs re-read from wiki config each run → picks up changes to `junctions:` block after a wiki pull.
+- Wiki junction correct (at the configured path) → skipped.
 - `config.local.yaml` present → skipped.
 - `Home.md` non-empty (and v2-shape or user-custom) → skipped; only GitHub-default content is overwritten.
 - `_Sidebar.md` regenerated unconditionally; commit only if bytes changed.
