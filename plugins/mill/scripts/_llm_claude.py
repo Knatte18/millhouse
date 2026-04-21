@@ -20,11 +20,29 @@ Stderr receives one-line progress messages on entry and exit.
 from __future__ import annotations
 
 import json
+import shutil
 import sys
 import time
 from pathlib import Path
 
 import _subprocess_util
+
+
+def _resolve_claude() -> str:
+    """Return the absolute path to the claude CLI, or the bare name as fallback.
+
+    On Windows, `claude` is typically installed as `claude.cmd` (an npm shim).
+    Python's subprocess.run does not resolve `.cmd`/`.bat` extensions without
+    shell=True, so we look up the full resolved path via shutil.which and
+    pass it to subprocess. shutil.which understands PATHEXT on Windows and
+    finds `claude.cmd` or `claude.exe` as appropriate.
+    """
+    resolved = shutil.which("claude")
+    if resolved is None:
+        # Let subprocess raise its own "file not found" error downstream;
+        # returning the bare name here keeps the error path unchanged.
+        return "claude"
+    return resolved
 
 
 # ---------------------------------------------------------------------------
@@ -51,9 +69,10 @@ def _build_argv(
 ) -> list[str]:
     """Build the base argv for a `claude -p` subprocess call."""
     argv = [
-        "claude",
+        _resolve_claude(),
         "-p",
         "--output-format", "stream-json",
+        "--verbose",  # required by claude CLI when combining -p with stream-json
         "--model", model,
         "--allowedTools", allowed_tools,
     ]

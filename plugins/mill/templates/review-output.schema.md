@@ -1,20 +1,20 @@
 # Review Output Schema
 
-This file documents the canonical format for all review output files produced by the Layer 02 review system. Every file written by `_review_common.write_review_file()` must conform to this schema. `parse_verdict()` in `_review_common.py` validates against this schema — specifically the `verdict:` frontmatter field.
+This file documents the canonical format for all review output files produced by the Layer 02 review system. Every file written by `_review_common.write_review_file()` must conform to this schema. `parse_verdict()` in `_review_common.py` validates against this schema — specifically the `verdict:` field inside the fenced yaml block.
 
 ---
 
 ## File format
 
 ```markdown
----
+# Review: <title>
+
+```yaml
 verdict: APPROVE | REQUEST_CHANGES
 reviewer_model: <reviewer name from config, e.g. sonnetmax>
 reviewed_file: <path to the artefact that was reviewed>
 date: <UTC YYYY-MM-DD>
----
-
-# Review: <title>
+```
 
 ## Findings
 
@@ -31,7 +31,9 @@ APPROVE | REQUEST_CHANGES
 
 ---
 
-## Frontmatter fields
+## Metadata block fields
+
+The fenced ` ```yaml ` block placed immediately after the `# Review: ...` heading contains review metadata. Fields:
 
 | Field | Type | Required | Values |
 |---|---|---|---|
@@ -40,11 +42,13 @@ APPROVE | REQUEST_CHANGES
 | `reviewed_file` | string | yes | path to the artefact reviewed (discussion file, batch file, or `plan/`) |
 | `date` | string | yes | UTC date in `YYYY-MM-DD` format |
 
-`parse_verdict()` reads the YAML frontmatter and returns the `verdict` value. It raises `ReviewError` if:
-- The output does not start with `---` (no frontmatter).
-- The frontmatter block is not closed by a second `---` line.
-- The `verdict:` field is absent from the frontmatter.
+`parse_verdict()` scans for the first fenced ` ```yaml ` block in the document and returns the `verdict` value. It raises `ReviewError` if:
+- No ` ```yaml ` opening fence is found.
+- The yaml block is not closed by a ` ``` ` line.
+- The `verdict:` field is absent from the block.
 - The `verdict:` value is not `APPROVE` or `REQUEST_CHANGES`.
+
+Note: `---`-style YAML frontmatter is reserved for SKILL.md and plugin manifests per the markdown skill. Review output files must never use `---` frontmatter.
 
 ---
 
@@ -76,7 +80,7 @@ APPROVE | REQUEST_CHANGES
 <one-sentence summary of the verdict rationale>
 ```
 
-The verdict line must match the `verdict:` frontmatter field exactly.
+The verdict line must match the `verdict:` field in the yaml block exactly.
 
 ---
 
@@ -107,8 +111,8 @@ Examples:
 
 | Verdict | Meaning | Appears in |
 |---|---|---|
-| `APPROVE` | Artefact is complete and correct. NITs recorded but do not block. | Frontmatter + `## Verdict` body |
-| `REQUEST_CHANGES` | One or more BLOCKING findings must be resolved. | Frontmatter + `## Verdict` body |
+| `APPROVE` | Artefact is complete and correct. NITs recorded but do not block. | yaml block + `## Verdict` body |
+| `REQUEST_CHANGES` | One or more BLOCKING findings must be resolved. | yaml block + `## Verdict` body |
 | `ERROR` | Sub-review failed (LLM error, timeout, etc.). | `reviews[]` entries in `ReviewResult` only — never in review files |
 
 `ERROR` never appears inside a review file. It is only used in the `ReviewResult` JSON emitted by the API scripts when a sub-review fails at the LLM-provider layer.

@@ -6,7 +6,7 @@ junction pointing at a fixture wiki containing a sample discussion.md,
 then invokes mill-review-discussion.py and asserts:
   - Exit 0
   - Valid JSON with type/round/verdict/reviews fields
-  - verdict in {APPROVE, REQUEST_CHANGES}
+  - verdict in {APPROVE, GAPS_FOUND}  (discussion uses v1 GAPS_FOUND vocab)
   - reviews has 1 entry, scope == "holistic"
   - review file exists on disk
   - review file has YAML frontmatter with matching verdict:
@@ -155,7 +155,7 @@ def main() -> int:
             failed = True
             return 1
 
-        if result.get("verdict") not in ("APPROVE", "REQUEST_CHANGES"):
+        if result.get("verdict") not in ("APPROVE", "GAPS_FOUND"):
             print(f"FAIL: unexpected verdict {result.get('verdict')!r}")
             failed = True
             return 1
@@ -180,12 +180,17 @@ def main() -> int:
             return 1
 
         review_text = review_file.read_text(encoding="utf-8")
-        # Parse YAML frontmatter
-        if review_text.startswith("---"):
-            fm_end = review_text.index("---", 3)
-            fm = yaml.safe_load(review_text[3:fm_end])
-        else:
-            fm = {}
+        # Parse fenced ```yaml block (markdown-skill compliant)
+        fm = {}
+        lines = review_text.splitlines()
+        open_idx = next((i for i, ln in enumerate(lines) if ln.rstrip() == "```yaml"), None)
+        if open_idx is not None:
+            close_idx = next(
+                (i for i, ln in enumerate(lines[open_idx + 1:], start=open_idx + 1) if ln.rstrip() == "```"),
+                None,
+            )
+            if close_idx is not None:
+                fm = yaml.safe_load("\n".join(lines[open_idx + 1:close_idx])) or {}
         entry_verdict = reviews[0]["verdict"]
         if fm.get("verdict") != entry_verdict:
             print(
