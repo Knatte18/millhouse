@@ -1,11 +1,11 @@
----
+# Batch 06: Integration tests
+
+```yaml
 kind: plan-batch
 batch-name: integration-tests
 batch-depends: [api-and-config]
 approved: false
----
-
-# Batch 06: Integration tests
+```
 
 ## Batch-Specific Context
 

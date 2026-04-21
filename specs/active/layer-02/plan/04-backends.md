@@ -1,11 +1,11 @@
----
+# Batch 04: Review backends — discussion / plan / code
+
+```yaml
 kind: plan-batch
 batch-name: backends
 batch-depends: [foundation, reviewers, templates]
 approved: false
----
-
-# Batch 04: Review backends — discussion / plan / code
+```
 
 ## Batch-Specific Context
 

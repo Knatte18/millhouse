@@ -1,11 +1,11 @@
----
+# Batch 02: Reviewers — `sonnetmax` + `sonnetmax_tool`
+
+```yaml
 kind: plan-batch
 batch-name: reviewers
 batch-depends: [foundation]
 approved: false
----
-
-# Batch 02: Reviewers — `sonnetmax` + `sonnetmax_tool`
+```
 
 ## Batch-Specific Context
 

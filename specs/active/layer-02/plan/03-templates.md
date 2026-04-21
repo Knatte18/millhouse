@@ -1,11 +1,11 @@
----
+# Batch 03: Templates — 5 prompts + 1 schema
+
+```yaml
 kind: plan-batch
 batch-name: templates
 batch-depends: []
 approved: false
----
-
-# Batch 03: Templates — 5 prompts + 1 schema
+```
 
 ## Batch-Specific Context
 

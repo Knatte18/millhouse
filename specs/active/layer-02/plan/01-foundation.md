@@ -1,11 +1,11 @@
----
+# Batch 01: Foundation — `_review_common.py` + `_llm_claude.py`
+
+```yaml
 kind: plan-batch
 batch-name: foundation
 batch-depends: []
 approved: false
----
-
-# Batch 01: Foundation — `_review_common.py` + `_llm_claude.py`
+```
 
 ## Batch-Specific Context
 

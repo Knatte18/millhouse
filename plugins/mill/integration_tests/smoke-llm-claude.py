@@ -7,12 +7,14 @@ Run from hub root:
 """
 from __future__ import annotations
 
+import shutil
 import sys
-import tempfile
+import uuid
 from pathlib import Path
 
-HUB = Path(__file__).parent.parent
-SCRIPTS = HUB / "scripts"
+HUB = Path(__file__).resolve().parent.parent.parent.parent
+SCRIPTS = HUB / "plugins" / "mill" / "scripts"
+SCRATCH = HUB / ".millhouse" / "scratch"
 sys.path.insert(0, str(SCRIPTS))
 
 import _llm_claude
@@ -87,8 +89,12 @@ def test_tool_use() -> int:
     print("TEST 2: run_tool_use reading a real file via Read tool", file=sys.stderr)
     print("=" * 60, file=sys.stderr)
 
-    with tempfile.TemporaryDirectory(prefix="mill-smoke-llm-") as tmp:
-        test_file = Path(tmp) / "sample.py"
+    SCRATCH.mkdir(parents=True, exist_ok=True)
+    tmp = SCRATCH / f"mill-smoke-llm-{uuid.uuid4().hex[:8]}"
+    tmp.mkdir()
+    failed = False
+    try:
+        test_file = tmp / "sample.py"
         test_file.write_text(
             "def greet(name: str) -> str:\n"
             "    return f'Hello, {name}!'\n",
@@ -104,6 +110,7 @@ def test_tool_use() -> int:
             )
         except Exception as exc:
             print(f"FAIL: run_tool_use raised {type(exc).__name__}: {exc}", file=sys.stderr)
+            failed = True
             return 1
 
         print("--- run_tool_use returned ---", file=sys.stderr)
@@ -112,9 +119,15 @@ def test_tool_use() -> int:
 
         if "verdict:" not in text.lower():
             print("FAIL: no verdict: in response", file=sys.stderr)
+            failed = True
             return 1
         print("PASS: run_tool_use returned text with verdict\n", file=sys.stderr)
         return 0
+    finally:
+        if failed:
+            print(f"Scratch dir preserved for inspection: {tmp}", file=sys.stderr)
+        else:
+            shutil.rmtree(tmp, ignore_errors=True)
 
 
 def main() -> int:

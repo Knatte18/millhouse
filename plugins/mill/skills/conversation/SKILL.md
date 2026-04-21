@@ -37,10 +37,11 @@ General behavior rules for Claude Code. These apply regardless of which plugins 
 
 ## File Writing
 
-- **Never write to `/tmp/` or system temporary directories.** This causes permission prompts.
-- **Default scratch location:** `.millhouse/scratch/` in the repo root. Use for ephemeral files (materialized reviewer prompts, test baselines, merge locks, new-thread hand-off prompts). Task-state files (`status.md`, `plan.md`, `discussion.md`, `reviews/`, `implementer-brief-instance.md`) live in `.millhouse/task/` — see the task/scratch split documented in `plugins/mill/doc/architecture/overview.md`.
-- **Plugin-managed scratch:** All plugins share `.millhouse/scratch/` for ephemeral files. Subdirectories like `plans/` and `briefs/` are created as needed.
-- `.millhouse/scratch/` must be in the repo-root `.gitignore`.
+- **Never write to `/tmp/`, `$env:TEMP`, or any system temporary directory.** This causes permission prompts on Windows and contradicts the `.millhouse/` isolation model. The rule applies to tests, fixtures, and any ephemeral scratch — use `.millhouse/scratch/` instead.
+- **Default scratch location:** `.millhouse/scratch/` in the repo root. Use for ephemeral files: materialized reviewer prompts, integration-test fixtures, merge locks, new-thread hand-off prompts, debug dumps.
+- **Task-state files** (`status.md`, `plan/`, `discussion.md`, `reviews/`, `<slug>-result.md`) live in the **wiki** repo, accessed through the `.millhouse/wiki` junction: `.millhouse/wiki/active/<slug>/`. They are NOT under `.millhouse/scratch/`.
+- **Plugin-managed scratch:** All plugins share `.millhouse/scratch/` for ephemeral files. Subdirectories (e.g. `test-review-<type>-<id>/`, `plans/`, `briefs/`) are created as needed and may be cleaned up at will.
+- `.millhouse/scratch/` is gitignored via the repo-root `.gitignore` entry `**/.millhouse/` (covers the whole `.millhouse/` tree).
 
 ## Worktree isolation
 

@@ -2,7 +2,8 @@
 #
 # This file is gitignored (together with the rest of .millhouse/).
 # It is a *partial overlay* on the shared wiki/config.yaml — include only
-# the keys you want to override locally.
+# the keys you want to override locally. Loaded by _review_common.load_config;
+# local values win on any conflict.
 #
 # Secrets DO NOT belong here. Put API keys in .env at the repo root
 # (standard dotenv convention). This file is for non-secret preferences.
@@ -12,6 +13,12 @@
 # notifications:
 #   toast: true
 #
-# pipeline:
-#   # Prefer a different model for code review in this worktree only:
-#   code-review-model: sonnet-max
+# review:
+#   # Use a different reviewer for code review in this worktree only:
+#   code:
+#     reviewer: sonnetmax
+#     style: multi
+#
+#   # Or lower the max rounds for discussion review:
+#   discussion:
+#     rounds: 1

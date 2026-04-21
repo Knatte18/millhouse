@@ -27,20 +27,22 @@ import json
 import os
 import shutil
 import sys
-import tempfile
+import uuid
 from pathlib import Path
 
-import yaml
 
 # Resolve paths relative to this file
 _INTEGRATION_TESTS_DIR = Path(__file__).resolve().parent
 _MILL_ROOT = _INTEGRATION_TESTS_DIR.parent
+_HUB = _MILL_ROOT.parent.parent          # plugins/mill -> plugins -> hub
 _SCRIPTS = _MILL_ROOT / "scripts"
 _FIXTURES = _INTEGRATION_TESTS_DIR / "fixtures"
+_SCRATCH = _HUB / ".millhouse" / "scratch"
 
 # Ensure scripts/ is importable
 sys.path.insert(0, str(_SCRIPTS))
 import _junction  # noqa: E402  (after sys.path manipulation)
+import _review_common  # noqa: E402
 
 import subprocess  # noqa: E402
 
@@ -75,6 +77,14 @@ task_title: "Test plan review"
 """
 
 
+def _remove_tree(root: Path) -> None:
+    """Remove a scratch tree, detaching any NTFS junctions first."""
+    junction = root / ".millhouse" / "wiki"
+    if junction.exists() or junction.is_symlink():
+        _junction.remove(junction)
+    shutil.rmtree(root, ignore_errors=True)
+
+
 def _run_script(script: Path, cwd: Path) -> tuple[int, str, str]:
     """Run a Python script; return (exit_code, stdout, stderr)."""
     env = os.environ.copy()
@@ -92,8 +102,9 @@ def _run_script(script: Path, cwd: Path) -> tuple[int, str, str]:
 
 
 def main() -> int:
-    tmp_obj = tempfile.TemporaryDirectory(prefix="mill-layer02-test-plan-")
-    tmp = Path(tmp_obj.name)
+    _SCRATCH.mkdir(parents=True, exist_ok=True)
+    tmp = _SCRATCH / f"mill-layer02-test-plan-{uuid.uuid4().hex[:8]}"
+    tmp.mkdir()
     failed = False
     try:
         # ---------------------------------------------------------------
@@ -192,21 +203,14 @@ def main() -> int:
                 failed = True
                 return 1
 
-            review_text = review_file.read_text(encoding="utf-8")
-            if review_text.startswith("---"):
-                fm_end = review_text.index("---", 3)
-                fm = yaml.safe_load(review_text[3:fm_end])
-            else:
-                fm = {}
+            # Use production parse_verdict — no duplicate YAML-block parser in tests.
+            file_verdict = _review_common.parse_verdict(review_file.read_text(encoding="utf-8"))
             entry_verdict = entry["verdict"]
-            if fm.get("verdict") != entry_verdict:
+            if file_verdict != entry_verdict:
                 print(
                     f"FAIL: review file for scope {entry.get('scope')!r} "
-                    f"frontmatter verdict={fm.get('verdict')!r}, expected {entry_verdict!r}"
+                    f"verdict={file_verdict!r}, expected {entry_verdict!r}"
                 )
-                print("Review file contents (first 20 lines):")
-                for line in review_text.splitlines()[:20]:
-                    print(f"  {line}")
                 failed = True
                 return 1
 
@@ -240,12 +244,9 @@ def main() -> int:
         raise
     finally:
         if failed:
-            tmp_obj._finalizer.detach()  # type: ignore[attr-defined]
-            print(
-                f"Temp dir preserved for inspection: {tmp}", file=sys.stderr
-            )
+            print(f"Scratch dir preserved for inspection: {tmp}", file=sys.stderr)
         else:
-            tmp_obj.cleanup()
+            _remove_tree(tmp)
 
     print("PASS — all plan review tests passed")
     return 0
