@@ -1,77 +1,41 @@
-# Implementation Roadmap — index
+# Implementation Roadmap
 
 ```yaml
-status: draft
-purpose: top-level status view for the mill-v2 build; detail lives in the per-M files in this folder
+status: current
+purpose: "High-level status tracker for the mill-v2 build. Layer-level detail lives in specs/active/<layer>/ while a layer is in design, and is promoted to specs/<layer>/ when finalised."
 ```
 
-## How to read this
+## Status
 
-The roadmap is split per milestone level. This file is the **index**: it shows at-a-glance what is done, what is next, and which detail file to open for the work. Each linked file owns:
+| Layer | Scope | Tag | Status |
+|---|---|---|---|
+| Bootstrap | `mill-setup`, `mill-add`, `mill-list` | `layer-01-done` | **done** |
+| Review API | `mill-review-discussion`/`-plan`/`-code`, sonnetmax reviewer, Claude LLM-provider | `layer-02-done` (pending) | **done (impl)** — awaiting integration-test run |
+| Orchestration | `mill-spawn`, `mill-go` (linear) | `layer-03-done` | not started |
+| Extras | `mill-start`, `mill-plan`, `mill-merge`, `mill-cleanup`, `mill-status`, `mill-abandon`, `mill-groom` | `v2.0` | not started |
 
-- Per-sub-milestone descriptions (e.g. M1.1, M1.2, …)
-- Exit criteria as ticket boxes — tick them as the work lands
-- Local gates (⛔) that block progress until met
-- Layer-specific LOC budgets
+## Where does detail live
 
-**Legend:** `- [ ]` = not done, `- [x]` = done, ⛔ = stop-gate.
-
-Work the layers in order. You may reorder sub-milestones within a layer if dependencies allow, but never jump between layers without tagging the previous one done.
-
-## What to read when picking up work
-
-The roadmap is a **status tracker + index**, not a complete briefing. Before touching code for a milestone, read (in order):
-
-1. [`../00-overview.md`](../00-overview.md) — principles, discipline rules, LOC budget.
-2. This file (you're here) — find the current layer row in the status table.
-3. The per-layer file in this folder (e.g. [`M1-bootstrap.md`](M1-bootstrap.md)) — exit criteria + status for each sub-milestone.
-4. The **full layer spec** linked from the per-layer file (e.g. [`../layer-01-bootstrap.md`](../layer-01-bootstrap.md)) — this is where v1 reuse tables, deliverables, design decisions, and acceptance criteria live.
-5. As needed: [`../ref-v1-reuse.md`](../ref-v1-reuse.md), [`../ref-legacy-index.md`](../ref-legacy-index.md), [`../ref-formats.md`](../ref-formats.md), [`../ref-code-scope.md`](../ref-code-scope.md), [`../ref-workflows.md`](../ref-workflows.md), [`../ref-dev-loop.md`](../ref-dev-loop.md).
-
-Rule of thumb: **roadmap = WHAT and WHEN; layer spec = HOW.** Skipping step 4 lands wrong code.
-
-## Status overview
-
-| Layer | File | Delivers | Gate tag | Status |
-|---|---|---|---|---|
-| M0 | [M0-decisions.md](M0-decisions.md) | Signed-off spec | — | [x] complete |
-| M0.5 | [M0.5-scaffolding.md](M0.5-scaffolding.md) | Marketplace + skill carry | — | [x] complete |
-| Layer 01 | [M1-bootstrap.md](M1-bootstrap.md) | `mill-setup`, `mill-add`, `mill-list` | `layer-01-done` | [x] done — all M1.x ticked; integration test passes |
-| Layer 02 | [M2-review.md](M2-review.md) | `mill-review` + Claude + Gemini providers | `layer-02-done` | [ ] not started |
-| Layer 03 | [M3-orchestration.md](M3-orchestration.md) | `mill-spawn`, `mill-go` (linear) | `layer-03-done` | [ ] not started |
-| Layer 04 | [M4-extras.md](M4-extras.md) | `mill-start`, `mill-plan`, `mill-merge`, `mill-cleanup`, `mill-status`, `mill-abandon`, `mill-groom` | `v2.0` | [ ] not started |
-
-## Cross-cutting checklist (resolve inline during layers)
-
-- [ ] **Skills index** — rebuild `mill-skills-index` fresh once the skill catalog is stable. Until then `SKILLS.md` is hand-maintained or absent.
-- [x] **.gitignore** — covers `**/.millhouse/`, `**/.env`, `**/worktrees/` (added during M1.2).
-- [x] **marketplace.json + cross-plugin setup** — done in M0.5.1.
-
-## Estimated effort (very rough)
-
-| Milestone | Estimate |
+| State | Location |
 |---|---|
-| M0 decisions | 30 min |
-| M1 (Bootstrap) | 4–6 hours |
-| M2 (Review) | 8–12 hours |
-| M3 (Orchestration) | 8–12 hours |
-| M4 (Extras) | 6–10 hours |
-| **Total** | **26–40 hours of focused work** |
+| In-design | `specs/active/<layer>/discussion.md`, `discussion-review-rN.md`, `plan/` |
+| Implemented | hub + wiki commits; per-layer canonical spec at `specs/<layer>-*.md` (TBD after audit) |
+| Legacy ideas | `specs/_legacy/` — not authoritative, kept for reference |
 
-If reality diverges significantly from this, the discipline rules (LOC budget, no abstractions, no tests beyond integration) are being violated somewhere. Stop and audit.
+## Cross-cutting checklist
+
+- [ ] **Skills index** — rebuild `mill-skills-index` once the v2 skill catalog is stable. Tracked as task `skills-index-rebuild` in Home.md.
+- [x] **.gitignore** — covers `**/.millhouse/`, `**/.env`, `**/worktrees/`.
+- [x] **marketplace.json + cross-plugin setup** — done during Layer 0.5.
 
 ## Deviation protocol
 
 You **may**:
-
-- Reorder within a layer (e.g. M1.4 before M1.3) if dependencies allow.
-- Skip a milestone after updating the relevant spec file to reflect the skip.
-- Insert a new milestone after updating the relevant spec file to reflect the insert.
+- Work on a later layer before an earlier one is tagged if the dependency is inverted during discussion — but update this file and tag/sign the earlier one explicitly.
+- Skip a milestone after updating this file to reflect the skip.
 
 You **may not**:
+- Write code that contradicts `specs/active/<layer>/discussion.md` (the canonical spec for in-design work). Update the discussion first, then code.
+- Cite anything in `specs/_legacy/` as authority.
 
-- Start a layer before the previous one is tagged done.
-- Write code that contradicts the spec. Fix the spec first, then code.
-- Skip ⛔ gates to "come back later".
-
-If you find yourself wanting to skip a gate, stop entirely and reconsider whether the plan needs to change.
+If you find yourself wanting to break a rule, stop and ask.
