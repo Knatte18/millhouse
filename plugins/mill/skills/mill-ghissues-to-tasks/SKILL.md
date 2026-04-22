@@ -1,9 +1,9 @@
 ---
-name: mill-revise-tasks
+name: mill-ghissues-to-tasks
 description: Drain the GitHub issue queue into Home.md. One-shot. Proposes a task per issue (new or folded-in), closes consumed issues with a pointer comment, leaves skipped ones alone.
 ---
 
-# mill-revise-tasks
+# mill-ghissues-to-tasks
 
 One-shot triage of the repo's open GitHub issues into `Home.md` task entries.
 
@@ -14,7 +14,7 @@ Leaving claimed-but-open issues on GitHub is a forgetting hazard — that's why 
 ## Entry checks
 
 1. `gh auth status` must succeed. If not, stop:
-   > `gh` is not authenticated. Run `gh auth login` and re-invoke `/mill-revise-tasks`.
+   > `gh` is not authenticated. Run `gh auth login` and re-invoke `/mill-ghissues-to-tasks`.
 2. `.millhouse/wiki/` junction must exist. If not, stop and tell the user to run `mill-setup`.
 
 ## Step 1 — Fetch all open issues
@@ -51,10 +51,10 @@ For each "new task", decide together whether it needs a `proposal-<slug>.md` at 
 
 ## Step 4 — Propose
 
-Write the consolidated proposal to `.millhouse/scratch/revise-proposal.md`:
+Write the consolidated proposal to `.millhouse/scratch/ghissues-to-tasks-proposal.md`:
 
 ```markdown
-# mill-revise-tasks proposal
+# mill-ghissues-to-tasks proposal
 
 Issues fetched: <N>
 Repo: <owner/repo>
@@ -116,7 +116,7 @@ Revision applied.
 
 ## Rules
 
-- **One-shot** — there is no resumable intermediate state. If the user closes mid-flow, the proposal file at `.millhouse/scratch/revise-proposal.md` is the only artefact; starting over is fine.
+- **One-shot** — there is no resumable intermediate state. If the user closes mid-flow, the proposal file at `.millhouse/scratch/ghissues-to-tasks-proposal.md` is the only artefact; starting over is fine.
 - **Skipped issues are untouched** — no comment, no label, no close. Forgetting is better than lingering "tracked" state.
 - **Close only on approval + actual write** — never close an issue before the task is committed to Home.md.
 - **Pointer comment is the invariant** — every closed issue gets `Consolidated into wiki task: <slug>` so someone browsing closed issues later can find where it went.

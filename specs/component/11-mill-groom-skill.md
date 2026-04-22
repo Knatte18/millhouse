@@ -3,7 +3,7 @@
 ```yaml
 type: skill
 layer: 04
-v1_ref: none (mill-revise-tasks covers a similar intent but via GitHub issues; mill-groom is for the Home.md backlog itself)
+v1_ref: none (mill-ghissues-to-tasks covers a similar intent but via GitHub issues; mill-groom is for the Home.md backlog itself)
 status: partially discussed — key decisions captured, not ready for full-write
 note: "Interactive backlog cleanup. Works on Home.md: consolidate duplicates, shorten bloated entries, kill dead tasks, surface gaps. Requires judgment — hence a skill, not a script."
 ```
@@ -29,14 +29,14 @@ Keep `Home.md` readable. Over time the backlog accrues duplicate tasks, long-win
 - **Protected marker**: entries whose body contains `<!-- protected -->` (HTML comment) are skipped entirely — user has flagged them as "hands off".
 - **Approval gate**: Claude writes a proposal to `.millhouse/scratch/groom-proposal.md` with the full before/after, user replies `approve` or `reject` in chat.
 - **Single commit on approve**: all backlog changes go in one `_wiki.write_commit_push` with a message listing counts ("chore: groom Home.md — 3 shortened, 2 folded, 1 dropped, 1 extracted").
-- **No link to GitHub issues**: mill-groom does NOT fetch or close issues. That's `mill-revise-tasks`'s job. A future `mill-groom` could optionally call `mill-revise-tasks` first, but they stay as separate skills for now.
+- **No link to GitHub issues**: mill-groom does NOT fetch or close issues. That's `mill-ghissues-to-tasks`'s job. A future `mill-groom` could optionally call `mill-ghissues-to-tasks` first, but they stay as separate skills for now.
 
 ## Flow
 
 1. `wiki.sync_pull(<WIKI_PATH>)`.
 2. Read `Home.md`, parse tasks, filter to backlog-markers (`[]` / `[s]`).
 3. Identify grooming candidates:
-   - Long bodies (threshold: `groom.brevity-threshold-lines` / `-chars`, same defaults as v1's mill-revise-tasks: 5 / 500).
+   - Long bodies (threshold: `groom.brevity-threshold-lines` / `-chars`, same defaults as v1's mill-ghissues-to-tasks: 5 / 500).
    - Possible duplicates (title overlap, body overlap — LLM judgment).
    - Short-form entries with no summary.
 4. Present candidates to user in small batches. For each, propose an action + alternatives.
@@ -66,7 +66,7 @@ Keep `Home.md` readable. Over time the backlog accrues duplicate tasks, long-win
 
 ## Out of scope
 
-- No GitHub issue integration (use `mill-revise-tasks`).
+- No GitHub issue integration (use `mill-ghissues-to-tasks`).
 - No multi-machine coordination.
 - No cross-wiki grooming.
 
