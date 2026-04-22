@@ -16,7 +16,7 @@ Detect the project language (see `@mill:workflow` Language Detection) and run th
 
 ### 2. Codeguide sync (only if `_codeguide/` exists)
 
-If `_codeguide/Overview.md` exists anywhere in the repo, run `@mill:codeguide-update` (no arguments — it defaults to the current git diff). Stage any updated or created doc files alongside source files.
+If `_codeguide/Overview.md` exists anywhere in the repo, run `@codeguide:codeguide-update` (no arguments — it defaults to the current git diff). Stage any updated or created doc files alongside source files.
 
 ## Rules
 
