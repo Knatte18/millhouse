@@ -39,7 +39,8 @@ Read the batch file first, then the overview's Shared Decisions. Do not read oth
 1. Work through `## Cards` in order. For each card:
    - Read every file in `Reads:` before editing.
    - Edit / create the files in `Modifies:` / `Creates:`.
-   - Commit with the message in `Commit:`. One commit per card.
+   - Stage the affected files and commit by invoking the `git-commit` skill with the card's `Commit:` message as the argument. **Do not call raw `git commit`.** The skill runs language-appropriate lint on staged files and, if `_codeguide/Overview.md` exists, triggers `codeguide-update` so the next batch's implementer sees the updated codeguide. Skipping the skill means the next batch reads a stale map.
+   - One commit per card.
 2. If you discover that a card must touch a file not listed in any of its `Reads:`/`Modifies:`/`Creates:` lists:
    - **STOP** before editing that file.
    - Add the file to the appropriate list in `<BATCH_FILE>`.
