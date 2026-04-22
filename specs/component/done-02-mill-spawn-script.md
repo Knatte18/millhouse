@@ -4,11 +4,11 @@
 type: script
 layer: 03
 v1_ref: plugins/mill/scripts/spawn_task.py + skills/mill-spawn/
-status: partially discussed — key decisions captured, not ready for full-write
+status: done — merged to main 2026-04-22 (branch impl/02-mill-spawn)
 note: "No skill wrapper. All logic is mechanical and lives in mill-spawn.py."
 ```
 
-**For the thread that will do the full-write:** these notes are *starting points*, not a finished spec. Grill Henrik further on edge cases before writing code — follow the approach used by v1 `skills/mill-start/` (interactive design discussion that exposes assumptions, corners, failure modes). Known underspecified areas are listed in *Open design points*; there will be more.
+**Implementation notes:** `mill-spawn.py` implemented with flags `--slug`, `--dry-run`. Supporting modules: `_tasks_md.py` (Home.md parse/claim), `_status.py` (renderer), `_worktree.py` (git worktree + .millhouse copy), plus `_wiki.sync_pull()`. Per-worktree VS Code title-bar colour via the existing `_vscode.py` + an 8-colour palette local to `mill-spawn.py` (green reserved for the hub). Config lives under `spawn:` in `wiki/config.yaml` (`branch_prefix`, `worktrees_dir` with `<CONTAINER_PATH>`/`<REPO>` tokens); developer-specific `branch_prefix` override goes in `.millhouse/config.local.yaml`. Tested by `integration_tests/test-spawn.py` (end-to-end against an isolated hub+bare-wiki pair in `.millhouse/scratch/`) and `integration_tests/test-spawn-units.py` (pure-function coverage of `pick_task` + `pick_worktree_color`). Empty Home.md path verified against the live wiki (exits 0 with a "no pickable tasks" message).
 
 ## Purpose
 

@@ -32,6 +32,8 @@ Public API:
         held for longer than ``timeout_seconds``.
     release_lock(wiki_path)
         Idempotently remove the wiki advisory lock.
+    sync_pull(wiki_path)
+        git pull --ff-only — refresh wiki before reading Home.md.
     write_commit_push(wiki_path, relative_paths, commit_msg)
         Stage, commit and push the named paths with one rebase retry.
 
@@ -179,6 +181,33 @@ def acquire_lock(wiki_path: Path, slug: str, timeout_seconds: int = 30) -> None:
             pass
 
         time.sleep(0.5)
+
+
+def sync_pull(wiki_path: Path) -> None:
+    """
+    Fetch + fast-forward the wiki clone so local state matches origin.
+
+    Runs ``git pull --ff-only``. Non-fast-forward (i.e. the wiki clone has
+    local commits not yet on origin) raises ``WikiPushError`` — this function
+    never performs a merge or rebase. Callers that want merge semantics go
+    through ``write_commit_push``.
+
+    Called by mill-spawn before reading Home.md so task-pick decisions run
+    against the latest task state.
+
+    Args:
+        wiki_path: Directory containing the wiki clone.
+
+    Raises:
+        WikiPushError: ``git pull --ff-only`` failed (network error,
+            non-fast-forward state, etc).
+    """
+    result = _subprocess_util.run(
+        ["git", "-C", str(wiki_path), "pull", "--ff-only"]
+    )
+    if result.returncode != 0:
+        raise WikiPushError(f"git pull --ff-only failed: {result.stderr.strip()!r}")
+    print(f"[wiki] sync_pull: fast-forwarded {wiki_path}", file=sys.stderr)
 
 
 def release_lock(wiki_path: Path) -> None:
