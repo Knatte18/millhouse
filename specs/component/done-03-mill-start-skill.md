@@ -4,11 +4,11 @@
 type: skill
 layer: 03
 v1_ref: plugins/mill/skills/mill-start/ + doc/prompts/discussion-review.md
-status: partially discussed — key decisions captured, not ready for full-write
+status: done — merged to main 2026-04-22 (branch impl/03-mill-start)
 note: "Interactive. Runs in a task-worktree (spawned by mill-spawn) and produces the discussion.md that mill-plan consumes."
 ```
 
-**For the thread that will do the full-write:** these notes are *starting points*, not a finished spec. Grill Henrik further on edge cases before writing code — v1's mill-start is the strongest reference, and most of its phases apply almost verbatim. Known underspecified areas are listed in *Open design points*.
+**Implementation notes:** `plugins/mill/skills/mill-start/SKILL.md` written v2-style (~95 lines vs v1's 267) with most body content delegated to referenced templates and helper modules. New helpers: `_constraints.py` (`read_if_exists` resolves hub root via `git rev-parse` — works from any subfolder), `_active.py` (`read_slug` / `read_all` / `write` for `.millhouse/active.slug.md`). Extended helper: `_status.py` grows `update_field` + `append_phase` so the skill's phase-transition/handoff writes go through the module, not free-form edits. New template: `plugins/mill/templates/discussion.md` (self-contained skeleton consumed by mill-plan). **Retrofit of mill-spawn** (`61a3f01`): now writes `.millhouse/active.slug.md` at spawn time and records `parent:` branch in `status.md`. Discussion-review loop uses `mill-review-discussion.py` CLI (not `spawn_reviewer`); `-dr N` flag dropped — rounds come from `review.discussion.rounds` only. Handoff remains explicit (user runs `/mill-plan`, mill-start does not chain). Skill content is prose-driven; validated end-to-end via the helper smoke tests + the mill-spawn integration test (which exercises the retrofitted spawn path).
 
 ## Purpose
 
