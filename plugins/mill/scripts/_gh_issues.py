@@ -1,5 +1,5 @@
 """
-GitHub issues helper — library for the mill-revise-tasks skill.
+GitHub issues helper — library for the mill-ghissues-to-tasks skill.
 
 Thin wrapper around the ``gh`` CLI. Skills invoke these via ``python -c``
 (see the mill-setup skill for the pattern). Requires the ``gh`` CLI to be
@@ -93,7 +93,7 @@ def close_with_comment(
 ) -> None:
     """Post ``comment`` on issue ``number``, then close it.
 
-    Used by mill-revise-tasks when an issue has been turned into — or
+    Used by mill-ghissues-to-tasks when an issue has been turned into — or
     folded into — a wiki task. Leaving claimed-but-still-open issues on
     GitHub is a forgetting hazard; closing with a pointer comment makes
     the pipeline state explicit.
