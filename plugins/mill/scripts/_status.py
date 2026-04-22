@@ -52,6 +52,7 @@ def render_initial(
     task_title: str,
     task_description: str,
     timestamp: str,
+    parent_branch: str,
 ) -> str:
     """
     Render the phase=discussing status.md for ``task_title``.
@@ -72,6 +73,8 @@ def render_initial(
             when the caller does not include leading spaces.
         timestamp: ISO-8601 UTC timestamp for the timeline entry,
             e.g. ``"2026-04-22T14:32:05Z"``.
+        parent_branch: The branch the hub was on at spawn time. mill-merge
+            / mill-cleanup read this to know where to merge back to.
 
     Returns:
         The rendered status.md text, including trailing newline.
@@ -82,6 +85,7 @@ def render_initial(
         "TASK_TITLE": task_title,
         "TASK_DESCRIPTION": task_description,
         "TIMESTAMP": timestamp,
+        "PARENT_BRANCH": parent_branch,
     }
     for key, value in tokens.items():
         body = body.replace(f"<{key}>", value)
@@ -101,10 +105,12 @@ if __name__ == "__main__":
         task_title="Fix bug in widget handler",
         task_description="Widgets throw on empty input.",
         timestamp="2026-04-22T14:32:05Z",
+        parent_branch="main",
     )
     assert out.startswith("# Status\n"), "Leading HTML comment should be stripped"
     assert "Fix bug in widget handler" in out
     assert "2026-04-22T14:32:05Z" in out
+    assert "parent: main" in out
     assert "<TASK_TITLE>" not in out and "<TIMESTAMP>" not in out
     print("PASS: render_initial() substitutes tokens and strips header")
     print("All _status smoke tests passed.")

@@ -182,13 +182,26 @@ def main() -> int:
             f"Home.md did not flip to [active]:\n{home_text}",
         )
 
-        # status.md written.
+        # status.md written with parent branch recorded.
         status_path = wiki / "active" / "demo-task" / "status.md"
         _assert(status_path.exists(), f"status.md missing: {status_path}")
         status_text = status_path.read_text(encoding="utf-8")
         _assert(
             "Demo task" in status_text and "phase: discussing" in status_text,
             f"status.md content unexpected:\n{status_text}",
+        )
+        _assert(
+            "parent: main" in status_text,
+            f"status.md missing parent branch:\n{status_text}",
+        )
+
+        # Per-worktree marker file written by mill-spawn.
+        marker_path = worktree / ".millhouse" / "active.slug.md"
+        _assert(marker_path.exists(), f"active.slug.md missing: {marker_path}")
+        marker_text = marker_path.read_text(encoding="utf-8")
+        _assert(
+            "slug: demo-task" in marker_text and "branch: test/demo-task" in marker_text,
+            f"active.slug.md content unexpected:\n{marker_text}",
         )
 
         # vscode settings with non-green colour.

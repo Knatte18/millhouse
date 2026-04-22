@@ -37,6 +37,7 @@ import sys
 from pathlib import Path
 from typing import Optional
 
+import _active
 import _junction
 import _sidebar
 import _status
@@ -339,6 +340,18 @@ def main(argv: list[str] | None = None) -> int:
     finally:
         _wiki.release_lock(wiki_path)
 
+    # Capture the hub's current branch BEFORE creating the new worktree
+    # so we can record it in status.md as the parent — mill-merge /
+    # mill-cleanup read this to know where to merge back to.
+    parent_result = _subprocess_util.run(
+        ["git", "-C", str(git_root), "rev-parse", "--abbrev-ref", "HEAD"],
+    )
+    if parent_result.returncode != 0:
+        raise SystemExit(
+            f"Could not resolve hub parent branch: {parent_result.stderr.strip()!r}"
+        )
+    parent_branch = parent_result.stdout.strip()
+
     # Create the worktree. git refuses if the target path exists, so we
     # only ensure the PARENT exists. Any failure here surfaces as a
     # WorktreeError with captured stderr.
@@ -382,14 +395,25 @@ def main(argv: list[str] | None = None) -> int:
         target=worktree_path / ".vscode" / "settings.json",
     )
 
+    # Write the per-worktree marker file so every downstream script /
+    # skill in this worktree can locate its task state.
+    ts = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    _active.write(
+        worktree_path / ".millhouse",
+        slug=slug,
+        task_title=picked.title,
+        branch=branch_name,
+        spawned_at=ts,
+    )
+
     # Render and write the initial status.md. v2's Home.md has no
     # dedicated description column; use the task title as description so
     # the template renders without empty placeholders.
-    ts = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     status_text = _status.render_initial(
         task_title=picked.title,
         task_description=picked.title,
         timestamp=ts,
+        parent_branch=parent_branch,
     )
     status_rel = f"active/{slug}/status.md"
     status_abs = wiki_path / status_rel
