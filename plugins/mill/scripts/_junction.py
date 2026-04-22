@@ -152,9 +152,14 @@ def remove(link_path: Path) -> None:
         ValueError: If ``link_path`` exists but is neither a junction nor
             a symlink.
     """
-    # Absent path is a no-op. Checking ``is_symlink`` covers the broken-
-    # symlink case where ``exists()`` alone returns False.
-    if not link_path.exists() and not link_path.is_symlink():
+    # Absent path is a no-op. We use ``lexists`` (does-not-follow-symlinks)
+    # so a broken junction or broken symlink — which has ``exists() == False``
+    # because its target is gone — is still recognised as present and
+    # removed below. Previously this guard skipped broken junctions,
+    # leaving the reparse-point entry behind; ``git worktree remove --force``
+    # then crashed with exit 255 when it tried to clean the surrounding
+    # directory.
+    if not os.path.lexists(str(link_path)):
         return
 
     if os.name == "nt":

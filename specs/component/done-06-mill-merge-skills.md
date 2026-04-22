@@ -4,11 +4,35 @@
 type: skills (2)
 layer: 03
 v1_ref: plugins/mill/skills/mill-merge/ + plugins/mill/skills/mill-merge-in/
-status: partially discussed — key decisions captured, not ready for full-write
+status: done — merged to main 2026-04-22 (branch impl/06-mill-merge)
 note: "Both skills carry over from v1 almost verbatim. Only v2 platform mismatches need patching (module refs, config paths, junction config, plan frontmatter)."
 ```
 
-**For the thread that will do the full-write:** v1's two skills are the strongest reference here. Copy their flow and language, then swap out v1-only machinery per the *v2 adaptations* section. Grill Henrik on anything that isn't already covered.
+## Implementation notes
+
+Shipped `plugins/mill/skills/mill-merge/SKILL.md` + `plugins/mill/skills/mill-merge-in/SKILL.md`, plus two helpers and one load-bearing bug fix.
+
+**Helpers added:**
+- `_parent_branch.py` — `resolve(status_path, *, interactive=True)` reads the `parent:` row from status.md's fenced-yaml block and optionally falls back to a stdin prompt. `interactive=False` is the hook for mill-go's auto-merge path so it can fail fast without blocking.
+- `_plan_dag.iter_batch_verifies(plan_dir)` — returns `(batch_name, verify_cmd)` pairs in topological order, skipping batches whose `verify:` is null. This is mill-merge-in's "replay the same tests implementation ran" loop.
+
+**Load-bearing bug fix:** `_junction.remove` was skipping broken Windows junctions because `Path.exists()` returns False once their target is gone. Fixed by switching the early-return guard from `.exists() or .is_symlink()` to `os.path.lexists`. The `.active` junction in a task worktree points into `wiki/active/<slug>/` which mill-merge deletes before the junction-cleanup step; without the fix, `git worktree remove --force` would later crash with exit 255 when it hit the orphan reparse point. Surfaced during the integration test.
+
+**Decisions made during discussion (summary):**
+- `done` is the terminal phase for mill-merge entry. No final `complete` phase appended — the `active/<slug>/` dir is deleted moments later anyway.
+- `git.require-pr-to-base` is kept in config. PR-path recovery: re-running `/mill-merge` detects `phase: pr-pending`, inspects the PR via `gh pr view`, and resumes cleanup from Step 5 onwards if the PR has landed on origin. No new `--post-pr` flag, no `mill-merge-finalise` skill.
+- mill-merge-in's Verify replays each batch's own `verify:` in DAG order (iter_batch_verifies). Not a config command, not just the last batch. If every batch has `verify: null` — nothing runs.
+- codeguide-update is invoked as `@codeguide:codeguide-update` (namespace fixed in that branch). Skipped silently when `_codeguide/Overview.md` is absent.
+- Windows "directory in use" errors surface a generic "close anything pointing at it and re-run" message. No `handle.exe` hint.
+- `plan_start_hash` was aspirational in the original spec; dropped entirely since the one-task-per-worktree rule + builder lock make stale-plan detection moot.
+- `git.parent-branch` config override dropped. `status.md parent:` is the single source of truth, with an interactive prompt fallback (and `ParentBranchError` for auto-merge contexts).
+
+**Deliberately not shipped in 06:**
+- No v1-style notify entrypoint — v2's `_notify` (shipped in 05) is the API, and mill-merge already calls `_notify.notify("mill-merge.done", ...)` on success.
+- No archive-to-`archive/<slug>/` when deleting `active/<slug>/`. Same as v1-out-of-scope — revisit if someone misses the history.
+- No `mill-merge-finalise` skill for PR-path recovery. The re-run mechanism is enough until PR-path actually sees production use.
+
+**Files added:** `plugins/mill/skills/mill-merge/SKILL.md`, `plugins/mill/skills/mill-merge-in/SKILL.md`, `plugins/mill/scripts/_parent_branch.py`, `plugins/mill/integration_tests/test-merge.py`. **Modified:** `plugins/mill/scripts/_plan_dag.py` (added `iter_batch_verifies` + `_read_batch_frontmatter`), `plugins/mill/scripts/_junction.py` (broken-junction fix).
 
 ## Purpose
 
