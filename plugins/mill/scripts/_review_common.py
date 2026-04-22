@@ -24,6 +24,8 @@ Public API:
     aggregate_verdict()  — worst-case verdict across a list of sub-verdicts
     load_reviewer()      — import a _reviewer_<name>.py module by name
     load_config()        — load wiki/config.yaml + optional config.local.yaml
+    parse_batch_refs()   — extract Reads/Modifies/Creates paths from a batch file
+    resolve_ref_paths()  — resolve raw ref strings against project_root (+ root:)
 """
 from __future__ import annotations
 
@@ -50,12 +52,13 @@ RE_SIMPLE = re.compile(
     r"^\d{8}-\d{6}-(?P<type>discussion|code|plan)-review-r(?P<n>\d+)\.md$"
 )
 
-# Matches plan per-batch review filenames:
+# Matches plan / code per-batch review filenames:
 #   20260418-143300-plan-review-01-setup-r1.md
+#   20260418-143300-code-review-foundation-r1.md
 # RE_SIMPLE is checked first; a file matching RE_SIMPLE is excluded from
-# RE_BATCH matching (prevents plan-holistic from being mis-identified).
+# RE_BATCH matching (prevents holistic files from being mis-identified).
 RE_BATCH = re.compile(
-    r"^\d{8}-\d{6}-plan-review-(?P<batch>[a-z0-9-]+)-r(?P<n>\d+)\.md$"
+    r"^\d{8}-\d{6}-(?P<type>plan|code)-review-(?P<batch>[a-z0-9-]+)-r(?P<n>\d+)\.md$"
 )
 
 
@@ -207,13 +210,74 @@ def discover_round(reviews_dir: Path, review_type: str) -> int:
                 found.append(int(m_simple.group("n")))
             # RE_SIMPLE matched — skip RE_BATCH for this file regardless.
             continue
-        # RE_SIMPLE did not match — try RE_BATCH (plan only).
-        if review_type == "plan":
+        # RE_SIMPLE did not match — try RE_BATCH (plan or code).
+        if review_type in ("plan", "code"):
             m_batch = RE_BATCH.match(name)
-            if m_batch:
+            if m_batch and m_batch.group("type") == review_type:
                 found.append(int(m_batch.group("n")))
 
     return max(found) + 1 if found else 1
+
+
+# Regex matching Reads:/Modifies:/Creates: reference lines in batch files.
+# Example:   - **Reads:** `path/a`, `path/b`
+# Kept at module level so plan and code review share one parser.
+_RE_BATCH_REFS = re.compile(
+    r"^-\s*\*\*(Reads|Modifies|Creates):\*\*\s+(?P<rest>.+)$",
+    re.MULTILINE,
+)
+
+
+def parse_batch_refs(batch_path: Path) -> list[str]:
+    """Extract raw path strings from a batch file's Reads/Modifies/Creates lines.
+
+    Backtick-wrapped paths win over comma-split fallback. Returns a
+    deduplicated list preserving first-seen order. Used by both plan
+    review (cards-within-a-batch) and code review (batch-level source
+    files to bulk for the reviewer).
+    """
+    text = batch_path.read_text(encoding="utf-8")
+    seen: dict[str, None] = {}
+    for m in _RE_BATCH_REFS.finditer(text):
+        rest = m.group("rest")
+        backtick_tokens = re.findall(r"`([^`]+)`", rest)
+        if backtick_tokens:
+            tokens = backtick_tokens
+        else:
+            tokens = [t.strip() for t in rest.split(",") if t.strip()]
+        for t in tokens:
+            seen[t] = None
+    return list(seen.keys())
+
+
+def resolve_ref_paths(
+    raw_paths: list[str],
+    project_root: Path,
+    root: str | None,
+) -> list[Path]:
+    """Resolve batch-reference path strings to absolute ``Path``s.
+
+    ``root`` is the optional filesystem sub-path declared in the plan
+    overview's frontmatter ``root:`` field. When present every raw path
+    is resolved under ``project_root / root``; otherwise directly under
+    ``project_root``. Non-existent paths are dropped with a stderr
+    warning (the reviewer tolerates missing files — it just can't
+    include them in the bulk).
+    """
+    resolved: list[Path] = []
+    for raw in raw_paths:
+        if root:
+            candidate = project_root / root / raw
+        else:
+            candidate = project_root / raw
+        if candidate.exists():
+            resolved.append(candidate)
+        else:
+            print(
+                f"[resolve_ref_paths] warning: referenced path not found, skipping: {candidate}",
+                file=sys.stderr,
+            )
+    return resolved
 
 
 def bulk_files(file_paths: list[Path]) -> str:
@@ -296,12 +360,17 @@ def parse_verdict(raw_output: str) -> str:
     - 'REQUEST_CHANGES'  — plan and code review
     - 'GAPS_FOUND'       — discussion review (v1 convention; a missing
                            criterion is not a must-fix defect)
+    - 'NEED_CONTEXT'     — plan and code review only; reviewer cannot
+                           evaluate without source files that were not
+                           included in the bulk. Orchestrator responds by
+                           re-firing with `--extra-file` plus a notify +
+                           self-report entry.
 
     Raises ReviewError if:
     - No ```yaml opening fence is found.
     - The yaml block is not closed by a ``` line.
     - The 'verdict:' field is absent from the block.
-    - The verdict value is not one of the three above.
+    - The verdict value is not one of the four above.
 
     The first ~400 chars of raw_output are included in error messages for
     debuggability.
@@ -340,11 +409,11 @@ def parse_verdict(raw_output: str) -> str:
         stripped = line.strip()
         if stripped.startswith("verdict:"):
             value = stripped[len("verdict:"):].strip().strip('"').strip("'")
-            if value in ("APPROVE", "REQUEST_CHANGES", "GAPS_FOUND"):
+            if value in ("APPROVE", "REQUEST_CHANGES", "GAPS_FOUND", "NEED_CONTEXT"):
                 return value
             raise ReviewError(
                 f"Could not parse verdict: invalid value {value!r}; "
-                f"expected APPROVE, REQUEST_CHANGES, or GAPS_FOUND.\n"
+                f"expected APPROVE, REQUEST_CHANGES, GAPS_FOUND, or NEED_CONTEXT.\n"
                 f"Raw output preview:\n{preview}"
             )
 
@@ -375,8 +444,12 @@ def write_review_file(
     """
     ts = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
 
-    if review_type == "plan" and scope is not None and scope != "holistic":
-        filename = f"{ts}-plan-review-{scope}-r{round_num}.md"
+    if (
+        review_type in ("plan", "code")
+        and scope is not None
+        and scope != "holistic"
+    ):
+        filename = f"{ts}-{review_type}-review-{scope}-r{round_num}.md"
     else:
         filename = f"{ts}-{review_type}-review-r{round_num}.md"
 
@@ -394,10 +467,15 @@ def aggregate_verdict(sub_verdicts: list[str]) -> str:
     """Return the worst-case aggregate verdict across sub-verdicts.
 
     Rules:
+    - Any NEED_CONTEXT propagates up to the aggregate (orchestrator must
+      resolve the missing-context request before it can act on any
+      REQUEST_CHANGES finding, so NEED_CONTEXT takes priority).
     - Any REQUEST_CHANGES or ERROR escalates the aggregate to REQUEST_CHANGES.
     - All APPROVE → APPROVE.
     - ERROR appears only inside reviews[] entries; aggregate is never ERROR.
     """
+    if "NEED_CONTEXT" in sub_verdicts:
+        return "NEED_CONTEXT"
     for v in sub_verdicts:
         if v in ("REQUEST_CHANGES", "ERROR"):
             return "REQUEST_CHANGES"

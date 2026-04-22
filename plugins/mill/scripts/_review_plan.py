@@ -10,7 +10,6 @@ Public API:
 """
 from __future__ import annotations
 
-import re
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -27,41 +26,14 @@ from _review_common import (
     discover_round,
     load_reviewer,
     load_task_title,
+    parse_batch_refs,
     parse_verdict,
     read_constraints_md,
     render_prompt,
     resolve_path,
+    resolve_ref_paths,
     write_review_file,
 )
-
-# Regex to match Reads:/Modifies:/Creates: lines in batch files.
-# Example:   - **Reads:** `path/a`, `path/b`
-_RE_REFS = re.compile(
-    r"^-\s*\*\*(Reads|Modifies|Creates):\*\*\s+(?P<rest>.+)$",
-    re.MULTILINE,
-)
-
-
-def _parse_batch_refs(batch_path: Path) -> list[str]:
-    """Extract path strings from Reads:/Modifies:/Creates: lines in a batch file.
-
-    1. Match lines with _RE_REFS.
-    2. From <rest>, extract backtick-wrapped tokens via re.findall.
-    3. If no backticks on the line, fall back to comma-split + strip.
-    Returns a deduplicated list preserving first-seen order.
-    """
-    text = batch_path.read_text(encoding="utf-8")
-    seen: dict[str, None] = {}  # ordered set
-    for m in _RE_REFS.finditer(text):
-        rest = m.group("rest")
-        backtick_tokens = re.findall(r"`([^`]+)`", rest)
-        if backtick_tokens:
-            tokens = backtick_tokens
-        else:
-            tokens = [t.strip() for t in rest.split(",") if t.strip()]
-        for t in tokens:
-            seen[t] = None
-    return list(seen.keys())
 
 
 def _load_root_from_overview(overview_path: Path) -> str | None:
@@ -107,7 +79,7 @@ def _load_root_from_overview(overview_path: Path) -> str | None:
     return data.get("root") or None
 
 
-def _resolve_ref_paths(
+def resolve_ref_paths(
     raw_paths: list[str],
     project_root: Path,
     root: str | None,
@@ -147,8 +119,8 @@ def _review_one_batch(
     root: str | None,
 ) -> dict:
     """Review a single plan batch file. Returns a reviews[] entry dict."""
-    raw_refs = _parse_batch_refs(batch_path)
-    reads = _resolve_ref_paths(raw_refs, project_root, root)
+    raw_refs = parse_batch_refs(batch_path)
+    reads = resolve_ref_paths(raw_refs, project_root, root)
 
     tool_rule = build_tool_rule(batch_reviewer.MODE)
     if batch_reviewer.MODE == "tool-use":
@@ -296,9 +268,9 @@ def run(
         # Union all Reads:/Modifies:/Creates: across all batch files
         all_raw_refs: dict[str, None] = {}
         for batch_path in batch_files:
-            for ref in _parse_batch_refs(batch_path):
+            for ref in parse_batch_refs(batch_path):
                 all_raw_refs[ref] = None
-        all_reads = _resolve_ref_paths(list(all_raw_refs.keys()), project_root, root)
+        all_reads = resolve_ref_paths(list(all_raw_refs.keys()), project_root, root)
 
         tool_rule = build_tool_rule(holistic_reviewer.MODE)
         if holistic_reviewer.MODE == "tool-use":

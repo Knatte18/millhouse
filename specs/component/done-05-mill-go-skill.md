@@ -4,11 +4,46 @@
 type: skill
 layer: 03
 v1_ref: plugins/mill/skills/mill-go/
-status: partially discussed — key decisions captured, not ready for full-write
+status: done — merged to main 2026-04-22 (branch impl/05-mill-go)
 note: "Lean Builder/orchestrator. Runs on Sonnet. Reads the batch DAG from 00-overview.md; never reads batch files or cards. Spawns one implementer Sonnet per batch, reuses its session across code-review → fix cycles, merges when the last batch approves."
 ```
 
-**For the thread that will do the full-write:** these notes are *starting points*, not a finished spec. Grill Henrik on edge cases before writing. The key design decisions are already captured here (see *Decisions*); *Open design points* lists what still needs pinning down.
+## Implementation notes
+
+Shipped as `plugins/mill/skills/mill-go/SKILL.md` + `templates/implementer-brief.md`. Also delivered a substantial Layer-02 re-work and infrastructure pieces that mill-go needs.
+
+**Major design changes vs. spec:**
+- **Code-review no longer diffs git.** Per user directive during discussion: `_review_code.py` now reads the plan's overview + the named batch file + every source file listed under that batch's `Reads:`/`Modifies:`/`Creates:`. No `git diff`. No per-batch `start_sha..HEAD` logic — plan content is the ground truth. `mill-review-code.py` gained `--batch <name>` + `--extra-file <path>` (repeatable).
+- **NEED_CONTEXT verdict added.** Reviewers are forbidden from guessing file contents; if they need a file not in the bulk, they emit `verdict: NEED_CONTEXT` with a `## Missing context` list. Orchestrator re-fires with `--extra-file` for each listed path, and records the gap for self-report. Added to every review template + `_review_common.parse_verdict` + `aggregate_verdict` (propagates up) + `review-output.schema.md`.
+- **Old review-code templates dropped.** `review-code-single.md` + `review-code-multi.md` deleted; replaced with `review-code-batch.md` (per-batch) + `review-code-holistic.md` (end-of-task). `review.code.style` config key dropped.
+- **"batches:" section lives in its own fenced-yaml block** under `## Batches` in status.md, not inside the top yaml block — the top block holds `task_description: |` block scalars and round-tripping through `yaml.safe_dump` would collapse them. Spec's schema showed `batches:` in the top block; the user-visible shape is the same list of entries, just under a dedicated heading.
+- **Stuck taxonomy simplified to two paths** (option B from discussion): `transient` → one silent auto-retry, then ask user. Anything else (`verify`/`logic`/malformed JSON) → ask user immediately with three options.
+- **Parallelism postponed.** v2.0 is strictly sequential; parallelism is a future additive backlog item per discussion.
+
+**New helpers in plugins/mill/scripts/:**
+- `_builder_lock.py` — per-worktree mutex (5-min stale window, no PID).
+- `_notify.py` + `_notify_stdout.py` — pluggable notification API; stdout backend ships as default; future backends drop-in via `notify.backend:` config.
+- `_plan_dag.topo_order()` added alongside the existing `validate()`.
+- `_status.py` gained `init_batches`, `set_batch_field`, `read_batches`.
+- `_review_common.parse_batch_refs` + `resolve_ref_paths` promoted from `_review_plan` internals to shared helpers.
+
+**Config additions (wiki/config.yaml):**
+- `pipeline.builder`, `pipeline.implementer`, `pipeline.auto_merge`, `pipeline.auto_report`.
+- `review.code.holistic: true` (default on, user-confirmed).
+- `review.code.self_fix_rounds: 2`.
+- `notify.backend: stdout`.
+- `llm.implementer_timeout` bumped from 1800 → 3600s per user.
+
+**Tests:** `integration_tests/test-go-assets.py` covers the refactored `_review_code.run` end-to-end against a stub reviewer (no real LLM call), plus `implementer-brief.md` rendering, `_notify` dispatch, `_builder_lock` conflict detection, and `_status` batches round-trip. Existing `test-plan-assets.py` and `test-spawn.py` still pass after the shared-helper move.
+
+**Deliberately not shipped in 05:**
+- No full mill-go → real implementer → real reviewer E2E test (would burn real tokens). The skill itself will be exercised the first time a real task runs through mill-go.
+- `--extra-file` not added to `mill-review-plan.py`. Mill-plan is interactive — when plan-review returns NEED_CONTEXT, the user fixes the batch's `Reads:` list and re-runs; no CLI-level extra-file needed.
+- No `mill-receiving-review` auto-dispatch on holistic `REQUEST_CHANGES`. Surfaces to user with two options instead (A: manual fix + re-run, B: treat as approved + self-report). Simpler for v2.0.
+
+**Also updated:**
+- `plugins/mill/skills/mill-self-report/SKILL.md` — config key renamed from `notifications.auto-report.enabled` → `pipeline.auto_report`.
+- `plugins/mill/skills/mill-plan/SKILL.md` — handoff now auto-fires `/mill-self-report` when `pipeline.auto_report` is true.
 
 ## Purpose
 
