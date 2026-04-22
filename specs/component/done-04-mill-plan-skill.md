@@ -4,11 +4,22 @@
 type: skill
 layer: 03
 v1_ref: plugins/mill/skills/mill-plan/ + doc/prompts/plan-review.md + doc/formats/plan.md
-status: partially discussed — key decisions captured, not ready for full-write
+status: done — merged to main 2026-04-22 (branch impl/04-mill-plan)
 note: "Autonomous planner. Runs on Opus in a task-worktree after mill-start. Writes batch-based plan files, self-reviews via mill-review-plan, self-corrects via mill-receiving-review. Hands off to mill-go."
 ```
 
-**For the thread that will do the full-write:** these notes are *starting points*, not a finished spec. Grill Henrik further on edge cases before writing. v1's mill-plan is the strongest reference and most phases transfer. Known underspecified areas are listed in *Open design points*.
+## Implementation notes
+
+Shipped as `plugins/mill/skills/mill-plan/SKILL.md` + two plan templates (`plan-overview.md`, `plan-batch.md`) + two helpers (`_timestamp.py` with `now_utc_compact`/`now_utc_iso`; `_plan_dag.py` with `extract_batch_index`/`validate` for cycle + ref-validity checks). Skill delegates heavy lifting to templates per the "minst mulig i skills" principle.
+
+Design calls made during discussion:
+- DAG cycle-check runs both in the skill pre-handoff (cheap, fails fast) AND in `review-plan-holistic.md` criteria (added a BLOCKING bullet) — belt-and-braces per spec intent.
+- `_review_plan._load_root_from_overview` was rewritten to read the fenced-yaml frontmatter shape v2 uses, replacing the old `---` frontmatter parser (spec's `root:` comment about "branch prefix" was a drafting error; the field is a filesystem sub-path for reviewer path resolution).
+- Max-rounds escape prompt uses the spec's wording verbatim. Non-progress detection is a hard halt (no escape hatch) — stable disagreement between planner and reviewer is a user problem.
+- No full end-to-end integration test (would burn real Opus+reviewer tokens). Instead `integration_tests/test-plan-assets.py` validates template rendering, DAG helper correctness, fenced-yaml root parsing, and timestamp shapes.
+- `approved: true` lives in overview frontmatter, not status.md — flipped via direct Edit because `_status.py` only knows status.md.
+
+Files added: `plugins/mill/scripts/{_timestamp,_plan_dag}.py`, `plugins/mill/skills/mill-plan/SKILL.md`, `plugins/mill/templates/{plan-overview,plan-batch}.md`, `plugins/mill/integration_tests/test-plan-assets.py`. Modified: `plugins/mill/scripts/_review_plan.py` (fenced-yaml root reader), `plugins/mill/templates/review-plan-holistic.md` (DAG-integrity criterion).
 
 ## Purpose
 

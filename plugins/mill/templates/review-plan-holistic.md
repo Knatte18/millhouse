@@ -16,6 +16,7 @@ Reviewer model: **<REVIEWER_MODEL>**. Round **<ROUND>**.
 - **Decision alignment** — every `### Decision:` in `## Shared Decisions` faithfully implemented.
 - **Completeness** — every card has `Creates`/`Modifies`, `Reads`, `Requirements`, `Commit`.
 - **Sequencing + batch dependencies** — correct order within and across batches; `batch-depends` accurate; no forward deps.
+- **Batch Index DAG integrity** — BLOCKING if the `batches:` block in `00-overview.md` has a cycle, references a batch name not declared, or names a `file:` not present in the plan directory.
 - **Edge cases + risks** — failures, empty states, boundaries addressed.
 - **Over-engineering** — unneeded abstractions or unrequested features.
 - **Codebase consistency** — follows patterns in the source files provided.
