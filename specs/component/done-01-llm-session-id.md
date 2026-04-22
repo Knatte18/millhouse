@@ -3,11 +3,11 @@
 ```yaml
 type: script-extension
 layer: 02/03 (extends Layer-02 provider; needed by Layer-03 builder)
-status: partially discussed — key decisions captured, not ready for full-write
+status: done — merged to main 2026-04-22 (branch impl/01-llm-session-id)
 order: 01 — implement BEFORE mill-spawn / mill-start / mill-plan / mill-go, so builder can depend on it.
 ```
 
-**For the thread that will do the full-write:** these notes are *starting points*, not a finished spec. Grill Henrik on edge cases before writing. Key open areas are listed in *Open design points*.
+**Implementation notes:** `_llm_claude.py` now exposes `run_bulk`/`run_tool_use`/`run_implementer`, each returning `(text, session_id)` and accepting `session_id`/`resume` kwargs. `LLMSessionError` surfaces stale-session failures. Reviewer modules (`_reviewer_sonnetmax*.py`) and the new `_implementer_sonnet.py` wrap the LLM calls; `wiki/config.yaml` gained `llm:` (timeouts) and `implementers:` (named-module map) sections. End-to-end session reuse verified by `integration_tests/smoke-llm-claude.py::test_session_reuse` (claude -p --resume carries context across subprocess calls).
 
 ## Purpose
 
