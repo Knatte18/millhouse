@@ -65,32 +65,44 @@ def _parse_batch_refs(batch_path: Path) -> list[str]:
 
 
 def _load_root_from_overview(overview_path: Path) -> str | None:
-    """Read the `root:` field from 00-overview.md YAML frontmatter.
+    """Read the `root:` field from the overview's top fenced-yaml block.
 
-    Returns the root string if present, else None.
-    Falls back gracefully if frontmatter is absent or unparseable.
+    v2 plan overviews use fenced ```yaml``` frontmatter (per the
+    project markdown convention; `---` is reserved for SKILL.md). This
+    parser locates the first ```yaml``` block and reads `root:` from
+    it. Returns the root string if present and truthy, else None.
+    Any structural problem (no block, unterminated, bad yaml, absent
+    key) silently yields None — the review surface degrades to
+    resolving paths against project_root directly, which is the right
+    behaviour for a mill-v2 worktree where root is typically empty.
     """
     try:
         text = overview_path.read_text(encoding="utf-8")
     except FileNotFoundError:
         return None
 
-    if not text.startswith("---"):
-        return None
-
     lines = text.splitlines()
-    end_idx = None
-    for i, line in enumerate(lines[1:], start=1):
-        if line.strip() == "---":
-            end_idx = i
+    start = None
+    for i, line in enumerate(lines):
+        if line.strip() == "```yaml":
+            start = i + 1
             break
-    if end_idx is None:
+    if start is None:
+        return None
+    end = None
+    for j in range(start, len(lines)):
+        if lines[j].strip() == "```":
+            end = j
+            break
+    if end is None:
         return None
 
-    fm_text = "\n".join(lines[1:end_idx])
+    fm_text = "\n".join(lines[start:end])
     try:
         data = yaml.safe_load(fm_text) or {}
     except yaml.YAMLError:
+        return None
+    if not isinstance(data, dict):
         return None
     return data.get("root") or None
 
