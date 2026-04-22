@@ -23,6 +23,8 @@ Future Claude Code sessions (and humans new to the repo) need a quick map of `pl
 
 The trigger is **the `git-commit` skill**, not mill-go directly. `plugins/mill/skills/git-commit/SKILL.md` already has a "Codeguide sync" pre-commit step (step 2) that calls `@mill:codeguide-update` whenever `_codeguide/Overview.md` exists. This fires for any commit made through the skill — by mill-go's implementer, by the user manually, anywhere.
 
+**Cadence is per-commit, not per-task.** This is the load-bearing property: mill-go's per-batch implementer uses `git-commit` for every card commit (already required by `implementer-brief.md`), so when batch 1 finishes and batch 2's implementer is spawned, batch 2 reads a `_codeguide/Overview.md` that already reflects batch 1's module additions. A per-task cadence would mean every batch-N+1 implementer reads a stale codeguide — defeating most of the value.
+
 The design discipline: codeguide maintenance is owned by the skill the user actively triggers (`git-commit`), not by a git hook. Hooks have been tried and are not trusted — invisible to the user, easy to disable silently, fire on every trivial commit. Skill-owned instructions are reliable because the user chose to run them.
 
 Two pieces need to ship for this to activate:
