@@ -188,6 +188,75 @@ def _check_acyclic(batches: list[dict]) -> None:
         )
 
 
+_FRONTMATTER_BLOCK_RE = re.compile(
+    r"```yaml\s*\n(?P<body>[\s\S]*?)```",
+    re.MULTILINE,
+)
+
+
+def _read_batch_frontmatter(batch_path: Path) -> dict:
+    """Return the first fenced-yaml block of a batch file as a dict.
+
+    Returns ``{}`` on any structural problem — the caller (typically
+    the verify-iterator) treats a malformed batch as "no verify
+    command" rather than escalating. A batch with a broken frontmatter
+    would have been rejected by the plan-reviewer long before a merge
+    is attempted.
+    """
+    try:
+        text = batch_path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return {}
+    match = _FRONTMATTER_BLOCK_RE.search(text)
+    if match is None:
+        return {}
+    try:
+        data = yaml.safe_load(match.group("body")) or {}
+    except yaml.YAMLError:
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def iter_batch_verifies(plan_dir: Path) -> list[tuple[str, str]]:
+    """Return ``(batch_name, verify_cmd)`` pairs in DAG execution order.
+
+    mill-merge-in's Verify step replays exactly the checks that ran
+    during implementation: each batch's ``verify:`` from its
+    frontmatter, in the same order mill-go dispatched them
+    (``topo_order``). Batches whose ``verify:`` is ``null`` or missing
+    are skipped silently — pure-docs batches have no runnable surface
+    and forcing a sentinel command there would be noise.
+
+    If the plan overview is missing or malformed, returns ``[]`` and
+    the caller falls back to "nothing to verify".
+    """
+    overview = plan_dir / "00-overview.md"
+    if not overview.exists():
+        return []
+    try:
+        batches = extract_batch_index(overview.read_text(encoding="utf-8"))
+    except PlanDAGError:
+        return []
+
+    try:
+        order = topo_order(batches)
+    except PlanDAGError:
+        return []
+
+    file_by_name = {entry["name"]: entry.get("file") for entry in batches}
+
+    commands: list[tuple[str, str]] = []
+    for name in order:
+        file_ref = file_by_name.get(name)
+        if not file_ref:
+            continue
+        frontmatter = _read_batch_frontmatter(plan_dir / file_ref)
+        verify = frontmatter.get("verify")
+        if isinstance(verify, str) and verify.strip():
+            commands.append((name, verify.strip()))
+    return commands
+
+
 def topo_order(batches: list[dict]) -> list[str]:
     """Return a topological ordering of batch names.
 
@@ -356,5 +425,55 @@ batches:
     # Authored-order tie-break: reviewers (2nd authored) precedes templates (3rd).
     assert order.index("reviewers") < order.index("templates")
     print(f"PASS: topo_order respects dependencies and authored order -- {order}")
+
+    # iter_batch_verifies
+    import tempfile as _tmp
+    with _tmp.TemporaryDirectory() as td:
+        plan_dir = Path(td)
+        (plan_dir / "00-overview.md").write_text(
+            "```yaml\n"
+            "batches:\n"
+            "  - name: foundation\n"
+            "    file: 01-foundation.md\n"
+            "    depends-on: []\n"
+            "  - name: reviewers\n"
+            "    file: 02-reviewers.md\n"
+            "    depends-on: [foundation]\n"
+            "  - name: docs\n"
+            "    file: 03-docs.md\n"
+            "    depends-on: [foundation]\n"
+            "```\n",
+            encoding="utf-8",
+        )
+        (plan_dir / "01-foundation.md").write_text(
+            "# Batch: foundation\n\n"
+            "```yaml\n"
+            "batch: foundation\n"
+            "verify: pytest tests/foundation -q\n"
+            "```\n",
+            encoding="utf-8",
+        )
+        (plan_dir / "02-reviewers.md").write_text(
+            "# Batch: reviewers\n\n"
+            "```yaml\n"
+            "batch: reviewers\n"
+            "verify: pytest tests/reviewers -q\n"
+            "```\n",
+            encoding="utf-8",
+        )
+        (plan_dir / "03-docs.md").write_text(
+            "# Batch: docs\n\n"
+            "```yaml\n"
+            "batch: docs\n"
+            "verify: null\n"
+            "```\n",
+            encoding="utf-8",
+        )
+        commands = iter_batch_verifies(plan_dir)
+        assert commands == [
+            ("foundation", "pytest tests/foundation -q"),
+            ("reviewers", "pytest tests/reviewers -q"),
+        ], commands
+        print(f"PASS: iter_batch_verifies yields verify commands in DAG order, skips null -- {commands}")
 
     print("All _plan_dag smoke tests passed.")
