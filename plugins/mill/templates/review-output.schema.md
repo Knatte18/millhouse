@@ -10,7 +10,7 @@ This file documents the canonical format for all review output files produced by
 # Review: <title>
 
 ```yaml
-verdict: APPROVE | REQUEST_CHANGES
+verdict: APPROVE | REQUEST_CHANGES | GAPS_FOUND | NEED_CONTEXT
 reviewer_model: <reviewer name from config, e.g. sonnetmax>
 reviewed_file: <path to the artefact that was reviewed>
 date: <UTC YYYY-MM-DD>
@@ -18,14 +18,20 @@ date: <UTC YYYY-MM-DD>
 
 ## Findings
 
-### [BLOCKING|NIT] <finding title>
+### [BLOCKING|NIT|GAP|NOTE] <finding title>
 **Section:** ...
 **Issue:** ...
 **Suggested fix:** ...
 
+## Missing context
+(present only when verdict is NEED_CONTEXT — one bullet per file the
+reviewer needs but could not find in the bulk)
+
+- `path/to/needed_file.py` — why the reviewer needs it
+
 ## Verdict
 
-APPROVE | REQUEST_CHANGES
+APPROVE | REQUEST_CHANGES | GAPS_FOUND | NEED_CONTEXT
 <one-sentence summary>
 ```
 
@@ -37,7 +43,7 @@ The fenced ` ```yaml ` block placed immediately after the `# Review: ...` headin
 
 | Field | Type | Required | Values |
 |---|---|---|---|
-| `verdict` | string | yes | `APPROVE` or `REQUEST_CHANGES` |
+| `verdict` | string | yes | `APPROVE`, `REQUEST_CHANGES`, `GAPS_FOUND`, or `NEED_CONTEXT` |
 | `reviewer_model` | string | yes | reviewer name from config (e.g. `sonnetmax`, `sonnetmax_tool`) |
 | `reviewed_file` | string | yes | path to the artefact reviewed (discussion file, batch file, or `plan/`) |
 | `date` | string | yes | UTC date in `YYYY-MM-DD` format |
@@ -46,7 +52,7 @@ The fenced ` ```yaml ` block placed immediately after the `# Review: ...` headin
 - No ` ```yaml ` opening fence is found.
 - The yaml block is not closed by a ` ``` ` line.
 - The `verdict:` field is absent from the block.
-- The `verdict:` value is not `APPROVE` or `REQUEST_CHANGES`.
+- The `verdict:` value is not one of the four listed above.
 
 Note: `---`-style YAML frontmatter is reserved for SKILL.md and plugin manifests per the markdown skill. Review output files must never use `---` frontmatter.
 
@@ -112,7 +118,11 @@ Examples:
 | Verdict | Meaning | Appears in |
 |---|---|---|
 | `APPROVE` | Artefact is complete and correct. NITs recorded but do not block. | yaml block + `## Verdict` body |
-| `REQUEST_CHANGES` | One or more BLOCKING findings must be resolved. | yaml block + `## Verdict` body |
+| `REQUEST_CHANGES` | One or more BLOCKING findings must be resolved. Plan / code reviews only. | yaml block + `## Verdict` body |
+| `GAPS_FOUND` | Discussion review only: at least one GAP in the discussion. | yaml block + `## Verdict` body |
+| `NEED_CONTEXT` | Reviewer cannot evaluate without source files not provided in the bulk. The body's `## Missing context` section lists which files. Orchestrator responds by re-firing with `--extra-file <path>` per needed file, and must also notify + self-report the incomplete plan reference. Never guess. | yaml block + `## Verdict` body |
 | `ERROR` | Sub-review failed (LLM error, timeout, etc.). | `reviews[]` entries in `ReviewResult` only — never in review files |
 
 `ERROR` never appears inside a review file. It is only used in the `ReviewResult` JSON emitted by the API scripts when a sub-review fails at the LLM-provider layer.
+
+`NEED_CONTEXT` is the reviewer's escape hatch when it cannot evaluate without reading a file the orchestrator did not bulk. The discipline is: reviewers never fabricate file contents from filename/position clues. If a claim cannot be verified against the provided source, emit `NEED_CONTEXT` — the orchestrator owns the retry.

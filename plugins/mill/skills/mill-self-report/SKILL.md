@@ -18,11 +18,11 @@ Exit cleanly. This check fires for BOTH manual and auto-fire invocations — the
 
 ## 2. Invocation modes
 
-- **Auto-fire from `mill-plan` and `mill-go`:** they invoke this skill at end-of-work IF `notifications.auto-report.enabled: true` in `.millhouse/config.yaml`. The skill receives no argument in this mode.
+- **Auto-fire from `mill-plan` and `mill-go`:** they invoke this skill at end-of-work IF `pipeline.auto_report: true` in the deep-merged wiki/config.yaml + .millhouse/config.local.yaml. The skill receives no argument in this mode.
 - **Manual:** the user invokes `/mill-self-report` directly.
   - With NO argument, reflect on the current session's events broadly.
   - With a free-text argument (e.g. `/mill-self-report "the Gemini reviewer hung on card 5"`), use the argument as a steering hint focusing the reflection on the topic mentioned.
-- The `notifications.auto-report.enabled` config toggle does NOT gate manual invocation — manual always works (subject to the entry check above).
+- The `pipeline.auto_report` config toggle does NOT gate manual invocation — manual always works (subject to the entry check above).
 
 ## 3. Step 1 — Reflect on session context
 

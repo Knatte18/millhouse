@@ -9,6 +9,10 @@ Reviewer model: **<REVIEWER_MODEL>**. Batch: **<BATCH_NAME>**. Round **<ROUND>**
 
 <ARTEFACT_SECTION>
 
+## Source-grounding rule
+
+**Never guess.** If you cannot verify a claim without reading a source file that was not provided above, emit `verdict: NEED_CONTEXT` and list the missing files under `## Missing context`. The orchestrator will re-fire the review with those files added. Fabricating file contents — or inferring them from filename / position alone — is a worse failure than halting honestly.
+
 ## Criteria (apply briefly)
 
 - **Constraint violations** — BLOCKING.
@@ -39,7 +43,7 @@ Target length: ~300 tokens for APPROVE, ~600–900 tokens for REQUEST_CHANGES. I
 # Review: <TASK_TITLE> — <BATCH_NAME>
 
 ```yaml
-verdict: APPROVE | REQUEST_CHANGES
+verdict: APPROVE | REQUEST_CHANGES | NEED_CONTEXT
 reviewer_model: <REVIEWER_MODEL>
 reviewed_file: <BATCH_NAME>
 date: <UTC YYYY-MM-DD>
@@ -57,9 +61,14 @@ date: <UTC YYYY-MM-DD>
 **Issue:** <one sentence>
 **Fix:** <one sentence>
 
+## Missing context
+(include ONLY when verdict is NEED_CONTEXT — omit the section otherwise)
+
+- `path/to/file.py` — <one-line reason the reviewer needs this file>
+
 ## Verdict
 
-<APPROVE | REQUEST_CHANGES>
+<APPROVE | REQUEST_CHANGES | NEED_CONTEXT>
 <one sentence — max 20 words>
 ```
 
@@ -70,5 +79,6 @@ Severity:
 Verdict:
 - `APPROVE` — zero BLOCKINGs.
 - `REQUEST_CHANGES` — one or more BLOCKINGs.
+- `NEED_CONTEXT` — missing source files; orchestrator will re-fire.
 
 Omit `## Findings` if zero findings. Never invent findings to pad.
