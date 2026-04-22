@@ -3,6 +3,16 @@
 Resolves project roots, loads config, finds the active task slug, calls
 the code review backend, and prints JSON to stdout.
 
+Flags:
+    --batch <name>     run a per-batch review against the named batch in
+                       the plan's Batch Index. Omit for a holistic review
+                       covering every batch in one reviewer call.
+    --extra-file <path> (repeatable) additional source file to include in
+                       the reviewer's bulk. Used by mill-go on a
+                       ``NEED_CONTEXT`` retry: the prior round listed the
+                       files it could not find; the orchestrator passes
+                       them explicitly here.
+
 Exit codes:
     0 — review complete; JSON result on stdout
     1 — error (missing slug, bad config, backend failure); message on stderr
@@ -19,7 +29,22 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Run a code review for the active task."
     )
-    parser.parse_args(argv)  # exits 0 on --help; raises SystemExit on bad args
+    parser.add_argument(
+        "--batch",
+        default=None,
+        help="Batch name from the plan's Batch Index. Omit for holistic review.",
+    )
+    parser.add_argument(
+        "--extra-file",
+        action="append",
+        default=[],
+        help=(
+            "Additional source file to include in the reviewer's bulk. "
+            "Repeat for each file. Typically supplied by the orchestrator "
+            "after a prior NEED_CONTEXT verdict."
+        ),
+    )
+    args = parser.parse_args(argv)
 
     from _review_common import ReviewError, find_active_slug, load_config
     from _review_code import run
@@ -29,9 +54,27 @@ def main(argv: list[str] | None = None) -> int:
     wiki_root = (mill_dir / "wiki").resolve()
     cfg = load_config(wiki_root, mill_dir)
 
+    extra_files: list[Path] = []
+    for raw in args.extra_file:
+        p = Path(raw)
+        if not p.is_absolute():
+            p = (project_root / p).resolve()
+        if not p.exists():
+            print(f"--extra-file not found: {p}", file=sys.stderr)
+            return 1
+        extra_files.append(p)
+
     try:
         slug = find_active_slug(mill_dir)
-        result = run(cfg, slug, mill_dir, wiki_root, project_root)
+        result = run(
+            cfg,
+            slug,
+            mill_dir,
+            wiki_root,
+            project_root,
+            batch_name=args.batch,
+            extra_files=extra_files,
+        )
         print(json.dumps(result.to_dict()))
         return 0
     except ReviewError as exc:

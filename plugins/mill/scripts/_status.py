@@ -1,30 +1,35 @@
 """
-Render the initial ``status.md`` for a freshly-spawned task.
+Render + mutate ``status.md`` — the per-task state file.
 
-mill-spawn writes one file after claiming a task: ``wiki/active/<slug>/
-status.md``. This module renders that file from
-``templates/status-discussing.md``, substituting title / description /
-timestamp tokens and stripping the leading HTML comment that documents
-the template for humans reading the repo.
+mill-spawn writes the initial file via :func:`render_initial`; all
+later skills (mill-start, mill-plan, mill-go) mutate fields with
+:func:`update_field` or :func:`append_phase`, and mill-go owns the
+``## Batches`` section via :func:`init_batches` / :func:`set_batch_field`
+/ :func:`read_batches`.
 
-Keeping the renderer separate from the spawner lets future scripts
-(mill-start's "begin discussion" step, mill-resume's re-sync) reuse the
-same surface without copy-pasting token maps.
+Why ``## Batches`` is its own fenced-yaml block rather than a key inside
+the top ``` ```yaml ``` ``` block: the top block contains
+``task_description: |`` — a literal-block scalar whose indentation is
+fragile. Re-serialising the whole top block via ``yaml.safe_dump`` to
+mutate one list item would risk collapsing the block scalar into a
+quoted string. Keeping ``batches:`` in its own section lets us parse
+and rewrite just that block, never touching the top block.
 
 Public API:
     render_initial(task_title, task_description, timestamp,
                    parent_branch) -> str
-        Return the rendered status.md body as a string.
     update_field(status_path, key, value) -> None
-        Mutate ``key:`` in the top ``` ```yaml ``` ``` block of status.md.
     append_phase(status_path, phase, timestamp) -> None
-        Record a new phase transition: overwrite ``phase:`` in the yaml
-        block and append a timeline row.
+    init_batches(status_path, names) -> None
+    set_batch_field(status_path, name, key, value) -> None
+    read_batches(status_path) -> list[dict]
 """
 from __future__ import annotations
 
 import re
 from pathlib import Path
+
+import yaml
 
 _TOKEN_RE = re.compile(r"<([A-Z][A-Z0-9_]*)>")
 _YAML_FENCE = "```yaml"
@@ -224,6 +229,210 @@ def append_phase(status_path: Path, phase: str, timestamp: str) -> None:
     status_path.write_text("".join(tl_lines), encoding="utf-8")
 
 
+# ---------------------------------------------------------------------------
+# Batches section — mill-go's per-batch execution state
+# ---------------------------------------------------------------------------
+
+_BATCHES_HEADING = "## Batches"
+_BATCH_ALLOWED_KEYS = {
+    "state",
+    "implementer_session",
+    "commit_sha",
+    "start_sha",
+    "review_round",
+    "review_file",
+    "blocked_reason",
+}
+_BATCH_STATES = {
+    "pending",
+    "running",
+    "reviewing",
+    "fixing",
+    "approved",
+    "blocked",
+}
+
+
+def _find_batches_block(lines: list[str]) -> tuple[int, int, int, int] | None:
+    r"""Locate the batches section's heading and fenced-yaml body.
+
+    Returns ``(heading_idx, fence_open_idx, fence_close_idx, section_end_idx)``
+    where:
+    - ``heading_idx`` points at the ``## Batches`` line,
+    - ``fence_open_idx`` points at ``\`\`\`yaml``,
+    - ``fence_close_idx`` points at the closing ``\`\`\``,
+    - ``section_end_idx`` is the last-line-inclusive end of the section
+      (the next ``## `` heading or EOF).
+
+    Returns ``None`` if the heading is absent.
+    """
+    heading_idx = None
+    for i, line in enumerate(lines):
+        if line.rstrip() == _BATCHES_HEADING:
+            heading_idx = i
+            break
+    if heading_idx is None:
+        return None
+
+    # Fence discovery is scoped to the section (until next ## heading).
+    section_end_idx = len(lines) - 1
+    for j in range(heading_idx + 1, len(lines)):
+        if lines[j].startswith("## "):
+            section_end_idx = j - 1
+            break
+
+    fence_open_idx = None
+    for j in range(heading_idx + 1, section_end_idx + 1):
+        if lines[j].strip() == "```yaml":
+            fence_open_idx = j
+            break
+    if fence_open_idx is None:
+        raise ValueError(
+            f"{_BATCHES_HEADING} section missing its ```yaml``` block"
+        )
+    fence_close_idx = None
+    for j in range(fence_open_idx + 1, section_end_idx + 1):
+        if lines[j].strip() == "```":
+            fence_close_idx = j
+            break
+    if fence_close_idx is None:
+        raise ValueError(
+            f"{_BATCHES_HEADING} ```yaml``` block is unterminated"
+        )
+    return (heading_idx, fence_open_idx, fence_close_idx, section_end_idx)
+
+
+def _serialise_batches(batches: list[dict]) -> str:
+    """Return a deterministic ``batches:`` yaml block body.
+
+    Writes one list entry per batch with keys in a fixed order so diffs
+    stay small across edits. Omits keys whose value is ``None`` to keep
+    an empty entry visually compact.
+    """
+    order = [
+        "name",
+        "state",
+        "implementer_session",
+        "start_sha",
+        "commit_sha",
+        "review_round",
+        "review_file",
+        "blocked_reason",
+    ]
+    parts = ["batches:"]
+    for entry in batches:
+        first = True
+        for key in order:
+            if key not in entry or entry[key] is None:
+                continue
+            value = entry[key]
+            prefix = "  - " if first else "    "
+            parts.append(f"{prefix}{key}: {value}")
+            first = False
+        if first:
+            # Entry had nothing but name (shouldn't happen, guard anyway).
+            parts.append("  - name: " + entry.get("name", "?"))
+    return "\n".join(parts) + "\n"
+
+
+def _write_batches(status_path: Path, batches: list[dict]) -> None:
+    """Replace or insert the ``## Batches`` section with ``batches``.
+
+    If the section already exists, the fenced-yaml block is rewritten
+    in place (preserving everything around it). If it does not, the
+    new section is appended to the end of the file with a leading
+    blank-line separator.
+    """
+    text = status_path.read_text(encoding="utf-8")
+    lines = text.splitlines()
+    body_yaml = _serialise_batches(batches)
+    new_block = [
+        _BATCHES_HEADING,
+        "",
+        "```yaml",
+        *body_yaml.rstrip("\n").splitlines(),
+        "```",
+    ]
+    located = _find_batches_block(lines)
+    if located is None:
+        # Append a new section at the end with leading blank separator.
+        if lines and lines[-1].strip() != "":
+            lines.append("")
+        lines.extend(new_block)
+    else:
+        heading_idx, _fence_open, _fence_close, section_end = located
+        lines = lines[:heading_idx] + new_block + lines[section_end + 1 :]
+    status_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def read_batches(status_path: Path) -> list[dict]:
+    """Return the batches list from ``## Batches``, or ``[]`` if absent.
+
+    Raises ``ValueError`` if the section exists but its yaml fence is
+    malformed — that is a corruption we want to surface, not silently
+    mask with an empty list.
+    """
+    text = status_path.read_text(encoding="utf-8")
+    lines = text.splitlines()
+    located = _find_batches_block(lines)
+    if located is None:
+        return []
+    _h, fence_open, fence_close, _end = located
+    body = "\n".join(lines[fence_open + 1 : fence_close])
+    try:
+        data = yaml.safe_load(body) or {}
+    except yaml.YAMLError as exc:
+        raise ValueError(f"Malformed {_BATCHES_HEADING} yaml: {exc}") from exc
+    batches = data.get("batches", []) if isinstance(data, dict) else []
+    return batches or []
+
+
+def init_batches(status_path: Path, names: list[str]) -> None:
+    """Seed the ``## Batches`` section with every batch in ``pending`` state.
+
+    Idempotent: calling with the same ``names`` list produces the same
+    output. Calling with a different list REPLACES the existing section
+    — intended for use only at mill-go's entry before any batch has
+    started. Callers resuming an existing run must not pass through
+    this function.
+    """
+    batches = [{"name": n, "state": "pending"} for n in names]
+    _write_batches(status_path, batches)
+
+
+def set_batch_field(
+    status_path: Path,
+    name: str,
+    key: str,
+    value: str | int | None,
+) -> None:
+    """Mutate one field on one batch entry in ``## Batches``.
+
+    Validates ``key`` is in the small known set and (for ``state:``)
+    that the value is one of the declared states. Unknown keys raise
+    ``ValueError`` so typos fail loudly rather than silently writing a
+    field no consumer reads.
+    """
+    if key not in _BATCH_ALLOWED_KEYS:
+        raise ValueError(
+            f"Unknown batch field {key!r}; allowed: {sorted(_BATCH_ALLOWED_KEYS)}"
+        )
+    if key == "state" and value not in _BATCH_STATES:
+        raise ValueError(
+            f"Unknown batch state {value!r}; allowed: {sorted(_BATCH_STATES)}"
+        )
+    batches = read_batches(status_path)
+    for entry in batches:
+        if entry.get("name") == name:
+            if value is None:
+                entry.pop(key, None)
+            else:
+                entry[key] = value
+            _write_batches(status_path, batches)
+            return
+    raise ValueError(f"Batch {name!r} not present in {_BATCHES_HEADING}")
+
+
 if __name__ == "__main__":
     out = render_initial(
         task_title="Fix bug in widget handler",
@@ -252,5 +461,45 @@ if __name__ == "__main__":
         assert "phase: discussed" in contents, "phase yaml row not updated"
         assert "discussed  2026-04-22T15:00:00Z" in contents, "timeline row not appended"
         print("PASS: append_phase updates phase yaml + appends timeline row")
+
+        # --- Batches section ---
+        assert read_batches(sp) == [], "no batches section yet"
+        init_batches(sp, ["foundation", "reviewers"])
+        batches = read_batches(sp)
+        assert [b["name"] for b in batches] == ["foundation", "reviewers"]
+        assert all(b["state"] == "pending" for b in batches)
+        print("PASS: init_batches seeds pending entries")
+
+        set_batch_field(sp, "foundation", "state", "running")
+        set_batch_field(sp, "foundation", "implementer_session", "abc123")
+        batches = read_batches(sp)
+        foundation = next(b for b in batches if b["name"] == "foundation")
+        assert foundation["state"] == "running"
+        assert foundation["implementer_session"] == "abc123"
+        print("PASS: set_batch_field updates state + implementer_session")
+
+        try:
+            set_batch_field(sp, "foundation", "nope", "x")
+        except ValueError as exc:
+            assert "Unknown batch field" in str(exc)
+            print("PASS: set_batch_field rejects unknown key")
+
+        try:
+            set_batch_field(sp, "foundation", "state", "finished")
+        except ValueError as exc:
+            assert "Unknown batch state" in str(exc)
+            print("PASS: set_batch_field rejects unknown state")
+
+        try:
+            set_batch_field(sp, "missing", "state", "running")
+        except ValueError as exc:
+            assert "not present" in str(exc)
+            print("PASS: set_batch_field rejects unknown batch name")
+
+        # Unaffected prior content
+        contents = sp.read_text(encoding="utf-8")
+        assert "phase: discussed" in contents, "batches edit damaged top yaml"
+        assert "discussed  2026-04-22T15:00:00Z" in contents, "batches edit damaged timeline"
+        print("PASS: batches edits preserve top yaml + timeline")
 
     print("All _status smoke tests passed.")

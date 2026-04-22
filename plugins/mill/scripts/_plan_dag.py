@@ -188,6 +188,53 @@ def _check_acyclic(batches: list[dict]) -> None:
         )
 
 
+def topo_order(batches: list[dict]) -> list[str]:
+    """Return a topological ordering of batch names.
+
+    mill-go consumes this to decide execution order: batches appear in
+    an order compatible with every ``depends-on:`` edge. Among batches
+    that share a dependency level we break ties by the order they
+    appear in the input — which matches the authored order in the
+    overview and gives a predictable execution timeline.
+
+    Assumes ``validate(batches, ...)`` has already been called so the
+    input is structurally sound (no cycles, no dangling refs). If the
+    graph contains a cycle this function raises ``PlanDAGError`` — a
+    safety net in case the caller skipped validation.
+    """
+    indegree: dict[str, int] = {entry["name"]: 0 for entry in batches}
+    adj: dict[str, list[str]] = {entry["name"]: [] for entry in batches}
+    for entry in batches:
+        for dep in entry.get("depends-on", []):
+            adj[dep].append(entry["name"])
+            indegree[entry["name"]] += 1
+
+    # Stable-priority queue: preserve authored order among zero-indegree
+    # nodes by draining them in batch-list sequence.
+    order_hint = {entry["name"]: i for i, entry in enumerate(batches)}
+    queue: list[str] = sorted(
+        [n for n, d in indegree.items() if d == 0],
+        key=lambda n: order_hint[n],
+    )
+
+    result: list[str] = []
+    while queue:
+        n = queue.pop(0)
+        result.append(n)
+        new_ready: list[str] = []
+        for m in adj[n]:
+            indegree[m] -= 1
+            if indegree[m] == 0:
+                new_ready.append(m)
+        if new_ready:
+            queue.extend(sorted(new_ready, key=lambda n: order_hint[n]))
+    if len(result) != len(batches):
+        raise PlanDAGError(
+            "Cycle detected during topological sort; call validate() first"
+        )
+    return result
+
+
 def validate(batches: list[dict], batch_files: list[str]) -> None:
     """Run every structural check on ``batches`` against ``batch_files``.
 
@@ -294,5 +341,20 @@ batches:
         print(f"PASS: missing block rejected -- {exc}")
     else:
         raise AssertionError("missing block was not rejected")
+
+    # topo_order
+    order = topo_order([
+        {"name": "foundation", "depends-on": []},
+        {"name": "reviewers", "depends-on": ["foundation"]},
+        {"name": "templates", "depends-on": ["foundation"]},
+        {"name": "integration", "depends-on": ["reviewers", "templates"]},
+    ])
+    assert order.index("foundation") < order.index("reviewers")
+    assert order.index("foundation") < order.index("templates")
+    assert order.index("reviewers") < order.index("integration")
+    assert order.index("templates") < order.index("integration")
+    # Authored-order tie-break: reviewers (2nd authored) precedes templates (3rd).
+    assert order.index("reviewers") < order.index("templates")
+    print(f"PASS: topo_order respects dependencies and authored order -- {order}")
 
     print("All _plan_dag smoke tests passed.")
