@@ -51,6 +51,7 @@ A discussion gap is missing information; a plan/code block is a must-fix defect.
 
 ## Conventions worth carrying
 
+- **Plugin scripts reference `${CLAUDE_PLUGIN_ROOT}`, never the source repo.** Anything installed via plugin manifest — `plugins/mill/`, `plugins/codeguide/`, etc. — runs on a user's machine that has no millhouse source checkout. Every intra-plugin path in a SKILL.md, Python helper, or prompt template must resolve against `${CLAUDE_PLUGIN_ROOT}`, not against `plugins/<name>/…`. This is load-bearing for external repos where CC uses mill/codeguide plugins without the millhouse source being cloned anywhere. Moves to `CONSTRAINTS.md` once mill-v2 is mature.
 - **Never write to `/tmp/` or `$env:TEMP`.** Use `.millhouse/scratch/`. (See `plugins/mill/skills/conversation/SKILL.md`.)
 - **Generated markdown uses fenced ```yaml for metadata**, not `---` frontmatter. `---` is reserved for `SKILL.md` and plugin manifests. (See `plugins/mill/skills/markdown/SKILL.md`.)
 - **Reviews match the tight v1 style**: per-finding = severity-label + 3–4 short bullets. Target a few hundred tokens total, not thousands. The fix-thread has full context and does not need narrative explanation.
