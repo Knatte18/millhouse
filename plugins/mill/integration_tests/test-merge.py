@@ -12,7 +12,7 @@ Layout mirrors `test-spawn.py`:
     <container>/wiki.git          bare "remote" for the wiki
     <container>/wiki              working clone of the bare
     <container>/hub               hub repo (the parent)
-    <container>/hub.worktrees/<slug>   child worktree under the task branch
+    <container>/worktrees/<slug>       child worktree under the task branch (hub-form default)
 
 Flow under test (mirrors mill-merge SKILL.md step numbering):
 
@@ -87,7 +87,7 @@ def _setup_trio(container: Path) -> tuple[Path, Path, Path, str]:
     bare = container / "wiki.git"
     wiki = container / "wiki"
     hub = container / "hub"
-    worktrees_dir = container / "hub.worktrees"
+    worktrees_dir = container / "worktrees"
     worktree = worktrees_dir / slug
 
     # Bare wiki + clone.
@@ -113,8 +113,7 @@ def _setup_trio(container: Path) -> tuple[Path, Path, Path, str]:
         "  .active: <WIKI_PATH>/active/<SLUG>/\n"
         "\n"
         "spawn:\n"
-        "  branch_prefix: test\n"
-        "  worktrees_dir: <CONTAINER_PATH>/<REPO>.worktrees\n",
+        "  branch_prefix: test\n",
         encoding="utf-8",
     )
     active_dir = wiki / "active" / slug

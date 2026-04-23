@@ -7,11 +7,11 @@ status: placeholder — deferred until mill-v2 is self-sufficient enough to run 
 note: "The codeguide plugin is already shipped (plugins/codeguide/) with codeguide-setup/-generate/-update/-maintain. The hub repo just hasn't been seeded. Do not seed manually."
 ```
 
-**For the thread that will eventually run this:** the infrastructure is done; there is no code to write. The one-shot sequence is:
+**For the thread that will eventually run this:** the infrastructure is done; there is no code to write. Codeguide can live either **inline** (`<repo>/_codeguide/`) or in a **sibling** repo (`<container>/codeguide/` for hub-form, `<container>/<repo>.codeguide/` otherwise). `resolve.py` handles both transparently — the consuming skill doesn't care. The one-shot sequence is:
 
-1. From hub root: invoke `/codeguide-setup` — creates `_codeguide/Overview.md`, `config.yaml`, `modules/DocumentationGuide.md`, etc.
+1. From hub root: invoke `/codeguide-setup` (inline) or `/codeguide-setup --sibling` (sibling, as Henrik prefers for the hub at that time) — seeds the `_codeguide/` tree in the chosen location.
 2. Optionally `/codeguide-generate` to bulk-document existing source files.
-3. Commit the seeded `_codeguide/` tree.
+3. Commit the seeded `_codeguide/` tree (inline → inside the hub; sibling → its own history in the sibling repo).
 
 From that point on, every `/git-commit` invocation triggers the pre-commit "Codeguide sync" step, which calls `@codeguide:codeguide-update` against the staged diff. Docs stay fresh per-commit.
 

@@ -14,9 +14,12 @@ Run these before staging. Both are conditional — skip if the condition isn't m
 
 Detect the project language (see `@mill:workflow` Language Detection) and run the lint step from the matching `{lang}-build` skill on changed files. Skip if no source files changed or no language detected.
 
-### 2. Codeguide sync (only if `_codeguide/` exists)
+### 2. Codeguide sync (only if codeguide is initialized)
 
-If `_codeguide/Overview.md` exists anywhere in the repo, run `@codeguide:codeguide-update` (no arguments — it defaults to the current git diff). Stage any updated or created doc files alongside source files.
+Run `@codeguide:codeguide-update` whenever codeguide is initialized for this repo — either **inline** (`_codeguide/Overview.md` exists under the repo) or **sibling** (a separate `<container>/<repo>.codeguide/` or `<container>/codeguide/` repo exists). `codeguide-update` resolves the mode itself via `resolve.py` and handles both.
+
+- **Inline mode** → doc files live inside this repo. `codeguide-update`'s helper (`codeguide_commit.py --mode inline`) stages them; this skill commits them alongside source changes as part of step 3.
+- **Sibling mode** → doc files live in the sibling repo and are committed there by `codeguide_commit.py --mode sibling` as its own commit. **Do not** try to stage sibling-rooted paths in this commit — the sibling has its own history.
 
 ## Rules
 

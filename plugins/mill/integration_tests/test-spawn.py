@@ -5,7 +5,8 @@ Builds an isolated hub+wiki pair under ``.millhouse/scratch/`` and runs
 ``mill-spawn.py`` against it. Asserts the end-to-end artefacts:
 
     - Home.md heading for the seeded task switches to ``[active]``.
-    - A new worktree directory exists at ``<container>/hub.worktrees/<slug>``.
+    - A new worktree directory exists at ``<container>/worktrees/<slug>``
+      (hub-form default, via _sibling.resolve_path).
     - The task's branch exists with the expected name.
     - ``wiki/active/<slug>/status.md`` exists with the expected title.
     - ``<worktree>/.vscode/settings.json`` has a non-green colour.
@@ -63,7 +64,7 @@ def _setup_pair(container: Path) -> tuple[Path, Path, Path]:
     bare = container / "wiki.git"
     wiki = container / "wiki"
     hub = container / "hub"
-    worktrees_dir = container / "hub.worktrees"
+    worktrees_dir = container / "worktrees"
 
     # Bare wiki + clone. The bare acts as origin so mill-spawn's
     # sync_pull/write_commit_push paths exercise real push/pull.
@@ -89,8 +90,7 @@ def _setup_pair(container: Path) -> tuple[Path, Path, Path]:
         "  .active: <WIKI_PATH>/active/<SLUG>/\n"
         "\n"
         "spawn:\n"
-        "  branch_prefix: test\n"
-        "  worktrees_dir: <CONTAINER_PATH>/<REPO>.worktrees\n",
+        "  branch_prefix: test\n",
         encoding="utf-8",
     )
     _run(["git", "-C", str(wiki), "add", "."], cwd=container)
@@ -249,7 +249,7 @@ def main() -> int:
             # worktree bookkeeping stays consistent on repeated runs.
             try:
                 _run(
-                    ["git", "worktree", "remove", "--force", str(container / "hub.worktrees" / "demo-task")],
+                    ["git", "worktree", "remove", "--force", str(container / "worktrees" / "demo-task")],
                     cwd=container / "hub",
                     check=False,
                 )
