@@ -47,8 +47,8 @@ Explicit `.millhouse/config.local.yaml` overrides (`spawn.worktrees_dir`, `wiki_
 
 ### Card 12: drop `spawn.worktrees_dir` default from `wiki/config.yaml`
 
-- **Reads:** `wiki/config.yaml`, `plugins/mill/scripts/mill-spawn.py` (post-Card-10).
-- **Modifies:** `wiki/config.yaml`
+- **Reads:** `wiki/config.yaml` (accessible as `.millhouse/wiki/config.yaml` from the hub root via the junction, or directly at `<container>/wiki/config.yaml` in the wiki-sibling clone), `plugins/mill/scripts/mill-spawn.py` (post-Card-10).
+- **Modifies:** `wiki/config.yaml` — write to the wiki clone directly. Changes land in the wiki repo's git history, not the hub's. Stage + commit + push via `_wiki.write_commit_push` (standard wiki-write path) OR direct `git -C <container>/wiki` invocation; either is fine since there are no other wiki writers active during this card.
 - **Creates:** (none)
 - **Requirements:**
   - Delete the line `worktrees_dir: <CONTAINER_PATH>/<REPO>.worktrees` from the `spawn:` block.

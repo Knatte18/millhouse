@@ -101,5 +101,5 @@ Modified files:
 - `plugins/mill/skills/mill-setup/SKILL.md`
 - `plugins/mill/integration_tests/test-spawn.py`
 - `plugins/mill/integration_tests/test-merge.py`
-- `wiki/config.yaml` (drops `spawn.worktrees_dir` default; updates `<WIKI_PATH>` header-comment)
+- `wiki/config.yaml` — lives in the wiki-sibling clone at `<container>/wiki/config.yaml`, accessible from hub root as `.millhouse/wiki/config.yaml` via the junction. Drops `spawn.worktrees_dir` default; updates `<WIKI_PATH>` header-comment.
 - `specs/component/13-mill-codeguide.md` (one-line edit: "inline or sibling")

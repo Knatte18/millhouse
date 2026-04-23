@@ -65,16 +65,21 @@ Unlike batches with runnable code, this batch is mostly skill markdown + pure-Py
 
 ### Card 6: `plugins/codeguide/scripts/codeguide_commit.py`
 
-- **Reads:** `plugins/codeguide/scripts/resolve.py` (post-Card-5 state), `plugins/mill/skills/git-commit/SKILL.md`, `plugins/mill/scripts/_subprocess_util.py` (pattern for git-invoking helpers).
+- **Reads:** `plugins/codeguide/scripts/resolve.py` (post-Card-5 state, for understanding the mode/anchor contract — NOT for re-invocation at commit time), `plugins/mill/skills/git-commit/SKILL.md`, `plugins/mill/scripts/_subprocess_util.py` (pattern for git-invoking helpers).
 - **Modifies:** (none)
 - **Creates:** `plugins/codeguide/scripts/codeguide_commit.py`
 - **Requirements:**
-  - CLI args: `--file <path>` (repeatable), `-m <msg>`.
-  - Call `resolve.py` (or directly import its logic) to determine mode.
-  - **Inline mode** → `git add <file> …` in the current repo (target repo). Do NOT commit — leave that to the outer `@git-commit` skill that invoked us.
-  - **Sibling mode** → `git -C <sibling_anchor> add <file> …` (the file paths are already rooted under the sibling) and `git -C <sibling_anchor> commit -m <msg>`. Commit in the sibling repo directly. Return 0 on success.
+  - CLI args (all explicit — the helper does NOT re-run resolve.py):
+    - `--mode {inline,sibling}` (required).
+    - `--sibling-anchor <path>` (required when `--mode sibling`; absolute path to the sibling repo root). Ignored when `--mode inline`.
+    - `--file <path>` (repeatable; absolute paths). For inline mode these are paths inside the target repo; for sibling mode they are paths inside the sibling repo tree.
+    - `-m <msg>`.
+  - The caller (`codeguide-update`) already holds the mode + anchor from its own `resolve.py` call earlier in the flow. Passing those in explicitly avoids re-running `resolve.py` from a potentially-different cwd, and avoids coupling this helper to import-time side effects.
+  - **Inline mode** → `git add <file> …` in the current repo (target repo, i.e. cwd). Do NOT commit — leave that to the outer `@git-commit` skill that invoked us.
+  - **Sibling mode** → `git -C <sibling-anchor> add <file> …` and `git -C <sibling-anchor> commit -m <msg>`. Commit in the sibling repo directly. Return 0 on success.
   - Stdout is a one-line JSON summary: `{"mode": "...", "committed": true|false, "files": [...]}`. Stderr carries subprocess transcripts.
   - No cross-plugin imports. If subprocess-to-git needs argument escaping, handle it locally; do not reach into mill's `_subprocess_util`.
+  - Argument validation: missing `--mode`, invalid value, or sibling mode without `--sibling-anchor` → exit 2 with a one-line stderr error.
 - **Commit:** `feat(codeguide): codeguide_commit.py mode-aware staging/commit helper`
 
 ### Card 7: rewrite `codeguide-setup` SKILL.md for sibling mode
@@ -105,8 +110,8 @@ Unlike batches with runnable code, this batch is mostly skill markdown + pure-Py
 - **Requirements:**
   - Preserve the existing `---` YAML frontmatter.
   - Replace the "Does not commit" disclaimer at the top: "In inline mode, the outer `@git-commit` skill commits; in sibling mode, codeguide_commit.py commits in the sibling repo."
-  - After updating cg-doc files, invoke `python ${CLAUDE_PLUGIN_ROOT}/scripts/codeguide_commit.py --file … --file … -m "…"` with the actual file list and a generated message.
-  - **Multi-codeguide grouping:** when the staged diff touches files under two subfolders that each have their own codeguide, the skill walks each diff-file through `resolve.py` to find its governing cg-root, groups files by root, and processes each group (update + commit) independently.
+  - After updating cg-doc files in a given cg-root's group, invoke `python ${CLAUDE_PLUGIN_ROOT}/scripts/codeguide_commit.py --mode <mode> [--sibling-anchor <path>] --file … --file … -m "…"` with the mode and anchor that `resolve.py` returned for THAT group, the actual file list, and a generated message. Never re-invoke `resolve.py` from the helper — pass what we already know.
+  - **Multi-codeguide grouping:** when the staged diff touches files under two subfolders that each have their own codeguide, the skill walks each diff-file through `resolve.py` to find its governing cg-root + mode + anchor, groups files by root, and processes each group (update + commit) independently with the group's own mode/anchor flags.
   - Preserve the existing "update stale docs / flag orphan / update Overview routing" logic verbatim.
 - **Commit:** `feat(codeguide): update skill uses codeguide_commit.py + group-by-root`
 
