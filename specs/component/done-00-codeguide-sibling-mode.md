@@ -4,10 +4,12 @@
 type: plugin change (codeguide) + _sibling.py helper + mill-config unification
 layer: bookkeeping / external tooling
 v1_ref: none — new capability
-status: discussed — ready for plan-writing
+status: done — merged to main 2026-04-23 (branch impl/00-codeguide-sibling-mode)
 note: "Let `_codeguide/` live in a sibling git repo next to the target repo. Same hub-form detection rule (`repo/.name == 'hub'`) unifies the naming convention across wiki, worktrees, and codeguide. Zero-footprint inside the target repo. Mill-v2 skill-contracts unaffected."
 priority: run before specs 07+. Triggered by the engineer's upcoming work on a third-party codebase where `_codeguide/` files cannot live in the main repo.
 ```
+
+**Implementation notes:** `plugins/mill/scripts/_sibling.py` + `plugins/codeguide/scripts/_sibling.py` (identical twins) expose `resolve_path(role, repo_root)` plus a CLI. `mill-spawn.py` and `mill-setup` SKILL.md delegate to the mill copy for default worktrees/ and wiki/ paths; explicit `.millhouse/config.local.yaml` overrides still win. `plugins/codeguide/scripts/resolve.py` gained a 3-step resolve chain (inline walk → `.codeguide-root` at git-toplevel → sibling via local `_sibling`) returning `{mode, cg_root, sibling_anchor, found}` via `--json`. `plugins/codeguide/scripts/codeguide_commit.py` is mode-aware (inline → `git add`; sibling → `git -C <anchor> add/commit`). `codeguide-setup` SKILL.md gained `--sibling [--from-url <url>]` flags; `codeguide-update` groups files by cg-root and calls `codeguide_commit.py` with per-group `--mode`/`--sibling-anchor`. Stale `millpy/codeguide/resolve.py` paths fixed across all four codeguide SKILLs. `wiki/config.yaml` dropped the `spawn.worktrees_dir` default and updated the `<WIKI_PATH>` comment. Unit test `test-sibling.py` covers all role×name combos and CLI; `test-spawn.py`/`test-merge.py` fixtures seed the hub-form default. Verify (unit + 4 integration tests) passes.
 
 ## Scope summary (post-discussion)
 
