@@ -37,7 +37,7 @@ def is_hub_form(repo_root: Path) -> bool:
 
 The repo directory name is the entire signal. No heuristic on sibling presence, no config flag, no setup-time question. Existing Millhouse layout (`<container>/hub/`) triggers hub-form automatically; every other repo triggers prefix-form.
 
-### `_sibling.resolve_path(role, repo_root)` — one helper for all siblings
+### `_sibling.resolve_path(role, repo_root)` — one helper; two identical copies
 
 ```python
 def resolve_path(role: str, repo_root: Path) -> Path:
@@ -47,7 +47,14 @@ def resolve_path(role: str, repo_root: Path) -> Path:
     return parent / f"{repo_root.name}.{role}"
 ```
 
-Applied uniformly to `role` in `{"wiki", "codeguide", "worktrees"}`. Lives at `plugins/mill/scripts/_sibling.py`. Consumed by `mill-spawn`, `mill-setup`, and (via subprocess call from the codeguide plugin) the codeguide `resolve.py`.
+Applied uniformly to `role` in `{"wiki", "codeguide", "worktrees"}`.
+
+**Two independent copies** — one per plugin — deliberately NO cross-plugin import:
+
+- `plugins/mill/scripts/_sibling.py` — used by mill-spawn and by the mill-setup skill's subprocess calls. Exposes a CLI mode so the skill's prose can run `python ${CLAUDE_PLUGIN_ROOT}/scripts/_sibling.py <role> <repo_root>` to fetch the computed path.
+- `plugins/codeguide/scripts/_sibling.py` — used by codeguide's own `resolve.py` and `codeguide_commit.py`. Identical 3-line logic.
+
+Rationale: three lines of pure arithmetic. Duplicating across plugins avoids any assumption that mill and codeguide plugins install in a specific relative layout (which `${CLAUDE_PLUGIN_ROOT}/../mill/` would require). Plugin independence is the load-bearing property; minor duplication is the acceptable cost. If the rule ever changes, both files get the same edit — a linter check or a pre-merge grep can catch divergence.
 
 ### Codeguide — two modes, chosen at setup time
 
@@ -94,10 +101,16 @@ All path computation uses `git rev-parse --show-toplevel`, not cwd. Running `/co
 
 ### Mill-v2 integration — shared helper, removed token defaults
 
-- `mill-spawn` switches from reading `cfg["spawn"]["worktrees_dir"]` as a token template to calling `_sibling.resolve_path("worktrees", repo_root)` when the key is absent. Explicit `spawn.worktrees_dir` set in `.millhouse/config.local.yaml` continues to override.
-- `mill-setup` switches from the documented `<CONTAINER_PATH>/<REPO>.wiki/` default to `_sibling.resolve_path("wiki", repo_root)`. Explicit `wiki_path:` in `.millhouse/config.local.yaml` continues to override.
+- `mill-spawn.py` switches from reading `cfg["spawn"]["worktrees_dir"]` as a token template to calling `_sibling.resolve_path("worktrees", repo_root)` when the key is absent. Explicit `spawn.worktrees_dir` set in `.millhouse/config.local.yaml` continues to override.
+- `mill-setup` is a **skill** (`plugins/mill/skills/mill-setup/SKILL.md`), not a Python script. Its SKILL.md prose currently contains two internally-inconsistent defaults: Phase 3 clones the wiki at literal `<container>/wiki/` (hub-form), while Phase 3.5 declares the `<WIKI_PATH>` token default as `<CONTAINER_PATH>/<REPO>.wiki/` (prefix-form). The plan reconciles both to `_sibling.resolve_path("wiki", repo_root)` by updating the skill's prose to invoke `python ${CLAUDE_PLUGIN_ROOT}/scripts/_sibling.py wiki <hub-path>` as a subprocess call and using the printed result for both Phase 3 and Phase 3.5. Explicit `wiki_path:` in `.millhouse/config.local.yaml` continues to override.
 - `wiki/config.yaml` drops the `spawn.worktrees_dir` default and the `<WIKI_PATH>` documented default from its header comments. Override-only keys remain documented.
 - Integration test fixtures (`test-spawn.py`, `test-merge.py`) update to the new layout: test hub is at `<container>/hub/` → worktrees at `<container>/worktrees/` (not `<container>/hub.worktrees/`).
+
+### Pre-existing bug in codeguide plugin — fix before the sibling work
+
+The codeguide skills (`codeguide-setup`, `codeguide-update`, `codeguide-generate`, `codeguide-maintain`) all reference `${CLAUDE_PLUGIN_ROOT}/scripts/millpy/codeguide/resolve.py` — a stale path from the v1 `millpy`-package layout. The file actually lives at `${CLAUDE_PLUGIN_ROOT}/scripts/resolve.py`. Any invocation of those skills on a real install would fail at the first `python` call.
+
+This spec fixes all four SKILL.md files to reference the correct flat path BEFORE touching the resolver code. Scope creep is acceptable because the sibling-mode work compounds the issue (adding `codeguide_commit.py` at the stale path). Fix the path first, then extend.
 
 ### Monorepo-branch pattern — user-managed, not a plugin mode
 

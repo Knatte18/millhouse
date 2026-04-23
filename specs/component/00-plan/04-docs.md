@@ -16,9 +16,9 @@ No code changes here; no verify command.
 
 ## Cards
 
-### Card 13: update `13-mill-codeguide.md` to mention sibling mode
+### Card 15: update `13-mill-codeguide.md` to mention sibling mode
 
-- **Reads:** `specs/component/13-mill-codeguide.md`, `specs/component/00-codeguide-sibling-mode.md` (post-implementation), `plugins/codeguide/skills/codeguide-setup/SKILL.md` (post-Card-5).
+- **Reads:** `specs/component/13-mill-codeguide.md`, `specs/component/00-codeguide-sibling-mode.md` (post-implementation), `plugins/codeguide/skills/codeguide-setup/SKILL.md` (post-Card-7).
 - **Modifies:** `specs/component/13-mill-codeguide.md`
 - **Creates:** (none)
 - **Requirements:**

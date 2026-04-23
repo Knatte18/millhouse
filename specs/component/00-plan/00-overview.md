@@ -38,13 +38,19 @@ batches:
 
 - **Decision:** `repo_root.name == "hub"` — the repo directory's name is the entire signal.
 - **Rationale:** Deterministic, zero-config, zero-heuristic. Existing Millhouse layout triggers it automatically; every other repo gets prefix-form naming.
-- **Applies to:** `_sibling.resolve_path`, and every consumer (mill-spawn, mill-setup, codeguide resolve.py).
+- **Applies to:** every implementation of the sibling-path rule (both plugin-local copies).
 
-### Decision: One `_sibling.py` helper governs wiki, worktrees, and codeguide
+### Decision: Each plugin ships its own `_sibling.py` — no cross-plugin import
 
-- **Decision:** `plugins/mill/scripts/_sibling.py` exposes `resolve_path(role, repo_root) -> Path`. Roles = `{"wiki", "codeguide", "worktrees"}` initially; extensible by string.
-- **Rationale:** Single source of truth. Future additions (e.g. `logs/`) land without re-deriving the hub-form rule.
-- **Applies to:** every batch touching sibling paths.
+- **Decision:** `plugins/mill/scripts/_sibling.py` and `plugins/codeguide/scripts/_sibling.py` are separate files with identical 3-line logic. Neither plugin imports from the other's `scripts/` directory.
+- **Rationale:** Plugin install paths are not guaranteed to be relative siblings of each other. Cross-plugin `${CLAUDE_PLUGIN_ROOT}/../mill/scripts/...` is fragile. Three lines of pure arithmetic is cheaper to duplicate than to share. Divergence risk is low; a pre-merge grep catches it if it ever happens.
+- **Applies to:** foundation batch (mill copy), codeguide-plugin batch (codeguide copy).
+
+### Decision: `_sibling.py` exposes a CLI entry point in addition to `resolve_path`
+
+- **Decision:** Both copies support `python _sibling.py <role> <repo_root>` → print resolved path on stdout, exit 0. Plus the Python import surface `from _sibling import resolve_path`.
+- **Rationale:** SKILL.md prose (mill-setup, codeguide-setup) invokes Python via subprocess — it needs a stable CLI. Python callers (mill-spawn) import directly.
+- **Applies to:** foundation batch; and a mirrored CLI in the codeguide copy for symmetry.
 
 ### Decision: Resolve chain for codeguide ends with "run /codeguide-setup first"
 
@@ -57,6 +63,12 @@ batches:
 - **Decision:** Never assume the millhouse source is cloned on the user's machine. Rule already in `CLAUDE.md` as of this spec's first commit.
 - **Rationale:** Codeguide + mill plugins install on foreign repos; those repos cannot be expected to carry the source tree.
 - **Applies to:** codeguide-plugin + mill-integration batches, and any future sibling-touching work.
+
+### Decision: Fix stale `millpy/codeguide/` paths before anything else in the codeguide-plugin batch
+
+- **Decision:** The four existing codeguide skills (`codeguide-setup`, `codeguide-update`, `codeguide-generate`, `codeguide-maintain`) reference `${CLAUDE_PLUGIN_ROOT}/scripts/millpy/codeguide/resolve.py`. That path does not exist — the file is at `${CLAUDE_PLUGIN_ROOT}/scripts/resolve.py`. The first card of the codeguide-plugin batch corrects all four files.
+- **Rationale:** The scoped-out bug blocks the sibling work: we cannot extend `resolve.py` if callers can't locate it in the first place. Fixing it is a precondition.
+- **Applies to:** codeguide-plugin batch (Card 3).
 
 ### Decision: Sibling repo is always its own git repo
 
@@ -75,15 +87,18 @@ batches:
 New files:
 - `plugins/mill/scripts/_sibling.py`
 - `plugins/mill/unit_tests/test-sibling.py`
-- `plugins/codeguide/scripts/millpy/codeguide/codeguide_commit.py`
+- `plugins/codeguide/scripts/_sibling.py`
+- `plugins/codeguide/scripts/codeguide_commit.py`
 
 Modified files:
-- `plugins/codeguide/scripts/millpy/codeguide/resolve.py`
+- `plugins/codeguide/scripts/resolve.py`
 - `plugins/codeguide/skills/codeguide-setup/SKILL.md`
 - `plugins/codeguide/skills/codeguide-update/SKILL.md`
+- `plugins/codeguide/skills/codeguide-generate/SKILL.md` (stale-path fix only)
+- `plugins/codeguide/skills/codeguide-maintain/SKILL.md` (stale-path fix only)
 - `plugins/mill/skills/git-commit/SKILL.md`
 - `plugins/mill/scripts/mill-spawn.py`
-- `plugins/mill/scripts/mill-setup.py` (if it reads wiki_path default today)
+- `plugins/mill/skills/mill-setup/SKILL.md`
 - `plugins/mill/integration_tests/test-spawn.py`
 - `plugins/mill/integration_tests/test-merge.py`
 - `wiki/config.yaml` (drops `spawn.worktrees_dir` default; updates `<WIKI_PATH>` header-comment)
