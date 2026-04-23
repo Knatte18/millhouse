@@ -121,27 +121,3 @@ def _is_windows_junction(path: Path) -> bool:
         return bool(path.lstat().st_file_attributes & _stat.FILE_ATTRIBUTE_REPARSE_POINT)  # type: ignore[attr-defined]
     except (OSError, AttributeError):
         return False
-
-
-if __name__ == "__main__":
-    import tempfile
-    # Minimal smoke: copy_millhouse excludes names and creates dst if missing.
-    with tempfile.TemporaryDirectory() as tmp:
-        tmp_path = Path(tmp)
-        src = tmp_path / ".millhouse"
-        src.mkdir()
-        (src / "keep").mkdir()
-        (src / "keep" / "file.txt").write_text("hello", encoding="utf-8")
-        (src / "scratch").mkdir()
-        (src / "scratch" / "noise.txt").write_text("bye", encoding="utf-8")
-        (src / "plainfile.txt").write_text("top-level", encoding="utf-8")
-
-        dst = tmp_path / "worktree" / ".millhouse"
-        copy_millhouse(src, dst, exclude={"scratch"})
-
-        assert (dst / "keep" / "file.txt").read_text(encoding="utf-8") == "hello"
-        assert (dst / "plainfile.txt").read_text(encoding="utf-8") == "top-level"
-        assert not (dst / "scratch").exists(), "excluded name must not be copied"
-        print("PASS: copy_millhouse propagates non-excluded entries")
-
-    print("All _worktree smoke tests passed.")

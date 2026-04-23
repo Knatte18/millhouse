@@ -78,13 +78,3 @@ def write_settings(color_hex: str, window_title: str, target: Path) -> None:
     """
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(render_settings(color_hex, window_title), encoding="utf-8")
-
-
-if __name__ == "__main__":
-    print(
-        "Usage: import _vscode; "
-        "_vscode.write_settings('#2d7d46', 'millhouse: ${activeEditorShort}', "
-        "Path('.vscode/settings.json'))",
-        file=sys.stderr,
-    )
-    sys.exit(0)

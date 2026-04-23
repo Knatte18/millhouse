@@ -294,8 +294,3 @@ def write_commit_push(
         raise WikiPushError(f"git push failed: {push.stderr.strip()!r}")
 
     raise WikiPushError("push still failing after rebase retry")
-
-
-if __name__ == "__main__":
-    print("Usage: import _wiki; _wiki.acquire_lock(wiki_path, slug); _wiki.release_lock(wiki_path); _wiki.write_commit_push(wiki_path, paths, msg)", file=sys.stderr)
-    sys.exit(0)

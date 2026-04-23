@@ -26,16 +26,3 @@ def run(
         resume=resume,
         cwd=cwd,
     )
-
-
-if __name__ == "__main__":
-    assert MODE == "implementer", f"Expected MODE='implementer', got {MODE!r}"
-    assert callable(run), "run must be callable"
-    import inspect
-    sig = inspect.signature(run)
-    assert "session_id" in sig.parameters
-    assert "resume" in sig.parameters
-    assert "cwd" in sig.parameters
-    print("PASS: MODE == 'implementer'")
-    print("PASS: run is callable with session_id/resume/cwd")
-    print("All smoke tests passed.")
