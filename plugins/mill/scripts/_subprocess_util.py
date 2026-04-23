@@ -101,11 +101,3 @@ def run(
         file=sys.stderr,
     )
     return result
-
-
-if __name__ == "__main__":
-    print("Usage: import _subprocess_util; _subprocess_util.run([...])", file=sys.stderr)
-    print("Self-test: running `git --version`", file=sys.stderr)
-    result = run(["git", "--version"])
-    print(f"stdout: {result.stdout.strip()}")
-    sys.exit(result.returncode)

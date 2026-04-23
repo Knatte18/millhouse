@@ -82,17 +82,3 @@ def render(template_path: Path, values: dict[str, str]) -> str:
     if missing:
         raise KeyError(f"Unresolved template tokens: {sorted(set(missing))}")
     return rendered
-
-
-if __name__ == "__main__":
-    print("Usage: import _render; _render.render(template_path, {'TOKEN': 'value'})", file=sys.stderr)
-    import tempfile
-    with tempfile.NamedTemporaryFile("w", suffix=".md", delete=False, encoding="utf-8") as tmp:
-        tmp.write("hello <NAME>, today is <DATE>\n")
-        tmp_path = Path(tmp.name)
-    try:
-        out = render(tmp_path, {"NAME": "world", "DATE": "2026-04-19"})
-        assert out == "hello world, today is 2026-04-19\n", f"unexpected: {out!r}"
-        print(f"self-test OK: {out.strip()}")
-    finally:
-        tmp_path.unlink()

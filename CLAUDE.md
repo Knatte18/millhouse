@@ -40,10 +40,11 @@ A discussion gap is missing information; a plan/code block is a must-fix defect.
 
 ## Repo layout pointers
 
-- `plugins/mill/scripts/` — flat Python (no submodules); `mill-*.py` CLI scripts + `_*.py` helpers.
+- `plugins/mill/scripts/` — flat Python (no submodules); `mill-*.py` CLI scripts + `_*.py` helpers. Helpers hold only production code; no `if __name__ == "__main__":` smoke-test blocks.
 - `plugins/mill/templates/` — review-prompt templates + `review-output.schema.md`.
 - `plugins/mill/skills/` — `SKILL.md`-per-skill; indexed at repo-root `SKILLS.md`.
-- `plugins/mill/integration_tests/` — local-dev Python tests that invoke real `claude`. Use `.millhouse/scratch/` for fixtures.
+- `plugins/mill/unit_tests/` — one `test-<name>.py` per helper. In-memory / `tempfile` fixtures; no real git, no real LLM. Run `python plugins/mill/unit_tests/run-all.py`.
+- `plugins/mill/integration_tests/` — local-dev Python tests that invoke real `git` and optionally real `claude`. Use `.millhouse/scratch/` for fixtures.
 - `specs/roadmap/README.md` — canonical status tracker.
 - `specs/_legacy/` — pre-discussion drafts, not authoritative.
 - `.millhouse/` in working clones is gitignored local state; `.millhouse/wiki` is a junction to the shared wiki repo.
