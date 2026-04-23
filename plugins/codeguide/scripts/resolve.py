@@ -1,18 +1,29 @@
 """
 Path resolution for codeguide hooks.
 
-Two-tier resolution:
-- Routing files (Overview.md, modules/) resolve from cwd — each folder with
-  a _codeguide/ is a self-contained routing node.
-- Metadata files (config.yaml, local-rules.md, DocumentationGuide.md)
-  resolve by walking up from cwd to the nearest ancestor that contains
-  them. These are repo-level concerns.
+Resolve chain
+-------------
+1. **Inline walk** — from cwd up to (and including) git-toplevel, look
+   for ``_codeguide/<filename>``.
+2. **.codeguide-root override** — if inline fails, read the first line of
+   ``<git-toplevel>/.codeguide-root`` and use it as the sibling anchor
+   (absolute path, or relative to toplevel).
+3. **Sibling default** — otherwise compute the anchor via
+   ``_sibling.resolve_path("codeguide", git_toplevel)``.
+4. **Sibling walk** — mirror the inline walk under the anchor: for each
+   level from cwd up to toplevel, check
+   ``<anchor>/<rel>/_codeguide/<filename>``.
+
+Routing files (Overview.md, modules/) resolve from cwd — each folder with
+a _codeguide/ is a self-contained routing node.
+Metadata files (config.yaml, local-rules.md, DocumentationGuide.md)
+resolve via the chain above.
 """
 
 import os
 import pathlib
+import sys
 
-# Metadata file that anchors the walk-up search. Change here if renamed.
 METADATA_ANCHOR = "config.yaml"
 
 
@@ -21,28 +32,111 @@ def routing_root(cwd: str | None = None) -> pathlib.Path:
     return pathlib.Path(cwd or os.getcwd()) / "_codeguide"
 
 
-def find_metadata(filename: str, cwd: str | None = None) -> pathlib.Path | None:
-    """Walk up from cwd to find _codeguide/<filename>. Stops at git root."""
-    current = pathlib.Path(cwd or os.getcwd()).resolve()
+def _find_git_toplevel(start: pathlib.Path) -> pathlib.Path | None:
+    current = start.resolve()
     while True:
-        candidate = current / "_codeguide" / filename
-        if candidate.exists():
-            return candidate
         if (current / ".git").exists():
-            return None
+            return current
         parent = current.parent
         if parent == current:
             return None
         current = parent
 
 
+def _walk_levels(cwd: pathlib.Path, toplevel: pathlib.Path) -> list[pathlib.Path]:
+    """Levels from cwd up to and including toplevel."""
+    levels: list[pathlib.Path] = []
+    current = cwd.resolve()
+    toplevel = toplevel.resolve()
+    while True:
+        levels.append(current)
+        if current == toplevel:
+            return levels
+        parent = current.parent
+        if parent == current:
+            return levels
+        current = parent
+
+
+def _inline_walk(filename: str, cwd: pathlib.Path, toplevel: pathlib.Path) -> pathlib.Path | None:
+    for level in _walk_levels(cwd, toplevel):
+        candidate = level / "_codeguide" / filename
+        if candidate.exists():
+            return candidate
+    return None
+
+
+def _sibling_walk(filename: str, cwd: pathlib.Path, toplevel: pathlib.Path, anchor: pathlib.Path) -> pathlib.Path | None:
+    toplevel = toplevel.resolve()
+    for level in _walk_levels(cwd, toplevel):
+        rel = level.relative_to(toplevel)
+        candidate = anchor / rel / "_codeguide" / filename
+        if candidate.exists():
+            return candidate
+    return None
+
+
+def _read_override(toplevel: pathlib.Path) -> pathlib.Path | None:
+    override = toplevel / ".codeguide-root"
+    if not override.exists():
+        return None
+    raw = override.read_text(encoding="utf-8").strip().splitlines()
+    if not raw:
+        return None
+    anchor = pathlib.Path(raw[0].strip())
+    if not anchor.is_absolute():
+        anchor = (toplevel / anchor).resolve()
+    return anchor
+
+
+def _sibling_anchor_default(toplevel: pathlib.Path) -> pathlib.Path:
+    sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+    from _sibling import resolve_path
+    return resolve_path("codeguide", toplevel)
+
+
+def resolve(cwd: str | None = None, filename: str = METADATA_ANCHOR) -> dict:
+    """Full resolution: inline walk, then .codeguide-root, then sibling default.
+
+    Returns a dict with keys:
+        mode: "inline" | "sibling" | None
+        cg_root: Path | None — the _codeguide/ directory that contains <filename>
+        sibling_anchor: Path | None — the sibling-repo root (only meaningful when mode == "sibling")
+        found: bool
+    """
+    cwd_path = pathlib.Path(cwd or os.getcwd()).resolve()
+    toplevel = _find_git_toplevel(cwd_path)
+    if toplevel is None:
+        return {"mode": None, "cg_root": None, "sibling_anchor": None, "found": False}
+
+    hit = _inline_walk(filename, cwd_path, toplevel)
+    if hit is not None:
+        return {"mode": "inline", "cg_root": hit.parent, "sibling_anchor": None, "found": True}
+
+    anchor = _read_override(toplevel) or _sibling_anchor_default(toplevel)
+    hit = _sibling_walk(filename, cwd_path, toplevel, anchor)
+    if hit is not None:
+        return {"mode": "sibling", "cg_root": hit.parent, "sibling_anchor": anchor, "found": True}
+
+    return {"mode": None, "cg_root": None, "sibling_anchor": anchor, "found": False}
+
+
+def find_metadata(filename: str, cwd: str | None = None) -> pathlib.Path | None:
+    """Find <filename> under any _codeguide/ (inline or sibling chain)."""
+    r = resolve(cwd, filename)
+    return r["cg_root"] / filename if r["found"] else None
+
+
 def config_path(cwd: str | None = None) -> pathlib.Path | None:
-    """Find the nearest metadata anchor (config.yaml by default)."""
     return find_metadata(METADATA_ANCHOR, cwd)
 
 
+def metadata_root(cwd: str | None = None) -> pathlib.Path | None:
+    r = resolve(cwd)
+    return r["cg_root"] if r["found"] else None
+
+
 def load_config_flag(flag: str, cwd: str | None = None) -> bool:
-    """Read a boolean flag from the nearest config.yaml. Returns False if not found."""
     path = config_path(cwd)
     if path is None:
         return False
@@ -58,14 +152,7 @@ def load_config_flag(flag: str, cwd: str | None = None) -> bool:
     return False
 
 
-def metadata_root(cwd: str | None = None) -> pathlib.Path | None:
-    """Find the nearest _codeguide/ containing the metadata anchor."""
-    path = config_path(cwd)
-    return path.parent if path else None
-
-
 def load_source_extensions(cwd: str | None = None) -> list[str]:
-    """Load source extensions from the nearest config.yaml."""
     path = config_path(cwd)
     if path is None:
         return []
@@ -81,10 +168,28 @@ def load_source_extensions(cwd: str | None = None) -> list[str]:
     return extensions
 
 
+def _cli(argv: list[str]) -> int:
+    import json
+    as_json = "--json" in argv[1:]
+    result = resolve()
+    if as_json:
+        payload = {
+            "mode": result["mode"],
+            "cg_root": str(result["cg_root"]) if result["cg_root"] else None,
+            "sibling_anchor": str(result["sibling_anchor"]) if result["sibling_anchor"] else None,
+            "found": result["found"],
+        }
+        print(json.dumps(payload))
+        return 0 if result["found"] else 1
+    if result["found"]:
+        print(result["cg_root"])
+        return 0
+    print(
+        "ERROR: no _codeguide/ with config.yaml found — run /codeguide-setup first [--sibling]",
+        file=sys.stderr,
+    )
+    return 1
+
+
 if __name__ == "__main__":
-    root = metadata_root()
-    if root:
-        print(root)
-    else:
-        print("ERROR: no _codeguide/ with config.yaml found", file=__import__("sys").stderr)
-        __import__("sys").exit(1)
+    sys.exit(_cli(sys.argv))
