@@ -1,15 +1,21 @@
-# codeguide sibling-mode — docs outside the target repo
+# codeguide sibling-mode + unified sibling-path convention
 
 ```yaml
-type: plugin change (codeguide) + CLAUDE.md convention
+type: plugin change (codeguide) + _sibling.py helper + mill-config unification
 layer: bookkeeping / external tooling
 v1_ref: none — new capability
-status: partially discussed — key decisions captured, not ready for full-write
-note: "Let `_codeguide/` live in a sibling git repo (`<repo-parent>/<repo>.codeguide/`) instead of inside the target repo. Zero-footprint mode for repos where docs should not pollute the source tree. Wiki stays unaffected (already sibling). Mill-v2 unaffected at the skill-contract level — only the codeguide plugin changes."
+status: discussed — ready for plan-writing
+note: "Let `_codeguide/` live in a sibling git repo next to the target repo. Same hub-form detection rule (`repo/.name == 'hub'`) unifies the naming convention across wiki, worktrees, and codeguide. Zero-footprint inside the target repo. Mill-v2 skill-contracts unaffected."
 priority: run before specs 07+. Triggered by the engineer's upcoming work on a third-party codebase where `_codeguide/` files cannot live in the main repo.
 ```
 
-**For the thread that will do the full-write:** these notes are *starting points*, not a finished spec. Grill Henrik further on the Open design points before writing plan or code. Treat the existing `plugins/codeguide/` plugin as the primary reference — most of this spec modifies it rather than adding new surface. The Millhouse hub itself (this repo) is not seeded with `_codeguide/` during this work; per project convention we wait until mill-v2 can drive that seed through its own workflow.
+## Scope summary (post-discussion)
+
+Three logical pieces, all shipped together:
+
+1. **`_sibling.py` helper in mill plugin** — single source of truth for where sibling dirs live (wiki, codeguide, worktrees). Hub-form detection: if the repo directory is literally named `hub`, use role-only paths (`<parent>/codeguide/`); otherwise prefix with repo dir name (`<parent>/<repo-name>.codeguide/`).
+2. **Codeguide plugin gains sibling mode** — `_codeguide/` can live outside the target repo as its own git repo. Inline mode (current behaviour) stays as default. Resolution chain: inline first → `.codeguide-root` file override → sibling via hub-form rule → fail.
+3. **Mill-setup and mill-spawn use `_sibling.py`** — removes the `spawn.worktrees_dir` token-template config default and the documented `<WIKI_PATH>` default, replacing both with the unified helper. Explicit overrides in `.millhouse/config.local.yaml` continue to work.
 
 ## Problem
 
@@ -20,26 +26,86 @@ priority: run before specs 07+. Triggered by the engineer's upcoming work on a t
 
 Sibling layout — `<parent>/<repo>.codeguide/` as its own git repo — sidesteps both: zero files in the target repo, full version control on the docs, consistent with Millhouse's existing wiki pattern (`<parent>/<repo>.wiki/`).
 
-## Decisions
+## Decisions (finalized)
 
-- **Two modes, user-chosen at setup time:**
-  - **Inline** (current default): `<repo>/_codeguide/` inside the target repo. Committed with source via `git-commit` skill.
-  - **Sibling**: `<repo-parent>/<repo>.codeguide/` as its own git repo. Committed independently.
-- **Location resolution — `resolve.py` walks up from cwd:**
-  - For each level between cwd and git-toplevel (inclusive):
-    - Try inline: `<level>/_codeguide/Overview.md`.
-    - Try sibling-mirror: `<git-parent>/<repo>.codeguide/<rel-path>/_codeguide/Overview.md` where `<rel-path>` is the path from git-toplevel to `<level>`.
-  - First match wins.
-  - Env var `CODEGUIDE_ROOT`, when set, replaces `<git-parent>/<repo>.codeguide/` with its value. Rare — only for oddball layouts where sibling convention cannot apply.
-  - No match at any level → "run /codeguide-setup first".
-- **Multi-codeguide support:** the mirror scheme handles it naturally — if `src/csharp/NORCE.Models/` runs setup with `--sibling`, its codeguide lives at `<sibling>/src/csharp/NORCE.Models/_codeguide/`. A second subfolder gets its own `_codeguide/` at the mirrored path. First-to-setup triggers `git init` on the sibling repo; later setups just `mkdir` + commit inside it.
-- **Subfolder-init respects git-toplevel:** every path computation in `codeguide-setup` and `resolve.py` anchors on `git rev-parse --show-toplevel`, not on cwd. Running `/codeguide-setup --sibling` from `Models/src/csharp/NORCE.Models/` places the codeguide at `Models.codeguide/src/csharp/NORCE.Models/_codeguide/`, not at `src/csharp/NORCE.Models.codeguide/`.
-- **Sibling is always its own git repo.** `codeguide-setup` handles `git init` automatically on first use (analogous to how `mill-setup` handles the wiki clone). Optional `--from-url <git-url>` clones an existing remote instead.
-- **Monorepo-branch pattern is NOT a dedicated mode.** Users who want "one GitHub repo, many codeguides as branches, worktree-checkout per active one" handle the git plumbing themselves and pass `--sibling <path>` to setup. Keeps the plugin scope small; the worktree-per-branch pattern is a user-level choice, not a plugin responsibility.
-- **Commit discipline splits by mode:**
-  - **Inline:** unchanged. `git-commit` step 2 stages codeguide files alongside source.
-  - **Sibling:** `codeguide-update` calls a new helper (`${CLAUDE_PLUGIN_ROOT}/scripts/millpy/codeguide/codeguide_commit.py`) that does `git -C <sibling> add … && git -C <sibling> commit -m "…"` rooted in the sibling repo. `git-commit` step 2 still invokes `codeguide-update` but does not try to stage its output — the helper already committed in the other repo.
-- **Never assume the millhouse source repo is cloned.** All plugin scripts reference `${CLAUDE_PLUGIN_ROOT}` for their own files. A session running on a third-party repo with `codeguide` installed must work with nothing on disk but the plugin install + the target repo + the sibling repo (if in sibling mode).
+### Hub-form detection rule — single string check
+
+```python
+def is_hub_form(repo_root: Path) -> bool:
+    return repo_root.name == "hub"
+```
+
+The repo directory name is the entire signal. No heuristic on sibling presence, no config flag, no setup-time question. Existing Millhouse layout (`<container>/hub/`) triggers hub-form automatically; every other repo triggers prefix-form.
+
+### `_sibling.resolve_path(role, repo_root)` — one helper for all siblings
+
+```python
+def resolve_path(role: str, repo_root: Path) -> Path:
+    parent = repo_root.parent
+    if repo_root.name == "hub":
+        return parent / role
+    return parent / f"{repo_root.name}.{role}"
+```
+
+Applied uniformly to `role` in `{"wiki", "codeguide", "worktrees"}`. Lives at `plugins/mill/scripts/_sibling.py`. Consumed by `mill-spawn`, `mill-setup`, and (via subprocess call from the codeguide plugin) the codeguide `resolve.py`.
+
+### Codeguide — two modes, chosen at setup time
+
+- **Inline** (default): `<repo>/_codeguide/` inside the target repo. Committed with source via `@git-commit` skill's pre-commit step 2. Current behaviour, unchanged.
+- **Sibling**: `_sibling.resolve_path("codeguide", repo_root)` as its own git repo. Committed independently by `codeguide_commit.py` helper. Never touches the target repo.
+
+`codeguide-setup --sibling [--from-url <git-url>]` creates the sibling repo on first use (`git init` locally, or clone from URL). Subsequent setups in subfolders `mkdir` + commit into the existing sibling repo.
+
+### Resolve chain (codeguide, walked from cwd up to git-toplevel)
+
+1. For each level between cwd and git-toplevel (inclusive):
+   - Inline: does `<level>/_codeguide/Overview.md` exist?
+2. If no inline match: is there a `.codeguide-root` file at git-toplevel? If yes, read the path inside it.
+3. If no override file: compute `sibling_root = _sibling.resolve_path("codeguide", git_toplevel)`.
+4. For each level (same sweep): does `<sibling_root>/<rel-path>/_codeguide/Overview.md` exist? (`<rel-path>` is the path from git-toplevel to `<level>`.)
+5. First match wins. No match at any step → "run /codeguide-setup first".
+
+### `.codeguide-root` override file
+
+- Path: `<git-toplevel>/.codeguide-root`. Single line containing an absolute or relative path (relative to git-toplevel).
+- Purpose: point at an existing codeguide directory in a non-conventional location (monorepo-branch worktree, shared drive, etc.).
+- The plugin does NOT add this file to the target repo's `.gitignore`. The user is responsible for ignoring it (e.g., via `~/.gitignore_global`). "Zero-footprint" means we never modify the target repo — not even its gitignore.
+- `CODEGUIDE_ROOT` env var is NOT supported. `.codeguide-root` is the single override mechanism.
+
+### Multi-codeguide — sibling mirrors the subfolder structure
+
+When subfolders of the repo each have their own codeguide:
+- `<repo>/src/csharp/NORCE.Models/` runs setup → `<sibling>/src/csharp/NORCE.Models/_codeguide/`.
+- `<repo>/src/csharp/NORCE.Drilling/` runs setup → `<sibling>/src/csharp/NORCE.Drilling/_codeguide/`.
+
+The sibling repo only contains paths where codeguides actually exist; empty mirror directories are not created. A codeguide at the repo root, if the user sets one up there, lives at `<sibling>/_codeguide/`.
+
+Multi-codeguide also implies **grouping by codeguide-root**: `codeguide-update` parses the staged diff, calls `resolve.py` per file to find that file's governing codeguide-root, groups files by root, updates each group independently. `resolve.py` finds roots (deterministic); the DocumentationGuide rules inside each root govern which specific `.md` doc files change (non-deterministic — CC decides based on the routing rules).
+
+### Subfolder-init anchors on git-toplevel
+
+All path computation uses `git rev-parse --show-toplevel`, not cwd. Running `/codeguide-setup --sibling` from `Models/src/csharp/NORCE.Models/` places the codeguide at `Models.codeguide/src/csharp/NORCE.Models/_codeguide/`, not at `src/csharp/NORCE.Models.codeguide/` or similar cwd-anchored guess.
+
+### Commit discipline splits by mode
+
+- **Inline:** `git-commit` skill stages `_codeguide/` files alongside source in the same target-repo commit. Current behaviour.
+- **Sibling:** `codeguide-update` calls `${CLAUDE_PLUGIN_ROOT}/scripts/millpy/codeguide/codeguide_commit.py`. The helper does `git -C <sibling> add … && git -C <sibling> commit -m "…"` inside the sibling repo. `git-commit`'s step 2 still invokes `codeguide-update` but does not try to stage its output — the sibling commit is already done. Cadence stays per-commit.
+- Recovery path when the user bypasses `@git-commit`: `codeguide-maintain` skill (already in the plugin) sweeps a commit range and fixes drift. Documentation pointer included in the spec, no new tooling required.
+
+### Mill-v2 integration — shared helper, removed token defaults
+
+- `mill-spawn` switches from reading `cfg["spawn"]["worktrees_dir"]` as a token template to calling `_sibling.resolve_path("worktrees", repo_root)` when the key is absent. Explicit `spawn.worktrees_dir` set in `.millhouse/config.local.yaml` continues to override.
+- `mill-setup` switches from the documented `<CONTAINER_PATH>/<REPO>.wiki/` default to `_sibling.resolve_path("wiki", repo_root)`. Explicit `wiki_path:` in `.millhouse/config.local.yaml` continues to override.
+- `wiki/config.yaml` drops the `spawn.worktrees_dir` default and the `<WIKI_PATH>` documented default from its header comments. Override-only keys remain documented.
+- Integration test fixtures (`test-spawn.py`, `test-merge.py`) update to the new layout: test hub is at `<container>/hub/` → worktrees at `<container>/worktrees/` (not `<container>/hub.worktrees/`).
+
+### Monorepo-branch pattern — user-managed, not a plugin mode
+
+Users who want "one GitHub repo with many codeguides as branches, worktree-checkout per active one" set up the clone + branch-worktree themselves and point `.codeguide-root` at the chosen worktree directory. The plugin does not orchestrate this. Keeps plugin scope small; the pattern is a user-level choice.
+
+### Never assume the millhouse source repo is cloned
+
+All plugin scripts reference `${CLAUDE_PLUGIN_ROOT}` for their own files. A session running on a third-party repo with codeguide and mill plugins installed must work with nothing on disk but the plugin install + the target repo + the sibling repo (when in sibling mode). Rule enshrined in `CLAUDE.md` in this same spec's commit.
 
 ## Flow — sibling setup first-time
 
@@ -84,16 +150,25 @@ Sibling layout — `<parent>/<repo>.codeguide/` as its own git repo — sidestep
 - No automatic migration from inline → sibling. A user who decides to switch after the fact moves the files manually and re-runs setup with `--sibling`.
 - No CC-driven auto-seed of the hub (Millhouse) repo's own codeguide. That is spec `13-mill-codeguide.md` and remains deferred until mill-v2 self-sufficiency.
 
-## Open design points
+## Open design points (resolved during grilling)
 
-- **Mode persistence:** when `resolve.py` discovers a sibling, should it cache the result (e.g. in `<git-toplevel>/.git/info/codeguide-mode`) so subsequent skill invocations skip the walk? Probably yes for perf, but cache invalidation rules need specifying.
-- **`codeguide-update` on a multi-codeguide repo:** if a source-commit touches files under two subfolders that each have their own codeguide, the skill must update both. Scope currently says "scan the staged diff" — confirm resolve.py handles the diff-file-to-codeguide mapping gracefully.
-- **`codeguide-setup` refresh on an existing sibling:** what does `/codeguide-setup` do when invoked from a subfolder that already has a sibling-mirrored `_codeguide/`? "Root refresh" in current SKILL.md assumes inline. Sibling refresh needs equivalent semantics (overwrite plugin-owned files, keep user-owned).
-- **`.gitignore` for the target repo:** should sibling-mode setup *optionally* add `/_codeguide/` to the target repo's `.gitignore` as a safety net against stray inline files? Probably yes, guarded by a flag to avoid surprise diffs.
-- **`CODEGUIDE_ROOT` env var:** exact semantics. Override sibling-root only, or entire resolve chain? Lean toward "overrides sibling-root path", resolve chain otherwise unchanged.
-- **Subfolder that previously used `root.txt` pointer in sibling mode:** spec says cg-workspaces still work. Confirm the subfolder activation flow in sibling mode creates the pointer correctly.
-- **Verify + lint interactions:** `git-commit` step 1 is lint. When codeguide is sibling, does lint run in the target repo only, or also touch the sibling? (Likely target only — lint is about source code, not docs.)
-- **Spec 13 (`mill-codeguide` placeholder) reference:** should be updated after this spec lands so it points to "sibling or inline" rather than assuming inline. Minor edit.
+Kept for audit trail.
+
+- **Mode cache under `.git/info/`** — rejected. No cache; `resolve.py` walks fresh every call. Walk cost is microseconds; LLM calls dominate.
+- **Multi-codeguide per staged commit** — confirmed: `resolve.py` finds cg-ROOT per file (deterministic), `codeguide-update` groups files by root and updates each root independently.
+- **Sibling refresh semantics** — same as root refresh: overwrite plugin-owned files, preserve user-owned. Just applied at the sibling-mirror anchor.
+- **`.gitignore` safety-net in target repo** — rejected. Zero-footprint in target repo means we NEVER modify it, not even gitignore. User handles their own gitignore via `~/.gitignore_global` if needed.
+- **`CODEGUIDE_ROOT` env var** — rejected. `.codeguide-root` file at git-toplevel is the single override mechanism.
+- **`root.txt` workspaces in sibling mode** — same pattern as inline, just living at mirrored paths inside the sibling repo. No re-design.
+- **Lint scope** — `git-commit` step 1 lints source in the target repo only. Sibling is docs; markdown-skill conventions apply at EDIT time (inside `codeguide-update`), not at commit-lint time.
+- **Spec 13 reference** — one-line edit included in this implementation's final batch.
+
+## Out of scope vs. current codeguide plugin
+
+- No GUI / interactive branch-picker when `--from-url` points at a monorepo with many branches. User passes `<url>#<branch>` or separate `--branch` flag; implementation detail.
+- No automatic migration from inline → sibling. A user who decides to switch after the fact moves files manually and re-runs setup with `--sibling`.
+- No CC-driven auto-seed of the hub (Millhouse) repo's own codeguide. That is spec `13-mill-codeguide.md` and remains deferred until mill-v2 self-sufficiency.
+- Wiki stays config-override-able via `.millhouse/config.local.yaml` → `wiki_path:` — overriding the new `_sibling` default when present.
 
 ## References
 
