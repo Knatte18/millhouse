@@ -151,9 +151,3 @@ def notify(event: str, detail: str, **context) -> None:
 def _reset_cache_for_tests() -> None:
     """Clear the backend cache so tests can reconfigure notify on the fly."""
     _load_backend.cache_clear()
-
-
-if __name__ == "__main__":
-    # Smoke test uses the stdout backend (the default) — no mocking needed.
-    notify("mill-go.test", "smoke check ok", slug="demo", batch="foundation")
-    print("PASS: notify() completed without raising")

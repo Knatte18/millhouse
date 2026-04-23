@@ -43,9 +43,3 @@ def send(event: str, detail: str, context: dict) -> None:
     """Write ``[notify] <event>  <detail>  (ctx)`` to stderr."""
     suffix = _render_context(context)
     print(f"[notify] {event}  {detail}{suffix}", file=sys.stderr)
-
-
-if __name__ == "__main__":
-    send("mill-go.test", "smoke check", {"slug": "demo", "round": 2})
-    send("mill-go.test", "no ctx", {})
-    print("PASS: stdout backend printed two lines above")

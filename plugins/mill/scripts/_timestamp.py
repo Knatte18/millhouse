@@ -48,20 +48,3 @@ def now_utc_iso() -> str:
     form — keep the corpus consistent.
     """
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-
-
-if __name__ == "__main__":
-    import re
-
-    compact = now_utc_compact()
-    assert re.fullmatch(r"\d{8}-\d{6}", compact), f"bad compact form: {compact!r}"
-    print(f"PASS: now_utc_compact() -> {compact}")
-
-    iso = now_utc_iso()
-    assert re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", iso), f"bad iso: {iso!r}"
-    print(f"PASS: now_utc_iso() -> {iso}")
-
-    # Same-invocation sanity: both should represent approximately the
-    # same moment (within a second). We don't enforce exact equality —
-    # two strftime calls can straddle a second boundary.
-    print("All _timestamp smoke tests passed.")

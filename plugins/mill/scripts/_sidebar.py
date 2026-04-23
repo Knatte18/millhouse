@@ -147,12 +147,3 @@ def regenerate(wiki_path: Path) -> None:
         f"{sum(1 for t in enriched if t['has_proposal'])} with proposal)",
         file=sys.stderr,
     )
-
-
-if __name__ == "__main__":
-    print(
-        "Usage: import _sidebar; "
-        "_sidebar.regenerate(Path('/path/to/wiki'))",
-        file=sys.stderr,
-    )
-    sys.exit(0)
