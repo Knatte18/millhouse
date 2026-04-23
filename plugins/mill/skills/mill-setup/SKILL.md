@@ -22,13 +22,23 @@ Bootstrap the mill infrastructure from nothing. Produces a working `.millhouse/`
 
 ## Layout assumed
 
+Hub-form (cwd dir is named exactly `hub`):
+
 ```
 <container>/
   hub/            <- cwd
   wiki/           <- sibling, created or reused in Phase 3
 ```
 
-Every path below is relative to `cwd` unless noted. Use absolute paths when calling the Python helpers (resolve via `Path(...).resolve()`).
+Prefix-form (any other name, e.g. `foo`):
+
+```
+<container>/
+  foo/            <- cwd
+  foo.wiki/       <- sibling, created or reused in Phase 3
+```
+
+The form is decided by `_sibling.py wiki <HUB_PATH>` in Phase 3 — callers just use `<wiki-dir>` thereafter. Every path below is relative to `cwd` unless noted. Use absolute paths when calling the Python helpers (resolve via `Path(...).resolve()`).
 
 ## How to invoke the helpers
 
@@ -61,19 +71,27 @@ Run `git ls-remote <wiki-url>`. If it fails (exit non-zero), halt with:
 >
 > (GitHub does not create the wiki git repo until the first page is saved.)
 
-### Phase 3 — Clone or fast-forward the wiki at `<container>/wiki`
+### Phase 3 — Clone or fast-forward the wiki at `<wiki-dir>`
 
-1. If `<container>/wiki/` does not exist: `git clone <wiki-url> <container>/wiki`.
-2. If `<container>/wiki/` exists and is a git repo (`<container>/wiki/.git/` present): `git -C <container>/wiki pull --ff-only`.
-3. If `<container>/wiki/` exists but is not a git repo: halt with:
-   > `<container>/wiki/` exists but is not a git repository. Move it aside or remove it, then re-run `/mill-setup`. mill-setup never overwrites user data.
+First compute `<wiki-dir>` using the sibling-path helper — this yields `<container>/wiki/` when the hub directory is named exactly `hub`, otherwise `<container>/<repo>.wiki/`. Use the printed path as `<wiki-dir>` for the remainder of mill-setup (Phases 3, 3.5, 4, 6, 6a, 8):
+
+```powershell
+python "${env:CLAUDE_PLUGIN_ROOT}/scripts/_sibling.py" wiki "<hub-path>"
+```
+
+`<hub-path>` is `<HUB_PATH>` from Phase 3.5 (`git rev-parse --show-toplevel`). Users can override via `.millhouse/config.local.yaml`'s `wiki_path:` key — that value wins over the helper's default.
+
+1. If `<wiki-dir>` does not exist: `git clone <wiki-url> <wiki-dir>`.
+2. If `<wiki-dir>` exists and is a git repo (`<wiki-dir>/.git/` present): `git -C <wiki-dir> pull --ff-only`.
+3. If `<wiki-dir>` exists but is not a git repo: halt with:
+   > `<wiki-dir>` exists but is not a git repository. Move it aside or remove it, then re-run `/mill-setup`. mill-setup never overwrites user data.
 
 ### Phase 3.5 — Resolve junctions from wiki config
 
-After the wiki is cloned (Phase 3) but before any junction is created, read the `junctions:` block from `<container>/wiki/config.yaml`:
+After the wiki is cloned (Phase 3) but before any junction is created, read the `junctions:` block from `<wiki-dir>/config.yaml`:
 
 ```powershell
-python -c "from pathlib import Path; import _wiki; import json; print(json.dumps(_wiki.read_junctions(Path(r'<container>/wiki').resolve())))"
+python -c "from pathlib import Path; import _wiki; import json; print(json.dumps(_wiki.read_junctions(Path(r'<wiki-dir>').resolve())))"
 ```
 
 `read_junctions` returns a dict of `{junction-path: target-template}`. Defaults when the config file or `junctions:` block is absent:
@@ -86,7 +104,7 @@ python -c "from pathlib import Path; import _wiki; import json; print(json.dumps
 - `<HUB_PATH>` — the primary clone. Derive via `git rev-parse --show-toplevel` (and, in future, worktree-detect to fall back to the primary from a worktree subfolder).
 - `<CWD_PATH>` — current working directory (absolute).
 - `<CONTAINER_PATH>` — parent of `<HUB_PATH>` (holds hub/, wiki/, worktrees/).
-- `<WIKI_PATH>` — the wiki clone. Default: `<CONTAINER_PATH>/<REPO>.wiki/`. Override if `.millhouse/config.local.yaml` has a `wiki_path:` key (future).
+- `<WIKI_PATH>` — the wiki clone (`<wiki-dir>` from Phase 3). Default: computed by `python ${CLAUDE_PLUGIN_ROOT}/scripts/_sibling.py wiki <HUB_PATH>` — hub-form yields `<CONTAINER_PATH>/wiki/`, prefix-form yields `<CONTAINER_PATH>/<REPO>.wiki/`. Override if `.millhouse/config.local.yaml` has a `wiki_path:` key.
 - `<REPO>` — short repo name from origin URL (last path segment, stripped of `.git`).
 
 Do **NOT** add `<SLUG>` — mill-setup only handles hub-scope junctions. Entries whose template contains `<SLUG>` belong to mill-spawn.
@@ -130,7 +148,7 @@ Iterate until all hub junctions are present. Entries with `<SLUG>` are left to m
 
 ### Phase 6 — Initialise or normalise `Home.md`
 
-Decide what to do based on the current content of `<container>/wiki/Home.md`:
+Decide what to do based on the current content of `<wiki-dir>/Home.md`:
 
 | Current state | Action |
 |---|---|
@@ -141,11 +159,11 @@ Decide what to do based on the current content of `<container>/wiki/Home.md`:
 
 For "missing" and "GitHub default" cases:
 
-1. Copy `plugins/mill/templates/Home.md` → `<container>/wiki/Home.md` verbatim.
+1. Copy `plugins/mill/templates/Home.md` → `<wiki-dir>/Home.md` verbatim.
 2. Commit and push via `_wiki.write_commit_push`:
 
    ```powershell
-   python -c "from pathlib import Path; import _wiki; _wiki.write_commit_push(Path(r'<container>/wiki').resolve(), ['Home.md'], '<commit-msg>')"
+   python -c "from pathlib import Path; import _wiki; _wiki.write_commit_push(Path(r'<wiki-dir>').resolve(), ['Home.md'], '<commit-msg>')"
    ```
 
    (Use the commit message from the table above.)
@@ -159,17 +177,17 @@ The wiki sidebar is auto-generated from `Home.md` and the set of `proposal-*.md`
 Run:
 
 ```powershell
-python -c "from pathlib import Path; import _sidebar; _sidebar.regenerate(Path(r'<container>/wiki').resolve())"
+python -c "from pathlib import Path; import _sidebar; _sidebar.regenerate(Path(r'<wiki-dir>').resolve())"
 ```
 
 Then commit + push if the file changed:
 
-1. Check `git -C <container>/wiki status --porcelain _Sidebar.md`.
+1. Check `git -C <wiki-dir> status --porcelain _Sidebar.md`.
 2. If the command prints nothing, the sidebar is already correct — skip the commit. (Idempotency: second and later runs land here.)
 3. Otherwise, commit via `_wiki.write_commit_push`:
 
    ```powershell
-   python -c "from pathlib import Path; import _wiki; _wiki.write_commit_push(Path(r'<container>/wiki').resolve(), ['_Sidebar.md'], 'chore: regenerate _Sidebar.md')"
+   python -c "from pathlib import Path; import _wiki; _wiki.write_commit_push(Path(r'<wiki-dir>').resolve(), ['_Sidebar.md'], 'chore: regenerate _Sidebar.md')"
    ```
 
 **Why separate from Phase 6:** Phase 6 only writes `Home.md` on the missing / GitHub-default branches. When Phase 6 skips (Home.md already in v2 shape), the sidebar still needs to be regenerated the first time `mill-setup` runs against a clone that was bootstrapped before this phase existed. Running it unconditionally is cheap and keeps the two commits separate in history: one says "init Home.md", the other says "regenerate _Sidebar.md".
@@ -239,7 +257,7 @@ Next: /mill-add <slug> --title "..." [--summary "..."] [--proposal-body "..."] t
 | Condition | Action |
 |---|---|
 | `git ls-remote <wiki-url>` fails | Halt with GitHub URL + instruction to create Home page |
-| `<container>/wiki/` exists but not a git repo | Halt — never overwrite user data |
+| `<wiki-dir>` exists but not a git repo | Halt — never overwrite user data |
 | `.millhouse/wiki` junction points elsewhere | Halt with remove-and-rerun instruction |
 | Push of `Home.md` fails (network / auth) | Halt; user fixes network and re-runs |
 | A Python helper raises | Show the traceback from the Python invocation and halt |

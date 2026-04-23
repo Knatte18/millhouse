@@ -241,12 +241,20 @@ def _build_tokens(
     return tokens
 
 
-def _resolve_worktrees_dir(cfg: dict, tokens: dict[str, str]) -> Path:
-    """Return the worktrees-dir from ``spawn.worktrees_dir``, resolving tokens."""
-    template = cfg.get("spawn", {}).get(
-        "worktrees_dir", "<CONTAINER_PATH>/<REPO>.worktrees"
-    )
-    return Path(_junction.resolve_target(template, tokens))
+def _resolve_worktrees_dir(cfg: dict, tokens: dict[str, str], git_root: Path) -> Path:
+    """Return the worktrees-dir.
+
+    When ``cfg["spawn"]["worktrees_dir"]`` is set explicitly (user override),
+    treat it as a token template and substitute. When absent, delegate to
+    ``_sibling.resolve_path("worktrees", git_root)`` — this yields the
+    hub-form default (``<container>/worktrees/``) or the prefix-form default
+    (``<container>/<repo>.worktrees/``) per the unified sibling-path rule.
+    """
+    template = cfg.get("spawn", {}).get("worktrees_dir")
+    if template is not None:
+        return Path(_junction.resolve_target(template, tokens))
+    import _sibling  # lazy import to keep module-level imports stable
+    return _sibling.resolve_path("worktrees", git_root)
 
 
 # --------------------------------------------------------------------------- #
@@ -316,7 +324,7 @@ def main(argv: list[str] | None = None) -> int:
     branch_name = f"{branch_prefix}/{slug}" if branch_prefix else slug
 
     tokens = _build_tokens(git_root, wiki_path, slug=slug)
-    worktrees_dir = _resolve_worktrees_dir(cfg, tokens)
+    worktrees_dir = _resolve_worktrees_dir(cfg, tokens, git_root)
     worktree_path = worktrees_dir / slug
 
     if args.dry_run:
