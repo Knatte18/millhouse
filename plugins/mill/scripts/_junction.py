@@ -198,8 +198,3 @@ def remove(link_path: Path) -> None:
             raise ValueError(
                 f"{link_path} is not a symlink — refusing to remove"
             )
-
-
-if __name__ == "__main__":
-    print("Usage: import _junction; _junction.create(target, link_path); _junction.remove(link_path)", file=sys.stderr)
-    sys.exit(0)
