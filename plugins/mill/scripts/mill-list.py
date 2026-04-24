@@ -1,8 +1,9 @@
 """
 mill-list — print the tasks in the wiki's Home.md, one per line.
 
-Resolves the wiki clone via the ``.millhouse/wiki`` junction in cwd, parses
-task headings out of ``Home.md`` using the shared helper in ``_sidebar``, and
+Resolves the wiki clone via ``_paths.resolve_wiki_path`` (``.millhouse/wiki``
+is a junction for IDE/terminal convenience only — scripts never use it as a
+code path). Parses task headings out of ``Home.md`` using the shared helper in ``_sidebar``, and
 prints one line per task. A leading ``[P]`` marker appears when a matching
 ``proposal-<slug>.md`` exists at wiki root; the marker column is padded so
 tasks without a proposal still line up with those that have one.
@@ -25,17 +26,7 @@ import sys
 from pathlib import Path
 
 import _sidebar
-
-
-def _resolve_wiki_path() -> Path:
-    """Return the absolute wiki clone path via the .millhouse/wiki junction."""
-    junction = Path(".millhouse/wiki")
-    if not junction.exists():
-        raise SystemExit(
-            "No .millhouse/wiki junction found. Run /mill-setup from this "
-            "clone first."
-        )
-    return junction.resolve()
+from _paths import resolve_git_root, resolve_wiki_path
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -43,10 +34,14 @@ def main(argv: list[str] | None = None) -> int:
     # calls even though mill-list takes no arguments today.
     del argv
 
-    wiki_path = _resolve_wiki_path()
+    git_root = resolve_git_root()
+    wiki_path = resolve_wiki_path(git_root)
     home_path = wiki_path / "Home.md"
     if not home_path.exists():
-        raise SystemExit(f"Home.md not found at {home_path}. Run /mill-setup first.")
+        raise SystemExit(
+            f"Wiki not found at {wiki_path}. Run /mill-setup to create it, "
+            "or set paths.wiki: in .millhouse/config.local.yaml."
+        )
 
     tasks = _sidebar.parse_home_tasks(home_path)
     if not tasks:
