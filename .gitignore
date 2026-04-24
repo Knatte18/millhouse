@@ -46,3 +46,5 @@ desktop.ini
 # Plugin templates ARE tracked (e.g. config.local.yaml — used by mill-setup)
 !plugins/*/templates/*.local.*
 nul
+
+/tasks.md.bak
