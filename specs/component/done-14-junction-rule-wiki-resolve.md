@@ -4,9 +4,11 @@
 type: refactor (mill plugin) + CLAUDE.md rule + .scratch relocation
 layer: bookkeeping / Layer 01 consolidation
 v1_ref: none — cleanup of mill-v2 scripts
-status: discussed — ready for plan-writing
+status: done — merged to main 2026-04-24 (branch impl/14-junction-rule-wiki-resolve)
 priority: low — no functional bug, but the invariant is documented in wiki/config.yaml and silently violated by three scripts; keeps getting forgotten
 ```
+
+**Implementation notes:** `plugins/mill/scripts/_paths.py` now owns `resolve_git_root` + `resolve_wiki_path`, and re-exports `resolve_path` from `_sibling` (identical-twin rule with codeguide preserved). `resolve_wiki_path` reads `paths.wiki:` from `.millhouse/config.local.yaml` if present, otherwise delegates to the sibling default; it never touches the `.millhouse/wiki` junction. `mill-add.py`, `mill-spawn.py`, `mill-list.py` all migrated — three private `_resolve_wiki_path` + three `_resolve_git_root` copies deleted. Error text now names the override key explicitly: "Wiki not found at {path}. Run /mill-setup to create it, or set paths.wiki: in .millhouse/config.local.yaml." Scratch moved from `.millhouse/scratch/` to `<cwd>/.scratch/` — 9 integration tests + 4 SKILL.md files + 2 active specs + `mill-merge` lock location + `.gitignore` + `_worktree.copy_millhouse` all updated. `test-worktree.py` repurposed to assert junction-alias exclusion. CLAUDE.md gained a `## Path invariants` section documenting the junction rule, `_paths.py` as the single resolver surface, and the scratch relocation. Full verify (17 unit tests + 4 integration tests) passes.
 
 ## Problem
 
