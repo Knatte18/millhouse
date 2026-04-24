@@ -2,7 +2,7 @@
 mill-spawn — claim one task from the wiki Home.md and spin up a worktree for it.
 
 Flow:
-    1. Resolve the wiki clone via the ``.millhouse/wiki`` junction.
+    1. Resolve the wiki clone via ``_paths.resolve_wiki_path`` (``.millhouse/wiki`` is a junction for IDE/terminal convenience only).
     2. Fast-forward pull the wiki so we pick against current state.
     3. Parse ``Home.md``; pick a task via ``pick_task`` (fast-path on
        ``[s]``, numbered picker on unmarked-only, exit 0 when empty).
@@ -46,6 +46,7 @@ import _tasks_md
 import _vscode
 import _wiki
 import _worktree
+from _paths import resolve_git_root, resolve_path, resolve_wiki_path
 
 
 # Worktree title-bar palette. Green is reserved for the hub (main worktree);
@@ -175,27 +176,6 @@ def pick_worktree_color(worktrees_dir: Path) -> str:
 # --------------------------------------------------------------------------- #
 
 
-def _resolve_wiki_path() -> Path:
-    """Return the absolute wiki clone path via the ``.millhouse/wiki`` junction."""
-    junction = Path(".millhouse/wiki")
-    if not junction.exists():
-        raise SystemExit(
-            "No .millhouse/wiki junction found. Run /mill-setup from this "
-            "clone first."
-        )
-    return junction.resolve()
-
-
-def _resolve_git_root() -> Path:
-    """Return the git toplevel of the current working directory."""
-    result = _subprocess_util.run(["git", "rev-parse", "--show-toplevel"])
-    if result.returncode != 0:
-        raise SystemExit(
-            f"Not in a git repository: {result.stderr.strip()!r}"
-        )
-    return Path(result.stdout.strip())
-
-
 def _load_config(wiki_path: Path, git_root: Path) -> dict:
     """Load ``wiki/config.yaml`` deep-merged with ``.millhouse/config.local.yaml``."""
     import yaml
@@ -246,15 +226,14 @@ def _resolve_worktrees_dir(cfg: dict, tokens: dict[str, str], git_root: Path) ->
 
     When ``cfg["spawn"]["worktrees_dir"]`` is set explicitly (user override),
     treat it as a token template and substitute. When absent, delegate to
-    ``_sibling.resolve_path("worktrees", git_root)`` — this yields the
+    ``resolve_path("worktrees", git_root)`` — this yields the
     hub-form default (``<container>/worktrees/``) or the prefix-form default
     (``<container>/<repo>.worktrees/``) per the unified sibling-path rule.
     """
     template = cfg.get("spawn", {}).get("worktrees_dir")
     if template is not None:
         return Path(_junction.resolve_target(template, tokens))
-    import _sibling  # lazy import to keep module-level imports stable
-    return _sibling.resolve_path("worktrees", git_root)
+    return resolve_path("worktrees", git_root)
 
 
 # --------------------------------------------------------------------------- #
@@ -278,14 +257,17 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    wiki_path = _resolve_wiki_path()
-    git_root = _resolve_git_root()
+    git_root = resolve_git_root()
+    wiki_path = resolve_wiki_path(git_root)
     cfg = _load_config(wiki_path, git_root)
     spawn_cfg = cfg.get("spawn", {})
 
     home_path = wiki_path / "Home.md"
     if not home_path.exists():
-        raise SystemExit(f"Home.md not found at {home_path}. Run /mill-setup first.")
+        raise SystemExit(
+            f"Wiki not found at {wiki_path}. Run /mill-setup to create it, "
+            "or set paths.wiki: in .millhouse/config.local.yaml."
+        )
 
     _wiki.sync_pull(wiki_path)
     home_text = home_path.read_text(encoding="utf-8")
