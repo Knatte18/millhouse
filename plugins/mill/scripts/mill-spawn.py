@@ -10,7 +10,7 @@ Flow:
        ``_Sidebar.md``, and commit+push.
     5. Create the worktree at ``<worktrees-dir>/<slug>`` on branch
        ``<branch-prefix>/<slug>`` (prefix optional).
-    6. Propagate ``.millhouse/`` (minus ``scratch``, ``wiki``, ``active``).
+    6. Propagate ``.millhouse/`` (minus ``wiki``, ``active`` junctions).
     7. Recreate junctions from the wiki config's ``junctions:`` block
        inside the new worktree.
     8. Pick a non-green VS Code title-bar colour not in use by sibling
@@ -355,7 +355,7 @@ def main(argv: list[str] | None = None) -> int:
     _worktree.copy_millhouse(
         src=git_root / ".millhouse",
         dst=worktree_path / ".millhouse",
-        exclude={"scratch", "wiki", "active"},
+        exclude={"wiki", "active"},
     )
 
     # Recreate every junction from the wiki config for the new worktree.
