@@ -1,0 +1,117 @@
+# wiki/config.yaml — shared configuration for mill.
+#
+# Owned by the wiki repo. Applies to every clone of this hub.
+# Local (non-secret) overrides go in .millhouse/config.local.yaml (gitignored).
+# Secrets belong in .env at the repo root, not here.
+#
+# Path tokens (substituted by mill scripts at run time, always UPPERCASE):
+#   <HUB_PATH>        — primary clone root
+#   <CONTAINER_PATH>  — parent of HUB_PATH (holds hub/, wiki/, worktrees/)
+#   <WIKI_PATH>       — wiki clone root
+#   <REPO>            — short repo name from origin URL
+#   <SLUG>            — task slug (valid only in mill-spawn-created entries)
+#
+# Junctions and hardlinks are IDE/terminal convenience — scripts always
+# resolve paths via _paths.py, never via the link paths themselves.
+
+# ---------------------------------------------------------------------------
+# Junctions
+# ---------------------------------------------------------------------------
+# Each entry: `<junction-path>: <target-template>`.
+# Scope inferred from token presence:
+#   * Target contains <SLUG>   → per-worktree; created by mill-spawn.
+#   * Target has no <SLUG>     → hub-scope; created by mill-setup.
+
+junctions:
+  .millhouse/wiki: <WIKI_PATH>
+  .active: <WIKI_PATH>/active/<SLUG>/
+
+# ---------------------------------------------------------------------------
+# Hardlinks
+# ---------------------------------------------------------------------------
+# Each entry: `<link-path>: <target-template>`.
+# Created by mill-setup at hub root. Same token substitution as junctions.
+# Entries are automatically added to .gitignore so they are never committed.
+# Windows hardlinks require source and target on the same volume.
+
+hardlinks:
+  tasks.md: <WIKI_PATH>/Home.md
+
+# ---------------------------------------------------------------------------
+# mill-spawn
+# ---------------------------------------------------------------------------
+# branch_prefix — prepended to the slug when creating the task branch.
+#   Empty string → branch == slug.
+
+spawn:
+  branch_prefix: ""
+
+# ---------------------------------------------------------------------------
+# Layer 02: file-path templates (relative to wiki root, <SLUG> substituted)
+# ---------------------------------------------------------------------------
+
+paths:
+  discussion_file: active/<SLUG>/discussion.md
+  plan_dir:        active/<SLUG>/plan/
+  reviews_dir:     active/<SLUG>/reviews/
+
+# ---------------------------------------------------------------------------
+# LLM-provider timeouts (seconds)
+# ---------------------------------------------------------------------------
+
+llm:
+  bulk_timeout: 600
+  tool_use_timeout: 900
+  implementer_timeout: 3600
+
+# ---------------------------------------------------------------------------
+# Implementers
+# ---------------------------------------------------------------------------
+
+implementers:
+  code: sonnet
+
+# ---------------------------------------------------------------------------
+# Layer 03: mill-go pipeline
+# ---------------------------------------------------------------------------
+
+pipeline:
+  builder: sonnet
+  implementer: null
+  auto_merge: false
+  auto_report: true
+
+# ---------------------------------------------------------------------------
+# Layer 02: review settings
+# ---------------------------------------------------------------------------
+
+review:
+  discussion:
+    rounds: 2
+    holistic: sonnetmax_tool
+
+  plan:
+    rounds: 3
+    batch: sonnetmax
+    holistic: sonnetmax
+
+  code:
+    rounds: 3
+    reviewer: sonnetmax
+    holistic: true
+    self_fix_rounds: 2
+
+# ---------------------------------------------------------------------------
+# Notifications
+# ---------------------------------------------------------------------------
+
+notify:
+  backend: stdout
+
+# ---------------------------------------------------------------------------
+# mill-groom: backlog cleanup thresholds
+# ---------------------------------------------------------------------------
+
+groom:
+  brevity-threshold-lines: 5
+  brevity-threshold-chars: 500

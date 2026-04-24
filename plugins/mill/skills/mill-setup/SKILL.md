@@ -1,6 +1,6 @@
 ---
 name: mill-setup
-description: Initialise mill in a fresh primary-clone directory. Creates the wiki clone at the sibling path, the .millhouse/wiki junction, a local config.local.yaml, and an initial Home.md. Idempotent — safe to re-run after a partial setup.
+description: Initialise mill in a fresh primary-clone directory. Creates the wiki clone, seeds wiki/config.yaml, creates hub junctions and hardlinks, seeds config.local.yaml and Home.md, and sets VS Code window colour. Idempotent — safe to re-run after a partial setup.
 ---
 
 # mill-setup
@@ -18,7 +18,7 @@ Bootstrap the mill infrastructure from nothing. Produces a working `.millhouse/`
 - `cwd` is the primary clone directory (typically `C:\Code\<project>\hub\`)
 - `git remote get-url origin` returns a valid URL
 - `plugins/mill/scripts/` contains `_junction.py`, `_wiki.py`, `_subprocess_util.py`, `_render.py` (lifted in M1.1)
-- `plugins/mill/templates/config.local.yaml` and `plugins/mill/templates/Home.md` exist (shipped with M1.2)
+- `plugins/mill/templates/config.local.yaml`, `plugins/mill/templates/wiki-config.yaml`, and `plugins/mill/templates/Home.md` exist
 
 ## Layout assumed
 
@@ -50,7 +50,7 @@ $env:PYTHONPATH = (Resolve-Path 'plugins/mill/scripts').Path
 
 After that you can use `python -c "..."` with plain `import _junction`, `import _wiki`, `import _vscode`, etc. — no `sys.path` gymnastics inside the snippet.
 
-Helpers used by this skill: `_junction` (Phase 4), `_wiki` (Phase 3.5, 6, 6a — incl. `read_junctions`), `_sidebar` (Phase 6a), `_vscode` (Phase 7), `_render` (transitively via `_vscode`).
+Helpers used by this skill: `_junction` (Phase 4, 4.5), `_wiki` (Phase 3.5, 6, 6a — incl. `read_junctions` and `read_hardlinks`), `_sidebar` (Phase 6a), `_vscode` (Phase 7), `_render` (transitively via `_vscode`).
 
 ## Phases
 
@@ -85,6 +85,18 @@ python "${env:CLAUDE_PLUGIN_ROOT}/scripts/_sibling.py" wiki "<hub-path>"
 2. If `<wiki-dir>` exists and is a git repo (`<wiki-dir>/.git/` present): `git -C <wiki-dir> pull --ff-only`.
 3. If `<wiki-dir>` exists but is not a git repo: halt with:
    > `<wiki-dir>` exists but is not a git repository. Move it aside or remove it, then re-run `/mill-setup`. mill-setup never overwrites user data.
+
+### Phase 3.1 — Seed `wiki/config.yaml` from template
+
+1. If `<wiki-dir>/config.yaml` exists: skip.
+2. Otherwise: copy `plugins/mill/templates/wiki-config.yaml` → `<wiki-dir>/config.yaml` verbatim (no substitution — tokens are resolved at runtime by scripts, not at seed time).
+3. Commit and push via `_wiki.write_commit_push`:
+
+   ```powershell
+   python -c "from pathlib import Path; import _wiki; _wiki.write_commit_push(Path(r'<wiki-dir>').resolve(), ['config.yaml'], 'chore: init wiki/config.yaml')"
+   ```
+
+**Why verbatim copy:** the token placeholders (`<WIKI_PATH>` etc.) are resolved by `_junction.resolve_target` and `_wiki.read_hardlinks` at runtime. Substituting at seed time would bake in machine-specific paths, breaking the file for other clones.
 
 ### Phase 3.5 — Resolve junctions from wiki config
 
@@ -140,6 +152,50 @@ Before creating, check state per junction:
    > `<junction-path>` points at `<current-target>`. Expected `<resolved-target>`. Remove `<junction-path>`, then re-run `/mill-setup`.
 
 Iterate until all hub junctions are present. Entries with `<SLUG>` are left to mill-spawn per worktree.
+
+### Phase 4.5 — Create hardlinks and add to `.gitignore`
+
+Read the `hardlinks:` block from `<wiki-dir>/config.yaml`:
+
+```powershell
+python -c "from pathlib import Path; import _wiki; import json; print(json.dumps(_wiki.read_hardlinks(Path(r'<wiki-dir>').resolve())))"
+```
+
+`read_hardlinks` returns a dict of `{link-path: target-template}`. If the block is absent, return an empty dict (no hardlinks configured).
+
+Resolve each target template using the same token map as Phase 3.5 (no `<SLUG>` — hardlinks are always hub-scope). For each entry:
+
+1. If `<link-path>` already exists and its inode matches `<resolved-target>`'s inode: skip (already a hardlink to the correct file).
+2. If `<link-path>` exists but points to a different inode: back up to `<link-path>.bak` and remove the original.
+3. Create the hardlink:
+
+   ```powershell
+   python -c "from pathlib import Path; Path(r'<link-path>').hardlink_to(Path(r'<resolved-target>'))"
+   ```
+
+   On failure (cross-volume): halt with:
+   > Cannot create hardlink `<link-path>` → `<resolved-target>`: source and target must be on the same volume. Move the wiki clone to the same drive as the hub, or remove this entry from `hardlinks:` in `wiki/config.yaml`.
+
+4. Add `/<link-path>` to the repo's `.gitignore` if not already present. Check via `grep`:
+
+   ```powershell
+   python -c "
+   from pathlib import Path
+   gi = Path('.gitignore')
+   entry = '/<link-path>'
+   if entry not in gi.read_text(encoding='utf-8').splitlines():
+       with gi.open('a', encoding='utf-8') as f:
+           f.write(f'\n{entry}\n')
+   "
+   ```
+
+5. If the file was already tracked by git, untrack it:
+
+   ```powershell
+   git ls-files --error-unmatch <link-path> 2>/dev/null && git rm --cached <link-path>
+   ```
+
+**Idempotency:** inode comparison in step 1 ensures re-runs skip already-correct hardlinks. The `.gitignore` check in step 4 avoids duplicate entries.
 
 ### Phase 5 — Seed `.millhouse/config.local.yaml`
 
@@ -224,13 +280,15 @@ Title format for the hub: **just the repo short-name** (e.g. `millhouse`). No `$
 Check every invariant; halt with a specific error if any fails:
 
 - `<WIKI_PATH>` is a git repo (the cloned wiki)
+- `<WIKI_PATH>/config.yaml` exists
 - Every hub junction (Phase 4 entry) exists and resolves to its expected target
+- Every hardlink (Phase 4.5 entry) exists and shares an inode with its target
 - `.millhouse/config.local.yaml` exists
 - `<WIKI_PATH>/Home.md` exists and starts with `# Tasks`
 - `<WIKI_PATH>/_Sidebar.md` exists and begins with `### Navigation`
 - `.vscode/settings.json` exists with `titleBar.activeBackground == "#2d7d46"`
 
-On success, print a summary listing all configured junctions. Hub junctions show their resolved target; per-worktree (`<SLUG>`) junctions show the unresolved template so the user can verify the config:
+On success, print a summary:
 
 ```
 mill-setup complete.
@@ -238,16 +296,18 @@ mill-setup complete.
   Hub:           <HUB_PATH>
   Wiki clone:    <WIKI_PATH>
   Local config:  .millhouse/config.local.yaml
-  Tasks (Home):  <WIKI_PATH>/Home.md
+  Tasks (Home):  <WIKI_PATH>/Home.md  (hardlinked as tasks.md)
   Sidebar:       <WIKI_PATH>/_Sidebar.md
   VS Code:       .vscode/settings.json (titleBar = #2d7d46 green)
 
 Junctions (from wiki config.yaml):
   Hub-scope (created now):
     <path-a> -> <resolved-target-a>
-    <path-b> -> <resolved-target-b>
   Per-worktree (created by mill-spawn):
     <path-c> -> <template-c>    (contains <SLUG>)
+
+Hardlinks (from wiki config.yaml):
+  <link-a> -> <resolved-target-a>
 
 Next: /mill-add <slug> --title "..." [--summary "..."] [--proposal-body "..."] to add tasks, /mill-list to list them.
 ```
@@ -267,8 +327,10 @@ Next: /mill-add <slug> --title "..." [--summary "..."] [--proposal-body "..."] t
 Every phase checks current state before acting. Re-running after a partial or complete setup is always safe:
 
 - Wiki already cloned → pulls latest.
+- `wiki/config.yaml` present → skipped (Phase 3.1).
 - Junction-prefs re-read from wiki config each run → picks up changes to `junctions:` block after a wiki pull.
 - Wiki junction correct (at the configured path) → skipped.
+- Hardlink inode-matches target → skipped; `.gitignore` entry already present → not duplicated (Phase 4.5).
 - `config.local.yaml` present → skipped.
 - `Home.md` non-empty (and v2-shape or user-custom) → skipped; only GitHub-default content is overwritten.
 - `_Sidebar.md` regenerated unconditionally; commit only if bytes changed.

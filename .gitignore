@@ -19,6 +19,9 @@ env/
 # VS Code
 **/.vscode/
 
+# Convenience hardlink to wiki/Home.md (created by mill-setup)
+/tasks.md
+
 # Mill local state (per-worktree, never tracked)
 **/.millhouse/
 **/.scratch/

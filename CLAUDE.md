@@ -7,11 +7,7 @@ scope: this file is read on session start; keep it short
 
 ## Project shape
 
-This is `mill-v2` — a plugin-based task/review/orchestration system for Claude Code. Layer 01 (bootstrap: `mill-setup`/`mill-add`/`mill-list`) and Layer 02 (review API: `mill-review-discussion`/`-plan`/`-code`) are implemented. Layers 03 (orchestration) and 04 (extras) are not started.
-
-Canonical status: `specs/roadmap/README.md`.
-
-Wiki repo (separate, at `c:/Code/millhouse/wiki/`) owns task state and shared config.
+`mill-v2` — a plugin-based task/review/orchestration system for Claude Code. Wiki repo (sibling clone) owns task state and shared config.
 
 ## Review terminology
 
@@ -47,12 +43,12 @@ A discussion gap is missing information; a plan/code block is a must-fix defect.
 - `plugins/mill/integration_tests/` — local-dev Python tests that invoke real `git` and optionally real `claude`. Use `.scratch/` for fixtures.
 - `specs/roadmap/README.md` — canonical status tracker.
 - `specs/_legacy/` — pre-discussion drafts, not authoritative.
-- `.millhouse/` in working clones is gitignored local state; `.millhouse/wiki` is a junction to the shared wiki repo.
+- `.millhouse/` in working clones is gitignored local state.
 - `.scratch/` in working clones is gitignored scratch-only state; not propagated to worktrees.
 
 ## Conventions worth carrying
 
-- **Plugin scripts reference `${CLAUDE_PLUGIN_ROOT}`, never the source repo.** Anything installed via plugin manifest — `plugins/mill/`, `plugins/codeguide/`, etc. — runs on a user's machine that has no millhouse source checkout. Every intra-plugin path in a SKILL.md, Python helper, or prompt template must resolve against `${CLAUDE_PLUGIN_ROOT}`, not against `plugins/<name>/…`. This is load-bearing for external repos where CC uses mill/codeguide plugins without the millhouse source being cloned anywhere. Moves to `CONSTRAINTS.md` once mill-v2 is mature.
+- **Plugin scripts reference `${CLAUDE_PLUGIN_ROOT}`, never the source repo.** Anything installed via plugin manifest — `plugins/mill/`, `plugins/codeguide/`, etc. — runs on a user's machine that has no millhouse source checkout. Every intra-plugin path in a SKILL.md, Python helper, or prompt template must resolve against `${CLAUDE_PLUGIN_ROOT}`, not against `plugins/<name>/…`. This is load-bearing for external repos where CC uses mill/codeguide plugins without the millhouse source being cloned anywhere.
 - **Generated markdown uses fenced ```yaml for metadata**, not `---` frontmatter. `---` is reserved for `SKILL.md` and plugin manifests. (See `plugins/mill/skills/markdown/SKILL.md`.)
 - **Reviews match the tight v1 style**: per-finding = severity-label + 3–4 short bullets. Target a few hundred tokens total, not thousands. The fix-thread has full context and does not need narrative explanation.
 - **Loading `mill-receiving-review` is mandatory** before reading any review output. See `plugins/mill/skills/mill-receiving-review/SKILL.md`.
