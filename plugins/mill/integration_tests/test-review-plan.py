@@ -37,7 +37,7 @@ _MILL_ROOT = _INTEGRATION_TESTS_DIR.parent
 _HUB = _MILL_ROOT.parent.parent          # plugins/mill -> plugins -> hub
 _SCRIPTS = _MILL_ROOT / "scripts"
 _FIXTURES = _INTEGRATION_TESTS_DIR / "fixtures"
-_SCRATCH = _HUB / ".millhouse" / "scratch"
+_SCRATCH = _HUB / ".scratch"
 
 # Ensure scripts/ is importable
 sys.path.insert(0, str(_SCRIPTS))

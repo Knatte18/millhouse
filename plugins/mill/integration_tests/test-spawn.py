@@ -1,7 +1,7 @@
 """
 Integration test for mill-spawn.
 
-Builds an isolated hub+wiki pair under ``.millhouse/scratch/`` and runs
+Builds an isolated hub+wiki pair under ``.scratch/`` and runs
 ``mill-spawn.py`` against it. Asserts the end-to-end artefacts:
 
     - Home.md heading for the seeded task switches to ``[active]``.
@@ -33,7 +33,7 @@ from pathlib import Path
 
 HUB = Path(__file__).resolve().parent.parent.parent.parent
 SCRIPTS = HUB / "plugins" / "mill" / "scripts"
-SCRATCH = HUB / ".millhouse" / "scratch"
+SCRATCH = HUB / ".scratch"
 
 
 def _run(cmd: list[str], *, cwd: Path, check: bool = True) -> subprocess.CompletedProcess:

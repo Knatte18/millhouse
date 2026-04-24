@@ -14,7 +14,7 @@ from pathlib import Path
 
 HUB = Path(__file__).resolve().parent.parent.parent.parent
 SCRIPTS = HUB / "plugins" / "mill" / "scripts"
-SCRATCH = HUB / ".millhouse" / "scratch"
+SCRATCH = HUB / ".scratch"
 sys.path.insert(0, str(SCRIPTS))
 
 import _llm_claude

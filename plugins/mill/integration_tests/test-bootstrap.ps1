@@ -20,9 +20,9 @@ $millRoot  = Split-Path -Parent $PSScriptRoot
 $scripts   = Join-Path $millRoot 'scripts'
 $templates = Join-Path $millRoot 'templates'
 
-# Per conversation/SKILL.md: never use $env:TEMP; use .millhouse/scratch/ instead.
+# Per conversation/SKILL.md: never use $env:TEMP; use .scratch/ instead.
 $hubRoot   = Split-Path -Parent $millRoot
-$scratch   = Join-Path $hubRoot '.millhouse' 'scratch'
+$scratch   = Join-Path $hubRoot '.scratch'
 New-Item -ItemType Directory -Path $scratch -Force | Out-Null
 $tmp       = Join-Path $scratch ('bootstrap-test-' + [Guid]::NewGuid().ToString('N').Substring(0,8))
 $container = Join-Path $tmp       'container'

@@ -29,7 +29,7 @@ from pathlib import Path
 HUB = Path(__file__).resolve().parent.parent.parent.parent
 SCRIPTS = HUB / "plugins" / "mill" / "scripts"
 TEMPLATES = HUB / "plugins" / "mill" / "templates"
-SCRATCH = HUB / ".millhouse" / "scratch"
+SCRATCH = HUB / ".scratch"
 
 sys.path.insert(0, str(SCRIPTS))
 

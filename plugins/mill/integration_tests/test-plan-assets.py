@@ -19,7 +19,7 @@ depends on:
     - ``_timestamp.now_utc_compact`` + ``now_utc_iso`` produce the
       shapes the skill substitutes into templates.
 
-Keeps a tiny fixture under ``.millhouse/scratch/`` so a failure leaves
+Keeps a tiny fixture under ``.scratch/`` so a failure leaves
 inspectable artefacts behind; on PASS the fixture is removed.
 
 Run from hub root:
@@ -38,7 +38,7 @@ from pathlib import Path
 HUB = Path(__file__).resolve().parent.parent.parent.parent
 SCRIPTS = HUB / "plugins" / "mill" / "scripts"
 TEMPLATES = HUB / "plugins" / "mill" / "templates"
-SCRATCH = HUB / ".millhouse" / "scratch"
+SCRATCH = HUB / ".scratch"
 
 sys.path.insert(0, str(SCRIPTS))
 
