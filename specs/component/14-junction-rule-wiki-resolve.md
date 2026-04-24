@@ -1,11 +1,11 @@
-# Junction-rule enforcement + `resolve_wiki_path` extraction
+# Junction-rule enforcement + `_paths.py` consolidation
 
 ```yaml
-type: refactor (mill plugin) + CLAUDE.md rule
+type: refactor (mill plugin) + CLAUDE.md rule + .scratch relocation
 layer: bookkeeping / Layer 01 consolidation
 v1_ref: none — cleanup of mill-v2 scripts
-status: starting point — needs grilling before plan
-priority: low — no functional bug, but the rule is documented in wiki/config.yaml and silently violated by three scripts; keeps getting forgotten
+status: discussed — ready for plan-writing
+priority: low — no functional bug, but the invariant is documented in wiki/config.yaml and silently violated by three scripts; keeps getting forgotten
 ```
 
 ## Problem
@@ -16,41 +16,45 @@ Three scripts resolve the wiki via the `.millhouse/wiki` junction:
 - [plugins/mill/scripts/mill-spawn.py:178-186](plugins/mill/scripts/mill-spawn.py#L178-L186)
 - [plugins/mill/scripts/mill-list.py:30-38](plugins/mill/scripts/mill-list.py#L30-L38)
 
-Each copy has a private `_resolve_wiki_path()` that does `Path(".millhouse/wiki").resolve()` — identical logic, duplicated three ways, and all three treat the junction as the authoritative source.
+Each copy has a private `_resolve_wiki_path()` that does `Path(".millhouse/wiki").resolve()` — identical logic, duplicated three ways, all treating the junction as the authoritative source. Each also has a duplicate `_resolve_git_root()` (`git rev-parse --show-toplevel`).
 
-This violates the invariant already documented in `wiki/config.yaml`:
+This violates the invariant documented in `wiki/config.yaml`:
 
 > Junctions are IDE/terminal convenience. Scripts MUST resolve to the real wiki repo (`<WIKI_PATH>`-token value) and never treat the junction path as authoritative.
 
-The rule is not in `CLAUDE.md`, so every new script writer independently reaches for `.millhouse/wiki` because it is the obvious discovery mechanism.
+The rule is not in `CLAUDE.md`, so every new script reaches for `.millhouse/wiki` because it is the obvious discovery mechanism.
+
+Relatedly: `.millhouse/scratch/` is the documented scratch location, but it is (a) copied past `.millhouse/` boundary on worktree-propagation logic (`copy_millhouse` excludes `scratch` by name — fragile), and (b) invisible to other plugins the engineer uses that default to a top-level `.scratch/` as their scrap-book. Promoting `.scratch/` to cwd-root solves both.
 
 ## Scope
 
-Three deliverables, to land in one PR:
+Four deliverables, landing in one PR:
 
-1. **Single-source `resolve_wiki_path(git_toplevel) -> Path`** — lives in `_wiki.py` (most natural home; it is where the read/commit/push helpers already live). Resolution order:
-   1. `.millhouse/config.local.yaml` `wiki_path:` override (absolute path).
-   2. `_sibling.resolve_path("wiki", git_toplevel)` — the convention already shipped in spec 00.
-   The function does NOT look at `.millhouse/wiki` at all.
-2. **Replace three call-sites** with `_wiki.resolve_wiki_path(_resolve_git_root())`. Delete the three private copies. Update their docstrings so the next reader knows the junction is pure UI.
-3. **Add the rule to `CLAUDE.md`** under "Conventions worth carrying":
-   > **Junctions are IDE/terminal convenience only.** Scripts MUST resolve to the real wiki repo via `_wiki.resolve_wiki_path(...)`, never by treating `.millhouse/wiki` (or any other junction) as a path. Junctions exist so the operator can type shorter paths in a shell / see the wiki tree in the sidebar — they are not a code contract.
+1. **`_paths.py` module in mill plugin** — single home for path resolution. Contents:
+   - `resolve_path(role, repo_root)` — re-exported from `_sibling.py` (identical-twin rule for codeguide preserved; mill callers get a single import surface).
+   - `resolve_git_root() -> Path` — wraps `git rev-parse --show-toplevel`.
+   - `resolve_wiki_path(git_toplevel) -> Path` — reads `.millhouse/config.local.yaml` for `paths.wiki:` override; falls back to `resolve_path("wiki", git_toplevel)`. Never touches `.millhouse/wiki`.
+   - Raises `PathResolutionError` (or re-uses `SystemExit` with improved message that names the override path explicitly).
+2. **Call-site migration** — replace the three private `_resolve_wiki_path()` and three `_resolve_git_root()` copies in `mill-add.py`, `mill-spawn.py`, `mill-list.py` with imports from `_paths`. Update docstrings so the next reader knows the junction is pure IDE.
+3. **`.scratch/` relocation** — move `.millhouse/scratch/` → `.scratch/` at cwd-root. Updates: `.gitignore`, CLAUDE.md rule text, `plugins/mill/skills/conversation/SKILL.md`, every integration test's `SCRATCH = HUB / ".millhouse" / "scratch"` constant, `_worktree.copy_millhouse`'s `scratch` exclusion (removable — no longer inside `.millhouse/`), and the corresponding `test-worktree.py` assertion.
+4. **`CLAUDE.md` gains a `## Path invariants` section** — new section (not a bullet under existing conventions) so path rules have a dedicated home to grow in. Contents: junction rule + pointer to `_paths.py` + scratch location rule.
 
-Tests: `mill-spawn` and `mill-merge` integration tests already exercise the real wiki path end-to-end; a unit test around `resolve_wiki_path` covers the override + default branches.
+Tests: `mill-spawn` and `mill-merge` integration tests exercise the real wiki path end-to-end; a new unit test `test-paths.py` covers the override + default branches of `resolve_wiki_path`.
 
-## Decisions pending discussion
+## Decisions (locked)
 
-These need to be grilled out before the plan is written:
-
-- **D1 — home for the helper.** Is `_wiki.py` right? Alternative: new `_paths.py` collecting `_sibling`, `resolve_wiki_path`, and future sibling-like resolvers. Lean: `_wiki.py` for now, move to `_paths.py` if/when the count grows beyond two.
-- **D2 — override source.** `config.local.yaml`'s `wiki_path:` — does it remain a top-level key (as today) or move under a `paths:` block? Affects one line in the config template.
-- **D3 — git-root discovery.** Each of the three scripts already has its own `_resolve_git_root()` (identical `git rev-parse --show-toplevel` call). Extract that too, or punt? Pure cleanup, but irrelevant if we later move to a `_paths.py` module anyway.
-- **D4 — error surface.** Current private copies raise `SystemExit` with a "run /mill-setup" hint. Should the new helper raise a dedicated `WikiResolutionError`, or keep `SystemExit` for CLI-call-site ergonomics?
-- **D5 — bigger layout question (parked).** Henrik floated moving junctions out of `.millhouse/` so `.millhouse/` only carries `config.local.yaml` + `active.slug.md`. That is a separate refactor with its own blast radius (`_worktree.copy_millhouse`, `.gitignore`, CLAUDE.md scratch rule). This spec does NOT touch that — decide in a follow-up.
+- **D1 — `_paths.py` in `plugins/mill/scripts/`.** Single module; imports `resolve_path` from the existing `_sibling.py` rather than duplicating, so the codeguide identical-twin rule stays intact.
+- **D2 — `paths:` block in `.millhouse/config.local.yaml`.** `paths.wiki:` lives in config.local.yaml ONLY (avoids bootstrap circularity — can't put wiki-path override inside the wiki). Other path overrides (`paths.worktrees:`, `paths.codeguide:`) MAY be added in `wiki/config.yaml` in the future for team-shared defaults; not implemented in this spec.
+- **D3 — `resolve_git_root` extracted to `_paths.py`.** Same rationale as wiki-path; three identical copies today.
+- **D4 — error message names the override path.** New text: `"Wiki not found at <resolved-path>. Run /mill-setup to create it, or set paths.wiki: in .millhouse/config.local.yaml."`.
+- **D5 — `.wiki` junction stays at `.millhouse/wiki/`** (IDE convenience preserved — one sidebar folder, not four top-level junctions). **`.scratch/` moves to cwd-root** because (a) other plugins the engineer uses default to a top-level `.scratch/`, and (b) it decouples "scratch" from "the millhouse-propagated subset" entirely.
+- **CLAUDE.md organisation.** New `## Path invariants` section — path rules keep being forgotten; giving them a dedicated section makes them easier to spot and accumulate.
 
 ## Out of scope
 
-- Layout move of `.millhouse/wiki` → `.wiki`, `.active` placement, `scratch/` location. (Parked as D5.)
+- Moving `.wiki` / `.active` junctions out of their current locations (decided against for IDE clutter reasons).
+- Moving `active.slug.md` (stays in `.millhouse/` as a worktree-marker; propagated via `copy_millhouse`).
 - Any change to `_junction.py`'s Windows/POSIX abstraction.
-- Any change to the `junctions:` block in `wiki/config.yaml`.
-- Migrating plugin-code junction references (codeguide/) — they are already sibling-aware via spec 00; no junction dependency.
+- Any change to the `junctions:` block in `wiki/config.yaml` (the junction-creation side — still correct).
+- `paths.worktrees:` / `paths.codeguide:` as config keys in `wiki/config.yaml` (deferred; wait for concrete demand).
+- Mill-codeguide seed (spec 13) — still gated on mill-v2 self-sufficiency, independent of this work.
