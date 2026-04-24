@@ -12,6 +12,7 @@ from _status import (  # noqa: E402
     append_phase,
     init_batches,
     read_batches,
+    read_status,
     render_initial,
     set_batch_field,
     update_field,
@@ -85,6 +86,93 @@ def main() -> int:
             assert "phase: discussed" in contents, "batches edit damaged top yaml"
             assert "discussed  2026-04-22T15:00:00Z" in contents, "batches edit damaged timeline"
             print("PASS: batches edits preserve top yaml + timeline")
+
+        # --- read_status tests ---
+        ts = "2026-04-22T14:32:05Z"
+
+        # Case 1: freshly-rendered file
+        with tempfile.TemporaryDirectory() as tmp:
+            sp = Path(tmp) / "status.md"
+            sp.write_text(
+                render_initial("My task", "Desc.", ts, "main"), encoding="utf-8"
+            )
+            r = read_status(sp)
+            assert r["phase"] == "discussing", f"expected discussing, got {r['phase']}"
+            assert r["task"] == "My task", f"task mismatch: {r['task']}"
+            assert r["last_timeline_entry"] is not None, "expected timeline entry"
+            assert ts in r["last_timeline_entry"], "timestamp not in last_timeline_entry"
+            assert r["current_batch"] is None
+            assert r["blocked_reason"] is None
+            print("PASS: read_status on fresh render_initial file")
+
+        # Case 2: after append_phase
+        with tempfile.TemporaryDirectory() as tmp:
+            sp = Path(tmp) / "status.md"
+            sp.write_text(render_initial("T", "D", ts, "main"), encoding="utf-8")
+            ts2 = "2026-04-22T16:00:00Z"
+            append_phase(sp, "discussed", ts2)
+            r = read_status(sp)
+            assert r["phase"] == "discussed", f"expected discussed, got {r['phase']}"
+            assert r["last_timeline_entry"] == f"discussed  {ts2}", (
+                f"unexpected last entry: {r['last_timeline_entry']!r}"
+            )
+            print("PASS: read_status after append_phase")
+
+        # Case 3: current_batch from running batch
+        with tempfile.TemporaryDirectory() as tmp:
+            sp = Path(tmp) / "status.md"
+            sp.write_text(render_initial("T", "D", ts, "main"), encoding="utf-8")
+            init_batches(sp, ["b1", "b2"])
+            set_batch_field(sp, "b1", "state", "running")
+            r = read_status(sp)
+            assert r["current_batch"] == "b1", f"expected b1, got {r['current_batch']}"
+            print("PASS: read_status current_batch from running batch")
+
+        # Case 4: ValueError on missing file
+        try:
+            read_status(Path("/nonexistent/status.md"))
+            assert False, "expected ValueError"
+        except ValueError:
+            pass
+        print("PASS: read_status raises ValueError on missing file")
+
+        # Case 5: ValueError on file with no yaml block
+        with tempfile.TemporaryDirectory() as tmp:
+            sp = Path(tmp) / "status.md"
+            sp.write_text("# Status\n\nNo fenced block here.\n", encoding="utf-8")
+            try:
+                read_status(sp)
+                assert False, "expected ValueError"
+            except ValueError:
+                pass
+        print("PASS: read_status raises ValueError on no yaml block")
+
+        # Case 6: missing task: key — no exception, full shape check
+        with tempfile.TemporaryDirectory() as tmp:
+            sp = Path(tmp) / "status.md"
+            minimal = "# Status\n\n```yaml\nphase: planning\n```\n"
+            sp.write_text(minimal, encoding="utf-8")
+            r = read_status(sp)
+            assert r["task"] is None, f"task should be None, got {r['task']}"
+            assert r["phase"] == "planning"
+            assert r["current_batch"] is None
+            assert r["blocked_reason"] is None
+            assert r["last_timeline_entry"] is None
+        print("PASS: read_status missing task: key returns None with full shape")
+
+        # Case 7: malformed ## Batches section raises ValueError
+        with tempfile.TemporaryDirectory() as tmp:
+            sp = Path(tmp) / "status.md"
+            sp.write_text(render_initial("T", "D", ts, "main"), encoding="utf-8")
+            # Append a malformed Batches section (unclosed yaml fence)
+            with open(sp, "a", encoding="utf-8") as f:
+                f.write("\n## Batches\n\n```yaml\nbatches:\n  - name: b1\n")
+            try:
+                read_status(sp)
+                assert False, "expected ValueError"
+            except ValueError:
+                pass
+        print("PASS: read_status raises ValueError on malformed ## Batches")
 
         print("All _status unit tests passed.")
         return 0
