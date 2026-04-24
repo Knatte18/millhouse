@@ -50,7 +50,7 @@ No call-sites are touched in this batch. Batch 02 does the migration.
   - Test `resolve_wiki_path` relative override: same fixture but `paths.wiki: ../custom-wiki`, assert result is `<tmp>/custom-wiki` (relative to git-toplevel).
   - Test `resolve_wiki_path` with an empty `paths:` block or missing key: falls through to sibling default (does NOT crash).
   - Test `resolve_wiki_path` with malformed YAML: currently undefined — document the chosen behaviour (propagate the `yaml.YAMLError` — mill-setup handles surfacing). One test confirming the exception propagates.
-  - `resolve_git_root` is NOT unit-tested here — it's a thin wrapper around `git rev-parse` and the integration tests already exercise it. Add a comment in the test file pointing at that coverage so reviewers don't flag the gap.
+  - `resolve_git_root` is NOT unit-tested here — it's a thin wrapper around `git rev-parse` and the integration tests already exercise it. Add an inline comment at the top of `test-paths.py`: `# resolve_git_root is exercised end-to-end by test-spawn.py and test-merge.py.` so reviewers don't flag the gap.
   - Follow the `test-sibling.py` pattern: `main()` function with `try/except AssertionError`, PASS prints per check, exit 0/1.
 - **Commit:** `test(paths): unit tests for _paths.resolve_wiki_path + re-export identity`
 
