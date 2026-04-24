@@ -4,9 +4,11 @@
 type: skill
 layer: 04
 v1_ref: none (mill-ghissues-to-tasks covers a similar intent but via GitHub issues; mill-groom is for the Home.md backlog itself)
-status: partially discussed — key decisions captured, not ready for full-write
+status: done — merged to main 2026-04-24 (branch impl/11-mill-groom-skill)
 note: "Interactive backlog cleanup. Works on Home.md: consolidate duplicates, shorten bloated entries, kill dead tasks, surface gaps. Requires judgment — hence a skill, not a script."
 ```
+
+**Implementation notes:** `SKILL.md` only — no new Python helpers. Follows the `mill-ghissues-to-tasks` shape: `---` frontmatter, numbered steps, Rules/Out-of-scope sections. Brevity thresholds (`groom.brevity-threshold-lines: 5`, `groom.brevity-threshold-chars: 500`) added to `wiki/config.yaml`. Duplicate detection is LLM-judgment only; extraction collisions error out and ask the user. Approval is all-or-nothing; `.scratch/groom-proposal.md` is deleted after commit.
 
 ## Purpose
 
@@ -30,6 +32,13 @@ Keep `Home.md` readable. Over time the backlog accrues duplicate tasks, long-win
 - **Approval gate**: Claude writes a proposal to `.scratch/groom-proposal.md` with the full before/after, user replies `approve` or `reject` in chat.
 - **Single commit on approve**: all backlog changes go in one `_wiki.write_commit_push` with a message listing counts ("chore: groom Home.md — 3 shortened, 2 folded, 1 dropped, 1 extracted").
 - **No link to GitHub issues**: mill-groom does NOT fetch or close issues. That's `mill-ghissues-to-tasks`'s job. A future `mill-groom` could optionally call `mill-ghissues-to-tasks` first, but they stay as separate skills for now.
+- **Brevity thresholds**: `groom.brevity-threshold-lines` (default 5) and `groom.brevity-threshold-chars` (default 500) live in `wiki/config.yaml` under a `groom:` block. Grooming targets the shared backlog — shared config is the right home.
+- **Duplicate detection**: LLM judgment only. Catches semantic duplicates without extra code; add heuristics later only if false-positives become a real problem.
+- **Extraction file naming**: use the same slug as the Home.md entry (`proposal-<slug>.md`). If that file already exists in the wiki, error out and ask the user what to do.
+- **Invocation**: `/mill-groom` with no arguments. No `--max` or `--since` flags.
+- **Approval**: all-or-nothing (`approve` / `reject`). The user can redirect mid-flow in chat if they want to change a specific decision before approving.
+- **Scratch cleanup**: delete `.scratch/groom-proposal.md` after the approved changes are committed. Scratch is ephemeral.
+- **Tests**: no new tests. The existing suite (`run-all.py` + integration tests) is the bar. No supporting Python helpers are planned, so there is nothing mechanical to test.
 
 ## Flow
 
@@ -70,8 +79,3 @@ Keep `Home.md` readable. Over time the backlog accrues duplicate tasks, long-win
 - No multi-machine coordination.
 - No cross-wiki grooming.
 
-## Open design points
-
-- **Brevity thresholds in config**: same as v1's `revise.*` — but now under `groom.*`. Defaults 5 lines / 500 chars.
-- **Duplicate detection**: pure LLM judgment or a heuristic (title Levenshtein, body overlap)? LLM judgment is easier and catches semantic duplicates; heuristics are a safety net. Start with LLM; add heuristic if false-positives become a nuisance.
-- **Extraction file naming**: if a groom extracts to `proposal-<slug>.md`, use the same slug as the Home.md entry. Collisions with existing proposal files should error and ask the user.

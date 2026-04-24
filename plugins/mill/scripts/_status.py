@@ -18,11 +18,13 @@ and rewrite just that block, never touching the top block.
 Public API:
     render_initial(task_title, task_description, timestamp,
                    parent_branch) -> str
+    read_full(status_path) -> dict
     update_field(status_path, key, value) -> None
     append_phase(status_path, phase, timestamp) -> None
     init_batches(status_path, names) -> None
     set_batch_field(status_path, name, key, value) -> None
     read_batches(status_path) -> list[dict]
+    read_status(status_path) -> dict
 """
 from __future__ import annotations
 
@@ -385,6 +387,120 @@ def read_batches(status_path: Path) -> list[dict]:
         raise ValueError(f"Malformed {_BATCHES_HEADING} yaml: {exc}") from exc
     batches = data.get("batches", []) if isinstance(data, dict) else []
     return batches or []
+
+
+def read_status(status_path: Path) -> dict:
+    """Return a summary dict parsed from ``status_path``.
+
+    Returns:
+        ``{"phase": str, "task": str|None, "current_batch": str|None,
+        "last_timeline_entry": str|None, "blocked_reason": str|None}``
+
+    Raises:
+        ValueError: file missing, no yaml block, yaml parse error,
+            missing ``phase:`` key, or ``read_batches`` raises ValueError.
+    """
+    if not status_path.exists():
+        raise ValueError(f"status file not found: {status_path}")
+    text = status_path.read_text(encoding="utf-8")
+
+    # Parse top yaml block.
+    try:
+        y_start, y_end = _split_fences(text, _YAML_FENCE)
+    except ValueError as exc:
+        raise ValueError(f"Cannot read yaml block in {status_path}: {exc}") from exc
+    y_body = "\n".join(text.splitlines()[y_start:y_end])
+    try:
+        data = yaml.safe_load(y_body) or {}
+    except yaml.YAMLError as exc:
+        raise ValueError(f"Malformed yaml block in {status_path}: {exc}") from exc
+    if not isinstance(data, dict) or "phase" not in data:
+        raise ValueError(f"Missing 'phase:' key in yaml block of {status_path}")
+    phase = data["phase"]
+    task = data.get("task") or None
+    blocked_reason = data.get("blocked_reason") or None
+
+    # current_batch: first batch with an active state.
+    _ACTIVE_BATCH_STATES = {"running", "reviewing", "fixing", "blocked"}
+    batches = read_batches(status_path)  # ValueError propagates
+    current_batch = None
+    for b in batches:
+        if b.get("state") in _ACTIVE_BATCH_STATES:
+            current_batch = b.get("name")
+            break
+
+    # last_timeline_entry: last non-empty line of the ```text block.
+    last_timeline_entry = None
+    lines = text.splitlines()
+    tl_start = None
+    tl_end = None
+    in_tl = False
+    for i, line in enumerate(lines):
+        if line.strip() == _TIMELINE_FENCE:
+            tl_start = i + 1
+            in_tl = True
+            continue
+        if in_tl and line.strip() == "```":
+            tl_end = i
+            break
+    if tl_start is not None and tl_end is not None:
+        content_lines = [l.strip() for l in lines[tl_start:tl_end] if l.strip()]
+        if content_lines:
+            last_timeline_entry = content_lines[-1]
+
+    return {
+        "phase": phase,
+        "task": task,
+        "current_batch": current_batch,
+        "last_timeline_entry": last_timeline_entry,
+        "blocked_reason": blocked_reason,
+    }
+
+
+def read_full(status_path: Path) -> dict:
+    """Return the complete yaml block and full timeline from ``status_path``.
+
+    Unlike ``read_status``, which returns a slim summary, this returns the
+    raw parsed contents without lossy summarisation — suitable for display
+    tools that need to show everything.
+
+    Returns:
+        ``{"yaml": dict, "timeline": list[str]}``
+        ``yaml`` contains all keys from the top yaml block.
+        ``timeline`` is the list of non-empty raw lines from the
+        ``## Timeline`` text fence, in file order.
+
+    Raises:
+        ValueError: file missing, yaml block missing/unterminated/malformed,
+            or timeline block missing/unterminated.
+    """
+    if not status_path.exists():
+        raise ValueError(f"status file not found: {status_path}")
+    text = status_path.read_text(encoding="utf-8")
+
+    try:
+        y_start, y_end = _split_fences(text, _YAML_FENCE)
+    except ValueError as exc:
+        raise ValueError(f"Cannot read yaml block in {status_path}: {exc}") from exc
+    y_body = "\n".join(text.splitlines()[y_start:y_end])
+    try:
+        data = yaml.safe_load(y_body) or {}
+    except yaml.YAMLError as exc:
+        raise ValueError(f"Malformed yaml block in {status_path}: {exc}") from exc
+    if not isinstance(data, dict):
+        raise ValueError(f"yaml block did not parse as a dict in {status_path}")
+
+    try:
+        t_start, t_end = _split_fences(text, _TIMELINE_FENCE)
+    except ValueError as exc:
+        raise ValueError(f"Cannot read timeline block in {status_path}: {exc}") from exc
+    timeline_lines = [
+        line.strip()
+        for line in text.splitlines()[t_start:t_end]
+        if line.strip()
+    ]
+
+    return {"yaml": data, "timeline": timeline_lines}
 
 
 def init_batches(status_path: Path, names: list[str]) -> None:

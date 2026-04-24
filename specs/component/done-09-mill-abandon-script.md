@@ -4,7 +4,8 @@
 type: script
 layer: 04
 v1_ref: plugins/mill/skills/mill-abandon/
-status: partially discussed — key decisions captured, not ready for full-write
+status: done
+implemented: 2026-04-24
 note: "Marks a task as abandoned. Runs FROM the worktree being abandoned, which means it cannot remove itself — actual worktree + active/<slug>/ deletion is done by mill-cleanup from the hub afterwards."
 ```
 
@@ -34,6 +35,11 @@ Destructive wiki writes are gated by an explicit confirmation on stdin (or `--fo
   - `.millhouse/active.slug.md` exists → derive slug.
   - `<WIKI_PATH>/active/<slug>/status.md` exists and `phase:` is not already `abandoned` / `done` (refuse re-abandon and re-abandon-after-done).
 - **Timestamp invariant**: use shell `date -u +%Y%m%d-%H%M%S` for any timestamp going into status.md timeline; never guess.
+- **`--reason <text>`**: deferred. History can be added to the timeline manually before running abandon, or via a future extension.
+- **Wiki-lock timeout**: reuse `_wiki.acquire_lock` default of 30 s (same as mill-merge). No override needed.
+- **Builder-lock guard**: refuse abandonment if `_builder_lock.read(mill_dir)` returns a non-stale lock (stale window = 5 min, per `_builder_lock.STALE_WINDOW_SEC`). `--force` bypasses this guard (and the confirmation prompt). Stale locks are silently ignored — a crashed mill-go's lock expires automatically.
+- **Exit code on user-cancel** (`N` at prompt): exit 0. The script ran successfully; the user chose not to proceed. Exit 1 is reserved for environment/validation errors.
+- **Output verbosity**: terse. Print only the final success line (or error). Intermediate steps (wiki lock, write) are not echoed to stdout.
 
 ## Flow
 
@@ -62,8 +68,3 @@ Destructive wiki writes are gated by an explicit confirmation on stdin (or `--fo
 - No history preservation ("why abandoned?" note in status.md). If the user wants a reason recorded, they add a Timeline entry manually before running abandon, or we extend this script with `--reason <text>` later.
 - No re-activation path in this script. Because mill-cleanup resets abandoned tasks to unclaimed in Home.md, resuming is just `mill-spawn` picking the task up again from the backlog like any other.
 
-## Open design points
-
-- **`--reason <text>`**: add now or later? Later is fine; can be appended to status.md timeline retroactively.
-- **Wiki-lock timeout**: reuse the 30s default from `_wiki.acquire_lock`. Same as mill-merge.
-- **Clash with mill-merge / mill-go running**: not addressed. If mill-go is implementing and the user runs mill-abandon, state could be confusing. A guard: reject if `status.md phase:` is `implementing`/`reviewing`/`fixing` and the builder lock exists? Simpler: reject abandonment while `builder.lock` is held.
