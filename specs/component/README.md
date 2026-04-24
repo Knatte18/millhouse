@@ -48,7 +48,7 @@ automated yet (that's partly what we're building).
      SKILL.md itself is prose instructions only.
 
 4. **Verify.** All smoke tests pass locally. Any new integration test
-   passes against an isolated fixture under `.millhouse/scratch/`. Any
+   passes against an isolated fixture under `.scratch/`. Any
    existing integration test that touches changed code still passes.
 
 5. **Mark the spec done.** Same pattern used on `done-01`/`02`/`03`:

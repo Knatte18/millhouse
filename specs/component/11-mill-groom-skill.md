@@ -27,7 +27,7 @@ Keep `Home.md` readable. Over time the backlog accrues duplicate tasks, long-win
   - **Drop** — remove the entry entirely (with comment in the removal commit explaining why).
   - **Extract to proposal** — if the task body is long and exploratory, move it to `<WIKI_PATH>/proposal-<slug>.md` and leave a 1-line summary linking to it.
 - **Protected marker**: entries whose body contains `<!-- protected -->` (HTML comment) are skipped entirely — user has flagged them as "hands off".
-- **Approval gate**: Claude writes a proposal to `.millhouse/scratch/groom-proposal.md` with the full before/after, user replies `approve` or `reject` in chat.
+- **Approval gate**: Claude writes a proposal to `.scratch/groom-proposal.md` with the full before/after, user replies `approve` or `reject` in chat.
 - **Single commit on approve**: all backlog changes go in one `_wiki.write_commit_push` with a message listing counts ("chore: groom Home.md — 3 shortened, 2 folded, 1 dropped, 1 extracted").
 - **No link to GitHub issues**: mill-groom does NOT fetch or close issues. That's `mill-ghissues-to-tasks`'s job. A future `mill-groom` could optionally call `mill-ghissues-to-tasks` first, but they stay as separate skills for now.
 
@@ -40,7 +40,7 @@ Keep `Home.md` readable. Over time the backlog accrues duplicate tasks, long-win
    - Possible duplicates (title overlap, body overlap — LLM judgment).
    - Short-form entries with no summary.
 4. Present candidates to user in small batches. For each, propose an action + alternatives.
-5. Build the consolidated proposal at `.millhouse/scratch/groom-proposal.md` (table of decisions + new/shortened/folded entries + extraction targets).
+5. Build the consolidated proposal at `.scratch/groom-proposal.md` (table of decisions + new/shortened/folded entries + extraction targets).
 6. User replies `approve` / `reject`.
 7. On `approve`:
    - Build the new Home.md content in memory.
