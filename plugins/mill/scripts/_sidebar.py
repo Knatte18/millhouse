@@ -33,16 +33,15 @@ import re
 import sys
 from pathlib import Path
 
-# Single regex parses both heading forms per ``ref-formats.md``:
-#   ## <Title> [<slug>]                         -> plain (no proposal)
-#   ## <Title> [[<slug>]](proposal-<slug>)      -> linked (proposal exists)
-# Group 1 = human-readable title, group 2 = kebab-case slug. The inner ``[?``
-# and ``]?`` make the extra brackets of the linked form optional; the trailing
-# ``(?:\([^)]+\))?`` consumes the ``(proposal-<slug>)`` link target when
-# present. Anchored to start-of-line + end-of-line (multiline mode at call
-# site) so prose body lines cannot masquerade as task headings.
+# Parses the two-line heading block written by mill-add:
+#   ## <Title>
+#   [<slug>]                         -> plain (no proposal)
+#   ## <Title>
+#   [[<slug>]](proposal-<slug>)      -> linked (proposal exists)
+# Group 1 = title (line 1), group 2 = slug (line 2). Phase marker on the
+# slug line (`` [active]`` etc.) is consumed but not captured.
 _TASK_HEADING_RE = re.compile(
-    r"^##\s+(.+?)\s+\[\[?([a-z][a-z0-9-]*)\]?\](?:\([^)]+\))?\s*$",
+    r"^##\s+(.+?)\n\[\[?([a-z][a-z0-9-]*)\]?\](?:\([^)]+\))?(?:\s+\[[^\]]+\])?[ \t]*$",
     re.MULTILINE,
 )
 

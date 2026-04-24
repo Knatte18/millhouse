@@ -40,11 +40,10 @@ from _paths import resolve_git_root, resolve_wiki_path
 _SLUG_RE = re.compile(r"^[a-z][a-z0-9-]*$")
 
 # Matches both ``## <Title> [<slug>]`` and
-# ``## <Title> [[<slug>]](proposal-<slug>)`` — same regex as _sidebar, kept in
-# sync by design. Used here only for duplicate-slug detection; the capture
-# groups are unused.
+# Matches both heading forms (slug on line after title) — same pattern as
+# _sidebar, kept in sync by design. Used only for duplicate-slug detection.
 _TASK_HEADING_RE = re.compile(
-    r"^##\s+.+?\s+\[\[?([a-z][a-z0-9-]*)\]?\](?:\([^)]+\))?\s*$",
+    r"^##\s+.+?\n\[\[?([a-z][a-z0-9-]*)\]?\](?:\([^)]+\))?[ \t]*$",
     re.MULTILINE,
 )
 
@@ -72,22 +71,26 @@ def _render_task_section(
     """
     Build the markdown block that gets appended to Home.md.
 
-    Heading form switches on ``has_proposal``:
-        - plain:  ``## <title> [<slug>]``
-        - linked: ``## <title> [[<slug>]](proposal-<slug>)``
+    Heading is two lines — title then slug — so the slug is visible and
+    scannable without crowding the title:
 
-    A leading blank line is included so the new section is visually separated
-    from whatever preceded it; callers do not have to manage spacing.
+        ## <title>
+        [<slug>]                           # plain (no proposal)
+
+        ## <title>
+        [[<slug>]](proposal-<slug>)        # linked (proposal exists)
+
+    A leading blank line separates the new section from whatever preceded it.
     """
     if has_proposal:
-        heading = f"## {title} [[{slug}]](proposal-{slug})"
+        slug_line = f"[[{slug}]](proposal-{slug})"
     else:
-        heading = f"## {title} [{slug}]"
+        slug_line = f"[{slug}]"
 
     body = summary.strip()
     if body:
-        return f"\n{heading}\n\n{body}\n"
-    return f"\n{heading}\n"
+        return f"\n## {title}\n{slug_line}\n\n{body}\n"
+    return f"\n## {title}\n{slug_line}\n"
 
 
 def main(argv: list[str] | None = None) -> int:
