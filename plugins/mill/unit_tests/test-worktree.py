@@ -19,17 +19,20 @@ def main() -> int:
             src.mkdir()
             (src / "keep").mkdir()
             (src / "keep" / "file.txt").write_text("hello", encoding="utf-8")
-            (src / "scratch").mkdir()
-            (src / "scratch" / "noise.txt").write_text("bye", encoding="utf-8")
+            (src / "wiki").mkdir()
+            (src / "wiki" / "decoy.txt").write_text("wiki-alias", encoding="utf-8")
+            (src / "active").mkdir()
+            (src / "active" / "decoy.txt").write_text("active-alias", encoding="utf-8")
             (src / "plainfile.txt").write_text("top-level", encoding="utf-8")
 
             dst = tmp_path / "worktree" / ".millhouse"
-            copy_millhouse(src, dst, exclude={"scratch"})
+            copy_millhouse(src, dst, exclude={"wiki", "active"})
 
             assert (dst / "keep" / "file.txt").read_text(encoding="utf-8") == "hello"
             assert (dst / "plainfile.txt").read_text(encoding="utf-8") == "top-level"
-            assert not (dst / "scratch").exists(), "excluded name must not be copied"
-            print("PASS: copy_millhouse propagates non-excluded entries")
+            assert not (dst / "wiki").exists(), "wiki junction alias must not be copied"
+            assert not (dst / "active").exists(), "active junction alias must not be copied"
+            print("PASS: copy_millhouse propagates non-excluded entries (excludes junction aliases)")
 
         print("All _worktree unit tests passed.")
         return 0

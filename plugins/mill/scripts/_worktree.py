@@ -11,9 +11,11 @@ work sit behind a tiny API here:
 
     2. ``copy_millhouse`` — propagate per-clone ``.millhouse/`` state
        into the new worktree, minus directories that would alias wiki
-       state (``wiki/``, ``active/``) or belong to a previous task
-       (``scratch/``). We explicitly do NOT copy junctions — the new
-       worktree recreates its own junction set via ``_junction.create``.
+       state (``wiki/``, ``active/``). We explicitly do NOT copy
+       junctions — the new worktree recreates its own junction set via
+       ``_junction.create``. (Scratch state lives at ``<cwd>/.scratch/``
+       per ``CLAUDE.md ## Path invariants`` and is outside ``.millhouse/``
+       entirely, so it is never propagated by this helper.)
 
 Public API:
     WorktreeError                          — raised on any git failure.
@@ -84,7 +86,8 @@ def copy_millhouse(src: Path, dst: Path, exclude: set[str]) -> None:
         dst: Destination ``.millhouse/`` directory in the new worktree.
             Created if missing.
         exclude: Names (NOT paths) to skip. Typical mill-spawn call:
-            ``{"scratch", "wiki", "active"}``.
+            ``{"wiki", "active"}`` (junction aliases that must not be
+            copied).
     """
     dst.mkdir(parents=True, exist_ok=True)
     if not src.exists():

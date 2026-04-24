@@ -19,7 +19,7 @@ Flow under test (mirrors mill-merge SKILL.md step numbering):
     0. Seed: task-branch worktree with a commit, Home.md [active], a
        done status.md, plan/00-overview.md with one batch (verify: null
        so we skip the verify step in the test).
-    1. Acquire merge lock on the parent's .millhouse/scratch/.
+    1. Acquire merge lock on the parent's .scratch/.
     2. mill-merge-in no-op check (parent has no new commits).
     3. Direct squash-merge child -> parent.
     4. Home.md [active] -> [done].
@@ -43,7 +43,7 @@ from pathlib import Path
 
 HUB = Path(__file__).resolve().parent.parent.parent.parent
 SCRIPTS = HUB / "plugins" / "mill" / "scripts"
-SCRATCH = HUB / ".millhouse" / "scratch"
+SCRATCH = HUB / ".scratch"
 
 sys.path.insert(0, str(SCRIPTS))
 
@@ -183,7 +183,7 @@ def _setup_trio(container: Path) -> tuple[Path, Path, Path, str]:
     _run(["git", "-C", str(hub), "add", "README.md"], cwd=container)
     _run(["git", "-C", str(hub), "commit", "-m", "init"], cwd=container)
 
-    # .millhouse on hub with wiki junction + active.slug.md + scratch/.
+    # .millhouse on hub with wiki junction + active.slug.md; .scratch/ at cwd-root.
     millhouse = hub / ".millhouse"
     millhouse.mkdir()
     if sys.platform == "win32":
@@ -193,7 +193,7 @@ def _setup_trio(container: Path) -> tuple[Path, Path, Path, str]:
         )
     else:
         os.symlink(str(wiki), str(millhouse / "wiki"))
-    (millhouse / "scratch").mkdir()
+    (hub / ".scratch").mkdir()
 
     # Task branch + worktree with a single commit ahead of main.
     worktrees_dir.mkdir()
@@ -261,7 +261,7 @@ def main() -> int:
         print("PASS: iter_batch_verifies returns [] when every batch has verify: null")
 
         # --- merge lock in parent scratch ---
-        lock_dir = hub / ".millhouse" / "scratch"
+        lock_dir = hub / ".scratch"
         lock_path = lock_dir / "merge.lock"
         lock_path.write_text(
             f"pid: {os.getpid()}\n"

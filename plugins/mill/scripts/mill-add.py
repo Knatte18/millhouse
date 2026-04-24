@@ -1,8 +1,9 @@
 """
 mill-add — append a task entry to the wiki's Home.md and regenerate the sidebar.
 
-Resolves the wiki clone via the `.millhouse/wiki` junction in cwd, acquires
-the shared `.mill-lock` (Home.md is a multi-writer file per `ref-formats.md`),
+Resolves the wiki clone via ``_paths.resolve_wiki_path``. Note: ``.millhouse/wiki``
+is a junction for IDE/terminal convenience only — scripts never use it as a
+code path. Acquires the shared `.mill-lock` (Home.md is a multi-writer file per `ref-formats.md`),
 appends a `## <Title> [<slug>]` section to Home.md — or `## <Title> [[<slug>]]
 (proposal-<slug>)` with a companion ``proposal-<slug>.md`` when
 ``--proposal-body`` is given — then regenerates `_Sidebar.md` and commits all
@@ -34,6 +35,7 @@ from pathlib import Path
 
 import _sidebar
 import _wiki
+from _paths import resolve_git_root, resolve_wiki_path
 
 _SLUG_RE = re.compile(r"^[a-z][a-z0-9-]*$")
 
@@ -54,17 +56,6 @@ def _validate_slug(slug: str) -> None:
             f"Invalid slug {slug!r}: must match [a-z][a-z0-9-]* "
             "(kebab-case, lowercase, digits and hyphens)."
         )
-
-
-def _resolve_wiki_path() -> Path:
-    """Return the absolute wiki clone path via the .millhouse/wiki junction."""
-    junction = Path(".millhouse/wiki")
-    if not junction.exists():
-        raise SystemExit(
-            "No .millhouse/wiki junction found. Run /mill-setup from this "
-            "clone first."
-        )
-    return junction.resolve()
 
 
 def _slug_already_present(home_text: str, slug: str) -> bool:
@@ -128,10 +119,14 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     _validate_slug(args.slug)
-    wiki_path = _resolve_wiki_path()
+    git_root = resolve_git_root()
+    wiki_path = resolve_wiki_path(git_root)
     home_path = wiki_path / "Home.md"
     if not home_path.exists():
-        raise SystemExit(f"Home.md not found at {home_path}. Run /mill-setup first.")
+        raise SystemExit(
+            f"Wiki not found at {wiki_path}. Run /mill-setup to create it, "
+            "or set paths.wiki: in .millhouse/config.local.yaml."
+        )
 
     has_proposal = args.proposal_body is not None
     proposal_path = wiki_path / f"proposal-{args.slug}.md"

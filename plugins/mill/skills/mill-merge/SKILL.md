@@ -41,7 +41,7 @@ You are an integration engineer. Your job is to merge a completed task branch ba
 
 ### 1. Acquire merge lock on parent
 
-Resolve the parent worktree path from `git worktree list --porcelain` (the entry whose branch matches the parent branch). Write `<parent-path>/.millhouse/scratch/merge.lock` with three lines: `pid`, `timestamp` (ISO-8601 UTC Z), `branch` (the child branch about to merge).
+Resolve the parent worktree path from `git worktree list --porcelain` (the entry whose branch matches the parent branch). Write `<parent-path>/.scratch/merge.lock` with three lines: `pid`, `timestamp` (ISO-8601 UTC Z), `branch` (the child branch about to merge).
 
 If the lock already exists:
 - Re-read it. If timestamp is older than 5 min → stale → overwrite.
@@ -110,7 +110,7 @@ For every entry in `_wiki.read_junctions(<WIKI_PATH>)`, compute the junction pat
 
 ### 9. Release merge lock
 
-Delete `<parent-path>/.millhouse/scratch/merge.lock`. Run this in a `finally:` equivalent so the lock is released on every exit path.
+Delete `<parent-path>/.scratch/merge.lock`. Run this in a `finally:` equivalent so the lock is released on every exit path.
 
 ### 10. Drop the worktree + branch
 
@@ -157,4 +157,4 @@ Post-Step-4 failures (Home.md, sidebar, junctions, worktree removal) are **not**
 - Home.md writes go through `_wiki.write_commit_push` with the shared lock held.
 - `active/<slug>/` deletion commits separately under the same shared lock.
 - Phase transitions via `_status.append_phase`; hand-editing status.md is banned.
-- Merge-lock file lives at `<parent-path>/.millhouse/scratch/merge.lock`. Never placed anywhere else — other skills expect it there.
+- Merge-lock file lives at `<parent-path>/.scratch/merge.lock`. Never placed anywhere else — other skills expect it there.

@@ -22,11 +22,11 @@ General behavior rules for Claude Code. These apply regardless of which plugins 
 
 ## Prompts for New Threads
 
-- When writing a prompt for a new thread: **write it to a file** at `.millhouse/scratch/prompt.md` (or `.millhouse/scratch/prompt-<slug>.md` if multiple). Never dump long prompts inline in the chat.
-- Tell the user: `Read .millhouse/scratch/prompt.md and follow the instructions there.`
+- When writing a prompt for a new thread: **write it to a file** at `.scratch/prompt.md` (or `.scratch/prompt-<slug>.md` if multiple). Never dump long prompts inline in the chat.
+- Tell the user: `Read .scratch/prompt.md and follow the instructions there.`
 - If the prompt needs amendments before the user has started the thread: overwrite the file with the complete updated prompt. Never show partial diffs.
 - The user copies from the file in the editor, which has a built-in copy function.
-- **Every prompt must instruct the receiving thread to:** write its full report/result to a file (e.g. `.millhouse/scratch/result-<slug>.md`) and only output to the user: (1) the path to the result file, and (2) a brief summary of key points. This keeps thread output concise and results reviewable.
+- **Every prompt must instruct the receiving thread to:** write its full report/result to a file (e.g. `.scratch/result-<slug>.md`) and only output to the user: (1) the path to the result file, and (2) a brief summary of key points. This keeps thread output concise and results reviewable.
 
 ## User Choices
 
@@ -37,11 +37,11 @@ General behavior rules for Claude Code. These apply regardless of which plugins 
 
 ## File Writing
 
-- **Never write to `/tmp/`, `$env:TEMP`, or any system temporary directory.** This causes permission prompts on Windows and contradicts the `.millhouse/` isolation model. The rule applies to tests, fixtures, and any ephemeral scratch — use `.millhouse/scratch/` instead.
-- **Default scratch location:** `.millhouse/scratch/` in the repo root. Use for ephemeral files: materialized reviewer prompts, integration-test fixtures, merge locks, new-thread hand-off prompts, debug dumps.
-- **Task-state files** (`status.md`, `plan/`, `discussion.md`, `reviews/`, `<slug>-result.md`) live in the **wiki** repo, accessed through the `.millhouse/wiki` junction: `.millhouse/wiki/active/<slug>/`. They are NOT under `.millhouse/scratch/`.
-- **Plugin-managed scratch:** All plugins share `.millhouse/scratch/` for ephemeral files. Subdirectories (e.g. `test-review-<type>-<id>/`, `plans/`, `briefs/`) are created as needed and may be cleaned up at will.
-- `.millhouse/scratch/` is gitignored via the repo-root `.gitignore` entry `**/.millhouse/` (covers the whole `.millhouse/` tree).
+- **Never write to `/tmp/`, `$env:TEMP`, or any system temporary directory.** This causes permission prompts on Windows and contradicts the `.millhouse/` isolation model. The rule applies to tests, fixtures, and any ephemeral scratch — use `.scratch/` instead.
+- **Default scratch location:** `.scratch/` in the repo root. Use for ephemeral files: materialized reviewer prompts, integration-test fixtures, merge locks, new-thread hand-off prompts, debug dumps.
+- **Task-state files** (`status.md`, `plan/`, `discussion.md`, `reviews/`, `<slug>-result.md`) live in the **wiki** repo. Scripts resolve the wiki path via `_paths.resolve_wiki_path` — the `.millhouse/wiki` junction is IDE/terminal convenience only, never a code path (see CLAUDE.md `## Path invariants`). Task-state files are NOT under `.scratch/`.
+- **Plugin-managed scratch:** All plugins share `.scratch/` for ephemeral files. Subdirectories (e.g. `test-review-<type>-<id>/`, `plans/`, `briefs/`) are created as needed and may be cleaned up at will.
+- `.scratch/` is gitignored via the repo-root `.gitignore` entry `**/.scratch/`.
 
 ## Worktree isolation
 

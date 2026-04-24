@@ -26,10 +26,10 @@ PYTHONPATH=plugins/mill/scripts python -c "
 import json, _gh_issues
 issues = _gh_issues.fetch(limit=100)
 print(json.dumps(issues, indent=2))
-" > .millhouse/scratch/issues.json
+" > .scratch/issues.json
 ```
 
-Read `.millhouse/scratch/issues.json`. Record the repo name (`_gh_issues.detect_repo()`) for the close step.
+Read `.scratch/issues.json`. Record the repo name (`_gh_issues.detect_repo()`) for the close step.
 
 ## Step 2 — Read the current Home.md
 
@@ -51,7 +51,7 @@ For each "new task", decide together whether it needs a `proposal-<slug>.md` at 
 
 ## Step 4 — Propose
 
-Write the consolidated proposal to `.millhouse/scratch/ghissues-to-tasks-proposal.md`:
+Write the consolidated proposal to `.scratch/ghissues-to-tasks-proposal.md`:
 
 ```markdown
 # mill-ghissues-to-tasks proposal
@@ -116,7 +116,7 @@ Revision applied.
 
 ## Rules
 
-- **One-shot** — there is no resumable intermediate state. If the user closes mid-flow, the proposal file at `.millhouse/scratch/ghissues-to-tasks-proposal.md` is the only artefact; starting over is fine.
+- **One-shot** — there is no resumable intermediate state. If the user closes mid-flow, the proposal file at `.scratch/ghissues-to-tasks-proposal.md` is the only artefact; starting over is fine.
 - **Skipped issues are untouched** — no comment, no label, no close. Forgetting is better than lingering "tracked" state.
 - **Close only on approval + actual write** — never close an issue before the task is committed to Home.md.
 - **Pointer comment is the invariant** — every closed issue gets `Consolidated into wiki task: <slug>` so someone browsing closed issues later can find where it went.
