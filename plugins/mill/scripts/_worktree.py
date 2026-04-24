@@ -21,6 +21,8 @@ Public API:
     WorktreeError                          — raised on any git failure.
     create(branch, target, cwd)            — git worktree add -b.
     copy_millhouse(src, dst, exclude)      — copy .millhouse/ minus exclude.
+    list_worktrees(cwd) -> list[dict]      — enumerate all worktrees for the repo at cwd.
+    remove(path, cwd, force=True) -> None  — remove a registered worktree.
 """
 from __future__ import annotations
 
@@ -106,6 +108,80 @@ def copy_millhouse(src: Path, dst: Path, exclude: set[str]) -> None:
             shutil.copytree(str(item), str(target), dirs_exist_ok=True)
         else:
             shutil.copy2(str(item), str(target))
+
+
+def list_worktrees(cwd: Path) -> list[dict[str, str | None]]:
+    """
+    Return all worktrees registered for the repo at ``cwd``.
+
+    Runs ``git worktree list --porcelain`` and parses its output into a
+    list of dicts. Each dict has two keys:
+
+    - ``"path"`` — absolute path string from the ``worktree`` line.
+    - ``"branch"`` — short branch name (``refs/heads/`` prefix stripped),
+      or ``None`` when the block contains a ``detached`` line.
+
+    The main worktree (first block) is included. Callers filter if needed.
+    Returns ``[]`` for empty output (bare repo with no worktrees is unusual
+    but not an error).
+
+    Raises:
+        WorktreeError: git returned non-zero.
+    """
+    result = _subprocess_util.run(
+        ["git", "-C", str(cwd), "worktree", "list", "--porcelain"],
+    )
+    if result.returncode != 0:
+        raise WorktreeError(
+            f"git worktree list failed (cwd={cwd}): {result.stderr.strip()!r}"
+        )
+    output = result.stdout.strip()
+    if not output:
+        return []
+
+    worktrees: list[dict[str, str | None]] = []
+    for block in output.split("\n\n"):
+        entry: dict[str, str | None] = {"path": None, "branch": None}
+        for line in block.splitlines():
+            if line.startswith("worktree "):
+                entry["path"] = line[len("worktree "):]
+            elif line.startswith("branch "):
+                ref = line[len("branch "):]
+                prefix = "refs/heads/"
+                entry["branch"] = ref[len(prefix):] if ref.startswith(prefix) else ref
+            elif line == "detached":
+                entry["branch"] = None
+        if entry["path"] is not None:
+            worktrees.append(entry)
+    return worktrees
+
+
+def remove(path: Path, cwd: Path, force: bool = True) -> None:
+    """
+    Remove a registered worktree at ``path``.
+
+    Runs ``git worktree remove [--force] <path>`` with ``cwd`` set to the
+    repo root. With ``force=True`` (default) git removes the worktree even
+    if it has untracked or modified files.
+
+    Args:
+        path: Absolute path to the worktree directory to remove.
+        cwd: Repo root from which to invoke ``git`` (same as ``create``).
+        force: When True, passes ``--force`` so git removes dirty trees.
+
+    Raises:
+        WorktreeError: git returned non-zero.
+    """
+    cmd = ["git", "-C", str(cwd), "worktree", "remove"]
+    if force:
+        cmd.append("--force")
+    cmd.append(str(path))
+    result = _subprocess_util.run(cmd)
+    if result.returncode != 0:
+        raise WorktreeError(
+            f"git worktree remove failed (path={path}): {result.stderr.strip()!r}"
+        )
+    print(f"[worktree] remove: path={path}", file=sys.stderr)
 
 
 def _is_windows_junction(path: Path) -> bool:
