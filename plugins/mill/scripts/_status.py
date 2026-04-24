@@ -18,6 +18,7 @@ and rewrite just that block, never touching the top block.
 Public API:
     render_initial(task_title, task_description, timestamp,
                    parent_branch) -> str
+    read_full(status_path) -> dict
     update_field(status_path, key, value) -> None
     append_phase(status_path, phase, timestamp) -> None
     init_batches(status_path, names) -> None
@@ -454,6 +455,52 @@ def read_status(status_path: Path) -> dict:
         "last_timeline_entry": last_timeline_entry,
         "blocked_reason": blocked_reason,
     }
+
+
+def read_full(status_path: Path) -> dict:
+    """Return the complete yaml block and full timeline from ``status_path``.
+
+    Unlike ``read_status``, which returns a slim summary, this returns the
+    raw parsed contents without lossy summarisation — suitable for display
+    tools that need to show everything.
+
+    Returns:
+        ``{"yaml": dict, "timeline": list[str]}``
+        ``yaml`` contains all keys from the top yaml block.
+        ``timeline`` is the list of non-empty raw lines from the
+        ``## Timeline`` text fence, in file order.
+
+    Raises:
+        ValueError: file missing, yaml block missing/unterminated/malformed,
+            or timeline block missing/unterminated.
+    """
+    if not status_path.exists():
+        raise ValueError(f"status file not found: {status_path}")
+    text = status_path.read_text(encoding="utf-8")
+
+    try:
+        y_start, y_end = _split_fences(text, _YAML_FENCE)
+    except ValueError as exc:
+        raise ValueError(f"Cannot read yaml block in {status_path}: {exc}") from exc
+    y_body = "\n".join(text.splitlines()[y_start:y_end])
+    try:
+        data = yaml.safe_load(y_body) or {}
+    except yaml.YAMLError as exc:
+        raise ValueError(f"Malformed yaml block in {status_path}: {exc}") from exc
+    if not isinstance(data, dict):
+        raise ValueError(f"yaml block did not parse as a dict in {status_path}")
+
+    try:
+        t_start, t_end = _split_fences(text, _TIMELINE_FENCE)
+    except ValueError as exc:
+        raise ValueError(f"Cannot read timeline block in {status_path}: {exc}") from exc
+    timeline_lines = [
+        line.strip()
+        for line in text.splitlines()[t_start:t_end]
+        if line.strip()
+    ]
+
+    return {"yaml": data, "timeline": timeline_lines}
 
 
 def init_batches(status_path: Path, names: list[str]) -> None:

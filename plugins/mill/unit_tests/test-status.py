@@ -12,6 +12,7 @@ from _status import (  # noqa: E402
     append_phase,
     init_batches,
     read_batches,
+    read_full,
     read_status,
     render_initial,
     set_batch_field,
@@ -173,6 +174,43 @@ def main() -> int:
             except ValueError:
                 pass
         print("PASS: read_status raises ValueError on malformed ## Batches")
+
+        # --- read_full tests ---
+        ts_full = "2026-04-23T10:00:00Z"
+
+        # Case F1: basic full read — yaml dict + timeline list
+        with tempfile.TemporaryDirectory() as tmp:
+            sp = Path(tmp) / "status.md"
+            initial = render_initial("Full task", "Desc.", ts_full, "main")
+            sp.write_text(initial, encoding="utf-8")
+            append_phase(sp, "discussed", "2026-04-23T11:00:00Z")
+            r = read_full(sp)
+            assert isinstance(r["yaml"], dict), "yaml should be a dict"
+            assert r["yaml"]["phase"] == "discussed", f"phase mismatch: {r['yaml']['phase']}"
+            assert r["yaml"]["task"] == "Full task", f"task mismatch: {r['yaml']['task']}"
+            assert "parent" in r["yaml"], "parent key should be present"
+            assert isinstance(r["timeline"], list), "timeline should be a list"
+            assert len(r["timeline"]) == 2, f"expected 2 timeline entries, got {len(r['timeline'])}"
+            assert any("discussing" in line for line in r["timeline"]), "discussing entry missing"
+            assert any("discussed" in line for line in r["timeline"]), "discussed entry missing"
+        print("PASS: read_full basic yaml + timeline")
+
+        # Case F2: empty timeline block
+        with tempfile.TemporaryDirectory() as tmp:
+            sp = Path(tmp) / "status.md"
+            empty_tl = "# Status\n\n```yaml\nphase: planning\ntask: T\n```\n\n## Timeline\n\n```text\n```\n"
+            sp.write_text(empty_tl, encoding="utf-8")
+            r = read_full(sp)
+            assert r["timeline"] == [], f"expected empty timeline, got {r['timeline']}"
+        print("PASS: read_full empty timeline returns []")
+
+        # Case F3: missing file raises ValueError
+        try:
+            read_full(Path("/nonexistent/status.md"))
+            assert False, "expected ValueError"
+        except ValueError:
+            pass
+        print("PASS: read_full raises ValueError on missing file")
 
         print("All _status unit tests passed.")
         return 0
