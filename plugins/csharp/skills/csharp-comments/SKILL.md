@@ -15,6 +15,12 @@ Guidelines for code comments and XML documentation in C#/.NET.
 - The doc comment should explain **what** the method does and **why** it exists.
 - A reader should understand the method's purpose from its signature + doc comment alone, without reading the implementation.
 
+## Interface implementations — use `<inheritdoc/>`, never duplicate
+
+- When a class implements an interface member, **never repeat** the interface's `/// <summary>` on the implementation.
+- **Always write `/// <inheritdoc/>`** on the implementation. This makes the inheritance explicit and signals to future readers (and to Claude) that the doc lives on the interface and no new docstring is needed here.
+- Only write a fresh `/// <summary>` on an implementation when it adds information beyond the interface contract, or when the member has no interface counterpart.
+
 ## Inline comments
 
 - Use inline comments only to explain **why**, never **what**.

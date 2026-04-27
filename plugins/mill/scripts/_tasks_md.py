@@ -7,13 +7,18 @@ change the phase marker on an existing heading. This module is the
 single source of truth for that heading syntax so every script sees
 the same shape.
 
-Heading syntax (mill-add writes; this module parses both forms):
-    ## <Title> [<slug>]
-    ## <Title> [[<slug>]](proposal-<slug>)
-Optionally suffixed with a phase marker:
-    ## <Title> [<slug>] [s]
-    ## <Title> [<slug>] [active]
-    ## <Title> [[<slug>]](proposal-<slug>) [done]
+Heading syntax — two lines, title then slug (mill-add writes this form):
+    ## <Title>
+    [<slug>]
+    ## <Title>
+    [[<slug>]](proposal-<slug>)
+Optionally with a phase marker on the slug line:
+    ## <Title>
+    [<slug>] [s]
+    ## <Title>
+    [<slug>] [active]
+    ## <Title>
+    [[<slug>]](proposal-<slug>) [done]
 
 Phases: ``None`` (unmarked backlog), ``"s"`` (spawn-ready fast-path),
 ``"active"``, ``"done"``. ``[abandoned]`` is accepted on parse for
@@ -32,11 +37,12 @@ import re
 from dataclasses import dataclass
 
 _HEADING_RE = re.compile(
-    r"^## (?P<title>.+?) "
+    r"^## (?P<title>.+?)\n"
     r"\[(?P<bracket>\[?)(?P<slug>[a-z][a-z0-9-]*)\]?\]"
     r"(?:\((?P<proposal>proposal-[^)]+)\))?"
     r"(?: \[(?P<phase>s|active|done|abandoned)\])?"
-    r"\s*$"
+    r"[ \t]*$",
+    re.MULTILINE,
 )
 
 _VALID_PHASES = (None, "s", "active", "done", "abandoned")
@@ -67,18 +73,12 @@ def parse(text: str) -> list[Task]:
         A list of Task instances in the order they appear.
     """
     tasks: list[Task] = []
-    for line_no, line in enumerate(text.splitlines(), start=1):
-        match = _HEADING_RE.match(line)
-        if match is None:
-            continue
-        # Verify the bracket shape is consistent: "[[" requires "]](...)"
-        # shape with a proposal; "[" requires no double-close. Mis-shaped
-        # headings (e.g. "[[slug]" with no closing-bracket pair) fail the
-        # regex above, so by this point we trust the match.
+    for match in _HEADING_RE.finditer(text):
         has_proposal = match.group("proposal") is not None
+        line_no = text[:match.start()].count("\n") + 1
         tasks.append(Task(
             slug=match.group("slug"),
-            title=match.group("title"),
+            title=match.group("title").strip(),
             phase=match.group("phase"),
             has_proposal=has_proposal,
             heading_line_no=line_no,
@@ -111,29 +111,29 @@ def set_phase(text: str, slug: str, phase: str | None) -> str:
             f"Invalid phase {phase!r}; expected one of {_VALID_PHASES!r}"
         )
 
-    lines = text.splitlines(keepends=True)
-    for i, line in enumerate(lines):
-        match = _HEADING_RE.match(line.rstrip("\r\n"))
-        if match is None or match.group("slug") != slug:
-            continue
-        # Rebuild the heading line with the new phase marker.
+    found = False
+
+    def _rewrite(match: re.Match) -> str:
+        nonlocal found
+        if match.group("slug") != slug:
+            return match.group(0)
+        found = True
         title = match.group("title")
         proposal = match.group("proposal")
         if match.group("bracket"):
-            slug_part = f"[[{slug}]]({proposal})" if proposal else f"[[{slug}]]"
+            slug_line = f"[[{slug}]]({proposal})" if proposal else f"[[{slug}]]"
         else:
-            slug_part = f"[{slug}]"
-        new_line = f"## {title} {slug_part}"
+            slug_line = f"[{slug}]"
         if phase is not None:
-            new_line += f" [{phase}]"
-        # Preserve the line's original line ending.
-        eol = line[len(line.rstrip("\r\n")):]
-        lines[i] = new_line + eol
-        out = "".join(lines)
-        if not out.endswith("\n"):
-            out += "\n"
-        return out
-    raise ValueError(f"Task with slug {slug!r} not found in Home.md")
+            slug_line += f" [{phase}]"
+        return f"## {title}\n{slug_line}"
+
+    result = _HEADING_RE.sub(_rewrite, text)
+    if not found:
+        raise ValueError(f"Task with slug {slug!r} not found in Home.md")
+    if not result.endswith("\n"):
+        result += "\n"
+    return result
 
 
 def claim(text: str, slug: str) -> str:

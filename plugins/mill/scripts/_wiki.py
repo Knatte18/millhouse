@@ -62,6 +62,8 @@ _JUNCTION_DEFAULTS: dict[str, str] = {
     ".active": "<WIKI_PATH>/active/<SLUG>/",
 }
 
+_HARDLINK_DEFAULTS: dict[str, str] = {}  # no hardlinks unless configured
+
 
 def read_junctions(wiki_root: Path) -> dict[str, str]:
     """Read the ``junctions:`` block from ``<wiki_root>/config.yaml``.
@@ -82,6 +84,25 @@ def read_junctions(wiki_root: Path) -> dict[str, str]:
     raw = cfg.get("junctions")
     if not raw:
         return dict(_JUNCTION_DEFAULTS)
+    return {str(k): str(v) for k, v in raw.items()}
+
+
+def read_hardlinks(wiki_root: Path) -> dict[str, str]:
+    """Read the ``hardlinks:`` block from ``<wiki_root>/config.yaml``.
+
+    Returns an ordered dict mapping link-path → unresolved target template.
+    Tokens in the target are NOT substituted here — callers pass the raw
+    template through ``_junction.resolve_target`` with the appropriate token
+    map. Missing config file or missing ``hardlinks:`` block returns an empty
+    dict (no hardlinks configured).
+    """
+    cfg_path = wiki_root / "config.yaml"
+    if not cfg_path.exists():
+        return dict(_HARDLINK_DEFAULTS)
+    cfg = yaml.safe_load(cfg_path.read_text(encoding="utf-8")) or {}
+    raw = cfg.get("hardlinks")
+    if not raw:
+        return dict(_HARDLINK_DEFAULTS)
     return {str(k): str(v) for k, v in raw.items()}
 
 
