@@ -43,6 +43,11 @@ Get-ChildItem -Path $SourceDir -Directory | ForEach-Object {
         }
     }
 
+    # Remove existing target dir before copy — Copy-Item -Recurse otherwise
+    # nests the source dir as a subdirectory instead of replacing contents.
+    if (Test-Path $target) {
+        Remove-Item $target -Recurse -Force
+    }
     Copy-Item -Path $_.FullName -Destination $target -Recurse -Force
     Write-Host "Updated: $name ($version)"
 }
