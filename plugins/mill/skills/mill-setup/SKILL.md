@@ -44,8 +44,8 @@ The form is decided by `_sibling.py wiki <HUB_PATH>` in Phase 3 — callers just
 
 The helpers in `plugins/mill/scripts/` are flat modules. Set `PYTHONPATH` once at the top of the session, then call them directly:
 
-```powershell
-$env:PYTHONPATH = "${env:CLAUDE_PLUGIN_ROOT}/scripts"
+```bash
+export PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts"
 ```
 
 After that you can use `python -c "..."` with plain `import _junction`, `import _wiki`, `import _vscode`, etc. — no `sys.path` gymnastics inside the snippet.
@@ -75,8 +75,8 @@ Run `git ls-remote <wiki-url>`. If it fails (exit non-zero), halt with:
 
 First compute `<wiki-dir>` using the sibling-path helper — this yields `<container>/wiki/` when the hub directory is named exactly `hub`, otherwise `<container>/<repo>.wiki/`. Use the printed path as `<wiki-dir>` for the remainder of mill-setup (Phases 3, 3.5, 4, 6, 6a, 8):
 
-```powershell
-python "${env:CLAUDE_PLUGIN_ROOT}/scripts/_sibling.py" wiki "<hub-path>"
+```bash
+python "${CLAUDE_PLUGIN_ROOT}/scripts/_sibling.py" wiki "<hub-path>"
 ```
 
 `<hub-path>` is `<HUB_PATH>` from Phase 3.5 (`git rev-parse --show-toplevel`). Users can override via `.millhouse/config.local.yaml`'s `wiki_path:` key — that value wins over the helper's default.
@@ -92,7 +92,7 @@ python "${env:CLAUDE_PLUGIN_ROOT}/scripts/_sibling.py" wiki "<hub-path>"
 2. Otherwise: copy `plugins/mill/templates/wiki-config.yaml` → `<wiki-dir>/config.yaml` verbatim (no substitution — tokens are resolved at runtime by scripts, not at seed time).
 3. Commit and push via `_wiki.write_commit_push`:
 
-   ```powershell
+   ```bash
    python -c "from pathlib import Path; import _wiki; _wiki.write_commit_push(Path(r'<wiki-dir>').resolve(), ['config.yaml'], 'chore: init wiki/config.yaml')"
    ```
 
@@ -102,7 +102,7 @@ python "${env:CLAUDE_PLUGIN_ROOT}/scripts/_sibling.py" wiki "<hub-path>"
 
 After the wiki is cloned (Phase 3) but before any junction is created, read the `junctions:` block from `<wiki-dir>/config.yaml`:
 
-```powershell
+```bash
 python -c "from pathlib import Path; import _wiki; import json; print(json.dumps(_wiki.read_junctions(Path(r'<wiki-dir>').resolve())))"
 ```
 
@@ -128,7 +128,7 @@ Partition the junction entries:
 
 For each hub junction, substitute tokens via `_junction.resolve_target`:
 
-```powershell
+```bash
 python -c "import _junction; print(_junction.resolve_target('<WIKI_PATH>/active/<SLUG>/', {'HUB_PATH': 'C:/path', 'CWD_PATH': '.', 'CONTAINER_PATH': 'C:/', 'REPO': 'millhouse', 'WIKI_PATH': 'C:/path/../millhouse.wiki'}))"
 ```
 
@@ -140,7 +140,7 @@ Unknown tokens raise `ValueError` — halt and tell the user to correct the `jun
 
 For each hub-scope entry resolved in Phase 3.5 (the ones without `<SLUG>`), call `_junction.create`:
 
-```powershell
+```bash
 python -c "from pathlib import Path; import _junction; _junction.create(Path(r'<resolved-target>').resolve(), Path(r'<junction-path>').resolve())"
 ```
 
@@ -157,7 +157,7 @@ Iterate until all hub junctions are present. Entries with `<SLUG>` are left to m
 
 Read the `hardlinks:` block from `<wiki-dir>/config.yaml`:
 
-```powershell
+```bash
 python -c "from pathlib import Path; import _wiki; import json; print(json.dumps(_wiki.read_hardlinks(Path(r'<wiki-dir>').resolve())))"
 ```
 
@@ -169,7 +169,7 @@ Resolve each target template using the same token map as Phase 3.5 (no `<SLUG>` 
 2. If `<link-path>` exists but points to a different inode: back up to `<link-path>.bak` and remove the original.
 3. Create the hardlink:
 
-   ```powershell
+   ```bash
    python -c "from pathlib import Path; Path(r'<link-path>').hardlink_to(Path(r'<resolved-target>'))"
    ```
 
@@ -180,7 +180,7 @@ Resolve each target template using the same token map as Phase 3.5 (no `<SLUG>` 
 
 4. If the file was already tracked by git, untrack it:
 
-   ```powershell
+   ```bash
    git ls-files --error-unmatch <link-path> 2>/dev/null && git rm --cached <link-path>
    ```
 
@@ -192,7 +192,7 @@ Maintains the `# === mill-managed ... # === end mill-managed ===` block in the r
 
 Read the hardlink entry names (already available from Phase 4.5), then call `_gitignore.upsert`:
 
-```powershell
+```bash
 python -c "
 from pathlib import Path
 import _wiki, _gitignore, json
@@ -208,11 +208,11 @@ Log `wrote/updated mill-managed block` or `already up to date` based on the bool
 
 Creates `.millhouse/<script>.py` forwarders for every user-callable mill script. Each wrapper locates the latest installed millhouse plugin cache and delegates to the real script via `runpy.run_path`, sidestepping the hyphen-vs-underscore Python import problem.
 
-```powershell
+```bash
 python -c "
 from pathlib import Path
 import sys
-sys.path.insert(0, '${env:CLAUDE_PLUGIN_ROOT}/scripts')
+sys.path.insert(0, '${CLAUDE_PLUGIN_ROOT}/scripts')
 import _shortcuts
 written = _shortcuts.write_all(Path('.millhouse'))
 print(f'wrote {len(written)} wrappers' if written else 'wrappers up to date')
@@ -242,7 +242,7 @@ For "missing" and "GitHub default" cases:
 1. Copy `plugins/mill/templates/Home.md` → `<wiki-dir>/Home.md` verbatim.
 2. Commit and push via `_wiki.write_commit_push`:
 
-   ```powershell
+   ```bash
    python -c "from pathlib import Path; import _wiki; _wiki.write_commit_push(Path(r'<wiki-dir>').resolve(), ['Home.md'], '<commit-msg>')"
    ```
 
@@ -256,7 +256,7 @@ The wiki sidebar is auto-generated from `Home.md` and the set of `proposal-*.md`
 
 Run:
 
-```powershell
+```bash
 python -c "from pathlib import Path; import _sidebar; _sidebar.regenerate(Path(r'<wiki-dir>').resolve())"
 ```
 
@@ -266,7 +266,7 @@ Then commit + push if the file changed:
 2. If the command prints nothing, the sidebar is already correct — skip the commit. (Idempotency: second and later runs land here.)
 3. Otherwise, commit via `_wiki.write_commit_push`:
 
-   ```powershell
+   ```bash
    python -c "from pathlib import Path; import _wiki; _wiki.write_commit_push(Path(r'<wiki-dir>').resolve(), ['_Sidebar.md'], 'chore: regenerate _Sidebar.md')"
    ```
 
@@ -291,7 +291,7 @@ Title format for the hub: `<short_name>` from `repo.short_name` config (default:
 
 Render and write via `_vscode.write_settings` (which wraps `_render` and the file write):
 
-```powershell
+```bash
 python -c "from pathlib import Path; import yaml; import _vscode; from _paths import resolve_short_name; cfg = yaml.safe_load(Path('<wiki-dir>/config.yaml').read_text(encoding='utf-8')); _vscode.write_settings(color_hex='#2d7d46', target=Path('.vscode/settings.json'), short_name=resolve_short_name(cfg, '<repo-name>'))"
 ```
 

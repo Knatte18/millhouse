@@ -20,3 +20,9 @@ Project-specific linting and style rules. Extensible per project.
 - **Subprocess:** no `shell=True`; resolve executables with `shutil.which` before spawning.
 - **UTC timestamps:** use `datetime.now(timezone.utc)`; never the deprecated `datetime.utcnow()`.
 - **Assertions:** no `assert` where correctness matters (production logic or test verdicts); use explicit `if`/`raise` or `return` instead.
+
+## PowerShell rules (placeholder)
+
+- **Syntax:** PS5 only — no PS7-only features (`?:`, `??`, `&&`/`||` chaining, `Get-Content -AsHashtable`).
+- **Naming:** PascalCase for function names, consistent with PS built-ins.
+- **Full convention TBD** — expand when the project's first `.ps1` file is written.
