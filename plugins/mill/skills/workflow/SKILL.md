@@ -27,6 +27,12 @@ Use the appropriate skill based on the current activity:
 
 ---
 
+## Wiki mutations
+
+Wiki edits (`Home.md`, `_Sidebar.md`, `status.md`, per-task files under `active/<slug>/...`) must go through `_wiki.write_commit_push`. Hold `_wiki.acquire_lock` only for shared wiki files (`Home.md` and `_Sidebar.md`); per-task files don't need the lock because each task has a single writer. Never edit wiki files via raw `Edit`/`Write` — that bypasses the commit+push and the lock, leaving the wiki out of sync across machines.
+
+---
+
 ## Language Detection
 
 Detect the project language from marker files in the working directory and use the matching skills:

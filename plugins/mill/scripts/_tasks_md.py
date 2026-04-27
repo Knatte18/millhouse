@@ -30,11 +30,16 @@ Public API:
     parse(text) -> list[Task]         parse Home.md body text.
     claim(text, slug) -> str          return text with slug set to [active].
     set_phase(text, slug, phase)      generalised claim; phase=None unmarks.
+    append_entry(text, slug, title, body, has_proposal=False) -> str
+                                      append a new entry at end-of-file.
+    remove_entry(text, slug) -> str   remove the entry for slug.
 """
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+
+_SLUG_RE = re.compile(r"^[a-z][a-z0-9-]*$")
 
 _HEADING_RE = re.compile(
     r"^## (?P<title>.+?)\n"
@@ -155,3 +160,86 @@ def claim(text: str, slug: str) -> str:
         ValueError: slug not found (see ``set_phase``).
     """
     return set_phase(text, slug, "active")
+
+
+def append_entry(
+    text: str,
+    slug: str,
+    title: str,
+    body: str,
+    has_proposal: bool = False,
+) -> str:
+    """
+    Return ``text`` with a new task entry appended at end-of-file.
+
+    Trailing whitespace in ``text`` is normalised to exactly one ``\\n``
+    before appending. A blank line is always prepended before the new heading.
+
+    Args:
+        text: Current contents of Home.md.
+        slug: Task slug. Must match ``[a-z][a-z0-9-]*``.
+        title: Human-readable task title.
+        body: Task body text. Empty string emits heading + slug line only,
+            with no trailing blank line.
+        has_proposal: Emit ``[[slug]](proposal-slug)`` link form when True.
+
+    Returns:
+        The updated text with the new entry appended.
+
+    Raises:
+        ValueError: ``slug`` fails validation.
+    """
+    if not _SLUG_RE.match(slug):
+        raise ValueError(
+            f"Invalid slug {slug!r}: must match [a-z][a-z0-9-]*"
+        )
+
+    slug_line = f"[[{slug}]](proposal-{slug})" if has_proposal else f"[{slug}]"
+
+    if body:
+        new_entry = f"## {title}\n{slug_line}\n\n{body}\n"
+    else:
+        new_entry = f"## {title}\n{slug_line}\n"
+
+    if text.strip():
+        text = text.rstrip() + "\n"
+
+    return text + "\n" + new_entry
+
+
+def remove_entry(text: str, slug: str) -> str:
+    """
+    Return ``text`` with the task entry for ``slug`` removed.
+
+    Deletes from the heading line through the line before the next ``##``
+    heading (or EOF). Always terminates the result with exactly one trailing
+    newline.
+
+    Args:
+        text: Current contents of Home.md.
+        slug: Task slug to remove.
+
+    Returns:
+        The updated text.
+
+    Raises:
+        ValueError: No heading with that slug exists in ``text``.
+    """
+    matches = list(_HEADING_RE.finditer(text))
+    target_index = None
+    for i, m in enumerate(matches):
+        if m.group("slug") == slug:
+            target_index = i
+            break
+    if target_index is None:
+        raise ValueError(f"Task with slug {slug!r} not found in Home.md")
+
+    delete_start = matches[target_index].start()
+    if target_index + 1 < len(matches):
+        delete_end = matches[target_index + 1].start()
+    else:
+        delete_end = len(text)
+
+    result = text[:delete_start] + text[delete_end:]
+    stripped = result.rstrip()
+    return (stripped + "\n") if stripped else "\n"

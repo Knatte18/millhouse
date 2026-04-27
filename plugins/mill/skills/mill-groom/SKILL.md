@@ -18,14 +18,14 @@ Claude proposes; you decide; nothing is written until you type `approve`.
    > `.millhouse/wiki/` junction missing. Run `/mill-setup` first.
 2. Resolve the wiki path:
    ```bash
-   PYTHONPATH=plugins/mill/scripts python -c "
+   PYTHONPATH=$CLAUDE_PLUGIN_ROOT/scripts python -c "
    import _paths; print(_paths.resolve_wiki_path(_paths.resolve_git_root()))
    "
    ```
    Store as `<WIKI_PATH>`.
 3. `_wiki.sync_pull(<WIKI_PATH>)`:
    ```bash
-   PYTHONPATH=plugins/mill/scripts python -c "
+   PYTHONPATH=$CLAUDE_PLUGIN_ROOT/scripts python -c "
    import _paths, _wiki
    wiki = _paths.resolve_wiki_path(_paths.resolve_git_root())
    _wiki.sync_pull(wiki)
@@ -46,7 +46,7 @@ Use these thresholds in Step 3.
 Read `<WIKI_PATH>/Home.md`. Parse with `_tasks_md.parse()`:
 
 ```bash
-PYTHONPATH=plugins/mill/scripts python -c "
+PYTHONPATH=$CLAUDE_PLUGIN_ROOT/scripts python -c "
 import _paths, _tasks_md
 wiki = _paths.resolve_wiki_path(_paths.resolve_git_root())
 text = (wiki / 'Home.md').read_text(encoding='utf-8')
@@ -58,54 +58,86 @@ print(json.dumps([{'slug': t.slug, 'title': t.title, 'phase': t.phase} for t in 
 
 **Scope rules:**
 
-| `task.phase` | In scope? | Actions available |
+| `task.phase` | Listed? | Actions available |
 |---|---|---|
 | `None` (plain backlog) | Yes | keep / shorten / fold / drop / extract |
 | `"s"` (spawn-ready) | Yes | keep / shorten / fold / drop / extract |
-| `"active"` | **Never** | — (skip entirely) |
-| `"done"` | Yes (drop only) | drop (with confirmation) |
-
-Skip any entry whose body contains `<!-- protected -->`.
+| `"active"` | Yes (listed, read-only) | none |
+| `"done"` | Yes | drop only |
+| (protected) | Yes (listed, read-only) | none |
 
 To read the body of a task, read the lines in `Home.md` between its heading
-and the next `##` heading (or end of file).
+and the next `##` heading (or end of file). A task is protected if its body
+contains `<!-- protected -->`.
 
-## Step 3 — Identify candidates
+## Step 3 — List all tasks
 
-Flag entries that warrant attention:
+Render every `Home.md` entry as a numbered list in file order. Show number, slug, and title. Append the appropriate suffix:
 
-- **Long**: body exceeds `groom.brevity-threshold-lines` lines OR
-  `groom.brevity-threshold-chars` characters.
-- **Possible duplicate**: title or body overlap with another entry — use your
-  judgment; no heuristic required.
-- **No summary**: heading exists but body is empty or only whitespace.
+- `(active — read-only)` for `[active]` entries
+- `(done — drop only)` for `[done]` entries
+- `(proposal)` for entries with a proposal link
+- `(protected — skipped)` if the body contains `<!-- protected -->`
+- No suffix for plain backlog or `[s]` entries
 
-Entries that don't match any flag can still be presented if the user asks, but
-by default focus on flagged candidates.
+Example output:
 
-## Step 4 — Interactive decisions
+```
+1. my-task — My Task Title (done — drop only)
+2. big-feature — Big Feature Request
+3. old-bug — Old Bug Report (active — read-only)
+4. explore-x — Explore Topic X (proposal)
+```
 
-Present candidates to the user in small batches (3–5 at a time). For each entry:
+Print after the list:
 
-1. Show the current heading + body (truncated to ~5 lines if long).
-2. Propose a default action with your reasoning.
-3. List alternatives.
+```
+Pick a task number to act on, or "done" to commit the proposal:
+```
 
-**Actions:**
+## Step 4 — Per-task action menu
 
-- **Keep as-is** — no change.
-- **Shorten** — you draft a tighter summary; user approves or edits inline.
-- **Fold into `<slug>`** — merge this entry into an existing one; this entry is
-  removed. Ask the user which slug to fold into if not obvious.
-- **Drop** — remove the entry. Note why in the commit message.
-- **Extract to proposal** — move the body to `<WIKI_PATH>/proposal-<slug>.md`
-  and replace the Home.md entry with a 1-line summary linking to it.
+When the user enters a number, look up the task at that position.
 
-Do NOT auto-decide. Record every decision as you go.
+**Branch on phase / protection:**
+
+- **Active or protected** → print:
+  > Active/protected tasks are read-only — pick another.
+  Return to Step 3.
+
+- **`[done]`** → show only:
+  ```
+  1) Drop
+  ```
+  Confirm with the user. Record the drop decision. Return to Step 3.
+
+- **Otherwise (unmarked, `[s]`)** → show the full action menu:
+  ```
+  1) Keep as-is
+  2) Shorten
+  3) Fold into <slug>
+  4) Drop
+  5) Extract to proposal
+  ```
+  Append `(Recommended)` to one action using these heuristics (at most one recommendation per task):
+  - Body exceeds `groom.brevity-threshold-lines` lines OR `groom.brevity-threshold-chars` chars → `5) Extract to proposal (Recommended)`
+  - Empty body → `4) Drop (Recommended)` (or `2) Shorten (Recommended)` if title hints at real content)
+  - Otherwise → no Recommended tag
+
+  **On user selection:**
+  - `1` (Keep): record decision. Return to Step 3.
+  - `2` (Shorten): prompt for the new body inline. Record decision. Return to Step 3.
+  - `3` (Fold): prompt for target slug. Validate against existing slugs from the parse output — re-prompt if the slug is not found. Record decision. Return to Step 3.
+  - `4` (Drop): prompt for a one-line reason (recorded in the commit message). Record decision. Return to Step 3.
+  - `5` (Extract): flag if `proposal-<slug>.md` already exists in `<WIKI_PATH>` — warn the user now; Step 6 enforces the final guard. Record decision. Return to Step 3.
+
+When the user types `done`, fall through to Step 5.
+
+Do NOT modify Home.md during this step.
 
 ## Step 5 — Write proposal
 
-After working through all candidates, write the consolidated proposal to
+After the user has worked through entries by number and typed `done`, write the consolidated proposal to
 `.scratch/groom-proposal.md`:
 
 ```markdown
@@ -160,7 +192,7 @@ On `reject`: ask what to change, revise decisions, rewrite the proposal, and ask
      `<WIKI_PATH>/proposal-<slug>.md`.
 4. Write all changed files and push via `_wiki.write_commit_push`:
    ```bash
-   PYTHONPATH=plugins/mill/scripts python -c "
+   PYTHONPATH=$CLAUDE_PLUGIN_ROOT/scripts python -c "
    import _paths, _wiki
    wiki = _paths.resolve_wiki_path(_paths.resolve_git_root())
    # Build relative_paths = ['Home.md'] + any 'proposal-<slug>.md' created
@@ -171,7 +203,7 @@ On `reject`: ask what to change, revise decisions, rewrite the proposal, and ask
    (omit zero-count terms, e.g. `chore: groom Home.md — 2 shortened, 1 dropped`).
 5. Regenerate the sidebar:
    ```bash
-   PYTHONPATH=plugins/mill/scripts python -c "
+   PYTHONPATH=$CLAUDE_PLUGIN_ROOT/scripts python -c "
    import _paths, _sidebar
    wiki = _paths.resolve_wiki_path(_paths.resolve_git_root())
    _sidebar.regenerate(wiki)
@@ -194,8 +226,8 @@ Groom complete.
 
 - **Never silently rewrite Home.md.** The proposal/approval gate is non-negotiable.
 - **Protected tasks are never modified.** Any entry whose body contains
-  `<!-- protected -->` is skipped without being presented to the user.
-- **`[active]` tasks are never modified.** Live work is out of scope.
+  `<!-- protected -->` is listed as read-only; no actions are offered.
+- **`[active]` tasks are never modified.** Listed for context; all actions blocked.
 - **`[done]` tasks get only the `drop` action** — never shorten, fold, or extract.
 - **One commit per session** — all changes land in a single `_wiki.write_commit_push` call.
 - **All-or-nothing approval** — the user approves or rejects the full proposal.

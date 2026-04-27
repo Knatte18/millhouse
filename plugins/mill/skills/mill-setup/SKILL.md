@@ -45,12 +45,12 @@ The form is decided by `_sibling.py wiki <HUB_PATH>` in Phase 3 — callers just
 The helpers in `plugins/mill/scripts/` are flat modules. Set `PYTHONPATH` once at the top of the session, then call them directly:
 
 ```powershell
-$env:PYTHONPATH = (Resolve-Path 'plugins/mill/scripts').Path
+$env:PYTHONPATH = "${env:CLAUDE_PLUGIN_ROOT}/scripts"
 ```
 
 After that you can use `python -c "..."` with plain `import _junction`, `import _wiki`, `import _vscode`, etc. — no `sys.path` gymnastics inside the snippet.
 
-Helpers used by this skill: `_junction` (Phase 4, 4.5), `_wiki` (Phase 3.5, 6, 6a — incl. `read_junctions` and `read_hardlinks`), `_sidebar` (Phase 6a), `_vscode` (Phase 7), `_render` (transitively via `_vscode`).
+Helpers used by this skill: `_junction` (Phase 4, 4.5), `_wiki` (Phase 3.5, 6, 6a — incl. `read_junctions` and `read_hardlinks`), `_gitignore` (Phase 4.5b), `_shortcuts` (Phase 4.7), `_sidebar` (Phase 6a), `_vscode` (Phase 7), `_render` (transitively via `_vscode` and `_shortcuts`).
 
 ## Phases
 
@@ -176,26 +176,50 @@ Resolve each target template using the same token map as Phase 3.5 (no `<SLUG>` 
    On failure (cross-volume): halt with:
    > Cannot create hardlink `<link-path>` → `<resolved-target>`: source and target must be on the same volume. Move the wiki clone to the same drive as the hub, or remove this entry from `hardlinks:` in `wiki/config.yaml`.
 
-4. Add `/<link-path>` to the repo's `.gitignore` if not already present. Check via `grep`:
+(.gitignore entries for hardlinks are managed by Phase 4.5b's marker block; no per-entry append here.)
 
-   ```powershell
-   python -c "
-   from pathlib import Path
-   gi = Path('.gitignore')
-   entry = '/<link-path>'
-   if entry not in gi.read_text(encoding='utf-8').splitlines():
-       with gi.open('a', encoding='utf-8') as f:
-           f.write(f'\n{entry}\n')
-   "
-   ```
-
-5. If the file was already tracked by git, untrack it:
+4. If the file was already tracked by git, untrack it:
 
    ```powershell
    git ls-files --error-unmatch <link-path> 2>/dev/null && git rm --cached <link-path>
    ```
 
-**Idempotency:** inode comparison in step 1 ensures re-runs skip already-correct hardlinks. The `.gitignore` check in step 4 avoids duplicate entries.
+**Idempotency:** inode comparison in step 1 ensures re-runs skip already-correct hardlinks.
+
+### Phase 4.5b — Manage `.gitignore` marker block
+
+Maintains the `# === mill-managed ... # === end mill-managed ===` block in the repo's `.gitignore`. The block covers the standard mill paths and every hardlink entry from `wiki/config.yaml`.
+
+Read the hardlink entry names (already available from Phase 4.5), then call `_gitignore.upsert`:
+
+```powershell
+python -c "
+from pathlib import Path
+import _wiki, _gitignore, json
+hardlinks = _wiki.read_hardlinks(Path(r'<wiki-dir>').resolve())
+changed = _gitignore.upsert(Path('.gitignore'), list(hardlinks.keys()))
+print('wrote/updated mill-managed block' if changed else 'already up to date')
+"
+```
+
+Log `wrote/updated mill-managed block` or `already up to date` based on the boolean returned.
+
+### Phase 4.7 — Shortcut wrappers
+
+Creates `.millhouse/<script>.py` forwarders for every user-callable mill script. Each wrapper locates the latest installed millhouse plugin cache and delegates to the real script via `runpy.run_path`, sidestepping the hyphen-vs-underscore Python import problem.
+
+```powershell
+python -c "
+from pathlib import Path
+import sys
+sys.path.insert(0, '${env:CLAUDE_PLUGIN_ROOT}/scripts')
+import _shortcuts
+written = _shortcuts.write_all(Path('.millhouse'))
+print(f'wrote {len(written)} wrappers' if written else 'wrappers up to date')
+"
+```
+
+Log `wrote N wrappers` or `wrappers up to date` based on the returned list.
 
 ### Phase 5 — Seed `.millhouse/config.local.yaml`
 
@@ -254,8 +278,6 @@ Then commit + push if the file changed:
 
 The hub is the canonical "main" workspace, always coloured `#2d7d46` so the operator can spot it instantly when several VS Code windows are open. mill-spawn picks non-green colours per worktree (M3.1).
 
-Derive `<short-name>` from the origin URL: take the last path segment, strip any trailing `.git`. For `https://github.com/Knatte18/millhouse.git` that gives `millhouse`.
-
 Behaviour:
 
 | Current state of `.vscode/settings.json` | Action |
@@ -265,13 +287,13 @@ Behaviour:
 | Present with a different `titleBar.activeBackground` colour | Back up to `.vscode/settings.json.bak`, then overwrite from template. |
 | Present but no `titleBar.activeBackground` key at all | Back up to `.vscode/settings.json.bak`, then overwrite from template. |
 
+Title format for the hub: `<short_name>` from `repo.short_name` config (default: `<repo>[:2].upper()`). No slug — this is the main workspace and the title must read clearly in the Windows 11 taskbar at small sizes. Worktrees use `<short_name>: <slug>` (mill-spawn, M3.1).
+
 Render and write via `_vscode.write_settings` (which wraps `_render` and the file write):
 
 ```powershell
-python -c "from pathlib import Path; import _vscode; _vscode.write_settings('#2d7d46', '<short-name>', Path('.vscode/settings.json'))"
+python -c "from pathlib import Path; import yaml; import _vscode; from _paths import resolve_short_name; cfg = yaml.safe_load(Path('<wiki-dir>/config.yaml').read_text(encoding='utf-8')); _vscode.write_settings(color_hex='#2d7d46', target=Path('.vscode/settings.json'), short_name=resolve_short_name(cfg, '<repo-name>'))"
 ```
-
-Title format for the hub: **just the repo short-name** (e.g. `millhouse`). No `${activeEditorShort}`, no slug — this is the main workspace and the title must read clearly in the Windows 11 taskbar at small sizes. Worktrees use `<short-name>: <slug>` (mill-spawn, M3.1).
 
 `_vscode.write_settings` overwrites unconditionally; the *decision* to write (skip vs back-up vs render) is this skill's job above. mill-spawn (M3.1) calls the same helper for worktree colours.
 
@@ -283,6 +305,8 @@ Check every invariant; halt with a specific error if any fails:
 - `<WIKI_PATH>/config.yaml` exists
 - Every hub junction (Phase 4 entry) exists and resolves to its expected target
 - Every hardlink (Phase 4.5 entry) exists and shares an inode with its target
+- `.gitignore` contains the mill-managed marker block with the standard entries plus every hardlink
+- Every script in `_shortcuts.SHORTCUT_SCRIPTS` has a wrapper at `.millhouse/<script>.py` whose content matches the rendered template
 - `.millhouse/config.local.yaml` exists
 - `<WIKI_PATH>/Home.md` exists and starts with `# Tasks`
 - `<WIKI_PATH>/_Sidebar.md` exists and begins with `### Navigation`
@@ -299,6 +323,7 @@ mill-setup complete.
   Tasks (Home):  <WIKI_PATH>/Home.md  (hardlinked as tasks.md)
   Sidebar:       <WIKI_PATH>/_Sidebar.md
   VS Code:       .vscode/settings.json (titleBar = #2d7d46 green)
+  Shortcut wrappers: 13 scripts under .millhouse/
 
 Junctions (from wiki config.yaml):
   Hub-scope (created now):
@@ -330,7 +355,7 @@ Every phase checks current state before acting. Re-running after a partial or co
 - `wiki/config.yaml` present → skipped (Phase 3.1).
 - Junction-prefs re-read from wiki config each run → picks up changes to `junctions:` block after a wiki pull.
 - Wiki junction correct (at the configured path) → skipped.
-- Hardlink inode-matches target → skipped; `.gitignore` entry already present → not duplicated (Phase 4.5).
+- Hardlink inode-matches target → skipped (Phase 4.5); `.gitignore` marker block already up-to-date → not rewritten (Phase 4.5b).
 - `config.local.yaml` present → skipped.
 - `Home.md` non-empty (and v2-shape or user-custom) → skipped; only GitHub-default content is overwritten.
 - `_Sidebar.md` regenerated unconditionally; commit only if bytes changed.

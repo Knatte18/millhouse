@@ -36,19 +36,24 @@ Number cards globally across all batches (no restart-from-1 inside
 each batch) so the reviewer and implementer can cite card numbers
 unambiguously. Fields per card:_
 
-- **Reads:** every file the implementer reads to do this card.
-  Non-empty. Backtick every path.
-- **Modifies:** files the implementer edits.
-- **Creates:** files the implementer creates.
+- **Reads:** every file the implementer reads to do this card. Non-empty. One backtick-wrapped path per indented bullet.
+- **Modifies:** files the implementer edits. One backtick-wrapped path per indented bullet.
+- **Creates:** files the implementer creates. One backtick-wrapped path per indented bullet. When a field has nothing, write the literal "none" on the same line as the field label.
 - **Requirements:** what the card must achieve. Prose — exact
   assertions live in tests, not here.
 - **Commit:** one-line commit message the implementer will use.
 
-### Card 1: <short title>
+Reads/Modifies/Creates fields contain ONLY backtick-wrapped paths in bullet form. No inline parenthetical commentary, no line-range suffixes (e.g. ":55-65"). Inline notes belong in Requirements:. When a field has nothing, write the literal "none" on the same line as the field label.
 
-- **Reads:** `path/a`, `path/b`
-- **Modifies:** `path/c`
-- **Creates:** `path/d`
+### Card N: <short title>
+
+- **Reads:**
+  - `path/a`
+  - `path/b`
+- **Modifies:**
+  - `path/c`
+- **Creates:**
+  - `path/d`
 - **Requirements:** …
 - **Commit:** `<type>(<scope>): <summary>`
 

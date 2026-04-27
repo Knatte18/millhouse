@@ -35,6 +35,8 @@ General behavior rules for Claude Code. These apply regardless of which plugins 
 - The user types the number (e.g. `1`), multiple numbers for multi-select (e.g. `1, 3`), or free text for something else.
 - Keep descriptions short — one line per option.
 
+**Skill authors:** any new skill that prompts the user MUST present options as a numbered text list per the rules above. This is non-negotiable for new skills and applies retroactively — when you touch an existing skill that uses prose prompts, convert them.
+
 ## File Writing
 
 - **Never write to `/tmp/`, `$env:TEMP`, or any system temporary directory.** This causes permission prompts on Windows and contradicts the `.millhouse/` isolation model. The rule applies to tests, fixtures, and any ephemeral scratch — use `.scratch/` instead.

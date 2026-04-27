@@ -8,6 +8,8 @@ from pathlib import Path
 HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
+import _active  # noqa: E402
+
 from _review_common import (  # noqa: E402
     RE_BATCH,
     RE_SIMPLE,
@@ -20,6 +22,7 @@ from _review_common import (  # noqa: E402
     load_config,
     load_reviewer,
     load_task_title,
+    parse_batch_refs,
     parse_verdict,
     render_prompt,
     resolve_path,
@@ -53,38 +56,35 @@ def main() -> int:
         assert result == 3
         print(f"PASS: discover_round for plan with batch file: {result}")
 
-    # find_active_slug: empty dir -> ReviewError
+    # find_active_slug: empty dir -> ActiveError re-raised as ReviewError
     with tempfile.TemporaryDirectory() as tmpdir:
         try:
             find_active_slug(Path(tmpdir))
             errors += 1
             print("FAIL: expected ReviewError for empty mill_dir", file=sys.stderr)
         except ReviewError as e:
-            assert "No active task" in str(e)
-            print("PASS: find_active_slug empty dir -> ReviewError")
+            assert "active.slug.md" in str(e)
+            print("PASS: find_active_slug empty dir -> ReviewError (ActiveError translation)")
 
-    # find_active_slug: one slug file -> returns slug
+    # find_active_slug: canonical active.slug.md present -> returns slug
     with tempfile.TemporaryDirectory() as tmpdir:
         mill_dir = Path(tmpdir)
-        (mill_dir / ".my-task.slug.md").write_text("---\ntask_title: My Task\n---\n")
+        _active.write(mill_dir, slug="my-task", task_title="My Task", branch="main", spawned_at="2026-01-01T00:00:00Z")
         assert find_active_slug(mill_dir) == "my-task"
         print("PASS: find_active_slug: 'my-task'")
 
-    # load_task_title: present field
+    # load_task_title: task_title present in active marker
     with tempfile.TemporaryDirectory() as tmpdir:
         mill_dir = Path(tmpdir)
-        (mill_dir / ".my-task.slug.md").write_text(
-            "---\ntask_title: My Task Title\nslug: my-task\n---\n"
-        )
+        _active.write(mill_dir, slug="my-task", task_title="My Task Title", branch="main", spawned_at="2026-01-01T00:00:00Z")
         assert load_task_title(mill_dir, "my-task") == "My Task Title"
-        print("PASS: load_task_title with field")
+        print("PASS: load_task_title with task_title in active marker")
 
-    # load_task_title: missing field -> falls back to slug
+    # load_task_title: marker missing -> falls back to slug
     with tempfile.TemporaryDirectory() as tmpdir:
         mill_dir = Path(tmpdir)
-        (mill_dir / ".my-task.slug.md").write_text("---\nslug: my-task\n---\n")
         assert load_task_title(mill_dir, "my-task") == "my-task"
-        print("PASS: load_task_title fallback")
+        print("PASS: load_task_title marker missing -> fallback to slug")
 
     # resolve_path
     p = resolve_path("active/<SLUG>/discussion.md", "my-slug", Path("/wiki"))
@@ -232,6 +232,52 @@ def main() -> int:
         except ReviewError as e:
             assert "Missing config" in str(e)
             print("PASS: load_config missing config -> ReviewError")
+
+    # parse_batch_refs: multi-line bullet form returns all sub-bullet paths
+    with tempfile.TemporaryDirectory() as tmpdir:
+        batch = Path(tmpdir) / "batch.md"
+        batch.write_text(
+            "### Card 1\n\n"
+            "- **Reads:**\n"
+            "  - `path/a`\n"
+            "  - `path/b`\n"
+            "- **Creates:** none\n",
+            encoding="utf-8",
+        )
+        refs = parse_batch_refs(batch)
+        assert refs == ["path/a", "path/b"], f"Got {refs}"
+        print("PASS: parse_batch_refs multi-line bullet form returns both paths")
+
+    # parse_batch_refs: 'none' token is filtered out
+    with tempfile.TemporaryDirectory() as tmpdir:
+        batch = Path(tmpdir) / "batch.md"
+        batch.write_text("- **Creates:** none\n", encoding="utf-8")
+        refs = parse_batch_refs(batch)
+        assert refs == [], f"Got {refs}"
+        print("PASS: parse_batch_refs 'none' token filtered")
+
+    # parse_batch_refs: single-line legacy form returns both paths
+    with tempfile.TemporaryDirectory() as tmpdir:
+        batch = Path(tmpdir) / "batch.md"
+        batch.write_text("- **Reads:** `x`, `y`\n", encoding="utf-8")
+        refs = parse_batch_refs(batch)
+        assert refs == ["x", "y"], f"Got {refs}"
+        print("PASS: parse_batch_refs single-line legacy form returns both paths")
+
+    # parse_batch_refs: mixed single-line and multi-line fields
+    with tempfile.TemporaryDirectory() as tmpdir:
+        batch = Path(tmpdir) / "batch.md"
+        batch.write_text(
+            "- **Reads:** `a`\n"
+            "- **Modifies:**\n"
+            "  - `b`\n"
+            "  - `c`\n"
+            "- **Creates:** none\n",
+            encoding="utf-8",
+        )
+        refs = parse_batch_refs(batch)
+        assert refs == ["a", "b", "c"], f"Got {refs}"
+        print("PASS: parse_batch_refs mixed single-line and multi-line fields")
 
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)

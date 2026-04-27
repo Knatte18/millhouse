@@ -15,19 +15,25 @@ You are an integration engineer. Your job is to merge a completed task branch ba
 
 ## Entry
 
-1. Verify this is a worktree, not the main repo:
+1. **Step 1 — Resolve mode + load config.**
+   Resolve `git_root` via `_paths.resolve_git_root()` and `wiki_path` via `_paths.resolve_wiki_path(git_root)`. Load the deep-merged config: read `<wiki_path>/config.yaml` and overlay `<git_root>/.millhouse/config.local.yaml` if present (same deep-merge pattern used elsewhere). Try to call `active_data = _active.read_all(Path('.millhouse'))`. On `_active.ActiveError` (no marker / malformed), set `active_data = None` and `mode = 'worktree'` (legacy behaviour). On success: extract `slug = active_data['slug']` and call `mode_inplace = _inplace.is_inplace(active_data, git_root, cfg)`. Set `mode = 'inplace'` if `mode_inplace` else `mode = 'worktree'`.
 
-   ```bash
-   git worktree list --porcelain
-   ```
+   Stale-worktree edge: if `active_data` is not None AND the corresponding `<worktrees-dir>/<slug>/` directory exists AND the branch matches, call `_inplace.prompt_stale_worktree(slug, worktree_path)` and override `mode` based on the user's choice (`"inplace"` → `mode = 'inplace'`; `"worktree"` → `mode = 'worktree'`; `"abort"` → halt).
 
-   If the current cwd matches the main worktree entry → halt: "mill-merge must be run from a task worktree, not main."
+   If `mode == 'worktree'` AND `git worktree list --porcelain` shows the cwd is the main worktree:
 
-2. `_wiki.sync_pull(<WIKI_PATH>)`.
-3. Read slug via `_active.read_slug(Path(".millhouse"))`. Missing → halt.
-4. Load config — deep-merge `<WIKI_PATH>/config.yaml` with `.millhouse/config.local.yaml`. Read these:
+   - When `active_data` is not None → halt with: "mill-merge from the main worktree requires in-place mode (no separate worktree exists for the active slug). The active marker says `<slug>` is on branch `<branch>`; mill-merge cannot proceed."
+   - When `active_data is None` → halt with: "No active in-place task found and cwd is the main worktree; mill-merge must run from a task worktree."
+
+   Config keys to read:
    - `git.require-pr-to-base` (bool, default false) — when true AND parent-branch equals base-branch, the skill creates a PR instead of merging directly.
    - `git.base-branch` (string) — the repo's canonical base (usually `main`). Falls back to `main` if absent.
+
+   **In-place mode bypass:** when `mode == 'inplace'`, the existing Steps 1 (acquire merge lock on parent) and 2 (invoke `mill-merge-in`) are SKIPPED. There is no separate parent worktree to lock; the merge is purely local. Continue from Step 3 (capture child branch) onward, but treat "child" and "parent" as branches in the same working tree (cwd is the hub). For the squash merge in Step 4 (Direct path), omit the `-C <parent-path>` flag — the merge runs against the current working tree directly.
+
+2. `_wiki.sync_pull(<WIKI_PATH>)`.
+3. Read slug via `_active.read_slug(Path(".millhouse"))` (already resolved in Step 1; reuse `active_data` — no second read needed).
+4. *(Config already loaded in Step 1.)*
 5. Resolve parent branch via `_parent_branch.resolve(status_path, interactive=<True unless called non-interactively>)`.
 6. **Phase gate — also the re-entry point for PR-path recovery.** Read `status.md`'s `phase:`.
 
@@ -108,18 +114,31 @@ While still holding the wiki lock:
 
 For every entry in `_wiki.read_junctions(<WIKI_PATH>)`, compute the junction path relative to the worktree root (e.g. `.millhouse/wiki`, `.active/`), and call `_junction.remove(junction_path)` on each. Tolerate already-gone.
 
+**In-place mode:** also remove the `.active` junction at `git_root / ".active"` via `_junction.remove(git_root / ".active")`. This junction is hub-root-level for in-place tasks (per `wiki/config.yaml`'s `junctions:` block).
+
 ### 9. Release merge lock
 
 Delete `<parent-path>/.scratch/merge.lock`. Run this in a `finally:` equivalent so the lock is released on every exit path.
 
+**In-place mode:** no merge lock was acquired (Steps 1 and 2 were skipped). Skip this step.
+
 ### 10. Drop the worktree + branch
 
+**Worktree mode:**
 ```bash
 git -C <parent-path> worktree remove --force <self-worktree-path>
 git -C <parent-path> branch -d "$CHILD_BRANCH"
 ```
 
 If `worktree remove` fails with "is not empty" or "is in use" on Windows: surface a hint — "couldn't remove <path>: directory is in use. Close any editor / terminal / file-explorer window pointing at it and re-run `/mill-merge` (Step 4's idempotency will skip the merge)." Do not name a specific diagnostic tool in the message.
+
+**In-place mode:** skip `git worktree remove`; from cwd run:
+```bash
+git checkout <parent_branch>
+git branch -d "$CHILD_BRANCH"
+```
+
+Also remove `<git_root>/.millhouse/active.slug.md` (the canonical in-place marker).
 
 ### 11. Notify + report
 

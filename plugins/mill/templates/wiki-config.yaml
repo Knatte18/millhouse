@@ -22,6 +22,17 @@
 #   * Target contains <SLUG>   → per-worktree; created by mill-spawn.
 #   * Target has no <SLUG>     → hub-scope; created by mill-setup.
 
+# ---------------------------------------------------------------------------
+# Repo identity
+# ---------------------------------------------------------------------------
+# short_name — 2-4 character prefix used in VS Code window titles.
+#   Hub form:      "<short_name>"
+#   Worktree form: "<short_name>: <slug>"
+#   Default when absent or empty: <repo>[:2].upper() (e.g. "millhouse" -> "MI").
+
+repo:
+  short_name: ""    # e.g. "MH" for millhouse
+
 junctions:
   .millhouse/wiki: <WIKI_PATH>
   .active: <WIKI_PATH>/active/<SLUG>/

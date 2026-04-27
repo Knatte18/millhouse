@@ -95,6 +95,31 @@ def main() -> int:
                     f"expected yaml.YAMLError, got {type(exc).__name__}: {exc}"
         print("PASS: resolve_wiki_path propagates yaml.YAMLError on malformed config")
 
+        # resolve_short_name
+        got = _paths.resolve_short_name({"repo": {"short_name": "MH"}}, "millhouse")
+        assert got == "MH", f"configured short_name: got {got!r}"
+        print("PASS: resolve_short_name configured value 'MH' returned as-is")
+
+        got = _paths.resolve_short_name({"repo": {"short_name": ""}}, "millhouse")
+        assert got == "MI", f"empty short_name fallback: got {got!r}"
+        print("PASS: resolve_short_name empty string falls back to repo_name[:2].upper()")
+
+        got = _paths.resolve_short_name({}, "millhouse")
+        assert got == "MI", f"missing repo block fallback: got {got!r}"
+        print("PASS: resolve_short_name missing repo: block falls back to repo_name[:2].upper()")
+
+        got = _paths.resolve_short_name({"repo": {}}, "millhouse")
+        assert got == "MI", f"missing short_name key fallback: got {got!r}"
+        print("PASS: resolve_short_name missing short_name key falls back to repo_name[:2].upper()")
+
+        got = _paths.resolve_short_name({}, "foobar")
+        assert got == "FO", f"repo_name=foobar fallback: got {got!r}"
+        print("PASS: resolve_short_name repo_name='foobar' -> 'FO'")
+
+        got = _paths.resolve_short_name({}, "x")
+        assert got == "X", f"repo_name=x fallback: got {got!r}"
+        print("PASS: resolve_short_name repo_name='x' -> 'X'")
+
         print("All _paths unit tests passed.")
         return 0
     except AssertionError as exc:

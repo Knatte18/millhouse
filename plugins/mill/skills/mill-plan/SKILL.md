@@ -108,7 +108,7 @@ Always use `_timestamp.now_utc_compact()` / `now_utc_iso()` for any generated ti
 - **YAGNI ruthlessly** — don't plan for hypothetical requirements.
 - **Follow `mill-receiving-review`'s decision tree** — never dismiss a finding with "low risk", "out of scope", "pre-existing".
 - **Autonomous** — the only user interaction is the max-rounds escape and non-progress halt.
-- **Card `Reads:` must be comprehensive** — every file the implementer needs to read, listed. An empty or terse `Reads:` is a review-blocker in the batch-review template.
+- **Card `Reads:` must be comprehensive** — every file the implementer needs to read, listed. An empty or terse `Reads:` is a review-blocker in the batch-review template. and contain ONLY backtick-wrapped paths in bullet form — no inline prose, no line-range suffixes. Inline notes belong in Requirements: bodies.
 
 ## Board discipline
 

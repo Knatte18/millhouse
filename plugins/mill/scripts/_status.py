@@ -19,6 +19,7 @@ Public API:
     render_initial(task_title, task_description, timestamp,
                    parent_branch) -> str
     read_full(status_path) -> dict
+    read_parent_branch(status_path) -> str | None
     update_field(status_path, key, value) -> None
     append_phase(status_path, phase, timestamp) -> None
     init_batches(status_path, names) -> None
@@ -501,6 +502,31 @@ def read_full(status_path: Path) -> dict:
     ]
 
     return {"yaml": data, "timeline": timeline_lines}
+
+
+def read_parent_branch(status_path: Path) -> str | None:
+    """Return the ``parent:`` value from the top yaml block of ``status_path``.
+
+    Used by ``mill-cleanup`` to determine which branch to check out after
+    an in-place task is cleaned up. Returns ``None`` when the file is
+    missing, the yaml block is absent or unparseable, or the ``parent:``
+    key is not present — callers that need the value to exist must raise
+    their own error.
+
+    Args:
+        status_path: Absolute path to the task's ``status.md`` file.
+
+    Returns:
+        The parent branch name string, or ``None`` on any parse failure.
+    """
+    try:
+        full = read_full(status_path)
+        value = full["yaml"].get("parent")
+        if not isinstance(value, str) or not value.strip():
+            return None
+        return value.strip()
+    except (ValueError, KeyError, TypeError):
+        return None
 
 
 def init_batches(status_path: Path, names: list[str]) -> None:

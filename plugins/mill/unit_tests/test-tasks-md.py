@@ -7,7 +7,7 @@ from pathlib import Path
 HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
-from _tasks_md import claim, parse, set_phase  # noqa: E402
+from _tasks_md import append_entry, claim, parse, remove_entry, set_phase  # noqa: E402
 
 
 def main() -> int:
@@ -15,11 +15,14 @@ def main() -> int:
         sample = (
             "# Tasks\n\n"
             "<!-- comment -->\n\n"
-            "## First task [task-one]\n\n"
+            "## First task\n"
+            "[task-one]\n\n"
             "Summary for task-one.\n\n"
-            "## Second task [[task-two]](proposal-task-two)\n\n"
+            "## Second task\n"
+            "[[task-two]](proposal-task-two)\n\n"
             "Summary for task-two (with proposal).\n\n"
-            "## Third task [task-three] [s]\n\n"
+            "## Third task\n"
+            "[task-three] [s]\n\n"
             "Summary for task-three, already spawn-ready.\n"
         )
         parsed = parse(sample)
@@ -44,6 +47,90 @@ def main() -> int:
             print(f"PASS: claim() raises on unknown slug ({exc})")
         else:
             raise AssertionError("Expected ValueError for unknown slug")
+
+        # --- append_entry ---
+
+        home = "# Tasks\n\n## Existing\n[existing]\n\nExisting body.\n"
+        result = append_entry(home, "new-task", "New Task", "Task body.")
+        tasks = parse(result)
+        assert tasks[-1].slug == "new-task"
+        assert "## New Task\n[new-task]\n\nTask body.\n" in result
+        assert result.count("\n\n## New Task") == 1
+        print("PASS: append_entry round-trip with non-empty body")
+
+        result_empty_body = append_entry(home, "empty-body", "Empty Body", "")
+        assert result_empty_body.endswith("## Empty Body\n[empty-body]\n")
+        assert "## Empty Body\n[empty-body]\n\n" not in result_empty_body
+        print("PASS: append_entry with empty body: heading + slug line + single newline")
+
+        result_proposal = append_entry(home, "prop-task", "Prop Task", "Body.", has_proposal=True)
+        assert "[[prop-task]](proposal-prop-task)" in result_proposal
+        print("PASS: append_entry with has_proposal=True emits link form")
+
+        try:
+            append_entry(home, "Bad-Slug", "Bad", "")
+        except ValueError as exc:
+            assert "Bad-Slug" in str(exc)
+            print("PASS: append_entry raises ValueError for invalid slug")
+        else:
+            raise AssertionError("Expected ValueError for invalid slug")
+
+        empty_home = ""
+        result_empty = append_entry(empty_home, "first", "First", "Body.")
+        assert "## First\n[first]\n\nBody.\n" in result_empty
+        print("PASS: append_entry into empty Home.md")
+
+        # --- remove_entry ---
+
+        multi = (
+            "# Tasks\n\n"
+            "## Alpha\n[alpha]\n\nAlpha body.\n\n"
+            "## Beta\n[beta]\n\nBeta body.\n\n"
+            "## Gamma\n[gamma]\n\nGamma body.\n"
+        )
+        after_remove_alpha = remove_entry(multi, "alpha")
+        remaining = parse(after_remove_alpha)
+        assert [t.slug for t in remaining] == ["beta", "gamma"]
+        assert "Alpha" not in after_remove_alpha
+        print("PASS: remove_entry round-trip removes target")
+
+        after_remove_beta = remove_entry(multi, "beta")
+        expected_middle = (
+            "# Tasks\n\n"
+            "## Alpha\n[alpha]\n\nAlpha body.\n\n"
+            "## Gamma\n[gamma]\n\nGamma body.\n"
+        )
+        assert after_remove_beta == expected_middle, (
+            f"remove middle byte-perfect FAIL:\n{repr(after_remove_beta)}\n!=\n{repr(expected_middle)}"
+        )
+        print("PASS: remove_entry middle entry preserves surrounding entries byte-perfect")
+
+        after_remove_gamma = remove_entry(multi, "gamma")
+        assert parse(after_remove_gamma)[-1].slug == "beta"
+        assert after_remove_gamma.endswith("Beta body.\n")
+        print("PASS: remove_entry last entry")
+
+        only = "# Tasks\n\n## Only\n[only]\n\nOnly body.\n"
+        after_only = remove_entry(only, "only")
+        assert parse(after_only) == []
+        assert after_only.endswith("\n")
+        assert not after_only.endswith("\n\n")
+        print("PASS: remove_entry only entry leaves clean file")
+
+        try:
+            remove_entry(multi, "does-not-exist")
+        except ValueError as exc:
+            assert "does-not-exist" in str(exc)
+            print("PASS: remove_entry unknown slug raises ValueError")
+        else:
+            raise AssertionError("Expected ValueError for unknown slug")
+
+        # remove-then-append round-trip
+        after_remove = remove_entry(multi, "beta")
+        after_append = append_entry(after_remove, "beta", "Beta", "Beta body.")
+        slugs = [t.slug for t in parse(after_append)]
+        assert "alpha" in slugs and "gamma" in slugs and "beta" in slugs
+        print("PASS: remove-then-append round-trip")
 
         print("All _tasks_md unit tests passed.")
         return 0

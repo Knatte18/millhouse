@@ -11,8 +11,8 @@ Public API:
     ReviewResult         — dataclass; serialised to the CLI's stdout JSON
     RE_SIMPLE            — regex matching simple review filenames
     RE_BATCH             — regex matching plan-batch review filenames
-    find_active_slug()   — locate the single .<slug>.slug.md in .millhouse/
-    load_task_title()    — read task_title from slug-file frontmatter
+    find_active_slug()   — delegate to _active.read_slug for the canonical active.slug.md
+    load_task_title()    — delegate to _active.read_all for task_title; fall back to slug on missing/malformed marker
     read_constraints_md()— read CONSTRAINTS.md, empty string if absent
     resolve_path()       — substitute <SLUG> in a config path template
     discover_round()     — determine next review round number from filesystem
@@ -38,6 +38,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+import _active
 import _render
 
 # ---------------------------------------------------------------------------
@@ -100,63 +101,28 @@ class ReviewResult:
 # ---------------------------------------------------------------------------
 
 def find_active_slug(mill_dir: Path) -> str:
-    """Find the single .<slug>.slug.md file in mill_dir.
+    """Delegate to _active.read_slug for the canonical active.slug.md.
 
-    Raises ReviewError if zero or more than one slug file is found.
+    Raises ReviewError (wrapping ActiveError) so callers using
+    ``except ReviewError:`` keep working unchanged.
     """
-    matches = [
-        p for p in mill_dir.iterdir()
-        if p.name.startswith(".") and p.name.endswith(".slug.md")
-    ]
-    if len(matches) == 0:
-        raise ReviewError(
-            "No active task: no .slug.md file found in .millhouse/"
-        )
-    if len(matches) > 1:
-        names = ", ".join(sorted(p.name for p in matches))
-        raise ReviewError(
-            f"Multiple .slug.md files; expected exactly one: {names}"
-        )
-    # Strip leading "." and trailing ".slug.md" to get the slug.
-    name = matches[0].name  # e.g. ".my-task.slug.md"
-    slug = name[1:-len(".slug.md")]
-    return slug
+    try:
+        return _active.read_slug(mill_dir)
+    except _active.ActiveError as exc:
+        raise ReviewError(str(exc)) from exc
 
 
 def load_task_title(mill_dir: Path, slug: str) -> str:
-    """Read task_title from .<slug>.slug.md's YAML frontmatter.
+    """Delegate to _active.read_all for task_title; fall back to slug on missing/malformed marker.
 
-    Falls back to the slug itself if the field is absent or the file lacks
-    valid YAML frontmatter.
+    The ``slug`` parameter is kept for signature compatibility but is not used
+    as a filename. It is returned when the marker is absent or has no task_title.
     """
-    slug_file = mill_dir / f".{slug}.slug.md"
     try:
-        text = slug_file.read_text(encoding="utf-8")
-    except FileNotFoundError:
+        data = _active.read_all(mill_dir)
+    except _active.ActiveError:
         return slug
-
-    # Parse YAML frontmatter delimited by "---" lines.
-    if not text.startswith("---"):
-        return slug
-
-    lines = text.splitlines()
-    end_idx = None
-    for i, line in enumerate(lines[1:], start=1):
-        if line.strip() == "---":
-            end_idx = i
-            break
-    if end_idx is None:
-        return slug
-
-    for line in lines[1:end_idx]:
-        # Match "task_title: <value>" allowing optional quotes.
-        stripped = line.strip()
-        if stripped.startswith("task_title:"):
-            value = stripped[len("task_title:"):].strip().strip('"').strip("'")
-            if value:
-                return value
-
-    return slug
+    return data.get("task_title") or slug
 
 
 def read_constraints_md(project_root: Path) -> str:
@@ -219,34 +185,54 @@ def discover_round(reviews_dir: Path, review_type: str) -> int:
     return max(found) + 1 if found else 1
 
 
-# Regex matching Reads:/Modifies:/Creates: reference lines in batch files.
-# Example:   - **Reads:** `path/a`, `path/b`
-# Kept at module level so plan and code review share one parser.
-_RE_BATCH_REFS = re.compile(
-    r"^-\s*\*\*(Reads|Modifies|Creates):\*\*\s+(?P<rest>.+)$",
-    re.MULTILINE,
+# Regex constants for parse_batch_refs.
+# Header line: - **Reads:** <inline>  (inline may be empty for multi-line bullet form).
+_RE_REFS_HEADER = re.compile(
+    r"^-\s*\*\*(Reads|Modifies|Creates):\*\*(?P<inline>.*)$"
 )
+# Sub-bullet under a multi-line header (leading whitespace + dash).
+_RE_REFS_SUB = re.compile(r"^\s+-\s*(.+)$")
 
 
 def parse_batch_refs(batch_path: Path) -> list[str]:
     """Extract raw path strings from a batch file's Reads/Modifies/Creates lines.
 
-    Backtick-wrapped paths win over comma-split fallback. Returns a
-    deduplicated list preserving first-seen order. Used by both plan
-    review (cards-within-a-batch) and code review (batch-level source
-    files to bulk for the reviewer).
+    Handles the single-line form (- **Reads:** `a`, `b`) and the multi-line
+    bullet form (- **Reads:**\\n  - `a`\\n  - `b`). Filters the literal token
+    'none'. Returns a deduplicated list preserving first-seen order. Used by
+    both plan review and code review to build the source-file bulk.
     """
     text = batch_path.read_text(encoding="utf-8")
     seen: dict[str, None] = {}
-    for m in _RE_BATCH_REFS.finditer(text):
-        rest = m.group("rest")
-        backtick_tokens = re.findall(r"`([^`]+)`", rest)
-        if backtick_tokens:
-            tokens = backtick_tokens
-        else:
-            tokens = [t.strip() for t in rest.split(",") if t.strip()]
-        for t in tokens:
-            seen[t] = None
+    lines = text.splitlines()
+
+    i = 0
+    while i < len(lines):
+        m = _RE_REFS_HEADER.match(lines[i])
+        if m:
+            inline = m.group("inline").strip()
+            if inline:
+                backtick_tokens = re.findall(r"`([^`]+)`", inline)
+                tokens = backtick_tokens if backtick_tokens else [
+                    t.strip() for t in inline.split(",") if t.strip()
+                ]
+            else:
+                tokens = []
+                j = i + 1
+                while j < len(lines):
+                    sm = _RE_REFS_SUB.match(lines[j])
+                    if not sm:
+                        break
+                    rest = sm.group(1).strip()
+                    bt = re.findall(r"`([^`]+)`", rest)
+                    if bt:
+                        tokens.extend(bt)
+                    j += 1
+            for t in tokens:
+                if t != "none":
+                    seen[t] = None
+        i += 1
+
     return list(seen.keys())
 
 
@@ -530,7 +516,3 @@ def load_config(wiki_root: Path, mill_dir: Path) -> dict:
 
     return cfg
 
-
-# ---------------------------------------------------------------------------
-# Self-test (smoke tests)
-# ---------------------------------------------------------------------------

@@ -22,7 +22,7 @@ Leaving claimed-but-open issues on GitHub is a forgetting hazard — that's why 
 Use the `_gh_issues` library. From the hub root:
 
 ```bash
-PYTHONPATH=plugins/mill/scripts python -c "
+PYTHONPATH=$CLAUDE_PLUGIN_ROOT/scripts python -c "
 import json, _gh_issues
 issues = _gh_issues.fetch(limit=100)
 print(json.dumps(issues, indent=2))
@@ -33,21 +33,47 @@ Read `.scratch/issues.json`. Record the repo name (`_gh_issues.detect_repo()`) f
 
 ## Step 2 — Read the current Home.md
 
-Resolve the wiki path via the `junctions:` block in `<wiki>/config.yaml` (see `CLAUDE.md` for tokens). Read `Home.md` and parse task entries — headings matching `## <Title> [<slug>]` or `## <Title> [[<slug>]](proposal-<slug>)`.
+Resolve the wiki path:
+
+```bash
+PYTHONPATH=$CLAUDE_PLUGIN_ROOT/scripts python -c "
+import _paths; print(_paths.resolve_wiki_path(_paths.resolve_git_root()))
+"
+```
+
+Store as `<WIKI_PATH>`. Read `<WIKI_PATH>/Home.md` and parse task entries — headings matching `## <Title> [<slug>]` or `## <Title> [[<slug>]](proposal-<slug>)`.
 
 You don't need a parser helper; a targeted regex is fine — this skill is interactive and the user is in the loop.
 
 ## Step 3 — Interactive decisions (per issue)
 
-For each fetched issue, present it to the user and ask for a decision:
+For each fetched issue, show the issue number, title, and a brief summary of its body. Then present the decision menu:
 
-- **New task** — you draft a title and a 1–2 sentence summary from the issue body. User edits if needed.
-- **Fold into existing task `<slug>`** — issue is covered by an existing entry; record the reference. Multiple issues can fold into the same task.
-- **Skip** — leave the issue alone on GitHub. No comment, no close. (Keep a short note of why for the final report.)
+```
+1) New task — you draft a slug + summary
+2) Fold into existing task
+3) Skip
+```
 
-Process issues one at a time or in small batches — whatever lets the user keep context. Do NOT auto-decide; the user chooses for every issue.
+Append `(Recommended)` to option 1 if there is no obvious overlap with current Home.md tasks; to option 2 if the title or first paragraph overlaps with an existing entry (assistant judgement, not a hard heuristic).
 
-For each "new task", decide together whether it needs a `proposal-<slug>.md` at the wiki root (long-form background).
+**On selection 1 (New task):**
+- Prompt for slug (validate `[a-z][a-z0-9-]*`; re-prompt on invalid).
+- Prompt for title (free text).
+- Prompt for summary (1–2 sentences).
+- Ask: `Extract to proposal? (y/N)`.
+- Record the decision.
+
+**On selection 2 (Fold into existing):**
+- Prompt for target slug (free text).
+- Validate against the parsed Home.md slug list; re-prompt if not found.
+- Record the decision.
+
+**On selection 3 (Skip):**
+- Prompt for a short reason (for the final report).
+- Record the decision. No comment is posted to GitHub.
+
+Process issues one at a time. Do NOT auto-decide; the user chooses for every issue.
 
 ## Step 4 — Propose
 
@@ -96,7 +122,7 @@ Print a one-line summary to chat + the path. User replies `approve` or `reject`.
 3. Regenerate the sidebar (`_sidebar.regenerate`) and commit if it changed.
 4. For each consumed issue (new or fold-in), call:
    ```bash
-   PYTHONPATH=plugins/mill/scripts python -c "
+   PYTHONPATH=$CLAUDE_PLUGIN_ROOT/scripts python -c "
    import _gh_issues
    _gh_issues.close_with_comment(<N>, 'Consolidated into wiki task: <slug>')
    "

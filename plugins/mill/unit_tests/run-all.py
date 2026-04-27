@@ -7,6 +7,7 @@ to spot in CI output.
 """
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -20,6 +21,12 @@ def main() -> int:
         print("No test-*.py files found.", file=sys.stderr)
         return 1
 
+    # Force UTF-8 I/O so test output containing non-ASCII characters (e.g.
+    # the → arrow in pick_task_single_or_multi output) doesn't crash on
+    # Windows consoles that default to cp1252.
+    child_env = os.environ.copy()
+    child_env["PYTHONIOENCODING"] = "utf-8"
+
     failures: list[str] = []
     for test in tests:
         print(f"--- {test.name} ---", file=sys.stderr)
@@ -27,6 +34,7 @@ def main() -> int:
             [sys.executable, str(test)],
             capture_output=False,
             text=True,
+            env=child_env,
         )
         if result.returncode != 0:
             failures.append(test.name)
