@@ -22,6 +22,7 @@ resolve via the chain above.
 
 import os
 import pathlib
+import subprocess
 import sys
 
 METADATA_ANCHOR = "config.yaml"
@@ -89,10 +90,28 @@ def _read_override(toplevel: pathlib.Path) -> pathlib.Path | None:
     return anchor
 
 
+def _resolve_main_worktree_root(toplevel: pathlib.Path) -> pathlib.Path:
+    result = subprocess.run(
+        ["git", "-C", str(toplevel), "rev-parse", "--git-common-dir"],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        raise SystemExit(
+            f"git rev-parse --git-common-dir failed for {toplevel}: "
+            f"{result.stderr.strip()!r}"
+        )
+    common_dir = pathlib.Path(result.stdout.strip())
+    if not common_dir.is_absolute():
+        common_dir = (toplevel / common_dir).resolve()
+    return common_dir.parent
+
+
 def _sibling_anchor_default(toplevel: pathlib.Path) -> pathlib.Path:
+    main_root = _resolve_main_worktree_root(toplevel)
     sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
     from _sibling import resolve_path
-    return resolve_path("codeguide", toplevel)
+    return resolve_path("codeguide", main_root)
 
 
 def resolve(cwd: str | None = None, filename: str = METADATA_ANCHOR) -> dict:
