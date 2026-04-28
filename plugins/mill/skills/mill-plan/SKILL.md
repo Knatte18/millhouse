@@ -33,9 +33,24 @@ Read `<WIKI_PATH>/active/<slug>/discussion.md` in full. Read `CONSTRAINTS.md` at
 
 **Write the files.**
 
-1. Render `plugins/mill/templates/plan-overview.md` into `<WIKI_PATH>/active/<slug>/plan/00-overview.md`. Tokens: `<TASK_TITLE>`, `<SLUG>`, `<STARTED>` (use `_timestamp.now_utc_compact()`), `<PARENT_BRANCH>` (from status.md's yaml block).
+**Pre-quote YAML-bound tokens.** Every token whose substituted value lands in a fenced yaml block of a rendered file MUST be passed through `_yaml_writer.quote_scalar` before being supplied to `_render.render`. The render engine substitutes tokens verbatim; quoting is the caller's responsibility. Tokens affected: `<TASK_TITLE>`, `<SLUG>`, `<STARTED>`, `<PARENT_BRANCH>`, `<BATCH_NAME>`, `<BATCH_SLUG>`. Concretely:
+
+```python
+from _yaml_writer import quote_scalar
+tokens = {
+    "TASK_TITLE":    quote_scalar(task_title),
+    "SLUG":          quote_scalar(slug),
+    "STARTED":       quote_scalar(_timestamp.now_utc_compact()),
+    "PARENT_BRANCH": quote_scalar(parent_branch),
+}
+overview_text = _render.render(template_path, tokens)
+```
+
+Apply the same rule when rendering `plan-batch.md` for each batch (`<BATCH_NAME>`, `<BATCH_SLUG>` go through `quote_scalar` too).
+
+1. Render `plugins/mill/templates/plan-overview.md` into `<WIKI_PATH>/active/<slug>/plan/00-overview.md` using the pre-quoted tokens dict.
 2. Fill the Batch Index DAG, Shared Decisions, and All Files Touched sections in place.
-3. For each batch, render `plugins/mill/templates/plan-batch.md` into `<WIKI_PATH>/active/<slug>/plan/NN-<batch-slug>.md`. Tokens: `<TASK_TITLE>`, `<BATCH_NAME>`, `<BATCH_SLUG>`. Fill Batch Scope + Cards + Batch Tests.
+3. For each batch, render `plugins/mill/templates/plan-batch.md` into `<WIKI_PATH>/active/<slug>/plan/NN-<batch-slug>.md` using the pre-quoted tokens dict. Fill Batch Scope + Cards + Batch Tests.
 
 **Card numbering is global across batches**: card 1 lives in batch 01, card 7 might live in batch 02, etc. Never restart at 1 inside each batch — the reviewer and implementer cite cards by number and need uniqueness.
 

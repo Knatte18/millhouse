@@ -71,6 +71,7 @@ def main() -> int:
 
         with (
             patch("mill_vscode.resolve_git_root", return_value=root),
+            patch("mill_vscode.resolve_wiki_path", return_value=root / "wiki"),
             patch("mill_vscode.resolve_worktrees_dir", return_value=worktrees_dir),
             patch("mill_vscode.subprocess.run", side_effect=mock_subprocess_run),
             patch("mill_vscode.input", return_value="1", create=True),
@@ -115,6 +116,7 @@ def main() -> int:
 
         with (
             patch("mill_vscode.resolve_git_root", return_value=root),
+            patch("mill_vscode.resolve_wiki_path", return_value=root / "wiki"),
             patch("mill_vscode.resolve_worktrees_dir", return_value=worktrees_dir),
             patch("mill_vscode.subprocess.run", side_effect=lambda a, **kw: subprocess_calls.append(a)),
             patch("mill_vscode.input", side_effect=lambda *a: input_calls.append(a) or "1", create=True),
@@ -151,6 +153,7 @@ def main() -> int:
         subprocess_calls = []
         with (
             patch("mill_vscode.resolve_git_root", return_value=root),
+            patch("mill_vscode.resolve_wiki_path", return_value=root / "wiki"),
             patch("mill_vscode.resolve_worktrees_dir", return_value=worktrees_dir),
             patch("mill_vscode.subprocess.run", side_effect=lambda a, **kw: subprocess_calls.append(a)),
         ):

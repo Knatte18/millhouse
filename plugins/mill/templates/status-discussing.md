@@ -10,6 +10,7 @@ Strip this HTML comment before writing.
 phase: discussing
 slug: <SLUG>
 branch: <BRANCH>
+plan: null
 parent: <PARENT_BRANCH>
 task: <TASK_TITLE>
 task_description: |

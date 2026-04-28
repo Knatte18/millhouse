@@ -344,7 +344,12 @@ def main() -> int:
                 run_calls2.append(argv)
                 result = MagicMock()
                 result.returncode = 0
-                result.stdout = "impl/my-task\n"
+                # `git rev-parse --git-common-dir` (used by _paths.resolve_main_worktree_root)
+                # must return the .git directory path so .parent resolves to hub_root.
+                if "--git-common-dir" in argv:
+                    result.stdout = f"{hub_root / '.git'}\n"
+                else:
+                    result.stdout = "impl/my-task\n"
                 result.stderr = ""
                 return result
 

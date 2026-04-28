@@ -36,6 +36,8 @@ from pathlib import Path
 
 import yaml
 
+from _yaml_writer import quote_scalar
+
 _MARKER_NAME = "active.slug.md"
 
 
@@ -73,10 +75,10 @@ def write(
     body = (
         "# Active task\n\n"
         "```yaml\n"
-        f"slug: {slug}\n"
-        f"task_title: {task_title}\n"
-        f"branch: {branch}\n"
-        f"spawned_at: {spawned_at}\n"
+        f"slug: {quote_scalar(slug)}\n"
+        f"task_title: {quote_scalar(task_title)}\n"
+        f"branch: {quote_scalar(branch)}\n"
+        f"spawned_at: {quote_scalar(spawned_at)}\n"
         "```\n"
     )
     _path(mill_dir).write_text(body, encoding="utf-8")

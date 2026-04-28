@@ -7,6 +7,8 @@ import sys
 import tempfile
 from pathlib import Path
 
+import yaml
+
 HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
@@ -41,6 +43,62 @@ def main() -> int:
         assert "<TASK_TITLE>" not in out and "<TIMESTAMP>" not in out
         print("PASS: render_initial() substitutes tokens and strips header")
 
+        # Colon in task_title: YAML must parse cleanly.
+        out_colon = render_initial(
+            task_title="contains: colon",
+            task_description="Desc.",
+            timestamp="2026-04-22T14:32:05Z",
+            parent_branch="main",
+            slug="t-slug",
+            branch="hanf/t-slug",
+        )
+        top_block_colon = "\n".join(
+            out_colon.splitlines()[
+                out_colon.splitlines().index("```yaml") + 1 :
+                out_colon.splitlines().index("```", out_colon.splitlines().index("```yaml") + 1)
+            ]
+        )
+        parsed_colon = yaml.safe_load(top_block_colon)
+        assert parsed_colon["task"] == "contains: colon", (
+            f"colon in task_title not round-tripped: {parsed_colon['task']!r}"
+        )
+        print("PASS: render_initial colon in task_title round-trips via yaml.safe_load")
+
+        # task_description with colon stays correct via block scalar.
+        out_desc = render_initial(
+            task_title="plain title",
+            task_description="single line with: colon",
+            timestamp="2026-04-22T14:32:05Z",
+            parent_branch="main",
+            slug="t-slug",
+            branch="hanf/t-slug",
+        )
+        top_block_desc = "\n".join(
+            out_desc.splitlines()[
+                out_desc.splitlines().index("```yaml") + 1 :
+                out_desc.splitlines().index("```", out_desc.splitlines().index("```yaml") + 1)
+            ]
+        )
+        parsed_desc = yaml.safe_load(top_block_desc)
+        assert parsed_desc["task_description"].strip() == "single line with: colon", (
+            f"block-scalar task_description colon not preserved: {parsed_desc['task_description']!r}"
+        )
+        print("PASS: render_initial block-scalar task_description preserves colon")
+
+        # Safe input stability: plain title emits bare scalar (no extra quotes).
+        out_plain = render_initial(
+            task_title="plain title",
+            task_description="Desc.",
+            timestamp="2026-04-22T14:32:05Z",
+            parent_branch="main",
+            slug="t-slug",
+            branch="hanf/t-slug",
+        )
+        assert "task: plain title" in out_plain, (
+            f"safe input should emit bare scalar: {out_plain!r}"
+        )
+        print("PASS: render_initial plain title emits bare scalar (output stability)")
+
         with tempfile.TemporaryDirectory() as tmp:
             sp = Path(tmp) / "status.md"
             sp.write_text(out, encoding="utf-8")
@@ -49,11 +107,42 @@ def main() -> int:
             assert "task: Updated title" in sp.read_text(encoding="utf-8")
             print("PASS: update_field rewrites a scalar yaml row")
 
+            update_field(sp, "task", "Updated: with colon")
+            uf_block = "\n".join(
+                sp.read_text(encoding="utf-8").splitlines()[
+                    sp.read_text(encoding="utf-8").splitlines().index("```yaml") + 1 :
+                    sp.read_text(encoding="utf-8").splitlines().index(
+                        "```",
+                        sp.read_text(encoding="utf-8").splitlines().index("```yaml") + 1,
+                    )
+                ]
+            )
+            assert yaml.safe_load(uf_block)["task"] == "Updated: with colon", (
+                f"update_field colon round-trip failed: {yaml.safe_load(uf_block)['task']!r}"
+            )
+            print("PASS: update_field quotes a value with colon")
+
             append_phase(sp, "discussed", "2026-04-22T15:00:00Z")
             contents = sp.read_text(encoding="utf-8")
             assert "phase: discussed" in contents, "phase yaml row not updated"
             assert "discussed  2026-04-22T15:00:00Z" in contents, "timeline row not appended"
             print("PASS: append_phase updates phase yaml + appends timeline row")
+
+        # Colon in phase round-trip — separate file to avoid contaminating shared sp.
+        with tempfile.TemporaryDirectory() as tmp:
+            sp_weird = Path(tmp) / "status.md"
+            sp_weird.write_text(out, encoding="utf-8")
+            append_phase(sp_weird, "weird: phase", "2026-04-22T16:00:00Z")
+            data_weird = read_full(sp_weird)
+            assert data_weird["yaml"]["phase"] == "weird: phase", (
+                f"append_phase colon round-trip failed: {data_weird['yaml']['phase']!r}"
+            )
+            print("PASS: append_phase quotes phase with colon")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            sp = Path(tmp) / "status.md"
+            sp.write_text(out, encoding="utf-8")
+            append_phase(sp, "discussed", "2026-04-22T15:00:00Z")
 
             # Batches section
             assert read_batches(sp) == [], "no batches section yet"
@@ -93,6 +182,22 @@ def main() -> int:
             assert "phase: discussed" in contents, "batches edit damaged top yaml"
             assert "discussed  2026-04-22T15:00:00Z" in contents, "batches edit damaged timeline"
             print("PASS: batches edits preserve top yaml + timeline")
+
+            set_batch_field(sp, "foundation", "blocked_reason", "missing key: foo")
+            batches_colon = read_batches(sp)
+            entry_colon = next(b for b in batches_colon if b["name"] == "foundation")
+            assert entry_colon["blocked_reason"] == "missing key: foo", (
+                f"blocked_reason colon not round-tripped: {entry_colon['blocked_reason']!r}"
+            )
+            print("PASS: _serialise_batches quotes str blocked_reason with colon")
+
+            set_batch_field(sp, "foundation", "review_round", 3)
+            batches_int = read_batches(sp)
+            entry_int = next(b for b in batches_int if b["name"] == "foundation")
+            assert entry_int["review_round"] == 3, (
+                f"review_round should be int 3, got {entry_int['review_round']!r}"
+            )
+            print("PASS: _serialise_batches leaves int review_round unquoted")
 
         # --- read_status tests ---
         ts = "2026-04-22T14:32:05Z"
@@ -235,6 +340,16 @@ def main() -> int:
                 "unresolved SLUG/BRANCH tokens in render_initial output"
             )
             print("PASS: render_initial has no unresolved SLUG/BRANCH tokens")
+
+            # plan: null pre-seed: update_field("plan", …) must not raise.
+            sp_plan = Path(tmp) / "status-plan.md"
+            sp_plan.write_text(rendered, encoding="utf-8")
+            update_field(sp_plan, "plan", "active/yaml-colon-quoting/plan")
+            data_plan = read_full(sp_plan)
+            assert data_plan["yaml"]["plan"] == "active/yaml-colon-quoting/plan", (
+                f"plan field not round-tripped: {data_plan['yaml']['plan']!r}"
+            )
+            print("PASS: status-discussing template seeds plan: null; update_field('plan', …) does not raise")
 
         # --- read_slug ---
         # Case A: slug: present in yaml block

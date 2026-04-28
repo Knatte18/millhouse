@@ -36,6 +36,8 @@ from pathlib import Path
 
 import yaml
 
+from _yaml_writer import quote_scalar
+
 _TOKEN_RE = re.compile(r"<([A-Z][A-Z0-9_]*)>")
 _YAML_FENCE = "```yaml"
 _TIMELINE_FENCE = "```text"
@@ -102,12 +104,14 @@ def render_initial(
     template = _TEMPLATE_PATH.read_text(encoding="utf-8")
     body = _strip_leading_comment(template)
     tokens = {
-        "TASK_TITLE": task_title,
+        "TASK_TITLE": quote_scalar(task_title),
+        # TASK_DESCRIPTION renders inside `task_description: |` (literal block);
+        # block scalars handle colons natively and quoting would be parsed as data.
         "TASK_DESCRIPTION": task_description,
-        "TIMESTAMP": timestamp,
-        "PARENT_BRANCH": parent_branch,
-        "SLUG": slug,
-        "BRANCH": branch,
+        "TIMESTAMP": quote_scalar(timestamp),
+        "PARENT_BRANCH": quote_scalar(parent_branch),
+        "SLUG": quote_scalar(slug),
+        "BRANCH": quote_scalar(branch),
     }
     for key, value in tokens.items():
         body = body.replace(f"<{key}>", value)
@@ -158,8 +162,11 @@ def update_field(status_path: Path, key: str, value: str) -> None:
     Args:
         status_path: Absolute path to the status.md file.
         key: YAML key to mutate (must already exist in the block).
-        value: New value. Written verbatim after ``key: ``; embed quotes
-            if the value contains colons or hash characters.
+        value: Written via ``_yaml_writer.quote_scalar`` so values
+            containing YAML-special characters (``:``, ``#``, leading
+            ``-``, etc.) are quoted automatically. Strict-key behaviour is
+            preserved — ``key`` must already exist in the YAML block;
+            absent keys raise ``ValueError``.
 
     Raises:
         ValueError: the file lacks a yaml block, the block is
@@ -175,7 +182,7 @@ def update_field(status_path: Path, key: str, value: str) -> None:
         if match is None:
             continue
         eol = lines[i][len(stripped):]
-        lines[i] = f"{key}: {value}{eol}"
+        lines[i] = f"{key}: {quote_scalar(value)}{eol}"
         status_path.write_text("".join(lines), encoding="utf-8")
         return
     raise ValueError(f"Key {key!r} not found in yaml block of {status_path}")
@@ -197,8 +204,12 @@ def append_phase(status_path: Path, phase: str, timestamp: str) -> None:
 
     Args:
         status_path: Absolute path to the status.md file.
-        phase: New phase name (e.g. ``"discussed"``, ``"planning"``,
-            ``"done"``).
+        phase: Written via ``_yaml_writer.quote_scalar`` inside the YAML
+            block. Phase names from the closed v2 set (``discussing``,
+            ``planning``, ``coding``, ``done``, plus per-round variants
+            like ``plan-review-r1``) are YAML-safe and pass through
+            unquoted; the helper guards against future phase names that
+            might contain YAML-special characters.
         timestamp: ISO-8601 UTC timestamp for the timeline row.
 
     Raises:
@@ -216,7 +227,7 @@ def append_phase(status_path: Path, phase: str, timestamp: str) -> None:
         if match is None:
             continue
         eol = lines[i][len(stripped):]
-        lines[i] = f"phase: {phase}{eol}"
+        lines[i] = f"phase: {quote_scalar(phase)}{eol}"
         updated_phase = True
         break
     if not updated_phase:
@@ -336,7 +347,12 @@ def _serialise_batches(batches: list[dict]) -> str:
                 continue
             value = entry[key]
             prefix = "  - " if first else "    "
-            parts.append(f"{prefix}{key}: {value}")
+            # str values may contain YAML-special chars (e.g. blocked_reason); ints/bools
+            # round-trip via str() and stay unquoted to preserve scalar type.
+            if isinstance(value, str):
+                parts.append(f"{prefix}{key}: {quote_scalar(value)}")
+            else:
+                parts.append(f"{prefix}{key}: {value}")
             first = False
         if first:
             # Entry had nothing but name (shouldn't happen, guard anyway).
@@ -451,7 +467,7 @@ def read_status(status_path: Path) -> dict:
             tl_end = i
             break
     if tl_start is not None and tl_end is not None:
-        content_lines = [l.strip() for l in lines[tl_start:tl_end] if l.strip()]
+        content_lines = [ln.strip() for ln in lines[tl_start:tl_end] if ln.strip()]
         if content_lines:
             last_timeline_entry = content_lines[-1]
 

@@ -51,6 +51,17 @@ def main() -> int:
             release(mill)
             print("PASS: release() on absent lock is a no-op")
 
+        # Colon in slug round-trip.
+        with tempfile.TemporaryDirectory() as tmp:
+            mill = Path(tmp)
+            acquire(mill, "injected: colon")
+            info_colon = read(mill)
+            assert info_colon is not None, "lock should exist after acquire"
+            assert info_colon.slug == "injected: colon", (
+                f"slug colon round-trip failed: {info_colon.slug!r}"
+            )
+            print("PASS: acquire quotes slug with colon; read round-trips it")
+
         print("All _builder_lock unit tests passed.")
         return 0
     except AssertionError as exc:

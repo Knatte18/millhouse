@@ -30,6 +30,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
+from _yaml_writer import quote_scalar
+
 LOCK_FILENAME = "builder.lock"
 STALE_WINDOW_SEC = 5 * 60
 
@@ -138,7 +140,7 @@ def acquire(mill_dir: Path, slug: str) -> LockInfo:
             f"{_lock_path(mill_dir)} if you are certain no mill-go is running."
         )
     new = LockInfo(slug=slug, timestamp=_now_iso())
-    body = f"```yaml\nslug: {new.slug}\ntimestamp: {new.timestamp}\n```\n"
+    body = f"```yaml\nslug: {quote_scalar(new.slug)}\ntimestamp: {quote_scalar(new.timestamp)}\n```\n"
     _lock_path(mill_dir).write_text(body, encoding="utf-8")
     return new
 

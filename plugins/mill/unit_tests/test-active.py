@@ -36,6 +36,20 @@ def main() -> int:
         else:
             raise AssertionError("expected ActiveError")
 
+        # Colon in task_title round-trip.
+        with tempfile.TemporaryDirectory() as tmp:
+            mill = Path(tmp) / ".millhouse"
+            write(
+                mill,
+                slug="colon-task",
+                task_title="mill v2 housekeeping: fix, cleanup, and convenience",
+                branch="hanf/colon-task",
+                spawned_at="2026-04-28T10:00:00Z",
+            )
+            data = read_all(mill)
+            assert data["task_title"] == "mill v2 housekeeping: fix, cleanup, and convenience"
+            print("PASS: write/read_all round-trip preserves colon in task_title")
+
         print("All _active unit tests passed.")
         return 0
     except AssertionError as exc:
