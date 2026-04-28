@@ -8,7 +8,8 @@ authenticated via ``gh auth login``.
 Public API:
     fetch(repo=None, limit=100) -> list[dict]
         Open issues for the current repo (or an override). Each dict has
-        number, title, body, labels, createdAt.
+        number, title, body, labels, createdAt. When an issue has comments,
+        body includes rendered comments appended after the original body.
     close_with_comment(number, comment, repo=None) -> None
         Close an issue after posting a single comment. Used by mill-revise-
         tasks when an issue has been turned into (or folded into) a task.
@@ -54,12 +55,42 @@ def detect_repo() -> str:
     return ""
 
 
+def _render_body_with_comments(body: str, comments: list[dict]) -> str:
+    """Return ``body`` with rendered comment blocks appended.
+
+    Sorts ``comments`` by ``createdAt`` ascending, caps at 10, renders each
+    as a Markdown block after a horizontal rule. Returns ``body`` unchanged
+    when ``comments`` is empty.
+    """
+    if not comments:
+        return body
+
+    sorted_comments = sorted(comments, key=lambda c: c["createdAt"])
+    truncated = len(sorted_comments) - 10
+    rendered = sorted_comments[:10]
+
+    blocks = []
+    for c in rendered:
+        author_node = c["author"]
+        if author_node and isinstance(author_node, dict):
+            author = author_node["login"]
+        else:
+            author = "[deleted]"
+        blocks.append(f"**Comment by {author} ({c['createdAt']}):**\n{c['body']}")
+
+    result = body + "\n\n---\n\n" + "\n\n".join(blocks)
+    if truncated > 0:
+        result += f"\n\n*[{truncated} more comments truncated]*"
+    return result
+
+
 def fetch(repo: str | None = None, limit: int = 100) -> list[dict[str, Any]]:
     """Return a list of open issues for the given repo.
 
     Each entry has number, title, body, labels, createdAt (per the gh
-    ``--json`` fields requested). Raises ``GhError`` on any non-zero gh
-    exit or unparseable output.
+    ``--json`` fields requested). When an issue has comments, body includes
+    rendered comments appended after the original body. Raises ``GhError``
+    on any non-zero gh exit or unparseable output.
     """
     repo_name = repo or detect_repo()
     if not repo_name:
@@ -72,7 +103,7 @@ def fetch(repo: str | None = None, limit: int = 100) -> list[dict[str, Any]]:
             "gh", "issue", "list",
             "--repo", repo_name,
             "--state", "open",
-            "--json", "number,title,body,labels,createdAt",
+            "--json", "number,title,body,labels,createdAt,comments",
             "--limit", str(limit),
         ]
     )
@@ -81,9 +112,12 @@ def fetch(repo: str | None = None, limit: int = 100) -> list[dict[str, Any]]:
             f"gh issue list failed: {(result.stderr or '').strip()}"
         )
     try:
-        return json.loads(result.stdout)
+        issues = json.loads(result.stdout)
     except json.JSONDecodeError as exc:
         raise GhError(f"Failed to parse gh output: {exc}") from exc
+    for issue in issues:
+        issue["body"] = _render_body_with_comments(issue["body"], issue.pop("comments", []))
+    return issues
 
 
 def close_with_comment(
