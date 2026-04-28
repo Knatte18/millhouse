@@ -218,6 +218,10 @@ def test_main_happy_path_calls_spawn_core_in_order() -> None:
         raise AssertionError(
             f"write_initial_status parent_branch mismatch: {status_call}"
         )
+    if status_call.kwargs.get("branch") != "my-task":
+        raise AssertionError(
+            f"write_initial_status branch mismatch: {status_call}"
+        )
 
     print("PASS: main() happy path calls all _spawn_core helpers in order")
 

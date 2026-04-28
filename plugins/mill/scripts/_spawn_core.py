@@ -45,7 +45,7 @@ Public API:
         Raises ``RuntimeError`` on non-zero exit.
     write_active_marker(mill_dir, slug, title, branch, ts) -> None
         Thin wrapper around ``_active.write``.
-    write_initial_status(wiki_path, slug, title, ts, parent_branch) -> Path
+    write_initial_status(wiki_path, slug, title, ts, parent_branch, branch) -> Path
         Render + write ``active/<slug>/status.md``; lock + commit+push; return
         the absolute path of the written file.
     recreate_active_junction(wiki_path, slug, mill_dir) -> None
@@ -673,6 +673,7 @@ def write_initial_status(
     title: str,
     ts: str,
     parent_branch: str,
+    branch: str,
 ) -> Path:
     """
     Render and write the initial ``active/<slug>/status.md``, then commit+push.
@@ -689,6 +690,9 @@ def write_initial_status(
         ts: ISO-8601 UTC timestamp for the timeline entry.
         parent_branch: Hub branch name recorded so mill-merge knows where
             to merge back to.
+        branch: The task branch the worktree is on; recorded so the wiki
+            state is self-describing without inferring from per-developer
+            cfg.branch_prefix.
 
     Returns:
         Absolute path to the written ``status.md``.
@@ -698,6 +702,8 @@ def write_initial_status(
         task_description=title,
         timestamp=ts,
         parent_branch=parent_branch,
+        slug=slug,
+        branch=branch,
     )
     status_rel = f"active/{slug}/status.md"
     status_abs = wiki_path / status_rel

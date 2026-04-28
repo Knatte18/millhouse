@@ -232,6 +232,8 @@ def test_main_happy_path_calls_spawn_core_helpers() -> None:
         raise AssertionError(f"write_initial_status slug mismatch: {status_call}")
     if status_call.kwargs.get("parent_branch") != "main":
         raise AssertionError(f"write_initial_status parent_branch mismatch: {status_call}")
+    if status_call.kwargs.get("branch") != "my-task":
+        raise AssertionError(f"write_initial_status branch mismatch: {status_call}")
 
     # Verify git checkout -b was invoked via subprocess
     run_calls = subprocess_stub.run.call_args_list

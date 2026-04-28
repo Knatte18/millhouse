@@ -83,6 +83,8 @@ def _setup_fixture(container: Path) -> tuple[Path, Path, Path, str]:
         task_description="A task for the abandon integration test.",
         timestamp="2026-04-24T10:00:00Z",
         parent_branch="main",
+        slug="my-slug",
+        branch="hanf/my-slug",
     )
     status_path.write_text(content, encoding="utf-8")
     _run(["git", "-C", str(wiki), "add", "."], cwd=wiki)

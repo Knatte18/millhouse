@@ -375,6 +375,7 @@ def test_write_initial_status() -> None:
             title="Task One",
             ts="2026-04-26T10:00:00Z",
             parent_branch="main",
+            branch="main/task-one",
         )
         if not status_path.exists():
             raise AssertionError(f"status.md not written at {status_path}")

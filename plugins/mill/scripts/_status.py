@@ -17,9 +17,11 @@ and rewrite just that block, never touching the top block.
 
 Public API:
     render_initial(task_title, task_description, timestamp,
-                   parent_branch) -> str
+                   parent_branch, slug, branch) -> str
     read_full(status_path) -> dict
     read_parent_branch(status_path) -> str | None
+    read_slug(status_path) -> str
+    read_branch(status_path, *, cfg, slug) -> str
     update_field(status_path, key, value) -> None
     append_phase(status_path, phase, timestamp) -> None
     init_batches(status_path, names) -> None
@@ -69,6 +71,8 @@ def render_initial(
     task_description: str,
     timestamp: str,
     parent_branch: str,
+    slug: str,
+    branch: str,
 ) -> str:
     """
     Render the phase=discussing status.md for ``task_title``.
@@ -102,6 +106,8 @@ def render_initial(
         "TASK_DESCRIPTION": task_description,
         "TIMESTAMP": timestamp,
         "PARENT_BRANCH": parent_branch,
+        "SLUG": slug,
+        "BRANCH": branch,
     }
     for key, value in tokens.items():
         body = body.replace(f"<{key}>", value)
@@ -527,6 +533,63 @@ def read_parent_branch(status_path: Path) -> str | None:
         return value.strip()
     except (ValueError, KeyError, TypeError):
         return None
+
+
+def read_slug(status_path: Path) -> str:
+    """Return the ``slug:`` value from the top yaml block, or the parent dir name.
+
+    Falls back silently to ``status_path.parent.name`` when the field is absent
+    — the slug is fully derivable from the directory, so the fallback produces
+    no warning.
+
+    Args:
+        status_path: Absolute path to the task's ``status.md`` file.
+
+    Returns:
+        The slug string.
+    """
+    try:
+        full = read_full(status_path)
+        value = full["yaml"].get("slug")
+        if isinstance(value, str) and value:
+            return value
+    except (ValueError, KeyError, TypeError):
+        pass
+    return status_path.parent.name
+
+
+def read_branch(status_path: Path, *, cfg: dict, slug: str) -> str:
+    """Return the ``branch:`` value from the top yaml block, or derive it.
+
+    Falls back to ``f"{cfg['spawn']['branch_prefix']}/{slug}"`` when the prefix
+    is non-empty, or bare ``slug`` when the prefix is empty. Emits a one-line
+    warning to stderr on the fallback path.
+
+    Args:
+        status_path: Absolute path to the task's ``status.md`` file.
+        cfg: Loaded mill config dict; must contain ``cfg['spawn']['branch_prefix']``.
+        slug: Task slug; used to derive the branch name on the fallback path.
+
+    Returns:
+        The branch name string.
+    """
+    import sys as _sys
+
+    try:
+        full = read_full(status_path)
+        value = full["yaml"].get("branch")
+        if isinstance(value, str) and value:
+            return value
+    except (ValueError, KeyError, TypeError):
+        pass
+
+    prefix = cfg.get("spawn", {}).get("branch_prefix", "")
+    derived = f"{prefix}/{slug}" if prefix else slug
+    print(
+        f"[_status] warning: deriving branch from cfg.spawn.branch_prefix for slug={slug}",
+        file=_sys.stderr,
+    )
+    return derived
 
 
 def init_batches(status_path: Path, names: list[str]) -> None:

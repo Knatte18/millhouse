@@ -183,6 +183,9 @@ def main() -> int:
             plan = build_plan([], worktrees, [], tmp, hub_root=hub_root)
             orphan_lines = [line for line in plan.to_report if "orphan worktree" in line and "ghost-slug" in line]
             assert len(orphan_lines) == 1, f"expected 1 orphan worktree line, got {plan.to_report}"
+            assert "mill-worktree remove" in orphan_lines[0], (
+                f"expected hint 'mill-worktree remove' in orphan message, got: {orphan_lines[0]!r}"
+            )
             print("PASS build_plan — orphan worktree -> reported")
 
         # --- orphan Home.md marker ([active] with no active_dir) ---

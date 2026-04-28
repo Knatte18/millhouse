@@ -234,6 +234,7 @@ def main(argv: list[str] | None = None) -> int:
         title=picked.title,
         ts=ts,
         parent_branch=parent_branch,
+        branch=branch_name,
     )
 
     print(f"Worktree: {worktree_path}")

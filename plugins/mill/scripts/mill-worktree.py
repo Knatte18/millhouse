@@ -1,20 +1,6 @@
 """
 mill-worktree — generic worktree management (no wiki claim).
 
-# Parent-branch tracking
-Each worktree created by ``mill-worktree create`` records the hub's HEAD
-branch in ``<worktree>/.millhouse/parent.txt`` (single-line plain text).
-This mirrors ``mill-spawn``'s behaviour for mill-merge/mill-cleanup, but
-``mill-worktree``-created worktrees do NOT write ``active.slug.md`` or
-``status.md`` — they have no wiki claim.
-
-# TODO(mill-merge,mill-cleanup)
-``mill-merge`` and ``mill-cleanup`` currently read the parent branch from
-``status.md``. Worktrees created by ``mill-worktree`` have no ``status.md``
-(no wiki claim). Add a fallback to ``.millhouse/parent.txt`` in both
-scripts so ``mill-worktree``-created worktrees can eventually be handled
-without manual merging.
-
 Usage:
     python mill-worktree.py create --branch <name> [--dir-name <name>]
                                    [--color <name>] [--dry-run]
@@ -33,7 +19,6 @@ from pathlib import Path
 
 import _active
 import _junction
-import _spawn_core
 import _subprocess_util
 import _vscode
 import _wiki
@@ -58,13 +43,11 @@ def _cmd_create(args: argparse.Namespace, git_root: Path, cfg: dict) -> int:
     Steps:
     1. Resolve worktrees dir and target path.
     2. Dry-run: print and exit 0.
-    3. Capture hub's current HEAD branch (for parent.txt).
-    4. If ``args.branch`` does not exist locally, create it with ``git branch``.
-    5. ``git worktree add <target> <branch>``.
-    6. Copy ``.millhouse/`` (minus junctions and wiki).
-    7. Recreate hub-scope junctions (no ``<SLUG>`` token).
-    8. Write ``.vscode/settings.json`` with color + title.
-    9. Write ``.millhouse/parent.txt``.
+    3. If ``args.branch`` does not exist locally, create it with ``git branch``.
+    4. ``git worktree add <target> <branch>``.
+    5. Copy ``.millhouse/`` (minus junctions and wiki).
+    6. Recreate hub-scope junctions (no ``<SLUG>`` token).
+    7. Write ``.vscode/settings.json`` with color + title.
     """
     worktrees_dir = resolve_worktrees_dir(cfg, git_root)
     dir_name = args.dir_name or args.branch
@@ -75,9 +58,6 @@ def _cmd_create(args: argparse.Namespace, git_root: Path, cfg: dict) -> int:
         print(f"[DryRun] Worktree: {worktree_path}")
         print(f"[DryRun] Color:    {args.color or '(auto)'}")
         return 0
-
-    # Capture parent branch BEFORE creating the worktree.
-    parent_branch = _spawn_core.capture_parent_branch(git_root)
 
     # Create the branch if it doesn't exist locally.
     check = _subprocess_util.run(
@@ -158,11 +138,6 @@ def _cmd_create(args: argparse.Namespace, git_root: Path, cfg: dict) -> int:
         target=worktree_path / ".vscode" / "settings.json",
         window_title=window_title,
     )
-
-    # Record parent branch for future mill-merge/mill-cleanup support.
-    parent_txt = worktree_path / ".millhouse" / "parent.txt"
-    parent_txt.parent.mkdir(parents=True, exist_ok=True)
-    parent_txt.write_text(parent_branch + "\n", encoding="utf-8")
 
     print(f"Worktree: {worktree_path}")
     print(f"Branch:   {args.branch}")

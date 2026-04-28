@@ -60,6 +60,8 @@ def _write_rendered_status(path: Path, slug: str, phase: str = "discussing") -> 
         task_description=f"Description for {slug}.",
         timestamp=ts,
         parent_branch="main",
+        slug=slug,
+        branch=f"hanf/{slug}",
     )
     # Update phase if not discussing
     if phase != "discussing":

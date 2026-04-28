@@ -16,14 +16,13 @@ You are an integration engineer. Your job is to merge a completed task branch ba
 ## Entry
 
 1. **Step 1 — Resolve mode + load config.**
-   Resolve `git_root` via `_paths.resolve_git_root()` and `wiki_path` via `_paths.resolve_wiki_path(git_root)`. Load the deep-merged config: read `<wiki_path>/config.yaml` and overlay `<git_root>/.millhouse/config.local.yaml` if present (same deep-merge pattern used elsewhere). Try to call `active_data = _active.read_all(Path('.millhouse'))`. On `_active.ActiveError` (no marker / malformed), set `active_data = None` and `mode = 'worktree'` (legacy behaviour). On success: extract `slug = active_data['slug']` and call `mode_inplace = _inplace.is_inplace(active_data, git_root, cfg)`. Set `mode = 'inplace'` if `mode_inplace` else `mode = 'worktree'`.
+   Resolve `git_root` via `_paths.resolve_git_root()` and `wiki_path` via `_paths.resolve_wiki_path(git_root)`. Load the deep-merged config: read `<wiki_path>/config.yaml` and overlay `<git_root>/.millhouse/config.local.yaml` if present (same deep-merge pattern used elsewhere). Try to call `active_data = _active.read_all(Path('.millhouse'))`. On `_active.ActiveError` (no marker / malformed), halt immediately with: *"This worktree has no wiki claim — `mill-merge` needs `status.md` to know the parent branch. Run `mill-claim` to convert this worktree to a tracked task, or merge manually."* On success: extract `slug = active_data['slug']` and call `mode_inplace = _inplace.is_inplace(active_data, git_root, cfg)`. Set `mode = 'inplace'` if `mode_inplace` else `mode = 'worktree'`.
 
    Stale-worktree edge: if `active_data` is not None AND the corresponding `<worktrees-dir>/<slug>/` directory exists AND the branch matches, call `_inplace.prompt_stale_worktree(slug, worktree_path)` and override `mode` based on the user's choice (`"inplace"` → `mode = 'inplace'`; `"worktree"` → `mode = 'worktree'`; `"abort"` → halt).
 
    If `mode == 'worktree'` AND `git worktree list --porcelain` shows the cwd is the main worktree:
 
    - When `active_data` is not None → halt with: "mill-merge from the main worktree requires in-place mode (no separate worktree exists for the active slug). The active marker says `<slug>` is on branch `<branch>`; mill-merge cannot proceed."
-   - When `active_data is None` → halt with: "No active in-place task found and cwd is the main worktree; mill-merge must run from a task worktree."
 
    Config keys to read:
    - `git.require-pr-to-base` (bool, default false) — when true AND parent-branch equals base-branch, the skill creates a PR instead of merging directly.

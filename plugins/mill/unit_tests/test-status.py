@@ -1,6 +1,8 @@
 """Unit tests for plugins/mill/scripts/_status.py."""
 from __future__ import annotations
 
+import contextlib
+import io
 import sys
 import tempfile
 from pathlib import Path
@@ -12,7 +14,9 @@ from _status import (  # noqa: E402
     append_phase,
     init_batches,
     read_batches,
+    read_branch,
     read_full,
+    read_slug,
     read_status,
     render_initial,
     set_batch_field,
@@ -27,6 +31,8 @@ def main() -> int:
             task_description="Widgets throw on empty input.",
             timestamp="2026-04-22T14:32:05Z",
             parent_branch="main",
+            slug="t-slug",
+            branch="hanf/t-slug",
         )
         assert out.startswith("# Status\n"), "Leading HTML comment should be stripped"
         assert "Fix bug in widget handler" in out
@@ -95,7 +101,7 @@ def main() -> int:
         with tempfile.TemporaryDirectory() as tmp:
             sp = Path(tmp) / "status.md"
             sp.write_text(
-                render_initial("My task", "Desc.", ts, "main"), encoding="utf-8"
+                render_initial("My task", "Desc.", ts, "main", slug="t-slug", branch="hanf/t-slug"), encoding="utf-8"
             )
             r = read_status(sp)
             assert r["phase"] == "discussing", f"expected discussing, got {r['phase']}"
@@ -109,7 +115,7 @@ def main() -> int:
         # Case 2: after append_phase
         with tempfile.TemporaryDirectory() as tmp:
             sp = Path(tmp) / "status.md"
-            sp.write_text(render_initial("T", "D", ts, "main"), encoding="utf-8")
+            sp.write_text(render_initial("T", "D", ts, "main", slug="t-slug", branch="hanf/t-slug"), encoding="utf-8")
             ts2 = "2026-04-22T16:00:00Z"
             append_phase(sp, "discussed", ts2)
             r = read_status(sp)
@@ -122,7 +128,7 @@ def main() -> int:
         # Case 3: current_batch from running batch
         with tempfile.TemporaryDirectory() as tmp:
             sp = Path(tmp) / "status.md"
-            sp.write_text(render_initial("T", "D", ts, "main"), encoding="utf-8")
+            sp.write_text(render_initial("T", "D", ts, "main", slug="t-slug", branch="hanf/t-slug"), encoding="utf-8")
             init_batches(sp, ["b1", "b2"])
             set_batch_field(sp, "b1", "state", "running")
             r = read_status(sp)
@@ -164,7 +170,7 @@ def main() -> int:
         # Case 7: malformed ## Batches section raises ValueError
         with tempfile.TemporaryDirectory() as tmp:
             sp = Path(tmp) / "status.md"
-            sp.write_text(render_initial("T", "D", ts, "main"), encoding="utf-8")
+            sp.write_text(render_initial("T", "D", ts, "main", slug="t-slug", branch="hanf/t-slug"), encoding="utf-8")
             # Append a malformed Batches section (unclosed yaml fence)
             with open(sp, "a", encoding="utf-8") as f:
                 f.write("\n## Batches\n\n```yaml\nbatches:\n  - name: b1\n")
@@ -181,7 +187,7 @@ def main() -> int:
         # Case F1: basic full read — yaml dict + timeline list
         with tempfile.TemporaryDirectory() as tmp:
             sp = Path(tmp) / "status.md"
-            initial = render_initial("Full task", "Desc.", ts_full, "main")
+            initial = render_initial("Full task", "Desc.", ts_full, "main", slug="t-slug", branch="hanf/t-slug")
             sp.write_text(initial, encoding="utf-8")
             append_phase(sp, "discussed", "2026-04-23T11:00:00Z")
             r = read_full(sp)
@@ -211,6 +217,106 @@ def main() -> int:
         except ValueError:
             pass
         print("PASS: read_full raises ValueError on missing file")
+
+        # --- render_initial new fields ---
+        with tempfile.TemporaryDirectory() as tmp:
+            rendered = render_initial(
+                task_title="New Task",
+                task_description="Desc.",
+                timestamp="2026-04-28T10:00:00Z",
+                parent_branch="main",
+                slug="my-slug",
+                branch="hanf/my-slug",
+            )
+            assert "slug: my-slug" in rendered, "slug row missing from rendered output"
+            assert "branch: hanf/my-slug" in rendered, "branch row missing from rendered output"
+            print("PASS: render_initial includes slug and branch rows")
+            assert "<SLUG>" not in rendered and "<BRANCH>" not in rendered, (
+                "unresolved SLUG/BRANCH tokens in render_initial output"
+            )
+            print("PASS: render_initial has no unresolved SLUG/BRANCH tokens")
+
+        # --- read_slug ---
+        # Case A: slug: present in yaml block
+        with tempfile.TemporaryDirectory() as tmp:
+            sp = Path(tmp) / "status.md"
+            content = render_initial(
+                task_title="T",
+                task_description="D",
+                timestamp="2026-04-28T10:00:00Z",
+                parent_branch="main",
+                slug="foo",
+                branch="hanf/foo",
+            )
+            sp.write_text(content, encoding="utf-8")
+            assert read_slug(sp) == "foo", f"expected 'foo', got {read_slug(sp)!r}"
+            print("PASS: read_slug returns slug from yaml block")
+
+        # Case B: slug absent — falls back to parent dir name
+        with tempfile.TemporaryDirectory() as tmp:
+            slug_dir = Path(tmp) / "some-name"
+            slug_dir.mkdir()
+            sp = slug_dir / "status.md"
+            sp.write_text(
+                "# Status\n\n```yaml\nphase: discussing\n```\n\n## Timeline\n\n```text\n```\n",
+                encoding="utf-8",
+            )
+            buf = io.StringIO()
+            with contextlib.redirect_stderr(buf):
+                result = read_slug(sp)
+            assert result == "some-name", f"expected 'some-name', got {result!r}"
+            assert buf.getvalue() == "", f"expected no stderr on slug fallback, got {buf.getvalue()!r}"
+            print("PASS: read_slug falls back silently to parent dir name")
+
+        # --- read_branch ---
+        # Case A: branch: present in yaml block
+        with tempfile.TemporaryDirectory() as tmp:
+            sp = Path(tmp) / "status.md"
+            content = render_initial(
+                task_title="T",
+                task_description="D",
+                timestamp="2026-04-28T10:00:00Z",
+                parent_branch="main",
+                slug="foo",
+                branch="hanf/foo",
+            )
+            sp.write_text(content, encoding="utf-8")
+            buf = io.StringIO()
+            with contextlib.redirect_stderr(buf):
+                result = read_branch(sp, cfg={"spawn": {"branch_prefix": "hanf"}}, slug="foo")
+            assert result == "hanf/foo", f"expected 'hanf/foo', got {result!r}"
+            assert buf.getvalue() == "", f"expected no stderr when branch present, got {buf.getvalue()!r}"
+            print("PASS: read_branch returns branch from yaml block, no warning")
+
+        # Case B: branch absent — derived from prefix + slug
+        with tempfile.TemporaryDirectory() as tmp:
+            sp = Path(tmp) / "status.md"
+            sp.write_text(
+                "# Status\n\n```yaml\nphase: discussing\n```\n\n## Timeline\n\n```text\n```\n",
+                encoding="utf-8",
+            )
+            buf = io.StringIO()
+            with contextlib.redirect_stderr(buf):
+                result = read_branch(sp, cfg={"spawn": {"branch_prefix": "hanf"}}, slug="foo")
+            assert result == "hanf/foo", f"expected 'hanf/foo', got {result!r}"
+            stderr_out = buf.getvalue()
+            assert "[_status] warning" in stderr_out, f"expected warning in stderr, got {stderr_out!r}"
+            assert "slug=foo" in stderr_out, f"expected slug=foo in warning, got {stderr_out!r}"
+            print("PASS: read_branch derives from prefix+slug and emits warning")
+
+        # Case C: empty branch_prefix — bare slug, warning still emitted
+        with tempfile.TemporaryDirectory() as tmp:
+            sp = Path(tmp) / "status.md"
+            sp.write_text(
+                "# Status\n\n```yaml\nphase: discussing\n```\n\n## Timeline\n\n```text\n```\n",
+                encoding="utf-8",
+            )
+            buf = io.StringIO()
+            with contextlib.redirect_stderr(buf):
+                result = read_branch(sp, cfg={"spawn": {"branch_prefix": ""}}, slug="foo")
+            assert result == "foo", f"expected 'foo', got {result!r}"
+            assert "[_status] warning" in buf.getvalue(), "expected warning for empty prefix fallback"
+            print("PASS: read_branch with empty prefix returns bare slug with warning")
 
         print("All _status unit tests passed.")
         return 0

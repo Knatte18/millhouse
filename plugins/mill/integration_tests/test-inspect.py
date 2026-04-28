@@ -59,6 +59,8 @@ def _write_status(path: Path, slug: str, phase: str) -> None:
         task_description=f"Desc for {slug}.",
         timestamp=ts,
         parent_branch="main",
+        slug=slug,
+        branch=f"hanf/{slug}",
     )
     path.write_text(content, encoding="utf-8")
     if phase != "discussing":

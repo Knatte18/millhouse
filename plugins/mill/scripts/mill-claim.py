@@ -289,6 +289,7 @@ def main(argv: list[str] | None = None) -> int:
         title=picked.title,
         ts=ts,
         parent_branch=parent_branch,
+        branch=branch_name,
     )
 
     _update_hub_vscode_title(git_root, cfg, slug)

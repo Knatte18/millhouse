@@ -37,7 +37,7 @@ def main() -> int:
     errors = 0
 
     # ------------------------------------------------------------------
-    # Test: create subcommand calls git worktree add and writes parent.txt
+    # Test: create subcommand calls git worktree add
     # ------------------------------------------------------------------
     with tempfile.TemporaryDirectory() as tmpdir:
         root = Path(tmpdir)
@@ -46,7 +46,6 @@ def main() -> int:
         worktrees_dir = root.parent / "worktrees"
 
         git_calls: list[list[str]] = []
-        original_run = _subprocess_util.run
 
         def capture_run(argv, **kwargs):
             git_calls.append(list(argv))
@@ -73,9 +72,6 @@ def main() -> int:
                 result.stderr = ""
                 result.stdout = ""
                 return result
-            # Delegate real git calls (rev-parse HEAD for capture_parent_branch)
-            # to the real subprocess.
-            return original_run(argv, **kwargs)
 
         vscode_calls: list[dict] = []
 
@@ -99,22 +95,6 @@ def main() -> int:
             errors += 1
         else:
             print("PASS: create -- git branch called for new branch")
-
-        # Verify parent.txt was written.
-        parent_txt = worktrees_dir / "feature-x" / ".millhouse" / "parent.txt"
-        if rc == 0 and not parent_txt.exists():
-            print("FAIL: create -- parent.txt not written", file=sys.stderr)
-            errors += 1
-        elif rc == 0:
-            content = parent_txt.read_text(encoding="utf-8").strip()
-            if content != "main":
-                print(f"FAIL: create -- parent.txt contains {content!r}, expected 'main'", file=sys.stderr)
-                errors += 1
-            else:
-                print("PASS: create -- parent.txt written with hub HEAD branch")
-        else:
-            print(f"FAIL: create -- rc={rc}, expected 0 (worktree add should be mocked)", file=sys.stderr)
-            errors += 1
 
     # ------------------------------------------------------------------
     # Test: remove subcommand calls git worktree remove --force

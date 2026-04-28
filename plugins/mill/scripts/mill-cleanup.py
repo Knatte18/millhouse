@@ -117,7 +117,8 @@ def build_plan(
     for w in worktrees:
         if Path(w["path"]) != hub_root and Path(w["path"]).name not in all_active_slugs:
             to_report.append(
-                f"orphan worktree: {w['path']} (no matching active/<slug>/ dir)"
+                f"orphan worktree: {w['path']} (no matching active/<slug>/ dir;"
+                f" run 'mill-worktree remove {w['path']}' to clean up)"
             )
 
     for task in home_tasks:
