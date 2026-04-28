@@ -1,5 +1,5 @@
 """
-Integration test for mill-inspect.py.
+Integration test for millpy-inspect.py.
 
 Builds a hub+wiki fixture under .scratch/ with two active slugs and verifies
 default output, single-slug filter, unknown-slug error, --json schema,
@@ -103,7 +103,7 @@ def main() -> int:
     ts = datetime.utcnow().strftime("%Y%m%d%H%M%S")
     container = SCRATCH / f"test-inspect-{ts}"
     failed = False
-    script = SCRIPTS / "mill-inspect.py"
+    script = SCRIPTS / "millpy-inspect.py"
 
     try:
         hub, wiki = _setup_fixture(container)

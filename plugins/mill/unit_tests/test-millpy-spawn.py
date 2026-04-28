@@ -1,4 +1,4 @@
-"""Unit tests for plugins/mill/scripts/mill-spawn.py (post-refactor).
+"""Unit tests for plugins/mill/scripts/millpy-spawn.py (post-refactor).
 
 Verifies:
   - top-level import succeeds (smoke test for broken imports after refactor)
@@ -29,10 +29,10 @@ def test_smoke_import() -> None:
     """mill-spawn must import without error after the refactor."""
     import importlib
     import importlib.util
-    spawn_path = HUB / "plugins" / "mill" / "scripts" / "mill-spawn.py"
+    spawn_path = HUB / "plugins" / "mill" / "scripts" / "millpy-spawn.py"
     spec = importlib.util.spec_from_file_location("mill_spawn", spawn_path)
     if spec is None or spec.loader is None:
-        raise AssertionError("Could not build module spec for mill-spawn.py")
+        raise AssertionError("Could not build module spec for millpy-spawn.py")
     mod = importlib.util.module_from_spec(spec)
     # Provide minimal stubs for the heavy imports so the module loads without
     # a real git repo or wiki on disk.
@@ -60,13 +60,13 @@ def test_smoke_import() -> None:
     try:
         spec.loader.exec_module(mod)
     except Exception as exc:
-        raise AssertionError(f"mill-spawn.py failed to import: {exc}") from exc
+        raise AssertionError(f"millpy-spawn.py failed to import: {exc}") from exc
 
     if not hasattr(mod, "main"):
         raise AssertionError("mill-spawn module must expose main()")
     if not hasattr(mod, "pick_worktree_color"):
         raise AssertionError("mill-spawn must still expose pick_worktree_color")
-    print("PASS: mill-spawn.py imports cleanly after refactor")
+    print("PASS: millpy-spawn.py imports cleanly after refactor")
 
 
 # ---------------------------------------------------------------------------
@@ -97,7 +97,7 @@ def _run_main_with_mocks(
     import importlib
     import importlib.util
 
-    spawn_path = HUB / "plugins" / "mill" / "scripts" / "mill-spawn.py"
+    spawn_path = HUB / "plugins" / "mill" / "scripts" / "millpy-spawn.py"
     spec = importlib.util.spec_from_file_location("mill_spawn_test_run", spawn_path)
     mod = importlib.util.module_from_spec(spec)
 
@@ -236,7 +236,7 @@ def test_write_settings_uses_short_name_and_slug() -> None:
     import importlib
     import importlib.util
 
-    spawn_path = HUB / "plugins" / "mill" / "scripts" / "mill-spawn.py"
+    spawn_path = HUB / "plugins" / "mill" / "scripts" / "millpy-spawn.py"
     spec = importlib.util.spec_from_file_location("mill_spawn_vscode_test", spawn_path)
     mod = importlib.util.module_from_spec(spec)
 
@@ -330,7 +330,7 @@ def test_main_backlog_empty_exits_zero() -> None:
     # instead of raising BacklogEmpty. Verify that main() translates this to exit 0.
     import importlib.util
 
-    spawn_path = HUB / "plugins" / "mill" / "scripts" / "mill-spawn.py"
+    spawn_path = HUB / "plugins" / "mill" / "scripts" / "millpy-spawn.py"
     spec = importlib.util.spec_from_file_location("mill_spawn_empty", spawn_path)
     mod = importlib.util.module_from_spec(spec)
 

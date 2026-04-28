@@ -17,10 +17,10 @@ v2 only writes the root `SKILLS.md` — per-plugin `INDEX.md` files from v1 are 
 
 ## Steps
 
-1. **Run the scanner.** v2's flat-layout entrypoint is `plugins/mill/scripts/mill-skills-index.py`:
+1. **Run the scanner.** v2's flat-layout entrypoint is `plugins/mill/scripts/millpy-skills-index.py`:
 
    ```bash
-   python plugins/mill/scripts/mill-skills-index.py
+   python plugins/mill/scripts/millpy-skills-index.py
    ```
 
 2. **Parse stdout.** The entrypoint prints a one-line summary followed by the list of written file paths. Relay that list to the user.

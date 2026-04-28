@@ -1,7 +1,7 @@
 """
-Sweeper: reconcile hub git worktrees, wiki active/<slug>/ dirs, and
-Home.md markers based on status.md phase. Runs from the hub. Pass
---apply to execute removals; default is dry-run.
+mill-cleanup — sweeper: reconcile hub git worktrees, wiki active/<slug>/ dirs, and Home.md markers based on status.md phase.
+
+Runs from the hub. Pass --apply to execute removals; default is dry-run.
 """
 from __future__ import annotations
 

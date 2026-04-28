@@ -1,4 +1,4 @@
-"""Unit tests for plugins/mill/scripts/mill-vscode.py."""
+"""Unit tests for plugins/mill/scripts/millpy-vscode.py."""
 from __future__ import annotations
 
 import importlib.util
@@ -11,8 +11,8 @@ from unittest.mock import MagicMock, patch
 HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
-# Load mill-vscode.py via importlib (hyphenated name).
-_SCRIPT = HUB / "plugins" / "mill" / "scripts" / "mill-vscode.py"
+# Load millpy-vscode.py via importlib (hyphenated name).
+_SCRIPT = HUB / "plugins" / "mill" / "scripts" / "millpy-vscode.py"
 _spec = importlib.util.spec_from_file_location("mill_vscode", _SCRIPT)
 mill_vscode = importlib.util.module_from_spec(_spec)
 sys.modules["mill_vscode"] = mill_vscode

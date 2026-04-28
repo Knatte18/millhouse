@@ -70,7 +70,7 @@ Loop up to `max_review_rounds` rounds. Each round:
 2. Invoke the CLI as a subprocess:
 
    ```bash
-   python plugins/mill/scripts/mill-review-discussion.py \
+   python plugins/mill/scripts/millpy-review-discussion.py \
        --slug <slug> \
        --round <N>
    ```

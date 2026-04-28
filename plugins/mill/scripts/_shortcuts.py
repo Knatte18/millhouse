@@ -20,21 +20,21 @@ from pathlib import Path
 import _render
 
 # User-callable v2 scripts and v1-ported entrypoints that are safe to expose
-# as shortcuts.  Excluded: mill-skills-index, mill-review-*, mill-merge.
+# as shortcuts.  Excluded: millpy-skills-index, millpy-review-*, mill-merge.
 SHORTCUT_SCRIPTS: list[str] = [
-    "mill-add",
-    "mill-list",
-    "mill-status",
-    "mill-inspect",
-    "mill-spawn",
-    "mill-claim",
-    "mill-cleanup",
-    "mill-abandon",
-    "mill-color",
-    "mill-terminal",
-    "mill-vscode",
-    "mill-worktree",
-    "mill-fetch-issues",
+    "millpy-add",
+    "millpy-list",
+    "millpy-status",
+    "millpy-inspect",
+    "millpy-spawn",
+    "millpy-claim",
+    "millpy-cleanup",
+    "millpy-abandon",
+    "millpy-color",
+    "millpy-terminal",
+    "millpy-vscode",
+    "millpy-worktree",
+    "millpy-fetch-issues",
 ]
 
 # Template path relative to this file's package root.

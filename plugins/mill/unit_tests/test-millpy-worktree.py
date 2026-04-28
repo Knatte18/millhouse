@@ -1,4 +1,4 @@
-"""Unit tests for plugins/mill/scripts/mill-worktree.py."""
+"""Unit tests for plugins/mill/scripts/millpy-worktree.py."""
 from __future__ import annotations
 
 import importlib.util
@@ -11,8 +11,8 @@ from unittest.mock import MagicMock, patch
 HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
-# Load mill-worktree.py via importlib (hyphenated name).
-_SCRIPT = HUB / "plugins" / "mill" / "scripts" / "mill-worktree.py"
+# Load millpy-worktree.py via importlib (hyphenated name).
+_SCRIPT = HUB / "plugins" / "mill" / "scripts" / "millpy-worktree.py"
 _spec = importlib.util.spec_from_file_location("mill_worktree", _SCRIPT)
 mill_worktree = importlib.util.module_from_spec(_spec)
 sys.modules["mill_worktree"] = mill_worktree

@@ -116,7 +116,7 @@ try {
         Invoke-Git '-C' $wiki 'config' 'user.email' 'test@mill' | Out-Null
         Invoke-Git '-C' $wiki 'config' 'user.name'  'mill-test' | Out-Null
 
-        python "$scripts/mill-add.py" plain-foo --title 'Plain foo' --summary 'summary for plain foo' | Out-Null
+        python "$scripts/millpy-add.py" plain-foo --title 'Plain foo' --summary 'summary for plain foo' | Out-Null
     } finally { Pop-Location }
 
     # ------------------------------------------------------------------
@@ -124,7 +124,7 @@ try {
     # ------------------------------------------------------------------
     Push-Location $hub
     try {
-        python "$scripts/mill-add.py" linked-bar --title 'Linked bar' --summary 'summary for linked bar' --proposal-body "# Linked bar`n`nBackground paragraph." | Out-Null
+        python "$scripts/millpy-add.py" linked-bar --title 'Linked bar' --summary 'summary for linked bar' --proposal-body "# Linked bar`n`nBackground paragraph." | Out-Null
     } finally { Pop-Location }
 
     # ------------------------------------------------------------------
@@ -178,7 +178,7 @@ try {
     # ------------------------------------------------------------------
     Push-Location $hub
     try {
-        $listOut = (python "$scripts/mill-list.py") -join "`n"
+        $listOut = (python "$scripts/millpy-list.py") -join "`n"
     } finally { Pop-Location }
 
     if ($listOut -notmatch '    plain-foo\s+Plain foo') {
@@ -200,7 +200,7 @@ try {
         $savedEAP = $ErrorActionPreference
         $ErrorActionPreference = 'Continue'
         try {
-            $dupOut = (python "$scripts/mill-add.py" plain-foo --title 'dup' 2>&1) -join "`n"
+            $dupOut = (python "$scripts/millpy-add.py" plain-foo --title 'dup' 2>&1) -join "`n"
         } finally {
             $ErrorActionPreference = $savedEAP
         }

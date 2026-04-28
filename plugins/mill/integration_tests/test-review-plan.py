@@ -1,9 +1,9 @@
 """
-Integration test for mill-review-plan.py
+Integration test for millpy-review-plan.py
 
 Sets up a temporary .millhouse/ layout with a seeded slug file, a wiki/
 junction pointing at a fixture wiki containing a sample plan (00-overview.md
-+ 01-core.md), then invokes mill-review-plan.py and asserts:
++ 01-core.md), then invokes millpy-review-plan.py and asserts:
   - Exit 0
   - Valid JSON with type/round/verdict/reviews fields
   - verdict in {APPROVE, REQUEST_CHANGES}
@@ -142,11 +142,11 @@ def main() -> int:
         # ---------------------------------------------------------------
         print("Test 1: happy path (plan review)...", file=sys.stderr)
 
-        script = _SCRIPTS / "mill-review-plan.py"
+        script = _SCRIPTS / "millpy-review-plan.py"
         exit_code, stdout, stderr = _run_script(script, tmp)
 
         if exit_code != 0:
-            print(f"FAIL: mill-review-plan.py exited {exit_code}")
+            print(f"FAIL: millpy-review-plan.py exited {exit_code}")
             print(f"stderr: {stderr}")
             print(f"stdout: {stdout}")
             failed = True

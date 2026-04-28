@@ -1,5 +1,5 @@
 """
-Integration test for mill-abandon.py.
+Integration test for millpy-abandon.py.
 
 Builds a hub+wiki fixture under .scratch/ with a real bare git repo and a
 wiki clone.  Tests the happy path, hub guard, and double-abandon guard.
@@ -125,7 +125,7 @@ def main() -> int:
         hub, wiki, worktree, slug = _setup_fixture(container)
         print(f"[test-abandon] container: {container}", file=sys.stderr)
 
-        script = SCRIPTS / "mill-abandon.py"
+        script = SCRIPTS / "millpy-abandon.py"
 
         # --- Scenario A: happy path ---
         result = _run([sys.executable, str(script), "--force"], cwd=worktree, check=False)

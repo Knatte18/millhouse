@@ -1,4 +1,4 @@
-"""Unit tests for mill-abandon.py logic.
+"""Unit tests for millpy-abandon.py logic.
 
 Uses a trampoline subprocess that pre-patches sys.modules with mock _paths
 and _wiki modules so no real git or wiki I/O occurs.
@@ -53,7 +53,7 @@ def _make_worktree(tmp: Path, slug: str, phase: str = "implementing") -> tuple[P
 
 def _make_trampoline(tmp: Path, wiki_path: Path) -> Path:
     """Write a subprocess trampoline that mocks _paths/_wiki before loading mill-abandon."""
-    abandon_src = (SCRIPTS / "mill-abandon.py").as_posix()
+    abandon_src = (SCRIPTS / "millpy-abandon.py").as_posix()
     wiki_posix = wiki_path.as_posix()
     trampoline = tmp / "_trampoline.py"
     trampoline.write_text(

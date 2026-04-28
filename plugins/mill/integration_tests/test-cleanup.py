@@ -1,5 +1,5 @@
 """
-Integration test for mill-cleanup.py.
+Integration test for millpy-cleanup.py.
 
 Seeds a full hub+wiki fixture under .scratch/ with six slug scenarios
 (done, abandoned, live, orphan-worktree, orphan-active, malformed-status).
@@ -162,7 +162,7 @@ def main() -> int:
 
         # --- Test 1: dry-run ---
         result = _run(
-            [sys.executable, str(SCRIPTS / "mill-cleanup.py")],
+            [sys.executable, str(SCRIPTS / "millpy-cleanup.py")],
             cwd=hub, check=False,
         )
         print(f"--- dry-run stdout ---\n{result.stdout}", file=sys.stderr)
@@ -183,7 +183,7 @@ def main() -> int:
 
         # --- Test 2: --apply ---
         result = _run(
-            [sys.executable, str(SCRIPTS / "mill-cleanup.py"), "--apply"],
+            [sys.executable, str(SCRIPTS / "millpy-cleanup.py"), "--apply"],
             cwd=hub, check=False,
         )
         print(f"--- apply stdout ---\n{result.stdout}", file=sys.stderr)

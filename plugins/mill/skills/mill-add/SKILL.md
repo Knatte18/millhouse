@@ -1,11 +1,11 @@
 ---
 name: mill-add
-description: Turn the conversation that just ended into a task entry in the wiki. Derive a slug, title, and one-paragraph summary; optionally extract a proposal file for long-form background. Wraps `mill-add.py` — the script handles the wiki lock, file writes, sidebar regeneration, and commit/push. You handle the judgment.
+description: Turn the conversation that just ended into a task entry in the wiki. Derive a slug, title, and one-paragraph summary; optionally extract a proposal file for long-form background. Wraps `millpy-add.py` — the script handles the wiki lock, file writes, sidebar regeneration, and commit/push. You handle the judgment.
 ---
 
 # mill-add
 
-A thin skill wrapping `plugins/mill/scripts/mill-add.py`. Use it when the user and you have just discussed something that deserves to be tracked as a task, and the user says "log this" / "legg det inn som en task" / similar.
+A thin skill wrapping `plugins/mill/scripts/millpy-add.py`. Use it when the user and you have just discussed something that deserves to be tracked as a task, and the user says "log this" / "legg det inn som en task" / similar.
 
 The script is mechanical (write files, regenerate sidebar, commit, push). The skill is judgment-heavy — you decide:
 
@@ -87,7 +87,7 @@ The structure is a suggestion, not a contract. Match it to what the discussion a
 
 ```powershell
 $env:PYTHONPATH = (Resolve-Path 'plugins/mill/scripts').Path
-python plugins/mill/scripts/mill-add.py <slug> `
+python plugins/mill/scripts/millpy-add.py <slug> `
     --title "<Title>" `
     --summary "<summary paragraph>" `
     --proposal-body "<proposal body in markdown>"    # omit when no proposal
@@ -96,18 +96,19 @@ python plugins/mill/scripts/mill-add.py <slug> `
 Notes:
 
 - `--proposal-body` accepts arbitrary markdown as a single string. For long bodies, write the content to a temp file first and read it into the argument — PowerShell handles heredoc-style strings via `@"..."@` or `Get-Content -Raw`.
+- For bodies longer than ~30 chars or containing backticks/quotes, prefer `--proposal-body-file <path>` — write the body to a temp file (e.g. `.scratch/proposal-<slug>.md`) and pass the path. Avoids heredoc-quoting issues that mangle markdown.
 - The script acquires the wiki lock, so never run two mill-add invocations in parallel.
 - A duplicate slug is a hard error — the script exits 1 without writing anything.
 
 ### Example — short task, no proposal
 
 ```powershell
-python plugins/mill/scripts/mill-add.py sidebar-tasks-alphabetise `
+python plugins/mill/scripts/millpy-add.py sidebar-tasks-alphabetise `
     --title "Alphabetise the Tasks section in _Sidebar.md" `
     --summary "The sidebar currently lists tasks in Home.md order. For easier scanning once we have more than 5 tasks, sort them alphabetically by slug at render time. Purely a _sidebar.py change; no new format."
 ```
 
-### Example — task with proposal
+### Example — task with short proposal body
 
 ```powershell
 $body = @"
@@ -128,10 +129,39 @@ Single-reviewer runs catch most issues, but we saw N false negatives ...
 - Does ensemble need its own prompt variant?
 "@
 
-python plugins/mill/scripts/mill-add.py mill-review-ensemble `
+python plugins/mill/scripts/millpy-add.py mill-review-ensemble `
     --title "Add ensemble reviewer script" `
     --summary "Spawn N workers, aggregate findings via a handler model. Separate script, not part of core mill-review." `
     --proposal-body $body
+```
+
+### Example — task with proposal (file-based)
+
+Write the body to a temp file first, then pass the path. Recommended for any body longer than ~30 characters or containing backticks, code fences, or quotes.
+
+```powershell
+Set-Content .scratch/proposal-mill-review-ensemble.md @"
+# Ensemble reviewer — background
+
+## Why
+
+Single-reviewer runs catch most issues, but we saw N false negatives ...
+
+## What needs to happen
+
+1. Script at `plugins/mill/scripts/mill-review-ensemble.py`
+2. ...
+
+## Open questions
+
+- Which worker-set default?
+- Does ensemble need its own prompt variant?
+"@
+
+python plugins/mill/scripts/millpy-add.py mill-review-ensemble `
+    --title "Add ensemble reviewer script" `
+    --summary "Spawn N workers, aggregate findings via a handler model. Separate script, not part of core mill-review." `
+    --proposal-body-file .scratch/proposal-mill-review-ensemble.md
 ```
 
 ## After the script succeeds

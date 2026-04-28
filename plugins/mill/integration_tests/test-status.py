@@ -1,5 +1,5 @@
 """
-Integration test for mill-status.py.
+Integration test for millpy-status.py.
 
 Builds a hub+wiki fixture under .scratch/ with five slug scenarios and
 verifies plain, --json, --sort phase, and main-worktree-guard runs.
@@ -144,7 +144,7 @@ def main() -> int:
         hub, wiki = _setup_fixture(container)
         print(f"[test-status] container: {container}", file=sys.stderr)
 
-        script = SCRIPTS / "mill-status.py"
+        script = SCRIPTS / "millpy-status.py"
 
         # --- Assertion group 1: plain run ---
         r = _run([sys.executable, str(script), "--no-color"], cwd=hub, check=False)

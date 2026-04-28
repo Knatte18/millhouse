@@ -16,7 +16,7 @@ These terms are used throughout the review subsystem and in any design discussio
 | Term | Meaning |
 |---|---|
 | **Frontend** | The orchestrator — the caller (e.g. a `mill-go` session in Claude Code). |
-| **API** | The three review CLI scripts: `mill-review-discussion.py`, `mill-review-plan.py`, `mill-review-code.py`. |
+| **API** | The three review CLI scripts: `millpy-review-discussion.py`, `millpy-review-plan.py`, `millpy-review-code.py`. |
 | **Backend** | Everything behind the API — templates, bulking, file-writing, reviewer dispatch, verdict parsing, ReviewResult assembly. Lives in `_review_*.py` + `_review_common.py`. |
 | **Reviewer** | A named strategy module (simple LLM, cluster, round-switching hybrid). Declares a module-level `MODE` constant (`"bulk"` or `"tool-use"`) and exposes `run(prompt_text) -> str`. File pattern: `_reviewer_<name>.py`. |
 | **LLM-provider** | Thin wrapper around a specific model. Exposes one function per mode (e.g. `_llm_claude.run_bulk`, `_llm_claude.run_tool_use`). No review semantics — just "send text, get text". |
@@ -36,7 +36,7 @@ A discussion gap is missing information; a plan/code block is a must-fix defect.
 
 ## Repo layout pointers
 
-- `plugins/mill/scripts/` — flat Python (no submodules); `mill-*.py` CLI scripts + `_*.py` helpers. Helpers hold only production code; no `if __name__ == "__main__":` smoke-test blocks.
+- `plugins/mill/scripts/` — flat Python (no submodules); `millpy-*.py` CLI scripts + `_*.py` helpers. Helpers hold only production code; no `if __name__ == "__main__":` smoke-test blocks.
 - `plugins/mill/templates/` — review-prompt templates + `review-output.schema.md`.
 - `plugins/mill/skills/` — `SKILL.md`-per-skill; indexed at repo-root `SKILLS.md`.
 - `plugins/mill/unit_tests/` — one `test-<name>.py` per helper. In-memory / `tempfile` fixtures; no real git, no real LLM. Run `python plugins/mill/unit_tests/run-all.py`.
@@ -58,5 +58,5 @@ A discussion gap is missing information; a plan/code block is a must-fix defect.
 Path rules that keep being forgotten — they live here, not spread across SKILL.md files.
 
 - **Junctions are IDE/terminal convenience only.** Scripts MUST resolve to the real wiki repo via `_paths.resolve_wiki_path(git_toplevel)`, never by treating `.millhouse/wiki` (or any junction) as a path. Junctions exist so the operator can type shorter paths in a shell and see the wiki in the sidebar — they are not a code contract. (The same invariant is documented in `wiki/config.yaml`'s header comment.)
-- **All path resolution goes through `_paths.py`.** The module re-exports `resolve_path` from `_sibling.py` (identical-twin with codeguide's copy per spec 00) and adds `resolve_git_root` + `resolve_wiki_path`. New path-resolver helpers go here too — do not scatter private `_resolve_*` functions across `mill-*.py` CLI scripts.
+- **All path resolution goes through `_paths.py`.** The module re-exports `resolve_path` from `_sibling.py` (identical-twin with codeguide's copy per spec 00) and adds `resolve_git_root` + `resolve_wiki_path`. New path-resolver helpers go here too — do not scatter private `_resolve_*` functions across `millpy-*.py` CLI scripts.
 - **Scratch lives at `<cwd>/.scratch/`, not under `.millhouse/`.** Shared with other plugins the engineer uses that default to top-level `.scratch/`. `.gitignore` covers it via `**/.scratch/`. Never write to `/tmp/` or `$env:TEMP`. (See `plugins/mill/skills/conversation/SKILL.md` for the full file-writing conventions.)

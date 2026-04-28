@@ -1,4 +1,4 @@
-"""Unit tests for build_plan() and in-place cleanup in mill-cleanup.py."""
+"""Unit tests for build_plan() and in-place cleanup in millpy-cleanup.py."""
 from __future__ import annotations
 
 import importlib.util
@@ -11,7 +11,7 @@ HUB = Path(__file__).resolve().parent.parent.parent.parent
 SCRIPTS = HUB / "plugins" / "mill" / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
-spec = importlib.util.spec_from_file_location("mill_cleanup", SCRIPTS / "mill-cleanup.py")
+spec = importlib.util.spec_from_file_location("mill_cleanup", SCRIPTS / "millpy-cleanup.py")
 mod = importlib.util.module_from_spec(spec)
 sys.modules["mill_cleanup"] = mod
 spec.loader.exec_module(mod)

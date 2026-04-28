@@ -1,4 +1,4 @@
-"""Unit tests for plugins/mill/scripts/mill-claim.py.
+"""Unit tests for plugins/mill/scripts/millpy-claim.py.
 
 Verifies:
   - top-level import succeeds (smoke test)
@@ -19,7 +19,7 @@ from unittest.mock import MagicMock, patch
 HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
-CLAIM_PATH = HUB / "plugins" / "mill" / "scripts" / "mill-claim.py"
+CLAIM_PATH = HUB / "plugins" / "mill" / "scripts" / "millpy-claim.py"
 
 
 # ---------------------------------------------------------------------------
@@ -45,7 +45,7 @@ def _make_ok_run(stdout: str = "", stderr: str = "") -> MagicMock:
 
 def _load_claim_module(stub_map: dict) -> object:
     """
-    Load mill-claim.py with the given module stubs injected into sys.modules.
+    Load millpy-claim.py with the given module stubs injected into sys.modules.
 
     Returns the loaded module object. Caller must restore sys.modules after
     use to avoid cross-test pollution.
@@ -107,12 +107,12 @@ def _make_stub_map(
 
 
 def test_smoke_import() -> None:
-    """mill-claim.py must import without error."""
+    """millpy-claim.py must import without error."""
     import importlib.util
 
     spec = importlib.util.spec_from_file_location("mill_claim_smoke", CLAIM_PATH)
     if spec is None or spec.loader is None:
-        raise AssertionError("Could not build module spec for mill-claim.py")
+        raise AssertionError("Could not build module spec for millpy-claim.py")
     mod = importlib.util.module_from_spec(spec)
 
     stubs = ["_spawn_core", "_subprocess_util", "_tasks_md", "_wiki", "_paths",
@@ -132,13 +132,13 @@ def test_smoke_import() -> None:
     try:
         spec.loader.exec_module(mod)
     except Exception as exc:
-        raise AssertionError(f"mill-claim.py failed to import: {exc}") from exc
+        raise AssertionError(f"millpy-claim.py failed to import: {exc}") from exc
     finally:
         _restore_modules(saved)
 
     if not hasattr(mod, "main"):
         raise AssertionError("mill-claim module must expose main()")
-    print("PASS: mill-claim.py imports cleanly")
+    print("PASS: millpy-claim.py imports cleanly")
 
 
 # ---------------------------------------------------------------------------

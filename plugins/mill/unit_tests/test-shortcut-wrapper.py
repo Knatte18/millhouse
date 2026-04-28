@@ -19,13 +19,13 @@ TEMPLATE_PATH = TEMPLATES_DIR / "shortcut-wrapper.py"
 def main() -> int:
     errors = 0
 
-    # --- render(template, {"SCRIPT": "mill-list"}) contains runpy.run_path call for mill-list.py ---
-    rendered = render(TEMPLATE_PATH, {"SCRIPT": "mill-list"})
-    if "mill-list.py" not in rendered:
-        print("FAIL: rendered template does not contain 'mill-list.py'", file=sys.stderr)
+    # --- render(template, {"SCRIPT": "millpy-list"}) contains runpy.run_path call for millpy-list.py ---
+    rendered = render(TEMPLATE_PATH, {"SCRIPT": "millpy-list"})
+    if "millpy-list.py" not in rendered:
+        print("FAIL: rendered template does not contain 'millpy-list.py'", file=sys.stderr)
         errors += 1
     else:
-        print("PASS: render substitutes <SCRIPT> -> mill-list.py in template")
+        print("PASS: render substitutes <SCRIPT> -> millpy-list.py in template")
     if "runpy.run_path" not in rendered:
         print("FAIL: rendered template does not contain 'runpy.run_path'", file=sys.stderr)
         errors += 1

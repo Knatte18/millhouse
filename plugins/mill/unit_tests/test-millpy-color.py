@@ -1,4 +1,4 @@
-"""Unit tests for plugins/mill/scripts/mill-color.py."""
+"""Unit tests for plugins/mill/scripts/millpy-color.py."""
 from __future__ import annotations
 
 import importlib.util
@@ -12,9 +12,9 @@ from unittest.mock import MagicMock, patch
 HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
-# Load the hyphenated module name via importlib (mill-color.py cannot be
+# Load the hyphenated module name via importlib (millpy-color.py cannot be
 # imported with a bare `import` because the filename contains a hyphen).
-_SCRIPT = HUB / "plugins" / "mill" / "scripts" / "mill-color.py"
+_SCRIPT = HUB / "plugins" / "mill" / "scripts" / "millpy-color.py"
 _spec = importlib.util.spec_from_file_location("mill_color", _SCRIPT)
 mill_color = importlib.util.module_from_spec(_spec)
 sys.modules["mill_color"] = mill_color  # register so patch() can resolve it

@@ -1,4 +1,4 @@
-"""Unit tests for plugins/mill/scripts/mill-fetch-issues.py."""
+"""Unit tests for plugins/mill/scripts/millpy-fetch-issues.py."""
 from __future__ import annotations
 
 import importlib.util
@@ -12,8 +12,8 @@ from unittest.mock import patch
 HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
-# Load mill-fetch-issues.py via importlib (hyphenated name).
-_SCRIPT = HUB / "plugins" / "mill" / "scripts" / "mill-fetch-issues.py"
+# Load millpy-fetch-issues.py via importlib (hyphenated name).
+_SCRIPT = HUB / "plugins" / "mill" / "scripts" / "millpy-fetch-issues.py"
 _spec = importlib.util.spec_from_file_location("mill_fetch_issues", _SCRIPT)
 mill_fetch_issues = importlib.util.module_from_spec(_spec)
 sys.modules["mill_fetch_issues"] = mill_fetch_issues

@@ -111,15 +111,37 @@ def main(argv: list[str] | None = None) -> int:
         default="",
         help="One-paragraph description written below the heading.",
     )
-    parser.add_argument(
+    body_group = parser.add_mutually_exclusive_group()
+    body_group.add_argument(
         "--proposal-body",
         default=None,
         help=(
-            "Long-form background. When provided, creates "
-            "proposal-<slug>.md at wiki root and links the heading to it."
+            "Long-form background as inline string. When provided, creates "
+            "proposal-<slug>.md at wiki root and links the heading to it. "
+            "For long bodies that may contain heredoc-fragile characters "
+            "(backticks, quotes), prefer --proposal-body-file."
+        ),
+    )
+    body_group.add_argument(
+        "--proposal-body-file",
+        default=None,
+        type=Path,
+        help=(
+            "Path to a UTF-8 file whose contents become the proposal body. "
+            "Use this for long bodies — it bypasses shell heredoc quoting "
+            "issues that mangle backticks and quotes."
         ),
     )
     args = parser.parse_args(argv)
+
+    if args.proposal_body_file is not None:
+        if not args.proposal_body_file.exists():
+            raise SystemExit(
+                f"--proposal-body-file path does not exist: {args.proposal_body_file}"
+            )
+        proposal_body = args.proposal_body_file.read_text(encoding="utf-8")
+    else:
+        proposal_body = args.proposal_body
 
     _validate_slug(args.slug)
     git_root = resolve_git_root()
@@ -131,7 +153,7 @@ def main(argv: list[str] | None = None) -> int:
             "or set paths.wiki: in .millhouse/config.local.yaml."
         )
 
-    has_proposal = args.proposal_body is not None
+    has_proposal = proposal_body is not None
     proposal_path = wiki_path / f"proposal-{args.slug}.md"
     # Guard against clobbering an existing proposal file even when the slug is
     # absent from Home.md (can happen after a bad abort): we'd overwrite the
@@ -165,7 +187,7 @@ def main(argv: list[str] | None = None) -> int:
             # Strip a single trailing newline if present, then re-add exactly
             # one, so we do not accumulate blanks when the caller already
             # terminated the string with ``\n``.
-            body = args.proposal_body.rstrip("\n") + "\n"
+            body = proposal_body.rstrip("\n") + "\n"
             proposal_path.write_text(body, encoding="utf-8")
             changed_paths.append(proposal_path.name)
 

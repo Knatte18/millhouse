@@ -1,5 +1,5 @@
 """
-Integration test for mill-review-code.py
+Integration test for millpy-review-code.py
 
 The .millhouse/ layout, wiki junction, and slug file are placed inside
 $tmp/project/ (not directly in $tmp/) because the code backend uses
@@ -11,7 +11,7 @@ Setup:
   3. Checkout task-branch; apply sample-code-diff.patch; commit.
   4. Seed .millhouse/ + wiki junction + slug file inside $tmp/project/.
   5. Seed active/test-slug/plan/00-overview.md in the fixture wiki.
-  6. Invoke mill-review-code.py with cwd=$tmp/project/.
+  6. Invoke millpy-review-code.py with cwd=$tmp/project/.
 
 Assertions:
   - Exit 0
@@ -269,11 +269,11 @@ def main() -> int:
         # ---------------------------------------------------------------
         print("Test 1: happy path (code review)...", file=sys.stderr)
 
-        script = _SCRIPTS / "mill-review-code.py"
+        script = _SCRIPTS / "millpy-review-code.py"
         exit_code, stdout, stderr = _run_script(script, project_root)
 
         if exit_code != 0:
-            print(f"FAIL: mill-review-code.py exited {exit_code}")
+            print(f"FAIL: millpy-review-code.py exited {exit_code}")
             print(f"stderr: {stderr}")
             print(f"stdout: {stdout}")
             failed = True

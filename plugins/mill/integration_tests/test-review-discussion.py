@@ -1,9 +1,9 @@
 """
-Integration test for mill-review-discussion.py
+Integration test for millpy-review-discussion.py
 
 Sets up a temporary .millhouse/ layout with a seeded slug file, a wiki/
 junction pointing at a fixture wiki containing a sample discussion.md,
-then invokes mill-review-discussion.py and asserts:
+then invokes millpy-review-discussion.py and asserts:
   - Exit 0
   - Valid JSON with type/round/verdict/reviews fields
   - verdict in {APPROVE, GAPS_FOUND}  (discussion uses v1 GAPS_FOUND vocab)
@@ -134,11 +134,11 @@ def main() -> int:
         # ---------------------------------------------------------------
         print("Test 1: happy path (discussion review)...", file=sys.stderr)
 
-        script = _SCRIPTS / "mill-review-discussion.py"
+        script = _SCRIPTS / "millpy-review-discussion.py"
         exit_code, stdout, stderr = _run_script(script, tmp)
 
         if exit_code != 0:
-            print(f"FAIL: mill-review-discussion.py exited {exit_code}")
+            print(f"FAIL: millpy-review-discussion.py exited {exit_code}")
             print(f"stderr: {stderr}")
             print(f"stdout: {stdout}")
             failed = True

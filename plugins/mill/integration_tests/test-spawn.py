@@ -2,7 +2,7 @@
 Integration test for mill-spawn.
 
 Builds an isolated hub+wiki pair under ``.scratch/`` and runs
-``mill-spawn.py`` against it. Asserts the end-to-end artefacts:
+``millpy-spawn.py`` against it. Asserts the end-to-end artefacts:
 
     - Home.md heading for the seeded task switches to ``[active]``.
     - A new worktree directory exists at ``<container>/worktrees/<slug>``
@@ -142,7 +142,7 @@ def _run_spawn(hub: Path) -> subprocess.CompletedProcess:
     env = os.environ.copy()
     env["PYTHONIOENCODING"] = "utf-8"
     return subprocess.run(
-        [sys.executable, str(SCRIPTS / "mill-spawn.py"), "--slug", "demo-task"],
+        [sys.executable, str(SCRIPTS / "millpy-spawn.py"), "--slug", "demo-task"],
         cwd=str(hub),
         capture_output=True,
         text=True,

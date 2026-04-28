@@ -71,7 +71,7 @@ Loop up to `max_review_rounds` rounds. Each round:
 2. Invoke the CLI as a subprocess:
 
    ```bash
-   python plugins/mill/scripts/mill-review-plan.py
+   python plugins/mill/scripts/millpy-review-plan.py
    ```
 
    The script discovers the slug and round from disk. It prints one JSON line: `{"type": "plan", "round": N, "verdict": "APPROVE" | "REQUEST_CHANGES", "reviews": [...]}` where each review entry has `{scope, verdict, file}`.

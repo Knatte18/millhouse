@@ -22,10 +22,10 @@ sys.path.insert(0, str(SCRIPTS))
 
 import _tasks_md  # noqa: E402
 
-# mill-spawn.py has a dash in its filename so plain ``import mill_spawn``
+# millpy-spawn.py has a dash in its filename so plain ``import mill_spawn``
 # doesn't work. Load it directly via importlib.
 spec = importlib.util.spec_from_file_location(
-    "mill_spawn", SCRIPTS / "mill-spawn.py"
+    "mill_spawn", SCRIPTS / "millpy-spawn.py"
 )
 mill_spawn = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(mill_spawn)
