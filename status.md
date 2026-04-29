@@ -63,7 +63,9 @@ batches:
     review_round: 2
     review_file: reviews/20260429-133125-code-review-state-on-worktree-r2.md
   - name: consumers-and-skills
-    state: pending
+    state: running
+    implementer_session: ba78188e-e4bc-4e77-81aa-979abe1416b1
+    start_sha: 518fe0e27c6d4244a7d07489cec33184a15dc04f
   - name: migration-and-docs
     state: pending
 ```
