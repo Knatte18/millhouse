@@ -7,6 +7,9 @@ worst-case; total failure raises ReviewError.
 
 Public API:
     run(cfg, slug, mill_dir, wiki_root, project_root) -> ReviewResult
+
+resolve_ref_paths is the canonical version from _review_common; no local
+shadow is defined here.
 """
 from __future__ import annotations
 
@@ -21,15 +24,20 @@ from _review_common import (
     ReviewError,
     ReviewResult,
     aggregate_verdict,
+    build_manifest_section,
+    build_reattached_section,
     build_tool_rule,
     bulk_files,
+    compute_creates_union,
     discover_round,
     load_reviewer,
     load_task_title,
     parse_batch_refs,
+    parse_missing_context,
     parse_verdict,
     read_constraints_md,
     render_prompt,
+    resolve_existing_paths,
     resolve_path,
     resolve_ref_paths,
     write_review_file,
@@ -79,96 +87,135 @@ def _load_root_from_overview(overview_path: Path) -> str | None:
     return data.get("root") or None
 
 
-def resolve_ref_paths(
-    raw_paths: list[str],
-    project_root: Path,
-    root: str | None,
-) -> list[Path]:
-    """Resolve raw path strings to absolute Paths.
-
-    root: absent → project_root / path
-    root: present → project_root / root / path
-    Non-existent paths are dropped with a stderr warning.
-    """
-    resolved: list[Path] = []
-    for raw in raw_paths:
-        if root:
-            candidate = project_root / root / raw
-        else:
-            candidate = project_root / raw
-        if candidate.exists():
-            resolved.append(candidate)
-        else:
-            print(
-                f"[_review_plan] warning: referenced path not found, skipping: {candidate}",
-                file=sys.stderr,
-            )
-    return resolved
-
-
 def _review_one_batch(
     batch_path: Path,
     overview_path: Path,
     reviews_dir: Path,
-    round_n: int,
+    max_rounds: int,
     task_title: str,
     constraints: str,
     batch_reviewer_name: str,
     batch_reviewer,
     project_root: Path,
     root: str | None,
+    creates_union: set[str],
+    wiki_root: Path,
 ) -> dict:
     """Review a single plan batch file. Returns a reviews[] entry dict."""
-    raw_refs = parse_batch_refs(batch_path)
-    reads = resolve_ref_paths(raw_refs, project_root, root)
-
-    tool_rule = build_tool_rule(batch_reviewer.MODE)
-    if batch_reviewer.MODE == "tool-use":
-        read_list = "\n".join(f"- {p}" for p in reads) or "(none)"
-        artefact_section = (
-            f"## Plan files to review\n"
-            f"- Overview: `{overview_path}`\n"
-            f"- Batch:    `{batch_path}`\n\n"
-            f"Read both files above. Then read the source files listed under "
-            f"`Reads:` / `Modifies:` / `Creates:` in the batch:\n{read_list}"
-        )
-    else:
-        bulked = bulk_files([overview_path, batch_path, *reads])
-        artefact_section = (
-            "## Plan content (overview + batch + Reads/Modifies files)\n"
-            f"{bulked}"
-        )
-
-    prompt_text = render_prompt(
-        "review-plan-batch",
-        task_title=task_title,
-        batch_name=batch_path.stem,
-        tool_rule=tool_rule,
-        artefact_section=artefact_section,
-        constraints=constraints,
-        round=round_n,
-        reviewer_model=batch_reviewer_name,
-    )
-
     try:
-        raw = batch_reviewer.run(prompt_text)
-    except LLMError as exc:
-        return {
-            "scope": batch_path.stem,
-            "verdict": "ERROR",
-            "file": None,
-            "error": str(exc),
-        }
+        round_n = discover_round(reviews_dir, "plan", batch_path.stem)
+        if round_n > max_rounds:
+            raise ReviewError(
+                f"Round {round_n} exceeds max {max_rounds} for plan review (batch={batch_path.stem})"
+            )
 
-    verdict = parse_verdict(raw)
-    path = write_review_file(
-        reviews_dir, "plan", round_n, raw, scope=batch_path.stem
-    )
-    print(
-        f"[_review_plan] batch {batch_path.stem}: verdict={verdict} file={path.name}",
-        file=sys.stderr,
-    )
-    return {"scope": batch_path.stem, "verdict": verdict, "file": str(path)}
+        raw_refs = parse_batch_refs(batch_path)
+        reads = resolve_ref_paths(
+            raw_refs, project_root, root,
+            creates_union=creates_union, wiki_root=wiki_root, caller_label="_review_plan",
+        )
+
+        ancestors_on_disk = resolve_existing_paths(
+            [raw for raw in creates_union if raw not in raw_refs],
+            project_root,
+            root,
+            wiki_root=wiki_root,
+        )
+        reads_set = {*reads, overview_path, batch_path}
+        ancestors_on_disk = [p for p in ancestors_on_disk if p not in reads_set]
+
+        tool_rule = build_tool_rule(batch_reviewer.MODE)
+
+        all_bulked = [overview_path, batch_path, *reads, *ancestors_on_disk]
+        manifest = build_manifest_section(all_bulked)
+
+        if batch_reviewer.MODE == "tool-use":
+            read_list = "\n".join(f"- {p}" for p in [*reads, *ancestors_on_disk]) or "(none)"
+            artefact_section = (
+                f"{manifest}\n\n"
+                f"## Plan files to review\n"
+                f"- Overview: `{overview_path}`\n"
+                f"- Batch:    `{batch_path}`\n\n"
+                f"Read both files above. Then read the source files listed under "
+                f"`Reads:` / `Modifies:` / `Creates:` in the batch + cross-batch creates "
+                f"that exist on disk:\n{read_list}"
+            )
+        else:
+            bulked = bulk_files(all_bulked)
+            artefact_section = (
+                f"{manifest}\n\n"
+                f"## Plan content (overview + batch + Reads/Modifies/Creates files + cross-batch ancestor creates)\n"
+                f"{bulked}"
+            )
+
+        prompt_text = render_prompt(
+            "review-plan-batch",
+            task_title=task_title,
+            batch_name=batch_path.stem,
+            tool_rule=tool_rule,
+            artefact_section=artefact_section,
+            constraints=constraints,
+            round=round_n,
+            reviewer_model=batch_reviewer_name,
+        )
+
+        try:
+            raw, session_id = batch_reviewer.run(prompt_text)
+        except LLMError as exc:
+            return {
+                "scope": batch_path.stem,
+                "round": round_n,
+                "verdict": "ERROR",
+                "file": None,
+                "error": str(exc),
+                "session_id": None,
+            }
+
+        verdict = parse_verdict(raw)
+
+        if verdict == "NEED_CONTEXT":
+            missing_raw = parse_missing_context(raw)
+            missing_paths = resolve_existing_paths(
+                missing_raw, project_root, root, wiki_root=wiki_root
+            )
+            if missing_paths:
+                retry_prompt = (
+                    build_reattached_section(missing_paths)
+                    + "\n\n"
+                    + "Please continue your review using the re-attached files above. "
+                    + "The original prompt is already in your session context."
+                )
+                print(
+                    f"[_review_plan] batch {batch_path.stem} NEED_CONTEXT round-1; retrying with resume "
+                    f"({len(missing_paths)} re-attached file(s)) session={(session_id or '?')[:8]}",
+                    file=sys.stderr,
+                )
+                try:
+                    raw, session_id = batch_reviewer.run(
+                        retry_prompt, session_id=session_id, resume=True
+                    )
+                except LLMError as exc:
+                    return {
+                        "scope": batch_path.stem,
+                        "round": round_n,
+                        "verdict": "ERROR",
+                        "file": None,
+                        "error": f"resume retry failed: {exc}",
+                        "session_id": None,
+                    }
+                verdict = parse_verdict(raw)
+                # Second NEED_CONTEXT propagates to caller untouched.
+
+        path = write_review_file(
+            reviews_dir, "plan", round_n, raw, scope=batch_path.stem
+        )
+        print(
+            f"[_review_plan] batch {batch_path.stem}: verdict={verdict} file={path.name}",
+            file=sys.stderr,
+        )
+        return {"scope": batch_path.stem, "round": round_n, "verdict": verdict, "file": str(path), "session_id": session_id}
+    except ReviewError as exc:
+        return {"scope": batch_path.stem, "round": round_n, "verdict": "ERROR", "file": None, "error": str(exc), "session_id": None}
 
 
 def run(
@@ -191,15 +238,10 @@ def run(
     # 1. Paths and round
     plan_dir = resolve_path(cfg["paths"]["plan_dir"], slug, wiki_root)
     reviews_dir = resolve_path(cfg["paths"]["reviews_dir"], slug, wiki_root)
-    round_n = discover_round(reviews_dir, "plan")
     max_rounds = cfg["review"]["plan"]["rounds"]
-    if round_n > max_rounds:
-        raise ReviewError(
-            f"Round {round_n} exceeds max {max_rounds} for plan review"
-        )
 
     print(
-        f"[_review_plan] slug={slug!r} round={round_n} plan_dir={plan_dir}",
+        f"[_review_plan] slug={slug!r} plan_dir={plan_dir} max_rounds={max_rounds}",
         file=sys.stderr,
     )
 
@@ -217,6 +259,7 @@ def run(
     )
 
     root = _load_root_from_overview(overview_path)
+    creates_union = compute_creates_union(plan_dir)
 
     # 3. Load reviewers (accept bulk or tool-use)
     batch_reviewer_name = cfg["review"]["plan"]["batch"]
@@ -243,18 +286,20 @@ def run(
                     batch_path,
                     overview_path,
                     reviews_dir,
-                    round_n,
+                    max_rounds,
                     task_title,
                     constraints,
                     batch_reviewer_name,
                     batch_reviewer,
                     project_root,
                     root,
+                    creates_union,
+                    wiki_root,
                 )
                 futures_map[future] = batch_path
 
             for future in as_completed(futures_map):
-                entry = future.result()  # propagates ReviewError from parse_verdict
+                entry = future.result()
                 reviews.append(entry)
 
         # Re-sort reviews to match batch file ordering (futures complete out-of-order)
@@ -263,6 +308,11 @@ def run(
 
     # 5. Holistic (if not skipped)
     if holistic_reviewer is not None:
+        round_n = discover_round(reviews_dir, "plan", "holistic")
+        if round_n > max_rounds:
+            raise ReviewError(
+                f"Round {round_n} exceeds max {max_rounds} for plan review (batch=holistic)"
+            )
         print("[_review_plan] running holistic review", file=sys.stderr)
 
         # Union all Reads:/Modifies:/Creates: across all batch files
@@ -270,13 +320,29 @@ def run(
         for batch_path in batch_files:
             for ref in parse_batch_refs(batch_path):
                 all_raw_refs[ref] = None
-        all_reads = resolve_ref_paths(list(all_raw_refs.keys()), project_root, root)
+        all_reads = resolve_ref_paths(
+            list(all_raw_refs.keys()), project_root, root,
+            creates_union=creates_union, wiki_root=wiki_root, caller_label="_review_plan",
+        )
+
+        all_creates_on_disk = resolve_existing_paths(
+            [r for r in creates_union if r not in all_raw_refs],
+            project_root,
+            root,
+            wiki_root=wiki_root,
+        )
+        reads_set = {*all_reads, overview_path, *batch_files}
+        all_creates_on_disk = [p for p in all_creates_on_disk if p not in reads_set]
 
         tool_rule = build_tool_rule(holistic_reviewer.MODE)
+
+        manifest = build_manifest_section([overview_path, *batch_files, *all_reads, *all_creates_on_disk])
+
         if holistic_reviewer.MODE == "tool-use":
             batch_list = "\n".join(f"- `{p}`" for p in batch_files) or "(none)"
-            read_list = "\n".join(f"- `{p}`" for p in all_reads) or "(none)"
+            read_list = "\n".join(f"- `{p}`" for p in [*all_reads, *all_creates_on_disk]) or "(none)"
             artefact_section = (
+                f"{manifest}\n\n"
                 f"## Plan files to review\n"
                 f"- Overview: `{overview_path}`\n"
                 f"- Batches:\n{batch_list}\n\n"
@@ -284,9 +350,10 @@ def run(
                 f"source files referenced across all batches:\n{read_list}"
             )
         else:
-            bulked_all = bulk_files([overview_path, *batch_files, *all_reads])
+            bulked_all = bulk_files([overview_path, *batch_files, *all_reads, *all_creates_on_disk])
             artefact_section = (
-                "## Plan content (overview + all batches + referenced files)\n"
+                f"{manifest}\n\n"
+                f"## Plan content (overview + all batches + referenced files + cross-batch ancestor creates)\n"
                 f"{bulked_all}"
             )
 
@@ -301,28 +368,98 @@ def run(
         )
 
         try:
-            raw = holistic_reviewer.run(prompt_text)
+            raw, session_id = holistic_reviewer.run(prompt_text)
         except LLMError as exc:
             reviews.append({
                 "scope": "holistic",
+                "round": round_n,
                 "verdict": "ERROR",
                 "file": None,
                 "error": str(exc),
+                "session_id": None,
             })
         else:
             verdict = parse_verdict(raw)
-            path = write_review_file(
-                reviews_dir, "plan", round_n, raw, scope="holistic"
-            )
-            print(
-                f"[_review_plan] holistic: verdict={verdict} file={path.name}",
-                file=sys.stderr,
-            )
-            reviews.append({
-                "scope": "holistic",
-                "verdict": verdict,
-                "file": str(path),
-            })
+
+            if verdict == "NEED_CONTEXT":
+                missing_raw = parse_missing_context(raw)
+                missing_paths = resolve_existing_paths(
+                    missing_raw, project_root, root, wiki_root=wiki_root
+                )
+                if missing_paths:
+                    retry_prompt = (
+                        build_reattached_section(missing_paths)
+                        + "\n\n"
+                        + "Please continue your review using the re-attached files above. "
+                        + "The original prompt is already in your session context."
+                    )
+                    print(
+                        f"[_review_plan] holistic NEED_CONTEXT round-1; retrying with resume "
+                        f"({len(missing_paths)} re-attached file(s)) session={(session_id or '?')[:8]}",
+                        file=sys.stderr,
+                    )
+                    try:
+                        raw, session_id = holistic_reviewer.run(
+                            retry_prompt, session_id=session_id, resume=True
+                        )
+                    except LLMError as exc:
+                        reviews.append({
+                            "scope": "holistic",
+                            "round": round_n,
+                            "verdict": "ERROR",
+                            "file": None,
+                            "error": f"resume retry failed: {exc}",
+                            "session_id": None,
+                        })
+                        # Skip the write_review_file + append below; retry failed.
+                    else:
+                        verdict = parse_verdict(raw)
+                        # Second NEED_CONTEXT propagates to caller untouched.
+                        path = write_review_file(
+                            reviews_dir, "plan", round_n, raw, scope="holistic"
+                        )
+                        print(
+                            f"[_review_plan] holistic: verdict={verdict} file={path.name}",
+                            file=sys.stderr,
+                        )
+                        reviews.append({
+                            "scope": "holistic",
+                            "round": round_n,
+                            "verdict": verdict,
+                            "file": str(path),
+                            "session_id": session_id,
+                        })
+                else:
+                    # No resolvable paths to re-attach — propagate NEED_CONTEXT.
+                    path = write_review_file(
+                        reviews_dir, "plan", round_n, raw, scope="holistic"
+                    )
+                    print(
+                        f"[_review_plan] holistic: verdict={verdict} file={path.name}",
+                        file=sys.stderr,
+                    )
+                    reviews.append({
+                        "scope": "holistic",
+                        "round": round_n,
+                        "verdict": verdict,
+                        "file": str(path),
+                        "session_id": session_id,
+                    })
+            else:
+                path = write_review_file(
+                    reviews_dir, "plan", round_n, raw, scope="holistic"
+                )
+                print(
+                    f"[_review_plan] holistic: verdict={verdict} file={path.name}",
+                    file=sys.stderr,
+                )
+                reviews.append({
+                    "scope": "holistic",
+                    "round": round_n,
+                    "verdict": verdict,
+                    "file": str(path),
+                    "session_id": session_id,
+                })
 
     # 6. Total-fail check
     if reviews and all(r["verdict"] == "ERROR" for r in reviews):
@@ -332,9 +469,10 @@ def run(
         raise ReviewError(f"All sub-reviews failed: {errors_summary}")
 
     aggregate = aggregate_verdict([r["verdict"] for r in reviews])
+    agg_round = max(r["round"] for r in reviews) if reviews else 0
     return ReviewResult(
         type="plan",
-        round=round_n,
+        round=agg_round,
         verdict=aggregate,
         reviews=reviews,
     )

@@ -11,7 +11,7 @@ Reviewer model: **<REVIEWER_MODEL>**. Round **<ROUND>**.
 
 ## Source-grounding rule
 
-**Never guess.** If you cannot verify a claim without reading a source file that was not provided above, emit `verdict: NEED_CONTEXT` and list the missing files under `## Missing context`. The orchestrator will re-fire the review with those files added. Fabricating file contents — or inferring them from filename / position alone — is a worse failure than halting honestly.
+**Never guess.** A `## Files included` manifest at the top of the artefact section above lists every file delivered to you in this prompt. Before emitting `verdict: NEED_CONTEXT`, scan the manifest and confirm the file you claim is missing is genuinely absent from the list. If a file IS in the manifest but you cannot find its content via the `--- FILE: <path> ---` delimiter, that is a long-context recall failure on your side — re-scan; do not emit NEED_CONTEXT for files in the manifest. Only emit `verdict: NEED_CONTEXT` for paths that are NOT in the manifest, and explain under `## Missing context` why each path is needed (one line per path). The orchestrator will re-fire the review with those files added. Fabricating file contents — or inferring them from filename / position alone — is a worse failure than halting honestly.
 
 ## Criteria (apply to the plan as a whole)
 

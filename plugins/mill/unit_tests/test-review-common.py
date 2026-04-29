@@ -15,17 +15,23 @@ from _review_common import (  # noqa: E402
     RE_SIMPLE,
     ReviewError,
     aggregate_verdict,
+    build_manifest_section,
+    build_reattached_section,
     build_tool_rule,
     bulk_files,
+    compute_creates_union,
     discover_round,
     find_active_slug,
     load_config,
     load_reviewer,
     load_task_title,
     parse_batch_refs,
+    parse_missing_context,
     parse_verdict,
     render_prompt,
+    resolve_existing_paths,
     resolve_path,
+    resolve_ref_paths,
     write_review_file,
 )
 
@@ -34,7 +40,7 @@ def main() -> int:
     errors = 0
 
     # discover_round: nonexistent dir -> 1
-    assert discover_round(Path("/tmp/__nx_reviews__"), "discussion") == 1
+    assert discover_round(Path("/tmp/__nx_reviews__"), "discussion", "holistic") == 1
     print("PASS: discover_round nonexistent dir returns 1")
 
     # RE_SIMPLE matches holistic plan file; RE_BATCH is NOT applied
@@ -50,11 +56,65 @@ def main() -> int:
     with tempfile.TemporaryDirectory() as tmpdir:
         reviews = Path(tmpdir)
         (reviews / "20260418-001200-plan-review-01-setup-r2.md").write_text("x")
-        assert discover_round(reviews, "discussion") == 1
+        assert discover_round(reviews, "discussion", "holistic") == 1
         print("PASS: discover_round cross-type isolation (plan-batch ignored for discussion)")
-        result = discover_round(reviews, "plan")
-        assert result == 3
+        result = discover_round(reviews, "plan", "01-setup")
+        assert result == 3, f"expected 3, got {result}"
         print(f"PASS: discover_round for plan with batch file: {result}")
+        assert discover_round(reviews, "plan", "holistic") == 1
+        print("PASS: discover_round plan holistic unaffected by batch file")
+        assert discover_round(reviews, "plan", "other-batch") == 1
+        print("PASS: discover_round plan other-batch unaffected by 01-setup file")
+
+    # discover_round per-scope isolation across all five (review_type, scope) axes
+    with tempfile.TemporaryDirectory() as tmpdir:
+        reviews = Path(tmpdir)
+        # discussion holistic: 2 files
+        (reviews / "20260418-001200-discussion-review-r1.md").write_text("x")
+        (reviews / "20260418-001300-discussion-review-r2.md").write_text("x")
+        # plan holistic: 1 file
+        (reviews / "20260418-001400-plan-review-r1.md").write_text("x")
+        # plan batch-a: 2 files
+        (reviews / "20260418-001500-plan-review-batch-a-r1.md").write_text("x")
+        (reviews / "20260418-001600-plan-review-batch-a-r2.md").write_text("x")
+        # plan batch-b: 1 file
+        (reviews / "20260418-001700-plan-review-batch-b-r1.md").write_text("x")
+        # code holistic: 1 file
+        (reviews / "20260418-001800-code-review-r1.md").write_text("x")
+        # code batch-a: 1 file
+        (reviews / "20260418-001900-code-review-batch-a-r1.md").write_text("x")
+
+        result = discover_round(reviews, "discussion", "holistic")
+        assert result == 3, f"expected 3, got {result}"
+        print(f"PASS: discover_round per-scope discussion/holistic: {result}")
+
+        result = discover_round(reviews, "plan", "holistic")
+        assert result == 2, f"expected 2, got {result}"
+        print(f"PASS: discover_round per-scope plan/holistic: {result}")
+
+        result = discover_round(reviews, "plan", "batch-a")
+        assert result == 3, f"expected 3, got {result}"
+        print(f"PASS: discover_round per-scope plan/batch-a: {result}")
+
+        result = discover_round(reviews, "plan", "batch-b")
+        assert result == 2, f"expected 2, got {result}"
+        print(f"PASS: discover_round per-scope plan/batch-b: {result}")
+
+        result = discover_round(reviews, "plan", "batch-c")
+        assert result == 1, f"expected 1, got {result}"
+        print(f"PASS: discover_round per-scope plan/batch-c (absent): {result}")
+
+        result = discover_round(reviews, "code", "holistic")
+        assert result == 2, f"expected 2, got {result}"
+        print(f"PASS: discover_round per-scope code/holistic: {result}")
+
+        result = discover_round(reviews, "code", "batch-a")
+        assert result == 2, f"expected 2, got {result}"
+        print(f"PASS: discover_round per-scope code/batch-a: {result}")
+
+        result = discover_round(reviews, "code", "batch-b")
+        assert result == 1, f"expected 1, got {result}"
+        print(f"PASS: discover_round per-scope code/batch-b (absent for code): {result}")
 
     # find_active_slug: empty dir -> ActiveError re-raised as ReviewError
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -278,6 +338,424 @@ def main() -> int:
         refs = parse_batch_refs(batch)
         assert refs == ["a", "b", "c"], f"Got {refs}"
         print("PASS: parse_batch_refs mixed single-line and multi-line fields")
+
+    # parse_batch_refs: case-variant none tokens filtered (Block A: None)
+    with tempfile.TemporaryDirectory() as tmpdir:
+        batch = Path(tmpdir) / "batch.md"
+        batch.write_text("- **Creates:** None\n", encoding="utf-8")
+        refs = parse_batch_refs(batch)
+        assert refs == [], f"Got {refs}"
+        print("PASS: parse_batch_refs 'None' (capital N) filtered")
+
+    # parse_batch_refs: case-variant none tokens filtered (Block B: NONE)
+    with tempfile.TemporaryDirectory() as tmpdir:
+        batch = Path(tmpdir) / "batch.md"
+        batch.write_text("- **Modifies:** NONE\n", encoding="utf-8")
+        refs = parse_batch_refs(batch)
+        assert refs == [], f"Got {refs}"
+        print("PASS: parse_batch_refs 'NONE' (all caps) filtered")
+
+    # parse_batch_refs: case-variant none in sub-bullet form (Block C: `None`)
+    with tempfile.TemporaryDirectory() as tmpdir:
+        batch = Path(tmpdir) / "batch.md"
+        batch.write_text(
+            "- **Creates:**\n"
+            "  - `None`\n",
+            encoding="utf-8",
+        )
+        refs = parse_batch_refs(batch)
+        assert refs == [], f"Got {refs}"
+        print("PASS: parse_batch_refs sub-bullet `None` filtered")
+
+    # parse_batch_refs: mixed token + lowercase none inline (Block D: regression pin)
+    with tempfile.TemporaryDirectory() as tmpdir:
+        batch = Path(tmpdir) / "batch.md"
+        batch.write_text("- **Reads:** `a`, none\n", encoding="utf-8")
+        refs = parse_batch_refs(batch)
+        # backtick tokens win; "none" is comma-fallback and filtered
+        assert refs == ["a"], f"Got {refs}"
+        print("PASS: parse_batch_refs backtick tokens win; trailing 'none' filtered")
+
+    # resolve_ref_paths: hit on disk
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp_dir = Path(tmpdir)
+        real_file = tmp_dir / "real.py"
+        real_file.write_text("x")
+        result = resolve_ref_paths([str(real_file)], tmp_dir, root=None)
+        assert result == [real_file], f"Got {result}"
+        print("PASS: resolve_ref_paths hit on disk returns resolved path")
+
+    # resolve_ref_paths: suppression via creates_union (no error, empty return)
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp_dir = Path(tmpdir)
+        result = resolve_ref_paths(
+            ["nonexistent.py"], tmp_dir, root=None,
+            creates_union={"nonexistent.py"},
+        )
+        assert result == [], f"Got {result}"
+        print("PASS: resolve_ref_paths creates_union suppresses missing path")
+
+    # resolve_ref_paths: hard-fail on unresolved path
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp_dir = Path(tmpdir)
+        try:
+            resolve_ref_paths(["nonexistent.py"], tmp_dir, root=None)
+            errors += 1
+            print("FAIL: expected ReviewError for missing path", file=sys.stderr)
+        except ReviewError as e:
+            assert "referenced path not found" in str(e), f"Unexpected message: {e}"
+            assert "nonexistent.py" in str(e), f"Path not in message: {e}"
+            print("PASS: resolve_ref_paths hard-fails with 'referenced path not found'")
+
+    # resolve_ref_paths: wiki path resolved
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp_project = Path(tmpdir) / "project"
+        tmp_project.mkdir()
+        tmp_wiki = Path(tmpdir) / "wiki"
+        (tmp_wiki / "active" / "x").mkdir(parents=True)
+        (tmp_wiki / "active" / "x" / "discussion.md").write_text("d")
+        result = resolve_ref_paths(
+            ["wiki/active/x/discussion.md"], tmp_project, root=None,
+            wiki_root=tmp_wiki,
+        )
+        assert result == [tmp_wiki / "active" / "x" / "discussion.md"], f"Got {result}"
+        print("PASS: resolve_ref_paths wiki/ prefix resolved via wiki_root")
+
+    # resolve_ref_paths: wiki path missing wiki_root raises ReviewError
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp_dir = Path(tmpdir)
+        try:
+            resolve_ref_paths(["wiki/foo"], tmp_dir, root=None)
+            errors += 1
+            print("FAIL: expected ReviewError for wiki/ without wiki_root", file=sys.stderr)
+        except ReviewError as e:
+            assert "no wiki_root provided" in str(e), f"Unexpected message: {e}"
+            print("PASS: resolve_ref_paths wiki/ without wiki_root raises ReviewError")
+
+    # resolve_ref_paths: wiki path exists in wiki_root but not in creates_union -> hard-fail
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp_project = Path(tmpdir) / "project"
+        tmp_project.mkdir()
+        tmp_wiki = Path(tmpdir) / "wiki"
+        tmp_wiki.mkdir()
+        try:
+            resolve_ref_paths(
+                ["wiki/active/missing.md"], tmp_project, root=None,
+                wiki_root=tmp_wiki,
+            )
+            errors += 1
+            print("FAIL: expected ReviewError for missing wiki path", file=sys.stderr)
+        except ReviewError as e:
+            assert "referenced path not found" in str(e), f"Unexpected message: {e}"
+            print("PASS: resolve_ref_paths wiki path missing on disk hard-fails")
+
+    # resolve_ref_paths: caller_label appears in error message
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp_dir = Path(tmpdir)
+        try:
+            resolve_ref_paths(
+                ["missing.py"], tmp_dir, root=None,
+                caller_label="_review_plan",
+            )
+            errors += 1
+            print("FAIL: expected ReviewError", file=sys.stderr)
+        except ReviewError as e:
+            assert str(e).startswith("[_review_plan]"), f"Unexpected message: {e}"
+            print("PASS: resolve_ref_paths caller_label appears in error message")
+
+    # resolve_ref_paths: defensive None filter (Python None in list)
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp_dir = Path(tmpdir)
+        real_file = tmp_dir / "real.py"
+        real_file.write_text("x")
+        result = resolve_ref_paths([None, str(real_file)], tmp_dir, root=None)
+        assert result == [real_file], f"Got {result}"
+        print("PASS: resolve_ref_paths defensive None skipped silently")
+
+    # resolve_ref_paths: defensive lowercase 'none' filter
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp_dir = Path(tmpdir)
+        real_file = tmp_dir / "real.py"
+        real_file.write_text("x")
+        result = resolve_ref_paths(["none", str(real_file)], tmp_dir, root=None)
+        assert result == [real_file], f"Got {result}"
+        print("PASS: resolve_ref_paths 'none' string skipped silently")
+
+    # resolve_ref_paths: defensive 'None' (capital N) filter
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp_dir = Path(tmpdir)
+        real_file = tmp_dir / "real.py"
+        real_file.write_text("x")
+        result = resolve_ref_paths(["None", str(real_file)], tmp_dir, root=None)
+        assert result == [real_file], f"Got {result}"
+        print("PASS: resolve_ref_paths 'None' string skipped silently")
+
+    # compute_creates_union: empty plan dir returns empty set
+    with tempfile.TemporaryDirectory() as tmpdir:
+        result = compute_creates_union(Path(tmpdir) / "nonexistent")
+        assert result == set(), f"Got {result}"
+        print("PASS: compute_creates_union nonexistent plan_dir returns empty set")
+
+    # compute_creates_union: one batch with inline Creates tokens
+    with tempfile.TemporaryDirectory() as tmpdir:
+        plan_dir = Path(tmpdir)
+        (plan_dir / "01-setup.md").write_text(
+            "- **Creates:** `a`, `b`\n", encoding="utf-8"
+        )
+        result = compute_creates_union(plan_dir)
+        assert result == {"a", "b"}, f"Got {result}"
+        print("PASS: compute_creates_union inline Creates returns set of tokens")
+
+    # compute_creates_union: none token filtered
+    with tempfile.TemporaryDirectory() as tmpdir:
+        plan_dir = Path(tmpdir)
+        (plan_dir / "01-setup.md").write_text(
+            "- **Creates:** none\n", encoding="utf-8"
+        )
+        result = compute_creates_union(plan_dir)
+        assert result == set(), f"Got {result}"
+        print("PASS: compute_creates_union 'none' token filtered")
+
+    # compute_creates_union: two batches with sub-bullet Creates -> union
+    with tempfile.TemporaryDirectory() as tmpdir:
+        plan_dir = Path(tmpdir)
+        (plan_dir / "01-setup.md").write_text(
+            "- **Creates:**\n"
+            "  - `x.py`\n"
+            "  - `y.py`\n",
+            encoding="utf-8",
+        )
+        (plan_dir / "02-wire.md").write_text(
+            "- **Creates:**\n"
+            "  - `z.py`\n",
+            encoding="utf-8",
+        )
+        result = compute_creates_union(plan_dir)
+        assert result == {"x.py", "y.py", "z.py"}, f"Got {result}"
+        print("PASS: compute_creates_union two batches -> union of Creates tokens")
+
+    # compute_creates_union: 00-overview.md excluded
+    with tempfile.TemporaryDirectory() as tmpdir:
+        plan_dir = Path(tmpdir)
+        (plan_dir / "00-overview.md").write_text(
+            "- **Creates:** `overview-token`\n", encoding="utf-8"
+        )
+        (plan_dir / "01-setup.md").write_text(
+            "- **Creates:** `real-token`\n", encoding="utf-8"
+        )
+        result = compute_creates_union(plan_dir)
+        assert result == {"real-token"}, f"Got {result}"
+        print("PASS: compute_creates_union 00-overview.md excluded")
+
+    # compute_creates_union: case-variant None filtered
+    with tempfile.TemporaryDirectory() as tmpdir:
+        plan_dir = Path(tmpdir)
+        (plan_dir / "01-setup.md").write_text(
+            "- **Creates:** None\n", encoding="utf-8"
+        )
+        result = compute_creates_union(plan_dir)
+        assert result == set(), f"Got {result}"
+        print("PASS: compute_creates_union 'None' (capital N) filtered")
+
+    # ---------------------------------------------------------------------------
+    # build_manifest_section
+    # ---------------------------------------------------------------------------
+
+    # Empty input
+    result = build_manifest_section([])
+    assert result == "## Files included (N=0)\n\n(no files)", f"Got {result!r}"
+    print("PASS: build_manifest_section empty input")
+
+    # Three-path input
+    paths = [Path("/a/foo.py"), Path("/b/bar.py"), Path("/c/baz.py")]
+    result = build_manifest_section(paths)
+    assert result.startswith("## Files included (N=3)"), f"Got {result!r}"
+    lines = result.split("\n")
+    assert lines[1] == "", f"Expected blank line, got {lines[1]!r}"
+    assert lines[2] == f"- {paths[0]}", f"Got {lines[2]!r}"
+    assert lines[3] == f"- {paths[1]}", f"Got {lines[3]!r}"
+    assert lines[4] == f"- {paths[2]}", f"Got {lines[4]!r}"
+    print("PASS: build_manifest_section three-path input (heading + blank + bullets)")
+
+    # No trailing newline
+    assert not result.endswith("\n"), f"Expected no trailing newline, got {result!r}"
+    print("PASS: build_manifest_section no trailing newline")
+
+    # ---------------------------------------------------------------------------
+    # resolve_existing_paths
+    # ---------------------------------------------------------------------------
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project = Path(tmpdir) / "project"
+        project.mkdir()
+
+        # Path on disk -> returned
+        existing = project / "real.py"
+        existing.write_text("x")
+        result = resolve_existing_paths([str(existing)], project, root=None)
+        assert result == [existing], f"Got {result}"
+        print("PASS: resolve_existing_paths path on disk returned")
+
+        # Path NOT on disk -> silently dropped
+        result = resolve_existing_paths(["nonexistent.py"], project, root=None)
+        assert result == [], f"Got {result}"
+        print("PASS: resolve_existing_paths missing path silently dropped")
+
+        # Wiki-prefixed path that exists under wiki_root -> returned
+        wiki = Path(tmpdir) / "wiki"
+        (wiki / "active" / "slug").mkdir(parents=True)
+        wiki_file = wiki / "active" / "slug" / "foo.md"
+        wiki_file.write_text("w")
+        result = resolve_existing_paths(
+            ["wiki/active/slug/foo.md"], project, root=None, wiki_root=wiki
+        )
+        assert result == [wiki_file], f"Got {result}"
+        print("PASS: resolve_existing_paths wiki-prefixed path exists -> returned")
+
+        # Wiki-prefixed path missing -> silently dropped (no error)
+        result = resolve_existing_paths(
+            ["wiki/active/slug/missing.md"], project, root=None, wiki_root=wiki
+        )
+        assert result == [], f"Got {result}"
+        print("PASS: resolve_existing_paths wiki-prefixed path missing -> silently dropped")
+
+        # Wiki-prefixed path with wiki_root=None -> silently dropped (no raise)
+        result = resolve_existing_paths(
+            ["wiki/active/slug/foo.md"], project, root=None, wiki_root=None
+        )
+        assert result == [], f"Got {result}"
+        print("PASS: resolve_existing_paths wiki/ with wiki_root=None -> silently dropped (no raise)")
+
+        # None token silently dropped
+        result = resolve_existing_paths([None, str(existing)], project, root=None)
+        assert result == [existing], f"Got {result}"
+        print("PASS: resolve_existing_paths None token silently dropped")
+
+        # 'none' (any case) tokens silently dropped
+        result = resolve_existing_paths(["none", "NONE", "None", str(existing)], project, root=None)
+        assert result == [existing], f"Got {result}"
+        print("PASS: resolve_existing_paths 'none'/'NONE'/'None' tokens silently dropped")
+
+        # Mixed: [exists, missing, "none", None, wiki-exists] -> [exists, wiki-exists]
+        result = resolve_existing_paths(
+            [str(existing), "nonexistent.py", "none", None, "wiki/active/slug/foo.md"],
+            project,
+            root=None,
+            wiki_root=wiki,
+        )
+        assert result == [existing, wiki_file], f"Got {result}"
+        print("PASS: resolve_existing_paths mixed input -> only existing paths returned")
+
+    # Per-scope counters survive interleaved per-batch + holistic writes (regression for #21, #62, #63)
+    with tempfile.TemporaryDirectory() as tmpdir:
+        reviews = Path(tmpdir)
+        ts = "20260418-002000"
+        (reviews / f"{ts}-code-review-helper-modules-r1.md").write_text("x")
+
+        result = discover_round(reviews, "code", "helper-modules")
+        assert result == 2, f"expected 2, got {result}"
+        print(f"PASS: discover_round per-scope code/helper-modules after r1: {result}")
+
+        result = discover_round(reviews, "code", "spawn-core")
+        assert result == 1, f"expected 1, got {result}"
+        print(f"PASS: discover_round per-scope code/spawn-core (different batch, fresh count): {result}")
+
+        (reviews / f"{ts}-code-review-r1.md").write_text("x")
+
+        result = discover_round(reviews, "code", "holistic")
+        assert result == 2, f"expected 2, got {result}"
+        print(f"PASS: discover_round per-scope code/holistic independent after holistic r1: {result}")
+
+        result = discover_round(reviews, "code", "helper-modules")
+        assert result == 2, f"expected 2, got {result}"
+        print(f"PASS: discover_round per-scope code/helper-modules still independent of holistic: {result}")
+
+    # ---------------------------------------------------------------------------
+    # parse_missing_context
+    # ---------------------------------------------------------------------------
+
+    # No ## Missing context heading → []
+    result = parse_missing_context("# Review\n\n```yaml\nverdict: NEED_CONTEXT\n```\n")
+    assert result == [], f"Got {result}"
+    print("PASS: parse_missing_context no heading -> []")
+
+    # One path bullet
+    text = "## Missing context\n\n- `a/b.py` — reason text\n"
+    result = parse_missing_context(text)
+    assert result == ["a/b.py"], f"Got {result}"
+    print("PASS: parse_missing_context one path bullet -> ['a/b.py']")
+
+    # Two path bullets in order
+    text = "## Missing context\n\n- `a/b.py` — reason\n- `c/d.py` — other reason\n"
+    result = parse_missing_context(text)
+    assert result == ["a/b.py", "c/d.py"], f"Got {result}"
+    print("PASS: parse_missing_context two path bullets -> list in order")
+
+    # Empty section (heading present, no bullets)
+    text = "## Missing context\n\nNo bullets here.\n"
+    result = parse_missing_context(text)
+    assert result == [], f"Got {result}"
+    print("PASS: parse_missing_context empty section -> []")
+
+    # Section terminated by next ## heading — only paths between headings captured
+    text = (
+        "## Missing context\n\n"
+        "- `x/y.py` — reason\n\n"
+        "## Verdict\n\n"
+        "- `z/w.py` — should NOT be captured\n"
+    )
+    result = parse_missing_context(text)
+    assert result == ["x/y.py"], f"Got {result}"
+    print("PASS: parse_missing_context stops at next ## heading")
+
+    # Bullet without backticks → not captured
+    text = "## Missing context\n\n- a/b.py — reason\n"
+    result = parse_missing_context(text)
+    assert result == [], f"Got {result}"
+    print("PASS: parse_missing_context bullet without backticks not captured")
+
+    # Bullet with `none` token → filtered (lowercase)
+    text = "## Missing context\n\n- `none` — reason\n"
+    result = parse_missing_context(text)
+    assert result == [], f"Got {result}"
+    print("PASS: parse_missing_context `none` token filtered")
+
+    # Bullet with `None` token → filtered (capital N)
+    text = "## Missing context\n\n- `None` — reason\n"
+    result = parse_missing_context(text)
+    assert result == [], f"Got {result}"
+    print("PASS: parse_missing_context `None` token filtered")
+
+    # ---------------------------------------------------------------------------
+    # build_reattached_section
+    # ---------------------------------------------------------------------------
+
+    # Empty input → ""
+    result = build_reattached_section([])
+    assert result == "", f"Got {result!r}"
+    print("PASS: build_reattached_section empty input -> ''")
+
+    # One path → heading + blank line + FILE delimiter
+    with tempfile.TemporaryDirectory() as tmpdir:
+        f = Path(tmpdir) / "foo.py"
+        f.write_text("content")
+        result = build_reattached_section([f])
+        assert "## Re-attached files (you said these were missing)" in result, f"Missing heading in: {result!r}"
+        assert str(f) in result, f"Path not in output: {result!r}"
+        assert "--- FILE:" in result, f"No FILE delimiter in: {result!r}"
+        print("PASS: build_reattached_section one path -> heading + FILE delimiter")
+
+    # Two paths → both delimiters in order
+    with tempfile.TemporaryDirectory() as tmpdir:
+        fa = Path(tmpdir) / "a.py"
+        fb = Path(tmpdir) / "b.py"
+        fa.write_text("aaa")
+        fb.write_text("bbb")
+        result = build_reattached_section([fa, fb])
+        assert str(fa) in result, "fa not in output"
+        assert str(fb) in result, "fb not in output"
+        assert result.index(str(fa)) < result.index(str(fb)), "fa should appear before fb"
+        print("PASS: build_reattached_section two paths -> both delimiters in order")
 
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)

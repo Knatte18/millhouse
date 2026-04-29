@@ -18,7 +18,6 @@ from _llm_claude import LLMError
 from _review_common import (
     ReviewError,
     ReviewResult,
-    aggregate_verdict,
     build_tool_rule,
     discover_round,
     load_reviewer,
@@ -53,7 +52,7 @@ def run(
     reviews_dir = resolve_path(cfg["paths"]["reviews_dir"], slug, wiki_root)
 
     # 2. Round discovery and cap check
-    round_n = discover_round(reviews_dir, "discussion")
+    round_n = discover_round(reviews_dir, "discussion", "holistic")
     max_rounds = cfg["review"]["discussion"]["rounds"]
     if round_n > max_rounds:
         raise ReviewError(
@@ -99,7 +98,7 @@ def run(
     #    means zero successes → total failure → raise ReviewError so the API
     #    exits 1 with empty stdout.
     try:
-        raw = reviewer.run(prompt_text)
+        raw, session_id = reviewer.run(prompt_text)
     except LLMError as exc:
         raise ReviewError(f"All sub-reviews failed: {exc}") from exc
 
@@ -121,6 +120,7 @@ def run(
                 "scope": "holistic",
                 "verdict": verdict,
                 "file": str(review_file),
+                "session_id": session_id,
             }
         ],
     )

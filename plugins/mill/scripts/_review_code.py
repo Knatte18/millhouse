@@ -35,15 +35,20 @@ from _plan_dag import PlanDAGError, extract_batch_index
 from _review_common import (
     ReviewError,
     ReviewResult,
+    build_manifest_section,
+    build_reattached_section,
     build_tool_rule,
     bulk_files,
+    compute_creates_union,
     discover_round,
     load_reviewer,
     load_task_title,
     parse_batch_refs,
+    parse_missing_context,
     parse_verdict,
     read_constraints_md,
     render_prompt,
+    resolve_existing_paths,
     resolve_path,
     resolve_ref_paths,
     write_review_file,
@@ -95,26 +100,37 @@ def _build_artefact_section(
     overview_path: Path,
     batch_files: list[Path],
     source_files: list[Path],
+    ancestors_on_disk: list[Path],
 ) -> str:
     """Return the ``<ARTEFACT_SECTION>`` block for the prompt.
 
     In tool-use mode we pass paths and tell the reviewer to Read them
     itself; in bulk mode we splice the file contents inline. Both modes
     list the same files — only the delivery mechanism differs.
+    ``ancestors_on_disk`` holds cross-batch creates that already exist on
+    disk; they are appended to the bulk so the reviewer can verify
+    cross-batch contracts.
     """
+    all_bulked = [overview_path, *batch_files, *source_files, *ancestors_on_disk]
+    manifest = build_manifest_section(all_bulked)
+
     if reviewer_mode == "tool-use":
         batch_list = "\n".join(f"  - `{p}`" for p in batch_files) or "  (none)"
-        read_list = "\n".join(f"- `{p}`" for p in source_files) or "(none)"
+        read_list = "\n".join(f"- `{p}`" for p in [*source_files, *ancestors_on_disk]) or "(none)"
         return (
+            f"{manifest}\n\n"
             "## Plan + source files to review\n"
             f"- Overview: `{overview_path}`\n"
             f"- Batch file(s):\n{batch_list}\n\n"
             "Read the overview and every batch file above. Then read every "
-            f"source file listed below for full context:\n{read_list}"
+            "source file listed below for full context (includes cross-batch "
+            f"ancestor creates already on disk):\n{read_list}"
         )
-    bulked = bulk_files([overview_path, *batch_files, *source_files])
+
+    bulked = bulk_files(all_bulked)
     return (
-        "## Plan + source content (overview + batch files + referenced source)\n"
+        f"{manifest}\n\n"
+        "## Plan + source content (overview + batch files + referenced source + ancestor creates)\n"
         f"{bulked}"
     )
 
@@ -139,14 +155,13 @@ def run(
     # 1. Paths + round counter
     plan_dir = resolve_path(cfg["paths"]["plan_dir"], slug, wiki_root)
     reviews_dir = resolve_path(cfg["paths"]["reviews_dir"], slug, wiki_root)
-    round_n = discover_round(reviews_dir, "code")
+    scope_label = batch_name or "holistic"
+    round_n = discover_round(reviews_dir, "code", scope_label)
     max_rounds = cfg["review"]["code"]["rounds"]
     if round_n > max_rounds:
         raise ReviewError(
             f"Round {round_n} exceeds max {max_rounds} for code review"
         )
-
-    scope_label = batch_name or "holistic"
     print(
         f"[_review_code] slug={slug!r} round={round_n} scope={scope_label}",
         file=sys.stderr,
@@ -165,7 +180,11 @@ def run(
     for bp in batch_files:
         for ref in parse_batch_refs(bp):
             all_raw_refs[ref] = None
-    referenced = resolve_ref_paths(list(all_raw_refs.keys()), project_root, root)
+    creates_union = compute_creates_union(plan_dir)
+    referenced = resolve_ref_paths(
+        list(all_raw_refs.keys()), project_root, root,
+        creates_union=creates_union, wiki_root=wiki_root,
+    )
 
     # Deduplicate while preserving order across the two lists.
     seen: dict[Path, None] = {}
@@ -182,6 +201,14 @@ def run(
             file=sys.stderr,
         )
 
+    ancestors_on_disk = resolve_existing_paths(
+        [raw for raw in creates_union if raw not in all_raw_refs],
+        project_root,
+        root,
+        wiki_root=wiki_root,
+    )
+    ancestors_on_disk = [p for p in ancestors_on_disk if p not in source_files]
+
     # 4. Reviewer + prompt
     reviewer_name = cfg["review"]["code"]["reviewer"]
     reviewer = load_reviewer(reviewer_name)
@@ -189,7 +216,7 @@ def run(
     template_name = "review-code-batch" if batch_name else "review-code-holistic"
     tool_rule = build_tool_rule(reviewer.MODE)
     artefact_section = _build_artefact_section(
-        reviewer.MODE, overview_path, batch_files, source_files
+        reviewer.MODE, overview_path, batch_files, source_files, ancestors_on_disk
     )
 
     prompt_kwargs = {
@@ -207,12 +234,39 @@ def run(
 
     # 5. Dispatch + record
     try:
-        raw = reviewer.run(prompt_text)
+        raw, session_id = reviewer.run(prompt_text)
     except LLMError as exc:
         # Single sub-review → total failure
         raise ReviewError(f"Code reviewer failed: {exc}") from exc
 
     verdict = parse_verdict(raw)
+
+    if verdict == "NEED_CONTEXT":
+        missing_raw = parse_missing_context(raw)
+        missing_paths = resolve_existing_paths(
+            missing_raw, project_root, root, wiki_root=wiki_root
+        )
+        if missing_paths:
+            retry_prompt = (
+                build_reattached_section(missing_paths)
+                + "\n\n"
+                + "Please continue your review using the re-attached files above. "
+                + "The original prompt is already in your session context."
+            )
+            print(
+                f"[_review_code] NEED_CONTEXT round-1; retrying with resume "
+                f"({len(missing_paths)} re-attached file(s)) session={(session_id or '?')[:8]}",
+                file=sys.stderr,
+            )
+            try:
+                raw, session_id = reviewer.run(
+                    retry_prompt, session_id=session_id, resume=True
+                )
+            except LLMError as exc:
+                raise ReviewError(f"Code reviewer failed on resume: {exc}") from exc
+            verdict = parse_verdict(raw)
+            # Second NEED_CONTEXT propagates to caller untouched.
+
     path = write_review_file(
         reviews_dir,
         "code",
@@ -234,6 +288,7 @@ def run(
                 "scope": scope_label,
                 "verdict": verdict,
                 "file": str(path),
+                "session_id": session_id,
             }
         ],
     )

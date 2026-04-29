@@ -31,11 +31,25 @@ def main() -> int:
 
         assert _reviewer_sonnetmax.MODE == "bulk"
         assert callable(_reviewer_sonnetmax.run)
-        print("PASS: _reviewer_sonnetmax MODE + callable")
+        sig = inspect.signature(_reviewer_sonnetmax.run)
+        assert "prompt_text" in sig.parameters
+        assert "session_id" in sig.parameters
+        assert sig.parameters["session_id"].default is None
+        assert "resume" in sig.parameters
+        assert sig.parameters["resume"].default is False
+        assert str(sig.return_annotation) == "tuple[str, str]"
+        print("PASS: _reviewer_sonnetmax new signature with session_id/resume")
 
         assert _reviewer_sonnetmax_tool.MODE == "tool-use"
         assert callable(_reviewer_sonnetmax_tool.run)
-        print("PASS: _reviewer_sonnetmax_tool MODE + callable")
+        sig = inspect.signature(_reviewer_sonnetmax_tool.run)
+        assert "prompt_text" in sig.parameters
+        assert "session_id" in sig.parameters
+        assert sig.parameters["session_id"].default is None
+        assert "resume" in sig.parameters
+        assert sig.parameters["resume"].default is False
+        assert str(sig.return_annotation) == "tuple[str, str]"
+        print("PASS: _reviewer_sonnetmax_tool new signature with session_id/resume")
 
         print("All reviewer-module unit tests passed.")
         return 0

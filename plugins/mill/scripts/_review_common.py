@@ -15,8 +15,11 @@ Public API:
     load_task_title()    — delegate to _active.read_all for task_title; fall back to slug on missing/malformed marker
     read_constraints_md()— read CONSTRAINTS.md, empty string if absent
     resolve_path()       — substitute <SLUG> in a config path template
-    discover_round()     — determine next review round number from filesystem
+    discover_round()     — determine next review round number per (review_type, scope)
     bulk_files()         — concatenate file contents with FILE delimiters
+    build_manifest_section() — return a `## Files included` markdown block listing every bulked file
+    parse_missing_context() — extract path strings from a `## Missing context` section in review text
+    build_reattached_section() — return a `## Re-attached files` block with inlined file contents for NEED_CONTEXT retry
     build_tool_rule()    — mode-specific <TOOL_RULE> block (bulk / tool-use)
     render_prompt()      — render a template from plugins/mill/templates/
     parse_verdict()      — extract APPROVE/REQUEST_CHANGES from fenced yaml block
@@ -24,8 +27,10 @@ Public API:
     aggregate_verdict()  — worst-case verdict across a list of sub-verdicts
     load_reviewer()      — import a _reviewer_<name>.py module by name
     load_config()        — load wiki/config.yaml + optional config.local.yaml
-    parse_batch_refs()   — extract Reads/Modifies/Creates paths from a batch file
-    resolve_ref_paths()  — resolve raw ref strings against project_root (+ root:)
+    parse_batch_refs()   — extract Reads/Modifies/Creates paths from a batch file (case-insensitive none filter)
+    compute_creates_union() — union of all Creates: tokens across every batch in a plan_dir
+    resolve_ref_paths()  — resolve raw ref strings against project_root; hard-fails on missing paths not in creates_union
+    resolve_existing_paths() — resolve raw paths and return only those that already exist on disk (silent drop, no creates_union check)
 """
 from __future__ import annotations
 
@@ -151,16 +156,26 @@ def resolve_path(path_tmpl: str, slug: str, wiki_root: Path) -> Path:
     return wiki_root / resolved
 
 
-def discover_round(reviews_dir: Path, review_type: str) -> int:
-    """Scan reviews_dir and return the next round number.
+def discover_round(reviews_dir: Path, review_type: str, scope: str) -> int:
+    """Scan reviews_dir and return the next round number for (review_type, scope).
 
-    If reviews_dir does not exist, return 1. Otherwise scan for review files
-    matching RE_SIMPLE (checked first) or RE_BATCH (only for plan type, only
-    when RE_SIMPLE does not match). Return max(found_rounds) + 1, or 1 if no
-    matching files exist.
+    ``scope`` is either ``"holistic"`` (for discussion reviews and plan/code
+    holistic reviews) or a batch name string (for per-batch plan/code reviews).
 
-    RE_SIMPLE is checked before RE_BATCH to prevent a plan-holistic file
-    (e.g. …-plan-review-r1.md) from being mis-identified as a batch review.
+    If ``reviews_dir`` does not exist, return 1.
+
+    Scope semantics:
+    - ``scope == "holistic"``: count files where RE_SIMPLE matches AND
+      ``m.group("type") == review_type``. RE_BATCH matches are ignored entirely.
+    - ``scope == <batch_name>``: count files where RE_SIMPLE does NOT match AND
+      RE_BATCH matches AND ``m.group("type") == review_type`` AND
+      ``m.group("batch") == scope``.
+
+    RE_SIMPLE is checked before RE_BATCH for every file, matching the existing
+    convention that prevents a plan-holistic file (e.g. …-plan-review-r1.md)
+    from being mis-identified as a batch review via RE_BATCH.
+
+    Return ``max(found) + 1`` if any matching files exist, else 1.
     """
     if not reviews_dir.exists():
         return 1
@@ -172,14 +187,18 @@ def discover_round(reviews_dir: Path, review_type: str) -> int:
         name = entry.name
         m_simple = RE_SIMPLE.match(name)
         if m_simple:
-            if m_simple.group("type") == review_type:
+            if scope == "holistic" and m_simple.group("type") == review_type:
                 found.append(int(m_simple.group("n")))
             # RE_SIMPLE matched — skip RE_BATCH for this file regardless.
             continue
-        # RE_SIMPLE did not match — try RE_BATCH (plan or code).
-        if review_type in ("plan", "code"):
+        # RE_SIMPLE did not match — try RE_BATCH (per-batch scope only).
+        if scope != "holistic":
             m_batch = RE_BATCH.match(name)
-            if m_batch and m_batch.group("type") == review_type:
+            if (
+                m_batch
+                and m_batch.group("type") == review_type
+                and m_batch.group("batch") == scope
+            ):
                 found.append(int(m_batch.group("n")))
 
     return max(found) + 1 if found else 1
@@ -198,9 +217,10 @@ def parse_batch_refs(batch_path: Path) -> list[str]:
     """Extract raw path strings from a batch file's Reads/Modifies/Creates lines.
 
     Handles the single-line form (- **Reads:** `a`, `b`) and the multi-line
-    bullet form (- **Reads:**\\n  - `a`\\n  - `b`). Filters the literal token
-    'none'. Returns a deduplicated list preserving first-seen order. Used by
-    both plan review and code review to build the source-file bulk.
+    bullet form (- **Reads:**\\n  - `a`\\n  - `b`). Filters tokens whose
+    lowercase form equals ``'none'`` (case-insensitive). Returns a
+    deduplicated list preserving first-seen order. Used by both plan review
+    and code review to build the source-file bulk.
     """
     text = batch_path.read_text(encoding="utf-8")
     seen: dict[str, None] = {}
@@ -229,41 +249,156 @@ def parse_batch_refs(batch_path: Path) -> list[str]:
                         tokens.extend(bt)
                     j += 1
             for t in tokens:
-                if t != "none":
+                if t.lower() != "none":
                     seen[t] = None
         i += 1
 
     return list(seen.keys())
 
 
+def compute_creates_union(plan_dir: Path) -> set[str]:
+    """Return the union of all Creates: tokens across every batch in plan_dir.
+
+    Iterates every ``??-*.md`` file under ``plan_dir`` except
+    ``00-overview.md``, extracts only the ``Creates:`` lines, and returns
+    a flat set of raw token strings (NOT resolved Paths). Filters tokens
+    whose lowercase form equals ``'none'`` (case-insensitive). Returns an
+    empty set if ``plan_dir`` doesn't exist or contains no batch files.
+    """
+    if not plan_dir.exists():
+        return set()
+    creates: set[str] = set()
+    for batch_path in sorted(plan_dir.glob("??-*.md")):
+        if batch_path.name == "00-overview.md":
+            continue
+        text = batch_path.read_text(encoding="utf-8")
+        lines = text.splitlines()
+        i = 0
+        while i < len(lines):
+            m = _RE_REFS_HEADER.match(lines[i])
+            if m and m.group(1) == "Creates":
+                inline = m.group("inline").strip()
+                if inline:
+                    backtick_tokens = re.findall(r"`([^`]+)`", inline)
+                    tokens = backtick_tokens if backtick_tokens else [
+                        t.strip() for t in inline.split(",") if t.strip()
+                    ]
+                else:
+                    tokens = []
+                    j = i + 1
+                    while j < len(lines):
+                        sm = _RE_REFS_SUB.match(lines[j])
+                        if not sm:
+                            break
+                        rest = sm.group(1).strip()
+                        bt = re.findall(r"`([^`]+)`", rest)
+                        if bt:
+                            tokens.extend(bt)
+                        j += 1
+                for t in tokens:
+                    if t.lower() != "none":
+                        creates.add(t)
+            i += 1
+    return creates
+
+
 def resolve_ref_paths(
     raw_paths: list[str],
     project_root: Path,
     root: str | None,
+    *,
+    creates_union: set[str] | None = None,
+    wiki_root: Path | None = None,
+    caller_label: str = "resolve_ref_paths",
 ) -> list[Path]:
     """Resolve batch-reference path strings to absolute ``Path``s.
 
     ``root`` is the optional filesystem sub-path declared in the plan
     overview's frontmatter ``root:`` field. When present every raw path
     is resolved under ``project_root / root``; otherwise directly under
-    ``project_root``. Non-existent paths are dropped with a stderr
-    warning (the reviewer tolerates missing files — it just can't
-    include them in the bulk).
+    ``project_root``.
+
+    Keyword args:
+        creates_union: Set of raw token strings extracted from ``Creates:``
+            lines across all batches. A path not on disk but present in
+            ``creates_union`` is silently skipped — the file will exist
+            after the creating batch runs (#60).
+        wiki_root: When provided, raw paths starting with ``wiki/`` are
+            resolved against ``wiki_root`` instead of ``project_root`` (#43).
+        caller_label: Prefix used in ``ReviewError`` messages. Defaults to
+            the function name.
+
+    Raises ``ReviewError`` when a candidate path is not on disk AND not in
+    ``creates_union`` — hard-fail replaces the old silent-skip + warning
+    behaviour (#41).
     """
+    creates = creates_union or set()
     resolved: list[Path] = []
     for raw in raw_paths:
-        if root:
+        # Defensive None/none filter — must run before any string operations.
+        if raw is None or (isinstance(raw, str) and raw.lower() == "none"):
+            continue
+        # Wiki-path resolution.
+        if raw.startswith("wiki/"):
+            if wiki_root is None:
+                raise ReviewError(
+                    f"[{caller_label}] wiki-prefixed ref {raw!r} but no wiki_root provided"
+                )
+            candidate = wiki_root / raw[len("wiki/"):]
+        elif root:
+            candidate = project_root / root / raw
+        else:
+            candidate = project_root / raw
+        # Hit on disk.
+        if candidate.exists():
+            resolved.append(candidate)
+            continue
+        # Suppression via creates_union.
+        if raw in creates:
+            continue
+        # Hard-fail.
+        raise ReviewError(
+            f"[{caller_label}] referenced path not found: {raw!r}; "
+            f"not in plan creates_union, not on disk; resolved candidate: {candidate}"
+        )
+    return resolved
+
+
+def resolve_existing_paths(
+    raw_paths: list[str],
+    project_root: Path,
+    root: str | None,
+    *,
+    wiki_root: Path | None = None,
+) -> list[Path]:
+    """Resolve raw paths and return only those that already exist on disk.
+
+    Mirrors resolve_ref_paths's standard-vs-wiki routing (wiki/ prefix
+    routes through wiki_root; otherwise project_root + root). Unlike
+    resolve_ref_paths, missing paths and routing failures are silently
+    dropped — no warning, no error, no creates_union check. Used to
+    expand the bulk with cross-batch ancestor creates that already
+    exist; missing creates are not an error here, they just aren't
+    included.
+    """
+    result: list[Path] = []
+    for raw in raw_paths:
+        # Defensive None/none filter — same as resolve_ref_paths.
+        if raw is None or (isinstance(raw, str) and raw.lower() == "none"):
+            continue
+        # Wiki-path routing.
+        if raw.startswith("wiki/"):
+            if wiki_root is None:
+                # Key divergence from resolve_ref_paths: silent drop instead of raise.
+                continue
+            candidate = wiki_root / raw[len("wiki/"):]
+        elif root:
             candidate = project_root / root / raw
         else:
             candidate = project_root / raw
         if candidate.exists():
-            resolved.append(candidate)
-        else:
-            print(
-                f"[resolve_ref_paths] warning: referenced path not found, skipping: {candidate}",
-                file=sys.stderr,
-            )
-    return resolved
+            result.append(candidate)
+    return result
 
 
 def bulk_files(file_paths: list[Path]) -> str:
@@ -280,6 +415,84 @@ def bulk_files(file_paths: list[Path]) -> str:
             continue
         parts.append(f"--- FILE: {p} ---\n{contents}")
     return "\n\n".join(parts)
+
+
+def build_manifest_section(file_paths: list[Path]) -> str:
+    """Return a `## Files included` markdown block listing every bulked file.
+
+    Output shape (no trailing newline):
+
+        ## Files included (N=<count>)
+
+        - <path-1>
+        - <path-2>
+        ...
+
+    The manifest is the FIRST thing the reviewer reads inside the
+    artefact section. Its job is to remove the long-context
+    haystack effect: the reviewer scans this list, then can answer
+    "is file X provided?" in O(1) instead of scanning a 200k-char
+    bulk for the matching `--- FILE: X ---` delimiter.
+    """
+    if not file_paths:
+        return "## Files included (N=0)\n\n(no files)"
+    count = len(file_paths)
+    bullets = "\n".join(f"- {p}" for p in file_paths)
+    return f"## Files included (N={count})\n\n{bullets}"
+
+
+_RE_MISSING_CONTEXT_BULLET = re.compile(r"^\s*-\s+`([^`]+)`")
+
+
+def parse_missing_context(review_text: str) -> list[str]:
+    """Extract path strings from a `## Missing context` section.
+
+    The reviewer's NEED_CONTEXT output uses the convention:
+
+        ## Missing context
+
+        - `path/a` — reason text
+        - `path/b` — reason text
+
+    Returns the list of raw path tokens (NOT resolved Paths). Empty
+    list if the heading is absent or no bullet matches the expected
+    shape. Multi-line bullets are not supported — paths must appear
+    backtick-wrapped on their own bullet line.
+    """
+    lines = review_text.splitlines()
+    in_section = False
+    paths: list[str] = []
+    for line in lines:
+        if not in_section:
+            if line.startswith("## Missing context"):
+                in_section = True
+            continue
+        # Stop at the next ## heading.
+        if line.startswith("## "):
+            break
+        m = _RE_MISSING_CONTEXT_BULLET.match(line)
+        if m:
+            token = m.group(1)
+            if token.lower() != "none":
+                paths.append(token)
+    return paths
+
+
+def build_reattached_section(file_paths: list[Path]) -> str:
+    """Return a `## Re-attached files (you said these were missing)` block
+    with the listed files inlined via bulk_files.
+
+    Used by the NEED_CONTEXT resume retry: the missing-context paths
+    from the prior round are re-attached at the top of the new prompt
+    so the reviewer cannot claim absence again without contradicting
+    itself. The section is appended to the existing artefact section.
+    """
+    if not file_paths:
+        return ""
+    return (
+        "## Re-attached files (you said these were missing)\n\n"
+        + bulk_files(file_paths)
+    )
 
 
 _TOOL_RULE_BULK = (

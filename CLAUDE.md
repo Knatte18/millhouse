@@ -18,7 +18,7 @@ These terms are used throughout the review subsystem and in any design discussio
 | **Frontend** | The orchestrator — the caller (e.g. a `mill-go` session in Claude Code). |
 | **API** | The three review CLI scripts: `millpy-review-discussion.py`, `millpy-review-plan.py`, `millpy-review-code.py`. |
 | **Backend** | Everything behind the API — templates, bulking, file-writing, reviewer dispatch, verdict parsing, ReviewResult assembly. Lives in `_review_*.py` + `_review_common.py`. |
-| **Reviewer** | A named strategy module (simple LLM, cluster, round-switching hybrid). Declares a module-level `MODE` constant (`"bulk"` or `"tool-use"`) and exposes `run(prompt_text) -> str`. File pattern: `_reviewer_<name>.py`. |
+| **Reviewer** | A named strategy module (simple LLM, cluster, round-switching hybrid). Declares a module-level `MODE` constant (`"bulk"` or `"tool-use"`) and exposes `run(prompt_text, *, session_id=None, resume=False) -> tuple[str, str]`. File pattern: `_reviewer_<name>.py`. |
 | **LLM-provider** | Thin wrapper around a specific model. Exposes one function per mode (e.g. `_llm_claude.run_bulk`, `_llm_claude.run_tool_use`). No review semantics — just "send text, get text". |
 | **prompt_text** | The fully-rendered prompt string passed to the LLM. Built by the backend from a template + tokens + bulked file content. |
 
