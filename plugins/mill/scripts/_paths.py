@@ -45,6 +45,12 @@ Public API:
         ``"."`` returns ``worktree_root`` unchanged; any relative subpath
         returns ``worktree_root / hub_subpath`` (trailing slash normalised).
         Absolute values raise ``ValueError``.
+
+    resolve_active_worktree(container_path, slug)
+        Return ``container_path / "wts" / slug`` when that directory exists
+        and its ``.millhouse/active.slug.md`` marker matches the slug.
+        Raises ``ActiveWorktreeNotFound`` when the directory is absent.
+        Raises ``ActiveWorktreeSlugMismatch`` when the marker slug differs.
 """
 from __future__ import annotations
 
@@ -62,6 +68,9 @@ __all__ = [
     "resolve_worktrees_dir",
     "resolve_short_name",
     "resolve_hub_relative_path",
+    "resolve_active_worktree",
+    "ActiveWorktreeNotFound",
+    "ActiveWorktreeSlugMismatch",
 ]
 
 
@@ -185,6 +194,54 @@ def resolve_hub_relative_path(worktree_root: Path, hub_subpath: str) -> Path:
     if str(sub) == ".":
         return worktree_root
     return worktree_root / sub
+
+
+class ActiveWorktreeNotFound(RuntimeError):
+    """Raised when the expected worktree directory does not exist."""
+
+
+class ActiveWorktreeSlugMismatch(RuntimeError):
+    """Raised when a worktree directory exists but its marker slug differs from the requested slug."""
+
+
+def resolve_active_worktree(container_path: Path, slug: str) -> Path:
+    """Return the path to an active task worktree within the container.
+
+    The canonical answer to "given a slug, where does that worktree live on
+    disk". Every cross-worktree consumer that needs to locate a task worktree
+    routes through this helper.
+
+    Args:
+        container_path: Absolute path to the container directory (grandparent
+            of all worktrees in container-form, i.e. the directory that
+            contains ``wts/``).
+        slug: The task slug to look up.
+
+    Returns:
+        Absolute ``Path`` of ``container_path / "wts" / slug`` when the
+        directory exists and its ``.millhouse/active.slug.md`` marker parses
+        to the same slug.
+
+    Raises:
+        ActiveWorktreeNotFound: When ``container_path / "wts" / slug`` does
+            not exist on disk.
+        ActiveWorktreeSlugMismatch: When the directory exists but the marker
+            slug does not match ``slug``.
+    """
+    import _active
+
+    worktree = container_path / "wts" / slug
+    if not worktree.is_dir():
+        raise ActiveWorktreeNotFound(
+            f"No worktree directory at {worktree} for slug {slug!r}"
+        )
+    mill_dir = worktree / ".millhouse"
+    marker_slug = _active.read_slug(mill_dir)
+    if marker_slug != slug:
+        raise ActiveWorktreeSlugMismatch(
+            f"Worktree at {worktree} has slug {marker_slug!r}, expected {slug!r}"
+        )
+    return worktree
 
 
 def resolve_wiki_path(git_toplevel: Path) -> Path:

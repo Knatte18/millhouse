@@ -276,6 +276,59 @@ def main() -> int:
             assert "/absolute/path" in str(exc), f"ValueError missing offending value: {exc}"
         print("PASS: resolve_hub_relative_path absolute hub_subpath raises ValueError naming the value")
 
+        # resolve_active_worktree
+
+        import _active
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            wts_dir = tmp_path / "wts"
+            wts_dir.mkdir()
+            worktree = wts_dir / "my-task"
+            worktree.mkdir()
+            mill_dir = worktree / ".millhouse"
+            _active.write(
+                mill_dir,
+                slug="my-task",
+                task_title="Test task",
+                branch="hanf/my-task",
+                spawned_at="2026-01-01T00:00:00Z",
+            )
+            got = _paths.resolve_active_worktree(tmp_path, "my-task")
+            assert got == worktree, f"happy path: got {got}"
+        print("PASS: resolve_active_worktree happy path returns container_path/wts/slug")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            (tmp_path / "wts").mkdir()
+            try:
+                _paths.resolve_active_worktree(tmp_path, "missing-slug")
+                raise AssertionError("expected ActiveWorktreeNotFound")
+            except _paths.ActiveWorktreeNotFound:
+                pass
+        print("PASS: resolve_active_worktree raises ActiveWorktreeNotFound when directory absent")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            wts_dir = tmp_path / "wts"
+            wts_dir.mkdir()
+            worktree = wts_dir / "my-task"
+            worktree.mkdir()
+            mill_dir = worktree / ".millhouse"
+            _active.write(
+                mill_dir,
+                slug="different-slug",
+                task_title="Test task",
+                branch="hanf/different-slug",
+                spawned_at="2026-01-01T00:00:00Z",
+            )
+            try:
+                _paths.resolve_active_worktree(tmp_path, "my-task")
+                raise AssertionError("expected ActiveWorktreeSlugMismatch")
+            except _paths.ActiveWorktreeSlugMismatch:
+                pass
+        print("PASS: resolve_active_worktree raises ActiveWorktreeSlugMismatch when marker slug differs")
+
         print("All _paths unit tests passed.")
         return 0
     except AssertionError as exc:
