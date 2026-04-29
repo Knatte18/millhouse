@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-consumers-and-skills
+phase: reviewing-migration-and-docs-r1
 slug: container-restructure
 branch: hanf/container-restructure
 plan: active/container-restructure/plan
@@ -37,6 +37,7 @@ reviewing-state-on-worktree-r2  2026-04-29T13:25:32Z
 approved-state-on-worktree  2026-04-29T13:31:37Z
 reviewing-consumers-and-skills-r1  2026-04-29T13:55:54Z
 approved-consumers-and-skills  2026-04-29T14:03:13Z
+reviewing-migration-and-docs-r1  2026-04-29T14:07:41Z
 ```
 
 ## Batches
@@ -72,7 +73,9 @@ batches:
     review_round: 1
     review_file: reviews/20260429-140300-code-review-consumers-and-skills-r1.md
   - name: migration-and-docs
-    state: running
+    state: reviewing
     implementer_session: 9b1e92a7-355d-4d50-b3bb-10b6d98add18
     start_sha: 898be9b31a618e1d8d52b148c2cf20afc3235e4f
+    commit_sha: fadb69f
+    review_round: 1
 ```
