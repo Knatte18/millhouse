@@ -26,7 +26,7 @@ from pathlib import Path
 
 import _spawn_core
 from _config import load_config as _load_config
-from _paths import resolve_git_root, resolve_wiki_path, resolve_worktrees_dir
+from _paths import resolve_git_root, resolve_hub_relative_path, resolve_wiki_path, resolve_worktrees_dir
 
 
 def _build_code_argv(worktree_path: Path) -> list[str]:
@@ -87,6 +87,7 @@ def main(argv: list[str] | None = None) -> int:
 
     git_root = resolve_git_root()
 
+    wiki_path = None
     try:
         wiki_path = resolve_wiki_path(git_root)
         cfg = _load_config(wiki_path, git_root)
@@ -138,8 +139,19 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         selected_path = active[num - 1][0]
 
-    print(f"Opening VS Code in: {selected_path}", file=sys.stderr)
-    code_argv = _build_code_argv(selected_path)
+    # Load per-worktree config to honour hub_relative_path.
+    if wiki_path is not None:
+        try:
+            worktree_cfg = _load_config(wiki_path, selected_path)
+        except SystemExit:
+            worktree_cfg = {}
+    else:
+        worktree_cfg = {}
+    hub_subpath = worktree_cfg.get("hub_relative_path", ".")
+    launch_path = resolve_hub_relative_path(selected_path, hub_subpath)
+
+    print(f"Opening VS Code in: {launch_path}", file=sys.stderr)
+    code_argv = _build_code_argv(launch_path)
     subprocess.run(code_argv)
     return 0
 

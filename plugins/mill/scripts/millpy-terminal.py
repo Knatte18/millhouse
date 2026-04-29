@@ -20,7 +20,7 @@ import sys
 
 import _spawn_core
 from _config import load_config as _load_config
-from _paths import resolve_git_root, resolve_wiki_path, resolve_worktrees_dir
+from _paths import resolve_git_root, resolve_hub_relative_path, resolve_wiki_path, resolve_worktrees_dir
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -39,6 +39,7 @@ def main(argv: list[str] | None = None) -> int:
     """
     git_root = resolve_git_root()
 
+    wiki_path = None
     try:
         wiki_path = resolve_wiki_path(git_root)
         cfg = _load_config(wiki_path, git_root)
@@ -76,12 +77,23 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         selected_path, selected_slug, _ = active[num - 1]
 
+    # Load per-worktree config to honour hub_relative_path.
+    if wiki_path is not None:
+        try:
+            worktree_cfg = _load_config(wiki_path, selected_path)
+        except SystemExit:
+            worktree_cfg = {}
+    else:
+        worktree_cfg = {}
+    hub_subpath = worktree_cfg.get("hub_relative_path", ".")
+    launch_path = resolve_hub_relative_path(selected_path, hub_subpath)
+
     claude = shutil.which("claude") or "claude"
-    print(f"Launching Claude Code in: {selected_path}", file=sys.stderr)
+    print(f"Launching Claude Code in: {launch_path}", file=sys.stderr)
     print(f"Session name: {selected_slug}", file=sys.stderr)
     subprocess.run(
         [claude, "--name", selected_slug],
-        cwd=selected_path,
+        cwd=launch_path,
     )
     return 0
 

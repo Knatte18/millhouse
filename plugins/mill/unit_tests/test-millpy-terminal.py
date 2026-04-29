@@ -165,6 +165,145 @@ def main() -> int:
         else:
             print("PASS: no active worktrees -> exits 0, no subprocess call")
 
+    # ------------------------------------------------------------------
+    # Test: hub_relative_path set in per-worktree config → subprocess
+    # launched with <worktree>/src/csharp/X as cwd.
+    # ------------------------------------------------------------------
+    with tempfile.TemporaryDirectory() as tmpdir:
+        root = Path(tmpdir)
+        _make_git_repo(root)
+
+        worktrees_dir = root / "worktrees"
+        wt1 = worktrees_dir / "task-alpha"
+        wt1.mkdir(parents=True)
+        _write_active_marker(wt1, "task-alpha", "Alpha Task")
+
+        # Write per-worktree config with hub_relative_path
+        mill_dir = wt1 / ".millhouse"
+        mill_dir.mkdir(exist_ok=True)
+        (mill_dir / "config.local.yaml").write_text(
+            "hub_relative_path: src/csharp/X\n", encoding="utf-8"
+        )
+
+        subprocess_calls: list = []
+        wiki_path = root / "wiki"
+        wiki_path.mkdir()
+
+        with (
+            patch("mill_terminal.resolve_git_root", return_value=root),
+            patch("mill_terminal.resolve_wiki_path", return_value=wiki_path),
+            patch("mill_terminal.resolve_worktrees_dir", return_value=worktrees_dir),
+            patch("mill_terminal.subprocess.run", side_effect=lambda *a, **kw: subprocess_calls.append(kw.get("cwd"))),
+        ):
+            rc = mill_terminal.main([])
+
+        expected_cwd = wt1 / "src" / "csharp" / "X"
+        if rc != 0:
+            print(f"FAIL: hub_relative_path test returned {rc}", file=sys.stderr)
+            errors += 1
+        elif not subprocess_calls or subprocess_calls[0] != expected_cwd:
+            print(
+                f"FAIL: expected cwd={expected_cwd}, got {subprocess_calls}",
+                file=sys.stderr,
+            )
+            errors += 1
+        else:
+            print("PASS: hub_relative_path (sub-dir) → subprocess launched in sub-dir")
+
+    # ------------------------------------------------------------------
+    # Test: hub_relative_path = "." → subprocess launched at worktree root.
+    # ------------------------------------------------------------------
+    with tempfile.TemporaryDirectory() as tmpdir:
+        root = Path(tmpdir)
+        _make_git_repo(root)
+
+        worktrees_dir = root / "worktrees"
+        wt1 = worktrees_dir / "task-dot"
+        wt1.mkdir(parents=True)
+        _write_active_marker(wt1, "task-dot", "Dot Task")
+
+        mill_dir = wt1 / ".millhouse"
+        mill_dir.mkdir(exist_ok=True)
+        (mill_dir / "config.local.yaml").write_text(
+            "hub_relative_path: .\n", encoding="utf-8"
+        )
+
+        subprocess_calls = []
+        wiki_path = root / "wiki"
+        wiki_path.mkdir()
+
+        with (
+            patch("mill_terminal.resolve_git_root", return_value=root),
+            patch("mill_terminal.resolve_wiki_path", return_value=wiki_path),
+            patch("mill_terminal.resolve_worktrees_dir", return_value=worktrees_dir),
+            patch("mill_terminal.subprocess.run", side_effect=lambda *a, **kw: subprocess_calls.append(kw.get("cwd"))),
+        ):
+            rc = mill_terminal.main([])
+
+        if rc != 0:
+            print(f"FAIL: hub_relative_path=. test returned {rc}", file=sys.stderr)
+            errors += 1
+        elif not subprocess_calls or subprocess_calls[0] != wt1:
+            print(
+                f"FAIL: expected cwd={wt1}, got {subprocess_calls}",
+                file=sys.stderr,
+            )
+            errors += 1
+        else:
+            print("PASS: hub_relative_path=. → subprocess launched at worktree root")
+
+    # ------------------------------------------------------------------
+    # Regression: hub config has hub_relative_path: "hub-sub", selected
+    # worktree's config has hub_relative_path: "wt-sub" → wt-sub wins.
+    # ------------------------------------------------------------------
+    with tempfile.TemporaryDirectory() as tmpdir:
+        root = Path(tmpdir)
+        _make_git_repo(root)
+
+        worktrees_dir = root / "worktrees"
+        wt1 = worktrees_dir / "task-reg"
+        wt1.mkdir(parents=True)
+        _write_active_marker(wt1, "task-reg", "Regression Task")
+
+        # Hub config (at git_root)
+        hub_mill_dir = root / ".millhouse"
+        hub_mill_dir.mkdir(exist_ok=True)
+        (hub_mill_dir / "config.local.yaml").write_text(
+            "hub_relative_path: hub-sub\n", encoding="utf-8"
+        )
+
+        # Per-worktree config (at selected_path)
+        wt_mill_dir = wt1 / ".millhouse"
+        wt_mill_dir.mkdir(exist_ok=True)
+        (wt_mill_dir / "config.local.yaml").write_text(
+            "hub_relative_path: wt-sub\n", encoding="utf-8"
+        )
+
+        subprocess_calls = []
+        wiki_path = root / "wiki"
+        wiki_path.mkdir()
+
+        with (
+            patch("mill_terminal.resolve_git_root", return_value=root),
+            patch("mill_terminal.resolve_wiki_path", return_value=wiki_path),
+            patch("mill_terminal.resolve_worktrees_dir", return_value=worktrees_dir),
+            patch("mill_terminal.subprocess.run", side_effect=lambda *a, **kw: subprocess_calls.append(kw.get("cwd"))),
+        ):
+            rc = mill_terminal.main([])
+
+        expected_cwd = wt1 / "wt-sub"
+        if rc != 0:
+            print(f"FAIL: hub_relative_path regression test returned {rc}", file=sys.stderr)
+            errors += 1
+        elif not subprocess_calls or subprocess_calls[0] != expected_cwd:
+            print(
+                f"FAIL: expected cwd={expected_cwd} (wt-sub wins), got {subprocess_calls}",
+                file=sys.stderr,
+            )
+            errors += 1
+        else:
+            print("PASS: per-worktree hub_relative_path wins over hub config value")
+
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)
         return 1
