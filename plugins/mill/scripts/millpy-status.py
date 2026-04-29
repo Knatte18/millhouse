@@ -14,13 +14,14 @@ _SCRIPTS = Path(__file__).resolve().parent
 sys.path.insert(0, str(_SCRIPTS))
 
 import _paths
+import _spawn_core
 import _status
 import _tasks_md
-import _worktree
 
 
 def _build_rows(git_root: Path) -> list[dict]:
     wiki = _paths.resolve_wiki_path(git_root)
+    container_path = _paths.resolve_container_path(git_root)
 
     # Home.md tasks
     home_md = wiki / "Home.md"
@@ -29,45 +30,32 @@ def _build_rows(git_root: Path) -> list[dict]:
     else:
         home_tasks = {}
 
-    # Active-dir slugs
-    active_dir = wiki / "active"
-    active_slugs: set[str] = set()
-    if active_dir.is_dir():
-        for d in active_dir.iterdir():
-            if d.is_dir():
-                active_slugs.add(d.name)
+    # Active worktrees: (path, slug, title) triples from <container>/wts/
+    active_worktree_list = _spawn_core.discover_active_worktrees(container_path / "wts")
+    worktree_map: dict[str, str] = {slug: str(path) for path, slug, _ in active_worktree_list}
+    active_worktree_paths: dict[str, Path] = {slug: path for path, slug, _ in active_worktree_list}
+    active_slugs: set[str] = set(worktree_map)
 
-    # Read status for each active-dir slug
+    # Read status for each active worktree
     status_data: dict[str, dict | None] = {}
-    for slug in active_slugs:
-        sp = active_dir / slug / "status.md"
+    for slug, wt_path in active_worktree_paths.items():
+        sp = wt_path / "status.md"
         try:
             status_data[slug] = _status.read_status(sp)
         except ValueError:
             status_data[slug] = None  # unreadable
 
-    # Worktree map: branch impl/<slug> → path
-    worktree_map: dict[str, str] = {}
-    for entry in _worktree.list_worktrees(git_root):
-        branch = entry.get("branch")
-        if branch is None:
-            continue
-        if not branch.startswith("impl/"):
-            continue
-        slug = branch[len("impl/"):]
-        worktree_map[slug] = entry["path"]
-
     # Union all slugs
-    all_slugs = set(home_tasks) | active_slugs | set(worktree_map)
+    all_slugs = set(home_tasks) | active_slugs
 
     rows = []
     for slug in sorted(all_slugs):
-        sd = status_data.get(slug)  # None if no active-dir, or dict | None
-        has_active_dir = slug in active_slugs
-        unreadable = has_active_dir and sd is None
+        sd = status_data.get(slug)  # None if no active worktree, or dict | None
+        has_active = slug in active_slugs
+        unreadable = has_active and sd is None
 
         # title
-        if has_active_dir and sd is not None:
+        if has_active and sd is not None:
             title = sd.get("task")
         elif slug in home_tasks:
             title = home_tasks[slug].title
@@ -77,7 +65,7 @@ def _build_rows(git_root: Path) -> list[dict]:
         # phase
         if unreadable:
             phase = "unreadable"
-        elif has_active_dir and sd is not None:
+        elif has_active and sd is not None:
             phase = sd["phase"]
         else:
             phase = None
@@ -92,7 +80,7 @@ def _build_rows(git_root: Path) -> list[dict]:
         # marker_flag
         if marker == "active" and slug not in worktree_map:
             marker_flag = "WT?"
-        elif has_active_dir and slug not in home_tasks:
+        elif has_active and slug not in home_tasks:
             marker_flag = "HM?"
         else:
             marker_flag = ""
