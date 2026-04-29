@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: reviewing-state-on-worktree-r1
+phase: fixing-state-on-worktree-r1
 slug: container-restructure
 branch: hanf/container-restructure
 plan: active/container-restructure/plan
@@ -32,6 +32,7 @@ fixing-create-hub-links-r1  2026-04-29T12:25:07Z
 reviewing-create-hub-links-r2  2026-04-29T12:28:33Z
 approved-create-hub-links  2026-04-29T12:32:07Z
 reviewing-state-on-worktree-r1  2026-04-29T13:06:59Z
+fixing-state-on-worktree-r1  2026-04-29T13:22:08Z
 ```
 
 ## Batches
@@ -53,7 +54,7 @@ batches:
     review_round: 2
     review_file: C:\Code\millhouse\wiki\active\container-restructure\reviews\20260429-123153-code-review-create-hub-links-r2.md
   - name: state-on-worktree
-    state: reviewing
+    state: fixing
     implementer_session: 9ff2c2dd-fccc-4041-8511-e42225790948
     start_sha: d3c8be9084421fe141d122ed0593159fdd24cfa5
     commit_sha: 67e7586
