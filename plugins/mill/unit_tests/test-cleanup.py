@@ -327,7 +327,9 @@ def main() -> int:
             )
 
             # Pre-create the worktree dir to trigger stale-worktree edge.
-            stale_dir = tmp / "worktrees" / "my-task"
+            # resolve_worktrees_dir fallback is now main_root.parent (= tmp for hub_root=tmp/hub),
+            # so the stale worktree dir is at tmp / slug, not tmp / "worktrees" / slug.
+            stale_dir = tmp / "my-task"
             stale_dir.mkdir(parents=True)
 
             record = SlugRecord(
