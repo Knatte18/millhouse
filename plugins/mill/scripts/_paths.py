@@ -38,6 +38,13 @@ Public API:
         ``git_root`` (no slug — this returns the *container* dir, not a
         per-task subdir). Falls back to ``resolve_path("worktrees",
         git_root)`` when the key is absent.
+
+    resolve_hub_relative_path(worktree_root, hub_subpath)
+        Translate the ``hub_relative_path`` value from
+        ``.millhouse/config.local.yaml`` into an absolute path.
+        ``"."`` returns ``worktree_root`` unchanged; any relative subpath
+        returns ``worktree_root / hub_subpath`` (trailing slash normalised).
+        Absolute values raise ``ValueError``.
 """
 from __future__ import annotations
 
@@ -47,7 +54,15 @@ import _subprocess_util
 from _sibling import resolve_path
 
 
-__all__ = ["resolve_path", "resolve_git_root", "resolve_main_worktree_root", "resolve_wiki_path", "resolve_worktrees_dir", "resolve_short_name"]
+__all__ = [
+    "resolve_path",
+    "resolve_git_root",
+    "resolve_main_worktree_root",
+    "resolve_wiki_path",
+    "resolve_worktrees_dir",
+    "resolve_short_name",
+    "resolve_hub_relative_path",
+]
 
 
 def resolve_git_root() -> Path:
@@ -138,6 +153,38 @@ def resolve_short_name(cfg: dict, repo_name: str) -> str:
     if short:
         return short
     return repo_name[:2].upper() if len(repo_name) >= 2 else repo_name.upper()
+
+
+def resolve_hub_relative_path(worktree_root: Path, hub_subpath: str) -> Path:
+    """Return the hub directory path within a worktree.
+
+    Translates the ``hub_relative_path`` value from ``.millhouse/config.local.yaml``
+    into an absolute path. The caller reads the config; this function only performs
+    path arithmetic.
+
+    Args:
+        worktree_root: Absolute path to the worktree's git checkout root.
+        hub_subpath: Relative subpath from ``config.local.yaml`` ``hub_relative_path:``.
+            Use ``"."`` when the hub is the worktree root itself (the typical case).
+            Trailing slashes are normalised away.
+
+    Returns:
+        Absolute ``Path`` of the hub directory inside ``worktree_root``.
+
+    Raises:
+        ValueError: When ``hub_subpath`` is an absolute path.
+    """
+    sub = Path(hub_subpath)
+    # Check for absolute paths. Path.is_absolute() handles Windows drive-letter paths
+    # (e.g. "C:\foo"); the additional startswith("/") check catches Unix-rooted paths
+    # on Windows where pathlib considers them only drive-relative.
+    if sub.is_absolute() or hub_subpath.startswith("/"):
+        raise ValueError(
+            f"hub_subpath must be a relative path or '.', got: {hub_subpath!r}"
+        )
+    if str(sub) == ".":
+        return worktree_root
+    return worktree_root / sub
 
 
 def resolve_wiki_path(git_toplevel: Path) -> Path:

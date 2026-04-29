@@ -250,6 +250,32 @@ def main() -> int:
         assert got == "X", f"repo_name=x fallback: got {got!r}"
         print("PASS: resolve_short_name repo_name='x' -> 'X'")
 
+        # resolve_hub_relative_path
+
+        root = Path("/some/worktree")
+        got = _paths.resolve_hub_relative_path(root, ".")
+        assert got == root, f"dot returns worktree_root unchanged: got {got}"
+        print("PASS: resolve_hub_relative_path('.') returns worktree_root unchanged")
+
+        got = _paths.resolve_hub_relative_path(root, "src/csharp/X")
+        assert got == root / "src" / "csharp" / "X", f"nested subpath: got {got}"
+        print("PASS: resolve_hub_relative_path nested subpath -> worktree_root / subpath")
+
+        got = _paths.resolve_hub_relative_path(root, "sub")
+        assert got == root / "sub", f"single subpath: got {got}"
+        print("PASS: resolve_hub_relative_path single subpath -> worktree_root / subpath")
+
+        got = _paths.resolve_hub_relative_path(root, "sub/")
+        assert got == root / "sub", f"trailing slash normalised: got {got}"
+        print("PASS: resolve_hub_relative_path trailing slash is normalised away")
+
+        try:
+            _paths.resolve_hub_relative_path(root, "/absolute/path")
+            raise AssertionError("expected ValueError for absolute hub_subpath")
+        except ValueError as exc:
+            assert "/absolute/path" in str(exc), f"ValueError missing offending value: {exc}"
+        print("PASS: resolve_hub_relative_path absolute hub_subpath raises ValueError naming the value")
+
         print("All _paths unit tests passed.")
         return 0
     except AssertionError as exc:
