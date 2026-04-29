@@ -72,5 +72,7 @@ batches:
     review_round: 1
     review_file: reviews/20260429-140300-code-review-consumers-and-skills-r1.md
   - name: migration-and-docs
-    state: pending
+    state: running
+    implementer_session: 9b1e92a7-355d-4d50-b3bb-10b6d98add18
+    start_sha: 898be9b31a618e1d8d52b148c2cf20afc3235e4f
 ```
