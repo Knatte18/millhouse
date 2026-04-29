@@ -37,7 +37,7 @@ def test_smoke_import() -> None:
     # Provide minimal stubs for the heavy imports so the module loads without
     # a real git repo or wiki on disk.
     stubs = [
-        "_junction", "_spawn_core", "_tasks_md", "_vscode", "_wiki",
+        "_junction", "_setup", "_spawn_core", "_tasks_md", "_vscode", "_wiki",
         "_worktree", "_paths", "_sibling", "_subprocess_util",
     ]
     for name in stubs:
@@ -51,6 +51,12 @@ def test_smoke_import() -> None:
     paths_mod.resolve_path = MagicMock(return_value=Path("/fake/worktrees"))
     paths_mod.resolve_worktrees_dir = MagicMock(return_value=Path("/fake/worktrees"))
     paths_mod.resolve_short_name = MagicMock(return_value="MI")
+    paths_mod.resolve_container_path = MagicMock(return_value=Path("/fake/container"))
+
+    # _setup needs create_hub_links so mill-spawn can call it.
+    setup_mod = sys.modules["_setup"]
+    setup_mod.create_hub_links = MagicMock(return_value={"junctions": [], "hardlinks": []})
+    paths_mod.resolve_container_path = MagicMock(return_value=Path("/fake/container"))
 
     # _spawn_core needs pick_worktree_color because mill-spawn imports it
     # at module level via `from _spawn_core import pick_worktree_color`.
@@ -134,11 +140,16 @@ def _run_main_with_mocks(
     paths_mock.resolve_path.return_value = Path("/fake/worktrees")
     paths_mock.resolve_worktrees_dir.return_value = Path("/fake/worktrees")
     paths_mock.resolve_short_name.return_value = "MI"
+    paths_mock.resolve_container_path.return_value = Path("/fake/container")
+
+    setup_mock = MagicMock()
+    setup_mock.create_hub_links.return_value = {"junctions": [], "hardlinks": []}
 
     # Inject stubs before loading so the module picks them up.
     saved: dict[str, object] = {}
     stub_map = {
         "_spawn_core": spawn_core_mock,
+        "_setup": setup_mock,
         "_wiki": wiki_mock,
         "_junction": junction_mock,
         "_tasks_md": tasks_md_mock,
@@ -260,9 +271,14 @@ def test_write_settings_uses_short_name_and_slug() -> None:
     paths_mock.resolve_path.return_value = Path("/fake/worktrees")
     paths_mock.resolve_worktrees_dir.return_value = Path("/fake/worktrees")
     paths_mock.resolve_short_name.return_value = "MI"
+    paths_mock.resolve_container_path.return_value = Path("/fake/container")
+
+    setup_mock = MagicMock()
+    setup_mock.create_hub_links.return_value = {"junctions": [], "hardlinks": []}
 
     stub_map = {
         "_spawn_core": spawn_core_mock,
+        "_setup": setup_mock,
         "_wiki": wiki_mock,
         "_junction": MagicMock(),
         "_tasks_md": MagicMock(),
@@ -348,8 +364,13 @@ def test_main_backlog_empty_exits_zero() -> None:
     paths_mock.resolve_wiki_path.return_value = Path("/fake/wiki")
     paths_mock.resolve_path.return_value = Path("/fake/worktrees")
 
+    setup_mock = MagicMock()
+    setup_mock.create_hub_links.return_value = {"junctions": [], "hardlinks": []}
+    paths_mock.resolve_container_path = MagicMock(return_value=Path("/fake/container"))
+
     stub_map = {
         "_spawn_core": spawn_core_mock,
+        "_setup": setup_mock,
         "_wiki": wiki_mock,
         "_junction": MagicMock(),
         "_tasks_md": tasks_md_mock,
@@ -421,6 +442,125 @@ def test_main_runtime_error_from_capture_branch_raises_system_exit() -> None:
 
 
 # ---------------------------------------------------------------------------
+# _setup.create_hub_links called AFTER portal junction.create
+# ---------------------------------------------------------------------------
+
+
+def test_create_hub_links_called_after_portal_creation() -> None:
+    """create_hub_links must be invoked AFTER the portal _junction.create call.
+
+    Uses a call_log side-effect to record the order of _junction.create and
+    _setup.create_hub_links invocations and asserts the portal entry is
+    created first.
+    """
+    import importlib
+    import importlib.util
+
+    spawn_path = HUB / "plugins" / "mill" / "scripts" / "millpy-spawn.py"
+    spec = importlib.util.spec_from_file_location("mill_spawn_order_test", spawn_path)
+    mod = importlib.util.module_from_spec(spec)
+
+    task = _make_fake_task(slug="my-task", title="My Task")
+    spawn_core_mock = MagicMock()
+    spawn_core_mock.pick_task_single_or_multi.return_value = ("single", task, [])
+    spawn_core_mock.BacklogEmpty = type("BacklogEmpty", (Exception,), {})
+    spawn_core_mock.claim_in_wiki.return_value = None
+    spawn_core_mock.capture_parent_branch.return_value = "main"
+    spawn_core_mock.write_active_marker.return_value = None
+    spawn_core_mock.write_initial_status.return_value = Path("/fake/wiki/active/my-task/status.md")
+
+    container_path = Path("/fake/container")
+    paths_mock = MagicMock()
+    paths_mock.resolve_git_root.return_value = Path("/fake/repo")
+    paths_mock.resolve_wiki_path.return_value = Path("/fake/wiki")
+    paths_mock.resolve_path.return_value = Path("/fake/worktrees")
+    paths_mock.resolve_worktrees_dir.return_value = Path("/fake/worktrees")
+    paths_mock.resolve_short_name.return_value = "MI"
+    paths_mock.resolve_container_path.return_value = container_path
+
+    call_log: list[str] = []
+
+    junction_mock = MagicMock()
+    junction_mock.create.side_effect = lambda *a, **kw: call_log.append("junction.create")
+
+    setup_mock = MagicMock()
+    setup_mock.create_hub_links.side_effect = (
+        lambda *a, **kw: call_log.append("create_hub_links") or {"junctions": [], "hardlinks": []}
+    )
+
+    wiki_mock = MagicMock()
+    wiki_mock.sync_pull.return_value = None
+    wiki_mock.read_junctions.return_value = {}
+
+    stub_map = {
+        "_spawn_core": spawn_core_mock,
+        "_setup": setup_mock,
+        "_wiki": wiki_mock,
+        "_junction": junction_mock,
+        "_tasks_md": MagicMock(),
+        "_vscode": MagicMock(),
+        "_worktree": MagicMock(),
+        "_paths": paths_mock,
+        "_sibling": types.ModuleType("_sibling"),
+        "_subprocess_util": types.ModuleType("_subprocess_util"),
+    }
+    saved: dict[str, object] = {}
+    for name, stub in stub_map.items():
+        saved[name] = sys.modules.get(name)
+        sys.modules[name] = stub
+
+    try:
+        spec.loader.exec_module(mod)
+        fake_cfg = {"spawn": {"branch_prefix": ""}}
+        with (
+            patch.object(mod, "_load_config", return_value=fake_cfg),
+            patch.object(mod, "resolve_worktrees_dir", return_value=Path("/fake/worktrees")),
+            patch.object(mod, "pick_worktree_color", return_value="#7d2d6b"),
+            patch.object(mod, "resolve_container_path", return_value=container_path),
+            patch.object(Path, "exists", return_value=True),
+            patch.object(Path, "read_text", return_value="# Home\n"),
+            patch.object(Path, "mkdir", return_value=None),
+        ):
+            exit_code = mod.main([])
+    finally:
+        for name, original in saved.items():
+            if original is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = original
+
+    if exit_code != 0:
+        raise AssertionError(f"expected exit 0, got {exit_code}")
+
+    # Verify call ordering: junction.create (portal entry) must come before create_hub_links
+    if "junction.create" not in call_log:
+        raise AssertionError("_junction.create was never called (portal entry missing)")
+    if "create_hub_links" not in call_log:
+        raise AssertionError("_setup.create_hub_links was never called")
+
+    portal_idx = call_log.index("junction.create")
+    hub_links_idx = call_log.index("create_hub_links")
+    if portal_idx >= hub_links_idx:
+        raise AssertionError(
+            f"portal _junction.create must precede create_hub_links; "
+            f"call_log={call_log}"
+        )
+
+    # Verify create_hub_links received worktree_path as first arg
+    hub_links_call = setup_mock.create_hub_links.call_args
+    if hub_links_call is None:
+        raise AssertionError("create_hub_links call_args is None")
+    first_arg = hub_links_call.args[0] if hub_links_call.args else None
+    expected_worktree = Path("/fake/worktrees") / "my-task"
+    if first_arg != expected_worktree:
+        raise AssertionError(
+            f"create_hub_links first arg should be {expected_worktree}, got {first_arg!r}"
+        )
+
+    print("PASS: _setup.create_hub_links called after portal _junction.create")
+
+
+# ---------------------------------------------------------------------------
 # Main runner
 # ---------------------------------------------------------------------------
 
@@ -433,6 +573,7 @@ def main() -> int:
         test_main_backlog_empty_exits_zero,
         test_main_value_error_from_picker_exits_one,
         test_main_runtime_error_from_capture_branch_raises_system_exit,
+        test_create_hub_links_called_after_portal_creation,
     ]
 
     failures: list[str] = []
