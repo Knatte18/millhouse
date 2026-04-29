@@ -74,7 +74,6 @@ def _make_stub_map(
     *,
     spawn_core_mock: object | None = None,
     subprocess_mock: object | None = None,
-    is_dirty: bool = False,
 ) -> dict:
     """Build the sys.modules stub map for a mill-claim test run."""
     sc = spawn_core_mock or MagicMock()
@@ -547,6 +546,62 @@ def test_portal_before_recreate_active_junction_order() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Idempotent re-claim: portal exists + same target → skip, no second create
+# ---------------------------------------------------------------------------
+
+
+def test_portal_idempotent_when_already_correct() -> None:
+    """Re-claiming the same slug when portal already points at the correct
+    worktree must not call _junction.create and must exit 0."""
+    task = _make_fake_task(slug="my-task", title="My Task")
+
+    sc = MagicMock()
+    sc.BacklogEmpty = type("BacklogEmpty", (Exception,), {})
+    sc.pick_task_single_or_multi.return_value = ("single", task, [])
+    sc.claim_in_wiki.return_value = None
+    sc.capture_parent_branch.return_value = "main"
+    sc.write_active_marker.return_value = None
+    sc.write_initial_status.return_value = Path("/fake/wiki/active/my-task/status.md")
+    sc.recreate_active_junction.return_value = None
+
+    subprocess_stub = MagicMock()
+    subprocess_stub.run.return_value = _make_ok_run()
+
+    stub_map = _make_stub_map(spawn_core_mock=sc, subprocess_mock=subprocess_stub)
+    junction_mock = stub_map["_junction"]
+
+    # Simulate portal_link already existing and pointing at the same target.
+    # os.path.realpath returns the same string for both portal_link and main_root.
+    same_target = "/fake/repo"
+
+    mod, saved = _load_claim_module(stub_map)
+    try:
+        fake_cfg = {"spawn": {"branch_prefix": ""}}
+        import unittest.mock as _um
+        with (
+            patch.object(mod, "_load_config", return_value=fake_cfg),
+            patch.object(mod, "_is_dirty", return_value=False),
+            patch.object(Path, "exists", return_value=True),
+            patch.object(Path, "is_symlink", return_value=False),
+            patch.object(Path, "read_text", return_value="# Home\n"),
+            patch.object(Path, "mkdir", return_value=None),
+            _um.patch("os.path.realpath", return_value=same_target),
+        ):
+            exit_code = mod.main(["--slug", "my-task"])
+    finally:
+        _restore_modules(saved)
+
+    if exit_code != 0:
+        raise AssertionError(f"expected exit 0 for idempotent re-claim, got {exit_code}")
+
+    # _junction.create must NOT be called (portal already correct).
+    junction_mock.create.assert_not_called()
+    # _junction.remove must NOT be called either.
+    junction_mock.remove.assert_not_called()
+    print("PASS: idempotent re-claim skips _junction.create when portal already correct")
+
+
+# ---------------------------------------------------------------------------
 # Hub-title flip: when settings.json has green background, title is updated
 # ---------------------------------------------------------------------------
 
@@ -617,6 +672,7 @@ def main() -> int:
         test_main_multi_path_skips_claim_in_wiki,
         test_portal_entry_uses_resolve_container_path,
         test_portal_before_recreate_active_junction_order,
+        test_portal_idempotent_when_already_correct,
         test_main_hub_title_flip_when_cwd_is_hub,
     ]
 

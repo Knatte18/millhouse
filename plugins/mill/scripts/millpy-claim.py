@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import argparse
 import datetime
+import os
 import sys
 from pathlib import Path
 
@@ -283,9 +284,8 @@ def main(argv: list[str] | None = None) -> int:
     if not portal_link.exists() and not portal_link.is_symlink():
         # First claim: create portal entry pointing at this worktree.
         _junction.create(target=main_root, link_path=portal_link)
-    elif (portal_link.exists() or portal_link.is_symlink()):
+    else:
         # Portal entry exists: check if it points at the current worktree.
-        import os
         existing_target = os.path.realpath(str(portal_link))
         current_target = os.path.realpath(str(main_root))
         if existing_target != current_target:
