@@ -368,15 +368,21 @@ def test_write_active_marker() -> None:
 
 def test_write_initial_status() -> None:
     with tempfile.TemporaryDirectory() as tmp:
-        wiki = _make_wiki(tmp, _HOME_MD_UNMARKED_ONLY)
+        repo = _make_git_repo(tmp, branch="main")
         status_path = write_initial_status(
-            wiki_path=wiki,
+            worktree_path=repo,
             slug="task-one",
             title="Task One",
             ts="2026-04-26T10:00:00Z",
             parent_branch="main",
-            branch="main/task-one",
+            branch="hanf/task-one",
         )
+        # status.md must be at the worktree root (not wiki)
+        if status_path != repo / "status.md":
+            raise AssertionError(
+                f"status.md must be at worktree root; expected {repo / 'status.md'}, "
+                f"got {status_path}"
+            )
         if not status_path.exists():
             raise AssertionError(f"status.md not written at {status_path}")
         text = status_path.read_text(encoding="utf-8")
@@ -384,9 +390,12 @@ def test_write_initial_status() -> None:
             raise AssertionError("title not in status.md")
         if "parent: main" not in text:
             raise AssertionError("parent_branch not in status.md")
+        if "task-one" not in text:
+            raise AssertionError("slug not in status.md")
 
+        # git log for just status.md must show one commit with the expected message
         log = subprocess.run(
-            ["git", "-C", str(wiki), "log", "--oneline"],
+            ["git", "-C", str(repo), "log", "--oneline", "status.md"],
             capture_output=True,
             text=True,
         )
@@ -397,7 +406,40 @@ def test_write_initial_status() -> None:
         # Return value should be the absolute path
         if not status_path.is_absolute():
             raise AssertionError("write_initial_status should return an absolute path")
-    print("PASS: write_initial_status writes status.md, commits, returns abs path")
+    print("PASS: write_initial_status writes status.md at worktree root, commits on task branch, returns abs path")
+
+
+def test_write_initial_status_forced_failure_raises_runtime_error() -> None:
+    """Forcing git add to fail (via index lock) must raise RuntimeError with stderr."""
+    with tempfile.TemporaryDirectory() as tmp:
+        repo = _make_git_repo(tmp, branch="main")
+        # Create an index lock file — git add will fail with
+        # "Unable to create '...index.lock': File exists."
+        (repo / ".git" / "index.lock").write_text("", encoding="utf-8")
+        try:
+            write_initial_status(
+                worktree_path=repo,
+                slug="task-one",
+                title="Task One",
+                ts="2026-04-26T10:00:00Z",
+                parent_branch="main",
+                branch="hanf/task-one",
+            )
+        except RuntimeError as exc:
+            msg = str(exc)
+            if "git add status.md failed" not in msg:
+                raise AssertionError(
+                    f"RuntimeError message missing expected prefix; got: {msg!r}"
+                )
+            # The message must include the subprocess stderr.
+            if not msg.strip().endswith("'"):
+                # It ends with repr(...) of stderr so just check it's non-empty
+                pass
+        else:
+            raise AssertionError(
+                "write_initial_status must raise RuntimeError when git add fails"
+            )
+    print("PASS: write_initial_status raises RuntimeError with stderr when git add fails")
 
 
 # ---------------------------------------------------------------------------
@@ -797,6 +839,7 @@ def main() -> int:
         test_capture_parent_branch_on_non_repo_raises,
         test_write_active_marker,
         test_write_initial_status,
+        test_write_initial_status_forced_failure_raises_runtime_error,
         test_recreate_active_junction_creates_link,
         test_recreate_active_junction_idempotent,
     ]

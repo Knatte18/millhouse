@@ -121,7 +121,7 @@ def _run_main_with_mocks(
     else:
         spawn_core_mock.capture_parent_branch.return_value = parent_branch
     spawn_core_mock.write_active_marker.return_value = None
-    spawn_core_mock.write_initial_status.return_value = Path("/fake/wiki/active/my-task/status.md")
+    spawn_core_mock.write_initial_status.return_value = Path("/fake/worktrees/my-task/status.md")
 
     wiki_mock = MagicMock()
     wiki_mock.sync_pull.return_value = None
@@ -233,6 +233,17 @@ def test_main_happy_path_calls_spawn_core_in_order() -> None:
         raise AssertionError(
             f"write_initial_status branch mismatch: {status_call}"
         )
+    # Must be called with worktree_path=, not wiki_path= (state on worktree)
+    if "wiki_path" in status_call.kwargs:
+        raise AssertionError(
+            f"write_initial_status must not be called with wiki_path=: {status_call}"
+        )
+    expected_wt = Path("/fake/worktrees") / "my-task"
+    if status_call.kwargs.get("worktree_path") != expected_wt:
+        raise AssertionError(
+            f"write_initial_status worktree_path should be {expected_wt}, "
+            f"got {status_call.kwargs.get('worktree_path')!r}"
+        )
 
     print("PASS: main() happy path calls all _spawn_core helpers in order")
 
@@ -258,7 +269,7 @@ def test_write_settings_uses_short_name_and_slug() -> None:
     spawn_core_mock.claim_in_wiki.return_value = None
     spawn_core_mock.capture_parent_branch.return_value = "main"
     spawn_core_mock.write_active_marker.return_value = None
-    spawn_core_mock.write_initial_status.return_value = Path("/fake/wiki/active/my-task/status.md")
+    spawn_core_mock.write_initial_status.return_value = Path("/fake/worktrees/my-task/status.md")
 
     vscode_mock = MagicMock()
     wiki_mock = MagicMock()
@@ -467,7 +478,7 @@ def test_create_hub_links_called_after_portal_creation() -> None:
     spawn_core_mock.claim_in_wiki.return_value = None
     spawn_core_mock.capture_parent_branch.return_value = "main"
     spawn_core_mock.write_active_marker.return_value = None
-    spawn_core_mock.write_initial_status.return_value = Path("/fake/wiki/active/my-task/status.md")
+    spawn_core_mock.write_initial_status.return_value = Path("/fake/worktrees/my-task/status.md")
 
     container_path = Path("/fake/container")
     paths_mock = MagicMock()
@@ -561,6 +572,45 @@ def test_create_hub_links_called_after_portal_creation() -> None:
 
 
 # ---------------------------------------------------------------------------
+# dry-run prints worktree status path
+# ---------------------------------------------------------------------------
+
+
+def test_main_dry_run_prints_worktree_status_path() -> None:
+    """--dry-run output must print <worktree_path>/status.md, not a wiki path."""
+    import io
+
+    captured = io.StringIO()
+    original_stdout = sys.stdout
+    sys.stdout = captured
+    try:
+        exit_code, sc, _ = _run_main_with_mocks(["--dry-run"])
+    finally:
+        sys.stdout = original_stdout
+
+    if exit_code != 0:
+        raise AssertionError(f"expected exit 0 for --dry-run, got {exit_code}")
+
+    output = captured.getvalue()
+    expected_path = str(Path("/fake/worktrees") / "my-task" / "status.md")
+    if expected_path not in output:
+        raise AssertionError(
+            f"dry-run output must contain {expected_path!r}\n"
+            f"Got:\n{output}"
+        )
+    if "wiki/active" in output:
+        raise AssertionError(
+            f"dry-run output must NOT contain 'wiki/active'\nGot:\n{output}"
+        )
+    # write_initial_status must NOT have been called (dry-run exits before live steps)
+    if sc.write_initial_status.called:
+        raise AssertionError(
+            "write_initial_status must not be called in --dry-run mode"
+        )
+    print("PASS: --dry-run output prints worktree status path (not wiki path)")
+
+
+# ---------------------------------------------------------------------------
 # Main runner
 # ---------------------------------------------------------------------------
 
@@ -574,6 +624,7 @@ def main() -> int:
         test_main_value_error_from_picker_exits_one,
         test_main_runtime_error_from_capture_branch_raises_system_exit,
         test_create_hub_links_called_after_portal_creation,
+        test_main_dry_run_prints_worktree_status_path,
     ]
 
     failures: list[str] = []

@@ -45,9 +45,9 @@ Public API:
         Raises ``RuntimeError`` on non-zero exit.
     write_active_marker(mill_dir, slug, title, branch, ts) -> None
         Thin wrapper around ``_active.write``.
-    write_initial_status(wiki_path, slug, title, ts, parent_branch, branch) -> Path
-        Render + write ``active/<slug>/status.md``; lock + commit+push; return
-        the absolute path of the written file.
+    write_initial_status(worktree_path, slug, title, ts, parent_branch, branch) -> Path
+        Render + write ``status.md`` at worktree root; stage + commit on task branch;
+        return the absolute path of the written file.
     recreate_active_junction(wiki_path, slug, mill_dir) -> None
         Delete-then-create the ``.active`` junction so it points at the correct
         active-task directory. Used by ``mill-claim``; ``mill-spawn`` handles
@@ -668,7 +668,7 @@ def write_active_marker(
 
 
 def write_initial_status(
-    wiki_path: Path,
+    worktree_path: Path,
     slug: str,
     title: str,
     ts: str,
@@ -676,26 +676,32 @@ def write_initial_status(
     branch: str,
 ) -> Path:
     """
-    Render and write the initial ``active/<slug>/status.md``, then commit+push.
+    Render + write ``status.md`` at worktree root; stage + commit on task branch.
 
     Uses ``_status.render_initial`` to produce the file body, writes the
-    file, commits, and returns the absolute path. No wiki lock is acquired
-    because ``status.md`` is a per-task file with a single writer.
+    file to ``worktree_path / "status.md"``, stages and commits on the task
+    branch, and returns the absolute path.
 
     Args:
-        wiki_path: Directory containing the wiki clone.
-        slug: Task slug; determines the subdirectory path.
+        worktree_path: Root directory of the task worktree (the git checkout
+            directory, not ``.millhouse/``). ``status.md`` is written here
+            and tracked by git on the task branch.
+        slug: Task slug; embedded in the commit message and in status.md.
         title: Human-readable task title used both as the ``task:`` value
             and as the description placeholder.
         ts: ISO-8601 UTC timestamp for the timeline entry.
         parent_branch: Hub branch name recorded so mill-merge knows where
             to merge back to.
-        branch: The task branch the worktree is on; recorded so the wiki
-            state is self-describing without inferring from per-developer
+        branch: The task branch the worktree is on; recorded so the status
+            file is self-describing without inferring from per-developer
             cfg.branch_prefix.
 
     Returns:
         Absolute path to the written ``status.md``.
+
+    Raises:
+        RuntimeError: ``git add`` or ``git commit`` returned non-zero. The
+            error message includes the subprocess ``stderr``.
     """
     status_text = _status.render_initial(
         task_title=title,
@@ -705,13 +711,22 @@ def write_initial_status(
         slug=slug,
         branch=branch,
     )
-    status_rel = f"active/{slug}/status.md"
-    status_abs = wiki_path / status_rel
-    status_abs.parent.mkdir(parents=True, exist_ok=True)
+    status_abs = worktree_path / "status.md"
     status_abs.write_text(status_text, encoding="utf-8")
-    _wiki.write_commit_push(
-        wiki_path, [status_rel], f"spawn: init status for {slug}"
+    result = _subprocess_util.run(
+        ["git", "-C", str(worktree_path), "add", "status.md"],
     )
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"git add status.md failed: {result.stderr.strip()!r}"
+        )
+    result = _subprocess_util.run(
+        ["git", "-C", str(worktree_path), "commit", "-m", f"spawn: init status for {slug}"],
+    )
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"git commit status.md failed: {result.stderr.strip()!r}"
+        )
     return status_abs
 
 
