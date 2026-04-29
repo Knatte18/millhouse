@@ -68,23 +68,45 @@ Apply the same rule when rendering `plan-batch.md` for each batch (`<BATCH_NAME>
 Loop up to `max_review_rounds` rounds. Each round:
 
 1. Report: **"Plan Review — round N/max_review_rounds"**.
+
+1.5. **Step 1.5: pre-review validator gate (auto-run, no round consumed)**
+
+   - The CLI auto-runs `_plan_validate` before invoking the LLM. If the validator finds anything, the CLI exits 1 with a JSON envelope on stdout (`{"errors": [...], "summary": "<n> finding(s) across <m> batch(es)"}`). No review file is written; no LLM token is spent; no review round is consumed.
+   - On validator-failure exit, mill-plan parses the JSON and applies one mechanical fix per error dict, per the mapping table below. After fixes, mill-plan re-runs `python plugins/mill/scripts/millpy-review-plan.py` (still no round consumed — the validator gate is pre-LLM).
+   - **Two-pass cap:** if the validator fails again on the second pass, mill-plan halts with `BLOCKED: plan-validate non-progress` and writes the unresolved errors to the user. Do NOT auto-retry beyond the second pass. The two-pass cap matches the `review.code.self_fix_rounds` self-fix pattern.
+   - If `pipeline.skip_validate: true` ever appears in config (currently it does not; this is a future hook), pass `--skip-validate` to the CLI and skip step 1.5 entirely. As of today, mill-plan never passes `--skip-validate`.
+
+   | check                          | mechanical fix                                                                                                  |
+   | ------------------------------ | ----------------------------------------------------------------------------------------------------------- |
+   | non-existent-path              | If the path is a typo of an existing file, correct it. If it is meant to be a Creates: target in this plan, move it from Reads:/Modifies: to Creates: in the appropriate card. If neither applies, the planner intended to read a file that does not exist — halt; this is not mechanically fixable. |
+   | card-missing-field             | Add the missing field with a sensible default: Reads: → list the file(s) the requirement names; Modifies: → none if the card creates a new file only; Creates: → none if the card edits an existing file only; Requirements: → restate the card title as a one-sentence requirement; Commit: → derive from the card title using the existing conventional-commit prefix pattern. |
+   | card-numbering                 | Renumber cards within the affected batch sequentially starting at the lowest existing number; if the conflict is across batches, re-number the later-batch's cards to start above the earlier batch's max. Update every "card N" reference inside the plan. |
+   | depends-on-unknown             | Compare the unknown name against the Batch Index. If it is a typo of an existing entry, correct it. If the dependency genuinely needs a new batch, halt — adding a batch is not a mechanical fix.                          |
+   | parallel-modifies-overlap      | If one batch logically depends on the other, add the missing edge to the dependent's depends-on list. If the two batches truly need to write to the same file in parallel, the plan is structurally wrong — halt.        |
+   | reads-not-backtick-path        | Re-format the bullet to backtick-only paths; move any inline parenthetical commentary to the card's Requirements: prose. Strip any line-range suffix (e.g. `:55-65`) from the path.                                       |
+   | all-files-touched-mismatch     | Update the overview's All Files Touched to match the union of every card's Modifies: + Creates:. (The overview list is derivative; the cards are the source of truth.)                                                |
+   | missing-overview               | Halt — the plan is structurally broken, not mechanically fixable.                                                                                                                                                       |
+   | batch-index-parse              | Halt — the overview's fenced-yaml block is unparseable; not mechanically fixable.                                                                                                                                        |
+
+   Rows where the fix is "halt" are deliberate: those errors signal a structural planning bug that auto-fixing would mask. The two-pass cap fires for these too (the second pass will produce the same error and trigger halt).
+
+   After applying mechanical fixes for every error in the JSON, mill-plan commits the fix(es) to plan files via `_wiki.write_commit_push(wiki_path, [f"active/{slug}/plan/"], f"mill-plan: validator-fix pass for {slug}")` and re-runs the CLI. The commit message uses `validator-fix` to distinguish it from `plan-fix-r{N}` commits (which are LLM-fix-pass commits).
+
 2. Invoke the CLI as a subprocess:
 
    ```bash
    python plugins/mill/scripts/millpy-review-plan.py
    ```
 
-   The script discovers the slug and round from disk. It prints one JSON line: `{"type": "plan", "round": N, "verdict": "APPROVE" | "REQUEST_CHANGES", "reviews": [...]}` where each review entry has `{scope, verdict, file}`.
+   The script discovers the slug and round from disk. It prints one JSON line: `{"type": "plan", "round": N, "verdict": "APPROVE" | "REQUEST_CHANGES", "blocking_count": N, "reviews": [...]}` where each review entry has `{scope, verdict, file}`.
 
 3. **BEFORE reading any review file, load the `mill-receiving-review` skill** (`plugins/mill/skills/mill-receiving-review/SKILL.md`). Non-negotiable. The VERIFY → HARM CHECK → FIX-or-PUSH-BACK decision tree is what keeps review loops useful.
 
-4. On `APPROVE`:
-   - `_status.update_field(overview_path_rel_to_wiki, "approved", "true")` via direct Edit (the field is in the overview's fenced-yaml frontmatter, not status.md).
-   - `_status.append_phase(status_path, f"plan-review-r{N}", iso_ts)`.
-   - Commit+push both.
-   - Break the loop → Handoff.
+4a. On `APPROVE` (verdict from JSON): set overview frontmatter `approved: true` via direct Edit, append `plan-review-r{N}` to status timeline, commit+push both, break loop → Handoff.
 
-5. On `REQUEST_CHANGES`:
+4b. On `REQUEST_CHANGES` AND `blocking_count == 0` (the JSON's top-level field): the round produced only NITs. Apply NIT fixes per the `mill-receiving-review` Decision Tree (no different from a regular fix-pass), write the fixer report at `<WIKI_PATH>/active/<slug>/reviews/<YYYYMMDD-HHMMSS>-plan-fix-r<N>.md`, append `plan-fix-r{N}` to status timeline, set overview frontmatter `approved: true`, commit+push (single commit covering plan + reviews + status), break loop → Handoff. Do NOT run round N+1. Rationale: 0-BLOCKING means the planner and reviewer have converged; further rounds only churn cosmetic NITs.
+
+4c. On `REQUEST_CHANGES` AND `blocking_count > 0`:
    - `_status.append_phase(status_path, f"plan-review-r{N}", iso_ts)`.
    - Read each review file. For each finding, run the `mill-receiving-review` decision tree.
    - Apply fixes to plan files.
@@ -93,11 +115,11 @@ Loop up to `max_review_rounds` rounds. Each round:
    - `_status.append_phase(status_path, f"plan-fix-r{N}", iso_ts)`.
    - `_wiki.write_commit_push(wiki_path, [f"active/{slug}/plan/", f"active/{slug}/reviews/<filename>", f"active/{slug}/status.md"], f"mill-plan: plan-fix round {N} for {slug}")`.
 
-6. **Non-progress check** (after writing each fixer report from round 2 onward): compare the `## Pushed Back` section's finding titles to the previous round's. If the set is identical, halt with `BLOCKED: Plan review non-progress round {N}` and tell the user to look at the fixer reports. Do not escape-hatch — non-progress means the planner and reviewer are stuck in a stable disagreement; user intervention is required.
+5. **Non-progress check** (after writing each fixer report from round 2 onward): **Skip this check when the latest round's `## Pushed Back` section is empty.** Empty Pushed Back means the planner addressed every finding cleanly — that is convergence, not non-progress. The check only fires when both rounds have a non-empty Pushed Back AND the title set is identical. If the set is identical, halt with `BLOCKED: Plan review non-progress round {N}` and tell the user to look at the fixer reports. Do not escape-hatch — non-progress means the planner and reviewer are stuck in a stable disagreement; user intervention is required.
 
-7. **Max-rounds escape** (only when round counter exhausts without APPROVE, BLOCKINGs still remain, AND non-progress did not fire): present the user with the prompt below verbatim, computing `{N}` and `{M}` and a one-line recommendation:
+6. **Max-rounds escape** (only when round counter exhausts without APPROVE, BLOCKINGs still remain, AND non-progress did not fire): present the user with the prompt below verbatim, computing `{N}` and `{M}` and a one-line recommendation. `{M}` is `result["blocking_count"]` from the most recent CLI invocation — do not re-count manually. If `blocking_count` was 0 in the latest round, this prompt should not have fired — verify step 4b logic before presenting.
 
-   > After {N} rounds, {M} BLOCKING findings remain unresolved. Options:
+   > After {N} rounds, {M} BLOCKING findings remain unresolved (blocking_count from latest round's review JSON). Options:
    > A) Deep problems — rethink approach. Go back to mill-start and revise discussion.
    > B) Shallow — one more review round.
    > C) Override — accept findings and proceed to mill-go anyway.

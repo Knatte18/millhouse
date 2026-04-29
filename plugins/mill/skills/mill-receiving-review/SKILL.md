@@ -46,6 +46,7 @@ These rationalizations are **never** valid reasons to skip a fix:
 - "Won't change during this project"
 - "Cosmetic / style preference"
 - "Future task will handle this"
+- **NITs are not optional.** A finding marked `[NIT]` is fixed under the default rule. The only escape is the same Decision Tree (factually wrong / breaks existing functionality / conflicts with documented design / destabilizes other work).
 
 ---
 

@@ -35,6 +35,7 @@ from _plan_dag import PlanDAGError, extract_batch_index
 from _review_common import (
     ReviewError,
     ReviewResult,
+    _load_root_from_overview,
     build_manifest_section,
     build_reattached_section,
     build_tool_rule,
@@ -44,6 +45,7 @@ from _review_common import (
     load_reviewer,
     load_task_title,
     parse_batch_refs,
+    parse_blocking_count,
     parse_missing_context,
     parse_verdict,
     read_constraints_md,
@@ -53,7 +55,6 @@ from _review_common import (
     resolve_ref_paths,
     write_review_file,
 )
-from _review_plan import _load_root_from_overview
 
 
 def _collect_batch_files(
@@ -142,6 +143,7 @@ def run(
     wiki_root: Path,
     project_root: Path,
     *,
+    max_rounds: int | None = None,
     batch_name: str | None = None,
     extra_files: list[Path] | None = None,
 ) -> ReviewResult:
@@ -157,7 +159,7 @@ def run(
     reviews_dir = resolve_path(cfg["paths"]["reviews_dir"], slug, wiki_root)
     scope_label = batch_name or "holistic"
     round_n = discover_round(reviews_dir, "code", scope_label)
-    max_rounds = cfg["review"]["code"]["rounds"]
+    max_rounds = max_rounds if max_rounds is not None else cfg["review"]["code"]["rounds"]
     if round_n > max_rounds:
         raise ReviewError(
             f"Round {round_n} exceeds max {max_rounds} for code review"
@@ -267,6 +269,7 @@ def run(
             verdict = parse_verdict(raw)
             # Second NEED_CONTEXT propagates to caller untouched.
 
+    blocking_count = parse_blocking_count(raw, severity="BLOCKING")
     path = write_review_file(
         reviews_dir,
         "code",
@@ -283,6 +286,7 @@ def run(
         type="code",
         round=round_n,
         verdict=verdict,
+        blocking_count=blocking_count,
         reviews=[
             {
                 "scope": scope_label,

@@ -23,6 +23,7 @@ Public API:
     build_tool_rule()    — mode-specific <TOOL_RULE> block (bulk / tool-use)
     render_prompt()      — render a template from plugins/mill/templates/
     parse_verdict()      — extract APPROVE/REQUEST_CHANGES from fenced yaml block
+    parse_blocking_count() — count "### [<severity>]" headings in review output
     write_review_file()  — write a review file with a canonical timestamp name
     aggregate_verdict()  — worst-case verdict across a list of sub-verdicts
     load_reviewer()      — import a _reviewer_<name>.py module by name
@@ -31,6 +32,7 @@ Public API:
     compute_creates_union() — union of all Creates: tokens across every batch in a plan_dir
     resolve_ref_paths()  — resolve raw ref strings against project_root; hard-fails on missing paths not in creates_union
     resolve_existing_paths() — resolve raw paths and return only those that already exist on disk (silent drop, no creates_union check)
+    _load_root_from_overview() — read root: field from overview's fenced-yaml block
 """
 from __future__ import annotations
 
@@ -91,12 +93,14 @@ class ReviewResult:
     round: int
     verdict: str                           # "APPROVE" | "REQUEST_CHANGES"
     reviews: list[dict] = field(default_factory=list)
+    blocking_count: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "type": self.type,
             "round": self.round,
             "verdict": self.verdict,
+            "blocking_count": self.blocking_count,
             "reviews": self.reviews,
         }
 
@@ -401,6 +405,49 @@ def resolve_existing_paths(
     return result
 
 
+def _load_root_from_overview(overview_path: Path) -> str | None:
+    """Read the `root:` field from the overview's top fenced-yaml block.
+
+    v2 plan overviews use fenced ```yaml``` frontmatter (per the
+    project markdown convention; `---` is reserved for SKILL.md). This
+    parser locates the first ```yaml``` block and reads `root:` from
+    it. Returns the root string if present and truthy, else None.
+    Any structural problem (no block, unterminated, bad yaml, absent
+    key) silently yields None — the review surface degrades to
+    resolving paths against project_root directly, which is the right
+    behaviour for a mill-v2 worktree where root is typically empty.
+    """
+    try:
+        text = overview_path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return None
+
+    lines = text.splitlines()
+    start = None
+    for i, line in enumerate(lines):
+        if line.strip() == "```yaml":
+            start = i + 1
+            break
+    if start is None:
+        return None
+    end = None
+    for j in range(start, len(lines)):
+        if lines[j].strip() == "```":
+            end = j
+            break
+    if end is None:
+        return None
+
+    fm_text = "\n".join(lines[start:end])
+    try:
+        data = yaml.safe_load(fm_text) or {}
+    except yaml.YAMLError:
+        return None
+    if not isinstance(data, dict):
+        return None
+    return data.get("root") or None
+
+
 def bulk_files(file_paths: list[Path]) -> str:
     """Concatenate file contents with '--- FILE: <path> ---' delimiters.
 
@@ -620,6 +667,21 @@ def parse_verdict(raw_output: str) -> str:
         f"Could not parse verdict: 'verdict:' key not found in ```yaml block.\n"
         f"Raw output preview:\n{preview}"
     )
+
+
+def parse_blocking_count(raw_output: str, *, severity: str) -> int:
+    """Count "### [<severity>]" ATX headings in review output.
+
+    Searches for lines matching ``^###\\s+\\[<severity>\\]\\s+`` using
+    MULTILINE mode. The severity argument is required (keyword-only).
+    Match is case-sensitive. Only line-start headings are counted —
+    mid-line occurrences are ignored.
+    """
+    pattern = re.compile(
+        r"^###\s+\[" + re.escape(severity) + r"\]\s+",
+        re.MULTILINE,
+    )
+    return len(pattern.findall(raw_output))
 
 
 def write_review_file(

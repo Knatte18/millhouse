@@ -1,0 +1,624 @@
+"""
+Static plan pre-validator.
+
+Checks plan files for structural issues BEFORE invoking the LLM reviewer.
+Used by millpy-validate-plan.py (standalone CLI) and by millpy-review-plan.py
+(auto-run gate before each review round).
+
+Public API:
+    run(plan_dir, project_root, *, root=None, wiki_root=None) -> list[dict]
+        Validate plan files in plan_dir. Returns a sorted list of error dicts.
+        Each error dict has keys: {check, batch, card, path, message}.
+
+Checks performed (check keys):
+    non-existent-path        — (#10 check 1) Reads:/Modifies:/Creates: refs that
+                               don't exist on disk and are not Creates: targets
+    card-missing-field       — (#10 check 2) Cards missing one of the five required
+                               fields (Reads, Modifies, Creates, Requirements, Commit)
+    card-numbering           — (#10 check 3) Non-sequential or cross-batch-duplicate
+                               card numbers
+    depends-on-unknown       — (#10 check 4) depends-on entries referencing unknown
+                               batch names
+    parallel-modifies-overlap — (#10 check 5) Parallel-eligible batches both
+                               modifying the same file
+    reads-not-backtick-path  — (#10 check 6) Reads:/Modifies:/Creates: entries not
+                               in backtick-only format (exempts bare 'none')
+    all-files-touched-mismatch — (#10 check 8) Mismatch between overview's
+                               All Files Touched section and cards' Modifies:/Creates:
+"""
+from __future__ import annotations
+
+import re
+from pathlib import Path
+
+from _plan_dag import PlanDAGError, extract_batch_index
+from _review_common import (
+    _load_root_from_overview,
+    compute_creates_union,
+    parse_batch_refs,
+    resolve_existing_paths,
+)
+
+# ---------------------------------------------------------------------------
+# Module-level regex helpers
+# ---------------------------------------------------------------------------
+
+# Matches Reads/Modifies/Creates header bullets.
+_RE_REFS_HEADER = re.compile(
+    r"^-\s*\*\*(Reads|Modifies|Creates):\*\*(?P<inline>.*)$"
+)
+
+# Matches sub-bullets under multi-line header bullets.
+_RE_REFS_SUB = re.compile(r"^\s+-\s*(.+)$")
+
+# Line-range suffix inside a backtick token: e.g. "path/a:55-65"
+_RE_LINE_RANGE = re.compile(r":\d+-\d+$")
+
+# Required card fields.
+_REQUIRED_CARD_FIELDS = ["Reads", "Modifies", "Creates", "Requirements", "Commit"]
+
+
+# ---------------------------------------------------------------------------
+# Private helpers
+# ---------------------------------------------------------------------------
+
+def _parse_cards(batch_text: str) -> list[tuple[int, list[str]]]:
+    """Return list of (card_number, card_lines) pairs.
+
+    Each card block starts at a ``### Card N:`` line and ends just before
+    the next ``### `` heading or at EOF.
+    """
+    lines = batch_text.splitlines()
+    cards: list[tuple[int, list[str]]] = []
+    current_num: int | None = None
+    current_lines: list[str] = []
+
+    for line in lines:
+        m = re.match(r"^###\s+Card\s+(\d+)\s*:", line)
+        if m:
+            if current_num is not None:
+                cards.append((current_num, current_lines))
+            current_num = int(m.group(1))
+            current_lines = [line]
+        elif current_num is not None:
+            # Any other ### heading terminates the current card block.
+            if line.startswith("### "):
+                cards.append((current_num, current_lines))
+                current_num = None
+                current_lines = []
+            else:
+                current_lines.append(line)
+
+    if current_num is not None:
+        cards.append((current_num, current_lines))
+
+    return cards
+
+
+def _parse_modifies_only(batch_path: Path) -> set[str]:
+    """Extract raw path tokens from a batch file's Modifies: lines only.
+
+    Same single-line / multi-line logic as parse_batch_refs in _review_common,
+    but restricted to ``- **Modifies:**`` headers. Filters ``none``
+    (case-insensitive) per the existing convention.
+    """
+    text = batch_path.read_text(encoding="utf-8")
+    tokens: set[str] = set()
+    lines = text.splitlines()
+    i = 0
+    while i < len(lines):
+        m = _RE_REFS_HEADER.match(lines[i])
+        if m and m.group(1) == "Modifies":
+            inline = m.group("inline").strip()
+            if inline:
+                backtick_tokens = re.findall(r"`([^`]+)`", inline)
+                batch_tokens = backtick_tokens if backtick_tokens else [
+                    t.strip() for t in inline.split(",") if t.strip()
+                ]
+            else:
+                batch_tokens = []
+                j = i + 1
+                while j < len(lines):
+                    sm = _RE_REFS_SUB.match(lines[j])
+                    if not sm:
+                        break
+                    rest = sm.group(1).strip()
+                    bt = re.findall(r"`([^`]+)`", rest)
+                    if bt:
+                        batch_tokens.extend(bt)
+                    j += 1
+            for t in batch_tokens:
+                if t.lower() != "none":
+                    tokens.add(t)
+        i += 1
+    return tokens
+
+
+# ---------------------------------------------------------------------------
+# Check 1 — non-existent-path
+# ---------------------------------------------------------------------------
+
+def _check_non_existent_path(
+    batch_files: list[Path],
+    project_root: Path,
+    root: str | None,
+    creates_union: set[str],
+    *,
+    wiki_root: Path | None = None,
+) -> list[dict]:
+    errors: list[dict] = []
+    for batch_path in batch_files:
+        raw_refs = parse_batch_refs(batch_path)
+        for t in raw_refs:
+            if t.lower() == "none":
+                continue  # defensive; parse_batch_refs already filters these
+            existing = resolve_existing_paths([t], project_root, root, wiki_root=wiki_root)
+            if not existing and t not in creates_union:
+                errors.append({
+                    "check": "non-existent-path",
+                    "batch": batch_path.stem,
+                    "card": None,
+                    "path": t,
+                    "message": (
+                        f"path '{t}' does not exist on disk and is not a "
+                        f"Creates: target in any batch"
+                    ),
+                })
+    return errors
+
+
+# ---------------------------------------------------------------------------
+# Check 2 — card-missing-field
+# ---------------------------------------------------------------------------
+
+def _check_card_missing_field(batch_files: list[Path]) -> list[dict]:
+    errors: list[dict] = []
+    for batch_path in batch_files:
+        text = batch_path.read_text(encoding="utf-8")
+        cards = _parse_cards(text)
+        for card_num, card_lines in cards:
+            card_text = "\n".join(card_lines)
+            for field in _REQUIRED_CARD_FIELDS:
+                pattern = re.compile(
+                    r"^-\s*\*\*" + re.escape(field) + r":\*\*", re.MULTILINE
+                )
+                if not pattern.search(card_text):
+                    errors.append({
+                        "check": "card-missing-field",
+                        "batch": batch_path.stem,
+                        "card": card_num,
+                        "path": None,
+                        "message": f"card {card_num} missing required field: {field}:",
+                    })
+    return errors
+
+
+# ---------------------------------------------------------------------------
+# Check 3 — card-numbering
+# ---------------------------------------------------------------------------
+
+def _check_card_numbering(batch_files: list[Path]) -> list[dict]:
+    errors: list[dict] = []
+
+    # Collect per-batch card lists and a global list for cross-batch checks.
+    per_batch: dict[str, list[int]] = {}
+    all_cards: list[tuple[str, int]] = []
+
+    for batch_path in batch_files:
+        text = batch_path.read_text(encoding="utf-8")
+        cards = _parse_cards(text)
+        stem = batch_path.stem
+        nums = [n for n, _ in cards]
+        per_batch[stem] = nums
+        for n in nums:
+            all_cards.append((stem, n))
+
+    # Within-batch: no duplicates, sequential (no gaps).
+    for stem, nums in per_batch.items():
+        if not nums:
+            continue
+        # Duplicate check.
+        seen_count: dict[int, int] = {}
+        for n in nums:
+            seen_count[n] = seen_count.get(n, 0) + 1
+        for n, count in sorted(seen_count.items()):
+            if count > 1:
+                errors.append({
+                    "check": "card-numbering",
+                    "batch": stem,
+                    "card": n,
+                    "path": None,
+                    "message": f"card {n} breaks sequential numbering within batch {stem}",
+                })
+        # Gap check on unique numbers.
+        unique_sorted = sorted(seen_count.keys())
+        for i in range(1, len(unique_sorted)):
+            if unique_sorted[i] != unique_sorted[i - 1] + 1:
+                # The gap starts after unique_sorted[i-1]; report at the missing number.
+                missing = unique_sorted[i - 1] + 1
+                errors.append({
+                    "check": "card-numbering",
+                    "batch": stem,
+                    "card": missing,
+                    "path": None,
+                    "message": (
+                        f"card {missing} breaks sequential numbering within batch {stem}"
+                    ),
+                })
+
+    # Cross-batch uniqueness: a card number in two different batches.
+    card_to_batches: dict[int, set[str]] = {}
+    for stem, n in all_cards:
+        card_to_batches.setdefault(n, set()).add(stem)
+    for n, batch_set in sorted(card_to_batches.items()):
+        if len(batch_set) > 1:
+            for stem in sorted(batch_set):
+                errors.append({
+                    "check": "card-numbering",
+                    "batch": stem,
+                    "card": n,
+                    "path": None,
+                    "message": (
+                        f"card {n} breaks sequential numbering within batch {stem}"
+                    ),
+                })
+
+    return errors
+
+
+# ---------------------------------------------------------------------------
+# Check 4 — depends-on-unknown
+# ---------------------------------------------------------------------------
+
+def _check_depends_on_unknown(
+    overview_text: str,
+    overview_path: Path,
+) -> list[dict]:
+    try:
+        batches = extract_batch_index(overview_text)
+    except PlanDAGError as exc:
+        return [{
+            "check": "batch-index-parse",
+            "batch": None,
+            "card": None,
+            "path": str(overview_path),
+            "message": f"batch index unparseable: {exc}",
+        }]
+    known_names = {entry["name"] for entry in batches}
+    errors: list[dict] = []
+    for entry in batches:
+        for dep_name in entry.get("depends-on", []):
+            if dep_name not in known_names:
+                errors.append({
+                    "check": "depends-on-unknown",
+                    "batch": entry["name"],
+                    "card": None,
+                    "path": None,
+                    "message": f"depends-on references unknown batch '{dep_name}'",
+                })
+    return errors
+
+
+# ---------------------------------------------------------------------------
+# Check 5 — parallel-modifies-overlap
+# ---------------------------------------------------------------------------
+
+def _compute_transitive_ancestors(batches: list[dict]) -> dict[str, set[str]]:
+    """Return {batch_name: set_of_all_ancestor_names} via BFS for each batch."""
+    deps_map: dict[str, list[str]] = {
+        entry["name"]: list(entry.get("depends-on", [])) for entry in batches
+    }
+    ancestors: dict[str, set[str]] = {}
+    for entry in batches:
+        name = entry["name"]
+        visited: set[str] = set()
+        queue = list(deps_map.get(name, []))
+        while queue:
+            n = queue.pop()
+            if n in visited:
+                continue
+            visited.add(n)
+            queue.extend(deps_map.get(n, []))
+        ancestors[name] = visited
+    return ancestors
+
+
+def _check_parallel_modifies_overlap(
+    batch_files: list[Path],
+    overview_text: str,
+) -> list[dict]:
+    try:
+        batches = extract_batch_index(overview_text)
+    except PlanDAGError:
+        # Check 4 has already recorded the parse error; don't double-report.
+        return []
+
+    ancestors = _compute_transitive_ancestors(batches)
+
+    # Map batch name → batch file path via the index's `file:` field.
+    stem_to_path: dict[str, Path] = {bf.stem: bf for bf in batch_files}
+    batch_name_to_path: dict[str, Path] = {}
+    for entry in batches:
+        file_ref = entry.get("file", "")
+        stem = Path(file_ref).stem
+        if stem in stem_to_path:
+            batch_name_to_path[entry["name"]] = stem_to_path[stem]
+
+    # Compute Modifies: sets.
+    batch_modifies: dict[str, set[str]] = {
+        name: _parse_modifies_only(path)
+        for name, path in batch_name_to_path.items()
+    }
+
+    errors: list[dict] = []
+    names = sorted(batch_name_to_path.keys())  # stable order for deterministic output
+
+    for i in range(len(names)):
+        for j in range(i + 1, len(names)):
+            a_name = names[i]
+            b_name = names[j]
+
+            # Parallel-eligible iff neither is a transitive ancestor of the other.
+            if b_name in ancestors.get(a_name, set()):
+                continue
+            if a_name in ancestors.get(b_name, set()):
+                continue
+
+            overlap = batch_modifies.get(a_name, set()) & batch_modifies.get(b_name, set())
+            for path in sorted(overlap):
+                # Emit one finding per (path, sorted-pair); if a_name < b_name the
+                # condition is always True here because names is sorted.
+                if a_name < b_name:
+                    errors.append({
+                        "check": "parallel-modifies-overlap",
+                        "batch": a_name,
+                        "card": None,
+                        "path": path,
+                        "message": (
+                            f"path '{path}' in Modifies: of parallel-eligible "
+                            f"batches '{a_name}' and '{b_name}'"
+                        ),
+                    })
+
+    return errors
+
+
+# ---------------------------------------------------------------------------
+# Check 6 — reads-not-backtick-path
+# ---------------------------------------------------------------------------
+
+def _check_reads_not_backtick_path(batch_files: list[Path]) -> list[dict]:
+    errors: list[dict] = []
+
+    for batch_path in batch_files:
+        text = batch_path.read_text(encoding="utf-8")
+        lines = text.splitlines()
+        current_card: int | None = None
+
+        i = 0
+        while i < len(lines):
+            line = lines[i]
+
+            # Track enclosing card number.
+            m_card = re.match(r"^###\s+Card\s+(\d+)\s*:", line)
+            if m_card:
+                current_card = int(m_card.group(1))
+
+            m_header = _RE_REFS_HEADER.match(line)
+            if m_header:
+                inline = m_header.group("inline").strip()
+                if inline:
+                    # Single-line form.
+                    if inline.lower() == "none":
+                        i += 1
+                        continue  # exempt
+
+                    # Check for line-range suffixes in backtick tokens.
+                    backtick_tokens = re.findall(r"`([^`]+)`", inline)
+                    for tok in backtick_tokens:
+                        if _RE_LINE_RANGE.search(tok):
+                            errors.append({
+                                "check": "reads-not-backtick-path",
+                                "batch": batch_path.stem,
+                                "card": current_card,
+                                "path": tok,
+                                "message": (
+                                    f"path token has line-range suffix: `{tok}`"
+                                ),
+                            })
+
+                    # Check for prose alongside backtick tokens.
+                    cleaned = re.sub(r"`[^`]+`", "", inline).replace(",", "").strip()
+                    if cleaned:
+                        errors.append({
+                            "check": "reads-not-backtick-path",
+                            "batch": batch_path.stem,
+                            "card": current_card,
+                            "path": inline,
+                            "message": (
+                                f"Reads/Modifies/Creates inline value contains prose "
+                                f"alongside backtick path: {inline!r}"
+                            ),
+                        })
+
+                    i += 1
+                    continue
+
+                # Multi-line form — consume sub-bullets.
+                j = i + 1
+                while j < len(lines):
+                    sm = _RE_REFS_SUB.match(lines[j])
+                    if not sm:
+                        break
+                    sub_content = sm.group(1).strip()
+                    bt_matches = re.findall(r"`[^`]+`", sub_content)
+
+                    if not bt_matches:
+                        errors.append({
+                            "check": "reads-not-backtick-path",
+                            "batch": batch_path.stem,
+                            "card": current_card,
+                            "path": sub_content,
+                            "message": (
+                                f"sub-bullet has no backtick-wrapped path: {sub_content!r}"
+                            ),
+                        })
+                    elif len(bt_matches) > 1:
+                        errors.append({
+                            "check": "reads-not-backtick-path",
+                            "batch": batch_path.stem,
+                            "card": current_card,
+                            "path": sub_content,
+                            "message": (
+                                f"sub-bullet contains multiple backtick paths: {sub_content!r}"
+                            ),
+                        })
+                    else:
+                        tok = bt_matches[0][1:-1]  # strip surrounding backticks
+                        if _RE_LINE_RANGE.search(tok):
+                            errors.append({
+                                "check": "reads-not-backtick-path",
+                                "batch": batch_path.stem,
+                                "card": current_card,
+                                "path": tok,
+                                "message": (
+                                    f"path token has line-range suffix: `{tok}`"
+                                ),
+                            })
+                        # Check for prose alongside the single backtick token.
+                        cleaned_sub = re.sub(r"`[^`]+`", "", sub_content).strip()
+                        if cleaned_sub:
+                            errors.append({
+                                "check": "reads-not-backtick-path",
+                                "batch": batch_path.stem,
+                                "card": current_card,
+                                "path": sub_content,
+                                "message": (
+                                    f"sub-bullet contains prose alongside backtick path: "
+                                    f"{sub_content!r}"
+                                ),
+                            })
+                    j += 1
+
+                i = j  # skip consumed sub-bullets
+                continue
+
+            i += 1
+
+    return errors
+
+
+# ---------------------------------------------------------------------------
+# Check 8 — all-files-touched-mismatch
+# ---------------------------------------------------------------------------
+
+def _check_all_files_touched_mismatch(
+    overview_path: Path,
+    batch_files: list[Path],
+) -> list[dict]:
+    text = overview_path.read_text(encoding="utf-8")
+    lines = text.splitlines()
+
+    # Locate the ## All Files Touched heading.
+    heading_idx: int | None = None
+    for i, line in enumerate(lines):
+        if re.match(r"^##\s+All Files Touched", line):
+            heading_idx = i
+            break
+
+    if heading_idx is None:
+        return []  # Section is optional; silent skip.
+
+    # Parse bullet list under the heading.
+    overview_set: set[str] = set()
+    for line in lines[heading_idx + 1:]:
+        if line.startswith("## "):
+            break
+        m = re.match(r"^\s*-\s+`([^`]+)`", line)
+        if m:
+            overview_set.add(m.group(1))
+
+    # Compute cards_set = union of Modifies: + Creates: across all cards.
+    cards_set: set[str] = set()
+    for batch_path in batch_files:
+        cards_set |= _parse_modifies_only(batch_path)
+    # Add Creates: tokens via compute_creates_union.
+    cards_set |= compute_creates_union(overview_path.parent)
+
+    errors: list[dict] = []
+    for p in sorted(overview_set - cards_set):
+        errors.append({
+            "check": "all-files-touched-mismatch",
+            "batch": None,
+            "card": None,
+            "path": p,
+            "message": (
+                f"path '{p}' listed in overview's All Files Touched "
+                f"but not in any card's Modifies: or Creates:"
+            ),
+        })
+    for p in sorted(cards_set - overview_set):
+        errors.append({
+            "check": "all-files-touched-mismatch",
+            "batch": None,
+            "card": None,
+            "path": p,
+            "message": (
+                f"path '{p}' in card Modifies:/Creates: but missing "
+                f"from overview's All Files Touched"
+            ),
+        })
+    return errors
+
+
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
+
+def run(
+    plan_dir: Path,
+    project_root: Path,
+    *,
+    root: str | None = None,
+    wiki_root: Path | None = None,
+) -> list[dict]:
+    """Validate plan files in plan_dir.
+
+    Returns a sorted list of error dicts with keys:
+    {check, batch, card, path, message}.
+
+    Checks 1, 2, 3, 4, 5, 6, 8 from issue #10.
+    """
+    overview_path = plan_dir / "00-overview.md"
+    if not overview_path.exists():
+        return [{
+            "check": "missing-overview",
+            "batch": None,
+            "card": None,
+            "path": str(overview_path),
+            "message": "00-overview.md not found",
+        }]
+
+    root_from_overview = _load_root_from_overview(overview_path)
+    effective_root = root if root is not None else root_from_overview
+
+    batch_files = sorted(
+        p for p in plan_dir.glob("??-*.md") if p.name != "00-overview.md"
+    )
+    overview_text = overview_path.read_text(encoding="utf-8")
+    creates_union = compute_creates_union(plan_dir)
+
+    errors: list[dict] = []
+
+    errors.extend(_check_non_existent_path(
+        batch_files, project_root, effective_root, creates_union, wiki_root=wiki_root,
+    ))
+    errors.extend(_check_card_missing_field(batch_files))
+    errors.extend(_check_card_numbering(batch_files))
+    errors.extend(_check_depends_on_unknown(overview_text, overview_path))
+    errors.extend(_check_parallel_modifies_overlap(batch_files, overview_text))
+    errors.extend(_check_reads_not_backtick_path(batch_files))
+    errors.extend(_check_all_files_touched_mismatch(overview_path, batch_files))
+
+    errors.sort(key=lambda e: (e["batch"] or "", e["card"] or 0, e["check"]))
+    return errors

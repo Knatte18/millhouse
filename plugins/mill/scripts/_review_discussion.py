@@ -22,6 +22,7 @@ from _review_common import (
     discover_round,
     load_reviewer,
     load_task_title,
+    parse_blocking_count,
     parse_verdict,
     read_constraints_md,
     render_prompt,
@@ -36,6 +37,8 @@ def run(
     mill_dir: Path,
     wiki_root: Path,
     project_root: Path,
+    *,
+    max_rounds: int | None = None,
 ) -> ReviewResult:
     """Run a holistic discussion review.
 
@@ -53,7 +56,7 @@ def run(
 
     # 2. Round discovery and cap check
     round_n = discover_round(reviews_dir, "discussion", "holistic")
-    max_rounds = cfg["review"]["discussion"]["rounds"]
+    max_rounds = max_rounds if max_rounds is not None else cfg["review"]["discussion"]["rounds"]
     if round_n > max_rounds:
         raise ReviewError(
             f"Round {round_n} exceeds max {max_rounds} for discussion review"
@@ -104,6 +107,7 @@ def run(
 
     # 6. Parse, write, return
     verdict = parse_verdict(raw)
+    blocking_count = parse_blocking_count(raw, severity="GAP")
     review_file = write_review_file(reviews_dir, "discussion", round_n, raw)
 
     print(
@@ -115,6 +119,7 @@ def run(
         type="discussion",
         round=round_n,
         verdict=verdict,
+        blocking_count=blocking_count,
         reviews=[
             {
                 "scope": "holistic",
