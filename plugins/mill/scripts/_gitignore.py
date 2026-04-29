@@ -9,16 +9,10 @@ Outside-marker content is NEVER modified. Duplicate entries that already
 exist outside the markers are left alone.
 
 Public API:
-    render_block(glob_entries, anchored_entries=None)
-        Return the full marker-block text. When ``anchored_entries is None``
-        (legacy mode), ``glob_entries`` is treated as the old hardlink-entry
-        list and the standard entries are prepended automatically. When
-        ``anchored_entries`` is a list (possibly empty), the new combined
-        block is emitted: glob entries first (as-is), anchored entries second
-        (each normalised to a leading ``/``).
-    upsert(gitignore_path, hardlink_entries)
-        Legacy single-path write. Write or rewrite the marker block. Returns
-        True if the file changed, False if already byte-equal.
+    render_block(glob_entries, anchored_entries)
+        Return the full marker-block text. ``glob_entries`` are written
+        first (as-is); ``anchored_entries`` follow, each normalised to a
+        leading ``/``.
     upsert_split(repo_root_gitignore, hub_gitignore, glob_entries, anchored_entries)
         Two-path write. When both paths are the same, writes a single combined
         block. When different, writes glob entries to ``repo_root_gitignore``
@@ -51,49 +45,28 @@ ANCHORED_ENTRIES: list[str] = [
 ]
 
 
-def render_block(glob_entries: list[str], anchored_entries: list[str] | None = None) -> str:
+def render_block(glob_entries: list[str], anchored_entries: list[str]) -> str:
     """
     Return the marker-block text.
 
-    **Legacy mode** (``anchored_entries is None``): ``glob_entries`` is
-    treated as the caller's hardlink-entry list. The standard mill entries
-    (``GLOB_ENTRIES + ANCHORED_ENTRIES``) are prepended; hardlink entries
-    follow, each normalised to a leading ``/``. This preserves the
-    ``render_block([...])`` call shape used by the legacy ``upsert``.
-
-    **New mode** (``anchored_entries`` is a list): ``glob_entries`` are
-    written first, each as-is. ``anchored_entries`` follow, each normalised
-    to a leading ``/``.
+    ``glob_entries`` are written first, each as-is. ``anchored_entries``
+    follow, each normalised to a leading ``/``.
 
     Args:
-        glob_entries: In legacy mode — bare hardlink entry names from
-            ``wiki/config.yaml`` ``hardlinks:`` (e.g. ``["tasks.md"]``).
-            In new mode — glob-pattern entries (e.g. ``GLOB_ENTRIES``).
-        anchored_entries: When ``None`` (default), legacy mode is used.
-            When a list (possibly empty), new mode is used. Each entry is
-            normalised to a leading ``/``.
+        glob_entries: Glob-pattern entries (e.g. ``GLOB_ENTRIES``).
+        anchored_entries: Root-anchored entries (e.g. ``ANCHORED_ENTRIES``).
+            Each entry is normalised to a leading ``/``.
 
     Returns:
         Multi-line string starting with ``START`` and ending with
         ``END\\n``.
     """
     lines = [START]
-    if anchored_entries is None:
-        # Legacy mode: prepend standard entries, then caller's hardlink entries.
-        for entry in GLOB_ENTRIES:
-            lines.append(entry)
-        for entry in ANCHORED_ENTRIES:
-            lines.append(entry)
-        for entry in glob_entries:  # treated as hardlink_entries
-            normalised = entry if entry.startswith("/") else f"/{entry}"
-            lines.append(normalised)
-    else:
-        # New mode: glob entries as-is, anchored entries with leading /.
-        for entry in glob_entries:
-            lines.append(entry)
-        for entry in anchored_entries:
-            normalised = entry if entry.startswith("/") else f"/{entry}"
-            lines.append(normalised)
+    for entry in glob_entries:
+        lines.append(entry)
+    for entry in anchored_entries:
+        normalised = entry if entry.startswith("/") else f"/{entry}"
+        lines.append(normalised)
     lines.append(END)
     return "\n".join(lines) + "\n"
 
@@ -139,27 +112,6 @@ def _upsert_single(gitignore_path: Path, block_text: str) -> bool:
 
     gitignore_path.write_text(rebuilt, encoding="utf-8")
     return True
-
-
-def upsert(gitignore_path: Path, hardlink_entries: list[str]) -> bool:
-    """
-    Write or rewrite the mill marker block at the end of ``.gitignore``.
-
-    Legacy single-path helper. Callers that have migrated to the split-file
-    layout should use ``upsert_split`` instead.
-
-    Returns True if the file was written (content changed), False if the
-    file was already byte-equal to what would be written.
-
-    Args:
-        gitignore_path: Path to the ``.gitignore`` file. Created if absent.
-        hardlink_entries: Bare entry names for the hardlinks block (see
-            ``render_block``).
-
-    Raises:
-        ValueError: START marker present but END marker absent.
-    """
-    return _upsert_single(gitignore_path, render_block(hardlink_entries))
 
 
 def upsert_split(

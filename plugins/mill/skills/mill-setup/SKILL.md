@@ -5,7 +5,7 @@ description: Initialise mill in a fresh primary-clone directory. Creates the wik
 
 # mill-setup
 
-Bootstrap the mill infrastructure from nothing. Produces a working `.millhouse/` + wiki junction in the current working clone.
+Bootstrap the mill infrastructure from nothing. Produces a working `.millhouse/` + wiki + container layout in the current working clone.
 
 ## When to invoke
 
@@ -15,42 +15,45 @@ Bootstrap the mill infrastructure from nothing. Produces a working `.millhouse/`
 
 ## Preconditions
 
-- `cwd` is the primary clone directory (typically `C:\Code\<project>\hub\`)
+- `cwd` is the hub directory inside a container (typically `<container>/wts/<repo>/`)
 - `git remote get-url origin` returns a valid URL
-- `plugins/mill/scripts/` contains `_junction.py`, `_wiki.py`, `_subprocess_util.py`, `_render.py` (lifted in M1.1)
-- `plugins/mill/templates/config.local.yaml`, `plugins/mill/templates/wiki-config.yaml`, and `plugins/mill/templates/Home.md` exist
+- `${CLAUDE_PLUGIN_ROOT}/scripts/` contains `_junction.py`, `_wiki.py`, `_subprocess_util.py`, `_render.py`, `_setup.py`
+- `${CLAUDE_PLUGIN_ROOT}/templates/config.local.yaml`, `${CLAUDE_PLUGIN_ROOT}/templates/wiki-config.yaml`, and `${CLAUDE_PLUGIN_ROOT}/templates/Home.md` exist
 
 ## Layout assumed
 
-Hub-form (cwd dir is named exactly `hub`):
+Container-form (main worktree lives under `wts/`):
 
 ```
 <container>/
-  hub/            <- cwd
-  wiki/           <- sibling, created or reused in Phase 3
+  wts/
+    <repo>/         <- hub (cwd)
+    <slug>/         <- task worktrees (created later by mill-spawn)
+  portals/          <- junction stubs, one per active task + one for hub
+  wiki/             <- wiki clone (created in Phase 3)
 ```
 
-Prefix-form (any other name, e.g. `foo`):
+Prefix-form (any other structure, e.g. `<container>/<repo>/`):
 
 ```
 <container>/
-  foo/            <- cwd
-  foo.wiki/       <- sibling, created or reused in Phase 3
+  <repo>/           <- hub (cwd)
+  <repo>.wiki/      <- wiki clone
 ```
 
-The form is decided by `_sibling.py wiki <HUB_PATH>` in Phase 3 — callers just use `<wiki-dir>` thereafter. Every path below is relative to `cwd` unless noted. Use absolute paths when calling the Python helpers (resolve via `Path(...).resolve()`).
+The form is decided by `_sibling.py wiki <HUB_PATH>` in Phase 3 — callers just use `<wiki-dir>` thereafter. Container-form is detected when `cwd.parent.name == "wts"`; prefix-form is everything else. Use absolute paths when calling Python helpers (resolve via `Path(...).resolve()`).
 
 ## How to invoke the helpers
 
-The helpers in `plugins/mill/scripts/` are flat modules. Set `PYTHONPATH` once at the top of the session, then call them directly:
+The helpers in `${CLAUDE_PLUGIN_ROOT}/scripts/` are flat modules. Set `PYTHONPATH` once at the top of the session, then call them directly:
 
 ```bash
 export PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts"
 ```
 
-After that you can use `python -c "..."` with plain `import _junction`, `import _wiki`, `import _vscode`, etc. — no `sys.path` gymnastics inside the snippet.
+After that you can use `python -c "..."` with plain `import _junction`, `import _wiki`, `import _setup`, etc. — no `sys.path` gymnastics inside the snippet.
 
-Helpers used by this skill: `_junction` (Phase 4, 4.5), `_wiki` (Phase 3.5, 6, 6a — incl. `read_junctions` and `read_hardlinks`), `_gitignore` (Phase 4.5b), `_shortcuts` (Phase 4.7), `_sidebar` (Phase 6a), `_vscode` (Phase 7), `_render` (transitively via `_vscode` and `_shortcuts`).
+Helpers used by this skill: `_setup` (Phase 4 — `create_hub_links`), `_gitignore` (Phase 4.5b), `_shortcuts` (Phase 4.7), `_sidebar` (Phase 6a), `_vscode` (Phase 7), `_render` (transitively via `_vscode` and `_shortcuts`), `_wiki` (Phase 3, 3.1, 6, 6a), `_junction` (Phase 3.7).
 
 ## Phases
 
@@ -61,7 +64,7 @@ Run in order. Stop on the first hard error and report it. Every phase is idempot
 1. `git remote get-url origin` → `<origin-url>`.
 2. Compute `<wiki-url>`: strip trailing `.git` if present, append `.wiki.git`.
    - `https://github.com/org/repo.git` → `https://github.com/org/repo.wiki.git`
-3. Store `<wiki-url>` and `<container>` (the parent of `cwd`).
+3. Store `<wiki-url>` and `<container>` (the parent of `wts/`, or the parent of `cwd` in prefix-form).
 
 ### Phase 2 — Verify wiki is reachable and non-empty
 
@@ -73,13 +76,13 @@ Run `git ls-remote <wiki-url>`. If it fails (exit non-zero), halt with:
 
 ### Phase 3 — Clone or fast-forward the wiki at `<wiki-dir>`
 
-First compute `<wiki-dir>` using the sibling-path helper — this yields `<container>/wiki/` when the hub directory is named exactly `hub`, otherwise `<container>/<repo>.wiki/`. Use the printed path as `<wiki-dir>` for the remainder of mill-setup (Phases 3, 3.5, 4, 6, 6a, 8):
+First compute `<wiki-dir>` using the sibling-path helper — this yields `<container>/wiki/` in container-form, otherwise `<container>/<repo>.wiki/`. Use the printed path as `<wiki-dir>` for the remainder of mill-setup:
 
 ```bash
 python "${CLAUDE_PLUGIN_ROOT}/scripts/_sibling.py" wiki "<hub-path>"
 ```
 
-`<hub-path>` is `<HUB_PATH>` from Phase 3.5 (`git rev-parse --show-toplevel`). Users can override via `.millhouse/config.local.yaml`'s `wiki_path:` key — that value wins over the helper's default.
+`<hub-path>` is derived via `git rev-parse --show-toplevel`. Users can override via `.millhouse/config.local.yaml`'s `wiki_path:` key.
 
 1. If `<wiki-dir>` does not exist: `git clone <wiki-url> <wiki-dir>`.
 2. If `<wiki-dir>` exists and is a git repo (`<wiki-dir>/.git/` present): `git -C <wiki-dir> pull --ff-only`.
@@ -89,120 +92,102 @@ python "${CLAUDE_PLUGIN_ROOT}/scripts/_sibling.py" wiki "<hub-path>"
 ### Phase 3.1 — Seed `wiki/config.yaml` from template
 
 1. If `<wiki-dir>/config.yaml` exists: skip.
-2. Otherwise: copy `plugins/mill/templates/wiki-config.yaml` → `<wiki-dir>/config.yaml` verbatim (no substitution — tokens are resolved at runtime by scripts, not at seed time).
+2. Otherwise: copy `${CLAUDE_PLUGIN_ROOT}/templates/wiki-config.yaml` → `<wiki-dir>/config.yaml` verbatim (no substitution — tokens are resolved at runtime by scripts, not at seed time).
 3. Commit and push via `_wiki.write_commit_push`:
 
    ```bash
    python -c "from pathlib import Path; import _wiki; _wiki.write_commit_push(Path(r'<wiki-dir>').resolve(), ['config.yaml'], 'chore: init wiki/config.yaml')"
    ```
 
-**Why verbatim copy:** the token placeholders (`<WIKI_PATH>` etc.) are resolved by `_junction.resolve_target` and `_wiki.read_hardlinks` at runtime. Substituting at seed time would bake in machine-specific paths, breaking the file for other clones.
+**Why verbatim copy:** the token placeholders (`<WIKI_PATH>` etc.) are resolved by `_junction.resolve_target` and `_wiki.read_hardlinks` at runtime. Substituting at seed time would bake in machine-specific paths.
 
-### Phase 3.5 — Resolve junctions from wiki config
+### Phase 3.7 — Create container scaffolding
 
-After the wiki is cloned (Phase 3) but before any junction is created, read the `junctions:` block from `<wiki-dir>/config.yaml`:
-
-```bash
-python -c "from pathlib import Path; import _wiki; import json; print(json.dumps(_wiki.read_junctions(Path(r'<wiki-dir>').resolve())))"
-```
-
-`read_junctions` returns a dict of `{junction-path: target-template}`. Defaults when the config file or `junctions:` block is absent:
-
-- `.millhouse/wiki` → `<WIKI_PATH>`
-- `.active` → `<WIKI_PATH>/active/<SLUG>/`
-
-**Compute the token map** for this run. All tokens are UPPERCASE; paths carry the `_PATH` suffix.
-
-- `<HUB_PATH>` — the primary clone. Derive via `git rev-parse --show-toplevel` (and, in future, worktree-detect to fall back to the primary from a worktree subfolder).
-- `<CWD_PATH>` — current working directory (absolute).
-- `<CONTAINER_PATH>` — parent of `<HUB_PATH>` (holds hub/, wiki/, worktrees/).
-- `<WIKI_PATH>` — the wiki clone (`<wiki-dir>` from Phase 3). Default: computed by `python ${CLAUDE_PLUGIN_ROOT}/scripts/_sibling.py wiki <HUB_PATH>` — hub-form yields `<CONTAINER_PATH>/wiki/`, prefix-form yields `<CONTAINER_PATH>/<REPO>.wiki/`. Override if `.millhouse/config.local.yaml` has a `wiki_path:` key.
-- `<REPO>` — short repo name from origin URL (last path segment, stripped of `.git`).
-
-Do **NOT** add `<SLUG>` — mill-setup only handles hub-scope junctions. Entries whose template contains `<SLUG>` belong to mill-spawn.
-
-Partition the junction entries:
-
-- **Hub junctions**: template does not contain `<SLUG>`. These are created now (Phase 4).
-- **Per-worktree junctions**: template contains `<SLUG>`. Skipped by mill-setup; reported in Phase 8 summary so the user can confirm they exist in config.
-
-For each hub junction, substitute tokens via `_junction.resolve_target`:
+Create the `<container>/portals/` directory (if missing) and the main-worktree portal entry pointing at the hub:
 
 ```bash
-python -c "import _junction; print(_junction.resolve_target('<WIKI_PATH>/active/<SLUG>/', {'HUB_PATH': 'C:/path', 'CWD_PATH': '.', 'CONTAINER_PATH': 'C:/', 'REPO': 'millhouse', 'WIKI_PATH': 'C:/path/../millhouse.wiki'}))"
+python -c "
+from pathlib import Path
+import _junction
+container = Path(r'<container>').resolve()
+portals = container / 'portals'
+portals.mkdir(parents=True, exist_ok=True)
+hub = Path(r'<hub-path>').resolve()
+portal_entry = portals / hub.name
+if not portal_entry.exists():
+    _junction.create(hub, portal_entry)
+    print(f'created portal entry: {portal_entry} -> {hub}')
+else:
+    print('portal entry already exists, skipping')
+"
 ```
 
-Unknown tokens raise `ValueError` — halt and tell the user to correct the `junctions:` block.
+`<hub.name>` is the repository directory name (last component of `<hub-path>`). This portal entry is the canonical "hub in portals" that `.others/<repo>` resolves through.
 
-**Invariant:** Junctions are IDE/terminal convenience. Scripts MUST resolve to the real wiki repo (`<WIKI_PATH>`-token value) and never treat the junction path as authoritative.
+**Idempotency:** `portals.mkdir(exist_ok=True)` is a no-op if the directory already exists. The portal junction check prevents double-creation.
 
-### Phase 4 — Create the hub junctions
+### Phase 4 — Create hub links (junctions + hardlinks)
 
-For each hub-scope entry resolved in Phase 3.5 (the ones without `<SLUG>`), call `_junction.create`:
+Call `_setup.create_hub_links` with the hub token set (no `<SLUG>` — that is mill-spawn's concern). The helper reads both the `junctions:` and `hardlinks:` blocks from `<wiki-dir>/config.yaml`, applies the token-scope filter (silently skipping entries whose templates reference `<SLUG>`), creates all hub-scope junctions, and creates all hardlinks idempotently:
 
 ```bash
-python -c "from pathlib import Path; import _junction; _junction.create(Path(r'<resolved-target>').resolve(), Path(r'<junction-path>').resolve())"
+python -c "
+from pathlib import Path
+import json, _setup
+result = _setup.create_hub_links(
+    target_root=Path(r'<hub-path>').resolve(),
+    wiki_path=Path(r'<wiki-dir>').resolve(),
+    tokens={
+        'HUB_PATH':       r'<hub-path>',
+        'CWD_PATH':       r'<cwd>',
+        'CONTAINER_PATH': r'<container>',
+        'WIKI_PATH':      r'<wiki-dir>',
+        'REPO':           '<repo>',
+    },
+)
+print(json.dumps({k: [str(p) for p in v] for k, v in result.items()}, indent=2))
+"
 ```
 
-Before creating, check state per junction:
+Token reference:
+- `<hub-path>` — absolute path to the hub (`git rev-parse --show-toplevel`)
+- `<cwd>` — current working directory absolute path
+- `<container>` — parent of `wts/` (container-form) or parent of hub (prefix-form)
+- `<wiki-dir>` — wiki clone path from Phase 3
+- `<repo>` — repository directory name (e.g. `millhouse`)
 
-1. If `<junction-path>` does not exist: create it. Parent dir (e.g. `.millhouse/`) is auto-created by `_junction.create`.
-2. If it exists and already resolves to `<resolved-target>`: skip.
-3. If it exists but resolves elsewhere: halt with:
-   > `<junction-path>` points at `<current-target>`. Expected `<resolved-target>`. Remove `<junction-path>`, then re-run `/mill-setup`.
+**Do NOT add `<SLUG>`** — the token-scope filter skips junction entries that need `<SLUG>` (`.active`, per-task `.others` entries). Those are created by mill-spawn.
 
-Iterate until all hub junctions are present. Entries with `<SLUG>` are left to mill-spawn per worktree.
-
-### Phase 4.5 — Create hardlinks and add to `.gitignore`
-
-Read the `hardlinks:` block from `<wiki-dir>/config.yaml`:
-
-```bash
-python -c "from pathlib import Path; import _wiki; import json; print(json.dumps(_wiki.read_hardlinks(Path(r'<wiki-dir>').resolve())))"
-```
-
-`read_hardlinks` returns a dict of `{link-path: target-template}`. If the block is absent, return an empty dict (no hardlinks configured).
-
-Resolve each target template using the same token map as Phase 3.5 (no `<SLUG>` — hardlinks are always hub-scope). For each entry:
-
-1. If `<link-path>` already exists and its inode matches `<resolved-target>`'s inode: skip (already a hardlink to the correct file).
-2. If `<link-path>` exists but points to a different inode: back up to `<link-path>.bak` and remove the original.
-3. Create the hardlink:
-
-   ```bash
-   python -c "from pathlib import Path; Path(r'<link-path>').hardlink_to(Path(r'<resolved-target>'))"
-   ```
-
-   On failure (cross-volume): halt with:
-   > Cannot create hardlink `<link-path>` → `<resolved-target>`: source and target must be on the same volume. Move the wiki clone to the same drive as the hub, or remove this entry from `hardlinks:` in `wiki/config.yaml`.
-
-(.gitignore entries for hardlinks are managed by Phase 4.5b's marker block; no per-entry append here.)
-
-4. If the file was already tracked by git, untrack it:
-
-   ```bash
-   git ls-files --error-unmatch <link-path> 2>/dev/null && git rm --cached <link-path>
-   ```
-
-**Idempotency:** inode comparison in step 1 ensures re-runs skip already-correct hardlinks.
+Log the created junctions and hardlinks from the returned dict so the user can verify.
 
 ### Phase 4.5b — Manage `.gitignore` marker block
 
-Maintains the `# === mill-managed ... # === end mill-managed ===` block in the repo's `.gitignore`. The block covers the standard mill paths and every hardlink entry from `wiki/config.yaml`.
+Maintains the `# === mill-managed ... # === end mill-managed ===` block across the repo-root `.gitignore` and (when hub is a subdirectory of the repo) a hub-local `.gitignore`.
 
-Read the hardlink entry names (already available from Phase 4.5), then call `_gitignore.upsert`:
+Compute `<repo-root-gitignore>` and `<hub-gitignore>`:
+- In container-form (`hub-path == git-toplevel`): both paths are the same (`<git-toplevel>/.gitignore`).
+- In prefix-form (hub is a subfolder of the repo): `<repo-root-gitignore>` is `<git-toplevel>/.gitignore`; `<hub-gitignore>` is `<hub-path>/.gitignore`.
+
+Read the hardlink entry names (available from Phase 4 output), then call `_gitignore.upsert_split`:
 
 ```bash
 python -c "
 from pathlib import Path
 import _wiki, _gitignore, json
-hardlinks = _wiki.read_hardlinks(Path(r'<wiki-dir>').resolve())
-changed = _gitignore.upsert(Path('.gitignore'), list(hardlinks.keys()))
-print('wrote/updated mill-managed block' if changed else 'already up to date')
+wiki = Path(r'<wiki-dir>').resolve()
+hardlinks = _wiki.read_hardlinks(wiki)
+hardlink_names = list(hardlinks.keys())
+repo_gi = Path(r'<repo-root-gitignore>').resolve()
+hub_gi = Path(r'<hub-gitignore>').resolve()
+glob_entries = _gitignore.GLOB_ENTRIES
+anchored_entries = _gitignore.ANCHORED_ENTRIES + hardlink_names
+repo_changed, hub_changed = _gitignore.upsert_split(repo_gi, hub_gi, glob_entries, anchored_entries)
+print('repo .gitignore:', 'updated' if repo_changed else 'already up to date')
+print('hub .gitignore: ', 'updated' if hub_changed else 'already up to date')
 "
 ```
 
-Log `wrote/updated mill-managed block` or `already up to date` based on the boolean returned.
+Log the result per file. When both paths are the same a single combined block is written; when different, glob entries go to `repo_root_gitignore` and anchored entries go to `hub_gitignore`.
 
 ### Phase 4.7 — Shortcut wrappers
 
@@ -221,10 +206,54 @@ print(f'wrote {len(written)} wrappers' if written else 'wrappers up to date')
 
 Log `wrote N wrappers` or `wrappers up to date` based on the returned list.
 
+### Phase 4.9 — Seed `hub_relative_path` in `config.local.yaml`
+
+The `hub_relative_path` key tells mill-terminal and mill-vscode where the effective hub directory is within the worktree. Write it before seeding `config.local.yaml` (Phase 5) so it appears in the seeded file if the file doesn't exist yet, and update it if the file already exists.
+
+Compute the value:
+
+```bash
+python -c "
+from pathlib import Path
+cwd = Path.cwd().resolve()
+git_toplevel = Path(r'<git-toplevel>').resolve()
+try:
+    rel = cwd.relative_to(git_toplevel).as_posix()
+except ValueError:
+    rel = '.'
+print(rel)
+"
+```
+
+- When `cwd == git_toplevel` (typical mill setup where the hub is the repo root): value is `"."`.
+- When `cwd` is a subdirectory of `git_toplevel` (downstream consumer pattern): value is the relative subpath (e.g. `"src/csharp/Models"`).
+
+Write the value into `.millhouse/config.local.yaml`. If the file already exists and already contains `hub_relative_path:`, update it in-place; if missing or absent from the file, append/insert it before the first non-comment key:
+
+```bash
+python -c "
+from pathlib import Path
+import yaml, re
+cfg_path = Path('.millhouse/config.local.yaml')
+hub_subpath = r'<hub_subpath>'  # computed above
+if cfg_path.exists():
+    text = cfg_path.read_text(encoding='utf-8')
+    if 'hub_relative_path:' in text:
+        text = re.sub(r'^hub_relative_path:.*$', f'hub_relative_path: {hub_subpath}', text, flags=re.MULTILINE)
+    else:
+        text = f'hub_relative_path: {hub_subpath}\n' + text
+    cfg_path.write_text(text, encoding='utf-8')
+    print(f'updated hub_relative_path: {hub_subpath}')
+else:
+    # Phase 5 will seed the full file; just record it for Phase 5.
+    print(f'hub_relative_path: {hub_subpath} (will be written in Phase 5)')
+"
+```
+
 ### Phase 5 — Seed `.millhouse/config.local.yaml`
 
 1. If `.millhouse/config.local.yaml` exists: skip.
-2. Otherwise: copy `plugins/mill/templates/config.local.yaml` → `.millhouse/config.local.yaml` verbatim (no substitution).
+2. Otherwise: copy `${CLAUDE_PLUGIN_ROOT}/templates/config.local.yaml` → `.millhouse/config.local.yaml` verbatim, then set `hub_relative_path:` to the value computed in Phase 4.9 (uncomment and fill in the line).
 
 ### Phase 6 — Initialise or normalise `Home.md`
 
@@ -239,22 +268,18 @@ Decide what to do based on the current content of `<wiki-dir>/Home.md`:
 
 For "missing" and "GitHub default" cases:
 
-1. Copy `plugins/mill/templates/Home.md` → `<wiki-dir>/Home.md` verbatim.
+1. Copy `${CLAUDE_PLUGIN_ROOT}/templates/Home.md` → `<wiki-dir>/Home.md` verbatim.
 2. Commit and push via `_wiki.write_commit_push`:
 
    ```bash
    python -c "from pathlib import Path; import _wiki; _wiki.write_commit_push(Path(r'<wiki-dir>').resolve(), ['Home.md'], '<commit-msg>')"
    ```
 
-   (Use the commit message from the table above.)
-
-**GitHub-default detection:** read the file, strip outer whitespace, match the pattern `^Welcome to the .+ wiki!$` (single line). The `<repo>` name varies per project; the surrounding text is fixed. This pattern is what GitHub writes when the user clicks "Create the first page" without editing.
+**GitHub-default detection:** read the file, strip outer whitespace, match the pattern `^Welcome to the .+ wiki!$` (single line).
 
 ### Phase 6a — Initialise `_Sidebar.md` via `_sidebar.regenerate()`
 
-The wiki sidebar is auto-generated from `Home.md` and the set of `proposal-*.md` files at wiki root. Regenerate it every time `mill-setup` runs so a fresh clone gets a Navigation-only sidebar, and any hand-edited sidebar drift is healed.
-
-Run:
+Regenerate the wiki sidebar every time mill-setup runs:
 
 ```bash
 python -c "from pathlib import Path; import _sidebar; _sidebar.regenerate(Path(r'<wiki-dir>').resolve())"
@@ -263,39 +288,29 @@ python -c "from pathlib import Path; import _sidebar; _sidebar.regenerate(Path(r
 Then commit + push if the file changed:
 
 1. Check `git -C <wiki-dir> status --porcelain _Sidebar.md`.
-2. If the command prints nothing, the sidebar is already correct — skip the commit. (Idempotency: second and later runs land here.)
-3. Otherwise, commit via `_wiki.write_commit_push`:
+2. If nothing printed: already correct — skip the commit.
+3. Otherwise commit:
 
    ```bash
    python -c "from pathlib import Path; import _wiki; _wiki.write_commit_push(Path(r'<wiki-dir>').resolve(), ['_Sidebar.md'], 'chore: regenerate _Sidebar.md')"
    ```
 
-**Why separate from Phase 6:** Phase 6 only writes `Home.md` on the missing / GitHub-default branches. When Phase 6 skips (Home.md already in v2 shape), the sidebar still needs to be regenerated the first time `mill-setup` runs against a clone that was bootstrapped before this phase existed. Running it unconditionally is cheap and keeps the two commits separate in history: one says "init Home.md", the other says "regenerate _Sidebar.md".
-
-**On `_sidebar.regenerate` semantics:** the function is pure on wiki state — it reads `Home.md` and the on-disk `proposal-*.md` set, writes `_Sidebar.md`, performs no git operations. Calling it when the sidebar is already correct produces a byte-identical file; `git status` in step 1 above will report no changes and the commit is skipped.
-
 ### Phase 7 — VS Code window colour (hub = green)
 
-The hub is the canonical "main" workspace, always coloured `#2d7d46` so the operator can spot it instantly when several VS Code windows are open. mill-spawn picks non-green colours per worktree (M3.1).
-
-Behaviour:
+The hub is always coloured `#2d7d46` so the operator can spot it instantly. mill-spawn picks non-green colours per worktree.
 
 | Current state of `.vscode/settings.json` | Action |
 |---|---|
 | Missing | Render template, write file. |
-| Present and contains `"titleBar.activeBackground": "#2d7d46"` (regex match — VS Code's settings.json allows trailing commas and comments, so do **not** parse it as strict JSON) | Skip (idempotent). |
-| Present with a different `titleBar.activeBackground` colour | Back up to `.vscode/settings.json.bak`, then overwrite from template. |
-| Present but no `titleBar.activeBackground` key at all | Back up to `.vscode/settings.json.bak`, then overwrite from template. |
+| Present and `"titleBar.activeBackground": "#2d7d46"` | Skip (idempotent). |
+| Present with different colour | Back up to `.vscode/settings.json.bak`, then overwrite. |
+| Present but no `titleBar.activeBackground` key | Back up to `.vscode/settings.json.bak`, then overwrite. |
 
-Title format for the hub: `<short_name>` from `repo.short_name` config (default: `<repo>[:2].upper()`). No slug — this is the main workspace and the title must read clearly in the Windows 11 taskbar at small sizes. Worktrees use `<short_name>: <slug>` (mill-spawn, M3.1).
-
-Render and write via `_vscode.write_settings` (which wraps `_render` and the file write):
+Render and write via `_vscode.write_settings`:
 
 ```bash
 python -c "from pathlib import Path; import yaml; import _vscode; from _paths import resolve_short_name; cfg = yaml.safe_load(Path('<wiki-dir>/config.yaml').read_text(encoding='utf-8')); _vscode.write_settings(color_hex='#2d7d46', target=Path('.vscode/settings.json'), short_name=resolve_short_name(cfg, '<repo-name>'))"
 ```
-
-`_vscode.write_settings` overwrites unconditionally; the *decision* to write (skip vs back-up vs render) is this skill's job above. mill-spawn (M3.1) calls the same helper for worktree colours.
 
 ### Phase 8 — Verify + report
 
@@ -303,10 +318,14 @@ Check every invariant; halt with a specific error if any fails:
 
 - `<WIKI_PATH>` is a git repo (the cloned wiki)
 - `<WIKI_PATH>/config.yaml` exists
-- Every hub junction (Phase 4 entry) exists and resolves to its expected target
-- Every hardlink (Phase 4.5 entry) exists and shares an inode with its target
-- `.gitignore` contains the mill-managed marker block with the standard entries plus every hardlink
-- Every script in `_shortcuts.SHORTCUT_SCRIPTS` has a wrapper at `.millhouse/<script>.py` whose content matches the rendered template
+- `<container>/wts/` exists (container-form) or `<container>/` exists (prefix-form)
+- `<container>/portals/` exists (container-form)
+- `<container>/portals/<repo>/` portal entry exists and points at `<hub-path>` (container-form)
+- Every hub junction (entries without `<SLUG>` from `wiki/config.yaml`) exists and resolves to its expected target
+- Every hardlink (from `wiki/config.yaml`) exists and shares an inode with its target
+- `.gitignore` contains the mill-managed marker block with glob and anchored entries
+- `hub_relative_path:` is set in `.millhouse/config.local.yaml`
+- Every script in `_shortcuts.SHORTCUT_SCRIPTS` has a wrapper at `.millhouse/<script>.py`
 - `.millhouse/config.local.yaml` exists
 - `<WIKI_PATH>/Home.md` exists and starts with `# Tasks`
 - `<WIKI_PATH>/_Sidebar.md` exists and begins with `### Navigation`
@@ -317,13 +336,16 @@ On success, print a summary:
 ```
 mill-setup complete.
 
-  Hub:           <HUB_PATH>
-  Wiki clone:    <WIKI_PATH>
-  Local config:  .millhouse/config.local.yaml
-  Tasks (Home):  <WIKI_PATH>/Home.md  (hardlinked as tasks.md)
-  Sidebar:       <WIKI_PATH>/_Sidebar.md
-  VS Code:       .vscode/settings.json (titleBar = #2d7d46 green)
-  Shortcut wrappers: 13 scripts under .millhouse/
+  Hub:               <HUB_PATH>
+  Container:         <container>
+  Portals:           <container>/portals/
+  Wiki clone:        <WIKI_PATH>
+  Local config:      .millhouse/config.local.yaml
+  hub_relative_path: <hub_subpath>
+  Tasks (Home):      <WIKI_PATH>/Home.md  (hardlinked as tasks.md)
+  Sidebar:           <WIKI_PATH>/_Sidebar.md
+  VS Code:           .vscode/settings.json (titleBar = #2d7d46 green)
+  Shortcut wrappers: N scripts under .millhouse/
 
 Junctions (from wiki config.yaml):
   Hub-scope (created now):
@@ -343,7 +365,7 @@ Next: /mill-add <slug> --title "..." [--summary "..."] [--proposal-body "..."] t
 |---|---|
 | `git ls-remote <wiki-url>` fails | Halt with GitHub URL + instruction to create Home page |
 | `<wiki-dir>` exists but not a git repo | Halt — never overwrite user data |
-| `.millhouse/wiki` junction points elsewhere | Halt with remove-and-rerun instruction |
+| Junction points elsewhere | Halt with remove-and-rerun instruction |
 | Push of `Home.md` fails (network / auth) | Halt; user fixes network and re-runs |
 | A Python helper raises | Show the traceback from the Python invocation and halt |
 
@@ -353,10 +375,11 @@ Every phase checks current state before acting. Re-running after a partial or co
 
 - Wiki already cloned → pulls latest.
 - `wiki/config.yaml` present → skipped (Phase 3.1).
-- Junction-prefs re-read from wiki config each run → picks up changes to `junctions:` block after a wiki pull.
-- Wiki junction correct (at the configured path) → skipped.
-- Hardlink inode-matches target → skipped (Phase 4.5); `.gitignore` marker block already up-to-date → not rewritten (Phase 4.5b).
-- `config.local.yaml` present → skipped.
+- `portals/` and main-worktree portal entry present → skipped (Phase 3.7).
+- `create_hub_links` re-checks each junction and hardlink — skips already-correct ones (Phase 4).
+- `.gitignore` marker block already up-to-date → not rewritten (Phase 4.5b).
+- `hub_relative_path` already set → updated to current value (Phase 4.9).
+- `config.local.yaml` present → skipped (Phase 5).
 - `Home.md` non-empty (and v2-shape or user-custom) → skipped; only GitHub-default content is overwritten.
 - `_Sidebar.md` regenerated unconditionally; commit only if bytes changed.
 - `.vscode/settings.json` already green → skipped.
