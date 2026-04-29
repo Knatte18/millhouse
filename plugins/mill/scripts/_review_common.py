@@ -14,7 +14,7 @@ Public API:
     find_active_slug()   — delegate to _active.read_slug for the canonical active.slug.md
     load_task_title()    — delegate to _active.read_all for task_title; fall back to slug on missing/malformed marker
     read_constraints_md()— read CONSTRAINTS.md, empty string if absent
-    resolve_path()       — substitute <SLUG> in a config path template
+    resolve_path()       — locate a path inside the active worktree from a config template
     discover_round()     — determine next review round number per (review_type, scope)
     bulk_files()         — concatenate file contents with FILE delimiters
     build_manifest_section() — return a `## Files included` markdown block listing every bulked file
@@ -44,6 +44,7 @@ from typing import Any
 
 import yaml
 import _active
+import _paths
 import _render
 
 # ---------------------------------------------------------------------------
@@ -142,18 +143,36 @@ def read_constraints_md(project_root: Path) -> str:
         return ""
 
 
-def resolve_path(path_tmpl: str, slug: str, wiki_root: Path) -> Path:
-    """Resolve a config path template to an absolute path.
+def resolve_path(path_tmpl: str, slug: str) -> Path:
+    """Resolve a config path template to an absolute path inside the active worktree.
 
-    Uses plain str.replace — does NOT use _render.render() (that reads files;
-    config paths are plain strings).
+    Computes the container path internally via
+    ``_paths.resolve_container_path(Path.cwd())`` and locates the active
+    worktree via ``_paths.resolve_active_worktree(container_path, slug)``.
+    Returns ``active_worktree / path_tmpl`` after substituting any ``<SLUG>``
+    token in ``path_tmpl`` — a no-op for the current worktree-relative
+    templates but guards against stale configs that still carry the old
+    ``active/<SLUG>/...`` shape (paths still fail at file-open time in that
+    case; this guard only prevents a literal ``<SLUG>`` segment in the result).
 
-    Example:
-        resolve_path('active/<SLUG>/discussion.md', 'my-slug', wiki_root)
-        → wiki_root / 'active/my-slug/discussion.md'
+    Args:
+        path_tmpl: Config path template string (e.g. ``"discussion.md"`` or
+            ``"reviews/"``). Read from ``wiki/config.yaml`` ``paths:`` block.
+        slug: Task slug used to locate the active worktree.
+
+    Returns:
+        Absolute ``Path`` inside the active worktree. No on-disk-existence check.
+
+    Raises:
+        _paths.ActiveWorktreeNotFound: When no worktree directory exists for
+            ``slug``.
+        _paths.ActiveWorktreeSlugMismatch: When the worktree exists but its
+            marker slug does not match ``slug``.
     """
-    resolved = path_tmpl.replace("<SLUG>", slug)
-    return wiki_root / resolved
+    container_path = _paths.resolve_container_path(Path.cwd())
+    active_worktree = _paths.resolve_active_worktree(container_path, slug)
+    resolved_tmpl = path_tmpl.replace("<SLUG>", slug)
+    return active_worktree / resolved_tmpl
 
 
 def discover_round(reviews_dir: Path, review_type: str, scope: str) -> int:
