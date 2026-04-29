@@ -26,6 +26,8 @@ Exit cleanly. This check fires for BOTH manual and auto-fire invocations — the
 
 ## 3. Step 1 — Reflect on session context
 
+If you need task-state context (e.g. the current phase, recent plan decisions), read `<worktree-root>/status.md` — task state lives on the task branch at the worktree root, not in the wiki. `<worktree-root>` is `git rev-parse --show-toplevel` from cwd; `status.md` and `discussion.md` are committed files on the branch.
+
 Scan your session memory for:
 
 - Tool failures or unexpected errors during the session.
