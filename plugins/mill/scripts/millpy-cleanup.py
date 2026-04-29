@@ -18,6 +18,7 @@ import _inplace
 import _junction
 import _paths
 import _sidebar
+import _spawn_core
 import _status
 import _subprocess_util
 import _tasks_md
@@ -31,7 +32,7 @@ class SlugRecord:
     slug: str
     worktree_path: Path | None
     branch: str | None
-    active_dir: Path | None
+    wiki_active_dir: Path | None
     home_marker: str | None
 
 
@@ -57,22 +58,34 @@ def _read_phase(status_path: Path) -> str | None:
 
 
 def build_plan(
-    active_dirs: list[Path],
-    worktrees: list[dict],
+    active_worktrees: list[Path],
     home_tasks: list[_tasks_md.Task],
     wiki_path: Path,
     hub_root: Path,
+    *,
+    container_path: Path | None = None,
 ) -> CleanupPlan:
     """
     Build a CleanupPlan from current repo state.
 
     Side-effect-free w.r.t. git and wiki writes; reads status.md files
-    via _read_phase (file I/O).
+    via _read_phase (file I/O). Each path in ``active_worktrees`` is a
+    worktree root discovered via ``_spawn_core.discover_active_worktrees``.
+
+    Args:
+        active_worktrees: List of worktree root paths, each carrying a
+            valid ``.millhouse/active.slug.md`` marker.
+        home_tasks: Tasks parsed from wiki ``Home.md``.
+        wiki_path: Path to the wiki clone root.
+        hub_root: Absolute path to the hub git checkout.
+        container_path: When provided, scans ``<container_path>/wts/`` for
+            worktree directories that have no active marker (orphan worktrees)
+            and adds them to ``to_report``. Pass the result of
+            ``_paths.resolve_container_path(hub_root)`` from the caller.
+            When ``None``, orphan worktree detection is skipped.
     """
-    wt_by_slug: dict[str, dict] = {Path(w["path"]).name: w for w in worktrees}
     marker_by_slug: dict[str, str | None] = {t.slug: t.phase for t in home_tasks}
-    active_dir_by_slug: dict[str, Path] = {d.name: d for d in active_dirs if d.is_dir()}
-    all_active_slugs = set(active_dir_by_slug)
+    active_slugs: set[str] = set()
 
     to_remove_done: list[SlugRecord] = []
     to_remove_abandoned: list[SlugRecord] = []
@@ -84,22 +97,32 @@ def build_plan(
         "implementing", "reviewing", "fixing", "blocked",
     }
 
-    for slug, active_dir in active_dir_by_slug.items():
-        phase = _read_phase(active_dir / "status.md")
+    for wt_path in active_worktrees:
+        try:
+            marker_data = _active.read_all(wt_path / ".millhouse")
+        except _active.ActiveError:
+            continue
+
+        slug = marker_data.get("slug", "")
+        branch = marker_data.get("branch")
+        if not slug:
+            continue
+
+        active_slugs.add(slug)
+        phase = _read_phase(wt_path / "status.md")
         if phase is None:
             to_report.append(
                 f"{slug} — status.md unreadable, skipping (inspect manually)"
             )
             continue
 
-        wt = wt_by_slug.get(slug)
-        wt_path = Path(wt["path"]) if wt else None
-        branch = wt["branch"] if wt else None
-        record = SlugRecord(slug, wt_path, branch, active_dir, marker_by_slug.get(slug))
+        wiki_active_dir_candidate = wiki_path / "active" / slug
+        wiki_active_dir = wiki_active_dir_candidate if wiki_active_dir_candidate.is_dir() else None
+
+        record = SlugRecord(slug, wt_path, branch, wiki_active_dir, marker_by_slug.get(slug))
 
         if phase == "done":
-            if record.worktree_path is not None or record.active_dir is not None:
-                to_remove_done.append(record)
+            to_remove_done.append(record)
         elif phase == "abandoned":
             if record.home_marker == "active":
                 to_remove_abandoned.append(record)
@@ -114,24 +137,35 @@ def build_plan(
         else:
             to_report.append(f"{slug} — unknown phase {phase!r}, skipping")
 
-    for w in worktrees:
-        if Path(w["path"]) != hub_root and Path(w["path"]).name not in all_active_slugs:
-            to_report.append(
-                f"orphan worktree: {w['path']} (no matching active/<slug>/ dir;"
-                f" run 'mill-worktree remove {w['path']}' to clean up)"
-            )
+    # Orphan worktree detection: wts/ dirs without active markers.
+    if container_path is not None:
+        wts_dir = container_path / "wts"
+        if wts_dir.is_dir():
+            for entry in wts_dir.iterdir():
+                if not entry.is_dir():
+                    continue
+                # Skip the hub itself (resolved to avoid symlink confusion).
+                if entry.resolve() == hub_root.resolve():
+                    continue
+                if entry.name not in active_slugs:
+                    to_report.append(
+                        f"orphan worktree: {entry} (no active marker;"
+                        f" run 'mill-worktree remove {entry}' to clean up)"
+                    )
 
+    # Orphan Home.md marker: [active] slug with no active worktree.
     for task in home_tasks:
-        if task.phase == "active" and task.slug not in all_active_slugs:
+        if task.phase == "active" and task.slug not in active_slugs:
             to_report.append(
                 f"orphan Home.md marker: {task.slug} is [active] but has no "
-                f"active/{task.slug}/ directory"
+                f"active worktree"
             )
 
-    for slug in all_active_slugs:
+    # Active worktree with no Home.md entry.
+    for slug in active_slugs:
         if slug not in marker_by_slug:
             to_report.append(
-                f"orphan active dir: active/{slug}/ exists but no Home.md entry"
+                f"orphan active worktree: {slug} has active marker but no Home.md entry"
             )
 
     return CleanupPlan(to_remove_done, to_remove_abandoned, to_reset_home, to_report)
@@ -144,12 +178,12 @@ def _print_plan(plan: CleanupPlan) -> None:
     for r in plan.to_remove_done:
         print(
             f"REMOVE (done):      {r.slug}  "
-            f"[worktree={r.worktree_path}, branch={r.branch}, active_dir={r.active_dir}]"
+            f"[worktree={r.worktree_path}, branch={r.branch}, wiki_active_dir={r.wiki_active_dir}]"
         )
     for r in plan.to_remove_abandoned:
         print(
             f"REMOVE (abandoned): {r.slug}  "
-            f"[worktree={r.worktree_path}, branch={r.branch}, active_dir={r.active_dir}]"
+            f"[worktree={r.worktree_path}, branch={r.branch}, wiki_active_dir={r.wiki_active_dir}]"
             f"  \u2192 Home.md marker reset to unclaimed"
         )
     for line in plan.to_report:
@@ -239,8 +273,8 @@ def _apply_inplace_record(
 
     """
     # Read parent branch from status.md so we can check out safely.
-    if record.active_dir is not None:
-        parent_branch = _status.read_parent_branch(record.active_dir / "status.md")
+    if record.worktree_path is not None:
+        parent_branch = _status.read_parent_branch(record.worktree_path / "status.md")
     else:
         parent_branch = None
 
@@ -266,11 +300,9 @@ def _apply_inplace_record(
         return
 
     # Determine deletion flag: done tasks get -d (safe); abandoned get -D (force).
-    # The phase comes from _read_phase called by build_plan — we infer it from
-    # which list the record appears in by checking whether active_dir status says
-    # done or abandoned. Use -D for safety in the abandoned case.
-    if record.active_dir is not None:
-        phase = _read_phase(record.active_dir / "status.md")
+    # Phase is re-read from the worktree's status.md; fall back to -D when absent.
+    if record.worktree_path is not None:
+        phase = _read_phase(record.worktree_path / "status.md")
         delete_flag = "-d" if phase == "done" else "-D"
     else:
         delete_flag = "-D"
@@ -302,6 +334,11 @@ def _apply_inplace_record(
     if marker_path.exists():
         marker_path.unlink()
         print(f"[cleanup] removed active marker: {marker_path}", file=sys.stderr)
+
+    # Remove the portal entry for this task.
+    container_path = _paths.resolve_container_path(hub_root)
+    _junction.remove(container_path / "portals" / record.slug)
+    print(f"[cleanup] removed portal entry: {container_path / 'portals' / record.slug}", file=sys.stderr)
 
 
 def _apply_worktree_record(
@@ -343,6 +380,11 @@ def _apply_worktree_record(
                     file=sys.stderr,
                 )
 
+    # Remove the portal entry for this task.
+    container_path = _paths.resolve_container_path(hub_root)
+    _junction.remove(container_path / "portals" / record.slug)
+    print(f"[cleanup] removed portal entry: {container_path / 'portals' / record.slug}", file=sys.stderr)
+
 
 def apply_plan(
     plan: CleanupPlan,
@@ -370,8 +412,8 @@ def apply_plan(
         else:
             _apply_worktree_record(record, hub_root, wiki_path, junctions_cfg)
 
-        if record.active_dir is not None:
-            shutil.rmtree(record.active_dir)
+        if record.wiki_active_dir is not None and record.wiki_active_dir.is_dir():
+            shutil.rmtree(record.wiki_active_dir)
             wiki_relative_paths.append(f"active/{record.slug}")
 
     if plan.to_reset_home:
@@ -402,22 +444,22 @@ def main() -> None:
 
     git_root = _paths.resolve_git_root()
     wiki_path = _paths.resolve_wiki_path(git_root)
+    container_path = _paths.resolve_container_path(git_root)
 
     _wiki.sync_pull(wiki_path)
 
-    active_root = wiki_path / "active"
-    if not active_root.exists():
-        print("No active/ directory found; nothing to clean.")
-        sys.exit(0)
+    active_wt_list = _spawn_core.discover_active_worktrees(container_path / "wts")
+    active_worktrees = [path for path, _slug, _title in active_wt_list]
 
-    active_dirs = sorted(p for p in active_root.iterdir() if p.is_dir())
-    worktrees = _worktree.list_worktrees(cwd=git_root)
     home_text = (wiki_path / "Home.md").read_text("utf-8")
     home_tasks = _tasks_md.parse(home_text)
     junctions_cfg = _wiki.read_junctions(wiki_path)
 
     cfg = _load_config(wiki_path, git_root)
-    plan = build_plan(active_dirs, worktrees, home_tasks, wiki_path, hub_root=git_root)
+    plan = build_plan(
+        active_worktrees, home_tasks, wiki_path,
+        hub_root=git_root, container_path=container_path,
+    )
     _print_plan(plan)
 
     if not args.apply:
