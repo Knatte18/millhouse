@@ -9,6 +9,8 @@ Discussion review is exempt from the NEED_CONTEXT resume-fallback path
 """
 from __future__ import annotations
 
+import os
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -25,6 +27,26 @@ SLUG = "test-slug"
 APPROVE_TEXT = "# Review: test\n\n```yaml\nverdict: APPROVE\n```\n"
 
 
+def _make_fixture(tmp: Path) -> tuple[Path, Path]:
+    """Create a container/wts/<slug> worktree fixture.
+
+    Returns (mill_dir, project_root). project_root is the worktree path;
+    callers must os.chdir(project_root) before invoking discussion_run.
+    """
+    worktree = tmp / "container" / "wts" / SLUG
+    worktree.mkdir(parents=True)
+    subprocess.run(["git", "-C", str(worktree), "init"], check=True, capture_output=True)
+    mill_dir = worktree / ".millhouse"
+    _active.write(
+        mill_dir,
+        slug=SLUG,
+        task_title="Test Task",
+        branch="test-branch",
+        spawned_at="2026-01-01T00:00:00Z",
+    )
+    return mill_dir, worktree
+
+
 def main() -> int:
     errors = 0
 
@@ -32,20 +54,10 @@ def main() -> int:
     # Single test — per-scope round counter for holistic discussion review
     # ------------------------------------------------------------------
     with tempfile.TemporaryDirectory() as tmpdir:
-        wiki_root = Path(tmpdir) / "wiki"
-        project_root = Path(tmpdir) / "project"
-        mill_dir = project_root / ".millhouse"
+        mill_dir, project_root = _make_fixture(Path(tmpdir))
 
-        _active.write(
-            mill_dir,
-            slug=SLUG,
-            task_title="Test Task",
-            branch="test-branch",
-            spawned_at="2026-01-01T00:00:00Z",
-        )
-
-        # Create discussion file
-        discussion_dir = wiki_root / "active" / SLUG
+        # Create discussion file inside the worktree
+        discussion_dir = project_root / "active" / SLUG
         discussion_dir.mkdir(parents=True)
         (discussion_dir / "discussion.md").write_text(
             "# Discussion\n\nThis is a test discussion.\n", encoding="utf-8"
@@ -62,10 +74,12 @@ def main() -> int:
             },
         }
 
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
         try:
             # Round 1
             stub.seed([(APPROVE_TEXT, "sid-1")])
-            r = discussion_run(cfg, SLUG, mill_dir, wiki_root, project_root)
+            r = discussion_run(cfg, SLUG, mill_dir, project_root)
             assert r.verdict == "APPROVE", f"expected APPROVE, got {r.verdict}"
             assert r.round == 1, f"expected round 1, got {r.round}"
             fname = Path(r.reviews[0]["file"]).name
@@ -80,7 +94,7 @@ def main() -> int:
 
             # Round 2 — same reviews_dir, counter should increment
             stub.seed([(APPROVE_TEXT, "sid-2")])
-            r2 = discussion_run(cfg, SLUG, mill_dir, wiki_root, project_root)
+            r2 = discussion_run(cfg, SLUG, mill_dir, project_root)
             assert r2.verdict == "APPROVE"
             assert r2.round == 2, f"expected round 2, got {r2.round}"
             fname2 = Path(r2.reviews[0]["file"]).name
@@ -94,6 +108,8 @@ def main() -> int:
         except Exception as exc:
             errors += 1
             print(f"FAIL test-discussion (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
 
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)

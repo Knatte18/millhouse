@@ -9,6 +9,8 @@ with no real LLM, no network calls. Covers:
 """
 from __future__ import annotations
 
+import os
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -86,11 +88,15 @@ def _make_plan_fixture(
     Reads paths are created on disk unless listed in skip_create (for
     tests that deliberately need missing refs).
     Returns (mill_dir, wiki_root, project_root, cfg with holistic enabled).
+    project_root is the worktree path; callers must os.chdir(project_root).
     """
     skip_create = skip_create or set()
+    worktree = tmp_path / "container" / "wts" / SLUG
+    worktree.mkdir(parents=True)
+    subprocess.run(["git", "-C", str(worktree), "init"], check=True, capture_output=True)
+    mill_dir = worktree / ".millhouse"
     wiki_root = tmp_path / "wiki"
-    project_root = tmp_path / "project"
-    mill_dir = project_root / ".millhouse"
+    project_root = worktree
 
     _active.write(
         mill_dir,
@@ -100,7 +106,7 @@ def _make_plan_fixture(
         spawned_at="2026-01-01T00:00:00Z",
     )
 
-    plan_dir = wiki_root / "active" / SLUG / "plan"
+    plan_dir = worktree / "active" / SLUG / "plan"
     plan_dir.mkdir(parents=True)
 
     (plan_dir / "00-overview.md").write_text(
@@ -154,6 +160,8 @@ def main() -> int:
             ("gamma", "03-gamma.md", ["src/c.py"], []),
         ]
         mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(Path(tmpdir), batch_specs)
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
         try:
             # First run — each scope gets r1
             _seed_approve(4)
@@ -194,6 +202,8 @@ def main() -> int:
         except Exception as exc:
             errors += 1
             print(f"FAIL test1 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
 
     # ------------------------------------------------------------------
     # Test 2 — partial re-invocation (only alpha-r1 file pre-exists)
@@ -206,9 +216,11 @@ def main() -> int:
             ("gamma", "03-gamma.md", ["src/c.py"], []),
         ]
         mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(Path(tmpdir), batch_specs)
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
         try:
-            # Pre-create an alpha-r1 review file
-            reviews_dir = wiki_root / "active" / SLUG / "reviews"
+            # Pre-create an alpha-r1 review file inside the worktree
+            reviews_dir = project_root / "active" / SLUG / "reviews"
             reviews_dir.mkdir(parents=True)
             (reviews_dir / "20260418-000000-plan-review-01-alpha-r1.md").write_text(
                 "# stub r1 review", encoding="utf-8"
@@ -241,6 +253,8 @@ def main() -> int:
         except Exception as exc:
             errors += 1
             print(f"FAIL test2 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
 
     # ------------------------------------------------------------------
     # Test 3 — creates_union suppression in per-batch parallel section (#60)
@@ -255,6 +269,8 @@ def main() -> int:
         mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(
             Path(tmpdir), batch_specs, skip_create={"generated/by_alpha.py"}
         )
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
         _seed_approve(4)
         try:
             r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root)
@@ -270,6 +286,8 @@ def main() -> int:
         except Exception as exc:
             errors += 1
             print(f"FAIL test3 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
 
     # ------------------------------------------------------------------
     # Test 4 — hard-fail surfaces as ERROR per-batch entry, not full-run failure
@@ -289,6 +307,8 @@ def main() -> int:
         cfg4["review"]["plan"] = dict(cfg["review"]["plan"])
         cfg4["review"]["plan"]["holistic"] = None  # disable holistic for isolation
 
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
         # 1 approve for alpha; beta fails before calling reviewer
         _seed_approve(1)
         try:
@@ -314,6 +334,8 @@ def main() -> int:
         except Exception as exc:
             errors += 1
             print(f"FAIL test4 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
 
     # ------------------------------------------------------------------
     # Test 5 — hard-fail in holistic block surfaces as ReviewError
@@ -329,6 +351,8 @@ def main() -> int:
         mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(
             Path(tmpdir), batch_specs, skip_create={"nonexistent/path.py"}
         )
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
         # alpha + gamma consume one each; holistic resolver fails before reviewer runs.
         # The third seeded response is never consumed.
         _seed_approve(3)
@@ -354,6 +378,8 @@ def main() -> int:
         except Exception as exc:
             errors += 1
             print(f"FAIL test5 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
 
     # ------------------------------------------------------------------
     # Test 6 — NEED_CONTEXT resume fallback in per-batch (#5/#7)
@@ -364,6 +390,8 @@ def main() -> int:
         mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(
             Path(tmpdir), batch_specs
         )
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
         # alpha: NEED_CONTEXT → retry APPROVE; holistic: APPROVE
         stub.seed([
             (NEED_CONTEXT_TEXT, "sid-1"),  # alpha first call
@@ -395,6 +423,8 @@ def main() -> int:
         except Exception as exc:
             errors += 1
             print(f"FAIL test6 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
 
     # ------------------------------------------------------------------
     # Test 7 — NEED_CONTEXT resume fallback in holistic block (#5/#7)
@@ -405,6 +435,8 @@ def main() -> int:
         mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(
             Path(tmpdir), batch_specs
         )
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
         # alpha: APPROVE; holistic: NEED_CONTEXT → retry APPROVE
         stub.seed([
             (APPROVE_TEXT,      "sid-1"),  # alpha
@@ -436,6 +468,8 @@ def main() -> int:
         except Exception as exc:
             errors += 1
             print(f"FAIL test7 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
 
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)

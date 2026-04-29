@@ -236,8 +236,8 @@ def run(
     6. Total-fail check; return ReviewResult.
     """
     # 1. Paths and round
-    plan_dir = resolve_path(cfg["paths"]["plan_dir"], slug, wiki_root)
-    reviews_dir = resolve_path(cfg["paths"]["reviews_dir"], slug, wiki_root)
+    plan_dir = resolve_path(cfg["paths"]["plan_dir"], slug)
+    reviews_dir = resolve_path(cfg["paths"]["reviews_dir"], slug)
     max_rounds = cfg["review"]["plan"]["rounds"]
 
     print(

@@ -21,12 +21,13 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.parse_args(argv)  # exits 0 on --help; raises SystemExit on bad args
 
+    from _paths import resolve_wiki_path
     from _review_common import ReviewError, find_active_slug, load_config
     from _review_plan import run
 
     project_root = Path.cwd()
     mill_dir = project_root / ".millhouse"
-    wiki_root = (mill_dir / "wiki").resolve()
+    wiki_root = resolve_wiki_path(project_root)
     cfg = load_config(wiki_root, mill_dir)
 
     try:
