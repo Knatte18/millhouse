@@ -406,31 +406,36 @@ def test_write_initial_status() -> None:
 
 
 def test_recreate_active_junction_creates_link() -> None:
+    """New signature: recreate_active_junction(slug, mill_dir, container_path).
+    Target is container_path / "portals" / slug."""
     with tempfile.TemporaryDirectory() as tmp:
-        wiki = Path(tmp) / "wiki"
+        container_path = Path(tmp) / "container"
+        portals = container_path / "portals"
+        portals.mkdir(parents=True)
         mill_dir = Path(tmp) / "worktree" / ".millhouse"
         mill_dir.mkdir(parents=True)
 
-        recreate_active_junction(wiki, "my-task", mill_dir)
+        recreate_active_junction("my-task", mill_dir, container_path)
 
         link_path = mill_dir.parent / ".active"
-        target = wiki / "active" / "my-task"
+        target = container_path / "portals" / "my-task"
         if not target.exists():
             raise AssertionError(f"target dir should have been created at {target}")
         if not (link_path.exists() or link_path.is_symlink()):
             raise AssertionError(f"junction not created at {link_path}")
-    print("PASS: recreate_active_junction creates junction on first call")
+    print("PASS: recreate_active_junction creates junction pointing to portals/<slug>")
 
 
 def test_recreate_active_junction_idempotent() -> None:
     """Calling twice must result in a valid junction pointing at the right target."""
     with tempfile.TemporaryDirectory() as tmp:
-        wiki = Path(tmp) / "wiki"
+        container_path = Path(tmp) / "container"
+        (container_path / "portals").mkdir(parents=True)
         mill_dir = Path(tmp) / "worktree" / ".millhouse"
         mill_dir.mkdir(parents=True)
 
-        recreate_active_junction(wiki, "my-task", mill_dir)
-        recreate_active_junction(wiki, "my-task", mill_dir)
+        recreate_active_junction("my-task", mill_dir, container_path)
+        recreate_active_junction("my-task", mill_dir, container_path)
 
         link_path = mill_dir.parent / ".active"
         if not (link_path.exists() or link_path.is_symlink()):

@@ -716,29 +716,37 @@ def write_initial_status(
 
 
 def recreate_active_junction(
-    wiki_path: Path,
     slug: str,
     mill_dir: Path,
+    container_path: Path,
 ) -> None:
     """
     Delete-then-create the ``.active`` junction at ``mill_dir.parent / ".active"``.
 
-    Points the junction at ``wiki_path / "active" / slug``. Called by
+    Points the junction at ``container_path / "portals" / slug``. Called by
     ``mill-claim`` after claiming a task in an existing worktree where the
     junction may already exist pointing at a previous task. ``mill-spawn``
-    does NOT call this helper — it handles junctions via its own per-worktree
-    junction loop.
+    does NOT call this helper directly — it routes through
+    ``_setup.create_hub_links`` which iterates the full ``junctions:`` block
+    including ``.active``.
 
     If the target directory does not yet exist it is created (parents
     included) so ``_junction.create`` does not fail on a missing target.
+    Callers must create ``container_path / "portals"`` and the portal entry
+    ``container_path / "portals" / slug`` BEFORE calling this function (see
+    ``mill-claim`` for the required order of operations).
 
     Args:
-        wiki_path: Directory containing the wiki clone.
-        slug: Task slug; determines the target path.
+        slug: Task slug; determines the target path under portals/.
         mill_dir: The ``.millhouse/`` directory inside the worktree.
             The junction is placed at ``mill_dir.parent / ".active"``.
+        container_path: The container directory. Derive via
+            ``_paths.resolve_container_path(git_root)`` — NOT
+            ``git_root.parent``, which returns ``<container>/wts/`` in
+            container-form and would land the portal entry under the wrong
+            level.
     """
-    target = wiki_path / "active" / slug
+    target = container_path / "portals" / slug
     target.mkdir(parents=True, exist_ok=True)
     link_path = mill_dir.parent / ".active"
     if link_path.exists() or link_path.is_symlink():
