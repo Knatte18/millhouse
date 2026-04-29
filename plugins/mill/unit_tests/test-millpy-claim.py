@@ -83,12 +83,18 @@ def _make_stub_map(
     paths_mod = MagicMock()
     paths_mod.resolve_git_root = MagicMock(return_value=Path("/fake/repo"))
     paths_mod.resolve_wiki_path = MagicMock(return_value=Path("/fake/wiki"))
+    paths_mod.resolve_container_path = MagicMock(return_value=Path("/fake/container"))
+    paths_mod.resolve_main_worktree_root = MagicMock(return_value=Path("/fake/repo"))
+    paths_mod.resolve_short_name = MagicMock(return_value="MI")
 
     tasks_md_mod = MagicMock()
     tasks_md_mod.parse.return_value = [_make_fake_task()]
 
     wiki_mod = MagicMock()
     wiki_mod.sync_pull.return_value = None
+
+    config_mod = types.ModuleType("_config")
+    config_mod.load_config = MagicMock(return_value={})
 
     return {
         "_spawn_core": sc,
@@ -97,6 +103,8 @@ def _make_stub_map(
         "_wiki": wiki_mod,
         "_paths": paths_mod,
         "_vscode": MagicMock(),
+        "_junction": MagicMock(),
+        "_config": config_mod,
         "_sibling": types.ModuleType("_sibling"),
     }
 
@@ -116,7 +124,7 @@ def test_smoke_import() -> None:
     mod = importlib.util.module_from_spec(spec)
 
     stubs = ["_spawn_core", "_subprocess_util", "_tasks_md", "_wiki", "_paths",
-             "_vscode", "_sibling", "_subprocess_util"]
+             "_vscode", "_junction", "_config", "_sibling"]
     saved: dict[str, object] = {}
     for name in stubs:
         saved[name] = sys.modules.get(name)
@@ -127,7 +135,13 @@ def test_smoke_import() -> None:
     paths_mod = sys.modules["_paths"]
     paths_mod.resolve_git_root = MagicMock(return_value=Path("/fake/repo"))
     paths_mod.resolve_wiki_path = MagicMock(return_value=Path("/fake/wiki"))
+    paths_mod.resolve_container_path = MagicMock(return_value=Path("/fake/container"))
+    paths_mod.resolve_main_worktree_root = MagicMock(return_value=Path("/fake/repo"))
     paths_mod.resolve_short_name = MagicMock(return_value="MI")
+
+    # _config needs load_config at module level.
+    config_mod = sys.modules["_config"]
+    config_mod.load_config = MagicMock(return_value={})
 
     try:
         spec.loader.exec_module(mod)
@@ -222,6 +236,17 @@ def test_main_happy_path_calls_spawn_core_helpers() -> None:
     sc.write_active_marker.assert_called_once()
     sc.write_initial_status.assert_called_once()
     sc.recreate_active_junction.assert_called_once()
+
+    # Verify new signature: (slug, mill_dir, container_path)
+    rac_call = sc.recreate_active_junction.call_args
+    expected_mill_dir = Path("/fake/repo") / ".millhouse"
+    expected_container = Path("/fake/container")
+    if rac_call.args[0] != "my-task":
+        raise AssertionError(f"recreate_active_junction slug mismatch: {rac_call}")
+    if rac_call.args[1] != expected_mill_dir:
+        raise AssertionError(f"recreate_active_junction mill_dir mismatch: {rac_call}")
+    if rac_call.args[2] != expected_container:
+        raise AssertionError(f"recreate_active_junction container_path mismatch: {rac_call}")
 
     marker_call = sc.write_active_marker.call_args
     if marker_call.kwargs.get("slug") != "my-task":
@@ -403,6 +428,125 @@ def test_main_multi_path_skips_claim_in_wiki() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Portal entry lands under resolve_container_path(), not git_root.parent
+# ---------------------------------------------------------------------------
+
+
+def test_portal_entry_uses_resolve_container_path() -> None:
+    """Portal entry link_path must be under container_path/portals, not git_root.parent."""
+    task = _make_fake_task(slug="my-task", title="My Task")
+
+    sc = MagicMock()
+    sc.BacklogEmpty = type("BacklogEmpty", (Exception,), {})
+    sc.pick_task_single_or_multi.return_value = ("single", task, [])
+    sc.claim_in_wiki.return_value = None
+    sc.capture_parent_branch.return_value = "main"
+    sc.write_active_marker.return_value = None
+    sc.write_initial_status.return_value = Path("/fake/wiki/active/my-task/status.md")
+    sc.recreate_active_junction.return_value = None
+
+    subprocess_stub = MagicMock()
+    subprocess_stub.run.return_value = _make_ok_run()
+
+    stub_map = _make_stub_map(spawn_core_mock=sc, subprocess_mock=subprocess_stub)
+    # container_path (/fake/container) is different from git_root.parent (/fake)
+    # to distinguish a correct call from an accidental git_root.parent usage.
+    junction_mock = stub_map["_junction"]
+    mod, saved = _load_claim_module(stub_map)
+    try:
+        fake_cfg = {"spawn": {"branch_prefix": ""}}
+        with (
+            patch.object(mod, "_load_config", return_value=fake_cfg),
+            patch.object(mod, "_is_dirty", return_value=False),
+            patch.object(Path, "exists", return_value=True),
+            patch.object(Path, "is_symlink", return_value=False),
+            patch.object(Path, "read_text", return_value="# Home\n"),
+            patch.object(Path, "mkdir", return_value=None),
+        ):
+            exit_code = mod.main(["--slug", "my-task"])
+    finally:
+        _restore_modules(saved)
+
+    if exit_code != 0:
+        raise AssertionError(f"expected exit 0, got {exit_code}")
+
+    create_calls = junction_mock.create.call_args_list
+    if not create_calls:
+        raise AssertionError("_junction.create was never called")
+
+    portal_call = create_calls[0]
+    link_path_arg = portal_call.kwargs.get("link_path") or portal_call.args[1]
+    expected_portal_dir = Path("/fake/container") / "portals"
+    # Must be under /fake/container/portals, NOT under /fake/portals (git_root.parent)
+    if not str(link_path_arg).startswith(str(expected_portal_dir)):
+        raise AssertionError(
+            f"portal entry link_path {link_path_arg!r} should be under "
+            f"{expected_portal_dir!r} (resolve_container_path output), "
+            f"not under git_root.parent ({Path('/fake/portals')!r})"
+        )
+    print("PASS: portal entry link_path uses resolve_container_path, not git_root.parent")
+
+
+# ---------------------------------------------------------------------------
+# Call order: portal entry created before recreate_active_junction
+# ---------------------------------------------------------------------------
+
+
+def test_portal_before_recreate_active_junction_order() -> None:
+    """_junction.create (portal entry) must fire before recreate_active_junction."""
+    task = _make_fake_task(slug="my-task", title="My Task")
+
+    sc = MagicMock()
+    sc.BacklogEmpty = type("BacklogEmpty", (Exception,), {})
+    sc.pick_task_single_or_multi.return_value = ("single", task, [])
+    sc.claim_in_wiki.return_value = None
+    sc.capture_parent_branch.return_value = "main"
+    sc.write_active_marker.return_value = None
+    sc.write_initial_status.return_value = Path("/fake/wiki/active/my-task/status.md")
+
+    call_log: list[str] = []
+    sc.recreate_active_junction.side_effect = lambda *a, **kw: call_log.append("recreate_active_junction")
+
+    subprocess_stub = MagicMock()
+    subprocess_stub.run.return_value = _make_ok_run()
+
+    stub_map = _make_stub_map(spawn_core_mock=sc, subprocess_mock=subprocess_stub)
+    junction_mock = stub_map["_junction"]
+    junction_mock.create.side_effect = lambda *a, **kw: call_log.append("junction.create")
+
+    mod, saved = _load_claim_module(stub_map)
+    try:
+        fake_cfg = {"spawn": {"branch_prefix": ""}}
+        with (
+            patch.object(mod, "_load_config", return_value=fake_cfg),
+            patch.object(mod, "_is_dirty", return_value=False),
+            patch.object(Path, "exists", return_value=True),
+            patch.object(Path, "is_symlink", return_value=False),
+            patch.object(Path, "read_text", return_value="# Home\n"),
+            patch.object(Path, "mkdir", return_value=None),
+        ):
+            exit_code = mod.main(["--slug", "my-task"])
+    finally:
+        _restore_modules(saved)
+
+    if exit_code != 0:
+        raise AssertionError(f"expected exit 0, got {exit_code}")
+
+    if "junction.create" not in call_log:
+        raise AssertionError("_junction.create was never called")
+    if "recreate_active_junction" not in call_log:
+        raise AssertionError("recreate_active_junction was never called")
+    create_idx = call_log.index("junction.create")
+    rac_idx = call_log.index("recreate_active_junction")
+    if create_idx >= rac_idx:
+        raise AssertionError(
+            f"junction.create (pos {create_idx}) must fire BEFORE recreate_active_junction "
+            f"(pos {rac_idx}), got order: {call_log}"
+        )
+    print("PASS: portal entry _junction.create fires before recreate_active_junction")
+
+
+# ---------------------------------------------------------------------------
 # Hub-title flip: when settings.json has green background, title is updated
 # ---------------------------------------------------------------------------
 
@@ -471,6 +615,8 @@ def main() -> int:
         test_main_dirty_tree_abort_exits_one,
         test_main_dirty_tree_stash_invokes_git_stash,
         test_main_multi_path_skips_claim_in_wiki,
+        test_portal_entry_uses_resolve_container_path,
+        test_portal_before_recreate_active_junction_order,
         test_main_hub_title_flip_when_cwd_is_hub,
     ]
 

@@ -37,13 +37,14 @@ import datetime
 import sys
 from pathlib import Path
 
+import _junction
 import _spawn_core
 import _subprocess_util
 import _tasks_md
 import _vscode
 import _wiki
 from _config import load_config as _load_config_lenient
-from _paths import resolve_git_root, resolve_short_name, resolve_wiki_path
+from _paths import resolve_container_path, resolve_git_root, resolve_main_worktree_root, resolve_short_name, resolve_wiki_path
 
 
 # --------------------------------------------------------------------------- #
@@ -269,8 +270,31 @@ def main(argv: list[str] | None = None) -> int:
             )
             raise SystemExit(1)
 
-    # Recreate the .active junction so it points at this task's wiki dir.
-    _spawn_core.recreate_active_junction(wiki_path, slug, mill_dir)
+    # Create the portal entry for this worktree and recreate .active.
+    # Order is CRITICAL: portal entry must exist before recreate_active_junction
+    # because that function calls target.mkdir(exist_ok=True) on portals/<slug>.
+    # If we created portals/<slug> as a real dir first and then tried to make it
+    # a junction, _junction.remove would fail ("not a junction or symlink").
+    container_path = resolve_container_path(git_root)
+    main_root = resolve_main_worktree_root(git_root)
+    (container_path / "portals").mkdir(parents=True, exist_ok=True)
+
+    portal_link = container_path / "portals" / slug
+    if not portal_link.exists() and not portal_link.is_symlink():
+        # First claim: create portal entry pointing at this worktree.
+        _junction.create(target=main_root, link_path=portal_link)
+    elif (portal_link.exists() or portal_link.is_symlink()):
+        # Portal entry exists: check if it points at the current worktree.
+        import os
+        existing_target = os.path.realpath(str(portal_link))
+        current_target = os.path.realpath(str(main_root))
+        if existing_target != current_target:
+            # Points elsewhere — remove and recreate.
+            _junction.remove(portal_link)
+            _junction.create(target=main_root, link_path=portal_link)
+        # else: already correct, skip.
+
+    _spawn_core.recreate_active_junction(slug, mill_dir, container_path)
 
     # Write the per-worktree active marker so downstream skills find this task.
     ts = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
