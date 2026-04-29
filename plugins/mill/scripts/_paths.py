@@ -36,8 +36,14 @@ Public API:
         ``cfg["spawn"]["worktrees_dir"]`` is set, treat it as a
         ``<TOKEN>``-template and substitute path tokens derived from
         ``git_root`` (no slug — this returns the *container* dir, not a
-        per-task subdir). Falls back to ``resolve_path("worktrees",
-        git_root)`` when the key is absent.
+        per-task subdir). Falls back to ``main_root.parent`` (the direct
+        parent of the main worktree, which equals ``wts/`` in container-form).
+        Prefix-form repos must set ``spawn.worktrees_dir:`` explicitly.
+
+    resolve_container_path(git_root)
+        Return the container directory for any worktree. In container-form
+        (``main_root.parent.name == "wts"``) returns ``main_root.parent.parent``.
+        In prefix-form returns ``main_root.parent``.
 
     resolve_hub_relative_path(worktree_root, hub_subpath)
         Translate the ``hub_relative_path`` value from
@@ -69,6 +75,7 @@ __all__ = [
     "resolve_short_name",
     "resolve_hub_relative_path",
     "resolve_active_worktree",
+    "resolve_container_path",
     "ActiveWorktreeNotFound",
     "ActiveWorktreeSlugMismatch",
 ]
@@ -119,8 +126,12 @@ def resolve_worktrees_dir(cfg: dict, git_root: Path) -> Path:
     When ``cfg["spawn"]["worktrees_dir"]`` is set explicitly, treat it as a
     ``<TOKEN>``-template and substitute path-level tokens derived from the
     main worktree root. The slug is intentionally absent — callers that need
-    a per-task path append ``/ slug`` themselves. Falls back to
-    ``resolve_path("worktrees", main_root)`` when the key is absent.
+    a per-task path append ``/ slug`` themselves.
+
+    Falls back to ``main_root.parent`` (the direct parent of the main worktree)
+    when the key is absent. In container-form this equals ``<container>/wts/``.
+    Prefix-form repos must set ``spawn.worktrees_dir:`` explicitly — there is
+    no automatic prefix-form fallback for the worktrees directory.
 
     Args:
         cfg: Deep-merged config dict (wiki config.yaml + config.local.yaml).
@@ -134,14 +145,40 @@ def resolve_worktrees_dir(cfg: dict, git_root: Path) -> Path:
     if template is not None:
         import _junction
 
+        container = (
+            main_root.parent.parent if main_root.parent.name == "wts" else main_root.parent
+        )
         tokens = {
             "HUB_PATH": str(main_root),
             "CWD_PATH": str(Path.cwd()),
-            "CONTAINER_PATH": str(main_root.parent),
+            "CONTAINER_PATH": str(container),
             "REPO": main_root.name,
         }
         return Path(_junction.resolve_target(template, tokens))
-    return resolve_path("worktrees", main_root)
+    return main_root.parent
+
+
+def resolve_container_path(git_root: Path) -> Path:
+    """Return the container directory for any worktree.
+
+    The canonical answer to "what is the container directory" for
+    cross-worktree operations that need to resolve ``<container>/portals/``,
+    ``<container>/wts/``, or ``<container>/wiki/``.
+
+    In container-form (``main_root.parent.name == "wts"``) the container is
+    the grandparent of the main worktree. In prefix-form the container is the
+    direct parent of the main worktree.
+
+    Args:
+        git_root: Absolute path to any worktree's git checkout root.
+
+    Returns:
+        Absolute ``Path`` of the container directory.
+    """
+    main_root = resolve_main_worktree_root(git_root)
+    if main_root.parent.name == "wts":
+        return main_root.parent.parent
+    return main_root.parent
 
 
 def resolve_short_name(cfg: dict, repo_name: str) -> str:

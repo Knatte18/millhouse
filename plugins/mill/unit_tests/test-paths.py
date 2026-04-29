@@ -14,6 +14,7 @@ sys.path.insert(0, str(SCRIPTS_DIR))
 
 from unittest.mock import MagicMock, patch  # noqa: E402
 
+import _active  # noqa: E402
 import _paths  # noqa: E402
 import _sibling  # noqa: E402
 
@@ -31,20 +32,30 @@ def _write_config(repo_root: Path, yaml_text: str) -> None:
     (repo_root / ".millhouse" / "config.local.yaml").write_text(yaml_text, encoding="utf-8")
 
 
+def _container_form(tmp_path: Path) -> Path:
+    """Create container-form main_root at tmp_path/wts/millhouse and return it."""
+    wts_dir = tmp_path / "wts"
+    wts_dir.mkdir(exist_ok=True)
+    main_root = wts_dir / "millhouse"
+    main_root.mkdir(exist_ok=True)
+    return main_root
+
+
 def main() -> int:
     try:
         assert _paths.resolve_path is _sibling.resolve_path, \
             "resolve_path must be re-exported identity from _sibling, not duplicated"
         print("PASS: _paths.resolve_path is _sibling.resolve_path (no duplication)")
 
+        # resolve_wiki_path — container-form default (main_root under wts/)
+
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
-            hub = tmp_path / "hub"
-            hub.mkdir()
-            with patch("_paths.resolve_main_worktree_root", return_value=hub):
-                got = _paths.resolve_wiki_path(hub)
-            assert got == tmp_path / "wiki", f"hub-form default: got {got}"
-        print("PASS: resolve_wiki_path hub-form default -> <parent>/wiki")
+            main_root = _container_form(tmp_path)
+            with patch("_paths.resolve_main_worktree_root", return_value=main_root):
+                got = _paths.resolve_wiki_path(main_root)
+            assert got == tmp_path / "wiki", f"container-form default: got {got}"
+        print("PASS: resolve_wiki_path container-form default -> <container>/wiki")
 
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
@@ -55,56 +66,61 @@ def main() -> int:
             assert got == tmp_path / "foo.wiki", f"prefix-form default: got {got}"
         print("PASS: resolve_wiki_path prefix-form default -> <parent>/<name>.wiki")
 
+        # Old hub-form now falls through to prefix-form (intentional regression from Card 1)
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
             hub = tmp_path / "hub"
             hub.mkdir()
-            abs_override = tmp_path / "elsewhere" / "wiki"
-            _write_config(hub, f"paths:\n  wiki: {abs_override}\n")
             with patch("_paths.resolve_main_worktree_root", return_value=hub):
                 got = _paths.resolve_wiki_path(hub)
+            assert got == tmp_path / "hub.wiki", f"hub-form now prefix-form: got {got}"
+        print("PASS: resolve_wiki_path old hub-form -> prefix-form hub.wiki (intentional regression)")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            main_root = _container_form(tmp_path)
+            abs_override = tmp_path / "elsewhere" / "wiki"
+            _write_config(main_root, f"paths:\n  wiki: {abs_override}\n")
+            with patch("_paths.resolve_main_worktree_root", return_value=main_root):
+                got = _paths.resolve_wiki_path(main_root)
             assert got == abs_override, f"absolute override: got {got}"
         print("PASS: resolve_wiki_path absolute paths.wiki override wins")
 
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
-            hub = (tmp_path / "hub").resolve()
-            hub.mkdir()
-            _write_config(hub, "paths:\n  wiki: ../custom-wiki\n")
-            with patch("_paths.resolve_main_worktree_root", return_value=hub):
-                got = _paths.resolve_wiki_path(hub)
-            assert got == (tmp_path / "custom-wiki").resolve(), \
+            main_root = _container_form(tmp_path).resolve()
+            _write_config(main_root, "paths:\n  wiki: ../custom-wiki\n")
+            with patch("_paths.resolve_main_worktree_root", return_value=main_root):
+                got = _paths.resolve_wiki_path(main_root)
+            assert got == (tmp_path / "wts" / "custom-wiki").resolve(), \
                 f"relative override: got {got}"
-        print("PASS: resolve_wiki_path relative paths.wiki override resolves against git-toplevel")
+        print("PASS: resolve_wiki_path relative paths.wiki override resolves against main root")
 
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
-            hub = tmp_path / "hub"
-            hub.mkdir()
-            _write_config(hub, "paths: {}\n")
-            with patch("_paths.resolve_main_worktree_root", return_value=hub):
-                got = _paths.resolve_wiki_path(hub)
+            main_root = _container_form(tmp_path)
+            _write_config(main_root, "paths: {}\n")
+            with patch("_paths.resolve_main_worktree_root", return_value=main_root):
+                got = _paths.resolve_wiki_path(main_root)
             assert got == tmp_path / "wiki", f"empty paths block: got {got}"
         print("PASS: resolve_wiki_path with empty paths: block falls through to sibling default")
 
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
-            hub = tmp_path / "hub"
-            hub.mkdir()
-            _write_config(hub, "other_key: value\n")
-            with patch("_paths.resolve_main_worktree_root", return_value=hub):
-                got = _paths.resolve_wiki_path(hub)
+            main_root = _container_form(tmp_path)
+            _write_config(main_root, "other_key: value\n")
+            with patch("_paths.resolve_main_worktree_root", return_value=main_root):
+                got = _paths.resolve_wiki_path(main_root)
             assert got == tmp_path / "wiki", f"no paths key: got {got}"
         print("PASS: resolve_wiki_path with no paths: key falls through to sibling default")
 
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
-            hub = tmp_path / "hub"
-            hub.mkdir()
-            _write_config(hub, "paths:\n  wiki: [this is not a string\n")
-            with patch("_paths.resolve_main_worktree_root", return_value=hub):
+            main_root = _container_form(tmp_path)
+            _write_config(main_root, "paths:\n  wiki: [this is not a string\n")
+            with patch("_paths.resolve_main_worktree_root", return_value=main_root):
                 try:
-                    _paths.resolve_wiki_path(hub)
+                    _paths.resolve_wiki_path(main_root)
                     raise AssertionError("malformed YAML should have raised")
                 except Exception as exc:
                     import yaml
@@ -116,12 +132,16 @@ def main() -> int:
 
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
-            worktree = tmp_path / "worktrees" / "feat"
-            worktree.mkdir(parents=True)
-            with patch("_paths.resolve_main_worktree_root", return_value=tmp_path / "hub"):
+            wts_dir = tmp_path / "wts"
+            wts_dir.mkdir()
+            main_root = wts_dir / "millhouse"
+            main_root.mkdir()
+            worktree = wts_dir / "feat"
+            worktree.mkdir()
+            with patch("_paths.resolve_main_worktree_root", return_value=main_root):
                 got = _paths.resolve_wiki_path(worktree)
-            assert got == tmp_path / "wiki", f"walk-up hub-form: got {got}"
-        print("PASS: resolve_wiki_path walk-up hub-form (from child worktree) -> <parent>/wiki")
+            assert got == tmp_path / "wiki", f"walk-up container-form: got {got}"
+        print("PASS: resolve_wiki_path walk-up container-form (from child worktree) -> <container>/wiki")
 
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
@@ -134,10 +154,13 @@ def main() -> int:
 
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
-            worktree = tmp_path / "worktrees" / "feat"
-            worktree.mkdir(parents=True)
+            wts_dir = tmp_path / "wts"
+            wts_dir.mkdir()
+            main_root = wts_dir / "millhouse"
+            main_root.mkdir()
+            worktree = wts_dir / "feat"
+            worktree.mkdir()
             _write_config(worktree, "paths:\n  wiki: ../custom-wiki\n")
-            main_root = tmp_path / "hub"
             with patch("_paths.resolve_main_worktree_root", return_value=main_root):
                 got = _paths.resolve_wiki_path(worktree)
             expected = (main_root / ".." / "custom-wiki").resolve()
@@ -148,30 +171,38 @@ def main() -> int:
 
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
-            worktree = tmp_path / "worktrees" / "feat"
-            worktree.mkdir(parents=True)
-            with patch("_paths.resolve_main_worktree_root", return_value=tmp_path / "hub"):
+            wts_dir = tmp_path / "wts"
+            wts_dir.mkdir()
+            main_root = wts_dir / "millhouse"
+            main_root.mkdir()
+            worktree = wts_dir / "feat"
+            worktree.mkdir()
+            with patch("_paths.resolve_main_worktree_root", return_value=main_root):
                 got = _paths.resolve_worktrees_dir({}, worktree)
-            assert got == tmp_path / "worktrees", f"worktrees hub-form: got {got}"
-        print("PASS: resolve_worktrees_dir walk-up hub-form -> <parent>/worktrees")
+            assert got == wts_dir, f"worktrees container-form fallback: got {got}"
+        print("PASS: resolve_worktrees_dir container-form fallback -> wts/ (main_root.parent)")
 
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
-            worktree = tmp_path / "foo.worktrees" / "feat"
-            worktree.mkdir(parents=True)
-            with patch("_paths.resolve_main_worktree_root", return_value=tmp_path / "foo"):
-                got = _paths.resolve_worktrees_dir({}, worktree)
-            assert got == tmp_path / "foo.worktrees", f"worktrees prefix-form: got {got}"
-        print("PASS: resolve_worktrees_dir walk-up prefix-form -> <parent>/<name>.worktrees")
+            foo = tmp_path / "foo"
+            foo.mkdir()
+            # Prefix-form: fallback is main_root.parent (no automatic prefix-form sibling)
+            with patch("_paths.resolve_main_worktree_root", return_value=foo):
+                got = _paths.resolve_worktrees_dir({}, foo)
+            # Prefix-form fallback is main_root.parent = tmp_path; prefix-form users must
+            # configure spawn.worktrees_dir: for a sensible default.
+            assert got == tmp_path, f"worktrees prefix-form fallback: got {got}"
+        print("PASS: resolve_worktrees_dir prefix-form fallback -> main_root.parent (configure override for real use)")
 
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
-            worktree = tmp_path / "worktrees" / "feat"
-            worktree.mkdir(parents=True)
-            main_root = tmp_path / "hub"
+            wts_dir = tmp_path / "wts"
+            wts_dir.mkdir()
+            main_root = wts_dir / "millhouse"
+            main_root.mkdir()
             cfg = {"spawn": {"worktrees_dir": "<CONTAINER_PATH>/custom-worktrees"}}
             with patch("_paths.resolve_main_worktree_root", return_value=main_root):
-                got = _paths.resolve_worktrees_dir(cfg, worktree)
+                got = _paths.resolve_worktrees_dir(cfg, main_root)
             assert got == tmp_path / "custom-worktrees", f"worktrees template override: got {got}"
         print("PASS: resolve_worktrees_dir template override anchors on main root via CONTAINER_PATH")
 
@@ -179,50 +210,49 @@ def main() -> int:
 
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
-            hub = (tmp_path / "hub").resolve()
-            hub.mkdir()
+            main_root = _container_form(tmp_path).resolve()
             mock_result = _make_run_result(stdout=".git\n")
             with patch("_subprocess_util.run", return_value=mock_result):
-                got = _paths.resolve_main_worktree_root(hub)
-            assert got == hub, f"hub-form: got {got}"
-        print("PASS: resolve_main_worktree_root hub-form (.git relative) -> git_root")
+                got = _paths.resolve_main_worktree_root(main_root)
+            assert got == main_root, f"container-form: got {got}"
+        print("PASS: resolve_main_worktree_root container-form (.git relative) -> git_root")
 
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
-            main_hub = tmp_path / "hub"
-            git_root = tmp_path / "worktrees" / "feat"
-            git_root.mkdir(parents=True)
-            mock_stdout = str(main_hub / ".git") + "\n"
+            wts_dir = tmp_path / "wts"
+            wts_dir.mkdir()
+            main_root = wts_dir / "millhouse"
+            git_root = wts_dir / "feat"
+            git_root.mkdir()
+            mock_stdout = str(main_root / ".git") + "\n"
             mock_result = _make_run_result(stdout=mock_stdout)
             with patch("_subprocess_util.run", return_value=mock_result):
                 got = _paths.resolve_main_worktree_root(git_root)
-            assert got == main_hub, f"worktree-form: got {got}"
+            assert got == main_root, f"worktree-form: got {got}"
         print("PASS: resolve_main_worktree_root worktree-form (absolute stdout) -> main hub")
 
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
-            hub = tmp_path / "hub"
-            hub.mkdir()
+            main_root = _container_form(tmp_path)
             mock_result = _make_run_result(returncode=1, stderr="not a git repository")
             with patch("_subprocess_util.run", return_value=mock_result):
                 try:
-                    _paths.resolve_main_worktree_root(hub)
+                    _paths.resolve_main_worktree_root(main_root)
                     raise AssertionError("expected SystemExit, got none")
                 except SystemExit as exc:
                     msg = str(exc)
-                    assert str(hub) in msg, f"error msg missing git_root: {msg!r}"
+                    assert str(main_root) in msg, f"error msg missing git_root: {msg!r}"
                     assert "not a git repository" in msg, f"error msg missing stderr: {msg!r}"
         print("PASS: resolve_main_worktree_root returncode=1 -> SystemExit with git_root and stderr")
 
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
-            hub = (tmp_path / "hub").resolve()
-            hub.mkdir()
+            main_root = _container_form(tmp_path).resolve()
             for stdout_val in [".git\r\n", "  .git  \n"]:
                 mock_result = _make_run_result(stdout=stdout_val)
                 with patch("_subprocess_util.run", return_value=mock_result):
-                    got = _paths.resolve_main_worktree_root(hub)
-                assert got == hub, f"whitespace/CRLF tolerance: stdout={stdout_val!r} got {got}"
+                    got = _paths.resolve_main_worktree_root(main_root)
+                assert got == main_root, f"whitespace/CRLF tolerance: stdout={stdout_val!r} got {got}"
         print("PASS: resolve_main_worktree_root tolerates CRLF and surrounding whitespace")
 
         # resolve_short_name
@@ -278,8 +308,6 @@ def main() -> int:
 
         # resolve_active_worktree
 
-        import _active
-
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
             wts_dir = tmp_path / "wts"
@@ -328,6 +356,28 @@ def main() -> int:
             except _paths.ActiveWorktreeSlugMismatch:
                 pass
         print("PASS: resolve_active_worktree raises ActiveWorktreeSlugMismatch when marker slug differs")
+
+        # resolve_container_path
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            wts_dir = tmp_path / "wts"
+            wts_dir.mkdir()
+            main_root = wts_dir / "millhouse"
+            main_root.mkdir()
+            with patch("_paths.resolve_main_worktree_root", return_value=main_root):
+                got = _paths.resolve_container_path(main_root)
+            assert got == tmp_path, f"container-form: got {got}"
+        print("PASS: resolve_container_path container-form -> grandparent (container dir)")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            main_root = tmp_path / "foo"
+            main_root.mkdir()
+            with patch("_paths.resolve_main_worktree_root", return_value=main_root):
+                got = _paths.resolve_container_path(main_root)
+            assert got == tmp_path, f"prefix-form: got {got}"
+        print("PASS: resolve_container_path prefix-form -> parent dir")
 
         print("All _paths unit tests passed.")
         return 0
