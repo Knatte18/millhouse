@@ -56,18 +56,16 @@ def main() -> int:
     with tempfile.TemporaryDirectory() as tmpdir:
         mill_dir, project_root = _make_fixture(Path(tmpdir))
 
-        # Create discussion file inside the worktree
-        discussion_dir = project_root / "active" / SLUG
-        discussion_dir.mkdir(parents=True)
-        (discussion_dir / "discussion.md").write_text(
+        # Create discussion file at worktree root
+        (project_root / "discussion.md").write_text(
             "# Discussion\n\nThis is a test discussion.\n", encoding="utf-8"
         )
 
         cfg = {
             "paths": {
-                "discussion_file": f"active/{SLUG}/discussion.md",
-                "plan_dir":        f"active/{SLUG}/plan/",
-                "reviews_dir":     f"active/{SLUG}/reviews/",
+                "discussion_file": "discussion.md",
+                "plan_dir":        "plan/",
+                "reviews_dir":     "reviews/",
             },
             "review": {
                 "discussion": {"rounds": 2, "holistic": "test_stub"},

@@ -100,7 +100,7 @@ def _make_fixture(tmp_path: Path) -> tuple[Path, Path, Path, dict]:
         spawned_at="2026-01-01T00:00:00Z",
     )
 
-    plan_dir = worktree / "active" / SLUG / "plan"
+    plan_dir = worktree / "plan"
     plan_dir.mkdir(parents=True)
 
     batch_specs = [
@@ -123,9 +123,9 @@ def _make_fixture(tmp_path: Path) -> tuple[Path, Path, Path, dict]:
 
     cfg = {
         "paths": {
-            "discussion_file": f"active/{SLUG}/discussion.md",
-            "plan_dir":        f"active/{SLUG}/plan/",
-            "reviews_dir":     f"active/{SLUG}/reviews/",
+            "discussion_file": "discussion.md",
+            "plan_dir":        "plan/",
+            "reviews_dir":     "reviews/",
         },
         "review": {
             "code": {
@@ -251,7 +251,7 @@ def main() -> int:
             slug=SLUG, task_title="Test", branch="test",
             spawned_at="2026-01-01T00:00:00Z",
         )
-        plan_dir = worktree / "active" / SLUG / "plan"
+        plan_dir = worktree / "plan"
         plan_dir.mkdir(parents=True)
         (plan_dir / "00-overview.md").write_text(
             _make_overview([("alpha", "01-alpha.md"), ("beta", "02-beta.md")]),
@@ -270,9 +270,9 @@ def main() -> int:
         # generated/by_alpha.py is NOT created on disk
         cfg3 = {
             "paths": {
-                "discussion_file": f"active/{SLUG}/discussion.md",
-                "plan_dir":        f"active/{SLUG}/plan/",
-                "reviews_dir":     f"active/{SLUG}/reviews/",
+                "discussion_file": "discussion.md",
+                "plan_dir":        "plan/",
+                "reviews_dir":     "reviews/",
             },
             "review": {
                 "code": {"rounds": 3, "reviewer": "test_stub", "self_fix_rounds": 0, "holistic": True},
@@ -309,7 +309,7 @@ def main() -> int:
             slug=SLUG, task_title="Test", branch="test",
             spawned_at="2026-01-01T00:00:00Z",
         )
-        plan_dir = worktree / "active" / SLUG / "plan"
+        plan_dir = worktree / "plan"
         plan_dir.mkdir(parents=True)
         (plan_dir / "00-overview.md").write_text(
             _make_overview([("alpha", "01-alpha.md")]), encoding="utf-8"
@@ -320,9 +320,9 @@ def main() -> int:
         )
         cfg4 = {
             "paths": {
-                "discussion_file": f"active/{SLUG}/discussion.md",
-                "plan_dir":        f"active/{SLUG}/plan/",
-                "reviews_dir":     f"active/{SLUG}/reviews/",
+                "discussion_file": "discussion.md",
+                "plan_dir":        "plan/",
+                "reviews_dir":     "reviews/",
             },
             "review": {
                 "code": {"rounds": 3, "reviewer": "test_stub", "self_fix_rounds": 0, "holistic": True},

@@ -106,7 +106,7 @@ def _make_plan_fixture(
         spawned_at="2026-01-01T00:00:00Z",
     )
 
-    plan_dir = worktree / "active" / SLUG / "plan"
+    plan_dir = worktree / "plan"
     plan_dir.mkdir(parents=True)
 
     (plan_dir / "00-overview.md").write_text(
@@ -125,9 +125,9 @@ def _make_plan_fixture(
 
     cfg = {
         "paths": {
-            "discussion_file": f"active/{SLUG}/discussion.md",
-            "plan_dir":        f"active/{SLUG}/plan/",
-            "reviews_dir":     f"active/{SLUG}/reviews/",
+            "discussion_file": "discussion.md",
+            "plan_dir":        "plan/",
+            "reviews_dir":     "reviews/",
         },
         "review": {
             "plan": {"rounds": 3, "batch": "test_stub", "holistic": "test_stub"},
@@ -220,7 +220,7 @@ def main() -> int:
         os.chdir(project_root)
         try:
             # Pre-create an alpha-r1 review file inside the worktree
-            reviews_dir = project_root / "active" / SLUG / "reviews"
+            reviews_dir = project_root / "reviews"
             reviews_dir.mkdir(parents=True)
             (reviews_dir / "20260418-000000-plan-review-01-alpha-r1.md").write_text(
                 "# stub r1 review", encoding="utf-8"
