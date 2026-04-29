@@ -79,7 +79,7 @@ Loop up to `max_review_rounds` rounds. Each round:
 3. **BEFORE reading any review file, load the `mill-receiving-review` skill** (`plugins/mill/skills/mill-receiving-review/SKILL.md`). Non-negotiable. The VERIFY → HARM CHECK → FIX-or-PUSH-BACK decision tree is what keeps review loops useful.
 
 4. On `APPROVE`:
-   - `_status.update_field(overview_path_rel_to_wiki, "approved", "true")` via direct Edit (the field is in the overview's fenced-yaml frontmatter, not status.md).
+   - `_status.update_field(overview_path, "approved", "true")` via direct Edit (the field is in `plan/00-overview.md`'s fenced-yaml frontmatter, not status.md).
    - `_status.append_phase(status_path, f"plan-review-r{N}", iso_ts)`.
    - Commit+push both.
    - Break the loop → Handoff.

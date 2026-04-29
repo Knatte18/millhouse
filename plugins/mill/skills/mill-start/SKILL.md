@@ -75,7 +75,7 @@ Loop up to `max_review_rounds` rounds. Each round:
        --round <N>
    ```
 
-   The script writes the review file under `<WIKI_PATH>/active/<slug>/reviews/` and prints a one-line JSON summary: `{"verdict": "APPROVE" | "GAPS_FOUND", "review_file": "<abs-path>"}`.
+   The script writes the review file under `<worktree_root>/reviews/` and prints a one-line JSON summary: `{"verdict": "APPROVE" | "GAPS_FOUND", "review_file": "<abs-path>"}`.
 
 3. **BEFORE reading the review file, load the `mill-receiving-review` skill** (see `plugins/mill/skills/mill-receiving-review/SKILL.md`). This is non-negotiable — the decision tree it encodes is what keeps review loops useful instead of adversarial.
 

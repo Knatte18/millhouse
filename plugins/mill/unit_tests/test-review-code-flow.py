@@ -168,6 +168,9 @@ def main() -> int:
             assert r.verdict == "APPROVE"
             fname = Path(r.reviews[0]["file"]).name
             assert "code-review-alpha-r1" in fname, f"unexpected filename: {fname}"
+            assert str(project_root / "reviews") in r.reviews[0]["file"], (
+                f"review file must be under worktree/reviews/, got {r.reviews[0]['file']!r}"
+            )
             print(f"PASS test1a: alpha r1 → {fname}")
 
             # alpha round 2 (counter increments per-scope)

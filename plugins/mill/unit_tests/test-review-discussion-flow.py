@@ -88,6 +88,9 @@ def main() -> int:
             assert r.reviews[0]["session_id"] == "sid-1", (
                 f"expected session_id 'sid-1', got {r.reviews[0]['session_id']!r}"
             )
+            assert str(project_root / "reviews") in r.reviews[0]["file"], (
+                f"review file must be under worktree/reviews/, got {r.reviews[0]['file']!r}"
+            )
             print(f"PASS test-discussion round 1: {fname} scope=holistic session_id=sid-1")
 
             # Round 2 — same reviews_dir, counter should increment

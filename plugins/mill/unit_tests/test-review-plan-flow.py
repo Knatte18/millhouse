@@ -178,6 +178,9 @@ def main() -> int:
             assert "plan-review-r1" in Path(holistic["file"]).name, (
                 f"unexpected holistic filename: {Path(holistic['file']).name}"
             )
+            assert str(project_root / "reviews") in holistic["file"], (
+                f"review file must be under worktree/reviews/, got {holistic['file']!r}"
+            )
             print("PASS test1a: first run — all scopes r1")
 
             # Second run — each scope advances to r2 independently

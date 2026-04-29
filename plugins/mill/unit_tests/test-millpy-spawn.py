@@ -233,7 +233,10 @@ def test_main_happy_path_calls_spawn_core_in_order() -> None:
         raise AssertionError(
             f"write_initial_status branch mismatch: {status_call}"
         )
-    # Must be called with worktree_path=, not wiki_path= (state on worktree)
+    # Must be called with worktree_path=, not wiki_path= (state on worktree).
+    # This is an intentional mock-level check: write_initial_status is patched
+    # so no files are touched on disk. The absence of wiki_path= in kwargs is
+    # the correct proxy — the real function writes to worktree_path/status.md.
     if "wiki_path" in status_call.kwargs:
         raise AssertionError(
             f"write_initial_status must not be called with wiki_path=: {status_call}"
