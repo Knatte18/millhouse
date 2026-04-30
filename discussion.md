@@ -41,7 +41,7 @@ A parallel documentation gap: the `wiki-config.yaml` template (which mill-setup 
 ### detection-strings
 
 - Decision: match any of four substrings in the stderr/stdout of the failed `git push`: `Changes must be made through a pull request`, `repository rule violations`, `protected branch`, `GH006`.
-- Rationale: GitHub's push rejection for branch protection emits one or more of these strings. `GH006` is the machine-readable API-level prefix that appears consistently even when the human-readable message text varies across GitHub Enterprise versions.
+- Rationale: GitHub's push rejection for branch protection emits one or more of these strings. `GH006` is the machine-readable API-level prefix that appears consistently even when the human-readable message text varies across GitHub Enterprise versions. `protected branch` appears specifically as `protected branch hook declined` in the non-force push rejection; false-positive risk from force-push rejections is zero here because mill-merge's direct path never uses `--force`.
 - Rejected: matching only the three human-readable strings — misses GHE environments where the prose differs.
 
 ### fallback-scope
@@ -86,7 +86,9 @@ git -C <parent-path> reset --hard origin/<parent_branch>
 ```
 This must run before any attempt to push the child branch.
 
-After rollback, the PR-path block from Step 5 runs verbatim, with one addition: the PR body is `"Auto-created: direct push was rejected by branch protection.\n\n<task_description>"` instead of just the task summary.
+After rollback, the PR-path logic from Step 5 runs with one argument difference and one body addition:
+- `--base` must be `<parent-branch>` (not `<base-branch>`). In the existing PR path, `parent == base-branch` is a prerequisite so the two values are identical; in the fallback they can differ (e.g., parent is `develop`, base is `main`).
+- PR body is `"Auto-created: direct push was rejected by branch protection.\n\n<task_description>"` instead of just the task summary.
 
 The skip target is Step 11 (Release lock) — same as the existing PR path.
 
@@ -130,3 +132,5 @@ No new Python code → no unit tests. The change is to the SKILL.md (prose instr
 - **Q:** What to print after fallback? **A:** PR URL + suggestion to set `git.require-pr-to-base: true`.
 - **Q:** Template `git:` block fields? **A:** Both `require-pr-to-base` and `base-branch`, both commented out.
 - **Q:** Live wiki/config.yaml? **A:** Also patched with the `git:` block (this is the dogfood repo).
+- **Q:** `--base` arg in fallback PR creation — `<base-branch>` or `<parent-branch>`? **A:** `<parent-branch>`; the existing PR path can use `<base-branch>` because it gates on `parent == base-branch`, but the fallback fires for any protected branch, so `--base` must follow `<parent-branch>` exactly.
+- **Q:** `protected branch` false-positive risk (appears in force-push rejections too)? **A:** Accepted; mill-merge's direct path never uses `--force`, so that error cannot occur in this code path.
