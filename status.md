@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-fix-r1
+phase: plan-fix-r2
 slug: migrate-to-uv
 branch: migrate-to-uv
 plan: plan
@@ -19,4 +19,6 @@ discussed  2026-04-30T17:38:55Z
 planning  2026-04-30T17:59:26Z
 plan-review-r1  2026-04-30T18:18:00Z
 plan-fix-r1  2026-04-30T18:18:00Z
+plan-review-r2  2026-04-30T18:33:00Z
+plan-fix-r2  2026-04-30T18:33:00Z
 ```

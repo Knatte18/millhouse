@@ -121,6 +121,7 @@ Card 8 covers the 12 simple skills with a single uniform `Run it` block — they
   - `plugins/mill/scripts/_wiki.py`
   - `plugins/mill/scripts/_paths.py`
   - `plugins/mill/scripts/_tasks_md.py`
+  - `plugins/mill/scripts/_sidebar.py`
   - `discussion.md`
 - **Modifies:**
   - `plugins/mill/skills/mill-groom/SKILL.md`
@@ -133,6 +134,7 @@ Card 8 covers the 12 simple skills with a single uniform `Run it` block — they
 - **Reads:**
   - `plugins/mill/skills/mill-resume/SKILL.md`
   - `plugins/mill/scripts/_sidebar.py`
+  - `plugins/mill/scripts/_junction.py`
   - `discussion.md`
 - **Modifies:**
   - `plugins/mill/skills/mill-resume/SKILL.md`
