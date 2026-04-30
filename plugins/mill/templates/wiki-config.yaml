@@ -58,6 +58,14 @@ spawn:
   branch_prefix: ""
 
 # ---------------------------------------------------------------------------
+# Git integration
+# ---------------------------------------------------------------------------
+# Uncomment if your remote enforces PRs to the base branch (branch protection).
+# git:
+#   require-pr-to-base: true   # create a PR instead of pushing directly
+#   base-branch: main          # branch to target; defaults to main if absent
+
+# ---------------------------------------------------------------------------
 # Layer 02: file-path templates (relative to wiki root, <SLUG> substituted)
 # ---------------------------------------------------------------------------
 
