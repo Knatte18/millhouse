@@ -28,6 +28,7 @@ from pathlib import Path
 
 HUB = Path(__file__).resolve().parent.parent.parent.parent
 SCRIPTS = HUB / "plugins" / "mill" / "scripts"
+PLUGIN_ROOT = HUB / "plugins" / "mill"
 TEMPLATES = HUB / "plugins" / "mill" / "templates"
 SCRATCH = HUB / ".scratch"
 

@@ -14,7 +14,7 @@ Exit codes:
 """
 from __future__ import annotations
 
-import shutil
+import os
 import subprocess
 import sys
 
@@ -88,13 +88,12 @@ def main(argv: list[str] | None = None) -> int:
     hub_subpath = worktree_cfg.get("hub_relative_path", ".")
     launch_path = resolve_hub_relative_path(selected_path, hub_subpath)
 
-    claude = shutil.which("claude") or "claude"
     print(f"Launching Claude Code in: {launch_path}", file=sys.stderr)
     print(f"Session name: {selected_slug}", file=sys.stderr)
-    subprocess.run(
-        [claude, "--name", selected_slug],
-        cwd=launch_path,
-    )
+    if os.name == "nt":
+        subprocess.run(["cmd", "/c", "claude", "--name", selected_slug], cwd=launch_path)
+    else:
+        subprocess.run(["claude", "--name", selected_slug], cwd=launch_path)
     return 0
 
 

@@ -13,26 +13,26 @@ sys.path.insert(0, str(SCRIPTS_DIR))
 from _render import render  # noqa: E402
 from _shortcuts import SHORTCUT_SCRIPTS, write_all  # noqa: E402
 
-TEMPLATE_PATH = TEMPLATES_DIR / "shortcut-wrapper.py"
+TEMPLATE_PATH = TEMPLATES_DIR / "shortcut-wrapper.ps1"
 
 
 def main() -> int:
     errors = 0
 
-    # --- render(template, {"SCRIPT": "millpy-list"}) contains runpy.run_path call for millpy-list.py ---
+    # --- render(template, {"SCRIPT": "millpy-list"}) contains uv run call for millpy-list.py ---
     rendered = render(TEMPLATE_PATH, {"SCRIPT": "millpy-list"})
     if "millpy-list.py" not in rendered:
         print("FAIL: rendered template does not contain 'millpy-list.py'", file=sys.stderr)
         errors += 1
     else:
         print("PASS: render substitutes <SCRIPT> -> millpy-list.py in template")
-    if "runpy.run_path" not in rendered:
-        print("FAIL: rendered template does not contain 'runpy.run_path'", file=sys.stderr)
+    if "uv run" not in rendered:
+        print("FAIL: rendered template does not contain 'uv run'", file=sys.stderr)
         errors += 1
     else:
-        print("PASS: rendered template contains runpy.run_path")
+        print("PASS: rendered template contains uv run")
 
-    # --- write_all against empty tempdir creates all 13 files ---
+    # --- write_all against empty tempdir creates all 13 PS1 files ---
     with tempfile.TemporaryDirectory() as tmpdir:
         mill_dir = Path(tmpdir)
         written = write_all(mill_dir)
@@ -46,9 +46,9 @@ def main() -> int:
         else:
             print(f"PASS: write_all creates all {expected_count} wrapper files")
         for script in SHORTCUT_SCRIPTS:
-            target = mill_dir / f"{script}.py"
+            target = mill_dir / f"{script}.ps1"
             if not target.exists():
-                print(f"FAIL: wrapper missing for {script}", file=sys.stderr)
+                print(f"FAIL: PS1 wrapper missing for {script}", file=sys.stderr)
                 errors += 1
             else:
                 content = target.read_text(encoding="utf-8")
@@ -80,7 +80,7 @@ def main() -> int:
         mill_dir = Path(tmpdir)
         write_all(mill_dir)  # seed all files
         stale_script = SHORTCUT_SCRIPTS[0]
-        stale_path = mill_dir / f"{stale_script}.py"
+        stale_path = mill_dir / f"{stale_script}.ps1"
         stale_path.write_text("# stale content\n", encoding="utf-8")
         written_third = write_all(mill_dir)
         if len(written_third) != 1:
@@ -96,7 +96,7 @@ def main() -> int:
             )
             errors += 1
         else:
-            print(f"PASS: only stale wrapper ({stale_script}.py) is rewritten")
+            print(f"PASS: only stale wrapper ({stale_script}.ps1) is rewritten")
         # Confirm the stale file now has the correct content
         refreshed = stale_path.read_text(encoding="utf-8")
         if f"{stale_script}.py" not in refreshed:

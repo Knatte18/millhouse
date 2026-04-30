@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import argparse
 import os
-import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -32,9 +31,12 @@ from _paths import resolve_git_root, resolve_hub_relative_path, resolve_wiki_pat
 def _build_code_argv(worktree_path: Path) -> list[str]:
     """Build the argv to open VS Code at ``worktree_path``.
 
-    Uses ``cmd /c code`` on Windows so cmd.exe resolves the binary via its
-    own PATH (which includes WindowsApps), avoiding the PATH truncation that
-    occurs in debugpy and other subprocess-launched environments.
+    On Windows, delegates resolution to cmd.exe so that ``code.cmd`` is
+    found via the full interactive PATH (including WindowsApps), which is
+    not inherited by Python subprocesses launched from debugpy or non-
+    interactive shells (see discussion.md § debugpy-path).
+
+    On POSIX, ``code`` is on PATH and subprocess inherits it normally.
 
     Args:
         worktree_path: Absolute path to the worktree to open.
@@ -44,8 +46,7 @@ def _build_code_argv(worktree_path: Path) -> list[str]:
     """
     if os.name == "nt":
         return ["cmd", "/c", "code", str(worktree_path)]
-    code = shutil.which("code") or "code"
-    return [code, str(worktree_path)]
+    return ["code", str(worktree_path)]
 
 
 def main(argv: list[str] | None = None) -> int:

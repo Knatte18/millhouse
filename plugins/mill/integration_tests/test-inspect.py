@@ -22,6 +22,7 @@ from pathlib import Path
 
 HUB = Path(__file__).resolve().parent.parent.parent.parent
 SCRIPTS = HUB / "plugins" / "mill" / "scripts"
+PLUGIN_ROOT = HUB / "plugins" / "mill"
 SCRATCH = HUB / ".scratch"
 
 sys.path.insert(0, str(SCRIPTS))
@@ -110,7 +111,7 @@ def main() -> int:
         print(f"[test-inspect] container: {container}", file=sys.stderr)
 
         # --- all slugs ---
-        r = _run([sys.executable, str(script)], cwd=hub, check=False)
+        r = _run(["uv", "run", "--project", str(PLUGIN_ROOT), str(script)], cwd=hub, check=False)
         assert r.returncode == 0, f"all-slugs exit={r.returncode}\n{r.stderr}"
         assert "## slug-alpha" in r.stdout, "slug-alpha heading missing"
         assert "## slug-beta" in r.stdout, "slug-beta heading missing"
@@ -120,19 +121,19 @@ def main() -> int:
         print("PASS: all-slugs — both headings + phases + Timeline present")
 
         # --- single slug ---
-        r = _run([sys.executable, str(script), "slug-alpha"], cwd=hub, check=False)
+        r = _run(["uv", "run", "--project", str(PLUGIN_ROOT), str(script), "slug-alpha"], cwd=hub, check=False)
         assert r.returncode == 0, f"single-slug exit={r.returncode}\n{r.stderr}"
         assert "## slug-alpha" in r.stdout, "slug-alpha heading missing in single-slug run"
         assert "## slug-beta" not in r.stdout, "slug-beta should be absent in single-slug run"
         print("PASS: single-slug — only slug-alpha in output")
 
         # --- unknown slug ---
-        r = _run([sys.executable, str(script), "no-such-slug"], cwd=hub, check=False)
+        r = _run(["uv", "run", "--project", str(PLUGIN_ROOT), str(script), "no-such-slug"], cwd=hub, check=False)
         assert r.returncode == 1, f"unknown-slug should exit 1, got {r.returncode}"
         print("PASS: unknown-slug — exit code 1")
 
         # --- --json schema ---
-        r = _run([sys.executable, str(script), "--json"], cwd=hub, check=False)
+        r = _run(["uv", "run", "--project", str(PLUGIN_ROOT), str(script), "--json"], cwd=hub, check=False)
         assert r.returncode == 0, f"--json exit={r.returncode}\n{r.stderr}"
         data = json.loads(r.stdout)
         for slug in ("slug-alpha", "slug-beta"):
@@ -153,7 +154,7 @@ def main() -> int:
         print("PASS: --json — schema shape, phase, home_marker correct")
 
         # --- --since filter ---
-        r = _run([sys.executable, str(script), "--since", "planned"], cwd=hub, check=False)
+        r = _run(["uv", "run", "--project", str(PLUGIN_ROOT), str(script), "--since", "planned"], cwd=hub, check=False)
         assert r.returncode == 0, f"--since exit={r.returncode}\n{r.stderr}"
         assert "## slug-alpha" in r.stdout, "slug-alpha should pass --since planned"
         assert "## slug-beta" not in r.stdout, "slug-beta (discussing) should be filtered by --since planned"
@@ -162,7 +163,7 @@ def main() -> int:
         # --- no active tasks ---
         shutil.rmtree(str(wiki / "active"), ignore_errors=True)
         (wiki / "active").mkdir()
-        r = _run([sys.executable, str(script)], cwd=hub, check=False)
+        r = _run(["uv", "run", "--project", str(PLUGIN_ROOT), str(script)], cwd=hub, check=False)
         assert r.returncode == 0, f"no-active exit={r.returncode}\n{r.stderr}"
         assert "(no active tasks)" in r.stdout, f"expected '(no active tasks)', got: {r.stdout!r}"
         print("PASS: no-active — exit 0, '(no active tasks)' printed")
@@ -175,7 +176,7 @@ def main() -> int:
             "## Alpha task [slug-alpha] [done]\n\n"
         )
         (wiki / "Home.md").write_text(warn_home, encoding="utf-8")
-        r = _run([sys.executable, str(script)], cwd=hub, check=False)
+        r = _run(["uv", "run", "--project", str(PLUGIN_ROOT), str(script)], cwd=hub, check=False)
         assert r.returncode == 0, f"warn-marker exit={r.returncode}\n{r.stderr}"
         assert "[WARN]" in r.stdout, f"[WARN] not found in output: {r.stdout!r}"
         assert "done" in r.stdout, f"marker value 'done' not in output: {r.stdout!r}"

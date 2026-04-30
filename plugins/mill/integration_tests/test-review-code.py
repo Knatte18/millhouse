@@ -43,6 +43,7 @@ _INTEGRATION_TESTS_DIR = Path(__file__).resolve().parent
 _MILL_ROOT = _INTEGRATION_TESTS_DIR.parent
 _HUB = _MILL_ROOT.parent.parent          # plugins/mill -> plugins -> hub
 _SCRIPTS = _MILL_ROOT / "scripts"
+_PLUGIN_ROOT = _MILL_ROOT
 _FIXTURES = _INTEGRATION_TESTS_DIR / "fixtures"
 _SCRATCH = _HUB / ".scratch"
 
@@ -200,10 +201,9 @@ def _git(project_root: Path, *args: str) -> None:
 def _run_script(script: Path, cwd: Path) -> tuple[int, str, str]:
     """Run a Python script; return (exit_code, stdout, stderr)."""
     env = os.environ.copy()
-    env["PYTHONPATH"] = str(_SCRIPTS)
     env["PYTHONIOENCODING"] = "utf-8"
     result = subprocess.run(
-        [sys.executable, str(script)],
+        ["uv", "run", "--project", str(_PLUGIN_ROOT), str(script)],
         cwd=str(cwd),
         capture_output=True,
         text=True,

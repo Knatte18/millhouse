@@ -22,6 +22,7 @@ from pathlib import Path
 
 HUB = Path(__file__).resolve().parent.parent.parent.parent
 SCRIPTS = HUB / "plugins" / "mill" / "scripts"
+PLUGIN_ROOT = HUB / "plugins" / "mill"
 SCRATCH = HUB / ".scratch"
 
 
@@ -162,7 +163,7 @@ def main() -> int:
 
         # --- Test 1: dry-run ---
         result = _run(
-            [sys.executable, str(SCRIPTS / "millpy-cleanup.py")],
+            ["uv", "run", "--project", str(PLUGIN_ROOT), str(SCRIPTS / "millpy-cleanup.py")],
             cwd=hub, check=False,
         )
         print(f"--- dry-run stdout ---\n{result.stdout}", file=sys.stderr)
@@ -183,7 +184,7 @@ def main() -> int:
 
         # --- Test 2: --apply ---
         result = _run(
-            [sys.executable, str(SCRIPTS / "millpy-cleanup.py"), "--apply"],
+            ["uv", "run", "--project", str(PLUGIN_ROOT), str(SCRIPTS / "millpy-cleanup.py"), "--apply"],
             cwd=hub, check=False,
         )
         print(f"--- apply stdout ---\n{result.stdout}", file=sys.stderr)

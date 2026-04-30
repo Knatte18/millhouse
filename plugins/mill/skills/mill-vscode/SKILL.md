@@ -10,7 +10,7 @@ Scans active worktrees and opens VS Code in the selected one. Use `--slug` to sk
 ## Run it
 
 ```bash
-python ${CLAUDE_PLUGIN_ROOT}/scripts/millpy-vscode.py [--slug <slug>] [--list]
+uv run --project "${CLAUDE_PLUGIN_ROOT}" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-vscode.py" [--slug <slug>] [--list]
 ```
 
 Exits 0 (with a message) when no active worktrees exist. Auto-selects when only one worktree is found. Probes `code.cmd`, `code`, and the Windows `LOCALAPPDATA` install path.

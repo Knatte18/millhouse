@@ -33,6 +33,7 @@ from pathlib import Path
 
 HUB = Path(__file__).resolve().parent.parent.parent.parent
 SCRIPTS = HUB / "plugins" / "mill" / "scripts"
+PLUGIN_ROOT = HUB / "plugins" / "mill"
 SCRATCH = HUB / ".scratch"
 
 
@@ -142,7 +143,7 @@ def _run_spawn(hub: Path) -> subprocess.CompletedProcess:
     env = os.environ.copy()
     env["PYTHONIOENCODING"] = "utf-8"
     return subprocess.run(
-        [sys.executable, str(SCRIPTS / "millpy-spawn.py"), "--slug", "demo-task"],
+        ["uv", "run", "--project", str(PLUGIN_ROOT), str(SCRIPTS / "millpy-spawn.py"), "--slug", "demo-task"],
         cwd=str(hub),
         capture_output=True,
         text=True,

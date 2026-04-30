@@ -20,6 +20,7 @@ from pathlib import Path
 
 HUB = Path(__file__).resolve().parent.parent.parent.parent
 SCRIPTS = HUB / "plugins" / "mill" / "scripts"
+PLUGIN_ROOT = HUB / "plugins" / "mill"
 SCRATCH = HUB / ".scratch"
 
 sys.path.insert(0, str(SCRIPTS))
@@ -128,7 +129,7 @@ def main() -> int:
         script = SCRIPTS / "millpy-abandon.py"
 
         # --- Scenario A: happy path ---
-        result = _run([sys.executable, str(script), "--force"], cwd=worktree, check=False)
+        result = _run(["uv", "run", "--project", str(PLUGIN_ROOT), str(script), "--force"], cwd=worktree, check=False)
         print(f"--- A stdout ---\n{result.stdout}", file=sys.stderr)
         print(f"--- A stderr ---\n{result.stderr}", file=sys.stderr)
         assert result.returncode == 0, (
@@ -155,7 +156,7 @@ def main() -> int:
         print("PASS Scenario A: happy path — status.md updated, wiki committed")
 
         # --- Scenario B: hub guard ---
-        result = _run([sys.executable, str(script), "--force"], cwd=hub, check=False)
+        result = _run(["uv", "run", "--project", str(PLUGIN_ROOT), str(script), "--force"], cwd=hub, check=False)
         print(f"--- B stdout ---\n{result.stdout}", file=sys.stderr)
         print(f"--- B stderr ---\n{result.stderr}", file=sys.stderr)
         assert result.returncode != 0, (
@@ -164,7 +165,7 @@ def main() -> int:
         print("PASS Scenario B: hub guard — non-zero exit when run from hub")
 
         # --- Scenario C: double-abandon guard ---
-        result = _run([sys.executable, str(script), "--force"], cwd=worktree, check=False)
+        result = _run(["uv", "run", "--project", str(PLUGIN_ROOT), str(script), "--force"], cwd=worktree, check=False)
         print(f"--- C stdout ---\n{result.stdout}", file=sys.stderr)
         print(f"--- C stderr ---\n{result.stderr}", file=sys.stderr)
         assert result.returncode != 0, (
