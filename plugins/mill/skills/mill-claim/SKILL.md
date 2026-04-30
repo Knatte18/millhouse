@@ -10,7 +10,7 @@ Like `mill-spawn` but in-place: claims a task and creates a new branch in the cu
 ## Run it
 
 ```bash
-python ${CLAUDE_PLUGIN_ROOT}/scripts/millpy-claim.py [--slug <slug>] [--dry-run]
+uv run --project "${CLAUDE_PLUGIN_ROOT}" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-claim.py" [--slug <slug>] [--dry-run]
 ```
 
 Does not create a new worktree directory. Exits 0 (not 1) when the backlog is empty. Takes the wiki lock during the claim step.

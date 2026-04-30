@@ -10,7 +10,7 @@ Reads `Home.md` from the wiki clone and prints one line per task. A `[P]` prefix
 ## Run it
 
 ```bash
-python ${CLAUDE_PLUGIN_ROOT}/scripts/millpy-list.py
+uv run --project "${CLAUDE_PLUGIN_ROOT}" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-list.py"
 ```
 
 No wiki lock taken — read-only. Exits 1 when the wiki is not found or `Home.md` is missing. Exits 0 with `(no tasks)` when the backlog is empty.
