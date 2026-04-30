@@ -21,20 +21,21 @@ A third deliverable is folded in: SKILL.md helper call shapes are out of sync wi
 - `plugins/mill/pyproject.toml` — new; declares Python version and runtime dependencies (PyYAML).
 - `plugins/mill/templates/shortcut-wrapper.ps1` — new PS1 template replacing the existing `.py` template.
 - `plugins/mill/scripts/_shortcuts.py` — updated to write `.ps1` wrappers; delete old `.py` wrappers.
-- mill-setup SKILL.md — Phase 1 adds `uv` presence check; Phase 4.7 updated (PS1 wrappers + PYTHONPATH Windows user env var); all `python -c` snippets → `uv run --project "${CLAUDE_PLUGIN_ROOT}" python -c`.
-- All other SKILL.md files — update every `python … millpy-X.py` invocation to `uv run --project "${CLAUDE_PLUGIN_ROOT}" …`; `PYTHONPATH=… python -c` → `uv run --project "${CLAUDE_PLUGIN_ROOT}" python -c`; ensure all skills consistently use `${CLAUDE_PLUGIN_ROOT}/scripts/` (not repo-relative `plugins/mill/scripts/`).
+- mill-setup SKILL.md — Phase 1 adds `uv` presence check; Phase 4.7 updated (PS1 wrappers + PYTHONPATH Windows user env var); all `python -c` snippets → `PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" uv run --project "${CLAUDE_PLUGIN_ROOT}" python -c` (inline prefix required — see bootstrap note in Technical context).
+- All other SKILL.md files — update every `python … millpy-X.py` invocation to `uv run --project "${CLAUDE_PLUGIN_ROOT}" …`; `PYTHONPATH=… python -c` → `uv run --project "${CLAUDE_PLUGIN_ROOT}" python -c`; ensure all skills consistently use `${CLAUDE_PLUGIN_ROOT}/scripts/` (not repo-relative `plugins/mill/scripts/`). No inline PYTHONPATH needed — global env var is present.
 - SKILL.md API call-shape audit (issue #70) — fix all helper-call examples that are wrong against real function signatures.
 - `plugins/mill/integration_tests/test-bootstrap.ps1` — update to `uv run`.
 - Python integration tests (`test-spawn.py` etc.) — update subprocess invocations to `uv run`; remove explicit PYTHONPATH overrides.
 - `plugins/mill/SCRIPTS.md` — new; auto-generated from `--help` output of all `millpy-*.py` scripts.
 - `CLAUDE.md` — add convention: "Mill scripts are invoked via `uv run`, not `python`."
+- PATH truncation fix in `millpy-vscode.py` and `millpy-terminal.py` — replace `shutil.which("code.cmd")` / `shutil.which("claude")` with `["cmd", "/c", "code"]` / `["cmd", "/c", "claude"]` invocation pattern; same fix `millpy-vscode.py` already applies partially (bundled here to avoid a separate sweep).
 
 **Out:**
 - Refactoring helper modules into a proper installable Python package (eliminates PYTHONPATH, but is a big restructure — deferred).
 - CMD wrappers — PS1 only.
 - `update-plugins.ps1` — no changes; it re-installs the plugin but does not update wrappers or PYTHONPATH (operator re-runs mill-setup after a plugin update).
 - `plugins/mill/unit_tests/run-all.py` — no changes; it uses `sys.executable` to invoke tests, which is correct when run under `uv run`.
-- Any changes to the Python scripts themselves — migration is invocation-only.
+- Python script changes beyond the two PATH-fix files (`millpy-vscode.py`, `millpy-terminal.py`) and test infrastructure — migration is otherwise invocation-only.
 
 ## Decisions
 
@@ -71,8 +72,8 @@ A third deliverable is folded in: SKILL.md helper call shapes are out of sync wi
 
 ### ps1-wrapper-design
 
-- Decision: PS1 wrapper finds the latest installed plugin version at runtime via semver-sort on `$HOME\.claude\plugins\cache\millhouse\mill`, then calls `uv run --project $pluginRoot "$pluginRoot\scripts\<SCRIPT>.py" @args`. No need to set PYTHONPATH in the wrapper — it's a global Windows env var.
-- Rationale: Semver-sort means the wrapper automatically picks up new versions without regeneration. Static version hardcode would require `update-plugins.ps1` to regenerate wrappers, which contradicts the decision that `update-plugins.ps1` does not touch wrappers.
+- Decision: PS1 wrapper finds the latest installed plugin version at runtime via lexicographic-sort (descending) on `$HOME\.claude\plugins\cache\millhouse\mill`, then calls `uv run --project $pluginRoot "$pluginRoot\scripts\<SCRIPT>.py" @args`. No need to set PYTHONPATH in the wrapper — it's a global Windows env var.
+- Rationale: Lexicographic-sort (same as the existing `.py` wrapper — `sorted(..., key=lambda d: d.name, reverse=True)`) means the wrapper automatically picks up new versions without regeneration. Known limitation: `0.9.0` sorts after `0.10.0` lexicographically — pre-existing in the `.py` wrapper, not new to this task. Static version hardcode would require `update-plugins.ps1` to regenerate wrappers, which contradicts the decision that `update-plugins.ps1` does not touch wrappers.
 - Rejected: Hardcoded version path — would go stale after every plugin update.
 
 ### scripts-md
@@ -86,6 +87,12 @@ A third deliverable is folded in: SKILL.md helper call shapes are out of sync wi
 - Decision: Audit and fix all helper call shapes in SKILL.md files against real Python signatures. Known errors are the starting list; implementation agent must grep for others.
 - Rationale: Issue #70 documents TypeErrors in live runs; this task already touches every SKILL.md file. Not fixing now means another full-sweep task later.
 - Rejected: Deferring — unjustifiable cost given that all SKILL.md files are already open.
+
+### debugpy-path
+
+- Decision: Replace `shutil.which("code.cmd")` in `millpy-vscode.py` and `shutil.which("claude")` in `millpy-terminal.py` with `["cmd", "/c", "code", …]` and `["cmd", "/c", "claude", …]` invocation patterns.
+- Rationale: `shutil.which()` in a Python subprocess inherits PATH from the calling process. WindowsApps (`%LOCALAPPDATA%\Microsoft\WindowsApps`) is only added to PATH by Windows for interactive shells — subprocess inheritance omits it. `cmd.exe` always uses the full interactive PATH including WindowsApps. `millpy-vscode.py` already has a partial fix for this; `millpy-terminal.py` does not. Bundling both fixes in this task avoids a separate sweep.
+- Rejected: Fixing PATH at the OS env level — intrusive and fragile; fixing at the PS1 wrapper level — the wrappers only control the outer call, not `shutil.which()` calls inside the Python script.
 
 ## Technical context
 
@@ -138,6 +145,14 @@ powershell -Command "[System.Environment]::SetEnvironmentVariable('PYTHONPATH', 
 
 Alternatively, mill-setup Phase 4.7 can instruct the operator to run the PowerShell command manually — the skill is a CC session, and setting a Windows env var from a CC Bash session requires `powershell -Command`.
 
+**Bootstrap note (chicken-and-egg):** Phase 4.7 is the step that *sets* the global PYTHONPATH env var. That env var does not exist in the current process (nor in any child process spawned before Phase 4.7 completes). Therefore, every `python -c` or `uv run` call in mill-setup — including the `_shortcuts.write_all()` call in Phase 4.7 itself — must use an explicit inline PYTHONPATH prefix:
+
+```bash
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" uv run --project "${CLAUDE_PLUGIN_ROOT}" python -c "..."
+```
+
+This inline prefix is **only** required in mill-setup. All other skills run after mill-setup has set the global env var and can rely on it without inline prefix.
+
 ### pyproject.toml contents
 
 ```toml
@@ -181,7 +196,24 @@ No `$env:PYTHONPATH` line — the global Windows env var is already in scope.
 
 **test-bootstrap.ps1**: Remove `$env:PYTHONPATH = $scripts`. Change `python "$scripts/millpy-X.py"` → `uv run --project $millRoot "$scripts\millpy-X.py"` where `$millRoot = Split-Path -Parent $scripts` (= `plugins/mill/`). The test sets `$scripts = Join-Path $millRoot 'scripts'` already.
 
-**Python integration tests (test-spawn.py, test-cleanup.py, etc.)**: Currently call `subprocess.run([sys.executable, str(SCRIPTS / "millpy-X.py")], env={**os.environ, "PYTHONPATH": str(SCRIPTS)})`. Change to `subprocess.run(["uv", "run", "--project", str(PLUGIN_ROOT), str(SCRIPTS / "millpy-X.py")])`. `PLUGIN_ROOT = HUB / "plugins" / "mill"` (or equivalent derivation from SCRIPTS). Remove explicit PYTHONPATH from env override — global env var covers it.
+**Python integration tests**: Two distinct patterns in the current test suite:
+
+- **Review tests** (`test-review-code.py`, `test-review-discussion.py`, `test-review-plan.py`): explicitly set `env["PYTHONPATH"] = str(SCRIPTS)` in the subprocess call. Change to `["uv", "run", "--project", str(PLUGIN_ROOT), ...]` and remove the explicit PYTHONPATH override — global env var covers it.
+- **Other tests** (`test-spawn.py`, `test-cleanup.py`, `test-abandon.py`, `test-status.py`, `test-inspect.py`, `test-worktree-sibling-resolution.py`, `test-go-assets.py`, `test-plan-assets.py`, `test-merge.py`): use `sys.executable` with inherited env (ambient PYTHONPATH). Change `sys.executable` → `["uv", "run", "--project", str(PLUGIN_ROOT), ...]`. No env override to remove.
+
+For all Python integration tests: `PLUGIN_ROOT = HUB / "plugins" / "mill"` (derivable from the existing `SCRIPTS = HUB / "plugins" / "mill" / "scripts"` constant at the top of each file).
+
+### PATH truncation in debugpy/subprocess environments
+
+`shutil.which()` in a Python subprocess inherits PATH from the calling process. On Windows, `%LOCALAPPDATA%\Microsoft\WindowsApps` (where `code.cmd`, `claude`, and other Store-installed tools live) is added by Windows only for interactive shell sessions — it is not inherited by child processes spawned from a non-interactive context (e.g., debugpy, CC's Bash tool).
+
+**Affected scripts and existing state:**
+- `millpy-vscode.py` — `shutil.which("code.cmd")` already partially patched to `["cmd", "/c", "code", path]` for Windows; verify and clean up.
+- `millpy-terminal.py` — `shutil.which("claude")` still uses the failing pattern; needs the same `["cmd", "/c", "claude"]` fix.
+
+**Pattern to apply:** replace any `shutil.which("<tool>")` → `[<tool>]` construction with `["cmd", "/c", "<tool>", ...]` on Windows. `cmd.exe` always uses the full interactive PATH including WindowsApps. This is the established pattern in the codebase (millpy-vscode partial fix) and requires no environment manipulation.
+
+**Scope note:** These are the only two scripts with external program lookups via `shutil.which`. The implementation agent must verify no other scripts have the same pattern before closing this item.
 
 ### SCRIPTS.md generation
 
@@ -189,7 +221,7 @@ Loop all `millpy-*.py` scripts, run `uv run --project plugins/mill plugins/mill/
 
 ## Constraints
 
-- **No Python script changes** — uv is a transparent runner; zero changes to `.py` files except test infrastructure.
+- **Python script changes limited** — uv is a transparent runner; `.py` file changes are limited to: (a) test infrastructure, (b) `millpy-vscode.py` and `millpy-terminal.py` for the PATH fix. All other scripts: no changes.
 - **`${CLAUDE_PLUGIN_ROOT}` in all intra-plugin paths** — no `plugins/mill/…` hardcodes in SKILL.md (CLAUDE.md constraint).
 - **Wrappers are never used by CC** (CLAUDE.md + this task's decision).
 - **`uv` must be present** — mill-setup Phase 1 must verify `uv --version` succeeds before proceeding. Install instruction: `irm https://astral.sh/uv/install.ps1 | iex`.
@@ -218,3 +250,6 @@ Loop all `millpy-*.py` scripts, run `uv run --project plugins/mill plugins/mill/
 - **Q:** Semver-sort or hardcoded version in PS1 wrapper? **A:** Semver-sort at runtime — wrapper auto-picks latest version without regeneration.
 - **Q:** SCRIPTS.md in scope? **A:** Yes.
 - **Q:** SKILL.md API audit in scope? **A:** Yes.
+- **Q:** mill-setup's own Python calls — inline PYTHONPATH or global env var? **A:** Inline prefix (`PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" uv run --project ...`) for all mill-setup calls only — mill-setup is the bootstrapper that creates the global env var, so the var doesn't exist yet during that session. All other skills: global env var, no inline prefix.
+- **Q:** Lexicographic vs semver sort in PS1 wrapper? **A:** Lexicographic (same as existing .py wrapper). Pre-existing limitation: `0.9.0 > 0.10.0`. Documented, not fixed in this task.
+- **Q:** PATH truncation in debugpy (shutil.which can't find WindowsApps tools)? **A:** Fix `millpy-vscode.py` and `millpy-terminal.py` to use `["cmd", "/c", "<tool>"]` pattern. Bundled in this task.
