@@ -114,6 +114,21 @@ Final polish: migrate the integration-test infrastructure to `uv run`, generate 
   Place the bullet after the existing `${CLAUDE_PLUGIN_ROOT}` bullet (which already discusses intra-plugin paths) — they are conceptually related.
 - **Commit:** `docs(CLAUDE.md): document uv run convention and PYTHONPATH bootstrap`
 
+### Card 22b: Fix unit tests broken by prior batches
+
+- **Reads:**
+  - `plugins/mill/unit_tests/test-llm-claude.py`
+  - `plugins/mill/unit_tests/test-shortcut-wrapper.py`
+  - `plugins/mill/scripts/_llm_claude.py`
+  - `plugins/mill/scripts/_shortcuts.py`
+  - `plugins/mill/templates/shortcut-wrapper.ps1`
+- **Modifies:**
+  - `plugins/mill/unit_tests/test-llm-claude.py`
+  - `plugins/mill/unit_tests/test-shortcut-wrapper.py`
+- **Creates:** none
+- **Requirements:** (1) test-llm-claude.py imports `_resolve_claude` which no longer exists (removed in path-fix batch; replaced by `_claude_argv_prefix()`). Remove `_resolve_claude` from imports; import `_claude_argv_prefix` instead; update the `_build_argv` argv assertion to use `_claude_argv_prefix()` as the prefix. (2) test-shortcut-wrapper.py targets `shortcut-wrapper.py` template (replaced with `.ps1` in foundation batch) and expects `.py` wrapper files. Update `TEMPLATE_PATH` to `shortcut-wrapper.ps1`; replace the `runpy.run_path` content check with a check for `uv run`; update all file references from `.py` to `.ps1`.
+- **Commit:** `test(unit): fix test-llm-claude and test-shortcut-wrapper for path-fix+foundation changes`
+
 ## Batch Tests
 
 `verify:` runs `uv run --project plugins/mill plugins/mill/unit_tests/run-all.py` — the canonical end-of-task smoke test. This passes if every existing unit test passes when invoked through uv (which it should, since uv is a transparent runner for Python). Test-bootstrap.ps1 is verified per-card by `pwsh plugins/mill/integration_tests/test-bootstrap.ps1` exiting PASS. Python integration tests are verified per-card by running each via `uv run` (some require external state and are documented as such). SCRIPTS.md is verified by visual inspection (one section per script). CLAUDE.md is verified by visual inspection (new bullet present, placement correct).
