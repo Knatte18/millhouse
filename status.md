@@ -27,5 +27,7 @@ implementing  2026-04-30T17:48:24Z
 ```yaml
 batches:
   - name: pr-fallback-edits
-    state: pending
+    state: running
+    implementer_session: d647d209-5f18-4dfd-9ff5-40e1655a34a5
+    start_sha: 143cfb86e7dc0a680e7180d3981c8996a67bdd27
 ```
