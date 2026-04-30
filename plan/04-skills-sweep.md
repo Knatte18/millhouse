@@ -165,7 +165,6 @@ Card 8 covers the 12 simple skills with a single uniform `Run it` block — they
 ### Card 18: API audit verification sweep across all SKILL.md
 
 - **Reads:**
-  - `plugins/mill/skills/*/SKILL.md` (all)
   - `plugins/mill/scripts/_config.py`
   - `plugins/mill/scripts/_wiki.py`
   - `plugins/mill/scripts/_status.py`
@@ -174,10 +173,11 @@ Card 8 covers the 12 simple skills with a single uniform `Run it` block — they
   - `plugins/mill/scripts/_notify.py`
   - `plugins/mill/scripts/_sidebar.py`
   - `plugins/mill/scripts/_active.py`
+  - `plugins/mill/scripts/_render.py`
   - `discussion.md`
-- **Modifies:** any `plugins/mill/skills/*/SKILL.md` that fails one of the verification greps below
+- **Modifies:** none
 - **Creates:** none
-- **Requirements:** Run grep verification across `plugins/mill/skills/*/SKILL.md` to confirm the migration is complete and consistent. For each grep that returns hits, fix the file in place; iterate until all greps return zero hits in invocation contexts (commentary mentions of `_wiki` etc. are not invocations and stay).
+- **Requirements:** Run grep verification across every file under `plugins/mill/skills/` matching `*/SKILL.md` (40+ files including style/workflow/conversation that this batch does not otherwise touch) to confirm the migration is complete and consistent. The card itself does not modify any file directly — if a grep below catches an issue, the implementer fixes it by amending the appropriate earlier card's commit (cards 7-17, depending on which file fails). The audit is verification-only at this card; modifications belong to whichever card owns the failing file.
   - Grep `^\s*python\s+\$\{?CLAUDE_PLUGIN_ROOT\}?` → must be zero. Indicates a missed `python` → `uv run` substitution.
   - Grep `\bPYTHONPATH=` → must be zero outside mill-setup/SKILL.md (mill-setup is the only skill that uses inline PYTHONPATH).
   - Grep `python\s+plugins/mill/scripts/` → must be zero. Indicates a missed repo-relative path.
