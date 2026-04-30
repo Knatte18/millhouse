@@ -12,6 +12,8 @@ Flags:
                        ``NEED_CONTEXT`` retry: the prior round listed the
                        files it could not find; the orchestrator passes
                        them explicitly here.
+    --max-rounds <N>   Override review.code.rounds for this invocation.
+                       Default: use config value.
 
 Exit codes:
     0 — review complete; JSON result on stdout
@@ -44,6 +46,12 @@ def main(argv: list[str] | None = None) -> int:
             "after a prior NEED_CONTEXT verdict."
         ),
     )
+    parser.add_argument(
+        "--max-rounds",
+        type=int,
+        default=None,
+        help="Override review.code.rounds for this invocation. Default: use config value.",
+    )
     args = parser.parse_args(argv)
 
     from _paths import resolve_wiki_path
@@ -73,6 +81,7 @@ def main(argv: list[str] | None = None) -> int:
             mill_dir,
             wiki_root,
             project_root,
+            max_rounds=args.max_rounds,
             batch_name=args.batch,
             extra_files=extra_files,
         )

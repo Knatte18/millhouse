@@ -65,6 +65,7 @@ from _review_common import (  # noqa: E402
     RE_BATCH,
     RE_SIMPLE,
     ReviewError,
+    _load_root_from_overview,
     aggregate_verdict,
     build_manifest_section,
     build_reattached_section,
@@ -77,6 +78,7 @@ from _review_common import (  # noqa: E402
     load_reviewer,
     load_task_title,
     parse_batch_refs,
+    parse_blocking_count,
     parse_missing_context,
     parse_verdict,
     render_prompt,
@@ -878,6 +880,56 @@ def main() -> int:
         assert str(fb) in result, "fb not in output"
         assert result.index(str(fa)) < result.index(str(fb)), "fa should appear before fb"
         print("PASS: build_reattached_section two paths -> both delimiters in order")
+
+    # ---------------------------------------------------------------------------
+    # parse_blocking_count
+    # ---------------------------------------------------------------------------
+
+    # Empty string → 0
+    result = parse_blocking_count("", severity="BLOCKING")
+    assert result == 0, f"expected 0, got {result}"
+    print("PASS: parse_blocking_count empty string -> 0")
+
+    # One BLOCKING heading
+    result = parse_blocking_count(
+        "# Review\n\n## Findings\n\n### [BLOCKING] foo\n",
+        severity="BLOCKING",
+    )
+    assert result == 1, f"expected 1, got {result}"
+    print("PASS: parse_blocking_count one BLOCKING heading -> 1")
+
+    # Two BLOCKINGs and one NIT
+    text = "### [BLOCKING] one\n### [BLOCKING] two\n### [NIT] three\n"
+    result = parse_blocking_count(text, severity="BLOCKING")
+    assert result == 2, f"expected 2, got {result}"
+    print("PASS: parse_blocking_count two BLOCKINGs -> 2")
+    result = parse_blocking_count(text, severity="NIT")
+    assert result == 1, f"expected 1, got {result}"
+    print("PASS: parse_blocking_count one NIT -> 1")
+
+    # Discussion-style GAP/NOTE
+    text = "### [GAP] missing edge case\n### [NOTE] minor\n"
+    result = parse_blocking_count(text, severity="GAP")
+    assert result == 1, f"expected 1, got {result}"
+    print("PASS: parse_blocking_count GAP severity -> 1")
+
+    # Severity match is case-sensitive
+    result = parse_blocking_count("### [blocking] foo\n", severity="BLOCKING")
+    assert result == 0, f"expected 0, got {result}"
+    print("PASS: parse_blocking_count case-sensitive: lowercase blocking with BLOCKING severity -> 0")
+
+    # Heading at start of line only — mid-line marker not counted
+    result = parse_blocking_count("text ### [BLOCKING] foo\n", severity="BLOCKING")
+    assert result == 0, f"expected 0, got {result}"
+    print("PASS: parse_blocking_count mid-line marker not counted -> 0")
+
+    # ---------------------------------------------------------------------------
+    # _load_root_from_overview: importable from _review_common
+    # ---------------------------------------------------------------------------
+
+    # Confirm the function is importable (not AttributeError); do not exercise behaviour
+    assert callable(_load_root_from_overview), "_load_root_from_overview should be callable"
+    print("PASS: _load_root_from_overview importable from _review_common")
 
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)

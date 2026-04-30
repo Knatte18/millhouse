@@ -3,6 +3,10 @@
 Resolves project roots, loads config, finds the active task slug, calls
 the discussion review backend, and prints JSON to stdout.
 
+Flags:
+    --max-rounds <N>   Override review.discussion.rounds for this invocation.
+                       Default: use config value.
+
 Exit codes:
     0 — review complete; JSON result on stdout
     1 — error (missing slug, bad config, backend failure); message on stderr
@@ -19,7 +23,13 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Run a discussion review for the active task."
     )
-    parser.parse_args(argv)  # exits 0 on --help; raises SystemExit on bad args
+    parser.add_argument(
+        "--max-rounds",
+        type=int,
+        default=None,
+        help="Override review.discussion.rounds for this invocation. Default: use config value.",
+    )
+    args = parser.parse_args(argv)
 
     from _paths import resolve_wiki_path
     from _review_common import ReviewError, find_active_slug, load_config
@@ -32,7 +42,7 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         slug = find_active_slug(mill_dir)
-        result = run(cfg, slug, mill_dir, project_root)
+        result = run(cfg, slug, mill_dir, project_root, max_rounds=args.max_rounds)
         print(json.dumps(result.to_dict()))
         return 0
     except ReviewError as exc:

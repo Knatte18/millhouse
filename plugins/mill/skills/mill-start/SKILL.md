@@ -70,12 +70,10 @@ Loop up to `max_review_rounds` rounds. Each round:
 2. Invoke the CLI as a subprocess:
 
    ```bash
-   python plugins/mill/scripts/millpy-review-discussion.py \
-       --slug <slug> \
-       --round <N>
+   python plugins/mill/scripts/millpy-review-discussion.py
    ```
 
-   The script writes the review file under `<worktree_root>/reviews/` and prints a one-line JSON summary: `{"verdict": "APPROVE" | "GAPS_FOUND", "review_file": "<abs-path>"}`.
+   The script writes the review file under `<worktree_root>/reviews/` and prints a one-line JSON summary: `{"type": "discussion", "round": <int>, "verdict": "APPROVE" | "GAPS_FOUND", "blocking_count": <int>, "reviews": [{"scope": "holistic", "verdict": ..., "file": "<abs-path>", "session_id": "<id>"}]}`.
 
 3. **BEFORE reading the review file, load the `mill-receiving-review` skill** (see `plugins/mill/skills/mill-receiving-review/SKILL.md`). This is non-negotiable — the decision tree it encodes is what keeps review loops useful instead of adversarial.
 

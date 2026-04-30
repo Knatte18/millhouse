@@ -424,6 +424,115 @@ def main() -> int:
         finally:
             os.chdir(orig_dir)
 
+    # ------------------------------------------------------------------
+    # Test 7 — max_rounds kwarg override
+    # ------------------------------------------------------------------
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir) / "container" / "wts" / SLUG
+        project_root.mkdir(parents=True)
+        subprocess.run(["git", "-C", str(project_root), "init"], check=True, capture_output=True)
+        wiki_root = Path(tmpdir) / "wiki"
+        mill_dir = project_root / ".millhouse"
+        _active.write(
+            mill_dir,
+            slug=SLUG, task_title="Test", branch="test",
+            spawned_at="2026-01-01T00:00:00Z",
+        )
+        plan_dir = project_root / "plan"
+        plan_dir.mkdir(parents=True)
+        (plan_dir / "00-overview.md").write_text(
+            _make_overview([("foo", "01-foo.md")]), encoding="utf-8"
+        )
+        (plan_dir / "01-foo.md").write_text(
+            _make_batch_file("foo", ["src/f.py"], []), encoding="utf-8"
+        )
+        (project_root / "src").mkdir(parents=True)
+        (project_root / "src" / "f.py").write_text("x", encoding="utf-8")
+
+        cfg7 = {
+            "paths": {
+                "discussion_file": "discussion.md",
+                "plan_dir":        "plan/",
+                "reviews_dir":     "reviews/",
+            },
+            "review": {
+                "code": {"rounds": 3, "reviewer": "test_stub", "self_fix_rounds": 0, "holistic": True},
+            },
+        }
+
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            # Pre-populate 3 review files for batch "foo"
+            _seed_approve(3)
+            code_run(cfg7, SLUG, mill_dir, wiki_root, project_root, batch_name="foo")
+            code_run(cfg7, SLUG, mill_dir, wiki_root, project_root, batch_name="foo")
+            code_run(cfg7, SLUG, mill_dir, wiki_root, project_root, batch_name="foo")
+
+            # Round 4 without kwarg: cfg.rounds == 3 → ReviewError
+            try:
+                _seed_approve(1)
+                code_run(cfg7, SLUG, mill_dir, wiki_root, project_root, batch_name="foo")
+                errors += 1
+                print("FAIL test7: expected ReviewError for round 4 with cfg max=3", file=sys.stderr)
+            except Exception as exc:
+                if "exceeds max" in str(exc):
+                    print("PASS test7a: round 4 raises ReviewError without max_rounds kwarg")
+                else:
+                    errors += 1
+                    print(f"FAIL test7a: unexpected exception: {exc}", file=sys.stderr)
+
+            # Round 4 with max_rounds=5 kwarg: should succeed
+            _seed_approve(1)
+            r4 = code_run(cfg7, SLUG, mill_dir, wiki_root, project_root, batch_name="foo", max_rounds=5)
+            assert r4.round == 4, f"expected round 4, got {r4.round}"
+            fname4 = Path(r4.reviews[0]["file"]).name
+            assert "code-review-foo-r4" in fname4, f"unexpected filename: {fname4}"
+            print(f"PASS test7b: round 4 succeeds with max_rounds=5 → {fname4}")
+
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test7: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test7 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
+    # Test 8 — blocking_count populated from BLOCKING headings
+    # ------------------------------------------------------------------
+    with tempfile.TemporaryDirectory() as tmpdir:
+        mill_dir, wiki_root, project_root, cfg = _make_fixture(Path(tmpdir))
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            three_blockings = (
+                "# Review: test\n\n"
+                "### [BLOCKING] issue one\n\n- bullet\n\n"
+                "### [BLOCKING] issue two\n\n- bullet\n\n"
+                "### [BLOCKING] issue three\n\n- bullet\n\n"
+                "```yaml\nverdict: REQUEST_CHANGES\n```\n"
+            )
+            stub.seed([(three_blockings, "sid-b1")])
+            r = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, batch_name="alpha")
+            assert r.blocking_count == 3, f"expected blocking_count=3, got {r.blocking_count}"
+            print("PASS test8a: three BLOCKING headings → blocking_count == 3")
+
+            stub.seed([(APPROVE_TEXT, "sid-b2")])
+            r2 = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, batch_name="beta")
+            assert r2.blocking_count == 0, f"expected blocking_count=0, got {r2.blocking_count}"
+            print("PASS test8b: no BLOCKING headings → blocking_count == 0")
+
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test8: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test8 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
+
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)
         return 1

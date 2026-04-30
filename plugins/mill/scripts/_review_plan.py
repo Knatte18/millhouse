@@ -17,12 +17,13 @@ import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
-import yaml
-
 from _llm_claude import LLMError
 from _review_common import (
+    RE_BATCH,
+    RE_SIMPLE,
     ReviewError,
     ReviewResult,
+    _load_root_from_overview,
     aggregate_verdict,
     build_manifest_section,
     build_reattached_section,
@@ -33,6 +34,7 @@ from _review_common import (
     load_reviewer,
     load_task_title,
     parse_batch_refs,
+    parse_blocking_count,
     parse_missing_context,
     parse_verdict,
     read_constraints_md,
@@ -44,47 +46,56 @@ from _review_common import (
 )
 
 
-def _load_root_from_overview(overview_path: Path) -> str | None:
-    """Read the `root:` field from the overview's top fenced-yaml block.
+def _scan_approved_batches(reviews_dir: Path) -> dict[str, dict]:
+    """Scan reviews_dir for plan-batch reviews; return {stem: carryforward_entry} for approved batches.
 
-    v2 plan overviews use fenced ```yaml``` frontmatter (per the
-    project markdown convention; `---` is reserved for SKILL.md). This
-    parser locates the first ```yaml``` block and reads `root:` from
-    it. Returns the root string if present and truthy, else None.
-    Any structural problem (no block, unterminated, bad yaml, absent
-    key) silently yields None — the review surface degrades to
-    resolving paths against project_root directly, which is the right
-    behaviour for a mill-v2 worktree where root is typically empty.
+    For each unique batch stem found via RE_BATCH (with type=='plan'),
+    find the file with the highest round number, parse its verdict, and
+    if APPROVE, build a carryforward dict to splice into reviews[].
+    RE_SIMPLE is checked first per file to avoid mis-attributing a plan-
+    holistic review to a batch.
     """
-    try:
-        text = overview_path.read_text(encoding="utf-8")
-    except FileNotFoundError:
-        return None
+    if not reviews_dir.exists():
+        return {}
 
-    lines = text.splitlines()
-    start = None
-    for i, line in enumerate(lines):
-        if line.strip() == "```yaml":
-            start = i + 1
-            break
-    if start is None:
-        return None
-    end = None
-    for j in range(start, len(lines)):
-        if lines[j].strip() == "```":
-            end = j
-            break
-    if end is None:
-        return None
+    # Group by batch stem: {stem: (round_n, path)}
+    best: dict[str, tuple[int, Path]] = {}
+    for entry in reviews_dir.iterdir():
+        if not entry.is_file():
+            continue
+        name = entry.name
+        m_simple = RE_SIMPLE.match(name)
+        if m_simple:
+            continue  # holistic or non-batch file — skip
+        m_batch = RE_BATCH.match(name)
+        if m_batch and m_batch.group("type") == "plan":
+            batch_stem = m_batch.group("batch")
+            n = int(m_batch.group("n"))
+            if batch_stem not in best or n > best[batch_stem][0]:
+                best[batch_stem] = (n, entry)
 
-    fm_text = "\n".join(lines[start:end])
-    try:
-        data = yaml.safe_load(fm_text) or {}
-    except yaml.YAMLError:
-        return None
-    if not isinstance(data, dict):
-        return None
-    return data.get("root") or None
+    result: dict[str, dict] = {}
+    for batch_stem, (n, path) in best.items():
+        try:
+            raw = path.read_text(encoding="utf-8")
+            verdict = parse_verdict(raw)
+        except ReviewError:
+            print(
+                f"[_review_plan] warn: could not parse verdict in {path.name}; will re-review",
+                file=sys.stderr,
+            )
+            continue
+        if verdict == "APPROVE":
+            result[batch_stem] = {
+                "scope": batch_stem,
+                "round": n,
+                "verdict": "APPROVE",
+                "blocking_count": 0,
+                "file": str(path),
+                "session_id": None,
+            }
+
+    return result
 
 
 def _review_one_batch(
@@ -166,6 +177,7 @@ def _review_one_batch(
                 "scope": batch_path.stem,
                 "round": round_n,
                 "verdict": "ERROR",
+                "blocking_count": 0,
                 "file": None,
                 "error": str(exc),
                 "session_id": None,
@@ -199,6 +211,7 @@ def _review_one_batch(
                         "scope": batch_path.stem,
                         "round": round_n,
                         "verdict": "ERROR",
+                        "blocking_count": 0,
                         "file": None,
                         "error": f"resume retry failed: {exc}",
                         "session_id": None,
@@ -206,6 +219,7 @@ def _review_one_batch(
                 verdict = parse_verdict(raw)
                 # Second NEED_CONTEXT propagates to caller untouched.
 
+        blocking_count = parse_blocking_count(raw, severity="BLOCKING")
         path = write_review_file(
             reviews_dir, "plan", round_n, raw, scope=batch_path.stem
         )
@@ -213,9 +227,24 @@ def _review_one_batch(
             f"[_review_plan] batch {batch_path.stem}: verdict={verdict} file={path.name}",
             file=sys.stderr,
         )
-        return {"scope": batch_path.stem, "round": round_n, "verdict": verdict, "file": str(path), "session_id": session_id}
+        return {
+            "scope": batch_path.stem,
+            "round": round_n,
+            "verdict": verdict,
+            "blocking_count": blocking_count,
+            "file": str(path),
+            "session_id": session_id,
+        }
     except ReviewError as exc:
-        return {"scope": batch_path.stem, "round": round_n, "verdict": "ERROR", "file": None, "error": str(exc), "session_id": None}
+        return {
+            "scope": batch_path.stem,
+            "round": round_n,
+            "verdict": "ERROR",
+            "blocking_count": 0,
+            "file": None,
+            "error": str(exc),
+            "session_id": None,
+        }
 
 
 def run(
@@ -224,6 +253,10 @@ def run(
     mill_dir: Path,
     wiki_root: Path,
     project_root: Path,
+    *,
+    max_rounds: int | None = None,
+    holistic_only: bool = False,
+    no_holistic: bool = False,
 ) -> ReviewResult:
     """Run plan review: parallel per-batch + optional holistic.
 
@@ -231,14 +264,17 @@ def run(
     1. Resolve plan_dir and reviews_dir; discover round.
     2. Verify overview exists; collect batch files.
     3. Load reviewers; verify bulk mode.
-    4. Parallel per-batch reviews (skipped if batch_files is empty).
-    5. Holistic review (skipped if cfg.review.plan.holistic is None).
+    4. Parallel per-batch reviews (skipped if batch_files is empty or holistic_only).
+    5. Holistic review (skipped if cfg.review.plan.holistic is None or no_holistic).
     6. Total-fail check; return ReviewResult.
     """
+    if holistic_only and no_holistic:
+        raise ReviewError("--holistic-only and --no-holistic are mutually exclusive")
+
     # 1. Paths and round
     plan_dir = resolve_path(cfg["paths"]["plan_dir"], slug)
     reviews_dir = resolve_path(cfg["paths"]["reviews_dir"], slug)
-    max_rounds = cfg["review"]["plan"]["rounds"]
+    max_rounds = max_rounds if max_rounds is not None else cfg["review"]["plan"]["rounds"]
 
     print(
         f"[_review_plan] slug={slug!r} plan_dir={plan_dir} max_rounds={max_rounds}",
@@ -276,38 +312,58 @@ def run(
 
     reviews: list[dict] = []
 
-    # 4. Per-batch parallel section (guarded: skip if no batch files)
-    if batch_files:
-        futures_map: dict = {}
-        with ThreadPoolExecutor(max_workers=len(batch_files)) as ex:
-            for batch_path in batch_files:
-                future = ex.submit(
-                    _review_one_batch,
-                    batch_path,
-                    overview_path,
-                    reviews_dir,
-                    max_rounds,
-                    task_title,
-                    constraints,
-                    batch_reviewer_name,
-                    batch_reviewer,
-                    project_root,
-                    root,
-                    creates_union,
-                    wiki_root,
-                )
-                futures_map[future] = batch_path
+    # 4. Per-batch parallel section (skipped when holistic_only=True)
+    if not holistic_only:
+        # Skip-approved scan (before per-batch block; uses full batch_files for order ref)
+        approved_carry = _scan_approved_batches(reviews_dir)
+        batch_files_to_review = [b for b in batch_files if b.stem not in approved_carry]
+        if approved_carry:
+            print(
+                f"[_review_plan] skipping {len(approved_carry)} already-approved batch(es): "
+                f"{sorted(approved_carry.keys())}",
+                file=sys.stderr,
+            )
+    else:
+        approved_carry = {}
+        batch_files_to_review = []
 
-            for future in as_completed(futures_map):
-                entry = future.result()
-                reviews.append(entry)
+    if not holistic_only and batch_files:
+        order = {b.stem: i for i, b in enumerate(batch_files)}
+
+        if batch_files_to_review:
+            futures_map: dict = {}
+            with ThreadPoolExecutor(max_workers=len(batch_files_to_review)) as ex:
+                for batch_path in batch_files_to_review:
+                    future = ex.submit(
+                        _review_one_batch,
+                        batch_path,
+                        overview_path,
+                        reviews_dir,
+                        max_rounds,
+                        task_title,
+                        constraints,
+                        batch_reviewer_name,
+                        batch_reviewer,
+                        project_root,
+                        root,
+                        creates_union,
+                        wiki_root,
+                    )
+                    futures_map[future] = batch_path
+
+                for future in as_completed(futures_map):
+                    entry = future.result()
+                    reviews.append(entry)
+
+        # Append carryforward entries for already-approved batches
+        for entry in approved_carry.values():
+            reviews.append(entry)
 
         # Re-sort reviews to match batch file ordering (futures complete out-of-order)
-        order = {b.stem: i for i, b in enumerate(batch_files)}
         reviews.sort(key=lambda r: order.get(r["scope"], 999))
 
-    # 5. Holistic (if not skipped)
-    if holistic_reviewer is not None:
+    # 5. Holistic (if not skipped by config or no_holistic flag)
+    if holistic_reviewer is not None and not no_holistic:
         round_n = discover_round(reviews_dir, "plan", "holistic")
         if round_n > max_rounds:
             raise ReviewError(
@@ -374,6 +430,7 @@ def run(
                 "scope": "holistic",
                 "round": round_n,
                 "verdict": "ERROR",
+                "blocking_count": 0,
                 "file": None,
                 "error": str(exc),
                 "session_id": None,
@@ -407,6 +464,7 @@ def run(
                             "scope": "holistic",
                             "round": round_n,
                             "verdict": "ERROR",
+                            "blocking_count": 0,
                             "file": None,
                             "error": f"resume retry failed: {exc}",
                             "session_id": None,
@@ -415,6 +473,7 @@ def run(
                     else:
                         verdict = parse_verdict(raw)
                         # Second NEED_CONTEXT propagates to caller untouched.
+                        blocking_count = parse_blocking_count(raw, severity="BLOCKING")
                         path = write_review_file(
                             reviews_dir, "plan", round_n, raw, scope="holistic"
                         )
@@ -426,11 +485,13 @@ def run(
                             "scope": "holistic",
                             "round": round_n,
                             "verdict": verdict,
+                            "blocking_count": blocking_count,
                             "file": str(path),
                             "session_id": session_id,
                         })
                 else:
                     # No resolvable paths to re-attach — propagate NEED_CONTEXT.
+                    blocking_count = parse_blocking_count(raw, severity="BLOCKING")
                     path = write_review_file(
                         reviews_dir, "plan", round_n, raw, scope="holistic"
                     )
@@ -442,10 +503,12 @@ def run(
                         "scope": "holistic",
                         "round": round_n,
                         "verdict": verdict,
+                        "blocking_count": blocking_count,
                         "file": str(path),
                         "session_id": session_id,
                     })
             else:
+                blocking_count = parse_blocking_count(raw, severity="BLOCKING")
                 path = write_review_file(
                     reviews_dir, "plan", round_n, raw, scope="holistic"
                 )
@@ -457,6 +520,7 @@ def run(
                     "scope": "holistic",
                     "round": round_n,
                     "verdict": verdict,
+                    "blocking_count": blocking_count,
                     "file": str(path),
                     "session_id": session_id,
                 })
@@ -470,9 +534,11 @@ def run(
 
     aggregate = aggregate_verdict([r["verdict"] for r in reviews])
     agg_round = max(r["round"] for r in reviews) if reviews else 0
+    aggregate_blocking = sum(r.get("blocking_count", 0) for r in reviews)
     return ReviewResult(
         type="plan",
         round=agg_round,
         verdict=aggregate,
+        blocking_count=aggregate_blocking,
         reviews=reviews,
     )

@@ -183,22 +183,29 @@ def main() -> int:
             )
             print("PASS test1a: first run — all scopes r1")
 
-            # Second run — each scope advances to r2 independently
-            _seed_approve(4)
+            # Second run — per-batch batches all APPROVE → carryforward (r1 files);
+            # only holistic fires fresh (r2). Skip-approved scan active.
+            _seed_approve(1)  # only holistic needs a response
             r2 = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root)
             assert r2.verdict == "APPROVE"
-            assert len(r2.reviews) == 4
+            assert len(r2.reviews) == 4, f"expected 4 reviews, got {len(r2.reviews)}"
             per_batch2 = [rv for rv in r2.reviews if rv["scope"] != "holistic"]
             holistic2 = next(rv for rv in r2.reviews if rv["scope"] == "holistic")
+            # Per-batch entries are carryforwards: r1 files, session_id None
             for rv in per_batch2:
                 fname = Path(rv["file"]).name
-                assert f"plan-review-{rv['scope']}-r2" in fname, (
-                    f"expected r2 in filename, got {fname}"
+                assert f"plan-review-{rv['scope']}-r1" in fname, (
+                    f"expected r1 carryforward in filename, got {fname}"
                 )
+                assert rv["session_id"] is None, (
+                    f"carryforward entry should have session_id=None, got {rv['session_id']!r}"
+                )
+            # Holistic is fresh: r2 file, non-None session_id
             assert "plan-review-r2" in Path(holistic2["file"]).name, (
                 f"unexpected holistic r2 filename: {Path(holistic2['file']).name}"
             )
-            print("PASS test1b: second run — all scopes r2 (per-scope #21/#62/#63)")
+            assert holistic2["session_id"] is not None, "holistic should have non-None session_id"
+            print("PASS test1b: second run — per-batch carryforward (r1), holistic fresh (r2)")
         except AssertionError as exc:
             errors += 1
             print(f"FAIL test1: {exc}", file=sys.stderr)
@@ -471,6 +478,352 @@ def main() -> int:
         except Exception as exc:
             errors += 1
             print(f"FAIL test7 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
+
+    REQUEST_CHANGES_TEXT = "# Review: test\n\n```yaml\nverdict: REQUEST_CHANGES\n```\n"
+
+    # ------------------------------------------------------------------
+    # Test 8 — skip-approved happy path
+    # Three batches; 01-a and 03-c are approved in r1; 02-b is not.
+    # Stub should fire exactly twice: once for 02-b, once for holistic.
+    # ------------------------------------------------------------------
+    with tempfile.TemporaryDirectory() as tmpdir:
+        batch_specs = [
+            ("a", "01-a.md", ["src/a.py"], []),
+            ("b", "02-b.md", ["src/b.py"], []),
+            ("c", "03-c.md", ["src/c.py"], []),
+        ]
+        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(Path(tmpdir), batch_specs)
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            reviews_dir = project_root / "reviews"
+            reviews_dir.mkdir(parents=True, exist_ok=True)
+            # 01-a approved in r1
+            (reviews_dir / "20260429-000001-plan-review-01-a-r1.md").write_text(
+                APPROVE_TEXT, encoding="utf-8"
+            )
+            # 02-b NOT approved (REQUEST_CHANGES)
+            (reviews_dir / "20260429-000002-plan-review-02-b-r1.md").write_text(
+                REQUEST_CHANGES_TEXT, encoding="utf-8"
+            )
+            # 03-c approved in r1
+            (reviews_dir / "20260429-000003-plan-review-03-c-r1.md").write_text(
+                APPROVE_TEXT, encoding="utf-8"
+            )
+
+            # Stub: 1 for 02-b + 1 for holistic = 2 responses
+            stub.seed([(APPROVE_TEXT, "sid-fresh-b"), (APPROVE_TEXT, "sid-fresh-hol")])
+            r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root)
+
+            prompts = stub.captured_prompts()
+            assert len(prompts) == 2, (
+                f"stub should fire exactly twice (02-b + holistic), got {len(prompts)}"
+            )
+            assert r.verdict == "APPROVE"
+            assert len(r.reviews) == 4, f"expected 4 reviews, got {len(r.reviews)}"
+
+            rv_a   = next((rv for rv in r.reviews if rv["scope"] == "01-a"), None)
+            rv_b   = next((rv for rv in r.reviews if rv["scope"] == "02-b"), None)
+            rv_c   = next((rv for rv in r.reviews if rv["scope"] == "03-c"), None)
+            rv_hol = next((rv for rv in r.reviews if rv["scope"] == "holistic"), None)
+
+            assert rv_a is not None, "01-a entry missing"
+            assert rv_b is not None, "02-b entry missing"
+            assert rv_c is not None, "03-c entry missing"
+            assert rv_hol is not None, "holistic entry missing"
+
+            # Carryforward entries
+            assert rv_a["session_id"] is None, f"01-a should be carryforward (session_id=None), got {rv_a['session_id']!r}"
+            assert rv_a["verdict"] == "APPROVE"
+            assert "01-a-r1" in Path(rv_a["file"]).name, f"01-a should point to r1 file, got {Path(rv_a['file']).name}"
+            assert rv_c["session_id"] is None, f"03-c should be carryforward, got {rv_c['session_id']!r}"
+            assert "03-c-r1" in Path(rv_c["file"]).name
+
+            # Fresh entries
+            assert rv_b["session_id"] == "sid-fresh-b", f"02-b should be fresh, got {rv_b['session_id']!r}"
+            assert rv_hol["session_id"] == "sid-fresh-hol", f"holistic should be fresh, got {rv_hol['session_id']!r}"
+
+            print("PASS test8: skip-approved happy path — 01-a/03-c carryforward, 02-b/holistic fresh")
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test8: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test8 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
+    # Test 9 — all batches approved + holistic re-runs
+    # All three batches approved in r1 → stub fires exactly once (holistic).
+    # reviews has 4 entries: 3 carryforward + 1 fresh holistic.
+    # ------------------------------------------------------------------
+    with tempfile.TemporaryDirectory() as tmpdir:
+        batch_specs = [
+            ("a", "01-a.md", ["src/a.py"], []),
+            ("b", "02-b.md", ["src/b.py"], []),
+            ("c", "03-c.md", ["src/c.py"], []),
+        ]
+        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(Path(tmpdir), batch_specs)
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            reviews_dir = project_root / "reviews"
+            reviews_dir.mkdir(parents=True, exist_ok=True)
+            for stem in ("01-a", "02-b", "03-c"):
+                (reviews_dir / f"20260429-000001-plan-review-{stem}-r1.md").write_text(
+                    APPROVE_TEXT, encoding="utf-8"
+                )
+
+            # Only holistic fires
+            stub.seed([(APPROVE_TEXT, "sid-hol")])
+            r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root)
+
+            prompts = stub.captured_prompts()
+            assert len(prompts) == 1, (
+                f"stub should fire exactly once (holistic), got {len(prompts)}"
+            )
+            assert len(r.reviews) == 4, f"expected 4 reviews (3 carry + 1 holistic), got {len(r.reviews)}"
+            carry_entries = [rv for rv in r.reviews if rv["session_id"] is None]
+            fresh_entries = [rv for rv in r.reviews if rv["session_id"] is not None]
+            assert len(carry_entries) == 3, f"expected 3 carryforward entries, got {len(carry_entries)}"
+            assert len(fresh_entries) == 1, f"expected 1 fresh entry, got {len(fresh_entries)}"
+            assert fresh_entries[0]["scope"] == "holistic"
+            print("PASS test9: all approved — stub fires once (holistic only); 3 carry + 1 fresh")
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test9: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test9 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
+    # Test 10 — malformed prior review file
+    # 01-a r1 file has unparseable content → treated as not-approved.
+    # Stub fires for 01-a, 02-b, 03-c, and holistic (4 calls).
+    # ------------------------------------------------------------------
+    with tempfile.TemporaryDirectory() as tmpdir:
+        batch_specs = [
+            ("a", "01-a.md", ["src/a.py"], []),
+            ("b", "02-b.md", ["src/b.py"], []),
+            ("c", "03-c.md", ["src/c.py"], []),
+        ]
+        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(Path(tmpdir), batch_specs)
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            reviews_dir = project_root / "reviews"
+            reviews_dir.mkdir(parents=True, exist_ok=True)
+            # 01-a has malformed content — no yaml block
+            (reviews_dir / "20260429-000001-plan-review-01-a-r1.md").write_text(
+                "not a yaml block at all", encoding="utf-8"
+            )
+
+            # All four scopes fire: 01-a, 02-b, 03-c, holistic
+            _seed_approve(4)
+            r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root)
+
+            prompts = stub.captured_prompts()
+            assert len(prompts) == 4, (
+                f"malformed file should cause 01-a to re-review; expected 4 prompts, got {len(prompts)}"
+            )
+            assert r.verdict == "APPROVE"
+            print("PASS test10: malformed prior review → 01-a treated as not-approved, all 4 scopes fire")
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test10: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test10 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
+    # Test 11 — holistic_only=True: only holistic fires
+    # ------------------------------------------------------------------
+    with tempfile.TemporaryDirectory() as tmpdir:
+        batch_specs = [
+            ("alpha", "01-alpha.md", ["src/a.py"], []),
+            ("beta",  "02-beta.md",  ["src/b.py"], []),
+        ]
+        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(Path(tmpdir), batch_specs)
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            stub.seed([(APPROVE_TEXT, "sid-hol-only")])
+            r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root, holistic_only=True)
+            prompts = stub.captured_prompts()
+            assert len(prompts) == 1, (
+                f"holistic_only: expected exactly 1 prompt (holistic), got {len(prompts)}"
+            )
+            assert len(r.reviews) == 1, f"expected 1 review entry, got {len(r.reviews)}"
+            assert r.reviews[0]["scope"] == "holistic"
+            print("PASS test11: holistic_only=True — stub fires once (holistic only)")
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test11: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test11 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
+    # Test 12 — no_holistic=True: only per-batch fires
+    # ------------------------------------------------------------------
+    with tempfile.TemporaryDirectory() as tmpdir:
+        batch_specs = [
+            ("alpha", "01-alpha.md", ["src/a.py"], []),
+            ("beta",  "02-beta.md",  ["src/b.py"], []),
+        ]
+        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(Path(tmpdir), batch_specs)
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            _seed_approve(2)
+            r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root, no_holistic=True)
+            prompts = stub.captured_prompts()
+            assert len(prompts) == 2, (
+                f"no_holistic: expected 2 prompts (per-batch only), got {len(prompts)}"
+            )
+            assert len(r.reviews) == 2, f"expected 2 review entries, got {len(r.reviews)}"
+            scopes = {rv["scope"] for rv in r.reviews}
+            assert "holistic" not in scopes, f"holistic should not appear in reviews: {scopes}"
+            print("PASS test12: no_holistic=True — stub fires twice (per-batch only)")
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test12: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test12 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
+    # Test 13 — mutual exclusion: holistic_only + no_holistic raises ReviewError
+    # ------------------------------------------------------------------
+    with tempfile.TemporaryDirectory() as tmpdir:
+        batch_specs = [("alpha", "01-alpha.md", ["src/a.py"], [])]
+        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(Path(tmpdir), batch_specs)
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            try:
+                plan_run(cfg, SLUG, mill_dir, wiki_root, project_root,
+                         holistic_only=True, no_holistic=True)
+                errors += 1
+                print("FAIL test13: expected ReviewError for mutually exclusive flags", file=sys.stderr)
+            except Exception as exc:
+                if "mutually exclusive" in str(exc):
+                    print("PASS test13: holistic_only+no_holistic raises ReviewError (mutually exclusive)")
+                else:
+                    errors += 1
+                    print(f"FAIL test13: unexpected exception: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test13 (unexpected outer {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
+    # Test 14 — aggregate blocking_count
+    # batch a: 2 BLOCKINGs, batch b: 1 BLOCKING, holistic: 0 BLOCKINGs
+    # aggregate = 3
+    # ------------------------------------------------------------------
+    with tempfile.TemporaryDirectory() as tmpdir:
+        batch_specs = [
+            ("alpha", "01-alpha.md", ["src/a.py"], []),
+            ("beta",  "02-beta.md",  ["src/b.py"], []),
+        ]
+        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(Path(tmpdir), batch_specs)
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            two_blockings = (
+                "# Review\n\n"
+                "### [BLOCKING] issue one\n\n- b\n\n"
+                "### [BLOCKING] issue two\n\n- b\n\n"
+                "```yaml\nverdict: REQUEST_CHANGES\n```\n"
+            )
+            one_blocking = (
+                "# Review\n\n"
+                "### [BLOCKING] issue three\n\n- b\n\n"
+                "```yaml\nverdict: REQUEST_CHANGES\n```\n"
+            )
+            stub.seed([
+                (two_blockings, "sid-a"),
+                (one_blocking,  "sid-b"),
+                (APPROVE_TEXT,  "sid-hol"),
+            ])
+            r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root)
+            assert r.blocking_count == 3, f"expected aggregate blocking_count=3, got {r.blocking_count}"
+            print("PASS test14: aggregate blocking_count == 3 (2 + 1 + 0)")
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test14: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test14 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
+    # Test 15 — max_rounds kwarg override for plan review
+    # Pre-populate 3 per-batch review files and 3 holistic files.
+    # Without kwarg (cfg max=3): raises ReviewError (round 4 would exceed max).
+    # With max_rounds=5: holistic r4 succeeds (per-batch all approved → carryforward).
+    # ------------------------------------------------------------------
+    with tempfile.TemporaryDirectory() as tmpdir:
+        batch_specs = [("alpha", "01-alpha.md", ["src/a.py"], [])]
+        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(Path(tmpdir), batch_specs)
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            reviews_dir = project_root / "reviews"
+            reviews_dir.mkdir(parents=True, exist_ok=True)
+
+            # Pre-populate 3 holistic review files (rounds 1-3)
+            for i in (1, 2, 3):
+                (reviews_dir / f"2026042{i}-000001-plan-review-r{i}.md").write_text(
+                    APPROVE_TEXT, encoding="utf-8"
+                )
+            # Pre-populate 3 alpha batch review files (rounds 1-3, all APPROVE)
+            for i in (1, 2, 3):
+                (reviews_dir / f"2026042{i}-000002-plan-review-01-alpha-r{i}.md").write_text(
+                    APPROVE_TEXT, encoding="utf-8"
+                )
+
+            # Without kwarg: round 4 exceeds cfg max=3 → ReviewError
+            try:
+                stub.seed([(APPROVE_TEXT, "sid-x")])
+                plan_run(cfg, SLUG, mill_dir, wiki_root, project_root)
+                errors += 1
+                print("FAIL test15a: expected ReviewError for round 4 with cfg max=3", file=sys.stderr)
+            except Exception as exc:
+                if "exceeds max" in str(exc):
+                    print("PASS test15a: round 4 raises ReviewError without max_rounds kwarg")
+                else:
+                    errors += 1
+                    print(f"FAIL test15a: unexpected exception: {exc}", file=sys.stderr)
+
+            # With max_rounds=5: succeeds (alpha carryforward, holistic fresh r4)
+            stub.seed([(APPROVE_TEXT, "sid-hol4")])
+            r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root, max_rounds=5)
+            rv_hol = next((rv for rv in r.reviews if rv["scope"] == "holistic"), None)
+            assert rv_hol is not None, "holistic entry missing"
+            fname = Path(rv_hol["file"]).name
+            assert "plan-review-r4" in fname, f"expected holistic r4, got {fname}"
+            print(f"PASS test15b: max_rounds=5 → holistic r4 succeeds → {fname}")
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test15: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test15 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
         finally:
             os.chdir(orig_dir)
 
