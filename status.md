@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: discussed
 slug: migrate-to-uv
 branch: migrate-to-uv
 plan: null
@@ -15,4 +15,5 @@ task_description: |
 
 ```text
 discussing  '2026-04-30T16:56:53Z'
+discussed  2026-04-30T17:38:55Z
 ```
