@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-migration-and-docs
+phase: done
 slug: container-restructure
 branch: hanf/container-restructure
 plan: active/container-restructure/plan
@@ -39,6 +39,8 @@ reviewing-consumers-and-skills-r1  2026-04-29T13:55:54Z
 approved-consumers-and-skills  2026-04-29T14:03:13Z
 reviewing-migration-and-docs-r1  2026-04-29T14:07:41Z
 approved-migration-and-docs  2026-04-30T05:53:04Z
+holistic-skipped-rate-limit  2026-04-30T05:57:15Z
+done  2026-04-30T05:57:15Z
 ```
 
 ## Batches
