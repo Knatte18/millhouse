@@ -10,6 +10,14 @@
 #
 # Examples (uncomment + edit to use):
 #
+# hub_relative_path: .
+#   The cwd-relative subpath where hub state (.active, .others, tasks.md,
+#   .vscode/) should live. Written by mill-setup at setup time.
+#   Use "." when cwd == git toplevel (typical for dedicated mill-managed repos).
+#   Use a subpath (e.g. "src/Models") when mill is installed in a subfolder of
+#   an existing repo and the user wants hub-state anchored there rather than
+#   at the git root.
+#
 # notifications:
 #   toast: true
 #

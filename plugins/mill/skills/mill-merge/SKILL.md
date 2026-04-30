@@ -1,6 +1,6 @@
 ---
 name: mill-merge
-description: Finalize a completed task. Sync parent, squash-merge back, flip Home.md to [done], delete the active task dir, remove junctions, drop the worktree + branch. PR-path honoured via git.require-pr-to-base. Runs from the child worktree.
+description: Finalize a completed task. Cleanup commit on task branch, squash-merge to parent, archive tag, Home.md flip, worktree+branch+portal removal, optional legacy wiki cleanup. PR-path honoured via git.require-pr-to-base. Runs from the child worktree.
 ---
 
 # mill-merge
@@ -16,7 +16,7 @@ You are an integration engineer. Your job is to merge a completed task branch ba
 ## Entry
 
 1. **Step 1 — Resolve mode + load config.**
-   Resolve `git_root` via `_paths.resolve_git_root()` and `wiki_path` via `_paths.resolve_wiki_path(git_root)`. Load the deep-merged config: read `<wiki_path>/config.yaml` and overlay `<git_root>/.millhouse/config.local.yaml` if present (same deep-merge pattern used elsewhere). Try to call `active_data = _active.read_all(Path('.millhouse'))`. On `_active.ActiveError` (no marker / malformed), halt immediately with: *"This worktree has no wiki claim — `mill-merge` needs `status.md` to know the parent branch. Run `mill-claim` to convert this worktree to a tracked task, or merge manually."* On success: extract `slug = active_data['slug']` and call `mode_inplace = _inplace.is_inplace(active_data, git_root, cfg)`. Set `mode = 'inplace'` if `mode_inplace` else `mode = 'worktree'`.
+   Resolve `git_root` via `_paths.resolve_git_root()`, `wiki_path` via `_paths.resolve_wiki_path(git_root)`, and `container_path` via `_paths.resolve_container_path(git_root)`. Load the deep-merged config: read `<wiki_path>/config.yaml` and overlay `<git_root>/.millhouse/config.local.yaml` if present (same deep-merge pattern used elsewhere). Try to call `active_data = _active.read_all(Path('.millhouse'))`. On `_active.ActiveError` (no marker / malformed), halt immediately with: *"This worktree has no active marker — `mill-merge` needs `status.md` to know the parent branch. Run `mill-claim` to convert this worktree to a tracked task, or merge manually."* On success: extract `slug = active_data['slug']` and call `mode_inplace = _inplace.is_inplace(active_data, git_root, cfg)`. Set `mode = 'inplace'` if `mode_inplace` else `mode = 'worktree'`.
 
    Stale-worktree edge: if `active_data` is not None AND the corresponding `<worktrees-dir>/<slug>/` directory exists AND the branch matches, call `_inplace.prompt_stale_worktree(slug, worktree_path)` and override `mode` based on the user's choice (`"inplace"` → `mode = 'inplace'`; `"worktree"` → `mode = 'worktree'`; `"abort"` → halt).
 
@@ -33,8 +33,8 @@ You are an integration engineer. Your job is to merge a completed task branch ba
 2. `_wiki.sync_pull(<WIKI_PATH>)`.
 3. Read slug via `_active.read_slug(Path(".millhouse"))` (already resolved in Step 1; reuse `active_data` — no second read needed).
 4. *(Config already loaded in Step 1.)*
-5. Resolve parent branch via `_parent_branch.resolve(status_path, interactive=<True unless called non-interactively>)`.
-6. **Phase gate — also the re-entry point for PR-path recovery.** Read `status.md`'s `phase:`.
+5. Resolve parent branch via `_parent_branch.resolve(status_path, interactive=<True unless called non-interactively>)`. `status_path` is `git_root / "status.md"` — state lives on the task branch, not in the wiki.
+6. **Phase gate — also the re-entry point for PR-path recovery.** Read `git_root/status.md`'s `phase:`.
 
    | phase | action |
    | --- | --- |
@@ -64,17 +64,36 @@ CHILD_BRANCH=$(git branch --show-current)
 
 Do this before switching to `git -C <parent-path>` calls — once you are operating on the parent, `git branch --show-current` there will report the parent's branch, not yours.
 
-### 4. PR path or direct squash?
+## Teardown sequence
+
+Steps 4–10 implement the canonical teardown. Each step is independent; a failed step is reported with its name so the user can re-run from that step (Step 4's squash idempotency handles the common re-entry case).
+
+> **Recovery note:** After teardown completes, the cleanup commit is permanently visible via `git log archive/<slug>`. Operators can inspect (or restore) the task-branch state at any point via `git checkout archive/<slug>`.
+
+### 4. Cleanup commit
+
+On the task branch (current cwd), remove the state files that belong to the task lifecycle, not to production code:
+
+```bash
+git rm -r reviews/ discussion.md plan/ status.md
+git commit -m "chore: pre-merge cleanup"
+```
+
+**Why:** squashing a branch that already has cleanup as its tip means the squash commit on the parent never includes transient task metadata. The cleanup commit is itself preserved under the archive tag created in Step 6.
+
+**Idempotency:** if all four paths are already absent (re-run after partial failure), `git rm -r` will warn "did not match any files" — treat as a no-op. If the resulting working tree has nothing to commit, skip the commit.
+
+### 5. PR path or direct squash?
 
 - **PR path** — activate when `git.require-pr-to-base: true` AND `parent-branch == base-branch`:
 
   ```bash
   gh pr create --base "<base-branch>" --head "$CHILD_BRANCH" \
       --title "<task: field from status.md>" \
-      --body "<one-line summary from status.md + link to active/<slug>/>"
+      --body "<one-line summary from status.md>"
   ```
 
-  Update `status.md`: `_status.append_phase(status_path, "pr-pending", _timestamp.now_utc_iso())`. Commit+push via `_wiki.write_commit_push`. Skip to Step 10 (Release lock) — no Home.md flip, no cleanup. The user (or a later `/mill-merge` re-run after the PR lands) continues from the PR-path re-entry below.
+  Update `status.md` via `_status.append_phase(status_path, "pr-pending", _timestamp.now_utc_iso())` and push the task branch so the PR has the cleanup commit. Skip to Step 11 (Release lock) — no Home.md flip, no further cleanup. Re-run `/mill-merge` after the PR lands to continue from the PR-path re-entry.
 
 - **Direct path** (everything else):
 
@@ -84,68 +103,80 @@ Do this before switching to `git -C <parent-path>` calls — once you are operat
   git -C <parent-path> push
   ```
 
-  **Idempotency check:** if `git merge --squash` prints "Already up to date" or `git commit` prints "nothing to commit" → skip `push` and proceed to Step 5. This lets the user re-run mill-merge after a Step-5-or-later failure without re-merging.
+  **Idempotency check:** if `git merge --squash` prints "Already up to date" or `git commit` prints "nothing to commit" → skip `push` and proceed to Step 6.
 
-### 5. Home.md — mark [done]
+### 6. Archive tag
 
-This step and the next happen under the wiki shared lock so no other task writes Home.md mid-flip.
+```bash
+git tag archive/<slug> "$CHILD_BRANCH"
+git push origin "archive/<slug>"
+```
+
+Tags the cleanup-commit tip of the task branch before the branch is deleted. The tag is cheap, persistent, and lets any operator recover the full task history via `git checkout archive/<slug>`.
+
+### 7. Home.md — mark [done]
+
+Under the wiki shared lock so no concurrent task writes Home.md mid-flip.
 
 1. `_wiki.acquire_lock(<WIKI_PATH>, slug, timeout_seconds=30)`.
 2. Read `<WIKI_PATH>/Home.md`. Use `_tasks_md.set_phase(text, slug, "done")` to rewrite the single line. Write the result.
 3. Commit+push via `_wiki.write_commit_push(<WIKI_PATH>, ["Home.md"], f"task: complete and merge {slug}")`.
-4. Keep the lock — Step 6 also holds it.
+4. Release the wiki lock.
 
-**Failure handling after the direct squash landed on parent:** do NOT roll back the merge. Report the error, release both locks, tell the user "Merge landed on <parent> but <step> failed: <err>. Re-run `/mill-merge` to retry — Step 4's idempotency check will skip the merge." This is v1's non-destructive boundary: once production has the squash, it stays.
+**Failure handling after the squash landed on parent:** do NOT roll back the merge. Report the error, release all locks, tell the user "Merge landed on <parent> but <step> failed: <err>. Re-run `/mill-merge` to retry — Step 5's idempotency check will skip the squash." This is the non-destructive boundary: once the parent has the squash, it stays.
 
-### 6. Delete `<WIKI_PATH>/active/<slug>/`
-
-While still holding the wiki lock:
-
-1. `shutil.rmtree(wiki_path / "active" / slug)`.
-2. Commit+push via `_wiki.write_commit_push(<WIKI_PATH>, [f"active/{slug}/"], f"task: complete and merge {slug}")`. The commit records the deletion.
-3. Release the wiki lock now — the remaining steps don't touch shared wiki state.
-
-### 7. Regenerate sidebar
-
-`_sidebar.regenerate(<WIKI_PATH>)` (re-acquires its own wiki lock internally). Pushes a `_Sidebar.md` update.
-
-### 8. Remove junctions owned by this worktree
-
-For every entry in `_wiki.read_junctions(<WIKI_PATH>)`, compute the junction path relative to the worktree root (e.g. `.millhouse/wiki`, `.active/`), and call `_junction.remove(junction_path)` on each. Tolerate already-gone.
-
-**In-place mode:** also remove the `.active` junction at `git_root / ".active"` via `_junction.remove(git_root / ".active")`. This junction is hub-root-level for in-place tasks (per `wiki/config.yaml`'s `junctions:` block).
-
-### 9. Release merge lock
-
-Delete `<parent-path>/.scratch/merge.lock`. Run this in a `finally:` equivalent so the lock is released on every exit path.
-
-**In-place mode:** no merge lock was acquired (Steps 1 and 2 were skipped). Skip this step.
-
-### 10. Drop the worktree + branch
+### 8. Drop the worktree + branch
 
 **Worktree mode:**
 ```bash
-git -C <parent-path> worktree remove --force <self-worktree-path>
-git -C <parent-path> branch -d "$CHILD_BRANCH"
+git -C <parent-path> worktree remove --force <container-path>/wts/<slug>
+git -C <parent-path> branch -D "$CHILD_BRANCH"
 ```
 
-If `worktree remove` fails with "is not empty" or "is in use" on Windows: surface a hint — "couldn't remove <path>: directory is in use. Close any editor / terminal / file-explorer window pointing at it and re-run `/mill-merge` (Step 4's idempotency will skip the merge)." Do not name a specific diagnostic tool in the message.
+If `worktree remove` fails with "is not empty" or "is in use" on Windows: surface a hint — "couldn't remove <path>: directory is in use. Close any editor / terminal / file-explorer window pointing at it and re-run `/mill-merge` (Step 5's idempotency will skip the squash)." Do not name a specific diagnostic tool in the message.
 
 **In-place mode:** skip `git worktree remove`; from cwd run:
 ```bash
 git checkout <parent_branch>
-git branch -d "$CHILD_BRANCH"
+git branch -D "$CHILD_BRANCH"
 ```
 
 Also remove `<git_root>/.millhouse/active.slug.md` (the canonical in-place marker).
 
-### 11. Notify + report
+### 9. Remove portal entry
+
+```python
+_junction.remove(container_path / "portals" / slug)
+```
+
+Tolerate already-gone. `container_path` was resolved in Entry Step 1 via `_paths.resolve_container_path(git_root)`.
+
+### 10. Legacy wiki cleanup (conditional)
+
+If `wiki_path / "active" / slug` exists (a pre-migration clone that still has the old wiki state directory):
+
+1. `shutil.rmtree(wiki_path / "active" / slug)`.
+2. Commit+push via `_wiki.write_commit_push(<WIKI_PATH>, [f"active/{slug}/"], f"task: cleanup legacy active dir {slug}")`.
+
+If the directory does not exist, skip silently — this is the normal case for post-migration setups.
+
+### 11. Regenerate sidebar + release merge lock
+
+`_sidebar.regenerate(<WIKI_PATH>)` (re-acquires its own wiki lock internally). Pushes a `_Sidebar.md` update.
+
+Delete `<parent-path>/.scratch/merge.lock`. Run this in a `finally:` equivalent so the lock is released on every exit path.
+
+**In-place mode:** no merge lock was acquired (Entry Steps 1 and 2 were skipped). Skip lock release.
+
+### 12. Notify + report
 
 `_notify.notify("mill-merge.done", f"task {slug} merged into {parent_branch}", slug=slug, parent=parent_branch)`.
 
 Report to the user:
 
-> "Merge complete for `<slug>`. Worktree and branch removed. Home.md updated."
+> "Merge complete for `<slug>`. Worktree and branch removed. Archive tag `archive/<slug>` created. Home.md updated."
+
+**Verify after teardown:** confirm `<container>/wts/<slug>` is gone, `$CHILD_BRANCH` is gone from `git branch`, `<container>/portals/<slug>` is gone, `git tag -l archive/<slug>` returns the tag, and `Home.md` shows `[done]` for `<slug>`.
 
 ## PR-path re-entry
 
@@ -153,14 +184,14 @@ When the entry-phase gate sees `phase: pr-pending`:
 
 1. Resolve the PR via `gh pr list --head "$CHILD_BRANCH" --state all --json state,mergeCommit,number --jq '.[0]'`.
 2. Interpret:
-   - `state == "MERGED"` → continue to Step 5 (Home.md flip). Skip Steps 1–4 (merge lock no longer needed; merge has already landed via the external PR). The rest of the cleanup (active/, sidebar, junctions, worktree removal) runs as normal.
+   - `state == "MERGED"` → continue to Step 6 (archive tag). Skip Steps 1–5 (merge lock no longer needed; squash has already landed via the external PR). The rest of the teardown (tag, Home.md flip, worktree/branch/portal removal, legacy wiki cleanup) runs as normal.
    - `state == "OPEN"` → report "PR #<N> still open. Waiting — re-run `/mill-merge` after it lands." Halt.
    - `state == "CLOSED"` without merge → report "PR #<N> closed without merging. Task branch is orphaned — run `/mill-abandon` if you want to discard, or open a new PR manually."
    - No PR found → report "status.md says pr-pending but no PR on this branch; inspect manually."
 
-## Rollback (Steps 1–4 only)
+## Rollback (Steps 1–5 only)
 
-Any failure between lock acquisition (Step 1) and the squash landing on parent (Step 4) rolls back via the checkpoint `mill-merge-in` created:
+Any failure between lock acquisition (Step 1) and the squash landing on parent (Step 5) rolls back via the checkpoint `mill-merge-in` created:
 
 ```bash
 git -C <parent-path> reset --hard mill-checkpoint-<name>
@@ -168,11 +199,18 @@ git -C <parent-path> reset --hard mill-checkpoint-<name>
 
 Release the merge lock. Preserve the checkpoint branch. Report the failure with the step name.
 
-Post-Step-4 failures (Home.md, sidebar, junctions, worktree removal) are **not** rolled back — the merge on parent is production state and un-doing it would waste the squash that the PR or direct merge already committed to origin.
+**Cleanup-commit rollback (Step 4):** if the cleanup commit fails mid-way (e.g. `git rm` succeeded but `git commit` failed), reset the task branch:
+
+```bash
+git reset --hard HEAD
+```
+
+Post-Step-5 failures (archive tag, Home.md, sidebar, worktree/branch/portal removal) are **not** rolled back — the merge on parent is production state and un-doing it would waste the squash that the PR or direct merge already committed to origin.
 
 ## Board discipline
 
 - Home.md writes go through `_wiki.write_commit_push` with the shared lock held.
-- `active/<slug>/` deletion commits separately under the same shared lock.
+- `active/<slug>/` deletion (legacy, conditional) commits separately via `_wiki.write_commit_push` after the wiki lock is released.
+- Task state (`status.md`, `discussion.md`, `plan/`, `reviews/`) lives on the task branch — never in the wiki for new-layout repos. The cleanup commit removes it from the branch tip before squash.
 - Phase transitions via `_status.append_phase`; hand-editing status.md is banned.
 - Merge-lock file lives at `<parent-path>/.scratch/merge.lock`. Never placed anywhere else — other skills expect it there.

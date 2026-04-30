@@ -7,7 +7,7 @@ pointed at its path and reads it via Read/Grep/Glob. The backend writes the
 review file; the LLM does not use Write.
 
 Public API:
-    run(cfg, slug, mill_dir, wiki_root, project_root) -> ReviewResult
+    run(cfg, slug, mill_dir, project_root) -> ReviewResult
 """
 from __future__ import annotations
 
@@ -35,7 +35,6 @@ def run(
     cfg: dict,
     slug: str,
     mill_dir: Path,
-    wiki_root: Path,
     project_root: Path,
     *,
     max_rounds: int | None = None,
@@ -51,8 +50,8 @@ def run(
     6. Parse verdict, write review file, return ReviewResult.
     """
     # 1. Resolve paths
-    discussion_path = resolve_path(cfg["paths"]["discussion_file"], slug, wiki_root)
-    reviews_dir = resolve_path(cfg["paths"]["reviews_dir"], slug, wiki_root)
+    discussion_path = resolve_path(cfg["paths"]["discussion_file"], slug)
+    reviews_dir = resolve_path(cfg["paths"]["reviews_dir"], slug)
 
     # 2. Round discovery and cap check
     round_n = discover_round(reviews_dir, "discussion", "holistic")

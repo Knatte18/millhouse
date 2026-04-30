@@ -31,17 +31,18 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
+    from _paths import resolve_wiki_path
     from _review_common import ReviewError, find_active_slug, load_config
     from _review_discussion import run
 
     project_root = Path.cwd()
     mill_dir = project_root / ".millhouse"
-    wiki_root = (mill_dir / "wiki").resolve()
+    wiki_root = resolve_wiki_path(project_root)
     cfg = load_config(wiki_root, mill_dir)
 
     try:
         slug = find_active_slug(mill_dir)
-        result = run(cfg, slug, mill_dir, wiki_root, project_root, max_rounds=args.max_rounds)
+        result = run(cfg, slug, mill_dir, project_root, max_rounds=args.max_rounds)
         print(json.dumps(result.to_dict()))
         return 0
     except ReviewError as exc:

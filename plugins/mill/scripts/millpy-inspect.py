@@ -14,9 +14,9 @@ _SCRIPTS = Path(__file__).resolve().parent
 sys.path.insert(0, str(_SCRIPTS))
 
 import _paths
+import _spawn_core
 import _status
 import _tasks_md
-import _worktree
 
 PHASE_ORDER = (
     "discussing",
@@ -42,15 +42,18 @@ def _phase_index(phase: str | None) -> int:
 
 def _collect(git_root: Path, slug_filter: str | None) -> list[dict]:
     wiki = _paths.resolve_wiki_path(git_root)
-    active_dir = wiki / "active"
+    container_path = _paths.resolve_container_path(git_root)
 
-    if not active_dir.is_dir():
+    # Active worktrees: (path, slug, title) triples from <container>/wts/
+    active_worktree_list = _spawn_core.discover_active_worktrees(container_path / "wts")
+    worktree_map: dict[str, Path] = {slug: path for path, slug, _ in active_worktree_list}
+    slugs = sorted(worktree_map)
+
+    if not slugs:
         return []
 
-    slugs = sorted(d.name for d in active_dir.iterdir() if d.is_dir())
-
     if slug_filter is not None:
-        if slug_filter not in slugs:
+        if slug_filter not in worktree_map:
             print(f"error: no active task with slug {slug_filter!r}", file=sys.stderr)
             sys.exit(1)
         slugs = [slug_filter]
@@ -61,21 +64,10 @@ def _collect(git_root: Path, slug_filter: str | None) -> list[dict]:
         for task in _tasks_md.parse(home_md.read_text(encoding="utf-8")):
             home_marker_map[task.slug] = task.phase if task.phase is not None else "unclaimed"
 
-    worktree_map: dict[str, str] = {}
-    for entry in _worktree.list_worktrees(git_root):
-        branch = entry.get("branch")
-        if branch is None:
-            continue
-        path = entry.get("path")
-        if branch.startswith("impl/"):
-            slug = branch[len("impl/"):]
-            worktree_map[slug] = path
-        else:
-            worktree_map[branch] = path
-
     records = []
     for slug in slugs:
-        sp = active_dir / slug / "status.md"
+        wt_path = worktree_map[slug]
+        sp = wt_path / "status.md"
         try:
             full = _status.read_full(sp)
         except ValueError as exc:
@@ -83,13 +75,12 @@ def _collect(git_root: Path, slug_filter: str | None) -> list[dict]:
             continue
 
         marker = home_marker_map.get(slug, "unclaimed")
-        wt = worktree_map.get(slug)
 
         records.append({
             "slug": slug,
             "yaml": full["yaml"],
             "timeline": full["timeline"],
-            "worktree": wt,
+            "worktree": str(wt_path),
             "home_marker": marker,
         })
 

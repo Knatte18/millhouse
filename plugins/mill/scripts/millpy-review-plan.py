@@ -55,19 +55,20 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
+    from _paths import resolve_wiki_path
     from _review_common import ReviewError, find_active_slug, load_config, resolve_path
     from _review_plan import run
 
     project_root = Path.cwd()
     mill_dir = project_root / ".millhouse"
-    wiki_root = (mill_dir / "wiki").resolve()
+    wiki_root = resolve_wiki_path(project_root)
     cfg = load_config(wiki_root, mill_dir)
 
     try:
         slug = find_active_slug(mill_dir)
         if not args.skip_validate:
             from _plan_validate import run as validate_run
-            plan_dir = resolve_path(cfg["paths"]["plan_dir"], slug, wiki_root)
+            plan_dir = resolve_path(cfg["paths"]["plan_dir"], slug)
             errors = validate_run(plan_dir, project_root, wiki_root=wiki_root)
             if errors:
                 n = len(errors)

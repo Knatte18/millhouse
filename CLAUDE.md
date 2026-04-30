@@ -7,7 +7,38 @@ scope: this file is read on session start; keep it short
 
 ## Project shape
 
-`mill-v2` — a plugin-based task/review/orchestration system for Claude Code. Wiki repo (sibling clone) owns task state and shared config.
+`mill-v2` — a plugin-based task/review/orchestration system for Claude Code. Wiki repo (sibling clone) owns the task index and shared config. Working state (`status.md`, `discussion.md`, `plan/`, `reviews/`) lives at the worktree root on the task branch.
+
+Container layout (`<container>/wts/<repo>/` for the main worktree, `<container>/wts/<slug>/` for task worktrees, `<container>/portals/` for cross-worktree junctions, `<container>/wiki/` for the wiki clone, `<container>/codeguide/` for codeguide):
+
+```text
+c:/Code/millhouse/                ← container, named after the repo
+  wts/                            ← all worktrees
+    millhouse/                    ← main worktree, named after repo
+    <slug>/                       ← task worktrees, named after slug
+  wiki/                           ← wiki clone
+  codeguide/                      ← codeguide clone
+  portals/                        ← junctions to all task worktrees
+    millhouse -> ../wts/millhouse
+    <slug>    -> ../wts/<slug>
+```
+
+Inside each worktree:
+
+```text
+c:/Code/millhouse/wts/<slug>/
+  plugins/                        ← (only meaningful in main worktree)
+  ... (rest of repo files)
+  .millhouse/
+    active.slug.md
+    config.local.yaml
+  .others -> ../../portals/       ← single junction to portals dir
+  .active -> ../../portals/<slug>/← resolves through portals to the task worktree
+  reviews/                        ← per-task working state, on the branch
+  discussion.md
+  plan/
+  status.md
+```
 
 ## Review terminology
 
@@ -45,6 +76,7 @@ A discussion gap is missing information; a plan/code block is a must-fix defect.
 - `specs/_legacy/` — pre-discussion drafts, not authoritative.
 - `.millhouse/` in working clones is gitignored local state.
 - `.scratch/` in working clones is gitignored scratch-only state; not propagated to worktrees.
+- Task worktrees live under `<container>/wts/`; portal junctions under `<container>/portals/`.
 
 ## Conventions worth carrying
 
@@ -58,5 +90,7 @@ A discussion gap is missing information; a plan/code block is a must-fix defect.
 Path rules that keep being forgotten — they live here, not spread across SKILL.md files.
 
 - **Junctions are IDE/terminal convenience only.** Scripts MUST resolve to the real wiki repo via `_paths.resolve_wiki_path(git_toplevel)`, never by treating `.millhouse/wiki` (or any junction) as a path. Junctions exist so the operator can type shorter paths in a shell and see the wiki in the sidebar — they are not a code contract. (The same invariant is documented in `wiki/config.yaml`'s header comment.)
-- **All path resolution goes through `_paths.py`.** The module re-exports `resolve_path` from `_sibling.py` (identical-twin with codeguide's copy per spec 00) and adds `resolve_git_root` + `resolve_wiki_path`. New path-resolver helpers go here too — do not scatter private `_resolve_*` functions across `millpy-*.py` CLI scripts.
+- **All path resolution goes through `_paths.py`.** The module re-exports `resolve_path` from `_sibling.py` (identical-twin with codeguide's copy per spec 00) and adds `resolve_git_root` + `resolve_wiki_path`. New helpers: `resolve_hub_relative_path(worktree_root, hub_subpath)` for cwd-as-hub resolution (reads `hub_relative_path:` from `.millhouse/config.local.yaml`); `resolve_active_worktree(container_path, slug)` for slug-to-worktree lookup (returns `<container>/wts/<slug>` after verifying `.millhouse/active.slug.md`). New path-resolver helpers go here too — do not scatter private `_resolve_*` functions across `millpy-*.py` CLI scripts.
+- **`_sibling.resolve_path` detects container-form via `repo_root.parent.name == "wts"`.** Container-form returns `parent.parent / role` (sibling of `wts/`). Prefix-form returns `parent / f"{repo_root.name}.{role}"`. Old hub-form (`repo_root.name == "hub"`) is no longer recognised — migrate first.
+- **Working state lives at the worktree root, tracked on the task branch.** `status.md`, `discussion.md`, `plan/`, and `reviews/` are committed to the task branch, not written to the wiki. The wiki holds only the task index (`Home.md`) and shared config (`config.yaml`). mill-merge's cleanup commit removes these four paths before squash-merging back to the parent branch.
 - **Scratch lives at `<cwd>/.scratch/`, not under `.millhouse/`.** Shared with other plugins the engineer uses that default to top-level `.scratch/`. `.gitignore` covers it via `**/.scratch/`. Never write to `/tmp/` or `$env:TEMP`. (See `plugins/mill/skills/conversation/SKILL.md` for the full file-writing conventions.)

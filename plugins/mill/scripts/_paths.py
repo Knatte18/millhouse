@@ -36,8 +36,27 @@ Public API:
         ``cfg["spawn"]["worktrees_dir"]`` is set, treat it as a
         ``<TOKEN>``-template and substitute path tokens derived from
         ``git_root`` (no slug — this returns the *container* dir, not a
-        per-task subdir). Falls back to ``resolve_path("worktrees",
-        git_root)`` when the key is absent.
+        per-task subdir). Falls back to ``main_root.parent`` (the direct
+        parent of the main worktree, which equals ``wts/`` in container-form).
+        Prefix-form repos must set ``spawn.worktrees_dir:`` explicitly.
+
+    resolve_container_path(git_root)
+        Return the container directory for any worktree. In container-form
+        (``main_root.parent.name == "wts"``) returns ``main_root.parent.parent``.
+        In prefix-form returns ``main_root.parent``.
+
+    resolve_hub_relative_path(worktree_root, hub_subpath)
+        Translate the ``hub_relative_path`` value from
+        ``.millhouse/config.local.yaml`` into an absolute path.
+        ``"."`` returns ``worktree_root`` unchanged; any relative subpath
+        returns ``worktree_root / hub_subpath`` (trailing slash normalised).
+        Absolute values raise ``ValueError``.
+
+    resolve_active_worktree(container_path, slug)
+        Return ``container_path / "wts" / slug`` when that directory exists
+        and its ``.millhouse/active.slug.md`` marker matches the slug.
+        Raises ``ActiveWorktreeNotFound`` when the directory is absent.
+        Raises ``ActiveWorktreeSlugMismatch`` when the marker slug differs.
 """
 from __future__ import annotations
 
@@ -47,7 +66,19 @@ import _subprocess_util
 from _sibling import resolve_path
 
 
-__all__ = ["resolve_path", "resolve_git_root", "resolve_main_worktree_root", "resolve_wiki_path", "resolve_worktrees_dir", "resolve_short_name"]
+__all__ = [
+    "resolve_path",
+    "resolve_git_root",
+    "resolve_main_worktree_root",
+    "resolve_wiki_path",
+    "resolve_worktrees_dir",
+    "resolve_short_name",
+    "resolve_hub_relative_path",
+    "resolve_active_worktree",
+    "resolve_container_path",
+    "ActiveWorktreeNotFound",
+    "ActiveWorktreeSlugMismatch",
+]
 
 
 def resolve_git_root() -> Path:
@@ -95,8 +126,12 @@ def resolve_worktrees_dir(cfg: dict, git_root: Path) -> Path:
     When ``cfg["spawn"]["worktrees_dir"]`` is set explicitly, treat it as a
     ``<TOKEN>``-template and substitute path-level tokens derived from the
     main worktree root. The slug is intentionally absent — callers that need
-    a per-task path append ``/ slug`` themselves. Falls back to
-    ``resolve_path("worktrees", main_root)`` when the key is absent.
+    a per-task path append ``/ slug`` themselves.
+
+    Falls back to ``main_root.parent`` (the direct parent of the main worktree)
+    when the key is absent. In container-form this equals ``<container>/wts/``.
+    Prefix-form repos must set ``spawn.worktrees_dir:`` explicitly — there is
+    no automatic prefix-form fallback for the worktrees directory.
 
     Args:
         cfg: Deep-merged config dict (wiki config.yaml + config.local.yaml).
@@ -110,14 +145,40 @@ def resolve_worktrees_dir(cfg: dict, git_root: Path) -> Path:
     if template is not None:
         import _junction
 
+        container = (
+            main_root.parent.parent if main_root.parent.name == "wts" else main_root.parent
+        )
         tokens = {
             "HUB_PATH": str(main_root),
             "CWD_PATH": str(Path.cwd()),
-            "CONTAINER_PATH": str(main_root.parent),
+            "CONTAINER_PATH": str(container),
             "REPO": main_root.name,
         }
         return Path(_junction.resolve_target(template, tokens))
-    return resolve_path("worktrees", main_root)
+    return main_root.parent
+
+
+def resolve_container_path(git_root: Path) -> Path:
+    """Return the container directory for any worktree.
+
+    The canonical answer to "what is the container directory" for
+    cross-worktree operations that need to resolve ``<container>/portals/``,
+    ``<container>/wts/``, or ``<container>/wiki/``.
+
+    In container-form (``main_root.parent.name == "wts"``) the container is
+    the grandparent of the main worktree. In prefix-form the container is the
+    direct parent of the main worktree.
+
+    Args:
+        git_root: Absolute path to any worktree's git checkout root.
+
+    Returns:
+        Absolute ``Path`` of the container directory.
+    """
+    main_root = resolve_main_worktree_root(git_root)
+    if main_root.parent.name == "wts":
+        return main_root.parent.parent
+    return main_root.parent
 
 
 def resolve_short_name(cfg: dict, repo_name: str) -> str:
@@ -138,6 +199,86 @@ def resolve_short_name(cfg: dict, repo_name: str) -> str:
     if short:
         return short
     return repo_name[:2].upper() if len(repo_name) >= 2 else repo_name.upper()
+
+
+def resolve_hub_relative_path(worktree_root: Path, hub_subpath: str) -> Path:
+    """Return the hub directory path within a worktree.
+
+    Translates the ``hub_relative_path`` value from ``.millhouse/config.local.yaml``
+    into an absolute path. The caller reads the config; this function only performs
+    path arithmetic.
+
+    Args:
+        worktree_root: Absolute path to the worktree's git checkout root.
+        hub_subpath: Relative subpath from ``config.local.yaml`` ``hub_relative_path:``.
+            Use ``"."`` when the hub is the worktree root itself (the typical case).
+            Trailing slashes are normalised away.
+
+    Returns:
+        Absolute ``Path`` of the hub directory inside ``worktree_root``.
+
+    Raises:
+        ValueError: When ``hub_subpath`` is an absolute path.
+    """
+    sub = Path(hub_subpath)
+    # Check for absolute paths. Path.is_absolute() handles Windows drive-letter paths
+    # (e.g. "C:\foo"); the additional startswith("/") check catches Unix-rooted paths
+    # on Windows where pathlib considers them only drive-relative.
+    if sub.is_absolute() or hub_subpath.startswith("/"):
+        raise ValueError(
+            f"hub_subpath must be a relative path or '.', got: {hub_subpath!r}"
+        )
+    if str(sub) == ".":
+        return worktree_root
+    return worktree_root / sub
+
+
+class ActiveWorktreeNotFound(RuntimeError):
+    """Raised when the expected worktree directory does not exist."""
+
+
+class ActiveWorktreeSlugMismatch(RuntimeError):
+    """Raised when a worktree directory exists but its marker slug differs from the requested slug."""
+
+
+def resolve_active_worktree(container_path: Path, slug: str) -> Path:
+    """Return the path to an active task worktree within the container.
+
+    The canonical answer to "given a slug, where does that worktree live on
+    disk". Every cross-worktree consumer that needs to locate a task worktree
+    routes through this helper.
+
+    Args:
+        container_path: Absolute path to the container directory (grandparent
+            of all worktrees in container-form, i.e. the directory that
+            contains ``wts/``).
+        slug: The task slug to look up.
+
+    Returns:
+        Absolute ``Path`` of ``container_path / "wts" / slug`` when the
+        directory exists and its ``.millhouse/active.slug.md`` marker parses
+        to the same slug.
+
+    Raises:
+        ActiveWorktreeNotFound: When ``container_path / "wts" / slug`` does
+            not exist on disk.
+        ActiveWorktreeSlugMismatch: When the directory exists but the marker
+            slug does not match ``slug``.
+    """
+    import _active
+
+    worktree = container_path / "wts" / slug
+    if not worktree.is_dir():
+        raise ActiveWorktreeNotFound(
+            f"No worktree directory at {worktree} for slug {slug!r}"
+        )
+    mill_dir = worktree / ".millhouse"
+    marker_slug = _active.read_slug(mill_dir)
+    if marker_slug != slug:
+        raise ActiveWorktreeSlugMismatch(
+            f"Worktree at {worktree} has slug {marker_slug!r}, expected {slug!r}"
+        )
+    return worktree
 
 
 def resolve_wiki_path(git_toplevel: Path) -> Path:

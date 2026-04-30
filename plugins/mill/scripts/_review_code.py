@@ -155,8 +155,8 @@ def run(
     round returned ``NEED_CONTEXT``.
     """
     # 1. Paths + round counter
-    plan_dir = resolve_path(cfg["paths"]["plan_dir"], slug, wiki_root)
-    reviews_dir = resolve_path(cfg["paths"]["reviews_dir"], slug, wiki_root)
+    plan_dir = resolve_path(cfg["paths"]["plan_dir"], slug)
+    reviews_dir = resolve_path(cfg["paths"]["reviews_dir"], slug)
     scope_label = batch_name or "holistic"
     round_n = discover_round(reviews_dir, "code", scope_label)
     max_rounds = max_rounds if max_rounds is not None else cfg["review"]["code"]["rounds"]

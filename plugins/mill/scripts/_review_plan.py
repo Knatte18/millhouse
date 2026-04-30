@@ -272,8 +272,8 @@ def run(
         raise ReviewError("--holistic-only and --no-holistic are mutually exclusive")
 
     # 1. Paths and round
-    plan_dir = resolve_path(cfg["paths"]["plan_dir"], slug, wiki_root)
-    reviews_dir = resolve_path(cfg["paths"]["reviews_dir"], slug, wiki_root)
+    plan_dir = resolve_path(cfg["paths"]["plan_dir"], slug)
+    reviews_dir = resolve_path(cfg["paths"]["reviews_dir"], slug)
     max_rounds = max_rounds if max_rounds is not None else cfg["review"]["plan"]["rounds"]
 
     print(

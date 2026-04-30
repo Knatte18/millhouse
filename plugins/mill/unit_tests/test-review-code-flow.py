@@ -10,6 +10,8 @@ with no real LLM, no network calls. Covers the bugs fixed in batches 01-05:
 """
 from __future__ import annotations
 
+import os
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -79,12 +81,16 @@ def _make_fixture(tmp_path: Path) -> tuple[Path, Path, Path, dict]:
     """Build a standard 3-batch (alpha, beta, gamma) fixture under tmp_path.
 
     Returns (mill_dir, wiki_root, project_root, cfg).
+    project_root is the worktree path; callers must os.chdir(project_root).
     alpha Reads src/a.py; beta Reads src/b.py; gamma Reads src/c.py.
     All three source files are created on disk.
     """
+    worktree = tmp_path / "container" / "wts" / SLUG
+    worktree.mkdir(parents=True)
+    subprocess.run(["git", "-C", str(worktree), "init"], check=True, capture_output=True)
+    mill_dir = worktree / ".millhouse"
     wiki_root = tmp_path / "wiki"
-    project_root = tmp_path / "project"
-    mill_dir = project_root / ".millhouse"
+    project_root = worktree
 
     _active.write(
         mill_dir,
@@ -94,7 +100,7 @@ def _make_fixture(tmp_path: Path) -> tuple[Path, Path, Path, dict]:
         spawned_at="2026-01-01T00:00:00Z",
     )
 
-    plan_dir = wiki_root / "active" / SLUG / "plan"
+    plan_dir = worktree / "plan"
     plan_dir.mkdir(parents=True)
 
     batch_specs = [
@@ -117,9 +123,9 @@ def _make_fixture(tmp_path: Path) -> tuple[Path, Path, Path, dict]:
 
     cfg = {
         "paths": {
-            "discussion_file": f"active/{SLUG}/discussion.md",
-            "plan_dir":        f"active/{SLUG}/plan/",
-            "reviews_dir":     f"active/{SLUG}/reviews/",
+            "discussion_file": "discussion.md",
+            "plan_dir":        "plan/",
+            "reviews_dir":     "reviews/",
         },
         "review": {
             "code": {
@@ -152,6 +158,8 @@ def main() -> int:
     # ------------------------------------------------------------------
     with tempfile.TemporaryDirectory() as tmpdir:
         mill_dir, wiki_root, project_root, cfg = _make_fixture(Path(tmpdir))
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
         try:
             # alpha round 1
             _seed_approve(1)
@@ -160,6 +168,9 @@ def main() -> int:
             assert r.verdict == "APPROVE"
             fname = Path(r.reviews[0]["file"]).name
             assert "code-review-alpha-r1" in fname, f"unexpected filename: {fname}"
+            assert str(project_root / "reviews") in r.reviews[0]["file"], (
+                f"review file must be under worktree/reviews/, got {r.reviews[0]['file']!r}"
+            )
             print(f"PASS test1a: alpha r1 → {fname}")
 
             # alpha round 2 (counter increments per-scope)
@@ -194,12 +205,16 @@ def main() -> int:
         except Exception as exc:
             errors += 1
             print(f"FAIL test1 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
 
     # ------------------------------------------------------------------
     # Test 2 — manifest present in prompt
     # ------------------------------------------------------------------
     with tempfile.TemporaryDirectory() as tmpdir:
         mill_dir, wiki_root, project_root, cfg = _make_fixture(Path(tmpdir))
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
         try:
             _seed_approve(1)
             code_run(cfg, SLUG, mill_dir, wiki_root, project_root, batch_name=None)
@@ -219,6 +234,8 @@ def main() -> int:
         except Exception as exc:
             errors += 1
             print(f"FAIL test2 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
 
     # ------------------------------------------------------------------
     # Test 3 — creates_union suppression
@@ -226,15 +243,18 @@ def main() -> int:
     # raise ReviewError even when the file doesn't exist on disk (#60).
     # ------------------------------------------------------------------
     with tempfile.TemporaryDirectory() as tmpdir:
+        worktree = Path(tmpdir) / "container" / "wts" / SLUG
+        worktree.mkdir(parents=True)
+        subprocess.run(["git", "-C", str(worktree), "init"], check=True, capture_output=True)
+        mill_dir = worktree / ".millhouse"
         wiki_root = Path(tmpdir) / "wiki"
-        project_root = Path(tmpdir) / "project"
-        mill_dir = project_root / ".millhouse"
+        project_root = worktree
         _active.write(
             mill_dir,
             slug=SLUG, task_title="Test", branch="test",
             spawned_at="2026-01-01T00:00:00Z",
         )
-        plan_dir = wiki_root / "active" / SLUG / "plan"
+        plan_dir = worktree / "plan"
         plan_dir.mkdir(parents=True)
         (plan_dir / "00-overview.md").write_text(
             _make_overview([("alpha", "01-alpha.md"), ("beta", "02-beta.md")]),
@@ -253,14 +273,16 @@ def main() -> int:
         # generated/by_alpha.py is NOT created on disk
         cfg3 = {
             "paths": {
-                "discussion_file": f"active/{SLUG}/discussion.md",
-                "plan_dir":        f"active/{SLUG}/plan/",
-                "reviews_dir":     f"active/{SLUG}/reviews/",
+                "discussion_file": "discussion.md",
+                "plan_dir":        "plan/",
+                "reviews_dir":     "reviews/",
             },
             "review": {
                 "code": {"rounds": 3, "reviewer": "test_stub", "self_fix_rounds": 0, "holistic": True},
             },
         }
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
         _seed_approve(1)
         try:
             r = code_run(cfg3, SLUG, mill_dir, wiki_root, project_root, batch_name="beta")
@@ -272,20 +294,25 @@ def main() -> int:
         except Exception as exc:
             errors += 1
             print(f"FAIL test3 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
 
     # ------------------------------------------------------------------
     # Test 4 — hard-fail on missing ref not in creates_union (#41/#43)
     # ------------------------------------------------------------------
     with tempfile.TemporaryDirectory() as tmpdir:
+        worktree = Path(tmpdir) / "container" / "wts" / SLUG
+        worktree.mkdir(parents=True)
+        subprocess.run(["git", "-C", str(worktree), "init"], check=True, capture_output=True)
+        mill_dir = worktree / ".millhouse"
         wiki_root = Path(tmpdir) / "wiki"
-        project_root = Path(tmpdir) / "project"
-        mill_dir = project_root / ".millhouse"
+        project_root = worktree
         _active.write(
             mill_dir,
             slug=SLUG, task_title="Test", branch="test",
             spawned_at="2026-01-01T00:00:00Z",
         )
-        plan_dir = wiki_root / "active" / SLUG / "plan"
+        plan_dir = worktree / "plan"
         plan_dir.mkdir(parents=True)
         (plan_dir / "00-overview.md").write_text(
             _make_overview([("alpha", "01-alpha.md")]), encoding="utf-8"
@@ -294,17 +321,18 @@ def main() -> int:
             _make_batch_file("alpha", ["nonexistent/path.py"], []),
             encoding="utf-8",
         )
-        project_root.mkdir(parents=True, exist_ok=True)
         cfg4 = {
             "paths": {
-                "discussion_file": f"active/{SLUG}/discussion.md",
-                "plan_dir":        f"active/{SLUG}/plan/",
-                "reviews_dir":     f"active/{SLUG}/reviews/",
+                "discussion_file": "discussion.md",
+                "plan_dir":        "plan/",
+                "reviews_dir":     "reviews/",
             },
             "review": {
                 "code": {"rounds": 3, "reviewer": "test_stub", "self_fix_rounds": 0, "holistic": True},
             },
         }
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
         _seed_approve(1)
         try:
             code_run(cfg4, SLUG, mill_dir, wiki_root, project_root, batch_name="alpha")
@@ -324,12 +352,16 @@ def main() -> int:
         except Exception as exc:
             errors += 1
             print(f"FAIL test4 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
 
     # ------------------------------------------------------------------
     # Test 5 — NEED_CONTEXT resume fallback: 1 retry → APPROVE (#5/#7)
     # ------------------------------------------------------------------
     with tempfile.TemporaryDirectory() as tmpdir:
         mill_dir, wiki_root, project_root, cfg = _make_fixture(Path(tmpdir))
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
         # src/a.py exists on disk (created by _make_fixture); NEED_CONTEXT_TEXT
         # claims it is missing so resolve_existing_paths returns it → retry fires.
         stub.seed([
@@ -359,12 +391,16 @@ def main() -> int:
         except Exception as exc:
             errors += 1
             print(f"FAIL test5 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
 
     # ------------------------------------------------------------------
     # Test 6 — NEED_CONTEXT propagated when retry also returns NEED_CONTEXT
     # ------------------------------------------------------------------
     with tempfile.TemporaryDirectory() as tmpdir:
         mill_dir, wiki_root, project_root, cfg = _make_fixture(Path(tmpdir))
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
         stub.seed([
             (NEED_CONTEXT_TEXT, "sid-1"),
             (NEED_CONTEXT_TEXT, "sid-2"),
@@ -385,20 +421,24 @@ def main() -> int:
         except Exception as exc:
             errors += 1
             print(f"FAIL test6 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
 
     # ------------------------------------------------------------------
     # Test 7 — max_rounds kwarg override
     # ------------------------------------------------------------------
     with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir) / "container" / "wts" / SLUG
+        project_root.mkdir(parents=True)
+        subprocess.run(["git", "-C", str(project_root), "init"], check=True, capture_output=True)
         wiki_root = Path(tmpdir) / "wiki"
-        project_root = Path(tmpdir) / "project"
         mill_dir = project_root / ".millhouse"
         _active.write(
             mill_dir,
             slug=SLUG, task_title="Test", branch="test",
             spawned_at="2026-01-01T00:00:00Z",
         )
-        plan_dir = wiki_root / "active" / SLUG / "plan"
+        plan_dir = project_root / "plan"
         plan_dir.mkdir(parents=True)
         (plan_dir / "00-overview.md").write_text(
             _make_overview([("foo", "01-foo.md")]), encoding="utf-8"
@@ -411,15 +451,17 @@ def main() -> int:
 
         cfg7 = {
             "paths": {
-                "discussion_file": f"active/{SLUG}/discussion.md",
-                "plan_dir":        f"active/{SLUG}/plan/",
-                "reviews_dir":     f"active/{SLUG}/reviews/",
+                "discussion_file": "discussion.md",
+                "plan_dir":        "plan/",
+                "reviews_dir":     "reviews/",
             },
             "review": {
                 "code": {"rounds": 3, "reviewer": "test_stub", "self_fix_rounds": 0, "holistic": True},
             },
         }
 
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
         try:
             # Pre-populate 3 review files for batch "foo"
             _seed_approve(3)
@@ -454,12 +496,16 @@ def main() -> int:
         except Exception as exc:
             errors += 1
             print(f"FAIL test7 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
 
     # ------------------------------------------------------------------
     # Test 8 — blocking_count populated from BLOCKING headings
     # ------------------------------------------------------------------
     with tempfile.TemporaryDirectory() as tmpdir:
         mill_dir, wiki_root, project_root, cfg = _make_fixture(Path(tmpdir))
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
         try:
             three_blockings = (
                 "# Review: test\n\n"
@@ -484,6 +530,8 @@ def main() -> int:
         except Exception as exc:
             errors += 1
             print(f"FAIL test8 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
 
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)

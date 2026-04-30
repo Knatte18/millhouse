@@ -8,12 +8,13 @@ from pathlib import Path
 HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
-from _gitignore import END, STANDARD_ENTRIES, START, upsert  # noqa: E402
-
-
-def _write(path: Path, content: str) -> None:
-    path.write_text(content, encoding="utf-8")
-
+from _gitignore import (  # noqa: E402
+    ANCHORED_ENTRIES,
+    END,
+    GLOB_ENTRIES,
+    START,
+    upsert_split,
+)
 
 def _read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
@@ -22,184 +23,126 @@ def _read(path: Path) -> str:
 def main() -> int:
     errors = 0
 
-    # --- empty .gitignore + upsert(p, []) ---
+    # --- upsert_split: same path → single combined block ---
     with tempfile.TemporaryDirectory() as tmpdir:
         gi = Path(tmpdir) / ".gitignore"
         gi.write_text("", encoding="utf-8")
-        changed = upsert(gi, [])
+        repo_changed, hub_changed = upsert_split(gi, gi, GLOB_ENTRIES, ANCHORED_ENTRIES)
         content = _read(gi)
-        if not changed:
-            print("FAIL: empty .gitignore + upsert([]) should return True", file=sys.stderr)
+        if not repo_changed:
+            print("FAIL: upsert_split same-path first run should return (True, False)", file=sys.stderr)
             errors += 1
-        else:
-            print("PASS: empty .gitignore + upsert([]) -> True")
-        if START not in content:
-            print("FAIL: START marker missing after upsert on empty file", file=sys.stderr)
+        if hub_changed:
+            print("FAIL: upsert_split same-path hub_changed should be False", file=sys.stderr)
             errors += 1
-        else:
-            print("PASS: START marker present")
-        if END not in content:
-            print("FAIL: END marker missing after upsert on empty file", file=sys.stderr)
-            errors += 1
-        else:
-            print("PASS: END marker present")
-        for entry in STANDARD_ENTRIES:
+        for entry in GLOB_ENTRIES + ANCHORED_ENTRIES:
             if entry not in content:
-                print(f"FAIL: standard entry missing: {entry}", file=sys.stderr)
+                print(f"FAIL: upsert_split same-path missing entry: {entry}", file=sys.stderr)
                 errors += 1
-            else:
-                print(f"PASS: standard entry present: {entry}")
-        # No extra trailing whitespace beyond the final newline
-        if content.rstrip("\n") != content.rstrip():
-            print("FAIL: trailing whitespace beyond newline", file=sys.stderr)
-            errors += 1
-        else:
-            print("PASS: no extra trailing whitespace")
+        if errors == 0:
+            print("PASS: upsert_split same-path writes single combined block, returns (True, False)")
 
-    # --- empty .gitignore + upsert(p, ["tasks.md"]) ---
+    # --- upsert_split: same path → idempotent re-run ---
     with tempfile.TemporaryDirectory() as tmpdir:
         gi = Path(tmpdir) / ".gitignore"
         gi.write_text("", encoding="utf-8")
-        changed = upsert(gi, ["tasks.md"])
-        content = _read(gi)
-        if "/tasks.md" not in content:
-            print("FAIL: /tasks.md not in block after upsert with hardlink entry", file=sys.stderr)
+        upsert_split(gi, gi, GLOB_ENTRIES, ANCHORED_ENTRIES)
+        repo_changed, hub_changed = upsert_split(gi, gi, GLOB_ENTRIES, ANCHORED_ENTRIES)
+        if repo_changed or hub_changed:
+            print("FAIL: upsert_split same-path re-run should return (False, False)", file=sys.stderr)
             errors += 1
         else:
-            print("PASS: /tasks.md present in block")
-        if not changed:
-            print("FAIL: upsert with hardlink entry should return True", file=sys.stderr)
-            errors += 1
-        else:
-            print("PASS: upsert with hardlink entry -> True")
-        # Entry must appear after the standard entries inside the block
-        block_start = content.index(START)
-        block_end = content.index(END)
-        block_inner = content[block_start:block_end]
-        last_std_pos = max(block_inner.find(e) for e in STANDARD_ENTRIES)
-        hardlink_pos = block_inner.find("/tasks.md")
-        if hardlink_pos < last_std_pos:
-            print("FAIL: hardlink entry appears before standard entries", file=sys.stderr)
-            errors += 1
-        else:
-            print("PASS: hardlink entry appears after standard entries")
+            print("PASS: upsert_split same-path re-run -> (False, False)")
 
-    # --- existing user content + no marker → block appended after user content ---
+    # --- upsert_split: different paths → two separate blocks ---
     with tempfile.TemporaryDirectory() as tmpdir:
-        gi = Path(tmpdir) / ".gitignore"
-        user_content = "# user content\n*.log\n"
-        gi.write_text(user_content, encoding="utf-8")
-        changed = upsert(gi, [])
-        content = _read(gi)
-        if not changed:
-            print("FAIL: user content + no marker should return True", file=sys.stderr)
+        root_gi = Path(tmpdir) / ".gitignore"
+        hub_dir = Path(tmpdir) / "src" / "hub"
+        hub_dir.mkdir(parents=True)
+        hub_gi = hub_dir / ".gitignore"
+        root_gi.write_text("", encoding="utf-8")
+        hub_gi.write_text("", encoding="utf-8")
+        repo_changed, hub_changed = upsert_split(root_gi, hub_gi, GLOB_ENTRIES, ANCHORED_ENTRIES)
+        root_content = _read(root_gi)
+        hub_content = _read(hub_gi)
+        if not repo_changed:
+            print("FAIL: upsert_split diff-path repo_changed should be True", file=sys.stderr)
             errors += 1
-        else:
-            print("PASS: user content + no marker -> True")
-        if not content.startswith(user_content.rstrip("\n")):
-            print("FAIL: user content not preserved before block", file=sys.stderr)
+        if not hub_changed:
+            print("FAIL: upsert_split diff-path hub_changed should be True", file=sys.stderr)
             errors += 1
-        else:
-            print("PASS: user content preserved before block")
-        start_pos = content.find(START)
-        if start_pos <= 0:
-            print("FAIL: block should appear after user content", file=sys.stderr)
-            errors += 1
-        else:
-            # Check blank-line separator
-            if "\n\n" not in content[content.find("*.log"):start_pos]:
-                print("FAIL: no blank-line separator before block", file=sys.stderr)
+        # Root gets only glob entries
+        for entry in GLOB_ENTRIES:
+            if entry not in root_content:
+                print(f"FAIL: root .gitignore missing glob entry: {entry}", file=sys.stderr)
                 errors += 1
-            else:
-                print("PASS: blank-line separator before block")
-
-    # --- re-run upsert with same input → returns False ---
-    with tempfile.TemporaryDirectory() as tmpdir:
-        gi = Path(tmpdir) / ".gitignore"
-        gi.write_text("", encoding="utf-8")
-        upsert(gi, ["tasks.md"])
-        first_content = _read(gi)
-        changed = upsert(gi, ["tasks.md"])
-        second_content = _read(gi)
-        if changed:
-            print("FAIL: re-run with same input should return False", file=sys.stderr)
-            errors += 1
-        else:
-            print("PASS: re-run with same input -> False")
-        if first_content != second_content:
-            print("FAIL: file changed on idempotent re-run", file=sys.stderr)
-            errors += 1
-        else:
-            print("PASS: file byte-equal on idempotent re-run")
-
-    # --- stale marker block → block rewritten, outside-marker content unchanged ---
-    with tempfile.TemporaryDirectory() as tmpdir:
-        gi = Path(tmpdir) / ".gitignore"
-        user_before = "# user entry\n*.bak\n"
-        stale_block = f"{START}\n**/.old-path/\n{END}\n"
-        gi.write_text(user_before + "\n" + stale_block, encoding="utf-8")
-        changed = upsert(gi, [])
-        content = _read(gi)
-        if not changed:
-            print("FAIL: stale block should return True", file=sys.stderr)
-            errors += 1
-        else:
-            print("PASS: stale block -> True (rewritten)")
-        if "**/.old-path/" in content:
-            print("FAIL: stale entry still present after rewrite", file=sys.stderr)
-            errors += 1
-        else:
-            print("PASS: stale entry removed")
-        for entry in STANDARD_ENTRIES:
-            if entry not in content:
-                print(f"FAIL: standard entry missing after rewrite: {entry}", file=sys.stderr)
+        for entry in ANCHORED_ENTRIES:
+            if entry in root_content:
+                print(f"FAIL: root .gitignore should not contain anchored entry: {entry}", file=sys.stderr)
                 errors += 1
-        if "# user entry" not in content or "*.bak" not in content:
-            print("FAIL: outside-marker user content was changed", file=sys.stderr)
+        # Hub gets only anchored entries
+        for entry in ANCHORED_ENTRIES:
+            if entry not in hub_content:
+                print(f"FAIL: hub .gitignore missing anchored entry: {entry}", file=sys.stderr)
+                errors += 1
+        for entry in GLOB_ENTRIES:
+            if entry in hub_content:
+                print(f"FAIL: hub .gitignore should not contain glob entry: {entry}", file=sys.stderr)
+                errors += 1
+        if errors == 0:
+            print("PASS: upsert_split diff-path writes glob-only to root and anchored-only to hub")
+
+    # --- upsert_split: different paths → idempotent re-run on each path ---
+    with tempfile.TemporaryDirectory() as tmpdir:
+        root_gi = Path(tmpdir) / ".gitignore"
+        hub_dir = Path(tmpdir) / "src" / "hub"
+        hub_dir.mkdir(parents=True)
+        hub_gi = hub_dir / ".gitignore"
+        root_gi.write_text("", encoding="utf-8")
+        hub_gi.write_text("", encoding="utf-8")
+        upsert_split(root_gi, hub_gi, GLOB_ENTRIES, ANCHORED_ENTRIES)
+        repo_changed, hub_changed = upsert_split(root_gi, hub_gi, GLOB_ENTRIES, ANCHORED_ENTRIES)
+        if repo_changed or hub_changed:
+            print("FAIL: upsert_split diff-path re-run should return (False, False)", file=sys.stderr)
             errors += 1
         else:
-            print("PASS: outside-marker user content unchanged after rewrite")
+            print("PASS: upsert_split diff-path re-run -> (False, False)")
 
-    # --- START present but END missing → ValueError ---
+    # --- upsert_split: anchored entries get / prepended if missing ---
+    with tempfile.TemporaryDirectory() as tmpdir:
+        root_gi = Path(tmpdir) / ".gitignore"
+        hub_dir = Path(tmpdir) / "hub"
+        hub_dir.mkdir()
+        hub_gi = hub_dir / ".gitignore"
+        root_gi.write_text("", encoding="utf-8")
+        hub_gi.write_text("", encoding="utf-8")
+        upsert_split(root_gi, hub_gi, [], ["tasks.md", "/.others"])
+        hub_content = _read(hub_gi)
+        if "/tasks.md" not in hub_content:
+            print("FAIL: bare anchored entry 'tasks.md' not normalised to '/tasks.md'", file=sys.stderr)
+            errors += 1
+        if "//tasks.md" in hub_content:
+            print("FAIL: double-slash in hub .gitignore for bare entry", file=sys.stderr)
+            errors += 1
+        if "/.others" not in hub_content:
+            print("FAIL: already-prefixed entry '/.others' missing from hub .gitignore", file=sys.stderr)
+            errors += 1
+        if "//.others" in hub_content:
+            print("FAIL: double-slash introduced for already-prefixed '/.others'", file=sys.stderr)
+            errors += 1
+        if errors == 0:
+            print("PASS: upsert_split anchored entries get / prepended; already-prefixed kept as-is")
+
+    # --- upsert_split: corrupt-marker ValueError preserved ---
     with tempfile.TemporaryDirectory() as tmpdir:
         gi = Path(tmpdir) / ".gitignore"
         gi.write_text(f"{START}\n**/.millhouse/\n", encoding="utf-8")
         try:
-            upsert(gi, [])
-            print("FAIL: expected ValueError for missing END marker", file=sys.stderr)
+            upsert_split(gi, gi, GLOB_ENTRIES, ANCHORED_ENTRIES)
+            print("FAIL: expected ValueError for corrupt marker in upsert_split", file=sys.stderr)
             errors += 1
-        except ValueError as exc:
-            print(f"PASS: ValueError raised for missing END marker: {exc}")
-
-    # --- hardlink entry without leading / → normalised ---
-    with tempfile.TemporaryDirectory() as tmpdir:
-        gi = Path(tmpdir) / ".gitignore"
-        gi.write_text("", encoding="utf-8")
-        upsert(gi, ["tasks.md"])
-        content = _read(gi)
-        if "tasks.md" in content and "/tasks.md" not in content:
-            print("FAIL: entry not normalised to /tasks.md", file=sys.stderr)
-            errors += 1
-        elif "/tasks.md" in content:
-            print("PASS: entry without / normalised to /tasks.md")
-        else:
-            print("FAIL: /tasks.md not found in output", file=sys.stderr)
-            errors += 1
-
-    # --- hardlink entry already /-prefixed → kept as-is (no double slash) ---
-    with tempfile.TemporaryDirectory() as tmpdir:
-        gi = Path(tmpdir) / ".gitignore"
-        gi.write_text("", encoding="utf-8")
-        upsert(gi, ["/tasks.md"])
-        content = _read(gi)
-        if "//tasks.md" in content:
-            print("FAIL: double slash introduced for already-prefixed entry", file=sys.stderr)
-            errors += 1
-        elif "/tasks.md" in content:
-            print("PASS: already-prefixed entry kept as-is (no double slash)")
-        else:
-            print("FAIL: /tasks.md not found in output for already-prefixed entry", file=sys.stderr)
-            errors += 1
+        except ValueError:
+            print("PASS: upsert_split preserves corrupt-marker ValueError")
 
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)

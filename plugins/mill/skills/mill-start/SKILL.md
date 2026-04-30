@@ -27,7 +27,7 @@ Read `<WIKI_PATH>/Home.md`, find the task heading whose slug matches the one fro
 
 ### Phase: Active
 
-The initial `status.md` at `<WIKI_PATH>/active/<slug>/status.md` was written by `mill-spawn` with `phase: discussing`. Verify it exists and the `parent:` branch is recorded. No edit needed here.
+The initial `status.md` at the worktree root (`status.md`) was written by `mill-spawn` and committed on the task branch with `phase: discussing`. Verify it exists and the `parent:` branch is recorded. No edit needed here.
 
 ### Phase: Explore
 
@@ -56,9 +56,9 @@ Propose 2–3 approaches with explicit trade-offs; lead with your recommendation
 
 ### Phase: Discussion File
 
-Render `plugins/mill/templates/discussion.md` into `<WIKI_PATH>/active/<slug>/discussion.md`, substituting `<TASK_TITLE>`, `<SLUG>`, `<PARENT_BRANCH>` from `status.md`. Fill every section — the file must be **self-contained**: a fresh mill-plan session with zero conversation history must be able to write a complete implementation plan from this file alone.
+Render `plugins/mill/templates/discussion.md` into `discussion.md` at the worktree root, substituting `<TASK_TITLE>`, `<SLUG>`, `<PARENT_BRANCH>` from `status.md`. Fill every section — the file must be **self-contained**: a fresh mill-plan session with zero conversation history must be able to write a complete implementation plan from this file alone.
 
-Commit via `_wiki.write_commit_push(wiki_path, [f"active/{slug}/discussion.md"], f"mill-start: write discussion.md for {slug}")`.
+Commit on the task branch: `git -C <worktree> add discussion.md && git commit -m "mill-start: write discussion.md for {slug}"`.
 
 ### Phase: Discussion Review
 
@@ -73,7 +73,7 @@ Loop up to `max_review_rounds` rounds. Each round:
    python plugins/mill/scripts/millpy-review-discussion.py
    ```
 
-   The script writes the review file under `<WIKI_PATH>/active/<slug>/reviews/` and prints a one-line JSON summary: `{"type": "discussion", "round": <int>, "verdict": "APPROVE" | "GAPS_FOUND", "blocking_count": <int>, "reviews": [{"scope": "holistic", "verdict": ..., "file": "<abs-path>", "session_id": "<id>"}]}`.
+   The script writes the review file under `<worktree_root>/reviews/` and prints a one-line JSON summary: `{"type": "discussion", "round": <int>, "verdict": "APPROVE" | "GAPS_FOUND", "blocking_count": <int>, "reviews": [{"scope": "holistic", "verdict": ..., "file": "<abs-path>", "session_id": "<id>"}]}`.
 
 3. **BEFORE reading the review file, load the `mill-receiving-review` skill** (see `plugins/mill/skills/mill-receiving-review/SKILL.md`). This is non-negotiable — the decision tree it encodes is what keeps review loops useful instead of adversarial.
 
@@ -85,7 +85,7 @@ If unresolved gaps remain after `max_review_rounds`: present them to the user fo
 
 ### Phase: Handoff
 
-Call `_status.append_phase(status_path, "discussed", timestamp)`. Commit+push via `_wiki.write_commit_push(wiki_path, [f"active/{slug}/status.md"], f"mill-start: handoff {slug}")`.
+Call `_status.append_phase(status_path, "discussed", timestamp)`. Commit on the task branch: `git -C <worktree> add status.md && git commit -m "mill-start: handoff {slug}"`.
 
 Report: **"Discussion complete. Run `/mill-plan` next to start autonomous plan writing."** Do not invoke `/mill-plan` yourself — handoff is always an explicit user decision.
 
@@ -103,5 +103,5 @@ Report: **"Discussion complete. Run `/mill-plan` next to start autonomous plan w
 ## Board discipline
 
 - Home.md writes go through `_wiki.write_commit_push` with the shared lock held (see `_wiki.acquire_lock` / `_wiki.release_lock`).
-- Per-task writes (`active/<slug>/*`) go through `_wiki.write_commit_push` without the shared lock.
+- Task-state writes (`status.md`, `discussion.md`) are committed on the task branch via `git add` + `git commit`, then pushed to remote. They never go through the wiki.
 - Phase transitions are recorded via `_status.append_phase`. Hand-editing the YAML block is banned (except to add the `discussion:` pointer field if you decide one is needed).

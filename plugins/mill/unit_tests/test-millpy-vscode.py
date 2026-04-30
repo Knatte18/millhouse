@@ -168,6 +168,142 @@ def main() -> int:
         else:
             print("PASS: --list prints candidates without launching VS Code")
 
+    # ------------------------------------------------------------------
+    # Test: hub_relative_path set in per-worktree config → VS Code
+    # launched with <worktree>/src/csharp/X as workspace folder.
+    # ------------------------------------------------------------------
+    with tempfile.TemporaryDirectory() as tmpdir:
+        root = Path(tmpdir)
+        _make_git_repo(root)
+
+        worktrees_dir = root / "worktrees"
+        wt1 = worktrees_dir / "task-alpha"
+        wt1.mkdir(parents=True)
+        _write_active_marker(wt1, "task-alpha", "Alpha Task")
+
+        mill_dir = wt1 / ".millhouse"
+        mill_dir.mkdir(exist_ok=True)
+        (mill_dir / "config.local.yaml").write_text(
+            "hub_relative_path: src/csharp/X\n", encoding="utf-8"
+        )
+
+        subprocess_calls: list[dict] = []
+        wiki_path = root / "wiki"
+        wiki_path.mkdir()
+
+        with (
+            patch("mill_vscode.resolve_git_root", return_value=root),
+            patch("mill_vscode.resolve_wiki_path", return_value=wiki_path),
+            patch("mill_vscode.resolve_worktrees_dir", return_value=worktrees_dir),
+            patch("mill_vscode.subprocess.run", side_effect=lambda a, **kw: subprocess_calls.append({"argv": a})),
+        ):
+            rc = mill_vscode.main([])
+
+        expected_workspace = str(wt1 / "src" / "csharp" / "X")
+        if rc != 0:
+            print(f"FAIL: hub_relative_path test returned {rc}", file=sys.stderr)
+            errors += 1
+        elif not subprocess_calls or expected_workspace not in subprocess_calls[0]["argv"]:
+            print(
+                f"FAIL: expected {expected_workspace} in code argv, got {subprocess_calls}",
+                file=sys.stderr,
+            )
+            errors += 1
+        else:
+            print("PASS: hub_relative_path (sub-dir) → VS Code launched in sub-dir")
+
+    # ------------------------------------------------------------------
+    # Test: hub_relative_path = "." → VS Code launched at worktree root.
+    # ------------------------------------------------------------------
+    with tempfile.TemporaryDirectory() as tmpdir:
+        root = Path(tmpdir)
+        _make_git_repo(root)
+
+        worktrees_dir = root / "worktrees"
+        wt1 = worktrees_dir / "task-dot"
+        wt1.mkdir(parents=True)
+        _write_active_marker(wt1, "task-dot", "Dot Task")
+
+        mill_dir = wt1 / ".millhouse"
+        mill_dir.mkdir(exist_ok=True)
+        (mill_dir / "config.local.yaml").write_text(
+            "hub_relative_path: .\n", encoding="utf-8"
+        )
+
+        subprocess_calls = []
+        wiki_path = root / "wiki"
+        wiki_path.mkdir()
+
+        with (
+            patch("mill_vscode.resolve_git_root", return_value=root),
+            patch("mill_vscode.resolve_wiki_path", return_value=wiki_path),
+            patch("mill_vscode.resolve_worktrees_dir", return_value=worktrees_dir),
+            patch("mill_vscode.subprocess.run", side_effect=lambda a, **kw: subprocess_calls.append({"argv": a})),
+        ):
+            rc = mill_vscode.main([])
+
+        if rc != 0:
+            print(f"FAIL: hub_relative_path=. test returned {rc}", file=sys.stderr)
+            errors += 1
+        elif not subprocess_calls or str(wt1) not in subprocess_calls[0]["argv"]:
+            print(
+                f"FAIL: expected {wt1} in code argv, got {subprocess_calls}",
+                file=sys.stderr,
+            )
+            errors += 1
+        else:
+            print("PASS: hub_relative_path=. → VS Code launched at worktree root")
+
+    # ------------------------------------------------------------------
+    # Regression: hub config has hub_relative_path: "hub-sub", selected
+    # worktree's config has hub_relative_path: "wt-sub" → wt-sub wins.
+    # ------------------------------------------------------------------
+    with tempfile.TemporaryDirectory() as tmpdir:
+        root = Path(tmpdir)
+        _make_git_repo(root)
+
+        worktrees_dir = root / "worktrees"
+        wt1 = worktrees_dir / "task-reg"
+        wt1.mkdir(parents=True)
+        _write_active_marker(wt1, "task-reg", "Regression Task")
+
+        hub_mill_dir = root / ".millhouse"
+        hub_mill_dir.mkdir(exist_ok=True)
+        (hub_mill_dir / "config.local.yaml").write_text(
+            "hub_relative_path: hub-sub\n", encoding="utf-8"
+        )
+
+        wt_mill_dir = wt1 / ".millhouse"
+        wt_mill_dir.mkdir(exist_ok=True)
+        (wt_mill_dir / "config.local.yaml").write_text(
+            "hub_relative_path: wt-sub\n", encoding="utf-8"
+        )
+
+        subprocess_calls = []
+        wiki_path = root / "wiki"
+        wiki_path.mkdir()
+
+        with (
+            patch("mill_vscode.resolve_git_root", return_value=root),
+            patch("mill_vscode.resolve_wiki_path", return_value=wiki_path),
+            patch("mill_vscode.resolve_worktrees_dir", return_value=worktrees_dir),
+            patch("mill_vscode.subprocess.run", side_effect=lambda a, **kw: subprocess_calls.append({"argv": a})),
+        ):
+            rc = mill_vscode.main([])
+
+        expected_workspace = str(wt1 / "wt-sub")
+        if rc != 0:
+            print(f"FAIL: hub_relative_path regression test returned {rc}", file=sys.stderr)
+            errors += 1
+        elif not subprocess_calls or expected_workspace not in subprocess_calls[0]["argv"]:
+            print(
+                f"FAIL: expected {expected_workspace} (wt-sub wins), got {subprocess_calls}",
+                file=sys.stderr,
+            )
+            errors += 1
+        else:
+            print("PASS: per-worktree hub_relative_path wins over hub config value")
+
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)
         return 1

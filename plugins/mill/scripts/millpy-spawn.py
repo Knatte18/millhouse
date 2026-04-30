@@ -37,13 +37,14 @@ from pathlib import Path
 from typing import Optional
 
 import _junction
+import _setup
 import _spawn_core
 import _tasks_md
 import _vscode
 import _wiki
 import _worktree
 from _config import load_config as _load_config_lenient
-from _paths import resolve_git_root, resolve_short_name, resolve_wiki_path, resolve_worktrees_dir
+from _paths import resolve_container_path, resolve_git_root, resolve_short_name, resolve_wiki_path, resolve_worktrees_dir
 from _spawn_core import pick_worktree_color
 
 
@@ -73,7 +74,7 @@ def _build_tokens(
     tokens = {
         "HUB_PATH": str(git_root),
         "CWD_PATH": str(Path.cwd()),
-        "CONTAINER_PATH": str(git_root.parent),
+        "CONTAINER_PATH": str(resolve_container_path(git_root)),
         "WIKI_PATH": str(wiki_path),
         "REPO": git_root.name,
     }
@@ -159,7 +160,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"[DryRun] Task:     {picked.title} [{slug}]")
         print(f"[DryRun] Branch:   {branch_name}")
         print(f"[DryRun] Worktree: {worktree_path}")
-        print(f"[DryRun] Status:   {wiki_path / 'active' / slug / 'status.md'}")
+        print(f"[DryRun] Status:   {worktree_path / 'status.md'}")
         return 0
 
     # Claim the task under the wiki lock. Multi mode already claimed inside
@@ -191,20 +192,18 @@ def main(argv: list[str] | None = None) -> int:
         exclude={"wiki", "active"},
     )
 
-    # Recreate every junction from the wiki config for the new worktree.
-    # Per-worktree junctions (target contains <SLUG>) point at this task's
-    # active dir and must be created with the slug-aware tokens.
-    junction_templates = _wiki.read_junctions(wiki_path)
-    for junction_rel, target_template in junction_templates.items():
-        target = Path(_junction.resolve_target(target_template, tokens))
-        link_path = worktree_path / junction_rel
-        # mill-spawn always owns a freshly-created worktree, so pre-existing
-        # junctions at these paths would be a bug in the copy step or a
-        # stale filesystem — surface the error by letting _junction.create
-        # raise rather than silently re-targeting.
-        if _junction.has_slug_token(target_template):
-            target.mkdir(parents=True, exist_ok=True)
-        _junction.create(target, link_path)
+    # Create the portals directory and portal entry for the new worktree.
+    # The portal entry (container/portals/<slug> → worktree_path) must exist
+    # BEFORE create_hub_links so that the .others and .active junction targets
+    # both exist when mklink /J runs (Windows fails on missing targets).
+    container_path = resolve_container_path(git_root)
+    (container_path / "portals").mkdir(parents=True, exist_ok=True)
+    _junction.create(target=worktree_path, link_path=container_path / "portals" / slug)
+
+    # Create all junctions and hardlinks from wiki/config.yaml for the new
+    # worktree.  _setup.create_hub_links uses the token-scope filter so that
+    # entries requiring <SLUG> are only created in slug-bearing (task) worktrees.
+    _setup.create_hub_links(worktree_path, wiki_path, tokens)
 
     # Pick a colour + write .vscode/settings.json. The palette scans the
     # *existing* sibling worktrees in the shared worktrees dir; the newly
@@ -229,7 +228,7 @@ def main(argv: list[str] | None = None) -> int:
     # dedicated description column; use the task title as description so
     # the template renders without empty placeholders.
     status_abs = _spawn_core.write_initial_status(
-        wiki_path=wiki_path,
+        worktree_path=worktree_path,
         slug=slug,
         title=picked.title,
         ts=ts,

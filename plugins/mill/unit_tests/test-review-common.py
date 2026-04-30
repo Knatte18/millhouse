@@ -1,6 +1,8 @@
 """Unit tests for plugins/mill/scripts/_review_common.py."""
 from __future__ import annotations
 
+import os
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -9,6 +11,55 @@ HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
 import _active  # noqa: E402
+from _paths import ActiveWorktreeNotFound, ActiveWorktreeSlugMismatch  # noqa: E402
+
+
+# ---------------------------------------------------------------------------
+# Fixture helper for resolve_path tests
+# ---------------------------------------------------------------------------
+
+
+def _make_worktree_fixture(tmp: str, slug: str) -> tuple[Path, Path]:
+    """Create a container-form git fixture at ``<tmp>/container/wts/<slug>``.
+
+    Layout:
+        <tmp>/container/wts/<slug>/          ← git repo + active.slug.md marker
+        <tmp>/container/wts/<slug>/.millhouse/active.slug.md
+
+    Returns:
+        ``(container_path, worktree_path)``
+
+    The caller must ``os.chdir(worktree_path)`` so that ``Path.cwd()`` resolves
+    inside the fixture when calling ``resolve_path``.
+    """
+    container = Path(tmp) / "container"
+    worktree = container / "wts" / slug
+    worktree.mkdir(parents=True)
+    subprocess.run(["git", "-C", str(worktree), "init"], check=True, capture_output=True)
+    subprocess.run(
+        ["git", "-C", str(worktree), "config", "user.email", "test@test.com"],
+        check=True, capture_output=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(worktree), "config", "user.name", "Test"],
+        check=True, capture_output=True,
+    )
+    (worktree / "README.md").write_text("# test\n", encoding="utf-8")
+    subprocess.run(["git", "-C", str(worktree), "add", "."], check=True, capture_output=True)
+    subprocess.run(
+        ["git", "-C", str(worktree), "commit", "-m", "init"],
+        check=True, capture_output=True,
+    )
+    mill_dir = worktree / ".millhouse"
+    mill_dir.mkdir(parents=True, exist_ok=True)
+    _active.write(
+        mill_dir,
+        slug=slug,
+        task_title="Test Task",
+        branch=f"hanf/{slug}",
+        spawned_at="2026-04-29T00:00:00Z",
+    )
+    return container, worktree
 
 from _review_common import (  # noqa: E402
     RE_BATCH,
@@ -148,10 +199,81 @@ def main() -> int:
         assert load_task_title(mill_dir, "my-task") == "my-task"
         print("PASS: load_task_title marker missing -> fallback to slug")
 
-    # resolve_path
-    p = resolve_path("active/<SLUG>/discussion.md", "my-slug", Path("/wiki"))
-    assert str(p).replace("\\", "/") == "/wiki/active/my-slug/discussion.md"
-    print("PASS: resolve_path")
+    # resolve_path: discussion.md → worktree root
+    with tempfile.TemporaryDirectory() as tmp:
+        slug = "my-task"
+        container, worktree = _make_worktree_fixture(tmp, slug)
+        original_cwd = Path.cwd()
+        os.chdir(worktree)
+        try:
+            p = resolve_path("discussion.md", slug)
+        finally:
+            os.chdir(original_cwd)
+        expected = worktree / "discussion.md"
+        assert p == expected, f"Expected {expected}, got {p}"
+        print("PASS: resolve_path('discussion.md', slug) → worktree/discussion.md")
+
+    # resolve_path: plan/ and reviews/ templates
+    with tempfile.TemporaryDirectory() as tmp:
+        slug = "my-task"
+        container, worktree = _make_worktree_fixture(tmp, slug)
+        original_cwd = Path.cwd()
+        os.chdir(worktree)
+        try:
+            p_plan = resolve_path("plan/", slug)
+            p_reviews = resolve_path("reviews/", slug)
+            p_nested = resolve_path("reviews/r1/holistic.md", slug)
+        finally:
+            os.chdir(original_cwd)
+        assert p_plan == worktree / "plan/", f"plan/ wrong: {p_plan}"
+        assert p_reviews == worktree / "reviews/", f"reviews/ wrong: {p_reviews}"
+        assert p_nested == worktree / "reviews/r1/holistic.md", f"nested wrong: {p_nested}"
+        print("PASS: resolve_path covers plan/, reviews/, nested reviews/r1/holistic.md")
+
+    # resolve_path: stale <SLUG> in template is substituted (not a literal segment)
+    with tempfile.TemporaryDirectory() as tmp:
+        slug = "my-task"
+        container, worktree = _make_worktree_fixture(tmp, slug)
+        original_cwd = Path.cwd()
+        os.chdir(worktree)
+        try:
+            p = resolve_path("active/<SLUG>/discussion.md", slug)
+        finally:
+            os.chdir(original_cwd)
+        # <SLUG> is substituted, so no literal segment named "<SLUG>" in result
+        assert "<SLUG>" not in str(p), f"<SLUG> should not appear literally in {p}"
+        assert slug in str(p), f"slug {slug!r} should appear in {p}"
+        print("PASS: resolve_path stale <SLUG> template substituted (no literal segment)")
+
+    # resolve_path: slug-mismatch raises ActiveWorktreeSlugMismatch
+    with tempfile.TemporaryDirectory() as tmp:
+        slug = "my-task"
+        container, worktree = _make_worktree_fixture(tmp, slug)
+        # Create a directory for a different slug but with the wrong marker slug inside it.
+        wrong_slug = "wrong-slug"
+        wrong_dir = container / "wts" / wrong_slug
+        wrong_dir.mkdir(parents=True)
+        wrong_mill = wrong_dir / ".millhouse"
+        wrong_mill.mkdir()
+        # Write marker with slug="my-task" into the "wrong-slug" directory.
+        _active.write(
+            wrong_mill,
+            slug="my-task",  # deliberate mismatch: dir is wrong-slug but marker says my-task
+            task_title="Test",
+            branch="hanf/my-task",
+            spawned_at="2026-04-29T00:00:00Z",
+        )
+        original_cwd = Path.cwd()
+        os.chdir(worktree)
+        try:
+            try:
+                resolve_path("discussion.md", wrong_slug)
+                errors += 1
+                print("FAIL: expected ActiveWorktreeSlugMismatch for wrong slug", file=sys.stderr)
+            except ActiveWorktreeSlugMismatch:
+                print("PASS: resolve_path raises ActiveWorktreeSlugMismatch on marker mismatch")
+        finally:
+            os.chdir(original_cwd)
 
     # parse_verdict: APPROVE
     raw = "# Review: My Task\n\n```yaml\nverdict: APPROVE\nreviewer_model: sonnetmax\n```\n"
