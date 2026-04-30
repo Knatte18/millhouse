@@ -26,7 +26,7 @@ messages on entry and exit.
 from __future__ import annotations
 
 import json
-import shutil
+import os
 import sys
 import time
 from pathlib import Path
@@ -34,21 +34,25 @@ from pathlib import Path
 import _subprocess_util
 
 
-def _resolve_claude() -> str:
-    """Return the absolute path to the claude CLI, or the bare name as fallback.
+def _claude_argv_prefix() -> list[str]:
+    """Return the argv prefix used to invoke the claude CLI.
 
-    On Windows, `claude` is typically installed as `claude.cmd` (an npm shim).
-    Python's subprocess.run does not resolve `.cmd`/`.bat` extensions without
-    shell=True, so we look up the full resolved path via shutil.which and
-    pass it to subprocess. shutil.which understands PATHEXT on Windows and
-    finds `claude.cmd` or `claude.exe` as appropriate.
+    On Windows, ``%LOCALAPPDATA%\\Microsoft\\WindowsApps`` (where the npm
+    shim ``claude.cmd`` lives) is stripped from the PATH that Python inherits
+    in non-interactive subprocess environments such as debugpy or CC's Bash
+    tool (see discussion.md § "PATH truncation in debugpy/subprocess
+    environments"). Delegating through ``cmd /c`` ensures cmd.exe uses its
+    own full interactive PATH, which always includes WindowsApps.
+
+    On POSIX, subprocess inherits the full PATH normally, so the bare name
+    suffices.
+
+    Returns:
+        ``["cmd", "/c", "claude"]`` on Windows; ``["claude"]`` on POSIX.
     """
-    resolved = shutil.which("claude")
-    if resolved is None:
-        # Let subprocess raise its own "file not found" error downstream;
-        # returning the bare name here keeps the error path unchanged.
-        return "claude"
-    return resolved
+    if os.name == "nt":
+        return ["cmd", "/c", "claude"]
+    return ["claude"]
 
 
 # ---------------------------------------------------------------------------
@@ -91,7 +95,7 @@ def _build_argv(
       * both unset                -> no flags; claude assigns an id server-side
     """
     argv = [
-        _resolve_claude(),
+        *_claude_argv_prefix(),
         "-p",
         "--output-format", "stream-json",
         "--verbose",  # required by claude CLI when combining -p with stream-json
