@@ -103,6 +103,64 @@ git commit -m "chore: pre-merge cleanup"
   git -C <parent-path> push
   ```
 
+  **On push failure — branch-protection fallback:**
+
+  Capture the combined stdout+stderr of the `git push` command. If the exit code is non-zero:
+
+  1. Check the captured output for any of these substrings: `Changes must be made through a pull request`, `repository rule violations`, `protected branch`, `GH006`. If none match → fail the step and trigger the Step 1–5 rollback (do not attempt the fallback).
+
+  2. If a match is found — branch-protection rejection — undo the local squash commit on the parent:
+
+     ```bash
+     git -C <parent-path> reset --hard origin/<parent_branch>
+     ```
+
+  3. Check whether a PR already exists for the child branch (handles re-runs after partial failure):
+
+     ```bash
+     gh pr list --head "$CHILD_BRANCH" --state open --json number,url --jq '.[0]'
+     ```
+
+     If a PR exists, capture its `url` field and skip to sub-step 5 (push child branch).
+
+  4. If no open PR exists, create one. Use `<parent_branch>` (not `<base-branch>`) as the `--base` target — in the fallback the two values may differ (e.g., parent is `develop`, base is `main`):
+
+     ```bash
+     gh pr create \
+         --base "<parent_branch>" \
+         --head "$CHILD_BRANCH" \
+         --title "<task: field from status.md>" \
+         --body "Auto-created: direct push was rejected by branch protection.
+
+     <task_description field from status.md>"
+     ```
+
+     Capture the PR URL printed by `gh pr create`.
+
+  5. Push the child branch so the PR has the cleanup commit:
+
+     ```bash
+     git push origin "$CHILD_BRANCH"
+     ```
+
+  6. Append the `pr-pending` phase and commit+push `status.md` on the task branch:
+
+     ```python
+     _status.append_phase(status_path, "pr-pending", _timestamp.now_utc_iso())
+     ```
+
+     ```bash
+     git add status.md && git commit -m "chore: pr-pending after branch-protection fallback" && git push
+     ```
+
+  7. Report to the user:
+
+     ```
+     Direct push rejected by branch protection — switched to PR path. PR: <url>. Consider setting `git.require-pr-to-base: true` in wiki/config.yaml.
+     ```
+
+  8. Skip to Step 11 (Release lock). Do not run Steps 6 (archive tag), 7 (Home.md flip), 8 (worktree/branch removal), or 9 (portal removal). Re-run `/mill-merge` after the PR lands to complete teardown.
+
   **Idempotency check:** if `git merge --squash` prints "Already up to date" or `git commit` prints "nothing to commit" → skip `push` and proceed to Step 6.
 
 ### 6. Archive tag
@@ -128,12 +186,29 @@ Under the wiki shared lock so no concurrent task writes Home.md mid-flip.
 ### 8. Drop the worktree + branch
 
 **Worktree mode:**
+
+Call `_worktree.remove_safe` — it strips every junction declared in `wiki/config.yaml` inside the worktree (`.millhouse/wiki`, `.others`, `.active`, plus any future entries) BEFORE removing the worktree, and falls back to `shutil.rmtree` only if `git worktree remove --force` fails with a long-path error. The junction-strip is non-skippable; you cannot lose the wiki by accident.
+
 ```bash
-git -C <parent-path> worktree remove --force <container-path>/wts/<slug>
+python -c "
+from pathlib import Path
+import _wiki, _worktree
+wiki = Path(r'<WIKI_PATH>').resolve()
+worktree = Path(r'<container-path>/wts/<slug>').resolve()
+parent = Path(r'<parent-path>').resolve()
+_worktree.remove_safe(worktree, cwd=parent, junctions_cfg=_wiki.read_junctions(wiki))
+"
 git -C <parent-path> branch -D "$CHILD_BRANCH"
 ```
 
-If `worktree remove` fails with "is not empty" or "is in use" on Windows: surface a hint — "couldn't remove <path>: directory is in use. Close any editor / terminal / file-explorer window pointing at it and re-run `/mill-merge` (Step 5's idempotency will skip the squash)." Do not name a specific diagnostic tool in the message.
+**Why this matters (GitHub issue #100):** `git worktree remove --force` is junction-safe on its own, but on Windows it can fail with "Filename too long" when `.scratch/` contains deeply nested claude session JSONs. A naive fallback to `cmd /c rmdir /s /q` or `shutil.rmtree` follows NTFS junctions by default and wipes the wiki, the portals directory, and any sibling worktree the junctions point to. `_worktree.remove_safe` strips junctions first so the fallback is junction-blind. Never invoke `rmdir /s` or `shutil.rmtree` on a worktree path directly — always go through `remove_safe`.
+
+**On `remove_safe` raising `WorktreeError`:**
+
+| Failure mode | Handling |
+|---|---|
+| "is in use" / "is not empty" | Surface "couldn't remove <path>: directory is in use. Close any editor / terminal / file-explorer window pointing at it and re-run `/mill-merge` (Step 5's idempotency will skip the squash)." Halt. |
+| Anything else | Halt with the captured error message — do NOT manually run `rmdir` or `rmtree` as a workaround. |
 
 **In-place mode:** skip `git worktree remove`; from cwd run:
 ```bash

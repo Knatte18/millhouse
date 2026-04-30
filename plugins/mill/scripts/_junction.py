@@ -198,3 +198,39 @@ def remove(link_path: Path) -> None:
             raise ValueError(
                 f"{link_path} is not a symlink — refusing to remove"
             )
+
+
+def strip_all_in_worktree(worktree_path: Path, junctions_cfg: dict[str, str]) -> list[Path]:
+    """
+    Unlink every junction declared in ``junctions_cfg`` inside ``worktree_path``.
+
+    This is the mandatory safety prelude to any recursive removal of a
+    worktree on Windows. ``rmdir /s`` (cmd.exe) and ``shutil.rmtree``
+    (Python) follow NTFS directory junctions by default — running either
+    against a worktree without first stripping junctions risks deleting
+    the wiki (`.millhouse/wiki -> <WIKI_PATH>`), the portals dir
+    (`.others -> <CONTAINER_PATH>/portals/`), or sibling worktrees
+    (`.active -> <CONTAINER_PATH>/portals/<SLUG>/`).
+
+    Removes ALL junctions regardless of token scope — both hub-scope
+    (no ``<SLUG>``) and per-worktree (with ``<SLUG>``) entries are stripped,
+    because mill-spawn creates both inside every task worktree.
+
+    Idempotent: missing junctions are silently skipped via ``remove``.
+
+    Args:
+        worktree_path: Absolute path to the worktree being torn down.
+        junctions_cfg: The ``junctions:`` block from ``wiki/config.yaml``,
+            as returned by ``_wiki.read_junctions``. Caller passes this
+            in to avoid a circular import on ``_wiki``.
+
+    Returns:
+        List of link paths that were stripped (or attempted; ``remove`` is
+        idempotent on missing paths).
+    """
+    removed: list[Path] = []
+    for link_relative in junctions_cfg.keys():
+        abs_link = worktree_path / link_relative
+        remove(abs_link)
+        removed.append(abs_link)
+    return removed

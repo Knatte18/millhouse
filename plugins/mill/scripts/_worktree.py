@@ -164,6 +164,12 @@ def remove(path: Path, cwd: Path, force: bool = True) -> None:
     repo root. With ``force=True`` (default) git removes the worktree even
     if it has untracked or modified files.
 
+    Note: this function does NOT strip junctions. Prefer ``remove_safe`` for
+    callers that need long-path fallback or operate on worktrees with
+    junctions inside (which is every mill task worktree). This raw form
+    exists for callers that have already handled junction-stripping or
+    operate on junction-free worktrees.
+
     Args:
         path: Absolute path to the worktree directory to remove.
         cwd: Repo root from which to invoke ``git`` (same as ``create``).
@@ -182,6 +188,88 @@ def remove(path: Path, cwd: Path, force: bool = True) -> None:
             f"git worktree remove failed (path={path}): {result.stderr.strip()!r}"
         )
     print(f"[worktree] remove: path={path}", file=sys.stderr)
+
+
+def remove_safe(
+    path: Path,
+    cwd: Path,
+    junctions_cfg: dict[str, str],
+    force: bool = True,
+) -> None:
+    """
+    Junction-safe worktree teardown with long-path fallback.
+
+    Sequence:
+        1. Strip every junction declared in ``junctions_cfg`` inside ``path``
+           via ``_junction.strip_all_in_worktree``. Mandatory: any subsequent
+           recursive removal would otherwise follow `.millhouse/wiki`,
+           `.others`, and `.active` and wipe the wiki, the portals dir,
+           or sibling worktrees.
+        2. Try ``git worktree remove --force``. Junction-safe by design.
+        3. If git fails with a long-path error (Windows, common when
+           ``.scratch/`` has deep claude session JSONs), fall back to
+           ``shutil.rmtree`` — safe NOW because junctions are already gone —
+           then ``git worktree prune`` to clear git's internal registry.
+        4. Any other git failure is re-raised; callers handle "in use"
+           messages etc.
+
+    See GitHub issue #100 for the data-loss incident this guards against.
+
+    Args:
+        path: Absolute path to the worktree directory to remove.
+        cwd: Repo root from which to invoke ``git``.
+        junctions_cfg: The ``junctions:`` block from ``wiki/config.yaml``,
+            as returned by ``_wiki.read_junctions``.
+        force: Forwarded to ``git worktree remove`` and to the fallback's
+            ``shutil.rmtree(ignore_errors=...)`` decision.
+
+    Raises:
+        WorktreeError: ``git worktree remove`` failed for a reason other
+            than long-path (e.g., "is in use"), and the fallback was not
+            attempted.
+    """
+    import _junction
+
+    if path.exists():
+        stripped = _junction.strip_all_in_worktree(path, junctions_cfg)
+        for abs_link in stripped:
+            print(f"[worktree] stripped junction: {abs_link}", file=sys.stderr)
+
+    cmd = ["git", "-C", str(cwd), "worktree", "remove"]
+    if force:
+        cmd.append("--force")
+    cmd.append(str(path))
+    result = _subprocess_util.run(cmd)
+    if result.returncode == 0:
+        print(f"[worktree] remove_safe: removed via git ({path})", file=sys.stderr)
+        return
+
+    stderr = result.stderr.strip()
+    long_path_marker = "Filename too long" in stderr or "filename too long" in stderr
+    if not long_path_marker:
+        raise WorktreeError(
+            f"git worktree remove failed (path={path}): {stderr!r}"
+        )
+
+    # Long-path fallback. Junctions are stripped, so shutil.rmtree is safe.
+    print(
+        f"[worktree] remove_safe: git failed with long-path error; "
+        f"falling back to shutil.rmtree (junctions already stripped)",
+        file=sys.stderr,
+    )
+    if path.exists():
+        shutil.rmtree(str(path), ignore_errors=False)
+
+    prune = _subprocess_util.run(
+        ["git", "-C", str(cwd), "worktree", "prune"],
+    )
+    if prune.returncode != 0:
+        print(
+            f"[worktree] remove_safe: git worktree prune warning: "
+            f"{prune.stderr.strip()!r}",
+            file=sys.stderr,
+        )
+    print(f"[worktree] remove_safe: removed via fallback ({path})", file=sys.stderr)
 
 
 def _is_windows_junction(path: Path) -> bool:

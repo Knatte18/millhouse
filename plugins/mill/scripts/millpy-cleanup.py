@@ -359,16 +359,10 @@ def _apply_worktree_record(
         junctions_cfg: Junction template map from the wiki config.
     """
     if record.worktree_path is not None:
-        for link_tpl, target_tpl in junctions_cfg.items():
-            if _junction.has_slug_token(target_tpl):
-                resolved_link = _junction.resolve_target(
-                    link_tpl,
-                    {"SLUG": record.slug, "WIKI_PATH": str(wiki_path), "HUB_PATH": str(hub_root)},
-                )
-                abs_link = record.worktree_path / resolved_link
-                _junction.remove(abs_link)
-                print(f"[cleanup] removed junction: {abs_link}", file=sys.stderr)
-        _worktree.remove(record.worktree_path, cwd=hub_root)
+        # remove_safe strips all junctions before removal and falls back
+        # to shutil.rmtree on long-path failures (junctions-stripped state
+        # makes that fallback safe). See GitHub issue #100.
+        _worktree.remove_safe(record.worktree_path, cwd=hub_root, junctions_cfg=junctions_cfg)
         if record.branch is not None:
             result = _subprocess_util.run(
                 ["git", "-C", str(hub_root), "branch", "-D", record.branch]
