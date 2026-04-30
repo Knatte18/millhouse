@@ -18,8 +18,8 @@ from _llm_claude import (  # noqa: E402
     LLMError,
     LLMSessionError,
     _build_argv,
+    _claude_argv_prefix,
     _parse_stream_json,
-    _resolve_claude,
     run_bulk,
     run_implementer,
     run_tool_use,
@@ -103,9 +103,9 @@ def main() -> int:
     print("PASS: _parse_stream_json skips bad JSON line")
 
     # _build_argv: bulk (no effort, no session)
-    claude_bin = _resolve_claude()
+    prefix = _claude_argv_prefix()
     argv = _build_argv("claude-sonnet-4-5", None, "")
-    assert argv == [claude_bin, "-p", "--output-format", "stream-json", "--verbose",
+    assert argv == [*prefix, "-p", "--output-format", "stream-json", "--verbose",
                     "--model", "claude-sonnet-4-5", "--allowedTools", ""]
     print("PASS: _build_argv bulk without effort / without session")
 
