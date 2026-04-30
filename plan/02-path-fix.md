@@ -5,7 +5,7 @@ task: 18 — par-E — Migrate Python invocation to `uv run`
 batch: path-fix
 cards: 3
 verify: uv run --project plugins/mill plugins/mill/scripts/millpy-vscode.py --help
-depends-on: []
+depends-on: [foundation]
 ```
 
 ## Batch Scope

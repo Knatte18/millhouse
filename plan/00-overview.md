@@ -20,7 +20,7 @@ batches:
     verify: uv run --project plugins/mill python -c "import yaml; print('ok')"
   - name: path-fix
     file: 02-path-fix.md
-    depends-on: []
+    depends-on: [foundation]
     verify: uv run --project plugins/mill plugins/mill/scripts/millpy-vscode.py --help
   - name: mill-setup-skill
     file: 03-mill-setup-skill.md
