@@ -59,7 +59,9 @@ batches:
     review_round: 1
     review_file: reviews/20260430-191230-code-review-mill-setup-skill-r1.md
   - name: skills-sweep
-    state: pending
+    state: running
+    implementer_session: 9bbf3214-7f5f-4837-8485-9255c17d1d2a
+    start_sha: 569280e8d7894c059f96b79e52aefbd28d09bb36
   - name: tests-and-docs
     state: pending
 ```
