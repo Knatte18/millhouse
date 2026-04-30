@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-tests-and-docs
+phase: done
 slug: migrate-to-uv
 branch: migrate-to-uv
 plan: plan
@@ -35,6 +35,7 @@ reviewing-skills-sweep-r1  2026-04-30T19:21:12Z
 approved-skills-sweep  2026-04-30T19:25:06Z
 reviewing-tests-and-docs-r1  2026-04-30T19:37:32Z
 approved-tests-and-docs  2026-04-30T19:41:02Z
+done  2026-04-30T19:44:58Z
 ```
 
 ## Batches
