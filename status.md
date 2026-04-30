@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planning
+phase: planned
 slug: mill-merge-pr-fallback
 branch: mill-merge-pr-fallback
 plan: plan
@@ -17,4 +17,6 @@ task_description: |
 discussing  '2026-04-30T17:15:09Z'
 discussed  2026-04-30T17:29:58Z
 planning  2026-04-30T17:35:34Z
+plan-review-r1  2026-04-30T17:41:51Z
+planned  2026-04-30T17:41:51Z
 ```

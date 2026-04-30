@@ -3,7 +3,7 @@
 ```yaml
 task: '22 — par-A — mill-merge: auto-switch to PR path on branch-protection rejection'
 slug: mill-merge-pr-fallback
-approved: false
+approved: true
 started: 20260430-173426
 parent: main
 root: ""
