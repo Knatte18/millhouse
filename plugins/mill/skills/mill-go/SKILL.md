@@ -93,7 +93,7 @@ For each round `N` from 1 to `review.code.rounds`:
 2. Invoke:
 
    ```bash
-   python plugins/mill/scripts/millpy-review-code.py --batch <batch_name> \
+   uv run --project "${CLAUDE_PLUGIN_ROOT}" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-review-code.py" --batch <batch_name> \
        [--extra-file <p> ...]
    ```
 
@@ -128,14 +128,14 @@ For each round `N` from 1 to `review.code.rounds`:
 
 After every batch in `order` has state `approved`, and only if `review.code.holistic: true`:
 
-- Invoke `python plugins/mill/scripts/millpy-review-code.py` (no `--batch`).
+- Invoke `uv run --project "${CLAUDE_PLUGIN_ROOT}" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-review-code.py"` (no `--batch`).
 - Same review-loop mechanics as per-batch, except there is no implementer resume — on `REQUEST_CHANGES` the orchestrator is the one that must dispatch fixes to the most relevant batch's implementer session. **Simplification for v2.0:** on holistic `REQUEST_CHANGES`, do not auto-dispatch — surface the findings to the user with a two-option prompt: (A) manually fix + re-run holistic, (B) treat as approved and self-report the gap. Record the decision in status.md.
 - On `NEED_CONTEXT` apply the same extra-files / notify path as per-batch.
 
 ## Handoff
 
 - `_status.append_phase(status_path, "done", _timestamp.now_utc_iso())`.
-- Flip Home.md's task line to `[done]` via `_tasks_md.set_phase(home_path, slug, "done")` — acquire the wiki shared lock first (`_wiki.acquire_lock` … `_wiki.release_lock`) since Home.md is shared across tasks.
+- Flip Home.md's task line to `[done]` — read `text = home_path.read_text(encoding="utf-8")`, call `result = _tasks_md.set_phase(text, slug, "done")`, and write back via `home_path.write_text(result, encoding="utf-8")`. Acquire the wiki shared lock first (`_wiki.acquire_lock` … `_wiki.release_lock`) since Home.md is shared across tasks.
 - Commit+push the wiki change.
 - `_notify.notify("mill-go.done", f"task {slug} complete", slug=slug)`.
 - If `pipeline.auto_report: true` → invoke `/mill-self-report` directly with no argument. The skill checks `gh auth` itself and bails cleanly if absent. Wait for it to finish before continuing.
