@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-skills-sweep
+phase: reviewing-tests-and-docs-r1
 slug: migrate-to-uv
 branch: migrate-to-uv
 plan: plan
@@ -33,6 +33,7 @@ reviewing-mill-setup-skill-r1  2026-04-30T19:08:09Z
 approved-mill-setup-skill  2026-04-30T19:12:35Z
 reviewing-skills-sweep-r1  2026-04-30T19:21:12Z
 approved-skills-sweep  2026-04-30T19:25:06Z
+reviewing-tests-and-docs-r1  2026-04-30T19:37:32Z
 ```
 
 ## Batches
@@ -68,7 +69,9 @@ batches:
     review_round: 1
     review_file: reviews/20260430-192501-code-review-skills-sweep-r1.md
   - name: tests-and-docs
-    state: running
+    state: reviewing
     implementer_session: 9bb4b9f5-b325-4934-b94d-7208225d55c9
     start_sha: 238a1430b37b04cdccb23d4aa793785185bdda4f
+    commit_sha: bd7dcc925507be10a570b307d8e270a1800489d0
+    review_round: 1
 ```
