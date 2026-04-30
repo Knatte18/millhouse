@@ -28,7 +28,7 @@ A third deliverable is folded in: SKILL.md helper call shapes are out of sync wi
 - Python integration tests (`test-spawn.py` etc.) — update subprocess invocations to `uv run`; remove explicit PYTHONPATH overrides.
 - `plugins/mill/SCRIPTS.md` — new; auto-generated from `--help` output of all `millpy-*.py` scripts.
 - `CLAUDE.md` — add convention: "Mill scripts are invoked via `uv run`, not `python`."
-- PATH truncation fix in `millpy-vscode.py` and `millpy-terminal.py` — replace `shutil.which("code.cmd")` / `shutil.which("claude")` with `["cmd", "/c", "code"]` / `["cmd", "/c", "claude"]` invocation pattern; same fix `millpy-vscode.py` already applies partially (bundled here to avoid a separate sweep).
+- PATH truncation fix in `millpy-vscode.py`, `millpy-terminal.py`, and `_llm_claude.py` — replace `shutil.which("code.cmd")` / `shutil.which("claude")` with `["cmd", "/c", "code"]` / `["cmd", "/c", "claude"]` invocation pattern; same fix `millpy-vscode.py` already applies partially (bundled here to avoid a separate sweep). `_llm_claude.py` is the hot path for all review invocations (mill-go) and has the same `shutil.which("claude")` call.
 
 **Out:**
 - Refactoring helper modules into a proper installable Python package (eliminates PYTHONPATH, but is a big restructure — deferred).
@@ -90,8 +90,8 @@ A third deliverable is folded in: SKILL.md helper call shapes are out of sync wi
 
 ### debugpy-path
 
-- Decision: Replace `shutil.which("code.cmd")` in `millpy-vscode.py` and `shutil.which("claude")` in `millpy-terminal.py` with `["cmd", "/c", "code", …]` and `["cmd", "/c", "claude", …]` invocation patterns.
-- Rationale: `shutil.which()` in a Python subprocess inherits PATH from the calling process. WindowsApps (`%LOCALAPPDATA%\Microsoft\WindowsApps`) is only added to PATH by Windows for interactive shells — subprocess inheritance omits it. `cmd.exe` always uses the full interactive PATH including WindowsApps. `millpy-vscode.py` already has a partial fix for this; `millpy-terminal.py` does not. Bundling both fixes in this task avoids a separate sweep.
+- Decision: Replace `shutil.which("code.cmd")` / `shutil.which("claude")` in `millpy-vscode.py`, `millpy-terminal.py`, and `_llm_claude.py` with `["cmd", "/c", "code", …]` / `["cmd", "/c", "claude", …]` invocation patterns.
+- Rationale: `shutil.which()` in a Python subprocess inherits PATH from the calling process. WindowsApps (`%LOCALAPPDATA%\Microsoft\WindowsApps`) is only added to PATH by Windows for interactive shells — subprocess inheritance omits it. `cmd.exe` always uses the full interactive PATH including WindowsApps. `millpy-vscode.py` already has a partial fix; `millpy-terminal.py` and `_llm_claude.py` do not. `_llm_claude.py` is the hot path for all review invocations — leaving it unfixed would break `mill-go` in debugpy environments. Bundling all three in this task avoids a separate sweep.
 - Rejected: Fixing PATH at the OS env level — intrusive and fragile; fixing at the PS1 wrapper level — the wrappers only control the outer call, not `shutil.which()` calls inside the Python script.
 
 ## Technical context
@@ -209,11 +209,12 @@ For all Python integration tests: `PLUGIN_ROOT = HUB / "plugins" / "mill"` (deri
 
 **Affected scripts and existing state:**
 - `millpy-vscode.py` — `shutil.which("code.cmd")` already partially patched to `["cmd", "/c", "code", path]` for Windows; verify and clean up.
-- `millpy-terminal.py` — `shutil.which("claude")` still uses the failing pattern; needs the same `["cmd", "/c", "claude"]` fix.
+- `millpy-terminal.py` — `shutil.which("claude")` still uses the failing pattern; needs `["cmd", "/c", "claude"]` fix.
+- `_llm_claude.py:46` — `shutil.which("claude")` used to resolve the claude binary before spawning the review subprocess. Same failure mode; same fix. This is the hot path for all `mill-go` review invocations.
 
-**Pattern to apply:** replace any `shutil.which("<tool>")` → `[<tool>]` construction with `["cmd", "/c", "<tool>", ...]` on Windows. `cmd.exe` always uses the full interactive PATH including WindowsApps. This is the established pattern in the codebase (millpy-vscode partial fix) and requires no environment manipulation.
+**Pattern to apply:** replace `shutil.which("<tool>")` → `[<tool>]` construction with `["cmd", "/c", "<tool>", ...]` on Windows. `cmd.exe` always uses the full interactive PATH including WindowsApps. This is the established pattern in the codebase (millpy-vscode partial fix) and requires no environment manipulation.
 
-**Scope note:** These are the only two scripts with external program lookups via `shutil.which`. The implementation agent must verify no other scripts have the same pattern before closing this item.
+**Scope note:** Grep confirms these three are the only scripts with `shutil.which` calls for external tools. No further discovery needed.
 
 ### SCRIPTS.md generation
 
@@ -221,7 +222,7 @@ Loop all `millpy-*.py` scripts, run `uv run --project plugins/mill plugins/mill/
 
 ## Constraints
 
-- **Python script changes limited** — uv is a transparent runner; `.py` file changes are limited to: (a) test infrastructure, (b) `millpy-vscode.py` and `millpy-terminal.py` for the PATH fix. All other scripts: no changes.
+- **Python script changes limited** — uv is a transparent runner; `.py` file changes are limited to: (a) test infrastructure, (b) `millpy-vscode.py`, `millpy-terminal.py`, and `_llm_claude.py` for the PATH fix, (c) `_shortcuts.py` for the PS1 wrapper generation update. All other `millpy-*.py` user-callable scripts: no changes.
 - **`${CLAUDE_PLUGIN_ROOT}` in all intra-plugin paths** — no `plugins/mill/…` hardcodes in SKILL.md (CLAUDE.md constraint).
 - **Wrappers are never used by CC** (CLAUDE.md + this task's decision).
 - **`uv` must be present** — mill-setup Phase 1 must verify `uv --version` succeeds before proceeding. Install instruction: `irm https://astral.sh/uv/install.ps1 | iex`.
