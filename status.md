@@ -50,7 +50,9 @@ batches:
     review_round: 1
     review_file: reviews/20260430-190318-code-review-path-fix-r1.md
   - name: mill-setup-skill
-    state: pending
+    state: running
+    implementer_session: cbe93411-ca20-47a8-be19-99bab256bae9
+    start_sha: 6a1a497e497f24228929e1b4e7182f34f5f8514d
   - name: skills-sweep
     state: pending
   - name: tests-and-docs
