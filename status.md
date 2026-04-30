@@ -32,7 +32,9 @@ implementing  2026-04-30T18:51:43Z
 ```yaml
 batches:
   - name: foundation
-    state: pending
+    state: running
+    implementer_session: f53436e0-bc1e-4933-a200-a50dc60a5634
+    start_sha: 72903eb44fdb6a6a53722f073c2ae6ad790917cd
   - name: path-fix
     state: pending
   - name: mill-setup-skill
