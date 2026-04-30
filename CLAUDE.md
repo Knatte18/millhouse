@@ -40,6 +40,16 @@ c:/Code/millhouse/wts/<slug>/
   status.md
 ```
 
+## Constraints
+
+Hard rules — violation causes silent bugs or breaks external repos using mill as a plugin.
+
+- **Junctions and hardlinks are NEVER used by scripts or skills.** `.others/`, `.active/`, `.millhouse/wiki`, `tasks.md`, and any other junction or hardlink exist solely for operator IDE/terminal navigation. Scripts always resolve real paths programmatically via `_paths.py`. Never pass a junction path to a Python helper or reference one in a SKILL.md instruction.
+- **`${CLAUDE_PLUGIN_ROOT}` for all intra-plugin paths.** Never hardcode `plugins/mill/…` — external repos have no millhouse source checkout.
+- **Working state is never written to the wiki.** `status.md`, `discussion.md`, `plan/`, `reviews/` live on the task branch. The wiki holds only `Home.md` and `config.yaml`.
+
+---
+
 ## Review terminology
 
 These terms are used throughout the review subsystem and in any design discussion about mill.
