@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: migrate-to-uv
 branch: migrate-to-uv
 plan: plan
@@ -24,4 +24,21 @@ plan-fix-r2  2026-04-30T18:33:00Z
 plan-review-r3  2026-04-30T18:48:32Z
 plan-fix-r3  2026-04-30T18:48:32Z
 planned  2026-04-30T18:48:37Z
+implementing  2026-04-30T18:51:43Z
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: foundation
+    state: pending
+  - name: path-fix
+    state: pending
+  - name: mill-setup-skill
+    state: pending
+  - name: skills-sweep
+    state: pending
+  - name: tests-and-docs
+    state: pending
 ```
