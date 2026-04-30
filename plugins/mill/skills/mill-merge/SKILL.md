@@ -187,34 +187,28 @@ Under the wiki shared lock so no concurrent task writes Home.md mid-flip.
 
 **Worktree mode:**
 
-**Step 8.0 — Strip junctions first (MANDATORY before any removal).**
-
-```python
-import _junction, _wiki
-junctions_cfg = _wiki.read_junctions(wiki_path)
-_junction.strip_all_in_worktree(<container-path>/wts/<slug>, junctions_cfg)
-```
-
-This unlinks every junction declared in `wiki/config.yaml` inside the worktree (`.millhouse/wiki`, `.others`, `.active`, plus any future entries). It is idempotent — missing junctions are skipped silently.
-
-**Why this is non-negotiable:** if `git worktree remove --force` fails (long-path errors are common on Windows when `.scratch/` contains deeply nested claude session JSONs), and the operator falls back to `cmd /c rmdir /s /q <path>` or `shutil.rmtree`, both follow NTFS junctions by default and will recurse into the wiki, the portals directory, and any sibling worktree the junctions point to. Stripping junctions first makes every subsequent removal junction-blind. See GitHub issue #100 for the data-loss incident this guards against.
-
-**Step 8.1 — Remove the worktree and branch.**
+Call `_worktree.remove_safe` — it strips every junction declared in `wiki/config.yaml` inside the worktree (`.millhouse/wiki`, `.others`, `.active`, plus any future entries) BEFORE removing the worktree, and falls back to `shutil.rmtree` only if `git worktree remove --force` fails with a long-path error. The junction-strip is non-skippable; you cannot lose the wiki by accident.
 
 ```bash
-git -C <parent-path> worktree remove --force <container-path>/wts/<slug>
+python -c "
+from pathlib import Path
+import _wiki, _worktree
+wiki = Path(r'<WIKI_PATH>').resolve()
+worktree = Path(r'<container-path>/wts/<slug>').resolve()
+parent = Path(r'<parent-path>').resolve()
+_worktree.remove_safe(worktree, cwd=parent, junctions_cfg=_wiki.read_junctions(wiki))
+"
 git -C <parent-path> branch -D "$CHILD_BRANCH"
 ```
 
-**On `worktree remove` failure:**
+**Why this matters (GitHub issue #100):** `git worktree remove --force` is junction-safe on its own, but on Windows it can fail with "Filename too long" when `.scratch/` contains deeply nested claude session JSONs. A naive fallback to `cmd /c rmdir /s /q` or `shutil.rmtree` follows NTFS junctions by default and wipes the wiki, the portals directory, and any sibling worktree the junctions point to. `_worktree.remove_safe` strips junctions first so the fallback is junction-blind. Never invoke `rmdir /s` or `shutil.rmtree` on a worktree path directly — always go through `remove_safe`.
+
+**On `remove_safe` raising `WorktreeError`:**
 
 | Failure mode | Handling |
 |---|---|
-| "is in use" / "is not empty" | Surface "couldn't remove <path>: directory is in use. Close any editor / terminal / file-explorer window pointing at it and re-run `/mill-merge` (Step 5's idempotency will skip the squash)." Halt — do NOT fall back to `rmdir`. |
-| "Filename too long" (Windows) | Junctions are already stripped (Step 8.0). Safe to fall back: `cmd /c rmdir /s /q <path>` (Windows) or `shutil.rmtree(path, ignore_errors=False)` (cross-platform). After successful removal, run `git -C <parent-path> worktree prune` to clean up git's internal worktree registry, then proceed to delete the branch. |
-| Any other error | Halt with the captured stderr — do NOT fall back to recursive remove without operator review. |
-
-**Important:** the long-path fallback is only safe AFTER Step 8.0 has stripped the junctions. Never invoke `rmdir /s` or `shutil.rmtree` on a worktree path without first running `_junction.strip_all_in_worktree` — the loss is unrecoverable for unpushed wiki commits.
+| "is in use" / "is not empty" | Surface "couldn't remove <path>: directory is in use. Close any editor / terminal / file-explorer window pointing at it and re-run `/mill-merge` (Step 5's idempotency will skip the squash)." Halt. |
+| Anything else | Halt with the captured error message — do NOT manually run `rmdir` or `rmtree` as a workaround. |
 
 **In-place mode:** skip `git worktree remove`; from cwd run:
 ```bash
