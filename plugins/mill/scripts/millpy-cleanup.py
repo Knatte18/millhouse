@@ -359,15 +359,13 @@ def _apply_worktree_record(
         junctions_cfg: Junction template map from the wiki config.
     """
     if record.worktree_path is not None:
-        for link_tpl, target_tpl in junctions_cfg.items():
-            if _junction.has_slug_token(target_tpl):
-                resolved_link = _junction.resolve_target(
-                    link_tpl,
-                    {"SLUG": record.slug, "WIKI_PATH": str(wiki_path), "HUB_PATH": str(hub_root)},
-                )
-                abs_link = record.worktree_path / resolved_link
-                _junction.remove(abs_link)
-                print(f"[cleanup] removed junction: {abs_link}", file=sys.stderr)
+        # Strip ALL junctions (hub-scope + per-worktree) before worktree
+        # removal. Without this, any fallback to recursive deletion
+        # (rmdir /s, shutil.rmtree) would follow .millhouse/wiki and .others
+        # and wipe the wiki + portals dir. See GitHub issue #100.
+        stripped = _junction.strip_all_in_worktree(record.worktree_path, junctions_cfg)
+        for abs_link in stripped:
+            print(f"[cleanup] stripped junction: {abs_link}", file=sys.stderr)
         _worktree.remove(record.worktree_path, cwd=hub_root)
         if record.branch is not None:
             result = _subprocess_util.run(

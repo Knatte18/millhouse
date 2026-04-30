@@ -32,8 +32,9 @@ from _paths import resolve_git_root, resolve_hub_relative_path, resolve_wiki_pat
 def _build_code_argv(worktree_path: Path) -> list[str]:
     """Build the argv to open VS Code at ``worktree_path``.
 
-    Probes for ``code.cmd`` and ``code`` on PATH; falls back to the
-    canonical Windows install location under ``LOCALAPPDATA``.
+    Uses ``cmd /c code`` on Windows so cmd.exe resolves the binary via its
+    own PATH (which includes WindowsApps), avoiding the PATH truncation that
+    occurs in debugpy and other subprocess-launched environments.
 
     Args:
         worktree_path: Absolute path to the worktree to open.
@@ -41,17 +42,9 @@ def _build_code_argv(worktree_path: Path) -> list[str]:
     Returns:
         A list suitable for passing to ``subprocess.run``.
     """
-    code = (
-        shutil.which("code.cmd")
-        or shutil.which("code")
-        or os.path.join(
-            os.environ.get("LOCALAPPDATA", ""),
-            "Programs",
-            "Microsoft VS Code",
-            "bin",
-            "code.cmd",
-        )
-    )
+    if os.name == "nt":
+        return ["cmd", "/c", "code", str(worktree_path)]
+    code = shutil.which("code") or "code"
     return [code, str(worktree_path)]
 
 

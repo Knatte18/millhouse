@@ -186,12 +186,35 @@ Under the wiki shared lock so no concurrent task writes Home.md mid-flip.
 ### 8. Drop the worktree + branch
 
 **Worktree mode:**
+
+**Step 8.0 — Strip junctions first (MANDATORY before any removal).**
+
+```python
+import _junction, _wiki
+junctions_cfg = _wiki.read_junctions(wiki_path)
+_junction.strip_all_in_worktree(<container-path>/wts/<slug>, junctions_cfg)
+```
+
+This unlinks every junction declared in `wiki/config.yaml` inside the worktree (`.millhouse/wiki`, `.others`, `.active`, plus any future entries). It is idempotent — missing junctions are skipped silently.
+
+**Why this is non-negotiable:** if `git worktree remove --force` fails (long-path errors are common on Windows when `.scratch/` contains deeply nested claude session JSONs), and the operator falls back to `cmd /c rmdir /s /q <path>` or `shutil.rmtree`, both follow NTFS junctions by default and will recurse into the wiki, the portals directory, and any sibling worktree the junctions point to. Stripping junctions first makes every subsequent removal junction-blind. See GitHub issue #100 for the data-loss incident this guards against.
+
+**Step 8.1 — Remove the worktree and branch.**
+
 ```bash
 git -C <parent-path> worktree remove --force <container-path>/wts/<slug>
 git -C <parent-path> branch -D "$CHILD_BRANCH"
 ```
 
-If `worktree remove` fails with "is not empty" or "is in use" on Windows: surface a hint — "couldn't remove <path>: directory is in use. Close any editor / terminal / file-explorer window pointing at it and re-run `/mill-merge` (Step 5's idempotency will skip the squash)." Do not name a specific diagnostic tool in the message.
+**On `worktree remove` failure:**
+
+| Failure mode | Handling |
+|---|---|
+| "is in use" / "is not empty" | Surface "couldn't remove <path>: directory is in use. Close any editor / terminal / file-explorer window pointing at it and re-run `/mill-merge` (Step 5's idempotency will skip the squash)." Halt — do NOT fall back to `rmdir`. |
+| "Filename too long" (Windows) | Junctions are already stripped (Step 8.0). Safe to fall back: `cmd /c rmdir /s /q <path>` (Windows) or `shutil.rmtree(path, ignore_errors=False)` (cross-platform). After successful removal, run `git -C <parent-path> worktree prune` to clean up git's internal worktree registry, then proceed to delete the branch. |
+| Any other error | Halt with the captured stderr — do NOT fall back to recursive remove without operator review. |
+
+**Important:** the long-path fallback is only safe AFTER Step 8.0 has stripped the junctions. Never invoke `rmdir /s` or `shutil.rmtree` on a worktree path without first running `_junction.strip_all_in_worktree` — the loss is unrecoverable for unpushed wiki commits.
 
 **In-place mode:** skip `git worktree remove`; from cwd run:
 ```bash
