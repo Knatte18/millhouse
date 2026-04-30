@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: reviewing-foundation-r1
+phase: approved-foundation
 slug: migrate-to-uv
 branch: migrate-to-uv
 plan: plan
@@ -26,6 +26,7 @@ plan-fix-r3  2026-04-30T18:48:32Z
 planned  2026-04-30T18:48:37Z
 implementing  2026-04-30T18:51:43Z
 reviewing-foundation-r1  2026-04-30T18:55:36Z
+approved-foundation  2026-04-30T18:58:56Z
 ```
 
 ## Batches
@@ -33,11 +34,12 @@ reviewing-foundation-r1  2026-04-30T18:55:36Z
 ```yaml
 batches:
   - name: foundation
-    state: reviewing
+    state: approved
     implementer_session: f53436e0-bc1e-4933-a200-a50dc60a5634
     start_sha: 72903eb44fdb6a6a53722f073c2ae6ad790917cd
     commit_sha: 8095a66e21613ea067b4c00c82935759b0ace9d8
     review_round: 1
+    review_file: reviews/20260430-185847-code-review-foundation-r1.md
   - name: path-fix
     state: pending
   - name: mill-setup-skill
