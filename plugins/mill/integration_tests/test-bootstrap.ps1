@@ -30,8 +30,6 @@ $bare      = Join-Path $container 'wiki.git'
 $wiki      = Join-Path $container 'wiki'
 $hub       = Join-Path $container 'hub'
 
-$env:PYTHONPATH = $scripts
-
 # Some earlier milestones discovered cp1252-vs-UTF8 issues when Python
 # prints rendered text to a Windows console (see legacy handoff notes).
 # Force UTF-8 I/O for the duration of the test so assertions on output
@@ -94,13 +92,13 @@ try {
     New-Item -ItemType Directory -Path (Join-Path $hub '.millhouse') -Force | Out-Null
 
     # Phase 4: junction
-    python -c "from pathlib import Path; import _junction; _junction.create(Path(r'$wiki').resolve(), Path(r'$hub/.millhouse/wiki').resolve())" | Out-Null
+    uv run --project $millRoot python -c "from pathlib import Path; import _junction; _junction.create(Path(r'$wiki').resolve(), Path(r'$hub/.millhouse/wiki').resolve())" | Out-Null
 
     # Phase 5: config
     Copy-Item (Join-Path $templates 'config.local.yaml') (Join-Path $hub '.millhouse/config.local.yaml')
 
     # Phase 6a: sidebar regen + seed commit (so the remote has a valid sidebar)
-    python -c "from pathlib import Path; import _sidebar; _sidebar.regenerate(Path(r'$wiki').resolve())" | Out-Null
+    uv run --project $millRoot python -c "from pathlib import Path; import _sidebar; _sidebar.regenerate(Path(r'$wiki').resolve())" | Out-Null
     Invoke-Git '-C' $wiki 'add' '_Sidebar.md' | Out-Null
     Invoke-Git '-C' $wiki '-c' 'user.email=test@mill' '-c' 'user.name=mill-test' 'commit' '-m' 'init _Sidebar.md' | Out-Null
     Invoke-Git '-C' $wiki 'push' | Out-Null
@@ -116,7 +114,7 @@ try {
         Invoke-Git '-C' $wiki 'config' 'user.email' 'test@mill' | Out-Null
         Invoke-Git '-C' $wiki 'config' 'user.name'  'mill-test' | Out-Null
 
-        python "$scripts/millpy-add.py" plain-foo --title 'Plain foo' --summary 'summary for plain foo' | Out-Null
+        uv run --project $millRoot "$scripts/millpy-add.py" plain-foo --title 'Plain foo' --summary 'summary for plain foo' | Out-Null
     } finally { Pop-Location }
 
     # ------------------------------------------------------------------
@@ -124,7 +122,7 @@ try {
     # ------------------------------------------------------------------
     Push-Location $hub
     try {
-        python "$scripts/millpy-add.py" linked-bar --title 'Linked bar' --summary 'summary for linked bar' --proposal-body "# Linked bar`n`nBackground paragraph." | Out-Null
+        uv run --project $millRoot "$scripts/millpy-add.py" linked-bar --title 'Linked bar' --summary 'summary for linked bar' --proposal-body "# Linked bar`n`nBackground paragraph." | Out-Null
     } finally { Pop-Location }
 
     # ------------------------------------------------------------------
@@ -178,7 +176,7 @@ try {
     # ------------------------------------------------------------------
     Push-Location $hub
     try {
-        $listOut = (python "$scripts/millpy-list.py") -join "`n"
+        $listOut = (uv run --project $millRoot "$scripts/millpy-list.py") -join "`n"
     } finally { Pop-Location }
 
     if ($listOut -notmatch '    plain-foo\s+Plain foo') {
@@ -200,7 +198,7 @@ try {
         $savedEAP = $ErrorActionPreference
         $ErrorActionPreference = 'Continue'
         try {
-            $dupOut = (python "$scripts/millpy-add.py" plain-foo --title 'dup' 2>&1) -join "`n"
+            $dupOut = (uv run --project $millRoot "$scripts/millpy-add.py" plain-foo --title 'dup' 2>&1) -join "`n"
         } finally {
             $ErrorActionPreference = $savedEAP
         }
@@ -218,7 +216,7 @@ try {
     $junction = Join-Path $hub '.millhouse/wiki'
     if (Test-Path $junction) {
         try {
-            python -c "from pathlib import Path; import _junction; _junction.remove(Path(r'$junction').resolve())" 2>&1 | Out-Null
+            uv run --project $millRoot python -c "from pathlib import Path; import _junction; _junction.remove(Path(r'$junction').resolve())" 2>&1 | Out-Null
         } catch { }
     }
     if (Test-Path $tmp) {
