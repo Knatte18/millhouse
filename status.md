@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-pr-fallback-edits
+phase: done
 slug: mill-merge-pr-fallback
 branch: mill-merge-pr-fallback
 plan: plan
@@ -22,6 +22,7 @@ planned  2026-04-30T17:41:51Z
 implementing  2026-04-30T17:48:24Z
 reviewing-pr-fallback-edits-r1  2026-04-30T17:54:26Z
 approved-pr-fallback-edits  2026-04-30T17:56:10Z
+done  2026-04-30T17:58:14Z
 ```
 
 ## Batches
