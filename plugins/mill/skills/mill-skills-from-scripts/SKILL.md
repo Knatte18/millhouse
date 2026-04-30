@@ -17,7 +17,6 @@ Generates or refreshes the 12 thin SKILL.md files that give Claude Code a compac
 
 ```python
 import sys
-sys.path.insert(0, '${CLAUDE_PLUGIN_ROOT}/scripts')
 import _skill_writer
 from pathlib import Path
 # ${CLAUDE_PLUGIN_ROOT} resolves to <plugin-cache>/mill/
@@ -48,7 +47,7 @@ for script_path in _skill_writer.iter_target_scripts(plugins_root):
    ## Run it
 
    ```bash
-   python ${CLAUDE_PLUGIN_ROOT}/scripts/millpy-<X>.py <args from Usage block>
+   uv run --project "${CLAUDE_PLUGIN_ROOT}" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-<X>.py" <args from Usage block>
    ```
 
    <2–3 lines of must-know constraints — e.g. "no wiki lock taken", "exits 1 if no .millhouse/wiki", or other tight invariants visible in the script docstring>
@@ -58,7 +57,7 @@ for script_path in _skill_writer.iter_target_scripts(plugins_root):
 
 5. After all 12 are written, run `mill-skills-index` to refresh `SKILLS.md`:
    ```bash
-   python ${CLAUDE_PLUGIN_ROOT}/scripts/millpy-skills-index.py
+   uv run --project "${CLAUDE_PLUGIN_ROOT}" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-skills-index.py"
    ```
 
 6. Commit and push the 12 new SKILL.md files and the regenerated `SKILLS.md` in one commit.
