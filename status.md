@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-path-fix
+phase: reviewing-mill-setup-skill-r1
 slug: migrate-to-uv
 branch: migrate-to-uv
 plan: plan
@@ -29,6 +29,7 @@ reviewing-foundation-r1  2026-04-30T18:55:36Z
 approved-foundation  2026-04-30T18:58:56Z
 reviewing-path-fix-r1  2026-04-30T19:01:55Z
 approved-path-fix  2026-04-30T19:03:23Z
+reviewing-mill-setup-skill-r1  2026-04-30T19:08:09Z
 ```
 
 ## Batches
@@ -50,9 +51,11 @@ batches:
     review_round: 1
     review_file: reviews/20260430-190318-code-review-path-fix-r1.md
   - name: mill-setup-skill
-    state: running
+    state: reviewing
     implementer_session: cbe93411-ca20-47a8-be19-99bab256bae9
     start_sha: 6a1a497e497f24228929e1b4e7182f34f5f8514d
+    commit_sha: 0a200aad55aeb9fc9d5926ba00e1d857fd75bbf2
+    review_round: 1
   - name: skills-sweep
     state: pending
   - name: tests-and-docs
