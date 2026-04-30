@@ -41,7 +41,9 @@ batches:
     review_round: 1
     review_file: reviews/20260430-185847-code-review-foundation-r1.md
   - name: path-fix
-    state: pending
+    state: running
+    implementer_session: 1fb57ab0-fe68-4e96-92f4-8b187df37c54
+    start_sha: fec8624a76d13a187a1186622230ec1fbb78fdee
   - name: mill-setup-skill
     state: pending
   - name: skills-sweep
