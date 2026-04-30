@@ -3,7 +3,7 @@
 ```yaml
 task: 18 — par-E — Migrate Python invocation to `uv run`
 slug: migrate-to-uv
-approved: false
+approved: true
 started: 20260430-175223
 parent: main
 root: ""
