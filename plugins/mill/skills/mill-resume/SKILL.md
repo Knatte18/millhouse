@@ -131,8 +131,8 @@ This is the same copy step as `mill-spawn` — see `plugins/mill/scripts/millpy/
 Create a `.millhouse/wiki/` junction in the new worktree pointing at the same wiki clone as the parent:
 
 ```python
-from millpy.core.junction import create as junction_create
-junction_create(new_worktree / ".millhouse" / "wiki", wiki_clone_path)
+from _junction import create as junction_create
+junction_create(wiki_clone_path, new_worktree / ".millhouse" / "wiki")
 ```
 
 ### Phase 9: Read and report phase
@@ -144,7 +144,7 @@ Read `<container>/wts/<slug>/status.md` from the newly added worktree. Parse the
 Invoke the `regenerate_sidebar` entrypoint to keep `_Sidebar.md` in sync:
 
 ```bash
-PYTHONPATH=<scripts-dir> python -m millpy.entrypoints.regenerate_sidebar
+uv run --project "${CLAUDE_PLUGIN_ROOT}" python -c "from pathlib import Path; import _sidebar; _sidebar.regenerate(Path(r'<wiki-dir>').resolve())"
 ```
 
 The `[active]` entry is already present in `Home.md` — regenerating the sidebar ensures any proposals added while the task was paused are reflected.
