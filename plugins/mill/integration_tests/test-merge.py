@@ -43,6 +43,7 @@ from pathlib import Path
 
 HUB = Path(__file__).resolve().parent.parent.parent.parent
 SCRIPTS = HUB / "plugins" / "mill" / "scripts"
+PLUGIN_ROOT = HUB / "plugins" / "mill"
 SCRATCH = HUB / ".scratch"
 
 sys.path.insert(0, str(SCRIPTS))

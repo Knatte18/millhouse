@@ -21,6 +21,7 @@ from pathlib import Path
 
 HUB = Path(__file__).resolve().parent.parent.parent.parent
 SCRIPTS = HUB / "plugins" / "mill" / "scripts"
+PLUGIN_ROOT = HUB / "plugins" / "mill"
 SCRATCH = HUB / ".scratch"
 
 sys.path.insert(0, str(SCRIPTS))
@@ -147,7 +148,7 @@ def main() -> int:
         script = SCRIPTS / "millpy-status.py"
 
         # --- Assertion group 1: plain run ---
-        r = _run([sys.executable, str(script), "--no-color"], cwd=hub, check=False)
+        r = _run(["uv", "run", "--project", str(PLUGIN_ROOT), str(script), "--no-color"], cwd=hub, check=False)
         assert r.returncode == 0, f"plain run exit={r.returncode}\n{r.stderr}"
         for slug in ["slug-alpha", "slug-beta", "slug-gamma", "slug-delta", "slug-echo"]:
             assert slug in r.stdout, f"slug {slug} missing from plain output"
@@ -164,7 +165,7 @@ def main() -> int:
         print("PASS: plain run — all slugs present, WT?/HM? flags, slug-echo shows —")
 
         # --- Assertion group 2: --json run ---
-        r = _run([sys.executable, str(script), "--json"], cwd=hub, check=False)
+        r = _run(["uv", "run", "--project", str(PLUGIN_ROOT), str(script), "--json"], cwd=hub, check=False)
         assert r.returncode == 0, f"--json exit={r.returncode}\n{r.stderr}"
         rows = json.loads(r.stdout)
         by_slug = {row["slug"]: row for row in rows}
@@ -190,14 +191,14 @@ def main() -> int:
         print("PASS: --json run — slugs/marker_flags/phase/worktree/timeline assertions")
 
         # --- Assertion group 3: --sort phase ---
-        r = _run([sys.executable, str(script), "--no-color", "--sort", "phase"],
+        r = _run(["uv", "run", "--project", str(PLUGIN_ROOT), str(script), "--no-color", "--sort", "phase"],
                  cwd=hub, check=False)
         assert r.returncode == 0, f"--sort phase exit={r.returncode}\n{r.stderr}"
         assert r.stdout.strip(), "--sort phase produced empty output"
         print("PASS: --sort phase — exit 0, non-empty output")
 
         # --- Assertion group 4: main worktree guard ---
-        r = _run([sys.executable, str(script), "--json"], cwd=hub, check=False)
+        r = _run(["uv", "run", "--project", str(PLUGIN_ROOT), str(script), "--json"], cwd=hub, check=False)
         rows = json.loads(r.stdout)
         slugs = [row["slug"] for row in rows]
         assert "main" not in slugs, f"'main' slug must not appear in --json output: {slugs}"
