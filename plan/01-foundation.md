@@ -30,7 +30,6 @@ Establish the uv project (`pyproject.toml`), the new PS1 shortcut-wrapper templa
 ### Card 2: Replace shortcut-wrapper template (Python → PS1)
 
 - **Reads:**
-  - `plugins/mill/templates/shortcut-wrapper.py`
   - `plugins/mill/scripts/_render.py`
   - `plugins/mill/scripts/_shortcuts.py`
   - `discussion.md`
