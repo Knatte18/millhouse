@@ -68,5 +68,7 @@ batches:
     review_round: 1
     review_file: reviews/20260430-192501-code-review-skills-sweep-r1.md
   - name: tests-and-docs
-    state: pending
+    state: running
+    implementer_session: 9bb4b9f5-b325-4934-b94d-7208225d55c9
+    start_sha: 238a1430b37b04cdccb23d4aa793785185bdda4f
 ```
