@@ -39,7 +39,10 @@ batches:
     review_round: 1
     review_file: reviews/20260504-175835-code-review-foundation-r1.md
   - name: docs-gitignore
-    state: pending
+    state: running
+    implementer_session: 0a838f94-048d-40e1-90b5-e78a6d03f2b3
+    start_sha: 20c02171d2b62ef28300f326e5496eebfb60ec92
+    review_round: 0
   - name: simple-fixes
     state: pending
   - name: spawn-worktree-dst
