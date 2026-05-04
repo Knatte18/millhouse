@@ -320,15 +320,16 @@ def run_implementer(
 ) -> tuple[str, str]:
     """Invoke claude as mill-go's per-batch implementer.
 
-    Spawns: claude -p --allowedTools Read,Edit,Write,Bash,Grep,Glob
+    Spawns: claude -p --allowedTools Read,Edit,Write,Bash,Grep,Glob,Skill
                    --output-format stream-json
                    --model <model> [--effort <effort>]
                    [--session-id <id> | --resume <id>]
 
-    Tool-set is the minimum needed for the implementer to read the plan,
-    edit files, run `verify:` commands via Bash, and navigate the
-    codebase. WebFetch/WebSearch are deliberately absent; TodoWrite can be
-    added later if session-local progress tracking is desired.
+    Tool-set covers file I/O, shell commands, codebase navigation, and
+    skill invocation. ``Skill`` is included so the implementer can invoke
+    ``@git-commit`` (per implementer-brief.md) and any other skills the
+    brief instructs. WebFetch/WebSearch are deliberately absent; TodoWrite
+    can be added later if session-local progress tracking is desired.
 
     `cwd` is passed to the subprocess (typically the worktree root) so
     Bash calls run in the right directory.
@@ -344,7 +345,7 @@ def run_implementer(
         prompt_text=prompt_text,
         model=model,
         effort=effort,
-        allowed_tools="Read,Edit,Write,Bash,Grep,Glob",
+        allowed_tools="Read,Edit,Write,Bash,Grep,Glob,Skill",
         mode_label="implementer",
         timeout=timeout,
         session_id=session_id,
