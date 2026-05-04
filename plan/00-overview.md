@@ -3,7 +3,7 @@
 ```yaml
 task: 'script-invocation-hygiene — Scripts: cwd not git-root, plugin cache not source repo'
 slug: script-invocation-hygiene
-approved: false
+approved: true
 started: '20260504-123651'
 parent: main
 root: ""
