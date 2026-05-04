@@ -236,31 +236,37 @@ def acquire_lock(wiki_path: Path, slug: str, timeout_seconds: int = 30) -> None:
     _acquire(wiki_path, slug, timeout_seconds)
 
 
-def sync_pull(wiki_path: Path) -> None:
+def sync_pull(wiki_path: Path, *, slug: str) -> None:
     """
     Fetch + fast-forward the wiki clone so local state matches origin.
 
-    Runs ``git pull --ff-only``. Non-fast-forward (i.e. the wiki clone has
-    local commits not yet on origin) raises ``WikiPushError`` — this function
-    never performs a merge or rebase. Callers that want merge semantics go
-    through ``write_commit_push``.
+    Acquires the wiki advisory lock internally. When called inside a
+    ``wiki_lock`` block the acquire is a no-op (re-entrancy counter).
 
-    Called by mill-spawn before reading Home.md so task-pick decisions run
-    against the latest task state.
+    Runs ``git pull --ff-only``. Non-fast-forward raises ``WikiPushError``.
 
     Args:
         wiki_path: Directory containing the wiki clone.
+        slug: Caller's slug; written into the lockfile for diagnostics.
 
     Raises:
         WikiPushError: ``git pull --ff-only`` failed (network error,
             non-fast-forward state, etc).
     """
-    result = _subprocess_util.run(
-        ["git", "-C", str(wiki_path), "pull", "--ff-only"]
-    )
-    if result.returncode != 0:
-        raise WikiPushError(f"git pull --ff-only failed: {result.stderr.strip()!r}")
-    print(f"[wiki] sync_pull: fast-forwarded {wiki_path}", file=sys.stderr)
+    resolved = wiki_path.resolve()
+    held = _held_locks.get(resolved, 0) > 0
+    if not held:
+        _acquire(wiki_path, slug)
+    try:
+        result = _subprocess_util.run(
+            ["git", "-C", str(wiki_path), "pull", "--ff-only"]
+        )
+        if result.returncode != 0:
+            raise WikiPushError(f"git pull --ff-only failed: {result.stderr.strip()!r}")
+        print(f"[wiki] sync_pull: fast-forwarded {wiki_path}", file=sys.stderr)
+    finally:
+        if not held:
+            _release(wiki_path)
 
 
 def release_lock(wiki_path: Path) -> None:
@@ -271,9 +277,14 @@ def write_commit_push(
     wiki_path: Path,
     relative_paths: list[str],
     commit_msg: str,
+    *,
+    slug: str,
 ) -> None:
     """
     Stage the named paths, commit with ``commit_msg``, and push.
+
+    Acquires the wiki advisory lock internally. When called inside a
+    ``wiki_lock`` block the acquire is a no-op (re-entrancy counter).
 
     The sequence is ``git add -- <paths>`` → ``git commit -m <msg>`` →
     ``git push``. On a non-fast-forward rejection we run
@@ -291,12 +302,29 @@ def write_commit_push(
             literally after ``git add --`` to avoid option parsing on
             paths that start with a dash.
         commit_msg: Commit message.
+        slug: Caller's slug; written into the lockfile for diagnostics.
 
     Raises:
         WikiPushError: ``git add``, ``git commit``, ``git rebase``, or
             ``git push`` failed in a way that the one-shot rebase retry
             could not recover from.
     """
+    resolved = wiki_path.resolve()
+    held = _held_locks.get(resolved, 0) > 0
+    if not held:
+        _acquire(wiki_path, slug)
+    try:
+        _write_commit_push_body(wiki_path, relative_paths, commit_msg)
+    finally:
+        if not held:
+            _release(wiki_path)
+
+
+def _write_commit_push_body(
+    wiki_path: Path,
+    relative_paths: list[str],
+    commit_msg: str,
+) -> None:
     print(f"[wiki] write_commit_push: wiki={wiki_path} paths={relative_paths!r}", file=sys.stderr)
 
     add = _subprocess_util.run(
