@@ -50,7 +50,10 @@ batches:
     review_round: 1
     review_file: reviews/20260504-183025-code-review-helper-api-additions-r1.md
   - name: validate-plan-typeerror
-    state: pending
+    state: running
+    implementer_session: 88520f84-8f07-44de-a5bb-fecb201501fe
+    start_sha: 27f2b837e7259372e48fe8f28191e879cb97fad8
+    review_round: 0
   - name: mill-plan-start-resume-prose
     state: pending
   - name: workflow-anti-patterns
