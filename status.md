@@ -68,7 +68,10 @@ batches:
     review_round: 1
     review_file: reviews/20260504-184505-code-review-mill-plan-start-resume-prose-r1.md
   - name: workflow-anti-patterns
-    state: pending
+    state: running
+    implementer_session: 00a0c064-9a67-453b-8dcf-2a73e3f5cef8
+    start_sha: 7ada3fc324ac401ad6328045b98f5342174e1818
+    review_round: 0
   - name: mill-go-skill-rewrite
     state: pending
 ```
