@@ -57,6 +57,10 @@ Public API:
         and its ``.millhouse/active.slug.md`` marker matches the slug.
         Raises ``ActiveWorktreeNotFound`` when the directory is absent.
         Raises ``ActiveWorktreeSlugMismatch`` when the marker slug differs.
+
+    resolve_hub_path(cwd)
+        Return the hub directory — assumes CC's cwd equals the hub when mill
+        scripts run. Pass an explicit path for testing; omit for production use.
 """
 from __future__ import annotations
 
@@ -69,6 +73,7 @@ from _sibling import resolve_path
 __all__ = [
     "resolve_path",
     "resolve_git_root",
+    "resolve_hub_path",
     "resolve_main_worktree_root",
     "resolve_wiki_path",
     "resolve_worktrees_dir",
@@ -87,6 +92,11 @@ def resolve_git_root() -> Path:
     if result.returncode != 0:
         raise SystemExit(f"Not in a git repository: {result.stderr.strip()!r}")
     return Path(result.stdout.strip())
+
+
+def resolve_hub_path(cwd: Path | None = None) -> Path:
+    """Return the hub directory — assumes CC's cwd equals the hub when mill scripts run."""
+    return (cwd or Path.cwd()).resolve()
 
 
 def resolve_main_worktree_root(git_root: Path) -> Path:

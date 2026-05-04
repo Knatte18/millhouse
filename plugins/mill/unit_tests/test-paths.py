@@ -47,6 +47,27 @@ def main() -> int:
             "resolve_path must be re-exported identity from _sibling, not duplicated"
         print("PASS: _paths.resolve_path is _sibling.resolve_path (no duplication)")
 
+        # resolve_hub_path
+
+        got = _paths.resolve_hub_path()
+        assert got == Path.cwd().resolve(), f"no-arg: got {got}"
+        print("PASS: resolve_hub_path() with no argument returns Path.cwd().resolve()")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp).resolve()
+            got = _paths.resolve_hub_path(tmp_path)
+            assert got == tmp_path, f"explicit absolute: got {got}"
+        print("PASS: resolve_hub_path(absolute_path) returns it resolved")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp).resolve()
+            parent = tmp_path.parent
+            rel = Path(tmp_path.name)
+            got = _paths.resolve_hub_path(parent / rel)
+            assert got == tmp_path, f"relative-like path: got {got}"
+            assert got.is_absolute(), f"result must be absolute: got {got}"
+        print("PASS: resolve_hub_path(relative-style path) returns an absolute path")
+
         # resolve_wiki_path — container-form default (main_root under wts/)
 
         with tempfile.TemporaryDirectory() as tmp:
