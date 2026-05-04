@@ -4,6 +4,8 @@ Covers:
   - load_config: shared config present → returned as dict
   - load_config: local override wins via deep_merge
   - load_config: wiki config absent → returns empty dict
+  - load_config: subfolder-install layout — stub + real config merged
+  - load_config: stub-only (real config absent) — hub_relative_path present
   - deep_merge: scalar in overlay wins over scalar in base
   - deep_merge: nested dicts are merged recursively
   - deep_merge: empty overlay leaves base unchanged
@@ -51,11 +53,11 @@ def test_load_config_shared_present() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         tmp_path = Path(tmp)
         wiki = tmp_path / "wiki"
-        hub = tmp_path / "hub"
-        _git_init(hub)
+        wt_root = tmp_path / "hub"
+        _git_init(wt_root)
         _write_yaml(wiki / "config.yaml", "spawn:\n  branch_prefix: feat\n")
 
-        cfg = _config.load_config(wiki, hub)
+        cfg = _config.load_config(wiki, wt_root)
 
         assert cfg == {"spawn": {"branch_prefix": "feat"}}, f"Unexpected cfg: {cfg!r}"
     print("PASS load_config — shared config present")
@@ -66,15 +68,15 @@ def test_load_config_local_override_wins() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         tmp_path = Path(tmp)
         wiki = tmp_path / "wiki"
-        hub = tmp_path / "hub"
-        _git_init(hub)
+        wt_root = tmp_path / "hub"
+        _git_init(wt_root)
         _write_yaml(wiki / "config.yaml", "spawn:\n  branch_prefix: feat\n  workers: 2\n")
         _write_yaml(
-            hub / ".millhouse" / "config.local.yaml",
+            wt_root / ".millhouse" / "config.local.yaml",
             "spawn:\n  branch_prefix: local\n",
         )
 
-        cfg = _config.load_config(wiki, hub)
+        cfg = _config.load_config(wiki, wt_root)
 
         assert cfg["spawn"]["branch_prefix"] == "local", (
             f"Local override should win; got {cfg['spawn']['branch_prefix']!r}"
@@ -91,13 +93,66 @@ def test_load_config_wiki_config_absent() -> None:
         tmp_path = Path(tmp)
         wiki = tmp_path / "wiki"
         wiki.mkdir()  # dir exists but no config.yaml inside
-        hub = tmp_path / "hub"
-        _git_init(hub)
+        wt_root = tmp_path / "hub"
+        _git_init(wt_root)
 
-        cfg = _config.load_config(wiki, hub)
+        cfg = _config.load_config(wiki, wt_root)
 
         assert cfg == {}, f"Expected empty dict for missing config, got {cfg!r}"
     print("PASS load_config — wiki config absent → empty dict")
+
+
+def test_load_config_subfolder_install() -> None:
+    """load_config merges stub then real config for subfolder-install layout."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        wiki = tmp_path / "wiki"
+        wt_root = tmp_path / "wt"
+        wt_root.mkdir()
+        # Stub at worktree root .millhouse
+        _write_yaml(
+            wt_root / ".millhouse" / "config.local.yaml",
+            "hub_relative_path: sub/hub\n",
+        )
+        # Real config at the declared hub subpath
+        _write_yaml(
+            wt_root / "sub" / "hub" / ".millhouse" / "config.local.yaml",
+            "spawn:\n  branch_prefix: real\n",
+        )
+
+        cfg = _config.load_config(wiki, wt_root)
+
+        assert cfg.get("hub_relative_path") == "sub/hub", (
+            f"hub_relative_path from stub should be present; got {cfg.get('hub_relative_path')!r}"
+        )
+        assert cfg.get("spawn", {}).get("branch_prefix") == "real", (
+            f"Real config keys should be in result; got {cfg.get('spawn')!r}"
+        )
+    print("PASS load_config — subfolder-install: stub + real config merged, both keys present")
+
+
+def test_load_config_stub_only_real_absent() -> None:
+    """load_config returns stub keys when real config is absent (no real hub)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        wiki = tmp_path / "wiki"
+        wt_root = tmp_path / "wt"
+        wt_root.mkdir()
+        # Stub only — no real config at sub/hub
+        _write_yaml(
+            wt_root / ".millhouse" / "config.local.yaml",
+            "hub_relative_path: sub/hub\n",
+        )
+
+        cfg = _config.load_config(wiki, wt_root)
+
+        assert cfg.get("hub_relative_path") == "sub/hub", (
+            f"hub_relative_path from stub should be present; got {cfg.get('hub_relative_path')!r}"
+        )
+        assert "spawn" not in cfg, (
+            f"Real config keys should be absent; got spawn={cfg.get('spawn')!r}"
+        )
+    print("PASS load_config — stub-only (real config absent): hub_relative_path present, real keys absent")
 
 
 # ---------------------------------------------------------------------------
@@ -141,6 +196,8 @@ def main() -> int:
         test_load_config_shared_present,
         test_load_config_local_override_wins,
         test_load_config_wiki_config_absent,
+        test_load_config_subfolder_install,
+        test_load_config_stub_only_real_absent,
         test_deep_merge_scalar_wins,
         test_deep_merge_nested_merge,
         test_deep_merge_empty_overlay,
