@@ -44,7 +44,7 @@ import _vscode
 import _wiki
 import _worktree
 from _config import load_config as _load_config_lenient
-from _paths import resolve_container_path, resolve_git_root, resolve_short_name, resolve_wiki_path, resolve_worktrees_dir
+from _paths import resolve_container_path, resolve_git_root, resolve_hub_path, resolve_main_worktree_root, resolve_short_name, resolve_wiki_path, resolve_worktrees_dir
 from _spawn_core import pick_worktree_color
 
 
@@ -53,7 +53,7 @@ from _spawn_core import pick_worktree_color
 # --------------------------------------------------------------------------- #
 
 
-def _load_config(wiki_path: Path, git_root: Path) -> dict:
+def _load_config(wiki_path: Path, worktree_root: Path) -> dict:
     """Load ``wiki/config.yaml`` deep-merged with ``.millhouse/config.local.yaml``.
 
     Raises ``SystemExit`` when ``wiki/config.yaml`` does not exist — mill-spawn
@@ -62,21 +62,21 @@ def _load_config(wiki_path: Path, git_root: Path) -> dict:
     shared_path = wiki_path / "config.yaml"
     if not shared_path.exists():
         raise SystemExit(f"Missing config at {shared_path}")
-    return _load_config_lenient(wiki_path, git_root)
+    return _load_config_lenient(wiki_path, worktree_root)
 
 
 def _build_tokens(
-    git_root: Path,
+    hub_path: Path,
     wiki_path: Path,
     slug: Optional[str] = None,
 ) -> dict[str, str]:
     """Assemble the token map used by ``_junction.resolve_target``."""
     tokens = {
-        "HUB_PATH": str(git_root),
-        "CWD_PATH": str(Path.cwd()),
-        "CONTAINER_PATH": str(resolve_container_path(git_root)),
+        "HUB_PATH": str(hub_path),
+        "CWD_PATH": str(hub_path),
+        "CONTAINER_PATH": str(resolve_container_path(hub_path)),
         "WIKI_PATH": str(wiki_path),
-        "REPO": git_root.name,
+        "REPO": resolve_main_worktree_root(hub_path).name,
     }
     if slug is not None:
         tokens["SLUG"] = slug
@@ -106,7 +106,7 @@ def main(argv: list[str] | None = None) -> int:
 
     git_root = resolve_git_root()
     wiki_path = resolve_wiki_path(git_root)
-    cfg = _load_config(wiki_path, git_root)
+    cfg = _load_config(wiki_path, resolve_hub_path())
     spawn_cfg = cfg.get("spawn", {})
 
     home_path = wiki_path / "Home.md"
@@ -152,7 +152,7 @@ def main(argv: list[str] | None = None) -> int:
     branch_prefix = spawn_cfg.get("branch_prefix", "")
     branch_name = f"{branch_prefix}/{slug}" if branch_prefix else slug
 
-    tokens = _build_tokens(git_root, wiki_path, slug=slug)
+    tokens = _build_tokens(resolve_hub_path(), wiki_path, slug=slug)
     worktrees_dir = resolve_worktrees_dir(cfg, git_root)
     worktree_path = worktrees_dir / slug
 
@@ -187,7 +187,7 @@ def main(argv: list[str] | None = None) -> int:
     # the parent clone's last run and (b) junctions that must be
     # recreated per-worktree.
     _worktree.copy_millhouse(
-        src=git_root / ".millhouse",
+        src=resolve_hub_path() / ".millhouse",
         dst=worktree_path / ".millhouse",
         exclude={"wiki", "active"},
     )
