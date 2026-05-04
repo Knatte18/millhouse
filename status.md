@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-helper-api-additions
+phase: reviewing-validate-plan-typeerror-r1
 slug: mill-go-fixes
 branch: mill-go-fixes
 plan: plan
@@ -29,6 +29,7 @@ reviewing-wiki-lock-unification-r2  2026-05-04T18:14:27Z
 approved-wiki-lock-unification  2026-05-04T18:19:45Z
 reviewing-helper-api-additions-r1  2026-05-04T18:26:15Z
 approved-helper-api-additions  2026-05-04T18:30:45Z
+reviewing-validate-plan-typeerror-r1  2026-05-04T18:35:56Z
 ```
 
 ## Batches
@@ -50,10 +51,11 @@ batches:
     review_round: 1
     review_file: reviews/20260504-183025-code-review-helper-api-additions-r1.md
   - name: validate-plan-typeerror
-    state: running
+    state: reviewing
     implementer_session: 88520f84-8f07-44de-a5bb-fecb201501fe
     start_sha: 27f2b837e7259372e48fe8f28191e879cb97fad8
-    review_round: 0
+    commit_sha: 95ff66e5a12591b616662498327de5fd05dd74df
+    review_round: 1
   - name: mill-plan-start-resume-prose
     state: pending
   - name: workflow-anti-patterns
