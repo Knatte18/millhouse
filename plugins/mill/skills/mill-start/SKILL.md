@@ -102,6 +102,6 @@ Report: **"Discussion complete. Run `/mill-plan` next to start autonomous plan w
 
 ## Board discipline
 
-- Home.md writes go through `_wiki.write_commit_push` with the shared lock held (see `_wiki.acquire_lock` / `_wiki.release_lock`).
+- Home.md writes go through `_wiki.write_commit_push` (which acquires the wiki lock internally). For multi-operation windows, use `with _wiki.wiki_lock(wiki_path, slug):`.
 - Task-state writes (`status.md`, `discussion.md`) are committed on the task branch via `git add` + `git commit`, then pushed to remote. They never go through the wiki.
 - Phase transitions are recorded via `_status.append_phase`. Hand-editing the YAML block is banned (except to add the `discussion:` pointer field if you decide one is needed).
