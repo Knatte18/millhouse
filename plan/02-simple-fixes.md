@@ -50,8 +50,10 @@ Batch-local decisions:
 - **Reads:**
   - `plugins/mill/scripts/millpy-fetch-issues.py`
   - `plugins/mill/scripts/_paths.py`
+  - `plugins/mill/unit_tests/test-millpy-fetch-issues.py`
 - **Modifies:**
   - `plugins/mill/scripts/millpy-fetch-issues.py`
+  - `plugins/mill/unit_tests/test-millpy-fetch-issues.py`
 - **Creates:** none
 - **Requirements:** Add `resolve_hub_path` to the `from _paths import ...` line. At line 62, change `out = git_root / ".scratch" / "issues.json"` to `out = resolve_hub_path() / ".scratch" / "issues.json"`. The `if args.out` branch (which uses an explicit override) is untouched. The `git_root = resolve_git_root()` call at line 57 stays — it remains a legitimate hint for "is this a git repo at all" even though no other path is constructed from it after the fix. (If `resolve_git_root()` becomes dead code after this change, leave it; removing it is out of scope.) Do not create a new test file for this script — the fix is a one-line swap and the discussion's testing list does not include `test-millpy-fetch-issues.py`.
 - **Commit:** `fix(millpy-fetch-issues): use resolve_hub_path() for default .scratch/issues.json output`
