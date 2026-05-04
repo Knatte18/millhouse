@@ -26,7 +26,7 @@ from pathlib import Path
 import _active
 import _vscode
 from _config import load_config as _load_config
-from _paths import resolve_git_root, resolve_short_name, resolve_wiki_path
+from _paths import resolve_git_root, resolve_hub_path, resolve_short_name, resolve_wiki_path
 from _spawn_core import WORKTREE_COLOR_NAME_TO_HEX
 
 _EXIT_USAGE = 2
@@ -77,7 +77,7 @@ def main(argv: list[str] | None = None) -> int:
     color_hex = WORKTREE_COLOR_NAME_TO_HEX[color_name]
 
     git_root = resolve_git_root()
-    settings_path = git_root / ".vscode" / "settings.json"
+    settings_path = resolve_hub_path() / ".vscode" / "settings.json"
 
     # Preserve the existing window title; do NOT clobber it.
     existing_title = _read_existing_window_title(settings_path)
@@ -86,12 +86,12 @@ def main(argv: list[str] | None = None) -> int:
         # Derive a title from config + active marker.
         try:
             wiki_path = resolve_wiki_path(git_root)
-            cfg = _load_config(wiki_path, git_root)
+            cfg = _load_config(wiki_path, resolve_hub_path())
         except SystemExit:
             cfg = {}
         short_name = resolve_short_name(cfg, git_root.name)
 
-        mill_dir = git_root / ".millhouse"
+        mill_dir = resolve_hub_path() / ".millhouse"
         slug: str | None = None
         try:
             slug = _active.read_slug(mill_dir)
