@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: reviewing-simple-fixes-r1
+phase: approved-simple-fixes
 slug: script-invocation-hygiene
 branch: script-invocation-hygiene
 plan: plan
@@ -28,6 +28,7 @@ approved-foundation  2026-05-04T17:58:47Z
 reviewing-docs-gitignore-r1  2026-05-04T18:04:56Z
 approved-docs-gitignore  2026-05-04T18:08:05Z
 reviewing-simple-fixes-r1  2026-05-04T18:20:04Z
+approved-simple-fixes  2026-05-04T18:25:27Z
 ```
 
 ## Batches
@@ -49,11 +50,12 @@ batches:
     review_round: 1
     review_file: reviews/20260504-180754-code-review-docs-gitignore-r1.md
   - name: simple-fixes
-    state: reviewing
+    state: approved
     implementer_session: bcac6072-4abf-4cf0-bbbb-39e01eb9420f
     start_sha: 695f16607a93628280131d3240bbf8ae54cf8abf
     commit_sha: 646da4d29cbb0d5bb844d018b6fb66143c81a095
     review_round: 1
+    review_file: reviews/20260504-182517-code-review-simple-fixes-r1.md
   - name: spawn-worktree-dst
     state: pending
 ```
