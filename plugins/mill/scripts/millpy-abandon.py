@@ -91,16 +91,14 @@ def main() -> int:
     # Step 7-10: update wiki
     timestamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
-    _wiki.acquire_lock(wiki_path, slug)
-    try:
+    with _wiki.wiki_lock(wiki_path, slug):
         _status.append_phase(status_path, "abandoned", timestamp)
         _wiki.write_commit_push(
             wiki_path,
             [f"active/{slug}/status.md"],
             f"task: abandon {slug}",
+            slug=slug,
         )
-    finally:
-        _wiki.release_lock(wiki_path)
 
     # Step 11: success
     print(

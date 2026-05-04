@@ -116,7 +116,7 @@ def main(argv: list[str] | None = None) -> int:
             "or set paths.wiki: in .millhouse/config.local.yaml."
         )
 
-    _wiki.sync_pull(wiki_path)
+    _wiki.sync_pull(wiki_path, slug="mill-spawn")
     home_text = home_path.read_text(encoding="utf-8")
     tasks = _tasks_md.parse(home_text)
 
