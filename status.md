@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-review-r2
+phase: planned
 slug: script-invocation-hygiene
 branch: script-invocation-hygiene
 plan: plan
@@ -21,4 +21,5 @@ planning  2026-05-04T17:11:47Z
 plan-review-r1  2026-05-04T17:24:49Z
 plan-fix-r1  2026-05-04T17:30:29Z
 plan-review-r2  2026-05-04T17:38:27Z
+planned  2026-05-04T17:38:38Z
 ```
