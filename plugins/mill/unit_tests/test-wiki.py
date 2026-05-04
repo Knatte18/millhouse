@@ -7,6 +7,7 @@ for all git operations so no real git activity occurs.
 """
 from __future__ import annotations
 
+import datetime
 import sys
 import tempfile
 from pathlib import Path
@@ -123,14 +124,18 @@ def main() -> int:
         with tempfile.TemporaryDirectory() as tmp_str:
             wiki = Path(tmp_str)
             lock_path = wiki / ".mill-lock"
-            old_ts = "2000-01-01T00:00:00Z"
-            lock_path.write_text(f"my-slug\n{old_ts}\n", encoding="utf-8")
+            # Use a recent timestamp (30 s ago) so the lock is NOT stale-by-age
+            # (age << 5 min threshold). Only the self-lock branch can trigger here.
+            recent_ts = (
+                datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(seconds=30)
+            ).strftime("%Y-%m-%dT%H:%M:%SZ")
+            lock_path.write_text(f"my-slug\n{recent_ts}\n", encoding="utf-8")
             # With timeout_seconds=1 a real wait would take 1 s; self-lock must return immediately.
             _wiki._acquire(wiki, "my-slug", timeout_seconds=1)
             content = lock_path.read_text(encoding="utf-8")
             lines = content.strip().splitlines()
             assert lines[0] == "my-slug", f"holder mismatch: {lines[0]!r}"
-            assert lines[1] != old_ts, "timestamp must be refreshed on reclaim (not the old value)"
+            assert lines[1] != recent_ts, "timestamp must be refreshed on reclaim (not the old value)"
             _wiki._release(wiki)  # clean up for next test
         ok("_acquire: stale-self-lock reclaimed immediately, timestamp updated")
     except Exception as exc:

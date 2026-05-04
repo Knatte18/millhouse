@@ -30,7 +30,7 @@ You are an integration engineer. Your job is to merge a completed task branch ba
 
    **In-place mode bypass:** when `mode == 'inplace'`, the existing Steps 1 (acquire merge lock on parent) and 2 (invoke `mill-merge-in`) are SKIPPED. There is no separate parent worktree to lock; the merge is purely local. Continue from Step 3 (capture child branch) onward, but treat "child" and "parent" as branches in the same working tree (cwd is the hub). For the squash merge in Step 4 (Direct path), omit the `-C <parent-path>` flag — the merge runs against the current working tree directly.
 
-2. `_wiki.sync_pull(<WIKI_PATH>)`.
+2. `_wiki.sync_pull(<WIKI_PATH>, slug=slug)`.
 3. Read slug via `_active.read_slug(Path(".millhouse"))` (already resolved in Step 1; reuse `active_data` — no second read needed).
 4. *(Config already loaded in Step 1.)*
 5. Resolve parent branch via `_parent_branch.resolve(status_path, interactive=<True unless called non-interactively>)`. `status_path` is `git_root / "status.md"` — state lives on the task branch, not in the wiki.
@@ -234,7 +234,7 @@ Tolerate already-gone. `container_path` was resolved in Entry Step 1 via `_paths
 If `wiki_path / "active" / slug` exists (a pre-migration clone that still has the old wiki state directory):
 
 1. `shutil.rmtree(wiki_path / "active" / slug)`.
-2. Commit+push via `_wiki.write_commit_push(<WIKI_PATH>, [f"active/{slug}/"], f"task: cleanup legacy active dir {slug}")`.
+2. Commit+push via `_wiki.write_commit_push(<WIKI_PATH>, [f"active/{slug}/"], f"task: cleanup legacy active dir {slug}", slug=slug)`.
 
 If the directory does not exist, skip silently — this is the normal case for post-migration setups.
 

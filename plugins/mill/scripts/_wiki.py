@@ -220,9 +220,9 @@ def wiki_lock(wiki_path: Path, slug: str):
     """
     resolved = wiki_path.resolve()
     count = _held_locks.get(resolved, 0)
-    _held_locks[resolved] = count + 1
     if count == 0:
         _acquire(wiki_path, slug)
+    _held_locks[resolved] = count + 1
     try:
         yield
     finally:
