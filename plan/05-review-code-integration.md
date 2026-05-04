@@ -41,12 +41,14 @@ Mirrors the `_review_plan` integration in `_review_code.run`: ERROR-handling par
 
 - **Reads:**
   - `plugins/mill/scripts/_review_code.py`
+  - `plugins/mill/unit_tests/test-review-code-flow.py`
   - `wiki/config.yaml`
 - **Modifies:**
   - `plugins/mill/scripts/_review_code.py`
+  - `plugins/mill/unit_tests/test-review-code-flow.py`
 - **Creates:** none
 - **Deletes:** none
-- **Requirements:** After `reviewer_name = cfg["review"]["code"]["reviewer"]` and `reviewer = load_reviewer(reviewer_name)`, compute the effective timeout: `timeout = cfg["llm"]["holistic_timeout"] if batch_name is None else cfg["llm"]["bulk_timeout"]`. Pass `timeout=timeout` to both reviewer.run calls — the initial dispatch (line ~239 today) and the NEED_CONTEXT resume retry (line ~264 today). The reviewer module already accepts `timeout` per Card 7. No other behaviour change.
+- **Requirements:** After `reviewer_name = cfg["review"]["code"]["reviewer"]` and `reviewer = load_reviewer(reviewer_name)`, compute the effective timeout: `timeout = cfg["llm"]["holistic_timeout"] if batch_name is None else cfg["llm"]["bulk_timeout"]`. Pass `timeout=timeout` to both reviewer.run calls — the initial dispatch (line ~239 today) and the NEED_CONTEXT resume retry (line ~264 today). The reviewer module already accepts `timeout` per Card 7. **Within the same card** (so this card's own verify stays green and Card 22 can layer assertions on top): update the local cfg fixture builder in `test-review-code-flow.py` to include `"llm": {"bulk_timeout": None, "holistic_timeout": None}` in the returned/assembled cfg. `None` propagates as the reviewer-default `timeout` kwarg from B01 Card 7, so existing tests stay behaviour-identical. Card 22 owns the new assertions; this card owns the fixture key.
 - **Commit:** `feat(review-code): plumb bulk_timeout / holistic_timeout from config`
 
 ### Card 22: Tests for `_review_code.run` integration
@@ -60,7 +62,24 @@ Mirrors the `_review_plan` integration in `_review_code.run`: ERROR-handling par
   - `plugins/mill/unit_tests/test-review-code-flow.py`
 - **Creates:** none
 - **Deletes:** none
-- **Requirements:** Add tests covering each of cards 19–21. Reuse the existing fixture helpers in `test-review-code-flow.py`; extend `_make_batch_file` (if a local copy lives there) to accept a `deletes:` argument, or use the same shape as `test-review-plan-flow.py`. Update the local cfg fixture to include `"llm": {"bulk_timeout": None, "holistic_timeout": None}` for the same reason as B04 Card 18 — `_review_code.run` reads both keys unconditionally after Card 21. (a) ERROR-handling parity — monkey-patch `stub.run` to raise `LLMError("seeded boom")` (define a small named raiser function and assign it to `stub.run`, restoring the original in a `finally` block — the stub has no exception-sentinel queue); call `_review_code.run` once with `batch_name="<batch>"` and once with `batch_name=None`; assert each returns `ReviewResult(verdict="REQUEST_CHANGES", reviews=[{"scope": ..., "verdict": "ERROR", "file": None, "error": "...", "session_id": None}])` rather than raising `ReviewError`. (b) ERROR on resume — seed one stub `(NEED_CONTEXT_TEXT, "sid-1")` response via `stub.seed([...])`, then monkey-patch `stub.run` to raise `LLMError` on the retry call only (e.g. wrap the original `stub.run` so first call returns the seeded NEED_CONTEXT and second call raises); assert the resulting ReviewResult has `verdict: REQUEST_CHANGES` with the single ERROR entry whose `error` field starts with `"resume retry failed:"`. (c) deletes surface — fixture batch declares `Deletes:` token `\`legacy/x.py\``; assert the captured prompt contains `## Intentionally deleted` and `legacy/x.py`. (d) timeout plumbing — override the fixture's cfg via `cfg["llm"]["bulk_timeout"] = 900` and `cfg["llm"]["holistic_timeout"] = 1800`; call `_review_code.run` with `batch_name="<batch>"` and assert `captured_prompts()[0][1]["timeout"] == 900`; call again with `batch_name=None` and assert `captured_prompts()[0][1]["timeout"] == 1800`. Existing tests in the file must continue to pass.
+- **Requirements:** Add tests covering each of cards 19–21. Reuse the existing fixture helpers in `test-review-code-flow.py`; extend `_make_batch_file` (if a local copy lives there) to accept a `deletes:` argument, or use the same shape as `test-review-plan-flow.py`. The cfg fixture's `"llm"` block is already in place from Card 21's update; Card 22 layers new test cases on top. (a) ERROR-handling parity — monkey-patch `stub.run` to raise `LLMError("seeded boom")` (define a small named raiser function and assign it to `stub.run`, restoring the original in a `finally` block — the stub has no exception-sentinel queue); call `_review_code.run` once with `batch_name="<batch>"` and once with `batch_name=None`; assert each returns `ReviewResult(verdict="REQUEST_CHANGES", reviews=[{"scope": ..., "verdict": "ERROR", "file": None, "error": "...", "session_id": None}])` rather than raising `ReviewError`. (b) ERROR on resume — use a `call_count` closure to drive two-call behaviour deterministically, e.g.:
+  ```python
+  original_run = stub.run
+  call_count = 0
+  def _seq(*a, **kw):
+      nonlocal call_count
+      call_count += 1
+      if call_count == 1:
+          return original_run(*a, **kw)        # returns the seeded NEED_CONTEXT
+      raise LLMError("seeded boom")            # second call: retry path
+  stub.seed([(NEED_CONTEXT_TEXT, "sid-1")])
+  stub.run = _seq
+  try:
+      result = _review_code.run(...)
+  finally:
+      stub.run = original_run
+  ```
+  Assert the resulting ReviewResult has `verdict: REQUEST_CHANGES` with the single ERROR entry whose `error` field starts with `"resume retry failed:"`. (c) deletes surface — fixture batch declares `Deletes:` token `\`legacy/x.py\``; assert the captured prompt contains `## Intentionally deleted` and `legacy/x.py`. (d) timeout plumbing — override the fixture's cfg via `cfg["llm"]["bulk_timeout"] = 900` and `cfg["llm"]["holistic_timeout"] = 1800`; call `_review_code.run` with `batch_name="<batch>"` and assert `captured_prompts()[0][1]["timeout"] == 900`; call again with `batch_name=None` and assert `captured_prompts()[0][1]["timeout"] == 1800`. Existing tests in the file must continue to pass.
 - **Commit:** `test(review-code): cover ERROR parity, deletes, timeouts`
 
 ## Batch Tests
