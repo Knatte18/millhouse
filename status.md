@@ -30,7 +30,10 @@ implementing  2026-05-04T17:44:49Z
 ```yaml
 batches:
   - name: foundation
-    state: pending
+    state: running
+    implementer_session: 014da18e-fff3-46e8-b7fe-84c4a6ab528e
+    start_sha: 40cd567e189f91a67419fee3b0a56a0c219aa88b
+    review_round: 0
   - name: docs-gitignore
     state: pending
   - name: simple-fixes
