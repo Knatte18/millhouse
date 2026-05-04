@@ -30,7 +30,10 @@ implementing  2026-05-04T17:44:14Z
 ```yaml
 batches:
   - name: wiki-lock-unification
-    state: pending
+    state: running
+    implementer_session: f7561923-4539-4376-80d0-fb797584dc73
+    start_sha: 34dadd66d045ec46156e81e33b159413d8d3fb2f
+    review_round: 0
   - name: helper-api-additions
     state: pending
   - name: validate-plan-typeerror
