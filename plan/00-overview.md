@@ -3,7 +3,7 @@
 ```yaml
 task: 6 — mill-go SKILL.md prose + lock-API + lock-coverage + Builder-oppførsel
 slug: mill-go-fixes
-approved: false
+approved: true
 started: 20260504-121302
 parent: main
 root: ""

@@ -19,4 +19,7 @@ discussed  2026-05-04T12:05:37Z
 planning  2026-05-04T12:19:31Z
 plan-review-r1  2026-05-04T12:39:00Z
 plan-fix-r1  2026-05-04T12:39:51Z
+plan-review-r2  2026-05-04T17:17:37Z
+plan-fix-r2  2026-05-04T17:19:51Z
+planned  2026-05-04T17:20:00Z
 ```

@@ -37,20 +37,10 @@ Batch-local decisions (in addition to Shared Decisions):
 - **Modifies:**
   - `plugins/mill/scripts/_wiki.py`
 - **Creates:** none
-- **Requirements:** Change `sync_pull` signature to `sync_pull(wiki_path: Path, *, slug: str) -> None`. Change `write_commit_push` signature to `write_commit_push(wiki_path: Path, relative_paths: list[str], commit_msg: str, *, slug: str) -> None`. Inside both: resolve the wiki path; check `_held_locks.get(resolved, 0)` — if > 0 just run the existing operation body; if 0 wrap the body in `try: _acquire(wiki_path, slug); ...; finally: _release(wiki_path)`. The "nothing to commit" early-return in `write_commit_push` must run inside the `finally`-released window so the lock is released even on no-op commits. Update the module docstring's "Public API" block to reflect the new signatures and the auto-locking behaviour. Do NOT remove the existing `acquire_lock` / `release_lock` symbols yet — Card 3 does that after Card 4 migrates callers.
+- **Requirements:** Change `sync_pull` signature to `sync_pull(wiki_path: Path, *, slug: str) -> None`. Change `write_commit_push` signature to `write_commit_push(wiki_path: Path, relative_paths: list[str], commit_msg: str, *, slug: str) -> None`. Inside both: resolve the wiki path; check `_held_locks.get(resolved, 0)` — if > 0 just run the existing operation body; if 0 wrap the body in `try: _acquire(wiki_path, slug); ...; finally: _release(wiki_path)`. The "nothing to commit" early-return in `write_commit_push` must run inside the `finally`-released window so the lock is released even on no-op commits. Update the module docstring's "Public API" block to reflect the new signatures and the auto-locking behaviour. Do NOT remove the existing `acquire_lock` / `release_lock` symbols yet — Card 4 does that after Card 3 migrates callers.
 - **Commit:** `feat(_wiki): sync_pull/write_commit_push acquire wiki lock internally`
 
-### Card 3: Remove public `acquire_lock` and `release_lock`; clean up module surface
-
-- **Reads:**
-  - `plugins/mill/scripts/_wiki.py`
-- **Modifies:**
-  - `plugins/mill/scripts/_wiki.py`
-- **Creates:** none
-- **Requirements:** ⚠️ **Execute this card AFTER Card 4.** The grep check below will halt if any caller still references `_wiki.acquire_lock`/`_wiki.release_lock`; skip ahead to Card 4 first, implement it, then return here. Delete the public `acquire_lock` and `release_lock` definitions from `_wiki.py`. The module-private `_acquire` and `_release` (added in Card 1) remain, used only by `wiki_lock`, `sync_pull`, and `write_commit_push`. Remove the matching entries from the module docstring's "Public API" block (Card 1 already did the docstring rewrite, but if any stale lines remain, clean them up). Run `grep -rn "_wiki\.acquire_lock\|_wiki\.release_lock"` across `plugins/mill/` and confirm Cards 4–8 have removed every external call site before this card lands. If any remain, halt — Card 3 must be the final step in the helper migration so the surface change lands atomically with the callers.
-- **Commit:** `refactor(_wiki): remove public acquire_lock/release_lock`
-
-### Card 4: Migrate all script callers of the wiki lock-API
+### Card 3: Migrate all script callers of the wiki lock-API
 
 - **Reads:**
   - `plugins/mill/scripts/_spawn_core.py`
@@ -69,6 +59,16 @@ Batch-local decisions (in addition to Shared Decisions):
 - **Creates:** none
 - **Requirements:** In every caller, delete the explicit `_wiki.acquire_lock(...)` / `_wiki.release_lock(...)` calls and the surrounding `try/finally` boilerplate. Add `slug=<value>` kwarg to every `_wiki.sync_pull(wiki_path)` and `_wiki.write_commit_push(wiki_path, paths, msg)` call. **Multi-op sequences (read Home.md → transform → `write_commit_push`) must be wrapped in `with _wiki.wiki_lock(wiki_path, <slug>):` — the nested `write_commit_push` inside will skip re-acquiring via the re-entrancy counter. The following functions perform multi-op atomic windows and require this treatment:** (a) `_spawn_core.claim_in_wiki(wiki_path, slug)` — wrap the full body in `with _wiki.wiki_lock(wiki_path, slug):`; (b) `_spawn_core.multi_select_groom_then_claim(wiki_path, ...)` — same treatment; (c) `millpy-add.main()` around line 170–204 — wrap the read→modify→write_commit_push sequence in `with _wiki.wiki_lock(wiki_path, args.slug):`; (d) `millpy-cleanup.main()` around lines 423, 443, 463 — wrap each read→modify→write_commit_push sequence in `with _wiki.wiki_lock(wiki_path, "mill-cleanup"):`. **For bare standalone `sync_pull` calls not currently surrounded by explicit locks, just add `slug=`:** `millpy-claim.py:179` uses `slug="mill-claim"` (early sync before any slug is picked); `millpy-spawn.py:119` uses `slug="mill-spawn"` (same reason); `millpy-abandon.py:94-103` uses local `slug`. **Also fix `millpy-claim.py:310-317`:** the call `_spawn_core.write_initial_status(wiki_path=wiki_path, ...)` passes the wrong kwarg — the function signature is `write_initial_status(worktree_path: Path, ...)`. Change to `_spawn_core.write_initial_status(worktree_path=git_root, ...)`. After this card lands, no script outside `_wiki.py` references `_wiki.acquire_lock` / `_wiki.release_lock`.
 - **Commit:** `refactor(scripts): migrate wiki callers to internal-locking helpers`
+
+### Card 4: Remove public `acquire_lock` and `release_lock`; clean up module surface
+
+- **Reads:**
+  - `plugins/mill/scripts/_wiki.py`
+- **Modifies:**
+  - `plugins/mill/scripts/_wiki.py`
+- **Creates:** none
+- **Requirements:** Delete the public `acquire_lock` and `release_lock` definitions from `_wiki.py`. The module-private `_acquire` and `_release` (added in Card 1) remain, used only by `wiki_lock`, `sync_pull`, and `write_commit_push`. Remove the matching entries from the module docstring's "Public API" block (Card 1 already did the docstring rewrite, but if any stale lines remain, clean them up). Run `grep -rn "_wiki\.acquire_lock\|_wiki\.release_lock"` across `plugins/mill/` and confirm Card 3 plus the SKILL.md prose / test-mock cards have removed every external call site before this card lands. If any remain, halt — Card 4 must be the final step in the helper migration so the surface change lands atomically with the callers.
+- **Commit:** `refactor(_wiki): remove public acquire_lock/release_lock`
 
 ### Card 5: Update SKILL.md prose for `mill-merge` and `mill-start` to use the new lock-API
 
