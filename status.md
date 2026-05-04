@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: discussed
 slug: script-invocation-hygiene
 branch: script-invocation-hygiene
 plan: null
@@ -16,4 +16,5 @@ task_description: |
 
 ```text
 discussing  '2026-05-04T11:52:44Z'
+discussed  2026-05-04T12:27:34Z
 ```
