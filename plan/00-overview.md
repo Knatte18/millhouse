@@ -3,7 +3,7 @@
 ```yaml
 task: 'review-subsystem-fixes — Review subsystem: deleted-refs + execution infrastructure'
 slug: review-subsystem-fixes
-approved: false
+approved: true
 started: 20260504-122950
 parent: main
 root: ""
