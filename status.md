@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-validate-plan-typeerror
+phase: reviewing-mill-plan-start-resume-prose-r1
 slug: mill-go-fixes
 branch: mill-go-fixes
 plan: plan
@@ -31,6 +31,7 @@ reviewing-helper-api-additions-r1  2026-05-04T18:26:15Z
 approved-helper-api-additions  2026-05-04T18:30:45Z
 reviewing-validate-plan-typeerror-r1  2026-05-04T18:35:56Z
 approved-validate-plan-typeerror  2026-05-04T18:38:43Z
+reviewing-mill-plan-start-resume-prose-r1  2026-05-04T18:42:43Z
 ```
 
 ## Batches
@@ -59,10 +60,11 @@ batches:
     review_round: 1
     review_file: reviews/20260504-183830-code-review-validate-plan-typeerror-r1.md
   - name: mill-plan-start-resume-prose
-    state: running
+    state: reviewing
     implementer_session: 4c3c0ba6-ba2f-4114-ad6c-9cbb1d21723a
     start_sha: c956a541875c39327f02adc0b810a3e1ecad47e4
-    review_round: 0
+    commit_sha: 09efa129ff64d33b5f8c2a90e88f2acea7f6e1e1
+    review_round: 1
   - name: workflow-anti-patterns
     state: pending
   - name: mill-go-skill-rewrite
