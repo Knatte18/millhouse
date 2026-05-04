@@ -45,7 +45,7 @@ import _tasks_md
 import _vscode
 import _wiki
 from _config import load_config as _load_config_lenient
-from _paths import resolve_container_path, resolve_git_root, resolve_main_worktree_root, resolve_short_name, resolve_wiki_path
+from _paths import resolve_container_path, resolve_git_root, resolve_hub_path, resolve_main_worktree_root, resolve_short_name, resolve_wiki_path
 
 
 # --------------------------------------------------------------------------- #
@@ -124,7 +124,7 @@ def _update_hub_vscode_title(git_root: Path, cfg: dict, slug: str) -> None:
     have the hub green background (indicating cwd is a differently-coloured
     worktree, not the hub).
     """
-    settings_path = git_root / ".vscode" / "settings.json"
+    settings_path = resolve_hub_path() / ".vscode" / "settings.json"
     if not settings_path.exists():
         return
     try:
@@ -165,8 +165,8 @@ def main(argv: list[str] | None = None) -> int:
 
     git_root = resolve_git_root()
     wiki_path = resolve_wiki_path(git_root)
-    mill_dir = git_root / ".millhouse"
-    cfg = _load_config(wiki_path, git_root)
+    mill_dir = resolve_hub_path() / ".millhouse"
+    cfg = _load_config(wiki_path, resolve_hub_path())
     spawn_cfg = cfg.get("spawn", {})
 
     home_path = wiki_path / "Home.md"
@@ -308,7 +308,7 @@ def main(argv: list[str] | None = None) -> int:
 
     # Render and write the initial status.md; lock + commit + push.
     status_abs = _spawn_core.write_initial_status(
-        wiki_path=wiki_path,
+        worktree_path=resolve_hub_path(),
         slug=slug,
         title=picked.title,
         ts=ts,

@@ -85,6 +85,7 @@ def _make_stub_map(
     paths_mod.resolve_container_path = MagicMock(return_value=Path("/fake/container"))
     paths_mod.resolve_main_worktree_root = MagicMock(return_value=Path("/fake/repo"))
     paths_mod.resolve_short_name = MagicMock(return_value="MI")
+    paths_mod.resolve_hub_path = MagicMock(return_value=Path("/fake/repo"))
 
     tasks_md_mod = MagicMock()
     tasks_md_mod.parse.return_value = [_make_fake_task()]
@@ -137,6 +138,7 @@ def test_smoke_import() -> None:
     paths_mod.resolve_container_path = MagicMock(return_value=Path("/fake/container"))
     paths_mod.resolve_main_worktree_root = MagicMock(return_value=Path("/fake/repo"))
     paths_mod.resolve_short_name = MagicMock(return_value="MI")
+    paths_mod.resolve_hub_path = MagicMock(return_value=Path("/fake/repo"))
 
     # _config needs load_config at module level.
     config_mod = sys.modules["_config"]
@@ -258,6 +260,10 @@ def test_main_happy_path_calls_spawn_core_helpers() -> None:
         raise AssertionError(f"write_initial_status parent_branch mismatch: {status_call}")
     if status_call.kwargs.get("branch") != "my-task":
         raise AssertionError(f"write_initial_status branch mismatch: {status_call}")
+    if "wiki_path" in status_call.kwargs:
+        raise AssertionError(f"write_initial_status must not use wiki_path= kwarg: {status_call}")
+    if status_call.kwargs.get("worktree_path") != Path("/fake/repo"):
+        raise AssertionError(f"write_initial_status worktree_path should be hub path /fake/repo: {status_call}")
 
     # Verify git checkout -b was invoked via subprocess
     run_calls = subprocess_stub.run.call_args_list
@@ -658,6 +664,68 @@ def test_main_hub_title_flip_when_cwd_is_hub() -> None:
 
 
 # ---------------------------------------------------------------------------
+# cwd != git_root: hub paths resolve to cwd, not git-root
+# ---------------------------------------------------------------------------
+
+
+def test_hub_paths_use_cwd_not_git_root() -> None:
+    """When cwd != git_root, .vscode/settings.json and mill_dir target cwd, not git_root."""
+    task = _make_fake_task(slug="my-task", title="My Task")
+
+    sc = MagicMock()
+    sc.BacklogEmpty = type("BacklogEmpty", (Exception,), {})
+    sc.pick_task_single_or_multi.return_value = ("single", task, [])
+    sc.claim_in_wiki.return_value = None
+    sc.capture_parent_branch.return_value = "main"
+    sc.write_active_marker.return_value = None
+    sc.write_initial_status.return_value = Path("/fake/repo/src/Models/status.md")
+    sc.recreate_active_junction.return_value = None
+
+    subprocess_stub = MagicMock()
+    subprocess_stub.run.return_value = _make_ok_run()
+
+    stub_map = _make_stub_map(spawn_core_mock=sc, subprocess_mock=subprocess_stub)
+    # Simulate cwd being a subdirectory of the git repo.
+    hub_path = Path("/fake/repo/src/Models")
+    stub_map["_paths"].resolve_git_root = MagicMock(return_value=Path("/fake/repo"))
+    stub_map["_paths"].resolve_hub_path = MagicMock(return_value=hub_path)
+
+    mod, saved = _load_claim_module(stub_map)
+    try:
+        fake_cfg = {"spawn": {"branch_prefix": ""}}
+        with (
+            patch.object(mod, "_load_config", return_value=fake_cfg),
+            patch.object(mod, "_is_dirty", return_value=False),
+            patch.object(Path, "exists", return_value=True),
+            patch.object(Path, "read_text", return_value="# Home\n"),
+        ):
+            exit_code = mod.main(["--slug", "my-task"])
+    finally:
+        _restore_modules(saved)
+
+    if exit_code != 0:
+        raise AssertionError(f"expected exit 0, got {exit_code}")
+
+    # write_initial_status must use the hub path (cwd), not the git_root.
+    status_call = sc.write_initial_status.call_args
+    if status_call.kwargs.get("worktree_path") != hub_path:
+        raise AssertionError(
+            f"write_initial_status worktree_path should be hub path {hub_path}, "
+            f"not git_root: {status_call}"
+        )
+
+    # write_active_marker's mill_dir arg must be hub_path / ".millhouse".
+    marker_call = sc.write_active_marker.call_args
+    expected_mill_dir = hub_path / ".millhouse"
+    if marker_call.args[0] != expected_mill_dir:
+        raise AssertionError(
+            f"write_active_marker mill_dir should be {expected_mill_dir}, got: {marker_call}"
+        )
+
+    print("PASS: hub paths (.vscode, .millhouse) resolve from cwd, not git_root")
+
+
+# ---------------------------------------------------------------------------
 # Main runner
 # ---------------------------------------------------------------------------
 
@@ -674,6 +742,7 @@ def main() -> int:
         test_portal_before_recreate_active_junction_order,
         test_portal_idempotent_when_already_correct,
         test_main_hub_title_flip_when_cwd_is_hub,
+        test_hub_paths_use_cwd_not_git_root,
     ]
 
     failures: list[str] = []
