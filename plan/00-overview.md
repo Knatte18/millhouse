@@ -80,7 +80,6 @@ batches:
 - `plugins/mill/scripts/millpy-worktree.py`
 - `plugins/mill/skills/mill-add/SKILL.md`
 - `plugins/mill/skills/mill-setup/SKILL.md`
-- `plugins/mill/skills/mill-skills-index/SKILL.md`
 - `plugins/mill/unit_tests/test-config.py`
 - `plugins/mill/unit_tests/test-gitignore-phase.py`
 - `plugins/mill/unit_tests/test-millpy-claim.py`

@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planning
+phase: plan-fix-r1
 slug: script-invocation-hygiene
 branch: script-invocation-hygiene
 plan: plan
@@ -18,4 +18,6 @@ task_description: |
 discussing  '2026-05-04T11:52:44Z'
 discussed  2026-05-04T12:27:34Z
 planning  2026-05-04T17:11:47Z
+plan-review-r1  2026-05-04T17:24:49Z
+plan-fix-r1  2026-05-04T17:30:29Z
 ```
