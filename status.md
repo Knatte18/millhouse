@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-simple-fixes
+phase: reviewing-spawn-worktree-dst-r1
 slug: script-invocation-hygiene
 branch: script-invocation-hygiene
 plan: plan
@@ -29,6 +29,7 @@ reviewing-docs-gitignore-r1  2026-05-04T18:04:56Z
 approved-docs-gitignore  2026-05-04T18:08:05Z
 reviewing-simple-fixes-r1  2026-05-04T18:20:04Z
 approved-simple-fixes  2026-05-04T18:25:27Z
+reviewing-spawn-worktree-dst-r1  2026-05-04T18:55:37Z
 ```
 
 ## Batches
@@ -57,8 +58,9 @@ batches:
     review_round: 1
     review_file: reviews/20260504-182517-code-review-simple-fixes-r1.md
   - name: spawn-worktree-dst
-    state: running
+    state: reviewing
     implementer_session: 40208280-e2d5-4064-8502-e1d8717fd4ef
     start_sha: 088b53e1a829b6013f612e572895a6347c54a927
-    review_round: 0
+    commit_sha: 1ecc3fd3c86e75c01e1866610e0420b57f3f895e
+    review_round: 1
 ```
