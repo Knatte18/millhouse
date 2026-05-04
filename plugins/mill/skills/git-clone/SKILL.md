@@ -1,12 +1,12 @@
 ---
 name: git-clone
-description: "Clone a repo as a bare-repo hub with worktrees"
+description: "Clone a repo into the mill container layout (wts/<repo>/) ready for mill-setup"
 argument-hint: "<url> [--linear]"
 ---
 
 # Clone Git Repository
 
-Clone a repo as a bare-repo hub with worktrees (default), or as a standard clone (`--linear`).
+Clone a repo into the mill container layout (default), or as a standard clone (`--linear`).
 
 ## Usage
 
@@ -16,15 +16,18 @@ Clone a repo as a bare-repo hub with worktrees (default), or as a standard clone
 /git-clone                                             (detect — inside existing repo)
 ```
 
-## Hub Structure
+## Hub Structure (container layout)
 
 ```text
-<name>/
-├── .bare/           ← bare git database
-├── .git             ← file: "gitdir: ./.bare"
-├── main/            ← worktree for default branch
-└── (future worktrees as siblings)
+<repo>/                  ← container, named after the repo
+└── wts/                 ← all worktrees live here
+    └── <repo>/          ← main worktree (regular clone — has its own .git/)
+                         ← (task worktrees added by mill-spawn as siblings)
 ```
+
+mill-setup later adds `<repo>/wiki/`, `<repo>/codeguide/`, and `<repo>/portals/` as siblings of `wts/`.
+
+**No bare-clone strategy.** The main worktree is a normal clone with `.git/` inside it. Task worktrees are added via `git -C wts/<repo>/ worktree add ../<slug>` so they land at `<container>/wts/<slug>/` as siblings. Bare clones were tried previously but conflicted with VS Code's repo extension.
 
 ## Instructions
 
@@ -51,99 +54,52 @@ Examples:
 - `git@github.com:user/my-repo.git` → `my-repo`
 - `https://github.com/user/my-repo` → `my-repo`
 
-#### 2.2. Resolve absolute hub path
+#### 2.2. Resolve absolute container path
 
 ```bash
-hub_path="$(pwd)/$name"
+container_path="$(pwd)/$name"
+worktree_path="$container_path/wts/$name"
 ```
 
-All subsequent commands use `$hub_path`. Do not use relative paths.
+`$name` is both the container directory name AND the main worktree's directory name (they match — see `## Hub Structure`). All subsequent commands use absolute paths. Do not use relative paths.
 
 #### 2.3. Check target doesn't exist
 
-If `$hub_path` already exists, report the error and stop:
+If `$container_path` already exists, report the error and stop:
 
 > "Directory `<name>/` already exists. Remove it first or choose a different location."
 
-#### 2.4. Clone bare repo
+#### 2.4. Create container scaffolding
 
 ```bash
-git clone --bare <url> "$hub_path/.bare"
+mkdir -p "$container_path/wts"
+```
+
+#### 2.5. Clone into the main worktree path
+
+```bash
+git clone <url> "$worktree_path"
 ```
 
 If the clone fails, report the error and stop.
 
-#### 2.5. Verify bare clone
+#### 2.6. Detect default branch
 
 ```bash
-git -C "$hub_path/.bare" rev-parse --is-bare-repository
+git -C "$worktree_path" symbolic-ref --short HEAD 2>/dev/null
 ```
 
-Must return `true`. If not, report error and stop. This check must run immediately after the clone, before any operations on the bare repo.
+Returns the branch name that was checked out by `git clone` (e.g. `main`, `master`). If the result is empty (detached HEAD — rare), ask the user via `AskUserQuestion`.
 
-#### 2.6. Configure fetch refspec
-
-Bare clones omit the remote-tracking fetch refspec by default. Without this configuration, `git fetch` inside worktrees won't update remote-tracking branches.
-
-```bash
-git -C "$hub_path/.bare" config remote.origin.fetch '+refs/heads/*:refs/remotes/origin/*'
-```
-
-#### 2.7. Initial fetch
-
-```bash
-git -C "$hub_path/.bare" fetch origin
-```
-
-#### 2.8. Write .git redirect file
-
-Write the file `$hub_path/.git` (a plain file, not a directory) with this exact content:
-
-```
-gitdir: ./.bare
-```
-
-This redirect file is required for all subsequent `git -C "$hub_path"` commands. Steps 2.9–2.10 depend on it.
-
-#### 2.9. Detect default branch
-
-Use this fallback chain:
-
-1. **Primary (local, no network):**
-   ```bash
-   git -C "$hub_path/.bare" symbolic-ref HEAD 2>/dev/null
-   ```
-   Strip the `refs/heads/` prefix to get the branch name (e.g. `main`, `master`). If the result is empty after stripping (detached HEAD), fall through to step 2.
-
-2. **Last resort:** Ask the user for the default branch name via `AskUserQuestion`.
-
-#### 2.10. Create main worktree
-
-Bare clones populate `refs/heads/` with all upstream branches. Check whether the default branch exists locally:
-
-```bash
-git -C "$hub_path/.bare" show-ref --verify "refs/heads/<default-branch>" 2>/dev/null
-```
-
-- **Branch exists locally** (common case):
-  ```bash
-  git -C "$hub_path" worktree add main <default-branch>
-  ```
-
-- **Branch does not exist locally** (unusual — e.g. empty repo or stripped bare clone):
-  ```bash
-  git -C "$hub_path" worktree add -b <default-branch> main "origin/<default-branch>"
-  ```
-
-If the command fails, report the error and stop.
-
-#### 2.11. Report
+#### 2.7. Report
 
 Tell the user:
 
 ```
-Hub created at <hub_path>
-Main worktree: <hub_path>/main (branch: <default-branch>)
+Hub created at <container_path>
+Main worktree: <worktree_path> (branch: <default-branch>)
+
+Next: cd <worktree_path> && /mill-setup
 ```
 
 ### 3. Linear flow
@@ -170,21 +126,21 @@ When invoked without a URL while inside a git repo.
 root=$(git rev-parse --show-toplevel)
 ```
 
-#### 4.2. Detect hub vs regular repo
+#### 4.2. Detect container-form layout
 
-Check the `.git` entry at the repo root:
+Check whether the repo root sits under a `wts/` directory:
 
 ```bash
-test -f "$root/.git"
+test "$(basename "$(dirname "$root")")" = "wts"
 ```
 
-If `.git` is a **file**: read its content. If the `gitdir:` value points to a path ending in `.bare`, this is a hub worktree. Report:
+If true, this repo is already in container-form (mill-managed). Report:
 
-> "This repo is already a hub."
+> "This repo is already in container-form layout (`wts/<repo>/`)."
 
 Stop.
 
-If `.git` is a **directory** (regular repo) or the gitdir doesn't point to `.bare`: continue.
+If false, continue.
 
 #### 4.3. Get remote URL
 
@@ -196,17 +152,15 @@ url=$(git remote get-url origin 2>/dev/null)
 
 If URL was found:
 
-> "This repo is not a hub. To convert: delete this repo and run `/git-clone <url>`"
+> "This repo is not in container-form layout. To convert: delete this repo and run `/git-clone <url>`"
 
 If no remote URL:
 
-> "This repo is not a hub and has no remote. Clone from a URL instead: `/git-clone <url>`"
+> "This repo is not in container-form layout and has no remote. Clone from a URL instead: `/git-clone <url>`"
 
 ### Error handling
 
 - **Target directory exists:** abort with clear message (step 2.3)
-- **Clone fails:** report git error output (step 2.4)
-- **Bare verification fails:** report unexpected state (step 2.5)
-- **No default branch detected:** ask user (step 2.9)
-- **Worktree add fails:** report git error output (step 2.10)
-- **Partial failure cleanup:** if any step after 2.4 fails (hub directory partially created), advise the user: "Hub creation failed. Delete `<hub_path>` before retrying."
+- **Clone fails:** report git error output (step 2.5)
+- **No default branch detected:** ask user (step 2.6)
+- **Partial failure cleanup:** if any step after 2.5 fails (container partially created), advise the user: "Hub creation failed. Delete `<container_path>` before retrying."
