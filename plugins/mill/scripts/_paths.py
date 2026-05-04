@@ -17,11 +17,12 @@ Public API:
 
     resolve_wiki_path(git_toplevel)
         Local-override-first, sibling-default-second resolution for the
-        wiki clone. Reads ``.millhouse/config.local.yaml`` ``paths.wiki:``
-        at ``<git-toplevel>`` if present; otherwise delegates to
-        ``resolve_path("wiki", git_toplevel)``. Does NOT check on-disk
-        existence — callers that need the path to exist surface their
-        own error (mill-setup's Phase 3 is the one that creates it).
+        wiki clone. Stub-aware: when a worktree carries a stub with
+        ``hub_relative_path``, the ``paths.wiki:`` override is read from
+        the real config at ``hub / .millhouse / config.local.yaml``; when
+        no stub is present (or ``hub_relative_path == "."``) the stub itself
+        is the real config. Falls back to ``resolve_path("wiki", main_root)``
+        when no override is found. Does NOT check on-disk existence.
 
     resolve_main_worktree_root(git_root)
         Walk up from any worktree's ``git_root`` to the main worktree
@@ -300,26 +301,41 @@ def resolve_wiki_path(git_toplevel: Path) -> Path:
        main worktree root (not ``git_toplevel``, which may be a child worktree).
     2. ``resolve_path("wiki", main_root)`` — the sibling-path default.
 
-    The local config file is read from ``git_toplevel`` (correct — each
-    worktree carries its own ``.millhouse/``). Only path *resolution* uses
-    the walked-up main root so that sibling detection anchors on the hub,
-    not the child worktree.
+    The local config read is stub-aware: when a worktree carries a stub with
+    ``hub_relative_path``, the ``paths.wiki:`` override is read from the real
+    config at ``hub / .millhouse / config.local.yaml``.
 
     The ``.millhouse/wiki`` junction is never consulted. Junctions are
     IDE/terminal convenience; the real wiki path is computed from the
     repo's own git-toplevel.
     """
-    main_root = resolve_main_worktree_root(git_toplevel)
-    local_cfg = git_toplevel / ".millhouse" / "config.local.yaml"
-    if local_cfg.exists():
-        import yaml
+    import yaml
 
-        cfg = yaml.safe_load(local_cfg.read_text(encoding="utf-8")) or {}
-        paths = cfg.get("paths") or {}
-        override = paths.get("wiki")
-        if override:
-            override_path = Path(override)
-            if override_path.is_absolute():
-                return override_path
-            return (main_root / override_path).resolve()
+    main_root = resolve_main_worktree_root(git_toplevel)
+
+    stub_path = git_toplevel / ".millhouse" / "config.local.yaml"
+    hub_subpath = "."
+    stub_cfg: dict = {}
+    if stub_path.exists():
+        stub_cfg = yaml.safe_load(stub_path.read_text(encoding="utf-8")) or {}
+        hub_subpath = stub_cfg.get("hub_relative_path", ".")
+
+    hub = git_toplevel if hub_subpath == "." else git_toplevel / hub_subpath
+
+    if hub != git_toplevel:
+        real_cfg_path = hub / ".millhouse" / "config.local.yaml"
+        if real_cfg_path.exists():
+            cfg = yaml.safe_load(real_cfg_path.read_text(encoding="utf-8")) or {}
+        else:
+            cfg = {}
+    else:
+        cfg = stub_cfg
+
+    paths = cfg.get("paths") or {}
+    override = paths.get("wiki")
+    if override:
+        override_path = Path(override)
+        if override_path.is_absolute():
+            return override_path
+        return (main_root / override_path).resolve()
     return resolve_path("wiki", main_root)

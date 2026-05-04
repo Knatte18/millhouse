@@ -188,6 +188,35 @@ def main() -> int:
             assert got == expected, f"walk-up override-anchors-on-main: got {got}"
         print("PASS: resolve_wiki_path walk-up: relative override resolves against main root, not child worktree")
 
+        # resolve_wiki_path subfolder-install stub-aware tests
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            main_root = _container_form(tmp_path)
+            # Stub points at sub/hub
+            _write_config(main_root, "hub_relative_path: sub/hub\n")
+            # Real config at sub/hub has paths.wiki override
+            real_mill_dir = main_root / "sub" / "hub" / ".millhouse"
+            real_mill_dir.mkdir(parents=True, exist_ok=True)
+            override_wiki = tmp_path / "override" / "wiki"
+            (real_mill_dir / "config.local.yaml").write_text(
+                f"paths:\n  wiki: {override_wiki}\n", encoding="utf-8"
+            )
+            with patch("_paths.resolve_main_worktree_root", return_value=main_root):
+                got = _paths.resolve_wiki_path(main_root)
+            assert got == override_wiki, f"subfolder stub + real config: got {got}"
+        print("PASS: resolve_wiki_path subfolder-install: paths.wiki read from real config at hub subpath")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            main_root = _container_form(tmp_path)
+            # Stub points at sub/hub but no real config exists there
+            _write_config(main_root, "hub_relative_path: sub/hub\n")
+            with patch("_paths.resolve_main_worktree_root", return_value=main_root):
+                got = _paths.resolve_wiki_path(main_root)
+            assert got == tmp_path / "wiki", f"subfolder stub no real config: got {got}"
+        print("PASS: resolve_wiki_path subfolder-install: no real config falls back to sibling default")
+
         # resolve_worktrees_dir walk-up composition
 
         with tempfile.TemporaryDirectory() as tmp:
