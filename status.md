@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-wiki-lock-unification
+phase: reviewing-helper-api-additions-r1
 slug: mill-go-fixes
 branch: mill-go-fixes
 plan: plan
@@ -27,6 +27,7 @@ reviewing-wiki-lock-unification-r1  2026-05-04T18:04:45Z
 fixing-wiki-lock-unification-r1  2026-05-04T18:10:41Z
 reviewing-wiki-lock-unification-r2  2026-05-04T18:14:27Z
 approved-wiki-lock-unification  2026-05-04T18:19:45Z
+reviewing-helper-api-additions-r1  2026-05-04T18:26:15Z
 ```
 
 ## Batches
@@ -41,10 +42,11 @@ batches:
     review_round: 2
     review_file: reviews/20260504-181934-code-review-wiki-lock-unification-r2.md
   - name: helper-api-additions
-    state: running
+    state: reviewing
     implementer_session: ce32d36a-9a03-4397-85a8-b6a79c9eb879
     start_sha: ecd938d9578dd1d7c3522c12d50a2ee003ef0494
-    review_round: 0
+    commit_sha: ad8d1383cb68a45df8e2e89f1e1708fdb1bb90da
+    review_round: 1
   - name: validate-plan-typeerror
     state: pending
   - name: mill-plan-start-resume-prose
