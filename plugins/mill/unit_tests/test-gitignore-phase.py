@@ -13,6 +13,7 @@ from _gitignore import (  # noqa: E402
     END,
     GLOB_ENTRIES,
     START,
+    render_block,
     upsert_split,
 )
 
@@ -143,6 +144,18 @@ def main() -> int:
             errors += 1
         except ValueError:
             print("PASS: upsert_split preserves corrupt-marker ValueError")
+
+    # --- render_block: **/plugins/*/uv.lock present in GLOB_ENTRIES output ---
+    block = render_block(GLOB_ENTRIES, ANCHORED_ENTRIES)
+    entry = "**/plugins/*/uv.lock"
+    if entry not in block:
+        print(f"FAIL: render_block output missing '{entry}'", file=sys.stderr)
+        errors += 1
+    elif not (block.index(START) < block.index(entry) < block.index(END)):
+        print(f"FAIL: '{entry}' not between START and END markers", file=sys.stderr)
+        errors += 1
+    else:
+        print(f"PASS: render_block includes '{entry}' between START and END markers")
 
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)
