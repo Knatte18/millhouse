@@ -98,8 +98,20 @@ def build_plan(
     }
 
     for wt_path in active_worktrees:
+        hub_subpath = "."
+        stub_path = wt_path / ".millhouse" / "config.local.yaml"
+        if stub_path.exists():
+            try:
+                stub_data = yaml.safe_load(stub_path.read_text(encoding="utf-8")) or {}
+                hub_subpath = stub_data.get("hub_relative_path", ".")
+            except Exception:  # noqa: BLE001
+                hub_subpath = "."
+        hub_mill_dir = (
+            wt_path / ".millhouse" if hub_subpath == "."
+            else wt_path / hub_subpath / ".millhouse"
+        )
         try:
-            marker_data = _active.read_all(wt_path / ".millhouse")
+            marker_data = _active.read_all(hub_mill_dir)
         except _active.ActiveError:
             continue
 
