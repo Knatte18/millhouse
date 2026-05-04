@@ -17,6 +17,8 @@ import argparse
 import sys
 from pathlib import Path
 
+import yaml
+
 import _active
 import _junction
 import _subprocess_util
@@ -25,7 +27,11 @@ import _wiki
 import _worktree
 from _config import load_config as _load_config
 from _paths import (
+    resolve_container_path,
     resolve_git_root,
+    resolve_hub_path,
+    resolve_hub_relative_path,
+    resolve_main_worktree_root,
     resolve_short_name,
     resolve_wiki_path,
     resolve_worktrees_dir,
@@ -52,6 +58,8 @@ def _cmd_create(args: argparse.Namespace, git_root: Path, cfg: dict) -> int:
     worktrees_dir = resolve_worktrees_dir(cfg, git_root)
     dir_name = args.dir_name or args.branch
     worktree_path = worktrees_dir / dir_name
+    hub_subpath = cfg.get("hub_relative_path", ".")
+    dest_hub = resolve_hub_relative_path(worktree_path, hub_subpath)
 
     if args.dry_run:
         print(f"[DryRun] Branch:   {args.branch}")
@@ -89,10 +97,13 @@ def _cmd_create(args: argparse.Namespace, git_root: Path, cfg: dict) -> int:
         )
         return 1
 
+    if hub_subpath != ".":
+        dest_hub.mkdir(parents=True, exist_ok=True)
+
     # Copy .millhouse/ from hub, excluding junction aliases.
     _worktree.copy_millhouse(
-        src=git_root / ".millhouse",
-        dst=worktree_path / ".millhouse",
+        src=resolve_hub_path() / ".millhouse",
+        dst=dest_hub / ".millhouse",
         exclude={"wiki", "active"},
     )
 
@@ -105,11 +116,11 @@ def _cmd_create(args: argparse.Namespace, git_root: Path, cfg: dict) -> int:
     if wiki_path is not None:
         junction_templates = _wiki.read_junctions(wiki_path)
         tokens = {
-            "HUB_PATH": str(git_root),
-            "CWD_PATH": str(worktree_path),
-            "CONTAINER_PATH": str(git_root.parent),
+            "HUB_PATH": str(dest_hub),
+            "CWD_PATH": str(dest_hub),
+            "CONTAINER_PATH": str(resolve_container_path(git_root)),
             "WIKI_PATH": str(wiki_path),
-            "REPO": git_root.name,
+            "REPO": resolve_main_worktree_root(git_root).name,
         }
         for junction_rel, target_template in junction_templates.items():
             if _junction.has_slug_token(target_template):
@@ -135,9 +146,17 @@ def _cmd_create(args: argparse.Namespace, git_root: Path, cfg: dict) -> int:
     window_title = f"{short_name}: {dir_name}"
     _vscode.write_settings(
         color_hex=color_hex,
-        target=worktree_path / ".vscode" / "settings.json",
+        target=dest_hub / ".vscode" / "settings.json",
         window_title=window_title,
     )
+
+    if hub_subpath != ".":
+        stub_dir = worktree_path / ".millhouse"
+        stub_dir.mkdir(parents=True, exist_ok=True)
+        (stub_dir / "config.local.yaml").write_text(
+            yaml.safe_dump({"hub_relative_path": hub_subpath}),
+            encoding="utf-8",
+        )
 
     print(f"Worktree: {worktree_path}")
     print(f"Branch:   {args.branch}")
@@ -271,7 +290,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.subcommand == "create":
         try:
             wiki_path = resolve_wiki_path(git_root)
-            cfg = _load_config(wiki_path, git_root)
+            cfg = _load_config(wiki_path, resolve_hub_path())
         except SystemExit:
             cfg = {}
         return _cmd_create(args, git_root, cfg)
