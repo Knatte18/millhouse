@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: script-invocation-hygiene
 branch: script-invocation-hygiene
 plan: plan
@@ -22,4 +22,19 @@ plan-review-r1  2026-05-04T17:24:49Z
 plan-fix-r1  2026-05-04T17:30:29Z
 plan-review-r2  2026-05-04T17:38:27Z
 planned  2026-05-04T17:38:38Z
+implementing  2026-05-04T17:44:49Z
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: foundation
+    state: pending
+  - name: docs-gitignore
+    state: pending
+  - name: simple-fixes
+    state: pending
+  - name: spawn-worktree-dst
+    state: pending
 ```
