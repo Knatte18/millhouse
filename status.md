@@ -41,7 +41,10 @@ batches:
     review_round: 2
     review_file: reviews/20260504-181934-code-review-wiki-lock-unification-r2.md
   - name: helper-api-additions
-    state: pending
+    state: running
+    implementer_session: ce32d36a-9a03-4397-85a8-b6a79c9eb879
+    start_sha: ecd938d9578dd1d7c3522c12d50a2ee003ef0494
+    review_round: 0
   - name: validate-plan-typeerror
     state: pending
   - name: mill-plan-start-resume-prose
