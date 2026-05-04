@@ -52,6 +52,11 @@ def test_smoke_import() -> None:
     paths_mod.resolve_worktrees_dir = MagicMock(return_value=Path("/fake/worktrees"))
     paths_mod.resolve_short_name = MagicMock(return_value="MI")
     paths_mod.resolve_container_path = MagicMock(return_value=Path("/fake/container"))
+    paths_mod.resolve_hub_path = MagicMock(return_value=Path("/fake/hub"))
+    paths_mod.resolve_hub_relative_path = MagicMock(
+        side_effect=lambda wt, sub: wt if sub == "." else wt / sub
+    )
+    paths_mod.resolve_main_worktree_root = MagicMock(return_value=Path("/fake/repo"))
 
     # _setup needs create_hub_links so mill-spawn can call it.
     setup_mod = sys.modules["_setup"]
@@ -531,6 +536,11 @@ def test_create_hub_links_called_after_portal_creation() -> None:
             patch.object(mod, "resolve_worktrees_dir", return_value=Path("/fake/worktrees")),
             patch.object(mod, "pick_worktree_color", return_value="#7d2d6b"),
             patch.object(mod, "resolve_container_path", return_value=container_path),
+            patch.object(mod, "resolve_main_worktree_root", return_value=Path("/fake/repo")),
+            patch.object(
+                mod, "resolve_hub_relative_path",
+                side_effect=lambda wt, sub: wt if sub == "." else wt / sub,
+            ),
             patch.object(Path, "exists", return_value=True),
             patch.object(Path, "read_text", return_value="# Home\n"),
             patch.object(Path, "mkdir", return_value=None),
@@ -560,7 +570,7 @@ def test_create_hub_links_called_after_portal_creation() -> None:
             f"call_log={call_log}"
         )
 
-    # Verify create_hub_links received worktree_path as first arg
+    # Verify create_hub_links received dest_hub (== worktree_path for standard layout) as first arg
     hub_links_call = setup_mock.create_hub_links.call_args
     if hub_links_call is None:
         raise AssertionError("create_hub_links call_args is None")
@@ -614,6 +624,395 @@ def test_main_dry_run_prints_worktree_status_path() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Helpers for real-filesystem spawn tests (Cards 9-11)
+# ---------------------------------------------------------------------------
+
+
+def _fake_copy_millhouse_real(src: Path, dst: Path, exclude: set) -> None:
+    """Copy .millhouse contents from src to dst, skipping excluded names."""
+    import shutil as _shutil
+    dst.mkdir(parents=True, exist_ok=True)
+    if not src.exists():
+        return
+    for item in src.iterdir():
+        if item.name in exclude or item.is_symlink():
+            continue
+        target = dst / item.name
+        if item.is_dir():
+            _shutil.copytree(str(item), str(target), dirs_exist_ok=True)
+        else:
+            _shutil.copy2(str(item), str(target))
+
+
+def _fake_write_active_marker_real(
+    mill_dir: Path, *, slug: str, title: str, branch: str, ts: str
+) -> None:
+    """Write active.slug.md in the canonical fenced-yaml format."""
+    mill_dir.mkdir(parents=True, exist_ok=True)
+    (mill_dir / "active.slug.md").write_text(
+        f"# Active task\n\n```yaml\nslug: {slug}\ntask_title: {title}\n"
+        f"branch: {branch}\nspawned_at: {ts}\n```\n",
+        encoding="utf-8",
+    )
+
+
+def _run_spawn_real_fs(
+    tmpdir: Path,
+    hub_subpath: str,
+    slug: str = "test-task",
+    title: str = "Test Task",
+) -> tuple[int, Path, MagicMock, MagicMock]:
+    """
+    Run spawn main() with ``tmpdir`` as the root filesystem.
+
+    Mocks all git/wiki/junction operations; lets Python file I/O happen.
+    Returns ``(exit_code, worktree_path, vscode_mock, setup_mock)``.
+    """
+    import importlib.util
+    import yaml
+
+    # Source hub filesystem
+    hub = tmpdir / "hub"
+    (hub / ".millhouse").mkdir(parents=True)
+    src_config: dict = {}
+    if hub_subpath != ".":
+        src_config["hub_relative_path"] = hub_subpath
+    (hub / ".millhouse" / "config.local.yaml").write_text(
+        yaml.safe_dump(src_config) if src_config else "",
+        encoding="utf-8",
+    )
+
+    wiki = tmpdir / "wiki"
+    wiki.mkdir()
+    (wiki / "config.yaml").write_text("junctions: {}\nhardlinks: {}\n", encoding="utf-8")
+    (wiki / "Home.md").write_text("# Home\n", encoding="utf-8")
+
+    worktrees = tmpdir / "wts"
+    worktrees.mkdir()
+    container = tmpdir
+    (container / "portals").mkdir(exist_ok=True)
+
+    worktree_path = worktrees / slug
+
+    task = _make_fake_task(slug=slug, title=title)
+    spawn_core_mock = MagicMock()
+    spawn_core_mock.pick_task_single_or_multi.return_value = ("single", task, [])
+    spawn_core_mock.BacklogEmpty = type("BacklogEmpty", (Exception,), {})
+    spawn_core_mock.claim_in_wiki.return_value = None
+    spawn_core_mock.capture_parent_branch.return_value = "main"
+    spawn_core_mock.write_initial_status.return_value = worktree_path / "status.md"
+    spawn_core_mock.write_active_marker.side_effect = _fake_write_active_marker_real
+
+    vscode_mock = MagicMock()
+    setup_mock = MagicMock()
+    setup_mock.create_hub_links.return_value = {"junctions": [], "hardlinks": []}
+
+    worktree_mock = MagicMock()
+    worktree_mock.create.side_effect = lambda branch, target, cwd: target.mkdir(
+        parents=True, exist_ok=True
+    )
+    worktree_mock.copy_millhouse.side_effect = _fake_copy_millhouse_real
+
+    paths_mock = MagicMock()
+    paths_mock.resolve_git_root.return_value = hub
+    paths_mock.resolve_wiki_path.return_value = wiki
+
+    stub_map = {
+        "_spawn_core": spawn_core_mock,
+        "_setup": setup_mock,
+        "_wiki": MagicMock(),
+        "_junction": MagicMock(),
+        "_tasks_md": MagicMock(),
+        "_vscode": vscode_mock,
+        "_worktree": worktree_mock,
+        "_paths": paths_mock,
+        "_sibling": types.ModuleType("_sibling"),
+        "_subprocess_util": types.ModuleType("_subprocess_util"),
+    }
+    saved: dict[str, object] = {}
+    for name, stub in stub_map.items():
+        saved[name] = sys.modules.get(name)
+        sys.modules[name] = stub
+
+    try:
+        spawn_path = HUB / "plugins" / "mill" / "scripts" / "millpy-spawn.py"
+        spec = importlib.util.spec_from_file_location(
+            f"mill_spawn_fs_{slug}", spawn_path
+        )
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+
+        fake_cfg: dict = {}
+        if hub_subpath != ".":
+            fake_cfg["hub_relative_path"] = hub_subpath
+
+        with (
+            patch.object(mod, "_load_config", return_value=fake_cfg),
+            patch.object(mod, "resolve_hub_path", return_value=hub),
+            patch.object(mod, "resolve_git_root", return_value=hub),
+            patch.object(mod, "resolve_wiki_path", return_value=wiki),
+            patch.object(mod, "resolve_worktrees_dir", return_value=worktrees),
+            patch.object(mod, "resolve_container_path", return_value=container),
+            patch.object(mod, "resolve_main_worktree_root", return_value=hub),
+            patch.object(
+                mod, "resolve_hub_relative_path",
+                side_effect=lambda wt, sub: wt if sub == "." else wt / sub,
+            ),
+            patch.object(mod, "resolve_short_name", return_value="MI"),
+            patch.object(mod, "pick_worktree_color", return_value="#7d2d6b"),
+        ):
+            exit_code = mod.main([])
+    finally:
+        for name, original in saved.items():
+            if original is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = original
+
+    return exit_code, worktree_path, vscode_mock, setup_mock
+
+
+# ---------------------------------------------------------------------------
+# Test 1: standard layout regression (Card 11)
+# ---------------------------------------------------------------------------
+
+
+def test_spawn_standard_layout_regression() -> None:
+    """Standard layout (no hub_relative_path): hub state lands at worktree_path/.millhouse/."""
+    import shutil
+    import tempfile
+
+    tmpdir = Path(tempfile.mkdtemp())
+    try:
+        exit_code, wt, vscode_mock, setup_mock = _run_spawn_real_fs(tmpdir, ".")
+
+        if exit_code != 0:
+            raise AssertionError(f"expected exit 0, got {exit_code}")
+
+        # active marker at the standard location
+        marker = wt / ".millhouse" / "active.slug.md"
+        if not marker.exists():
+            raise AssertionError(f"active.slug.md not found at {marker}")
+        content = marker.read_text(encoding="utf-8")
+        if "test-task" not in content:
+            raise AssertionError(f"slug 'test-task' not in active.slug.md: {content!r}")
+
+        # vscode settings target must be at worktree_path/.vscode/settings.json
+        ws_call = vscode_mock.write_settings.call_args
+        if ws_call is None:
+            raise AssertionError("_vscode.write_settings was never called")
+        actual_target = ws_call.kwargs.get("target")
+        expected_target = wt / ".vscode" / "settings.json"
+        if actual_target != expected_target:
+            raise AssertionError(
+                f"write_settings target should be {expected_target}, got {actual_target!r}"
+            )
+
+        # create_hub_links first arg must be dest_hub == worktree_path for standard layout
+        hl_call = setup_mock.create_hub_links.call_args
+        if hl_call is None:
+            raise AssertionError("create_hub_links was never called")
+        first_arg = hl_call.args[0] if hl_call.args else None
+        if first_arg != wt:
+            raise AssertionError(
+                f"create_hub_links first arg should be {wt}, got {first_arg!r}"
+            )
+
+        # no bootstrap stub written for standard layout
+        stub_path = wt / ".millhouse" / "config.local.yaml"
+        if stub_path.exists():
+            import yaml
+            cfg = yaml.safe_load(stub_path.read_text(encoding="utf-8")) or {}
+            hub_rel = cfg.get("hub_relative_path", ".")
+            if hub_rel != ".":
+                raise AssertionError(
+                    f"config.local.yaml has unexpected hub_relative_path={hub_rel!r}"
+                )
+    finally:
+        shutil.rmtree(str(tmpdir), ignore_errors=True)
+
+    print("PASS: test_spawn_standard_layout_regression")
+
+
+# ---------------------------------------------------------------------------
+# Test 2: subfolder-install destination layout (Card 11)
+# ---------------------------------------------------------------------------
+
+
+def test_spawn_subfolder_install_destination_layout() -> None:
+    """Subfolder-install (hub_relative_path: src/Models): hub state lands at dest_hub."""
+    import shutil
+    import tempfile
+    import yaml
+
+    hub_subpath = "src/Models"
+    tmpdir = Path(tempfile.mkdtemp())
+    try:
+        exit_code, wt, vscode_mock, setup_mock = _run_spawn_real_fs(
+            tmpdir, hub_subpath, slug="subfolder-task", title="Subfolder Task"
+        )
+
+        if exit_code != 0:
+            raise AssertionError(f"expected exit 0, got {exit_code}")
+
+        dest_hub = wt / hub_subpath
+
+        # (a) active marker at dest_hub/.millhouse/
+        marker = dest_hub / ".millhouse" / "active.slug.md"
+        if not marker.exists():
+            raise AssertionError(f"active.slug.md not found at {marker}")
+        marker_content = marker.read_text(encoding="utf-8")
+        if "subfolder-task" not in marker_content:
+            raise AssertionError(
+                f"slug 'subfolder-task' not in active.slug.md: {marker_content!r}"
+            )
+
+        # (b) vscode target at dest_hub/.vscode/settings.json (via mock call args)
+        ws_call = vscode_mock.write_settings.call_args
+        if ws_call is None:
+            raise AssertionError("_vscode.write_settings was never called")
+        actual_target = ws_call.kwargs.get("target")
+        expected_target = dest_hub / ".vscode" / "settings.json"
+        if actual_target != expected_target:
+            raise AssertionError(
+                f"write_settings target should be {expected_target}, got {actual_target!r}"
+            )
+
+        # (c) bootstrap stub exists at worktree_path/.millhouse/config.local.yaml
+        stub_path = wt / ".millhouse" / "config.local.yaml"
+        if not stub_path.exists():
+            raise AssertionError(f"bootstrap stub not found at {stub_path}")
+
+        # (d) stub YAML equals exactly {"hub_relative_path": "src/Models"} — no extra keys
+        stub_cfg = yaml.safe_load(stub_path.read_text(encoding="utf-8")) or {}
+        if stub_cfg != {"hub_relative_path": hub_subpath}:
+            raise AssertionError(
+                f"stub YAML should be exactly {{hub_relative_path: {hub_subpath!r}}}, "
+                f"got {stub_cfg!r}"
+            )
+
+        # (e) create_hub_links first positional arg == dest_hub
+        hl_call = setup_mock.create_hub_links.call_args
+        if hl_call is None:
+            raise AssertionError("create_hub_links was never called")
+        first_arg = hl_call.args[0] if hl_call.args else None
+        if first_arg != dest_hub:
+            raise AssertionError(
+                f"create_hub_links first arg should be {dest_hub}, got {first_arg!r}"
+            )
+    finally:
+        shutil.rmtree(str(tmpdir), ignore_errors=True)
+
+    print("PASS: test_spawn_subfolder_install_destination_layout")
+
+
+# ---------------------------------------------------------------------------
+# Test 3: discovery round-trip on subfolder-install layout (Card 11)
+# ---------------------------------------------------------------------------
+
+
+def test_spawn_discovery_round_trip_subfolder() -> None:
+    """After spawn produces a subfolder layout, discover/load_config/resolve all work."""
+    import shutil
+    import tempfile
+    import yaml
+
+    hub_subpath = "src/Models"
+    slug = "rt-task"
+    tmpdir = Path(tempfile.mkdtemp())
+    try:
+        # Build the subfolder-install layout manually (mirrors what spawn produces)
+        worktrees = tmpdir / "wts"
+        worktrees.mkdir()
+        wt = worktrees / slug
+        wt.mkdir()
+
+        # Bootstrap stub at wt/.millhouse/
+        stub_dir = wt / ".millhouse"
+        stub_dir.mkdir()
+        (stub_dir / "config.local.yaml").write_text(
+            yaml.safe_dump({"hub_relative_path": hub_subpath}),
+            encoding="utf-8",
+        )
+
+        # Real hub at wt/src/Models/
+        dest_hub = wt / hub_subpath
+        (dest_hub / ".millhouse").mkdir(parents=True)
+
+        # Active marker at dest_hub/.millhouse/
+        (dest_hub / ".millhouse" / "active.slug.md").write_text(
+            f"# Active task\n\n```yaml\nslug: {slug}\ntask_title: RT Task\n"
+            f"branch: {slug}\nspawned_at: 2026-05-04T12:00:00Z\n```\n",
+            encoding="utf-8",
+        )
+
+        # Real local config at dest_hub/.millhouse/ (operational keys)
+        real_local = {"repo": {"short_name": "RT"}, "spawn": {"branch_prefix": "feat"}}
+        (dest_hub / ".millhouse" / "config.local.yaml").write_text(
+            yaml.safe_dump(real_local),
+            encoding="utf-8",
+        )
+
+        # Wiki config
+        wiki = tmpdir / "wiki"
+        wiki.mkdir()
+        (wiki / "config.yaml").write_text("junctions: {}\nhardlinks: {}\n", encoding="utf-8")
+
+        # Import real module implementations (scripts dir is on sys.path)
+        # Temporarily clear any stubs injected by previous tests.
+        _to_clear = ["_spawn_core", "_config", "_paths", "_active", "_yaml_writer",
+                     "_sibling", "_subprocess_util"]
+        _saved = {n: sys.modules.pop(n, None) for n in _to_clear}
+        try:
+            import _spawn_core as real_sc
+            import _config as real_cfg_mod
+            import _paths as real_paths_mod
+
+            # 1. discover_active_worktrees
+            discovered = real_sc.discover_active_worktrees(worktrees)
+            if len(discovered) != 1:
+                raise AssertionError(
+                    f"expected 1 discovered worktree, got {len(discovered)}: {discovered}"
+                )
+            _, found_slug, _ = discovered[0]
+            if found_slug != slug:
+                raise AssertionError(
+                    f"discovered slug should be {slug!r}, got {found_slug!r}"
+                )
+
+            # 2. load_config merges stub + real config + wiki config
+            merged = real_cfg_mod.load_config(wiki, wt)
+            if merged.get("hub_relative_path") != hub_subpath:
+                raise AssertionError(
+                    f"hub_relative_path should be {hub_subpath!r} in merged cfg: {merged}"
+                )
+            if merged.get("repo", {}).get("short_name") != "RT":
+                raise AssertionError(
+                    f"operational key repo.short_name missing from merged cfg: {merged}"
+                )
+
+            # 3. resolve_hub_relative_path returns correct path
+            resolved = real_paths_mod.resolve_hub_relative_path(wt, hub_subpath)
+            expected = wt / hub_subpath
+            if resolved != expected:
+                raise AssertionError(
+                    f"resolve_hub_relative_path({wt!r}, {hub_subpath!r}) should be "
+                    f"{expected}, got {resolved}"
+                )
+        finally:
+            # Restore whatever was in sys.modules before
+            for name, orig in _saved.items():
+                if orig is None:
+                    sys.modules.pop(name, None)
+                else:
+                    sys.modules[name] = orig
+    finally:
+        shutil.rmtree(str(tmpdir), ignore_errors=True)
+
+    print("PASS: test_spawn_discovery_round_trip_subfolder")
+
+
+# ---------------------------------------------------------------------------
 # Main runner
 # ---------------------------------------------------------------------------
 
@@ -628,6 +1027,9 @@ def main() -> int:
         test_main_runtime_error_from_capture_branch_raises_system_exit,
         test_create_hub_links_called_after_portal_creation,
         test_main_dry_run_prints_worktree_status_path,
+        test_spawn_standard_layout_regression,
+        test_spawn_subfolder_install_destination_layout,
+        test_spawn_discovery_round_trip_subfolder,
     ]
 
     failures: list[str] = []
