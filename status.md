@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: fixing-wiki-lock-unification-r1
+phase: reviewing-wiki-lock-unification-r2
 slug: mill-go-fixes
 branch: mill-go-fixes
 plan: plan
@@ -25,6 +25,7 @@ planned  2026-05-04T17:20:00Z
 implementing  2026-05-04T17:44:14Z
 reviewing-wiki-lock-unification-r1  2026-05-04T18:04:45Z
 fixing-wiki-lock-unification-r1  2026-05-04T18:10:41Z
+reviewing-wiki-lock-unification-r2  2026-05-04T18:14:27Z
 ```
 
 ## Batches
@@ -32,11 +33,11 @@ fixing-wiki-lock-unification-r1  2026-05-04T18:10:41Z
 ```yaml
 batches:
   - name: wiki-lock-unification
-    state: fixing
+    state: reviewing
     implementer_session: f7561923-4539-4376-80d0-fb797584dc73
     start_sha: 34dadd66d045ec46156e81e33b159413d8d3fb2f
-    commit_sha: 4e1534af8cee6e3ef0e84b8a29e6977ce6b3d0fb
-    review_round: 1
+    commit_sha: d01821d991e1a43c00541e9205e09b9ea680496e
+    review_round: 2
     review_file: reviews/20260504-181021-code-review-wiki-lock-unification-r1.md
   - name: helper-api-additions
     state: pending
