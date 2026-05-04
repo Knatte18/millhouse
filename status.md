@@ -57,5 +57,8 @@ batches:
     review_round: 1
     review_file: reviews/20260504-182517-code-review-simple-fixes-r1.md
   - name: spawn-worktree-dst
-    state: pending
+    state: running
+    implementer_session: 40208280-e2d5-4064-8502-e1d8717fd4ef
+    start_sha: 088b53e1a829b6013f612e572895a6347c54a927
+    review_round: 0
 ```
