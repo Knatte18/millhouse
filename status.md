@@ -1,10 +1,10 @@
 # Status
 
 ```yaml
-phase: discussed
+phase: planning
 slug: script-invocation-hygiene
 branch: script-invocation-hygiene
-plan: null
+plan: plan
 parent: main
 task: 'script-invocation-hygiene — Scripts: cwd not git-root, plugin cache not source
   repo'
@@ -17,4 +17,5 @@ task_description: |
 ```text
 discussing  '2026-05-04T11:52:44Z'
 discussed  2026-05-04T12:27:34Z
+planning  2026-05-04T17:11:47Z
 ```
