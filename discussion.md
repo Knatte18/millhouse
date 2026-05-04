@@ -22,8 +22,10 @@ The review subsystem has nine known defects spanning two domains. Both block mil
 - Bump `llm.bulk_timeout` default to 900s.
 - Replace `subprocess.run(timeout=)` in `_subprocess_util.run` with a `Popen` + manual-timeout loop that, on timeout, terminates the parent then kills the entire process tree (`taskkill /T /F /PID` on Windows, `os.killpg(SIGKILL)` on POSIX) after a 5s grace period.
 - Mid-round-aware resume in `_review_plan.run`: if no holistic file exists for round N but per-batch round N files exist, treat round N as in-progress; reuse the per-batch round-N files (regardless of verdict, parsing the verdict from disk for the aggregate) and only fire the holistic.
-- Stream-json parser in `_llm_claude` extended to detect `rate_limit_event` and `result.is_error == true`; new `LLMRateLimitError(LLMError)` subclass raised in those cases.
+- Stream-json scanner in `_llm_claude` detects `rate_limit_event` and `result.is_error == true`; new `LLMRateLimitError(LLMError)` subclass raised by `_invoke` on non-zero exit when a rate-limit signal is observed.
 - ERROR-only-aggregate retry policy added to `mill-plan` SKILL.md (Phase: Plan Review, new step 4.5): skip fix-pass when every entry has `verdict: ERROR`, re-run the CLI; halt with `BLOCKED: review ERROR-only round {N}` after two consecutive ERROR-only rounds.
+- Remove the total-fail `raise ReviewError` block in `_review_plan.run` (lines 529–534) so an all-ERROR plan review still emits a parseable `ReviewResult` JSON envelope (`verdict: REQUEST_CHANGES`, `reviews[]` populated with the ERROR entries). The orchestrator's ERROR-only retry then has something to evaluate.
+- Patch `_review_code.run` ERROR handling for consistency: replace the `raise ReviewError(f"Code reviewer failed: {exc}") from exc` block (lines 240–242 and the equivalent `LLMError` handler in the NEED_CONTEXT resume retry on lines 267–268) with a structured `verdict: ERROR` `ReviewResult` return — same shape as the `_review_plan` per-batch ERROR entry already produces. mill-go's existing review-loop logic gets the same JSON-first contract as plan review.
 - All three review CLI scripts (`millpy-review-discussion.py`, `millpy-review-plan.py`, `millpy-review-code.py`) catch `ReviewError` at top level and print `ERROR: <message>` (uppercase prefix) to stderr; when the message starts with `[resolve_ref_paths]`, append a one-line hint pointing at the originating plan card.
 - Unit-test coverage for every helper change.
 
@@ -90,15 +92,21 @@ The review subsystem has nine known defects spanning two domains. Both block mil
 
 ### error-only-aggregate-retry-in-skill
 
-- **Decision:** ERROR-only-aggregate retry lives in **mill-plan SKILL.md** (Phase: Plan Review, new step 4.5: pre-fix-pass). Step 4.5 fires after step 4c parses the JSON envelope: if every entry's `verdict` is `ERROR`, skip the fix-pass entirely and re-run the CLI immediately (no round counter consumed — the round produced no reviewable output). Halt with `BLOCKED: review ERROR-only round {N}` after two consecutive ERROR-only rounds. Backend (`_review_plan.run`) stays stateless across runs.
-- **Rationale:** Matches the proposal's location. Backend remains pure (no retry policy embedded). The two-pass cap mirrors the validator-fix two-pass cap already in step 1.5 — same shape, easy to reason about.
-- **Rejected:** Retry-inside-backend (couples retry policy to backend; harder to test; same retry would have to be re-implemented for code review).
+- **Decision:** ERROR-only-aggregate retry lives in **mill-plan SKILL.md** (Phase: Plan Review, new step 4.5: pre-fix-pass). Step 4.5 fires after step 4c parses the JSON envelope: if every entry's `verdict` is `ERROR`, skip the fix-pass entirely and re-run the CLI immediately (no round counter consumed — the round produced no reviewable output). Halt with `BLOCKED: review ERROR-only round {N}` after two consecutive ERROR-only rounds. Backend (`_review_plan.run`) stays stateless across runs. **Backend prerequisite:** the existing total-fail block in `_review_plan.run` (lines 529–534, `if reviews and all(r["verdict"] == "ERROR" for r in reviews): raise ReviewError(...)`) is removed entirely. After removal the function falls through to `aggregate_verdict([...])` which already maps ERROR to `REQUEST_CHANGES`, so the CLI prints a valid JSON envelope on stdout with `verdict: REQUEST_CHANGES` and an all-ERROR `reviews[]` array. That JSON is what step 4.5 evaluates.
+- **Rationale:** Matches the proposal's location. Backend remains pure (no retry policy embedded). The two-pass cap mirrors the validator-fix two-pass cap already in step 1.5 — same shape, easy to reason about. Removing the total-fail check is the load-bearing change: without it the orchestrator has no JSON to inspect.
+- **Rejected:** Retry-inside-backend (couples retry policy to backend; harder to test; same retry would have to be re-implemented for code review). Keeping the total-fail check (silently breaks step 4.5).
+
+### code-review-error-handling-parity
+
+- **Decision:** Patch `_review_code.run` to record `verdict: ERROR` instead of raising. The two `raise ReviewError(f"Code reviewer failed: {exc}") from exc` sites — at line 242 (initial `reviewer.run` call) and at line 268 (NEED_CONTEXT resume retry) — both replaced with constructing a single-entry `ReviewResult(type="code", round=round_n, verdict="REQUEST_CHANGES", blocking_count=0, reviews=[{"scope": scope_label, "verdict": "ERROR", "file": None, "error": str(exc), "session_id": None}])` and returning it. Same shape as the per-batch ERROR entry `_review_plan._review_one_batch` already produces.
+- **Rationale:** Code review currently explodes with no JSON when the LLM errors, mirroring the same JSON-contract violation #84 calls out for plan review. mill-go's review-loop benefits from the same JSON-first contract as mill-plan; ERROR-only retry semantics can be applied uniformly later (out of scope for this task — mill-go SKILL.md is task 6).
+- **Rejected:** Leave `_review_code.run` as-is (perpetuates the JSON-contract gap; same bug, different surface).
 
 ### llm-rate-limit-error-class
 
-- **Decision:** Extend `_parse_stream_json` in `_llm_claude.py` to inspect each event for `rate_limit_event` (top-level event-type or sub-field) and the final `result` event's `is_error`/`subtype` fields. When the call exits non-zero AND a rate-limit event was observed, raise `LLMRateLimitError(LLMError)` with a message containing the rate-limit detail. When non-zero with no rate-limit signal, fall through to the existing `LLMError`. Backend records `verdict: ERROR, error: "rate_limit: <msg>"` and the orchestrator's ERROR-only retry handles it naturally.
-- **Rationale:** Typed exceptions let callers distinguish rate-limit from generic crash without string-matching. The retry policy stays in the orchestrator; the backend just surfaces what it saw.
-- **Rejected:** Improve the error string only (loses typed-handling option; orchestrator has to grep the string).
+- **Decision:** Add a new `_scan_rate_limit(stdout: str) -> bool` helper in `_llm_claude.py` that scans every line of the captured stdout for a `rate_limit_event` event-type or a `result` event with `is_error: true` AND a rate-limit subtype/message marker (matched by substring against the known claude CLI markers). Restructure `_invoke` so it calls `_parse_stream_json(stdout)` defensively (wrapped to swallow `LLMError` on the no-content path) and `_scan_rate_limit(stdout)` *before* the existing exit-code branch. On non-zero exit AND `_scan_rate_limit` true, raise `LLMRateLimitError(msg)` — taking precedence over `LLMSessionError` and the generic `LLMError`. On non-zero exit with no rate-limit signal, raise the existing `LLMError`/`LLMSessionError` exactly as today. Zero-exit path is unchanged. `_parse_stream_json` keeps its `(text, session_id)` signature; rate-limit detection is a sibling concern.
+- **Rationale:** Typed exceptions let callers distinguish rate-limit from generic crash without string-matching. Keeping `_parse_stream_json` clean separates the "what did the assistant say" parser from the "did the platform throttle us" scanner. The retry policy still lives in the orchestrator; the backend records `verdict: ERROR, error: "rate_limit: <msg>"` and the SKILL.md step 4.5 ERROR-only retry handles it naturally.
+- **Rejected:** Returning a 3-tuple from `_parse_stream_json` (every caller updates for one feature); raising from inside `_parse_stream_json` itself (parser deciding error semantics is surprising); only improving the error string (loses typed-handling option).
 
 ### review-error-cli-prefix
 
@@ -129,7 +137,7 @@ The review subsystem has nine known defects spanning two domains. Both block mil
 - **`plugins/mill/scripts/_review_code.py`** — code-review backend. Single-scope per call. Holistic-timeout pass-through (when `batch_name is None`). No mid-round resume.
 - **`plugins/mill/scripts/_review_discussion.py`** — discussion-review backend. Out of scope; discussion review doesn't bulk plan refs.
 - **`plugins/mill/scripts/millpy-review-discussion.py` / `millpy-review-plan.py` / `millpy-review-code.py`** — three CLI scripts. Each ends with `except ReviewError as exc: print(str(exc), file=sys.stderr); return 1`. Replace with `ERROR:` prefix + the resolve_ref_paths hint when applicable. Same change in all three; consider extracting a `_review_cli.print_error(exc)` helper to avoid duplication.
-- **`plugins/mill/scripts/_plan_validate.py`** — plan validator. Holds `_REQUIRED_CARD_FIELDS = ["Reads", "Modifies", "Creates", "Requirements", "Commit"]`. Add `"Deletes"` to that list. Extend the `non-existent-path` check to know about `Deletes:` (intentional deletes are *not* errors when the file doesn't exist on disk pre-implementation; they ARE errors if listed in `Deletes:` AND in any other card's `Reads:`/`Modifies:` after that card runs — out of scope for this task; flag and defer).
+- **`plugins/mill/scripts/_plan_validate.py`** — plan validator. Holds `_REQUIRED_CARD_FIELDS = ["Reads", "Modifies", "Creates", "Requirements", "Commit"]`. Add `"Deletes"` to that list. Extend `_check_non_existent_path` (or whatever the current function name is — there's a `non-existent-path` rule today via `parse_batch_refs`) to accept a new `deletes_union: set[str]` parameter computed from `compute_deletes_union(plan_dir)`. Gating: a token from `Reads:`/`Modifies:` that is missing on disk is skipped if it's in `deletes_union` (mirrors the existing `creates_union` gate). For `Deletes:` tokens specifically, the validator REQUIRES the path to resolve to an on-disk file at validation time OR to be in `creates_union` (covers the cross-batch case where batch 01 creates X and batch 02 deletes X). A `Deletes:` token that's missing on disk AND not in `creates_union` is a `non-existent-path` error — keeps the validator-as-source-of-truth contract for the new field. Cross-card consistency check ("a path can't be in `Deletes:` of card N AND `Reads:`/`Modifies:` of card M>N") is flagged as out-of-scope here.
 - **`plugins/mill/templates/plan-batch.md`** — card template. Add `- **Deletes:**` field documentation (same shape as `Creates:`).
 - **`wiki/config.yaml`** — add `llm.holistic_timeout: 1800`; bump `llm.bulk_timeout` to 900. Comment block above explains both.
 - **`plugins/mill/skills/mill-plan/SKILL.md`** — Phase: Plan Review, add step 4.5 (ERROR-only-aggregate retry, two-pass cap). Update the validator-fix mapping table to include rows for `Deletes:` if any new validator codes appear (likely none for the minimal extension).
@@ -173,6 +181,15 @@ The review subsystem has nine known defects spanning two domains. Both block mil
 
 **Per-module test approach.** TDD-first for the four candidates listed under `tdd-candidates`; tests-after for the rest.
 
+**`_plan_validate` Deletes-aware path checks (`_plan_validate.py`):**
+- `_REQUIRED_CARD_FIELDS` includes `"Deletes"` (every card must have the field; "none" is the empty sentinel).
+- `Deletes:` token resolves to an on-disk file → no error.
+- `Deletes:` token missing on disk AND in `creates_union` (cross-batch case) → no error.
+- `Deletes:` token missing on disk AND not in `creates_union` → `non-existent-path` error.
+- `Reads:`/`Modifies:` token missing on disk AND in `deletes_union` → no error (suppressed by deletes_union).
+- `Reads:`/`Modifies:` token missing on disk AND in `creates_union` (existing behaviour) → no error.
+- `Reads:`/`Modifies:` token missing on disk AND in NEITHER union → `non-existent-path` error (existing behaviour).
+
 **`compute_deletes_union` (`_review_common.py`) — TDD:**
 - Empty plan_dir → empty set.
 - Single batch, single-line `- **Deletes:** \`a\`, \`b\`` → `{"a", "b"}`.
@@ -207,15 +224,22 @@ The review subsystem has nine known defects spanning two domains. Both block mil
 **`_review_plan.run` mid-round resume integration (`_review_plan.py`):**
 - Fixture: a `reviews_dir` populated with a complete round-1 per-batch set (verdicts mixed APPROVE/REQUEST_CHANGES) and no holistic. Run `_review_plan.run` with a fake reviewer that records calls. Assert the per-batch reviewer is *not* called; the holistic reviewer is called once at round 1; the assembled `reviews[]` contains the disk-loaded per-batch entries (with their parsed verdicts) plus the new holistic entry. Aggregate is the worst-case across the disk-loaded verdicts and the holistic.
 
-**`_parse_stream_json` rate-limit detection (`_llm_claude.py`) — TDD:**
-- Fixture stream-json blob containing a `rate_limit_event` line + a final `result` event with `is_error: true` → call `_invoke` with this fixture (mock `_subprocess_util.run` to return non-zero exit + this stdout). Expect `LLMRateLimitError`.
-- Fixture with `result.is_error: true` but no `rate_limit_event` → expect `LLMError` (not the rate-limit subclass).
-- Fixture with normal completion (no error events) + zero exit → expect `(text, sid)` tuple.
-- Bonus: `_parse_stream_json` purely (independent of `_invoke`) returns the text + observed session_id even when a rate-limit event is mid-stream — the caller decides what to do based on exit code.
+**`_scan_rate_limit` + `_invoke` integration (`_llm_claude.py`) — TDD:**
+- `_scan_rate_limit` unit cases: stdout containing a `rate_limit_event` line → True; stdout with `result` event having `is_error: true` and a rate-limit subtype/message marker → True; stdout with `result.is_error: true` but no rate-limit marker → False (generic error, falls through to `LLMError`); empty stdout → False; malformed stream-json (one bad line, others good) → scan continues, returns based on the rest.
+- `_invoke` integration cases (mocking `_subprocess_util.run`): non-zero exit + `_scan_rate_limit` true → expect `LLMRateLimitError` (taking precedence over `LLMSessionError` even when `resume=True`); non-zero exit + `_scan_rate_limit` false + `resume=True` → `LLMSessionError` (existing behaviour); non-zero exit + `_scan_rate_limit` false + `resume=False` → `LLMError`; zero exit → `(text, session_id)` tuple unchanged.
+- `_parse_stream_json` regression: signature unchanged, returns `(text, session_id)`, raises `LLMError` on no content. Existing tests stay green.
 
 **ERROR-only aggregate detection:**
 - The retry policy is in `mill-plan/SKILL.md` prose; no helper to test directly. Cover via a SKILL.md-level walkthrough in the discussion log, not unit tests.
 - If `aggregate_verdict` ends up changing to expose ERROR-only (e.g. a new return value or a flag), that's a programmatic surface and gets a test. Default decision: don't change `aggregate_verdict`; the orchestrator re-checks `all(r["verdict"] == "ERROR" for r in result["reviews"])` itself. No new helper, no new test.
+
+**`_review_plan.run` post-removal-of-total-fail (`_review_plan.py`):**
+- Fixture: a fake reviewer that always raises `LLMError`; a plan with two batch files. Run `_review_plan.run` and assert it returns a `ReviewResult(verdict="REQUEST_CHANGES", reviews=[…each entry verdict==ERROR…])` rather than raising. The CLI invocation prints valid JSON.
+- Mixed: one batch ERROR, one batch APPROVE, holistic ERROR → aggregate `REQUEST_CHANGES`, three reviews entries.
+
+**`_review_code.run` ERROR-handling parity (`_review_code.py`):**
+- Fixture: fake reviewer raising `LLMError` on the first call. Run `_review_code.run` for both `batch_name="<name>"` and `batch_name=None`. Assert it returns a `ReviewResult(verdict="REQUEST_CHANGES", reviews=[{"scope": ..., "verdict": "ERROR", "file": None, "error": "...", "session_id": None}])` rather than raising.
+- Same fixture but the failure happens on the resume retry (NEED_CONTEXT path) → assert the same ERROR-recording return.
 
 **CLI `ERROR:` prefix output:**
 - Each of the three `millpy-review-*.py` scripts: invoke via `subprocess.run` against a fixture worktree with a deliberate trigger (missing slug → already raises ReviewError), assert stderr starts with `ERROR: `.
@@ -245,3 +269,6 @@ The review subsystem has nine known defects spanning two domains. Both block mil
 - **Q:** `ReviewError` CLI format? **A:** `ERROR: <msg>` prefix; for `[resolve_ref_paths]` messages append a one-line hint pointing at the new `Deletes:` mechanism.
 - **Q:** Test coverage? **A:** Unit tests in-memory / `tempfile` for every helper change. Process-tree kill not TDD (integration-shaped); flagged as optional follow-up.
 - **Q:** TDD-first candidates? **A:** `compute_deletes_union`, `resolve_ref_paths` with `deletes_union`, mid-round resume detection, stream-json rate-limit parser.
+- **Q (round 1 review):** How does `_invoke` integrate rate-limit detection given that today it raises before `_parse_stream_json` runs? **A:** New sibling `_scan_rate_limit(stdout) -> bool` helper. `_invoke` parses defensively then scans; on non-zero exit + scan-true, raise `LLMRateLimitError` (precedence over `LLMSessionError`). `_parse_stream_json` signature unchanged.
+- **Q (round 1 review):** How does the SKILL.md step 4.5 ERROR-only retry get JSON to inspect when `_review_plan.run` raises ReviewError on all-ERROR? **A:** Remove the total-fail check at lines 529–534 entirely. Fall-through path produces a valid JSON envelope (verdict `REQUEST_CHANGES`, reviews[] populated). Same change pattern applied to `_review_code.run` for consistency.
+- **Q (round 1 review):** How does the validator avoid false-positives on `Deletes:` tokens? **A:** `_check_non_existent_path` accepts `deletes_union` and skips `Reads:`/`Modifies:` tokens that are in it. `Deletes:` tokens themselves require the path to be on-disk OR in `creates_union` at validation time.
