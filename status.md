@@ -63,7 +63,7 @@ batches:
     state: reviewing
     implementer_session: 4c3c0ba6-ba2f-4114-ad6c-9cbb1d21723a
     start_sha: c956a541875c39327f02adc0b810a3e1ecad47e4
-    commit_sha: 09efa129ff64d33b5f8c2a90e88f2acea7f6e1e1
+    commit_sha: 09efa12c9f6d1fcfe5cc06f8470dbb458c156c9d
     review_round: 1
   - name: workflow-anti-patterns
     state: pending
