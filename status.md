@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planning
+phase: planned
 slug: mill-go-fixes
 branch: mill-go-fixes
 plan: plan
