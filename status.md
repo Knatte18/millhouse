@@ -48,7 +48,10 @@ batches:
     review_round: 1
     review_file: reviews/20260504-180754-code-review-docs-gitignore-r1.md
   - name: simple-fixes
-    state: pending
+    state: running
+    implementer_session: bcac6072-4abf-4cf0-bbbb-39e01eb9420f
+    start_sha: 695f16607a93628280131d3240bbf8ae54cf8abf
+    review_round: 0
   - name: spawn-worktree-dst
     state: pending
 ```
