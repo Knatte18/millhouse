@@ -20,8 +20,10 @@ Out of scope here: extending `_check_all_files_touched_mismatch` to include `Del
 
 - **Reads:**
   - `plugins/mill/scripts/_plan_validate.py`
+  - `plugins/mill/unit_tests/test-plan-validate.py`
 - **Modifies:**
   - `plugins/mill/scripts/_plan_validate.py`
+  - `plugins/mill/unit_tests/test-plan-validate.py`
 - **Creates:** none
 - **Deletes:** none
 - **Requirements:** Update the local `_RE_REFS_HEADER` regex constant in `_plan_validate.py` (top of file) to alternate over `Reads|Modifies|Creates|Deletes` instead of the current three-way alternation — matching the change to `_review_common._RE_REFS_HEADER` from Card 1. Update `_REQUIRED_CARD_FIELDS` from `["Reads", "Modifies", "Creates", "Requirements", "Commit"]` to `["Reads", "Modifies", "Creates", "Deletes", "Requirements", "Commit"]` so `_check_card_missing_field` flags any card without a `Deletes:` field (including the "none" sentinel form `- **Deletes:** none`). Update the test-side fixture helpers in `unit_tests/test-plan-validate.py` so the existing test suite continues to pass after this change: extend `_make_batch_file` and `_make_batch_file_cards` (the two card-emitting helpers in that file) to emit a `- **Deletes:** none` line between the existing `- **Creates:**` and `- **Requirements:**` lines by default, accepting a `deletes` kwarg (default `None → "none"`) and supporting `"Deletes"` in the `missing_fields` parameter. Also update the two custom `batch_text` literals inside `test_check_reads_not_backtick_path_clean` and `test_check_reads_not_backtick_path_dirty` to include `- **Deletes:** none` on each card so they don't trip the new required-field check. No other changes in this card.

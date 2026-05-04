@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-fix-r2
+phase: plan-fix-r3
 slug: review-subsystem-fixes
 branch: review-subsystem-fixes
 plan: plan
@@ -19,4 +19,6 @@ discussed  2026-05-04T12:21:27Z
 planning  2026-05-04T12:37:54Z
 plan-review-r2  2026-05-04T17:37:05Z
 plan-fix-r2  2026-05-04T17:37:05Z
+plan-review-r3  2026-05-04T17:45:50Z
+plan-fix-r3  2026-05-04T17:45:50Z
 ```

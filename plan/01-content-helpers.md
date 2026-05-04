@@ -104,14 +104,18 @@ External interface for downstream batches:
   - `plugins/mill/scripts/_reviewer_sonnetmax_tool.py`
   - `plugins/mill/scripts/_reviewer_test_stub.py`
   - `plugins/mill/unit_tests/test-reviewer-modules.py`
+  - `plugins/mill/unit_tests/test-review-plan-flow.py`
+  - `plugins/mill/unit_tests/test-review-code-flow.py`
 - **Modifies:**
   - `plugins/mill/scripts/_reviewer_sonnetmax.py`
   - `plugins/mill/scripts/_reviewer_sonnetmax_tool.py`
   - `plugins/mill/scripts/_reviewer_test_stub.py`
   - `plugins/mill/unit_tests/test-reviewer-modules.py`
+  - `plugins/mill/unit_tests/test-review-plan-flow.py`
+  - `plugins/mill/unit_tests/test-review-code-flow.py`
 - **Creates:** none
 - **Deletes:** none
-- **Requirements:** Add a keyword-only parameter `timeout: int | None = None` to every reviewer module's `run()` function. In `_reviewer_sonnetmax.py` and `_reviewer_sonnetmax_tool.py`: when `timeout` is `None`, omit it on the inner `run_bulk` / `run_tool_use` call (the LLM provider's default applies); when set, forward it as `timeout=timeout`. In `_reviewer_test_stub.py`: extend the `kwargs` dict captured in `_prompts` to include `"timeout": timeout` so backend tests can assert it. Update `test-reviewer-modules.py` to assert: every reviewer's `run()` signature exposes `timeout` as a keyword-only parameter with default `None`; calling the stub with `timeout=900` makes `captured_prompts()[0][1]["timeout"] == 900`. The stub still defaults the queue-empty error message; signature changes do not break existing seeded-queue behaviour. The stub does NOT gain an exception-seeding queue in this card — backend tests that need `LLMError` raises (B04 Card 18 test (a)/(b) and B05 Card 22 test (a)/(b)) monkey-patch `stub.run` directly inside a `try/finally` that restores the original. Document this in the module docstring's "Public API" line: "Tests that need to simulate LLMError monkey-patch `run`; the stub itself only handles the seeded-queue path."
+- **Requirements:** Add a keyword-only parameter `timeout: int | None = None` to every reviewer module's `run()` function. In `_reviewer_sonnetmax.py` and `_reviewer_sonnetmax_tool.py`: when `timeout` is `None`, omit it on the inner `run_bulk` / `run_tool_use` call (the LLM provider's default applies); when set, forward it as `timeout=timeout`. In `_reviewer_test_stub.py`: extend the `kwargs` dict captured in `_prompts` to include `"timeout": timeout` so backend tests can assert it. Update `test-reviewer-modules.py` to assert: every reviewer's `run()` signature exposes `timeout` as a keyword-only parameter with default `None`; calling the stub with `timeout=900` makes `captured_prompts()[0][1]["timeout"] == 900`. To keep B01's `verify:` green within this card, also update the existing exact-equality kwargs assertions that today expect `{"session_id": ..., "resume": True}`: in `test-review-plan-flow.py` tests 6 and 7, change the expected `retry_kwargs` dict to include `"timeout": None`; in `test-review-code-flow.py` test 5, the same change. (Card 18 in B04 / Card 22 in B05 add their own timeout-plumbing assertions on top of these — this card just keeps the existing assertions passing.) The stub still defaults the queue-empty error message; signature changes do not break existing seeded-queue behaviour. The stub does NOT gain an exception-seeding queue in this card — backend tests that need `LLMError` raises (B04 Card 18 test (a)/(b) and B05 Card 22 test (a)/(b)) monkey-patch `stub.run` directly inside a `try/finally` that restores the original. Document this in the module docstring's "Public API" line: "Tests that need to simulate LLMError monkey-patch `run`; the stub itself only handles the seeded-queue path."
 - **Commit:** `feat(reviewers): add timeout kwarg propagating to LLM provider`
 
 ## Batch Tests
