@@ -135,7 +135,7 @@ After every batch in `order` has state `approved`, and only if `review.code.holi
 ## Handoff
 
 - `_status.append_phase(status_path, "done", _timestamp.now_utc_iso())`.
-- Flip Home.md's task line to `[done]` — read `text = home_path.read_text(encoding="utf-8")`, call `result = _tasks_md.set_phase(text, slug, "done")`, and write back via `home_path.write_text(result, encoding="utf-8")`. Acquire the wiki shared lock first (`_wiki.acquire_lock` … `_wiki.release_lock`) since Home.md is shared across tasks.
+- Flip Home.md's task line to `[done]` — wrap in `with _wiki.wiki_lock(wiki_path, slug):`, then read `text = home_path.read_text(encoding="utf-8")`, call `result = _tasks_md.set_phase(text, slug, "done")`, write back via `home_path.write_text(result, encoding="utf-8")`, and call `_wiki.write_commit_push(wiki_path, ["Home.md"], f"task: mark {slug} done", slug=slug)` (lock already held; no re-acquire).
 - Commit+push the wiki change.
 - `_notify.notify("mill-go.done", f"task {slug} complete", slug=slug)`.
 - If `pipeline.auto_report: true` → invoke `/mill-self-report` directly with no argument. The skill checks `gh auth` itself and bails cleanly if absent. Wait for it to finish before continuing.

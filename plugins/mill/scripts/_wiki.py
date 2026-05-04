@@ -232,10 +232,6 @@ def wiki_lock(wiki_path: Path, slug: str):
             _release(wiki_path)
 
 
-def acquire_lock(wiki_path: Path, slug: str, timeout_seconds: int = 30) -> None:
-    _acquire(wiki_path, slug, timeout_seconds)
-
-
 def sync_pull(wiki_path: Path, *, slug: str) -> None:
     """
     Fetch + fast-forward the wiki clone so local state matches origin.
@@ -267,10 +263,6 @@ def sync_pull(wiki_path: Path, *, slug: str) -> None:
     finally:
         if not held:
             _release(wiki_path)
-
-
-def release_lock(wiki_path: Path) -> None:
-    _release(wiki_path)
 
 
 def write_commit_push(
