@@ -36,6 +36,8 @@ import sys
 from pathlib import Path
 from typing import Optional
 
+import yaml
+
 import _junction
 import _setup
 import _spawn_core
@@ -44,7 +46,7 @@ import _vscode
 import _wiki
 import _worktree
 from _config import load_config as _load_config_lenient
-from _paths import resolve_container_path, resolve_git_root, resolve_hub_path, resolve_main_worktree_root, resolve_short_name, resolve_wiki_path, resolve_worktrees_dir
+from _paths import resolve_container_path, resolve_git_root, resolve_hub_path, resolve_hub_relative_path, resolve_main_worktree_root, resolve_short_name, resolve_wiki_path, resolve_worktrees_dir
 from _spawn_core import pick_worktree_color
 
 
@@ -107,6 +109,7 @@ def main(argv: list[str] | None = None) -> int:
     git_root = resolve_git_root()
     wiki_path = resolve_wiki_path(git_root)
     cfg = _load_config(wiki_path, resolve_hub_path())
+    hub_subpath = cfg.get("hub_relative_path", ".")
     spawn_cfg = cfg.get("spawn", {})
 
     home_path = wiki_path / "Home.md"
@@ -152,9 +155,9 @@ def main(argv: list[str] | None = None) -> int:
     branch_prefix = spawn_cfg.get("branch_prefix", "")
     branch_name = f"{branch_prefix}/{slug}" if branch_prefix else slug
 
-    tokens = _build_tokens(resolve_hub_path(), wiki_path, slug=slug)
     worktrees_dir = resolve_worktrees_dir(cfg, git_root)
     worktree_path = worktrees_dir / slug
+    dest_hub = resolve_hub_relative_path(worktree_path, hub_subpath)
 
     if args.dry_run:
         print(f"[DryRun] Task:     {picked.title} [{slug}]")
@@ -182,13 +185,16 @@ def main(argv: list[str] | None = None) -> int:
     worktrees_dir.mkdir(parents=True, exist_ok=True)
     _worktree.create(branch_name, worktree_path, cwd=git_root)
 
+    if hub_subpath != ".":
+        dest_hub.mkdir(parents=True, exist_ok=True)
+
     # Propagate .millhouse/ minus task/worktree-specific subtrees. The
     # excluded names cover (a) the scratch area whose contents belong to
     # the parent clone's last run and (b) junctions that must be
     # recreated per-worktree.
     _worktree.copy_millhouse(
         src=resolve_hub_path() / ".millhouse",
-        dst=worktree_path / ".millhouse",
+        dst=dest_hub / ".millhouse",
         exclude={"wiki", "active"},
     )
 
@@ -203,7 +209,8 @@ def main(argv: list[str] | None = None) -> int:
     # Create all junctions and hardlinks from wiki/config.yaml for the new
     # worktree.  _setup.create_hub_links uses the token-scope filter so that
     # entries requiring <SLUG> are only created in slug-bearing (task) worktrees.
-    _setup.create_hub_links(worktree_path, wiki_path, tokens)
+    dest_tokens = _build_tokens(dest_hub, wiki_path, slug=slug)
+    _setup.create_hub_links(dest_hub, wiki_path, dest_tokens)
 
     # Pick a colour + write .vscode/settings.json. The palette scans the
     # *existing* sibling worktrees in the shared worktrees dir; the newly
@@ -211,18 +218,28 @@ def main(argv: list[str] | None = None) -> int:
     # to the "used" set.
     color = pick_worktree_color(worktrees_dir)
     short = resolve_short_name(cfg, git_root.name)
-    _vscode.write_settings(color_hex=color, target=worktree_path / ".vscode" / "settings.json", short_name=short, slug=slug)
+    _vscode.write_settings(color_hex=color, target=dest_hub / ".vscode" / "settings.json", short_name=short, slug=slug)
 
     # Write the per-worktree marker file so every downstream script /
     # skill in this worktree can locate its task state.
     ts = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     _spawn_core.write_active_marker(
-        worktree_path / ".millhouse",
+        dest_hub / ".millhouse",
         slug=slug,
         title=picked.title,
         branch=branch_name,
         ts=ts,
     )
+
+    # When hub lives in a subfolder, write a bootstrap stub at worktree root so
+    # terminal/vscode discovery can find dest_hub without walking the tree.
+    if hub_subpath != ".":
+        stub_dir = worktree_path / ".millhouse"
+        stub_dir.mkdir(parents=True, exist_ok=True)
+        (stub_dir / "config.local.yaml").write_text(
+            yaml.safe_dump({"hub_relative_path": hub_subpath}),
+            encoding="utf-8",
+        )
 
     # Render and write the initial status.md. v2's Home.md has no
     # dedicated description column; use the task title as description so
