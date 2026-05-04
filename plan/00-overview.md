@@ -32,7 +32,7 @@ batches:
     verify: uv run --project "${CLAUDE_PLUGIN_ROOT}" python "${CLAUDE_PLUGIN_ROOT}/unit_tests/run-all.py"
   - name: review-code-integration
     file: 05-review-code-integration.md
-    depends-on: [content-helpers]
+    depends-on: [content-helpers, review-plan-integration]
     verify: uv run --project "${CLAUDE_PLUGIN_ROOT}" python "${CLAUDE_PLUGIN_ROOT}/unit_tests/run-all.py"
   - name: cli-error-prefix
     file: 06-cli-error-prefix.md
