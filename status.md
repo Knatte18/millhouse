@@ -59,7 +59,10 @@ batches:
     review_round: 1
     review_file: reviews/20260504-183830-code-review-validate-plan-typeerror-r1.md
   - name: mill-plan-start-resume-prose
-    state: pending
+    state: running
+    implementer_session: 4c3c0ba6-ba2f-4114-ad6c-9cbb1d21723a
+    start_sha: c956a541875c39327f02adc0b810a3e1ecad47e4
+    review_round: 0
   - name: workflow-anti-patterns
     state: pending
   - name: mill-go-skill-rewrite
