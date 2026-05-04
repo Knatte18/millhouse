@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-go-fixes
 branch: mill-go-fixes
 plan: plan
@@ -22,4 +22,23 @@ plan-fix-r1  2026-05-04T12:39:51Z
 plan-review-r2  2026-05-04T17:17:37Z
 plan-fix-r2  2026-05-04T17:19:51Z
 planned  2026-05-04T17:20:00Z
+implementing  2026-05-04T17:44:14Z
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: wiki-lock-unification
+    state: pending
+  - name: helper-api-additions
+    state: pending
+  - name: validate-plan-typeerror
+    state: pending
+  - name: mill-plan-start-resume-prose
+    state: pending
+  - name: workflow-anti-patterns
+    state: pending
+  - name: mill-go-skill-rewrite
+    state: pending
 ```
