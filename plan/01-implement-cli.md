@@ -59,6 +59,7 @@ Batch-local decisions beyond Shared Decisions:
   - `plugins/mill/scripts/_render.py`
   - `plugins/mill/scripts/_implementer_sonnet.py`
   - `plugins/mill/scripts/_llm_claude.py`
+  - `plugins/mill/scripts/_timestamp.py`
   - `plugins/mill/scripts/millpy-review-code.py`
   - `plugins/mill/templates/implementer-brief.md`
   - `plugins/mill/templates/implementer-fix.md`
@@ -78,7 +79,7 @@ Batch-local decisions beyond Shared Decisions:
   **Common setup (both paths):**
   1. `project_root = Path.cwd()` and `mill_dir = project_root / ".millhouse"`.
   2. `git_root = _paths.resolve_git_root()` then `wiki_path = _paths.resolve_wiki_path(git_root)`.
-  3. `cfg = _review_common.load_config(wiki_path, mill_dir)`.
+  3. `cfg = _review_common.load_config(wiki_path, mill_dir)`. Wrap in `try/except _review_common.ReviewError as e: print(str(e), file=sys.stderr); return 1`.
   4. `slug = _active.read_slug(mill_dir)`. Wrap in `try/except _active.ActiveError as e: print(str(e), file=sys.stderr); return 1`.
   5. `status_path = project_root / "status.md"`.
   6. `full = _status.read_full(status_path)` → `task_title = full["yaml"].get("task", slug)`.
@@ -105,7 +106,8 @@ Batch-local decisions beyond Shared Decisions:
   1. Normalise review_file: `review_file = Path(args.review_file); if not review_file.is_absolute(): review_file = (project_root / review_file).resolve()`. If not exists → stderr + return 1.
   2. Read `implementer_session`: `existing = _status.read_batches(status_path)`. `batch_state = next((b for b in existing if b["name"] == batch_name), None)`. `session_id = batch_state.get("implementer_session") if batch_state else None`. If not `session_id` → stderr + return 1.
   3. Three `_status.set_batch_field` calls: `state="fixing"`, `review_round=args.round`, `review_file=str(review_file)`. Always overwrite.
-  4. Git commit: `result = subprocess.run(["git", "add", "status.md"], capture_output=True, text=True, cwd=project_root)`. On non-zero → stderr + return 1. Then `result = subprocess.run(["git", "commit", "-m", f"mill-go: fixing batch {batch_name} round {args.round}"], capture_output=True, text=True, cwd=project_root)`. On non-zero → stderr + return 1.
+  3b. Append phase via `_status.append_phase(status_path, f"fixing-{batch_name}-r{args.round}", _timestamp.now_utc_iso())`.
+  4. Compute `review_file_arg = str(review_file.relative_to(project_root)) if review_file.is_relative_to(project_root) else str(review_file)`. Git commit: `result = subprocess.run(["git", "add", "status.md", review_file_arg], capture_output=True, text=True, cwd=project_root)`. On non-zero → stderr + return 1. Then `result = subprocess.run(["git", "commit", "-m", f"mill-go: fixing batch {batch_name} round {args.round}"], capture_output=True, text=True, cwd=project_root)`. On non-zero → stderr + return 1.
   5. Git push: `result = subprocess.run(["git", "push", "origin", branch], capture_output=True, text=True, cwd=project_root)`. On non-zero → stderr + return 1.
   6. Render: `template_path = plugin_root / "templates" / "implementer-fix.md"`. `prompt_text = _render.render(template_path, {"REVIEW_FILE": str(review_file), "BATCH_FILE": str(batch_file), "SELF_FIX_ROUNDS": str(self_fix_rounds), "ROUND": str(args.round)})`.
   7. Run: `output, _ = _implementer_sonnet.run(prompt_text, session_id=session_id, resume=True, cwd=project_root, timeout=timeout)`. Wrap in try/except `_llm_claude.LLMError` (catches both `LLMError` and `LLMSessionError` since the latter is a subclass) → print `json.dumps({"status": "stuck", "stuck_type": "transient", "reason": str(e)})`, print str(e) to stderr, return 1.
