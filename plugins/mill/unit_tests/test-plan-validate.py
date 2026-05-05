@@ -678,6 +678,229 @@ def test_run_no_overview() -> int:
 
 
 # ---------------------------------------------------------------------------
+# Tests for Deletes-aware behaviour (Cards 26–28)
+# ---------------------------------------------------------------------------
+
+def test_deletes_field_required() -> int:
+    """(a) Card without - **Deletes:** line → card-missing-field error mentioning 'Deletes:'."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file("alpha", missing_fields={"Deletes"})
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        deletes_errs = [
+            e for e in result
+            if e["check"] == "card-missing-field" and "Deletes:" in e["message"]
+        ]
+        try:
+            assert len(deletes_errs) == 1, (
+                f"expected 1 Deletes: card-missing-field error, got: {deletes_errs}"
+            )
+            assert deletes_errs[0]["card"] == 1, f"wrong card: {deletes_errs[0]['card']}"
+            assert "missing required field: Deletes:" in deletes_errs[0]["message"], (
+                f"message should contain 'missing required field: Deletes:': "
+                f"{deletes_errs[0]['message']!r}"
+            )
+            print("PASS test_deletes_field_required")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_deletes_field_required: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_deletes_token_on_disk_clean() -> int:
+    """(b) Deletes: token resolves to an on-disk file → no non-existent-path error."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+
+        existing_file = project_root / "src" / "to_delete.py"
+        existing_file.parent.mkdir(parents=True)
+        existing_file.write_text("# placeholder", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file("alpha", deletes=["src/to_delete.py"])
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check1 = [e for e in result if e["check"] == "non-existent-path"]
+        if check1:
+            print(
+                f"FAIL test_deletes_token_on_disk_clean: unexpected errors: {check1}",
+                file=sys.stderr,
+            )
+            return 1
+        print("PASS test_deletes_token_on_disk_clean")
+        return 0
+
+
+def test_deletes_token_in_creates_union_clean() -> int:
+    """(c) Deletes: token missing on disk + in another batch's Creates: → no error."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        overview = _make_overview([
+            {"name": "alpha", "file": "01-alpha.md", "depends-on": []},
+            {"name": "beta",  "file": "02-beta.md",  "depends-on": ["alpha"]},
+        ])
+        batch_a = _make_batch_file("alpha", card_num=1, creates=["generated/file.py"])
+        batch_b = _make_batch_file("beta",  card_num=2, deletes=["generated/file.py"])
+        _write_plan(plan_dir, overview, [
+            ("01-alpha.md", batch_a),
+            ("02-beta.md",  batch_b),
+        ])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check1 = [e for e in result if e["check"] == "non-existent-path"]
+        if check1:
+            print(
+                f"FAIL test_deletes_token_in_creates_union_clean: unexpected errors: {check1}",
+                file=sys.stderr,
+            )
+            return 1
+        print("PASS test_deletes_token_in_creates_union_clean")
+        return 0
+
+
+def test_deletes_token_missing_not_in_creates_dirty() -> int:
+    """(d) Deletes: token missing on disk + not in any Creates: → non-existent-path with Deletes-specific message."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file("alpha", deletes=["missing/file.py"])
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check1 = [e for e in result if e["check"] == "non-existent-path"]
+        try:
+            assert len(check1) == 1, f"expected 1 error, got {len(check1)}: {check1}"
+            assert check1[0]["path"] == "missing/file.py", (
+                f"wrong path: {check1[0]['path']!r}"
+            )
+            assert check1[0]["message"].startswith("Deletes: token '"), (
+                f"message should start with \"Deletes: token '\": {check1[0]['message']!r}"
+            )
+            print("PASS test_deletes_token_missing_not_in_creates_dirty")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_deletes_token_missing_not_in_creates_dirty: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_reads_token_in_deletes_union_clean() -> int:
+    """(e) Reads: token missing on disk + in another batch's Deletes: → no error for that token."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        overview = _make_overview([
+            {"name": "alpha", "file": "01-alpha.md", "depends-on": []},
+            {"name": "beta",  "file": "02-beta.md",  "depends-on": ["alpha"]},
+        ])
+        # alpha reads going/away.py (not on disk); beta declares it as Deletes:.
+        # Alpha's Reads: reference must be suppressed by deletes_union.
+        batch_a = _make_batch_file("alpha", card_num=1, reads=["going/away.py"])
+        batch_b = _make_batch_file("beta",  card_num=2, deletes=["going/away.py"])
+        _write_plan(plan_dir, overview, [
+            ("01-alpha.md", batch_a),
+            ("02-beta.md",  batch_b),
+        ])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        alpha_errs = [
+            e for e in result
+            if e["check"] == "non-existent-path"
+            and e["batch"] == "01-alpha"
+            and e["path"] == "going/away.py"
+        ]
+        try:
+            assert len(alpha_errs) == 0, (
+                f"expected no error for alpha's Reads: token, got: {alpha_errs}"
+            )
+            print("PASS test_reads_token_in_deletes_union_clean")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_reads_token_in_deletes_union_clean: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_reads_token_in_creates_union_suppressed() -> int:
+    """(f) Reads: token missing on disk + in creates_union → no error (existing behaviour)."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        overview = _make_overview([
+            {"name": "alpha", "file": "01-alpha.md", "depends-on": []},
+            {"name": "beta",  "file": "02-beta.md",  "depends-on": ["alpha"]},
+        ])
+        batch_a = _make_batch_file("alpha", card_num=1, creates=["generated/output.py"])
+        batch_b = _make_batch_file("beta",  card_num=2, reads=["generated/output.py"])
+        _write_plan(plan_dir, overview, [
+            ("01-alpha.md", batch_a),
+            ("02-beta.md",  batch_b),
+        ])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check1 = [e for e in result if e["check"] == "non-existent-path"]
+        if check1:
+            print(
+                f"FAIL test_reads_token_in_creates_union_suppressed: unexpected errors: {check1}",
+                file=sys.stderr,
+            )
+            return 1
+        print("PASS test_reads_token_in_creates_union_suppressed")
+        return 0
+
+
+def test_reads_token_missing_both_unions_dirty() -> int:
+    """(g) Reads: token missing on disk + in neither union → non-existent-path error."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file("alpha", reads=["totally/missing.py"])
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check1 = [e for e in result if e["check"] == "non-existent-path"]
+        try:
+            assert len(check1) == 1, f"expected 1 error, got {len(check1)}: {check1}"
+            assert check1[0]["path"] == "totally/missing.py", (
+                f"wrong path: {check1[0]['path']!r}"
+            )
+            assert not check1[0]["message"].startswith("Deletes: token '"), (
+                f"Reads: token should not use Deletes prefix: {check1[0]['message']!r}"
+            )
+            print("PASS test_reads_token_missing_both_unions_dirty")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_reads_token_missing_both_unions_dirty: {exc}", file=sys.stderr)
+            return 1
+
+
+# ---------------------------------------------------------------------------
 # Runner
 # ---------------------------------------------------------------------------
 
@@ -701,6 +924,14 @@ def main() -> int:
         test_check_all_files_touched_mismatch_dirty,
         test_run_returns_sorted,
         test_run_no_overview,
+        # Deletes-aware behaviour (Cards 26–28)
+        test_deletes_field_required,
+        test_deletes_token_on_disk_clean,
+        test_deletes_token_in_creates_union_clean,
+        test_deletes_token_missing_not_in_creates_dirty,
+        test_reads_token_in_deletes_union_clean,
+        test_reads_token_in_creates_union_suppressed,
+        test_reads_token_missing_both_unions_dirty,
     ]
 
     errors = 0
