@@ -132,6 +132,7 @@ def _make_plan_fixture(
         "review": {
             "plan": {"rounds": 3, "batch": "test_stub", "holistic": "test_stub"},
         },
+        "llm": {"bulk_timeout": None, "holistic_timeout": None},
     }
     return mill_dir, wiki_root, project_root, cfg
 

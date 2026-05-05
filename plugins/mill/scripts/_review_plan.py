@@ -111,6 +111,7 @@ def _review_one_batch(
     root: str | None,
     creates_union: set[str],
     wiki_root: Path,
+    bulk_timeout: int | None,
 ) -> dict:
     """Review a single plan batch file. Returns a reviews[] entry dict."""
     try:
@@ -171,7 +172,7 @@ def _review_one_batch(
         )
 
         try:
-            raw, session_id = batch_reviewer.run(prompt_text)
+            raw, session_id = batch_reviewer.run(prompt_text, timeout=bulk_timeout)
         except LLMError as exc:
             return {
                 "scope": batch_path.stem,
@@ -204,7 +205,7 @@ def _review_one_batch(
                 )
                 try:
                     raw, session_id = batch_reviewer.run(
-                        retry_prompt, session_id=session_id, resume=True
+                        retry_prompt, session_id=session_id, resume=True, timeout=bulk_timeout
                     )
                 except LLMError as exc:
                     return {
@@ -275,6 +276,8 @@ def run(
     plan_dir = resolve_path(cfg["paths"]["plan_dir"], slug)
     reviews_dir = resolve_path(cfg["paths"]["reviews_dir"], slug)
     max_rounds = max_rounds if max_rounds is not None else cfg["review"]["plan"]["rounds"]
+    bulk_timeout = cfg["llm"]["bulk_timeout"]
+    holistic_timeout = cfg["llm"]["holistic_timeout"]
 
     print(
         f"[_review_plan] slug={slug!r} plan_dir={plan_dir} max_rounds={max_rounds}",
@@ -348,6 +351,7 @@ def run(
                         root,
                         creates_union,
                         wiki_root,
+                        bulk_timeout,
                     )
                     futures_map[future] = batch_path
 
@@ -424,7 +428,7 @@ def run(
         )
 
         try:
-            raw, session_id = holistic_reviewer.run(prompt_text)
+            raw, session_id = holistic_reviewer.run(prompt_text, timeout=holistic_timeout)
         except LLMError as exc:
             reviews.append({
                 "scope": "holistic",
@@ -457,7 +461,7 @@ def run(
                     )
                     try:
                         raw, session_id = holistic_reviewer.run(
-                            retry_prompt, session_id=session_id, resume=True
+                            retry_prompt, session_id=session_id, resume=True, timeout=holistic_timeout
                         )
                     except LLMError as exc:
                         reviews.append({
