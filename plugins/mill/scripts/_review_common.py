@@ -30,7 +30,8 @@ Public API:
     load_config()        — load wiki/config.yaml + optional config.local.yaml
     parse_batch_refs()   — extract Reads/Modifies/Creates paths from a batch file (case-insensitive none filter)
     compute_creates_union() — union of all Creates: tokens across every batch in a plan_dir
-    resolve_ref_paths()  — resolve raw ref strings against project_root; hard-fails on missing paths not in creates_union
+    compute_deletes_union() — union of all Deletes: tokens across every batch in a plan_dir
+    resolve_ref_paths()  — resolve raw ref strings against project_root; hard-fails on missing paths not in creates_union or deletes_union
     resolve_existing_paths() — resolve raw paths and return only those that already exist on disk (silent drop, no creates_union check)
     _load_root_from_overview() — read root: field from overview's fenced-yaml block
 """
@@ -323,6 +324,52 @@ def compute_creates_union(plan_dir: Path) -> set[str]:
                         creates.add(t)
             i += 1
     return creates
+
+
+def compute_deletes_union(plan_dir: Path) -> set[str]:
+    """Return the union of all Deletes: tokens across every batch in plan_dir.
+
+    Iterates every ``??-*.md`` file under ``plan_dir`` except
+    ``00-overview.md``, extracts only the ``Deletes:`` lines, and returns
+    a flat set of raw token strings (NOT resolved Paths). Filters tokens
+    whose lowercase form equals ``'none'`` (case-insensitive). Returns an
+    empty set if ``plan_dir`` doesn't exist or contains no batch files.
+    """
+    if not plan_dir.exists():
+        return set()
+    deletes: set[str] = set()
+    for batch_path in sorted(plan_dir.glob("??-*.md")):
+        if batch_path.name == "00-overview.md":
+            continue
+        text = batch_path.read_text(encoding="utf-8")
+        lines = text.splitlines()
+        i = 0
+        while i < len(lines):
+            m = _RE_REFS_HEADER.match(lines[i])
+            if m and m.group(1) == "Deletes":
+                inline = m.group("inline").strip()
+                if inline:
+                    backtick_tokens = re.findall(r"`([^`]+)`", inline)
+                    tokens = backtick_tokens if backtick_tokens else [
+                        t.strip() for t in inline.split(",") if t.strip()
+                    ]
+                else:
+                    tokens = []
+                    j = i + 1
+                    while j < len(lines):
+                        sm = _RE_REFS_SUB.match(lines[j])
+                        if not sm:
+                            break
+                        rest = sm.group(1).strip()
+                        bt = re.findall(r"`([^`]+)`", rest)
+                        if bt:
+                            tokens.extend(bt)
+                        j += 1
+                for t in tokens:
+                    if t.lower() != "none":
+                        deletes.add(t)
+            i += 1
+    return deletes
 
 
 def resolve_ref_paths(

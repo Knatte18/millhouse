@@ -72,6 +72,7 @@ from _review_common import (  # noqa: E402
     build_tool_rule,
     bulk_files,
     compute_creates_union,
+    compute_deletes_union,
     discover_round,
     find_active_slug,
     load_config,
@@ -697,6 +698,89 @@ def main() -> int:
         result = compute_creates_union(plan_dir)
         assert result == set(), f"Got {result}"
         print("PASS: compute_creates_union 'None' (capital N) filtered")
+
+    # ---------------------------------------------------------------------------
+    # compute_deletes_union
+    # ---------------------------------------------------------------------------
+
+    # empty plan dir returns empty set
+    with tempfile.TemporaryDirectory() as tmpdir:
+        result = compute_deletes_union(Path(tmpdir) / "nonexistent")
+        assert result == set(), f"Got {result}"
+        print("PASS: compute_deletes_union nonexistent plan_dir returns empty set")
+
+    # single batch single-line Deletes tokens
+    with tempfile.TemporaryDirectory() as tmpdir:
+        plan_dir = Path(tmpdir)
+        (plan_dir / "01-setup.md").write_text(
+            "- **Deletes:** `a`, `b`\n", encoding="utf-8"
+        )
+        result = compute_deletes_union(plan_dir)
+        assert result == {"a", "b"}, f"Got {result}"
+        print("PASS: compute_deletes_union inline Deletes returns set of tokens")
+
+    # multi-line bullet form
+    with tempfile.TemporaryDirectory() as tmpdir:
+        plan_dir = Path(tmpdir)
+        (plan_dir / "01-setup.md").write_text(
+            "- **Deletes:**\n"
+            "  - `a`\n"
+            "  - `b`\n",
+            encoding="utf-8",
+        )
+        result = compute_deletes_union(plan_dir)
+        assert result == {"a", "b"}, f"Got {result}"
+        print("PASS: compute_deletes_union multi-line bullet form returns tokens")
+
+    # 'none' sentinel filtered (case variants)
+    for sentinel in ("none", "None", "NONE"):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            plan_dir = Path(tmpdir)
+            (plan_dir / "01-setup.md").write_text(
+                f"- **Deletes:** {sentinel}\n", encoding="utf-8"
+            )
+            result = compute_deletes_union(plan_dir)
+            assert result == set(), f"Got {result} for sentinel {sentinel!r}"
+        print(f"PASS: compute_deletes_union '{sentinel}' sentinel filtered")
+
+    # two batches with overlapping deletes — de-duplicated
+    with tempfile.TemporaryDirectory() as tmpdir:
+        plan_dir = Path(tmpdir)
+        (plan_dir / "01-setup.md").write_text(
+            "- **Deletes:** `x.py`, `y.py`\n", encoding="utf-8"
+        )
+        (plan_dir / "02-wire.md").write_text(
+            "- **Deletes:** `y.py`, `z.py`\n", encoding="utf-8"
+        )
+        result = compute_deletes_union(plan_dir)
+        assert result == {"x.py", "y.py", "z.py"}, f"Got {result}"
+        print("PASS: compute_deletes_union two batches with overlap -> de-duplicated")
+
+    # Deletes: absent on a card contributes nothing; other cards in same batch do
+    with tempfile.TemporaryDirectory() as tmpdir:
+        plan_dir = Path(tmpdir)
+        (plan_dir / "01-setup.md").write_text(
+            "- **Reads:** `src/a.py`\n"
+            "- **Deletes:** `old.py`\n"
+            "- **Reads:** `src/b.py`\n",
+            encoding="utf-8",
+        )
+        result = compute_deletes_union(plan_dir)
+        assert result == {"old.py"}, f"Got {result}"
+        print("PASS: compute_deletes_union Deletes absent on some cards; present on others")
+
+    # 00-overview.md is skipped
+    with tempfile.TemporaryDirectory() as tmpdir:
+        plan_dir = Path(tmpdir)
+        (plan_dir / "00-overview.md").write_text(
+            "- **Deletes:** `overview-token`\n", encoding="utf-8"
+        )
+        (plan_dir / "01-setup.md").write_text(
+            "- **Deletes:** `real-token`\n", encoding="utf-8"
+        )
+        result = compute_deletes_union(plan_dir)
+        assert result == {"real-token"}, f"Got {result}"
+        print("PASS: compute_deletes_union 00-overview.md excluded")
 
     # ---------------------------------------------------------------------------
     # build_manifest_section
