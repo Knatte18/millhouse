@@ -38,5 +38,7 @@ batches:
     review_round: '1'
     review_file: reviews/20260505-123002-code-review-unit-and-docs-r1.md
   - name: integration-test
-    state: pending
+    state: running
+    implementer_session: b3676651-c6e9-483f-a117-f0c9247df8d6
+    start_sha: a2513d88870f6a312da1cefbeac9f5f5f4ace177
 ```
