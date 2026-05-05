@@ -17,15 +17,18 @@ painful to maintain case-by-case in v1:
 
 Public API:
     run(argv, *, cwd=None, input=None, check=False, timeout=None, env=None)
-        Thin wrapper around ``subprocess.run`` with the guarantees above.
+        Thin wrapper around ``subprocess.Popen`` with the guarantees above.
 """
 from __future__ import annotations
 
 import os
+import signal
 import subprocess
 import sys
 import time
 from pathlib import Path
+
+_GRACE_SECONDS = 5
 
 
 def run(
@@ -51,10 +54,9 @@ def run(
         cwd: Working directory for the child. ``None`` inherits the
             caller's cwd.
         input: Optional string fed to the child's stdin.
-        check: When True, ``subprocess.run`` raises CalledProcessError on
-            non-zero exit. Default False — callers inspect
-            ``result.returncode`` explicitly.
-        timeout: Seconds before the child is killed and
+        check: When True, raises CalledProcessError on non-zero exit.
+            Default False — callers inspect ``result.returncode`` explicitly.
+        timeout: Seconds before the child process tree is killed and
             ``subprocess.TimeoutExpired`` is raised. A matching exit
             breadcrumb is emitted before the exception propagates.
         env: Full replacement environment. When None, inherits from
@@ -64,40 +66,63 @@ def run(
         The completed ``subprocess.CompletedProcess[str]`` — stdout,
         stderr, and returncode populated as strings.
     """
-    # Build the child environment. Start from the caller's env (or the
-    # current process env), then force UTF-8 I/O so nested Python children
-    # don't default to cp1252 on Windows.
     child_env = env.copy() if env is not None else os.environ.copy()
     child_env["PYTHONIOENCODING"] = "utf-8"
 
-    # Emit a spawn breadcrumb. Tests and post-mortem debugging rely on this
-    # line being present on stderr before the child starts executing.
     print(f"[subprocess] spawn argv={argv!r} timeout={timeout}", file=sys.stderr)
     start = time.monotonic()
+
+    popen_kwargs: dict = dict(
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        cwd=cwd,
+        env=child_env,
+        encoding="utf-8",
+        errors="replace",
+        text=True,
+    )
+    if input is not None:
+        popen_kwargs["stdin"] = subprocess.PIPE
+    if os.name != "nt":
+        popen_kwargs["start_new_session"] = True
+
+    proc = subprocess.Popen(argv, **popen_kwargs)
     try:
-        result = subprocess.run(
-            argv,
-            cwd=cwd,
-            input=input,
-            check=check,
-            timeout=timeout,
-            env=child_env,
-            encoding="utf-8",
-            errors="replace",
-            text=True,
-            capture_output=True,
-        )
-    except subprocess.TimeoutExpired:
-        # Still emit an exit breadcrumb on timeout so the stderr stream
-        # always has a matching spawn/exit pair per invocation.
+        stdout, stderr = proc.communicate(input=input, timeout=timeout)
+    except subprocess.TimeoutExpired as exc:
         print(
             f"[subprocess] exit code=timeout duration={time.monotonic() - start:.3f}s",
             file=sys.stderr,
         )
-        raise
-    # Normal completion — log exit code and wall duration.
+        collected_stdout = exc.stdout
+        collected_stderr = exc.stderr
+        proc.terminate()
+        try:
+            proc.wait(timeout=_GRACE_SECONDS)
+        except subprocess.TimeoutExpired:
+            if os.name == "nt":
+                subprocess.run(
+                    ["taskkill", "/T", "/F", "/PID", str(proc.pid)],
+                    capture_output=True,
+                )
+            else:
+                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+            proc.wait()
+        raise subprocess.TimeoutExpired(
+            cmd=argv,
+            timeout=timeout,
+            output=collected_stdout,
+            stderr=collected_stderr,
+        ) from exc
+
     print(
-        f"[subprocess] exit code={result.returncode} duration={time.monotonic() - start:.3f}s",
+        f"[subprocess] exit code={proc.returncode} duration={time.monotonic() - start:.3f}s",
         file=sys.stderr,
     )
-    return result
+    if check and proc.returncode != 0:
+        raise subprocess.CalledProcessError(
+            proc.returncode, argv, output=stdout, stderr=stderr
+        )
+    return subprocess.CompletedProcess(
+        args=argv, returncode=proc.returncode, stdout=stdout, stderr=stderr
+    )
