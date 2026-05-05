@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: reviewing-content-helpers-r1
+phase: approved-content-helpers-no-review
 slug: review-subsystem-fixes
 branch: review-subsystem-fixes
 plan: plan
@@ -26,6 +26,7 @@ plan-fix-r4  2026-05-04T17:58:16Z
 planned  2026-05-04T18:45:46Z
 implementing  2026-05-05T06:24:54Z
 reviewing-content-helpers-r1  2026-05-05T06:37:36Z
+approved-content-helpers-no-review  2026-05-05T06:38:59Z
 ```
 
 ## Batches
@@ -33,7 +34,7 @@ reviewing-content-helpers-r1  2026-05-05T06:37:36Z
 ```yaml
 batches:
   - name: content-helpers
-    state: reviewing
+    state: approved
     implementer_session: 7e27e134-ffe6-4047-a90b-17a9b015cf6c
     start_sha: b97f23117afe64fce137f9ed6f133026213b136a
     commit_sha: 248e880daeead971fcf476523d1fbb6a61e80532
