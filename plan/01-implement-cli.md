@@ -31,7 +31,7 @@ Batch-local decisions beyond Shared Decisions:
 - **Requirements:** Create the fix-cycle resume prompt template. The file must:
   - Begin with an HTML comment listing all tokens (stripped by `_render.render` at render time). List: `REVIEW_FILE`, `BATCH_FILE`, `SELF_FIX_ROUNDS`, `ROUND`.
   - After the comment, open with a heading that names this as a fix-cycle resume prompt and identifies the round using `<ROUND>`.
-  - Instruct the implementer to: (1) load the `mill-receiving-review` skill before reading any finding; (2) read the review file at `<REVIEW_FILE>`; (3) apply VERIFY → HARM CHECK → FIX or PUSH BACK per finding; (4) re-run the `verify:` command from the batch frontmatter at `<BATCH_FILE>`, with up to `<SELF_FIX_ROUNDS>` self-fix attempts on failure; (5) report the same JSON shape as before (`{"status":"success|stuck","commit_sha":"...","session_id":"..."}`), reflecting post-fix state.
+  - Instruct the implementer to: (1) load the `mill-receiving-review` skill before reading any finding; (2) read the review file at `<REVIEW_FILE>`; (3) apply VERIFY → HARM CHECK → FIX or PUSH BACK per finding; (4) re-run the `verify:` command from the batch frontmatter at `<BATCH_FILE>`, with up to `<SELF_FIX_ROUNDS>` self-fix attempts on failure; (5) report the same JSON shape as before (`{"status":"success|stuck","commit_sha":"...","session_id":"..."}`), reflecting post-fix state. Include an explicit note that the implementer is resuming the same session as the original spawn — its `session_id` is the UUID from the `--session-id` flag at first dispatch, retained in session context. The implementer must reuse that UUID in the post-fix JSON report and must NOT attempt to re-read `--session-id` from argv (it is absent on `--resume`).
   - The tone and structure should mirror `implementer-brief.md` (heading, short prose sections, no markdown tables).
   - Keep it concise — the implementer's warm session already knows the code; this prompt adds only the review pointer and decision-tree reminder.
 - **Commit:** `feat(templates): add implementer-fix.md for fix-cycle resume`
@@ -67,7 +67,7 @@ Batch-local decisions beyond Shared Decisions:
 - **Creates:**
   - `plugins/mill/scripts/millpy-implement.py`
 - **Deletes:** none
-- **Requirements:** Create the CLI script. The module-level docstring must reproduce the CLI surface and exit-code table from the discussion. Structure `main(argv=None) -> int` following `millpy-review-code.py`'s pattern (imports inside main, argparse, early validation, then work).
+- **Requirements:** Create the CLI script. The module-level docstring must reproduce the CLI surface and exit-code table from the discussion. Structure `main(argv=None) -> int` following `millpy-review-code.py`'s pattern (most imports inside main, argparse, early validation, then work). However, the modules `json`, `sys`, `argparse`, `os`, `subprocess`, `uuid`, and `pathlib.Path` MUST be imported at the module level (not inside `main`). The unit tests in batch 02 patch `millpy_implement.subprocess.run` and `millpy_implement.uuid.uuid4` — these patches require module-level bindings on those names. An `import uuid` placed inside `main` would silently no-op the test mocks and tests would pass for the wrong reason.
 
   **Argument parsing:**
   - Positional `batch_name` (required).
