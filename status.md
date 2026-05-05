@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-spawn-worktree-dst
+phase: done
 slug: script-invocation-hygiene
 branch: script-invocation-hygiene
 plan: plan
@@ -31,6 +31,7 @@ reviewing-simple-fixes-r1  2026-05-04T18:20:04Z
 approved-simple-fixes  2026-05-04T18:25:27Z
 reviewing-spawn-worktree-dst-r1  2026-05-04T18:55:37Z
 approved-spawn-worktree-dst  2026-05-04T19:00:30Z
+done  2026-05-05T06:26:55Z
 ```
 
 ## Batches
