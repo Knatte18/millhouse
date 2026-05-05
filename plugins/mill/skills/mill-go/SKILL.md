@@ -43,8 +43,10 @@ You are the **Builder** — a lean orchestrator. You coordinate per-batch implem
 On a fresh run only (no `## Batches` section in status.md):
 
 - `_status.init_batches(status_path, order)` — seeds every batch at `state: pending`.
+  `signature: _status.init_batches(status_path: Path, names: list[str]) -> None`
 - `_status.append_phase(status_path, "implementing", _timestamp.now_utc_iso())`.
-- Commit+push via `_wiki.write_commit_push(...)`.
+  `signature: _status.append_phase(status_path: Path, phase: str, timestamp: str) -> None`
+- Commit on the task branch: `git -C <worktree> add status.md && git -C <worktree> commit -m "mill-go: prepare for {slug}"` (no push).
 
 ## Execute — sequential loop
 
@@ -53,7 +55,7 @@ For each batch in `order`:
 ### 1. Implement
 
 - Resolve the batch's file path via the Batch Index entry's `file:`.
-- Build implementer prompt: render `plugins/mill/templates/implementer-brief.md`. Tokens:
+- Build implementer prompt: render `${CLAUDE_PLUGIN_ROOT}/templates/implementer-brief.md` via `_render.render`. Note: `_render.render` auto-strips the brief's leading HTML comment, so the prompt sent to Sonnet is comment-free. Tokens:
 
    | Token | Value |
    | --- | --- |
@@ -68,9 +70,11 @@ For each batch in `order`:
    | `<ROUND>` | `1` on first implementation |
 
 - Record `start_sha = git rev-parse HEAD` (reserved for future per-batch diff scoping — not used by the refactored code reviewer but kept for traceability).
-- Set batch state → `running`, `start_sha: <sha>`. Generate a new `implementer_session = uuid4()` and record it.
-- Commit+push status.md.
+- Set batch state → `running`, `start_sha: <sha>`. Generate a new `implementer_session = uuid4()` and record it via `_status.set_batch_field`.
+  `signature: _status.set_batch_field(status_path: Path, name: str, key: str, value: str | int | None) -> None`
+- Commit on the task branch: `git -C <worktree> add status.md && git -C <worktree> commit -m "mill-go: start batch {batch_name}"` (no push).
 - Spawn implementer: `_implementer_sonnet.run(prompt_text, session_id=session_id, resume=False, cwd=project_root)`. Returns `(output, session_id)`.
+  `signature: _implementer_sonnet.run(prompt_text: str, *, session_id: str, resume: bool, cwd: Path) -> tuple[str, str]`
 
 ### 2. Parse implementer report
 
