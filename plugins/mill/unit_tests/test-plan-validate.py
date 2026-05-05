@@ -76,12 +76,13 @@ def _make_batch_file(
     reads: list[str] | None = None,
     modifies: list[str] | None = None,
     creates: list[str] | None = None,
+    deletes: list[str] | None = None,
     missing_fields: set[str] | None = None,
 ) -> str:
     """Return a well-formed batch file with one card.
 
-    reads/modifies/creates: list of path strings (backtick-wrapped automatically),
-        or None to default to "none".
+    reads/modifies/creates/deletes: list of path strings (backtick-wrapped
+        automatically), or None to default to "none".
     missing_fields: set of field names to omit (for check 2 tests).
     """
     missing_fields = missing_fields or set()
@@ -105,6 +106,8 @@ def _make_batch_file(
         parts.append(f"- **Modifies:** {fmt(modifies)}\n")
     if "Creates" not in missing_fields:
         parts.append(f"- **Creates:** {fmt(creates)}\n")
+    if "Deletes" not in missing_fields:
+        parts.append(f"- **Deletes:** {fmt(deletes)}\n")
     if "Requirements" not in missing_fields:
         parts.append("- **Requirements:**\n  See scope.\n")
     if "Commit" not in missing_fields:
@@ -127,6 +130,7 @@ def _make_batch_file_cards(name: str, card_nums: list[int]) -> str:
             "- **Reads:** none\n"
             "- **Modifies:** none\n"
             "- **Creates:** none\n"
+            "- **Deletes:** none\n"
             "- **Requirements:**\n  See scope.\n"
             f"- **Commit:** feat({name}): card {n}\n"
         )
@@ -478,6 +482,7 @@ def test_check_reads_not_backtick_path_clean() -> int:
             "- **Reads:** `src/a.py`\n"
             "- **Modifies:** none\n"
             "- **Creates:** none\n"
+            "- **Deletes:** none\n"
             "- **Requirements:**\n  See scope.\n"
             "- **Commit:** feat(alpha): card 1\n"
         )
@@ -540,6 +545,7 @@ def test_check_reads_not_backtick_path_dirty() -> int:
             "- **Reads:** `src/foo.py` (used by foo)\n"
             "- **Modifies:** none\n"
             "- **Creates:** none\n"
+            "- **Deletes:** none\n"
             "- **Requirements:**\n  See scope.\n"
             "- **Commit:** feat(alpha): card 1\n"
         )

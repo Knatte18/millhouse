@@ -43,9 +43,9 @@ from _review_common import (
 # Module-level regex helpers
 # ---------------------------------------------------------------------------
 
-# Matches Reads/Modifies/Creates header bullets.
+# Matches Reads/Modifies/Creates/Deletes header bullets.
 _RE_REFS_HEADER = re.compile(
-    r"^-\s*\*\*(Reads|Modifies|Creates):\*\*(?P<inline>.*)$"
+    r"^-\s*\*\*(Reads|Modifies|Creates|Deletes):\*\*(?P<inline>.*)$"
 )
 
 # Matches sub-bullets under multi-line header bullets.
@@ -55,7 +55,7 @@ _RE_REFS_SUB = re.compile(r"^\s+-\s*(.+)$")
 _RE_LINE_RANGE = re.compile(r":\d+-\d+$")
 
 # Required card fields.
-_REQUIRED_CARD_FIELDS = ["Reads", "Modifies", "Creates", "Requirements", "Commit"]
+_REQUIRED_CARD_FIELDS = ["Reads", "Modifies", "Creates", "Deletes", "Requirements", "Commit"]
 
 
 # ---------------------------------------------------------------------------
