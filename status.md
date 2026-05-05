@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planning
+phase: plan-review-r1
 slug: codeguide-improvements
 branch: codeguide-improvements
 plan: plan
@@ -17,4 +17,5 @@ task_description: |
 discussing  '2026-05-05T12:30:48Z'
 discussed  2026-05-05T13:00:35Z
 planning  2026-05-05T13:04:16Z
+plan-review-r1  2026-05-05T13:08:17Z
 ```

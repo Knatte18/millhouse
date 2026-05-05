@@ -3,7 +3,7 @@
 ```yaml
 task: '3 (A) — codeguide improvements: sibling placement + --branch flag'
 slug: codeguide-improvements
-approved: false
+approved: true
 started: 20260505-130128
 parent: main
 root: ""
