@@ -32,7 +32,10 @@ implementing  2026-05-05T06:24:54Z
 ```yaml
 batches:
   - name: content-helpers
-    state: pending
+    state: running
+    implementer_session: 7e27e134-ffe6-4047-a90b-17a9b015cf6c
+    start_sha: b97f23117afe64fce137f9ed6f133026213b136a
+    review_round: 0
   - name: subprocess-tree-kill
     state: pending
   - name: llm-rate-limit
