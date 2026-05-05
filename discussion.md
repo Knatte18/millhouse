@@ -35,9 +35,9 @@ The core fix — rewriting `_shortcuts.py` to generate PS1 wrappers that invoke 
 
 ### Integration test assertion scope
 
-- Decision: After the bootstrap run in `test-bootstrap.ps1`, assert that each script in `SHORTCUT_SCRIPTS` has a `.ps1` wrapper in `.millhouse/` and that no `.py` wrapper for any `SHORTCUT_SCRIPTS` entry remains.
-- Rationale: The integration test already exercises mill-setup end-to-end; adding a Phase 4.7 check closes the gap without requiring a new test file.
-- Rejected: A separate integration test file — unnecessary overhead for two assertions.
+- Decision: In `test-bootstrap.ps1`, add a Phase 4.7 block that invokes `_shortcuts.write_all()` against the test hub's `.millhouse/` directory, then assert that each `SHORTCUT_SCRIPTS` entry has a `.ps1` wrapper and no `.py` wrapper remains.
+- Rationale: The test covers Layer 01 prerequisites only (Phases 4/5/6a per its own header comment); Phase 4.7 is entirely absent. Assertions without the invocation step would be vacuously true (no `.py` files are seeded, no `.ps1` files are created). Both the invocation and the assertions must be added.
+- Rejected: A separate integration test file — unnecessary overhead for what is a single Phase 4.7 block.
 
 ### Upgrade path for existing hubs
 
@@ -55,7 +55,7 @@ Two loops: (1) renders `shortcut-wrapper.ps1` template for each `SHORTCUT_SCRIPT
 
 **`plugins/mill/unit_tests/test-shortcut-wrapper.py`** — existing tests: render substitution, write_all creates all PS1s, idempotent on second call, rewrites only stale file. Missing: cleanup of legacy `.py` wrappers.
 
-**`plugins/mill/integration_tests/test-bootstrap.ps1`** — runs a full mill-setup sequence against a temp git repo. Phase 4 (junction) is covered; Phase 4.7 (shortcut wrappers) is not asserted. The test uses a `$millRoot` variable pointing at the plugins/mill dir and a `$scripts` variable for the scripts directory.
+**`plugins/mill/integration_tests/test-bootstrap.ps1`** — runs a Layer 01 bootstrap sequence against a temp git repo, explicitly covering Phases 4/5/6a (per the comment on line ~89). Phase 4.7 (shortcut wrappers) is entirely absent — no invocation and no assertions. The test uses `$millRoot` (path to `plugins/mill`) and `$scripts` (`$millRoot/scripts`). Adding Phase 4.7 requires: (1) seeding some `.py` dummy wrappers in `$hub/.millhouse/` to make cleanup observable, (2) invoking `_shortcuts.write_all` via `uv run --project $millRoot python -c "from pathlib import Path; import _shortcuts; _shortcuts.write_all(Path(r'$hub/.millhouse').resolve())"`, (3) asserting each `SHORTCUT_SCRIPTS` entry has a `.ps1` file and no `.py` file.
 
 **`SHORTCUT_SCRIPTS` constant** (13 entries): `millpy-add`, `millpy-list`, `millpy-status`, `millpy-inspect`, `millpy-spawn`, `millpy-claim`, `millpy-cleanup`, `millpy-abandon`, `millpy-color`, `millpy-terminal`, `millpy-vscode`, `millpy-worktree`, `millpy-fetch-issues`.
 
@@ -67,11 +67,14 @@ Two loops: (1) renders `shortcut-wrapper.ps1` template for each `SHORTCUT_SCRIPT
 - Assert: all `.py` files are deleted (`not (mill_dir / f"{s}.py").exists()` for each `s`).
 - Assert: all `.ps1` files exist (`(mill_dir / f"{s}.ps1").exists()` for each `s`).
 
-**Integration test (new assertions in `test-bootstrap.ps1`):**
-- After the Phase 4.7 step in the bootstrap sequence, for each script in a hardcoded list (matching `SHORTCUT_SCRIPTS`):
+**Integration test (new Phase 4.7 block in `test-bootstrap.ps1`):**
+- Seed dummy `.py` wrappers for every `SHORTCUT_SCRIPTS` entry in the test hub's `.millhouse/`.
+- Invoke `_shortcuts.write_all()` via `uv run --project $millRoot`.
+- For each script in a hardcoded list matching `SHORTCUT_SCRIPTS`:
   - Assert `.millhouse/<script>.ps1` exists.
   - Assert `.millhouse/<script>.py` does not exist.
 - Failures increment the error counter like all other assertions in the file.
+- Note: `PYTHONPATH` must be set inline for this call (same pattern as mill-setup bootstrapper), since the global env var may not be present in the CI environment.
 
 **Run the full unit suite** after changes: `python plugins/mill/unit_tests/run-all.py`.
 
