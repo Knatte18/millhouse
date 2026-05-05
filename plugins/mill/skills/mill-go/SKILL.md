@@ -46,6 +46,7 @@ On a fresh run only (no `## Batches` section in status.md):
   `signature: _status.init_batches(status_path: Path, names: list[str]) -> None`
 - `_status.append_phase(status_path, "implementing", _timestamp.now_utc_iso())`.
   `signature: _status.append_phase(status_path: Path, phase: str, timestamp: str) -> None`
+  `signature: _timestamp.now_utc_iso() -> str`
 - Commit on the task branch: `git -C <worktree> add status.md && git -C <worktree> commit -m "mill-go: prepare for {slug}"` (no push).
 
 ## Execute — sequential loop
@@ -74,7 +75,7 @@ For each batch in `order`:
   `signature: _status.set_batch_field(status_path: Path, name: str, key: str, value: str | int | None) -> None`
 - Commit on the task branch: `git -C <worktree> add status.md && git -C <worktree> commit -m "mill-go: start batch {batch_name}"` (no push).
 - Spawn implementer: `_implementer_sonnet.run(prompt_text, session_id=session_id, resume=False, cwd=project_root)`. Returns `(output, session_id)`.
-  `signature: _implementer_sonnet.run(prompt_text: str, *, session_id: str, resume: bool, cwd: Path) -> tuple[str, str]`
+  `signature: _implementer_sonnet.run(prompt_text: str, *, session_id: str | None = None, resume: bool = False, cwd: Path | str | None = None) -> tuple[str, str]`
 
 ### 2. Parse implementer report
 
@@ -94,7 +95,7 @@ Record `commit_sha` from a successful report on the batch entry.
 ### 3. Code Review loop
 
 - Set batch state → `reviewing`, `review_round: 1`.
-- `_status.append_phase(status_path, f"reviewing-{batch_name}-r1", iso_ts)`.
+- `_status.append_phase(status_path, f"reviewing-{batch_name}-r1", _timestamp.now_utc_iso())`.
 - `extra_files = []`.
 
 For each round `N` from 1 to `review.code.rounds`:
@@ -114,23 +115,23 @@ For each round `N` from 1 to `review.code.rounds`:
 3. **Before reading any review file, load the `mill-receiving-review` skill.** Non-negotiable.
 
 4. Branch on verdict:
-   - `APPROVE` — batch state → `approved`, `review_file: <path>`. `_status.append_phase(..., f"approved-{batch_name}")`. Commit on the task branch: `git -C <worktree> add status.md && git -C <worktree> commit -m "mill-go: approve batch {batch_name}"`. Break out of the loop → next batch.
+   - `APPROVE` — batch state → `approved`, `review_file: <path>`. `_status.append_phase(status_path, f"approved-{batch_name}", _timestamp.now_utc_iso())`. Commit on the task branch: `git -C <worktree> add status.md && git -C <worktree> commit -m "mill-go: approve batch {batch_name}"`. Break out of the loop → next batch.
    - `NEED_CONTEXT` — read the `## Missing context` bullets from the review file. For each listed path, if it exists under the worktree, append to `extra_files` for the NEXT round. `_notify.notify("mill-go.review-need-context", f"batch {batch_name} round {N}", slug=slug, files=len(missing))`. Record this gap for mill-self-report (see Handoff). Increment round and continue the loop. If ALL the missing files are paths already in `extra_files` from a prior round (no new info), treat as a stuck-logic failure and break.
-     `signature: _notify.notify(event: str, message: str, **fields) -> None`
-   - `REQUEST_CHANGES` — set batch state → `fixing`. `_status.append_phase(..., f"fixing-{batch_name}-r{N}")`. Commit on the task branch: `git -C <worktree> add status.md reviews/<file> && git -C <worktree> commit -m "mill-go: review-request batch {batch_name} round {N}"`. **Resume the implementer session** with a new user message:
+     `signature: _notify.notify(event: str, detail: str, **context) -> None`
+   - `REQUEST_CHANGES` — set batch state → `fixing`. `_status.append_phase(status_path, f"fixing-{batch_name}-r{N}", _timestamp.now_utc_iso())`. Commit on the task branch: `git -C <worktree> add status.md reviews/<file> && git -C <worktree> commit -m "mill-go: review-request batch {batch_name} round {N}"`. **Resume the implementer session** with a new user message:
 
      > Load the `mill-receiving-review` skill. Read `<review-file-abs-path>`. Apply VERIFY / HARM CHECK / FIX or PUSH BACK per finding. Re-run `verify:` from the batch frontmatter. Report the same JSON shape as before, reflecting the post-fix state.
 
      Spawn via `_implementer_sonnet.run(fix_prompt, session_id=session_id, resume=True, cwd=project_root)`. Parse the JSON report the same way as step 2. On success → increment round, continue loop (next round's review). On stuck → escalate.
 
-5. **Max-rounds exhaustion.** After `review.code.rounds` rounds without APPROVE: `_notify.notify("mill-go.review-exhausted", f"batch {batch_name}", slug=slug, rounds=N)`, set batch state → `blocked`, `blocked_reason: "review rounds exhausted"`, `_status.append_phase(..., "blocked")`, commit on the task branch: `git -C <worktree> add status.md && git -C <worktree> commit -m "mill-go: blocked on {batch_name} after {N} rounds"`. Go to *Blocked* below.
+5. **Max-rounds exhaustion.** After `review.code.rounds` rounds without APPROVE: `_notify.notify("mill-go.review-exhausted", f"batch {batch_name}", slug=slug, rounds=N)`, set batch state → `blocked`, `blocked_reason: "review rounds exhausted"`, `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`, commit on the task branch: `git -C <worktree> add status.md && git -C <worktree> commit -m "mill-go: blocked on {batch_name} after {N} rounds"`. Go to *Blocked* below.
 
 ### Stuck escalation
 
 - **`LLMError` from `_llm_claude.run_implementer`** (subprocess crashed before producing a JSON report) → treat as `stuck_type: transient`. Apply the existing one-retry policy: retry once with a fresh session (new UUID, `resume=False`). If the second attempt also raises `LLMError`, escalate to user with the regular `transient` three-option prompt (retry fresh, edit plan and retry, block). Note: catch `_llm_claude.LLMError` specifically (not bare `Exception`) so genuine programmer errors still propagate.
 - `transient` (already retried once) → surface to user with three options: retry fresh, edit plan and retry, block. User picks.
 - `verify` / `logic` → surface to user with three options: edit plan to clarify then retry fresh, skip this batch (block the task), block the task. User picks.
-- On user-chosen block: set batch state → `blocked`, `blocked_reason: <reason>`, `_status.append_phase(..., "blocked")`, commit on the task branch: `git -C <worktree> add status.md && git -C <worktree> commit -m "mill-go: blocked on {batch_name}"`. Go to *Blocked*.
+- On user-chosen block: set batch state → `blocked`, `blocked_reason: <reason>`, `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`, commit on the task branch: `git -C <worktree> add status.md && git -C <worktree> commit -m "mill-go: blocked on {batch_name}"`. Go to *Blocked*.
 
 ### Blocked
 
@@ -144,7 +145,7 @@ After every batch in `order` has state `approved`, and only if `review.code.holi
 
 - Invoke `uv run --project "${CLAUDE_PLUGIN_ROOT}" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-review-code.py"` (no `--batch`).
 - On `REQUEST_CHANGES`: apply the same review-fix loop as per-batch — track holistic state via `_status.append_phase` with dedicated holistic phase names (`"holistic-reviewing"`, `"holistic-fixing"`, `"holistic-approved"`) rather than `_status.set_batch_field` (which would raise `ValueError: Batch 'holistic' not present` since 'holistic' is never initialized via `init_batches`). Spawn the implementer via `_implementer_sonnet.run(prompt_text, session_id=new_uuid, resume=False, cwd=worktree_path)` with the review file pointer (no resume — holistic review's findings span multiple batches; the implementer receives whole-worktree access).
-  `signature: _implementer_sonnet.run(prompt_text: str, *, session_id: str, resume: bool, cwd: Path) -> tuple[str, str]`
+  `signature: _implementer_sonnet.run(prompt_text: str, *, session_id: str | None = None, resume: bool = False, cwd: Path | str | None = None) -> tuple[str, str]`
   Run the same review-fix loop until APPROVE or rounds-exhausted. On rounds-exhausted only, surface to user with the same blocked-batch halt prompt as per-batch flow.
 - On `NEED_CONTEXT` apply the same extra-files / notify path as per-batch.
 
@@ -153,6 +154,7 @@ After every batch in `order` has state `approved`, and only if `review.code.holi
 1. `_status.append_phase(status_path, "done", _timestamp.now_utc_iso())`. Commit on the task branch: `git -C <worktree> add status.md && git -C <worktree> commit -m "mill-go: done {slug}"` (no push).
 2. Flip Home.md's task line to `[done]`:
    ```python
+   home_path = wiki_path / "Home.md"
    with _wiki.wiki_lock(wiki_path, slug):
        _tasks_md.set_phase_at(home_path, slug, "done")
        _wiki.write_commit_push(wiki_path, ["Home.md"], f"task: complete {slug}", slug=slug)
