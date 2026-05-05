@@ -176,14 +176,15 @@ def main() -> int:
         worktrees_dir = root / "worktrees"
         wt1 = worktrees_dir / "task-alpha"
         wt1.mkdir(parents=True)
-        _write_active_marker(wt1, "task-alpha", "Alpha Task")
 
-        # Write per-worktree config with hub_relative_path
-        mill_dir = wt1 / ".millhouse"
-        mill_dir.mkdir(exist_ok=True)
-        (mill_dir / "config.local.yaml").write_text(
+        # Stub at worktree root pointing at sub-path; active marker lives
+        # under the sub-path (mirrors the real hub-relative-path layout).
+        stub_dir = wt1 / ".millhouse"
+        stub_dir.mkdir(exist_ok=True)
+        (stub_dir / "config.local.yaml").write_text(
             "hub_relative_path: src/csharp/X\n", encoding="utf-8"
         )
+        _write_active_marker(wt1 / "src" / "csharp" / "X", "task-alpha", "Alpha Task")
 
         subprocess_calls: list = []
         wiki_path = root / "wiki"
@@ -263,7 +264,6 @@ def main() -> int:
         worktrees_dir = root / "worktrees"
         wt1 = worktrees_dir / "task-reg"
         wt1.mkdir(parents=True)
-        _write_active_marker(wt1, "task-reg", "Regression Task")
 
         # Hub config (at git_root)
         hub_mill_dir = root / ".millhouse"
@@ -278,6 +278,8 @@ def main() -> int:
         (wt_mill_dir / "config.local.yaml").write_text(
             "hub_relative_path: wt-sub\n", encoding="utf-8"
         )
+        # Active marker lives under the sub-path per the stub.
+        _write_active_marker(wt1 / "wt-sub", "task-reg", "Regression Task")
 
         subprocess_calls = []
         wiki_path = root / "wiki"
