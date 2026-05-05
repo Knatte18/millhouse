@@ -9,6 +9,7 @@ This is the lowest layer in the 4-layer review architecture:
 Public API:
     LLMError          — raised on timeout, auth failure, or non-zero exit
     LLMSessionError   — subclass raised when --resume <id> fails
+    LLMRateLimitError — subclass raised when claude exits non-zero due to rate-limiting
     run_bulk()        — invoke claude with no tools; return (text, session_id)
     run_tool_use()    — invoke claude with Read/Grep/Glob; return (text, session_id)
     run_implementer() — invoke claude with Read/Edit/Write/Bash/Grep/Glob;
@@ -76,6 +77,15 @@ class LLMSessionError(LLMError):
     """
 
 
+class LLMRateLimitError(LLMError):
+    """Raised when the claude CLI exits non-zero AND stream-json indicates a rate-limit/throttle event.
+
+    Backends record verdict: ERROR with error: 'rate_limit: ...' and the orchestrator's
+    ERROR-only retry handles it. Inherits from LLMError so existing catch sites continue
+    to handle it as a generic provider failure unless they specifically want the typed split.
+    """
+
+
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
@@ -111,6 +121,37 @@ def _build_argv(
     elif session_id is not None:
         argv += ["--session-id", session_id]
     return argv
+
+
+def _scan_rate_limit(stdout: str) -> bool:
+    """Return True if stdout contains a rate-limit/throttle signal.
+
+    Iterates stream-json lines defensively (skips un-parseable lines).
+    Returns True when any of:
+      (a) top-level type == "rate_limit_event"
+      (b) type == "result" AND is_error == True AND (subtype contains "rate"
+          case-insensitively, OR the lowercased JSON body contains "rate_limit")
+    Returns False for empty stdout, all-good results, or generic errors.
+    Does not raise.
+    """
+    for line in stdout.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            obj = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        event_type = obj.get("type", "")
+        if event_type == "rate_limit_event":
+            return True
+        if event_type == "result" and obj.get("is_error") is True:
+            subtype = str(obj.get("subtype", "")).lower()
+            if "rate" in subtype:
+                return True
+            if "rate_limit" in json.dumps(obj).lower():
+                return True
+    return False
 
 
 def _parse_stream_json(stdout: str) -> tuple[str, str | None]:
@@ -214,9 +255,14 @@ def _invoke(
         raise LLMError(f"Failed to spawn claude: {exc}") from exc
 
     dt = time.monotonic() - start
+    rate_limited = _scan_rate_limit(result.stdout or "")
 
     if result.returncode != 0:
         stderr_snippet = (result.stderr or "")[:500]
+        if rate_limited:
+            raise LLMRateLimitError(
+                f"claude rate-limited (exit {result.returncode}): {stderr_snippet}"
+            )
         if resume:
             raise LLMSessionError(
                 f"claude --resume {session_id} exited {result.returncode}: {stderr_snippet}"

@@ -20,6 +20,7 @@ sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
 import _active  # noqa: E402
 import _reviewer_test_stub as stub  # noqa: E402
+from _llm_claude import LLMError  # noqa: E402
 from _review_plan import run as plan_run  # noqa: E402
 from _review_common import ReviewError  # noqa: E402
 
@@ -60,10 +61,17 @@ def _make_overview(batches: list[tuple[str, str]]) -> str:
     )
 
 
-def _make_batch_file(name: str, reads: list[str], creates: list[str]) -> str:
-    """Return batch file text (single-line Reads:/Creates: form)."""
+def _make_batch_file(
+    name: str,
+    reads: list[str],
+    creates: list[str],
+    *,
+    deletes: list[str] | None = None,
+) -> str:
+    """Return batch file text (single-line Reads:/Creates:/Deletes: form)."""
     reads_part = ", ".join(f"`{r}`" for r in reads) if reads else "none"
     creates_part = ", ".join(f"`{c}`" for c in creates) if creates else "none"
+    deletes_part = ", ".join(f"`{d}`" for d in deletes) if deletes else "none"
     return (
         f"# Batch: {name}\n\n"
         "```yaml\n"
@@ -73,6 +81,7 @@ def _make_batch_file(name: str, reads: list[str], creates: list[str]) -> str:
         f"- **Reads:** {reads_part}\n"
         "- **Modifies:** none\n"
         f"- **Creates:** {creates_part}\n"
+        f"- **Deletes:** {deletes_part}\n"
     )
 
 
@@ -132,6 +141,7 @@ def _make_plan_fixture(
         "review": {
             "plan": {"rounds": 3, "batch": "test_stub", "holistic": "test_stub"},
         },
+        "llm": {"bulk_timeout": None, "holistic_timeout": None},
     }
     return mill_dir, wiki_root, project_root, cfg
 
@@ -217,7 +227,9 @@ def main() -> int:
 
     # ------------------------------------------------------------------
     # Test 2 — partial re-invocation (only alpha-r1 file pre-exists)
-    # alpha must be r2; beta/gamma/holistic must each be r1.
+    # alpha must be r2; beta/gamma must be r1; holistic must be r2.
+    # A holistic-r1 file is also pre-created so detect_resume_round
+    # returns None (completed round, not interrupted mid-round).
     # ------------------------------------------------------------------
     with tempfile.TemporaryDirectory() as tmpdir:
         batch_specs = [
@@ -229,17 +241,21 @@ def main() -> int:
         orig_dir = os.getcwd()
         os.chdir(project_root)
         try:
-            # Pre-create an alpha-r1 review file inside the worktree
+            # Pre-create alpha-r1 (malformed) and holistic-r1 to simulate a
+            # completed round where alpha's result was written but was garbled.
             reviews_dir = project_root / "reviews"
             reviews_dir.mkdir(parents=True)
             (reviews_dir / "20260418-000000-plan-review-01-alpha-r1.md").write_text(
                 "# stub r1 review", encoding="utf-8"
             )
+            (reviews_dir / "20260418-000001-plan-review-r1.md").write_text(
+                APPROVE_TEXT, encoding="utf-8"
+            )
 
             _seed_approve(4)
             r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root)
             assert r.verdict == "APPROVE"
-            # alpha should be r2; others r1
+            # alpha should be r2; beta/gamma r1; holistic r2 (prior holistic was r1)
             rv_alpha = next(rv for rv in r.reviews if rv["scope"] == "01-alpha")
             rv_beta  = next(rv for rv in r.reviews if rv["scope"] == "02-beta")
             rv_gamma = next(rv for rv in r.reviews if rv["scope"] == "03-gamma")
@@ -253,10 +269,10 @@ def main() -> int:
             assert "plan-review-03-gamma-r1" in Path(rv_gamma["file"]).name, (
                 f"gamma should be r1, got {Path(rv_gamma['file']).name}"
             )
-            assert "plan-review-r1" in Path(rv_hol["file"]).name, (
-                f"holistic should be r1, got {Path(rv_hol['file']).name}"
+            assert "plan-review-r2" in Path(rv_hol["file"]).name, (
+                f"holistic should be r2, got {Path(rv_hol['file']).name}"
             )
-            print("PASS test2: partial re-invocation — alpha r2, others r1 (independent per-scope)")
+            print("PASS test2: partial re-invocation — alpha r2, beta/gamma r1, holistic r2 (independent per-scope)")
         except AssertionError as exc:
             errors += 1
             print(f"FAIL test2: {exc}", file=sys.stderr)
@@ -423,7 +439,7 @@ def main() -> int:
             assert retry_text.startswith("## Re-attached files"), (
                 f"retry prompt must start with '## Re-attached files': {retry_text[:80]!r}"
             )
-            assert retry_kwargs == {"session_id": "sid-1", "resume": True}, (
+            assert retry_kwargs == {"session_id": "sid-1", "resume": True, "timeout": None}, (
                 f"retry kwargs wrong: {retry_kwargs}"
             )
             print("PASS test6: per-batch NEED_CONTEXT retry → APPROVE, holistic unaffected")
@@ -468,7 +484,7 @@ def main() -> int:
             assert retry_text.startswith("## Re-attached files"), (
                 f"holistic retry prompt must start with '## Re-attached files': {retry_text[:80]!r}"
             )
-            assert retry_kwargs == {"session_id": "sid-2", "resume": True}, (
+            assert retry_kwargs == {"session_id": "sid-2", "resume": True, "timeout": None}, (
                 f"holistic retry kwargs wrong: {retry_kwargs}"
             )
             print("PASS test7: holistic NEED_CONTEXT retry → APPROVE")
@@ -510,6 +526,10 @@ def main() -> int:
             )
             # 03-c approved in r1
             (reviews_dir / "20260429-000003-plan-review-03-c-r1.md").write_text(
+                APPROVE_TEXT, encoding="utf-8"
+            )
+            # holistic-r1: marks round 1 as complete so detect_resume_round returns None
+            (reviews_dir / "20260429-000004-plan-review-r1.md").write_text(
                 APPROVE_TEXT, encoding="utf-8"
             )
 
@@ -621,6 +641,10 @@ def main() -> int:
             # 01-a has malformed content — no yaml block
             (reviews_dir / "20260429-000001-plan-review-01-a-r1.md").write_text(
                 "not a yaml block at all", encoding="utf-8"
+            )
+            # holistic-r1: marks round 1 as complete so detect_resume_round returns None
+            (reviews_dir / "20260429-000002-plan-review-r1.md").write_text(
+                APPROVE_TEXT, encoding="utf-8"
             )
 
             # All four scopes fire: 01-a, 02-b, 03-c, holistic
@@ -824,6 +848,176 @@ def main() -> int:
         except Exception as exc:
             errors += 1
             print(f"FAIL test15 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
+    # Test 16 — all-ERROR run returns ReviewResult, not ReviewError (#84)
+    # Monkey-patch stub.run to raise LLMError for every call.
+    # After Card 17, the total-fail check is removed, so plan_run falls
+    # through to aggregate_verdict and returns REQUEST_CHANGES.
+    # ------------------------------------------------------------------
+    with tempfile.TemporaryDirectory() as tmpdir:
+        batch_specs = [("alpha", "01-alpha.md", ["src/a.py"], [])]
+        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(Path(tmpdir), batch_specs)
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        original_run = stub.run
+
+        def _raises_llmerror(*a, **kw):
+            raise LLMError("seeded boom")
+
+        stub.run = _raises_llmerror
+        try:
+            r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root)
+            assert r.verdict == "REQUEST_CHANGES", (
+                f"expected REQUEST_CHANGES for all-ERROR run, got {r.verdict}"
+            )
+            assert len(r.reviews) >= 1, "expected at least 1 review entry"
+            for rv in r.reviews:
+                assert rv["verdict"] == "ERROR", (
+                    f"expected ERROR entry, got {rv['verdict']}"
+                )
+            print("PASS test16: all-ERROR run returns ReviewResult(REQUEST_CHANGES) rather than raising (#84)")
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test16: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test16 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            stub.run = original_run
+            os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
+    # Test 17 — mid-round resume: holistic missing, per-batch on disk (#87)
+    # Pre-populate two per-batch r1 files (no holistic); stub fires once
+    # (holistic only); reviews has 3 entries (2 disk + 1 fresh holistic).
+    # ------------------------------------------------------------------
+    REQUEST_CHANGES_TEXT2 = "# Review: test\n\n```yaml\nverdict: REQUEST_CHANGES\n```\n"
+    with tempfile.TemporaryDirectory() as tmpdir:
+        batch_specs = [
+            ("alpha", "01-alpha.md", ["src/a.py"], []),
+            ("beta",  "02-beta.md",  ["src/b.py"], []),
+        ]
+        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(Path(tmpdir), batch_specs)
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            reviews_dir = project_root / "reviews"
+            reviews_dir.mkdir(parents=True, exist_ok=True)
+            (reviews_dir / "20260501-000001-plan-review-01-alpha-r1.md").write_text(
+                APPROVE_TEXT, encoding="utf-8"
+            )
+            (reviews_dir / "20260501-000002-plan-review-02-beta-r1.md").write_text(
+                REQUEST_CHANGES_TEXT2, encoding="utf-8"
+            )
+
+            stub.seed([(APPROVE_TEXT, "sid-hol-resume")])
+            r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root)
+
+            prompts = stub.captured_prompts()
+            assert len(prompts) == 1, (
+                f"mid-round resume: expected 1 prompt (holistic only), got {len(prompts)}"
+            )
+            assert len(r.reviews) == 3, (
+                f"expected 3 reviews (2 disk + 1 holistic), got {len(r.reviews)}"
+            )
+            rv_alpha = next((rv for rv in r.reviews if rv["scope"] == "01-alpha"), None)
+            rv_beta  = next((rv for rv in r.reviews if rv["scope"] == "02-beta"), None)
+            rv_hol   = next((rv for rv in r.reviews if rv["scope"] == "holistic"), None)
+            assert rv_alpha is not None, "01-alpha missing from resume reviews"
+            assert rv_beta is not None, "02-beta missing from resume reviews"
+            assert rv_hol is not None, "holistic missing from resume reviews"
+            assert rv_alpha["verdict"] == "APPROVE", (
+                f"disk-loaded alpha verdict should be APPROVE, got {rv_alpha['verdict']}"
+            )
+            assert rv_beta["verdict"] == "REQUEST_CHANGES", (
+                f"disk-loaded beta verdict should be REQUEST_CHANGES, got {rv_beta['verdict']}"
+            )
+            assert rv_hol["session_id"] == "sid-hol-resume", (
+                f"holistic should be fresh, got {rv_hol['session_id']!r}"
+            )
+            print("PASS test17: mid-round resume — stub fires once (holistic only), 2 disk + 1 fresh (#87)")
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test17: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test17 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
+    # Test 18 — deletes surface: batch declares Deletes token
+    # The per-batch prompt must contain ## Intentionally deleted + the token.
+    # ------------------------------------------------------------------
+    with tempfile.TemporaryDirectory() as tmpdir:
+        batch_specs = [("alpha", "01-alpha.md", ["src/a.py"], [])]
+        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(Path(tmpdir), batch_specs)
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            # Overwrite batch file to declare a delete
+            plan_dir = project_root / "plan"
+            (plan_dir / "01-alpha.md").write_text(
+                _make_batch_file("alpha", ["src/a.py"], [], deletes=["old/file.py"]),
+                encoding="utf-8",
+            )
+
+            _seed_approve(2)  # per-batch + holistic
+            plan_run(cfg, SLUG, mill_dir, wiki_root, project_root)
+
+            prompts = stub.captured_prompts()
+            per_batch_prompt = prompts[0][0]
+            assert "## Intentionally deleted" in per_batch_prompt, (
+                "per-batch prompt missing '## Intentionally deleted' section"
+            )
+            assert "old/file.py" in per_batch_prompt, (
+                "'old/file.py' not found in per-batch prompt"
+            )
+            print("PASS test18: deletes surface — '## Intentionally deleted' in per-batch prompt")
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test18: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test18 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
+    # Test 19 — timeout plumbing: bulk_timeout → per-batch, holistic_timeout → holistic
+    # Single-batch fixture so captured_prompts() ordering is deterministic.
+    # ------------------------------------------------------------------
+    with tempfile.TemporaryDirectory() as tmpdir:
+        batch_specs = [("alpha", "01-alpha.md", ["src/a.py"], [])]
+        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(Path(tmpdir), batch_specs)
+        cfg["llm"]["bulk_timeout"] = 900
+        cfg["llm"]["holistic_timeout"] = 1800
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            _seed_approve(2)  # per-batch + holistic
+            plan_run(cfg, SLUG, mill_dir, wiki_root, project_root)
+
+            prompts = stub.captured_prompts()
+            assert len(prompts) == 2, f"expected 2 prompts, got {len(prompts)}"
+            _, batch_kwargs = prompts[0]
+            _, hol_kwargs   = prompts[1]
+            assert batch_kwargs["timeout"] == 900, (
+                f"per-batch timeout should be 900, got {batch_kwargs['timeout']!r}"
+            )
+            assert hol_kwargs["timeout"] == 1800, (
+                f"holistic timeout should be 1800, got {hol_kwargs['timeout']!r}"
+            )
+            print("PASS test19: timeout plumbing — bulk_timeout=900 → per-batch, holistic_timeout=1800 → holistic")
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test19: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test19 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
         finally:
             os.chdir(orig_dir)
 

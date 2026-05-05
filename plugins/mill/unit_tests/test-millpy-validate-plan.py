@@ -70,6 +70,8 @@ def _make_batch_file(name: str, *, missing_fields: set | None = None) -> str:
         parts.append("- **Modifies:** none\n")
     if "Creates" not in missing_fields:
         parts.append("- **Creates:** none\n")
+    if "Deletes" not in missing_fields:
+        parts.append("- **Deletes:** none\n")
     if "Requirements" not in missing_fields:
         parts.append("- **Requirements:**\n  See scope.\n")
     if "Commit" not in missing_fields:

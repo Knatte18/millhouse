@@ -35,6 +35,7 @@ from _plan_dag import PlanDAGError, extract_batch_index
 from _review_common import (
     _load_root_from_overview,
     compute_creates_union,
+    compute_deletes_union,
     parse_batch_refs,
     resolve_existing_paths,
 )
@@ -43,9 +44,9 @@ from _review_common import (
 # Module-level regex helpers
 # ---------------------------------------------------------------------------
 
-# Matches Reads/Modifies/Creates header bullets.
+# Matches Reads/Modifies/Creates/Deletes header bullets.
 _RE_REFS_HEADER = re.compile(
-    r"^-\s*\*\*(Reads|Modifies|Creates):\*\*(?P<inline>.*)$"
+    r"^-\s*\*\*(Reads|Modifies|Creates|Deletes):\*\*(?P<inline>.*)$"
 )
 
 # Matches sub-bullets under multi-line header bullets.
@@ -55,7 +56,7 @@ _RE_REFS_SUB = re.compile(r"^\s+-\s*(.+)$")
 _RE_LINE_RANGE = re.compile(r":\d+-\d+$")
 
 # Required card fields.
-_REQUIRED_CARD_FIELDS = ["Reads", "Modifies", "Creates", "Requirements", "Commit"]
+_REQUIRED_CARD_FIELDS = ["Reads", "Modifies", "Creates", "Deletes", "Requirements", "Commit"]
 
 
 # ---------------------------------------------------------------------------
@@ -134,6 +135,45 @@ def _parse_modifies_only(batch_path: Path) -> set[str]:
     return tokens
 
 
+def _parse_deletes_only(batch_path: Path) -> set[str]:
+    """Extract raw path tokens from a batch file's Deletes: lines only.
+
+    Same single-line / multi-line logic as parse_batch_refs in _review_common,
+    but restricted to ``- **Deletes:**`` headers. Filters ``none``
+    (case-insensitive) per the existing convention.
+    """
+    text = batch_path.read_text(encoding="utf-8")
+    tokens: set[str] = set()
+    lines = text.splitlines()
+    i = 0
+    while i < len(lines):
+        m = _RE_REFS_HEADER.match(lines[i])
+        if m and m.group(1) == "Deletes":
+            inline = m.group("inline").strip()
+            if inline:
+                backtick_tokens = re.findall(r"`([^`]+)`", inline)
+                batch_tokens = backtick_tokens if backtick_tokens else [
+                    t.strip() for t in inline.split(",") if t.strip()
+                ]
+            else:
+                batch_tokens = []
+                j = i + 1
+                while j < len(lines):
+                    sm = _RE_REFS_SUB.match(lines[j])
+                    if not sm:
+                        break
+                    rest = sm.group(1).strip()
+                    bt = re.findall(r"`([^`]+)`", rest)
+                    if bt:
+                        batch_tokens.extend(bt)
+                    j += 1
+            for t in batch_tokens:
+                if t.lower() != "none":
+                    tokens.add(t)
+        i += 1
+    return tokens
+
+
 # ---------------------------------------------------------------------------
 # Check 1 — non-existent-path
 # ---------------------------------------------------------------------------
@@ -143,17 +183,23 @@ def _check_non_existent_path(
     project_root: Path,
     root: str | None,
     creates_union: set[str],
+    deletes_union: set[str],
     *,
     wiki_root: Path | None = None,
 ) -> list[dict]:
     errors: list[dict] = []
     for batch_path in batch_files:
         raw_refs = parse_batch_refs(batch_path)
-        for t in raw_refs:
+        deletes_only = _parse_deletes_only(batch_path)
+        general_refs = set(raw_refs) - deletes_only
+
+        # General refs (Reads/Modifies/Creates): missing on disk is suppressed if
+        # the token is in creates_union OR deletes_union (intentional deletion).
+        for t in general_refs:
             if t.lower() == "none":
-                continue  # defensive; parse_batch_refs already filters these
+                continue
             existing = resolve_existing_paths([t], project_root, root, wiki_root=wiki_root)
-            if not existing and t not in creates_union:
+            if not existing and t not in creates_union and t not in deletes_union:
                 errors.append({
                     "check": "non-existent-path",
                     "batch": batch_path.stem,
@@ -164,6 +210,25 @@ def _check_non_existent_path(
                         f"Creates: target in any batch"
                     ),
                 })
+
+        # Deletes refs: missing on disk is suppressed only if in creates_union
+        # (cross-batch: an earlier batch creates it, this card deletes it).
+        for t in deletes_only:
+            if t.lower() == "none":
+                continue
+            existing = resolve_existing_paths([t], project_root, root, wiki_root=wiki_root)
+            if not existing and t not in creates_union:
+                errors.append({
+                    "check": "non-existent-path",
+                    "batch": batch_path.stem,
+                    "card": None,
+                    "path": t,
+                    "message": (
+                        f"Deletes: token '{t}' does not exist on disk and is not a "
+                        f"Creates: target in any batch"
+                    ),
+                })
+
     return errors
 
 
@@ -607,11 +672,13 @@ def run(
     )
     overview_text = overview_path.read_text(encoding="utf-8")
     creates_union = compute_creates_union(plan_dir)
+    deletes_union = compute_deletes_union(plan_dir)
 
     errors: list[dict] = []
 
     errors.extend(_check_non_existent_path(
-        batch_files, project_root, effective_root, creates_union, wiki_root=wiki_root,
+        batch_files, project_root, effective_root, creates_union, deletes_union,
+        wiki_root=wiki_root,
     ))
     errors.extend(_check_card_missing_field(batch_files))
     errors.extend(_check_card_numbering(batch_files))

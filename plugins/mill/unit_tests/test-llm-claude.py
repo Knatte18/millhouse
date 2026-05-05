@@ -8,6 +8,7 @@ invoke the live ``claude`` CLI — those tests live in
 from __future__ import annotations
 
 import inspect
+import subprocess as _subprocess_mod
 import sys
 import unittest.mock as mock
 from pathlib import Path
@@ -18,10 +19,12 @@ sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 import _subprocess_util as _subprocess_util_mod  # noqa: E402
 from _llm_claude import (  # noqa: E402
     LLMError,
+    LLMRateLimitError,
     LLMSessionError,
     _build_argv,
     _claude_argv_prefix,
     _parse_stream_json,
+    _scan_rate_limit,
     run_bulk,
     run_implementer,
     run_tool_use,
@@ -37,6 +40,7 @@ def main() -> int:
     assert callable(run_implementer)
     assert issubclass(LLMError, Exception)
     assert issubclass(LLMSessionError, LLMError)
+    assert issubclass(LLMRateLimitError, LLMError)
     print("PASS: module imports cleanly, public symbols present")
 
     # Function signatures (keyword-only model arg, session_id/resume present)
@@ -66,6 +70,13 @@ def main() -> int:
     except LLMError as e:
         assert str(e) == "stale session"
         print("PASS: LLMSessionError is caught as LLMError")
+
+    # LLMRateLimitError class existence and hierarchy
+    try:
+        raise LLMRateLimitError("throttled")
+    except LLMError as e:
+        assert str(e) == "throttled"
+        print("PASS: LLMRateLimitError is caught as LLMError")
 
     # _parse_stream_json: valid result event with session_id
     raw = (
@@ -104,6 +115,35 @@ def main() -> int:
     assert text == "OK" and sid == "s1"
     print("PASS: _parse_stream_json skips bad JSON line")
 
+    # _scan_rate_limit: rate_limit_event type -> True
+    rl_event = '{"type":"rate_limit_event","limit_type":"requests"}\n'
+    assert _scan_rate_limit(rl_event) is True
+    print("PASS: _scan_rate_limit rate_limit_event -> True")
+
+    # _scan_rate_limit: result event with is_error + rate-limit subtype -> True
+    rl_result = '{"type":"result","is_error":true,"subtype":"rate_limited","session_id":"s1"}\n'
+    assert _scan_rate_limit(rl_result) is True
+    print("PASS: _scan_rate_limit result+is_error+rate_limited subtype -> True")
+
+    # _scan_rate_limit: result event with is_error + generic subtype + no rate-limit string -> False
+    generic_err = '{"type":"result","is_error":true,"subtype":"error_during_execution","session_id":"s1"}\n'
+    assert _scan_rate_limit(generic_err) is False
+    print("PASS: _scan_rate_limit result+is_error+generic subtype -> False")
+
+    # _scan_rate_limit: empty stdout -> False
+    assert _scan_rate_limit("") is False
+    print("PASS: _scan_rate_limit empty stdout -> False")
+
+    # _scan_rate_limit: unparseable line then rate_limit_event -> True (defensive parse)
+    mixed_rl = 'not-valid-json\n{"type":"rate_limit_event"}\n'
+    assert _scan_rate_limit(mixed_rl) is True
+    print("PASS: _scan_rate_limit bad line + rate_limit_event -> True")
+
+    # _scan_rate_limit: unparseable line then generic result error -> False
+    mixed_generic = 'not-valid-json\n{"type":"result","is_error":true,"subtype":"error_during_execution"}\n'
+    assert _scan_rate_limit(mixed_generic) is False
+    print("PASS: _scan_rate_limit bad line + generic error -> False")
+
     # _build_argv: bulk (no effort, no session)
     prefix = _claude_argv_prefix()
     argv = _build_argv("claude-sonnet-4-5", None, "")
@@ -135,6 +175,79 @@ def main() -> int:
         errors += 1
     except LLMError:
         print("PASS: _build_argv rejects resume=True without session_id")
+
+    # _invoke integration: monkeypatch _subprocess_util.run
+    _RL_STDOUT = '{"type":"rate_limit_event","limit_type":"requests"}\n'
+    _GENERIC_ERR_STDOUT = '{"type":"result","is_error":true,"subtype":"error_during_execution"}\n'
+    _GOOD_STDOUT = (
+        '{"type":"system","subtype":"init","session_id":"sid-xyz"}\n'
+        '{"type":"result","result":"All good","session_id":"sid-xyz"}\n'
+    )
+
+    _orig_run = _subprocess_util_mod.run
+
+    def _fake_rl(argv, **kwargs):
+        return _subprocess_mod.CompletedProcess(args=argv, returncode=1, stdout=_RL_STDOUT, stderr="rate limited")
+
+    def _fake_generic(argv, **kwargs):
+        return _subprocess_mod.CompletedProcess(args=argv, returncode=1, stdout=_GENERIC_ERR_STDOUT, stderr="crash")
+
+    def _fake_ok(argv, **kwargs):
+        return _subprocess_mod.CompletedProcess(args=argv, returncode=0, stdout=_GOOD_STDOUT, stderr="")
+
+    try:
+        # rate-limited exit + resume=False -> LLMRateLimitError
+        _subprocess_util_mod.run = _fake_rl
+        try:
+            run_bulk(prompt_text="x", model="m", session_id="abc", resume=False)
+            errors += 1
+        except LLMRateLimitError:
+            print("PASS: _invoke raises LLMRateLimitError on rate-limited exit (resume=False)")
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL: expected LLMRateLimitError, got {type(exc).__name__}: {exc}", file=sys.stderr)
+
+        # rate-limited exit + resume=True -> LLMRateLimitError (takes precedence over LLMSessionError)
+        _subprocess_util_mod.run = _fake_rl
+        try:
+            run_bulk(prompt_text="x", model="m", session_id="abc", resume=True)
+            errors += 1
+        except LLMRateLimitError:
+            print("PASS: _invoke raises LLMRateLimitError on rate-limited exit (resume=True)")
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL: expected LLMRateLimitError, got {type(exc).__name__}: {exc}", file=sys.stderr)
+
+        # generic error + resume=True -> LLMSessionError
+        _subprocess_util_mod.run = _fake_generic
+        try:
+            run_bulk(prompt_text="x", model="m", session_id="abc", resume=True)
+            errors += 1
+        except LLMSessionError:
+            print("PASS: _invoke raises LLMSessionError on generic error with resume=True")
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL: expected LLMSessionError, got {type(exc).__name__}: {exc}", file=sys.stderr)
+
+        # generic error + resume=False -> LLMError but NOT LLMSessionError
+        _subprocess_util_mod.run = _fake_generic
+        try:
+            run_bulk(prompt_text="x", model="m", session_id=None, resume=False)
+            errors += 1
+        except LLMSessionError:
+            errors += 1
+            print("FAIL: got LLMSessionError but expected plain LLMError", file=sys.stderr)
+        except LLMError:
+            print("PASS: _invoke raises plain LLMError (not LLMSessionError) on generic error with resume=False")
+
+        # zero exit -> (text, sid) tuple unchanged
+        _subprocess_util_mod.run = _fake_ok
+        result_tuple = run_bulk(prompt_text="x", model="m", session_id="sid-xyz", resume=False)
+        assert result_tuple == ("All good", "sid-xyz"), f"unexpected result: {result_tuple}"
+        print("PASS: _invoke zero-exit returns (text, sid) unchanged")
+
+    finally:
+        _subprocess_util_mod.run = _orig_run
 
     # run_implementer passes Skill in --allowedTools
     _FAKE_STDOUT = (

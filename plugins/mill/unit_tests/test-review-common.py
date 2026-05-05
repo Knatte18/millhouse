@@ -11,7 +11,7 @@ HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
 import _active  # noqa: E402
-from _paths import ActiveWorktreeNotFound, ActiveWorktreeSlugMismatch  # noqa: E402
+from _paths import ActiveWorktreeSlugMismatch  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -67,11 +67,14 @@ from _review_common import (  # noqa: E402
     ReviewError,
     _load_root_from_overview,
     aggregate_verdict,
+    build_deletes_section,
     build_manifest_section,
     build_reattached_section,
     build_tool_rule,
     bulk_files,
     compute_creates_union,
+    compute_deletes_union,
+    detect_resume_round,
     discover_round,
     find_active_slug,
     load_config,
@@ -500,6 +503,23 @@ def main() -> int:
         assert refs == ["a"], f"Got {refs}"
         print("PASS: parse_batch_refs backtick tokens win; trailing 'none' filtered")
 
+    # parse_batch_refs: Deletes: field extracted alongside Reads/Modifies/Creates
+    with tempfile.TemporaryDirectory() as tmpdir:
+        batch = Path(tmpdir) / "batch.md"
+        batch.write_text(
+            "- **Reads:** `src/a.py`\n"
+            "- **Modifies:** `src/b.py`\n"
+            "- **Creates:** `src/c.py`\n"
+            "- **Deletes:** `src/d.py`\n",
+            encoding="utf-8",
+        )
+        refs = parse_batch_refs(batch)
+        assert "src/a.py" in refs, f"Reads token missing: {refs}"
+        assert "src/b.py" in refs, f"Modifies token missing: {refs}"
+        assert "src/c.py" in refs, f"Creates token missing: {refs}"
+        assert "src/d.py" in refs, f"Deletes token missing: {refs}"
+        print("PASS: parse_batch_refs includes Deletes tokens alongside Reads/Modifies/Creates")
+
     # resolve_ref_paths: hit on disk
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp_dir = Path(tmpdir)
@@ -614,6 +634,68 @@ def main() -> int:
         assert result == [real_file], f"Got {result}"
         print("PASS: resolve_ref_paths 'None' string skipped silently")
 
+    # resolve_ref_paths: missing + in deletes_union -> silent suppress
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp_dir = Path(tmpdir)
+        result = resolve_ref_paths(
+            ["nonexistent.py"], tmp_dir, root=None,
+            deletes_union={"nonexistent.py"},
+        )
+        assert result == [], f"Got {result}"
+        print("PASS: resolve_ref_paths deletes_union suppresses missing path")
+
+    # resolve_ref_paths: missing + in both unions -> silent suppress
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp_dir = Path(tmpdir)
+        result = resolve_ref_paths(
+            ["nonexistent.py"], tmp_dir, root=None,
+            creates_union={"nonexistent.py"},
+            deletes_union={"nonexistent.py"},
+        )
+        assert result == [], f"Got {result}"
+        print("PASS: resolve_ref_paths missing + in both unions -> silent suppress")
+
+    # resolve_ref_paths: on-disk + in deletes_union -> resolved normally, included
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp_dir = Path(tmpdir)
+        real_file = tmp_dir / "real.py"
+        real_file.write_text("x")
+        result = resolve_ref_paths(
+            ["real.py"], tmp_dir, root=None,
+            deletes_union={"real.py"},
+        )
+        assert result == [real_file], f"Got {result}"
+        print("PASS: resolve_ref_paths on-disk + in deletes_union -> resolved and included")
+
+    # resolve_ref_paths: missing + in neither union -> ReviewError (existing behaviour preserved)
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp_dir = Path(tmpdir)
+        try:
+            resolve_ref_paths(
+                ["nonexistent.py"], tmp_dir, root=None,
+                deletes_union={"other.py"},
+            )
+            errors += 1
+            print("FAIL: expected ReviewError for missing path not in deletes_union", file=sys.stderr)
+        except ReviewError as e:
+            assert "referenced path not found" in str(e), f"Unexpected message: {e}"
+            print("PASS: resolve_ref_paths missing + not in deletes_union -> ReviewError")
+
+    # resolve_ref_paths: caller_label in error when deletes_union present but path missing
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp_dir = Path(tmpdir)
+        try:
+            resolve_ref_paths(
+                ["missing.py"], tmp_dir, root=None,
+                deletes_union={"other.py"},
+                caller_label="test_caller",
+            )
+            errors += 1
+            print("FAIL: expected ReviewError", file=sys.stderr)
+        except ReviewError as e:
+            assert str(e).startswith("[test_caller]"), f"Unexpected message: {e}"
+            print("PASS: resolve_ref_paths caller_label in error with deletes_union present")
+
     # compute_creates_union: empty plan dir returns empty set
     with tempfile.TemporaryDirectory() as tmpdir:
         result = compute_creates_union(Path(tmpdir) / "nonexistent")
@@ -682,6 +764,89 @@ def main() -> int:
         print("PASS: compute_creates_union 'None' (capital N) filtered")
 
     # ---------------------------------------------------------------------------
+    # compute_deletes_union
+    # ---------------------------------------------------------------------------
+
+    # empty plan dir returns empty set
+    with tempfile.TemporaryDirectory() as tmpdir:
+        result = compute_deletes_union(Path(tmpdir) / "nonexistent")
+        assert result == set(), f"Got {result}"
+        print("PASS: compute_deletes_union nonexistent plan_dir returns empty set")
+
+    # single batch single-line Deletes tokens
+    with tempfile.TemporaryDirectory() as tmpdir:
+        plan_dir = Path(tmpdir)
+        (plan_dir / "01-setup.md").write_text(
+            "- **Deletes:** `a`, `b`\n", encoding="utf-8"
+        )
+        result = compute_deletes_union(plan_dir)
+        assert result == {"a", "b"}, f"Got {result}"
+        print("PASS: compute_deletes_union inline Deletes returns set of tokens")
+
+    # multi-line bullet form
+    with tempfile.TemporaryDirectory() as tmpdir:
+        plan_dir = Path(tmpdir)
+        (plan_dir / "01-setup.md").write_text(
+            "- **Deletes:**\n"
+            "  - `a`\n"
+            "  - `b`\n",
+            encoding="utf-8",
+        )
+        result = compute_deletes_union(plan_dir)
+        assert result == {"a", "b"}, f"Got {result}"
+        print("PASS: compute_deletes_union multi-line bullet form returns tokens")
+
+    # 'none' sentinel filtered (case variants)
+    for sentinel in ("none", "None", "NONE"):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            plan_dir = Path(tmpdir)
+            (plan_dir / "01-setup.md").write_text(
+                f"- **Deletes:** {sentinel}\n", encoding="utf-8"
+            )
+            result = compute_deletes_union(plan_dir)
+            assert result == set(), f"Got {result} for sentinel {sentinel!r}"
+        print(f"PASS: compute_deletes_union '{sentinel}' sentinel filtered")
+
+    # two batches with overlapping deletes — de-duplicated
+    with tempfile.TemporaryDirectory() as tmpdir:
+        plan_dir = Path(tmpdir)
+        (plan_dir / "01-setup.md").write_text(
+            "- **Deletes:** `x.py`, `y.py`\n", encoding="utf-8"
+        )
+        (plan_dir / "02-wire.md").write_text(
+            "- **Deletes:** `y.py`, `z.py`\n", encoding="utf-8"
+        )
+        result = compute_deletes_union(plan_dir)
+        assert result == {"x.py", "y.py", "z.py"}, f"Got {result}"
+        print("PASS: compute_deletes_union two batches with overlap -> de-duplicated")
+
+    # Deletes: absent on a card contributes nothing; other cards in same batch do
+    with tempfile.TemporaryDirectory() as tmpdir:
+        plan_dir = Path(tmpdir)
+        (plan_dir / "01-setup.md").write_text(
+            "- **Reads:** `src/a.py`\n"
+            "- **Deletes:** `old.py`\n"
+            "- **Reads:** `src/b.py`\n",
+            encoding="utf-8",
+        )
+        result = compute_deletes_union(plan_dir)
+        assert result == {"old.py"}, f"Got {result}"
+        print("PASS: compute_deletes_union Deletes absent on some cards; present on others")
+
+    # 00-overview.md is skipped
+    with tempfile.TemporaryDirectory() as tmpdir:
+        plan_dir = Path(tmpdir)
+        (plan_dir / "00-overview.md").write_text(
+            "- **Deletes:** `overview-token`\n", encoding="utf-8"
+        )
+        (plan_dir / "01-setup.md").write_text(
+            "- **Deletes:** `real-token`\n", encoding="utf-8"
+        )
+        result = compute_deletes_union(plan_dir)
+        assert result == {"real-token"}, f"Got {result}"
+        print("PASS: compute_deletes_union 00-overview.md excluded")
+
+    # ---------------------------------------------------------------------------
     # build_manifest_section
     # ---------------------------------------------------------------------------
 
@@ -704,6 +869,40 @@ def main() -> int:
     # No trailing newline
     assert not result.endswith("\n"), f"Expected no trailing newline, got {result!r}"
     print("PASS: build_manifest_section no trailing newline")
+
+    # ---------------------------------------------------------------------------
+    # build_deletes_section
+    # ---------------------------------------------------------------------------
+
+    # Empty list -> empty string
+    result = build_deletes_section([])
+    assert result == "", f"Expected empty string, got {result!r}"
+    print("PASS: build_deletes_section empty list -> empty string")
+
+    # Single token
+    result = build_deletes_section(["old_module.py"])
+    assert result == "## Intentionally deleted (N=1)\n\n- old_module.py", f"Got {result!r}"
+    print("PASS: build_deletes_section single token -> heading + bullet")
+
+    # Multiple tokens preserve input order
+    result = build_deletes_section(["a.py", "b.py", "c.py"])
+    assert result.startswith("## Intentionally deleted (N=3)"), f"Wrong heading: {result!r}"
+    lines = result.split("\n")
+    assert lines[2] == "- a.py", f"Wrong first bullet: {lines[2]!r}"
+    assert lines[3] == "- b.py", f"Wrong second bullet: {lines[3]!r}"
+    assert lines[4] == "- c.py", f"Wrong third bullet: {lines[4]!r}"
+    print("PASS: build_deletes_section multiple tokens preserve input order")
+
+    # Bullets are exactly '- <token>' — no backticks added
+    result = build_deletes_section(["path/to/file.py"])
+    assert "- path/to/file.py" in result, f"Expected plain bullet, got {result!r}"
+    assert "`" not in result, f"No backticks should be added: {result!r}"
+    print("PASS: build_deletes_section bullets have no backticks added")
+
+    # No trailing newline
+    result = build_deletes_section(["x.py"])
+    assert not result.endswith("\n"), f"Expected no trailing newline, got {result!r}"
+    print("PASS: build_deletes_section no trailing newline")
 
     # ---------------------------------------------------------------------------
     # resolve_existing_paths
@@ -930,6 +1129,68 @@ def main() -> int:
     # Confirm the function is importable (not AttributeError); do not exercise behaviour
     assert callable(_load_root_from_overview), "_load_root_from_overview should be callable"
     print("PASS: _load_root_from_overview importable from _review_common")
+
+    # ---------------------------------------------------------------------------
+    # detect_resume_round
+    # ---------------------------------------------------------------------------
+
+    # reviews_dir does not exist -> None
+    result = detect_resume_round(Path("/tmp/__nx_detect_resume__"), "plan")
+    assert result is None, f"Got {result}"
+    print("PASS: detect_resume_round nonexistent dir -> None")
+
+    # no files -> None
+    with tempfile.TemporaryDirectory() as tmpdir:
+        result = detect_resume_round(Path(tmpdir), "plan")
+        assert result is None, f"Got {result}"
+        print("PASS: detect_resume_round empty dir -> None")
+
+    # per-batch round-1 files + holistic round-1 file -> None
+    with tempfile.TemporaryDirectory() as tmpdir:
+        reviews = Path(tmpdir)
+        (reviews / "20260418-001200-plan-review-01-setup-r1.md").write_text("x")
+        (reviews / "20260418-001300-plan-review-r1.md").write_text("x")
+        result = detect_resume_round(reviews, "plan")
+        assert result is None, f"Got {result}"
+        print("PASS: detect_resume_round per-batch r1 + holistic r1 -> None")
+
+    # per-batch round-1 files + no holistic round-1 -> 1
+    with tempfile.TemporaryDirectory() as tmpdir:
+        reviews = Path(tmpdir)
+        (reviews / "20260418-001200-plan-review-01-setup-r1.md").write_text("x")
+        (reviews / "20260418-001300-plan-review-02-wire-r1.md").write_text("x")
+        result = detect_resume_round(reviews, "plan")
+        assert result == 1, f"Got {result}"
+        print("PASS: detect_resume_round per-batch r1 + no holistic -> 1")
+
+    # per-batch rounds 1 and 2 + holistic round-1 + no holistic round-2 -> 2
+    with tempfile.TemporaryDirectory() as tmpdir:
+        reviews = Path(tmpdir)
+        (reviews / "20260418-001200-plan-review-01-setup-r1.md").write_text("x")
+        (reviews / "20260418-001300-plan-review-01-setup-r2.md").write_text("x")
+        (reviews / "20260418-001400-plan-review-r1.md").write_text("x")  # holistic r1
+        result = detect_resume_round(reviews, "plan")
+        assert result == 2, f"Got {result}"
+        print("PASS: detect_resume_round per-batch r1+r2, holistic r1 only -> 2")
+
+    # per-batch round 2 partial (some at r2, some at r1) + no holistic r2 -> 2
+    with tempfile.TemporaryDirectory() as tmpdir:
+        reviews = Path(tmpdir)
+        (reviews / "20260418-001200-plan-review-01-setup-r1.md").write_text("x")
+        (reviews / "20260418-001300-plan-review-01-setup-r2.md").write_text("x")
+        (reviews / "20260418-001400-plan-review-02-wire-r1.md").write_text("x")
+        # no holistic at any round
+        result = detect_resume_round(reviews, "plan")
+        assert result == 2, f"Got {result}"
+        print("PASS: detect_resume_round partial r2 batches, no holistic -> 2 (highest batch round)")
+
+    # type isolation: plan per-batch files don't affect code detect_resume_round
+    with tempfile.TemporaryDirectory() as tmpdir:
+        reviews = Path(tmpdir)
+        (reviews / "20260418-001200-plan-review-01-setup-r1.md").write_text("x")
+        result = detect_resume_round(reviews, "code")
+        assert result is None, f"Got {result}"
+        print("PASS: detect_resume_round type isolation: plan files ignored for code")
 
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)

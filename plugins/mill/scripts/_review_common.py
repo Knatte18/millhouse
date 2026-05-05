@@ -16,8 +16,10 @@ Public API:
     read_constraints_md()— read CONSTRAINTS.md, empty string if absent
     resolve_path()       — locate a path inside the active worktree from a config template
     discover_round()     — determine next review round number per (review_type, scope)
+    detect_resume_round() — return highest per-batch-only round (no holistic yet), or None
     bulk_files()         — concatenate file contents with FILE delimiters
     build_manifest_section() — return a `## Files included` markdown block listing every bulked file
+    build_deletes_section() — return a `## Intentionally deleted` markdown block listing deleted tokens
     parse_missing_context() — extract path strings from a `## Missing context` section in review text
     build_reattached_section() — return a `## Re-attached files` block with inlined file contents for NEED_CONTEXT retry
     build_tool_rule()    — mode-specific <TOOL_RULE> block (bulk / tool-use)
@@ -30,7 +32,8 @@ Public API:
     load_config()        — load wiki/config.yaml + optional config.local.yaml
     parse_batch_refs()   — extract Reads/Modifies/Creates paths from a batch file (case-insensitive none filter)
     compute_creates_union() — union of all Creates: tokens across every batch in a plan_dir
-    resolve_ref_paths()  — resolve raw ref strings against project_root; hard-fails on missing paths not in creates_union
+    compute_deletes_union() — union of all Deletes: tokens across every batch in a plan_dir
+    resolve_ref_paths()  — resolve raw ref strings against project_root; hard-fails on missing paths not in creates_union or deletes_union
     resolve_existing_paths() — resolve raw paths and return only those that already exist on disk (silent drop, no creates_union check)
     _load_root_from_overview() — read root: field from overview's fenced-yaml block
 """
@@ -227,17 +230,57 @@ def discover_round(reviews_dir: Path, review_type: str, scope: str) -> int:
     return max(found) + 1 if found else 1
 
 
+def detect_resume_round(reviews_dir: Path, review_type: str) -> int | None:
+    """Return the highest per-batch-only round for review_type, or None.
+
+    Returns the highest round number ``N`` such that at least one per-batch
+    review file exists for round ``N`` AND no holistic review file exists for
+    round ``N``. Returns ``None`` when no such round exists (either all rounds
+    have a holistic file, no per-batch files exist at all, or ``reviews_dir``
+    does not exist).
+
+    Uses RE_SIMPLE (checked first per convention) to identify holistic files
+    and RE_BATCH to identify per-batch files, both filtered by ``review_type``.
+
+    Consumed by ``_review_plan.run`` to detect a partially-complete run where
+    per-batch reviews are done but the holistic pass has not yet fired.
+    """
+    if not reviews_dir.exists():
+        return None
+
+    batch_rounds: set[int] = set()
+    holistic_rounds: set[int] = set()
+
+    for entry in reviews_dir.iterdir():
+        if not entry.is_file():
+            continue
+        name = entry.name
+        m_simple = RE_SIMPLE.match(name)
+        if m_simple:
+            if m_simple.group("type") == review_type:
+                holistic_rounds.add(int(m_simple.group("n")))
+            continue
+        m_batch = RE_BATCH.match(name)
+        if m_batch and m_batch.group("type") == review_type:
+            batch_rounds.add(int(m_batch.group("n")))
+
+    candidates = batch_rounds - holistic_rounds
+    if not candidates:
+        return None
+    return max(candidates)
+
+
 # Regex constants for parse_batch_refs.
 # Header line: - **Reads:** <inline>  (inline may be empty for multi-line bullet form).
 _RE_REFS_HEADER = re.compile(
-    r"^-\s*\*\*(Reads|Modifies|Creates):\*\*(?P<inline>.*)$"
+    r"^-\s*\*\*(Reads|Modifies|Creates|Deletes):\*\*(?P<inline>.*)$"
 )
 # Sub-bullet under a multi-line header (leading whitespace + dash).
 _RE_REFS_SUB = re.compile(r"^\s+-\s*(.+)$")
 
 
 def parse_batch_refs(batch_path: Path) -> list[str]:
-    """Extract raw path strings from a batch file's Reads/Modifies/Creates lines.
+    """Extract raw path strings from a batch file's Reads/Modifies/Creates/Deletes lines.
 
     Handles the single-line form (- **Reads:** `a`, `b`) and the multi-line
     bullet form (- **Reads:**\\n  - `a`\\n  - `b`). Filters tokens whose
@@ -325,12 +368,59 @@ def compute_creates_union(plan_dir: Path) -> set[str]:
     return creates
 
 
+def compute_deletes_union(plan_dir: Path) -> set[str]:
+    """Return the union of all Deletes: tokens across every batch in plan_dir.
+
+    Iterates every ``??-*.md`` file under ``plan_dir`` except
+    ``00-overview.md``, extracts only the ``Deletes:`` lines, and returns
+    a flat set of raw token strings (NOT resolved Paths). Filters tokens
+    whose lowercase form equals ``'none'`` (case-insensitive). Returns an
+    empty set if ``plan_dir`` doesn't exist or contains no batch files.
+    """
+    if not plan_dir.exists():
+        return set()
+    deletes: set[str] = set()
+    for batch_path in sorted(plan_dir.glob("??-*.md")):
+        if batch_path.name == "00-overview.md":
+            continue
+        text = batch_path.read_text(encoding="utf-8")
+        lines = text.splitlines()
+        i = 0
+        while i < len(lines):
+            m = _RE_REFS_HEADER.match(lines[i])
+            if m and m.group(1) == "Deletes":
+                inline = m.group("inline").strip()
+                if inline:
+                    backtick_tokens = re.findall(r"`([^`]+)`", inline)
+                    tokens = backtick_tokens if backtick_tokens else [
+                        t.strip() for t in inline.split(",") if t.strip()
+                    ]
+                else:
+                    tokens = []
+                    j = i + 1
+                    while j < len(lines):
+                        sm = _RE_REFS_SUB.match(lines[j])
+                        if not sm:
+                            break
+                        rest = sm.group(1).strip()
+                        bt = re.findall(r"`([^`]+)`", rest)
+                        if bt:
+                            tokens.extend(bt)
+                        j += 1
+                for t in tokens:
+                    if t.lower() != "none":
+                        deletes.add(t)
+            i += 1
+    return deletes
+
+
 def resolve_ref_paths(
     raw_paths: list[str],
     project_root: Path,
     root: str | None,
     *,
     creates_union: set[str] | None = None,
+    deletes_union: set[str] | None = None,
     wiki_root: Path | None = None,
     caller_label: str = "resolve_ref_paths",
 ) -> list[Path]:
@@ -346,16 +436,22 @@ def resolve_ref_paths(
             lines across all batches. A path not on disk but present in
             ``creates_union`` is silently skipped — the file will exist
             after the creating batch runs (#60).
+        deletes_union: Set of raw token strings extracted from ``Deletes:``
+            lines across all batches. A path not on disk but present in
+            ``deletes_union`` is silently skipped — the file has already
+            been deleted by a prior batch. Paths still on disk that appear
+            in ``deletes_union`` are resolved normally and included.
         wiki_root: When provided, raw paths starting with ``wiki/`` are
             resolved against ``wiki_root`` instead of ``project_root`` (#43).
         caller_label: Prefix used in ``ReviewError`` messages. Defaults to
             the function name.
 
     Raises ``ReviewError`` when a candidate path is not on disk AND not in
-    ``creates_union`` — hard-fail replaces the old silent-skip + warning
-    behaviour (#41).
+    either ``creates_union`` or ``deletes_union`` — hard-fail replaces the
+    old silent-skip + warning behaviour (#41).
     """
     creates = creates_union or set()
+    deletes = deletes_union or set()
     resolved: list[Path] = []
     for raw in raw_paths:
         # Defensive None/none filter — must run before any string operations.
@@ -376,8 +472,8 @@ def resolve_ref_paths(
         if candidate.exists():
             resolved.append(candidate)
             continue
-        # Suppression via creates_union.
-        if raw in creates:
+        # Suppression via creates_union or deletes_union.
+        if raw in creates or raw in deletes:
             continue
         # Hard-fail.
         raise ReviewError(
@@ -505,6 +601,27 @@ def build_manifest_section(file_paths: list[Path]) -> str:
     count = len(file_paths)
     bullets = "\n".join(f"- {p}" for p in file_paths)
     return f"## Files included (N={count})\n\n{bullets}"
+
+
+def build_deletes_section(deletes_tokens: list[str]) -> str:
+    """Return a `## Intentionally deleted` markdown block listing deleted tokens.
+
+    Output shape (no trailing newline):
+
+        ## Intentionally deleted (N=<count>)
+
+        - <token-1>
+        - <token-2>
+        ...
+
+    Empty list returns the empty string so callers can splice unconditionally.
+    Tokens are emitted as-is — no backtick wrapping is added by this helper.
+    """
+    if not deletes_tokens:
+        return ""
+    count = len(deletes_tokens)
+    bullets = "\n".join(f"- {t}" for t in deletes_tokens)
+    return f"## Intentionally deleted (N={count})\n\n{bullets}"
 
 
 _RE_MISSING_CONTEXT_BULLET = re.compile(r"^\s*-\s+`([^`]+)`")
