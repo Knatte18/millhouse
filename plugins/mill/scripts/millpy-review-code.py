@@ -55,6 +55,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     from _paths import resolve_wiki_path
+    from _review_cli import print_error
     from _review_common import ReviewError, find_active_slug, load_config
     from _review_code import run
 
@@ -88,7 +89,7 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(result.to_dict()))
         return 0
     except ReviewError as exc:
-        print(str(exc), file=sys.stderr)
+        print_error(exc)
         return 1
 
 
