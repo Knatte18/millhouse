@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing-subprocess-tree-kill
+phase: implementing-llm-rate-limit
 slug: review-subsystem-fixes
 branch: review-subsystem-fixes
 plan: plan
@@ -28,6 +28,8 @@ implementing  2026-05-05T06:24:54Z
 reviewing-content-helpers-r1  2026-05-05T06:37:36Z
 approved-content-helpers-no-review  2026-05-05T06:38:59Z
 implementing-subprocess-tree-kill  2026-05-05T06:39:18Z
+approved-subprocess-tree-kill-no-review  2026-05-05T06:43:21Z
+implementing-llm-rate-limit  2026-05-05T06:43:21Z
 ```
 
 ## Batches
@@ -41,12 +43,16 @@ batches:
     commit_sha: 248e880daeead971fcf476523d1fbb6a61e80532
     review_round: 1
   - name: subprocess-tree-kill
-    state: running
+    state: approved
     implementer_session: 2c48f0ef-5bf3-4725-a030-bdeba3249586
     start_sha: 8015b8f8cdd4aab1606b33261c56d50eb89bcb71
+    commit_sha: 6f00c902d90efbe974929b0fca817d6405b7d1b7
     review_round: 0
   - name: llm-rate-limit
-    state: pending
+    state: running
+    implementer_session: 81f1580c-55ff-4e10-8df6-3ea244992449
+    start_sha: 6f00c902d90efbe974929b0fca817d6405b7d1b7
+    review_round: 0
   - name: review-plan-integration
     state: pending
   - name: cli-error-prefix
