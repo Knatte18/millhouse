@@ -525,7 +525,7 @@ def run(
                             "error": f"resume retry failed: {exc}",
                             "session_id": None,
                         })
-                        # Skip the write_review_file + append below; retry failed.
+                        # error entry appended above; else branch writes the review file on success
                     else:
                         verdict = parse_verdict(raw)
                         # Second NEED_CONTEXT propagates to caller untouched.
