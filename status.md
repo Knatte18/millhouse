@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: fixing-mill-go-skill-rewrite-r1
+phase: reviewing-mill-go-skill-rewrite-r2
 slug: mill-go-fixes
 branch: mill-go-fixes
 plan: plan
@@ -37,6 +37,7 @@ reviewing-workflow-anti-patterns-r1  2026-05-04T18:48:08Z
 approved-workflow-anti-patterns  2026-05-04T18:49:19Z
 reviewing-mill-go-skill-rewrite-r1  2026-05-05T06:30:53Z
 fixing-mill-go-skill-rewrite-r1  2026-05-05T06:36:26Z
+reviewing-mill-go-skill-rewrite-r2  2026-05-05T06:40:19Z
 ```
 
 ## Batches
@@ -79,10 +80,10 @@ batches:
     review_round: 1
     review_file: reviews/20260504-184907-code-review-workflow-anti-patterns-r1.md
   - name: mill-go-skill-rewrite
-    state: fixing
+    state: reviewing
     implementer_session: adde49f9-c859-4e77-af1d-ac1c8017362e
     start_sha: 7803f40c3497f17639f7e944ecfadd4c3ea64839
-    commit_sha: 0adcf665e0ee174642ac37266be7d364759f4fa1
-    review_round: 1
+    commit_sha: 4c8305862c79c766dcb75be388686dc5cbef9eb0
+    review_round: 2
     review_file: reviews/20260505-063615-code-review-mill-go-skill-rewrite-r1.md
 ```
