@@ -16,7 +16,9 @@ Second: `codeguide-setup` supports `--sibling --from-url <url>` to clone an exis
 ## Scope
 
 **In:**
-- `plugins/codeguide/skills/codeguide-generate/SKILL.md` — add sibling placement rule + multi-project worked example to Step 9
+- `plugins/codeguide/skills/codeguide-generate/SKILL.md` —
+  - Step 1: switch from `resolve.py` to `resolve.py --json` so Step 9 has access to `mode` and `sibling_anchor`; also fetch `git rev-parse --show-toplevel` for relative-path computation
+  - Step 9: add sibling placement rule + multi-project worked example using the values from Step 1
 - `plugins/codeguide/skills/codeguide-setup/SKILL.md` — replace `--from-url <url>` with `--sibling <url>` (URL as direct argument); add `--branch <name>` flag with clone-or-orphan logic; update argument-hint and step 4
 
 **Out:**
@@ -30,9 +32,9 @@ Second: `codeguide-setup` supports `--sibling --from-url <url>` to clone an exis
 
 ### Sibling placement rule location
 
-- Decision: Add the rule inline in Step 9 of codeguide-generate SKILL.md ("Create docs for new project"), where docs are actually written.
-- Rationale: Most contextually relevant — an agent reading the steps encounters the rule exactly where it needs it. A separate section before the steps creates a reading split.
-- Rejected: New `## Placement` section before Steps (reading split); note in Step 1 (too early, writing happens later).
+- Decision: Add the rule inline in Step 9 of codeguide-generate SKILL.md ("Create docs for new project"), where docs are actually written. Step 1 is updated in tandem to expose the values Step 9 needs (`mode`, `sibling_anchor`, `git_toplevel`).
+- Rationale: Most contextually relevant — an agent reading the steps encounters the rule exactly where it needs it. A separate section before the steps creates a reading split. Step 1 carries the prerequisite resolution (matches codeguide-setup's Step 3 pattern).
+- Rejected: New `## Placement` section before Steps (reading split); rule in Step 1 only (writing happens later, easy to miss).
 
 ### Worked example scope
 
@@ -74,12 +76,22 @@ Second: `codeguide-setup` supports `--sibling --from-url <url>` to clone an exis
 
 **codeguide-generate SKILL.md** (`plugins/codeguide/skills/codeguide-generate/SKILL.md`):
 
+Step 1 currently reads:
+
+> Run `python ${CLAUDE_PLUGIN_ROOT}/scripts/resolve.py` to locate the nearest `_codeguide/` containing config.yaml.
+
+This returns only the path, with no information about mode or anchor — so Step 9 has nothing to base placement on. Update Step 1 to:
+
+> Run `python ${CLAUDE_PLUGIN_ROOT}/scripts/resolve.py --json` and parse `{mode, cg_root, sibling_anchor, found}`. Also fetch `git_toplevel` via `git rev-parse --show-toplevel`.
+
+(Same pattern that codeguide-setup Step 3 already uses.)
+
 Step 9 currently reads:
 
 > Create `_codeguide/` and `_codeguide/modules/`
 > Write `_codeguide/Overview.md` …
 
-No mention of sibling mode at all. The rule to add: in sibling mode, `_codeguide/` is created at `<sibling-anchor>/<rel-to-git-toplevel>/_codeguide/` — NOT at `<sibling-anchor>/_codeguide/` flat. `resolve.py`'s `_sibling_walk` already walks this structure: `anchor / rel / "_codeguide" / filename` for each level from cwd up to git-toplevel.
+No mention of sibling mode at all. The rule to add: when `mode == "sibling"`, place `_codeguide/` at `<sibling_anchor>/<project_path.relative_to(git_toplevel)>/_codeguide/` — NOT at `<sibling_anchor>/_codeguide/` flat. When `mode == "inline"`, behavior is unchanged (place at `<project_path>/_codeguide/`). `resolve.py`'s `_sibling_walk` already walks this same structure: `anchor / rel / "_codeguide" / filename`.
 
 Worked example to add:
 
@@ -135,7 +147,8 @@ If already exists: proceed as before; ignore --branch
 
 Both changes are SKILL.md prose — no executable code to test. Verification is manual/integration-level:
 
-- **Task A**: Run `/codeguide-generate` on a multi-project repo in sibling mode and confirm docs land at `<anchor>/<rel>/_codeguide/` not `<anchor>/_codeguide/modules/`. Check `resolve.py` output matches.
+- **Task A — Step 1**: Verify `resolve.py --json` output is parsed and `mode`/`sibling_anchor`/`git_toplevel` are bound for use in later steps.
+- **Task A — Step 9**: Run `/codeguide-generate` on a multi-project repo in sibling mode and confirm docs land at `<anchor>/<rel>/_codeguide/` not `<anchor>/_codeguide/modules/`. Inline mode regression: confirm docs still land at `<project>/_codeguide/`.
 - **Task B — clone case**: Run `/codeguide-setup --sibling <url> --branch <existing-branch>` and verify `<anchor>` is cloned on the right branch.
 - **Task B — orphan case**: Run `/codeguide-setup --sibling <url> --branch <new-branch>` and verify `<anchor>` is initialized with remote set and local branch checked out.
 - **Task B — no URL + --branch**: Verify agent reports the error message.
@@ -144,7 +157,7 @@ Both changes are SKILL.md prose — no executable code to test. Verification is 
 
 ## Q&A log
 
-- **Q:** Where in codeguide-generate SKILL.md should the placement rule go? **A:** Inline in Step 9 (where docs are created).
+- **Q:** Where in codeguide-generate SKILL.md should the placement rule go? **A:** Inline in Step 9 (where docs are created); Step 1 updated in tandem to expose `mode`/`sibling_anchor`/`git_toplevel`.
 - **Q:** Single or multi-project worked example? **A:** Multi-project — the mirroring is only non-obvious with multiple projects.
 - **Q:** Keep `--from-url` or replace with `--sibling <url>`? **A:** Replace — `--sibling <url>` is cleaner, no backward-compat concern.
 - **Q:** `--branch` without URL: error or ignore? **A:** Error with clear message.
