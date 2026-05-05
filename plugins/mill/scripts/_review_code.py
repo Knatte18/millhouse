@@ -36,11 +36,13 @@ from _review_common import (
     ReviewError,
     ReviewResult,
     _load_root_from_overview,
+    build_deletes_section,
     build_manifest_section,
     build_reattached_section,
     build_tool_rule,
     bulk_files,
     compute_creates_union,
+    compute_deletes_union,
     discover_round,
     load_reviewer,
     load_task_title,
@@ -102,6 +104,7 @@ def _build_artefact_section(
     batch_files: list[Path],
     source_files: list[Path],
     ancestors_on_disk: list[Path],
+    deletes_union: set[str],
 ) -> str:
     """Return the ``<ARTEFACT_SECTION>`` block for the prompt.
 
@@ -110,7 +113,8 @@ def _build_artefact_section(
     list the same files — only the delivery mechanism differs.
     ``ancestors_on_disk`` holds cross-batch creates that already exist on
     disk; they are appended to the bulk so the reviewer can verify
-    cross-batch contracts.
+    cross-batch contracts. ``deletes_union`` appends an
+    ``## Intentionally deleted`` section when non-empty.
     """
     all_bulked = [overview_path, *batch_files, *source_files, *ancestors_on_disk]
     manifest = build_manifest_section(all_bulked)
@@ -118,7 +122,7 @@ def _build_artefact_section(
     if reviewer_mode == "tool-use":
         batch_list = "\n".join(f"  - `{p}`" for p in batch_files) or "  (none)"
         read_list = "\n".join(f"- `{p}`" for p in [*source_files, *ancestors_on_disk]) or "(none)"
-        return (
+        body = (
             f"{manifest}\n\n"
             "## Plan + source files to review\n"
             f"- Overview: `{overview_path}`\n"
@@ -127,13 +131,17 @@ def _build_artefact_section(
             "source file listed below for full context (includes cross-batch "
             f"ancestor creates already on disk):\n{read_list}"
         )
+    else:
+        bulked = bulk_files(all_bulked)
+        body = (
+            f"{manifest}\n\n"
+            "## Plan + source content (overview + batch files + referenced source + ancestor creates)\n"
+            f"{bulked}"
+        )
 
-    bulked = bulk_files(all_bulked)
-    return (
-        f"{manifest}\n\n"
-        "## Plan + source content (overview + batch files + referenced source + ancestor creates)\n"
-        f"{bulked}"
-    )
+    if deletes_union:
+        body += "\n\n" + build_deletes_section(sorted(deletes_union))
+    return body
 
 
 def run(
@@ -183,9 +191,10 @@ def run(
         for ref in parse_batch_refs(bp):
             all_raw_refs[ref] = None
     creates_union = compute_creates_union(plan_dir)
+    deletes_union = compute_deletes_union(plan_dir)
     referenced = resolve_ref_paths(
         list(all_raw_refs.keys()), project_root, root,
-        creates_union=creates_union, wiki_root=wiki_root,
+        creates_union=creates_union, deletes_union=deletes_union, wiki_root=wiki_root,
     )
 
     # Deduplicate while preserving order across the two lists.
@@ -218,7 +227,8 @@ def run(
     template_name = "review-code-batch" if batch_name else "review-code-holistic"
     tool_rule = build_tool_rule(reviewer.MODE)
     artefact_section = _build_artefact_section(
-        reviewer.MODE, overview_path, batch_files, source_files, ancestors_on_disk
+        reviewer.MODE, overview_path, batch_files, source_files, ancestors_on_disk,
+        deletes_union,
     )
 
     prompt_kwargs = {
