@@ -175,9 +175,11 @@ After every batch in `order` has state `approved`, and only if `review.code.holi
 - **One task per worktree.** The builder lock enforces this at runtime. Do not attempt to relax it.
 - **Never guess when stuck.** Surface to the user with concrete options; don't invent a recovery.
 - **Review files are the ground truth.** Verdict parsing reads only the fenced yaml block; the `## Findings` body is the implementer's job to read, not yours.
+- **Helper signatures are documented inline.** Every helper this skill names has an explicit one-line signature in the section that calls it. Never Read or Grep the helper source — the signature is here, and any failure surfaces as an exception. (See `mill:workflow` for the project-wide rule.)
 
 ## Board discipline
 
-- Home.md writes (`[done]` flip at handoff) go through `_wiki.write_commit_push` WITH the shared lock held.
-- Per-task writes (`active/<slug>/status.md`, `active/<slug>/reviews/*`) go through `_wiki.write_commit_push` without the shared lock.
-- Phase transitions via `_status.append_phase`; batch-state mutations via `_status.set_batch_field`. Hand-editing either block is banned.
+- Status.md, reviews/<file>, and plan/<file> writes are committed on the **task branch** via `git -C <worktree> add ... && git -C <worktree> commit`. No push from per-card commits — mill-merge pushes the task branch at task end.
+- Home.md writes (the Handoff `[done]` flip) go through `_wiki.write_commit_push(..., slug=...)` inside a `with _wiki.wiki_lock(wiki_path, slug):` block. The wiki helpers acquire the lock internally; the context manager makes the read-modify-write atomic.
+- Phase transitions via `_status.append_phase`; batch-state mutations via `_status.set_batch_field`. Hand-editing either yaml block is banned.
+- The path-invariant rule from CLAUDE.md is load-bearing: working state never goes to the wiki — only Home.md / _Sidebar.md do.
