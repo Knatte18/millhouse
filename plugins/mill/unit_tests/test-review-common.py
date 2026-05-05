@@ -11,7 +11,7 @@ HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
 import _active  # noqa: E402
-from _paths import ActiveWorktreeNotFound, ActiveWorktreeSlugMismatch  # noqa: E402
+from _paths import ActiveWorktreeSlugMismatch  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -499,6 +499,23 @@ def main() -> int:
         # backtick tokens win; "none" is comma-fallback and filtered
         assert refs == ["a"], f"Got {refs}"
         print("PASS: parse_batch_refs backtick tokens win; trailing 'none' filtered")
+
+    # parse_batch_refs: Deletes: field extracted alongside Reads/Modifies/Creates
+    with tempfile.TemporaryDirectory() as tmpdir:
+        batch = Path(tmpdir) / "batch.md"
+        batch.write_text(
+            "- **Reads:** `src/a.py`\n"
+            "- **Modifies:** `src/b.py`\n"
+            "- **Creates:** `src/c.py`\n"
+            "- **Deletes:** `src/d.py`\n",
+            encoding="utf-8",
+        )
+        refs = parse_batch_refs(batch)
+        assert "src/a.py" in refs, f"Reads token missing: {refs}"
+        assert "src/b.py" in refs, f"Modifies token missing: {refs}"
+        assert "src/c.py" in refs, f"Creates token missing: {refs}"
+        assert "src/d.py" in refs, f"Deletes token missing: {refs}"
+        print("PASS: parse_batch_refs includes Deletes tokens alongside Reads/Modifies/Creates")
 
     # resolve_ref_paths: hit on disk
     with tempfile.TemporaryDirectory() as tmpdir:

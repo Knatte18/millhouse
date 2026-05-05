@@ -230,14 +230,14 @@ def discover_round(reviews_dir: Path, review_type: str, scope: str) -> int:
 # Regex constants for parse_batch_refs.
 # Header line: - **Reads:** <inline>  (inline may be empty for multi-line bullet form).
 _RE_REFS_HEADER = re.compile(
-    r"^-\s*\*\*(Reads|Modifies|Creates):\*\*(?P<inline>.*)$"
+    r"^-\s*\*\*(Reads|Modifies|Creates|Deletes):\*\*(?P<inline>.*)$"
 )
 # Sub-bullet under a multi-line header (leading whitespace + dash).
 _RE_REFS_SUB = re.compile(r"^\s+-\s*(.+)$")
 
 
 def parse_batch_refs(batch_path: Path) -> list[str]:
-    """Extract raw path strings from a batch file's Reads/Modifies/Creates lines.
+    """Extract raw path strings from a batch file's Reads/Modifies/Creates/Deletes lines.
 
     Handles the single-line form (- **Reads:** `a`, `b`) and the multi-line
     bullet form (- **Reads:**\\n  - `a`\\n  - `b`). Filters tokens whose
