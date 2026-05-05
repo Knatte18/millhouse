@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: reviewing-content-helpers-r1
 slug: review-subsystem-fixes
 branch: review-subsystem-fixes
 plan: plan
@@ -25,6 +25,7 @@ plan-review-r4  2026-05-04T17:58:16Z
 plan-fix-r4  2026-05-04T17:58:16Z
 planned  2026-05-04T18:45:46Z
 implementing  2026-05-05T06:24:54Z
+reviewing-content-helpers-r1  2026-05-05T06:37:36Z
 ```
 
 ## Batches
@@ -32,10 +33,11 @@ implementing  2026-05-05T06:24:54Z
 ```yaml
 batches:
   - name: content-helpers
-    state: running
+    state: reviewing
     implementer_session: 7e27e134-ffe6-4047-a90b-17a9b015cf6c
     start_sha: b97f23117afe64fce137f9ed6f133026213b136a
-    review_round: 0
+    commit_sha: 248e880daeead971fcf476523d1fbb6a61e80532
+    review_round: 1
   - name: subprocess-tree-kill
     state: pending
   - name: llm-rate-limit
