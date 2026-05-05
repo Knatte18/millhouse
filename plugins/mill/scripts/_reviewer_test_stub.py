@@ -6,6 +6,15 @@ pops the next tuple and returns it. The optional `prompt_observer`
 callback receives every prompt the backend sends, letting tests
 assert on prompt shape (manifest presence, re-attached section,
 etc).
+
+Public API:
+    seed()              — load response queue and clear captured-prompts log
+    set_prompt_observer() — attach callback fired per run call
+    captured_prompts()  — return all (prompt_text, kwargs) tuples captured
+    run()               — pop next seeded response; capture kwargs including timeout
+
+Tests that need to simulate LLMError monkey-patch `run`; the stub itself only
+handles the seeded-queue path.
 """
 from __future__ import annotations
 
@@ -59,8 +68,9 @@ def run(
     *,
     session_id: str | None = None,
     resume: bool = False,
+    timeout: int | None = None,
 ) -> tuple[str, str]:
-    kwargs = {"session_id": session_id, "resume": resume}
+    kwargs = {"session_id": session_id, "resume": resume, "timeout": timeout}
     with _lock:
         _prompts.append((prompt_text, kwargs))
         observer = _observer

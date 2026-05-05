@@ -374,7 +374,7 @@ def main() -> int:
             prompts = stub.captured_prompts()
             assert len(prompts) == 2, f"expected 2 captured prompts, got {len(prompts)}"
             _, retry_kwargs = prompts[1]
-            assert retry_kwargs == {"session_id": "sid-1", "resume": True}, (
+            assert retry_kwargs == {"session_id": "sid-1", "resume": True, "timeout": None}, (
                 f"retry kwargs wrong: {retry_kwargs}"
             )
             retry_text = prompts[1][0]
