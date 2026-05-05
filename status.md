@@ -77,5 +77,8 @@ batches:
     review_round: 1
     review_file: reviews/20260504-184907-code-review-workflow-anti-patterns-r1.md
   - name: mill-go-skill-rewrite
-    state: pending
+    state: running
+    implementer_session: adde49f9-c859-4e77-af1d-ac1c8017362e
+    start_sha: 7803f40c3497f17639f7e944ecfadd4c3ea64839
+    review_round: 0
 ```
