@@ -25,11 +25,13 @@ from _review_common import (
     ReviewResult,
     _load_root_from_overview,
     aggregate_verdict,
+    build_deletes_section,
     build_manifest_section,
     build_reattached_section,
     build_tool_rule,
     bulk_files,
     compute_creates_union,
+    compute_deletes_union,
     discover_round,
     load_reviewer,
     load_task_title,
@@ -110,6 +112,7 @@ def _review_one_batch(
     project_root: Path,
     root: str | None,
     creates_union: set[str],
+    deletes_union: set[str],
     wiki_root: Path,
     bulk_timeout: int | None,
 ) -> dict:
@@ -124,7 +127,8 @@ def _review_one_batch(
         raw_refs = parse_batch_refs(batch_path)
         reads = resolve_ref_paths(
             raw_refs, project_root, root,
-            creates_union=creates_union, wiki_root=wiki_root, caller_label="_review_plan",
+            creates_union=creates_union, deletes_union=deletes_union,
+            wiki_root=wiki_root, caller_label="_review_plan",
         )
 
         ancestors_on_disk = resolve_existing_paths(
@@ -159,6 +163,8 @@ def _review_one_batch(
                 f"## Plan content (overview + batch + Reads/Modifies/Creates files + cross-batch ancestor creates)\n"
                 f"{bulked}"
             )
+        if deletes_union:
+            artefact_section += "\n\n" + build_deletes_section(sorted(deletes_union))
 
         prompt_text = render_prompt(
             "review-plan-batch",
@@ -299,6 +305,7 @@ def run(
 
     root = _load_root_from_overview(overview_path)
     creates_union = compute_creates_union(plan_dir)
+    deletes_union = compute_deletes_union(plan_dir)
 
     # 3. Load reviewers (accept bulk or tool-use)
     batch_reviewer_name = cfg["review"]["plan"]["batch"]
@@ -350,6 +357,7 @@ def run(
                         project_root,
                         root,
                         creates_union,
+                        deletes_union,
                         wiki_root,
                         bulk_timeout,
                     )
@@ -382,7 +390,8 @@ def run(
                 all_raw_refs[ref] = None
         all_reads = resolve_ref_paths(
             list(all_raw_refs.keys()), project_root, root,
-            creates_union=creates_union, wiki_root=wiki_root, caller_label="_review_plan",
+            creates_union=creates_union, deletes_union=deletes_union,
+            wiki_root=wiki_root, caller_label="_review_plan",
         )
 
         all_creates_on_disk = resolve_existing_paths(
@@ -416,6 +425,8 @@ def run(
                 f"## Plan content (overview + all batches + referenced files + cross-batch ancestor creates)\n"
                 f"{bulked_all}"
             )
+        if deletes_union:
+            artefact_section += "\n\n" + build_deletes_section(sorted(deletes_union))
 
         prompt_text = render_prompt(
             "review-plan-holistic",
