@@ -32,6 +32,7 @@ from _review_common import (
     bulk_files,
     compute_creates_union,
     compute_deletes_union,
+    detect_resume_round,
     discover_round,
     load_reviewer,
     load_task_title,
@@ -322,57 +323,95 @@ def run(
 
     reviews: list[dict] = []
 
+    resume_round = detect_resume_round(reviews_dir, "plan")
+
     # 4. Per-batch parallel section (skipped when holistic_only=True)
     if not holistic_only:
-        # Skip-approved scan (before per-batch block; uses full batch_files for order ref)
-        approved_carry = _scan_approved_batches(reviews_dir)
-        batch_files_to_review = [b for b in batch_files if b.stem not in approved_carry]
-        if approved_carry:
+        if resume_round is not None:
+            # Mid-round resume: per-batch files for this round already exist on disk;
+            # load them directly and fall through to the holistic.
+            _disk_reviews: list[dict] = []
+            if reviews_dir.exists():
+                for _entry in reviews_dir.iterdir():
+                    if not _entry.is_file():
+                        continue
+                    _m_simple = RE_SIMPLE.match(_entry.name)
+                    if _m_simple:
+                        continue
+                    _m_batch = RE_BATCH.match(_entry.name)
+                    if (
+                        _m_batch
+                        and _m_batch.group("type") == "plan"
+                        and int(_m_batch.group("n")) == resume_round
+                    ):
+                        _batch_stem = _m_batch.group("batch")
+                        _file_text = _entry.read_text(encoding="utf-8")
+                        try:
+                            _parsed_verdict = parse_verdict(_file_text)
+                        except ReviewError:
+                            _parsed_verdict = "ERROR"
+                        _parsed_blocking = parse_blocking_count(_file_text, severity="BLOCKING")
+                        _disk_reviews.append({
+                            "scope": _batch_stem,
+                            "round": resume_round,
+                            "verdict": _parsed_verdict,
+                            "blocking_count": _parsed_blocking,
+                            "file": str(_entry),
+                            "session_id": None,
+                        })
             print(
-                f"[_review_plan] skipping {len(approved_carry)} already-approved batch(es): "
-                f"{sorted(approved_carry.keys())}",
+                f"[_review_plan] resuming round {resume_round} from {len(_disk_reviews)} "
+                f"on-disk per-batch files; firing holistic only",
                 file=sys.stderr,
             )
-    else:
-        approved_carry = {}
-        batch_files_to_review = []
+            reviews.extend(_disk_reviews)
+        else:
+            # Normal path: skip-approved scan + ThreadPoolExecutor.
+            approved_carry = _scan_approved_batches(reviews_dir)
+            batch_files_to_review = [b for b in batch_files if b.stem not in approved_carry]
+            if approved_carry:
+                print(
+                    f"[_review_plan] skipping {len(approved_carry)} already-approved batch(es): "
+                    f"{sorted(approved_carry.keys())}",
+                    file=sys.stderr,
+                )
 
-    if not holistic_only and batch_files:
-        order = {b.stem: i for i, b in enumerate(batch_files)}
+            if batch_files:
+                order = {b.stem: i for i, b in enumerate(batch_files)}
 
-        if batch_files_to_review:
-            futures_map: dict = {}
-            with ThreadPoolExecutor(max_workers=len(batch_files_to_review)) as ex:
-                for batch_path in batch_files_to_review:
-                    future = ex.submit(
-                        _review_one_batch,
-                        batch_path,
-                        overview_path,
-                        reviews_dir,
-                        max_rounds,
-                        task_title,
-                        constraints,
-                        batch_reviewer_name,
-                        batch_reviewer,
-                        project_root,
-                        root,
-                        creates_union,
-                        deletes_union,
-                        wiki_root,
-                        bulk_timeout,
-                    )
-                    futures_map[future] = batch_path
+                if batch_files_to_review:
+                    futures_map: dict = {}
+                    with ThreadPoolExecutor(max_workers=len(batch_files_to_review)) as ex:
+                        for batch_path in batch_files_to_review:
+                            future = ex.submit(
+                                _review_one_batch,
+                                batch_path,
+                                overview_path,
+                                reviews_dir,
+                                max_rounds,
+                                task_title,
+                                constraints,
+                                batch_reviewer_name,
+                                batch_reviewer,
+                                project_root,
+                                root,
+                                creates_union,
+                                deletes_union,
+                                wiki_root,
+                                bulk_timeout,
+                            )
+                            futures_map[future] = batch_path
 
-                for future in as_completed(futures_map):
-                    entry = future.result()
+                        for future in as_completed(futures_map):
+                            entry = future.result()
+                            reviews.append(entry)
+
+                # Append carryforward entries for already-approved batches
+                for entry in approved_carry.values():
                     reviews.append(entry)
 
-        # Append carryforward entries for already-approved batches
-        for entry in approved_carry.values():
-            reviews.append(entry)
-
-        # Re-sort reviews to match batch file ordering (futures complete out-of-order)
-        reviews.sort(key=lambda r: order.get(r["scope"], 999))
+                # Re-sort reviews to match batch file ordering (futures complete out-of-order)
+                reviews.sort(key=lambda r: order.get(r["scope"], 999))
 
     # 5. Holistic (if not skipped by config or no_holistic flag)
     if holistic_reviewer is not None and not no_holistic:

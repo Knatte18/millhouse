@@ -218,7 +218,9 @@ def main() -> int:
 
     # ------------------------------------------------------------------
     # Test 2 — partial re-invocation (only alpha-r1 file pre-exists)
-    # alpha must be r2; beta/gamma/holistic must each be r1.
+    # alpha must be r2; beta/gamma must be r1; holistic must be r2.
+    # A holistic-r1 file is also pre-created so detect_resume_round
+    # returns None (completed round, not interrupted mid-round).
     # ------------------------------------------------------------------
     with tempfile.TemporaryDirectory() as tmpdir:
         batch_specs = [
@@ -230,17 +232,21 @@ def main() -> int:
         orig_dir = os.getcwd()
         os.chdir(project_root)
         try:
-            # Pre-create an alpha-r1 review file inside the worktree
+            # Pre-create alpha-r1 (malformed) and holistic-r1 to simulate a
+            # completed round where alpha's result was written but was garbled.
             reviews_dir = project_root / "reviews"
             reviews_dir.mkdir(parents=True)
             (reviews_dir / "20260418-000000-plan-review-01-alpha-r1.md").write_text(
                 "# stub r1 review", encoding="utf-8"
             )
+            (reviews_dir / "20260418-000001-plan-review-r1.md").write_text(
+                APPROVE_TEXT, encoding="utf-8"
+            )
 
             _seed_approve(4)
             r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root)
             assert r.verdict == "APPROVE"
-            # alpha should be r2; others r1
+            # alpha should be r2; beta/gamma r1; holistic r2 (prior holistic was r1)
             rv_alpha = next(rv for rv in r.reviews if rv["scope"] == "01-alpha")
             rv_beta  = next(rv for rv in r.reviews if rv["scope"] == "02-beta")
             rv_gamma = next(rv for rv in r.reviews if rv["scope"] == "03-gamma")
@@ -254,10 +260,10 @@ def main() -> int:
             assert "plan-review-03-gamma-r1" in Path(rv_gamma["file"]).name, (
                 f"gamma should be r1, got {Path(rv_gamma['file']).name}"
             )
-            assert "plan-review-r1" in Path(rv_hol["file"]).name, (
-                f"holistic should be r1, got {Path(rv_hol['file']).name}"
+            assert "plan-review-r2" in Path(rv_hol["file"]).name, (
+                f"holistic should be r2, got {Path(rv_hol['file']).name}"
             )
-            print("PASS test2: partial re-invocation — alpha r2, others r1 (independent per-scope)")
+            print("PASS test2: partial re-invocation — alpha r2, beta/gamma r1, holistic r2 (independent per-scope)")
         except AssertionError as exc:
             errors += 1
             print(f"FAIL test2: {exc}", file=sys.stderr)
@@ -513,6 +519,10 @@ def main() -> int:
             (reviews_dir / "20260429-000003-plan-review-03-c-r1.md").write_text(
                 APPROVE_TEXT, encoding="utf-8"
             )
+            # holistic-r1: marks round 1 as complete so detect_resume_round returns None
+            (reviews_dir / "20260429-000004-plan-review-r1.md").write_text(
+                APPROVE_TEXT, encoding="utf-8"
+            )
 
             # Stub: 1 for 02-b + 1 for holistic = 2 responses
             stub.seed([(APPROVE_TEXT, "sid-fresh-b"), (APPROVE_TEXT, "sid-fresh-hol")])
@@ -622,6 +632,10 @@ def main() -> int:
             # 01-a has malformed content — no yaml block
             (reviews_dir / "20260429-000001-plan-review-01-a-r1.md").write_text(
                 "not a yaml block at all", encoding="utf-8"
+            )
+            # holistic-r1: marks round 1 as complete so detect_resume_round returns None
+            (reviews_dir / "20260429-000002-plan-review-r1.md").write_text(
+                APPROVE_TEXT, encoding="utf-8"
             )
 
             # All four scopes fire: 01-a, 02-b, 03-c, holistic
