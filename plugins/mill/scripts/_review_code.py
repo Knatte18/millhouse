@@ -238,8 +238,19 @@ def run(
     try:
         raw, session_id = reviewer.run(prompt_text)
     except LLMError as exc:
-        # Single sub-review → total failure
-        raise ReviewError(f"Code reviewer failed: {exc}") from exc
+        return ReviewResult(
+            type="code",
+            round=round_n,
+            verdict="REQUEST_CHANGES",
+            blocking_count=0,
+            reviews=[{
+                "scope": scope_label,
+                "verdict": "ERROR",
+                "file": None,
+                "error": str(exc),
+                "session_id": None,
+            }],
+        )
 
     verdict = parse_verdict(raw)
 
@@ -265,7 +276,19 @@ def run(
                     retry_prompt, session_id=session_id, resume=True
                 )
             except LLMError as exc:
-                raise ReviewError(f"Code reviewer failed on resume: {exc}") from exc
+                return ReviewResult(
+                    type="code",
+                    round=round_n,
+                    verdict="REQUEST_CHANGES",
+                    blocking_count=0,
+                    reviews=[{
+                        "scope": scope_label,
+                        "verdict": "ERROR",
+                        "file": None,
+                        "error": f"resume retry failed: {exc}",
+                        "session_id": None,
+                    }],
+                )
             verdict = parse_verdict(raw)
             # Second NEED_CONTEXT propagates to caller untouched.
 
