@@ -18,6 +18,7 @@ Public API:
     discover_round()     — determine next review round number per (review_type, scope)
     bulk_files()         — concatenate file contents with FILE delimiters
     build_manifest_section() — return a `## Files included` markdown block listing every bulked file
+    build_deletes_section() — return a `## Intentionally deleted` markdown block listing deleted tokens
     parse_missing_context() — extract path strings from a `## Missing context` section in review text
     build_reattached_section() — return a `## Re-attached files` block with inlined file contents for NEED_CONTEXT retry
     build_tool_rule()    — mode-specific <TOOL_RULE> block (bulk / tool-use)
@@ -559,6 +560,27 @@ def build_manifest_section(file_paths: list[Path]) -> str:
     count = len(file_paths)
     bullets = "\n".join(f"- {p}" for p in file_paths)
     return f"## Files included (N={count})\n\n{bullets}"
+
+
+def build_deletes_section(deletes_tokens: list[str]) -> str:
+    """Return a `## Intentionally deleted` markdown block listing deleted tokens.
+
+    Output shape (no trailing newline):
+
+        ## Intentionally deleted (N=<count>)
+
+        - <token-1>
+        - <token-2>
+        ...
+
+    Empty list returns the empty string so callers can splice unconditionally.
+    Tokens are emitted as-is — no backtick wrapping is added by this helper.
+    """
+    if not deletes_tokens:
+        return ""
+    count = len(deletes_tokens)
+    bullets = "\n".join(f"- {t}" for t in deletes_tokens)
+    return f"## Intentionally deleted (N={count})\n\n{bullets}"
 
 
 _RE_MISSING_CONTEXT_BULLET = re.compile(r"^\s*-\s+`([^`]+)`")

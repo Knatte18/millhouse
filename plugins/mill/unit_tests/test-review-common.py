@@ -67,6 +67,7 @@ from _review_common import (  # noqa: E402
     ReviewError,
     _load_root_from_overview,
     aggregate_verdict,
+    build_deletes_section,
     build_manifest_section,
     build_reattached_section,
     build_tool_rule,
@@ -867,6 +868,40 @@ def main() -> int:
     # No trailing newline
     assert not result.endswith("\n"), f"Expected no trailing newline, got {result!r}"
     print("PASS: build_manifest_section no trailing newline")
+
+    # ---------------------------------------------------------------------------
+    # build_deletes_section
+    # ---------------------------------------------------------------------------
+
+    # Empty list -> empty string
+    result = build_deletes_section([])
+    assert result == "", f"Expected empty string, got {result!r}"
+    print("PASS: build_deletes_section empty list -> empty string")
+
+    # Single token
+    result = build_deletes_section(["old_module.py"])
+    assert result == "## Intentionally deleted (N=1)\n\n- old_module.py", f"Got {result!r}"
+    print("PASS: build_deletes_section single token -> heading + bullet")
+
+    # Multiple tokens preserve input order
+    result = build_deletes_section(["a.py", "b.py", "c.py"])
+    assert result.startswith("## Intentionally deleted (N=3)"), f"Wrong heading: {result!r}"
+    lines = result.split("\n")
+    assert lines[2] == "- a.py", f"Wrong first bullet: {lines[2]!r}"
+    assert lines[3] == "- b.py", f"Wrong second bullet: {lines[3]!r}"
+    assert lines[4] == "- c.py", f"Wrong third bullet: {lines[4]!r}"
+    print("PASS: build_deletes_section multiple tokens preserve input order")
+
+    # Bullets are exactly '- <token>' — no backticks added
+    result = build_deletes_section(["path/to/file.py"])
+    assert "- path/to/file.py" in result, f"Expected plain bullet, got {result!r}"
+    assert "`" not in result, f"No backticks should be added: {result!r}"
+    print("PASS: build_deletes_section bullets have no backticks added")
+
+    # No trailing newline
+    result = build_deletes_section(["x.py"])
+    assert not result.endswith("\n"), f"Expected no trailing newline, got {result!r}"
+    print("PASS: build_deletes_section no trailing newline")
 
     # ---------------------------------------------------------------------------
     # resolve_existing_paths
