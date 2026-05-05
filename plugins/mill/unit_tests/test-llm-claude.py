@@ -21,6 +21,7 @@ from _llm_claude import (  # noqa: E402
     _build_argv,
     _claude_argv_prefix,
     _parse_stream_json,
+    _scan_rate_limit,
     run_bulk,
     run_implementer,
     run_tool_use,
@@ -110,6 +111,35 @@ def main() -> int:
     text, sid = _parse_stream_json(mixed)
     assert text == "OK" and sid == "s1"
     print("PASS: _parse_stream_json skips bad JSON line")
+
+    # _scan_rate_limit: rate_limit_event type -> True
+    rl_event = '{"type":"rate_limit_event","limit_type":"requests"}\n'
+    assert _scan_rate_limit(rl_event) is True
+    print("PASS: _scan_rate_limit rate_limit_event -> True")
+
+    # _scan_rate_limit: result event with is_error + rate-limit subtype -> True
+    rl_result = '{"type":"result","is_error":true,"subtype":"rate_limited","session_id":"s1"}\n'
+    assert _scan_rate_limit(rl_result) is True
+    print("PASS: _scan_rate_limit result+is_error+rate_limited subtype -> True")
+
+    # _scan_rate_limit: result event with is_error + generic subtype + no rate-limit string -> False
+    generic_err = '{"type":"result","is_error":true,"subtype":"error_during_execution","session_id":"s1"}\n'
+    assert _scan_rate_limit(generic_err) is False
+    print("PASS: _scan_rate_limit result+is_error+generic subtype -> False")
+
+    # _scan_rate_limit: empty stdout -> False
+    assert _scan_rate_limit("") is False
+    print("PASS: _scan_rate_limit empty stdout -> False")
+
+    # _scan_rate_limit: unparseable line then rate_limit_event -> True (defensive parse)
+    mixed_rl = 'not-valid-json\n{"type":"rate_limit_event"}\n'
+    assert _scan_rate_limit(mixed_rl) is True
+    print("PASS: _scan_rate_limit bad line + rate_limit_event -> True")
+
+    # _scan_rate_limit: unparseable line then generic result error -> False
+    mixed_generic = 'not-valid-json\n{"type":"result","is_error":true,"subtype":"error_during_execution"}\n'
+    assert _scan_rate_limit(mixed_generic) is False
+    print("PASS: _scan_rate_limit bad line + generic error -> False")
 
     # _build_argv: bulk (no effort, no session)
     prefix = _claude_argv_prefix()

@@ -123,6 +123,37 @@ def _build_argv(
     return argv
 
 
+def _scan_rate_limit(stdout: str) -> bool:
+    """Return True if stdout contains a rate-limit/throttle signal.
+
+    Iterates stream-json lines defensively (skips un-parseable lines).
+    Returns True when any of:
+      (a) top-level type == "rate_limit_event"
+      (b) type == "result" AND is_error == True AND (subtype contains "rate"
+          case-insensitively, OR the lowercased JSON body contains "rate_limit")
+    Returns False for empty stdout, all-good results, or generic errors.
+    Does not raise.
+    """
+    for line in stdout.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            obj = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        event_type = obj.get("type", "")
+        if event_type == "rate_limit_event":
+            return True
+        if event_type == "result" and obj.get("is_error") is True:
+            subtype = str(obj.get("subtype", "")).lower()
+            if "rate" in subtype:
+                return True
+            if "rate_limit" in json.dumps(obj).lower():
+                return True
+    return False
+
+
 def _parse_stream_json(stdout: str) -> tuple[str, str | None]:
     """Parse claude's stream-json output.
 
