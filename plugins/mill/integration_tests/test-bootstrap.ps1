@@ -103,6 +103,26 @@ try {
     Invoke-Git '-C' $wiki '-c' 'user.email=test@mill' '-c' 'user.name=mill-test' 'commit' '-m' 'init _Sidebar.md' | Out-Null
     Invoke-Git '-C' $wiki 'push' | Out-Null
 
+    # Phase 4.7: PS1 shortcut wrappers
+    $shortcutScripts = @(
+        'millpy-add', 'millpy-list', 'millpy-status', 'millpy-inspect',
+        'millpy-spawn', 'millpy-claim', 'millpy-cleanup', 'millpy-abandon',
+        'millpy-color', 'millpy-terminal', 'millpy-vscode', 'millpy-worktree',
+        'millpy-fetch-issues'
+    )
+    foreach ($s in $shortcutScripts) {
+        Set-Content (Join-Path $hub ".millhouse/$s.py") "# legacy" -Encoding utf8
+    }
+    uv run --project $millRoot python -c "from pathlib import Path; import _shortcuts; _shortcuts.write_all(Path(r'$hub/.millhouse').resolve())" | Out-Null
+    foreach ($s in $shortcutScripts) {
+        if (-not (Test-Path (Join-Path $hub ".millhouse/$s.ps1"))) {
+            throw "Phase 4.7: missing PS1 wrapper for $s"
+        }
+        if (Test-Path (Join-Path $hub ".millhouse/$s.py")) {
+            throw "Phase 4.7: legacy .py wrapper not deleted for $s"
+        }
+    }
+
     # ------------------------------------------------------------------
     # 3. mill-add (plain — no proposal).
     # ------------------------------------------------------------------
