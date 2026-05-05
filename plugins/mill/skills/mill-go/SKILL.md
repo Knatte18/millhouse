@@ -9,16 +9,20 @@ You are the **Builder** — a lean orchestrator. You coordinate per-batch implem
 
 ## Entry
 
-1. `wiki.sync_pull()` on the wiki clone.
-2. Read the slug via `_active.read_slug(Path(".millhouse"))`. Missing → halt with "this worktree was not created by mill-spawn".
-3. Load config — deep-merge `<WIKI_PATH>/config.yaml` with `.millhouse/config.local.yaml`. Read these keys:
+1. Read the task slug: `slug = _active.read_slug(Path(".millhouse"))`. Missing → halt with "this worktree was not created by mill-spawn".
+   `signature: _active.read_slug(mill_dir: Path) -> str`
+2. Resolve the wiki path: `wiki_path = _paths.resolve_wiki_path(_paths.resolve_git_root(Path.cwd()))`. Sync the wiki clone: `_wiki.sync_pull(wiki_path, slug=slug)`.
+   `signature: _wiki.sync_pull(wiki_path: Path, *, slug: str) -> None`
+3. Load config — deep-merge `<wiki_path>/config.yaml` with `.millhouse/config.local.yaml` via `_review_common.load_config(wiki_path, Path(".millhouse"))`. Read these keys:
    - `pipeline.auto_merge` — whether to invoke mill-merge after success.
    - `pipeline.auto_report` — whether to auto-fire mill-self-report at end-of-work.
    - `review.code.rounds` — max review rounds per batch.
    - `review.code.self_fix_rounds` — passed to the implementer brief.
    - `review.code.holistic` — if true, run one holistic code review after all batches approve.
-4. Acquire the builder lock: `_builder_lock.acquire(mill_dir, slug)`. On `LockBusy`: surface the message and halt — a second mill-go will corrupt state.
-5. **Entry phase gate.** Read `<WIKI_PATH>/active/<slug>/status.md` phase:
+4. Acquire the builder lock: `_builder_lock.acquire(Path(".millhouse"), slug)`. On `LockBusy`: surface the message and halt — a second mill-go will corrupt state.
+   `signature: _builder_lock.acquire(mill_dir: Path, slug: str) -> LockInfo`
+5. **Entry phase gate.** Set `status_path = Path("status.md").resolve()` and inspect the phase via `_status.read_full(status_path)`.
+   `signature: _status.read_full(status_path: Path) -> dict`
 
    | phase | action |
    | --- | --- |
@@ -29,7 +33,10 @@ You are the **Builder** — a lean orchestrator. You coordinate per-batch implem
    | `done` | tell user the task is complete; suggest `/mill-merge` if auto-merge was off |
    | any other | surface + halt |
 
-6. Read the plan overview: `<WIKI_PATH>/active/<slug>/plan/00-overview.md`. Confirm `approved: true` in the frontmatter. Extract the Batch Index via `_plan_dag.extract_batch_index(overview_text)`, validate via `_plan_dag.validate(batches, sorted(p.name for p in plan_dir.glob("??-*.md") if p.name != "00-overview.md"))`, then compute `order = _plan_dag.topo_order(batches)`.
+6. Read the plan overview: `overview_path = Path("plan/00-overview.md").resolve()`. Confirm `approved: true` in the frontmatter. Extract the Batch Index via `_plan_dag.extract_batch_index(overview_text)`, validate via `_plan_dag.validate(batches, sorted(p.name for p in plan_dir.glob("??-*.md") if p.name != "00-overview.md"))`, then compute `order = _plan_dag.topo_order(batches)`.
+   `signature: _plan_dag.extract_batch_index(overview_text: str) -> list[dict]`
+   `signature: _plan_dag.validate(batches: list[dict], batch_files: list[str]) -> None`
+   `signature: _plan_dag.topo_order(batches: list[dict]) -> list[str]`
 
 ## Prepare
 
