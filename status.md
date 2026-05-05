@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: uv-wrapper-enforce
 branch: uv-wrapper-enforce
 plan: plan
@@ -21,4 +21,15 @@ plan-review-r1  2026-05-05T12:20:05Z
 plan-fix-r1  2026-05-05T12:20:05Z
 plan-review-r2  2026-05-05T12:23:38Z
 planned  2026-05-05T12:23:38Z
+implementing  2026-05-05T12:25:05Z
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: unit-and-docs
+    state: pending
+  - name: integration-test
+    state: pending
 ```
