@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-mill-plan-skill-step45-no-review
+phase: done
 slug: review-subsystem-fixes
 branch: review-subsystem-fixes
 plan: plan
@@ -41,6 +41,7 @@ implementing-review-code-integration  2026-05-05T07:21:47Z
 approved-review-code-integration-no-review  2026-05-05T07:30:14Z
 implementing-mill-plan-skill-step45  2026-05-05T07:30:14Z
 approved-mill-plan-skill-step45-no-review  2026-05-05T07:32:42Z
+done  2026-05-05T07:49:24Z
 ```
 
 ## Batches
