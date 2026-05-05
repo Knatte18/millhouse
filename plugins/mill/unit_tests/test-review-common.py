@@ -632,6 +632,68 @@ def main() -> int:
         assert result == [real_file], f"Got {result}"
         print("PASS: resolve_ref_paths 'None' string skipped silently")
 
+    # resolve_ref_paths: missing + in deletes_union -> silent suppress
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp_dir = Path(tmpdir)
+        result = resolve_ref_paths(
+            ["nonexistent.py"], tmp_dir, root=None,
+            deletes_union={"nonexistent.py"},
+        )
+        assert result == [], f"Got {result}"
+        print("PASS: resolve_ref_paths deletes_union suppresses missing path")
+
+    # resolve_ref_paths: missing + in both unions -> silent suppress
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp_dir = Path(tmpdir)
+        result = resolve_ref_paths(
+            ["nonexistent.py"], tmp_dir, root=None,
+            creates_union={"nonexistent.py"},
+            deletes_union={"nonexistent.py"},
+        )
+        assert result == [], f"Got {result}"
+        print("PASS: resolve_ref_paths missing + in both unions -> silent suppress")
+
+    # resolve_ref_paths: on-disk + in deletes_union -> resolved normally, included
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp_dir = Path(tmpdir)
+        real_file = tmp_dir / "real.py"
+        real_file.write_text("x")
+        result = resolve_ref_paths(
+            ["real.py"], tmp_dir, root=None,
+            deletes_union={"real.py"},
+        )
+        assert result == [real_file], f"Got {result}"
+        print("PASS: resolve_ref_paths on-disk + in deletes_union -> resolved and included")
+
+    # resolve_ref_paths: missing + in neither union -> ReviewError (existing behaviour preserved)
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp_dir = Path(tmpdir)
+        try:
+            resolve_ref_paths(
+                ["nonexistent.py"], tmp_dir, root=None,
+                deletes_union={"other.py"},
+            )
+            errors += 1
+            print("FAIL: expected ReviewError for missing path not in deletes_union", file=sys.stderr)
+        except ReviewError as e:
+            assert "referenced path not found" in str(e), f"Unexpected message: {e}"
+            print("PASS: resolve_ref_paths missing + not in deletes_union -> ReviewError")
+
+    # resolve_ref_paths: caller_label in error when deletes_union present but path missing
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp_dir = Path(tmpdir)
+        try:
+            resolve_ref_paths(
+                ["missing.py"], tmp_dir, root=None,
+                deletes_union={"other.py"},
+                caller_label="test_caller",
+            )
+            errors += 1
+            print("FAIL: expected ReviewError", file=sys.stderr)
+        except ReviewError as e:
+            assert str(e).startswith("[test_caller]"), f"Unexpected message: {e}"
+            print("PASS: resolve_ref_paths caller_label in error with deletes_union present")
+
     # compute_creates_union: empty plan dir returns empty set
     with tempfile.TemporaryDirectory() as tmpdir:
         result = compute_creates_union(Path(tmpdir) / "nonexistent")

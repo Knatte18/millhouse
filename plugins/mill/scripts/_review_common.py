@@ -378,6 +378,7 @@ def resolve_ref_paths(
     root: str | None,
     *,
     creates_union: set[str] | None = None,
+    deletes_union: set[str] | None = None,
     wiki_root: Path | None = None,
     caller_label: str = "resolve_ref_paths",
 ) -> list[Path]:
@@ -393,16 +394,22 @@ def resolve_ref_paths(
             lines across all batches. A path not on disk but present in
             ``creates_union`` is silently skipped — the file will exist
             after the creating batch runs (#60).
+        deletes_union: Set of raw token strings extracted from ``Deletes:``
+            lines across all batches. A path not on disk but present in
+            ``deletes_union`` is silently skipped — the file has already
+            been deleted by a prior batch. Paths still on disk that appear
+            in ``deletes_union`` are resolved normally and included.
         wiki_root: When provided, raw paths starting with ``wiki/`` are
             resolved against ``wiki_root`` instead of ``project_root`` (#43).
         caller_label: Prefix used in ``ReviewError`` messages. Defaults to
             the function name.
 
     Raises ``ReviewError`` when a candidate path is not on disk AND not in
-    ``creates_union`` — hard-fail replaces the old silent-skip + warning
-    behaviour (#41).
+    either ``creates_union`` or ``deletes_union`` — hard-fail replaces the
+    old silent-skip + warning behaviour (#41).
     """
     creates = creates_union or set()
+    deletes = deletes_union or set()
     resolved: list[Path] = []
     for raw in raw_paths:
         # Defensive None/none filter — must run before any string operations.
@@ -423,8 +430,8 @@ def resolve_ref_paths(
         if candidate.exists():
             resolved.append(candidate)
             continue
-        # Suppression via creates_union.
-        if raw in creates:
+        # Suppression via creates_union or deletes_union.
+        if raw in creates or raw in deletes:
             continue
         # Hard-fail.
         raise ReviewError(
