@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing-llm-rate-limit
+phase: implementing-review-plan-integration
 slug: review-subsystem-fixes
 branch: review-subsystem-fixes
 plan: plan
@@ -30,6 +30,8 @@ approved-content-helpers-no-review  2026-05-05T06:38:59Z
 implementing-subprocess-tree-kill  2026-05-05T06:39:18Z
 approved-subprocess-tree-kill-no-review  2026-05-05T06:43:21Z
 implementing-llm-rate-limit  2026-05-05T06:43:21Z
+approved-llm-rate-limit-no-review  2026-05-05T06:49:05Z
+implementing-review-plan-integration  2026-05-05T06:49:05Z
 ```
 
 ## Batches
@@ -49,12 +51,16 @@ batches:
     commit_sha: 6f00c902d90efbe974929b0fca817d6405b7d1b7
     review_round: 0
   - name: llm-rate-limit
-    state: running
+    state: approved
     implementer_session: 81f1580c-55ff-4e10-8df6-3ea244992449
     start_sha: 6f00c902d90efbe974929b0fca817d6405b7d1b7
+    commit_sha: 3ec98845bc090e78021e129b1f2e894a97d3b749
     review_round: 0
   - name: review-plan-integration
-    state: pending
+    state: running
+    implementer_session: 631d161a-0357-4f7d-a600-3ca9289436a8
+    start_sha: 3ec98845bc090e78021e129b1f2e894a97d3b749
+    review_round: 0
   - name: cli-error-prefix
     state: pending
   - name: plan-validate-deletes
