@@ -30,6 +30,7 @@ Public API:
     parse(text) -> list[Task]         parse Home.md body text.
     claim(text, slug) -> str          return text with slug set to [active].
     set_phase(text, slug, phase)      generalised claim; phase=None unmarks.
+    set_phase_at(path, slug, phase)   read-write wrapper for set_phase.
     append_entry(text, slug, title, body, has_proposal=False) -> str
                                       append a new entry at end-of-file.
     remove_entry(text, slug) -> str   remove the entry for slug.
@@ -38,6 +39,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from pathlib import Path
 
 _SLUG_RE = re.compile(r"^[a-z][a-z0-9-]*$")
 
@@ -160,6 +162,28 @@ def claim(text: str, slug: str) -> str:
         ValueError: slug not found (see ``set_phase``).
     """
     return set_phase(text, slug, "active")
+
+
+def set_phase_at(path: Path, slug: str, phase: str | None) -> None:
+    """
+    Read ``path``, call ``set_phase``, and write the result back to ``path``.
+
+    Convenience wrapper for callers that work with the file path rather
+    than holding the text in memory (e.g. the mill-go orchestrator that
+    flips a phase in one call instead of read → set_phase → write).
+
+    Args:
+        path: Path to Home.md (read and written in place).
+        slug: Task slug to modify.
+        phase: New phase marker, or ``None`` to clear.
+
+    Raises:
+        ValueError: ``phase`` is not valid, or no heading with that slug
+            exists (delegates to ``set_phase``).
+    """
+    text = path.read_text(encoding="utf-8")
+    result = set_phase(text, slug, phase)
+    path.write_text(result, encoding="utf-8")
 
 
 def append_entry(

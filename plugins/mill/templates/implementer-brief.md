@@ -18,7 +18,7 @@ Mill-go spawns this session with tools Read / Edit / Write / Bash /
 Grep / Glob. No TodoWrite, no WebFetch, no WebSearch. Write / Edit /
 Bash are the work tools; Read / Grep / Glob the exploration tools.
 
-Strip this HTML comment before the prompt is sent.
+(`_render.render` strips this comment automatically.)
 -->
 # Implementer Brief — <TASK_TITLE> / <BATCH_NAME>
 
@@ -66,11 +66,15 @@ Your last line of output (after all work and commits) MUST be a single JSON obje
 {"status":"success","commit_sha":"<last-HEAD-sha>","session_id":"<this-session-id>"}
 ```
 
+**`session_id` MUST be the exact UUID passed to you via the `--session-id` flag (you can read it from your own command-line arguments or echo it as given). Do not invent or paraphrase the value. mill-go uses this field to correlate the report with the spawned session.**
+
 or, when stuck:
 
 ```json
 {"status":"stuck","stuck_type":"transient|verify|logic","reason":"<one-line>","commit_sha":"<last-HEAD-sha>","session_id":"<this-session-id>"}
 ```
+
+**`session_id` MUST be the exact UUID passed to you via the `--session-id` flag (you can read it from your own command-line arguments or echo it as given). Do not invent or paraphrase the value. mill-go uses this field to correlate the report with the spawned session.**
 
 `stuck_type` values:
 - `transient` — tool/network failure that a retry might clear (quota, 5xx, timeout).

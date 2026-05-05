@@ -188,7 +188,7 @@ try {
 
     # ------------------------------------------------------------------
     # 7. Duplicate-slug rejection. Same 2>&1 / EAP=Stop trap as Invoke-Git:
-    # mill-add's stderr breadcrumbs (acquire_lock, release_lock, the
+    # mill-add's stderr breadcrumbs (_acquire/_release inside wiki_lock, the
     # SystemExit message) get promoted to ErrorRecords under EAP=Stop and
     # the first one throws before we can inspect $LASTEXITCODE. Drop EAP
     # to Continue for the duration of the negative test.

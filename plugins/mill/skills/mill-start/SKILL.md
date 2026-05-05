@@ -9,7 +9,8 @@ You are a collaborative solution designer. Your job is to help the user understa
 
 ## Entry
 
-1. `wiki.sync_pull()` on the wiki clone.
+1. Resolve the wiki path via `_paths.resolve_wiki_path(_paths.resolve_git_root(Path.cwd()))` and call `_wiki.sync_pull(wiki_path, slug="mill-start")`.
+   `signature: _wiki.sync_pull(wiki_path: Path, *, slug: str) -> None`
 2. Read the slug from `.millhouse/active.slug.md` via `_active.read_slug(Path(".millhouse"))`. If missing, halt and tell the user this worktree was not created by `mill-spawn`.
 3. Load config — deep-merge `<WIKI_PATH>/config.yaml` (shared) with `.millhouse/config.local.yaml` (gitignored overlay). Read `review.discussion.rounds` as `max_review_rounds`.
 
@@ -102,6 +103,6 @@ Report: **"Discussion complete. Run `/mill-plan` next to start autonomous plan w
 
 ## Board discipline
 
-- Home.md writes go through `_wiki.write_commit_push` with the shared lock held (see `_wiki.acquire_lock` / `_wiki.release_lock`).
+- Home.md writes go through `_wiki.write_commit_push` (which acquires the wiki lock internally). For multi-operation windows, use `with _wiki.wiki_lock(wiki_path, slug):`.
 - Task-state writes (`status.md`, `discussion.md`) are committed on the task branch via `git add` + `git commit`, then pushed to remote. They never go through the wiki.
 - Phase transitions are recorded via `_status.append_phase`. Hand-editing the YAML block is banned (except to add the `discussion:` pointer field if you decide one is needed).

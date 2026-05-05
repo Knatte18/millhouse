@@ -9,7 +9,8 @@ You are an autonomous planner running on Opus. Your job is to turn `discussion.m
 
 ## Entry
 
-1. `wiki.sync_pull()` on the wiki clone.
+1. Resolve the wiki path via `_paths.resolve_wiki_path(_paths.resolve_git_root(Path.cwd()))` and call `_wiki.sync_pull(wiki_path, slug="mill-plan")`.
+   `signature: _wiki.sync_pull(wiki_path: Path, *, slug: str) -> None`
 2. Read the slug via `_active.read_slug(Path(".millhouse"))`. Missing → halt with "this worktree was not created by mill-spawn".
 3. Load config — deep-merge `<WIKI_PATH>/config.yaml` with `.millhouse/config.local.yaml`. Read `review.plan.rounds` as `max_review_rounds`.
 4. Read `status.md` (worktree root) and inspect `phase:` + the plan state on disk (`plan/00-overview.md`). Decide entry branch:
@@ -90,7 +91,7 @@ Loop up to `max_review_rounds` rounds. Each round:
 
    Rows where the fix is "halt" are deliberate: those errors signal a structural planning bug that auto-fixing would mask. The two-pass cap fires for these too (the second pass will produce the same error and trigger halt).
 
-   After applying mechanical fixes for every error in the JSON, mill-plan commits the fix(es) to plan files via `_wiki.write_commit_push(wiki_path, [f"active/{slug}/plan/"], f"mill-plan: validator-fix pass for {slug}")` and re-runs the CLI. The commit message uses `validator-fix` to distinguish it from `plan-fix-r{N}` commits (which are LLM-fix-pass commits).
+   After applying mechanical fixes for every error in the JSON, mill-plan commits the fix(es) on the task branch: `git -C <worktree> add plan/ && git -C <worktree> commit -m "mill-plan: validator-fix pass for {slug}"` and re-runs the CLI. The commit message uses `validator-fix` to distinguish it from `plan-fix-r{N}` commits (which are LLM-fix-pass commits).
 
 2. Invoke the CLI as a subprocess:
 
@@ -114,7 +115,7 @@ Loop up to `max_review_rounds` rounds. Each round:
 
    The round counter is **not** consumed — the round produced no reviewable output. On the **second** consecutive ERROR-only round, halt with `BLOCKED: review ERROR-only round {N}` and surface each entry's `error` string to the user. Do NOT auto-retry beyond the second pass. The two-pass cap mirrors step 1.5's validator gate. *(Closes #84 — `verdict: ERROR` tracking was introduced so ERROR rounds never silently collapse into 4b's NIT path.)*
 
-4b. On `REQUEST_CHANGES` AND `blocking_count == 0` (the JSON's top-level field): the round produced only NITs. Apply NIT fixes per the `mill-receiving-review` Decision Tree (no different from a regular fix-pass), write the fixer report at `<WIKI_PATH>/active/<slug>/reviews/<YYYYMMDD-HHMMSS>-plan-fix-r<N>.md`, append `plan-fix-r{N}` to status timeline, set overview frontmatter `approved: true`, commit+push (single commit covering plan + reviews + status), break loop → Handoff. Do NOT run round N+1. Rationale: 0-BLOCKING means the planner and reviewer have converged; further rounds only churn cosmetic NITs.
+4b. On `REQUEST_CHANGES` AND `blocking_count == 0` (the JSON's top-level field): the round produced only NITs. Apply NIT fixes per the `mill-receiving-review` Decision Tree (no different from a regular fix-pass), write the fixer report at `reviews/<YYYYMMDD-HHMMSS>-plan-fix-r<N>.md` (worktree root), append `plan-fix-r{N}` to status timeline, set overview frontmatter `approved: true`, commit+push (single commit covering plan + reviews + status), break loop → Handoff. Do NOT run round N+1. Rationale: 0-BLOCKING means the planner and reviewer have converged; further rounds only churn cosmetic NITs.
 
 4c. On `REQUEST_CHANGES` AND `blocking_count > 0`:
    - `_status.append_phase(status_path, f"plan-review-r{N}", iso_ts)`.

@@ -153,10 +153,13 @@ def discover_active_worktrees(
     """
     Scan ``worktrees_dir`` for worktrees that carry an ``active.slug.md`` marker.
 
-    For each immediate subdirectory of ``worktrees_dir``, attempts to read
-    ``.millhouse/active.slug.md`` via ``_active.read_all``. Entries that are
-    missing or malformed are silently skipped. Results are returned in
-    filesystem iteration order (non-deterministic on most platforms).
+    For each immediate subdirectory of ``worktrees_dir``, uses a two-step
+    stub-aware read: first reads the stub at ``<entry>/.millhouse/config.local.yaml``
+    for ``hub_relative_path``; when present and non-root, reads the active marker
+    from ``<entry>/<hub_subpath>/.millhouse/`` instead. Entries whose stub is
+    malformed, or whose real ``.millhouse/`` is absent, are silently skipped.
+    Results are returned in filesystem iteration order (non-deterministic on most
+    platforms).
 
     Args:
         worktrees_dir: Container directory holding per-task worktrees.
@@ -166,15 +169,28 @@ def discover_active_worktrees(
         Empty list when ``worktrees_dir`` does not exist or contains no
         valid markers.
     """
+    import yaml
+
     results: list[tuple[Path, str, str]] = []
     if not worktrees_dir.exists():
         return results
     for entry in worktrees_dir.iterdir():
         if not entry.is_dir():
             continue
-        mill_dir = entry / ".millhouse"
+        hub_subpath = "."
+        stub_path = entry / ".millhouse" / "config.local.yaml"
+        if stub_path.exists():
+            try:
+                stub_data = yaml.safe_load(stub_path.read_text(encoding="utf-8")) or {}
+                hub_subpath = stub_data.get("hub_relative_path", ".")
+            except Exception:  # noqa: BLE001
+                hub_subpath = "."
+        hub_mill_dir = (
+            entry / ".millhouse" if hub_subpath == "."
+            else entry / hub_subpath / ".millhouse"
+        )
         try:
-            data = _active.read_all(mill_dir)
+            data = _active.read_all(hub_mill_dir)
         except _active.ActiveError:
             continue
         slug = data.get("slug", "")
@@ -445,8 +461,7 @@ def multi_select_groom_then_claim(
         RuntimeError: The merged task cannot be found after re-parsing (parse failure).
     """
     home_path = wiki_path / "Home.md"
-    _wiki.acquire_lock(wiki_path, merged_slug)
-    try:
+    with _wiki.wiki_lock(wiki_path, merged_slug):
         text = home_path.read_text(encoding="utf-8")
 
         # Remove all source entries first, then append the merged one.
@@ -472,9 +487,7 @@ def multi_select_groom_then_claim(
             f"task: groom-and-claim {len(source_slugs)}->1 "
             f"({merged_slug}; absorbed {absorbed})"
         )
-        _wiki.write_commit_push(wiki_path, files_to_commit, commit_msg)
-    finally:
-        _wiki.release_lock(wiki_path)
+        _wiki.write_commit_push(wiki_path, files_to_commit, commit_msg, slug=merged_slug)
 
     # Re-parse after commit to return an authoritative Task object.
     new_text = home_path.read_text(encoding="utf-8")
@@ -596,17 +609,14 @@ def claim_in_wiki(wiki_path: Path, slug: str) -> None:
         slug: Task slug to claim.
     """
     home_path = wiki_path / "Home.md"
-    _wiki.acquire_lock(wiki_path, slug)
-    try:
+    with _wiki.wiki_lock(wiki_path, slug):
         home_text = home_path.read_text(encoding="utf-8")
         claimed_text = _tasks_md.claim(home_text, slug)
         home_path.write_text(claimed_text, encoding="utf-8")
         _sidebar.regenerate(wiki_path)
         _wiki.write_commit_push(
-            wiki_path, ["Home.md", "_Sidebar.md"], f"task: claim {slug}"
+            wiki_path, ["Home.md", "_Sidebar.md"], f"task: claim {slug}", slug=slug
         )
-    finally:
-        _wiki.release_lock(wiki_path)
 
 
 def capture_parent_branch(git_root: Path) -> str:

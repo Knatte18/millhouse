@@ -29,7 +29,15 @@ Use the appropriate skill based on the current activity:
 
 ## Wiki mutations
 
-Wiki edits (`Home.md`, `_Sidebar.md`, `status.md`, per-task files under `active/<slug>/...`) must go through `_wiki.write_commit_push`. Hold `_wiki.acquire_lock` only for shared wiki files (`Home.md` and `_Sidebar.md`); per-task files don't need the lock because each task has a single writer. Never edit wiki files via raw `Edit`/`Write` — that bypasses the commit+push and the lock, leaving the wiki out of sync across machines.
+Wiki edits go through `_wiki.write_commit_push(wiki_path, paths, msg, slug=...)` (which acquires the wiki lock internally). For multi-operation read-modify-write windows (e.g. read Home.md → flip a phase → write back), wrap the whole sequence in `with _wiki.wiki_lock(wiki_path, slug):` — the inner `write_commit_push`'s lock acquire becomes a no-op via the held-lock counter. Never edit wiki files via raw `Edit` / `Write` — that bypasses the commit + push and the lock, leaving the wiki out of sync across machines. Per-task working state (`status.md`, `discussion.md`, `plan/`, `reviews/`) is NOT in the wiki — it lives at the worktree root on the task branch. Only `Home.md` and `_Sidebar.md` belong in the wiki.
+
+---
+
+## Anti-patterns
+
+1. **Don't Read or Grep helper internals.** When a SKILL.md names a helper to call, call it. Signatures are documented in the calling SKILL.md (mill-go's Principles section makes this explicit). If a helper fails, handle the exception then. Reading a helper's source to predict failure wastes turns and inverts the API contract — that's why the helpers exist. *Reasons preserved from incidents #16, #81.*
+
+2. **Don't write wrapper scripts for orchestration loops the SKILL.md describes inline.** If the SKILL says "for each round N do X, Y, Z", execute X, Y, Z as separate tool calls per round. The user must be able to see and interrupt each round. A script that packages a *transactional* operation (e.g. one implementer-spawn step) is fine because the operation is a unit; a script that packages a *loop* is not, because the loop is the orchestrator's behavior. *Reason preserved from incident #19.*
 
 ---
 

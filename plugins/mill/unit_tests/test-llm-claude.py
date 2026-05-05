@@ -10,13 +10,13 @@ from __future__ import annotations
 import inspect
 import subprocess as _subprocess_mod
 import sys
+import unittest.mock as mock
 from pathlib import Path
 
 HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
 import _subprocess_util as _subprocess_util_mod  # noqa: E402
-
 from _llm_claude import (  # noqa: E402
     LLMError,
     LLMRateLimitError,
@@ -248,6 +248,34 @@ def main() -> int:
 
     finally:
         _subprocess_util_mod.run = _orig_run
+
+    # run_implementer passes Skill in --allowedTools
+    _FAKE_STDOUT = (
+        '{"type":"system","session_id":"fake-sid-123"}\n'
+        '{"type":"result","result":"done","session_id":"fake-sid-123"}\n'
+    )
+
+    class _FakeResult:
+        returncode = 0
+        stdout = _FAKE_STDOUT
+        stderr = ""
+
+    captured_argv: list[str] = []
+
+    def _fake_run(argv: list[str], **_kwargs: object) -> _FakeResult:
+        captured_argv.extend(argv)
+        return _FakeResult()
+
+    with mock.patch.object(_subprocess_util_mod, "run", _fake_run):
+        run_implementer("hello", model="claude-sonnet-4-5", session_id="fake-sid-123")
+
+    assert "--allowedTools" in captured_argv, "--allowedTools flag missing from argv"
+    tools_idx = captured_argv.index("--allowedTools")
+    tools_value = captured_argv[tools_idx + 1]
+    assert tools_value == "Read,Edit,Write,Bash,Grep,Glob,Skill", (
+        f"unexpected tools: {tools_value!r}"
+    )
+    print(f"PASS: run_implementer uses --allowedTools {tools_value}")
 
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)

@@ -2,12 +2,13 @@
 from __future__ import annotations
 
 import sys
+import tempfile
 from pathlib import Path
 
 HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
-from _tasks_md import append_entry, claim, parse, remove_entry, set_phase  # noqa: E402
+from _tasks_md import append_entry, claim, parse, remove_entry, set_phase, set_phase_at  # noqa: E402
 
 
 def main() -> int:
@@ -131,6 +132,71 @@ def main() -> int:
         slugs = [t.slug for t in parse(after_append)]
         assert "alpha" in slugs and "gamma" in slugs and "beta" in slugs
         print("PASS: remove-then-append round-trip")
+
+        # --- set_phase_at ---
+
+        home_text = (
+            "# Tasks\n\n"
+            "## My Task\n"
+            "[my-task]\n\n"
+            "Body.\n"
+        )
+
+        # (a) happy path: set_phase_at writes updated text back to path
+        with tempfile.NamedTemporaryFile(
+            "w", suffix=".md", delete=False, encoding="utf-8"
+        ) as tmp:
+            tmp.write(home_text)
+            tmp_path = Path(tmp.name)
+        try:
+            set_phase_at(tmp_path, "my-task", "done")
+            written = tmp_path.read_text(encoding="utf-8")
+            assert "[done]" in written, f"expected [done] in {written!r}"
+            assert parse(written)[0].phase == "done"
+            print("PASS: set_phase_at happy path writes [done] back to file")
+
+            # (d) round-trip with phase=None strips existing marker
+            set_phase_at(tmp_path, "my-task", None)
+            cleared = tmp_path.read_text(encoding="utf-8")
+            assert "[done]" not in cleared
+            assert parse(cleared)[0].phase is None
+            print("PASS: set_phase_at phase=None strips existing marker")
+        finally:
+            tmp_path.unlink()
+
+        # (b) unknown slug raises ValueError
+        with tempfile.NamedTemporaryFile(
+            "w", suffix=".md", delete=False, encoding="utf-8"
+        ) as tmp:
+            tmp.write(home_text)
+            tmp_path = Path(tmp.name)
+        try:
+            try:
+                set_phase_at(tmp_path, "no-such-slug", "done")
+            except ValueError as exc:
+                assert "no-such-slug" in str(exc)
+                print(f"PASS: set_phase_at raises ValueError for unknown slug ({exc})")
+            else:
+                raise AssertionError("Expected ValueError for unknown slug")
+        finally:
+            tmp_path.unlink()
+
+        # (c) invalid phase raises ValueError
+        with tempfile.NamedTemporaryFile(
+            "w", suffix=".md", delete=False, encoding="utf-8"
+        ) as tmp:
+            tmp.write(home_text)
+            tmp_path = Path(tmp.name)
+        try:
+            try:
+                set_phase_at(tmp_path, "my-task", "invalid-phase")
+            except ValueError as exc:
+                assert "invalid-phase" in str(exc) or "Invalid phase" in str(exc)
+                print(f"PASS: set_phase_at raises ValueError for invalid phase ({exc})")
+            else:
+                raise AssertionError("Expected ValueError for invalid phase")
+        finally:
+            tmp_path.unlink()
 
         print("All _tasks_md unit tests passed.")
         return 0

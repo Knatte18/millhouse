@@ -20,14 +20,13 @@ prevents half-rendered documents from reaching the wiki.
 
 Public API:
     render(template_path, values)
-        Read the template, substitute every ``<TOKEN>`` from ``values``,
-        return the rendered string. Raises ``KeyError`` on any
-        unresolved token.
+        Read the template, strip any leading ``<!-- ... -->`` comment,
+        substitute every ``<TOKEN>`` from ``values``, return the rendered
+        string. Raises ``KeyError`` on any unresolved token.
 """
 from __future__ import annotations
 
 import re
-import sys
 from pathlib import Path
 
 # Match uppercase-identifier tokens wrapped in angle brackets. The
@@ -36,15 +35,38 @@ from pathlib import Path
 _TOKEN_RE = re.compile(r"<([A-Z][A-Z0-9_]*)>")
 
 
+def _strip_leading_comment(text: str) -> str:
+    """Drop a leading ``<!-- ... -->`` block if one is present.
+
+    Only a comment that begins at the very start of the text (after
+    optional leading whitespace) is stripped. Comments mid-template are
+    left untouched. Returns ``text`` unchanged when no leading comment is
+    found.
+    """
+    stripped = text.lstrip()
+    if not stripped.startswith("<!--"):
+        return text
+    close = stripped.find("-->")
+    if close == -1:
+        return text
+    after = stripped[close + len("-->"):].lstrip("\r\n")
+    return after
+
+
 def render(template_path: Path, values: dict[str, str]) -> str:
     """
     Render a template by substituting ``<TOKEN>`` placeholders from ``values``.
 
-    The template file is read as UTF-8. Each ``<TOKEN>`` match is looked
-    up in ``values``; on a miss, the token name is recorded and the
-    original ``<TOKEN>`` text is left in place so the error message can
-    report every missing token in one pass (rather than failing on the
-    first and forcing the caller to iterate).
+    The template file is read as UTF-8. A leading ``<!-- ... -->`` comment
+    at the very start of the file is stripped automatically before token
+    substitution — tokens inside the leading comment are never checked
+    against ``values``. Mid-template comments are preserved verbatim.
+
+    Each ``<TOKEN>`` match in the remaining body is looked up in
+    ``values``; on a miss, the token name is recorded and the original
+    ``<TOKEN>`` text is left in place so the error message can report
+    every missing token in one pass (rather than failing on the first and
+    forcing the caller to iterate).
 
     Args:
         template_path: Path to the ``.md`` template file.
@@ -62,7 +84,7 @@ def render(template_path: Path, values: dict[str, str]) -> str:
     """
     # Read the template as UTF-8. Templates ship as part of the plugin
     # so encoding is controlled; we don't accept cp1252 fallbacks.
-    text = template_path.read_text(encoding="utf-8")
+    text = _strip_leading_comment(template_path.read_text(encoding="utf-8"))
 
     # Accumulate every missing token name so the error message can report
     # all of them at once. The regex callback cannot raise directly

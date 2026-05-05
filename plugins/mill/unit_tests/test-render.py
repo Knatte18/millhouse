@@ -38,6 +38,63 @@ def main() -> int:
         finally:
             tmp_path.unlink()
 
+        # (a) Leading comment is stripped before render.
+        with tempfile.NamedTemporaryFile("w", suffix=".md", delete=False, encoding="utf-8") as tmp:
+            tmp.write("<!-- doc comment -->\n# Hello <NAME>\n")
+            tmp_path = Path(tmp.name)
+        try:
+            out = render(tmp_path, {"NAME": "world"})
+            assert out == "# Hello world\n", f"unexpected: {out!r}"
+            assert "doc comment" not in out
+            print("PASS: render strips leading HTML comment before substitution")
+        finally:
+            tmp_path.unlink()
+
+        # (b) Mid-template comment is preserved verbatim.
+        with tempfile.NamedTemporaryFile("w", suffix=".md", delete=False, encoding="utf-8") as tmp:
+            tmp.write("# Hello\n<!-- inline -->\n<NAME>\n")
+            tmp_path = Path(tmp.name)
+        try:
+            out = render(tmp_path, {"NAME": "world"})
+            assert "<!-- inline -->" in out, f"mid-template comment missing: {out!r}"
+            assert "world" in out
+            print("PASS: render preserves mid-template comment verbatim")
+        finally:
+            tmp_path.unlink()
+
+        # (c) Template that is only a comment renders to empty string.
+        with tempfile.NamedTemporaryFile("w", suffix=".md", delete=False, encoding="utf-8") as tmp:
+            tmp.write("<!-- only a comment -->")
+            tmp_path = Path(tmp.name)
+        try:
+            out = render(tmp_path, {})
+            assert out == "", f"expected empty string, got {out!r}"
+            print("PASS: render returns empty string for comment-only template")
+        finally:
+            tmp_path.unlink()
+
+        # (d) Tokens inside leading comment are NOT substituted (no KeyError).
+        with tempfile.NamedTemporaryFile("w", suffix=".md", delete=False, encoding="utf-8") as tmp:
+            tmp.write("<!-- <MISSING_TOKEN> -->\n# Hello <NAME>\n")
+            tmp_path = Path(tmp.name)
+        try:
+            out = render(tmp_path, {"NAME": "world"})
+            assert out == "# Hello world\n", f"unexpected: {out!r}"
+            print("PASS: tokens inside leading comment are not checked (no KeyError)")
+        finally:
+            tmp_path.unlink()
+
+        # (e) Tokens after leading comment ARE substituted.
+        with tempfile.NamedTemporaryFile("w", suffix=".md", delete=False, encoding="utf-8") as tmp:
+            tmp.write("<!-- doc -->\n<GREETING> <TARGET>\n")
+            tmp_path = Path(tmp.name)
+        try:
+            out = render(tmp_path, {"GREETING": "Hello", "TARGET": "world"})
+            assert out == "Hello world\n", f"unexpected: {out!r}"
+            print("PASS: tokens after leading comment are substituted normally")
+        finally:
+            tmp_path.unlink()
+
         print("All _render unit tests passed.")
         return 0
     except AssertionError as exc:

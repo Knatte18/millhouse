@@ -49,6 +49,10 @@ The form is decided by `_sibling.py wiki <HUB_PATH>` in Phase 3 — callers just
 mill-setup is the bootstrapper that **creates** the global `PYTHONPATH` Windows user environment variable. That variable does not exist in the current process (or in any child process spawned during this session) until Phase 4.7 completes and a new shell is opened. Therefore, every Python invocation in this skill uses the inline prefix:
 
 ```bash
+# WRONG — invokes from source tree
+PYTHONPATH="plugins/mill/scripts" uv run --project plugins/mill python -c "..."
+
+# RIGHT — invokes from cache (mill-setup's unique inline-prefix form)
 PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" uv run --project "${CLAUDE_PLUGIN_ROOT}" python -c "..."
 ```
 

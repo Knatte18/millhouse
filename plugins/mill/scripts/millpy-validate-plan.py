@@ -29,7 +29,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         cfg = load_config(wiki_root, mill_dir)
         slug = find_active_slug(mill_dir)
-        plan_dir = resolve_path(cfg["paths"]["plan_dir"], slug, wiki_root)
+        plan_dir = resolve_path(cfg["paths"]["plan_dir"], slug)
         errors = _plan_validate.run(plan_dir, project_root, wiki_root=wiki_root)
     except ReviewError as exc:
         print(str(exc), file=sys.stderr)

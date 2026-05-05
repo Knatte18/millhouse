@@ -98,8 +98,20 @@ def build_plan(
     }
 
     for wt_path in active_worktrees:
+        hub_subpath = "."
+        stub_path = wt_path / ".millhouse" / "config.local.yaml"
+        if stub_path.exists():
+            try:
+                stub_data = yaml.safe_load(stub_path.read_text(encoding="utf-8")) or {}
+                hub_subpath = stub_data.get("hub_relative_path", ".")
+            except Exception:  # noqa: BLE001
+                hub_subpath = "."
+        hub_mill_dir = (
+            wt_path / ".millhouse" if hub_subpath == "."
+            else wt_path / hub_subpath / ".millhouse"
+        )
         try:
-            marker_data = _active.read_all(wt_path / ".millhouse")
+            marker_data = _active.read_all(hub_mill_dir)
         except _active.ActiveError:
             continue
 
@@ -425,6 +437,7 @@ def apply_plan(
             wiki_relative_paths,
             f"chore: cleanup — {len(plan.to_remove_done)} done, "
             f"{len(plan.to_remove_abandoned)} abandoned",
+            slug="mill-cleanup",
         )
 
 
@@ -440,7 +453,7 @@ def main() -> None:
     wiki_path = _paths.resolve_wiki_path(git_root)
     container_path = _paths.resolve_container_path(git_root)
 
-    _wiki.sync_pull(wiki_path)
+    _wiki.sync_pull(wiki_path, slug="mill-cleanup")
 
     active_wt_list = _spawn_core.discover_active_worktrees(container_path / "wts")
     active_worktrees = [path for path, _slug, _title in active_wt_list]
@@ -460,11 +473,8 @@ def main() -> None:
         print("\nDry-run. Pass --apply to execute.")
         sys.exit(0)
 
-    _wiki.acquire_lock(wiki_path, "mill-cleanup")
-    try:
+    with _wiki.wiki_lock(wiki_path, "mill-cleanup"):
         apply_plan(plan, wiki_path, git_root, junctions_cfg, cfg=cfg)
-    finally:
-        _wiki.release_lock(wiki_path)
 
     print(
         f"\nDone: {len(plan.to_remove_done)} done, "

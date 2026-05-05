@@ -85,6 +85,7 @@ def main() -> int:
 
         with (
             patch("mill_fetch_issues.resolve_git_root", return_value=root),
+            patch("mill_fetch_issues.resolve_hub_path", return_value=root),
             patch("_gh_issues._subprocess_util.run", side_effect=_fake_subprocess_run),
             patch("builtins.print", side_effect=mock_print),
         ):
