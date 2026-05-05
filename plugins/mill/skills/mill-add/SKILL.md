@@ -85,6 +85,14 @@ The structure is a suggestion, not a contract. Match it to what the discussion a
 
 ## How to call the script
 
+```bash
+# WRONG — invokes from source tree
+uv run --project plugins/mill plugins/mill/scripts/millpy-add.py <slug>
+
+# RIGHT — invokes from cache
+uv run --project "${CLAUDE_PLUGIN_ROOT}" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-add.py" <slug>
+```
+
 ```powershell
 uv run --project "${CLAUDE_PLUGIN_ROOT}" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-add.py" <slug> `
     --title "<Title>" `

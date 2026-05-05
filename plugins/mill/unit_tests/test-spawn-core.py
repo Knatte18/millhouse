@@ -9,10 +9,12 @@ from pathlib import Path
 HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
+import _active  # noqa: E402
 from _spawn_core import (  # noqa: E402
     BacklogEmpty,
     capture_parent_branch,
     claim_in_wiki,
+    discover_active_worktrees,
     multi_select_groom_then_claim,
     pick_task_single,
     pick_task_single_or_multi,
@@ -806,6 +808,74 @@ def test_prompt_merged_entry_bad_slug_raises() -> None:
 
 
 # ---------------------------------------------------------------------------
+# discover_active_worktrees
+# ---------------------------------------------------------------------------
+
+
+def test_discover_active_worktrees_standard_layout() -> None:
+    """Standard layout (no stub): active marker at entry/.millhouse/ is found."""
+    with tempfile.TemporaryDirectory() as tmp:
+        wts_dir = Path(tmp) / "wts"
+        wts_dir.mkdir()
+        entry = wts_dir / "my-task"
+        entry.mkdir()
+        mill_dir = entry / ".millhouse"
+        _active.write(
+            mill_dir,
+            slug="my-task",
+            task_title="My Task",
+            branch="hanf/my-task",
+            spawned_at="2026-01-01T00:00:00Z",
+        )
+
+        results = discover_active_worktrees(wts_dir)
+
+        if len(results) != 1:
+            raise AssertionError(f"expected 1 result, got {len(results)}: {results}")
+        path, slug, title = results[0]
+        if path != entry:
+            raise AssertionError(f"expected entry {entry}, got {path}")
+        if slug != "my-task":
+            raise AssertionError(f"expected slug='my-task', got {slug!r}")
+    print("PASS: discover_active_worktrees standard layout finds active marker")
+
+
+def test_discover_active_worktrees_subfolder_install() -> None:
+    """Subfolder-install layout: stub at entry/.millhouse/ points to src/hub; active marker found there."""
+    with tempfile.TemporaryDirectory() as tmp:
+        wts_dir = Path(tmp) / "wts"
+        wts_dir.mkdir()
+        entry = wts_dir / "my-task"
+        entry.mkdir()
+        # Stub at the worktree root .millhouse
+        stub_dir = entry / ".millhouse"
+        stub_dir.mkdir()
+        (stub_dir / "config.local.yaml").write_text(
+            "hub_relative_path: src/hub\n", encoding="utf-8"
+        )
+        # Real active marker at src/hub/.millhouse
+        hub_mill_dir = entry / "src" / "hub" / ".millhouse"
+        _active.write(
+            hub_mill_dir,
+            slug="my-task",
+            task_title="My Subfolder Task",
+            branch="hanf/my-task",
+            spawned_at="2026-01-01T00:00:00Z",
+        )
+
+        results = discover_active_worktrees(wts_dir)
+
+        if len(results) != 1:
+            raise AssertionError(f"expected 1 result, got {len(results)}: {results}")
+        path, slug, title = results[0]
+        if path != entry:
+            raise AssertionError(f"expected entry {entry}, got {path}")
+        if slug != "my-task":
+            raise AssertionError(f"expected slug='my-task', got {slug!r}")
+    print("PASS: discover_active_worktrees subfolder-install layout finds active marker via stub")
+
+
+# ---------------------------------------------------------------------------
 # Main runner
 # ---------------------------------------------------------------------------
 
@@ -842,6 +912,8 @@ def main() -> int:
         test_write_initial_status_forced_failure_raises_runtime_error,
         test_recreate_active_junction_creates_link,
         test_recreate_active_junction_idempotent,
+        test_discover_active_worktrees_standard_layout,
+        test_discover_active_worktrees_subfolder_install,
     ]
 
     failures: list[str] = []

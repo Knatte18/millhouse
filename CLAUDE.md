@@ -91,6 +91,15 @@ A discussion gap is missing information; a plan/code block is a must-fix defect.
 ## Conventions worth carrying
 
 - **Plugin scripts reference `${CLAUDE_PLUGIN_ROOT}`, never the source repo.** Anything installed via plugin manifest — `plugins/mill/`, `plugins/codeguide/`, etc. — runs on a user's machine that has no millhouse source checkout. Every intra-plugin path in a SKILL.md, Python helper, or prompt template must resolve against `${CLAUDE_PLUGIN_ROOT}`, not against `plugins/<name>/…`. This is load-bearing for external repos where CC uses mill/codeguide plugins without the millhouse source being cloned anywhere.
+- **In operational Bash commands typed at the agent level, never reference `plugins/mill/...` or `plugins/codeguide/...` source-tree paths. Use `${CLAUDE_PLUGIN_ROOT}` (which resolves to the cache). Tests run as `python plugins/mill/unit_tests/...` are the sole exception, and only when explicitly invoked from a test runner.**
+
+  ```bash
+  # WRONG — invokes from source tree
+  uv run --project plugins/mill plugins/mill/scripts/millpy-spawn.py
+
+  # RIGHT — invokes from cache
+  uv run --project "${CLAUDE_PLUGIN_ROOT}" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-spawn.py"
+  ```
 - **Mill scripts are invoked via `uv run`, not `python`.** All SKILL.md examples use `uv run --project "${CLAUDE_PLUGIN_ROOT}" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-X.py" [args]`; inline helpers use `uv run --project "${CLAUDE_PLUGIN_ROOT}" python -c "..."`. PYTHONPATH is set globally as a Windows user environment variable by `mill-setup` Phase 4.7; CC inherits it automatically — no per-session export needed. Exception: `mill-setup` itself is the bootstrapper and uses an inline `PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts"` prefix on each call.
 - **Generated markdown uses fenced ```yaml for metadata**, not `---` frontmatter. `---` is reserved for `SKILL.md` and plugin manifests. (See `plugins/mill/skills/markdown/SKILL.md`.)
 - **Reviews match the tight v1 style**: per-finding = severity-label + 3–4 short bullets. Target a few hundred tokens total, not thousands. The fix-thread has full context and does not need narrative explanation.
@@ -106,3 +115,4 @@ Path rules that keep being forgotten — they live here, not spread across SKILL
 - **`_sibling.resolve_path` detects container-form via `repo_root.parent.name == "wts"`.** Container-form returns `parent.parent / role` (sibling of `wts/`). Prefix-form returns `parent / f"{repo_root.name}.{role}"`. Old hub-form (`repo_root.name == "hub"`) is no longer recognised — migrate first.
 - **Working state lives at the worktree root, tracked on the task branch.** `status.md`, `discussion.md`, `plan/`, and `reviews/` are committed to the task branch, not written to the wiki. The wiki holds only the task index (`Home.md`) and shared config (`config.yaml`). mill-merge's cleanup commit removes these four paths before squash-merging back to the parent branch.
 - **Scratch lives at `<cwd>/.scratch/`, not under `.millhouse/`.** Shared with other plugins the engineer uses that default to top-level `.scratch/`. `.gitignore` covers it via `**/.scratch/`. Never write to `/tmp/` or `$env:TEMP`. (See `plugins/mill/skills/conversation/SKILL.md` for the full file-writing conventions.)
+- **Future `.wiki` junction (introduced by `rename-hub-junctions`) follows the same `cwd / ".wiki"` convention as `.millhouse/` — scripts must resolve it via `_paths.py`, not treat the junction as a code path.**
