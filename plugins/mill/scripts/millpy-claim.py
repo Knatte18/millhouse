@@ -176,7 +176,7 @@ def main(argv: list[str] | None = None) -> int:
             "or set paths.wiki: in .millhouse/config.local.yaml."
         )
 
-    _wiki.sync_pull(wiki_path)
+    _wiki.sync_pull(wiki_path, slug="mill-claim")
     home_text = home_path.read_text(encoding="utf-8")
     tasks = _tasks_md.parse(home_text)
 
@@ -306,7 +306,7 @@ def main(argv: list[str] | None = None) -> int:
         ts=ts,
     )
 
-    # Render and write the initial status.md; lock + commit + push.
+    # Render and write the initial status.md; commit on task branch.
     status_abs = _spawn_core.write_initial_status(
         worktree_path=resolve_hub_path(),
         slug=slug,

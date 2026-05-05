@@ -30,7 +30,7 @@ You are an integration engineer. Your job is to merge a completed task branch ba
 
    **In-place mode bypass:** when `mode == 'inplace'`, the existing Steps 1 (acquire merge lock on parent) and 2 (invoke `mill-merge-in`) are SKIPPED. There is no separate parent worktree to lock; the merge is purely local. Continue from Step 3 (capture child branch) onward, but treat "child" and "parent" as branches in the same working tree (cwd is the hub). For the squash merge in Step 4 (Direct path), omit the `-C <parent-path>` flag — the merge runs against the current working tree directly.
 
-2. `_wiki.sync_pull(<WIKI_PATH>)`.
+2. `_wiki.sync_pull(<WIKI_PATH>, slug=slug)`.
 3. Read slug via `_active.read_slug(Path(".millhouse"))` (already resolved in Step 1; reuse `active_data` — no second read needed).
 4. *(Config already loaded in Step 1.)*
 5. Resolve parent branch via `_parent_branch.resolve(status_path, interactive=<True unless called non-interactively>)`. `status_path` is `git_root / "status.md"` — state lives on the task branch, not in the wiki.
@@ -176,10 +176,13 @@ Tags the cleanup-commit tip of the task branch before the branch is deleted. The
 
 Under the wiki shared lock so no concurrent task writes Home.md mid-flip.
 
-1. `_wiki.acquire_lock(<WIKI_PATH>, slug, timeout_seconds=30)`.
-2. Read `<WIKI_PATH>/Home.md`. Use `_tasks_md.set_phase(text, slug, "done")` to rewrite the single line. Write the result.
-3. Commit+push via `_wiki.write_commit_push(<WIKI_PATH>, ["Home.md"], f"task: complete and merge {slug}")`.
-4. Release the wiki lock.
+```python
+with _wiki.wiki_lock(<WIKI_PATH>, slug):
+    home_text = home_path.read_text(encoding="utf-8")
+    new_text = _tasks_md.set_phase(home_text, slug, "done")
+    home_path.write_text(new_text, encoding="utf-8")
+    _wiki.write_commit_push(<WIKI_PATH>, ["Home.md"], f"task: complete and merge {slug}", slug=slug)
+```
 
 **Failure handling after the squash landed on parent:** do NOT roll back the merge. Report the error, release all locks, tell the user "Merge landed on <parent> but <step> failed: <err>. Re-run `/mill-merge` to retry — Step 5's idempotency check will skip the squash." This is the non-destructive boundary: once the parent has the squash, it stays.
 
@@ -231,7 +234,7 @@ Tolerate already-gone. `container_path` was resolved in Entry Step 1 via `_paths
 If `wiki_path / "active" / slug` exists (a pre-migration clone that still has the old wiki state directory):
 
 1. `shutil.rmtree(wiki_path / "active" / slug)`.
-2. Commit+push via `_wiki.write_commit_push(<WIKI_PATH>, [f"active/{slug}/"], f"task: cleanup legacy active dir {slug}")`.
+2. Commit+push via `_wiki.write_commit_push(<WIKI_PATH>, [f"active/{slug}/"], f"task: cleanup legacy active dir {slug}", slug=slug)`.
 
 If the directory does not exist, skip silently — this is the normal case for post-migration setups.
 
@@ -284,7 +287,7 @@ Post-Step-5 failures (archive tag, Home.md, sidebar, worktree/branch/portal remo
 
 ## Board discipline
 
-- Home.md writes go through `_wiki.write_commit_push` with the shared lock held.
+- Home.md writes go through `_wiki.write_commit_push` (which acquires the wiki lock internally). For multi-operation windows use `with _wiki.wiki_lock(wiki_path, slug):`.
 - `active/<slug>/` deletion (legacy, conditional) commits separately via `_wiki.write_commit_push` after the wiki lock is released.
 - Task state (`status.md`, `discussion.md`, `plan/`, `reviews/`) lives on the task branch — never in the wiki for new-layout repos. The cleanup commit removes it from the branch tip before squash.
 - Phase transitions via `_status.append_phase`; hand-editing status.md is banned.

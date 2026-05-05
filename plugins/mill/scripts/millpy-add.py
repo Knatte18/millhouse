@@ -167,8 +167,7 @@ def main(argv: list[str] | None = None) -> int:
     # _Sidebar.md are both multi-writer shared resources per `ref-formats.md`
     # so the entire read-append-regenerate-commit sequence runs under one
     # lock acquisition to avoid another writer interleaving.
-    _wiki.acquire_lock(wiki_path, args.slug)
-    try:
+    with _wiki.wiki_lock(wiki_path, args.slug):
         home_text = home_path.read_text(encoding="utf-8")
         if _slug_already_present(home_text, args.slug):
             raise SystemExit(f"Slug {args.slug!r} already present in Home.md.")
@@ -198,10 +197,8 @@ def main(argv: list[str] | None = None) -> int:
         _sidebar.regenerate(wiki_path)
 
         _wiki.write_commit_push(
-            wiki_path, changed_paths, f"add task: {args.slug}"
+            wiki_path, changed_paths, f"add task: {args.slug}", slug=args.slug
         )
-    finally:
-        _wiki.release_lock(wiki_path)
 
     print(f"Added task {args.slug!r} to {home_path}")
     return 0

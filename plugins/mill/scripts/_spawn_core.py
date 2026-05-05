@@ -461,8 +461,7 @@ def multi_select_groom_then_claim(
         RuntimeError: The merged task cannot be found after re-parsing (parse failure).
     """
     home_path = wiki_path / "Home.md"
-    _wiki.acquire_lock(wiki_path, merged_slug)
-    try:
+    with _wiki.wiki_lock(wiki_path, merged_slug):
         text = home_path.read_text(encoding="utf-8")
 
         # Remove all source entries first, then append the merged one.
@@ -488,9 +487,7 @@ def multi_select_groom_then_claim(
             f"task: groom-and-claim {len(source_slugs)}->1 "
             f"({merged_slug}; absorbed {absorbed})"
         )
-        _wiki.write_commit_push(wiki_path, files_to_commit, commit_msg)
-    finally:
-        _wiki.release_lock(wiki_path)
+        _wiki.write_commit_push(wiki_path, files_to_commit, commit_msg, slug=merged_slug)
 
     # Re-parse after commit to return an authoritative Task object.
     new_text = home_path.read_text(encoding="utf-8")
@@ -612,17 +609,14 @@ def claim_in_wiki(wiki_path: Path, slug: str) -> None:
         slug: Task slug to claim.
     """
     home_path = wiki_path / "Home.md"
-    _wiki.acquire_lock(wiki_path, slug)
-    try:
+    with _wiki.wiki_lock(wiki_path, slug):
         home_text = home_path.read_text(encoding="utf-8")
         claimed_text = _tasks_md.claim(home_text, slug)
         home_path.write_text(claimed_text, encoding="utf-8")
         _sidebar.regenerate(wiki_path)
         _wiki.write_commit_push(
-            wiki_path, ["Home.md", "_Sidebar.md"], f"task: claim {slug}"
+            wiki_path, ["Home.md", "_Sidebar.md"], f"task: claim {slug}", slug=slug
         )
-    finally:
-        _wiki.release_lock(wiki_path)
 
 
 def capture_parent_branch(git_root: Path) -> str:

@@ -58,6 +58,7 @@ def _make_trampoline(tmp: Path, wiki_path: Path) -> Path:
     trampoline = tmp / "_trampoline.py"
     trampoline.write_text(
         "import sys, types, importlib.util\n"
+        "from contextlib import contextmanager\n"
         "from pathlib import Path\n"
         "\n"
         "pm = types.ModuleType('_paths')\n"
@@ -66,8 +67,7 @@ def _make_trampoline(tmp: Path, wiki_path: Path) -> Path:
         "sys.modules['_paths'] = pm\n"
         "\n"
         "wm = types.ModuleType('_wiki')\n"
-        "wm.acquire_lock = lambda *a, **k: None\n"
-        "wm.release_lock = lambda *a, **k: None\n"
+        "wm.wiki_lock = contextmanager(lambda *a, **k: (x for x in [None]))\n"
         "wm.write_commit_push = lambda *a, **k: None\n"
         "sys.modules['_wiki'] = wm\n"
         "\n"

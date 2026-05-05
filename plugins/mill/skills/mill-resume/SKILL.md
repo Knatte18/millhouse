@@ -11,7 +11,8 @@ One-shot. Finds an `[active]` task in `Home.md` that has no local worktree, then
 
 **Cross-machine resume:** on a machine that has never checked out the task branch, run `git fetch origin` first to make the remote-tracking ref available. `git worktree add` will then check out the branch automatically.
 
-**Sync invariant:** mill-resume MUST call `wiki.sync_pull(cfg)` on entry before reading any wiki state.
+**Sync invariant:** mill-resume MUST call `_wiki.sync_pull(wiki_path, slug="mill-resume")` on entry before reading any wiki state, where `wiki_path = _paths.resolve_wiki_path(_paths.resolve_git_root(Path.cwd()))`.
+`signature: _wiki.sync_pull(wiki_path: Path, *, slug: str) -> None`
 
 ---
 
@@ -36,7 +37,7 @@ If the `.millhouse/wiki/` junction does not exist at cwd, stop and tell the user
 
 ### Phase 2: Sync wiki
 
-Call `wiki.sync_pull(cfg)` to refresh the local wiki clone from remote. This ensures the task list reflects the current state across all machines and worktrees.
+Call `_wiki.sync_pull(wiki_path, slug="mill-resume")` (where `wiki_path = _paths.resolve_wiki_path(_paths.resolve_git_root(Path.cwd()))`) to refresh the local wiki clone from remote. This ensures the task list reflects the current state across all machines and worktrees.
 
 ### Phase 3: Resolve the slug
 
@@ -173,7 +174,7 @@ Note: task is mid-review. mill-go will re-enter the current phase from its start
 |---|---|
 | `.millhouse/config.local.yaml` missing | Stop, tell user to run `mill-setup` |
 | `.millhouse/wiki/` junction missing | Stop, tell user to run `mill-setup` |
-| `wiki.sync_pull` fails | Report error; do not proceed (stale state risk) |
+| `_wiki.sync_pull` raises `WikiPushError` | Report error; do not proceed (stale state risk) |
 | No remote branch for slug | Halt with manual-resolution message |
 | Remote branch has no status.md | Halt with manual-resolution message (pre-migration task) |
 | `git worktree add` fails | Report error with stderr |

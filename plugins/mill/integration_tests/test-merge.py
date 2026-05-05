@@ -296,22 +296,19 @@ def main() -> int:
         print("PASS: direct squash-merge landed on parent")
 
         # --- Home.md [active] -> [done] under wiki lock ---
-        _wiki.acquire_lock(wiki, slug)
-        try:
+        with _wiki.wiki_lock(wiki, slug):
             home_text = (wiki / "Home.md").read_text(encoding="utf-8")
             new_text = _tasks_md.set_phase(home_text, slug, "done")
             (wiki / "Home.md").write_text(new_text, encoding="utf-8")
             _wiki.write_commit_push(
-                wiki, ["Home.md"], f"task: complete and merge {slug}"
+                wiki, ["Home.md"], f"task: complete and merge {slug}", slug=slug
             )
 
             # --- delete active/<slug>/ ---
             shutil.rmtree(wiki / "active" / slug)
             _wiki.write_commit_push(
-                wiki, [f"active/{slug}/"], f"task: complete and merge {slug}"
+                wiki, [f"active/{slug}/"], f"task: complete and merge {slug}", slug=slug
             )
-        finally:
-            _wiki.release_lock(wiki)
 
         home_after = (wiki / "Home.md").read_text(encoding="utf-8")
         _assert(f"[{slug}] [done]" in home_after,

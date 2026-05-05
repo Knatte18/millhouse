@@ -3,9 +3,9 @@ Wiki-clone advisory lock and commit/push helpers.
 
 The wiki clone is shared by every worktree on a developer's machine
 (``.millhouse/wiki`` is a junction to a single checkout). Two writers
-racing to append to ``Home.md`` or to ``active/<slug>/status.md`` would
-produce a merge conflict at push time; this module serialises writers
-via an advisory lockfile at ``<wiki>/.mill-lock``.
+racing to append to ``Home.md`` would produce a merge conflict at push
+time; this module serialises writers via an advisory lockfile at
+``<wiki>/.mill-lock``.
 
 Locking model:
     * Acquisition is atomic via ``O_CREAT | O_EXCL``. No filesystem
@@ -16,8 +16,13 @@ Locking model:
       overwritten without waiting. That duration is the longest we've
       ever observed a legitimate wiki write taking; any older lock is a
       crash we need to step over.
-    * ``acquire_lock`` polls every 500 ms up to ``timeout_seconds`` and
+    * ``_acquire`` polls every 500 ms up to ``timeout_seconds`` and
       raises ``LockBusy`` on timeout with the current holder + age.
+    * Stale-self-lock: if the existing lockfile's holder slug equals
+      the caller's slug, the lock is reclaimed immediately (overwrite +
+      warn) instead of waiting for the timeout.
+    * Module-level ``_held_locks`` counter enables re-entrancy: nested
+      ``wiki_lock`` calls on the same path do not deadlock.
 
 Commit/push uses a single rebase retry on non-fast-forward rejection.
 If the rebase itself fails (e.g. a genuine conflict), we abort the
@@ -27,19 +32,23 @@ conflict resolution. Auto-resolve code lived in v1's
 resurrecting it is out of scope for the M1.x layer.
 
 Public API:
-    acquire_lock(wiki_path, slug, timeout_seconds=30)
-        Atomically acquire the wiki advisory lock; raise LockBusy if
-        held for longer than ``timeout_seconds``.
-    release_lock(wiki_path)
-        Idempotently remove the wiki advisory lock.
-    sync_pull(wiki_path)
+    wiki_lock(wiki_path, slug)
+        Context manager. Acquires the wiki advisory lock for the
+        duration of the block. Re-entrant: nested calls on the same
+        path skip the inner acquire/release. Use for multi-op windows.
+    sync_pull(wiki_path, *, slug)
         git pull --ff-only — refresh wiki before reading Home.md.
-    write_commit_push(wiki_path, relative_paths, commit_msg)
+        Acquires/releases the wiki lock internally; no-op acquire if
+        already held via ``wiki_lock``.
+    write_commit_push(wiki_path, relative_paths, commit_msg, *, slug)
         Stage, commit and push the named paths with one rebase retry.
+        Acquires/releases the wiki lock internally; no-op acquire if
+        already held via ``wiki_lock``.
 
 Exceptions:
-    LockBusy        — raised by ``acquire_lock`` on timeout. Carries
-                      ``holder`` (slug) and ``age_seconds`` for diagnostics.
+    LockBusy        — raised by ``_acquire`` on timeout. Carries
+                      ``holder`` (slug) and ``age_seconds`` for
+                      diagnostics.
     WikiPushError   — raised by ``write_commit_push`` on any
                       unrecoverable git failure (add/commit/rebase/push).
 """
@@ -49,6 +58,7 @@ import datetime
 import os
 import sys
 import time
+from contextlib import contextmanager
 from pathlib import Path
 
 import yaml
@@ -119,7 +129,7 @@ class WikiPushError(RuntimeError):
 
 class LockBusy(RuntimeError):
     """
-    Raised by ``acquire_lock`` on timeout.
+    Raised by ``_acquire`` on timeout.
 
     The exception carries the current holder's slug and the approximate
     age of the lock in seconds so that callers (and mill-status) can
@@ -138,29 +148,10 @@ class LockBusy(RuntimeError):
         )
 
 
-def acquire_lock(wiki_path: Path, slug: str, timeout_seconds: int = 30) -> None:
-    """
-    Acquire the advisory lockfile at ``<wiki_path>/.mill-lock`` atomically.
+_held_locks: dict[Path, int] = {}
 
-    The lockfile is created via ``os.open`` with ``O_CREAT | O_EXCL`` so
-    two concurrent callers cannot both win. On contention the function
-    polls every 500 ms and inspects the existing lock: if its timestamp
-    is older than 5 minutes the lock is treated as stale (the previous
-    holder likely crashed) and overwritten without waiting.
 
-    Args:
-        wiki_path: Directory containing the wiki clone. The lockfile is
-            placed at ``wiki_path / '.mill-lock'``.
-        slug: Identifier written into the lockfile so a blocked caller
-            can report who is holding it.
-        timeout_seconds: Maximum wall time to wait for a non-stale lock
-            before raising ``LockBusy``. Default 30 seconds.
-
-    Raises:
-        LockBusy: A non-stale lock held by a different writer was still
-            present when ``timeout_seconds`` elapsed. The exception
-            carries the current holder's slug and approximate age.
-    """
+def _acquire(wiki_path: Path, slug: str, timeout_seconds: int = 30) -> None:
     lock_path = wiki_path / ".mill-lock"
     deadline = time.monotonic() + timeout_seconds
 
@@ -172,7 +163,7 @@ def acquire_lock(wiki_path: Path, slug: str, timeout_seconds: int = 30) -> None:
             fd = os.open(str(lock_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
             with os.fdopen(fd, "w", encoding="utf-8") as f:
                 f.write(f"{slug}\n{ts_str}\n")
-            print(f"[wiki] acquire_lock: acquired by {slug!r}", file=sys.stderr)
+            print(f"[wiki] _acquire: acquired by {slug!r}", file=sys.stderr)
             return
         except FileExistsError:
             pass
@@ -191,8 +182,16 @@ def acquire_lock(wiki_path: Path, slug: str, timeout_seconds: int = 30) -> None:
                 age_seconds = _STALE_SECONDS + 1
                 holder = "<unknown>"
 
+            if holder == slug:
+                print(
+                    f"[wiki] _acquire: reclaiming self-lock held by {slug!r} (age {age_seconds}s)",
+                    file=sys.stderr,
+                )
+                lock_path.write_text(f"{slug}\n{ts_str}\n", encoding="utf-8")
+                return
+
             if age_seconds > _STALE_SECONDS:
-                print(f"[wiki] acquire_lock: overwriting stale lock (age={age_seconds}s)", file=sys.stderr)
+                print(f"[wiki] _acquire: overwriting stale lock (age={age_seconds}s)", file=sys.stderr)
                 lock_path.write_text(f"{slug}\n{ts_str}\n", encoding="utf-8")
                 return
 
@@ -204,57 +203,80 @@ def acquire_lock(wiki_path: Path, slug: str, timeout_seconds: int = 30) -> None:
         time.sleep(0.5)
 
 
-def sync_pull(wiki_path: Path) -> None:
+def _release(wiki_path: Path) -> None:
+    lock_path = wiki_path / ".mill-lock"
+    if lock_path.exists():
+        lock_path.unlink()
+        print("[wiki] _release: released", file=sys.stderr)
+
+
+@contextmanager
+def wiki_lock(wiki_path: Path, slug: str):
+    """Context manager that acquires and releases the wiki advisory lock.
+
+    Re-entrant: nested calls on the same resolved wiki_path increment a
+    counter and skip the inner acquire/release. The lock is only acquired
+    on the first entry and released when the outermost block exits.
+    """
+    resolved = wiki_path.resolve()
+    count = _held_locks.get(resolved, 0)
+    if count == 0:
+        _acquire(wiki_path, slug)
+    _held_locks[resolved] = count + 1
+    try:
+        yield
+    finally:
+        _held_locks[resolved] -= 1
+        if _held_locks[resolved] == 0:
+            del _held_locks[resolved]
+            _release(wiki_path)
+
+
+def sync_pull(wiki_path: Path, *, slug: str) -> None:
     """
     Fetch + fast-forward the wiki clone so local state matches origin.
 
-    Runs ``git pull --ff-only``. Non-fast-forward (i.e. the wiki clone has
-    local commits not yet on origin) raises ``WikiPushError`` — this function
-    never performs a merge or rebase. Callers that want merge semantics go
-    through ``write_commit_push``.
+    Acquires the wiki advisory lock internally. When called inside a
+    ``wiki_lock`` block the acquire is a no-op (re-entrancy counter).
 
-    Called by mill-spawn before reading Home.md so task-pick decisions run
-    against the latest task state.
+    Runs ``git pull --ff-only``. Non-fast-forward raises ``WikiPushError``.
 
     Args:
         wiki_path: Directory containing the wiki clone.
+        slug: Caller's slug; written into the lockfile for diagnostics.
 
     Raises:
         WikiPushError: ``git pull --ff-only`` failed (network error,
             non-fast-forward state, etc).
     """
-    result = _subprocess_util.run(
-        ["git", "-C", str(wiki_path), "pull", "--ff-only"]
-    )
-    if result.returncode != 0:
-        raise WikiPushError(f"git pull --ff-only failed: {result.stderr.strip()!r}")
-    print(f"[wiki] sync_pull: fast-forwarded {wiki_path}", file=sys.stderr)
-
-
-def release_lock(wiki_path: Path) -> None:
-    """
-    Delete the advisory lockfile at ``<wiki_path>/.mill-lock``.
-
-    Idempotent: missing lockfile is a no-op, because cleanup paths call
-    this unconditionally regardless of whether a prior ``acquire_lock``
-    actually succeeded.
-
-    Args:
-        wiki_path: Directory containing the wiki clone.
-    """
-    lock_path = wiki_path / ".mill-lock"
-    if lock_path.exists():
-        lock_path.unlink()
-        print("[wiki] release_lock: released", file=sys.stderr)
+    resolved = wiki_path.resolve()
+    held = _held_locks.get(resolved, 0) > 0
+    if not held:
+        _acquire(wiki_path, slug)
+    try:
+        result = _subprocess_util.run(
+            ["git", "-C", str(wiki_path), "pull", "--ff-only"]
+        )
+        if result.returncode != 0:
+            raise WikiPushError(f"git pull --ff-only failed: {result.stderr.strip()!r}")
+        print(f"[wiki] sync_pull: fast-forwarded {wiki_path}", file=sys.stderr)
+    finally:
+        if not held:
+            _release(wiki_path)
 
 
 def write_commit_push(
     wiki_path: Path,
     relative_paths: list[str],
     commit_msg: str,
+    *,
+    slug: str,
 ) -> None:
     """
     Stage the named paths, commit with ``commit_msg``, and push.
+
+    Acquires the wiki advisory lock internally. When called inside a
+    ``wiki_lock`` block the acquire is a no-op (re-entrancy counter).
 
     The sequence is ``git add -- <paths>`` → ``git commit -m <msg>`` →
     ``git push``. On a non-fast-forward rejection we run
@@ -272,12 +294,29 @@ def write_commit_push(
             literally after ``git add --`` to avoid option parsing on
             paths that start with a dash.
         commit_msg: Commit message.
+        slug: Caller's slug; written into the lockfile for diagnostics.
 
     Raises:
         WikiPushError: ``git add``, ``git commit``, ``git rebase``, or
             ``git push`` failed in a way that the one-shot rebase retry
             could not recover from.
     """
+    resolved = wiki_path.resolve()
+    held = _held_locks.get(resolved, 0) > 0
+    if not held:
+        _acquire(wiki_path, slug)
+    try:
+        _write_commit_push_body(wiki_path, relative_paths, commit_msg)
+    finally:
+        if not held:
+            _release(wiki_path)
+
+
+def _write_commit_push_body(
+    wiki_path: Path,
+    relative_paths: list[str],
+    commit_msg: str,
+) -> None:
     print(f"[wiki] write_commit_push: wiki={wiki_path} paths={relative_paths!r}", file=sys.stderr)
 
     add = _subprocess_util.run(
