@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: review-subsystem-fixes
 branch: review-subsystem-fixes
 plan: plan
@@ -24,4 +24,27 @@ plan-fix-r3  2026-05-04T17:45:50Z
 plan-review-r4  2026-05-04T17:58:16Z
 plan-fix-r4  2026-05-04T17:58:16Z
 planned  2026-05-04T18:45:46Z
+implementing  2026-05-05T06:24:54Z
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: content-helpers
+    state: pending
+  - name: subprocess-tree-kill
+    state: pending
+  - name: llm-rate-limit
+    state: pending
+  - name: review-plan-integration
+    state: pending
+  - name: cli-error-prefix
+    state: pending
+  - name: plan-validate-deletes
+    state: pending
+  - name: review-code-integration
+    state: pending
+  - name: mill-plan-skill-step45
+    state: pending
 ```
