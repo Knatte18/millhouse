@@ -60,9 +60,9 @@ The fix-cycle is additionally broken when the Builder uses `Agent` tool dispatch
 
 ### session-error-handling
 
-- **Decision:** On `LLMSessionError` (expired session during `--resume`), exit non-zero with JSON: `{"status":"stuck","stuck_type":"transient","reason":"session expired"}`. The Builder handles the fallback.
-- **Rationale:** The Builder already has a one-retry policy for `stuck_type: transient`. Routing expired sessions through that path keeps error handling in one place. Auto-retry inside the CLI would hide the event from the Builder's state machine.
-- **Rejected:** CLI auto-falls-back to a fresh session (no `--resume`) with a stderr warning. Breaks the Builder's crash-recovery check which uses `implementer_session` to correlate session IDs.
+- **Decision:** On `LLMSessionError` (expired session during `--resume`) OR bare `LLMError` (timeout, auth failure, non-zero exit without session context), exit non-zero with JSON: `{"status":"stuck","stuck_type":"transient","reason":"<message>"}` on stdout, details on stderr. The Builder handles the fallback.
+- **Rationale:** `_implementer_sonnet.run` can raise both `LLMSessionError` (resume-specific) and `LLMError` (general). Both represent a transient failure the Builder's one-retry policy already handles. Surfacing a synthetic stuck JSON in both cases keeps the Builder's parsing path intact regardless of which exception fires. Auto-retry inside the CLI would hide the event from the Builder's state machine.
+- **Rejected:** CLI auto-falls-back to a fresh session on `LLMError`. Breaks the Builder's crash-recovery check which uses `implementer_session` to correlate session IDs.
 
 ### crash-recovery-initial
 
@@ -78,9 +78,9 @@ The fix-cycle is additionally broken when the Builder uses `Agent` tool dispatch
 
 ### task-branch-push
 
-- **Decision:** The CLI pushes to `origin/<task-branch>` after each state-change commit (start batch, fixing).
-- **Rationale:** The task branch is an active working branch. Pushing after discrete state transitions provides crash-recovery visibility and matches the expectation for targeted, purposeful operations. The "no push" annotation in the existing mill-go skill applies to wiki commits only.
-- **Rejected:** Commit only, no push. Withholding the push mid-task is conservative with no clear benefit — mill-merge is not the only legitimate moment to push the task branch.
+- **Decision:** All task-branch state commits push to `origin/<task-branch>` — both the CLI's state-change commits (start batch, fixing) and mill-go's own state commits (Prepare, Approve, blocked, done). The Board Discipline section of `mill-go/SKILL.md` is updated to remove "(no push)" from task-branch commits.
+- **Rationale:** The existing mill-go SKILL.md carries an explicit "(no push)" annotation on all task-branch state-mutation commits (Prepare, Approve, etc.), with "mill-merge pushes the task branch at task end." This task deliberately changes that policy. Task-branch commits represent discrete, durable state transitions — pushing them provides crash-recovery visibility and makes the branch inspectable without requiring a merge. Wiki commits already push via `_wiki.write_commit_push`; aligning task-branch commits gives a consistent model across all state writes.
+- **Rejected:** CLI commits push, mill-go's own commits do not. Creates an inconsistent policy with no principled distinction.
 
 ### implementer-timeout-config
 
@@ -90,9 +90,9 @@ The fix-cycle is additionally broken when the Builder uses `Agent` tool dispatch
 
 ### mill-go-skill-update
 
-- **Decision:** Update `mill-go/SKILL.md` to replace both the initial-dispatch block (the 10-step sequence under "1. Implement") and the fix-cycle resume block (under "REQUEST_CHANGES" in the code review loop) with single `millpy-implement.py` subprocess calls. Verdict parsing logic stays in the skill.
-- **Rationale:** The skill describes what the Builder does. After the CLI exists, the Builder's action is one subprocess call — the skill should say that and no more. Leaving the old steps in the skill alongside the new CLI call creates a divergent dual-mode description that will confuse future sessions.
-- **Rejected:** Update only the initial-dispatch block. Leaves the fix-cycle resume block inline, meaning the Builder may still do ad-hoc resume logic on that path.
+- **Decision:** Update `mill-go/SKILL.md` to: (1) replace the initial-dispatch block (the 10-step sequence under "1. Implement") with a single `millpy-implement.py` call; (2) replace the fix-cycle resume block (under "REQUEST_CHANGES" in the code review loop) with a single `millpy-implement.py --resume` call; (3) update Board Discipline to remove "(no push)" from task-branch commits and state that task-branch state commits push to `origin/<task-branch>`. Verdict parsing logic stays in the skill.
+- **Rationale:** The skill describes what the Builder does. After the CLI exists, the Builder's action is one subprocess call — the skill should say that and no more. Board Discipline must be updated in the same change to avoid contradicting the new push policy.
+- **Rejected:** Update only the initial-dispatch block. Leaves fix-cycle inline and Board Discipline contradicting the new push policy.
 
 ## Technical context
 
@@ -127,7 +127,7 @@ Allowed fields per `_status._BATCH_ALLOWED_KEYS`: `state`, `implementer_session`
 `TASK_TITLE`, `SLUG`, `BATCH_NAME`, `BATCH_FILE`, `OVERVIEW_FILE`, `PROJECT_ROOT`, `WIKI_PATH`, `SELF_FIX_ROUNDS`, `ROUND`
 
 **`implementer-fix.md`** (to be created):
-`REVIEW_FILE`, `BATCH_FILE`, `SELF_FIX_ROUNDS`
+`REVIEW_FILE`, `BATCH_FILE`, `SELF_FIX_ROUNDS`, `ROUND`
 
 The fix prompt is short: load `mill-receiving-review`, read the review file, apply fixes per VERIFY/HARM CHECK/FIX or PUSH BACK decision tree, re-run `verify:` from batch frontmatter, report the same JSON shape.
 
@@ -141,12 +141,13 @@ millpy-implement.py <batch_name> --resume --round N --review-file <abs-path>
 Flags:
 - `<batch_name>` — positional, required. Must match a name in `plan/00-overview.md`'s Batch Index.
 - `--resume` — triggers the fix-cycle path. Requires `--round` and `--review-file`.
-- `--round N` — fix-cycle round number; injected into fix prompt as context; defaults to 1.
+- `--round N` — fix-cycle round number; injected as `<ROUND>` token in `implementer-fix.md`; defaults to 1.
 - `--review-file <abs-path>` — absolute path to the review file the implementer must read.
 
 Exit codes:
 - `0` — implementer returned JSON (success or stuck); JSON on stdout
-- `1` — pre-launch error (missing plan, batch not found, bad args, etc.); message on stderr
+- `1` (pre-launch) — missing plan, batch not found, bad args, etc.; message on stderr, no JSON
+- `1` (runtime) — `LLMError` or `LLMSessionError` from the implementer; synthetic stuck JSON on stdout, details on stderr
 
 ### `_review_common.load_config` signature
 
@@ -211,4 +212,4 @@ No real git, no real LLM. All git subprocesses mocked.
 - **Q:** Crash-recovery: allow restart if batch already `running`? **A:** Yes — generate new session_id, overwrite fields.
 - **Q:** Builder lock — does CLI check it? **A:** No.
 - **Q:** `implementer_timeout` from config? **A:** Yes, read `llm.implementer_timeout` from merged config.
-- **Q:** Push after task-branch commits? **A:** Yes — commit and push. "No push" in mill-go skill applied to wiki commits only.
+- **Q:** Push after task-branch commits? **A:** Yes — all task-branch state commits push. This changes the existing mill-go no-push policy (which withheld push until mill-merge). Board Discipline in mill-go SKILL.md is updated accordingly. The previous rationale that "no push applied to wiki commits only" was wrong — wiki commits already push via `_wiki.write_commit_push`; the existing no-push applied to task-branch commits.
