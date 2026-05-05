@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-mill-go-skill-rewrite
+phase: done
 slug: mill-go-fixes
 branch: mill-go-fixes
 plan: plan
@@ -39,6 +39,7 @@ reviewing-mill-go-skill-rewrite-r1  2026-05-05T06:30:53Z
 fixing-mill-go-skill-rewrite-r1  2026-05-05T06:36:26Z
 reviewing-mill-go-skill-rewrite-r2  2026-05-05T06:40:19Z
 approved-mill-go-skill-rewrite  2026-05-05T06:45:18Z
+done  2026-05-05T06:45:35Z
 ```
 
 ## Batches
