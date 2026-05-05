@@ -25,7 +25,7 @@ from pathlib import Path
 
 import _gh_issues
 from _gh_issues import GhError
-from _paths import resolve_git_root
+from _paths import resolve_git_root, resolve_hub_path
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -54,12 +54,12 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    git_root = resolve_git_root()
+    resolve_git_root()
 
     if args.out is not None:
         out = Path(args.out)
     else:
-        out = git_root / ".scratch" / "issues.json"
+        out = resolve_hub_path() / ".scratch" / "issues.json"
 
     out.parent.mkdir(parents=True, exist_ok=True)
 

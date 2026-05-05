@@ -42,6 +42,7 @@ nul
 **/.scratch/
 **/wts/
 **/portals/
+**/plugins/*/uv.lock
 /.active
 /.others
 /tasks.md

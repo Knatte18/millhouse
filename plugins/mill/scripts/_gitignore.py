@@ -37,6 +37,7 @@ GLOB_ENTRIES: list[str] = [
     "**/.scratch/",
     "**/wts/",
     "**/portals/",
+    "**/plugins/*/uv.lock",
 ]
 
 ANCHORED_ENTRIES: list[str] = [

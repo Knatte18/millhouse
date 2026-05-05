@@ -18,7 +18,7 @@ mill_worktree = importlib.util.module_from_spec(_spec)
 sys.modules["mill_worktree"] = mill_worktree
 _spec.loader.exec_module(mill_worktree)
 
-import _subprocess_util  # noqa: E402
+import _subprocess_util  # noqa: E402,F401
 
 
 def _make_git_repo(tmp: Path) -> Path:
@@ -149,6 +149,190 @@ def main() -> int:
             errors += 1
         else:
             print("PASS: list -- parses worktree list without error")
+
+    # ------------------------------------------------------------------
+    # Test: standard layout regression — hub state at worktree_path/.millhouse/
+    # ------------------------------------------------------------------
+    with tempfile.TemporaryDirectory() as tmpdir:
+        root = Path(tmpdir)
+        _make_git_repo(root)
+        (root / ".millhouse").mkdir()
+
+        worktrees_dir = root / "worktrees"
+        worktree_path = worktrees_dir / "feature-x"
+
+        git_calls2: list[list[str]] = []
+
+        def capture_run2(argv, **kwargs):
+            git_calls2.append(list(argv))
+            if "--verify" in argv:
+                return MagicMock(returncode=1, stderr="", stdout="")
+            if "branch" in argv:
+                return MagicMock(returncode=0, stderr="", stdout="")
+            if "worktree" in argv and "add" in argv:
+                worktrees_dir.mkdir(parents=True, exist_ok=True)
+                worktree_path.mkdir(exist_ok=True)
+                return MagicMock(returncode=0, stderr="", stdout="")
+            return MagicMock(returncode=0, stderr="", stdout="")
+
+        copy_calls: list[dict] = []
+
+        def capture_copy(src, dst, exclude):
+            copy_calls.append({"src": src, "dst": dst})
+
+        vscode_calls2: list[dict] = []
+
+        def capture_vscode2(color_hex, target, *, window_title=None, **kw):
+            vscode_calls2.append({"target": target})
+
+        hub_path = root
+
+        with (
+            patch("mill_worktree.resolve_git_root", return_value=root),
+            patch("mill_worktree.resolve_hub_path", return_value=hub_path),
+            patch("mill_worktree.resolve_hub_relative_path",
+                  side_effect=lambda wt, sub: wt if sub == "." else wt / sub),
+            patch("mill_worktree.resolve_container_path", return_value=root.parent),
+            patch("mill_worktree.resolve_main_worktree_root", return_value=root),
+            patch("mill_worktree.resolve_worktrees_dir", return_value=worktrees_dir),
+            patch("mill_worktree.resolve_wiki_path", side_effect=SystemExit("no wiki")),
+            patch("mill_worktree._load_config", return_value={}),
+            patch("_subprocess_util.run", side_effect=capture_run2),
+            patch("mill_worktree._vscode.write_settings", side_effect=capture_vscode2),
+            patch("mill_worktree._worktree.copy_millhouse", side_effect=capture_copy),
+        ):
+            rc = mill_worktree.main(["create", "--branch", "feature-x"])
+
+        if rc != 0:
+            print(f"FAIL: standard-layout create returned {rc}", file=sys.stderr)
+            errors += 1
+        elif not copy_calls:
+            print("FAIL: standard-layout -- copy_millhouse not called", file=sys.stderr)
+            errors += 1
+        elif copy_calls[0]["src"] != hub_path / ".millhouse":
+            print(
+                f"FAIL: standard-layout -- copy src should be {hub_path / '.millhouse'!r}, "
+                f"got {copy_calls[0]['src']!r}",
+                file=sys.stderr,
+            )
+            errors += 1
+        elif copy_calls[0]["dst"] != worktree_path / ".millhouse":
+            print(
+                f"FAIL: standard-layout -- copy dst should be {worktree_path / '.millhouse'!r}, "
+                f"got {copy_calls[0]['dst']!r}",
+                file=sys.stderr,
+            )
+            errors += 1
+        elif not vscode_calls2 or vscode_calls2[0]["target"] != worktree_path / ".vscode" / "settings.json":
+            print(
+                f"FAIL: standard-layout -- vscode target wrong: {vscode_calls2}",
+                file=sys.stderr,
+            )
+            errors += 1
+        elif (worktree_path / ".millhouse" / "config.local.yaml").exists():
+            # No bootstrap stub should be written for standard layout
+            print(
+                "FAIL: standard-layout -- unexpected bootstrap stub at worktree_path/.millhouse/config.local.yaml",
+                file=sys.stderr,
+            )
+            errors += 1
+        else:
+            print("PASS: standard-layout -- hub state at worktree_path/.millhouse/")
+
+    # ------------------------------------------------------------------
+    # Test: subfolder-install — hub state at dest_hub, bootstrap stub written
+    # ------------------------------------------------------------------
+    with tempfile.TemporaryDirectory() as tmpdir:
+        root = Path(tmpdir)
+        _make_git_repo(root)
+        (root / ".millhouse").mkdir()
+
+        hub_subpath = "src/Models"
+        worktrees_dir = root / "worktrees"
+        worktree_path = worktrees_dir / "feature-x"
+        dest_hub = worktree_path / hub_subpath
+
+        def capture_run3(argv, **kwargs):
+            if "--verify" in argv:
+                return MagicMock(returncode=1, stderr="", stdout="")
+            if "branch" in argv:
+                return MagicMock(returncode=0, stderr="", stdout="")
+            if "worktree" in argv and "add" in argv:
+                worktrees_dir.mkdir(parents=True, exist_ok=True)
+                worktree_path.mkdir(exist_ok=True)
+                return MagicMock(returncode=0, stderr="", stdout="")
+            return MagicMock(returncode=0, stderr="", stdout="")
+
+        copy_calls3: list[dict] = []
+
+        def capture_copy3(src, dst, exclude):
+            copy_calls3.append({"src": src, "dst": dst})
+
+        vscode_calls3: list[dict] = []
+
+        def capture_vscode3(color_hex, target, *, window_title=None, **kw):
+            vscode_calls3.append({"target": target})
+
+        fake_wiki = Path("/fake/wiki")
+        with (
+            patch("mill_worktree.resolve_git_root", return_value=root),
+            patch("mill_worktree.resolve_hub_path", return_value=root),
+            patch("mill_worktree.resolve_hub_relative_path",
+                  side_effect=lambda wt, sub: wt if sub == "." else wt / sub),
+            patch("mill_worktree.resolve_container_path", return_value=root.parent),
+            patch("mill_worktree.resolve_main_worktree_root", return_value=root),
+            patch("mill_worktree.resolve_worktrees_dir", return_value=worktrees_dir),
+            patch("mill_worktree.resolve_wiki_path", return_value=fake_wiki),
+            patch("mill_worktree._load_config", return_value={"hub_relative_path": hub_subpath}),
+            patch("mill_worktree._wiki.read_junctions", return_value={}),
+            patch("_subprocess_util.run", side_effect=capture_run3),
+            patch("mill_worktree._vscode.write_settings", side_effect=capture_vscode3),
+            patch("mill_worktree._worktree.copy_millhouse", side_effect=capture_copy3),
+        ):
+            rc = mill_worktree.main(["create", "--branch", "feature-x"])
+
+        import yaml
+
+        stub_path = worktree_path / ".millhouse" / "config.local.yaml"
+        failed = False
+        if rc != 0:
+            print(f"FAIL: subfolder-install create returned {rc}", file=sys.stderr)
+            failed = True
+        elif not copy_calls3:
+            print("FAIL: subfolder-install -- copy_millhouse not called", file=sys.stderr)
+            failed = True
+        elif copy_calls3[0]["dst"] != dest_hub / ".millhouse":
+            print(
+                f"FAIL: subfolder-install -- copy dst should be {dest_hub / '.millhouse'!r}, "
+                f"got {copy_calls3[0]['dst']!r}",
+                file=sys.stderr,
+            )
+            failed = True
+        elif not vscode_calls3 or vscode_calls3[0]["target"] != dest_hub / ".vscode" / "settings.json":
+            print(
+                f"FAIL: subfolder-install -- vscode target wrong: {vscode_calls3}",
+                file=sys.stderr,
+            )
+            failed = True
+        elif not stub_path.exists():
+            print(
+                f"FAIL: subfolder-install -- bootstrap stub not found at {stub_path}",
+                file=sys.stderr,
+            )
+            failed = True
+        else:
+            stub_cfg = yaml.safe_load(stub_path.read_text(encoding="utf-8")) or {}
+            if stub_cfg != {"hub_relative_path": hub_subpath}:
+                print(
+                    f"FAIL: subfolder-install -- stub content wrong: {stub_cfg!r}",
+                    file=sys.stderr,
+                )
+                failed = True
+
+        if not failed:
+            print("PASS: subfolder-install -- hub state at dest_hub, bootstrap stub written")
+        else:
+            errors += 1
 
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)

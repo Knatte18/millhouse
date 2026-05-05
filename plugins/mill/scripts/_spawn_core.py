@@ -153,10 +153,13 @@ def discover_active_worktrees(
     """
     Scan ``worktrees_dir`` for worktrees that carry an ``active.slug.md`` marker.
 
-    For each immediate subdirectory of ``worktrees_dir``, attempts to read
-    ``.millhouse/active.slug.md`` via ``_active.read_all``. Entries that are
-    missing or malformed are silently skipped. Results are returned in
-    filesystem iteration order (non-deterministic on most platforms).
+    For each immediate subdirectory of ``worktrees_dir``, uses a two-step
+    stub-aware read: first reads the stub at ``<entry>/.millhouse/config.local.yaml``
+    for ``hub_relative_path``; when present and non-root, reads the active marker
+    from ``<entry>/<hub_subpath>/.millhouse/`` instead. Entries whose stub is
+    malformed, or whose real ``.millhouse/`` is absent, are silently skipped.
+    Results are returned in filesystem iteration order (non-deterministic on most
+    platforms).
 
     Args:
         worktrees_dir: Container directory holding per-task worktrees.
@@ -166,15 +169,28 @@ def discover_active_worktrees(
         Empty list when ``worktrees_dir`` does not exist or contains no
         valid markers.
     """
+    import yaml
+
     results: list[tuple[Path, str, str]] = []
     if not worktrees_dir.exists():
         return results
     for entry in worktrees_dir.iterdir():
         if not entry.is_dir():
             continue
-        mill_dir = entry / ".millhouse"
+        hub_subpath = "."
+        stub_path = entry / ".millhouse" / "config.local.yaml"
+        if stub_path.exists():
+            try:
+                stub_data = yaml.safe_load(stub_path.read_text(encoding="utf-8")) or {}
+                hub_subpath = stub_data.get("hub_relative_path", ".")
+            except Exception:  # noqa: BLE001
+                hub_subpath = "."
+        hub_mill_dir = (
+            entry / ".millhouse" if hub_subpath == "."
+            else entry / hub_subpath / ".millhouse"
+        )
         try:
-            data = _active.read_all(mill_dir)
+            data = _active.read_all(hub_mill_dir)
         except _active.ActiveError:
             continue
         slug = data.get("slug", "")
