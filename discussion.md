@@ -122,8 +122,9 @@ New step 4:
 If not exist:
   - No URL: git init <anchor>
   - URL, no --branch: git clone <url> <anchor>
-  - URL + --branch, branch exists on remote: git clone -b <branch> --single-branch <url> <anchor>
-  - URL + --branch, branch not on remote: git init <anchor> + git remote add origin <url> + git checkout -b <branch>
+  - URL + --branch: check via `git ls-remote --heads <url> <branch>`
+      - exit 0 (branch exists): git clone -b <branch> --single-branch <url> <anchor>
+      - non-zero (branch absent): git init <anchor> + git remote add origin <url> + git checkout -b <branch>
 If already exists: proceed as before; ignore --branch
 ```
 
