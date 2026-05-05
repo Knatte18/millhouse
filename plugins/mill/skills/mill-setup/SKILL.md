@@ -233,7 +233,7 @@ Write-Host \"Set PYTHONPATH (User) = \$scripts\"
 
 Log: `Set PYTHONPATH (User) = <scripts>. Note: takes effect in NEW shell sessions; current mill-setup session must keep using the inline PYTHONPATH prefix above.`
 
-**Note:** After running `update-plugins.ps1` to install a new plugin version, re-run `/mill-setup` to refresh PYTHONPATH and the PS1 wrappers to the new version.
+**Note:** After running `update-plugins.ps1` to install a new plugin version, re-run `/mill-setup` to refresh PYTHONPATH and the PS1 wrappers to the new version. If upgrading from a pre-PS1 hub (one where `.millhouse/` still contains `.py` wrappers), re-run `/mill-setup` — Phase 4.7 is idempotent and will replace the `.py` wrappers with `.ps1` wrappers in a single pass, and Phase 8 will verify their absence.
 
 ### Phase 4.9 — Seed `hub_relative_path` in `config.local.yaml`
 
