@@ -150,13 +150,22 @@ After every batch in `order` has state `approved`, and only if `review.code.holi
 
 ## Handoff
 
-- `_status.append_phase(status_path, "done", _timestamp.now_utc_iso())`.
-- Flip Home.md's task line to `[done]` — wrap in `with _wiki.wiki_lock(wiki_path, slug):`, then read `text = home_path.read_text(encoding="utf-8")`, call `result = _tasks_md.set_phase(text, slug, "done")`, write back via `home_path.write_text(result, encoding="utf-8")`, and call `_wiki.write_commit_push(wiki_path, ["Home.md"], f"task: mark {slug} done", slug=slug)` (lock already held; no re-acquire).
-- Commit+push the wiki change.
-- `_notify.notify("mill-go.done", f"task {slug} complete", slug=slug)`.
-- If `pipeline.auto_report: true` → invoke `/mill-self-report` directly with no argument. The skill checks `gh auth` itself and bails cleanly if absent. Wait for it to finish before continuing.
-- If `pipeline.auto_merge: true` → invoke `/mill-merge`. Otherwise tell the user: "Task complete. Run `/mill-merge` to merge the task branch back to parent."
-- Release the builder lock.
+1. `_status.append_phase(status_path, "done", _timestamp.now_utc_iso())`. Commit on the task branch: `git -C <worktree> add status.md && git -C <worktree> commit -m "mill-go: done {slug}"` (no push).
+2. Flip Home.md's task line to `[done]`:
+   ```python
+   with _wiki.wiki_lock(wiki_path, slug):
+       _tasks_md.set_phase_at(home_path, slug, "done")
+       _wiki.write_commit_push(wiki_path, ["Home.md"], f"task: complete {slug}", slug=slug)
+   ```
+   `signature: _tasks_md.set_phase_at(path: Path, slug: str, phase: str | None) -> None`
+   `signature: _wiki.wiki_lock(wiki_path: Path, slug: str) -> ContextManager[None]`
+   `signature: _wiki.write_commit_push(wiki_path: Path, paths: list[str], msg: str, *, slug: str) -> None`
+   The lock-context wraps the read-modify-write atomically; `set_phase_at` does the read+transform+write itself; `write_commit_push` acquires the lock internally but the counter from `wiki_lock` makes that a no-op.
+3. `_notify.notify("mill-go.done", f"task {slug} complete", slug=slug)`.
+4. **Release the builder lock immediately:** `_builder_lock.release(Path(".millhouse"))`.
+   `signature: _builder_lock.release(mill_dir: Path) -> None`
+5. If `pipeline.auto_report: true` → invoke `/mill-self-report` directly with no argument. The skill checks `gh auth` itself and bails cleanly if absent. Wait for it to finish before continuing.
+6. If `pipeline.auto_merge: true` → invoke `/mill-merge`. Otherwise tell the user: "Task complete. Run `/mill-merge` to merge the task branch back to parent."
 
 ## Principles
 
