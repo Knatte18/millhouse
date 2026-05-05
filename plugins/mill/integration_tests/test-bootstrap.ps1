@@ -28,7 +28,7 @@ $tmp       = Join-Path $scratch ('bootstrap-test-' + [Guid]::NewGuid().ToString(
 $container = Join-Path $tmp       'container'
 $bare      = Join-Path $container 'wiki.git'
 $wiki      = Join-Path $container 'wiki'
-$hub       = Join-Path $container 'hub'
+$hub       = Join-Path (Join-Path $container 'wts') 'hub'
 
 # Some earlier milestones discovered cp1252-vs-UTF8 issues when Python
 # prints rendered text to a Windows console (see legacy handoff notes).
@@ -90,6 +90,8 @@ try {
     #    judgment and not exercised here.
     # ------------------------------------------------------------------
     New-Item -ItemType Directory -Path (Join-Path $hub '.millhouse') -Force | Out-Null
+    # git init so that git rev-parse --show-toplevel returns $hub rather than the outer worktree
+    Invoke-Git 'init' '-q' $hub | Out-Null
 
     # Phase 4: junction
     uv run --project $millRoot python -c "from pathlib import Path; import _junction; _junction.create(Path(r'$wiki').resolve(), Path(r'$hub/.millhouse/wiki').resolve())" | Out-Null
@@ -154,10 +156,10 @@ try {
     $homeText    = Get-Content (Join-Path $wiki 'Home.md')    -Raw
     $sidebarText = Get-Content (Join-Path $wiki '_Sidebar.md') -Raw
 
-    if ($homeText -notmatch '## Plain foo \[plain-foo\]') {
+    if ($homeText -notmatch '## Plain foo[\r\n]+\[plain-foo\]') {
         throw "Home.md missing plain heading. Got:`n$homeText"
     }
-    if ($homeText -notmatch '## Linked bar \[\[linked-bar\]\]\(proposal-linked-bar\)') {
+    if ($homeText -notmatch '## Linked bar[\r\n]+\[\[linked-bar\]\]\(proposal-linked-bar\)') {
         throw "Home.md missing linked heading. Got:`n$homeText"
     }
 
