@@ -98,7 +98,7 @@ No batch-local decisions beyond Shared Decisions.
   - Call `main(["test-batch", "--resume"])`.
   - Assert: exit code 1; no JSON on stdout.
 
-  For cwd isolation, use `os.chdir(tmp_path)` inside each test and restore after (use `addCleanup` or `unittest.mock.patch("os.getcwd", return_value=str(tmp_path))` — but since the CLI uses `Path.cwd()`, the cleanest approach is to actually `os.chdir` and restore via `addCleanup(os.chdir, original_cwd)`.
+  For cwd isolation, use `os.chdir(tmp_path)` inside each test and restore in a try/finally: `original_cwd = os.getcwd(); try: os.chdir(tmp_path); result = main(argv); finally: os.chdir(original_cwd)`.
 
 - **Commit:** `feat(tests): add test-millpy-implement.py`
 
@@ -111,7 +111,7 @@ No batch-local decisions beyond Shared Decisions.
   - `plugins/mill/skills/mill-go/SKILL.md`
 - **Creates:** none
 - **Deletes:** none
-- **Requirements:** Make three targeted edits to `mill-go/SKILL.md`:
+- **Requirements:** Make four targeted edits to `mill-go/SKILL.md`:
 
   **Edit 1 — "### 1. Implement" section:**
   Replace the block that starts with "- Resolve the batch's file path via the Batch Index entry's `file:`." and ends with the `_implementer_sonnet.run` signature line. Replace with:
@@ -129,21 +129,38 @@ No batch-local decisions beyond Shared Decisions.
   The `start_sha` / `implementer_session` bullets are removed — the CLI handles these.
 
   **Edit 2 — "### 3. Code Review loop → REQUEST_CHANGES" section:**
-  Replace the block that starts with "> Load the `mill-receiving-review` skill..." (the quoted user-message block) and ends with "`_implementer_sonnet.run(fix_prompt, session_id=session_id, resume=True, cwd=project_root)`. Parse the JSON report the same way as step 2. On stuck → escalate." Replace with:
+  Replace the entire `REQUEST_CHANGES` bullet block. The replacement starts at "— set batch state → `fixing`. `_status.append_phase(...)`. Commit on the task branch: `git -C <worktree> add status.md reviews/<file>...`. **Resume the implementer session** with a new user message:" (immediately after the literal `REQUEST_CHANGES` token at the start of the bullet) and ends after "`_implementer_sonnet.run(fix_prompt, session_id=session_id, resume=True, cwd=project_root)`. Parse the JSON report the same way as step 2. On stuck → escalate." This includes the blockquote (`> Load the mill-receiving-review skill...`) in between. Replace with:
 
   ```
-  - Invoke:
+  — invoke:
     ```bash
     uv run --project "${CLAUDE_PLUGIN_ROOT}" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-implement.py" <batch_name> --resume --round <N> --review-file <review-file-abs-path>
     ```
-    The CLI reads `implementer_session` from status.md, sets batch state → `fixing`, commits and pushes, and resumes the warm implementer session with the fix prompt (which instructs the implementer to load `mill-receiving-review` and apply findings). Parse the JSON report the same way as step 2. On stuck → escalate.
+    The CLI atomically: reads `implementer_session` from status.md, sets batch state → `fixing`, calls `_status.append_phase` for `fixing-{batch_name}-r{N}`, commits and pushes (status.md plus the review file), and resumes the warm implementer session with the fix prompt (which instructs the implementer to load `mill-receiving-review` and apply findings). Parse the JSON report the same way as step 2. On stuck → escalate.
   ```
 
-  **Edit 3 — "## Board discipline" section:**
-  - On every line that ends with `(no push)`, remove `(no push)` from the end. The affected lines are in the Prepare commit and the Approve commit annotations.
-  - Replace the final bullet "No push from per-card commits — mill-merge pushes the task branch at task end." with: "Task-branch state commits push to `origin/<task-branch>` immediately after each `git commit`. `millpy-implement.py` handles push for batch-start and fix-cycle commits; mill-go handles push for Prepare, Approve, blocked, and done commits. Per-card implementer commits (via the `git-commit` skill) do not push — mill-merge pushes the full task branch at task end."
+  After this edit the REQUEST_CHANGES bullet contains exactly one Invoke block — no leading state-management text, no orphaned blockquote, no orphaned spawn line.
 
-  Make no other changes. In particular: keep `## Holistic code review` section unchanged; keep `## Principles` section unchanged; keep all signature lines that remain accurate.
+  **Edit 3 — "## Board discipline" section:**
+  - On every line whose text ends with `(no push)`, remove the trailing `(no push)` from that line (and any leading single space). The affected lines in the current SKILL.md are the Prepare commit (Prepare section) and the Handoff step-1 done commit (Handoff section). Do not search by commit-message text; the rule "remove `(no push)` from any line ending with it" is unambiguous and finds the right lines.
+  - Replace the final bullet "No push from per-card commits — mill-merge pushes the task branch at task end." with: "`millpy-implement.py` pushes its own task-branch state commits (batch-start, fix-cycle) to `origin/<task-branch>` immediately after each `git commit`. The Builder's own state commits (Prepare, Approve, blocked, done) and per-card implementer commits do not push — mill-merge pushes the full task branch at task end. Adding push to the Builder's own commits is a follow-up task; this PR scopes the push policy to CLI commits only."
+
+  **Edit 4 — "## Holistic code review" section:**
+  Update the inline `_implementer_sonnet.run` signature line to include the new `timeout` parameter introduced by Card 2. Locate the signature line:
+
+  ```
+  `signature: _implementer_sonnet.run(prompt_text: str, *, session_id: str | None = None, resume: bool = False, cwd: Path | str | None = None) -> tuple[str, str]`
+  ```
+
+  Replace with:
+
+  ```
+  `signature: _implementer_sonnet.run(prompt_text: str, *, session_id: str | None = None, resume: bool = False, cwd: Path | str | None = None, timeout: int = 1800) -> tuple[str, str]`
+  ```
+
+  Change nothing else in the Holistic section. The `_implementer_sonnet.run(...)` call site itself does not need editing — the timeout parameter is optional with a default that matches the prior behavior.
+
+  Make no other changes. In particular: keep `## Holistic code review` section's prose and call site unchanged (only the inline signature line is edited per Edit 4); keep `## Principles` section unchanged; keep all signature lines elsewhere that remain accurate.
 
 - **Commit:** `docs(mill-go): update SKILL.md — millpy-implement.py dispatch + push policy`
 
