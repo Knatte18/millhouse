@@ -21,6 +21,7 @@ sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
 import _active  # noqa: E402
 import _reviewer_test_stub as stub  # noqa: E402
+from _llm_claude import LLMError  # noqa: E402
 from _review_code import run as code_run  # noqa: E402
 from _review_common import ReviewError  # noqa: E402
 
@@ -61,10 +62,17 @@ def _make_overview(batches: list[tuple[str, str]]) -> str:
     )
 
 
-def _make_batch_file(name: str, reads: list[str], creates: list[str]) -> str:
-    """Return batch file text (single-line Reads:/Creates: form)."""
+def _make_batch_file(
+    name: str,
+    reads: list[str],
+    creates: list[str],
+    *,
+    deletes: list[str] | None = None,
+) -> str:
+    """Return batch file text (single-line Reads:/Creates:/Deletes: form)."""
     reads_part = ", ".join(f"`{r}`" for r in reads) if reads else "none"
     creates_part = ", ".join(f"`{c}`" for c in creates) if creates else "none"
+    deletes_part = ", ".join(f"`{d}`" for d in deletes) if deletes else "none"
     return (
         f"# Batch: {name}\n\n"
         "```yaml\n"
@@ -74,6 +82,7 @@ def _make_batch_file(name: str, reads: list[str], creates: list[str]) -> str:
         f"- **Reads:** {reads_part}\n"
         "- **Modifies:** none\n"
         f"- **Creates:** {creates_part}\n"
+        f"- **Deletes:** {deletes_part}\n"
     )
 
 
@@ -537,6 +546,203 @@ def main() -> int:
         except Exception as exc:
             errors += 1
             print(f"FAIL test8 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
+    # Test 9 — ERROR parity: initial LLM call raises (per-batch)
+    # ------------------------------------------------------------------
+    with tempfile.TemporaryDirectory() as tmpdir:
+        mill_dir, wiki_root, project_root, cfg = _make_fixture(Path(tmpdir))
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        original_run = stub.run
+        def _raise_boom(prompt_text, **kw):
+            raise LLMError("seeded boom")
+        stub.run = _raise_boom
+        stub.seed([])  # clear prompts log
+        try:
+            r = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, batch_name="alpha")
+            assert r.verdict == "REQUEST_CHANGES", f"expected REQUEST_CHANGES, got {r.verdict}"
+            assert len(r.reviews) == 1
+            rev = r.reviews[0]
+            assert rev["verdict"] == "ERROR", f"expected ERROR entry, got {rev['verdict']}"
+            assert rev["file"] is None, f"expected file=None, got {rev['file']}"
+            assert "seeded boom" in rev["error"], f"error field wrong: {rev['error']}"
+            assert rev["session_id"] is None
+            print("PASS test9: initial LLM failure → ReviewResult(ERROR) not raise")
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test9: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test9 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            stub.run = original_run
+            os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
+    # Test 10 — ERROR parity: initial LLM call raises (holistic)
+    # ------------------------------------------------------------------
+    with tempfile.TemporaryDirectory() as tmpdir:
+        mill_dir, wiki_root, project_root, cfg = _make_fixture(Path(tmpdir))
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        original_run = stub.run
+        def _raise_boom(prompt_text, **kw):
+            raise LLMError("seeded boom")
+        stub.run = _raise_boom
+        stub.seed([])
+        try:
+            r = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, batch_name=None)
+            assert r.verdict == "REQUEST_CHANGES", f"expected REQUEST_CHANGES, got {r.verdict}"
+            rev = r.reviews[0]
+            assert rev["verdict"] == "ERROR"
+            assert rev["scope"] == "holistic"
+            assert "seeded boom" in rev["error"]
+            print("PASS test10: holistic LLM failure → ReviewResult(ERROR) not raise")
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test10: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test10 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            stub.run = original_run
+            os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
+    # Test 11 — ERROR on resume: first call returns NEED_CONTEXT, retry raises
+    # ------------------------------------------------------------------
+    with tempfile.TemporaryDirectory() as tmpdir:
+        mill_dir, wiki_root, project_root, cfg = _make_fixture(Path(tmpdir))
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        original_run = stub.run
+        call_count = 0
+        def _seq(prompt_text, **kw):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return original_run(prompt_text, **kw)
+            raise LLMError("seeded boom")
+        stub.seed([(NEED_CONTEXT_TEXT, "sid-1")])
+        stub.run = _seq
+        try:
+            r = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, batch_name="alpha")
+            assert r.verdict == "REQUEST_CHANGES", f"expected REQUEST_CHANGES, got {r.verdict}"
+            rev = r.reviews[0]
+            assert rev["verdict"] == "ERROR"
+            assert rev["error"].startswith("resume retry failed:"), (
+                f"error should start with 'resume retry failed:': {rev['error']}"
+            )
+            assert rev["session_id"] is None
+            print("PASS test11: resume LLM failure → ERROR entry with 'resume retry failed:' prefix")
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test11: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test11 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            stub.run = original_run
+            os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
+    # Test 12 — deletes surface: ## Intentionally deleted in prompt
+    # ------------------------------------------------------------------
+    with tempfile.TemporaryDirectory() as tmpdir:
+        worktree = Path(tmpdir) / "container" / "wts" / SLUG
+        worktree.mkdir(parents=True)
+        subprocess.run(["git", "-C", str(worktree), "init"], check=True, capture_output=True)
+        mill_dir = worktree / ".millhouse"
+        wiki_root = Path(tmpdir) / "wiki"
+        project_root = worktree
+        _active.write(
+            mill_dir,
+            slug=SLUG, task_title="Test", branch="test",
+            spawned_at="2026-01-01T00:00:00Z",
+        )
+        plan_dir = worktree / "plan"
+        plan_dir.mkdir(parents=True)
+        (plan_dir / "00-overview.md").write_text(
+            _make_overview([("alpha", "01-alpha.md")]), encoding="utf-8"
+        )
+        (plan_dir / "01-alpha.md").write_text(
+            _make_batch_file("alpha", ["src/a.py"], [], deletes=["legacy/x.py"]),
+            encoding="utf-8",
+        )
+        (project_root / "src").mkdir(parents=True)
+        (project_root / "src" / "a.py").write_text("x", encoding="utf-8")
+        cfg12 = {
+            "paths": {
+                "discussion_file": "discussion.md",
+                "plan_dir":        "plan/",
+                "reviews_dir":     "reviews/",
+            },
+            "llm": {"bulk_timeout": None, "holistic_timeout": None},
+            "review": {
+                "code": {"rounds": 3, "reviewer": "test_stub", "self_fix_rounds": 0, "holistic": True},
+            },
+        }
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        _seed_approve(1)
+        try:
+            code_run(cfg12, SLUG, mill_dir, wiki_root, project_root, batch_name="alpha")
+            prompts = stub.captured_prompts()
+            assert prompts, "expected at least one captured prompt"
+            first_prompt = prompts[0][0]
+            assert "## Intentionally deleted" in first_prompt, (
+                "'## Intentionally deleted' heading absent from prompt"
+            )
+            assert "legacy/x.py" in first_prompt, (
+                "'legacy/x.py' token absent from prompt"
+            )
+            print("PASS test12: Deletes: token surfaces as '## Intentionally deleted' in prompt")
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test12: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test12 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
+    # Test 13 — timeout plumbing: bulk_timeout and holistic_timeout forwarded
+    # ------------------------------------------------------------------
+    with tempfile.TemporaryDirectory() as tmpdir:
+        mill_dir, wiki_root, project_root, cfg = _make_fixture(Path(tmpdir))
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        cfg["llm"]["bulk_timeout"] = 900
+        cfg["llm"]["holistic_timeout"] = 1800
+        try:
+            _seed_approve(1)
+            code_run(cfg, SLUG, mill_dir, wiki_root, project_root, batch_name="alpha")
+            prompts = stub.captured_prompts()
+            assert prompts, "expected at least one captured prompt"
+            _, kwargs = prompts[0]
+            assert kwargs["timeout"] == 900, (
+                f"per-batch call: expected timeout=900, got {kwargs['timeout']}"
+            )
+            print("PASS test13a: bulk_timeout=900 forwarded to reviewer for per-batch call")
+
+            _seed_approve(1)
+            code_run(cfg, SLUG, mill_dir, wiki_root, project_root, batch_name=None)
+            prompts = stub.captured_prompts()
+            _, kwargs = prompts[0]
+            assert kwargs["timeout"] == 1800, (
+                f"holistic call: expected timeout=1800, got {kwargs['timeout']}"
+            )
+            print("PASS test13b: holistic_timeout=1800 forwarded to reviewer for holistic call")
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test13: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test13 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
         finally:
             os.chdir(orig_dir)
 
