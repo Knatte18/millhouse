@@ -4,7 +4,7 @@
 task: 6 — mill-go SKILL.md prose + lock-API + lock-coverage + Builder-oppførsel
 batch: wiki-lock-unification
 cards: 8
-verify: uv run --project "c:/Code/millhouse/wts/millhouse/plugins/mill" python "c:/Code/millhouse/wts/millhouse/plugins/mill/unit_tests/run-all.py"
+verify: uv run --project "plugins/mill" python "plugins/mill/unit_tests/run-all.py"
 depends-on: []
 ```
 

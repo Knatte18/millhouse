@@ -7,7 +7,7 @@ approved: true
 started: 20260504-121302
 parent: main
 root: ""
-verify: uv run --project "c:/Code/millhouse/wts/millhouse/plugins/mill" python "c:/Code/millhouse/wts/millhouse/plugins/mill/unit_tests/run-all.py"
+verify: uv run --project "plugins/mill" python "plugins/mill/unit_tests/run-all.py"
 ```
 
 ## Batch Index
@@ -17,15 +17,15 @@ batches:
   - name: wiki-lock-unification
     file: 01-wiki-lock-unification.md
     depends-on: []
-    verify: uv run --project "c:/Code/millhouse/wts/millhouse/plugins/mill" python "c:/Code/millhouse/wts/millhouse/plugins/mill/unit_tests/run-all.py"
+    verify: uv run --project "plugins/mill" python "plugins/mill/unit_tests/run-all.py"
   - name: helper-api-additions
     file: 02-helper-api-additions.md
     depends-on: []
-    verify: uv run --project "c:/Code/millhouse/wts/millhouse/plugins/mill" python "c:/Code/millhouse/wts/millhouse/plugins/mill/unit_tests/run-all.py"
+    verify: uv run --project "plugins/mill" python "plugins/mill/unit_tests/run-all.py"
   - name: validate-plan-typeerror
     file: 03-validate-plan-typeerror.md
     depends-on: []
-    verify: uv run --project "c:/Code/millhouse/wts/millhouse/plugins/mill" python "c:/Code/millhouse/wts/millhouse/plugins/mill/unit_tests/run-all.py"
+    verify: uv run --project "plugins/mill" python "plugins/mill/unit_tests/run-all.py"
   - name: mill-go-skill-rewrite
     file: 04-mill-go-skill-rewrite.md
     depends-on: [wiki-lock-unification, helper-api-additions]
