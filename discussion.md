@@ -66,9 +66,9 @@ The fix-cycle is additionally broken when the Builder uses `Agent` tool dispatch
 
 ### crash-recovery-initial
 
-- **Decision:** If the CLI is called for a batch already in state `running`, it treats it as a restart: generates a new `session_id`, overwrites the `running` state fields, and re-commits.
-- **Rationale:** Consistent with mill-go's one-retry-on-transient policy. A crash mid-dispatch leaves the batch in `running` — forcing a manual reset to `pending` before restarting is unnecessary friction.
-- **Rejected:** Error if batch is already `running`. Too strict; the common crash-recovery case should not require operator intervention.
+- **Decision:** If the CLI is called for a batch already in state `running`, it treats it as a restart: generates a new `session_id`, overwrites the `running` state fields, and re-commits. If `--resume` is called for a batch already in state `fixing`, it also treats it as a restart: overwrites the `fixing` state fields and re-resumes.
+- **Rationale:** Consistent with mill-go's one-retry-on-transient policy. A crash mid-dispatch leaves the batch in `running` or `fixing` — forcing a manual reset before restarting is unnecessary friction.
+- **Rejected:** Error if batch is already `running` or `fixing`. Too strict; the common crash-recovery case should not require operator intervention.
 
 ### builder-lock
 
@@ -90,8 +90,8 @@ The fix-cycle is additionally broken when the Builder uses `Agent` tool dispatch
 
 ### mill-go-skill-update
 
-- **Decision:** Update `mill-go/SKILL.md` to: (1) replace the initial-dispatch block (the 10-step sequence under "1. Implement") with a single `millpy-implement.py` call; (2) replace the fix-cycle resume block (under "REQUEST_CHANGES" in the code review loop) with a single `millpy-implement.py --resume` call; (3) update Board Discipline to remove "(no push)" from task-branch commits and state that task-branch state commits push to `origin/<task-branch>`. Verdict parsing logic stays in the skill.
-- **Rationale:** The skill describes what the Builder does. After the CLI exists, the Builder's action is one subprocess call — the skill should say that and no more. Board Discipline must be updated in the same change to avoid contradicting the new push policy.
+- **Decision:** Update `mill-go/SKILL.md` to: (1) replace the initial-dispatch block (the 10-step sequence under "1. Implement") with a single `millpy-implement.py` call; (2) replace the per-batch fix-cycle resume block (under "REQUEST_CHANGES" in the code review loop) with a single `millpy-implement.py --resume` call; (3) update Board Discipline to remove "(no push)" from task-branch commits and state that task-branch state commits push to `origin/<task-branch>`. The `## Holistic code review` section's `_implementer_sonnet.run(...)` call is left unchanged — holistic sessions are always fresh (no resume), so the resume advantage does not apply, and replacing that dispatch site is a separate follow-up. Verdict parsing logic stays in the skill.
+- **Rationale:** The skill describes what the Builder does. After the CLI exists, the Builder's action is one subprocess call — the skill should say that and no more. Board Discipline must be updated in the same change to avoid contradicting the new push policy. Holistic dispatch is excluded because it never resumes and is already listed out-of-scope.
 - **Rejected:** Update only the initial-dispatch block. Leaves fix-cycle inline and Board Discipline contradicting the new push policy.
 
 ## Technical context
@@ -117,7 +117,8 @@ The fix-cycle is additionally broken when the Builder uses `Agent` tool dispatch
 - `pending` → `running`: initial dispatch (set state, start_sha, implementer_session + commit + push)
 - `running` → `reviewing`: set by mill-go after the CLI returns success (not the CLI's job)
 - `reviewing` → `fixing`: fix-cycle resume (set state, review_round, review_file + commit + push)
-- Any → `running` (on crash-recovery restart): overwrite running-state fields, new session_id
+- Any → `running` (on crash-recovery restart for initial dispatch): overwrite running-state fields, new session_id
+- `fixing` → `fixing` (on crash-recovery restart for resume): overwrite fixing-state fields, re-resume
 
 Allowed fields per `_status._BATCH_ALLOWED_KEYS`: `state`, `implementer_session`, `commit_sha`, `start_sha`, `review_round`, `review_file`, `blocked_reason`.
 
@@ -140,9 +141,9 @@ millpy-implement.py <batch_name> --resume --round N --review-file <abs-path>
 
 Flags:
 - `<batch_name>` — positional, required. Must match a name in `plan/00-overview.md`'s Batch Index.
-- `--resume` — triggers the fix-cycle path. Requires `--round` and `--review-file`.
-- `--round N` — fix-cycle round number; injected as `<ROUND>` token in `implementer-fix.md`; defaults to 1.
-- `--review-file <abs-path>` — absolute path to the review file the implementer must read.
+- `--resume` — triggers the fix-cycle path. Requires `--review-file`.
+- `--round N` — fix-cycle round number; injected as `<ROUND>` token in `implementer-fix.md`; optional, defaults to 1.
+- `--review-file <abs-path>` — absolute path to the review file the implementer must read. Required when `--resume` is set.
 
 Exit codes:
 - `0` — implementer returned JSON (success or stuck); JSON on stdout
@@ -193,6 +194,7 @@ Mock at the module level (via `unittest.mock.patch`):
 3. **Initial dispatch — implementer reports `stuck`**: CLI exits 0, forwards the stuck JSON verbatim.
 4. **Resume path — success**: `--resume --round 2 --review-file <path>` → reads `implementer_session` from status.md, sets state `fixing`, commits, pushes, calls `run` with `resume=True`. Exit 0.
 5. **Resume path — `LLMSessionError`**: `run` raises `LLMSessionError` → CLI exits 1, stdout contains `{"status":"stuck","stuck_type":"transient","reason":"session expired"}`.
+5b. **Resume path — bare `LLMError`**: `run` raises `LLMError` (e.g. timeout) → same stdout shape, exit 1.
 6. **Batch not found**: batch_name not in overview → stderr error, exit 1.
 7. **Malformed / missing JSON from implementer**: implementer returns text with no valid JSON on last line → CLI exits 0, stdout is `{"status":"stuck","stuck_type":"logic","reason":"no structured report"}`.
 8. **`--resume` without `--review-file`**: argparse error, exit 2.
