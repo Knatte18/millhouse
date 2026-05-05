@@ -9,6 +9,7 @@ This is the lowest layer in the 4-layer review architecture:
 Public API:
     LLMError          — raised on timeout, auth failure, or non-zero exit
     LLMSessionError   — subclass raised when --resume <id> fails
+    LLMRateLimitError — subclass raised when claude exits non-zero due to rate-limiting
     run_bulk()        — invoke claude with no tools; return (text, session_id)
     run_tool_use()    — invoke claude with Read/Grep/Glob; return (text, session_id)
     run_implementer() — invoke claude with Read/Edit/Write/Bash/Grep/Glob;
@@ -73,6 +74,15 @@ class LLMSessionError(LLMError):
 
     Callers (mill-go's builder) catch this specifically to fall back to a
     fresh session instead of aborting the batch.
+    """
+
+
+class LLMRateLimitError(LLMError):
+    """Raised when the claude CLI exits non-zero AND stream-json indicates a rate-limit/throttle event.
+
+    Backends record verdict: ERROR with error: 'rate_limit: ...' and the orchestrator's
+    ERROR-only retry handles it. Inherits from LLMError so existing catch sites continue
+    to handle it as a generic provider failure unless they specifically want the typed split.
     """
 
 

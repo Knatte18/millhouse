@@ -16,6 +16,7 @@ sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
 from _llm_claude import (  # noqa: E402
     LLMError,
+    LLMRateLimitError,
     LLMSessionError,
     _build_argv,
     _claude_argv_prefix,
@@ -35,6 +36,7 @@ def main() -> int:
     assert callable(run_implementer)
     assert issubclass(LLMError, Exception)
     assert issubclass(LLMSessionError, LLMError)
+    assert issubclass(LLMRateLimitError, LLMError)
     print("PASS: module imports cleanly, public symbols present")
 
     # Function signatures (keyword-only model arg, session_id/resume present)
@@ -64,6 +66,13 @@ def main() -> int:
     except LLMError as e:
         assert str(e) == "stale session"
         print("PASS: LLMSessionError is caught as LLMError")
+
+    # LLMRateLimitError class existence and hierarchy
+    try:
+        raise LLMRateLimitError("throttled")
+    except LLMError as e:
+        assert str(e) == "throttled"
+        print("PASS: LLMRateLimitError is caught as LLMError")
 
     # _parse_stream_json: valid result event with session_id
     raw = (
