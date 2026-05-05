@@ -127,9 +127,10 @@ For each round `N` from 1 to `review.code.rounds`:
 
 ### Stuck escalation
 
+- **`LLMError` from `_llm_claude.run_implementer`** (subprocess crashed before producing a JSON report) → treat as `stuck_type: transient`. Apply the existing one-retry policy: retry once with a fresh session (new UUID, `resume=False`). If the second attempt also raises `LLMError`, escalate to user with the regular `transient` three-option prompt (retry fresh, edit plan and retry, block). Note: catch `_llm_claude.LLMError` specifically (not bare `Exception`) so genuine programmer errors still propagate.
 - `transient` (already retried once) → surface to user with three options: retry fresh, edit plan and retry, block. User picks.
 - `verify` / `logic` → surface to user with three options: edit plan to clarify then retry fresh, skip this batch (block the task), block the task. User picks.
-- On user-chosen block: set batch state → `blocked`, `blocked_reason: <reason>`, `_status.append_phase(..., "blocked")`, commit+push. Go to *Blocked*.
+- On user-chosen block: set batch state → `blocked`, `blocked_reason: <reason>`, `_status.append_phase(..., "blocked")`, commit on the task branch: `git -C <worktree> add status.md && git -C <worktree> commit -m "mill-go: blocked on {batch_name}"`. Go to *Blocked*.
 
 ### Blocked
 
