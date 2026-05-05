@@ -14,10 +14,14 @@ verify: null
 
 ```yaml
 batches:
-  - name: test-and-docs
-    file: 01-test-and-docs.md
+  - name: unit-and-docs
+    file: 01-unit-and-docs.md
     depends-on: []
     verify: python plugins/mill/unit_tests/run-all.py
+  - name: integration-test
+    file: 02-integration-test.md
+    depends-on: [unit-and-docs]
+    verify: pwsh plugins/mill/integration_tests/test-bootstrap.ps1
 ```
 
 ## Shared Decisions
@@ -32,7 +36,13 @@ batches:
 
 - **Decision:** The Phase 4.7 block in `test-bootstrap.ps1` uses `uv run --project $millRoot python -c "..."` without setting PYTHONPATH inline, matching Phases 4 and 6a already in the file.
 - **Rationale:** The existing integration test already relies on PYTHONPATH being set in the developer's environment (by mill-setup Phase 4.7). Deviating from that convention inside the same file would be inconsistent.
-- **Applies to:** test-and-docs
+- **Applies to:** integration-test
+
+### Decision: split verify by runner type
+
+- **Decision:** The unit-test batch verifies with the Python runner; the integration-test batch verifies with `pwsh`. Each batch verify covers only the code changes in that batch.
+- **Rationale:** `test-bootstrap.ps1` requires git, PYTHONPATH, and a real developer environment — it cannot be included in the unit-test runner. Separating them gives each batch an honest, executable verify command.
+- **Applies to:** unit-and-docs, integration-test
 
 ## All Files Touched
 
