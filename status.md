@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing-plan-validate-deletes
+phase: implementing-review-code-integration
 slug: review-subsystem-fixes
 branch: review-subsystem-fixes
 plan: plan
@@ -36,6 +36,8 @@ approved-review-plan-integration-no-review  2026-05-05T07:09:26Z
 implementing-cli-error-prefix  2026-05-05T07:09:26Z
 approved-cli-error-prefix-no-review  2026-05-05T07:13:48Z
 implementing-plan-validate-deletes  2026-05-05T07:13:48Z
+approved-plan-validate-deletes-no-review  2026-05-05T07:21:46Z
+implementing-review-code-integration  2026-05-05T07:21:47Z
 ```
 
 ## Batches
@@ -73,12 +75,16 @@ batches:
     commit_sha: b64617dfbeec55c15a1dbee2922a513e25fc3fa0
     review_round: 0
   - name: plan-validate-deletes
-    state: running
+    state: approved
     implementer_session: 9fd65336-7c12-4bd9-842a-47599c91107c
     start_sha: b64617dfbeec55c15a1dbee2922a513e25fc3fa0
+    commit_sha: f01b29820875ac6c15db37f11b590575434ffb61
     review_round: 0
   - name: review-code-integration
-    state: pending
+    state: running
+    implementer_session: 29180b19-a783-47b6-b2ca-5ddf94c85704
+    start_sha: f01b29820875ac6c15db37f11b590575434ffb61
+    review_round: 0
   - name: mill-plan-skill-step45
     state: pending
 ```
