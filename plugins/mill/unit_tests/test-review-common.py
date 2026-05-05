@@ -74,6 +74,7 @@ from _review_common import (  # noqa: E402
     bulk_files,
     compute_creates_union,
     compute_deletes_union,
+    detect_resume_round,
     discover_round,
     find_active_slug,
     load_config,
@@ -1128,6 +1129,68 @@ def main() -> int:
     # Confirm the function is importable (not AttributeError); do not exercise behaviour
     assert callable(_load_root_from_overview), "_load_root_from_overview should be callable"
     print("PASS: _load_root_from_overview importable from _review_common")
+
+    # ---------------------------------------------------------------------------
+    # detect_resume_round
+    # ---------------------------------------------------------------------------
+
+    # reviews_dir does not exist -> None
+    result = detect_resume_round(Path("/tmp/__nx_detect_resume__"), "plan")
+    assert result is None, f"Got {result}"
+    print("PASS: detect_resume_round nonexistent dir -> None")
+
+    # no files -> None
+    with tempfile.TemporaryDirectory() as tmpdir:
+        result = detect_resume_round(Path(tmpdir), "plan")
+        assert result is None, f"Got {result}"
+        print("PASS: detect_resume_round empty dir -> None")
+
+    # per-batch round-1 files + holistic round-1 file -> None
+    with tempfile.TemporaryDirectory() as tmpdir:
+        reviews = Path(tmpdir)
+        (reviews / "20260418-001200-plan-review-01-setup-r1.md").write_text("x")
+        (reviews / "20260418-001300-plan-review-r1.md").write_text("x")
+        result = detect_resume_round(reviews, "plan")
+        assert result is None, f"Got {result}"
+        print("PASS: detect_resume_round per-batch r1 + holistic r1 -> None")
+
+    # per-batch round-1 files + no holistic round-1 -> 1
+    with tempfile.TemporaryDirectory() as tmpdir:
+        reviews = Path(tmpdir)
+        (reviews / "20260418-001200-plan-review-01-setup-r1.md").write_text("x")
+        (reviews / "20260418-001300-plan-review-02-wire-r1.md").write_text("x")
+        result = detect_resume_round(reviews, "plan")
+        assert result == 1, f"Got {result}"
+        print("PASS: detect_resume_round per-batch r1 + no holistic -> 1")
+
+    # per-batch rounds 1 and 2 + holistic round-1 + no holistic round-2 -> 2
+    with tempfile.TemporaryDirectory() as tmpdir:
+        reviews = Path(tmpdir)
+        (reviews / "20260418-001200-plan-review-01-setup-r1.md").write_text("x")
+        (reviews / "20260418-001300-plan-review-01-setup-r2.md").write_text("x")
+        (reviews / "20260418-001400-plan-review-r1.md").write_text("x")  # holistic r1
+        result = detect_resume_round(reviews, "plan")
+        assert result == 2, f"Got {result}"
+        print("PASS: detect_resume_round per-batch r1+r2, holistic r1 only -> 2")
+
+    # per-batch round 2 partial (some at r2, some at r1) + no holistic r2 -> 2
+    with tempfile.TemporaryDirectory() as tmpdir:
+        reviews = Path(tmpdir)
+        (reviews / "20260418-001200-plan-review-01-setup-r1.md").write_text("x")
+        (reviews / "20260418-001300-plan-review-01-setup-r2.md").write_text("x")
+        (reviews / "20260418-001400-plan-review-02-wire-r1.md").write_text("x")
+        # no holistic at any round
+        result = detect_resume_round(reviews, "plan")
+        assert result == 2, f"Got {result}"
+        print("PASS: detect_resume_round partial r2 batches, no holistic -> 2 (highest batch round)")
+
+    # type isolation: plan per-batch files don't affect code detect_resume_round
+    with tempfile.TemporaryDirectory() as tmpdir:
+        reviews = Path(tmpdir)
+        (reviews / "20260418-001200-plan-review-01-setup-r1.md").write_text("x")
+        result = detect_resume_round(reviews, "code")
+        assert result is None, f"Got {result}"
+        print("PASS: detect_resume_round type isolation: plan files ignored for code")
 
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)

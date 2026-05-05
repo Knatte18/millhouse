@@ -16,6 +16,7 @@ Public API:
     read_constraints_md()— read CONSTRAINTS.md, empty string if absent
     resolve_path()       — locate a path inside the active worktree from a config template
     discover_round()     — determine next review round number per (review_type, scope)
+    detect_resume_round() — return highest per-batch-only round (no holistic yet), or None
     bulk_files()         — concatenate file contents with FILE delimiters
     build_manifest_section() — return a `## Files included` markdown block listing every bulked file
     build_deletes_section() — return a `## Intentionally deleted` markdown block listing deleted tokens
@@ -227,6 +228,46 @@ def discover_round(reviews_dir: Path, review_type: str, scope: str) -> int:
                 found.append(int(m_batch.group("n")))
 
     return max(found) + 1 if found else 1
+
+
+def detect_resume_round(reviews_dir: Path, review_type: str) -> int | None:
+    """Return the highest per-batch-only round for review_type, or None.
+
+    Returns the highest round number ``N`` such that at least one per-batch
+    review file exists for round ``N`` AND no holistic review file exists for
+    round ``N``. Returns ``None`` when no such round exists (either all rounds
+    have a holistic file, no per-batch files exist at all, or ``reviews_dir``
+    does not exist).
+
+    Uses RE_SIMPLE (checked first per convention) to identify holistic files
+    and RE_BATCH to identify per-batch files, both filtered by ``review_type``.
+
+    Consumed by ``_review_plan.run`` to detect a partially-complete run where
+    per-batch reviews are done but the holistic pass has not yet fired.
+    """
+    if not reviews_dir.exists():
+        return None
+
+    batch_rounds: set[int] = set()
+    holistic_rounds: set[int] = set()
+
+    for entry in reviews_dir.iterdir():
+        if not entry.is_file():
+            continue
+        name = entry.name
+        m_simple = RE_SIMPLE.match(name)
+        if m_simple:
+            if m_simple.group("type") == review_type:
+                holistic_rounds.add(int(m_simple.group("n")))
+            continue
+        m_batch = RE_BATCH.match(name)
+        if m_batch and m_batch.group("type") == review_type:
+            batch_rounds.add(int(m_batch.group("n")))
+
+    candidates = batch_rounds - holistic_rounds
+    if not candidates:
+        return None
+    return max(candidates)
 
 
 # Regex constants for parse_batch_refs.
