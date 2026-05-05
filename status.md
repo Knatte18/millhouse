@@ -29,7 +29,9 @@ implementing  2026-05-05T12:25:05Z
 ```yaml
 batches:
   - name: unit-and-docs
-    state: pending
+    state: running
+    implementer_session: 2127fe44-40e7-42ab-ac9a-bd6a578254e8
+    start_sha: 2f635e49697c903aedd8df3b4716712d52aeb7e8
   - name: integration-test
     state: pending
 ```
