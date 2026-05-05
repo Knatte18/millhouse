@@ -99,7 +99,8 @@ Record `commit_sha` from a successful report on the batch entry.
 
 For each round `N` from 1 to `review.code.rounds`:
 
-1. **Crash-recovery check.** Before firing the CLI, scan `<WIKI_PATH>/active/<slug>/reviews/` for a file matching `*-code-review-{batch_name}-r{N}.md`. If found, treat it as this round's review file — parse its verdict from the fenced yaml block (via `_review_common.parse_verdict` on the file content) and skip to step 4 below. This covers the case where mill-go crashed after writing the review but before committing state.
+1. **Crash-recovery check.** Before firing the CLI, scan `Path("reviews").resolve()` for a file matching `*-code-review-{batch_name}-r{N}.md`. If found, treat it as this round's review file — parse its verdict from the fenced yaml block via `_review_common.parse_verdict(file_content)` and skip to step 4 below. This covers the case where mill-go crashed after writing the review but before committing state.
+   `signature: _review_common.parse_verdict(text: str) -> str`
 
 2. Invoke:
 
@@ -113,15 +114,16 @@ For each round `N` from 1 to `review.code.rounds`:
 3. **Before reading any review file, load the `mill-receiving-review` skill.** Non-negotiable.
 
 4. Branch on verdict:
-   - `APPROVE` — batch state → `approved`, `review_file: <path>`. `_status.append_phase(..., f"approved-{batch_name}")`. Commit+push. Break out of the loop → next batch.
+   - `APPROVE` — batch state → `approved`, `review_file: <path>`. `_status.append_phase(..., f"approved-{batch_name}")`. Commit on the task branch: `git -C <worktree> add status.md && git -C <worktree> commit -m "mill-go: approve batch {batch_name}"`. Break out of the loop → next batch.
    - `NEED_CONTEXT` — read the `## Missing context` bullets from the review file. For each listed path, if it exists under the worktree, append to `extra_files` for the NEXT round. `_notify.notify("mill-go.review-need-context", f"batch {batch_name} round {N}", slug=slug, files=len(missing))`. Record this gap for mill-self-report (see Handoff). Increment round and continue the loop. If ALL the missing files are paths already in `extra_files` from a prior round (no new info), treat as a stuck-logic failure and break.
-   - `REQUEST_CHANGES` — set batch state → `fixing`. `_status.append_phase(..., f"fixing-{batch_name}-r{N}")`. Commit+push. **Resume the implementer session** with a new user message:
+     `signature: _notify.notify(event: str, message: str, **fields) -> None`
+   - `REQUEST_CHANGES` — set batch state → `fixing`. `_status.append_phase(..., f"fixing-{batch_name}-r{N}")`. Commit on the task branch: `git -C <worktree> add status.md reviews/<file> && git -C <worktree> commit -m "mill-go: review-request batch {batch_name} round {N}"`. **Resume the implementer session** with a new user message:
 
      > Load the `mill-receiving-review` skill. Read `<review-file-abs-path>`. Apply VERIFY / HARM CHECK / FIX or PUSH BACK per finding. Re-run `verify:` from the batch frontmatter. Report the same JSON shape as before, reflecting the post-fix state.
 
      Spawn via `_implementer_sonnet.run(fix_prompt, session_id=session_id, resume=True, cwd=project_root)`. Parse the JSON report the same way as step 2. On success → increment round, continue loop (next round's review). On stuck → escalate.
 
-5. **Max-rounds exhaustion.** After `review.code.rounds` rounds without APPROVE: `_notify.notify("mill-go.review-exhausted", f"batch {batch_name}", slug=slug, rounds=N)`, set batch state → `blocked`, `blocked_reason: "review rounds exhausted"`, `_status.append_phase(..., "blocked")`, commit+push. Go to *Blocked* below.
+5. **Max-rounds exhaustion.** After `review.code.rounds` rounds without APPROVE: `_notify.notify("mill-go.review-exhausted", f"batch {batch_name}", slug=slug, rounds=N)`, set batch state → `blocked`, `blocked_reason: "review rounds exhausted"`, `_status.append_phase(..., "blocked")`, commit on the task branch: `git -C <worktree> add status.md && git -C <worktree> commit -m "mill-go: blocked on {batch_name} after {N} rounds"`. Go to *Blocked* below.
 
 ### Stuck escalation
 
