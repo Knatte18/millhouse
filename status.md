@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: codeguide-improvements
 branch: codeguide-improvements
 plan: plan
@@ -19,4 +19,15 @@ discussed  2026-05-05T13:00:35Z
 planning  2026-05-05T13:04:16Z
 plan-review-r1  2026-05-05T13:08:17Z
 planned  2026-05-05T13:08:26Z
+implementing  2026-05-05T13:22:35Z
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: codeguide-generate-skill
+    state: pending
+  - name: codeguide-setup-skill
+    state: pending
 ```
