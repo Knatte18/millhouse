@@ -1,10 +1,10 @@
 # Status
 
 ```yaml
-phase: discussed
+phase: planning
 slug: uv-wrapper-enforce
 branch: uv-wrapper-enforce
-plan: null
+plan: plan
 parent: main
 task: 2 — Enforce uv run in .millhouse shortcut wrappers
 task_description: |
@@ -16,4 +16,5 @@ task_description: |
 ```text
 discussing  '2026-05-05T11:54:19Z'
 discussed  2026-05-05T12:06:47.444295Z
+planning  2026-05-05T12:13:33Z
 ```
