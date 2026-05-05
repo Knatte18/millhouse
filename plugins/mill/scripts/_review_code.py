@@ -223,6 +223,7 @@ def run(
     # 4. Reviewer + prompt
     reviewer_name = cfg["review"]["code"]["reviewer"]
     reviewer = load_reviewer(reviewer_name)
+    timeout = cfg["llm"]["holistic_timeout"] if batch_name is None else cfg["llm"]["bulk_timeout"]
 
     template_name = "review-code-batch" if batch_name else "review-code-holistic"
     tool_rule = build_tool_rule(reviewer.MODE)
@@ -246,7 +247,7 @@ def run(
 
     # 5. Dispatch + record
     try:
-        raw, session_id = reviewer.run(prompt_text)
+        raw, session_id = reviewer.run(prompt_text, timeout=timeout)
     except LLMError as exc:
         return ReviewResult(
             type="code",
@@ -283,7 +284,7 @@ def run(
             )
             try:
                 raw, session_id = reviewer.run(
-                    retry_prompt, session_id=session_id, resume=True
+                    retry_prompt, session_id=session_id, resume=True, timeout=timeout
                 )
             except LLMError as exc:
                 return ReviewResult(

@@ -127,6 +127,10 @@ def _make_fixture(tmp_path: Path) -> tuple[Path, Path, Path, dict]:
             "plan_dir":        "plan/",
             "reviews_dir":     "reviews/",
         },
+        "llm": {
+            "bulk_timeout":     None,
+            "holistic_timeout": None,
+        },
         "review": {
             "code": {
                 "rounds": 3,
@@ -277,6 +281,7 @@ def main() -> int:
                 "plan_dir":        "plan/",
                 "reviews_dir":     "reviews/",
             },
+            "llm": {"bulk_timeout": None, "holistic_timeout": None},
             "review": {
                 "code": {"rounds": 3, "reviewer": "test_stub", "self_fix_rounds": 0, "holistic": True},
             },
@@ -327,6 +332,7 @@ def main() -> int:
                 "plan_dir":        "plan/",
                 "reviews_dir":     "reviews/",
             },
+            "llm": {"bulk_timeout": None, "holistic_timeout": None},
             "review": {
                 "code": {"rounds": 3, "reviewer": "test_stub", "self_fix_rounds": 0, "holistic": True},
             },
@@ -455,6 +461,7 @@ def main() -> int:
                 "plan_dir":        "plan/",
                 "reviews_dir":     "reviews/",
             },
+            "llm": {"bulk_timeout": None, "holistic_timeout": None},
             "review": {
                 "code": {"rounds": 3, "reviewer": "test_stub", "self_fix_rounds": 0, "holistic": True},
             },
