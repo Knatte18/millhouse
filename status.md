@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: discussed
 slug: dispatch-cli-and-resume
 branch: dispatch-cli-and-resume
 plan: null
@@ -15,4 +15,5 @@ task_description: |
 
 ```text
 discussing  '2026-05-05T11:53:45Z'
+discussed  2026-05-05T12:21:09Z
 ```
