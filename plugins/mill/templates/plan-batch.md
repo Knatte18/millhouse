@@ -39,11 +39,12 @@ unambiguously. Fields per card:_
 - **Reads:** every file the implementer reads to do this card. Non-empty. One backtick-wrapped path per indented bullet.
 - **Modifies:** files the implementer edits. One backtick-wrapped path per indented bullet.
 - **Creates:** files the implementer creates. One backtick-wrapped path per indented bullet. When a field has nothing, write the literal "none" on the same line as the field label.
+- **Deletes:** files the implementer deletes. One backtick-wrapped path per indented bullet. Multi-line bullet form supported. When a field has nothing, write the literal "none" on the same line as the field label.
 - **Requirements:** what the card must achieve. Prose — exact
   assertions live in tests, not here.
 - **Commit:** one-line commit message the implementer will use.
 
-Reads/Modifies/Creates fields contain ONLY backtick-wrapped paths in bullet form. No inline parenthetical commentary, no line-range suffixes (e.g. ":55-65"). Inline notes belong in Requirements:. When a field has nothing, write the literal "none" on the same line as the field label.
+Reads/Modifies/Creates/Deletes fields contain ONLY backtick-wrapped paths in bullet form. No inline parenthetical commentary, no line-range suffixes (e.g. ":55-65"). Inline notes belong in Requirements:. When a field has nothing, write the literal "none" on the same line as the field label.
 
 ### Card N: <short title>
 
@@ -54,6 +55,7 @@ Reads/Modifies/Creates fields contain ONLY backtick-wrapped paths in bullet form
   - `path/c`
 - **Creates:**
   - `path/d`
+- **Deletes:** none
 - **Requirements:** …
 - **Commit:** `<type>(<scope>): <summary>`
 
