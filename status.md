@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-fix-r1
+phase: planned
 slug: uv-wrapper-enforce
 branch: uv-wrapper-enforce
 plan: plan
@@ -19,4 +19,6 @@ discussed  2026-05-05T12:06:47.444295Z
 planning  2026-05-05T12:13:33Z
 plan-review-r1  2026-05-05T12:20:05Z
 plan-fix-r1  2026-05-05T12:20:05Z
+plan-review-r2  2026-05-05T12:23:38Z
+planned  2026-05-05T12:23:38Z
 ```

@@ -3,7 +3,7 @@
 ```yaml
 task: 2 — Enforce uv run in .millhouse shortcut wrappers
 slug: uv-wrapper-enforce
-approved: false
+approved: true
 started: 20260505-121228
 parent: main
 root: ""
