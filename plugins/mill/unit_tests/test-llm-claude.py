@@ -8,11 +8,14 @@ invoke the live ``claude`` CLI — those tests live in
 from __future__ import annotations
 
 import inspect
+import subprocess as _subprocess_mod
 import sys
 from pathlib import Path
 
 HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
+
+import _subprocess_util as _subprocess_util_mod  # noqa: E402
 
 from _llm_claude import (  # noqa: E402
     LLMError,
@@ -172,6 +175,79 @@ def main() -> int:
         errors += 1
     except LLMError:
         print("PASS: _build_argv rejects resume=True without session_id")
+
+    # _invoke integration: monkeypatch _subprocess_util.run
+    _RL_STDOUT = '{"type":"rate_limit_event","limit_type":"requests"}\n'
+    _GENERIC_ERR_STDOUT = '{"type":"result","is_error":true,"subtype":"error_during_execution"}\n'
+    _GOOD_STDOUT = (
+        '{"type":"system","subtype":"init","session_id":"sid-xyz"}\n'
+        '{"type":"result","result":"All good","session_id":"sid-xyz"}\n'
+    )
+
+    _orig_run = _subprocess_util_mod.run
+
+    def _fake_rl(argv, **kwargs):
+        return _subprocess_mod.CompletedProcess(args=argv, returncode=1, stdout=_RL_STDOUT, stderr="rate limited")
+
+    def _fake_generic(argv, **kwargs):
+        return _subprocess_mod.CompletedProcess(args=argv, returncode=1, stdout=_GENERIC_ERR_STDOUT, stderr="crash")
+
+    def _fake_ok(argv, **kwargs):
+        return _subprocess_mod.CompletedProcess(args=argv, returncode=0, stdout=_GOOD_STDOUT, stderr="")
+
+    try:
+        # rate-limited exit + resume=False -> LLMRateLimitError
+        _subprocess_util_mod.run = _fake_rl
+        try:
+            run_bulk(prompt_text="x", model="m", session_id="abc", resume=False)
+            errors += 1
+        except LLMRateLimitError:
+            print("PASS: _invoke raises LLMRateLimitError on rate-limited exit (resume=False)")
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL: expected LLMRateLimitError, got {type(exc).__name__}: {exc}", file=sys.stderr)
+
+        # rate-limited exit + resume=True -> LLMRateLimitError (takes precedence over LLMSessionError)
+        _subprocess_util_mod.run = _fake_rl
+        try:
+            run_bulk(prompt_text="x", model="m", session_id="abc", resume=True)
+            errors += 1
+        except LLMRateLimitError:
+            print("PASS: _invoke raises LLMRateLimitError on rate-limited exit (resume=True)")
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL: expected LLMRateLimitError, got {type(exc).__name__}: {exc}", file=sys.stderr)
+
+        # generic error + resume=True -> LLMSessionError
+        _subprocess_util_mod.run = _fake_generic
+        try:
+            run_bulk(prompt_text="x", model="m", session_id="abc", resume=True)
+            errors += 1
+        except LLMSessionError:
+            print("PASS: _invoke raises LLMSessionError on generic error with resume=True")
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL: expected LLMSessionError, got {type(exc).__name__}: {exc}", file=sys.stderr)
+
+        # generic error + resume=False -> LLMError but NOT LLMSessionError
+        _subprocess_util_mod.run = _fake_generic
+        try:
+            run_bulk(prompt_text="x", model="m", session_id=None, resume=False)
+            errors += 1
+        except LLMSessionError:
+            errors += 1
+            print("FAIL: got LLMSessionError but expected plain LLMError", file=sys.stderr)
+        except LLMError:
+            print("PASS: _invoke raises plain LLMError (not LLMSessionError) on generic error with resume=False")
+
+        # zero exit -> (text, sid) tuple unchanged
+        _subprocess_util_mod.run = _fake_ok
+        result_tuple = run_bulk(prompt_text="x", model="m", session_id="sid-xyz", resume=False)
+        assert result_tuple == ("All good", "sid-xyz"), f"unexpected result: {result_tuple}"
+        print("PASS: _invoke zero-exit returns (text, sid) unchanged")
+
+    finally:
+        _subprocess_util_mod.run = _orig_run
 
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)

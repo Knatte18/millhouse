@@ -255,9 +255,14 @@ def _invoke(
         raise LLMError(f"Failed to spawn claude: {exc}") from exc
 
     dt = time.monotonic() - start
+    rate_limited = _scan_rate_limit(result.stdout or "")
 
     if result.returncode != 0:
         stderr_snippet = (result.stderr or "")[:500]
+        if rate_limited:
+            raise LLMRateLimitError(
+                f"claude rate-limited (exit {result.returncode}): {stderr_snippet}"
+            )
         if resume:
             raise LLMSessionError(
                 f"claude --resume {session_id} exited {result.returncode}: {stderr_snippet}"
