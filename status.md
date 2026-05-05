@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-integration-test
+phase: done
 slug: uv-wrapper-enforce
 branch: uv-wrapper-enforce
 plan: plan
@@ -26,6 +26,8 @@ reviewing-unit-and-docs-r1  2026-05-05T12:28:59Z
 approved-unit-and-docs  2026-05-05T12:30:09Z
 reviewing-integration-test-r1  2026-05-05T12:39:34Z
 approved-integration-test  2026-05-05T12:40:43Z
+holistic-approved  2026-05-05T12:42:28Z
+done  2026-05-05T12:42:28Z
 ```
 
 ## Batches
