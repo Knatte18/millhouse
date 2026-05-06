@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: review-code-enhancements
 branch: review-code-enhancements
 plan: plan
@@ -25,4 +25,19 @@ plan-review-r3  2026-05-06T13:31:53Z
 plan-fix-r3  2026-05-06T13:31:53Z
 plan-review-r4  2026-05-06T13:35:59Z
 planned  2026-05-06T13:35:59Z
+implementing  2026-05-06T13:39:27Z
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: config-and-subprocess
+    state: pending
+  - name: reviewer-effort-api
+    state: pending
+  - name: diff-scope-and-effort
+    state: pending
+  - name: test-diff-scope-and-effort
+    state: pending
 ```
