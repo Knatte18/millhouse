@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-setup-wiki-url
 branch: mill-setup-wiki-url
 plan: plan
@@ -21,4 +21,15 @@ plan-review-r1  2026-05-06T06:14:15Z
 plan-fix-r1  2026-05-06T06:14:15Z
 plan-review-r2  2026-05-06T06:22:24Z
 planned  2026-05-06T06:22:34Z
+implementing  2026-05-06T06:47:45Z
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: helpers
+    state: pending
+  - name: skill-and-template
+    state: pending
 ```
