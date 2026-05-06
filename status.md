@@ -29,7 +29,9 @@ implementing  2026-05-06T11:48:54Z
 ```yaml
 batches:
   - name: skill-md-fixes
-    state: pending
+    state: running
+    implementer_session: 94ed7a3b-8f63-4fe3-a078-7d5cefc6f442
+    start_sha: 14ef3adac50655e01e27aa0f3c9d423d6cb37859
   - name: session-id-template
     state: pending
 ```
