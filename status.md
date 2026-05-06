@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: discussed
 slug: rename-hub-junctions
 branch: rename-hub-junctions
 plan: null
@@ -15,4 +15,5 @@ task_description: |
 
 ```text
 discussing  '2026-05-06T16:46:14Z'
+discussed  2026-05-06T17:03:57Z
 ```
