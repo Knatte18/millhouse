@@ -9,7 +9,7 @@ You are an autonomous planner running on Opus. Your job is to turn `discussion.m
 
 ## Entry
 
-1. Resolve the wiki path via `_paths.resolve_wiki_path(_paths.resolve_git_root(Path.cwd()))` and call `_wiki.sync_pull(wiki_path, slug="mill-plan")`.
+1. Resolve the wiki path via `_paths.resolve_wiki_path(_paths.resolve_git_root())` and call `_wiki.sync_pull(wiki_path, slug="mill-plan")`.
    `signature: _wiki.sync_pull(wiki_path: Path, *, slug: str) -> None`
 2. Read the slug via `_active.read_slug(Path(".millhouse"))`. Missing → halt with "this worktree was not created by mill-spawn".
 3. Load config — deep-merge `<WIKI_PATH>/config.yaml` with `.millhouse/config.local.yaml`. Read `review.plan.rounds` as `max_review_rounds`.
@@ -132,11 +132,11 @@ Loop up to `max_review_rounds` rounds. Each round:
 
    > After {N} rounds, {M} BLOCKING findings remain unresolved (blocking_count from latest round's review JSON). Options:
    > A) Deep problems — rethink approach. Go back to mill-start and revise discussion.
-   > B) Shallow — one more review round.
+   > B) Shallow — one more review round. Invoke: `uv run --project "${CLAUDE_PLUGIN_ROOT}" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-review-plan.py" --max-rounds {N+1}` (the `--max-rounds` flag overrides the configured cap; without it the script re-reads config and exits at the same cap again).
    > C) Override — accept findings and proceed to mill-go anyway.
    > Recommended: {A/B/C} based on {analysis of remaining findings}.
 
-   Wait for the user's choice. A → halt and tell user to check out fresh after they revise. B → run one more round (ignore the max). C → set `approved: true` and proceed to Handoff.
+   Wait for the user's choice. A → halt and tell user to check out fresh after they revise. B → invoke `millpy-review-plan.py --max-rounds {N+1}` where `{N}` is the round count just reported (one extra round beyond the configured max). C → set `approved: true` and proceed to Handoff.
 
 ### Phase: Handoff
 
