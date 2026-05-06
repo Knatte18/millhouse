@@ -35,15 +35,17 @@ Fix issue D: the implementer-brief.md template instructs the spawned Claude Code
   {"status":"success","commit_sha":"<last-HEAD-sha>","session_id":"<SESSION_ID>"}
   ```
 
-  **Edit 2 — success instruction block:**
-  Find the bold instruction that immediately follows the success JSON fenced block:
+  **Edit 2+4 — both instruction blocks (replace_all):**
+  Both instruction blocks are identical, so use `replace_all: true` in a single Edit call rather than two separate edits (the Edit tool requires `old_string` to be unique in the file; since the text appears twice, a non-replace_all edit would fail).
+  Find (appears twice, once after success JSON and once after stuck JSON):
   ```
   **`session_id` MUST be the exact UUID passed to you via the `--session-id` flag (you can read it from your own command-line arguments or echo it as given). Do not invent or paraphrase the value. mill-go uses this field to correlate the report with the spawned session.**
   ```
-  Replace with:
+  Replace all with:
   ```
   **`session_id` MUST be exactly `<SESSION_ID>` (the UUID shown in the example above — it was injected into this brief when it was rendered). Copy it verbatim.**
   ```
+  Use `replace_all: true` in the Edit call. Verify afterwards that neither the original text nor `<this-session-id>` appears anywhere in the file.
 
   **Edit 3 — stuck JSON example:**
   Find:
@@ -55,17 +57,18 @@ Fix issue D: the implementer-brief.md template instructs the spawned Claude Code
   {"status":"stuck","stuck_type":"transient|verify|logic","reason":"<one-line>","commit_sha":"<last-HEAD-sha>","session_id":"<SESSION_ID>"}
   ```
 
-  **Edit 4 — stuck instruction block:**
-  Find the bold instruction that immediately follows the stuck JSON fenced block:
+  **Edit 4 — header comment token table:**
+  The file starts with an HTML comment listing all render tokens. Find the last token entry line in that table:
   ```
-  **`session_id` MUST be the exact UUID passed to you via the `--session-id` flag (you can read it from your own command-line arguments or echo it as given). Do not invent or paraphrase the value. mill-go uses this field to correlate the report with the spawned session.**
+    <ROUND>            — 1 for the first implementation pass, or the review
+                         round number on a receive-review resume
   ```
-  Replace with:
+  Add a new line immediately after it (before the blank line that ends the token table):
   ```
-  **`session_id` MUST be exactly `<SESSION_ID>` (the UUID shown in the example above — it was injected into this brief when it was rendered). Copy it verbatim.**
+  <SESSION_ID>       — UUID injected at render time; copy verbatim into the report JSON
   ```
 
-  After all four edits, confirm that no occurrence of `<this-session-id>` remains in the file and that both instruction blocks have been updated.
+  After all edits, confirm: no `<this-session-id>` remains; both instruction blocks read "injected into this brief when it was rendered"; `<SESSION_ID>` appears in the token table in the header comment.
 
   Note: `<SESSION_ID>` is a render token that will be substituted by `_render.render()` at runtime. Inside the fenced json code block in the template, it will appear literally as `<SESSION_ID>` until rendering. This is correct — `_render.render()` strips the HTML comment and substitutes all `<TOKEN>` patterns including those inside code fences.
 
