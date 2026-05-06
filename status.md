@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-worktree-locked-error
+phase: approved-auto-spawn-integration
 slug: mill-merge-teardown-fix
 branch: mill-merge-teardown-fix
 plan: plan
@@ -22,6 +22,7 @@ planned  2026-05-06T13:04:59Z
 implementing  2026-05-06T13:08:10Z
 reviewing-worktree-locked-error-r1  2026-05-06T13:11:57Z
 approved-worktree-locked-error  2026-05-06T13:13:18Z
+approved-auto-spawn-integration  2026-05-06T13:21:42Z
 ```
 
 ## Batches
@@ -35,7 +36,7 @@ batches:
     review_round: 1
     review_file: reviews/20260506-131302-code-review-worktree-locked-error-r1.md
   - name: auto-spawn-integration
-    state: running
+    state: approved
     implementer_session: 0ce655c5-e8ef-46d3-bf85-949d452b0a9b
     start_sha: 70de17a40ce9209b08ef1f9d7e5e8e249c5b3fd3
 ```
