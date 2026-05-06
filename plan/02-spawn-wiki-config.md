@@ -22,7 +22,7 @@ Bootstrap justification for `wiki/config.yaml`: `_setup.create_hub_links` reads 
 - **Context:**
   - `plugins/mill/scripts/_setup.py`
   - `plugins/mill/scripts/_junction.py`
-  - `plugins/mill/scripts/_spawn_core.py`
+  - `plugins/mill/scripts/_wiki.py`
 - **Edits:**
   - `wiki/config.yaml`
   - `plugins/mill/scripts/_wiki.py`
@@ -45,15 +45,7 @@ Bootstrap justification for `wiki/config.yaml`: `_setup.create_hub_links` reads 
      ```
      `.wiki` has no `<SLUG>` token so it is created in every worktree (hub and task). `.portals` requires `<SLUG>` so it is only created in task worktrees. `.active` is removed entirely from config; mill-spawn and mill-claim create it explicitly on the hub.
   3. Update the `junctions:` section comment block above the entries to reflect the new semantics. The key `.wiki` maps to `<WIKI_PATH>`; the key `.portals` maps to the wiki state dir for the current task.
-  4. Before committing the new config, strip old junctions from all active task worktrees so that `_junction.strip_all_in_worktree` (called by mill-cleanup/mill-merge) isn't left with stale junction names. For each worktree in `container_path / "wts"` that contains `.millhouse/active.slug.md` (i.e. active task worktrees), call:
-     ```python
-     old_junctions = {".millhouse/wiki": None, ".others": None, ".active": None}
-     for name in old_junctions:
-         p = wt_path / name
-         if p.exists() or os.path.lexists(str(p)):
-             _junction.remove(p)
-     ```
-     This is a best-effort strip of old-layout junctions before the shared config flips to new names.
+  4. Deployment note: after this card's config push lands, `_junction.strip_all_in_worktree` will iterate only `.wiki` and `.portals`. Active task worktrees with old-layout junctions (`.millhouse/wiki`, `.others`, `.active`) are not automatically stripped. `--step rename-junctions` (Card 11, batch 03) strips old junctions and recreates the new layout for every active worktree. **Ensure Card 11 is run before the first `mill-cleanup` or `mill-merge` post-deploy.** No code change is needed here — this is a deployment sequencing requirement.
   5. In `plugins/mill/scripts/_wiki.py`, update `_JUNCTION_DEFAULTS` (line ~79) from:
      ```python
      _JUNCTION_DEFAULTS: dict[str, str] = {

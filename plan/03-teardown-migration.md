@@ -60,7 +60,7 @@ Update `millpy-cleanup.py` to read status from `task/status.md` (with legacy fal
 - **Creates:** none
 - **Deletes:** none
 - **Requirements:**
-  1. Add `import _setup, _spawn_core, _gitignore, _config` to the imports section.
+  1. Add `import _setup, _spawn_core, _gitignore, _config` to the imports section. Extend the existing `from _paths import resolve_main_worktree_root, resolve_git_root` line to also import `resolve_container_path, resolve_wiki_path`.
   2. Update the `argparse` argument definition: add a `--step` argument:
      ```python
      parser.add_argument(
@@ -80,10 +80,10 @@ Update `millpy-cleanup.py` to read status from `task/status.md` (with legacy fal
      e. For each (wt_path, slug, title) in active_wts:
         - junctions_cfg_old = {"<OLD_JUNCTION_NAMES>": "..."} — read the OLD config from git history if needed, or just strip all junctions with a broad strip. Actually: call `_junction.strip_all_in_worktree(wt_path, junctions_cfg)` where `junctions_cfg` is from the CURRENT (new) wiki config. This strips `.wiki` and `.portals` if they exist. For OLD junctions (`.millhouse/wiki`, `.others`, `.active`), they need to be stripped too. Do a manual strip: for name in [".millhouse/wiki", ".others", ".active"]: path = wt_path / name; if path.exists() or path.is_symlink(): _junction.remove(path).
         - Remove old portals entry: _junction.remove(container / "portals" / slug) (tolerate already-gone).
-        - Create wiki/active/<slug>/ if not exists: (wiki_path / "active" / slug).mkdir(parents=True, exist_ok=True). Write task.md if not exists. Commit+push via _wiki.write_commit_push.
-        - Create new portals entry: _junction.create(target=wiki_path / "active" / slug, link_path=container / "portals" / slug).
-        - Recreate junctions via _setup.create_hub_links(wt_path, wiki_path, tokens) where tokens includes SLUG=slug.
-        - Move working state to task/: check `git -C <wt_path> status --porcelain` is empty. If not: log warning "skipping task/ move for <slug>: working tree dirty", continue. If clean: for src_name in ["status.md", "discussion.md", "plan", "reviews"]: src = wt_path / src_name; dst = wt_path / "task" / src_name; if src.exists(): run `git -C <wt_path> mv <src> <dst>`. After staging all four moves (for whichever files exist), issue a single commit: `git -C <wt_path> commit -m "migrate: move working state to task/ for {slug}"`. Do NOT commit inside the per-file loop.
+        - Create wiki/active/<slug>/task.md and commit+push: `ts = _timestamp.now_utc_compact(); _spawn_core.write_wiki_active_task_md(wiki_path, slug, title, ts)`. This creates the dir and task.md idempotently and commits them to the wiki.
+        - Create new portals entry: `_junction.create(target=wiki_path / "active" / slug, link_path=container / "portals" / slug)`.
+        - Recreate junctions: `_setup.create_hub_links(wt_path, wiki_path, tokens)` where `tokens` includes `SLUG=slug`.
+        - Move working state to task/: check `git -C <wt_path> status --porcelain` is empty. If not: log warning "skipping task/ move for <slug>: working tree dirty", continue. If clean: first run `(wt_path / "task").mkdir(exist_ok=True)` (`git mv` does not create parent directories). Then for src_name in ["status.md", "discussion.md", "plan", "reviews"]: src = wt_path / src_name; dst = wt_path / "task" / src_name; if src.exists(): run `git -C <wt_path> mv <src> <dst>`. After staging all four moves (for whichever files exist), issue a single commit: `git -C <wt_path> commit -m "migrate: move working state to task/ for {slug}"`. Do NOT commit inside the per-file loop.
      f. For hub worktree:
         - Strip old junctions: for name in [".millhouse/wiki", ".others", ".active"]: manually remove if exists. Also call _junction.strip_all_in_worktree(hub_root, cfg.get("junctions", {})) for any new-layout junctions.
         - Recreate hub junctions via _setup.create_hub_links(hub_root, wiki_path, hub_tokens) (no SLUG in tokens).
