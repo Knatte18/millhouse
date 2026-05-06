@@ -44,8 +44,15 @@ Where `<root>` is either the target repo (inline) or `<sibling-anchor>/<rel-path
    - Sibling mode:
      - Compute `<sibling-anchor>` by invoking `python ${CLAUDE_PLUGIN_ROOT}/scripts/_sibling.py codeguide <git-toplevel>` via subprocess. Parse the printed path.
      - If `.codeguide-root` exists at the git-toplevel, use its contents instead (single absolute or relative-to-toplevel path). Do NOT auto-create this file; users who want a non-default anchor write it themselves.
-     - If `<sibling-anchor>` does not exist yet: create it with `git init`, OR `git clone <url> <sibling-anchor>` when `--sibling <url>` was given. Then `<root> = <sibling-anchor> / <rel-path>` where `<rel-path> = cwd.relative_to(git-toplevel)`.
-     - If `<sibling-anchor>` already exists and is a git repo: `<root> = <sibling-anchor> / <rel-path>`.
+     - If `<sibling-anchor>` does not exist yet, create it according to which flags were given:
+       - **No URL** (`--sibling` only): `git init <sibling-anchor>`
+       - **URL, no `--branch`**: `git clone <url> <sibling-anchor>`
+       - **URL + `--branch <name>`**: first run `git ls-remote --heads <url> <branch>`, then:
+         - Exit 0, non-empty stdout (branch exists on remote): `git clone -b <branch> --single-branch <url> <sibling-anchor>`
+         - Exit 0, empty stdout (branch absent from remote): `git init <sibling-anchor>`, then `git -C <sibling-anchor> remote add origin <url>`, then `git -C <sibling-anchor> checkout -b <branch>` (orphan branch; do NOT push at setup time — first commit pushes)
+         - Non-zero exit (network/auth failure): stop with an error message identifying the failure; do not proceed
+       - Then `<root> = <sibling-anchor> / <rel-path>` where `<rel-path> = cwd.relative_to(git-toplevel)`.
+     - If `<sibling-anchor>` already exists and is a git repo: `<root> = <sibling-anchor> / <rel-path>`. `--branch` is ignored — the anchor has its own branch history.
 
 5. **Determine mode (first-time / refresh / subfolder):**
    - `found == false` AND `<root>` has no `_codeguide/` → **first-time root setup**
