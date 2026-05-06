@@ -11,7 +11,7 @@ One-shot. Finds an `[active]` task in `Home.md` that has no local worktree, then
 
 **Cross-machine resume:** on a machine that has never checked out the task branch, run `git fetch origin` first to make the remote-tracking ref available. `git worktree add` will then check out the branch automatically.
 
-**Sync invariant:** mill-resume MUST call `_wiki.sync_pull(wiki_path, slug="mill-resume")` on entry before reading any wiki state, where `wiki_path = _paths.resolve_wiki_path(_paths.resolve_git_root(Path.cwd()))`.
+**Sync invariant:** mill-resume MUST call `_wiki.sync_pull(wiki_path, slug="mill-resume")` on entry before reading any wiki state, where `wiki_path = _paths.resolve_wiki_path(_paths.resolve_git_root())`.
 `signature: _wiki.sync_pull(wiki_path: Path, *, slug: str) -> None`
 
 ---
@@ -37,7 +37,7 @@ If the `.millhouse/wiki/` junction does not exist at cwd, stop and tell the user
 
 ### Phase 2: Sync wiki
 
-Call `_wiki.sync_pull(wiki_path, slug="mill-resume")` (where `wiki_path = _paths.resolve_wiki_path(_paths.resolve_git_root(Path.cwd()))`) to refresh the local wiki clone from remote. This ensures the task list reflects the current state across all machines and worktrees.
+Call `_wiki.sync_pull(wiki_path, slug="mill-resume")` (where `wiki_path = _paths.resolve_wiki_path(_paths.resolve_git_root())`) to refresh the local wiki clone from remote. This ensures the task list reflects the current state across all machines and worktrees.
 
 ### Phase 3: Resolve the slug
 
