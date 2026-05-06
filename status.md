@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-config-docs
+phase: done
 slug: disable-per-batch-reviews
 branch: disable-per-batch-reviews
 plan: plan
@@ -24,6 +24,8 @@ reviewing-python-backend-r1  2026-05-06T12:44:07Z
 approved-python-backend  2026-05-06T12:46:48Z
 reviewing-config-docs-r1  2026-05-06T12:49:59Z
 approved-config-docs  2026-05-06T12:51:20Z
+holistic-approved  2026-05-06T12:54:06Z
+done  2026-05-06T12:54:06Z
 ```
 
 ## Batches
