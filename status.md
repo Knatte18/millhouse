@@ -43,5 +43,7 @@ batches:
     implementer_session: acf45020-d78a-42e8-b9f9-a26ae3922735
     start_sha: be30379c951f504e8ea699f4de4418e9a9ba2298
   - name: guidance
-    state: pending
+    state: running
+    implementer_session: c189bb9b-55a0-42ba-8b05-1c638ac8928d
+    start_sha: 5ee8bc027b1bf90c5316aba37c3a66c64db0e71b
 ```
