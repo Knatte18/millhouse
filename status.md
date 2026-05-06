@@ -27,7 +27,9 @@ implementing  2026-05-06T13:08:10Z
 ```yaml
 batches:
   - name: worktree-locked-error
-    state: pending
+    state: running
+    implementer_session: 6ad98932-6503-41d2-a372-a5a8329f511d
+    start_sha: c5feb3c1875dc82fe56a8b750b1eda2aa080829a
   - name: auto-spawn-integration
     state: pending
 ```
