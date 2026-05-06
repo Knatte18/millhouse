@@ -67,7 +67,11 @@ Batch-local decisions beyond Shared Decisions:
 - **Creates:**
   - `plugins/mill/scripts/millpy-implement.py`
 - **Deletes:** none
-- **Requirements:** Create the CLI script. The module-level docstring must reproduce the CLI surface and exit-code table from the discussion. Structure `main(argv=None) -> int` following `millpy-review-code.py`'s pattern (most imports inside main, argparse, early validation, then work). However, the modules `json`, `sys`, `argparse`, `os`, `subprocess`, `uuid`, and `pathlib.Path` MUST be imported at the module level (not inside `main`). The unit tests in batch 02 patch `millpy_implement.subprocess.run` and `millpy_implement.uuid.uuid4` — these patches require module-level bindings on those names. An `import uuid` placed inside `main` would silently no-op the test mocks and tests would pass for the wrong reason.
+- **Requirements:** Create the CLI script. The module-level docstring must reproduce the CLI surface and exit-code table from the discussion. Structure `main(argv=None) -> int` with module-level imports (no nested `import` inside `main`), argparse, early validation, then work. The following must be imported at the module level so unit tests in batch 02 can patch them via `unittest.mock.patch.object(millpy_implement.<name>, ...)`:
+  - Standard library: `json`, `sys`, `argparse`, `os`, `subprocess`, `uuid`, and `pathlib.Path`.
+  - Project helpers: `_paths`, `_review_common`, `_active`, `_status`, `_plan_dag`, `_render`, `_implementer_sonnet`, `_timestamp`, `_llm_claude`.
+
+  Each helper must be importable as `millpy_implement.<helper>` AT setUp TIME (before `main()` is ever called). Putting any of these inside `main` would cause unit tests to fail with `AttributeError: module 'millpy_implement' has no attribute '_paths'` (or similar) before any assertion runs. The reference `millpy-review-code.py` does its imports inside `main` to avoid loading helpers when `--help` is the only thing requested; that micro-optimisation is unimportant for `millpy-implement.py` and is rejected here in favour of testability.
 
   **Argument parsing:**
   - Positional `batch_name` (required).

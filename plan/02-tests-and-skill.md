@@ -80,13 +80,13 @@ No batch-local decisions beyond Shared Decisions.
 
   **Test 5 — resume LLMSessionError:**
   - Set batch state to `reviewing`, `implementer_session = "sess"`.
-  - Create fake review file.
+  - `review_file = tmp_path / "reviews" / "review.md"`; create it with any text content.
   - Mock `run` to raise `_llm_claude.LLMSessionError("session expired")`.
   - Call `main(["test-batch", "--resume", "--round", "1", "--review-file", str(review_file)])`.
   - Assert: exit code 1; stdout JSON has `"status": "stuck"` and `"stuck_type": "transient"`.
 
   **Test 5b — resume bare LLMError:**
-  - Same setup as 5 but raise `_llm_claude.LLMError("timeout")`.
+  - Same setup as 5 (including `review_file = tmp_path / "reviews" / "review.md"`) but raise `_llm_claude.LLMError("timeout")`.
   - Call `main(["test-batch", "--resume", "--round", "1", "--review-file", str(review_file)])`.
   - Assert: same shape as Test 5.
 
@@ -147,8 +147,8 @@ No batch-local decisions beyond Shared Decisions.
   After this edit the REQUEST_CHANGES bullet contains exactly one Invoke block — no leading state-management text, no orphaned blockquote, no orphaned spawn line.
 
   **Edit 3 — "## Board discipline" section:**
-  - On every line whose text ends with `(no push)`, remove the trailing `(no push)` from that line (and any leading single space). The affected lines in the current SKILL.md are the Prepare commit (Prepare section) and the Handoff step-1 done commit (Handoff section). Do not search by commit-message text; the rule "remove `(no push)` from any line ending with it" is unambiguous and finds the right lines.
-  - Replace the final bullet "No push from per-card commits — mill-merge pushes the task branch at task end." with: "`millpy-implement.py` pushes its own task-branch state commits (batch-start, fix-cycle) to `origin/<task-branch>` immediately after each `git commit`. The Builder's own state commits (Prepare, Approve, blocked, done) and per-card implementer commits do not push — mill-merge pushes the full task branch at task end. Adding push to the Builder's own commits is a follow-up task; this PR scopes the push policy to CLI commits only."
+  - On every line whose text ends with `(no push)`, remove the trailing `(no push)` from that line (and any leading single space). These are commit-line annotations elsewhere in the SKILL.md (the Prepare commit in Prepare and the Handoff step-1 done commit in Handoff), not Board discipline bullets. Do not search by commit-message text; the rule "remove `(no push)` from any line ending with it" is unambiguous and finds the right lines.
+  - In `## Board discipline`, the first bullet currently reads: "Status.md, reviews/<file>, and plan/<file> writes are committed on the **task branch** via `git -C <worktree> add ... && git -C <worktree> commit`. No push from per-card commits — mill-merge pushes the task branch at task end." Replace ONLY the trailing sentence "No push from per-card commits — mill-merge pushes the task branch at task end." with: "`millpy-implement.py` pushes its own task-branch state commits (batch-start, fix-cycle) to `origin/<task-branch>` immediately after each `git commit`. The Builder's own state commits (Prepare, Approve, blocked, done) and per-card implementer commits do not push — mill-merge pushes the full task branch at task end. Adding push to the Builder's own commits is a follow-up task; this PR scopes the push policy to CLI commits only." Keep the first sentence ("Status.md, reviews/<file>, and plan/<file> writes are committed on the **task branch** via `git -C <worktree> add ... && git -C <worktree> commit`.") intact. Do not touch the other bullets in `## Board discipline` (Home.md writes, phase transitions, path-invariant rule).
 
   **Edit 4 — "## Holistic code review" section:**
   Update the inline `_implementer_sonnet.run` signature line to include the new `timeout` parameter introduced by Card 2. Locate the signature line:
@@ -165,14 +165,14 @@ No batch-local decisions beyond Shared Decisions.
 
   Change nothing else in the Holistic section. The `_implementer_sonnet.run(...)` call site itself does not need editing — the timeout parameter is optional with a default that matches the prior behavior.
 
-  **Edit 6 — "### 2. Parse implementer report" section:**
+  **Edit 5 — "### 2. Parse implementer report" section:**
   The current bullet for the transient stuck case reads: "`status: stuck, stuck_type: transient` → auto-retry ONCE with a fresh session (new UUID, `resume=False`). Record `review_round: 0`, do not change batch state. If second attempt is also stuck → escalate per *Stuck escalation* below."
 
   Replace with: "`status: stuck, stuck_type: transient` → auto-retry ONCE by re-invoking `millpy-implement.py <batch_name>` (no `--resume` flag — a fresh batch start). Record `review_round: 0`, do not change batch state. If the second invocation also reports `stuck_type: transient` → escalate per *Stuck escalation* below."
 
   Make no other changes inside `### 2.`.
 
-  **Edit 5 — "### Stuck escalation" section:**
+  **Edit 6 — "### Stuck escalation" section:**
   The current first bullet starts: "**`LLMError` from `_llm_claude.run_implementer`** (subprocess crashed before producing a JSON report) → treat as `stuck_type: transient`. Apply the existing one-retry policy: retry once with a fresh session (new UUID, `resume=False`). If the second attempt also raises `LLMError`, escalate to user with the regular `transient` three-option prompt (retry fresh, edit plan and retry, block). Note: catch `_llm_claude.LLMError` specifically (not bare `Exception`) so genuine programmer errors still propagate."
 
   Replace this entire bullet with:
