@@ -34,7 +34,7 @@ Add tests for all logic introduced in batches 02 and 03. Two test files are exte
   ```
 
   **Test A — file with small diff uses DIFF delimiter:**
-  - Create `src/a.py` with 200 lines of content ("x\n" * 200) and commit it as `start_sha`.
+  - Create `src/a.py` with 2000 lines of content ("x\n" * 2000 = ~4000 bytes) and commit it as `start_sha`. Using 2000 lines ensures the threshold (0.25 × ~4020 ≈ 1005 bytes) is well above the diff size (~150 bytes for a git diff header + 10 added lines), so the DIFF branch is taken reliably.
   - Append 10 lines to `src/a.py` and commit.
   - Call `bulk_files_with_diff([repo / "src/a.py"], start_sha, repo, 0.25)`.
   - Assert the result contains `"--- DIFF:"` and does NOT contain `"--- FILE: "`.
@@ -97,7 +97,7 @@ Add tests for all logic introduced in batches 02 and 03. Two test files are exte
 
   Setup steps:
   1. Use `_make_fixture` to get `(mill_dir, wiki_root, project_root, cfg)`.
-  2. In `project_root`, init git, configure user, add and commit `src/a.py` with 200 lines ("x\n" * 200). Capture that commit sha as `start_sha`.
+  2. In `project_root`, configure git user (`git config user.email/user.name`) and add and commit `src/a.py` with 2000 lines ("x\n" * 2000). `_make_fixture` already called `git init` on the repo; do not call it again — just configure the user and make the initial commit. Capture that commit sha as `start_sha`.
   3. Append 5 lines to `src/a.py` and make a second commit.
   4. Write a `status.md` file at `project_root / "status.md"` with a `## Batches` section containing one entry: `name: alpha, state: approved, start_sha: <start_sha>`. Use the yaml format that `_status.read_batches` expects (see `_status.py`'s `_BATCHES_HEADING` and `_serialise_batches` for the format — or write it directly as text).
   5. Seed one APPROVE response. Use a `prompt_observer` via `stub.set_prompt_observer(lambda p, kw: captured.append(p))` to capture the prompt text.

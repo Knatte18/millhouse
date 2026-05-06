@@ -41,7 +41,7 @@ Two tightly coupled changes: (1) add `bulk_files_with_diff` to `_review_common.p
 
   1. Read the full file content (UTF-8, `errors="replace"`) into `file_content`. If the file does not exist → skip with a stderr warning (`f"[bulk_files_with_diff] warning: {p} not found, skipping"`) and continue to the next file.
 
-  2. Run `git -C <project_root> diff <start_sha>..HEAD -- <rel_path>` where `<rel_path>` is the file path made relative to `project_root` (use `p.relative_to(project_root)` — if the path is not under `project_root`, fall back to the absolute path as the argument to git). Use `subprocess.run` directly (not `_subprocess_util.run`) since we don't want the `[subprocess] spawn` breadcrumb noise filling up the review log for every file. Pass `text=True, encoding="utf-8", errors="replace"` and capture stdout and stderr. Do NOT use `check=True`.
+  2. Run `git -C <project_root> diff <start_sha>..HEAD -- <rel_path>` where `<rel_path>` is the file path made relative to `project_root` using `p.relative_to(project_root).as_posix()` (forward-slash pathspec — portable across platforms; if the path is not under `project_root`, fall back to the absolute path's string as the argument to git). Use `subprocess.run` directly (not `_subprocess_util.run`) since we don't want the `[subprocess] spawn` breadcrumb noise filling up the review log for every file. Pass `text=True, encoding="utf-8", errors="replace"` and capture stdout and stderr. Do NOT use `check=True`.
 
   3. If the subprocess returns non-zero exit code → warn to stderr with `f"[bulk_files_with_diff] warning: git diff failed for {p} (returncode={result.returncode}), using full file"` and append `file_content` with `--- FILE: {p} ---` delimiter. Continue to next file.
 
