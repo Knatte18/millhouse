@@ -27,7 +27,9 @@ implementing  2026-05-06T11:52:17Z
 ```yaml
 batches:
   - name: Lock CLI and mill-go SKILL.md updates
-    state: pending
+    state: running
+    implementer_session: 7134c9f6-3f22-43f8-9d6b-2626684adad4
+    start_sha: 16fe32fba6a375520513a09b8f0076877306ac05
   - name: Implement parser hardening
     state: pending
   - name: Cleanup guard
