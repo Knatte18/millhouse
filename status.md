@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-fix-r1
+phase: planned
 slug: skill-api-audit
 branch: skill-api-audit
 plan: plan
@@ -19,4 +19,6 @@ discussed  2026-05-06T11:30:26Z
 planning  2026-05-06T11:36:08Z
 plan-review-r1  2026-05-06T11:43:48Z
 plan-fix-r1  2026-05-06T11:43:48Z
+plan-review-r2  2026-05-06T11:47:20Z
+planned  2026-05-06T11:47:20Z
 ```

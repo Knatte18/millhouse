@@ -3,7 +3,7 @@
 ```yaml
 task: 17 (A) — SKILL.md API accuracy audit + implementer-brief contract fixes
 slug: skill-api-audit
-approved: false
+approved: true
 started: 20260506-113414
 parent: main
 root: ""
