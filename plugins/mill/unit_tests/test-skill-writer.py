@@ -33,7 +33,7 @@ def main() -> int:
     else:
         print("PASS: SKILL_GENERATOR_SKIP is a list")
 
-    # --- iter_target_scripts returns the 12 expected paths ---
+    # --- iter_target_scripts returns the 13 expected paths ---
     expected_stems = sorted([
         "millpy-list",
         "millpy-status",
@@ -42,6 +42,7 @@ def main() -> int:
         "millpy-claim",
         "millpy-cleanup",
         "millpy-abandon",
+        "millpy-bg",
         "millpy-color",
         "millpy-terminal",
         "millpy-vscode",
@@ -52,20 +53,20 @@ def main() -> int:
         tmp = Path(tmpdir)
         scripts_dir = tmp / "mill" / "scripts"
         scripts_dir.mkdir(parents=True)
-        # Touch one file per SHORTCUT_SCRIPTS entry (13 total)
+        # Touch one file per SHORTCUT_SCRIPTS entry (14 total)
         from _shortcuts import SHORTCUT_SCRIPTS  # noqa: E402
         for stem in SHORTCUT_SCRIPTS:
             (scripts_dir / f"{stem}.py").touch()
 
         result = _skill_writer.iter_target_scripts(tmp)
-        if len(result) != 12:
+        if len(result) != 13:
             print(
-                f"FAIL: iter_target_scripts returned {len(result)} paths, expected 12",
+                f"FAIL: iter_target_scripts returned {len(result)} paths, expected 13",
                 file=sys.stderr,
             )
             errors += 1
         else:
-            print("PASS: iter_target_scripts returns 12 paths")
+            print("PASS: iter_target_scripts returns 13 paths")
 
         for path in result:
             if not isinstance(path, Path):
@@ -96,7 +97,7 @@ def main() -> int:
             )
             errors += 1
         else:
-            print("PASS: iter_target_scripts returns exactly the 12 expected stems")
+            print("PASS: iter_target_scripts returns exactly the 13 expected stems")
 
         # Confirm millpy-add.py (skill mill-add) is absent (skip-listed)
         returned_names = [p.name for p in result]
