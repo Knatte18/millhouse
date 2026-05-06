@@ -38,5 +38,7 @@ batches:
     review_round: 1
     review_file: reviews/20260506-065855-code-review-helpers-r1.md
   - name: skill-and-template
-    state: pending
+    state: running
+    implementer_session: d445685f-b02f-47fe-9c59-5edfddf0dcd2
+    start_sha: a723a6f5eafa320abbf06c275cc30f86435a847f
 ```
