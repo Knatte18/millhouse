@@ -65,6 +65,7 @@ Your last line of output (after all work and commits) MUST be a single JSON obje
 ```json
 {"status":"success","commit_sha":"<last-HEAD-sha>","session_id":"<this-session-id>"}
 ```
+**Do not wrap the JSON in a code block. Output it as a bare line — no backticks, no fence. Anything other than a bare JSON line is treated as `stuck_type: logic`.**
 
 **`session_id` MUST be the exact UUID passed to you via the `--session-id` flag (you can read it from your own command-line arguments or echo it as given). Do not invent or paraphrase the value. mill-go uses this field to correlate the report with the spawned session.**
 
@@ -73,6 +74,7 @@ or, when stuck:
 ```json
 {"status":"stuck","stuck_type":"transient|verify|logic","reason":"<one-line>","commit_sha":"<last-HEAD-sha>","session_id":"<this-session-id>"}
 ```
+**Do not wrap the JSON in a code block. Output it as a bare line — no backticks, no fence. Anything other than a bare JSON line is treated as `stuck_type: logic`.**
 
 **`session_id` MUST be the exact UUID passed to you via the `--session-id` flag (you can read it from your own command-line arguments or echo it as given). Do not invent or paraphrase the value. mill-go uses this field to correlate the report with the spawned session.**
 
