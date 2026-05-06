@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-infra-bugfix-batch
 branch: mill-infra-bugfix-batch
 plan: plan
@@ -21,4 +21,13 @@ plan-review-r1  2026-05-06T17:11:33Z
 plan-fix-r1  2026-05-06T17:12:37Z
 plan-review-r2  2026-05-06T17:15:57Z
 planned  2026-05-06T17:16:08Z
+implementing  2026-05-06T17:18:33Z
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: 01-bugfix-batch
+    state: pending
 ```
