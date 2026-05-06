@@ -33,8 +33,8 @@ A third issue (#163, `resolve_git_root` and `sync_pull` signature errors in mill
 
 ### wiki-config-mutation row: conditions for --skip-validate
 
-- **Decision:** The row allows `--skip-validate` under two conditions: (a) a bootstrap card is present (a card whose body explains why the config.yaml change is safe mid-flight for the currently-shipping task), or (b) the modified keys are provably unused (zero grep hits across `scripts/` and `skills/`). If neither holds, the instruction is to halt.
-- **Rationale:** The validator message names condition (a). Issue #169 adds condition (b) for the dead-key-removal case, where the risk cited by the validator (self-applying layout change) is not present. The two conditions cover all legitimate uses of `--skip-validate` for this check.
+- **Decision:** The row allows `--skip-validate` under two conditions: (a) a bootstrap card is present (a card whose body explains why the config.yaml change is safe mid-flight for the currently-shipping task), or (b) the modified keys are provably unused — defined as key *removal or rename* where zero grep hits across `scripts/` and `skills/` confirm no existing code references them. If neither holds, the instruction is to halt.
+- **Rationale:** The validator message names condition (a). Issue #169 adds condition (b) for the dead-key-removal case, where the risk cited by the validator (self-applying layout change) is not present. Condition (b) is explicitly scoped to removal/rename: for key *addition* (where consuming code is also being added in the same plan), grep hits are zero before deployment, making the condition trivially — and incorrectly — satisfied. Key addition requires condition (a) or a halt.
 - **Rejected:** Allowing `--skip-validate` unconditionally whenever `wiki-config-mutation` fires — too permissive, would mask real self-applying layout risks.
 
 ### wiki-config-mutation row: "fix" is invoking --skip-validate, not editing plan files
@@ -82,7 +82,7 @@ Manual verification: after the edit, read the changed SKILL.md and confirm:
 ## Q&A log
 
 - **Q:** Is issue C (#163, resolve_git_root + sync_pull signatures) still open? **A:** No — fixed by task 17(A). No work needed.
-- **Q:** Should the table row cover both "bootstrap card present" and "provably unused keys"? **A:** Yes, both conditions.
+- **Q:** Should the table row cover both "bootstrap card present" and "provably unused keys"? **A:** Yes, both conditions. Condition (b) is scoped to key removal/rename only; key addition always requires condition (a).
 - **Q:** Where to document the --skip-validate justification? **A:** Validator-fix commit message (no fixer report exists at that stage).
 - **Q:** If wiki-config-mutation co-occurs with other fixable errors, what to do? **A:** Fix the others first per their rows, then re-run with --skip-validate.
 - **Q:** Is this scope limited to mill-plan SKILL.md only? **A:** Yes — no validator code changes, no other SKILL.md files.
