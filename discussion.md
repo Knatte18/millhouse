@@ -80,7 +80,7 @@ The rename is also the right moment to change `.portals` semantics so that it gi
 
 ### Migration approach
 
-- **Decision:** Extend `millpy-migrate-layout.py` with a new `--step rename-junctions` sub-command. The step: (1) strips old junctions in each found worktree (`_junction.strip_all_in_worktree`), (2) updates each worktree's `portals/<slug>` container entry, (3) creates `wiki/active/<slug>/` with `task.md` for each active slug found, (4) recreates junctions under new names via `_setup.create_hub_links`, (5) moves `status.md`, `discussion.md`, `plan/`, `reviews/` from root to `task/` (if present) and commits the move on the task branch, (6) rewrites the `.gitignore` managed block in the hub. Dry-run mode required. Idempotent (safe to re-run).
+- **Decision:** Extend `millpy-migrate-layout.py` with a new `--step rename-junctions` sub-command. The step: (1) strips old junctions in each found worktree (`_junction.strip_all_in_worktree`), (2) updates each worktree's `portals/<slug>` container entry target to `wiki/active/<slug>/`, (3) creates `wiki/active/<slug>/` with `task.md` for each active slug found, (4) recreates junctions under new names via `_setup.create_hub_links`, (5) for each task worktree: verify clean working tree (`git status --porcelain`) before moving files — if dirty, skip that worktree, emit a warning, continue with remaining; at end, print a summary of skipped worktrees for manual follow-up; if clean, move `status.md`, `discussion.md`, `plan/`, `reviews/` into `task/` via `git mv` and commit on the task branch, (6) rewrites the `.gitignore` managed block in the hub. Hub `.active` is NOT recreated — left absent; the next `mill-claim` or `mill-spawn` will create it correctly. Dry-run mode required. Idempotent (safe to re-run).
 - **Rationale:** The existing migration script already has logging, dry-run, and safeguard scaffolding. A new standalone script would duplicate all of that.
 - **Rejected:** Mill-setup re-run alone — mill-setup only operates on the hub, not on task worktrees. Existing task worktrees would keep old layout.
 
@@ -156,7 +156,7 @@ Also: `write_initial_status` path changes from `worktree_path / "status.md"` to 
 - New `--step rename-junctions` sub-command. Steps in order:
   1. Discover all active task worktrees (scan `container/wts/`, confirm `.millhouse/active.slug.md` present).
   2. For each task worktree: strip junctions via `_junction.strip_all_in_worktree`; remove old `portals/<slug>` entry; create `wiki/active/<slug>/task.md`; create new `portals/<slug>` → `wiki/active/<slug>/`; recreate junctions via `_setup.create_hub_links` (new config); move `status.md`, `discussion.md`, `plan/`, `reviews/` into `task/` and commit on task branch.
-  3. For hub worktree: strip old junctions; recreate via `_setup.create_hub_links`; update `.gitignore` managed block; update hub's `.active` junction to point to most recently active slug (or skip if none).
+  3. For hub worktree: strip old junctions; recreate via `_setup.create_hub_links`; update `.gitignore` managed block. Do NOT recreate `.active` — leave it absent. The next `mill-claim` or `mill-spawn` will create it correctly against the new layout. No recency heuristic is needed.
 
 ### SKILL.md files to update
 
@@ -170,6 +170,7 @@ All path references from root to `task/` subdirectory, and junction name updates
 | `mill-merge/SKILL.md` | cleanup commit: `git rm -r task/`; step 5 status_path; `.millhouse/wiki` → `.wiki`; `.others` → `.portals` |
 | `mill-merge-in/SKILL.md` | `status.md` → `task/status.md` |
 | `mill-setup/SKILL.md` | junction layout diagram updated |
+| `mill-spawn/SKILL.md` | update description: wiki active dir creation, portal target change, hub `.active` update; update status path to `task/status.md` |
 | `mill-receiving-review/SKILL.md` | if any status_path references |
 
 ### `CLAUDE.md`
@@ -200,6 +201,8 @@ All path references from root to `task/` subdirectory, and junction name updates
 - **`test-millpy-spawn.py`**: portals entry target is `wiki/active/<slug>/`; `.active` absent from task worktree; hub `.active` present; `task/status.md` written; `wiki/active/<slug>/task.md` content; idempotent re-spawn (no duplicate portals entries).
 - **`test-spawn-core.py`**: `write_initial_status` writes to `task/status.md` and creates the `task/` dir if absent.
 - **`test-worktree.py`**: `strip_all_in_worktree` with new config strips `.wiki` and `.portals` (not `.others`).
+
+Integration tests for NTFS junction operations (creation, portals re-targeting, migration script end-to-end) are out of scope for this PR. The existing `integration_tests/` harness can be extended separately when CI infra supports Windows junction fixtures.
 
 TDD candidates:
 - `_gitignore.upsert` — pure function, easy to drive from test data.
