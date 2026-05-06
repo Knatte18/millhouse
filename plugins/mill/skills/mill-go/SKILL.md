@@ -125,7 +125,7 @@ For each round `N` from 1 to `review.code.rounds`:
 3. **Before reading any review file, load the `mill-receiving-review` skill.** Non-negotiable.
 
 4. Branch on verdict:
-   - `APPROVE` — batch state → `approved`, `review_file: <path>`. `_status.append_phase(status_path, f"approved-{batch_name}", _timestamp.now_utc_iso())`. Commit on the task branch: `git -C <worktree> add status.md && git -C <worktree> commit -m "mill-go: approve batch {batch_name}"`. Break out of the loop → next batch.
+   - `APPROVE` — batch state → `approved`, `review_file: <path>`. `_status.append_phase(status_path, f"approved-{batch_name}", _timestamp.now_utc_iso())`. Use the `file` field from `reviews[0]` in the JSON summary (or the crash-recovery scan path) as `<review_file_path>`. Commit on the task branch: `git -C <worktree> add status.md <review_file_path> && git -C <worktree> commit -m "mill-go: approve batch {batch_name}"`. Break out of the loop → next batch.
    - `NEED_CONTEXT` — read the `## Missing context` bullets from the review file. For each listed path, if it exists under the worktree, append to `extra_files` for the NEXT round. `_notify.notify("mill-go.review-need-context", f"batch {batch_name} round {N}", slug=slug, files=len(missing))`. Record this gap for mill-self-report (see Handoff). Increment round and continue the loop. If ALL the missing files are paths already in `extra_files` from a prior round (no new info), treat as a stuck-logic failure and break.
      `signature: _notify.notify(event: str, detail: str, **context) -> None`
    - `REQUEST_CHANGES` — invoke:
