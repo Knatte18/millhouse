@@ -23,6 +23,7 @@ Bootstrap justification for `wiki/config.yaml`: `_setup.create_hub_links` reads 
   - `plugins/mill/scripts/_setup.py`
   - `plugins/mill/scripts/_junction.py`
   - `plugins/mill/scripts/_wiki.py`
+  - `plugins/mill/scripts/_paths.py`
 - **Edits:**
   - `wiki/config.yaml`
   - `plugins/mill/scripts/_wiki.py`
@@ -116,7 +117,7 @@ Bootstrap justification for `wiki/config.yaml`: `_setup.create_hub_links` reads 
   3. Change portal entry target from `main_root` to `wiki_path / "active" / slug`:
      - First creation: `_junction.create(target=wiki_path / "active" / slug, link_path=portal_link)`.
      - Re-creation check: `current_target = os.path.realpath(str(wiki_path / "active" / slug))`.
-  4. Update `recreate_active_junction` call (currently line ~297): change `_spawn_core.recreate_active_junction(slug, mill_dir, container_path)` to `_spawn_core.recreate_active_junction(slug, git_root, container_path)`. (`git_root` is already in scope; `mill_dir.parent == git_root` so behaviour is identical.)
+  4. Update `recreate_active_junction` call (currently line ~297): change `_spawn_core.recreate_active_junction(slug, mill_dir, container_path)` to `_spawn_core.recreate_active_junction(slug, resolve_hub_path(), container_path)`. Do NOT use `git_root` — in subfolder installs `resolve_hub_path()` differs from `git_root`, and using `git_root` would place `.active` at the wrong location.
   5. Update dry-run status print (line ~217): `print(f"[DryRun] Status:  {resolve_hub_path() / 'task' / 'status.md'}")`.
 - **Commit:** `feat(millpy-claim): wiki/active dir, new portals target, hub-root active junction`
 
@@ -202,7 +203,7 @@ Bootstrap justification for `wiki/config.yaml`: `_setup.create_hub_links` reads 
   2. In `test_main_dry_run_prints_worktree_status_path`: update the expected path assertion from `str(Path("/fake/worktrees") / "my-task" / "status.md")` to `str(Path("/fake/worktrees") / "my-task" / "task" / "status.md")`. Card 5 req 5 changes the dry-run print to the `task/` path; the test must match.
 
   **test-millpy-claim.py:**
-  2. In `test_main_happy_path` (the test with all helper call assertions): change the comment on line ~241 from `"Verify new signature: (slug, mill_dir, container_path)"` to `"Verify new signature: (slug, hub_root, container_path)"`. Change `expected_mill_dir = Path("/fake/repo") / ".millhouse"` to `expected_hub_root = Path("/fake/repo")`. Change the assertion `rac_call.args[1] != expected_mill_dir` to `rac_call.args[1] != expected_hub_root` and update the error message to name `hub_root`.
+  2. In `test_main_happy_path` (the test with all helper call assertions): change the comment on line ~241 from `"Verify new signature: (slug, mill_dir, container_path)"` to `"Verify new signature: (slug, hub_root, container_path)"`. Change `expected_mill_dir = Path("/fake/repo") / ".millhouse"` to `expected_hub_root` set to whatever `resolve_hub_path()` is mocked to return in that test (check the mock stub map — it may differ from `git_root` in subfolder-install tests). Change the assertion `rac_call.args[1] != expected_mill_dir` to `rac_call.args[1] != expected_hub_root` and update the error message to name `hub_root`. If the standard test has both `resolve_hub_path` and `resolve_git_root` returning `Path("/fake/repo")`, change the hub mock to return a distinct path (e.g. `Path("/fake/repo/subdir")`) so the test catches the `git_root` vs `resolve_hub_path()` distinction.
   3. Update all `sc.write_initial_status.return_value` mock values (lines ~211, ~331, ~396, ~450, ~510, ~570, ~625, ~681) from stale paths like `Path("/fake/wiki/active/my-task/status.md")` to `Path("/fake/repo/task/status.md")` (or `/fake/repo/src/Models/task/status.md` for the subfolder-install case). These are mock return values; updating them keeps tests readable and avoids confusion about the expected path.
 - **Commit:** `test(spawn/claim): update stubs, dry-run path, and sig assertions for new _spawn_core API`
 

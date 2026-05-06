@@ -32,10 +32,10 @@ Update `millpy-cleanup.py` to read status from `task/status.md` (with legacy fal
      _legacy_status = wt_path / "status.md"
      phase = _read_phase(_task_status if _task_status.exists() else _legacy_status)
      ```
+     Also apply the same fallback pattern to the `read_parent_branch` call in `build_plan`'s `if phase == "done":` block — `read_parent_branch(wt_path / "status.md")` must become `read_parent_branch(_task_status if _task_status.exists() else _legacy_status)` using the same `_task_status` / `_legacy_status` variables already computed above. (The shared decision `task-status-path-fallback` states: "any consumer that reads `status.md` by path" must use the fallback.)
   2. `_apply_inplace_record`: there are two lines that read `record.worktree_path / "status.md"` (for `read_parent_branch` at ~line 302 and for `_read_phase` at ~line 330). Apply the same fallback pattern to both: resolve to `task/status.md` if it exists, otherwise `status.md`.
-  3. `apply_plan`: after the main cleanup loop (after all `to_remove_done + to_remove_abandoned` records are processed), add a dangling-junction check for hub `.active`:
+  3. `apply_plan`: after the main cleanup loop (after all `to_remove_done + to_remove_abandoned` records are processed), add a dangling-junction check for hub `.active`. Also add `import os` to the module-level imports section at the top of `millpy-cleanup.py` (not inline in the function):
      ```python
-     import os
      active_link = hub_root / ".active"
      if os.path.lexists(str(active_link)) and not active_link.is_dir():
          _junction.remove(active_link)
@@ -55,12 +55,13 @@ Update `millpy-cleanup.py` to read status from `task/status.md` (with legacy fal
   - `plugins/mill/scripts/_paths.py`
   - `plugins/mill/scripts/_subprocess_util.py`
   - `plugins/mill/scripts/_config.py`
+  - `plugins/mill/scripts/millpy-spawn.py`
 - **Edits:**
   - `plugins/mill/scripts/millpy-migrate-layout.py`
 - **Creates:** none
 - **Deletes:** none
 - **Requirements:**
-  1. Add `import _setup, _spawn_core, _gitignore, _config` to the imports section. Extend the existing `from _paths import resolve_main_worktree_root, resolve_git_root` line to also import `resolve_container_path, resolve_wiki_path`.
+  1. Add `import _setup, _spawn_core, _gitignore, _config, _timestamp` to the imports section. Extend the existing `from _paths import resolve_main_worktree_root, resolve_git_root` line to also import `resolve_container_path, resolve_wiki_path`.
   2. Update the `argparse` argument definition: add a `--step` argument:
      ```python
      parser.add_argument(
@@ -78,15 +79,15 @@ Update `millpy-cleanup.py` to read status from `task/status.md` (with legacy fal
      c. Open log file at `.scratch/migrate-rename-junctions-<ts>.log` (skip in dry-run).
      d. Discover active task worktrees: active_wts = _spawn_core.discover_active_worktrees(container / "wts").
      e. For each (wt_path, slug, title) in active_wts:
-        - junctions_cfg_old = {"<OLD_JUNCTION_NAMES>": "..."} — read the OLD config from git history if needed, or just strip all junctions with a broad strip. Actually: call `_junction.strip_all_in_worktree(wt_path, junctions_cfg)` where `junctions_cfg` is from the CURRENT (new) wiki config. This strips `.wiki` and `.portals` if they exist. For OLD junctions (`.millhouse/wiki`, `.others`, `.active`), they need to be stripped too. Do a manual strip: for name in [".millhouse/wiki", ".others", ".active"]: path = wt_path / name; if path.exists() or path.is_symlink(): _junction.remove(path).
+        - Strip junctions from worktree: call `_junction.strip_all_in_worktree(wt_path, cfg.get("junctions", {}))` (strips new-layout junctions if they exist). Then for old-layout junctions: `for name in [".millhouse/wiki", ".others", ".active"]: _junction.remove(wt_path / name)` — call `_junction.remove` directly without a pre-check (`remove` uses `os.path.lexists` internally and is a no-op when absent).
         - Remove old portals entry: _junction.remove(container / "portals" / slug) (tolerate already-gone).
         - Create wiki/active/<slug>/task.md and commit+push: `ts = _timestamp.now_utc_compact(); _spawn_core.write_wiki_active_task_md(wiki_path, slug, title, ts)`. This creates the dir and task.md idempotently and commits them to the wiki.
         - Create new portals entry: `_junction.create(target=wiki_path / "active" / slug, link_path=container / "portals" / slug)`.
-        - Recreate junctions: `_setup.create_hub_links(wt_path, wiki_path, tokens)` where `tokens` includes `SLUG=slug`.
+        - Recreate junctions: `_setup.create_hub_links(wt_path, wiki_path, tokens)` where `tokens` is a dict with at minimum `{"SLUG": slug, "WIKI_PATH": str(wiki_path), "CONTAINER_PATH": str(container), "HUB_PATH": str(hub_root)}`. See `_build_tokens` in `millpy-spawn.py` for the full token construction pattern.
         - Move working state to task/: check `git -C <wt_path> status --porcelain` is empty. If not: log warning "skipping task/ move for <slug>: working tree dirty", continue. If clean: first run `(wt_path / "task").mkdir(exist_ok=True)` (`git mv` does not create parent directories). Then for src_name in ["status.md", "discussion.md", "plan", "reviews"]: src = wt_path / src_name; dst = wt_path / "task" / src_name; if src.exists(): run `git -C <wt_path> mv <src> <dst>`. After staging all four moves (for whichever files exist), issue a single commit: `git -C <wt_path> commit -m "migrate: move working state to task/ for {slug}"`. Do NOT commit inside the per-file loop.
      f. For hub worktree:
         - Strip old junctions: for name in [".millhouse/wiki", ".others", ".active"]: manually remove if exists. Also call _junction.strip_all_in_worktree(hub_root, cfg.get("junctions", {})) for any new-layout junctions.
-        - Recreate hub junctions via _setup.create_hub_links(hub_root, wiki_path, hub_tokens) (no SLUG in tokens).
+        - Recreate hub junctions: `_setup.create_hub_links(hub_root, wiki_path, hub_tokens)` where `hub_tokens = {"WIKI_PATH": str(wiki_path), "CONTAINER_PATH": str(container), "HUB_PATH": str(hub_root)}` (no SLUG — hub scope).
         - Update .gitignore: hub_gitignore = hub_root / ".gitignore"; _gitignore.upsert(hub_gitignore, _gitignore.GLOB_ENTRIES).
         - Do NOT recreate .active — leave absent; the next mill-claim/mill-spawn will create it.
      g. In dry-run mode: log all planned operations but perform no writes. Return.

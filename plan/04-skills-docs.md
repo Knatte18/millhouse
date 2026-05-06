@@ -60,11 +60,11 @@ Update all SKILL.md files and `CLAUDE.md` to reflect the new junction names (`.w
      ```
      Note: `_gitignore.upsert` is introduced by batch 01 (batch 04 depends on batch 01). The `ANCHORED_ENTRIES` constant and `upsert_split` function are gone; hardlink names are now passed as anchored patterns (`/tasks.md` etc.) directly in the combined list alongside `GLOB_ENTRIES`. Remove the `repo_gi` / two-path logic and the `repo_changed` / `hub_changed` variables.
   2. Update Phase 4.5b prose: replace "split across two files" description with single-file description. Remove "When different, glob entries go to repo_root_gitignore…" text.
-  3. Update any junction diagram in the SKILL.md that references `.millhouse/wiki`, `.others`, or `.active`: replace with `.wiki` and `.portals`.
+  3. Update any **reference** in the SKILL.md (diagrams, prose bullets, "When to invoke" bullets) that mentions `.millhouse/wiki`, `.others`, or `.active` junction names: replace with `.wiki` and `.portals`. This includes the prose "When to invoke" bullet `"When .millhouse/wiki junction is missing or broken"` → `"When .wiki junction is missing or broken"`.
 
   **mill-spawn/SKILL.md:**
   4. Update the description paragraph to include: "creates `wiki/active/<slug>/task.md`, creates a portal entry `container/portals/<slug>` pointing to `wiki/active/<slug>/`, creates `.wiki` and `.portals` junctions in the new worktree, and updates the hub's `.active` junction."
-  5. If any bullet list in the SKILL.md references `status.md` at root, update to `task/status.md`.
+  5. Update any **reference** in the SKILL.md (bullet lists, description paragraphs) that mentions `status.md` at root, update to `task/status.md`. Specifically: the description paragraph ends with "writes the initial `status.md`" — change to "writes the initial `task/status.md`".
 - **Commit:** `docs(mill-setup/spawn): upsert API; new junction names; task/status.md path`
 
 ### Card 15: `mill-start/SKILL.md` + `mill-plan/SKILL.md` + `mill-merge-in/SKILL.md`
@@ -134,7 +134,7 @@ Update all SKILL.md files and `CLAUDE.md` to reflect the new junction names (`.w
   3. Step 8 (Drop the worktree — description list inside `_worktree.remove_safe` prose): update junction names: `.millhouse/wiki`, `.others`, `.active` → `.wiki`, `.portals`. The inline Python snippet that calls `_worktree.remove_safe` does not change (it reads junctions from the wiki config dynamically).
   4. Step 10 (Legacy wiki cleanup): this step is now the normal cleanup path (not legacy). Rename heading from "Legacy wiki cleanup (conditional)" to "Remove wiki active directory". Update prose to show it is called unconditionally on merge, but preserve the existence guard around the `shutil.rmtree` call — e.g. `if (wiki_path / "active" / slug).exists(): shutil.rmtree(...)`. This is not conditional-legacy logic; it is a defensive guard against racing or partially-migrated states. The heading and surrounding prose should convey "always attempt" while the code uses the guard to avoid `FileNotFoundError`.
   5. Verify after teardown section: update paths listed (`<container>/portals/<slug>` etc.) to remain correct — the portals entry is still removed the same way.
-  6. Board discipline section: `status.md`, `plan/`, `reviews/` → `task/status.md`, `task/plan/`, `task/reviews/`. Also update the cleanup commit note ("The cleanup commit removes it from the branch tip").
+  6. Board discipline section: `status.md`, `discussion.md`, `plan/`, `reviews/` → `task/status.md`, `task/discussion.md`, `task/plan/`, `task/reviews/`. Also update the cleanup commit note ("The cleanup commit removes it from the branch tip").
 - **Commit:** `docs(mill-merge): task/ cleanup; .wiki/.portals junction names; wiki active dir is normal not legacy`
 
 ## Batch Tests

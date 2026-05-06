@@ -24,7 +24,7 @@ Drop `ANCHORED_ENTRIES`, remove `upsert_split`, and replace with a single-path `
 - **Creates:** none
 - **Deletes:** none
 - **Requirements:**
-  1. Replace `GLOB_ENTRIES` with `["**/.millhouse/", "**/.scratch/", "**/.portals/", "**/.wiki/", "**/.active/"]`. Remove `**/wts/`, `**/portals/`, `**/plugins/*/uv.lock` which were carry-overs from the initial migration.
+  1. Replace `GLOB_ENTRIES` with `["**/.millhouse/", "**/.scratch/", "**/.portals/", "**/.wiki/", "**/.active/"]`. Remove `**/wts/`, `**/portals/`, `**/plugins/*/uv.lock`. Justification for removing each: `**/wts/` and `**/portals/` were hub-layout artefacts that never belonged in the global gitignore (they would incorrectly ignore directories named `wts` or `portals` anywhere in the repo). `**/plugins/*/uv.lock` is dead coverage — plugin `uv.lock` files (e.g. `plugins/mill/uv.lock`) are tracked by git in the millhouse repo; the ignore entry is a no-op for tracked files. The implementer should verify via `git ls-files plugins/mill/uv.lock` before removing to confirm it is tracked.
   2. Delete the `ANCHORED_ENTRIES` constant entirely.
   3. Change `render_block(glob_entries, anchored_entries)` to `render_block(glob_entries: list[str]) -> str`. Remove the anchored-entries normalisation loop (the `for entry in anchored_entries:` block). Remove the `anchored_entries` parameter from the module docstring's API description.
   4. Add `upsert(gitignore_path: Path, glob_entries: list[str]) -> bool`: renders the block via `render_block(glob_entries)`, calls `_upsert_single(gitignore_path, block_text)`, and returns the bool. Add it to the module docstring's Public API section.
