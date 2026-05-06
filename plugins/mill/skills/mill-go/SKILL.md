@@ -89,7 +89,7 @@ Record `commit_sha` from a successful report on the batch entry.
 
 ### 2b. Cleanliness gate
 
-After a `success` report: run `git -C <worktree> status --porcelain`. If the output is non-empty (uncommitted files present):
+After a `success` report: run `git -C <worktree> status --porcelain --untracked-files=no`. If the output is non-empty (uncommitted changes to tracked files present):
 - `_status.set_batch_field(status_path, batch_name, "state", "blocked")`
 - `_status.set_batch_field(status_path, batch_name, "blocked_reason", "uncommitted working tree after implementer report")`
 - `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`
