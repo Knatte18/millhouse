@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: discussed
 slug: plan-reviewer-self-apply
 branch: plan-reviewer-self-apply
 plan: null
@@ -16,4 +16,5 @@ task_description: |
 
 ```text
 discussing  '2026-05-06T10:43:23Z'
+discussed  2026-05-06T11:32:04.568533+00:00
 ```
