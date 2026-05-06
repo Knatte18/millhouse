@@ -38,7 +38,9 @@ batches:
     implementer_session: 97507563-59bd-4b79-aaa0-581f9375293a
     start_sha: f5659c41f7887feb9fa7ccc869e8807d0fcd453a
   - name: field-rename
-    state: pending
+    state: running
+    implementer_session: acf45020-d78a-42e8-b9f9-a26ae3922735
+    start_sha: be30379c951f504e8ea699f4de4418e9a9ba2298
   - name: guidance
     state: pending
 ```
