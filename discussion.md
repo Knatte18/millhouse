@@ -21,6 +21,7 @@ Three independent defects in the code-review subsystem surfaced during productio
 
 **In:**
 - `wiki/config.yaml` — add `review.code.holistic_effort` (default `max`) and `review.code.diff_scope_threshold` (default `0.25`)
+- `plugins/mill/templates/wiki-config.yaml` — add the same two keys to the `review.code` block (line 117); seeds fresh installations and must stay in sync with the live config
 - `_reviewer_sonnetmax.py` and `_reviewer_sonnetmax_tool.py` — add `effort: str | None = None` kwarg to `run`; pass it through to `run_bulk` / `run_tool_use`
 - `_reviewer_test_stub.py` — add `effort: str | None = None` kwarg to `run` to stay in sync
 - `_review_code.py` — thread `holistic_effort` into the holistic reviewer call; add diff-scoping for per-batch bulk reviews using `start_sha` from `status.md`
@@ -37,8 +38,8 @@ Three independent defects in the code-review subsystem surfaced during productio
 
 ### effort-api-extension
 
-- Decision: Add `effort: str | None = None` to the `run` signature of every reviewer module. `None` falls through to the module's internal default (`"max"`). `_review_code.run` passes `cfg["review"]["code"]["holistic_effort"]` only for holistic calls (`batch_name is None`).
-- Rationale: Keeps the reviewer API stable and backwards-compatible. Callers that don't care about effort pass nothing and get existing behaviour. Avoids duplicating module files per effort level.
+- Decision: Add `effort: str | None = None` to the `run` signature of every reviewer module. `None` falls through to the module's internal default (`"max"`). `_review_code.run` passes `cfg["review"]["code"]["holistic_effort"]` only for holistic calls (`batch_name is None`). Both the initial reviewer call **and** the NEED_CONTEXT retry call (bulk mode only, `_review_code.py` line ~287) must receive the same `effort` value.
+- Rationale: Keeps the reviewer API stable and backwards-compatible. Callers that don't care about effort pass nothing and get existing behaviour. Avoids duplicating module files per effort level. Threading effort into the retry path ensures a NEED_CONTEXT round-trip doesn't silently drop the configured effort.
 - Rejected: Calling `_llm_claude.run_bulk` directly from `_review_code.run` (breaks the reviewer abstraction); new reviewer modules per effort level (`_reviewer_sonnetmax_medium.py`) multiplies nearly-identical files.
 
 ### diff-scoping-bulk-only
@@ -120,8 +121,10 @@ The function currently takes `(reviewer_mode, overview_path, batch_files, source
 
 ### Config additions
 
+Both `wiki/config.yaml` and `plugins/mill/templates/wiki-config.yaml` must receive the same additions. The template seeds fresh installations; omitting keys there causes `KeyError` on `cfg["review"]["code"]["holistic_effort"]` for any repo that ran `mill-setup` after this change without a prior `wiki/config.yaml`.
+
 ```yaml
-# wiki/config.yaml, under review.code:
+# wiki/config.yaml and plugins/mill/templates/wiki-config.yaml, under review.code:
 code:
   rounds: 3
   reviewer: sonnetmax
