@@ -29,5 +29,7 @@ implementing  2026-05-06T13:43:55Z
 ```yaml
 batches:
   - name: wiki-enhance-fixes
-    state: pending
+    state: running
+    implementer_session: 2222554c-9139-4b38-bfc0-349583b34d87
+    start_sha: 87cb5e3d828af3bb962121394336f51093421868
 ```
