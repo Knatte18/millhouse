@@ -187,22 +187,24 @@ This batch renames `Reads:` → `Context:` and `Modifies:` → `Edits:` everywhe
 
 - **Commit:** `test(plan-validate,review-common): update field names Reads/Modifies → Context/Edits`
 
-### Card 12: Relabel plan files so post-batch code review can bulk source files
+### Card 12: Relabel plan files so post-batch and holistic code review can bulk source files
 
 - **Reads:**
+  - `plan/01-batch-numbering.md`
   - `plan/02-field-rename.md`
   - `plan/03-guidance.md`
 - **Modifies:**
+  - `plan/01-batch-numbering.md`
   - `plan/02-field-rename.md`
   - `plan/03-guidance.md`
 - **Creates:** none
 - **Deletes:** none
 - **Requirements:**
-  Replace every occurrence of `- **Reads:**` with `- **Context:**` and every occurrence of `- **Modifies:**` with `- **Edits:**` in both `plan/02-field-rename.md` and `plan/03-guidance.md` (this batch file and the next batch's plan file). Both single-line form (`- **Reads:** \`path\``) and multi-line form (`- **Reads:**\n  - \`path\``) must be replaced. `- **Creates:**` and `- **Deletes:**` headers are unchanged.
+  Replace every occurrence of `- **Reads:**` with `- **Context:**` and every occurrence of `- **Modifies:**` with `- **Edits:**` in all three plan-batch files: `plan/01-batch-numbering.md`, `plan/02-field-rename.md`, and `plan/03-guidance.md`. Both single-line form (`- **Reads:** \`path\``) and multi-line form (`- **Reads:**\n  - \`path\``) must be replaced. `- **Creates:**` and `- **Deletes:**` headers are unchanged. Do NOT edit `plan/00-overview.md` — it contains no card field labels (only its `## All Files Touched` description, which Card 9 already updates as a template change does not apply here because `00-overview.md` is a rendered instance, not the template).
 
-  This card exists because card 7 renames `_RE_REFS_HEADER` in `_review_common.py` from `Reads|Modifies|Creates|Deletes` to `Context|Edits|Creates|Deletes`. After card 7 commits, `parse_batch_refs` no longer matches the old `**Reads:**` / `**Modifies:**` headers in the batch's own plan files. When mill-go invokes the per-batch code-reviewer for batch 02 after the whole batch completes, it calls `parse_batch_refs(plan/02-field-rename.md)` to bulk source files. Without this relabeling, `parse_batch_refs` returns `[]` and the code-reviewer is given only the overview and batch file — no source files. This card runs LAST in batch 02 so that the renamed regex (already committed in card 7) matches the now-renamed plan-file headers when code review fires.
+  Why all three plan files: this worktree's `.millhouse/config.local.yaml` sets `review.code.per_batch: false`, so only the holistic code reviewer runs after all batches complete. The holistic reviewer reads every batch file and bulks the union of source files via `parse_batch_refs`. After card 7 commits the regex rename, `parse_batch_refs` only matches `Context|Edits|Creates|Deletes` headers; any plan file still using `**Reads:**`/`**Modifies:**` returns an empty ref set and its source files are not bulked. Relabeling all three plan files (01, 02, 03) ensures the holistic reviewer sees every source file from every batch.
 
-  Do not edit any other plan file (e.g. `plan/00-overview.md`, `plan/01-batch-numbering.md`) — batch 01 is approved-and-implemented before batch 02 starts, and `plan/00-overview.md` does not contain card field labels.
+  This card runs LAST in batch 02 so that the renamed regex (committed in card 7) matches the now-renamed plan-file headers when the holistic code reviewer fires after batch 03.
 
 - **Commit:** `refactor(plan-files): relabel plan-file card fields Reads/Modifies → Context/Edits`
 
