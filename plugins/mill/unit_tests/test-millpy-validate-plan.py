@@ -64,10 +64,10 @@ def _make_batch_file(name: str, *, missing_fields: set | None = None) -> str:
         "## Cards\n\n",
         "### Card 1: card 1\n\n",
     ]
-    if "Reads" not in missing_fields:
-        parts.append("- **Reads:** none\n")
-    if "Modifies" not in missing_fields:
-        parts.append("- **Modifies:** none\n")
+    if "Context" not in missing_fields:
+        parts.append("- **Context:** none\n")
+    if "Edits" not in missing_fields:
+        parts.append("- **Edits:** none\n")
     if "Creates" not in missing_fields:
         parts.append("- **Creates:** none\n")
     if "Deletes" not in missing_fields:
@@ -133,7 +133,7 @@ def test_cli_clean_exits_zero_no_findings() -> int:
 
 
 def test_cli_dirty_exits_one_card_missing_field() -> int:
-    """Dirty fixture (card missing Reads): main() exits 1 and JSON contains card-missing-field."""
+    """Dirty fixture (card missing Context): main() exits 1 and JSON contains card-missing-field."""
     with tempfile.TemporaryDirectory() as tmpdir:
         fixture_root = Path(tmpdir)
         plan_dir = fixture_root / "plan"
@@ -141,7 +141,7 @@ def test_cli_dirty_exits_one_card_missing_field() -> int:
         wiki_dir.mkdir()
 
         overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
-        batch = _make_batch_file("alpha", missing_fields={"Reads"})
+        batch = _make_batch_file("alpha", missing_fields={"Context"})
         _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
 
         slug = "test-slug"
