@@ -32,9 +32,11 @@ batches:
     state: approved
     implementer_session: 7134c9f6-3f22-43f8-9d6b-2626684adad4
     start_sha: 16fe32fba6a375520513a09b8f0076877306ac05
-    review_file: 'C:\Code\millhouse\wts\mill-go-infra-fixes\reviews\20260506-115602-code-review-Lock CLI and mill-go SKILL.md updates-r1.md'
+    review_file: C:\Code\millhouse\wts\mill-go-infra-fixes\reviews\20260506-115602-code-review-Lock CLI and mill-go SKILL.md updates-r1.md
   - name: Implement parser hardening
-    state: pending
+    state: running
+    implementer_session: ce8c9da6-a712-45f7-870d-73b582b7d26a
+    start_sha: 03a59a7b6822d19a50f99bad49a5020ad8f6dd6e
   - name: Cleanup guard
     state: pending
   - name: PYTHONPATH documentation fix
