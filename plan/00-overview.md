@@ -3,7 +3,7 @@
 ```yaml
 task: 21 (A) — mill-go cleanliness gate fixes
 slug: mill-cleanliness-gate-fixes
-approved: false
+approved: true
 started: 20260506-161233
 parent: main
 root: ""
