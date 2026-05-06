@@ -56,7 +56,8 @@ This batch adds `number:` as a first-class field on plan batches and switches `d
 
   Update `_compute_transitive_ancestors`: replace the dict-comprehension `deps_map: dict[str, list[str]] = {entry["name"]: list(entry.get("depends-on", [])) for entry in batches}` with `deps_map = resolve_deps_as_names(batches)`. The rest of the BFS is unchanged.
 
-  Update `_check_depends_on_unknown`: after computing `known_names`, also compute `known_numbers = {entry["number"] for entry in batches if "number" in entry}`. In the inner loop, change `for dep_name in entry.get("depends-on", []):` to `for dep in entry.get("depends-on", []):`. Check: if `isinstance(dep, int)`, check against `known_numbers`; error message: `f"depends-on references unknown batch number {dep}"`. If `isinstance(dep, str)`, check against `known_names`; error message unchanged (`f"depends-on references unknown batch '{dep}'"`).- **Commit:** `feat(plan-validate): handle integer depends-on in transitive-ancestors and unknown-dep checks`
+  Update `_check_depends_on_unknown`: after computing `known_names`, also compute `known_numbers = {entry["number"] for entry in batches if "number" in entry}`. In the inner loop, change `for dep_name in entry.get("depends-on", []):` to `for dep in entry.get("depends-on", []):`. Check: if `isinstance(dep, int)`, check against `known_numbers`; error message: `f"depends-on references unknown batch number {dep}"`. If `isinstance(dep, str)`, check against `known_names`; error message unchanged (`f"depends-on references unknown batch '{dep}'"`).
+- **Commit:** `feat(plan-validate): handle integer depends-on in transitive-ancestors and unknown-dep checks`
 
 ### Card 3: Update `plan-overview.md` and `plan-batch.md` templates
 
