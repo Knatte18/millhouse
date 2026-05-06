@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: plan-reviewer-self-apply
 branch: plan-reviewer-self-apply
 plan: plan
@@ -20,4 +20,13 @@ discussed  2026-05-06T11:32:04.568533+00:00
 planning  2026-05-06T11:37:18Z
 plan-review-r1  2026-05-06T11:42:11Z
 planned  2026-05-06T11:42:11Z
+implementing  2026-05-06T11:44:27Z
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: wiki-config-check
+    state: pending
 ```
