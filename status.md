@@ -33,7 +33,9 @@ implementing  2026-05-06T13:39:27Z
 ```yaml
 batches:
   - name: config-and-subprocess
-    state: pending
+    state: running
+    implementer_session: bb944d4f-cd72-4f39-a513-b5d25a938132
+    start_sha: 1fbca817f2f3a877b5897cb4efae25b7cbd8ebb9
   - name: reviewer-effort-api
     state: pending
   - name: diff-scope-and-effort
