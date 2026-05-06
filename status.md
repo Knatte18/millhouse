@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-core-script
+phase: approved-tests-and-skills
 slug: mill-bg-helper
 branch: mill-bg-helper
 plan: plan
@@ -24,6 +24,8 @@ planned  2026-05-06T08:30:43Z
 implementing  2026-05-06T08:44:43Z
 reviewing-core-script-r1  2026-05-06T08:49:22Z
 approved-core-script  2026-05-06T08:51:55Z
+reviewing-tests-and-skills-r1  2026-05-06T09:00:56Z
+approved-tests-and-skills  2026-05-06T09:11:08Z
 ```
 
 ## Batches
@@ -38,7 +40,10 @@ batches:
     review_round: 1
     review_file: reviews/20260506-085146-code-review-core-script-r1.md
   - name: tests-and-skills
-    state: running
+    state: approved
     implementer_session: 062babbf-97e5-4528-abaa-4ab9d6b6191a
     start_sha: cdf5f9dbeba89946f27ce243f2db867a67c7c1c1
+    commit_sha: 00d2adb8bfd1ea1355fbbf0d0f2c2a5c1d991950
+    review_round: 1
+    review_file: reviews/20260506-091054-code-review-tests-and-skills-r1.md
 ```
