@@ -3,7 +3,7 @@
 ```yaml
 task: 22 (A) — SKILL.md round-2 fixes
 slug: skill-md-fixes-2
-approved: false
+approved: true
 started: 20260506-162556
 parent: main
 root: ""
