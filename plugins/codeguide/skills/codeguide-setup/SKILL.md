@@ -1,7 +1,7 @@
 ---
 name: codeguide-setup
 description: "Set up, refresh, or activate codeguide (inline or sibling). Detects context automatically: first-time root, refresh, or subfolder."
-argument-hint: "[--sibling] [--from-url <git-url>] [.cs .py .ts]"
+argument-hint: "[--sibling [<url>]] [--branch <name>] [.cs .py .ts]"
 ---
 
 Set up or refresh codeguide for the current git repo. Two placement modes:
@@ -31,8 +31,8 @@ Where `<root>` is either the target repo (inline) or `<sibling-anchor>/<rel-path
 ## Steps
 
 1. **Parse flags from `$ARGUMENTS`:**
-   - `--sibling` → sibling mode
-   - `--from-url <git-url>` → when creating the sibling repo for the first time, `git clone <git-url>` instead of `git init`. Ignored without `--sibling`.
+   - `--sibling` or `--sibling <url>` → sibling mode; an optional URL argument (the next non-flag token following `--sibling`) clones from that URL instead of `git init`.
+   - `--branch <name>` → branch to use when cloning or initializing the sibling anchor; requires `--sibling <url>` (a URL must be present). If `--branch` is given without a URL in `--sibling`, stop with the error: `"--branch requires a URL — use --sibling <url> --branch <name>"`.
    - Any tokens starting with `.` (e.g. `.cs .py`) → source extensions for `config.yaml`.
 
 2. **Detect git toplevel:** Run `git rev-parse --show-toplevel`. If not in a git repo, stop with an error.
@@ -44,7 +44,7 @@ Where `<root>` is either the target repo (inline) or `<sibling-anchor>/<rel-path
    - Sibling mode:
      - Compute `<sibling-anchor>` by invoking `python ${CLAUDE_PLUGIN_ROOT}/scripts/_sibling.py codeguide <git-toplevel>` via subprocess. Parse the printed path.
      - If `.codeguide-root` exists at the git-toplevel, use its contents instead (single absolute or relative-to-toplevel path). Do NOT auto-create this file; users who want a non-default anchor write it themselves.
-     - If `<sibling-anchor>` does not exist yet: create it with `git init`, OR `git clone <git-url> <sibling-anchor>` when `--from-url <url>` was given. Then `<root> = <sibling-anchor> / <rel-path>` where `<rel-path> = cwd.relative_to(git-toplevel)`.
+     - If `<sibling-anchor>` does not exist yet: create it with `git init`, OR `git clone <url> <sibling-anchor>` when `--sibling <url>` was given. Then `<root> = <sibling-anchor> / <rel-path>` where `<rel-path> = cwd.relative_to(git-toplevel)`.
      - If `<sibling-anchor>` already exists and is a git repo: `<root> = <sibling-anchor> / <rel-path>`.
 
 5. **Determine mode (first-time / refresh / subfolder):**
