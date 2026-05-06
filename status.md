@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-skill-md-fixes
+phase: approved-session-id-template
 slug: skill-api-audit
 branch: skill-api-audit
 plan: plan
@@ -24,6 +24,8 @@ planned  2026-05-06T11:47:20Z
 implementing  2026-05-06T11:48:54Z
 reviewing-skill-md-fixes-r1  2026-05-06T11:52:10Z
 approved-skill-md-fixes  2026-05-06T11:53:24Z
+reviewing-session-id-template-r1  2026-05-06T11:56:12Z
+approved-session-id-template  2026-05-06T11:57:08Z
 ```
 
 ## Batches
@@ -37,7 +39,9 @@ batches:
     review_round: 1
     review_file: reviews/20260506-115309-code-review-skill-md-fixes-r1.md
   - name: session-id-template
-    state: running
+    state: approved
     implementer_session: 07f47bdc-7cbb-428c-a5e0-9d9318b897e0
     start_sha: 62fe2ae7cadd6b8fc16e4814a42c2ed7993860ff
+    review_round: 1
+    review_file: reviews/20260506-115700-code-review-session-id-template-r1.md
 ```
