@@ -62,8 +62,14 @@ Three independent defects in the code-review subsystem surfaced during productio
 
 ### missing-start-sha-fallback
 
-- Decision: If `read_batches` returns no entry for the named batch, or the batch entry has no `start_sha`, fall back silently to full file content for that review. Log a stderr warning.
-- Rationale: Backwards-compatible with tasks started before this feature. No hard failure for missing metadata.
+- Decision: If `read_batches` returns no entry for the named batch, or the batch entry has no `start_sha`, fall back silently to full file content for that review. Log a stderr warning. The same fallback applies if the `git diff` subprocess itself fails (e.g. `start_sha` no longer reachable after a rebase) — `bulk_files_with_diff` catches the subprocess error, warns to stderr, and uses full file content for that file.
+- Rationale: Backwards-compatible with tasks started before this feature. No hard failure for missing or unreachable metadata.
+
+### need-context-retry-disables-diff-scoping
+
+- Decision: NEED_CONTEXT retries always pass `start_sha=None` to `_build_artefact_section`, forcing full file content regardless of batch metadata.
+- Rationale: If the reviewer returned `NEED_CONTEXT` while receiving diff content, it is asking for more context than the diff provides. Retrying with the same scoped artefacts would stall the loop — the reviewer would still not get the full file it needs. Full content on retry is the safe default.
+- Rejected: Retrying with the same `start_sha` (unproductive loop risk).
 
 ### create-no-window-location
 
@@ -110,6 +116,7 @@ def bulk_files_with_diff(
 
 For each file:
 - Run `git -C <project_root> diff <start_sha>..HEAD -- <rel_path>`.
+- If the git subprocess fails (non-zero exit, `start_sha` unreachable, etc.) → warn to stderr, fall back to full file content with `--- FILE: <path> ---` delimiter.
 - If diff is empty string and file exists → file was not changed by this batch; include full file content (the reviewer needs context even for unchanged referenced files).
 - If `len(diff) < threshold * len(file_content)` → substitute diff content, prefixed with a `--- DIFF: <path> (from <start_sha[:8]>) ---` delimiter so the reviewer understands what it's seeing.
 - Otherwise → full file content with the normal `--- FILE: <path> ---` delimiter.
@@ -117,7 +124,7 @@ For each file:
 
 ### `_build_artefact_section` changes
 
-The function currently takes `(reviewer_mode, overview_path, batch_files, source_files, ancestors_on_disk, deletes_union)`. Add `start_sha: str | None = None, diff_threshold: float = 0.25, project_root: Path | None = None`. When `reviewer_mode == "bulk"` and `start_sha` is not None, call `bulk_files_with_diff(source_files, start_sha, project_root, diff_threshold)` for the source files portion. The `overview_path`, `batch_files`, and `ancestors_on_disk` are always bulked as full content (plan artefacts and ancestor creates don't benefit from diffs).
+The function currently takes `(reviewer_mode, overview_path, batch_files, source_files, ancestors_on_disk, deletes_union)`. Add `start_sha: str | None = None, diff_threshold: float = 0.25, project_root: Path | None = None`. `project_root` is already a direct parameter of `_review_code.run` — pass it through. When `reviewer_mode == "bulk"` and `start_sha` is not None, call `bulk_files_with_diff(source_files, start_sha, project_root, diff_threshold)` for the source files portion. The `overview_path`, `batch_files`, and `ancestors_on_disk` are always bulked as full content (plan artefacts and ancestor creates don't benefit from diffs). NEED_CONTEXT retry calls pass `start_sha=None` explicitly, forcing full file content.
 
 ### Config additions
 
