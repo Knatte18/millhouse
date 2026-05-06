@@ -103,7 +103,7 @@ Loop up to `max_review_rounds` rounds. Each round:
 
 3. **BEFORE reading any review file, load the `mill-receiving-review` skill** (`plugins/mill/skills/mill-receiving-review/SKILL.md`). Non-negotiable. The VERIFY → HARM CHECK → FIX-or-PUSH-BACK decision tree is what keeps review loops useful.
 
-4a. On `APPROVE` (verdict from JSON): set overview frontmatter `approved: true` via direct Edit, append `plan-review-r{N}` to status timeline, commit+push both, break loop → Handoff.
+4a. On `APPROVE` (verdict from JSON): set overview frontmatter `approved: true` via direct Edit. `_status.append_phase(status_path, f"plan-review-r{N}", iso_ts)`. Commit on the task branch: `git -C <worktree> add plan/ reviews/ status.md && git -C <worktree> commit -m "mill-plan: approve plan for {slug}"`. Push. Break loop → Handoff. `iso_ts` is `_timestamp.now_utc_iso()`.
 
 4.5. **Step 4.5: ERROR-only-aggregate retry (no round consumed)**
 
@@ -124,7 +124,7 @@ Loop up to `max_review_rounds` rounds. Each round:
    - Write a fixer report at `reviews/<YYYYMMDD-HHMMSS>-plan-fix-r<N>.md` (worktree root) with two sections: `## Fixed` (each fixed finding, one-line reference to the review file + quoted finding title) and `## Pushed Back` (each rejected finding, same format + reason citing code/doc/scope).
    - Re-validate the plan DAG (`_plan_dag.validate`).
    - `_status.append_phase(status_path, f"plan-fix-r{N}", iso_ts)`.
-   - Commit on the task branch: `git -C <worktree> add plan/ reviews/<filename> status.md && git commit -m "mill-plan: plan-fix round {N} for {slug}"`.
+   - Commit on the task branch: `git -C <worktree> add plan/ reviews/ status.md && git commit -m "mill-plan: plan-fix round {N} for {slug}"`.
 
 5. **Non-progress check** (after writing each fixer report from round 2 onward): **Skip this check when the latest round's `## Pushed Back` section is empty.** Empty Pushed Back means the planner addressed every finding cleanly — that is convergence, not non-progress. The check only fires when both rounds have a non-empty Pushed Back AND the title set is identical. If the set is identical, halt with `BLOCKED: Plan review non-progress round {N}` and tell the user to look at the fixer reports. Do not escape-hatch — non-progress means the planner and reviewer are stuck in a stable disagreement; user intervention is required.
 
