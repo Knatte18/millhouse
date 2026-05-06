@@ -30,7 +30,7 @@ Report the current phase to the user at each transition.
 
 Read `discussion.md` at the worktree root in full. Read `CONSTRAINTS.md` at the hub root if present (via `_constraints.read_if_exists()`). Then **think the plan through end-to-end before writing any file** — you are Opus and this is exactly where the planning budget pays off.
 
-**Batch sizing.** A batch is a *smart unit*: code that logically belongs together and that a Sonnet builder with a 200k-token context window can hold in its head while implementing. Split on natural module/subsystem boundaries, not on file count. If a proposed batch would force Sonnet to load the entire codebase to understand its own `Reads:` list, split it. If two adjacent batches share >80% of their `Reads:`, merge them.
+**Batch sizing.** A batch is a *smart unit*: code that logically belongs together and that a Sonnet builder with a 200k-token context window can hold in its head while implementing. Split on natural module/subsystem boundaries, not on file count. If a proposed batch would force Sonnet to load the entire codebase to understand its own `Context:` list, split it. If two adjacent batches share >80% of their `Context:`, merge them.
 
 **Write the files.**
 
@@ -79,13 +79,13 @@ Loop up to `max_review_rounds` rounds. Each round:
 
    | check                          | mechanical fix                                                                                                  |
    | ------------------------------ | ----------------------------------------------------------------------------------------------------------- |
-   | non-existent-path              | If the path is a typo of an existing file, correct it. If it is meant to be a Creates: target in this plan, move it from Reads:/Modifies: to Creates: in the appropriate card. If neither applies, the planner intended to read a file that does not exist — halt; this is not mechanically fixable. |
-   | card-missing-field             | Add the missing field with a sensible default: Reads: → list the file(s) the requirement names; Modifies: → none if the card creates a new file only; Creates: → none if the card edits an existing file only; Requirements: → restate the card title as a one-sentence requirement; Commit: → derive from the card title using the existing conventional-commit prefix pattern. |
+   | non-existent-path              | If the path is a typo of an existing file, correct it. If it is meant to be a Creates: target in this plan, move it from Context:/Edits: to Creates: in the appropriate card. If neither applies, the planner intended to read a file that does not exist — halt; this is not mechanically fixable. |
+   | card-missing-field             | Add the missing field with a sensible default: Context: → list the file(s) the requirement names; Edits: → none if the card creates a new file only; Creates: → none if the card edits an existing file only; Requirements: → restate the card title as a one-sentence requirement; Commit: → derive from the card title using the existing conventional-commit prefix pattern. |
    | card-numbering                 | Renumber cards within the affected batch sequentially starting at the lowest existing number; if the conflict is across batches, re-number the later-batch's cards to start above the earlier batch's max. Update every "card N" reference inside the plan. |
    | depends-on-unknown             | If the unknown dep is an integer, compare it against the `number:` values in the Batch Index — if close to an existing number (likely a typo), correct it. If the unknown dep is a string (legacy format), compare it against the `name:` values — if it is a typo of an existing entry, correct it. If the dependency genuinely needs a new batch, halt — adding a batch is not a mechanical fix. |
    | parallel-modifies-overlap      | If one batch logically depends on the other, add the missing edge to the dependent's depends-on list. If the two batches truly need to write to the same file in parallel, the plan is structurally wrong — halt.        |
    | reads-not-backtick-path        | Re-format the bullet to backtick-only paths; move any inline parenthetical commentary to the card's Requirements: prose. Strip any line-range suffix (e.g. `:55-65`) from the path.                                       |
-   | all-files-touched-mismatch     | Update the overview's All Files Touched to match the union of every card's Modifies: + Creates:. (The overview list is derivative; the cards are the source of truth.)                                                |
+   | all-files-touched-mismatch     | Update the overview's All Files Touched to match the union of every card's Edits: + Creates:. (The overview list is derivative; the cards are the source of truth.)                                                |
    | missing-overview               | Halt — the plan is structurally broken, not mechanically fixable.                                                                                                                                                       |
    | batch-index-parse              | Halt — the overview's fenced-yaml block is unparseable; not mechanically fixable.                                                                                                                                        |
 
@@ -156,7 +156,7 @@ Always use `_timestamp.now_utc_compact()` / `now_utc_iso()` for any generated ti
 - **YAGNI ruthlessly** — don't plan for hypothetical requirements.
 - **Follow `mill-receiving-review`'s decision tree** — never dismiss a finding with "low risk", "out of scope", "pre-existing".
 - **Autonomous** — the only user interaction is the max-rounds escape and non-progress halt.
-- **Card `Reads:` must be comprehensive** — every file the implementer needs to read, listed. An empty or terse `Reads:` is a review-blocker in the batch-review template. and contain ONLY backtick-wrapped paths in bullet form — no inline prose, no line-range suffixes. Inline notes belong in Requirements: bodies.
+- **Card `Context:` must be comprehensive** — every file the implementer needs to read WITHOUT editing, listed. An empty or terse `Context:` is a review-blocker in the batch-review template. and contain ONLY backtick-wrapped paths in bullet form — no inline prose, no line-range suffixes. Inline notes belong in Requirements: bodies.
 
 ## Board discipline
 
