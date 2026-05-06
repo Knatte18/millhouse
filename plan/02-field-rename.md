@@ -74,16 +74,18 @@ This batch renames `Reads:` → `Context:` and `Modifies:` → `Edits:` everywhe
 
 - **Commit:** `refactor(plan-validate): rename Reads/Modifies → Context/Edits in plan_validate`
 
-### Card 9: Rename in all five templates
+### Card 9: Rename in all six templates
 
 - **Reads:**
   - `plugins/mill/templates/plan-batch.md`
+  - `plugins/mill/templates/plan-overview.md`
   - `plugins/mill/templates/review-plan-batch.md`
   - `plugins/mill/templates/review-plan-holistic.md`
   - `plugins/mill/templates/review-code-batch.md`
   - `plugins/mill/templates/implementer-brief.md`
 - **Modifies:**
   - `plugins/mill/templates/plan-batch.md`
+  - `plugins/mill/templates/plan-overview.md`
   - `plugins/mill/templates/review-plan-batch.md`
   - `plugins/mill/templates/review-plan-holistic.md`
   - `plugins/mill/templates/review-code-batch.md`
@@ -91,6 +93,10 @@ This batch renames `Reads:` → `Context:` and `Modifies:` → `Edits:` everywhe
 - **Creates:** none
 - **Deletes:** none
 - **Requirements:**
+  In `plan-overview.md`:
+  - HTML comment line referencing "resolving card-level `Reads:`/`Modifies:` paths" → replace `Reads:`/`Modifies:` with `Context:`/`Edits:`.
+  - `## All Files Touched` description: `Full union of every \`Creates:\` / \`Modifies:\` across every batch` → `Full union of every \`Creates:\` / \`Edits:\` across every batch`.
+
   In `plan-batch.md`:
   - Card field header label `**Reads:**` → `**Context:**` in the template body (the `### Card N:` example).
   - Card field header label `**Modifies:**` → `**Edits:**`.
@@ -163,6 +169,11 @@ This batch renames `Reads:` → `Context:` and `Modifies:` → `Edits:` everywhe
   - Update all call sites that pass `reads=...` → `context=...`, `modifies=...` → `edits=...`.
   - Update `test_check_card_missing_field_dirty`: use `missing_fields={"Edits"}` instead of `{"Modifies"}`; update assertion to `"Edits" in check2[0]["message"]`.
   - Update any error-message assertions that reference "Modifies:" to "Edits:".
+  - Update hardcoded raw-string fixtures in three tests that build batch text directly (without `_make_batch_file`):
+    - `test_check_reads_not_backtick_path_clean`: `"- **Reads:** \`src/a.py\`\n"` → `"- **Context:** \`src/a.py\`\n"`; `"- **Modifies:** none\n"` → `"- **Edits:** none\n"`.
+    - `test_check_reads_not_backtick_path_none_exempt`: any `**Reads:**`/`**Modifies:**` headers in its fixture string → `**Context:**`/`**Edits:**`. (Update the docstring too if it mentions `Reads:`.)
+    - `test_check_reads_not_backtick_path_dirty`: `"- **Reads:** \`src/foo.py\` (used by foo)\n"` → `"- **Context:** \`src/foo.py\` (used by foo)\n"`; `"- **Modifies:** none\n"` → `"- **Edits:** none\n"`.
+    Without these updates, the renamed `_RE_REFS_HEADER` regex (Card 8) stops matching these fixtures and the tests pass vacuously or fail outright — breaking batch 02's `verify:` command.
 
   In `test-review-common.py`:
   - Update all `parse_batch_refs` fixture strings: `"- **Reads:** ..."` → `"- **Context:** ..."`, `"- **Modifies:** ..."` → `"- **Edits:** ..."`. Specifically:

@@ -23,7 +23,7 @@ This batch adds `number:` as a first-class field on plan batches and switches `d
 - **Creates:** none
 - **Deletes:** none
 - **Requirements:**
-  Add a new public function `resolve_deps_as_names(batches: list[dict]) -> dict[str, list[str]]` that maps each batch's `depends-on:` entries to names, translating any integer entry `n` to its corresponding `name` via `{entry["number"]: entry["name"] for entry in batches if "number" in entry}`. String entries pass through unchanged. Place it between `_check_shapes` and `_check_deps`.
+  Add a new public function `resolve_deps_as_names(batches: list[dict]) -> dict[str, list[str]]` that maps each batch's `depends-on:` entries to names, translating any integer entry `n` to its corresponding `name` via `{entry["number"]: entry["name"] for entry in batches if "number" in entry}`. String entries pass through unchanged. **Unresolved integer entries (no matching `number:` in any entry) are silently dropped** — `_check_deps` is the authoritative check for dangling deps and emits a clean error there; downstream callers (`_check_acyclic`, `topo_order`, `_compute_transitive_ancestors`) must not crash on data that the validator has already flagged. Place it between `_check_shapes` and `_check_deps`.
 
   Update `_check_shapes` to:
   1. Track `seen_numbers: set[int] = set()` alongside `seen_names`.
@@ -98,7 +98,7 @@ This batch adds `number:` as a first-class field on plan batches and switches `d
 
   In Phase: Plan, step 3 ("For each batch, render `plan-batch.md`..."), add: "Set `number: NN` in the rendered frontmatter to the batch's integer (same as the filename prefix)."
 
-  In the validator mechanical-fix table, update the `depends-on-unknown` row: change "Compare the unknown name against the Batch Index. If it is a typo of an existing entry, correct it." to "Compare the unknown number against the `number:` values in the Batch Index. If it is close to an existing number (likely a typo), correct it."
+  In the validator mechanical-fix table, update the `depends-on-unknown` row to cover both formats (since legacy string deps remain valid): "If the unknown dep is an integer, compare it against the `number:` values in the Batch Index — if close to an existing number (likely a typo), correct it. If the unknown dep is a string (legacy format), compare it against the `name:` values — if it is a typo of an existing entry, correct it. If the dependency genuinely needs a new batch, halt — adding a batch is not a mechanical fix."
 
 - **Commit:** `docs(mill-plan): add batch number: field and integer depends-on authoring instructions`
 
@@ -144,7 +144,7 @@ This batch adds `number:` as a first-class field on plan batches and switches `d
 
   Update `test_check_depends_on_unknown_dirty`: switch the batch dict to `{"name": "alpha", "file": "01-alpha.md", "number": 1, "depends-on": [99]}` (integer dep 99). Verify the error message contains "99" and `check == "depends-on-unknown"`.
 
-  Add `test_check_depends_on_unknown_dirty_integer`: same as above but confirm the old string-dep path still works — provide a batch with `depends-on: ["non-existent-batch"]` (no `number:` field) and assert the error mentions `"non-existent-batch"`.
+  Add `test_check_depends_on_unknown_dirty_legacy_string`: confirms the old string-dep path still works — provide a batch with `depends-on: ["non-existent-batch"]` (no `number:` field) and assert the error mentions `"non-existent-batch"`. (Name reflects body — body tests legacy string deps, not integer deps.)
 
   Update `main()` to include all new test functions.
 
