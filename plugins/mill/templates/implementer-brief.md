@@ -13,6 +13,7 @@ by mill-go. Rendered by mill-go via `_render.render` with these tokens:
                        before reporting stuck (from pipeline config)
   <ROUND>            — 1 for the first implementation pass, or the review
                        round number on a receive-review resume
+  <SESSION_ID>       — UUID injected at render time; copy verbatim into the report JSON
 
 Mill-go spawns this session with tools Read / Edit / Write / Bash /
 Grep / Glob. No TodoWrite, no WebFetch, no WebSearch. Write / Edit /
@@ -63,20 +64,20 @@ If `verify: null` in the frontmatter, there is nothing to run; skip straight to 
 Your last line of output (after all work and commits) MUST be a single JSON object:
 
 ```json
-{"status":"success","commit_sha":"<last-HEAD-sha>","session_id":"<this-session-id>"}
+{"status":"success","commit_sha":"<last-HEAD-sha>","session_id":"<SESSION_ID>"}
 ```
 **Do not wrap the JSON in a code block. Output it as a bare line — no backticks, no fence. Anything other than a bare JSON line is treated as `stuck_type: logic`.**
 
-**`session_id` MUST be the exact UUID passed to you via the `--session-id` flag (you can read it from your own command-line arguments or echo it as given). Do not invent or paraphrase the value. mill-go uses this field to correlate the report with the spawned session.**
+**`session_id` MUST be exactly `<SESSION_ID>` (the UUID shown in the example above — it was injected into this brief when it was rendered). Copy it verbatim.**
 
 or, when stuck:
 
 ```json
-{"status":"stuck","stuck_type":"transient|verify|logic","reason":"<one-line>","commit_sha":"<last-HEAD-sha>","session_id":"<this-session-id>"}
+{"status":"stuck","stuck_type":"transient|verify|logic","reason":"<one-line>","commit_sha":"<last-HEAD-sha>","session_id":"<SESSION_ID>"}
 ```
 **Do not wrap the JSON in a code block. Output it as a bare line — no backticks, no fence. Anything other than a bare JSON line is treated as `stuck_type: logic`.**
 
-**`session_id` MUST be the exact UUID passed to you via the `--session-id` flag (you can read it from your own command-line arguments or echo it as given). Do not invent or paraphrase the value. mill-go uses this field to correlate the report with the spawned session.**
+**`session_id` MUST be exactly `<SESSION_ID>` (the UUID shown in the example above — it was injected into this brief when it was rendered). Copy it verbatim.**
 
 `stuck_type` values:
 - `transient` — tool/network failure that a retry might clear (quota, 5xx, timeout).

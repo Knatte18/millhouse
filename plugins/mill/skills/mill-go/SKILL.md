@@ -11,7 +11,7 @@ You are the **Builder** — a lean orchestrator. You coordinate per-batch implem
 
 1. Read the task slug: `slug = _active.read_slug(Path(".millhouse"))`. Missing → halt with "this worktree was not created by mill-spawn".
    `signature: _active.read_slug(mill_dir: Path) -> str`
-2. Resolve the wiki path: `wiki_path = _paths.resolve_wiki_path(_paths.resolve_git_root(Path.cwd()))`. Sync the wiki clone: `_wiki.sync_pull(wiki_path, slug=slug)`.
+2. Resolve the wiki path: `wiki_path = _paths.resolve_wiki_path(_paths.resolve_git_root())`. Sync the wiki clone: `_wiki.sync_pull(wiki_path, slug=slug)`.
    `signature: _wiki.sync_pull(wiki_path: Path, *, slug: str) -> None`
 3. Load config — deep-merge `<wiki_path>/config.yaml` with `.millhouse/config.local.yaml` via `_review_common.load_config(wiki_path, Path(".millhouse"))`. Read these keys:
    - `pipeline.auto_merge` — whether to invoke mill-merge after success.
@@ -24,8 +24,13 @@ You are the **Builder** — a lean orchestrator. You coordinate per-batch implem
    uv run --project "${CLAUDE_PLUGIN_ROOT}" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-builder-lock.py" acquire <slug>
    ```
    On exit code 1: surface the stderr message and halt — a second mill-go will corrupt state.
-5. **Entry phase gate.** Set `status_path = Path("status.md").resolve()` and inspect the phase via `_status.read_full(status_path)`.
-   `signature: _status.read_full(status_path: Path) -> dict`
+5. **Entry phase gate.** Set `status_path = Path("status.md").resolve()` and inspect the phase:
+   ```python
+   status = _status.read_full(status_path)
+   phase = status["yaml"]["phase"]
+   blocked_reason = status["yaml"].get("blocked_reason")
+   ```
+   `signature: _status.read_full(status_path: Path) -> {"yaml": dict, "timeline": list[str]}`
 
    | phase | action |
    | --- | --- |

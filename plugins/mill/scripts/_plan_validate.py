@@ -25,6 +25,7 @@ Checks performed (check keys):
                                in backtick-only format (exempts bare 'none')
     all-files-touched-mismatch — (#10 check 8) Mismatch between overview's
                                All Files Touched section and cards' Modifies:/Creates:
+    wiki-config-mutation  — batch Modifies:/Creates: contains wiki/config.yaml (self-applying layout risk)
 """
 from __future__ import annotations
 
@@ -110,6 +111,45 @@ def _parse_modifies_only(batch_path: Path) -> set[str]:
     while i < len(lines):
         m = _RE_REFS_HEADER.match(lines[i])
         if m and m.group(1) == "Modifies":
+            inline = m.group("inline").strip()
+            if inline:
+                backtick_tokens = re.findall(r"`([^`]+)`", inline)
+                batch_tokens = backtick_tokens if backtick_tokens else [
+                    t.strip() for t in inline.split(",") if t.strip()
+                ]
+            else:
+                batch_tokens = []
+                j = i + 1
+                while j < len(lines):
+                    sm = _RE_REFS_SUB.match(lines[j])
+                    if not sm:
+                        break
+                    rest = sm.group(1).strip()
+                    bt = re.findall(r"`([^`]+)`", rest)
+                    if bt:
+                        batch_tokens.extend(bt)
+                    j += 1
+            for t in batch_tokens:
+                if t.lower() != "none":
+                    tokens.add(t)
+        i += 1
+    return tokens
+
+
+def _parse_creates_only(batch_path: Path) -> set[str]:
+    """Extract raw path tokens from a batch file's Creates: lines only.
+
+    Same single-line / multi-line logic as parse_batch_refs in _review_common,
+    but restricted to ``- **Creates:**`` headers. Filters ``none``
+    (case-insensitive) per the existing convention.
+    """
+    text = batch_path.read_text(encoding="utf-8")
+    tokens: set[str] = set()
+    lines = text.splitlines()
+    i = 0
+    while i < len(lines):
+        m = _RE_REFS_HEADER.match(lines[i])
+        if m and m.group(1) == "Creates":
             inline = m.group("inline").strip()
             if inline:
                 backtick_tokens = re.findall(r"`([^`]+)`", inline)
@@ -574,6 +614,28 @@ def _check_reads_not_backtick_path(batch_files: list[Path]) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
+# wiki-config-mutation check
+# ---------------------------------------------------------------------------
+
+def _check_wiki_config_mutation(batch_files: list[Path]) -> list[dict]:
+    errors: list[dict] = []
+    for batch_path in batch_files:
+        writes = _parse_modifies_only(batch_path) | _parse_creates_only(batch_path)
+        if "wiki/config.yaml" in writes:
+            errors.append({
+                "check": "wiki-config-mutation",
+                "batch": batch_path.stem,
+                "card": None,
+                "path": "wiki/config.yaml",
+                "message": (
+                    "batch modifies or creates wiki/config.yaml — self-applying layout change risk; "
+                    "use --skip-validate if a bootstrap card is present"
+                ),
+            })
+    return errors
+
+
+# ---------------------------------------------------------------------------
 # Check 8 — all-files-touched-mismatch
 # ---------------------------------------------------------------------------
 
@@ -652,7 +714,7 @@ def run(
     Returns a sorted list of error dicts with keys:
     {check, batch, card, path, message}.
 
-    Checks 1, 2, 3, 4, 5, 6, 8 from issue #10.
+    Checks 1, 2, 3, 4, 5, 6, 8 from issue #10, plus wiki-config-mutation.
     """
     overview_path = plan_dir / "00-overview.md"
     if not overview_path.exists():
@@ -685,6 +747,7 @@ def run(
     errors.extend(_check_depends_on_unknown(overview_text, overview_path))
     errors.extend(_check_parallel_modifies_overlap(batch_files, overview_text))
     errors.extend(_check_reads_not_backtick_path(batch_files))
+    errors.extend(_check_wiki_config_mutation(batch_files))
     errors.extend(_check_all_files_touched_mismatch(overview_path, batch_files))
 
     errors.sort(key=lambda e: (e["batch"] or "", e["card"] or 0, e["check"]))

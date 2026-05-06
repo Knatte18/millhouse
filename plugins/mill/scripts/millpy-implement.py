@@ -192,6 +192,7 @@ def main(argv=None) -> int:
             "WIKI_PATH": str(wiki_path),
             "SELF_FIX_ROUNDS": str(self_fix_rounds),
             "ROUND": "1",
+            "SESSION_ID": session_id,
         })
 
         try:
