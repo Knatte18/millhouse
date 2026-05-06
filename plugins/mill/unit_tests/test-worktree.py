@@ -5,11 +5,12 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
-from _worktree import WorktreeError, copy_millhouse, list_worktrees, remove  # noqa: E402
+from _worktree import WorktreeError, WorktreeLockedError, copy_millhouse, list_worktrees, remove, remove_safe  # noqa: E402
 
 
 def _git_init(path: Path) -> None:
@@ -119,6 +120,86 @@ def main() -> int:
                 raised = True
             assert raised, "expected WorktreeError for nonexistent path"
             print("PASS remove — nonexistent path raises WorktreeError")
+
+        # --- WorktreeLockedError is a WorktreeError subclass ---
+        assert issubclass(WorktreeLockedError, WorktreeError)
+        print("PASS: WorktreeLockedError is WorktreeError subclass")
+
+        # --- remove_safe raises WorktreeLockedError on "Permission denied" in git stderr ---
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "wt"
+            path.mkdir()
+            cwd = Path(tmp) / "cwd"
+            cwd.mkdir()
+            mock_result = MagicMock()
+            mock_result.returncode = 1
+            mock_result.stderr = "fatal: Permission denied"
+            raised_locked = False
+            with patch("_worktree._subprocess_util.run", return_value=mock_result):
+                try:
+                    remove_safe(path, cwd=cwd, junctions_cfg={})
+                except WorktreeLockedError:
+                    raised_locked = True
+            assert raised_locked, "expected WorktreeLockedError for Permission denied"
+            print("PASS: remove_safe raises WorktreeLockedError on Permission denied")
+
+        # --- remove_safe raises WorktreeLockedError on "is in use" in git stderr ---
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "wt"
+            path.mkdir()
+            cwd = Path(tmp) / "cwd"
+            cwd.mkdir()
+            mock_result = MagicMock()
+            mock_result.returncode = 1
+            mock_result.stderr = "fatal: is in use"
+            raised_locked = False
+            with patch("_worktree._subprocess_util.run", return_value=mock_result):
+                try:
+                    remove_safe(path, cwd=cwd, junctions_cfg={})
+                except WorktreeLockedError:
+                    raised_locked = True
+            assert raised_locked, "expected WorktreeLockedError for is in use"
+            print("PASS: remove_safe raises WorktreeLockedError on is in use")
+
+        # --- remove_safe raises base WorktreeError (not subclass) for unrecognized git errors ---
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "wt"
+            path.mkdir()
+            cwd = Path(tmp) / "cwd"
+            cwd.mkdir()
+            mock_result = MagicMock()
+            mock_result.returncode = 1
+            mock_result.stderr = "fatal: some unknown error"
+            raised_base = False
+            raised_locked_wrong = False
+            with patch("_worktree._subprocess_util.run", return_value=mock_result):
+                try:
+                    remove_safe(path, cwd=cwd, junctions_cfg={})
+                except WorktreeLockedError:
+                    raised_locked_wrong = True
+                except WorktreeError:
+                    raised_base = True
+            assert raised_base and not raised_locked_wrong, "expected base WorktreeError (not locked) for unrecognized error"
+            print("PASS: remove_safe raises WorktreeError (not locked) for unrecognized error")
+
+        # --- remove_safe raises WorktreeLockedError when shutil.rmtree raises PermissionError (long-path fallback) ---
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "wt"
+            path.mkdir()
+            cwd = Path(tmp) / "cwd"
+            cwd.mkdir()
+            mock_result = MagicMock()
+            mock_result.returncode = 1
+            mock_result.stderr = "Filename too long"
+            raised_locked = False
+            with patch("_worktree._subprocess_util.run", return_value=mock_result):
+                with patch("_worktree.shutil.rmtree", side_effect=PermissionError("locked")):
+                    try:
+                        remove_safe(path, cwd=cwd, junctions_cfg={})
+                    except WorktreeLockedError:
+                        raised_locked = True
+            assert raised_locked, "expected WorktreeLockedError when rmtree fallback raises PermissionError"
+            print("PASS: remove_safe raises WorktreeLockedError when rmtree fallback raises PermissionError")
 
         print("All _worktree unit tests passed.")
         return 0

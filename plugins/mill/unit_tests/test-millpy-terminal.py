@@ -139,7 +139,7 @@ def main() -> int:
             print("PASS: single worktree auto-selected, no prompt, subprocess called")
 
     # ------------------------------------------------------------------
-    # Test: no active worktrees → exits 0, no subprocess call.
+    # Test: no active worktrees, spawn returns 0, backlog empty → exit 0.
     # ------------------------------------------------------------------
     with tempfile.TemporaryDirectory() as tmpdir:
         root = Path(tmpdir)
@@ -147,23 +147,26 @@ def main() -> int:
         empty_dir = root / "worktrees"
         empty_dir.mkdir()
 
+        spawn_callable = MagicMock(return_value=0)
         subprocess_calls = []
         with (
             patch("mill_terminal.resolve_git_root", return_value=root),
             patch("mill_terminal.resolve_wiki_path", return_value=root / "wiki"),
             patch("mill_terminal.resolve_worktrees_dir", return_value=empty_dir),
+            patch("mill_terminal._spawn_core.discover_active_worktrees", return_value=[]),
+            patch("mill_terminal._load_spawn_main", return_value=spawn_callable),
             patch("mill_terminal.subprocess.run", side_effect=lambda *a, **kw: subprocess_calls.append(kw)),
         ):
             rc = mill_terminal.main([])
 
         if rc != 0:
-            print(f"FAIL: no worktrees returned {rc}, expected 0", file=sys.stderr)
+            print(f"FAIL: empty backlog → expected exit 0, got {rc}", file=sys.stderr)
             errors += 1
         elif subprocess_calls:
-            print("FAIL: subprocess.run called when no worktrees found", file=sys.stderr)
+            print("FAIL: subprocess.run called despite empty backlog", file=sys.stderr)
             errors += 1
         else:
-            print("PASS: no active worktrees -> exits 0, no subprocess call")
+            print("PASS: spawn empty backlog → exit 0, no claude")
 
     # ------------------------------------------------------------------
     # Test: hub_relative_path set in per-worktree config → subprocess
@@ -305,6 +308,92 @@ def main() -> int:
             errors += 1
         else:
             print("PASS: per-worktree hub_relative_path wins over hub config value")
+
+    # ------------------------------------------------------------------
+    # Test: no active worktrees → spawn called, new worktree, claude launched.
+    # ------------------------------------------------------------------
+    with tempfile.TemporaryDirectory() as tmpdir:
+        root = Path(tmpdir)
+        _make_git_repo(root)
+
+        worktrees_dir = root / "worktrees"
+        wt_new = worktrees_dir / "task-new"
+        wt_new.mkdir(parents=True)
+
+        spawn_callable = MagicMock(return_value=0)
+        subprocess_calls: list = []
+
+        with (
+            patch("mill_terminal.resolve_git_root", return_value=root),
+            patch("mill_terminal.resolve_wiki_path", return_value=root / "wiki"),
+            patch("mill_terminal.resolve_worktrees_dir", return_value=worktrees_dir),
+            patch(
+                "mill_terminal._spawn_core.discover_active_worktrees",
+                side_effect=[[], [(wt_new, "task-new", "New Task")]],
+            ),
+            patch("mill_terminal._load_spawn_main", return_value=spawn_callable),
+            patch(
+                "mill_terminal.subprocess.run",
+                side_effect=lambda *a, **kw: subprocess_calls.append(kw),
+            ),
+        ):
+            rc = mill_terminal.main([])
+
+        if not spawn_callable.called:
+            print("FAIL: spawn callable not called", file=sys.stderr)
+            errors += 1
+        elif spawn_callable.call_args_list[0] != call([]):
+            print(
+                f"FAIL: spawn callable called with wrong args: {spawn_callable.call_args_list}",
+                file=sys.stderr,
+            )
+            errors += 1
+        elif not subprocess_calls:
+            print("FAIL: subprocess.run not called after spawn", file=sys.stderr)
+            errors += 1
+        elif subprocess_calls[0].get("cwd") != wt_new:
+            print(
+                f"FAIL: expected cwd={wt_new}, got {subprocess_calls}",
+                file=sys.stderr,
+            )
+            errors += 1
+        else:
+            print("PASS: no active worktrees → spawn called, claude launched in new worktree")
+
+    # ------------------------------------------------------------------
+    # Test: no active worktrees, spawn returns non-zero → exit 1, no claude.
+    # ------------------------------------------------------------------
+    with tempfile.TemporaryDirectory() as tmpdir:
+        root = Path(tmpdir)
+        _make_git_repo(root)
+
+        worktrees_dir = root / "worktrees"
+        worktrees_dir.mkdir()
+
+        spawn_callable = MagicMock(return_value=1)
+        subprocess_calls = []
+
+        with (
+            patch("mill_terminal.resolve_git_root", return_value=root),
+            patch("mill_terminal.resolve_wiki_path", return_value=root / "wiki"),
+            patch("mill_terminal.resolve_worktrees_dir", return_value=worktrees_dir),
+            patch("mill_terminal._spawn_core.discover_active_worktrees", return_value=[]),
+            patch("mill_terminal._load_spawn_main", return_value=spawn_callable),
+            patch(
+                "mill_terminal.subprocess.run",
+                side_effect=lambda *a, **kw: subprocess_calls.append(kw),
+            ),
+        ):
+            rc = mill_terminal.main([])
+
+        if rc != 1:
+            print(f"FAIL: spawn non-zero rc → expected exit 1, got {rc}", file=sys.stderr)
+            errors += 1
+        elif subprocess_calls:
+            print("FAIL: subprocess.run called despite spawn failure", file=sys.stderr)
+            errors += 1
+        else:
+            print("PASS: spawn non-zero rc → exit 1, no claude")
 
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)

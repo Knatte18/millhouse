@@ -17,10 +17,19 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+from pathlib import Path
 
 import _spawn_core
 from _config import load_config as _load_config
 from _paths import resolve_git_root, resolve_hub_relative_path, resolve_wiki_path, resolve_worktrees_dir
+
+
+def _load_spawn_main():
+    import importlib.util as _ilu
+    spec = _ilu.spec_from_file_location("mill_spawn", Path(__file__).parent / "millpy-spawn.py")
+    module = _ilu.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.main
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -50,8 +59,17 @@ def main(argv: list[str] | None = None) -> int:
     active = _spawn_core.discover_active_worktrees(worktrees_dir)
 
     if not active:
-        print("No active worktrees found.", file=sys.stderr)
-        return 0
+        spawn_main = _load_spawn_main()
+        rc = spawn_main([])
+        if rc != 0:
+            return rc
+        active = _spawn_core.discover_active_worktrees(worktrees_dir)
+        if not active:
+            print(
+                "No tasks available and no active worktrees. Add tasks to Home.md first.",
+                file=sys.stderr,
+            )
+            return 0
 
     if len(active) == 1:
         path, slug, title = active[0]
