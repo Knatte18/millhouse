@@ -35,5 +35,7 @@ batches:
     review_round: 1
     review_file: reviews/20260506-131302-code-review-worktree-locked-error-r1.md
   - name: auto-spawn-integration
-    state: pending
+    state: running
+    implementer_session: 0ce655c5-e8ef-46d3-bf85-949d452b0a9b
+    start_sha: 70de17a40ce9209b08ef1f9d7e5e8e249c5b3fd3
 ```
