@@ -218,7 +218,7 @@ def append_entry(
             f"Invalid slug {slug!r}: must match [a-z][a-z0-9-]*"
         )
 
-    slug_line = f"[[{slug}]](proposal-{slug})" if has_proposal else f"[{slug}]"
+    slug_line = f"[[{slug}]](proposal-{slug}.md)" if has_proposal else f"[{slug}]"
 
     if body:
         new_entry = f"## {title}\n{slug_line}\n\n{body}\n"
