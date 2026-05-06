@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-fix-r4
+phase: planned
 slug: dispatch-cli-and-resume
 branch: dispatch-cli-and-resume
 plan: plan
@@ -25,4 +25,6 @@ plan-review-r3  2026-05-05T13:23:46Z
 plan-fix-r3  2026-05-05T13:23:46Z
 plan-review-r4  2026-05-06T06:05:41Z
 plan-fix-r4  2026-05-06T06:05:41Z
+plan-review-r5  2026-05-06T06:29:55Z
+planned  2026-05-06T06:29:55Z
 ```

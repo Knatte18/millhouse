@@ -3,7 +3,7 @@
 ```yaml
 task: 1 — Implementer dispatch-CLI + Agent-resume fix (conflicts with 8)
 slug: dispatch-cli-and-resume
-approved: false
+approved: true
 started: 20260505-122812
 parent: main
 root: ""
