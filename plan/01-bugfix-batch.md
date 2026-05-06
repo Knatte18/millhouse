@@ -35,8 +35,8 @@ This batch fixes three independent bugs in the mill infra layer — bugs B, C, a
 - **Creates:** none
 - **Deletes:** none
 - **Requirements:** Three changes to `millpy-implement.py`:
-  1. In the initial-dispatch path (the three consecutive `set_batch_field` calls for `state`, `start_sha`, and `implementer_session`), replace them with a single `set_batch_fields(status_path, args.batch_name, {"state": "running", "start_sha": start_sha, "implementer_session": session_id})` call. Import `set_batch_fields` from `_status` (match the existing import style in the file).
-  2. In the fix-cycle resume path (the three consecutive `set_batch_field` calls for `state`, `review_round`, and `review_file`), replace them with a single `set_batch_fields(status_path, args.batch_name, {"state": "fixing", "review_round": args.round, "review_file": str(review_file)})` call.
+  1. In the initial-dispatch path (the three consecutive `set_batch_field` calls for `state`, `start_sha`, and `implementer_session`), replace them with a single `_status.set_batch_fields(status_path, args.batch_name, {"state": "running", "start_sha": start_sha, "implementer_session": session_id})` call. The file already uses `import _status` (module-style); no new import is needed.
+  2. In the fix-cycle resume path (the three consecutive `set_batch_field` calls for `state`, `review_round`, and `review_file`), replace them with a single `_status.set_batch_fields(status_path, args.batch_name, {"state": "fixing", "review_round": args.round, "review_file": str(review_file)})` call.
   3. Modify `_forward_output` to accept `project_root: Path` as a second parameter. After successfully extracting and parsing the JSON dict from the implementer output, run `subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True, cwd=project_root)`. If the process exits with code 0, overwrite the `commit_sha` key in the parsed dict with `result.stdout.strip()` before printing `json.dumps(dict)`. If the process exits non-zero, forward the original JSON string unmodified (preserving the always-0 return contract). Update both call sites of `_forward_output` in `main()` to pass `project_root` as the second argument.
 - **Commit:** `fix(millpy-implement): atomic batch-state writes + normalize commit_sha via git rev-parse`
 
@@ -60,7 +60,7 @@ This batch fixes three independent bugs in the mill infra layer — bugs B, C, a
   - `plugins/mill/unit_tests/test-status.py`
 - **Creates:** none
 - **Deletes:** none
-- **Requirements:** Import `set_batch_fields` alongside the existing imports from `_status`. Add four tests using the existing sequential-letter naming convention (continuing from the last letter in use). Each test uses the same status.md setup pattern as the existing `set_batch_field` tests (render_initial + init_batches into a temp file). Tests to add:
+- **Requirements:** Import `set_batch_fields` alongside the existing imports from `_status`. Add four tests appended to the existing sequential `print("PASS: ...")` block in `main()`, following the same flat style. Each test uses the same status.md setup pattern as the existing `set_batch_field` tests (render_initial + init_batches into a temp file). Tests to add:
   - Success path: call `set_batch_fields(sp, "foundation", {"state": "running", "implementer_session": "sess123", "start_sha": "abc"})`, then assert `read_batches(sp)[0]` has all three fields set correctly. Print `"PASS: set_batch_fields writes multiple fields atomically"`.
   - Unknown key: call `set_batch_fields(sp, "foundation", {"nope": "x"})`, assert `ValueError` is raised. Print `"PASS: set_batch_fields rejects unknown key"`.
   - Unknown state: call `set_batch_fields(sp, "foundation", {"state": "finished"})`, assert `ValueError` is raised. Print `"PASS: set_batch_fields rejects unknown state"`.
@@ -80,7 +80,7 @@ This batch fixes three independent bugs in the mill infra layer — bugs B, C, a
   - `test_fo_7_sha_normalized`: mock `millpy_implement.subprocess.run` to return returncode 0 with stdout `"a" * 40 + "\n"`. Call `millpy_implement._forward_output('{"status":"success","commit_sha":"abc1234","session_id":"x"}', Path("/fake"))` with stdout captured. Assert printed JSON has `"commit_sha"` equal to `"a" * 40`. Assert return is 0.
   - `test_fo_8_sha_git_failure`: mock `millpy_implement.subprocess.run` to return returncode 1 with empty stdout. Call `_forward_output('{"status":"success","commit_sha":"abc1234","session_id":"x"}', Path("/fake"))`. Assert printed JSON has `"commit_sha"` equal to `"abc1234"` (original preserved). Assert return is 0.
 
-  Note: `_forward_output` now requires a second `project_root: Path` argument — update all existing `test_fo_*` test invocations that call `_forward_output` directly to pass `Path("/fake")` as the second argument, and patch `millpy_implement.subprocess.run` to avoid real git calls in those tests.
+  Note: `_forward_output` now requires a second `project_root: Path` argument — update all existing `test_fo_*` test invocations that call `_forward_output` directly to pass `Path("/fake")` as the second argument. For each updated existing test, add a `unittest.mock.patch("millpy_implement.subprocess.run", return_value=unittest.mock.MagicMock(returncode=1, stdout=""))` context to avoid real git calls and to ensure the "forward original JSON unmodified" path is taken (preserving current assertions).
 - **Commit:** `test(millpy-implement): add SHA normalization tests for _forward_output`
 
 ### Card 6: Test for UTC-aware timestamp in `test-millpy-bg.py`
