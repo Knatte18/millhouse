@@ -35,7 +35,9 @@ implementing  2026-05-06T06:46:53Z
 ```yaml
 batches:
   - name: implement-cli
-    state: pending
+    state: running
+    implementer_session: b88581f8-366f-4655-ae87-d5560c245b0a
+    start_sha: d2198240fd38d78c046b101e26be67b10370574c
   - name: tests-and-skill
     state: pending
 ```
