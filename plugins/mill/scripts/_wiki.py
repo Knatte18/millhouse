@@ -44,13 +44,22 @@ Public API:
         Stage, commit and push the named paths with one rebase retry.
         Acquires/releases the wiki lock internally; no-op acquire if
         already held via ``wiki_lock``.
+    clone_or_init(url, branch, dest)
+        Clone, init-orphan, or pull an existing wiki clone at dest.
+        Returns a status dict with "action" and "branch_existed_on_remote".
+        Does not acquire the wiki lock (dest is not yet a live wiki).
 
 Exceptions:
     LockBusy        — raised by ``_acquire`` on timeout. Carries
                       ``holder`` (slug) and ``age_seconds`` for
                       diagnostics.
-    WikiPushError   — raised by ``write_commit_push`` on any
-                      unrecoverable git failure (add/commit/rebase/push).
+    WikiPushError   — raised by ``write_commit_push`` and the pull path
+                      of ``clone_or_init`` on any unrecoverable git
+                      failure (add/commit/rebase/push/pull).
+    WikiSetupError  — raised by ``clone_or_init`` on unrecoverable
+                      clone/init/mismatch failures (URL mismatch, branch
+                      mismatch, dest-exists-but-not-git, ls-remote
+                      failure, clone/init failure).
 """
 from __future__ import annotations
 
@@ -114,6 +123,17 @@ def read_hardlinks(wiki_root: Path) -> dict[str, str]:
     if not raw:
         return dict(_HARDLINK_DEFAULTS)
     return {str(k): str(v) for k, v in raw.items()}
+
+
+class WikiSetupError(Exception):
+    """
+    Raised by ``clone_or_init`` on any unrecoverable clone/init/mismatch failure.
+
+    Covers URL mismatch, branch mismatch, dest-exists-but-not-git,
+    ls-remote failure, clone/init failure, and remote-add/config failures.
+    The message includes enough context for the caller (mill-setup Phase 2/3)
+    to surface a clear user-facing error.
+    """
 
 
 class WikiPushError(RuntimeError):
@@ -354,3 +374,154 @@ def _write_commit_push_body(
         raise WikiPushError(f"git push failed: {push.stderr.strip()!r}")
 
     raise WikiPushError("push still failing after rebase retry")
+
+
+def clone_or_init(url: str, branch: str | None, dest: Path) -> dict:
+    """Clone, init-orphan, or pull an existing wiki clone at dest.
+
+    Four code paths:
+
+    Path A — dest exists and dest/.git exists:
+        Verifies origin URL matches url; if branch is not None, verifies
+        current branch matches branch; then runs git pull --ff-only.
+        Returns {"action": "pulled", "branch_existed_on_remote": None}.
+
+    Path B — dest exists but dest/.git is missing:
+        Raises WikiSetupError (dest is not a git repo).
+
+    Path C — dest does not exist, branch is None:
+        Runs git clone <url> <dest> (remote HEAD).
+        Returns {"action": "cloned", "branch_existed_on_remote": None}.
+
+    Path D — dest does not exist, branch is not None:
+        Checks remote branch existence via git ls-remote --heads.
+        Branch exists  → git clone -b <branch> --single-branch <url> <dest>.
+                         Returns {"action": "cloned", "branch_existed_on_remote": True}.
+        Branch missing → git init <dest>, git remote add origin <url>,
+                         git checkout --orphan <branch>, git config
+                         branch.<branch>.remote/merge so the first
+                         write_commit_push pushes upstream-cleanly.
+                         Returns {"action": "initialized", "branch_existed_on_remote": False}.
+
+    This helper does NOT log or print — the caller shapes all user-facing messages.
+    All subprocess calls go through _subprocess_util.run; argv lists are explicit.
+
+    Args:
+        url:    Remote wiki URL.
+        branch: Branch name to pin, or None to use the remote default.
+        dest:   Filesystem path where the wiki clone should live.
+
+    Returns:
+        dict with keys:
+          "action": "cloned" | "pulled" | "initialized"
+          "branch_existed_on_remote": True | False | None
+
+    Raises:
+        WikiSetupError: Unrecoverable clone/init/mismatch failure.
+        WikiPushError:  git pull --ff-only failed on an existing repo (Path A).
+    """
+    if dest.exists():
+        if not (dest / ".git").exists():
+            raise WikiSetupError(
+                f"{dest} exists but is not a git repository; move or remove it and re-run"
+            )
+        # Path A — existing git repo
+        get_url = _subprocess_util.run(
+            ["git", "-C", str(dest), "remote", "get-url", "origin"]
+        )
+        if get_url.returncode != 0:
+            raise WikiSetupError(
+                f"git -C {dest} remote get-url origin failed: {get_url.stderr}"
+            )
+        actual_url = get_url.stdout.strip()
+        if actual_url != url:
+            raise WikiSetupError(
+                f"wiki at {dest} has origin {actual_url!r}, expected {url!r};"
+                " remove or fix the wiki dir manually"
+            )
+        if branch is not None:
+            show = _subprocess_util.run(
+                ["git", "-C", str(dest), "branch", "--show-current"]
+            )
+            if show.returncode != 0:
+                raise WikiSetupError(
+                    f"git -C {dest} branch --show-current failed: {show.stderr}"
+                )
+            actual_branch = show.stdout.strip()
+            if actual_branch != branch:
+                raise WikiSetupError(
+                    f"wiki at {dest} is on branch {actual_branch!r}, expected {branch!r};"
+                    " remove or fix the wiki dir manually"
+                )
+        pull = _subprocess_util.run(
+            ["git", "-C", str(dest), "pull", "--ff-only"]
+        )
+        if pull.returncode != 0:
+            raise WikiPushError(f"git pull --ff-only failed: {pull.stderr}")
+        return {"action": "pulled", "branch_existed_on_remote": None}
+
+    # dest does not exist
+    if branch is None:
+        # Path C — clone without branch
+        result = _subprocess_util.run(["git", "clone", url, str(dest)])
+        if result.returncode != 0:
+            raise WikiSetupError(
+                f"git clone {url} {dest} failed: {result.stderr}"
+            )
+        return {"action": "cloned", "branch_existed_on_remote": None}
+
+    # Path D — dest missing, branch specified
+    ls = _subprocess_util.run(["git", "ls-remote", "--heads", url, branch])
+    if ls.returncode != 0:
+        raise WikiSetupError(
+            f"git ls-remote --heads {url} {branch} failed: {ls.stderr}"
+        )
+    if ls.stdout.strip():
+        # branch exists on remote
+        result = _subprocess_util.run(
+            ["git", "clone", "-b", branch, "--single-branch", url, str(dest)]
+        )
+        if result.returncode != 0:
+            raise WikiSetupError(
+                f"git clone -b {branch} --single-branch {url} {dest} failed: {result.stderr}"
+            )
+        return {"action": "cloned", "branch_existed_on_remote": True}
+
+    # branch missing — init orphan
+    init = _subprocess_util.run(["git", "init", str(dest)])
+    if init.returncode != 0:
+        raise WikiSetupError(f"git init {dest} failed: {init.stderr}")
+
+    remote = _subprocess_util.run(
+        ["git", "-C", str(dest), "remote", "add", "origin", url]
+    )
+    if remote.returncode != 0:
+        raise WikiSetupError(
+            f"git -C {dest} remote add origin {url} failed: {remote.stderr}"
+        )
+
+    orphan = _subprocess_util.run(
+        ["git", "-C", str(dest), "checkout", "--orphan", branch]
+    )
+    if orphan.returncode != 0:
+        raise WikiSetupError(
+            f"git -C {dest} checkout --orphan {branch} failed: {orphan.stderr}"
+        )
+
+    cfg_remote = _subprocess_util.run(
+        ["git", "-C", str(dest), "config", f"branch.{branch}.remote", "origin"]
+    )
+    if cfg_remote.returncode != 0:
+        raise WikiSetupError(
+            f"git -C {dest} config branch.{branch}.remote failed: {cfg_remote.stderr}"
+        )
+
+    cfg_merge = _subprocess_util.run(
+        ["git", "-C", str(dest), "config", f"branch.{branch}.merge", f"refs/heads/{branch}"]
+    )
+    if cfg_merge.returncode != 0:
+        raise WikiSetupError(
+            f"git -C {dest} config branch.{branch}.merge failed: {cfg_merge.stderr}"
+        )
+
+    return {"action": "initialized", "branch_existed_on_remote": False}

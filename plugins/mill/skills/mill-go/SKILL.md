@@ -47,7 +47,7 @@ On a fresh run only (no `## Batches` section in status.md):
 - `_status.append_phase(status_path, "implementing", _timestamp.now_utc_iso())`.
   `signature: _status.append_phase(status_path: Path, phase: str, timestamp: str) -> None`
   `signature: _timestamp.now_utc_iso() -> str`
-- Commit on the task branch: `git -C <worktree> add status.md && git -C <worktree> commit -m "mill-go: prepare for {slug}"` (no push).
+- Commit on the task branch: `git -C <worktree> add status.md && git -C <worktree> commit -m "mill-go: prepare for {slug}"`.
 
 ## Execute — sequential loop
 
@@ -55,27 +55,11 @@ For each batch in `order`:
 
 ### 1. Implement
 
-- Resolve the batch's file path via the Batch Index entry's `file:`.
-- Build implementer prompt: render `${CLAUDE_PLUGIN_ROOT}/templates/implementer-brief.md` via `_render.render`. Note: `_render.render` auto-strips the brief's leading HTML comment, so the prompt sent to Sonnet is comment-free. Tokens:
-
-   | Token | Value |
-   | --- | --- |
-   | `<TASK_TITLE>` | from `status.md` yaml block |
-   | `<SLUG>` | the slug |
-   | `<BATCH_NAME>` | batch name from Batch Index |
-   | `<BATCH_FILE>` | abs path to `NN-<slug>.md` |
-   | `<OVERVIEW_FILE>` | abs path to `00-overview.md` |
-   | `<PROJECT_ROOT>` | worktree cwd (abs) |
-   | `<WIKI_PATH>` | wiki path (abs) |
-   | `<SELF_FIX_ROUNDS>` | `review.code.self_fix_rounds` |
-   | `<ROUND>` | `1` on first implementation |
-
-- Record `start_sha = git rev-parse HEAD` (reserved for future per-batch diff scoping — not used by the refactored code reviewer but kept for traceability).
-- Set batch state → `running`, `start_sha: <sha>`. Generate a new `implementer_session = uuid4()` and record it via `_status.set_batch_field`.
-  `signature: _status.set_batch_field(status_path: Path, name: str, key: str, value: str | int | None) -> None`
-- Commit on the task branch: `git -C <worktree> add status.md && git -C <worktree> commit -m "mill-go: start batch {batch_name}"` (no push).
-- Spawn implementer: `_implementer_sonnet.run(prompt_text, session_id=session_id, resume=False, cwd=project_root)`. Returns `(output, session_id)`.
-  `signature: _implementer_sonnet.run(prompt_text: str, *, session_id: str | None = None, resume: bool = False, cwd: Path | str | None = None) -> tuple[str, str]`
+- Invoke:
+  ```bash
+  uv run --project "${CLAUDE_PLUGIN_ROOT}" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-implement.py" <batch_name>
+  ```
+  The CLI atomically: resolves paths and config, renders the implementer brief, generates a `session_id`, sets batch state → `running`, records `start_sha` and `implementer_session` in status.md, commits and pushes on the task branch, spawns the implementer, and prints the implementer's JSON report on stdout. The Builder reads stdout JSON directly for the Parse step. Note: the CLI exits 0 when the implementer produced JSON (success or stuck). On exit code 1 the stdout still carries a `{"status":"stuck","stuck_type":"transient",...}` line if an LLM-layer failure (timeout, dead session, etc.) occurred — parse it the same way and route through Stuck escalation. Only treat exit 1 as an unrecoverable pre-launch error when stdout is empty.
 
 ### 2. Parse implementer report
 
@@ -86,7 +70,7 @@ The implementer's last output line must be JSON:
 ```
 
 - `status: success` → continue to Code Review.
-- `status: stuck, stuck_type: transient` → auto-retry ONCE with a fresh session (new UUID, `resume=False`). Record `review_round: 0`, do not change batch state. If second attempt is also stuck → escalate per *Stuck escalation* below.
+- `status: stuck, stuck_type: transient` → auto-retry ONCE by re-invoking `millpy-implement.py <batch_name>` (no `--resume` flag — a fresh batch start). Record `review_round: 0`, do not change batch state. If the second invocation also reports `stuck_type: transient` → escalate per *Stuck escalation* below.
 - `status: stuck, stuck_type: verify | logic` → **ask user** per *Stuck escalation*.
 - Malformed / missing JSON line → treat as `stuck_type: logic` reason "no structured report".
 
@@ -120,17 +104,17 @@ For each round `N` from 1 to `review.code.rounds`:
    - `APPROVE` — batch state → `approved`, `review_file: <path>`. `_status.append_phase(status_path, f"approved-{batch_name}", _timestamp.now_utc_iso())`. Commit on the task branch: `git -C <worktree> add status.md && git -C <worktree> commit -m "mill-go: approve batch {batch_name}"`. Break out of the loop → next batch.
    - `NEED_CONTEXT` — read the `## Missing context` bullets from the review file. For each listed path, if it exists under the worktree, append to `extra_files` for the NEXT round. `_notify.notify("mill-go.review-need-context", f"batch {batch_name} round {N}", slug=slug, files=len(missing))`. Record this gap for mill-self-report (see Handoff). Increment round and continue the loop. If ALL the missing files are paths already in `extra_files` from a prior round (no new info), treat as a stuck-logic failure and break.
      `signature: _notify.notify(event: str, detail: str, **context) -> None`
-   - `REQUEST_CHANGES` — set batch state → `fixing`. `_status.append_phase(status_path, f"fixing-{batch_name}-r{N}", _timestamp.now_utc_iso())`. Commit on the task branch: `git -C <worktree> add status.md reviews/<file> && git -C <worktree> commit -m "mill-go: review-request batch {batch_name} round {N}"`. **Resume the implementer session** with a new user message:
-
-     > Load the `mill-receiving-review` skill. Read `<review-file-abs-path>`. Apply VERIFY / HARM CHECK / FIX or PUSH BACK per finding. Re-run `verify:` from the batch frontmatter. Report the same JSON shape as before, reflecting the post-fix state.
-
-     Spawn via `_implementer_sonnet.run(fix_prompt, session_id=session_id, resume=True, cwd=project_root)`. Parse the JSON report the same way as step 2. On success → increment round, continue loop (next round's review). On stuck → escalate.
+   - `REQUEST_CHANGES` — invoke:
+     ```bash
+     uv run --project "${CLAUDE_PLUGIN_ROOT}" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-implement.py" <batch_name> --resume --round <N> --review-file <review-file-abs-path>
+     ```
+     The CLI atomically: reads `implementer_session` from status.md, sets batch state → `fixing`, calls `_status.append_phase` for `fixing-{batch_name}-r{N}`, commits and pushes (status.md plus the review file), and resumes the warm implementer session with the fix prompt (which instructs the implementer to load `mill-receiving-review` and apply findings). Parse the JSON report the same way as step 2 — including the exit-code-1-with-stuck-JSON behavior described under "1. Implement". On stuck → escalate.
 
 5. **Max-rounds exhaustion.** After `review.code.rounds` rounds without APPROVE: `_notify.notify("mill-go.review-exhausted", f"batch {batch_name}", slug=slug, rounds=N)`, set batch state → `blocked`, `blocked_reason: "review rounds exhausted"`, `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`, commit on the task branch: `git -C <worktree> add status.md && git -C <worktree> commit -m "mill-go: blocked on {batch_name} after {N} rounds"`. Go to *Blocked* below.
 
 ### Stuck escalation
 
-- **`LLMError` from `_llm_claude.run_implementer`** (subprocess crashed before producing a JSON report) → treat as `stuck_type: transient`. Apply the existing one-retry policy: retry once with a fresh session (new UUID, `resume=False`). If the second attempt also raises `LLMError`, escalate to user with the regular `transient` three-option prompt (retry fresh, edit plan and retry, block). Note: catch `_llm_claude.LLMError` specifically (not bare `Exception`) so genuine programmer errors still propagate.
+- **CLI emits `stuck_type: transient`** (LLM-layer failure surfaced as the synthetic stuck JSON described in Implement step 2; the CLI exits 1 in that case but stdout carries the JSON) → apply the one-retry policy: re-invoke `millpy-implement.py <batch_name>` once with no `--resume` flag (a fresh session). If the second invocation also reports `stuck_type: transient`, escalate to user with the regular `transient` three-option prompt (retry fresh, edit plan and retry, block).
 - `transient` (already retried once) → surface to user with three options: retry fresh, edit plan and retry, block. User picks.
 - `verify` / `logic` → surface to user with three options: edit plan to clarify then retry fresh, skip this batch (block the task), block the task. User picks.
 - On user-chosen block: set batch state → `blocked`, `blocked_reason: <reason>`, `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`, commit on the task branch: `git -C <worktree> add status.md && git -C <worktree> commit -m "mill-go: blocked on {batch_name}"`. Go to *Blocked*.
@@ -147,13 +131,13 @@ After every batch in `order` has state `approved`, and only if `review.code.holi
 
 - Background via `millpy-bg`: `uv run --project "${CLAUDE_PLUGIN_ROOT}" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-bg.py" --slug review-code-holistic-r<N> -- uv run --project "${CLAUDE_PLUGIN_ROOT}" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-review-code.py"` (no `--batch`). Poll and extract JSON as per the per-batch pattern above.
 - On `REQUEST_CHANGES`: apply the same review-fix loop as per-batch — track holistic state via `_status.append_phase` with dedicated holistic phase names (`"holistic-reviewing"`, `"holistic-fixing"`, `"holistic-approved"`) rather than `_status.set_batch_field` (which would raise `ValueError: Batch 'holistic' not present` since 'holistic' is never initialized via `init_batches`). Spawn the implementer via `_implementer_sonnet.run(prompt_text, session_id=new_uuid, resume=False, cwd=worktree_path)` with the review file pointer (no resume — holistic review's findings span multiple batches; the implementer receives whole-worktree access).
-  `signature: _implementer_sonnet.run(prompt_text: str, *, session_id: str | None = None, resume: bool = False, cwd: Path | str | None = None) -> tuple[str, str]`
+  `signature: _implementer_sonnet.run(prompt_text: str, *, session_id: str | None = None, resume: bool = False, cwd: Path | str | None = None, timeout: int = 1800) -> tuple[str, str]`
   Run the same review-fix loop until APPROVE or rounds-exhausted. On rounds-exhausted only, surface to user with the same blocked-batch halt prompt as per-batch flow.
 - On `NEED_CONTEXT` apply the same extra-files / notify path as per-batch.
 
 ## Handoff
 
-1. `_status.append_phase(status_path, "done", _timestamp.now_utc_iso())`. Commit on the task branch: `git -C <worktree> add status.md && git -C <worktree> commit -m "mill-go: done {slug}"` (no push).
+1. `_status.append_phase(status_path, "done", _timestamp.now_utc_iso())`. Commit on the task branch: `git -C <worktree> add status.md && git -C <worktree> commit -m "mill-go: done {slug}"`.
 2. Flip Home.md's task line to `[done]`:
    ```python
    home_path = wiki_path / "Home.md"
@@ -183,7 +167,7 @@ After every batch in `order` has state `approved`, and only if `review.code.holi
 
 ## Board discipline
 
-- Status.md, reviews/<file>, and plan/<file> writes are committed on the **task branch** via `git -C <worktree> add ... && git -C <worktree> commit`. No push from per-card commits — mill-merge pushes the task branch at task end.
+- Status.md, reviews/<file>, and plan/<file> writes are committed on the **task branch** via `git -C <worktree> add ... && git -C <worktree> commit`. `millpy-implement.py` pushes its own task-branch state commits (batch-start, fix-cycle) to `origin/<task-branch>` immediately after each `git commit`. The Builder's own state commits (Prepare, Approve, blocked, done) and per-card implementer commits do not push — mill-merge pushes the full task branch at task end. Adding push to the Builder's own commits is a follow-up task; this PR scopes the push policy to CLI commits only.
 - Home.md writes (the Handoff `[done]` flip) go through `_wiki.write_commit_push(..., slug=...)` inside a `with _wiki.wiki_lock(wiki_path, slug):` block. The wiki helpers acquire the lock internally; the context manager makes the read-modify-write atomic.
 - Phase transitions via `_status.append_phase`; batch-state mutations via `_status.set_batch_field`. Hand-editing either yaml block is banned.
 - The path-invariant rule from CLAUDE.md is load-bearing: working state never goes to the wiki — only Home.md / _Sidebar.md do.

@@ -21,6 +21,8 @@ HUB = Path(__file__).resolve().parent.parent.parent.parent
 SCRIPTS_DIR = HUB / "plugins" / "mill" / "scripts"
 sys.path.insert(0, str(SCRIPTS_DIR))
 
+import yaml  # noqa: E402
+
 import _config  # noqa: E402
 
 
@@ -191,6 +193,107 @@ def test_deep_merge_empty_overlay() -> None:
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# set_local_wiki_overrides
+# ---------------------------------------------------------------------------
+
+
+def test_no_op_when_both_args_none() -> None:
+    """Returns False and creates no file when both repo_url and branch are None."""
+    with tempfile.TemporaryDirectory() as tmp:
+        cfg_path = Path(tmp) / "config.local.yaml"
+        result = _config.set_local_wiki_overrides(cfg_path, repo_url=None, branch=None)
+        assert result is False, f"Expected False, got {result!r}"
+        assert not cfg_path.exists(), "File must not be created when both args are None"
+    print("PASS set_local_wiki_overrides — no-op when both args are None")
+
+
+def test_creates_file_when_missing() -> None:
+    """Creates the file with wiki.repo_url when file did not exist."""
+    with tempfile.TemporaryDirectory() as tmp:
+        cfg_path = Path(tmp) / "config.local.yaml"
+        result = _config.set_local_wiki_overrides(
+            cfg_path, repo_url="https://example.com/x.git", branch=None
+        )
+        assert result is True, f"Expected True, got {result!r}"
+        assert cfg_path.exists(), "File must be created"
+        data = yaml.safe_load(cfg_path.read_text(encoding="utf-8"))
+        assert data["wiki"]["repo_url"] == "https://example.com/x.git"
+        assert "branch" not in data["wiki"], "branch key must be absent"
+    print("PASS set_local_wiki_overrides — creates file with repo_url; branch absent")
+
+
+def test_updates_existing_value() -> None:
+    """Updates repo_url in an existing file."""
+    with tempfile.TemporaryDirectory() as tmp:
+        cfg_path = Path(tmp) / "config.local.yaml"
+        cfg_path.write_text(
+            yaml.safe_dump({"wiki": {"repo_url": "https://old.git"}}, sort_keys=False),
+            encoding="utf-8",
+        )
+        result = _config.set_local_wiki_overrides(
+            cfg_path, repo_url="https://new.git", branch=None
+        )
+        assert result is True, f"Expected True, got {result!r}"
+        data = yaml.safe_load(cfg_path.read_text(encoding="utf-8"))
+        assert data["wiki"]["repo_url"] == "https://new.git"
+    print("PASS set_local_wiki_overrides — updates existing repo_url value")
+
+
+def test_idempotent_when_already_correct() -> None:
+    """Returns False without touching the file when content is already up-to-date."""
+    with tempfile.TemporaryDirectory() as tmp:
+        cfg_path = Path(tmp) / "config.local.yaml"
+        initial_data = {"wiki": {"repo_url": "https://x.git", "branch": "B"}}
+        initial_text = yaml.safe_dump(initial_data, sort_keys=False, allow_unicode=True)
+        cfg_path.write_text(initial_text, encoding="utf-8")
+        before = cfg_path.read_text(encoding="utf-8")
+        result = _config.set_local_wiki_overrides(
+            cfg_path, repo_url="https://x.git", branch="B"
+        )
+        assert result is False, f"Expected False (no-op), got {result!r}"
+        after = cfg_path.read_text(encoding="utf-8")
+        assert before == after, "File contents must be unchanged on no-op"
+    print("PASS set_local_wiki_overrides — idempotent when already correct")
+
+
+def test_partial_update_branch_only_preserves_repo_url() -> None:
+    """Updating only branch preserves the existing repo_url."""
+    with tempfile.TemporaryDirectory() as tmp:
+        cfg_path = Path(tmp) / "config.local.yaml"
+        cfg_path.write_text(
+            yaml.safe_dump(
+                {"wiki": {"repo_url": "https://x.git", "branch": "old"}},
+                sort_keys=False,
+            ),
+            encoding="utf-8",
+        )
+        result = _config.set_local_wiki_overrides(cfg_path, repo_url=None, branch="new")
+        assert result is True, f"Expected True, got {result!r}"
+        data = yaml.safe_load(cfg_path.read_text(encoding="utf-8"))
+        assert data["wiki"]["repo_url"] == "https://x.git", "repo_url must be preserved"
+        assert data["wiki"]["branch"] == "new", "branch must be updated"
+    print("PASS set_local_wiki_overrides — partial update: branch updated, repo_url preserved")
+
+
+def test_preserves_other_top_level_keys() -> None:
+    """Adds wiki block without removing other top-level keys."""
+    with tempfile.TemporaryDirectory() as tmp:
+        cfg_path = Path(tmp) / "config.local.yaml"
+        cfg_path.write_text(
+            yaml.safe_dump({"hub_relative_path": "."}, sort_keys=False),
+            encoding="utf-8",
+        )
+        result = _config.set_local_wiki_overrides(
+            cfg_path, repo_url="https://x.git", branch=None
+        )
+        assert result is True, f"Expected True, got {result!r}"
+        data = yaml.safe_load(cfg_path.read_text(encoding="utf-8"))
+        assert data.get("hub_relative_path") == ".", "hub_relative_path must be preserved"
+        assert data["wiki"]["repo_url"] == "https://x.git", "wiki.repo_url must be present"
+    print("PASS set_local_wiki_overrides — other top-level keys preserved")
+
+
 def main() -> int:
     tests = [
         test_load_config_shared_present,
@@ -201,6 +304,12 @@ def main() -> int:
         test_deep_merge_scalar_wins,
         test_deep_merge_nested_merge,
         test_deep_merge_empty_overlay,
+        test_no_op_when_both_args_none,
+        test_creates_file_when_missing,
+        test_updates_existing_value,
+        test_idempotent_when_already_correct,
+        test_partial_update_branch_only_preserves_repo_url,
+        test_preserves_other_top_level_keys,
     ]
     failures: list[str] = []
     for fn in tests:

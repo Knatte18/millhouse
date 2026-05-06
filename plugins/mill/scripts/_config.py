@@ -12,6 +12,12 @@ load_config(wiki_path, worktree_root) -> dict
 
 deep_merge(base, overlay) -> dict
     Shallow-recursive deep merge; overlay wins on scalar conflicts.
+
+set_local_wiki_overrides(cfg_path, repo_url, branch) -> bool
+    Write or update the ``wiki:`` block in a
+    ``.millhouse/config.local.yaml`` file. Returns True if the file
+    was created or modified, False if it was already up-to-date or
+    both arguments were None.
 """
 from __future__ import annotations
 
@@ -61,6 +67,61 @@ def load_config(wiki_path: Path, worktree_root: Path) -> dict:
             real_cfg = yaml.safe_load(real_path.read_text(encoding="utf-8")) or {}
             cfg = deep_merge(cfg, real_cfg)
     return cfg
+
+
+def set_local_wiki_overrides(
+    cfg_path: Path,
+    repo_url: str | None,
+    branch: str | None,
+) -> bool:
+    """Write or update the ``wiki:`` block in a ``.millhouse/config.local.yaml`` file.
+
+    If both ``repo_url`` and ``branch`` are None this is a no-op and returns False
+    immediately — the caller passed no overrides to apply.
+
+    Otherwise the file is read (if it exists), the ``wiki:`` sub-dict is created or
+    updated with only the non-None arguments (partial-update semantics: a key absent
+    from the call is not removed from the file), and the result is written back using
+    ``yaml.safe_dump(sort_keys=False)``.  If the resulting text is byte-for-byte
+    identical to the existing file the function returns False without touching the file.
+
+    Note: comments in the existing file are lost on rewrite — this is the documented
+    trade-off for this gitignored, per-machine file.
+
+    Args:
+        cfg_path: Absolute path to the config file (need not exist yet).
+        repo_url: URL to store under ``wiki.repo_url``, or None to leave unchanged.
+        branch:   Branch name to store under ``wiki.branch``, or None to leave unchanged.
+
+    Returns:
+        True if the file was created or modified, False if no-op.
+    """
+    if repo_url is None and branch is None:
+        return False
+
+    if cfg_path.exists():
+        existing_text = cfg_path.read_text(encoding="utf-8")
+        data = yaml.safe_load(existing_text) or {}
+    else:
+        existing_text = None
+        data = {}
+
+    existing_wiki = data.get("wiki") or {}
+    new_wiki = dict(existing_wiki)
+    if repo_url is not None:
+        new_wiki["repo_url"] = repo_url
+    if branch is not None:
+        new_wiki["branch"] = branch
+    data["wiki"] = new_wiki
+
+    new_text = yaml.safe_dump(data, sort_keys=False, allow_unicode=True)
+
+    if existing_text is not None and existing_text == new_text:
+        return False
+
+    cfg_path.parent.mkdir(parents=True, exist_ok=True)
+    cfg_path.write_text(new_text, encoding="utf-8")
+    return True
 
 
 def deep_merge(base: dict, overlay: dict) -> dict:

@@ -1,11 +1,19 @@
 ---
 name: mill-setup
 description: Initialise mill in a fresh primary-clone directory. Creates the wiki clone, seeds wiki/config.yaml, creates hub junctions and hardlinks, seeds config.local.yaml and Home.md, and sets VS Code window colour. Idempotent — safe to re-run after a partial setup.
+argument-hint: "[--from-url <url>] [--branch <name>]"
 ---
 
 # mill-setup
 
 Bootstrap the mill infrastructure from nothing. Produces a working `.millhouse/` + wiki + container layout in the current working clone.
+
+## Usage
+
+- `/mill-setup` — default GitHub-wiki path (derives `<origin>.wiki.git` from the primary clone's origin URL and clones the remote default branch). Behaviour unchanged from pre-flags state.
+- `/mill-setup --from-url https://github.com/Org/shared.git --branch wiki/millhouse` — clones the named branch from a separate repo (one-repo-many-branches pattern). If the branch does not yet exist on remote, mill-setup initialises a local orphan branch and the first commit (Phase 3.1) pushes it.
+- `/mill-setup --from-url https://github.com/Org/shared.git` — clones from a separate repo at its remote HEAD branch (no `-b` passed to `git clone`).
+- `/mill-setup --branch wiki/millhouse` — applies a branch override to the default `<origin>.wiki.git` URL. Edge case but supported; branch is persisted to `config.local.yaml` for re-runs.
 
 ## When to invoke
 
@@ -64,6 +72,22 @@ Helpers used by this skill: `_setup` (Phase 4 — `create_hub_links`), `_gitigno
 
 Run in order. Stop on the first hard error and report it. Every phase is idempotent — re-checks current state before acting.
 
+### Phase 0 — Parse arguments
+
+Read `$ARGUMENTS`. Token-walk left-to-right:
+
+- `--from-url <url>` — the next token is the wiki URL. Store as `<cli-from-url>`. May appear at most once.
+- `--branch <name>` — the next token is the branch name. Store as `<cli-branch>`. May appear at most once.
+- Any other token: halt with usage hint:
+
+  > Unknown argument: `<token>` in `$ARGUMENTS`
+  >
+  > usage: `/mill-setup [--from-url <url>] [--branch <name>]`
+
+Store `<cli-from-url>` and `<cli-branch>` (each may be empty / unset).
+
+Optionally pre-load `.millhouse/config.local.yaml` now (if it exists) and read `wiki.repo_url:` / `wiki.branch:` into `<config-repo-url>` and `<config-branch>`, so Phase 1 can apply precedence without re-reading the file.
+
 ### Phase 1 — Derive wiki URL
 
 0. **Check `uv` is installed:**
@@ -76,18 +100,26 @@ Run in order. Stop on the first hard error and report it. Every phase is idempot
 
    > uv is not installed. Install via PowerShell: `irm https://astral.sh/uv/install.ps1 | iex` — then re-run /mill-setup.
 
-1. `git remote get-url origin` → `<origin-url>`.
-2. Compute `<wiki-url>`: strip trailing `.git` if present, append `.wiki.git`.
-   - `https://github.com/org/repo.git` → `https://github.com/org/repo.wiki.git`
-3. Store `<wiki-url>` and `<container>` (the parent of `wts/`, or the parent of `cwd` in prefix-form).
+1. `git remote get-url origin` → `<origin-url>` (still computed; needed for the derived fallback and for Phase 7's `<repo-name>` resolution).
+2. Compute effective URL and branch via precedence:
+   - **Effective URL (`<wiki-url>`):** `<cli-from-url>` if set; else `wiki.repo_url:` from `.millhouse/config.local.yaml` if present; else strip trailing `.git` from `<origin-url>` and append `.wiki.git` (e.g. `https://github.com/org/repo.git` → `https://github.com/org/repo.wiki.git`).
+   - **Effective branch (`<wiki-branch>`):** `<cli-branch>` if set; else `wiki.branch:` from config if present; else `None` (use remote HEAD).
+   - **Source flag (`<effective-from-url-source>`):** `'cli'` when `<cli-from-url>` or `<cli-branch>` was supplied on the CLI; `'config'` when the effective URL came from `.millhouse/config.local.yaml`; `'derived'` when the `<origin>.wiki.git` fallback was used.
+3. Store `<wiki-url>`, `<wiki-branch>`, `<effective-from-url-source>`, and `<container>` (the parent of `wts/`, or the parent of `cwd` in prefix-form).
 
 ### Phase 2 — Verify wiki is reachable and non-empty
 
-Run `git ls-remote <wiki-url>`. If it fails (exit non-zero), halt with:
+Run `git ls-remote <wiki-url>`. If it fails (exit non-zero), halt with a conditional message based on `<effective-from-url-source>`:
 
-> The wiki at `<wiki-url>` is unreachable or empty. Open `https://github.com/<owner>/<repo>/wiki` on GitHub, create the Home page with any content, then re-run `/mill-setup`.
->
-> (GitHub does not create the wiki git repo until the first page is saved.)
+- When `<effective-from-url-source> == 'derived'` (no CLI flag, no config override — the default GitHub-wiki path):
+
+  > The wiki at `<wiki-url>` is unreachable or empty. Open `https://github.com/<owner>/<repo>/wiki` on GitHub, create the Home page with any content, then re-run `/mill-setup`.
+  >
+  > (GitHub does not create the wiki git repo until the first page is saved.)
+
+- When `<effective-from-url-source>` is `'cli'` or `'config'`:
+
+  > The wiki URL `<wiki-url>` is unreachable. Check the URL, your network, and your credentials, then re-run `/mill-setup`.
 
 ### Phase 3 — Clone or fast-forward the wiki at `<wiki-dir>`
 
@@ -99,10 +131,26 @@ PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" uv run --project "${CLAUDE_PLUGIN_ROO
 
 `<hub-path>` is derived via `git rev-parse --show-toplevel`. Users can override via `.millhouse/config.local.yaml`'s `wiki_path:` key.
 
-1. If `<wiki-dir>` does not exist: `git clone <wiki-url> <wiki-dir>`.
-2. If `<wiki-dir>` exists and is a git repo (`<wiki-dir>/.git/` present): `git -C <wiki-dir> pull --ff-only`.
-3. If `<wiki-dir>` exists but is not a git repo: halt with:
-   > `<wiki-dir>` exists but is not a git repository. Move it aside or remove it, then re-run `/mill-setup`. mill-setup never overwrites user data.
+After `<wiki-dir>` is computed, call `_wiki.clone_or_init`:
+
+```bash
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" uv run --project "${CLAUDE_PLUGIN_ROOT}" python -c "
+from pathlib import Path
+import _wiki, json
+result = _wiki.clone_or_init(
+    url=r'<wiki-url>',
+    branch=r'<wiki-branch>' if r'<wiki-branch>' else None,
+    dest=Path(r'<wiki-dir>').resolve(),
+)
+print(json.dumps(result))
+"
+```
+
+When rendering the command, substitute `<wiki-url>` and `<wiki-dir>` with their computed values. For `<wiki-branch>`: when it is set (e.g. `wiki/millhouse`), the ternary evaluates to the string; when `<wiki-branch>` is unset, write `branch=None` directly instead. Log the returned JSON (`"action"`: `"cloned"` | `"pulled"` | `"initialized"`; `"branch_existed_on_remote"`: `true` | `false` | `null`).
+
+If the helper raises `WikiSetupError` (dest is not a git repo, URL mismatch, branch mismatch, clone or init failure): halt and surface the exception message verbatim. The message names the offending paths so the user can fix manually.
+
+If the helper raises `WikiPushError` (from the pull path — `git pull --ff-only` failed due to network failure, credentials, or non-fast-forward / local divergence): halt and instruct the user to inspect and fix the wiki dir manually.
 
 ### Phase 3.1 — Seed `wiki/config.yaml` from template
 
@@ -115,6 +163,31 @@ PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" uv run --project "${CLAUDE_PLUGIN_ROO
    ```
 
 **Why verbatim copy:** the token placeholders (`<WIKI_PATH>` etc.) are resolved by `_junction.resolve_target` and `_wiki.read_hardlinks` at runtime. Substituting at seed time would bake in machine-specific paths.
+
+### Phase 3.2 — Persist wiki overrides to `config.local.yaml`
+
+Runs only when `<cli-from-url>` or `<cli-branch>` was explicitly supplied on the CLI in this run. When both came from config or derived defaults, this phase is a no-op.
+
+```bash
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" uv run --project "${CLAUDE_PLUGIN_ROOT}" python -c "
+from pathlib import Path
+import _config
+changed = _config.set_local_wiki_overrides(
+    cfg_path=Path('.millhouse/config.local.yaml'),
+    repo_url=<repo-url-or-None>,
+    branch=<branch-or-None>,
+)
+print('config.local.yaml updated' if changed else 'config.local.yaml already correct')
+"
+```
+
+When rendering the command: fill `<repo-url-or-None>` with `r'<value>'` when `--from-url` was given, `None` when only `--branch` was given. Fill `<branch-or-None>` with `r'<value>'` when `--branch` was given, `None` when only `--from-url` was given. Passing `None` for an omitted argument preserves whatever value the file already has (partial-update semantics).
+
+Note: `.millhouse/` does not exist on a fresh install at the time this phase fires (it is created in Phase 4 by `create_hub_links`). No separate `mkdir` is needed — `_config.set_local_wiki_overrides` calls `cfg_path.parent.mkdir(parents=True, exist_ok=True)` before writing.
+
+Note: comments in `.millhouse/config.local.yaml` are lost when this phase rewrites the file. The file is gitignored and per-machine, so the trade-off is acceptable.
+
+Idempotency: re-running mill-setup with the same flags (or no flags after a prior persisted run) leaves the file untouched — the helper returns `False` when the on-disk content already matches the desired content.
 
 ### Phase 3.7 — Create container scaffolding
 
@@ -397,9 +470,11 @@ Next: /mill-add <slug> --title "..." [--summary "..."] [--proposal-body "..."] t
 | `uv --version` fails | Halt with install instruction: `irm https://astral.sh/uv/install.ps1 | iex` |
 | `git ls-remote <wiki-url>` fails | Halt with GitHub URL + instruction to create Home page |
 | `<wiki-dir>` exists but not a git repo | Halt — never overwrite user data |
+| `clone_or_init` raises `WikiSetupError` (dest is not a git repo / URL mismatch / branch mismatch / clone or init failure) | Halt with the exception message verbatim. The helper's message names the offending paths; instruct the user to fix manually. |
 | Junction points elsewhere | Halt with remove-and-rerun instruction |
 | Push of `Home.md` fails (network / auth) | Halt; user fixes network and re-runs |
 | A Python helper raises | Show the traceback from the Python invocation and halt |
+| Unknown CLI argument | Halt with usage hint (Phase 0). |
 
 ## Idempotency
 
@@ -412,6 +487,7 @@ Every phase checks current state before acting. Re-running after a partial or co
 - `.gitignore` marker block already up-to-date → not rewritten (Phase 4.5b).
 - `hub_relative_path` already set → updated to current value (Phase 4.9).
 - `config.local.yaml` present → skipped (Phase 5).
+- Phase 3.2's persisted `wiki.repo_url` / `wiki.branch` block is rewritten only when the on-disk values differ from the effective CLI values. Re-runs with matching flags (or no flags after a prior persisted run) make no change.
 - `Home.md` non-empty (and v2-shape or user-custom) → skipped; only GitHub-default content is overwritten.
 - `_Sidebar.md` regenerated unconditionally; commit only if bytes changed.
 - `.vscode/settings.json` already green → skipped.
