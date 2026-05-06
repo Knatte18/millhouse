@@ -55,5 +55,7 @@ batches:
     start_sha: 9e19394729bd7fd2f1b6fd5013af8268f195aab6
     review_file: C:\Code\millhouse\wts\mill-go-infra-fixes\reviews\20260506-120646-code-review-PYTHONPATH documentation fix-r1.md
   - name: Tests
-    state: pending
+    state: running
+    implementer_session: 97a9bdfe-b19c-47db-987d-958de156808f
+    start_sha: 3fbd83da5ad1d56ce2332de0c846f1b66041d051
 ```
