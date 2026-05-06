@@ -330,5 +330,62 @@ class TestMillpyImplement(unittest.TestCase):
         self.assertEqual(out.strip(), "")
 
 
+class TestForwardOutput(unittest.TestCase):
+
+    def _call(self, output: str) -> tuple[int, str]:
+        buf = io.StringIO()
+        with unittest.mock.patch("sys.stdout", buf):
+            rc = millpy_implement._forward_output(output)
+        return rc, buf.getvalue()
+
+    def test_fo_1_bare_json_on_last_line(self):
+        """Bare JSON with status key on last line → printed verbatim, exit 0."""
+        json_str = '{"status":"success","commit_sha":"abc"}'
+        rc, out = self._call(f"some preamble\n{json_str}")
+        self.assertEqual(rc, 0)
+        self.assertEqual(json.loads(out.strip()), json.loads(json_str))
+
+    def test_fo_2_json_in_fence(self):
+        """JSON inside ```json fence → extracted and printed, exit 0."""
+        json_str = '{"status":"success","commit_sha":"abc"}'
+        output = f"```json\n{json_str}\n```"
+        rc, out = self._call(output)
+        self.assertEqual(rc, 0)
+        self.assertEqual(json.loads(out.strip()), json.loads(json_str))
+
+    def test_fo_3_json_in_fence_trailing_blank_lines(self):
+        """JSON in fence with trailing blank lines → extracted correctly, exit 0."""
+        json_str = '{"status":"success","commit_sha":"abc"}'
+        output = f"```json\n{json_str}\n```\n\n\n"
+        rc, out = self._call(output)
+        self.assertEqual(rc, 0)
+        self.assertEqual(json.loads(out.strip()), json.loads(json_str))
+
+    def test_fo_4_multiple_json_lines_last_wins(self):
+        """Multiple lines with status JSON → last one printed."""
+        first = '{"status":"stuck","stuck_type":"verify","reason":"oops"}'
+        last = '{"status":"success","commit_sha":"def"}'
+        rc, out = self._call(f"{first}\n{last}")
+        self.assertEqual(rc, 0)
+        self.assertEqual(json.loads(out.strip()), json.loads(last))
+
+    def test_fo_5_no_json_anywhere(self):
+        """No JSON-like pattern in output → stuck/logic sentinel printed, exit 0."""
+        rc, out = self._call("implementer ran but produced no report")
+        self.assertEqual(rc, 0)
+        data = json.loads(out.strip())
+        self.assertEqual(data["status"], "stuck")
+        self.assertEqual(data["stuck_type"], "logic")
+        self.assertIn("no structured report", data["reason"])
+
+    def test_fo_6_malformed_json_last_valid_earlier(self):
+        """Unclosed brace last (regex miss) + valid JSON earlier → earlier valid one printed."""
+        valid = '{"status":"success","commit_sha":"x"}'
+        output = f'{valid}\n{{"status":"broken"'
+        rc, out = self._call(output)
+        self.assertEqual(rc, 0)
+        self.assertEqual(json.loads(out.strip()), json.loads(valid))
+
+
 if __name__ == "__main__":
     unittest.main()
