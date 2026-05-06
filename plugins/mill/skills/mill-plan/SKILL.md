@@ -103,7 +103,7 @@ Loop up to `max_review_rounds` rounds. Each round:
 
 3. **BEFORE reading any review file, load the `mill-receiving-review` skill** (`plugins/mill/skills/mill-receiving-review/SKILL.md`). Non-negotiable. The VERIFY → HARM CHECK → FIX-or-PUSH-BACK decision tree is what keeps review loops useful.
 
-4a. On `APPROVE` (verdict from JSON): set overview frontmatter `approved: true` via direct Edit, append `plan-review-r{N}` to status timeline, commit+push both, break loop → Handoff.
+4a. On `APPROVE` (verdict from JSON): set overview frontmatter `approved: true` via direct Edit. `_status.append_phase(status_path, f"plan-review-r{N}", iso_ts)`. Commit on the task branch: `git -C <worktree> add plan/ reviews/ status.md && git -C <worktree> commit -m "mill-plan: approve plan for {slug}"`. Push. Break loop → Handoff. `iso_ts` is `_timestamp.now_utc_iso()`.
 
 4.5. **Step 4.5: ERROR-only-aggregate retry (no round consumed)**
 
