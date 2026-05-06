@@ -27,7 +27,9 @@ implementing  2026-05-05T13:22:35Z
 ```yaml
 batches:
   - name: codeguide-generate-skill
-    state: pending
+    state: running
+    implementer_session: cc2391e7-2d96-45dd-81a2-ca957c6b6ea2
+    start_sha: 79828523f51a4570090ec87c8bc2519cea3f29ec
   - name: codeguide-setup-skill
     state: pending
 ```
