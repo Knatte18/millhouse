@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-Tests
+phase: done
 slug: mill-go-infra-fixes
 branch: mill-go-infra-fixes
 plan: plan
@@ -30,6 +30,9 @@ reviewing-PYTHONPATH documentation fix-r1  2026-05-06T12:06:29Z
 approved-PYTHONPATH documentation fix  2026-05-06T12:06:55Z
 reviewing-Tests-r1  2026-05-06T12:12:30Z
 approved-Tests  2026-05-06T12:15:17Z
+holistic-reviewing  2026-05-06T12:15:24Z
+holistic-approved  2026-05-06T12:20:58Z
+done  2026-05-06T12:20:58Z
 ```
 
 ## Batches
