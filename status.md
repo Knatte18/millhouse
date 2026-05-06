@@ -1,10 +1,10 @@
 # Status
 
 ```yaml
-phase: discussed
+phase: planning
 slug: holistic-fix-agent
 branch: holistic-fix-agent
-plan: null
+plan: plan
 parent: main
 task: 14 (D) — Holistic-fix agent for cross-batch funn (conflicts with 15)
 task_description: |
@@ -16,4 +16,5 @@ task_description: |
 ```text
 discussing  '2026-05-06T17:03:48Z'
 discussed  2026-05-06T17:15:13Z
+planning  2026-05-06T17:24:50Z
 ```
