@@ -155,14 +155,14 @@ def _review_one_batch(
                 f"- Overview: `{overview_path}`\n"
                 f"- Batch:    `{batch_path}`\n\n"
                 f"Read both files above. Then read the source files listed under "
-                f"`Reads:` / `Modifies:` / `Creates:` in the batch + cross-batch creates "
+                f"`Context:` / `Edits:` / `Creates:` in the batch + cross-batch creates "
                 f"that exist on disk:\n{read_list}"
             )
         else:
             bulked = bulk_files(all_bulked)
             artefact_section = (
                 f"{manifest}\n\n"
-                f"## Plan content (overview + batch + Reads/Modifies/Creates files + cross-batch ancestor creates)\n"
+                f"## Plan content (overview + batch + Context/Edits/Creates files + cross-batch ancestor creates)\n"
                 f"{bulked}"
             )
         if deletes_union:
@@ -435,7 +435,7 @@ def run(
             )
         print("[_review_plan] running holistic review", file=sys.stderr)
 
-        # Union all Reads:/Modifies:/Creates: across all batch files
+        # Union all Context:/Edits:/Creates: across all batch files
         all_raw_refs: dict[str, None] = {}
         for batch_path in batch_files:
             for ref in parse_batch_refs(batch_path):

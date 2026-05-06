@@ -15,9 +15,9 @@ Reviewer model: **<REVIEWER_MODEL>**. Batch: **<BATCH_NAME>**. Round **<ROUND>**
 
 ## Criteria (apply to the batch's implementation)
 
-- **Plan alignment** — every card's `Requirements:` is realised in the source files; every file listed in `Reads:` / `Modifies:` / `Creates:` is present and matches its stated role.
+- **Plan alignment** — every card's `Requirements:` is realised in the source files; every file listed in `Context:` / `Edits:` / `Creates:` is present and matches its stated role.
 - **Shared-decisions alignment** — the `## Shared Decisions` subsections in the overview are faithfully applied; deviation is BLOCKING.
-- **Out-of-plan files** — BLOCKING if the batch touches a file not listed in any card's `Reads:`/`Modifies:`/`Creates:`. The implementer is required to update the batch file first if this happens; a code review with surprise files means that discipline was skipped.
+- **Out-of-plan files** — BLOCKING if the batch touches a file not listed in any card's `Context:`/`Edits:`/`Creates:`. The implementer is required to update the batch file first if this happens; a code review with surprise files means that discipline was skipped.
 - **Correctness** — bugs, off-by-one, null/undefined handling, race conditions within the batch's surface.
 - **Cross-file contracts** — interfaces exposed by one card and consumed by another are compatible and consistent.
 - **Dead code** — unused exports, unreachable branches, imports that nothing uses.
