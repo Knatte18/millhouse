@@ -32,8 +32,7 @@ batches:
     state: approved
     implementer_session: 7134c9f6-3f22-43f8-9d6b-2626684adad4
     start_sha: 16fe32fba6a375520513a09b8f0076877306ac05
-    review_file: C:\Code\millhouse\wts\mill-go-infra-fixes\reviews\20260506-115602-code-review-Lock
-  CLI and mill-go SKILL.md updates-r1.md
+    review_file: 'C:\Code\millhouse\wts\mill-go-infra-fixes\reviews\20260506-115602-code-review-Lock CLI and mill-go SKILL.md updates-r1.md'
   - name: Implement parser hardening
     state: pending
   - name: Cleanup guard
