@@ -75,7 +75,7 @@ Loop up to `max_review_rounds` rounds. Each round:
    - The CLI auto-runs `_plan_validate` before invoking the LLM. If the validator finds anything, the CLI exits 1 with a JSON envelope on stdout (`{"errors": [...], "summary": "<n> finding(s) across <m> batch(es)"}`). No review file is written; no LLM token is spent; no review round is consumed.
    - On validator-failure exit, mill-plan parses the JSON and applies one mechanical fix per error dict, per the mapping table below. After fixes, mill-plan re-runs `uv run --project "${CLAUDE_PLUGIN_ROOT}" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-review-plan.py"` (still no round consumed — the validator gate is pre-LLM).
    - **Two-pass cap:** if the validator fails again on the second pass, mill-plan halts with `BLOCKED: plan-validate non-progress` and writes the unresolved errors to the user. Do NOT auto-retry beyond the second pass. The two-pass cap matches the `review.code.self_fix_rounds` self-fix pattern.
-   - If `pipeline.skip_validate: true` ever appears in config (currently it does not; this is a future hook), pass `--skip-validate` to the CLI and skip step 1.5 entirely. As of today, mill-plan never passes `--skip-validate`.
+   - If `pipeline.skip_validate: true` ever appears in config (currently it does not; this is a future hook), pass `--skip-validate` to the CLI and skip step 1.5 entirely. mill-plan passes `--skip-validate` only when the fix table instructs it — see the `wiki-config-mutation` row.
 
    | check                          | mechanical fix                                                                                                  |
    | ------------------------------ | ----------------------------------------------------------------------------------------------------------- |
@@ -86,6 +86,7 @@ Loop up to `max_review_rounds` rounds. Each round:
    | parallel-modifies-overlap      | If one batch logically depends on the other, add the missing edge to the dependent's depends-on list. If the two batches truly need to write to the same file in parallel, the plan is structurally wrong — halt.        |
    | reads-not-backtick-path        | Re-format the bullet to backtick-only paths; move any inline parenthetical commentary to the card's Requirements: prose. Strip any line-range suffix (e.g. `:55-65`) from the path.                                       |
    | all-files-touched-mismatch     | Update the overview's All Files Touched to match the union of every card's Edits: + Creates:. (The overview list is derivative; the cards are the source of truth.)                                                |
+   | wiki-config-mutation           | This check cannot be fixed by editing plan files — the batch intentionally modifies `wiki/config.yaml`. To proceed, verify one of two conditions: (a) a bootstrap card is present — a card whose body explains why the config.yaml change is safe mid-flight for the currently-shipping task; or (b) the modified keys are provably unused — meaning key *removal or rename* where zero grep hits across `scripts/` and `skills/` confirm no existing code references them. (For key *addition* where consuming code is also being added in the same plan, zero grep hits does NOT satisfy condition (b); use (a) or halt.) If either condition holds: document the justification in the validator-fix commit message and re-run the CLI with `--skip-validate`. If `wiki-config-mutation` co-occurs with other fixable validator errors, fix those first per their rows, then re-run with `--skip-validate`. If neither condition holds: halt — the plan requires redesign. |
    | missing-overview               | Halt — the plan is structurally broken, not mechanically fixable.                                                                                                                                                       |
    | batch-index-parse              | Halt — the overview's fenced-yaml block is unparseable; not mechanically fixable.                                                                                                                                        |
 
@@ -103,7 +104,7 @@ Loop up to `max_review_rounds` rounds. Each round:
 
 3. **BEFORE reading any review file, load the `mill-receiving-review` skill** (`plugins/mill/skills/mill-receiving-review/SKILL.md`). Non-negotiable. The VERIFY → HARM CHECK → FIX-or-PUSH-BACK decision tree is what keeps review loops useful.
 
-4a. On `APPROVE` (verdict from JSON): set overview frontmatter `approved: true` via direct Edit, append `plan-review-r{N}` to status timeline, commit+push both, break loop → Handoff.
+4a. On `APPROVE` (verdict from JSON): set overview frontmatter `approved: true` via direct Edit. `_status.append_phase(status_path, f"plan-review-r{N}", iso_ts)`. Commit on the task branch: `git -C <worktree> add plan/ reviews/ status.md && git -C <worktree> commit -m "mill-plan: approve plan for {slug}"`. Push. Break loop → Handoff. `iso_ts` is `_timestamp.now_utc_iso()`.
 
 4.5. **Step 4.5: ERROR-only-aggregate retry (no round consumed)**
 
@@ -124,7 +125,7 @@ Loop up to `max_review_rounds` rounds. Each round:
    - Write a fixer report at `reviews/<YYYYMMDD-HHMMSS>-plan-fix-r<N>.md` (worktree root) with two sections: `## Fixed` (each fixed finding, one-line reference to the review file + quoted finding title) and `## Pushed Back` (each rejected finding, same format + reason citing code/doc/scope).
    - Re-validate the plan DAG (`_plan_dag.validate`).
    - `_status.append_phase(status_path, f"plan-fix-r{N}", iso_ts)`.
-   - Commit on the task branch: `git -C <worktree> add plan/ reviews/<filename> status.md && git commit -m "mill-plan: plan-fix round {N} for {slug}"`.
+   - Commit on the task branch: `git -C <worktree> add plan/ reviews/ status.md && git commit -m "mill-plan: plan-fix round {N} for {slug}"`.
 
 5. **Non-progress check** (after writing each fixer report from round 2 onward): **Skip this check when the latest round's `## Pushed Back` section is empty.** Empty Pushed Back means the planner addressed every finding cleanly — that is convergence, not non-progress. The check only fires when both rounds have a non-empty Pushed Back AND the title set is identical. If the set is identical, halt with `BLOCKED: Plan review non-progress round {N}` and tell the user to look at the fixer reports. Do not escape-hatch — non-progress means the planner and reviewer are stuck in a stable disagreement; user intervention is required.
 

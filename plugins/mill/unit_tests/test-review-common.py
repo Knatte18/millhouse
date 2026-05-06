@@ -72,6 +72,7 @@ from _review_common import (  # noqa: E402
     build_reattached_section,
     build_tool_rule,
     bulk_files,
+    bulk_files_with_diff,
     compute_creates_union,
     compute_deletes_union,
     detect_resume_round,
@@ -1191,6 +1192,113 @@ def main() -> int:
         result = detect_resume_round(reviews, "code")
         assert result is None, f"Got {result}"
         print("PASS: detect_resume_round type isolation: plan files ignored for code")
+
+    # ---------------------------------------------------------------------------
+    # bulk_files_with_diff
+    # ---------------------------------------------------------------------------
+
+    # Test A — file with small diff uses DIFF delimiter
+    with tempfile.TemporaryDirectory() as tmpdir:
+        repo = Path(tmpdir)
+        subprocess.run(["git", "-C", str(repo), "init"], check=True, capture_output=True)
+        subprocess.run(["git", "-C", str(repo), "config", "user.email", "t@t.com"], check=True, capture_output=True)
+        subprocess.run(["git", "-C", str(repo), "config", "user.name", "T"], check=True, capture_output=True)
+        src = repo / "src"
+        src.mkdir()
+        (src / "a.py").write_text("x\n" * 2000, encoding="utf-8")
+        subprocess.run(["git", "-C", str(repo), "add", "src/a.py"], check=True, capture_output=True)
+        subprocess.run(["git", "-C", str(repo), "commit", "-m", "init"], check=True, capture_output=True)
+        start_sha = subprocess.run(
+            ["git", "-C", str(repo), "rev-parse", "HEAD"],
+            check=True, capture_output=True, text=True,
+        ).stdout.strip()
+        with open(src / "a.py", "a", encoding="utf-8") as fh:
+            fh.write("y\n" * 10)
+        subprocess.run(["git", "-C", str(repo), "add", "src/a.py"], check=True, capture_output=True)
+        subprocess.run(["git", "-C", str(repo), "commit", "-m", "small change"], check=True, capture_output=True)
+        result = bulk_files_with_diff([repo / "src" / "a.py"], start_sha, repo, 0.25)
+        assert "--- DIFF:" in result, f"expected DIFF delimiter, got: {result[:200]!r}"
+        assert "--- FILE: " not in result, f"expected no FILE delimiter, got: {result[:200]!r}"
+        assert start_sha[:8] in result, f"expected start_sha[:8] in result, got: {result[:200]!r}"
+        print("PASS: bulk_files_with_diff small diff -> DIFF delimiter")
+
+    # Test B — file with large diff uses FILE delimiter
+    with tempfile.TemporaryDirectory() as tmpdir:
+        repo = Path(tmpdir)
+        subprocess.run(["git", "-C", str(repo), "init"], check=True, capture_output=True)
+        subprocess.run(["git", "-C", str(repo), "config", "user.email", "t@t.com"], check=True, capture_output=True)
+        subprocess.run(["git", "-C", str(repo), "config", "user.name", "T"], check=True, capture_output=True)
+        src = repo / "src"
+        src.mkdir()
+        (src / "b.py").write_text("x\n" * 20, encoding="utf-8")
+        subprocess.run(["git", "-C", str(repo), "add", "src/b.py"], check=True, capture_output=True)
+        subprocess.run(["git", "-C", str(repo), "commit", "-m", "init"], check=True, capture_output=True)
+        start_sha = subprocess.run(
+            ["git", "-C", str(repo), "rev-parse", "HEAD"],
+            check=True, capture_output=True, text=True,
+        ).stdout.strip()
+        (src / "b.py").write_text("y\n" * 20, encoding="utf-8")
+        subprocess.run(["git", "-C", str(repo), "add", "src/b.py"], check=True, capture_output=True)
+        subprocess.run(["git", "-C", str(repo), "commit", "-m", "large change"], check=True, capture_output=True)
+        result = bulk_files_with_diff([repo / "src" / "b.py"], start_sha, repo, 0.25)
+        assert "--- FILE: " in result, f"expected FILE delimiter, got: {result[:200]!r}"
+        assert "--- DIFF:" not in result, f"expected no DIFF delimiter, got: {result[:200]!r}"
+        print("PASS: bulk_files_with_diff large diff -> FILE delimiter")
+
+    # Test C — unchanged file (empty diff) uses FILE delimiter
+    with tempfile.TemporaryDirectory() as tmpdir:
+        repo = Path(tmpdir)
+        subprocess.run(["git", "-C", str(repo), "init"], check=True, capture_output=True)
+        subprocess.run(["git", "-C", str(repo), "config", "user.email", "t@t.com"], check=True, capture_output=True)
+        subprocess.run(["git", "-C", str(repo), "config", "user.name", "T"], check=True, capture_output=True)
+        src = repo / "src"
+        src.mkdir()
+        (src / "c.py").write_text("hello\n", encoding="utf-8")
+        subprocess.run(["git", "-C", str(repo), "add", "src/c.py"], check=True, capture_output=True)
+        subprocess.run(["git", "-C", str(repo), "commit", "-m", "init"], check=True, capture_output=True)
+        start_sha = subprocess.run(
+            ["git", "-C", str(repo), "rev-parse", "HEAD"],
+            check=True, capture_output=True, text=True,
+        ).stdout.strip()
+        (src / "other.py").write_text("z\n", encoding="utf-8")
+        subprocess.run(["git", "-C", str(repo), "add", "src/other.py"], check=True, capture_output=True)
+        subprocess.run(["git", "-C", str(repo), "commit", "-m", "other file"], check=True, capture_output=True)
+        result = bulk_files_with_diff([repo / "src" / "c.py"], start_sha, repo, 0.25)
+        assert "--- FILE: " in result, f"expected FILE delimiter, got: {result[:200]!r}"
+        print("PASS: bulk_files_with_diff empty diff (unchanged file) -> FILE delimiter")
+
+    # Test D — non-existent file is skipped
+    with tempfile.TemporaryDirectory() as tmpdir:
+        repo = Path(tmpdir)
+        subprocess.run(["git", "-C", str(repo), "init"], check=True, capture_output=True)
+        subprocess.run(["git", "-C", str(repo), "config", "user.email", "t@t.com"], check=True, capture_output=True)
+        subprocess.run(["git", "-C", str(repo), "config", "user.name", "T"], check=True, capture_output=True)
+        (repo / "dummy.py").write_text("x\n", encoding="utf-8")
+        subprocess.run(["git", "-C", str(repo), "add", "dummy.py"], check=True, capture_output=True)
+        subprocess.run(["git", "-C", str(repo), "commit", "-m", "init"], check=True, capture_output=True)
+        start_sha = subprocess.run(
+            ["git", "-C", str(repo), "rev-parse", "HEAD"],
+            check=True, capture_output=True, text=True,
+        ).stdout.strip()
+        result = bulk_files_with_diff([repo / "nonexistent.py"], start_sha, repo, 0.25)
+        assert result == "", f"expected empty string, got: {result!r}"
+        print("PASS: bulk_files_with_diff non-existent file skipped")
+
+    # Test E — git diff failure falls back to full file
+    with tempfile.TemporaryDirectory() as tmpdir:
+        repo = Path(tmpdir)
+        subprocess.run(["git", "-C", str(repo), "init"], check=True, capture_output=True)
+        subprocess.run(["git", "-C", str(repo), "config", "user.email", "t@t.com"], check=True, capture_output=True)
+        subprocess.run(["git", "-C", str(repo), "config", "user.name", "T"], check=True, capture_output=True)
+        src = repo / "src"
+        src.mkdir()
+        (src / "a.py").write_text("hello\n", encoding="utf-8")
+        subprocess.run(["git", "-C", str(repo), "add", "src/a.py"], check=True, capture_output=True)
+        subprocess.run(["git", "-C", str(repo), "commit", "-m", "init"], check=True, capture_output=True)
+        result = bulk_files_with_diff([repo / "src" / "a.py"], "deadbeef" * 5, repo, 0.25)
+        assert "--- FILE: " in result, f"expected FILE delimiter fallback, got: {result[:200]!r}"
+        assert "--- DIFF:" not in result, f"expected no DIFF delimiter, got: {result[:200]!r}"
+        print("PASS: bulk_files_with_diff git diff failure -> FILE delimiter fallback")
 
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)

@@ -97,7 +97,7 @@ def render_sidebar(tasks: list[dict]) -> str:
     ]
     for task in tasks:
         if task["has_proposal"]:
-            lines.append(f"- [{task['title']}](proposal-{task['slug']})")
+            lines.append(f"- [{task['title']}](proposal-{task['slug']}.md)")
         else:
             lines.append(f"- {task['title']}")
     lines.append("")  # trailing newline

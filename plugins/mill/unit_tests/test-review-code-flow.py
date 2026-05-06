@@ -389,7 +389,7 @@ def main() -> int:
             prompts = stub.captured_prompts()
             assert len(prompts) == 2, f"expected 2 captured prompts, got {len(prompts)}"
             _, retry_kwargs = prompts[1]
-            assert retry_kwargs == {"session_id": "sid-1", "resume": True, "timeout": None}, (
+            assert retry_kwargs == {"session_id": "sid-1", "resume": True, "timeout": None, "effort": None}, (
                 f"retry kwargs wrong: {retry_kwargs}"
             )
             retry_text = prompts[1][0]
@@ -743,6 +743,223 @@ def main() -> int:
         except Exception as exc:
             errors += 1
             print(f"FAIL test13 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
+    # Test 14 — effort threading and diff-scoping
+    # ------------------------------------------------------------------
+
+    # 14a: holistic call passes holistic_effort='medium' to reviewer
+    with tempfile.TemporaryDirectory() as tmpdir:
+        mill_dir, wiki_root, project_root, cfg = _make_fixture(Path(tmpdir))
+        cfg["review"]["code"]["holistic_effort"] = "medium"
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            _seed_approve(1)
+            code_run(cfg, SLUG, mill_dir, wiki_root, project_root, batch_name=None)
+            prompts = stub.captured_prompts()
+            assert prompts, "expected at least one captured prompt"
+            assert prompts[0][1]["effort"] == "medium", (
+                f"expected effort='medium', got {prompts[0][1]['effort']!r}"
+            )
+            print("PASS test14a: holistic call passes holistic_effort='medium' to reviewer")
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test14a: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test14a (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
+
+    # 14b: per-batch call passes effort=None to reviewer
+    with tempfile.TemporaryDirectory() as tmpdir:
+        mill_dir, wiki_root, project_root, cfg = _make_fixture(Path(tmpdir))
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            _seed_approve(1)
+            code_run(cfg, SLUG, mill_dir, wiki_root, project_root, batch_name="alpha")
+            prompts = stub.captured_prompts()
+            assert prompts, "expected at least one captured prompt"
+            assert prompts[0][1]["effort"] is None, (
+                f"expected effort=None for per-batch, got {prompts[0][1]['effort']!r}"
+            )
+            print("PASS test14b: per-batch call passes effort=None (no holistic_effort override)")
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test14b: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test14b (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
+
+    # 14c: per-batch with start_sha present → prompt contains DIFF delimiter
+    with tempfile.TemporaryDirectory() as tmpdir:
+        mill_dir, wiki_root, project_root, cfg = _make_fixture(Path(tmpdir))
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            subprocess.run(
+                ["git", "-C", str(project_root), "config", "user.email", "t@t.com"],
+                check=True, capture_output=True,
+            )
+            subprocess.run(
+                ["git", "-C", str(project_root), "config", "user.name", "T"],
+                check=True, capture_output=True,
+            )
+            (project_root / "src" / "a.py").write_text("x\n" * 2000, encoding="utf-8")
+            subprocess.run(
+                ["git", "-C", str(project_root), "add", "src/a.py"],
+                check=True, capture_output=True,
+            )
+            subprocess.run(
+                ["git", "-C", str(project_root), "commit", "-m", "initial a.py"],
+                check=True, capture_output=True,
+            )
+            start_sha = subprocess.run(
+                ["git", "-C", str(project_root), "rev-parse", "HEAD"],
+                check=True, capture_output=True, text=True,
+            ).stdout.strip()
+            with open(project_root / "src" / "a.py", "a", encoding="utf-8") as fh:
+                fh.write("y\n" * 5)
+            subprocess.run(
+                ["git", "-C", str(project_root), "add", "src/a.py"],
+                check=True, capture_output=True,
+            )
+            subprocess.run(
+                ["git", "-C", str(project_root), "commit", "-m", "small change"],
+                check=True, capture_output=True,
+            )
+            (project_root / "status.md").write_text(
+                "# Status\n\n"
+                "```yaml\n"
+                f"phase: coding\nslug: {SLUG}\nbranch: {SLUG}\n"
+                "plan: plan\nparent: main\ntask: test\n"
+                "```\n\n"
+                "## Batches\n\n"
+                "```yaml\n"
+                f"batches:\n  - name: alpha\n    state: approved\n    start_sha: {start_sha}\n"
+                "```\n",
+                encoding="utf-8",
+            )
+            _seed_approve(1)
+            code_run(cfg, SLUG, mill_dir, wiki_root, project_root, batch_name="alpha")
+            prompts = stub.captured_prompts()
+            assert prompts, "expected at least one captured prompt"
+            assert "--- DIFF:" in prompts[0][0], (
+                f"expected DIFF delimiter in prompt; prompt[:300]={prompts[0][0][:300]!r}"
+            )
+            print("PASS test14c: per-batch with start_sha uses diff-scoping (DIFF delimiter in prompt)")
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test14c: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test14c (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
+
+    # 14d: per-batch with missing start_sha → prompt uses FILE delimiter (no DIFF)
+    with tempfile.TemporaryDirectory() as tmpdir:
+        mill_dir, wiki_root, project_root, cfg = _make_fixture(Path(tmpdir))
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            (project_root / "status.md").write_text(
+                "# Status\n\n"
+                "```yaml\n"
+                f"phase: coding\nslug: {SLUG}\nbranch: {SLUG}\n"
+                "plan: plan\nparent: main\ntask: test\n"
+                "```\n\n"
+                "## Batches\n\n"
+                "```yaml\n"
+                f"batches:\n  - name: alpha\n    state: approved\n"
+                "```\n",
+                encoding="utf-8",
+            )
+            _seed_approve(1)
+            code_run(cfg, SLUG, mill_dir, wiki_root, project_root, batch_name="alpha")
+            prompts = stub.captured_prompts()
+            assert prompts, "expected at least one captured prompt"
+            assert "--- DIFF:" not in prompts[0][0], (
+                "expected no DIFF delimiter when start_sha is absent"
+            )
+            print("PASS test14d: per-batch with missing start_sha falls back to full file content")
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test14d: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test14d (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
+
+    # 14e: per-batch with large diff → prompt uses FILE delimiter (not DIFF)
+    with tempfile.TemporaryDirectory() as tmpdir:
+        mill_dir, wiki_root, project_root, cfg = _make_fixture(Path(tmpdir))
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            subprocess.run(
+                ["git", "-C", str(project_root), "config", "user.email", "t@t.com"],
+                check=True, capture_output=True,
+            )
+            subprocess.run(
+                ["git", "-C", str(project_root), "config", "user.name", "T"],
+                check=True, capture_output=True,
+            )
+            (project_root / "src" / "a.py").write_text("x\n" * 20, encoding="utf-8")
+            subprocess.run(
+                ["git", "-C", str(project_root), "add", "src/a.py"],
+                check=True, capture_output=True,
+            )
+            subprocess.run(
+                ["git", "-C", str(project_root), "commit", "-m", "initial a.py"],
+                check=True, capture_output=True,
+            )
+            start_sha = subprocess.run(
+                ["git", "-C", str(project_root), "rev-parse", "HEAD"],
+                check=True, capture_output=True, text=True,
+            ).stdout.strip()
+            (project_root / "src" / "a.py").write_text("y\n" * 20, encoding="utf-8")
+            subprocess.run(
+                ["git", "-C", str(project_root), "add", "src/a.py"],
+                check=True, capture_output=True,
+            )
+            subprocess.run(
+                ["git", "-C", str(project_root), "commit", "-m", "large rewrite"],
+                check=True, capture_output=True,
+            )
+            (project_root / "status.md").write_text(
+                "# Status\n\n"
+                "```yaml\n"
+                f"phase: coding\nslug: {SLUG}\nbranch: {SLUG}\n"
+                "plan: plan\nparent: main\ntask: test\n"
+                "```\n\n"
+                "## Batches\n\n"
+                "```yaml\n"
+                f"batches:\n  - name: alpha\n    state: approved\n    start_sha: {start_sha}\n"
+                "```\n",
+                encoding="utf-8",
+            )
+            _seed_approve(1)
+            code_run(cfg, SLUG, mill_dir, wiki_root, project_root, batch_name="alpha")
+            prompts = stub.captured_prompts()
+            assert prompts, "expected at least one captured prompt"
+            assert "--- DIFF:" not in prompts[0][0], (
+                "expected no DIFF delimiter when diff exceeds threshold"
+            )
+            print("PASS test14e: per-batch with large diff falls back to full file content")
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test14e: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test14e (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
         finally:
             os.chdir(orig_dir)
 

@@ -32,6 +32,7 @@ from pathlib import Path
 
 from _llm_claude import LLMError
 from _plan_dag import PlanDAGError, extract_batch_index
+import _status
 from _review_common import (
     ReviewError,
     ReviewResult,
@@ -41,6 +42,7 @@ from _review_common import (
     build_reattached_section,
     build_tool_rule,
     bulk_files,
+    bulk_files_with_diff,
     compute_creates_union,
     compute_deletes_union,
     discover_round,
@@ -105,6 +107,10 @@ def _build_artefact_section(
     source_files: list[Path],
     ancestors_on_disk: list[Path],
     deletes_union: set[str],
+    *,
+    start_sha: str | None = None,
+    diff_threshold: float = 0.25,
+    project_root: Path | None = None,
 ) -> str:
     """Return the ``<ARTEFACT_SECTION>`` block for the prompt.
 
@@ -132,7 +138,14 @@ def _build_artefact_section(
             f"ancestor creates already on disk):\n{read_list}"
         )
     else:
-        bulked = bulk_files(all_bulked)
+        # Always bulk overview + batch files + ancestors at full content.
+        # source_files use diff-scoping if start_sha is set.
+        plan_and_ancestors = [overview_path, *batch_files, *ancestors_on_disk]
+        if start_sha is not None and project_root is not None:
+            scoped_sources = bulk_files_with_diff(source_files, start_sha, project_root, diff_threshold)
+            bulked = bulk_files(plan_and_ancestors) + ("\n\n" + scoped_sources if scoped_sources else "")
+        else:
+            bulked = bulk_files(all_bulked)
         body = (
             f"{manifest}\n\n"
             "## Plan + source content (overview + batch files + referenced source + ancestor creates)\n"
@@ -186,6 +199,26 @@ def run(
     # 3. Target batch files + referenced source files
     batch_files = _collect_batch_files(plan_dir, batch_name, overview_path)
 
+    # Per-batch diff-scoping: read start_sha from status.md if batch_name is set.
+    start_sha: str | None = None
+    diff_threshold: float = cfg["review"]["code"].get("diff_scope_threshold", 0.25)
+    if batch_name is not None:
+        try:
+            status_path = resolve_path("status.md", slug)
+            batches_list = _status.read_batches(status_path)
+            entry = next((b for b in batches_list if b.get("name") == batch_name), None)
+            start_sha = entry.get("start_sha") if entry else None
+            if start_sha is None:
+                print(
+                    f"[_review_code] no start_sha for batch {batch_name!r}; using full file content",
+                    file=sys.stderr,
+                )
+        except Exception as exc:
+            print(
+                f"[_review_code] warning: could not read start_sha for batch {batch_name!r}: {exc}; using full file content",
+                file=sys.stderr,
+            )
+
     all_raw_refs: dict[str, None] = {}
     for bp in batch_files:
         for ref in parse_batch_refs(bp):
@@ -222,6 +255,7 @@ def run(
 
     # 4. Reviewer + prompt
     reviewer_name = cfg["review"]["code"]["reviewer"]
+    holistic_effort: str | None = cfg["review"]["code"].get("holistic_effort", "max") if batch_name is None else None
     reviewer = load_reviewer(reviewer_name)
     timeout = cfg["llm"]["holistic_timeout"] if batch_name is None else cfg["llm"]["bulk_timeout"]
 
@@ -230,6 +264,9 @@ def run(
     artefact_section = _build_artefact_section(
         reviewer.MODE, overview_path, batch_files, source_files, ancestors_on_disk,
         deletes_union,
+        start_sha=start_sha,
+        diff_threshold=diff_threshold,
+        project_root=project_root,
     )
 
     prompt_kwargs = {
@@ -247,7 +284,7 @@ def run(
 
     # 5. Dispatch + record
     try:
-        raw, session_id = reviewer.run(prompt_text, timeout=timeout)
+        raw, session_id = reviewer.run(prompt_text, timeout=timeout, effort=holistic_effort)
     except LLMError as exc:
         return ReviewResult(
             type="code",
@@ -284,7 +321,7 @@ def run(
             )
             try:
                 raw, session_id = reviewer.run(
-                    retry_prompt, session_id=session_id, resume=True, timeout=timeout
+                    retry_prompt, session_id=session_id, resume=True, timeout=timeout, effort=holistic_effort
                 )
             except LLMError as exc:
                 return ReviewResult(

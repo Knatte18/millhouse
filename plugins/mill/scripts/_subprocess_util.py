@@ -84,6 +84,8 @@ def run(
     if input is not None:
         popen_kwargs["stdin"] = subprocess.PIPE
     if os.name == "nt":
+        # Suppress the CMD console window that would otherwise flash on-screen
+        # when spawning `cmd /c claude` or `git` on Windows.
         popen_kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
     else:
         popen_kwargs["start_new_session"] = True

@@ -69,8 +69,9 @@ def run(
     session_id: str | None = None,
     resume: bool = False,
     timeout: int | None = None,
+    effort: str | None = None,
 ) -> tuple[str, str]:
-    kwargs = {"session_id": session_id, "resume": resume, "timeout": timeout}
+    kwargs = {"session_id": session_id, "resume": resume, "timeout": timeout, "effort": effort}
     with _lock:
         _prompts.append((prompt_text, kwargs))
         observer = _observer

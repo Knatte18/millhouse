@@ -39,7 +39,6 @@ from _paths import resolve_git_root, resolve_wiki_path
 
 _SLUG_RE = re.compile(r"^[a-z][a-z0-9-]*$")
 
-# Matches both ``## <Title> [<slug>]`` and
 # Matches both heading forms (slug on line after title) — same pattern as
 # _sidebar, kept in sync by design. Used only for duplicate-slug detection.
 _TASK_HEADING_RE = re.compile(
@@ -83,7 +82,7 @@ def _render_task_section(
     A leading blank line separates the new section from whatever preceded it.
     """
     if has_proposal:
-        slug_line = f"[[{slug}]](proposal-{slug})"
+        slug_line = f"[[{slug}]](proposal-{slug}.md)"
     else:
         slug_line = f"[{slug}]"
 

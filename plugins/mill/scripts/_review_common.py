@@ -18,6 +18,7 @@ Public API:
     discover_round()     — determine next review round number per (review_type, scope)
     detect_resume_round() — return highest per-batch-only round (no holistic yet), or None
     bulk_files()         — concatenate file contents with FILE delimiters
+    bulk_files_with_diff() — like bulk_files but substitutes git diff output for small-diff files
     build_manifest_section() — return a `## Files included` markdown block listing every bulked file
     build_deletes_section() — return a `## Intentionally deleted` markdown block listing deleted tokens
     parse_missing_context() — extract path strings from a `## Missing context` section in review text
@@ -41,6 +42,7 @@ from __future__ import annotations
 
 import importlib
 import re
+import subprocess
 import sys
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -576,6 +578,63 @@ def bulk_files(file_paths: list[Path]) -> str:
             print(f"[bulk_files] warning: {p} not found, skipping", file=sys.stderr)
             continue
         parts.append(f"--- FILE: {p} ---\n{contents}")
+    return "\n\n".join(parts)
+
+
+def bulk_files_with_diff(
+    file_paths: list[Path],
+    start_sha: str,
+    project_root: Path,
+    threshold: float,
+) -> str:
+    """Like bulk_files but substitutes git diff output for small-diff files.
+
+    For each file: if the diff from start_sha to HEAD is smaller than
+    threshold * file_content_size, include the diff instead of full content.
+    Files with no diff (unchanged between start_sha and HEAD) are included
+    at full content so the reviewer has all context.
+    """
+    parts: list[str] = []
+    for p in file_paths:
+        try:
+            file_content = p.read_text(encoding="utf-8", errors="replace")
+        except FileNotFoundError:
+            print(f"[bulk_files_with_diff] warning: {p} not found, skipping", file=sys.stderr)
+            continue
+
+        try:
+            rel_path = p.relative_to(project_root).as_posix()
+        except ValueError:
+            rel_path = str(p)
+
+        result = subprocess.run(
+            ["git", "-C", str(project_root), "diff", f"{start_sha}..HEAD", "--", rel_path],
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            capture_output=True,
+        )
+
+        if result.returncode != 0:
+            print(
+                f"[bulk_files_with_diff] warning: git diff failed for {p} (returncode={result.returncode}), using full file",
+                file=sys.stderr,
+            )
+            parts.append(f"--- FILE: {p} ---\n{file_content}")
+            continue
+
+        diff_text = result.stdout
+
+        if not diff_text:
+            parts.append(f"--- FILE: {p} ---\n{file_content}")
+            continue
+
+        if len(diff_text) < threshold * len(file_content):
+            parts.append(f"--- DIFF: {p} (from {start_sha[:8]}) ---\n{diff_text}")
+            continue
+
+        parts.append(f"--- FILE: {p} ---\n{file_content}")
+
     return "\n\n".join(parts)
 
 
