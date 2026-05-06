@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: wiki-enhance
 branch: wiki-enhance
 plan: plan
@@ -21,4 +21,13 @@ plan-review-r1  2026-05-06T13:34:56Z
 plan-fix-r1  2026-05-06T13:34:56Z
 plan-review-r2  2026-05-06T13:38:20Z
 planned  2026-05-06T13:38:20Z
+implementing  2026-05-06T13:43:55Z
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: wiki-enhance-fixes
+    state: pending
 ```
