@@ -10,6 +10,9 @@ can implement in one go, keeping context well under the 200k window.
 There is no hard cap on cards — the planner picks what makes sense.
 Fill every section; no heading-only skeletons.
 
+Replace `NN` in `number: NN` with the integer from the batch filename
+(e.g., `02-field-rename.md` → `number: 2`).
+
 Strip this HTML comment before writing.
 -->
 # Batch: <BATCH_NAME>
@@ -17,6 +20,7 @@ Strip this HTML comment before writing.
 ```yaml
 task: <TASK_TITLE>
 batch: <BATCH_NAME>
+number: NN
 cards: 0
 verify: null
 depends-on: []

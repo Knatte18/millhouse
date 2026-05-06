@@ -15,6 +15,10 @@ paths. In the typical mill-v2 worktree where the code IS the worktree
 root, leave `root:` empty. Set it only for repos where the worktree
 contains multiple roots (rare).
 
+Each batch entry has `number:` (the NN integer prefix, for DAG navigation),
+`name:`, `file:`, `depends-on:` (list of integers referencing other batch
+`number:` values), and `verify:`.
+
 Strip this HTML comment before writing.
 -->
 # Plan: <TASK_TITLE>
@@ -37,7 +41,8 @@ directory and is mirrored as one entry here._
 
 ```yaml
 batches:
-  - name: <batch-name>
+  - number: NN
+    name: <batch-name>
     file: NN-<batch-slug>.md
     depends-on: []
     verify: <command or null>
