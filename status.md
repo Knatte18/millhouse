@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-implement-cli
 slug: dispatch-cli-and-resume
 branch: dispatch-cli-and-resume
 plan: plan
@@ -28,6 +28,8 @@ plan-fix-r4  2026-05-06T06:05:41Z
 plan-review-r5  2026-05-06T06:29:55Z
 planned  2026-05-06T06:29:55Z
 implementing  2026-05-06T06:46:53Z
+reviewing-implement-cli-r1  2026-05-06T06:54:02Z
+approved-implement-cli  2026-05-06T06:57:35Z
 ```
 
 ## Batches
@@ -35,9 +37,12 @@ implementing  2026-05-06T06:46:53Z
 ```yaml
 batches:
   - name: implement-cli
-    state: running
+    state: approved
     implementer_session: b88581f8-366f-4655-ae87-d5560c245b0a
     start_sha: d2198240fd38d78c046b101e26be67b10370574c
+    commit_sha: 23de957a568cde82d42c6a8239c8a6530da344cf
+    review_round: 1
+    review_file: reviews/20260506-065721-code-review-implement-cli-r1.md
   - name: tests-and-skill
     state: pending
 ```
