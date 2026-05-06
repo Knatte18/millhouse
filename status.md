@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planning
+phase: plan-review-r1
 slug: disable-per-batch-reviews
 branch: disable-per-batch-reviews
 plan: plan
@@ -17,4 +17,5 @@ task_description: |
 discussing  '2026-05-06T12:01:02Z'
 discussed  2026-05-06T12:15:47Z
 planning  2026-05-06T12:23:52Z
+plan-review-r1  2026-05-06T12:31:49Z
 ```

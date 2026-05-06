@@ -3,7 +3,7 @@
 ```yaml
 task: "8 (A) — Disable per-batch reviews (config-driven)"
 slug: disable-per-batch-reviews
-approved: false
+approved: true
 started: 20260506-122230
 parent: main
 root: ""
