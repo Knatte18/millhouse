@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-tests-and-skills
+phase: done
 slug: mill-bg-helper
 branch: mill-bg-helper
 plan: plan
@@ -26,6 +26,8 @@ reviewing-core-script-r1  2026-05-06T08:49:22Z
 approved-core-script  2026-05-06T08:51:55Z
 reviewing-tests-and-skills-r1  2026-05-06T09:00:56Z
 approved-tests-and-skills  2026-05-06T09:11:08Z
+holistic-approved  2026-05-06T09:14:48Z
+done  2026-05-06T09:14:48Z
 ```
 
 ## Batches
