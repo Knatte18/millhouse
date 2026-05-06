@@ -158,6 +158,219 @@ def main() -> int:
     except Exception as exc:
         fail("write_commit_push: lockfile released on WikiPushError", exc)
 
+    # --- clone_or_init tests ---
+
+    # (1) clone with explicit branch that exists on remote
+    try:
+        with tempfile.TemporaryDirectory() as tmp_str:
+            tmp = Path(tmp_str)
+            dest = tmp / "wiki"
+            url = "https://example.com/repo.git"
+            branch = "docs"
+            calls: list = []
+
+            def _run_branch_exists(argv, **kwargs):
+                calls.append(argv)
+                if argv[0:3] == ["git", "ls-remote", "--heads"]:
+                    return _ok_result(stdout="abc123\trefs/heads/docs\n")
+                return _ok_result()
+
+            with patch("_wiki._subprocess_util.run", side_effect=_run_branch_exists):
+                result = _wiki.clone_or_init(url, branch, dest)
+
+            assert result == {"action": "cloned", "branch_existed_on_remote": True}
+            assert len(calls) == 2, f"Expected 2 calls, got {len(calls)}: {calls}"
+            assert calls[0] == ["git", "ls-remote", "--heads", url, branch]
+            assert calls[1] == ["git", "clone", "-b", branch, "--single-branch", url, str(dest)]
+        ok("clone_or_init: clone with explicit branch exists on remote")
+    except Exception as exc:
+        fail("clone_or_init: clone with explicit branch exists on remote", exc)
+
+    # (2) init orphan when branch missing from remote
+    try:
+        with tempfile.TemporaryDirectory() as tmp_str:
+            tmp = Path(tmp_str)
+            dest = tmp / "wiki"
+            url = "https://example.com/repo.git"
+            branch = "mill-wiki"
+            calls: list = []
+
+            def _run_orphan(argv, **kwargs):
+                calls.append(argv)
+                return _ok_result()  # ls-remote returns empty stdout (branch absent)
+
+            with patch("_wiki._subprocess_util.run", side_effect=_run_orphan):
+                result = _wiki.clone_or_init(url, branch, dest)
+
+            assert result == {"action": "initialized", "branch_existed_on_remote": False}
+            assert calls[0] == ["git", "ls-remote", "--heads", url, branch]
+            assert calls[1] == ["git", "init", str(dest)]
+            assert calls[2] == ["git", "-C", str(dest), "remote", "add", "origin", url]
+            assert calls[3] == ["git", "-C", str(dest), "checkout", "--orphan", branch]
+            assert calls[4] == ["git", "-C", str(dest), "config", f"branch.{branch}.remote", "origin"]
+            assert calls[5] == ["git", "-C", str(dest), "config", f"branch.{branch}.merge", f"refs/heads/{branch}"]
+            assert len(calls) == 6, f"Expected 6 calls, got {len(calls)}: {calls}"
+        ok("clone_or_init: init orphan when branch missing from remote")
+    except Exception as exc:
+        fail("clone_or_init: init orphan when branch missing from remote", exc)
+
+    # (3) clone without branch (remote HEAD)
+    try:
+        with tempfile.TemporaryDirectory() as tmp_str:
+            tmp = Path(tmp_str)
+            dest = tmp / "wiki"
+            url = "https://example.com/repo.git"
+            calls: list = []
+
+            def _run_no_branch(argv, **kwargs):
+                calls.append(argv)
+                return _ok_result()
+
+            with patch("_wiki._subprocess_util.run", side_effect=_run_no_branch):
+                result = _wiki.clone_or_init(url, None, dest)
+
+            assert result == {"action": "cloned", "branch_existed_on_remote": None}
+            assert len(calls) == 1, f"Expected 1 call, got {len(calls)}: {calls}"
+            assert calls[0] == ["git", "clone", url, str(dest)]
+        ok("clone_or_init: clone without branch (remote HEAD)")
+    except Exception as exc:
+        fail("clone_or_init: clone without branch (remote HEAD)", exc)
+
+    # (4) pull existing repo with matching url and branch
+    try:
+        with tempfile.TemporaryDirectory() as tmp_str:
+            tmp = Path(tmp_str)
+            dest = tmp / "wiki"
+            dest.mkdir()
+            (dest / ".git").mkdir()
+            url = "https://example.com/repo.git"
+            branch = "main"
+            calls: list = []
+
+            def _run_pull_existing(argv, **kwargs):
+                calls.append(argv)
+                if "get-url" in argv:
+                    return _ok_result(stdout=url + "\n")
+                if "--show-current" in argv:
+                    return _ok_result(stdout=branch + "\n")
+                return _ok_result()
+
+            with patch("_wiki._subprocess_util.run", side_effect=_run_pull_existing):
+                result = _wiki.clone_or_init(url, branch, dest)
+
+            assert result == {"action": "pulled", "branch_existed_on_remote": None}
+            assert calls[-1] == ["git", "-C", str(dest), "pull", "--ff-only"]
+        ok("clone_or_init: pull existing repo with matching url and branch")
+    except Exception as exc:
+        fail("clone_or_init: pull existing repo with matching url and branch", exc)
+
+    # (5) halt when dest exists but is not a git repo
+    try:
+        with tempfile.TemporaryDirectory() as tmp_str:
+            tmp = Path(tmp_str)
+            dest = tmp / "wiki"
+            dest.mkdir()
+            # no .git dir — not a repo
+            raised = False
+            try:
+                _wiki.clone_or_init("https://example.com/repo.git", None, dest)
+            except _wiki.WikiSetupError as exc:
+                raised = True
+                assert str(dest) in str(exc), f"dest missing from message: {exc}"
+                assert "not a git repository" in str(exc), f"phrase missing: {exc}"
+            assert raised, "WikiSetupError must be raised"
+        ok("clone_or_init: halt when dest exists but not a git repo")
+    except Exception as exc:
+        fail("clone_or_init: halt when dest exists but not a git repo", exc)
+
+    # (6) halt on origin URL mismatch
+    try:
+        with tempfile.TemporaryDirectory() as tmp_str:
+            tmp = Path(tmp_str)
+            dest = tmp / "wiki"
+            dest.mkdir()
+            (dest / ".git").mkdir()
+            url = "https://example.com/expected.git"
+            actual_url = "https://example.com/other.git"
+            calls: list = []
+
+            def _run_url_mismatch(argv, **kwargs):
+                calls.append(argv)
+                if "get-url" in argv:
+                    return _ok_result(stdout=actual_url + "\n")
+                return _ok_result()
+
+            raised = False
+            try:
+                with patch("_wiki._subprocess_util.run", side_effect=_run_url_mismatch):
+                    _wiki.clone_or_init(url, None, dest)
+            except _wiki.WikiSetupError as exc:
+                raised = True
+                assert url in str(exc) and actual_url in str(exc), f"Both URLs must appear: {exc}"
+            assert raised, "WikiSetupError must be raised"
+            # no further calls after the mismatch
+            assert len(calls) == 1, f"Expected 1 call after mismatch, got {len(calls)}: {calls}"
+        ok("clone_or_init: halt on origin URL mismatch")
+    except Exception as exc:
+        fail("clone_or_init: halt on origin URL mismatch", exc)
+
+    # (7) halt on branch mismatch
+    try:
+        with tempfile.TemporaryDirectory() as tmp_str:
+            tmp = Path(tmp_str)
+            dest = tmp / "wiki"
+            dest.mkdir()
+            (dest / ".git").mkdir()
+            url = "https://example.com/repo.git"
+            branch = "expected-branch"
+            actual_branch = "other-branch"
+            calls: list = []
+
+            def _run_branch_mismatch(argv, **kwargs):
+                calls.append(argv)
+                if "get-url" in argv:
+                    return _ok_result(stdout=url + "\n")
+                if "--show-current" in argv:
+                    return _ok_result(stdout=actual_branch + "\n")
+                return _ok_result()
+
+            raised = False
+            try:
+                with patch("_wiki._subprocess_util.run", side_effect=_run_branch_mismatch):
+                    _wiki.clone_or_init(url, branch, dest)
+            except _wiki.WikiSetupError as exc:
+                raised = True
+                assert branch in str(exc) and actual_branch in str(exc), f"Both branches must appear: {exc}"
+            assert raised, "WikiSetupError must be raised"
+            # no pull call after the mismatch
+            pull_calls = [c for c in calls if "pull" in c]
+            assert not pull_calls, f"No pull call should happen after branch mismatch: {calls}"
+        ok("clone_or_init: halt on branch mismatch")
+    except Exception as exc:
+        fail("clone_or_init: halt on branch mismatch", exc)
+
+    # (8) reachability failure — ls-remote returns non-zero
+    try:
+        with tempfile.TemporaryDirectory() as tmp_str:
+            tmp = Path(tmp_str)
+            dest = tmp / "wiki"
+            url = "https://example.com/repo.git"
+            branch = "docs"
+
+            def _run_ls_remote_fail(argv, **kwargs):
+                return _ok_result(returncode=128, stderr="fatal: unable to access 'https://...'")
+
+            raised = False
+            try:
+                with patch("_wiki._subprocess_util.run", side_effect=_run_ls_remote_fail):
+                    _wiki.clone_or_init(url, branch, dest)
+            except _wiki.WikiSetupError:
+                raised = True
+            assert raised, "WikiSetupError must be raised on ls-remote failure"
+        ok("clone_or_init: reachability failure from ls-remote")
+    except Exception as exc:
+        fail("clone_or_init: reachability failure from ls-remote", exc)
+
     print(f"\n{passed} passed, {failed} failed.")
     return 0 if failed == 0 else 1
 

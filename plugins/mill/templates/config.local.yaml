@@ -30,3 +30,19 @@
 #   # Or lower the max rounds for discussion review:
 #   discussion:
 #     rounds: 1
+#
+# wiki:
+#   The wiki repo overrides. Default behaviour: derive
+#   <origin>.wiki.git from the primary clone's origin URL and
+#   clone the remote default branch. Set explicitly when using a
+#   separate repo as the wiki, or to track a non-default branch
+#   (one-repo-many-branches pattern).
+#
+#   repo_url: https://github.com/Org/shared.git
+#     URL of the wiki repo. Set by /mill-setup --from-url <url>;
+#     persisted automatically. Default: <origin>.wiki.git.
+#
+#   branch: wiki/millhouse
+#     Branch to clone/track in the wiki repo. Set by
+#     /mill-setup --branch <name>; persisted automatically.
+#     Default: remote HEAD.
