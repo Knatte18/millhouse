@@ -36,18 +36,22 @@ def _make_overview(
 ) -> str:
     """Return 00-overview.md text.
 
-    Each batch dict: {name, file, depends-on (optional, default [])}.
+    Each batch dict: {name, file, number (optional), depends-on (optional, default [])}.
     all_files_touched: optional list of path strings for the section.
     """
     entries = []
     for b in batches:
         deps = b.get("depends-on", [])
-        deps_yaml = "[" + ", ".join(f'"{d}"' for d in deps) + "]"
+        deps_yaml = "[" + ", ".join(str(d) if isinstance(d, int) else f'"{d}"' for d in deps) + "]"
+        if "number" in b:
+            first_line = f"  - number: {b['number']}\n    name: {b['name']}\n"
+        else:
+            first_line = f"  - name: {b['name']}\n"
         entries.append(
-            f"  - name: {b['name']}\n"
-            f"    file: {b['file']}\n"
-            f"    depends-on: {deps_yaml}\n"
-            f"    verify: null"
+            first_line
+            + f"    file: {b['file']}\n"
+            + f"    depends-on: {deps_yaml}\n"
+            + f"    verify: null"
         )
     batch_list = "\n".join(entries)
     text = (
@@ -362,7 +366,41 @@ def test_check_depends_on_unknown_clean() -> int:
 
 
 def test_check_depends_on_unknown_dirty() -> int:
-    """Dirty: depends-on references non-existent-batch → one depends-on-unknown error."""
+    """Dirty: depends-on has integer reference to unknown batch number → one depends-on-unknown error."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        overview = _make_overview([
+            {
+                "name": "alpha",
+                "file": "01-alpha.md",
+                "number": 1,
+                "depends-on": [99],
+            }
+        ])
+        batch = _make_batch_file("alpha")
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check4 = [e for e in result if e["check"] == "depends-on-unknown"]
+        try:
+            assert len(check4) == 1, f"expected 1 error, got {len(check4)}: {check4}"
+            assert check4[0]["batch"] == "alpha", f"wrong batch: {check4[0]['batch']!r}"
+            assert "99" in check4[0]["message"], (
+                f"message should mention the unknown number: {check4[0]['message']!r}"
+            )
+            print("PASS test_check_depends_on_unknown_dirty")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_check_depends_on_unknown_dirty: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_check_depends_on_unknown_dirty_legacy_string() -> int:
+    """Dirty (legacy): depends-on string references unknown batch name → one depends-on-unknown error."""
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
         plan_dir = tmp / "plan"
@@ -387,10 +425,10 @@ def test_check_depends_on_unknown_dirty() -> int:
             assert "non-existent-batch" in check4[0]["message"], (
                 f"message should mention the unknown name: {check4[0]['message']!r}"
             )
-            print("PASS test_check_depends_on_unknown_dirty")
+            print("PASS test_check_depends_on_unknown_dirty_legacy_string")
             return 0
         except AssertionError as exc:
-            print(f"FAIL test_check_depends_on_unknown_dirty: {exc}", file=sys.stderr)
+            print(f"FAIL test_check_depends_on_unknown_dirty_legacy_string: {exc}", file=sys.stderr)
             return 1
 
 
@@ -1080,6 +1118,7 @@ def main() -> int:
         test_check_card_numbering_dirty_cross_batch,
         test_check_depends_on_unknown_clean,
         test_check_depends_on_unknown_dirty,
+        test_check_depends_on_unknown_dirty_legacy_string,
         test_check_parallel_modifies_overlap_clean,
         test_check_parallel_modifies_overlap_dirty,
         test_check_reads_not_backtick_path_clean,
