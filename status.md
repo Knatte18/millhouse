@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-wiki-config-check
+phase: done
 slug: plan-reviewer-self-apply
 branch: plan-reviewer-self-apply
 plan: plan
@@ -23,6 +23,8 @@ planned  2026-05-06T11:42:11Z
 implementing  2026-05-06T11:44:27Z
 reviewing-wiki-config-check-r1  2026-05-06T11:49:19Z
 approved-wiki-config-check  2026-05-06T11:51:42Z
+holistic-approved  2026-05-06T11:53:48Z
+done  2026-05-06T11:53:48Z
 ```
 
 ## Batches
