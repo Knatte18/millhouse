@@ -65,7 +65,7 @@ def main() -> int:
         print("PASS: append_entry with empty body: heading + slug line + single newline")
 
         result_proposal = append_entry(home, "prop-task", "Prop Task", "Body.", has_proposal=True)
-        assert "[[prop-task]](proposal-prop-task)" in result_proposal
+        assert "[[prop-task]](proposal-prop-task.md)" in result_proposal
         print("PASS: append_entry with has_proposal=True emits link form")
 
         try:

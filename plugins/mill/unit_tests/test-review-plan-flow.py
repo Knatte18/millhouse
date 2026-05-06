@@ -1021,6 +1021,64 @@ def main() -> int:
         finally:
             os.chdir(orig_dir)
 
+    # ------------------------------------------------------------------
+    # Test 6a — batch=null: holistic fires, per-batch skipped
+    # ------------------------------------------------------------------
+    with tempfile.TemporaryDirectory() as tmpdir:
+        batch_specs = [("core", "01-core.md", ["src/a.py"], [])]
+        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(Path(tmpdir), batch_specs)
+        cfg["review"]["plan"]["batch"] = None  # keep holistic: "test_stub"
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            stub.seed([(APPROVE_TEXT, "sid-null-1")])
+            r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root)
+            assert r.verdict == "APPROVE", f"expected APPROVE, got {r.verdict}"
+            assert len(r.reviews) == 1, f"expected 1 review, got {len(r.reviews)}"
+            assert r.reviews[0]["scope"] == "holistic", (
+                f"expected holistic scope, got {r.reviews[0]['scope']!r}"
+            )
+            fname = Path(r.reviews[0]["file"]).name
+            assert "plan-review-r1" in fname, f"expected holistic filename pattern, got {fname}"
+            print("PASS test6a: batch=null — holistic fires, per-batch skipped")
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test6a: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test6a (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
+    # Test 6b — batch=null + holistic=null raises ReviewError
+    # ------------------------------------------------------------------
+    with tempfile.TemporaryDirectory() as tmpdir:
+        batch_specs = [("core", "01-core.md", ["src/a.py"], [])]
+        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(Path(tmpdir), batch_specs)
+        cfg["review"]["plan"]["batch"] = None
+        cfg["review"]["plan"]["holistic"] = None
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            try:
+                plan_run(cfg, SLUG, mill_dir, wiki_root, project_root)
+                errors += 1
+                print("FAIL test6b: expected ReviewError", file=sys.stderr)
+            except ReviewError as exc:
+                assert "at least one must be set" in str(exc), (
+                    f"ReviewError message missing 'at least one must be set': {exc}"
+                )
+                print("PASS test6b: batch=null + holistic=null raises ReviewError")
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test6b: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test6b (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
+
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)
         return 1

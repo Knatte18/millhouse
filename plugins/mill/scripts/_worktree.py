@@ -19,6 +19,7 @@ work sit behind a tiny API here:
 
 Public API:
     WorktreeError                          — raised on any git failure.
+    WorktreeLockedError                    — raised when a worktree is in use (NTFS CWD lock or PermissionError).
     create(branch, target, cwd)            — git worktree add -b.
     copy_millhouse(src, dst, exclude)      — copy .millhouse/ minus exclude.
     list_worktrees(cwd) -> list[dict]      — enumerate all worktrees for the repo at cwd.
@@ -35,6 +36,10 @@ import _subprocess_util
 
 class WorktreeError(RuntimeError):
     """Raised by ``create`` when ``git worktree add`` fails."""
+
+
+class WorktreeLockedError(WorktreeError):
+    """Raised when a worktree directory cannot be removed because it is in use (NTFS CWD lock or PermissionError)."""
 
 
 def create(branch: str, target: Path, cwd: Path) -> None:
@@ -246,6 +251,9 @@ def remove_safe(
 
     stderr = result.stderr.strip()
     long_path_marker = "Filename too long" in stderr or "filename too long" in stderr
+    _lock_patterns = ("Permission denied", "is in use", "Access is denied")
+    if any(p in stderr for p in _lock_patterns):
+        raise WorktreeLockedError(f"worktree is locked (path={path}): {stderr!r}")
     if not long_path_marker:
         raise WorktreeError(
             f"git worktree remove failed (path={path}): {stderr!r}"
@@ -253,12 +261,17 @@ def remove_safe(
 
     # Long-path fallback. Junctions are stripped, so shutil.rmtree is safe.
     print(
-        f"[worktree] remove_safe: git failed with long-path error; "
-        f"falling back to shutil.rmtree (junctions already stripped)",
+        "[worktree] remove_safe: git failed with long-path error; "
+        "falling back to shutil.rmtree (junctions already stripped)",
         file=sys.stderr,
     )
     if path.exists():
-        shutil.rmtree(str(path), ignore_errors=False)
+        try:
+            shutil.rmtree(str(path), ignore_errors=False)
+        except PermissionError as exc:
+            raise WorktreeLockedError(
+                f"worktree is locked via rmtree fallback (path={path}): {exc}"
+            ) from exc
 
     prune = _subprocess_util.run(
         ["git", "-C", str(cwd), "worktree", "prune"],
