@@ -1,10 +1,10 @@
 # Status
 
 ```yaml
-phase: discussed
+phase: planning
 slug: mill-infra-bugfix-batch
 branch: mill-infra-bugfix-batch
-plan: null
+plan: plan
 parent: main
 task: 23 (A) — mill infra bugfix-batch
 task_description: |
@@ -16,4 +16,5 @@ task_description: |
 ```text
 discussing  '2026-05-06T16:33:56Z'
 discussed  2026-05-06T16:55:03Z
+planning  2026-05-06T17:01:10Z
 ```
