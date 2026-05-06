@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-config-and-subprocess
+phase: approved-reviewer-effort-api
 slug: review-code-enhancements
 branch: review-code-enhancements
 plan: plan
@@ -28,6 +28,7 @@ planned  2026-05-06T13:35:59Z
 implementing  2026-05-06T13:39:27Z
 reviewing-config-and-subprocess-r1  2026-05-06T13:42:04Z
 approved-config-and-subprocess  2026-05-06T13:42:42Z
+approved-reviewer-effort-api  2026-05-06T13:45:36Z
 ```
 
 ## Batches
@@ -41,7 +42,7 @@ batches:
     review_round: 1
     review_file: reviews/20260506-134223-code-review-config-and-subprocess-r1.md
   - name: reviewer-effort-api
-    state: running
+    state: approved
     implementer_session: 139f389e-04f7-4dad-aede-4ec85928ef3a
     start_sha: c22e87ed936d3bf608d1ae4d587c4439a7056713
   - name: diff-scope-and-effort
