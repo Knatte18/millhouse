@@ -48,7 +48,9 @@ batches:
     start_sha: 3106ab47b53039295f6c4677010c3063246888da
     review_file: C:\Code\millhouse\wts\mill-go-infra-fixes\reviews\20260506-120423-code-review-Cleanup guard-r1.md
   - name: PYTHONPATH documentation fix
-    state: pending
+    state: running
+    implementer_session: 156208e7-e979-44b2-8da8-a5f02e8eec72
+    start_sha: 9e19394729bd7fd2f1b6fd5013af8268f195aab6
   - name: Tests
     state: pending
 ```
