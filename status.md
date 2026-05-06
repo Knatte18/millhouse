@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-mill-plan SKILL.md fixes
+phase: done
 slug: skill-md-fixes-2
 branch: skill-md-fixes-2
 plan: plan
@@ -22,6 +22,8 @@ planned  2026-05-06T16:28:45Z
 implementing  2026-05-06T16:34:13Z
 reviewing-mill-plan SKILL.md fixes-r1  2026-05-06T16:36:27Z
 approved-mill-plan SKILL.md fixes  2026-05-06T16:37:00Z
+holistic-approved  2026-05-06T16:38:18Z
+done  2026-05-06T16:38:18Z
 ```
 
 ## Batches
