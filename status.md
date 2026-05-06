@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: skill-api-audit
 branch: skill-api-audit
 plan: plan
@@ -21,4 +21,15 @@ plan-review-r1  2026-05-06T11:43:48Z
 plan-fix-r1  2026-05-06T11:43:48Z
 plan-review-r2  2026-05-06T11:47:20Z
 planned  2026-05-06T11:47:20Z
+implementing  2026-05-06T11:48:54Z
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: skill-md-fixes
+    state: pending
+  - name: session-id-template
+    state: pending
 ```
