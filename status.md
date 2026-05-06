@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: discussed
 slug: skill-md-fixes-2
 branch: skill-md-fixes-2
 plan: null
@@ -15,4 +15,5 @@ task_description: |
 
 ```text
 discussing  '2026-05-06T15:59:23Z'
+discussed  2026-05-06T16:22:45Z
 ```
