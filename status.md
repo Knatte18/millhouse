@@ -44,5 +44,7 @@ batches:
     review_round: 1
     review_file: reviews/20260506-065721-code-review-implement-cli-r1.md
   - name: tests-and-skill
-    state: pending
+    state: running
+    implementer_session: 9886f8a5-4fb1-485c-95f8-bc196d6453ba
+    start_sha: b88f3c0677fdd7b4eb5ededee59f69923259d09a
 ```
