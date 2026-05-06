@@ -115,7 +115,7 @@ External interface: `millpy-vscode.py` and `millpy-terminal.py` are invoked by t
   Add the following test blocks after the existing tests. All patches use the `mill_terminal.*` namespace.
 
   **Test: no active worktrees → spawn called, new worktree, claude launched.**
-  Set up one worktree directory `wt_new` with an active marker (`_write_active_marker`). Patch `discover_active_worktrees` with `side_effect` returning `[]` first, then `[(wt_new, "task-new", "New Task")]`. Patch `mill_terminal._load_spawn_main` to return a callable returning 0. Patch `subprocess.run`. Call `mill_terminal.main([])`. Assert: spawn callable was invoked with `[]`; `subprocess.run` called with `cwd=wt_new`. Print `"PASS: no active worktrees → spawn called, claude launched in new worktree"`.
+  Create `wt_new` directory with `wt_new.mkdir(parents=True)` — no active marker needed since `discover_active_worktrees` is mocked. Patch `discover_active_worktrees` with `side_effect` returning `[]` first, then `[(wt_new, "task-new", "New Task")]`. Patch `mill_terminal._load_spawn_main` to return a callable returning 0. Patch `subprocess.run`. Call `mill_terminal.main([])`. Assert: spawn callable was invoked with `[]`; `subprocess.run` called with `cwd=wt_new`. Print `"PASS: no active worktrees → spawn called, claude launched in new worktree"`.
 
   **Test: no active worktrees, spawn returns non-zero → exit 1.**
   Patch `discover_active_worktrees` to return `[]`. Patch `mill_terminal._load_spawn_main` to return a callable returning 1. Patch `subprocess.run`. Call `mill_terminal.main([])`. Assert: return code 1; `subprocess.run` NOT called. Print `"PASS: spawn non-zero rc → exit 1, no claude"`.

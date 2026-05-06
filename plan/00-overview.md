@@ -3,7 +3,7 @@
 ```yaml
 task: '20 (A) — mill UX-fixes: teardown + spawn-integration'
 slug: mill-merge-teardown-fix
-approved: false
+approved: true
 started: 20260506-125506
 parent: main
 root: ""
