@@ -6,7 +6,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 
 HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
@@ -306,6 +306,187 @@ def main() -> int:
             errors += 1
         else:
             print("PASS: per-worktree hub_relative_path wins over hub config value")
+
+    # ------------------------------------------------------------------
+    # Test: no active worktrees, no flags → spawn called, new worktree opened.
+    # ------------------------------------------------------------------
+    with tempfile.TemporaryDirectory() as tmpdir:
+        root = Path(tmpdir)
+        _make_git_repo(root)
+
+        worktrees_dir = root / "worktrees"
+        wt_new = worktrees_dir / "task-new"
+        wt_new.mkdir(parents=True)
+
+        spawn_callable = MagicMock(return_value=0)
+        subprocess_calls: list[dict] = []
+
+        with (
+            patch("mill_vscode.resolve_git_root", return_value=root),
+            patch("mill_vscode.resolve_wiki_path", return_value=root / "wiki"),
+            patch("mill_vscode.resolve_worktrees_dir", return_value=worktrees_dir),
+            patch(
+                "mill_vscode._spawn_core.discover_active_worktrees",
+                side_effect=[[], [(wt_new, "task-new", "New Task")]],
+            ),
+            patch("mill_vscode._load_spawn_main", return_value=spawn_callable),
+            patch(
+                "mill_vscode.subprocess.run",
+                side_effect=lambda a, **kw: subprocess_calls.append({"argv": a}),
+            ),
+        ):
+            rc = mill_vscode.main([])
+
+        if not spawn_callable.called:
+            print("FAIL: spawn callable not called", file=sys.stderr)
+            errors += 1
+        elif spawn_callable.call_args_list[0] != call([]):
+            print(
+                f"FAIL: spawn callable called with wrong args: {spawn_callable.call_args_list}",
+                file=sys.stderr,
+            )
+            errors += 1
+        elif not subprocess_calls:
+            print("FAIL: subprocess.run not called after spawn", file=sys.stderr)
+            errors += 1
+        elif str(wt_new) not in subprocess_calls[0]["argv"]:
+            print(
+                f"FAIL: expected {wt_new} in code argv, got {subprocess_calls}",
+                file=sys.stderr,
+            )
+            errors += 1
+        else:
+            print("PASS: no active worktrees + no flags → spawn called, new worktree opened")
+
+    # ------------------------------------------------------------------
+    # Test: no active worktrees, spawn returns non-zero → exit 1, no VS Code.
+    # ------------------------------------------------------------------
+    with tempfile.TemporaryDirectory() as tmpdir:
+        root = Path(tmpdir)
+        _make_git_repo(root)
+
+        worktrees_dir = root / "worktrees"
+        worktrees_dir.mkdir()
+
+        spawn_callable = MagicMock(return_value=1)
+        subprocess_calls = []
+
+        with (
+            patch("mill_vscode.resolve_git_root", return_value=root),
+            patch("mill_vscode.resolve_wiki_path", return_value=root / "wiki"),
+            patch("mill_vscode.resolve_worktrees_dir", return_value=worktrees_dir),
+            patch("mill_vscode._spawn_core.discover_active_worktrees", return_value=[]),
+            patch("mill_vscode._load_spawn_main", return_value=spawn_callable),
+            patch(
+                "mill_vscode.subprocess.run",
+                side_effect=lambda a, **kw: subprocess_calls.append(a),
+            ),
+        ):
+            rc = mill_vscode.main([])
+
+        if rc != 1:
+            print(f"FAIL: spawn non-zero rc → expected exit 1, got {rc}", file=sys.stderr)
+            errors += 1
+        elif subprocess_calls:
+            print("FAIL: subprocess.run called despite spawn failure", file=sys.stderr)
+            errors += 1
+        else:
+            print("PASS: spawn non-zero rc → exit 1, no VS Code")
+
+    # ------------------------------------------------------------------
+    # Test: no active worktrees, spawn returns 0 but backlog empty → exit 0, no VS Code.
+    # ------------------------------------------------------------------
+    with tempfile.TemporaryDirectory() as tmpdir:
+        root = Path(tmpdir)
+        _make_git_repo(root)
+
+        worktrees_dir = root / "worktrees"
+        worktrees_dir.mkdir()
+
+        spawn_callable = MagicMock(return_value=0)
+        subprocess_calls = []
+
+        with (
+            patch("mill_vscode.resolve_git_root", return_value=root),
+            patch("mill_vscode.resolve_wiki_path", return_value=root / "wiki"),
+            patch("mill_vscode.resolve_worktrees_dir", return_value=worktrees_dir),
+            patch("mill_vscode._spawn_core.discover_active_worktrees", return_value=[]),
+            patch("mill_vscode._load_spawn_main", return_value=spawn_callable),
+            patch(
+                "mill_vscode.subprocess.run",
+                side_effect=lambda a, **kw: subprocess_calls.append(a),
+            ),
+        ):
+            rc = mill_vscode.main([])
+
+        if rc != 0:
+            print(f"FAIL: empty backlog → expected exit 0, got {rc}", file=sys.stderr)
+            errors += 1
+        elif subprocess_calls:
+            print("FAIL: subprocess.run called despite empty backlog", file=sys.stderr)
+            errors += 1
+        else:
+            print("PASS: spawn empty backlog → exit 0, no VS Code")
+
+    # ------------------------------------------------------------------
+    # Test: --list with no active worktrees → spawn NOT called, exit 0.
+    # ------------------------------------------------------------------
+    with tempfile.TemporaryDirectory() as tmpdir:
+        root = Path(tmpdir)
+        _make_git_repo(root)
+
+        worktrees_dir = root / "worktrees"
+        worktrees_dir.mkdir()
+
+        load_spawn_mock = MagicMock()
+
+        with (
+            patch("mill_vscode.resolve_git_root", return_value=root),
+            patch("mill_vscode.resolve_wiki_path", return_value=root / "wiki"),
+            patch("mill_vscode.resolve_worktrees_dir", return_value=worktrees_dir),
+            patch("mill_vscode._spawn_core.discover_active_worktrees", return_value=[]),
+            patch("mill_vscode._load_spawn_main", load_spawn_mock),
+        ):
+            rc = mill_vscode.main(["--list"])
+
+        if load_spawn_mock.called:
+            print("FAIL: _load_spawn_main called despite --list flag", file=sys.stderr)
+            errors += 1
+        elif rc != 0:
+            print(f"FAIL: --list empty → expected exit 0, got {rc}", file=sys.stderr)
+            errors += 1
+        else:
+            print("PASS: --list with empty active list → spawn not called")
+
+    # ------------------------------------------------------------------
+    # Test: --slug with no active worktrees → spawn NOT called, exit 0.
+    # ------------------------------------------------------------------
+    with tempfile.TemporaryDirectory() as tmpdir:
+        root = Path(tmpdir)
+        _make_git_repo(root)
+
+        worktrees_dir = root / "worktrees"
+        worktrees_dir.mkdir()
+
+        load_spawn_mock = MagicMock()
+
+        with (
+            patch("mill_vscode.resolve_git_root", return_value=root),
+            patch("mill_vscode.resolve_wiki_path", return_value=root / "wiki"),
+            patch("mill_vscode.resolve_worktrees_dir", return_value=worktrees_dir),
+            patch("mill_vscode._spawn_core.discover_active_worktrees", return_value=[]),
+            patch("mill_vscode._load_spawn_main", load_spawn_mock),
+        ):
+            rc = mill_vscode.main(["--slug", "nonexistent"])
+
+        if load_spawn_mock.called:
+            print("FAIL: _load_spawn_main called despite --slug flag", file=sys.stderr)
+            errors += 1
+        elif rc != 0:
+            print(f"FAIL: --slug empty → expected exit 0, got {rc}", file=sys.stderr)
+            errors += 1
+        else:
+            print("PASS: --slug with empty active list → spawn not called")
 
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)
