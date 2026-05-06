@@ -156,7 +156,8 @@ Always use `_timestamp.now_utc_compact()` / `now_utc_iso()` for any generated ti
 - **YAGNI ruthlessly** — don't plan for hypothetical requirements.
 - **Follow `mill-receiving-review`'s decision tree** — never dismiss a finding with "low risk", "out of scope", "pre-existing".
 - **Autonomous** — the only user interaction is the max-rounds escape and non-progress halt.
-- **Card `Context:` must be comprehensive** — every file the implementer needs to read WITHOUT editing, listed. An empty or terse `Context:` is a review-blocker in the batch-review template. and contain ONLY backtick-wrapped paths in bullet form — no inline prose, no line-range suffixes. Inline notes belong in Requirements: bodies.
+- **Card `Context:` is an allowlist** — list every file the implementer needs to read WITHOUT editing. An empty or terse `Context:` is a review-blocker. The implementer reads ONLY listed files; any unlisted file is a plan defect. `Edits:` files are implicitly read — do not repeat them in `Context:`. All paths must be backtick-wrapped, one per bullet; no inline prose, no line-range suffixes.
+- **`Requirements:` must use stable identifiers** — name the specific function, class, or constant being changed. "Replace `_load_config` in `mill-claim.py` with `from _config import load_config`" is correct. "Refactor config loading to use the shared helper" is not — it forces the implementer to explore, defeating the cold-start guarantee.
 
 ## Board discipline
 
