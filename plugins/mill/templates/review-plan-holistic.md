@@ -30,7 +30,9 @@ Reviewer model: **<REVIEWER_MODEL>**. Round **<ROUND>**.
 - **Self-applying layout change** — BLOCKING if any batch `Edits:` or `Creates:` `wiki/config.yaml` (the shared config governing where task state lives) without an explicit bootstrap step for the currently-shipping task. A task running under the old layout cannot safely migrate its own state mid-flight.
 - **Explore targets** — purpose-driven; subset of `Context:`.
 - **Step granularity + atomicity** — each card small and self-contained.
+- **Requirements specificity** — BLOCKING if `Requirements:` uses vague prose ("refactor X", "update to use helper") without naming the specific function, class, or constant being changed. Stable identifiers are required.
 - **Context field** — non-empty per card; Edits: files are implicitly read.
+- **Context completeness** — BLOCKING if `Requirements:` mentions a function, class, or constant from a file not listed in `Context:` or `Edits:`. The implementer may only read files in `Context:`; a missing entry means cold-start exploration.
 - **Global step numbering** — unique, sequential, no gaps across batches.
 
 ## Output format — STRICT
