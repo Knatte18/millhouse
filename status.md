@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-01-bugfix-batch
+phase: done
 slug: mill-infra-bugfix-batch
 branch: mill-infra-bugfix-batch
 plan: plan
@@ -24,6 +24,8 @@ planned  2026-05-06T17:16:08Z
 implementing  2026-05-06T17:18:33Z
 reviewing-01-bugfix-batch-r1  2026-05-06T17:29:49Z
 approved-01-bugfix-batch  2026-05-06T17:31:29Z
+holistic-approved  2026-05-06T17:33:34Z
+done  2026-05-06T17:33:34Z
 ```
 
 ## Batches
