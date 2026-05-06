@@ -635,6 +635,135 @@ def main() -> int:
             )
             print("PASS apply_plan — stale-worktree-dir: inplace choice taken, no worktree remove, git branch -D, junction removed, marker deleted")
 
+        # --- build_plan guard: phase=done, unmerged commits -> to_report ---
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            wts_dir = tmp / "wts"
+            hub = wts_dir / "my-repo"
+            hub.mkdir(parents=True)
+            wt = wts_dir / "guard-slug-1"
+            wt.mkdir(parents=True)
+            _write_active_marker(wt, "guard-slug-1", "impl/guard-slug-1")
+            (wt / "status.md").write_text(_make_status_md("done", parent="main"), encoding="utf-8")
+
+            home_tasks = [_make_task("guard-slug-1", "done")]
+            wiki_path = tmp / "wiki"
+            wiki_path.mkdir()
+
+            unmerged_result = subprocess.CompletedProcess(
+                args=[], returncode=0, stdout="abc1234 some commit\n", stderr=""
+            )
+            with patch("mill_cleanup._subprocess_util.run", return_value=unmerged_result):
+                plan = build_plan([wt], home_tasks, wiki_path, hub_root=hub)
+
+            assert any("guard-slug-1" in r and "unmerged commits" in r for r in plan.to_report), (
+                f"expected to_report with 'unmerged commits', got {plan.to_report}"
+            )
+            assert not any(r.slug == "guard-slug-1" for r in plan.to_remove_done), (
+                "guard-slug-1 must NOT be in to_remove_done when it has unmerged commits"
+            )
+            print("PASS build_plan — phase=done, unmerged commits -> to_report, not to_remove_done")
+
+        # --- build_plan guard: phase=done, fully merged -> to_remove_done ---
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            wts_dir = tmp / "wts"
+            hub = wts_dir / "my-repo"
+            hub.mkdir(parents=True)
+            wt = wts_dir / "guard-slug-2"
+            wt.mkdir(parents=True)
+            _write_active_marker(wt, "guard-slug-2", "impl/guard-slug-2")
+            (wt / "status.md").write_text(_make_status_md("done", parent="main"), encoding="utf-8")
+
+            home_tasks = [_make_task("guard-slug-2", "done")]
+            wiki_path = tmp / "wiki"
+            wiki_path.mkdir()
+
+            merged_result = subprocess.CompletedProcess(
+                args=[], returncode=0, stdout="", stderr=""
+            )
+            with patch("mill_cleanup._subprocess_util.run", return_value=merged_result):
+                plan = build_plan([wt], home_tasks, wiki_path, hub_root=hub)
+
+            assert any(r.slug == "guard-slug-2" for r in plan.to_remove_done), (
+                f"expected guard-slug-2 in to_remove_done, got {plan.to_remove_done}"
+            )
+            assert not any("guard-slug-2" in r for r in plan.to_report), (
+                f"guard-slug-2 must not be in to_report, got {plan.to_report}"
+            )
+            print("PASS build_plan — phase=done, fully merged -> to_remove_done, not to_report")
+
+        # --- build_plan guard: phase=done, no parent: key -> guard skipped, to_remove_done ---
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            wts_dir = tmp / "wts"
+            hub = wts_dir / "my-repo"
+            hub.mkdir(parents=True)
+            wt = wts_dir / "guard-slug-3"
+            wt.mkdir(parents=True)
+            _write_active_marker(wt, "guard-slug-3", "impl/guard-slug-3")
+            no_parent_status = (
+                "# Status\n\n"
+                "```yaml\n"
+                "phase: done\n"
+                "task: test task\n"
+                "```\n\n"
+                "## Timeline\n\n"
+                "```text\n"
+                "done  2026-01-01T00:00:00Z\n"
+                "```\n"
+            )
+            (wt / "status.md").write_text(no_parent_status, encoding="utf-8")
+
+            home_tasks = [_make_task("guard-slug-3", "done")]
+            wiki_path = tmp / "wiki"
+            wiki_path.mkdir()
+
+            plan = build_plan([wt], home_tasks, wiki_path, hub_root=hub)
+
+            assert any(r.slug == "guard-slug-3" for r in plan.to_remove_done), (
+                f"expected guard-slug-3 in to_remove_done (guard skipped, no parent), got {plan.to_remove_done}"
+            )
+            assert not any("guard-slug-3" in r for r in plan.to_report), (
+                f"guard-slug-3 must not be in to_report, got {plan.to_report}"
+            )
+            print("PASS build_plan — phase=done, no parent: key -> guard skipped, to_remove_done")
+
+        # --- build_plan guard: phase=done, no branch in active marker -> guard skipped, to_remove_done ---
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            wts_dir = tmp / "wts"
+            hub = wts_dir / "my-repo"
+            hub.mkdir(parents=True)
+            wt = wts_dir / "guard-slug-4"
+            wt.mkdir(parents=True)
+            mill_dir = wt / ".millhouse"
+            mill_dir.mkdir(parents=True, exist_ok=True)
+            (mill_dir / "active.slug.md").write_text(
+                "# Active task\n\n"
+                "```yaml\n"
+                "slug: guard-slug-4\n"
+                "task_title: Task guard-slug-4\n"
+                "spawned_at: \"2026-01-01T00:00:00Z\"\n"
+                "```\n",
+                encoding="utf-8",
+            )
+            (wt / "status.md").write_text(_make_status_md("done", parent="main"), encoding="utf-8")
+
+            home_tasks = [_make_task("guard-slug-4", "done")]
+            wiki_path = tmp / "wiki"
+            wiki_path.mkdir()
+
+            plan = build_plan([wt], home_tasks, wiki_path, hub_root=hub)
+
+            assert any(r.slug == "guard-slug-4" for r in plan.to_remove_done), (
+                f"expected guard-slug-4 in to_remove_done (guard skipped, no branch), got {plan.to_remove_done}"
+            )
+            assert not any("guard-slug-4" in r for r in plan.to_report), (
+                f"guard-slug-4 must not be in to_report, got {plan.to_report}"
+            )
+            print("PASS build_plan — phase=done, no branch in active marker -> guard skipped, to_remove_done")
+
         print("All build_plan unit tests passed.")
         return 0
     except AssertionError as exc:

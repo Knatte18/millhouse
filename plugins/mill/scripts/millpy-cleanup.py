@@ -68,9 +68,10 @@ def build_plan(
     """
     Build a CleanupPlan from current repo state.
 
-    Side-effect-free w.r.t. git and wiki writes; reads status.md files
-    via _read_phase (file I/O). Each path in ``active_worktrees`` is a
-    worktree root discovered via ``_spawn_core.discover_active_worktrees``.
+    No git or wiki writes (read-only git queries are permitted); reads
+    status.md files via _read_phase (file I/O). Each path in
+    ``active_worktrees`` is a worktree root discovered via
+    ``_spawn_core.discover_active_worktrees``.
 
     Args:
         active_worktrees: List of worktree root paths, each carrying a
@@ -134,6 +135,18 @@ def build_plan(
         record = SlugRecord(slug, wt_path, branch, wiki_active_dir, marker_by_slug.get(slug))
 
         if phase == "done":
+            parent_branch = _status.read_parent_branch(wt_path / "status.md")
+            if parent_branch and record.branch:
+                result = _subprocess_util.run(
+                    ["git", "-C", str(hub_root), "log", "--oneline",
+                     f"{parent_branch}..{record.branch}"]
+                )
+                if result.returncode == 0 and result.stdout.strip():
+                    to_report.append(
+                        f"{slug} — phase=done but has unmerged commits relative to "
+                        f"{parent_branch!r}; run mill-merge first"
+                    )
+                    continue
             to_remove_done.append(record)
         elif phase == "abandoned":
             if record.home_marker == "active":

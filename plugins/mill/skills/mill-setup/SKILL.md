@@ -64,7 +64,7 @@ PYTHONPATH="plugins/mill/scripts" uv run --project plugins/mill python -c "..."
 PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" uv run --project "${CLAUDE_PLUGIN_ROOT}" python -c "..."
 ```
 
-This inline `PYTHONPATH=` prefix is **only** required in mill-setup. All other skills rely on the global Windows user env var set here and need no prefix.
+This inline `PYTHONPATH=` prefix is required in mill-setup and in any skill invocation within the same CC session where mill-setup ran (before a new shell is opened). Skills running in a new CC session started after mill-setup completes rely on the global Windows user env var set by Phase 4.7 and need no prefix.
 
 Helpers used by this skill: `_setup` (Phase 4 — `create_hub_links`), `_gitignore` (Phase 4.5b), `_shortcuts` (Phase 4.7), `_sidebar` (Phase 6a), `_vscode` (Phase 7), `_render` (transitively via `_vscode` and `_shortcuts`), `_wiki` (Phase 3, 3.1, 6, 6a), `_junction` (Phase 3.7).
 

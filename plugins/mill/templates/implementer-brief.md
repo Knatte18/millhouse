@@ -66,6 +66,7 @@ Your last line of output (after all work and commits) MUST be a single JSON obje
 ```json
 {"status":"success","commit_sha":"<last-HEAD-sha>","session_id":"<SESSION_ID>"}
 ```
+**Do not wrap the JSON in a code block. Output it as a bare line — no backticks, no fence. Anything other than a bare JSON line is treated as `stuck_type: logic`.**
 
 **`session_id` MUST be exactly `<SESSION_ID>` (the UUID shown in the example above — it was injected into this brief when it was rendered). Copy it verbatim.**
 
@@ -74,6 +75,7 @@ or, when stuck:
 ```json
 {"status":"stuck","stuck_type":"transient|verify|logic","reason":"<one-line>","commit_sha":"<last-HEAD-sha>","session_id":"<SESSION_ID>"}
 ```
+**Do not wrap the JSON in a code block. Output it as a bare line — no backticks, no fence. Anything other than a bare JSON line is treated as `stuck_type: logic`.**
 
 **`session_id` MUST be exactly `<SESSION_ID>` (the UUID shown in the example above — it was injected into this brief when it was rendered). Copy it verbatim.**
 

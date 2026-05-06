@@ -19,8 +19,11 @@ You are the **Builder** — a lean orchestrator. You coordinate per-batch implem
    - `review.code.rounds` — max review rounds per batch.
    - `review.code.self_fix_rounds` — passed to the implementer brief.
    - `review.code.holistic` — if true, run one holistic code review after all batches approve.
-4. Acquire the builder lock: `_builder_lock.acquire(Path(".millhouse"), slug)`. On `LockBusy`: surface the message and halt — a second mill-go will corrupt state.
-   `signature: _builder_lock.acquire(mill_dir: Path, slug: str) -> LockInfo`
+4. Acquire the builder lock:
+   ```bash
+   uv run --project "${CLAUDE_PLUGIN_ROOT}" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-builder-lock.py" acquire <slug>
+   ```
+   On exit code 1: surface the stderr message and halt — a second mill-go will corrupt state.
 5. **Entry phase gate.** Set `status_path = Path("status.md").resolve()` and inspect the phase:
    ```python
    status = _status.read_full(status_path)
@@ -42,6 +45,8 @@ You are the **Builder** — a lean orchestrator. You coordinate per-batch implem
    `signature: _plan_dag.extract_batch_index(overview_text: str) -> list[dict]`
    `signature: _plan_dag.validate(batches: list[dict], batch_files: list[str]) -> None`
    `signature: _plan_dag.topo_order(batches: list[dict]) -> list[str]`
+
+> If mill-go is interrupted mid-run, re-run `/mill-go` — it will auto-reclaim the builder lock for the same task (stale-self-lock detection is built in).
 
 ## Prepare
 
@@ -80,6 +85,17 @@ The implementer's last output line must be JSON:
 - Malformed / missing JSON line → treat as `stuck_type: logic` reason "no structured report".
 
 Record `commit_sha` from a successful report on the batch entry.
+
+### 2b. Cleanliness gate
+
+After a `success` report: run `git -C <worktree> status --porcelain`. If the output is non-empty (uncommitted files present):
+- `_status.set_batch_field(status_path, batch_name, "state", "blocked")`
+- `_status.set_batch_field(status_path, batch_name, "blocked_reason", "uncommitted working tree after implementer report")`
+- `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`
+- Commit on the task branch: `git -C <worktree> add status.md && git -C <worktree> commit -m "mill-go: blocked on <batch_name> — dirty tree"`
+- Go to *Blocked*.
+
+If the output is empty, continue to "3. Code Review loop" as normal.
 
 ### 3. Code Review loop
 
@@ -127,7 +143,10 @@ For each round `N` from 1 to `review.code.rounds`:
 ### Blocked
 
 - `_notify.notify("mill-go.blocked", f"batch {batch_name}: {blocked_reason}", slug=slug, batch=batch_name)`.
-- Release the builder lock: `_builder_lock.release(mill_dir)`.
+- Release the builder lock:
+  ```bash
+  uv run --project "${CLAUDE_PLUGIN_ROOT}" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-builder-lock.py" release
+  ```
 - Tell the user: "Batch X blocked with reason Y. Inspect reviews/ and status.md. Re-run `/mill-go` after resolving, or `/mill-abandon` to wind down." Do not proceed to Handoff.
 
 ## Holistic code review
@@ -155,8 +174,10 @@ After every batch in `order` has state `approved`, and only if `review.code.holi
    `signature: _wiki.write_commit_push(wiki_path: Path, paths: list[str], msg: str, *, slug: str) -> None`
    The lock-context wraps the read-modify-write atomically; `set_phase_at` does the read+transform+write itself; `write_commit_push` acquires the lock internally but the counter from `wiki_lock` makes that a no-op.
 3. `_notify.notify("mill-go.done", f"task {slug} complete", slug=slug)`.
-4. **Release the builder lock immediately:** `_builder_lock.release(Path(".millhouse"))`.
-   `signature: _builder_lock.release(mill_dir: Path) -> None`
+4. **Release the builder lock immediately:**
+   ```bash
+   uv run --project "${CLAUDE_PLUGIN_ROOT}" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-builder-lock.py" release
+   ```
 5. If `pipeline.auto_report: true` → invoke `/mill-self-report` directly with no argument. The skill checks `gh auth` itself and bails cleanly if absent. Wait for it to finish before continuing.
 6. If `pipeline.auto_merge: true` → invoke `/mill-merge`. Otherwise tell the user: "Task complete. Run `/mill-merge` to merge the task branch back to parent."
 
