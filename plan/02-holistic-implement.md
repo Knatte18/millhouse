@@ -46,6 +46,7 @@ Delivers the complete holistic-fix dispatch path: the `implementer-holistic-brie
   - `plugins/mill/scripts/_render.py`
   - `plugins/mill/scripts/_paths.py`
   - `plugins/mill/scripts/_active.py`
+  - `plugins/mill/scripts/_llm_claude.py`
   - `plugins/mill/scripts/_review_common.py`
   - `plugins/mill/scripts/_timestamp.py`
   - `plugins/mill/templates/implementer-holistic-brief.md`
@@ -101,7 +102,7 @@ Delivers the complete holistic-fix dispatch path: the `implementer-holistic-brie
 
   1. Read `review.code.holistic_rounds` (not `review.code.rounds`): `` `max_holistic_rounds = cfg.get("review", {}).get("code", {}).get("holistic_rounds", 1)` ``. Loop variable `H` starts at 1.
 
-  2. **Crash-recovery:** Before firing the review CLI each round, scan `reviews/` for a file matching `*-code-review-holistic-r{H}.md`. If found, skip the CLI and use that file's verdict directly (same pattern as per-batch).
+  2. **Crash-recovery:** Before firing the review CLI each round, scan `reviews/` for a file matching `*-code-review-r{H}.md` (holistic code review files have format `{ts}-code-review-r{N}.md` — no batch-name segment, no `-holistic-` substring). If found, skip the CLI and use that file's verdict directly (same pattern as per-batch; per-batch files embed `{batch_name}` so the glob never collides).
 
   3. Before each review: `_status.append_phase(status_path, "holistic-reviewing", _timestamp.now_utc_iso())`. Commit: `git -C <worktree> add status.md && git -C <worktree> commit -m "mill-go: holistic reviewing round {H}"`.
 
@@ -110,9 +111,10 @@ Delivers the complete holistic-fix dispatch path: the `implementer-holistic-brie
      uv run --project "${CLAUDE_PLUGIN_ROOT}" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-bg.py" \
        --slug review-code-holistic-r{H} -- \
        uv run --project "${CLAUDE_PLUGIN_ROOT}" \
-         "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-review-code.py"
+         "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-review-code.py" \
+         [--extra-file <p> ...]
      ```
-     Poll and extract JSON as per the per-batch pattern.
+     Include any accumulated `extra_files` from prior `NEED_CONTEXT` rounds via `--extra-file <p>` (one flag per path), mirroring the per-batch review invocation. Poll and extract JSON as per the per-batch pattern.
 
   5. On `APPROVE`: `_status.append_phase(status_path, "holistic-approved", _timestamp.now_utc_iso())`. Commit status. Proceed to Handoff.
 
