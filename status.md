@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-codeguide-setup-skill
+phase: done
 slug: codeguide-improvements
 branch: codeguide-improvements
 plan: plan
@@ -24,6 +24,9 @@ reviewing-codeguide-generate-skill-r1  2026-05-06T05:55:47Z
 approved-codeguide-generate-skill  2026-05-06T05:57:43Z
 reviewing-codeguide-setup-skill-r1  2026-05-06T06:00:48Z
 approved-codeguide-setup-skill  2026-05-06T06:01:15Z
+holistic-reviewing  2026-05-06T06:01:26Z
+holistic-approved  2026-05-06T06:04:17Z
+done  2026-05-06T06:04:17Z
 ```
 
 ## Batches
