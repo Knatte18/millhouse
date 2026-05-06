@@ -42,6 +42,9 @@ def main() -> int:
         assert sig.parameters["timeout"].default is None, "_reviewer_sonnetmax timeout default should be None"
         assert str(sig.return_annotation) == "tuple[str, str]"
         print("PASS: _reviewer_sonnetmax signature with session_id/resume/timeout")
+        assert "effort" in sig.parameters, "effort missing from _reviewer_sonnetmax.run"
+        assert sig.parameters["effort"].default is None, "_reviewer_sonnetmax effort default should be None"
+        print("PASS: _reviewer_sonnetmax effort kwarg")
 
         assert _reviewer_sonnetmax_tool.MODE == "tool-use"
         assert callable(_reviewer_sonnetmax_tool.run)
@@ -55,12 +58,18 @@ def main() -> int:
         assert sig.parameters["timeout"].default is None, "_reviewer_sonnetmax_tool timeout default should be None"
         assert str(sig.return_annotation) == "tuple[str, str]"
         print("PASS: _reviewer_sonnetmax_tool signature with session_id/resume/timeout")
+        assert "effort" in sig.parameters, "effort missing from _reviewer_sonnetmax_tool.run"
+        assert sig.parameters["effort"].default is None, "_reviewer_sonnetmax_tool effort default should be None"
+        print("PASS: _reviewer_sonnetmax_tool effort kwarg")
 
-        # _reviewer_test_stub also exposes timeout
+        # _reviewer_test_stub also exposes timeout and effort
         sig_stub = inspect.signature(stub.run)
         assert "timeout" in sig_stub.parameters, "timeout missing from _reviewer_test_stub.run"
         assert sig_stub.parameters["timeout"].default is None, "stub timeout default should be None"
         print("PASS: _reviewer_test_stub.run exposes timeout kwarg with default None")
+        assert "effort" in sig_stub.parameters, "effort missing from _reviewer_test_stub.run"
+        assert sig_stub.parameters["effort"].default is None, "stub effort default should be None"
+        print("PASS: _reviewer_test_stub effort kwarg")
 
         # Calling stub with timeout=900 -> captured_prompts()[0][1]["timeout"] == 900
         stub.seed([("# Review\n\n```yaml\nverdict: APPROVE\n```\n", "sid-t")])
@@ -71,6 +80,16 @@ def main() -> int:
             f"expected timeout=900 in kwargs, got {captured[0][1]!r}"
         )
         print("PASS: stub captures timeout=900 in kwargs dict")
+
+        # Calling stub with effort="medium" -> captured_prompts()[0][1]["effort"] == "medium"
+        stub.seed([("# Review\n\n```yaml\nverdict: APPROVE\n```\n", "sid-e")])
+        stub.run("probe", effort="medium")
+        captured = stub.captured_prompts()
+        assert len(captured) == 1, f"expected 1 captured prompt, got {len(captured)}"
+        assert captured[0][1]["effort"] == "medium", (
+            f"expected effort='medium' in kwargs, got {captured[0][1]!r}"
+        )
+        print("PASS: stub captures effort='medium' in kwargs dict")
 
         print("All reviewer-module unit tests passed.")
         return 0
