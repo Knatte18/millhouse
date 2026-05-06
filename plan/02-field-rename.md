@@ -3,14 +3,14 @@
 ```yaml
 task: 10 (B) — Plan-template format-forbedringer
 batch: field-rename
-cards: 5
+cards: 6
 verify: python plugins/mill/unit_tests/test-plan-validate.py && python plugins/mill/unit_tests/test-review-common.py
 depends-on: [batch-numbering]
 ```
 
 ## Batch Scope
 
-This batch renames `Reads:` → `Context:` and `Modifies:` → `Edits:` everywhere: regex constants in `_review_common.py` and `_plan_validate.py`, required-field lists, function names, error messages, all five templates, the implementer brief, and mill-plan SKILL.md. `Creates:` and `Deletes:` are unchanged. The code change is purely mechanical — no logic changes. Unit tests for the affected modules are updated to use the new field names. Cards must be done in order: code first (cards 7-8), then templates and SKILL.md (cards 9-10), then tests (card 11).
+This batch renames `Reads:` → `Context:` and `Modifies:` → `Edits:` everywhere: regex constants in `_review_common.py` and `_plan_validate.py`, required-field lists, function names, error messages, all six templates, the implementer brief, and mill-plan SKILL.md. `Creates:` and `Deletes:` are unchanged. The code change is purely mechanical — no logic changes. Unit tests for the affected modules are updated to use the new field names. Cards must be done in order: code first (cards 7-8), then templates and SKILL.md (cards 9-10), then tests (card 11), then plan-file relabel (card 12). Card 12 ensures the post-batch code-reviewer's `parse_batch_refs` (which now uses the renamed regex) can still bulk source files from the plan files in `plan/`.
 
 ## Cards
 
@@ -169,11 +169,11 @@ This batch renames `Reads:` → `Context:` and `Modifies:` → `Edits:` everywhe
   - Update all call sites that pass `reads=...` → `context=...`, `modifies=...` → `edits=...`.
   - Update `test_check_card_missing_field_dirty`: use `missing_fields={"Edits"}` instead of `{"Modifies"}`; update assertion to `"Edits" in check2[0]["message"]`.
   - Update any error-message assertions that reference "Modifies:" to "Edits:".
-  - Update hardcoded raw-string fixtures in three tests that build batch text directly (without `_make_batch_file`):
+  - Update hardcoded raw-string fixtures in two tests that build batch text directly (without `_make_batch_file`):
     - `test_check_reads_not_backtick_path_clean`: `"- **Reads:** \`src/a.py\`\n"` → `"- **Context:** \`src/a.py\`\n"`; `"- **Modifies:** none\n"` → `"- **Edits:** none\n"`.
-    - `test_check_reads_not_backtick_path_none_exempt`: any `**Reads:**`/`**Modifies:**` headers in its fixture string → `**Context:**`/`**Edits:**`. (Update the docstring too if it mentions `Reads:`.)
     - `test_check_reads_not_backtick_path_dirty`: `"- **Reads:** \`src/foo.py\` (used by foo)\n"` → `"- **Context:** \`src/foo.py\` (used by foo)\n"`; `"- **Modifies:** none\n"` → `"- **Edits:** none\n"`.
-    Without these updates, the renamed `_RE_REFS_HEADER` regex (Card 8) stops matching these fixtures and the tests pass vacuously or fail outright — breaking batch 02's `verify:` command.
+    - `test_check_reads_not_backtick_path_none_exempt` uses `_make_batch_file("alpha")` (no raw string) — its docstring `"Clean: \`- **Reads:** none\` returns [] for check 6."` should be updated to `"Clean: \`- **Context:** none\` returns [] for check 6."` for consistency, but the test body needs no changes (relies on the `_make_batch_file` parameter rename).
+    Without these updates, the renamed `_RE_REFS_HEADER` regex (Card 8) stops matching the raw-string fixtures and those two tests pass vacuously or fail outright — breaking batch 02's `verify:` command.
 
   In `test-review-common.py`:
   - Update all `parse_batch_refs` fixture strings: `"- **Reads:** ..."` → `"- **Context:** ..."`, `"- **Modifies:** ..."` → `"- **Edits:** ..."`. Specifically:
@@ -187,6 +187,25 @@ This batch renames `Reads:` → `Context:` and `Modifies:` → `Edits:` everywhe
 
 - **Commit:** `test(plan-validate,review-common): update field names Reads/Modifies → Context/Edits`
 
+### Card 12: Relabel plan files so post-batch code review can bulk source files
+
+- **Reads:**
+  - `plan/02-field-rename.md`
+  - `plan/03-guidance.md`
+- **Modifies:**
+  - `plan/02-field-rename.md`
+  - `plan/03-guidance.md`
+- **Creates:** none
+- **Deletes:** none
+- **Requirements:**
+  Replace every occurrence of `- **Reads:**` with `- **Context:**` and every occurrence of `- **Modifies:**` with `- **Edits:**` in both `plan/02-field-rename.md` and `plan/03-guidance.md` (this batch file and the next batch's plan file). Both single-line form (`- **Reads:** \`path\``) and multi-line form (`- **Reads:**\n  - \`path\``) must be replaced. `- **Creates:**` and `- **Deletes:**` headers are unchanged.
+
+  This card exists because card 7 renames `_RE_REFS_HEADER` in `_review_common.py` from `Reads|Modifies|Creates|Deletes` to `Context|Edits|Creates|Deletes`. After card 7 commits, `parse_batch_refs` no longer matches the old `**Reads:**` / `**Modifies:**` headers in the batch's own plan files. When mill-go invokes the per-batch code-reviewer for batch 02 after the whole batch completes, it calls `parse_batch_refs(plan/02-field-rename.md)` to bulk source files. Without this relabeling, `parse_batch_refs` returns `[]` and the code-reviewer is given only the overview and batch file — no source files. This card runs LAST in batch 02 so that the renamed regex (already committed in card 7) matches the now-renamed plan-file headers when code review fires.
+
+  Do not edit any other plan file (e.g. `plan/00-overview.md`, `plan/01-batch-numbering.md`) — batch 01 is approved-and-implemented before batch 02 starts, and `plan/00-overview.md` does not contain card field labels.
+
+- **Commit:** `refactor(plan-files): relabel plan-file card fields Reads/Modifies → Context/Edits`
+
 ## Batch Tests
 
-Cards 7-10 are mechanical renames with no logic change; correctness is verified by the unit tests in card 11. The `verify:` command runs `test-plan-validate.py` and `test-review-common.py`. All tests that previously relied on `Reads:`/`Modifies:` field names must pass after the rename.
+Cards 7-10 are mechanical renames with no logic change; correctness is verified by the unit tests in card 11. Card 12 has no runnable test surface (it only relabels plan-text headers); its correctness is observed indirectly by mill-go's post-batch code-reviewer successfully bulking the source files. The `verify:` command runs `test-plan-validate.py` and `test-review-common.py`. All tests that previously relied on `Reads:`/`Modifies:` field names must pass after the rename.

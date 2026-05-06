@@ -10,11 +10,11 @@ depends-on: [field-rename]
 
 ## Batch Scope
 
-This batch adds stable-identifier and allowlist guidance for mill-plan. It strengthens three files: the `plan-batch.md` template (card 12), the plan-review templates (card 13), and the mill-plan SKILL.md (card 14). No code changes. Cards read files renamed in batch 02 and add new content only. `verify: null` because these are documentation/instruction changes with no runnable test surface.
+This batch adds stable-identifier and allowlist guidance for mill-plan. It strengthens three files: the `plan-batch.md` template (card 13), the plan-review templates (card 14), and the mill-plan SKILL.md (card 15). No code changes. Cards read files renamed in batch 02 and add new content only. `verify: null` because these are documentation/instruction changes with no runnable test surface.
 
 ## Cards
 
-### Card 12: Strengthen `plan-batch.md` template — Requirements and Context guidance
+### Card 13: Strengthen `plan-batch.md` template — Requirements and Context guidance
 
 - **Reads:**
   - `plugins/mill/templates/plan-batch.md`
@@ -37,7 +37,7 @@ This batch adds stable-identifier and allowlist guidance for mill-plan. It stren
 
 - **Commit:** `docs(plan-batch): strengthen Context: allowlist and Requirements: stable-identifier guidance`
 
-### Card 13: Add BLOCKING criteria to plan-review templates
+### Card 14: Add BLOCKING criteria to plan-review templates
 
 - **Reads:**
   - `plugins/mill/templates/review-plan-batch.md`
@@ -61,7 +61,7 @@ This batch adds stable-identifier and allowlist guidance for mill-plan. It stren
 
 - **Commit:** `docs(review-templates): add Context-completeness and Requirements-specificity BLOCKING criteria`
 
-### Card 14: Strengthen `mill-plan/SKILL.md` — guidance section
+### Card 15: Strengthen `mill-plan/SKILL.md` — guidance section
 
 - **Reads:**
   - `plugins/mill/skills/mill-plan/SKILL.md`
