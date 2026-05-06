@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-01-skill-fixes
+phase: done
 slug: mill-cleanliness-gate-fixes
 branch: mill-cleanliness-gate-fixes
 plan: plan
@@ -22,6 +22,7 @@ planned  2026-05-06T16:18:17Z
 implementing  2026-05-06T16:22:25Z
 reviewing-01-skill-fixes-r1  2026-05-06T16:24:39Z
 approved-01-skill-fixes  2026-05-06T16:25:33Z
+done  2026-05-06T16:27:27Z
 ```
 
 ## Batches
