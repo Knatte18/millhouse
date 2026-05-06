@@ -18,7 +18,7 @@ Reviewer model: **<REVIEWER_MODEL>**. Round **<ROUND>**.
 - **Constraint violations** — BLOCKING.
 - **Alignment** — plan covers all task requirements.
 - **Decision alignment** — every `### Decision:` in `## Shared Decisions` faithfully implemented.
-- **Completeness** — every card has `Creates`/`Modifies`, `Reads`, `Requirements`, `Commit`.
+- **Completeness** — every card has `Creates`/`Edits`, `Context`, `Requirements`, `Commit`.
 - **Sequencing + batch dependencies** — correct order within and across batches; `batch-depends` accurate; no forward deps.
 - **Batch Index DAG integrity** — BLOCKING if the `batches:` block in `00-overview.md` has a cycle, references a batch name not declared, or names a `file:` not present in the plan directory.
 - **Edge cases + risks** — failures, empty states, boundaries addressed.
@@ -27,10 +27,10 @@ Reviewer model: **<REVIEWER_MODEL>**. Round **<ROUND>**.
 - **Test coverage** — error paths + edges.
 - **Language pitfalls** — BLOCKING if high-risk (Python: mutable defaults, import side-effects, Windows path sep, CRLF/LF).
 - **Integration test reachability** — BLOCKING if integration tests added but `verify:` doesn't run them.
-- **Self-applying layout change** — BLOCKING if any batch `Modifies:` or `Creates:` `wiki/config.yaml` (the shared config governing where task state lives) without an explicit bootstrap step for the currently-shipping task. A task running under the old layout cannot safely migrate its own state mid-flight.
-- **Explore targets** — purpose-driven; subset of `Reads:`.
+- **Self-applying layout change** — BLOCKING if any batch `Edits:` or `Creates:` `wiki/config.yaml` (the shared config governing where task state lives) without an explicit bootstrap step for the currently-shipping task. A task running under the old layout cannot safely migrate its own state mid-flight.
+- **Explore targets** — purpose-driven; subset of `Context:`.
 - **Step granularity + atomicity** — each card small and self-contained.
-- **Reads field** — non-empty per card.
+- **Context field** — non-empty per card; Edits: files are implicitly read.
 - **Global step numbering** — unique, sequential, no gaps across batches.
 
 ## Output format — STRICT
