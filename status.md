@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-test-diff-scope-and-effort
+phase: done
 slug: review-code-enhancements
 branch: review-code-enhancements
 plan: plan
@@ -31,6 +31,8 @@ approved-config-and-subprocess  2026-05-06T13:42:42Z
 approved-reviewer-effort-api  2026-05-06T13:45:36Z
 approved-diff-scope-and-effort  2026-05-06T13:49:52Z
 approved-test-diff-scope-and-effort  2026-05-06T14:00:22Z
+holistic-approved  2026-05-06T14:05:48Z
+done  2026-05-06T14:05:48Z
 ```
 
 ## Batches
