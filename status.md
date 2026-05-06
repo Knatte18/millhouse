@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planning
+phase: planned
 slug: plan-reviewer-self-apply
 branch: plan-reviewer-self-apply
 plan: plan
@@ -18,4 +18,6 @@ task_description: |
 discussing  '2026-05-06T10:43:23Z'
 discussed  2026-05-06T11:32:04.568533+00:00
 planning  2026-05-06T11:37:18Z
+plan-review-r1  2026-05-06T11:42:11Z
+planned  2026-05-06T11:42:11Z
 ```

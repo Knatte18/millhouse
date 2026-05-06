@@ -3,7 +3,7 @@
 ```yaml
 task: '6 (A) — Plan reviewer: detect self-applying layout changes that strand in-flight state'
 slug: plan-reviewer-self-apply
-approved: false
+approved: true
 started: 20260506-113540
 parent: main
 root: ""
