@@ -57,6 +57,7 @@ def quote_scalar(value: str) -> str:
         {"_": value},
         default_flow_style=False,
         allow_unicode=True,
+        width=float("inf"),
     )
     # dumped is "_: <scalar>\n"; split on first ": " only (maxsplit=1) so
     # values that contain ": " are not truncated.

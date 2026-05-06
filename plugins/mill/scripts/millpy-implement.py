@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
+import re
 import subprocess
 import sys
 import uuid
@@ -40,20 +40,20 @@ import _timestamp
 
 
 def _forward_output(output: str) -> int:
-    """Scan output lines in reverse for a valid JSON report line.
+    """Extract the last JSON object containing a 'status' key from output using regex.
 
-    Returns 0 in both cases — the JSON on stdout is how the caller reads state.
-    When no JSON is found, emits a stuck/logic sentinel.
+    Returns 0 in both success and fallback cases — the JSON on stdout is how the caller reads state.
+    When no valid JSON is found, emits a stuck/logic sentinel.
     """
-    for line in reversed(output.strip().splitlines()):
-        if not line:
-            continue
+    matches = re.findall(r'\{[^{}]*"status"[^{}]*\}', output)
+    if matches:
+        last = matches[-1]
         try:
-            json.loads(line)
-            print(line)
+            json.loads(last)
+            print(last)
             return 0
         except json.JSONDecodeError:
-            continue
+            pass
     print(json.dumps({"status": "stuck", "stuck_type": "logic", "reason": "no structured report"}))
     return 0
 
@@ -192,6 +192,7 @@ def main(argv=None) -> int:
             "WIKI_PATH": str(wiki_path),
             "SELF_FIX_ROUNDS": str(self_fix_rounds),
             "ROUND": "1",
+            "SESSION_ID": session_id,
         })
 
         try:
