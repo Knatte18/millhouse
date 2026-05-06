@@ -36,5 +36,7 @@ batches:
     review_round: 1
     review_file: reviews/20260506-055732-code-review-codeguide-generate-skill-r1.md
   - name: codeguide-setup-skill
-    state: pending
+    state: running
+    implementer_session: f17fd174-e1ff-4c24-accc-ba6990256648
+    start_sha: d7d51201a6384662859f11f6fb99010685e985df
 ```
