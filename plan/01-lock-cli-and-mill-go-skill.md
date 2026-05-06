@@ -46,7 +46,7 @@ Batch-local decisions: none beyond Shared Decisions.
   - `plugins/mill/skills/mill-go/SKILL.md`
 - **Creates:** none
 - **Deletes:** none
-- **Requirements:** Make four changes to `mill-go SKILL.md`:
+- **Requirements:** Make five changes to `mill-go SKILL.md`:
 
   1. **Lock acquire (Entry step 4).** Replace the inline `_builder_lock.acquire(Path(".millhouse"), slug)` call and its `signature:` line with:
      ```
@@ -58,7 +58,6 @@ Batch-local decisions: none beyond Shared Decisions.
      ```
      uv run --project "${CLAUDE_PLUGIN_ROOT}" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-builder-lock.py" release
      ```
-     Remove the `signature: _builder_lock.release(...)` line.
 
   3. **Lock release (Handoff step 4).** Same replacement as Blocked step. Remove its `signature:` line.
 

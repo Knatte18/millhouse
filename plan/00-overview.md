@@ -3,7 +3,7 @@
 ```yaml
 task: 19 (A) — mill-go + scripts infra fixes
 slug: mill-go-infra-fixes
-approved: false
+approved: true
 started: 20260506-113757
 parent: main
 root: ""

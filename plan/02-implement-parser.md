@@ -34,7 +34,6 @@ Batch-local decisions:
 
   2. Replace the entire `_forward_output()` function body with:
      ```python
-     import re
      matches = re.findall(r'\{[^{}]*"status"[^{}]*\}', output)
      if matches:
          last = matches[-1]
@@ -47,7 +46,7 @@ Batch-local decisions:
      print(json.dumps({"status": "stuck", "stuck_type": "logic", "reason": "no structured report"}))
      return 0
      ```
-     The `import re` at the top of the file means the local `import re` inside the function body is not needed — use the module-level import. The function itself should just use `re.findall(...)`.
+     The `re` module is imported at the module level in step 1 — do not add a local `import re` inside the function body.
 
   3. Update the `_forward_output()` docstring to reflect the new approach: "Extract the last JSON object containing a 'status' key from output using regex. Returns 0 in both success and fallback cases — the JSON on stdout is how the caller reads state. When no valid JSON is found, emits a stuck/logic sentinel."
 
