@@ -3,7 +3,7 @@
 ```yaml
 task: '5 (A) — mill-bg.py: project-lokal backgrounding'
 slug: mill-bg-helper
-approved: false
+approved: true
 started: 20260506T072351Z
 parent: main
 root: ""
