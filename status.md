@@ -38,5 +38,7 @@ batches:
     review_round: 1
     review_file: reviews/20260506-085146-code-review-core-script-r1.md
   - name: tests-and-skills
-    state: pending
+    state: running
+    implementer_session: 062babbf-97e5-4528-abaa-4ab9d6b6191a
+    start_sha: cdf5f9dbeba89946f27ce243f2db867a67c7c1c1
 ```
