@@ -58,6 +58,8 @@ This batch renames `Reads:` → `Context:` and `Modifies:` → `Edits:` everywhe
 
   Rename `_parse_modifies_only` to `_parse_edits_only` throughout the file (definition and all three call sites: in `_check_parallel_modifies_overlap`, `_check_wiki_config_mutation`, and `_check_all_files_touched_mismatch`). Update the function's docstring: replace "Modifies:" with "Edits:".
 
+  Rename `_check_reads_not_backtick_path` to `_check_ref_not_backtick_path` throughout the file (definition + the single call site in `run()`). The function validates `Context:`/`Edits:`/`Creates:`/`Deletes:` after the rename, so "reads" in its name is misleading.
+
   Update the `_check_reads_not_backtick_path` inline error message: change `"Reads/Modifies/Creates inline value contains prose alongside backtick path:"` to `"Context/Edits/Creates inline value contains prose alongside backtick path:"`.
 
   Update error messages in `_check_parallel_modifies_overlap`:
@@ -100,12 +102,14 @@ This batch renames `Reads:` → `Context:` and `Modifies:` → `Edits:` everywhe
   - Criteria section: replace `Reads:` with `Context:`, `Modifies:` with `Edits:` in all criteria bullet text.
   - Specifically: `**Reads field** — non-empty; lists every file the implementer reads.` → `**Context field** — non-empty; lists every file the implementer reads but does not edit. Edits: files are implicitly read — do not repeat them in Context:.`
   - Replace `Creates`/`Modifies`/`Reads` references in completeness criterion: `every card has \`Creates\`/\`Modifies\`, \`Reads\`, \`Requirements\`, \`Commit\`.` → `every card has \`Creates\`/\`Edits\`, \`Context\`, \`Requirements\`, \`Commit\`.`
+  - **Explore targets** bullet: `**Explore targets** — purpose-driven; subset of \`Reads:\`.` → `**Explore targets** — purpose-driven; subset of \`Context:\`.`
   - Add after the criteria list a note about reviewer asymmetry: "**Reviewer note:** plan-reviewer sees only `Context: ∪ Edits:` (existing files). `Creates:` targets are absent — do not flag missing `Creates:` files as NEED_CONTEXT."
 
   In `review-plan-holistic.md`:
   - Same field-name replacements as above in criteria text.
   - `**Reads field** — non-empty per card.` → `**Context field** — non-empty per card; Edits: files are implicitly read.`
   - `Creates`/`Modifies`/`Reads` → `Creates`/`Edits`/`Context` in completeness criterion.
+  - **Explore targets** bullet: `**Explore targets** — purpose-driven; subset of \`Reads:\`.` → `**Explore targets** — purpose-driven; subset of \`Context:\`.`
 
   In `review-code-batch.md`:
   - Criteria text: `**Plan alignment** — every card's \`Requirements:\` is realised in the source files; every file listed in \`Reads:\` / \`Modifies:\` / \`Creates:\` is present and matches its stated role.` → use `Context:` / `Edits:` / `Creates:`.

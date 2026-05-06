@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planning
+phase: plan-fix-r1
 slug: plan-template-quality
 branch: plan-template-quality
 plan: plan
@@ -17,4 +17,6 @@ task_description: |
 discussing  '2026-05-06T13:37:54Z'
 discussed  2026-05-06T13:50:43Z
 planning  2026-05-06T13:59:00Z
+plan-review-r1  2026-05-06T14:05:51Z
+plan-fix-r1  2026-05-06T14:05:51Z
 ```

@@ -140,6 +140,8 @@ This batch adds `number:` as a first-class field on plan batches and switches `d
 - **Requirements:**
   Update `_make_overview` helper (lines ~39-65 in the file): add an optional `number:` key to each batch dict parameter. When a `number` key is present in the dict, emit `    number: {number}\n` as the first field under each batch entry in the YAML block. The helper signature stays unchanged — it already accepts dicts with arbitrary keys; just emit `number:` when present.
 
+  Update `deps_yaml` construction (currently line 45: `deps_yaml = "[" + ", ".join(f'"{d}"' for d in deps) + "]"`) so integer deps emit unquoted: `deps_yaml = "[" + ", ".join(str(d) if isinstance(d, int) else f'"{d}"' for d in deps) + "]"`. This is required so the YAML parses integer deps as integers (`[99]`), not strings (`["99"]`); without it, the integer-dep code path in `_check_depends_on_unknown` is never exercised by tests.
+
   Update `test_check_depends_on_unknown_dirty`: switch the batch dict to `{"name": "alpha", "file": "01-alpha.md", "number": 1, "depends-on": [99]}` (integer dep 99). Verify the error message contains "99" and `check == "depends-on-unknown"`.
 
   Add `test_check_depends_on_unknown_dirty_integer`: same as above but confirm the old string-dep path still works — provide a batch with `depends-on: ["non-existent-batch"]` (no `number:` field) and assert the error mentions `"non-existent-batch"`.
