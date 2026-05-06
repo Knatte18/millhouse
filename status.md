@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-fix-r1
+phase: planned
 slug: mill-setup-wiki-url
 branch: mill-setup-wiki-url
 plan: plan
@@ -19,4 +19,6 @@ discussed  2026-05-06T05:56:20Z
 planning  2026-05-06T06:05:34Z
 plan-review-r1  2026-05-06T06:14:15Z
 plan-fix-r1  2026-05-06T06:14:15Z
+plan-review-r2  2026-05-06T06:22:24Z
+planned  2026-05-06T06:22:34Z
 ```

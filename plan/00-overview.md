@@ -3,7 +3,7 @@
 ```yaml
 task: '4 (A) — mill-setup: --from-url for separate wiki repo'
 slug: mill-setup-wiki-url
-approved: false
+approved: true
 started: 20260506-060141
 parent: main
 root: ""
