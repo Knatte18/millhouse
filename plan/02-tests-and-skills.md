@@ -3,7 +3,7 @@
 ```yaml
 task: '5 (A) — mill-bg.py: project-lokal backgrounding'
 batch: tests-and-skills
-cards: 5
+cards: 3
 verify: python plugins/mill/unit_tests/test-millpy-bg.py
 depends-on: [core-script]
 ```
@@ -35,18 +35,18 @@ This batch adds the unit test suite for `millpy-bg.py` and updates the two SKILL
   - **(a) log path format:** Mock `subprocess.run` to return a fake git root (`/tmp/testrepo` or equivalent tempdir). Mock `Popen`. Call `_launcher_main(["--slug", "myslug", "--", "echo", "hi"])`. Capture stdout. Assert the output line matches `pid=<N> log=<path>` where path ends with `bg-<14-digit-timestamp>-myslug.log` under `.scratch/`.
   - **(b) .scratch/ created:** Same setup; assert `.scratch/` dir is created (pass a real tempdir as the fake git root; don't mock `Path.mkdir`).
   - **(c) stdout is exactly one line:** Assert the captured stdout has exactly one non-empty line and nothing extra.
-  - **(d) Windows flags:** When `os.name` is patched to `"nt"`, assert Popen is called with `creationflags` containing `DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP | CREATE_BREAKAWAY_FROM_JOB` (`0x01200208`).
+  - **(d) Windows flags:** When `os.name` is patched to `"nt"`, assert Popen is called with `creationflags` equal to `0x01000208` (`DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP | CREATE_BREAKAWAY_FROM_JOB` = `0x00000008 | 0x00000200 | 0x01000000`).
   - **(e) non-Windows flags:** When `os.name` is patched to `"posix"`, assert Popen is called with `start_new_session=True` and no `creationflags`.
-  - **(f) missing --slug exits 1:** Call `_launcher_main(["--", "echo", "hi"])` and assert return value is 1.
-  - **(g) missing -- exits 1:** Call `_launcher_main(["--slug", "x"])` and assert return value is 1.
+  - **(f) missing --slug returns 1:** Call `_launcher_main(["--", "echo", "hi"])` and assert the return value is 1 (note: `_launcher_main` returns `int`, it does not call `sys.exit`).
+  - **(g) missing -- returns 1:** Call `_launcher_main(["--slug", "x"])` and assert the return value is 1.
 
   **Worker mode tests** — run directly in a `tempfile.TemporaryDirectory`, no mocking:
 
   - **(h) output captured to log:** Call `_worker_main(["--log", str(log_path), "--", sys.executable, "-c", "print('hello')"])`. Assert log_path exists and its text contains `hello`.
   - **(i) sentinel written on success:** Assert log text ends with `[mill-bg] EXIT 0` (after stripping trailing whitespace).
   - **(j) non-zero exit code in sentinel:** Call with `sys.executable, "-c", "import sys; sys.exit(3)"`. Assert log text contains `[mill-bg] EXIT 3`.
-  - **(k) missing --log exits 1:** Call `_worker_main(["--", "echo", "hi"])` and assert return value is 1.
-  - **(l) missing command exits 1:** Call `_worker_main(["--log", str(log_path), "--"])` and assert return value is 1.
+  - **(k) missing --log returns 1:** Call `_worker_main(["--", "echo", "hi"])` and assert return value is 1 (`_worker_main` returns `int`, not `sys.exit`).
+  - **(l) missing command returns 1:** Call `_worker_main(["--log", str(log_path), "--"])` and assert return value is 1.
 
 - **Commit:** `test(mill-bg): add unit tests for millpy-bg launcher and worker modes`
 

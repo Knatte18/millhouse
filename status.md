@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planning
+phase: plan-fix-r1
 slug: mill-bg-helper
 branch: mill-bg-helper
 plan: plan
@@ -17,4 +17,6 @@ task_description: |
 discussing  '2026-05-06T06:29:05Z'
 discussed  2026-05-06T07:16:56Z
 planning  2026-05-06T08:17:02Z
+plan-review-r1  2026-05-06T08:25:38Z
+plan-fix-r1  2026-05-06T08:25:38Z
 ```

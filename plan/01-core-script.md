@@ -41,13 +41,15 @@ This batch creates the `millpy-bg.py` CLI script and wires it into the shortcut 
   - Windows (`os.name == "nt"`): `creationflags = DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP | CREATE_BREAKAWAY_FROM_JOB` where the three constants are `0x00000008`, `0x00000200`, `0x01000000`. Pass `stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL`.
   - Non-Windows: `start_new_session=True`. Pass `stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL`.
 
-  Print exactly `pid=<N> log=<path>` (one line, nothing else) to stdout and exit 0.
+  Print exactly `pid=<N> log=<path>` (one line, nothing else) to stdout and return 0. The entry point is named `_launcher_main(args: list[str]) -> int`; it returns 0 on success or 1 on error. The top-level `main(argv=None)` function calls `sys.exit(_launcher_main(...))` or `sys.exit(_worker_main(...))`.
 
   **Worker mode** (`"--_worker"` in `sys.argv` before any import — check this early and branch before importing anything):
 
-  Strip `"--_worker"` from the remaining argv. Locate `"--"` and split: everything before `"--"` is worker flags (`--log <abs-path>`); everything after is the command to run. Missing `--log` or empty command → print error to stderr and exit 1.
+  Strip `"--_worker"` from the remaining argv. Locate `"--"` and split: everything before `"--"` is worker flags (`--log <abs-path>`); everything after is the command to run. Missing `--log` or empty command → print error to stderr and return 1.
 
-  Open `log_path` for write in text mode with `encoding="utf-8"` and `buffering=1` (line-buffered). Run `subprocess.run(cmd, stdout=log_f, stderr=subprocess.STDOUT)`. After the subprocess returns, write `f"\n[mill-bg] EXIT {result.returncode}\n"` to the log file. Flush and exit 0.
+  Open `log_path` for write in text mode with `encoding="utf-8"` and `buffering=1` (line-buffered). Run `subprocess.run(cmd, stdout=log_f, stderr=subprocess.STDOUT)`. After the subprocess returns, write `f"\n[mill-bg] EXIT {result.returncode}\n"` to the log file. Flush and return 0. The entry point is named `_worker_main(args: list[str]) -> int`.
+
+  **Function signatures:** Both `_launcher_main(args: list[str]) -> int` and `_worker_main(args: list[str]) -> int` return `int` (0/1). They never call `sys.exit` themselves. The top-level `main(argv: list[str] | None = None) -> int` delegates to one of them and `if __name__ == "__main__": sys.exit(main())` handles process exit.
 
   **Import structure:** The worker-mode fast-path must execute before any import that requires mill modules. Use a top-of-file guard:
 
