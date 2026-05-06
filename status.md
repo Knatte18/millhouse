@@ -29,7 +29,9 @@ implementing  2026-05-06T08:44:43Z
 ```yaml
 batches:
   - name: core-script
-    state: pending
+    state: running
+    implementer_session: 0c705eb7-53d9-4495-baff-f4cf055657d1
+    start_sha: 830f618c81e449a5966b4ff8ed22ffea4d3333d1
   - name: tests-and-skills
     state: pending
 ```
