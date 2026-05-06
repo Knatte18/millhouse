@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-session-id-template
+phase: done
 slug: skill-api-audit
 branch: skill-api-audit
 plan: plan
@@ -26,6 +26,8 @@ reviewing-skill-md-fixes-r1  2026-05-06T11:52:10Z
 approved-skill-md-fixes  2026-05-06T11:53:24Z
 reviewing-session-id-template-r1  2026-05-06T11:56:12Z
 approved-session-id-template  2026-05-06T11:57:08Z
+holistic-approved  2026-05-06T11:58:47Z
+done  2026-05-06T11:58:47Z
 ```
 
 ## Batches
