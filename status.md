@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-batch-numbering
 slug: plan-template-quality
 branch: plan-template-quality
 plan: plan
@@ -26,6 +26,7 @@ plan-fix-r3  2026-05-06T16:02:07Z
 plan-review-r4  2026-05-06T16:24:33Z
 planned  2026-05-06T16:24:33Z
 implementing  2026-05-06T16:25:58Z
+approved-batch-numbering  2026-05-06T16:33:02Z
 ```
 
 ## Batches
@@ -33,7 +34,7 @@ implementing  2026-05-06T16:25:58Z
 ```yaml
 batches:
   - name: batch-numbering
-    state: running
+    state: approved
     implementer_session: 97507563-59bd-4b79-aaa0-581f9375293a
     start_sha: f5659c41f7887feb9fa7ccc869e8807d0fcd453a
   - name: field-rename
