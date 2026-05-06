@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planning
+phase: plan-fix-r1
 slug: wiki-enhance
 branch: wiki-enhance
 plan: plan
@@ -17,4 +17,6 @@ task_description: |
 discussing  '2026-05-06T13:07:39Z'
 discussed  2026-05-06T13:25:36Z
 planning  2026-05-06T13:28:37Z
+plan-review-r1  2026-05-06T13:34:56Z
+plan-fix-r1  2026-05-06T13:34:56Z
 ```
