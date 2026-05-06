@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-Cleanup guard
+phase: approved-PYTHONPATH documentation fix
 slug: mill-go-infra-fixes
 branch: mill-go-infra-fixes
 plan: plan
@@ -26,6 +26,8 @@ reviewing-Implement parser hardening-r1  2026-05-06T12:01:40Z
 approved-Implement parser hardening  2026-05-06T12:02:46Z
 reviewing-Cleanup guard-r1  2026-05-06T12:04:08Z
 approved-Cleanup guard  2026-05-06T12:04:42Z
+reviewing-PYTHONPATH documentation fix-r1  2026-05-06T12:06:29Z
+approved-PYTHONPATH documentation fix  2026-05-06T12:06:55Z
 ```
 
 ## Batches
@@ -48,9 +50,10 @@ batches:
     start_sha: 3106ab47b53039295f6c4677010c3063246888da
     review_file: C:\Code\millhouse\wts\mill-go-infra-fixes\reviews\20260506-120423-code-review-Cleanup guard-r1.md
   - name: PYTHONPATH documentation fix
-    state: running
+    state: approved
     implementer_session: 156208e7-e979-44b2-8da8-a5f02e8eec72
     start_sha: 9e19394729bd7fd2f1b6fd5013af8268f195aab6
+    review_file: C:\Code\millhouse\wts\mill-go-infra-fixes\reviews\20260506-120646-code-review-PYTHONPATH documentation fix-r1.md
   - name: Tests
     state: pending
 ```
