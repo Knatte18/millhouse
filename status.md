@@ -27,5 +27,7 @@ implementing  2026-05-06T16:22:25Z
 ```yaml
 batches:
   - name: 01-skill-fixes
-    state: pending
+    state: running
+    implementer_session: dd874d62-6997-4e2c-a67a-6f071ca5f194
+    start_sha: fc8f8f653cf7c5ab09d9bfc50069e9cecb17b860
 ```
