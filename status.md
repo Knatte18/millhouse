@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-guidance
+phase: done
 slug: plan-template-quality
 branch: plan-template-quality
 plan: plan
@@ -29,6 +29,8 @@ implementing  2026-05-06T16:25:58Z
 approved-batch-numbering  2026-05-06T16:33:02Z
 approved-field-rename  2026-05-06T16:47:09Z
 approved-guidance  2026-05-06T16:49:47Z
+holistic-approved  2026-05-06T16:54:10Z
+done  2026-05-06T16:54:10Z
 ```
 
 ## Batches
