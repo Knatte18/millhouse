@@ -108,6 +108,26 @@ def main() -> int:
         else:
             print(f"PASS: refreshed wrapper for {stale_script} has correct content")
 
+    # --- write_all against tempdir with legacy .py wrappers → .py files deleted, .ps1 files present ---
+    with tempfile.TemporaryDirectory() as tmpdir:
+        mill_dir = Path(tmpdir)
+        for script in SHORTCUT_SCRIPTS:
+            (mill_dir / f"{script}.py").write_text("# legacy wrapper\n", encoding="utf-8")
+        write_all(mill_dir)
+        legacy_errors = 0
+        for script in SHORTCUT_SCRIPTS:
+            if (mill_dir / f"{script}.py").exists():
+                print(f"FAIL: legacy .py wrapper still exists for {script}", file=sys.stderr)
+                legacy_errors += 1
+                errors += 1
+        for script in SHORTCUT_SCRIPTS:
+            if not (mill_dir / f"{script}.ps1").exists():
+                print(f"FAIL: PS1 wrapper missing after legacy cleanup for {script}", file=sys.stderr)
+                legacy_errors += 1
+                errors += 1
+        if legacy_errors == 0:
+            print(f"PASS: write_all deletes all {len(SHORTCUT_SCRIPTS)} legacy .py wrappers")
+
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)
         return 1
