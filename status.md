@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-python-backend
+phase: approved-config-docs
 slug: disable-per-batch-reviews
 branch: disable-per-batch-reviews
 plan: plan
@@ -22,6 +22,8 @@ planned  2026-05-06T12:31:58Z
 implementing  2026-05-06T12:38:52Z
 reviewing-python-backend-r1  2026-05-06T12:44:07Z
 approved-python-backend  2026-05-06T12:46:48Z
+reviewing-config-docs-r1  2026-05-06T12:49:59Z
+approved-config-docs  2026-05-06T12:51:20Z
 ```
 
 ## Batches
@@ -35,7 +37,9 @@ batches:
     review_round: 1
     review_file: reviews/20260506-124629-code-review-python-backend-r1.md
   - name: config-docs
-    state: running
+    state: approved
     implementer_session: fdbc3d64-7e50-4421-9ee3-9aca24d6511e
     start_sha: b5ee8c4c6e19b4c34fbaa17085d89d10007b56da
+    review_round: 1
+    review_file: reviews/20260506-125111-code-review-config-docs-r1.md
 ```
