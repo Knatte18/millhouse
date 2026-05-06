@@ -28,5 +28,7 @@ implementing  2026-05-06T11:44:27Z
 ```yaml
 batches:
   - name: wiki-config-check
-    state: pending
+    state: running
+    implementer_session: 1cced33b-88ea-4ebd-aec3-969c9a015abd
+    start_sha: 3d982344d1ff68642f12bdd3695b74c97c0d1a24
 ```
