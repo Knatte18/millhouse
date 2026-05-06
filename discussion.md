@@ -16,7 +16,7 @@ The plan went through three review rounds (r1–r3) and was approved each time. 
 ## Scope
 
 **In:**
-- New static check in `_plan_validate.py`: flag any batch that lists `wiki/config.yaml` as a `Modifies:` target. Check key: `wiki-config-paths-mutation`. Returns the same error dict shape as all other checks (`{check, batch, card, path, message}`).
+- New static check in `_plan_validate.py`: flag any batch that lists `wiki/config.yaml` as a `Modifies:` or `Creates:` target. Check key: `wiki-config-mutation`. Returns the same error dict shape as all other checks (`{check, batch, card, path, message}`).
 - New criterion in `plugins/mill/templates/review-plan-batch.md`: the LLM reviewer must flag any batch that modifies `wiki/config.yaml`, cross-checked against the task running under those same paths. BLOCKING severity.
 - New criterion in `plugins/mill/templates/review-plan-holistic.md`: same rule, evaluated holistically across all batches.
 - Unit tests in `plugins/mill/unit_tests/test-plan-validate.py`: clean and dirty fixtures for the new check.
@@ -79,11 +79,7 @@ def _check_<name>(...) -> list[dict]:
 
 The `run()` function at line 643 calls all check functions and collects results. The new check must be added to `run()` and to the module docstring's `Checks performed` list.
 
-The helper `_parse_modifies_only(batch_path: Path) -> set[str]` already exists and returns raw Modifies: tokens. A new helper `_parse_modifies_or_creates(batch_path)` (or reuse `parse_batch_refs` which covers all ref types) will give the union of Modifies: and Creates: tokens. Use `parse_batch_refs` from `_review_common` (already imported) to get all Modifies+Creates tokens, then filter for `wiki/config.yaml`. Do not introduce a new helper if `parse_batch_refs` covers the need.
-
-`parse_batch_refs` returns all Reads/Modifies/Creates tokens. The check should operate only on Modifies + Creates. Since `_parse_modifies_only` already exists, add a parallel `_parse_creates_only` or check `parse_batch_refs` minus Reads. The cleanest approach: define `_parse_writes_only(batch_path)` that returns `_parse_modifies_only(batch_path) | _parse_creates_only(batch_path)`, then use that in the new check.
-
-Actually the simplest approach: reuse `_parse_modifies_only` and add a `_parse_creates_only` (same pattern). Union them for the check.
+The helper `_parse_modifies_only(batch_path: Path) -> set[str]` already exists and returns raw Modifies: tokens. Add a parallel `_parse_creates_only(batch_path: Path) -> set[str]` using identical logic but restricted to `Creates:` headers. The new check unions both: `_parse_modifies_only(batch_path) | _parse_creates_only(batch_path)`, then checks if `"wiki/config.yaml"` is in the result. Do not use `parse_batch_refs` (returns Reads too) and do not add a third helper — two helpers + inline union is the right shape.
 
 ### `review-plan-batch.md` and `review-plan-holistic.md`
 
@@ -115,7 +111,7 @@ The new check needs `wiki_root` to resolve `wiki/config.yaml` paths (the token `
 ## Constraints
 
 - No new external dependencies.
-- The check key must be unique among all check keys in `_plan_validate.py`. Use `wiki-config-mutation`.
+- The check key must be unique among all check keys in `_plan_validate.py`. Use `wiki-config-mutation`. (Do not use `wiki-config-paths-mutation` — the check covers any wiki/config.yaml mutation, not only paths changes.)
 - Error dict shape must match exactly: `{check, batch, card, path, message}`. `card` is `None` for file-level checks.
 - `run-all.py` runs tests as subprocesses; new tests go in the existing `test-plan-validate.py` file.
 - Windows path separators — existing code uses `Path` throughout; no raw string slashes in new code.
@@ -127,7 +123,8 @@ The new check needs `wiki_root` to resolve `wiki/config.yaml` paths (the token `
 - `test_wiki_config_mutation_clean` — batch with `wiki/config.yaml` only in `Reads:` → zero errors.
 - `test_wiki_config_mutation_modifies` — batch with `wiki/config.yaml` in `Modifies:` → one `wiki-config-mutation` error.
 - `test_wiki_config_mutation_creates` — batch with `wiki/config.yaml` in `Creates:` → one `wiki-config-mutation` error.
-- `test_wiki_config_mutation_multi_batch` — two batches, each with `wiki/config.yaml` in `Modifies:` → two errors.
+- `test_wiki_config_mutation_multi_batch` — two batches, each with `wiki/config.yaml` in `Modifies:` → two errors (one per batch).
+- `test_wiki_config_mutation_modifies_and_creates` — one batch with `wiki/config.yaml` in both `Modifies:` and `Creates:` → one error (file-level check, one error per batch regardless of how many fields reference the token).
 - Verify error dict shape: `check == "wiki-config-mutation"`, `batch == <stem>`, `card is None`, `path == "wiki/config.yaml"`.
 
 No new integration tests needed — the check is purely structural (string matching on batch text).
@@ -139,4 +136,6 @@ Template changes have no automated tests (LLM output is not deterministic). The 
 - **Q:** What scope for the static check — narrow (halt-check co-presence), medium (any wiki/config.yaml Modifies), broad (any infrastructure path)? **A:** Medium — any `wiki/config.yaml` in `Modifies:` or `Creates:`.
 - **Q:** Programmatic check only, LLM rule only, or both? **A:** Both.
 - **Q:** Should the static check auto-pass if a bootstrap card is present? **A:** No — always block; `--skip-validate` for suppression; LLM validates the suppression.
-- **Q:** Should the detection cover only `Modifies:` or also `Creates:`? **A:** Both `Modifies:` and `Creates:`.
+- **Q:** Should the detection cover only `Modifies:` or also `Creates:`? **A:** Both. One error per batch maximum (deduplicated).
+- **Q:** What check key to use? **A:** `wiki-config-mutation` (not `wiki-config-paths-mutation` — the check covers any wiki/config.yaml write, not only paths changes).
+- **Q:** How to union Modifies+Creates? **A:** Add `_parse_creates_only` mirroring `_parse_modifies_only`; union inline. Do not use `parse_batch_refs`.
