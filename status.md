@@ -1,10 +1,10 @@
 # Status
 
 ```yaml
-phase: discussed
+phase: planning
 slug: plan-template-quality
 branch: plan-template-quality
-plan: null
+plan: plan
 parent: main
 task: 10 (B) — Plan-template format-forbedringer
 task_description: |
@@ -16,4 +16,5 @@ task_description: |
 ```text
 discussing  '2026-05-06T13:37:54Z'
 discussed  2026-05-06T13:50:43Z
+planning  2026-05-06T13:59:00Z
 ```
