@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: discussed
 slug: mill-setup-wiki-url
 branch: mill-setup-wiki-url
 plan: null
@@ -15,4 +15,5 @@ task_description: |
 
 ```text
 discussing  '2026-05-05T12:54:10Z'
+discussed  2026-05-06T05:56:20Z
 ```
