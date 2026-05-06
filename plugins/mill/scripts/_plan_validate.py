@@ -32,7 +32,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from _plan_dag import PlanDAGError, extract_batch_index
+from _plan_dag import PlanDAGError, extract_batch_index, resolve_deps_as_names
 from _review_common import (
     _load_root_from_overview,
     compute_creates_union,
@@ -390,17 +390,28 @@ def _check_depends_on_unknown(
             "message": f"batch index unparseable: {exc}",
         }]
     known_names = {entry["name"] for entry in batches}
+    known_numbers = {entry["number"] for entry in batches if "number" in entry}
     errors: list[dict] = []
     for entry in batches:
-        for dep_name in entry.get("depends-on", []):
-            if dep_name not in known_names:
-                errors.append({
-                    "check": "depends-on-unknown",
-                    "batch": entry["name"],
-                    "card": None,
-                    "path": None,
-                    "message": f"depends-on references unknown batch '{dep_name}'",
-                })
+        for dep in entry.get("depends-on", []):
+            if isinstance(dep, int):
+                if dep not in known_numbers:
+                    errors.append({
+                        "check": "depends-on-unknown",
+                        "batch": entry["name"],
+                        "card": None,
+                        "path": None,
+                        "message": f"depends-on references unknown batch number {dep}",
+                    })
+            else:
+                if dep not in known_names:
+                    errors.append({
+                        "check": "depends-on-unknown",
+                        "batch": entry["name"],
+                        "card": None,
+                        "path": None,
+                        "message": f"depends-on references unknown batch '{dep}'",
+                    })
     return errors
 
 
@@ -410,9 +421,7 @@ def _check_depends_on_unknown(
 
 def _compute_transitive_ancestors(batches: list[dict]) -> dict[str, set[str]]:
     """Return {batch_name: set_of_all_ancestor_names} via BFS for each batch."""
-    deps_map: dict[str, list[str]] = {
-        entry["name"]: list(entry.get("depends-on", [])) for entry in batches
-    }
+    deps_map = resolve_deps_as_names(batches)
     ancestors: dict[str, set[str]] = {}
     for entry in batches:
         name = entry["name"]
