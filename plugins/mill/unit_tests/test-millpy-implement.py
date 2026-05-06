@@ -334,8 +334,12 @@ class TestForwardOutput(unittest.TestCase):
 
     def _call(self, output: str) -> tuple[int, str]:
         buf = io.StringIO()
-        with unittest.mock.patch("sys.stdout", buf):
-            rc = millpy_implement._forward_output(output)
+        with unittest.mock.patch.object(
+            millpy_implement.subprocess, "run",
+            return_value=unittest.mock.MagicMock(returncode=1, stdout=""),
+        ):
+            with unittest.mock.patch("sys.stdout", buf):
+                rc = millpy_implement._forward_output(output, Path("/fake"))
         return rc, buf.getvalue()
 
     def test_fo_1_bare_json_on_last_line(self):
@@ -385,6 +389,37 @@ class TestForwardOutput(unittest.TestCase):
         rc, out = self._call(output)
         self.assertEqual(rc, 0)
         self.assertEqual(json.loads(out.strip()), json.loads(valid))
+
+    def test_fo_7_sha_normalized(self):
+        """git rev-parse success → commit_sha in output replaced with HEAD sha."""
+        sha = "a" * 40
+        buf = io.StringIO()
+        with unittest.mock.patch.object(
+            millpy_implement.subprocess, "run",
+            return_value=unittest.mock.MagicMock(returncode=0, stdout=sha + "\n"),
+        ):
+            with unittest.mock.patch("sys.stdout", buf):
+                rc = millpy_implement._forward_output(
+                    '{"status":"success","commit_sha":"abc1234","session_id":"x"}',
+                    Path("/fake"),
+                )
+        self.assertEqual(rc, 0)
+        self.assertEqual(json.loads(buf.getvalue().strip())["commit_sha"], sha)
+
+    def test_fo_8_sha_git_failure(self):
+        """git rev-parse failure → original commit_sha preserved in output."""
+        buf = io.StringIO()
+        with unittest.mock.patch.object(
+            millpy_implement.subprocess, "run",
+            return_value=unittest.mock.MagicMock(returncode=1, stdout=""),
+        ):
+            with unittest.mock.patch("sys.stdout", buf):
+                rc = millpy_implement._forward_output(
+                    '{"status":"success","commit_sha":"abc1234","session_id":"x"}',
+                    Path("/fake"),
+                )
+        self.assertEqual(rc, 0)
+        self.assertEqual(json.loads(buf.getvalue().strip())["commit_sha"], "abc1234")
 
 
 if __name__ == "__main__":
