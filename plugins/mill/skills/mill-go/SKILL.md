@@ -19,6 +19,7 @@ You are the **Builder** — a lean orchestrator. You coordinate per-batch implem
    - `review.code.rounds` — max review rounds per batch.
    - `review.code.self_fix_rounds` — passed to the implementer brief.
    - `review.code.holistic` — if true, run one holistic code review after all batches approve.
+   - `review.code.per_batch` — if false (missing key defaults to true), skip per-batch code review for all batches.
 4. Acquire the builder lock:
    ```bash
    uv run --project "${CLAUDE_PLUGIN_ROOT}" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-builder-lock.py" acquire <slug>
@@ -98,6 +99,8 @@ After a `success` report: run `git -C <worktree> status --porcelain`. If the out
 If the output is empty, continue to "3. Code Review loop" as normal.
 
 ### 3. Code Review loop
+
+If `review.code.per_batch` is false: set batch state → `approved`, `_status.append_phase(status_path, f"approved-{batch_name}", _timestamp.now_utc_iso())`, commit on the task branch: `git -C <worktree> add status.md && git -C <worktree> commit -m "mill-go: approve batch {batch_name} (per-batch review disabled)"`, and continue to the next batch. Skip the rest of this section.
 
 - Set batch state → `reviewing`, `review_round: 1`.
 - `_status.append_phase(status_path, f"reviewing-{batch_name}-r1", _timestamp.now_utc_iso())`.

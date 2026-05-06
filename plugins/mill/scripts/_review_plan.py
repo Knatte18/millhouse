@@ -273,7 +273,7 @@ def run(
     1. Resolve plan_dir and reviews_dir; discover round.
     2. Verify overview exists; collect batch files.
     3. Load reviewers; verify bulk mode.
-    4. Parallel per-batch reviews (skipped if batch_files is empty or holistic_only).
+    4. Parallel per-batch reviews (skipped if batch_files is empty, holistic_only, or batch reviewer is null).
        Mid-round resume fires holistic only when per-batch files exist but holistic is missing.
     5. Holistic review (skipped if cfg.review.plan.holistic is None or no_holistic).
     6. Aggregate and return ReviewResult (all-ERROR → REQUEST_CHANGES; no raise).
@@ -312,7 +312,18 @@ def run(
 
     # 3. Load reviewers (accept bulk or tool-use)
     batch_reviewer_name = cfg["review"]["plan"]["batch"]
-    batch_reviewer = load_reviewer(batch_reviewer_name)
+    if batch_reviewer_name is None:
+        if cfg["review"]["plan"].get("holistic") is None:
+            raise ReviewError(
+                "review.plan.batch is null and review.plan.holistic is also null"
+                " — at least one must be set"
+            )
+        holistic_only = True
+
+    if not holistic_only:
+        batch_reviewer = load_reviewer(batch_reviewer_name)
+    else:
+        batch_reviewer = None
 
     holistic_name = cfg["review"]["plan"].get("holistic")
     if holistic_name is not None:

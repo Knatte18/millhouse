@@ -111,13 +111,14 @@ review:
 
   plan:
     rounds: 3
-    batch: sonnetmax
+    batch: sonnetmax            # per-batch reviewer; MODE must be "bulk". null = skip per-batch (holistic must be set)
     holistic: sonnetmax
 
   code:
     rounds: 3
     reviewer: sonnetmax
     holistic: true
+    per_batch: true             # false = skip per-batch code review; holistic gate is independent
     self_fix_rounds: 2
 
 # ---------------------------------------------------------------------------
