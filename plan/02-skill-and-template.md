@@ -41,7 +41,7 @@ Batch-local decision: arg parsing is prose-level (token-walk in skill instructio
 - **Requirements:**
   Edit `plugins/mill/skills/mill-setup/SKILL.md` so the rendered skill supports the two new flags end-to-end. Every change below is in-place editing of the existing file — do not duplicate sections, do not move existing prose.
 
-  **Frontmatter.** Add an `argument-hint:` line to the existing YAML frontmatter (between `name:` and `description:` — match the position used by `codeguide-setup`'s SKILL.md):
+  **Frontmatter.** Add an `argument-hint:` line to the existing YAML frontmatter (after `description:` — match the position used by `codeguide-setup`'s SKILL.md):
 
   ```yaml
   argument-hint: "[--from-url <url>] [--branch <name>]"
@@ -97,7 +97,7 @@ Batch-local decision: arg parsing is prose-level (token-walk in skill instructio
   "
   ```
 
-  Show how to translate empty `<wiki-branch>` to Python `None` (e.g. ternary expression in the rendered command). Document that the helper raises `WikiSetupError` on dest-not-git-repo / URL-mismatch / branch-mismatch — the skill instructs the user (or agent) to halt and surface the message verbatim. Document that `WikiPushError` from the pull path means the wiki has unmerged local commits — instruct the user to inspect manually.
+  Show how to translate empty `<wiki-branch>` to Python `None` (e.g. ternary expression in the rendered command). Document that the helper raises `WikiSetupError` on dest-not-git-repo / URL-mismatch / branch-mismatch — the skill instructs the user (or agent) to halt and surface the message verbatim. Document that `WikiPushError` from the pull path means `git pull --ff-only` failed for any reason — network failure, credentials, non-fast-forward / local divergence — instruct the user to inspect and fix manually.
 
   Drop the existing prose for "If `<wiki-dir>` exists but is not a git repo" — that case is now handled by the helper's `WikiSetupError` and surfaces through the same agent-level halt.
 
@@ -120,6 +120,8 @@ Batch-local decision: arg parsing is prose-level (token-walk in skill instructio
     ```
 
     The agent fills `<repo-url-or-None>` and `<branch-or-None>` with `r'<value>'` when the CLI flag was given AND `None` when only the other flag was given. (Passing `None` for the omitted side preserves whatever value the file already has — partial-update semantics.)
+
+  - Document: `.millhouse/` does not exist on a fresh install at the time this phase fires (it is created in Phase 4 by `create_hub_links`). No separate `mkdir` is needed in this prose — `_config.set_local_wiki_overrides` from Card 3 calls `cfg_path.parent.mkdir(parents=True, exist_ok=True)` before writing.
 
   - Document: comments in `.millhouse/config.local.yaml` are lost when this phase rewrites the file. The file is gitignored and per-machine, so the trade-off is acceptable. `ruamel.yaml` is not used.
 
