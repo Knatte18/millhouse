@@ -33,7 +33,9 @@ implementing  2026-05-06T16:25:58Z
 ```yaml
 batches:
   - name: batch-numbering
-    state: pending
+    state: running
+    implementer_session: 97507563-59bd-4b79-aaa0-581f9375293a
+    start_sha: f5659c41f7887feb9fa7ccc869e8807d0fcd453a
   - name: field-rename
     state: pending
   - name: guidance
