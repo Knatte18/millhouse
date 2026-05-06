@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-tests-and-skill
+phase: done
 slug: dispatch-cli-and-resume
 branch: dispatch-cli-and-resume
 plan: plan
@@ -32,6 +32,8 @@ reviewing-implement-cli-r1  2026-05-06T06:54:02Z
 approved-implement-cli  2026-05-06T06:57:35Z
 reviewing-tests-and-skill-r1  2026-05-06T07:09:55Z
 approved-tests-and-skill  2026-05-06T07:15:58Z
+holistic-approved  2026-05-06T07:21:55Z
+done  2026-05-06T07:21:55Z
 ```
 
 ## Batches
