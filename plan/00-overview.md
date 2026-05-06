@@ -27,12 +27,12 @@ batches:
   - number: 3
     name: Teardown and migration
     file: 03-teardown-migration.md
-    depends-on: [2]
+    depends-on: [1, 2]
     verify: python plugins/mill/unit_tests/run-all.py
   - number: 4
     name: Skills and documentation
     file: 04-skills-docs.md
-    depends-on: [2]
+    depends-on: [1, 2]
     verify: null
 ```
 
@@ -67,6 +67,7 @@ batches:
 - `CLAUDE.md`
 - `plugins/mill/scripts/_gitignore.py`
 - `plugins/mill/scripts/_spawn_core.py`
+- `plugins/mill/scripts/_wiki.py`
 - `plugins/mill/scripts/millpy-claim.py`
 - `plugins/mill/scripts/millpy-cleanup.py`
 - `plugins/mill/scripts/millpy-migrate-layout.py`

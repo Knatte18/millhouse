@@ -22,8 +22,10 @@ Bootstrap justification for `wiki/config.yaml`: `_setup.create_hub_links` reads 
 - **Context:**
   - `plugins/mill/scripts/_setup.py`
   - `plugins/mill/scripts/_junction.py`
+  - `plugins/mill/scripts/_spawn_core.py`
 - **Edits:**
   - `wiki/config.yaml`
+  - `plugins/mill/scripts/_wiki.py`
 - **Creates:** none
 - **Deletes:** none
 - **Requirements:**
@@ -43,8 +45,31 @@ Bootstrap justification for `wiki/config.yaml`: `_setup.create_hub_links` reads 
      ```
      `.wiki` has no `<SLUG>` token so it is created in every worktree (hub and task). `.portals` requires `<SLUG>` so it is only created in task worktrees. `.active` is removed entirely from config; mill-spawn and mill-claim create it explicitly on the hub.
   3. Update the `junctions:` section comment block above the entries to reflect the new semantics. The key `.wiki` maps to `<WIKI_PATH>`; the key `.portals` maps to the wiki state dir for the current task.
-  4. Commit and push: call `_wiki.write_commit_push(wiki_path, ["config.yaml"], "config: new junction layout — .wiki, .portals (rename-hub-junctions)", slug="rename-hub-junctions")` where `wiki_path` is resolved via `_paths.resolve_wiki_path(_paths.resolve_git_root())`.
-- **Commit:** `config(wiki): replace .millhouse/wiki + .others + .active with .wiki + .portals`
+  4. Before committing the new config, strip old junctions from all active task worktrees so that `_junction.strip_all_in_worktree` (called by mill-cleanup/mill-merge) isn't left with stale junction names. For each worktree in `container_path / "wts"` that contains `.millhouse/active.slug.md` (i.e. active task worktrees), call:
+     ```python
+     old_junctions = {".millhouse/wiki": None, ".others": None, ".active": None}
+     for name in old_junctions:
+         p = wt_path / name
+         if p.exists() or os.path.lexists(str(p)):
+             _junction.remove(p)
+     ```
+     This is a best-effort strip of old-layout junctions before the shared config flips to new names.
+  5. In `plugins/mill/scripts/_wiki.py`, update `_JUNCTION_DEFAULTS` (line ~79) from:
+     ```python
+     _JUNCTION_DEFAULTS: dict[str, str] = {
+         ".millhouse/wiki": "<WIKI_PATH>",
+         ".active": "<WIKI_PATH>/active/<SLUG>/",
+     }
+     ```
+     to:
+     ```python
+     _JUNCTION_DEFAULTS: dict[str, str] = {
+         ".wiki": "<WIKI_PATH>",
+     }
+     ```
+     `.portals` is SLUG-scoped and must not be in defaults (it would be created with literal `<SLUG>` in the target when no slug is available).
+  6. Commit and push: call `_wiki.write_commit_push(wiki_path, ["config.yaml"], "config: new junction layout — .wiki, .portals (rename-hub-junctions)", slug="rename-hub-junctions")` where `wiki_path` is resolved via `_paths.resolve_wiki_path(_paths.resolve_git_root())`.
+- **Commit:** `config(wiki): replace .millhouse/wiki + .others + .active with .wiki + .portals; strip old junctions; update _JUNCTION_DEFAULTS`
 
 ### Card 4: `_spawn_core.py` — three targeted changes
 
@@ -181,12 +206,13 @@ Bootstrap justification for `wiki/config.yaml`: `_setup.create_hub_links` reads 
 - **Deletes:** none
 - **Requirements:**
   **test-millpy-spawn.py:**
-  1. In `test_smoke_import`: add `spawn_core_mod.write_wiki_active_task_md = MagicMock()` alongside the existing `spawn_core_mod.pick_worktree_color = MagicMock(...)` stub. This prevents an `AttributeError` when `millpy-spawn.py` is loaded (the module-level attribute lookup).
+  1. In `test_smoke_import`: add `spawn_core_mod.write_wiki_active_task_md = MagicMock()` alongside the existing `spawn_core_mod.pick_worktree_color = MagicMock(...)` stub. This prevents `AttributeError` in `main()` when the stub map replaces `_spawn_core` with a bare `MagicMock` that lacks the attribute (the call is inside `main()`, not at module level).
+  2. In `test_main_dry_run_prints_worktree_status_path`: update the expected path assertion from `str(Path("/fake/worktrees") / "my-task" / "status.md")` to `str(Path("/fake/worktrees") / "my-task" / "task" / "status.md")`. Card 5 req 5 changes the dry-run print to the `task/` path; the test must match.
 
   **test-millpy-claim.py:**
   2. In `test_main_happy_path` (the test with all helper call assertions): change the comment on line ~241 from `"Verify new signature: (slug, mill_dir, container_path)"` to `"Verify new signature: (slug, hub_root, container_path)"`. Change `expected_mill_dir = Path("/fake/repo") / ".millhouse"` to `expected_hub_root = Path("/fake/repo")`. Change the assertion `rac_call.args[1] != expected_mill_dir` to `rac_call.args[1] != expected_hub_root` and update the error message to name `hub_root`.
   3. Update all `sc.write_initial_status.return_value` mock values (lines ~211, ~331, ~396, ~450, ~510, ~570, ~625, ~681) from stale paths like `Path("/fake/wiki/active/my-task/status.md")` to `Path("/fake/repo/task/status.md")` (or `/fake/repo/src/Models/task/status.md` for the subfolder-install case). These are mock return values; updating them keeps tests readable and avoids confusion about the expected path.
-- **Commit:** `test(spawn/claim): update stubs and sig assertions for new _spawn_core API`
+- **Commit:** `test(spawn/claim): update stubs, dry-run path, and sig assertions for new _spawn_core API`
 
 ## Batch Tests
 

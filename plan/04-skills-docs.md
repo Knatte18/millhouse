@@ -6,7 +6,7 @@ batch: Skills and documentation
 number: 4
 cards: 5
 verify: null
-depends-on: [2]
+depends-on: [1, 2]
 ```
 
 ## Batch Scope
@@ -25,7 +25,7 @@ Update all SKILL.md files and `CLAUDE.md` to reflect the new junction names (`.w
 - **Creates:** none
 - **Deletes:** none
 - **Requirements:**
-  1. In the container layout diagram (the `text` block starting with `c:/Code/millhouse/`): remove the `.others -> ../wts/millhouse` entry; add `.wiki -> ../../wiki/` and `.portals -> ../../wiki/active/<slug>/` entries inside the `<slug>/` worktree section.
+  1. In the container layout diagram (the `text` block starting with `c:/Code/millhouse/`): in the `portals/` section, change the per-slug entry from `<slug>    -> ../wts/<slug>` to `<slug>    -> ../wiki/active/<slug>/` (portal junctions now point to the wiki state dir, not the worktree). Also update the `millhouse -> ../wts/millhouse` entry to reflect that the main worktree portal is unchanged. Add `.wiki -> ../../wiki/` and `.portals -> ../../wiki/active/<slug>/` entries inside the `<slug>/` worktree section (if not already present from the inner-worktree update).
   2. In the inner-worktree layout diagram (the block starting with `c:/Code/millhouse/wts/<slug>/`): add `task/` subdirectory with its contents (`status.md`, `discussion.md`, `plan/`, `reviews/`); update `.others` → `.portals`; update `.millhouse/wiki` → `.wiki`.
   3. In `## Constraints`: update "Junctions and hardlinks are NEVER used by scripts" to list `.wiki`, `.portals`, `.active` (replacing `.others/`, `.active/`, `.millhouse/wiki`).
   4. In `## Path invariants`:
@@ -48,15 +48,17 @@ Update all SKILL.md files and `CLAUDE.md` to reflect the new junction names (`.w
 - **Deletes:** none
 - **Requirements:**
   **mill-setup/SKILL.md:**
-  1. Phase 4.5b: replace the inline Python snippet that calls `_gitignore.upsert_split` with one that calls `_gitignore.upsert`:
+  1. Phase 4.5b: replace the inline Python snippet that calls `_gitignore.upsert_split` with one that calls `_gitignore.upsert`. Keep `_wiki.read_hardlinks` to cover hardlink names (e.g. `tasks.md`) which are regular files from git's perspective and must remain gitignored:
      ```python
      from pathlib import Path
-     import _gitignore
+     import _wiki, _gitignore
      hub_gi = Path(r'<hub-gitignore>').resolve()
-     changed = _gitignore.upsert(hub_gi, _gitignore.GLOB_ENTRIES)
+     wiki = Path(r'<wiki-dir>').resolve()
+     hardlink_names = [f"/{name}" for name in _wiki.read_hardlinks(wiki).keys()]
+     changed = _gitignore.upsert(hub_gi, _gitignore.GLOB_ENTRIES + hardlink_names)
      print('hub .gitignore:', 'updated' if changed else 'already up to date')
      ```
-     Note: the wiki hardlinks import and `anchored_entries` computation are removed — `upsert` uses only `GLOB_ENTRIES`. The hardlink names (e.g. `tasks.md`) are now covered by git's normal ignore rules or not needed in `.gitignore` (they are hardlinks, not junctions). Remove the `wiki` import and `hardlink_names` logic from the snippet.
+     Note: `_gitignore.upsert` is introduced by batch 01 (batch 04 depends on batch 01). The `ANCHORED_ENTRIES` constant and `upsert_split` function are gone; hardlink names are now passed as anchored patterns (`/tasks.md` etc.) directly in the combined list alongside `GLOB_ENTRIES`. Remove the `repo_gi` / two-path logic and the `repo_changed` / `hub_changed` variables.
   2. Update Phase 4.5b prose: replace "split across two files" description with single-file description. Remove "When different, glob entries go to repo_root_gitignore…" text.
   3. Update any junction diagram in the SKILL.md that references `.millhouse/wiki`, `.others`, or `.active`: replace with `.wiki` and `.portals`.
 
@@ -130,7 +132,7 @@ Update all SKILL.md files and `CLAUDE.md` to reflect the new junction names (`.w
   1. Step 5 (status_path line): `status_path` is `git_root / "status.md"` in the Entry section (line ~37) → `git_root / "task" / "status.md"`.
   2. Step 4 (Cleanup commit): `git rm -r reviews/ discussion.md plan/ status.md` → `git rm -r task/`. Single-path cleanup removes the entire `task/` directory which contains all four artefacts.
   3. Step 8 (Drop the worktree — description list inside `_worktree.remove_safe` prose): update junction names: `.millhouse/wiki`, `.others`, `.active` → `.wiki`, `.portals`. The inline Python snippet that calls `_worktree.remove_safe` does not change (it reads junctions from the wiki config dynamically).
-  4. Step 10 (Legacy wiki cleanup): this step is now the normal cleanup path (not legacy). Rename heading from "Legacy wiki cleanup (conditional)" to "Remove wiki active directory". Update prose: "If `wiki_path / 'active' / slug` exists" → always remove it (not conditional on "pre-migration clone"). This is the normal post-merge wiki state cleanup.
+  4. Step 10 (Legacy wiki cleanup): this step is now the normal cleanup path (not legacy). Rename heading from "Legacy wiki cleanup (conditional)" to "Remove wiki active directory". Update prose to show it is called unconditionally on merge, but preserve the existence guard around the `shutil.rmtree` call — e.g. `if (wiki_path / "active" / slug).exists(): shutil.rmtree(...)`. This is not conditional-legacy logic; it is a defensive guard against racing or partially-migrated states. The heading and surrounding prose should convey "always attempt" while the code uses the guard to avoid `FileNotFoundError`.
   5. Verify after teardown section: update paths listed (`<container>/portals/<slug>` etc.) to remain correct — the portals entry is still removed the same way.
   6. Board discipline section: `status.md`, `plan/`, `reviews/` → `task/status.md`, `task/plan/`, `task/reviews/`. Also update the cleanup commit note ("The cleanup commit removes it from the branch tip").
 - **Commit:** `docs(mill-merge): task/ cleanup; .wiki/.portals junction names; wiki active dir is normal not legacy`
