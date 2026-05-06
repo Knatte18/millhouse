@@ -426,7 +426,7 @@ def main() -> int:
         batch = Path(tmpdir) / "batch.md"
         batch.write_text(
             "### Card 1\n\n"
-            "- **Reads:**\n"
+            "- **Context:**\n"
             "  - `path/a`\n"
             "  - `path/b`\n"
             "- **Creates:** none\n",
@@ -444,20 +444,20 @@ def main() -> int:
         assert refs == [], f"Got {refs}"
         print("PASS: parse_batch_refs 'none' token filtered")
 
-    # parse_batch_refs: single-line legacy form returns both paths
+    # parse_batch_refs: single-line form returns both paths
     with tempfile.TemporaryDirectory() as tmpdir:
         batch = Path(tmpdir) / "batch.md"
-        batch.write_text("- **Reads:** `x`, `y`\n", encoding="utf-8")
+        batch.write_text("- **Context:** `x`, `y`\n", encoding="utf-8")
         refs = parse_batch_refs(batch)
         assert refs == ["x", "y"], f"Got {refs}"
-        print("PASS: parse_batch_refs single-line legacy form returns both paths")
+        print("PASS: parse_batch_refs single-line form returns both paths")
 
     # parse_batch_refs: mixed single-line and multi-line fields
     with tempfile.TemporaryDirectory() as tmpdir:
         batch = Path(tmpdir) / "batch.md"
         batch.write_text(
-            "- **Reads:** `a`\n"
-            "- **Modifies:**\n"
+            "- **Context:** `a`\n"
+            "- **Edits:**\n"
             "  - `b`\n"
             "  - `c`\n"
             "- **Creates:** none\n",
@@ -478,7 +478,7 @@ def main() -> int:
     # parse_batch_refs: case-variant none tokens filtered (Block B: NONE)
     with tempfile.TemporaryDirectory() as tmpdir:
         batch = Path(tmpdir) / "batch.md"
-        batch.write_text("- **Modifies:** NONE\n", encoding="utf-8")
+        batch.write_text("- **Edits:** NONE\n", encoding="utf-8")
         refs = parse_batch_refs(batch)
         assert refs == [], f"Got {refs}"
         print("PASS: parse_batch_refs 'NONE' (all caps) filtered")
@@ -498,28 +498,28 @@ def main() -> int:
     # parse_batch_refs: mixed token + lowercase none inline (Block D: regression pin)
     with tempfile.TemporaryDirectory() as tmpdir:
         batch = Path(tmpdir) / "batch.md"
-        batch.write_text("- **Reads:** `a`, none\n", encoding="utf-8")
+        batch.write_text("- **Context:** `a`, none\n", encoding="utf-8")
         refs = parse_batch_refs(batch)
         # backtick tokens win; "none" is comma-fallback and filtered
         assert refs == ["a"], f"Got {refs}"
         print("PASS: parse_batch_refs backtick tokens win; trailing 'none' filtered")
 
-    # parse_batch_refs: Deletes: field extracted alongside Reads/Modifies/Creates
+    # parse_batch_refs: Deletes: field extracted alongside Context/Edits/Creates
     with tempfile.TemporaryDirectory() as tmpdir:
         batch = Path(tmpdir) / "batch.md"
         batch.write_text(
-            "- **Reads:** `src/a.py`\n"
-            "- **Modifies:** `src/b.py`\n"
+            "- **Context:** `src/a.py`\n"
+            "- **Edits:** `src/b.py`\n"
             "- **Creates:** `src/c.py`\n"
             "- **Deletes:** `src/d.py`\n",
             encoding="utf-8",
         )
         refs = parse_batch_refs(batch)
-        assert "src/a.py" in refs, f"Reads token missing: {refs}"
-        assert "src/b.py" in refs, f"Modifies token missing: {refs}"
+        assert "src/a.py" in refs, f"Context token missing: {refs}"
+        assert "src/b.py" in refs, f"Edits token missing: {refs}"
         assert "src/c.py" in refs, f"Creates token missing: {refs}"
         assert "src/d.py" in refs, f"Deletes token missing: {refs}"
-        print("PASS: parse_batch_refs includes Deletes tokens alongside Reads/Modifies/Creates")
+        print("PASS: parse_batch_refs includes Deletes tokens alongside Context/Edits/Creates")
 
     # resolve_ref_paths: hit on disk
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -825,9 +825,9 @@ def main() -> int:
     with tempfile.TemporaryDirectory() as tmpdir:
         plan_dir = Path(tmpdir)
         (plan_dir / "01-setup.md").write_text(
-            "- **Reads:** `src/a.py`\n"
+            "- **Context:** `src/a.py`\n"
             "- **Deletes:** `old.py`\n"
-            "- **Reads:** `src/b.py`\n",
+            "- **Context:** `src/b.py`\n",
             encoding="utf-8",
         )
         result = compute_deletes_union(plan_dir)

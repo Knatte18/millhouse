@@ -18,7 +18,7 @@ Reviewer model: **<REVIEWER_MODEL>**. Batch: **<BATCH_NAME>**. Round **<ROUND>**
 - **Constraint violations** — BLOCKING.
 - **Alignment** — steps cover what the batch claims.
 - **Decision alignment** — steps implement `## Shared Decisions` + batch decisions.
-- **Completeness** — every card has `Creates`/`Modifies`, `Reads`, `Requirements`, `Commit`.
+- **Completeness** — every card has `Creates`/`Edits`, `Context`, `Requirements`, `Commit`.
 - **Sequencing** — steps in correct order; no forward dependencies.
 - **Batch isolation** — stands alone given `batch-depends`.
 - **Interface contracts** — APIs consumed by other batches are stable + clear.
@@ -28,11 +28,15 @@ Reviewer model: **<REVIEWER_MODEL>**. Batch: **<BATCH_NAME>**. Round **<ROUND>**
 - **Test coverage** — error paths + edges, not just happy paths.
 - **Language pitfalls** — BLOCKING if high-risk (Python: mutable defaults, import side-effects, Windows path sep, CRLF/LF).
 - **Integration test reachability** — BLOCKING if tests/integration files added but `verify:` doesn't run them.
-- **Self-applying layout change** — BLOCKING if any batch `Modifies:` or `Creates:` `wiki/config.yaml` (the shared config governing where task state lives) without an explicit bootstrap step for the currently-shipping task. A task running under the old layout cannot safely migrate its own state mid-flight.
-- **Explore targets** — purpose-driven; subset of `Reads:`.
+- **Self-applying layout change** — BLOCKING if any batch `Edits:` or `Creates:` `wiki/config.yaml` (the shared config governing where task state lives) without an explicit bootstrap step for the currently-shipping task. A task running under the old layout cannot safely migrate its own state mid-flight.
+- **Explore targets** — purpose-driven; subset of `Context:`.
 - **Step granularity** — small, reviewable scope per card.
+- **Requirements specificity** — BLOCKING if `Requirements:` uses vague prose ("refactor X", "update to use helper") without naming the specific function, class, or constant being changed. Stable identifiers are required.
 - **Atomicity** — each card self-contained.
-- **Reads field** — non-empty; lists every file the implementer reads.
+- **Context field** — non-empty; lists every file the implementer reads but does not edit. Edits: files are implicitly read — do not repeat them in Context:.
+- **Context completeness** — BLOCKING if `Requirements:` mentions a function, class, or constant from a file not listed in `Context:` or `Edits:`. The implementer may only read files in `Context:`; a missing entry means cold-start exploration.
+
+**Reviewer note:** plan-reviewer sees only `Context: ∪ Edits:` (existing files). `Creates:` targets are absent — do not flag missing `Creates:` files as NEED_CONTEXT.
 
 ## Output format — STRICT
 

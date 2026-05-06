@@ -27,21 +27,25 @@ def test_good_plan_accepted() -> None:
     good = """
 ```yaml
 batches:
-  - name: a
+  - number: 1
+    name: a
     file: 01-a.md
     depends-on: []
     verify: pytest tests/a -q
-  - name: b
+  - number: 2
+    name: b
     file: 02-b.md
-    depends-on: [a]
+    depends-on: [1]
     verify: null
-  - name: c
+  - number: 3
+    name: c
     file: 03-c.md
-    depends-on: [a]
+    depends-on: [1]
     verify: null
-  - name: d
+  - number: 4
+    name: d
     file: 04-d.md
-    depends-on: [b, c]
+    depends-on: [2, 3]
     verify: pytest tests/d -q
 ```
 """
@@ -174,6 +178,108 @@ def test_iter_batch_verifies() -> None:
         print(f"PASS: iter_batch_verifies yields non-null verifies in DAG order -- {commands}")
 
 
+def test_good_plan_with_numbers_accepted() -> None:
+    text = """
+```yaml
+batches:
+  - number: 1
+    name: a
+    file: 01-a.md
+    depends-on: []
+  - number: 2
+    name: b
+    file: 02-b.md
+    depends-on: [1]
+```
+"""
+    batches = extract_batch_index(text)
+    validate(batches, ["01-a.md", "02-b.md"])
+    order = topo_order(batches)
+    assert order == ["a", "b"], f"expected ['a', 'b'], got {order}"
+    print(f"PASS: good plan with numbers accepted -- {order}")
+
+
+def test_number_dep_unknown_rejected() -> None:
+    text = """
+```yaml
+batches:
+  - number: 1
+    name: a
+    file: 01-a.md
+    depends-on: [99]
+```
+"""
+    batches = extract_batch_index(text)
+    try:
+        validate(batches, ["01-a.md"])
+    except PlanDAGError as exc:
+        assert "unknown batch number 99" in str(exc), str(exc)
+        print(f"PASS: unknown number dep rejected -- {exc}")
+        return
+    raise AssertionError("unknown number dep was not rejected")
+
+
+def test_number_dep_duplicate_rejected() -> None:
+    text = """
+```yaml
+batches:
+  - number: 1
+    name: a
+    file: 01-a.md
+    depends-on: []
+  - number: 1
+    name: b
+    file: 02-b.md
+    depends-on: []
+```
+"""
+    batches = extract_batch_index(text)
+    try:
+        validate(batches, ["01-a.md", "02-b.md"])
+    except PlanDAGError as exc:
+        assert "Duplicate batch number" in str(exc), str(exc)
+        print(f"PASS: duplicate batch number rejected -- {exc}")
+        return
+    raise AssertionError("duplicate batch number was not rejected")
+
+
+def test_mixed_dep_type_rejected() -> None:
+    text = """
+```yaml
+batches:
+  - number: 1
+    name: a
+    file: 01-a.md
+    depends-on: [1, "other"]
+```
+"""
+    batches = extract_batch_index(text)
+    try:
+        validate(batches, ["01-a.md"])
+    except PlanDAGError as exc:
+        assert "mix" in str(exc).lower(), str(exc)
+        print(f"PASS: mixed dep types rejected -- {exc}")
+        return
+    raise AssertionError("mixed dep types were not rejected")
+
+
+def test_old_name_deps_still_valid() -> None:
+    text = """
+```yaml
+batches:
+  - name: a
+    file: 01-a.md
+    depends-on: []
+  - name: b
+    file: 02-b.md
+    depends-on: [a]
+```
+"""
+    batches = extract_batch_index(text)
+    validate(batches, ["01-a.md", "02-b.md"])
+    print("PASS: old string name deps still valid (backward compat)")
+
+
 def main() -> int:
     try:
         test_good_plan_accepted()
@@ -183,6 +289,11 @@ def main() -> int:
         test_missing_block_rejected()
         test_topo_order()
         test_iter_batch_verifies()
+        test_good_plan_with_numbers_accepted()
+        test_number_dep_unknown_rejected()
+        test_number_dep_duplicate_rejected()
+        test_mixed_dep_type_rejected()
+        test_old_name_deps_still_valid()
         print("All _plan_dag unit tests passed.")
         return 0
     except AssertionError as exc:

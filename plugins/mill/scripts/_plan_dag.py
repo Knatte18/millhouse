@@ -25,15 +25,20 @@ Public API:
 Structure expected inside the fenced block:
 
     batches:
-      - name: foundation
+      - number: NN
+        name: foundation
         file: 01-foundation.md
         depends-on: []
         verify: pytest tests/foundation/ -q
       - name: reviewers
         file: 02-reviewers.md
-        depends-on: [foundation]
+        depends-on: [1]
         verify: null
 
+``number:`` (optional positive int) labels the batch for human navigation.
+``depends-on:`` accepts a list of integers (referencing ``number:`` values)
+or strings (referencing ``name:`` values; legacy format). Mixed types in one
+list are rejected.
 ``verify:`` may be null. ``depends-on:`` may be ``[]``. ``name:`` and
 ``file:`` are required per batch.
 """
@@ -103,6 +108,7 @@ def _check_shapes(batches: list[dict]) -> None:
     here; that is a reviewer concern.
     """
     seen_names: set[str] = set()
+    seen_numbers: set[int] = set()
     for i, entry in enumerate(batches):
         if not isinstance(entry, dict):
             raise PlanDAGError(f"Batch entry #{i} is not a mapping: {entry!r}")
@@ -115,11 +121,58 @@ def _check_shapes(batches: list[dict]) -> None:
         file_ref = entry.get("file")
         if not isinstance(file_ref, str) or not file_ref:
             raise PlanDAGError(f"Batch {name!r} missing `file:` string")
+        number = entry.get("number")
+        if number is not None:
+            if not isinstance(number, int) or number < 1:
+                raise PlanDAGError(
+                    f"Batch {name!r} `number:` must be a positive integer, got {number!r}"
+                )
+            if number in seen_numbers:
+                raise PlanDAGError(f"Duplicate batch number: {number}")
+            seen_numbers.add(number)
         deps = entry.get("depends-on", [])
-        if not isinstance(deps, list) or not all(isinstance(d, str) for d in deps):
+        if not isinstance(deps, list):
             raise PlanDAGError(
                 f"Batch {name!r} `depends-on:` must be a list of strings"
             )
+        if deps:
+            types = {type(d) for d in deps}
+            if types - {int, str}:
+                raise PlanDAGError(
+                    f"Batch {name!r} `depends-on:` must be a list of strings"
+                )
+            if len(types) > 1:
+                raise PlanDAGError(
+                    f"Batch {name!r} `depends-on:` must not mix int and str entries"
+                )
+
+
+def resolve_deps_as_names(batches: list[dict]) -> dict[str, list[str]]:
+    """Map each batch's ``depends-on:`` entries to names.
+
+    Integer entries are translated to names via the ``number:`` field.
+    String entries pass through unchanged. Unresolved integer entries
+    (no matching ``number:`` in any batch) are silently dropped —
+    ``_check_deps`` is the authoritative check for dangling deps.
+    """
+    number_to_name = {
+        entry["number"]: entry["name"]
+        for entry in batches
+        if "number" in entry
+    }
+    result: dict[str, list[str]] = {}
+    for entry in batches:
+        name = entry["name"]
+        deps: list[str] = []
+        for dep in entry.get("depends-on", []):
+            if isinstance(dep, int):
+                resolved = number_to_name.get(dep)
+                if resolved is not None:
+                    deps.append(resolved)
+            else:
+                deps.append(dep)
+        result[name] = deps
+    return result
 
 
 def _check_file_refs(batches: list[dict], batch_files: list[str]) -> None:
@@ -148,14 +201,25 @@ def _check_file_refs(batches: list[dict], batch_files: list[str]) -> None:
 def _check_deps(batches: list[dict]) -> None:
     """Verify every ``depends-on:`` entry names a known batch."""
     names = {entry["name"] for entry in batches}
+    numbers = {entry["number"] for entry in batches if "number" in entry}
     for entry in batches:
         for dep in entry.get("depends-on", []):
-            if dep not in names:
-                raise PlanDAGError(
-                    f"Batch {entry['name']!r} depends on unknown batch {dep!r}"
-                )
-            if dep == entry["name"]:
-                raise PlanDAGError(f"Batch {entry['name']!r} depends on itself")
+            if isinstance(dep, int):
+                if dep not in numbers:
+                    raise PlanDAGError(
+                        f"Batch {entry['name']!r} depends on unknown batch number {dep}"
+                    )
+                if entry.get("number") == dep:
+                    raise PlanDAGError(
+                        f"Batch {entry['name']!r} (number {dep}) depends on itself"
+                    )
+            else:
+                if dep not in names:
+                    raise PlanDAGError(
+                        f"Batch {entry['name']!r} depends on unknown batch {dep!r}"
+                    )
+                if dep == entry["name"]:
+                    raise PlanDAGError(f"Batch {entry['name']!r} depends on itself")
 
 
 def _check_acyclic(batches: list[dict]) -> None:
@@ -167,10 +231,11 @@ def _check_acyclic(batches: list[dict]) -> None:
     """
     indegree: dict[str, int] = {entry["name"]: 0 for entry in batches}
     adj: dict[str, list[str]] = {entry["name"]: [] for entry in batches}
-    for entry in batches:
-        for dep in entry.get("depends-on", []):
-            adj[dep].append(entry["name"])
-            indegree[entry["name"]] += 1
+    deps_by_name = resolve_deps_as_names(batches)
+    for name, deps in deps_by_name.items():
+        for dep in deps:
+            adj[dep].append(name)
+            indegree[name] += 1
 
     queue = [n for n, d in indegree.items() if d == 0]
     visited = 0
@@ -273,10 +338,11 @@ def topo_order(batches: list[dict]) -> list[str]:
     """
     indegree: dict[str, int] = {entry["name"]: 0 for entry in batches}
     adj: dict[str, list[str]] = {entry["name"]: [] for entry in batches}
-    for entry in batches:
-        for dep in entry.get("depends-on", []):
-            adj[dep].append(entry["name"])
-            indegree[entry["name"]] += 1
+    deps_by_name = resolve_deps_as_names(batches)
+    for name, deps in deps_by_name.items():
+        for dep in deps:
+            adj[dep].append(name)
+            indegree[name] += 1
 
     # Stable-priority queue: preserve authored order among zero-indegree
     # nodes by draining them in batch-list sequence.
