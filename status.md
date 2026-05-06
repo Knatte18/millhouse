@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-bg-helper
 branch: mill-bg-helper
 plan: plan
@@ -21,4 +21,15 @@ plan-review-r1  2026-05-06T08:25:38Z
 plan-fix-r1  2026-05-06T08:25:38Z
 plan-review-r2  2026-05-06T08:30:43Z
 planned  2026-05-06T08:30:43Z
+implementing  2026-05-06T08:44:43Z
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: core-script
+    state: pending
+  - name: tests-and-skills
+    state: pending
 ```
