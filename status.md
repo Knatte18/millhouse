@@ -41,7 +41,9 @@ batches:
     review_round: 1
     review_file: reviews/20260506-134223-code-review-config-and-subprocess-r1.md
   - name: reviewer-effort-api
-    state: pending
+    state: running
+    implementer_session: 139f389e-04f7-4dad-aede-4ec85928ef3a
+    start_sha: c22e87ed936d3bf608d1ae4d587c4439a7056713
   - name: diff-scope-and-effort
     state: pending
   - name: test-diff-scope-and-effort
