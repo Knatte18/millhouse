@@ -87,14 +87,16 @@ For each round `N` from 1 to `review.code.rounds`:
 1. **Crash-recovery check.** Before firing the CLI, scan `Path("reviews").resolve()` for a file matching `*-code-review-{batch_name}-r{N}.md`. If found, treat it as this round's review file — parse its verdict from the fenced yaml block via `_review_common.parse_verdict(file_content)` and skip to step 4 below. This covers the case where mill-go crashed after writing the review but before committing state.
    `signature: _review_common.parse_verdict(text: str) -> str`
 
-2. Invoke:
+2. Background via `millpy-bg`:
 
    ```bash
-   uv run --project "${CLAUDE_PLUGIN_ROOT}" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-review-code.py" --batch <batch_name> \
-       [--extra-file <p> ...]
+   uv run --project "${CLAUDE_PLUGIN_ROOT}" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-bg.py" \
+       --slug review-code-<batch_name>-r<N> -- \
+       uv run --project "${CLAUDE_PLUGIN_ROOT}" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-review-code.py" \
+           --batch <batch_name> [--extra-file <p> ...]
    ```
 
-   The CLI prints one JSON line `{"type":"code","round":N,"verdict":"...","reviews":[...]}`.
+   Returns immediately with `pid=<N> log=<abs-path>`. Do **not** use `run_in_background: true`. Poll `cat <log-path>` until `[mill-bg] EXIT` appears, then extract the JSON summary line (last non-empty, non-sentinel line). The CLI prints one JSON line `{"type":"code","round":N,"verdict":"...","reviews":[...]}`.
 
 3. **Before reading any review file, load the `mill-receiving-review` skill.** Non-negotiable.
 
@@ -127,7 +129,7 @@ For each round `N` from 1 to `review.code.rounds`:
 
 After every batch in `order` has state `approved`, and only if `review.code.holistic: true`:
 
-- Invoke `uv run --project "${CLAUDE_PLUGIN_ROOT}" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-review-code.py"` (no `--batch`).
+- Background via `millpy-bg`: `uv run --project "${CLAUDE_PLUGIN_ROOT}" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-bg.py" --slug review-code-holistic-r<N> -- uv run --project "${CLAUDE_PLUGIN_ROOT}" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-review-code.py"` (no `--batch`). Poll and extract JSON as per the per-batch pattern above.
 - On `REQUEST_CHANGES`: apply the same review-fix loop as per-batch — track holistic state via `_status.append_phase` with dedicated holistic phase names (`"holistic-reviewing"`, `"holistic-fixing"`, `"holistic-approved"`) rather than `_status.set_batch_field` (which would raise `ValueError: Batch 'holistic' not present` since 'holistic' is never initialized via `init_batches`). Spawn the implementer via `_implementer_sonnet.run(prompt_text, session_id=new_uuid, resume=False, cwd=worktree_path)` with the review file pointer (no resume — holistic review's findings span multiple batches; the implementer receives whole-worktree access).
   `signature: _implementer_sonnet.run(prompt_text: str, *, session_id: str | None = None, resume: bool = False, cwd: Path | str | None = None, timeout: int = 1800) -> tuple[str, str]`
   Run the same review-fix loop until APPROVE or rounds-exhausted. On rounds-exhausted only, surface to user with the same blocked-batch halt prompt as per-batch flow.
