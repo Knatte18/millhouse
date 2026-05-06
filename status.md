@@ -41,7 +41,9 @@ batches:
     start_sha: 03a59a7b6822d19a50f99bad49a5020ad8f6dd6e
     review_file: C:\Code\millhouse\wts\mill-go-infra-fixes\reviews\20260506-120238-code-review-Implement parser hardening-r1.md
   - name: Cleanup guard
-    state: pending
+    state: running
+    implementer_session: 57375b2d-1e2f-4fde-b75c-dc4adc0c6e47
+    start_sha: 3106ab47b53039295f6c4677010c3063246888da
   - name: PYTHONPATH documentation fix
     state: pending
   - name: Tests
