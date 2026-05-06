@@ -35,27 +35,25 @@ Two tightly coupled changes: (1) add `bulk_files_with_diff` to `_review_common.p
   ) -> str:
   ```
 
+  **Imports:** Add `import subprocess` to `_review_common.py`'s import block (alongside the existing `importlib, re, sys, ...` stdlib imports). The module currently does not import `subprocess`; omitting this causes `NameError` at runtime.
+
   **Per-file logic** (iterate `file_paths` in order):
 
-  1. If the file does not exist on disk → skip with a stderr warning (identical to `bulk_files` behaviour). Use `f"[bulk_files_with_diff] warning: {p} not found, skipping"`.
+  1. Read the full file content (UTF-8, `errors="replace"`) into `file_content`. If the file does not exist → skip with a stderr warning (`f"[bulk_files_with_diff] warning: {p} not found, skipping"`) and continue to the next file.
 
-  2. Run `git -C <project_root> diff <start_sha>..HEAD -- <rel_path>` where `<rel_path>` is the file path made relative to `project_root` (use `p.relative_to(project_root)` — if the path is not under `project_root`, fall back to the absolute path as the argument to git). Use `subprocess.run` directly (not `_subprocess_util.run`) since we don't want the `[subprocess] spawn` breadcrumb noise filling up the review log for every file. Capture stdout and stderr. Do NOT use `check=True`.
+  2. Run `git -C <project_root> diff <start_sha>..HEAD -- <rel_path>` where `<rel_path>` is the file path made relative to `project_root` (use `p.relative_to(project_root)` — if the path is not under `project_root`, fall back to the absolute path as the argument to git). Use `subprocess.run` directly (not `_subprocess_util.run`) since we don't want the `[subprocess] spawn` breadcrumb noise filling up the review log for every file. Pass `text=True, encoding="utf-8", errors="replace"` and capture stdout and stderr. Do NOT use `check=True`.
 
-  3. If the subprocess returns non-zero exit code → warn to stderr with `f"[bulk_files_with_diff] warning: git diff failed for {p} (returncode={result.returncode}), using full file"` and append the full file content with `--- FILE: {p} ---` delimiter.
+  3. If the subprocess returns non-zero exit code → warn to stderr with `f"[bulk_files_with_diff] warning: git diff failed for {p} (returncode={result.returncode}), using full file"` and append `file_content` with `--- FILE: {p} ---` delimiter. Continue to next file.
 
   4. diff_text = the decoded stdout (already a string since `text=True`).
 
-  5. If `diff_text` is empty (file exists but was not changed between `start_sha` and HEAD) → append full file content with `--- FILE: {p} ---` delimiter. The reviewer needs the file content as context even if it wasn't changed in this batch.
+  5. If `diff_text` is empty (file exists but was not changed between `start_sha` and HEAD) → append `file_content` with `--- FILE: {p} ---` delimiter. The reviewer needs the file content as context even if it wasn't changed in this batch.
 
-  6. Read the full file content (UTF-8, `errors="replace"`).
+  6. If `len(diff_text) < threshold * len(file_content)` → append with `--- DIFF: {p} (from {start_sha[:8]}) ---` delimiter followed by `diff_text`.
 
-  7. If `len(diff_text) < threshold * len(file_content)` → append with `--- DIFF: {p} (from {start_sha[:8]}) ---` delimiter followed by `diff_text`.
-
-  8. Otherwise → append full file content with `--- FILE: {p} ---` delimiter.
+  7. Otherwise → append `file_content` with `--- FILE: {p} ---` delimiter.
 
   Join all parts with `"\n\n"` and return, same as `bulk_files`.
-
-  **Imports:** `subprocess` is already imported in `_review_common.py`. No new imports needed.
 
   **Public API docstring entry** (add to the module-level docstring list):
   ```

@@ -39,8 +39,8 @@ batches:
 
 ### Decision: effort-kwarg-default-none
 
-- **Decision:** `effort: str | None = None` is the default on all reviewer `run` signatures. `None` passes through to the LLM provider, which already treats `None` as "no `--effort` flag" (see `_llm_claude._build_argv`). The internal `"max"` default in each reviewer module is preserved for callers that pass nothing.
-- **Rationale:** Backwards-compatible: existing callers (plan review, discussion review) pass no `effort` and get current behaviour. Only `_review_code.run` passes a non-None value.
+- **Decision:** `effort: str | None = None` is the default on all reviewer `run` signatures. Inside each reviewer module, `None` is converted to `"max"` (the existing default) via `effort if effort is not None else "max"` before being passed to `run_bulk`/`run_tool_use`. This preserves the `--effort max` behaviour for all existing callers. Only `_review_code.run` passes an explicit non-None value for holistic calls.
+- **Rationale:** Backwards-compatible: existing callers (plan review, discussion review) pass no `effort` and get `--effort max` as before. The `None`-to-`"max"` conversion happens inside the reviewer module, not in the LLM provider.
 - **Applies to:** reviewer-effort-api, diff-scope-and-effort, test-diff-scope-and-effort
 
 ### Decision: no-new-files-except-tests
@@ -67,4 +67,3 @@ batches:
 - `plugins/mill/unit_tests/test-review-code-flow.py`
 - `plugins/mill/unit_tests/test-review-common.py`
 - `plugins/mill/unit_tests/test-reviewer-modules.py`
-- `wiki/config.yaml`
