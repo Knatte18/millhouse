@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: dispatch-cli-and-resume
 branch: dispatch-cli-and-resume
 plan: plan
@@ -27,4 +27,15 @@ plan-review-r4  2026-05-06T06:05:41Z
 plan-fix-r4  2026-05-06T06:05:41Z
 plan-review-r5  2026-05-06T06:29:55Z
 planned  2026-05-06T06:29:55Z
+implementing  2026-05-06T06:46:53Z
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: implement-cli
+    state: pending
+  - name: tests-and-skill
+    state: pending
 ```
