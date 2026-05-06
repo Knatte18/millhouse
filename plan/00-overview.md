@@ -3,7 +3,7 @@
 ```yaml
 task: '9 (B) — Wiki-enhance: small wiki cleanups'
 slug: wiki-enhance
-approved: false
+approved: true
 started: 20260506-132723
 parent: main
 root: ""
