@@ -27,6 +27,7 @@ Reviewer model: **<REVIEWER_MODEL>**. Round **<ROUND>**.
 - **Test coverage** — error paths + edges.
 - **Language pitfalls** — BLOCKING if high-risk (Python: mutable defaults, import side-effects, Windows path sep, CRLF/LF).
 - **Integration test reachability** — BLOCKING if integration tests added but `verify:` doesn't run them.
+- **Self-applying layout change** — BLOCKING if any batch `Modifies:` or `Creates:` `wiki/config.yaml` (the shared config governing where task state lives) without an explicit bootstrap step for the currently-shipping task. A task running under the old layout cannot safely migrate its own state mid-flight.
 - **Explore targets** — purpose-driven; subset of `Reads:`.
 - **Step granularity + atomicity** — each card small and self-contained.
 - **Reads field** — non-empty per card.
