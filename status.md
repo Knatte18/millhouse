@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-field-rename
+phase: approved-guidance
 slug: plan-template-quality
 branch: plan-template-quality
 plan: plan
@@ -28,6 +28,7 @@ planned  2026-05-06T16:24:33Z
 implementing  2026-05-06T16:25:58Z
 approved-batch-numbering  2026-05-06T16:33:02Z
 approved-field-rename  2026-05-06T16:47:09Z
+approved-guidance  2026-05-06T16:49:47Z
 ```
 
 ## Batches
@@ -43,7 +44,7 @@ batches:
     implementer_session: acf45020-d78a-42e8-b9f9-a26ae3922735
     start_sha: be30379c951f504e8ea699f4de4418e9a9ba2298
   - name: guidance
-    state: running
+    state: approved
     implementer_session: c189bb9b-55a0-42ba-8b05-1c638ac8928d
     start_sha: 5ee8bc027b1bf90c5316aba37c3a66c64db0e71b
 ```
