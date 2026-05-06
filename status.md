@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-review-r1
+phase: planned
 slug: mill-cleanliness-gate-fixes
 branch: mill-cleanliness-gate-fixes
 plan: plan
@@ -18,4 +18,5 @@ discussing  '2026-05-06T15:58:27Z'
 discussed  2026-05-06T16:10:01Z
 planning  2026-05-06T16:13:49Z
 plan-review-r1  2026-05-06T16:18:07Z
+planned  2026-05-06T16:18:17Z
 ```
