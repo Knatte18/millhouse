@@ -121,6 +121,10 @@ Three new responsibilities:
 3. After creating the task worktree, call hub-side `.active` update (see `_spawn_core.recreate_active_junction`) on the HUB root rather than on the new task worktree.
 4. In `create_hub_links` call on the new worktree — the new config.yaml no longer has `.active`, so it will not be created there. `.portals` will be created pointing to `wiki/active/<slug>/`.
 
+Mill-merge teardown: after removing `portals/<slug>` and `wiki/active/<slug>/`, also remove hub `.active` junction (`_junction.remove(hub_root / ".active")`). A dangling junction (pointing to removed targets) is confusing to operators; explicit removal is cleaner. The next spawn/claim recreates it.
+
+Mill-spawn creates `wiki/active/` with `mkdir(parents=True, exist_ok=True)` before creating the slug subdirectory — handles fresh wiki clones with no prior tasks.
+
 Also: `write_initial_status` path changes from `worktree_path / "status.md"` to `worktree_path / "task" / "status.md"` (see `_spawn_core`).
 
 ### `plugins/mill/scripts/_spawn_core.py`
@@ -145,6 +149,7 @@ Also: `write_initial_status` path changes from `worktree_path / "status.md"` to 
 ### `plugins/mill/scripts/millpy-cleanup.py`
 
 - Add cleanup of `wiki/active/<slug>/` directory for each slug being cleaned up (alongside the `portals/<slug>` entry removal).
+- Remove hub `.active` junction when the last portal entry is removed (i.e., no active tasks remain). If other tasks remain, leave `.active` pointing to whatever is current — the next claim/spawn will update it.
 - Update any docstrings/comments referencing `.others` or `.millhouse/wiki`.
 
 ### `plugins/mill/scripts/millpy-claim.py`
