@@ -43,8 +43,30 @@ Generate `_codeguide/` documentation for source files that don't have correspond
    - Small modules get a flat `_codeguide/modules/<Name>.md`
 
 9. **Create docs for new project (if no Overview exists):**
-   - Create `_codeguide/` and `_codeguide/modules/`
-   - Write `_codeguide/Overview.md` with: scope, negative boundaries, dependencies, module table with routing hints, cross-cutting patterns
+
+   **Placement rule** — determine `<placement_root>` using `mode` and `git_toplevel` from Step 1:
+   - `mode == "inline"` → `<placement_root> = <project_path>` (current behavior, unchanged).
+   - `mode == "sibling"` → `<placement_root> = <sibling_anchor> / <project_path>.relative_to(<git_toplevel>)`. This mirrors the layout that `resolve.py`'s `_sibling_walk` traverses. Do **not** collapse all projects under a flat `<sibling_anchor>/_codeguide/modules/`.
+
+   Multi-project monorepo example (sibling mode):
+
+   ```
+   Repo: c:/Code/acme/wts/acme/          (git toplevel)
+     src/csharp/Api/                      (project A)
+     src/csharp/Worker/                   (project B)
+
+   Sibling anchor: c:/Code/acme/codeguide/
+
+   Docs land at:
+     c:/Code/acme/codeguide/src/csharp/Api/_codeguide/
+     c:/Code/acme/codeguide/src/csharp/Worker/_codeguide/
+
+   NOT at:
+     c:/Code/acme/codeguide/_codeguide/modules/  ← wrong flat structure
+   ```
+
+   - Create `<placement_root>/_codeguide/` and `<placement_root>/_codeguide/modules/`
+   - Write `<placement_root>/_codeguide/Overview.md` with: scope, negative boundaries, dependencies, module table with routing hints, cross-cutting patterns
    - Include excluded modules (from cgexclude.md) in the Overview table with their description from cgexclude. Mark them as *excluded* in the Doc column. Do not add "not yet documented" placeholders.
    - Update the repo-level `_codeguide/Overview.md` project table
 
