@@ -83,7 +83,9 @@ def run(
     )
     if input is not None:
         popen_kwargs["stdin"] = subprocess.PIPE
-    if os.name != "nt":
+    if os.name == "nt":
+        popen_kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
+    else:
         popen_kwargs["start_new_session"] = True
 
     proc = subprocess.Popen(argv, **popen_kwargs)
