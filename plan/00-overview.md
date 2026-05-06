@@ -50,6 +50,9 @@ batches:
 
 ## All Files Touched
 
+- `plan/01-batch-numbering.md`
+- `plan/02-field-rename.md`
+- `plan/03-guidance.md`
 - `plugins/mill/scripts/_plan_dag.py`
 - `plugins/mill/scripts/_plan_validate.py`
 - `plugins/mill/scripts/_review_code.py`
