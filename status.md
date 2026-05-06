@@ -35,5 +35,7 @@ batches:
     review_round: 1
     review_file: reviews/20260506-124629-code-review-python-backend-r1.md
   - name: config-docs
-    state: pending
+    state: running
+    implementer_session: fdbc3d64-7e50-4421-9ee3-9aca24d6511e
+    start_sha: b5ee8c4c6e19b4c34fbaa17085d89d10007b56da
 ```
