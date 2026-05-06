@@ -39,6 +39,7 @@ SHORTCUT_SCRIPTS: list[str] = [
     "millpy-vscode",
     "millpy-worktree",
     "millpy-fetch-issues",
+    "millpy-bg",
 ]
 
 # Template path relative to this file's package root.

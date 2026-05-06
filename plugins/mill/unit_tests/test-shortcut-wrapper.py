@@ -32,7 +32,7 @@ def main() -> int:
     else:
         print("PASS: rendered template contains uv run")
 
-    # --- write_all against empty tempdir creates all 13 PS1 files ---
+    # --- write_all against empty tempdir creates one PS1 file per SHORTCUT_SCRIPTS entry ---
     with tempfile.TemporaryDirectory() as tmpdir:
         mill_dir = Path(tmpdir)
         written = write_all(mill_dir)
