@@ -3,7 +3,7 @@
 ```yaml
 task: '11 (B) — Review-code: configurable holistic effort + diff-scoping via start_sha'
 slug: review-code-enhancements
-approved: false
+approved: true
 started: 20260506-125306
 parent: main
 root: ""
