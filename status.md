@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-implement-cli
+phase: approved-tests-and-skill
 slug: dispatch-cli-and-resume
 branch: dispatch-cli-and-resume
 plan: plan
@@ -30,6 +30,8 @@ planned  2026-05-06T06:29:55Z
 implementing  2026-05-06T06:46:53Z
 reviewing-implement-cli-r1  2026-05-06T06:54:02Z
 approved-implement-cli  2026-05-06T06:57:35Z
+reviewing-tests-and-skill-r1  2026-05-06T07:09:55Z
+approved-tests-and-skill  2026-05-06T07:15:58Z
 ```
 
 ## Batches
@@ -44,7 +46,10 @@ batches:
     review_round: 1
     review_file: reviews/20260506-065721-code-review-implement-cli-r1.md
   - name: tests-and-skill
-    state: running
+    state: approved
     implementer_session: 9886f8a5-4fb1-485c-95f8-bc196d6453ba
     start_sha: b88f3c0677fdd7b4eb5ededee59f69923259d09a
+    commit_sha: 203f884019101a52ed6572d37ebde4e990beac6e
+    review_round: 1
+    review_file: reviews/20260506-071543-code-review-tests-and-skill-r1.md
 ```
