@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: discussed
 slug: mill-merge-teardown-fix
 branch: mill-merge-teardown-fix
 plan: null
@@ -15,4 +15,5 @@ task_description: |
 
 ```text
 discussing  '2026-05-06T12:36:31Z'
+discussed  2026-05-06T12:50:42Z
 ```
