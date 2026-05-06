@@ -86,7 +86,7 @@ Already correct. `acquire(mill_dir, slug)` handles:
 - Different slug, stale → overwrite.
 - Different slug, fresh → raise `LockBusy`.
 
-`millpy-builder-lock.py` is a thin CLI shell: `acquire` exits 0 on success, 1 with a message on `LockBusy`; `release` is idempotent; `read` prints YAML or exits 1 if free.
+`millpy-builder-lock.py` is a thin CLI shell: `acquire` exits 0 on success, 1 with a message on `LockBusy`; `release` is idempotent; `read` prints YAML or exits 1 if free. The CLI derives `mill_dir = Path.cwd() / '.millhouse'`; it must be invoked from the worktree root, consistent with every other millpy script.
 
 ### `millpy-implement.py` — `_forward_output()`
 Location: `plugins/mill/scripts/millpy-implement.py` lines 42–58
@@ -112,7 +112,7 @@ The implementer report is always a flat JSON object — no nested braces. The re
 ### `implementer-brief.md` Report section
 Location: `plugins/mill/templates/implementer-brief.md` lines 63–84
 
-The JSON examples are in fenced blocks for readability. After the block, add a bold note:
+The JSON examples are in fenced blocks for readability. Add a bold warning after each of the two fenced JSON blocks (success and stuck):
 > **Do not wrap the JSON in a code block. Output it as a bare line — no backticks, no fence. Anything other than a bare JSON line is treated as `stuck_type: logic`.**
 
 ### mill-go SKILL.md — cleanliness gate placement
