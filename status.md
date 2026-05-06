@@ -37,5 +37,7 @@ batches:
     review_round: 1
     review_file: reviews/20260506-115309-code-review-skill-md-fixes-r1.md
   - name: session-id-template
-    state: pending
+    state: running
+    implementer_session: 07f47bdc-7cbb-428c-a5e0-9d9318b897e0
+    start_sha: 62fe2ae7cadd6b8fc16e4814a42c2ed7993860ff
 ```
