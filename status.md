@@ -29,7 +29,9 @@ implementing  2026-05-06T06:47:45Z
 ```yaml
 batches:
   - name: helpers
-    state: pending
+    state: running
+    implementer_session: d0ccaa23-f77b-4d5a-beea-9d97771b586d
+    start_sha: 0ca9674afedb95cff475a1cd5b57c5442ad399c2
   - name: skill-and-template
     state: pending
 ```
