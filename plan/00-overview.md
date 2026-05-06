@@ -3,7 +3,7 @@
 ```yaml
 task: 10 (B) — Plan-template format-forbedringer
 slug: plan-template-quality
-approved: false
+approved: true
 started: 20260506T135532Z
 parent: main
 root: ""
