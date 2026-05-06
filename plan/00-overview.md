@@ -3,7 +3,7 @@
 ```yaml
 task: '14 (D) — Holistic-fix agent for cross-batch funn (conflicts with 15)'
 slug: holistic-fix-agent
-approved: false
+approved: true
 started: '20260506-171853'
 parent: main
 root: ""
