@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-skill-and-template
+phase: done
 slug: mill-setup-wiki-url
 branch: mill-setup-wiki-url
 plan: plan
@@ -26,6 +26,9 @@ reviewing-helpers-r1  2026-05-06T06:56:06Z
 approved-helpers  2026-05-06T06:59:03Z
 reviewing-skill-and-template-r1  2026-05-06T07:07:40Z
 approved-skill-and-template  2026-05-06T07:10:33Z
+holistic-reviewing  2026-05-06T07:10:45Z
+holistic-approved  2026-05-06T07:14:50Z
+done  2026-05-06T07:14:50Z
 ```
 
 ## Batches
