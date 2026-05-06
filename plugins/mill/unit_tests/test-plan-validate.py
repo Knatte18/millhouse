@@ -871,6 +871,171 @@ def test_reads_token_in_creates_union_suppressed() -> int:
         return 0
 
 
+def test_wiki_config_mutation_clean() -> int:
+    """wiki/config.yaml only in Reads: (not Modifies/Creates) → zero wiki-config-mutation errors."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        wiki_dir = project_root / "wiki"
+        wiki_dir.mkdir()
+        (wiki_dir / "config.yaml").write_text("# placeholder", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file("alpha", reads=["wiki/config.yaml"])
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "wiki-config-mutation"]
+        try:
+            assert len(check_errors) == 0, (
+                f"expected 0 wiki-config-mutation errors, got: {check_errors}"
+            )
+            print("PASS test_wiki_config_mutation_clean")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_wiki_config_mutation_clean: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_wiki_config_mutation_modifies() -> int:
+    """wiki/config.yaml in Modifies: → exactly one wiki-config-mutation error with correct shape."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        wiki_dir = project_root / "wiki"
+        wiki_dir.mkdir()
+        (wiki_dir / "config.yaml").write_text("# placeholder", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file("alpha", modifies=["wiki/config.yaml"])
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "wiki-config-mutation"]
+        try:
+            assert len(check_errors) == 1, (
+                f"expected 1 wiki-config-mutation error, got: {check_errors}"
+            )
+            e = check_errors[0]
+            assert e["check"] == "wiki-config-mutation", f"wrong check: {e['check']!r}"
+            assert e["batch"] == "01-alpha", f"wrong batch: {e['batch']!r}"
+            assert e["card"] is None, f"card should be None, got: {e['card']!r}"
+            assert e["path"] == "wiki/config.yaml", f"wrong path: {e['path']!r}"
+            print("PASS test_wiki_config_mutation_modifies")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_wiki_config_mutation_modifies: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_wiki_config_mutation_creates() -> int:
+    """wiki/config.yaml in Creates: → exactly one wiki-config-mutation error with correct shape."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file("alpha", creates=["wiki/config.yaml"])
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "wiki-config-mutation"]
+        try:
+            assert len(check_errors) == 1, (
+                f"expected 1 wiki-config-mutation error, got: {check_errors}"
+            )
+            e = check_errors[0]
+            assert e["check"] == "wiki-config-mutation", f"wrong check: {e['check']!r}"
+            assert e["batch"] == "01-alpha", f"wrong batch: {e['batch']!r}"
+            assert e["card"] is None, f"card should be None, got: {e['card']!r}"
+            assert e["path"] == "wiki/config.yaml", f"wrong path: {e['path']!r}"
+            print("PASS test_wiki_config_mutation_creates")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_wiki_config_mutation_creates: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_wiki_config_mutation_multi_batch() -> int:
+    """Two batches each with wiki/config.yaml in Modifies: → exactly two wiki-config-mutation errors."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        wiki_dir = project_root / "wiki"
+        wiki_dir.mkdir()
+        (wiki_dir / "config.yaml").write_text("# placeholder", encoding="utf-8")
+
+        overview = _make_overview([
+            {"name": "alpha", "file": "01-alpha.md", "depends-on": []},
+            {"name": "beta",  "file": "02-beta.md",  "depends-on": []},
+        ])
+        batch_a = _make_batch_file("alpha", card_num=1, modifies=["wiki/config.yaml"])
+        batch_b = _make_batch_file("beta",  card_num=2, modifies=["wiki/config.yaml"])
+        _write_plan(plan_dir, overview, [
+            ("01-alpha.md", batch_a),
+            ("02-beta.md",  batch_b),
+        ])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "wiki-config-mutation"]
+        try:
+            assert len(check_errors) == 2, (
+                f"expected 2 wiki-config-mutation errors (one per batch), got: {check_errors}"
+            )
+            batches = {e["batch"] for e in check_errors}
+            assert "01-alpha" in batches, f"expected 01-alpha in {batches}"
+            assert "02-beta" in batches, f"expected 02-beta in {batches}"
+            print("PASS test_wiki_config_mutation_multi_batch")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_wiki_config_mutation_multi_batch: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_wiki_config_mutation_modifies_and_creates() -> int:
+    """wiki/config.yaml in both Modifies: and Creates: → exactly one error (deduplicated)."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        wiki_dir = project_root / "wiki"
+        wiki_dir.mkdir()
+        (wiki_dir / "config.yaml").write_text("# placeholder", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            modifies=["wiki/config.yaml"],
+            creates=["wiki/config.yaml"],
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "wiki-config-mutation"]
+        try:
+            assert len(check_errors) == 1, (
+                f"expected 1 wiki-config-mutation error (deduplicated), got: {check_errors}"
+            )
+            print("PASS test_wiki_config_mutation_modifies_and_creates")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_wiki_config_mutation_modifies_and_creates: {exc}", file=sys.stderr)
+            return 1
+
+
 def test_reads_token_missing_both_unions_dirty() -> int:
     """(g) Reads: token missing on disk + in neither union → non-existent-path error."""
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -932,6 +1097,12 @@ def main() -> int:
         test_reads_token_in_deletes_union_clean,
         test_reads_token_in_creates_union_suppressed,
         test_reads_token_missing_both_unions_dirty,
+
+        test_wiki_config_mutation_clean,
+        test_wiki_config_mutation_modifies,
+        test_wiki_config_mutation_creates,
+        test_wiki_config_mutation_multi_batch,
+        test_wiki_config_mutation_modifies_and_creates,
     ]
 
     errors = 0
