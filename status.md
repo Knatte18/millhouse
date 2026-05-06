@@ -1,10 +1,10 @@
 # Status
 
 ```yaml
-phase: discussed
+phase: planning
 slug: mill-go-infra-fixes
 branch: mill-go-infra-fixes
-plan: null
+plan: plan
 parent: main
 task: 19 (A) — mill-go + scripts infra fixes
 task_description: |
@@ -16,4 +16,5 @@ task_description: |
 ```text
 discussing  '2026-05-06T10:43:10Z'
 discussed  2026-05-06T11:33:38Z
+planning  2026-05-06T11:41:43Z
 ```
