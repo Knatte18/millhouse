@@ -27,5 +27,7 @@ implementing  2026-05-06T16:34:13Z
 ```yaml
 batches:
   - name: mill-plan SKILL.md fixes
-    state: pending
+    state: running
+    implementer_session: c411f6d7-016b-43a2-b317-33bb942b0268
+    start_sha: 1b79363156b88e35b158a115071a9cd71715c998
 ```
