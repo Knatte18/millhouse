@@ -16,9 +16,9 @@ This batch adds stable-identifier and allowlist guidance for mill-plan. It stren
 
 ### Card 13: Strengthen `plan-batch.md` template — Requirements and Context guidance
 
-- **Reads:**
+- **Context:**
   - `plugins/mill/templates/plan-batch.md`
-- **Modifies:**
+- **Edits:**
   - `plugins/mill/templates/plan-batch.md`
 - **Creates:** none
 - **Deletes:** none
@@ -39,10 +39,10 @@ This batch adds stable-identifier and allowlist guidance for mill-plan. It stren
 
 ### Card 14: Add BLOCKING criteria to plan-review templates
 
-- **Reads:**
+- **Context:**
   - `plugins/mill/templates/review-plan-batch.md`
   - `plugins/mill/templates/review-plan-holistic.md`
-- **Modifies:**
+- **Edits:**
   - `plugins/mill/templates/review-plan-batch.md`
   - `plugins/mill/templates/review-plan-holistic.md`
 - **Creates:** none
@@ -63,9 +63,9 @@ This batch adds stable-identifier and allowlist guidance for mill-plan. It stren
 
 ### Card 15: Strengthen `mill-plan/SKILL.md` — guidance section
 
-- **Reads:**
+- **Context:**
   - `plugins/mill/skills/mill-plan/SKILL.md`
-- **Modifies:**
+- **Edits:**
   - `plugins/mill/skills/mill-plan/SKILL.md`
 - **Creates:** none
 - **Deletes:** none

@@ -16,9 +16,9 @@ This batch adds `number:` as a first-class field on plan batches and switches `d
 
 ### Card 1: Update `_plan_dag.py` for integer `depends-on` and `number:` field
 
-- **Reads:**
+- **Context:**
   - `plugins/mill/scripts/_plan_dag.py`
-- **Modifies:**
+- **Edits:**
   - `plugins/mill/scripts/_plan_dag.py`
 - **Creates:** none
 - **Deletes:** none
@@ -44,10 +44,10 @@ This batch adds `number:` as a first-class field on plan batches and switches `d
 
 ### Card 2: Update `_plan_validate.py` for integer `depends-on`
 
-- **Reads:**
+- **Context:**
   - `plugins/mill/scripts/_plan_validate.py`
   - `plugins/mill/scripts/_plan_dag.py`
-- **Modifies:**
+- **Edits:**
   - `plugins/mill/scripts/_plan_validate.py`
 - **Creates:** none
 - **Deletes:** none
@@ -61,10 +61,10 @@ This batch adds `number:` as a first-class field on plan batches and switches `d
 
 ### Card 3: Update `plan-overview.md` and `plan-batch.md` templates
 
-- **Reads:**
+- **Context:**
   - `plugins/mill/templates/plan-overview.md`
   - `plugins/mill/templates/plan-batch.md`
-- **Modifies:**
+- **Edits:**
   - `plugins/mill/templates/plan-overview.md`
   - `plugins/mill/templates/plan-batch.md`
 - **Creates:** none
@@ -87,9 +87,9 @@ This batch adds `number:` as a first-class field on plan batches and switches `d
 
 ### Card 4: Update `mill-plan/SKILL.md` for batch numbering
 
-- **Reads:**
+- **Context:**
   - `plugins/mill/skills/mill-plan/SKILL.md`
-- **Modifies:**
+- **Edits:**
   - `plugins/mill/skills/mill-plan/SKILL.md`
 - **Creates:** none
 - **Deletes:** none
@@ -104,10 +104,10 @@ This batch adds `number:` as a first-class field on plan batches and switches `d
 
 ### Card 5: Update `test-plan-dag.py` with number-based tests
 
-- **Reads:**
+- **Context:**
   - `plugins/mill/unit_tests/test-plan-dag.py`
   - `plugins/mill/scripts/_plan_dag.py`
-- **Modifies:**
+- **Edits:**
   - `plugins/mill/unit_tests/test-plan-dag.py`
 - **Creates:** none
 - **Deletes:** none
@@ -130,10 +130,10 @@ This batch adds `number:` as a first-class field on plan batches and switches `d
 
 ### Card 6: Update `test-plan-validate.py` for integer depends-on
 
-- **Reads:**
+- **Context:**
   - `plugins/mill/unit_tests/test-plan-validate.py`
   - `plugins/mill/scripts/_plan_validate.py`
-- **Modifies:**
+- **Edits:**
   - `plugins/mill/unit_tests/test-plan-validate.py`
 - **Creates:** none
 - **Deletes:** none

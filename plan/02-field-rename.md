@@ -16,11 +16,11 @@ This batch renames `Reads:` → `Context:` and `Modifies:` → `Edits:` everywhe
 
 ### Card 7: Rename in `_review_common.py`, `_review_plan.py`, `_review_code.py`
 
-- **Reads:**
+- **Context:**
   - `plugins/mill/scripts/_review_common.py`
   - `plugins/mill/scripts/_review_plan.py`
   - `plugins/mill/scripts/_review_code.py`
-- **Modifies:**
+- **Edits:**
   - `plugins/mill/scripts/_review_common.py`
   - `plugins/mill/scripts/_review_plan.py`
   - `plugins/mill/scripts/_review_code.py`
@@ -43,9 +43,9 @@ This batch renames `Reads:` → `Context:` and `Modifies:` → `Edits:` everywhe
 
 ### Card 8: Rename in `_plan_validate.py`
 
-- **Reads:**
+- **Context:**
   - `plugins/mill/scripts/_plan_validate.py`
-- **Modifies:**
+- **Edits:**
   - `plugins/mill/scripts/_plan_validate.py`
 - **Creates:** none
 - **Deletes:** none
@@ -76,14 +76,14 @@ This batch renames `Reads:` → `Context:` and `Modifies:` → `Edits:` everywhe
 
 ### Card 9: Rename in all six templates
 
-- **Reads:**
+- **Context:**
   - `plugins/mill/templates/plan-batch.md`
   - `plugins/mill/templates/plan-overview.md`
   - `plugins/mill/templates/review-plan-batch.md`
   - `plugins/mill/templates/review-plan-holistic.md`
   - `plugins/mill/templates/review-code-batch.md`
   - `plugins/mill/templates/implementer-brief.md`
-- **Modifies:**
+- **Edits:**
   - `plugins/mill/templates/plan-batch.md`
   - `plugins/mill/templates/plan-overview.md`
   - `plugins/mill/templates/review-plan-batch.md`
@@ -100,7 +100,7 @@ This batch renames `Reads:` → `Context:` and `Modifies:` → `Edits:` everywhe
   In `plan-batch.md`:
   - Card field header label `**Reads:**` → `**Context:**` in the template body (the `### Card N:` example).
   - Card field header label `**Modifies:**` → `**Edits:**`.
-  - Update the field description bullet list (the lines starting with `- **Reads:** every file...` and `- **Modifies:** files the implementer edits...`): rename and update description: `- **Context:** every file the implementer reads but does not change. Non-empty. One backtick-wrapped path per indented bullet.` and `- **Edits:** files the implementer changes (implicitly also read — do not repeat in Context:). One backtick-wrapped path per indented bullet.`
+  - Update the field description bullet list (the lines starting with `- **Context:** every file...` and `- **Edits:** files the implementer edits...`): rename and update description: `- **Context:** every file the implementer reads but does not change. Non-empty. One backtick-wrapped path per indented bullet.` and `- **Edits:** files the implementer changes (implicitly also read — do not repeat in Context:). One backtick-wrapped path per indented bullet.`
   - Update the combined constraint sentence at the bottom of the Cards section: replace `Reads/Modifies/Creates/Deletes fields` with `Context/Edits/Creates/Deletes fields`.
   - Add a reviewer-asymmetry note after the field descriptions: "Note for reviewers: the plan-reviewer bulks `Context: ∪ Edits:` (existing files only; `Creates:` targets do not exist yet). The code-reviewer bulks `Context: ∪ Edits: ∪ Creates:` (all files exist post-implementation)."
 
@@ -130,9 +130,9 @@ This batch renames `Reads:` → `Context:` and `Modifies:` → `Edits:` everywhe
 
 ### Card 10: Rename in `mill-plan/SKILL.md`
 
-- **Reads:**
+- **Context:**
   - `plugins/mill/skills/mill-plan/SKILL.md`
-- **Modifies:**
+- **Edits:**
   - `plugins/mill/skills/mill-plan/SKILL.md`
 - **Creates:** none
 - **Deletes:** none
@@ -152,36 +152,36 @@ This batch renames `Reads:` → `Context:` and `Modifies:` → `Edits:` everywhe
 
 ### Card 11: Update unit tests for renamed fields
 
-- **Reads:**
+- **Context:**
   - `plugins/mill/unit_tests/test-plan-validate.py`
   - `plugins/mill/unit_tests/test-review-common.py`
   - `plugins/mill/scripts/_plan_validate.py`
   - `plugins/mill/scripts/_review_common.py`
-- **Modifies:**
+- **Edits:**
   - `plugins/mill/unit_tests/test-plan-validate.py`
   - `plugins/mill/unit_tests/test-review-common.py`
 - **Creates:** none
 - **Deletes:** none
 - **Requirements:**
   In `test-plan-validate.py`:
-  - In `_make_batch_file`: rename parameter `reads` → `context`, `modifies` → `edits`. Update generated field headers: `f"- **Reads:** {fmt(reads)}\n"` → `f"- **Context:** {fmt(context)}\n"`, `f"- **Modifies:** {fmt(modifies)}\n"` → `f"- **Edits:** {fmt(edits)}\n"`.
-  - In `_make_batch_file_cards`: update hardcoded `"- **Reads:** none\n"` and `"- **Modifies:** none\n"` to `"- **Context:** none\n"` and `"- **Edits:** none\n"`.
+  - In `_make_batch_file`: rename parameter `reads` → `context`, `modifies` → `edits`. Update generated field headers: `f"- **Context:** {fmt(reads)}\n"` → `f"- **Context:** {fmt(context)}\n"`, `f"- **Edits:** {fmt(modifies)}\n"` → `f"- **Edits:** {fmt(edits)}\n"`.
+  - In `_make_batch_file_cards`: update hardcoded `"- **Context:** none\n"` and `"- **Edits:** none\n"` to `"- **Context:** none\n"` and `"- **Edits:** none\n"`.
   - Update all call sites that pass `reads=...` → `context=...`, `modifies=...` → `edits=...`.
   - Update `test_check_card_missing_field_dirty`: use `missing_fields={"Edits"}` instead of `{"Modifies"}`; update assertion to `"Edits" in check2[0]["message"]`.
   - Update any error-message assertions that reference "Modifies:" to "Edits:".
   - Update hardcoded raw-string fixtures in two tests that build batch text directly (without `_make_batch_file`):
-    - `test_check_reads_not_backtick_path_clean`: `"- **Reads:** \`src/a.py\`\n"` → `"- **Context:** \`src/a.py\`\n"`; `"- **Modifies:** none\n"` → `"- **Edits:** none\n"`.
-    - `test_check_reads_not_backtick_path_dirty`: `"- **Reads:** \`src/foo.py\` (used by foo)\n"` → `"- **Context:** \`src/foo.py\` (used by foo)\n"`; `"- **Modifies:** none\n"` → `"- **Edits:** none\n"`.
-    - `test_check_reads_not_backtick_path_none_exempt` uses `_make_batch_file("alpha")` (no raw string) — its docstring `"Clean: \`- **Reads:** none\` returns [] for check 6."` should be updated to `"Clean: \`- **Context:** none\` returns [] for check 6."` for consistency, but the test body needs no changes (relies on the `_make_batch_file` parameter rename).
+    - `test_check_reads_not_backtick_path_clean`: `"- **Context:** \`src/a.py\`\n"` → `"- **Context:** \`src/a.py\`\n"`; `"- **Edits:** none\n"` → `"- **Edits:** none\n"`.
+    - `test_check_reads_not_backtick_path_dirty`: `"- **Context:** \`src/foo.py\` (used by foo)\n"` → `"- **Context:** \`src/foo.py\` (used by foo)\n"`; `"- **Edits:** none\n"` → `"- **Edits:** none\n"`.
+    - `test_check_reads_not_backtick_path_none_exempt` uses `_make_batch_file("alpha")` (no raw string) — its docstring `"Clean: \`- **Context:** none\` returns [] for check 6."` should be updated to `"Clean: \`- **Context:** none\` returns [] for check 6."` for consistency, but the test body needs no changes (relies on the `_make_batch_file` parameter rename).
     Without these updates, the renamed `_RE_REFS_HEADER` regex (Card 8) stops matching the raw-string fixtures and those two tests pass vacuously or fail outright — breaking batch 02's `verify:` command.
 
   In `test-review-common.py`:
-  - Update all `parse_batch_refs` fixture strings: `"- **Reads:** ..."` → `"- **Context:** ..."`, `"- **Modifies:** ..."` → `"- **Edits:** ..."`. Specifically:
-    - Multi-line bullet form test: `"- **Reads:**\n  - \`path/a\`\n..."` → `"- **Context:**\n  - \`path/a\`\n..."`.
-    - Mixed single-line/multi-line test: `"- **Reads:** \`a\`\n- **Modifies:**\n..."` → `"- **Context:** \`a\`\n- **Edits:**\n..."`.
-    - NONE filter test: `"- **Modifies:** NONE\n"` → `"- **Edits:** NONE\n"`.
-    - Deletes test: `"- **Reads:** \`src/a.py\`\n- **Modifies:** \`src/b.py\`\n..."` → `"- **Context:** ...\n- **Edits:** ...\n..."`.
-    - Mixed token + lowercase none test: `"- **Reads:** \`a\`, none\n"` → `"- **Context:** \`a\`, none\n"`.
+  - Update all `parse_batch_refs` fixture strings: `"- **Context:** ..."` → `"- **Context:** ..."`, `"- **Edits:** ..."` → `"- **Edits:** ..."`. Specifically:
+    - Multi-line bullet form test: `"- **Context:**\n  - \`path/a\`\n..."` → `"- **Context:**\n  - \`path/a\`\n..."`.
+    - Mixed single-line/multi-line test: `"- **Context:** \`a\`\n- **Edits:**\n..."` → `"- **Context:** \`a\`\n- **Edits:**\n..."`.
+    - NONE filter test: `"- **Edits:** NONE\n"` → `"- **Edits:** NONE\n"`.
+    - Deletes test: `"- **Context:** \`src/a.py\`\n- **Edits:** \`src/b.py\`\n..."` → `"- **Context:** ...\n- **Edits:** ...\n..."`.
+    - Mixed token + lowercase none test: `"- **Context:** \`a\`, none\n"` → `"- **Context:** \`a\`, none\n"`.
     - Assert comment strings: replace `"Reads token missing"`, `"Modifies token missing"` with `"Context token missing"`, `"Edits token missing"`.
     - Any other fixture string containing `Reads` or `Modifies` field headers.
 
@@ -189,18 +189,18 @@ This batch renames `Reads:` → `Context:` and `Modifies:` → `Edits:` everywhe
 
 ### Card 12: Relabel plan files so post-batch and holistic code review can bulk source files
 
-- **Reads:**
+- **Context:**
   - `plan/01-batch-numbering.md`
   - `plan/02-field-rename.md`
   - `plan/03-guidance.md`
-- **Modifies:**
+- **Edits:**
   - `plan/01-batch-numbering.md`
   - `plan/02-field-rename.md`
   - `plan/03-guidance.md`
 - **Creates:** none
 - **Deletes:** none
 - **Requirements:**
-  Replace every occurrence of `- **Reads:**` with `- **Context:**` and every occurrence of `- **Modifies:**` with `- **Edits:**` in all three plan-batch files: `plan/01-batch-numbering.md`, `plan/02-field-rename.md`, and `plan/03-guidance.md`. Both single-line form (`- **Reads:** \`path\``) and multi-line form (`- **Reads:**\n  - \`path\``) must be replaced. `- **Creates:**` and `- **Deletes:**` headers are unchanged. Do NOT edit `plan/00-overview.md` — it contains no card field labels (only its `## All Files Touched` description, which Card 9 already updates as a template change does not apply here because `00-overview.md` is a rendered instance, not the template).
+  Replace every occurrence of `- **Context:**` with `- **Context:**` and every occurrence of `- **Edits:**` with `- **Edits:**` in all three plan-batch files: `plan/01-batch-numbering.md`, `plan/02-field-rename.md`, and `plan/03-guidance.md`. Both single-line form (`- **Context:** \`path\``) and multi-line form (`- **Context:**\n  - \`path\``) must be replaced. `- **Creates:**` and `- **Deletes:**` headers are unchanged. Do NOT edit `plan/00-overview.md` — it contains no card field labels (only its `## All Files Touched` description, which Card 9 already updates as a template change does not apply here because `00-overview.md` is a rendered instance, not the template).
 
   Why all three plan files: this worktree's `.millhouse/config.local.yaml` sets `review.code.per_batch: false`, so only the holistic code reviewer runs after all batches complete. The holistic reviewer reads every batch file and bulks the union of source files via `parse_batch_refs`. After card 7 commits the regex rename, `parse_batch_refs` only matches `Context|Edits|Creates|Deletes` headers; any plan file still using `**Reads:**`/`**Modifies:**` returns an empty ref set and its source files are not bulked. Relabeling all three plan files (01, 02, 03) ensures the holistic reviewer sees every source file from every batch.
 
