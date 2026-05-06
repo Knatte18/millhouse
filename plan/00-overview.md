@@ -3,7 +3,7 @@
 ```yaml
 task: 23 (A) — mill infra bugfix-batch
 slug: mill-infra-bugfix-batch
-approved: false
+approved: true
 started: 20260506-165947
 parent: main
 root: ""
