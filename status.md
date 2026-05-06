@@ -27,7 +27,9 @@ implementing  2026-05-06T12:38:52Z
 ```yaml
 batches:
   - name: python-backend
-    state: pending
+    state: running
+    implementer_session: 7cd1f2f3-7320-4142-a803-558b4eb30815
+    start_sha: 2c4ebfef6464f7a0ec1ee19aea2e79e2521c0519
   - name: config-docs
     state: pending
 ```
