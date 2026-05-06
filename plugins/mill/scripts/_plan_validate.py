@@ -11,21 +11,21 @@ Public API:
         Each error dict has keys: {check, batch, card, path, message}.
 
 Checks performed (check keys):
-    non-existent-path        — (#10 check 1) Reads:/Modifies:/Creates: refs that
+    non-existent-path        — (#10 check 1) Context:/Edits:/Creates: refs that
                                don't exist on disk and are not Creates: targets
     card-missing-field       — (#10 check 2) Cards missing one of the five required
-                               fields (Reads, Modifies, Creates, Requirements, Commit)
+                               fields (Context, Edits, Creates, Requirements, Commit)
     card-numbering           — (#10 check 3) Non-sequential or cross-batch-duplicate
                                card numbers
     depends-on-unknown       — (#10 check 4) depends-on entries referencing unknown
                                batch names
     parallel-modifies-overlap — (#10 check 5) Parallel-eligible batches both
                                modifying the same file
-    reads-not-backtick-path  — (#10 check 6) Reads:/Modifies:/Creates: entries not
+    reads-not-backtick-path  — (#10 check 6) Context:/Edits:/Creates: entries not
                                in backtick-only format (exempts bare 'none')
     all-files-touched-mismatch — (#10 check 8) Mismatch between overview's
-                               All Files Touched section and cards' Modifies:/Creates:
-    wiki-config-mutation  — batch Modifies:/Creates: contains wiki/config.yaml (self-applying layout risk)
+                               All Files Touched section and cards' Edits:/Creates:
+    wiki-config-mutation  — batch Edits:/Creates: contains wiki/config.yaml (self-applying layout risk)
 """
 from __future__ import annotations
 
@@ -45,9 +45,9 @@ from _review_common import (
 # Module-level regex helpers
 # ---------------------------------------------------------------------------
 
-# Matches Reads/Modifies/Creates/Deletes header bullets.
+# Matches Context/Edits/Creates/Deletes header bullets.
 _RE_REFS_HEADER = re.compile(
-    r"^-\s*\*\*(Reads|Modifies|Creates|Deletes):\*\*(?P<inline>.*)$"
+    r"^-\s*\*\*(Context|Edits|Creates|Deletes):\*\*(?P<inline>.*)$"
 )
 
 # Matches sub-bullets under multi-line header bullets.
@@ -57,7 +57,7 @@ _RE_REFS_SUB = re.compile(r"^\s+-\s*(.+)$")
 _RE_LINE_RANGE = re.compile(r":\d+-\d+$")
 
 # Required card fields.
-_REQUIRED_CARD_FIELDS = ["Reads", "Modifies", "Creates", "Deletes", "Requirements", "Commit"]
+_REQUIRED_CARD_FIELDS = ["Context", "Edits", "Creates", "Deletes", "Requirements", "Commit"]
 
 
 # ---------------------------------------------------------------------------
@@ -97,11 +97,11 @@ def _parse_cards(batch_text: str) -> list[tuple[int, list[str]]]:
     return cards
 
 
-def _parse_modifies_only(batch_path: Path) -> set[str]:
-    """Extract raw path tokens from a batch file's Modifies: lines only.
+def _parse_edits_only(batch_path: Path) -> set[str]:
+    """Extract raw path tokens from a batch file's Edits: lines only.
 
     Same single-line / multi-line logic as parse_batch_refs in _review_common,
-    but restricted to ``- **Modifies:**`` headers. Filters ``none``
+    but restricted to ``- **Edits:**`` headers. Filters ``none``
     (case-insensitive) per the existing convention.
     """
     text = batch_path.read_text(encoding="utf-8")
@@ -110,7 +110,7 @@ def _parse_modifies_only(batch_path: Path) -> set[str]:
     i = 0
     while i < len(lines):
         m = _RE_REFS_HEADER.match(lines[i])
-        if m and m.group(1) == "Modifies":
+        if m and m.group(1) == "Edits":
             inline = m.group("inline").strip()
             if inline:
                 backtick_tokens = re.findall(r"`([^`]+)`", inline)
@@ -458,9 +458,9 @@ def _check_parallel_modifies_overlap(
         if stem in stem_to_path:
             batch_name_to_path[entry["name"]] = stem_to_path[stem]
 
-    # Compute Modifies: sets.
-    batch_modifies: dict[str, set[str]] = {
-        name: _parse_modifies_only(path)
+    # Compute Edits: sets.
+    batch_edits: dict[str, set[str]] = {
+        name: _parse_edits_only(path)
         for name, path in batch_name_to_path.items()
     }
 
@@ -478,7 +478,7 @@ def _check_parallel_modifies_overlap(
             if a_name in ancestors.get(b_name, set()):
                 continue
 
-            overlap = batch_modifies.get(a_name, set()) & batch_modifies.get(b_name, set())
+            overlap = batch_edits.get(a_name, set()) & batch_edits.get(b_name, set())
             for path in sorted(overlap):
                 # Emit one finding per (path, sorted-pair); if a_name < b_name the
                 # condition is always True here because names is sorted.
@@ -489,7 +489,7 @@ def _check_parallel_modifies_overlap(
                         "card": None,
                         "path": path,
                         "message": (
-                            f"path '{path}' in Modifies: of parallel-eligible "
+                            f"path '{path}' in Edits: of parallel-eligible "
                             f"batches '{a_name}' and '{b_name}'"
                         ),
                     })
@@ -501,7 +501,7 @@ def _check_parallel_modifies_overlap(
 # Check 6 — reads-not-backtick-path
 # ---------------------------------------------------------------------------
 
-def _check_reads_not_backtick_path(batch_files: list[Path]) -> list[dict]:
+def _check_ref_not_backtick_path(batch_files: list[Path]) -> list[dict]:
     errors: list[dict] = []
 
     for batch_path in batch_files:
@@ -550,7 +550,7 @@ def _check_reads_not_backtick_path(batch_files: list[Path]) -> list[dict]:
                             "card": current_card,
                             "path": inline,
                             "message": (
-                                f"Reads/Modifies/Creates inline value contains prose "
+                                f"Context/Edits/Creates inline value contains prose "
                                 f"alongside backtick path: {inline!r}"
                             ),
                         })
@@ -629,7 +629,7 @@ def _check_reads_not_backtick_path(batch_files: list[Path]) -> list[dict]:
 def _check_wiki_config_mutation(batch_files: list[Path]) -> list[dict]:
     errors: list[dict] = []
     for batch_path in batch_files:
-        writes = _parse_modifies_only(batch_path) | _parse_creates_only(batch_path)
+        writes = _parse_edits_only(batch_path) | _parse_creates_only(batch_path)
         if "wiki/config.yaml" in writes:
             errors.append({
                 "check": "wiki-config-mutation",
@@ -637,7 +637,7 @@ def _check_wiki_config_mutation(batch_files: list[Path]) -> list[dict]:
                 "card": None,
                 "path": "wiki/config.yaml",
                 "message": (
-                    "batch modifies or creates wiki/config.yaml — self-applying layout change risk; "
+                    "batch edits or creates wiki/config.yaml — self-applying layout change risk; "
                     "use --skip-validate if a bootstrap card is present"
                 ),
             })
@@ -674,10 +674,10 @@ def _check_all_files_touched_mismatch(
         if m:
             overview_set.add(m.group(1))
 
-    # Compute cards_set = union of Modifies: + Creates: across all cards.
+    # Compute cards_set = union of Edits: + Creates: across all cards.
     cards_set: set[str] = set()
     for batch_path in batch_files:
-        cards_set |= _parse_modifies_only(batch_path)
+        cards_set |= _parse_edits_only(batch_path)
     # Add Creates: tokens via compute_creates_union.
     cards_set |= compute_creates_union(overview_path.parent)
 
@@ -690,7 +690,7 @@ def _check_all_files_touched_mismatch(
             "path": p,
             "message": (
                 f"path '{p}' listed in overview's All Files Touched "
-                f"but not in any card's Modifies: or Creates:"
+                f"but not in any card's Edits: or Creates:"
             ),
         })
     for p in sorted(cards_set - overview_set):
@@ -700,7 +700,7 @@ def _check_all_files_touched_mismatch(
             "card": None,
             "path": p,
             "message": (
-                f"path '{p}' in card Modifies:/Creates: but missing "
+                f"path '{p}' in card Edits:/Creates: but missing "
                 f"from overview's All Files Touched"
             ),
         })
@@ -755,7 +755,7 @@ def run(
     errors.extend(_check_card_numbering(batch_files))
     errors.extend(_check_depends_on_unknown(overview_text, overview_path))
     errors.extend(_check_parallel_modifies_overlap(batch_files, overview_text))
-    errors.extend(_check_reads_not_backtick_path(batch_files))
+    errors.extend(_check_ref_not_backtick_path(batch_files))
     errors.extend(_check_wiki_config_mutation(batch_files))
     errors.extend(_check_all_files_touched_mismatch(overview_path, batch_files))
 
