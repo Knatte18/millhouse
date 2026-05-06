@@ -49,6 +49,14 @@ def _build_code_argv(worktree_path: Path) -> list[str]:
     return ["code", str(worktree_path)]
 
 
+def _load_spawn_main():
+    import importlib.util as _ilu
+    spec = _ilu.spec_from_file_location("mill_spawn", Path(__file__).parent / "millpy-spawn.py")
+    module = _ilu.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.main
+
+
 def main(argv: list[str] | None = None) -> int:
     """Open VS Code in an active child worktree selected by the user.
 
@@ -92,8 +100,20 @@ def main(argv: list[str] | None = None) -> int:
     active = _spawn_core.discover_active_worktrees(worktrees_dir)
 
     if not active:
-        print("No active worktrees found.")
-        return 0
+        if args.list or args.slug is not None:
+            print("No active worktrees found.", file=sys.stderr)
+            return 0
+        spawn_main = _load_spawn_main()
+        rc = spawn_main([])
+        if rc != 0:
+            return rc
+        active = _spawn_core.discover_active_worktrees(worktrees_dir)
+        if not active:
+            print(
+                "No tasks available and no active worktrees. Add tasks to Home.md first.",
+                file=sys.stderr,
+            )
+            return 0
 
     if args.list:
         for i, (path, slug, title) in enumerate(active, start=1):
