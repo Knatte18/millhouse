@@ -60,10 +60,10 @@ Delivers the complete holistic-fix dispatch path: the `implementer-holistic-brie
 
   **`wiki/config.yaml` edit:** Under `review.code`, add `holistic_rounds: 1` on a new line after the existing `self_fix_rounds:` key.
 
-  **`millpy-implement-holistic.py` implementation:** Module docstring mirrors `millpy-implement.py` style — describe flags, exit codes. Flags: `--review-file PATH` (required), `--round N` (int, default 1). No positional arg, no `--resume`. Import block (in order): `from __future__ import annotations`, standard library (`argparse`, `json`, `subprocess`, `sys`, `uuid`, `pathlib.Path`), then `_active`, `_implementer_common`, `_implementer_sonnet`, `_llm_claude`, `_paths`, `_plan_dag`, `_render`, `_review_common`, `_status`, `_timestamp`.
+  **`millpy-implement-holistic.py` implementation:** Module docstring mirrors `millpy-implement.py` style — describe flags, exit codes. Flags: `--review-file PATH` (optional, default None; checked manually), `--round N` (int, default 1). No positional arg, no `--resume`. Import block (in order): `from __future__ import annotations`, standard library (`argparse`, `json`, `subprocess`, `sys`, `uuid`, `pathlib.Path`), then `_active`, `_implementer_sonnet`, `_llm_claude`, `_paths`, `_plan_dag`, `_render`, `_review_common`, `_status`, `_timestamp`, `from _implementer_common import _forward_output`.
 
   `main(argv=None) -> int` procedure:
-  1. `parser = argparse.ArgumentParser(...)`. Add `--review-file` (required, type str) and `--round` (type int, default 1). Parse `args = parser.parse_args(argv)`. If `args.review_file` is None, print error to stderr, return 1.
+  1. `parser = argparse.ArgumentParser(...)`. Add `--review-file` (type str, default None) and `--round` (type int, default 1). Parse `args = parser.parse_args(argv)`. If `args.review_file is None`, print error to stderr, return 1.
   2. `project_root = Path.cwd()`, `mill_dir = project_root / ".millhouse"`.
   3. `git_root = _paths.resolve_git_root()`, `wiki_path = _paths.resolve_wiki_path(git_root)`.
   4. `cfg = _review_common.load_config(wiki_path, mill_dir)` — on `ReviewError` print to stderr, return 1.
@@ -82,7 +82,7 @@ Delivers the complete holistic-fix dispatch path: the `implementer-holistic-brie
   17. `git push origin <branch>` → check returncode, return 1 on failure.
   18. `plugin_root = Path(__file__).resolve().parent.parent`. `template_path = plugin_root / "templates" / "implementer-holistic-brief.md"`. `prompt_text = _render.render(template_path, {"TASK_TITLE": task_title, "SLUG": slug, "OVERVIEW_FILE": str(overview_path), "REVIEW_FILE": str(review_file), "PROJECT_ROOT": str(project_root), "WIKI_PATH": str(wiki_path), "SESSION_ID": session_id, "ROUND": str(args.round), "SELF_FIX_ROUNDS": str(self_fix_rounds), "BATCH_FILES": batch_files_text, "BATCH_SESSION_IDS": batch_session_ids_text})`.
   19. `output, _ = _implementer_sonnet.run(prompt_text, session_id=session_id, resume=False, cwd=project_root, timeout=timeout)` — on `_llm_claude.LLMError`: print `json.dumps({"status": "stuck", "stuck_type": "transient", "reason": str(e)})` to stdout, print str(e) to stderr, return 1.
-  20. `return _implementer_common._forward_output(output)`.
+  20. `return _forward_output(output)`.
 
   Add `if __name__ == "__main__": sys.exit(main())` at the end.
 - **Commit:** `feat(mill): add millpy-implement-holistic CLI and holistic_rounds config key`
@@ -95,7 +95,9 @@ Delivers the complete holistic-fix dispatch path: the `implementer-holistic-brie
   - `plugins/mill/skills/mill-go/SKILL.md`
 - **Creates:** none
 - **Deletes:** none
-- **Requirements:** Replace lines 155–163 of `plugins/mill/skills/mill-go/SKILL.md` — from the `## Holistic code review` heading through the `- On \`NEED_CONTEXT\` apply...` line (inclusive). Leave `## Handoff` and everything after it untouched. The replacement section must:
+- **Requirements:** Replace lines 155–163 of `plugins/mill/skills/mill-go/SKILL.md` — from the `## Holistic code review` heading through the `- On \`NEED_CONTEXT\` apply...` line (inclusive). Leave `## Handoff` and everything after it untouched. Additionally, in the **Entry** section of the same skill (earlier in the file), add `` `review.code.holistic_rounds` — max holistic fix rounds (default 1). `` to the list of config keys read in Entry step 3. The replacement section must:
+
+  0. **Guard:** Only execute this section if `cfg.get("review", {}).get("code", {}).get("holistic", True)` is truthy. This preserves the existing behaviour when `review.code.holistic: false` is set in config.
 
   1. Read `review.code.holistic_rounds` (not `review.code.rounds`): `` `max_holistic_rounds = cfg.get("review", {}).get("code", {}).get("holistic_rounds", 1)` ``. Loop variable `H` starts at 1.
 
@@ -147,7 +149,7 @@ Delivers the complete holistic-fix dispatch path: the `implementer-holistic-brie
 - **Creates:**
   - `plugins/mill/unit_tests/test-millpy-implement-holistic.py`
 - **Deletes:** none
-- **Requirements:** Mirror `test-millpy-implement.py` structure. Load `millpy-implement-holistic` via `importlib.util.spec_from_file_location`. In `setUp`: create a `tempfile.mkdtemp()` fixture with `plan/` (containing `00-overview.md` with a `batches:` yaml block listing one batch entry: `name: test-batch`, `file: 01-test-batch.md`, `depends-on: []`, `verify: null`; and `01-test-batch.md`), `status.md` (with `## Batches` section listing `test-batch` with `state: pending`), `.millhouse/config.local.yaml` (`{}`), `wiki/config.yaml` (include `review:\n  code:\n    self_fix_rounds: 2\n    holistic_rounds: 1\n`), `reviews/`, and a `reviews/holistic-review.md` file. `os.chdir(tmp_path)` in setUp. Patch: `_paths.resolve_git_root` → tmp_path, `_paths.resolve_wiki_path` → tmp_path / "wiki", `_review_common.load_config` → `{"review": {"code": {"self_fix_rounds": 2, "holistic_rounds": 1}}, "llm": {"implementer_timeout": 1800}}`, `_active.read_slug` → `"test-slug"`, `_status.read_branch` → `"test-branch"`, `subprocess.run` → `CompletedProcess(args=[], returncode=0, stdout="abc1234\n", stderr="")`, `uuid.uuid4` → fixed UUID `00000000-0000-0000-0000-000000000001`.
+- **Requirements:** Mirror `test-millpy-implement.py` structure. Load `millpy-implement-holistic` via `importlib.util.spec_from_file_location`. In `setUp`: create a `tempfile.mkdtemp()` fixture with `plan/` (containing `00-overview.md` with a `batches:` yaml block listing one batch entry: `name: test-batch`, `file: 01-test-batch.md`, `depends-on: []`, `verify: null`; and `01-test-batch.md`), `status.md` (full structure mirroring `test-millpy-implement.py`'s fixture: a leading `\`\`\`yaml` block with fields `phase: implementing`, `slug: test-slug`, `task: Test Task`, `branch: test-branch`, `parent: main`; then `## Timeline` + `\`\`\`text` fence with one entry; then `## Batches` + `\`\`\`yaml` fence listing `test-batch` with `state: pending`), `.millhouse/config.local.yaml` (`{}`), `wiki/config.yaml` (include `review:\n  code:\n    self_fix_rounds: 2\n    holistic_rounds: 1\n`), `reviews/`, and a `reviews/holistic-review.md` file. `os.chdir(tmp_path)` in setUp. Patch: `_paths.resolve_git_root` → tmp_path, `_paths.resolve_wiki_path` → tmp_path / "wiki", `_review_common.load_config` → `{"review": {"code": {"self_fix_rounds": 2, "holistic_rounds": 1}}, "llm": {"implementer_timeout": 1800}}`, `_active.read_slug` → `"test-slug"`, `_status.read_branch` → `"test-branch"`, `subprocess.run` → `CompletedProcess(args=[], returncode=0, stdout="abc1234\n", stderr="")`, `uuid.uuid4` → fixed UUID `00000000-0000-0000-0000-000000000001`.
 
   Required test cases:
   1. `test_1_fresh_dispatch_success`: call `main(["--review-file", str(review_file)])` with `_implementer_sonnet.run` returning success JSON → rc == 0, stdout last line parses to `{"status": "success", ...}`, timeline in `status.md` contains `holistic-fixing` entry.

@@ -23,7 +23,7 @@ Extract `_forward_output()` from `millpy-implement.py` into a new `_implementer_
 - **Creates:**
   - `plugins/mill/scripts/_implementer_common.py`
 - **Deletes:** none
-- **Requirements:** Create `plugins/mill/scripts/_implementer_common.py`. Add a module-level docstring stating it holds shared helpers for `millpy-implement.py` and `millpy-implement-holistic.py`. Copy `_forward_output(output: str) -> int` verbatim from `millpy-implement.py` (lines 42–58, including its docstring). Imports needed: `import json`, `import re`, `import sys`. No other imports. No `if __name__ == "__main__":` block.
+- **Requirements:** Create `plugins/mill/scripts/_implementer_common.py`. Add a module-level docstring stating it holds shared helpers for `millpy-implement.py` and `millpy-implement-holistic.py`. Copy `_forward_output(output: str) -> int` verbatim from `millpy-implement.py` (lines 42–58, including its docstring). Imports needed: `import json`, `import re`. No other imports. No `if __name__ == "__main__":` block.
 - **Commit:** `refactor(mill): create _implementer_common with _forward_output`
 
 ### Card 2: Remove `_forward_output` from `millpy-implement.py`

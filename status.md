@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planning
+phase: plan-fix-r1
 slug: holistic-fix-agent
 branch: holistic-fix-agent
 plan: plan
@@ -17,4 +17,6 @@ task_description: |
 discussing  '2026-05-06T17:03:48Z'
 discussed  2026-05-06T17:15:13Z
 planning  2026-05-06T17:24:50Z
+plan-review-r1  2026-05-06T17:45:21Z
+plan-fix-r1  2026-05-06T17:45:21Z
 ```
