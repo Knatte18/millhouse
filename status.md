@@ -29,5 +29,7 @@ implementing  2026-05-06T17:18:33Z
 ```yaml
 batches:
   - name: 01-bugfix-batch
-    state: pending
+    state: running
+    implementer_session: 16256dec-5973-4d01-aeff-e4a100d9d191
+    start_sha: 8d117844c6fd75ab8809064bcb2c57ab98a559d9
 ```
