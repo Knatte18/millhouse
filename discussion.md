@@ -44,8 +44,8 @@ Four independent bugs were filed against the mill infra layer. Bug A (`_yaml_wri
 
 ### commit-sha-override
 
-- Decision: Modify `_forward_output(output: str, project_root: Path) -> int` to accept the project root as a second argument. After extracting the JSON dict, run `subprocess.run(["git", "rev-parse", "HEAD"], cwd=project_root, ...)` and overwrite `commit_sha` with the result before printing.
-- Rationale: `git rev-parse HEAD` is authoritative and always 40 chars. Overriding unconditionally means format is stable regardless of what the implementer reported. Call sites in `main()` already have `project_root` in scope.
+- Decision: Modify `_forward_output(output: str, project_root: Path) -> int` to accept the project root as a second argument. After extracting the JSON dict, run `subprocess.run(["git", "rev-parse", "HEAD"], cwd=project_root, ...)` and overwrite `commit_sha` with the result before printing. On non-zero exit from `git rev-parse`, forward the original JSON unmodified (preserving the always-0 return contract).
+- Rationale: `git rev-parse HEAD` is authoritative and always 40 chars. Overriding unconditionally means format is stable regardless of what the implementer reported. Call sites in `main()` already have `project_root` in scope. The fallback-to-original policy on git failure preserves the function's no-exception, always-0 contract.
 - Rejected: Patching the implementer brief to mandate a specific SHA format — doesn't fix existing sessions and relies on the LLM following format instructions exactly.
 
 ### datetime-utcnow-fix
@@ -70,7 +70,7 @@ Four independent bugs were filed against the mill infra layer. Bug A (`_yaml_wri
 ## Testing
 
 - **`test-status.py`**: Add tests for `set_batch_fields` — success path (all fields written, single read-modify-write cycle), validation path (unknown key raises `ValueError`, unknown state raises `ValueError`, unknown batch name raises `ValueError`). Import `set_batch_fields` from `_status`.
-- **`test-millpy-implement.py`**: Add test verifying `_forward_output` normalizes `commit_sha` to the 40-char SHA returned by `git rev-parse HEAD`, even when the implementer reported a 7-char abbreviated SHA. Mock `subprocess.run` for the `rev-parse` call.
+- **`test-millpy-implement.py`**: Add tests for `_forward_output`: (1) success path — implementer reports 7-char SHA, `git rev-parse HEAD` returns 40-char SHA, output JSON has the 40-char value; (2) git failure path — `git rev-parse HEAD` exits non-zero, original JSON forwarded unmodified (preserving 7-char or whatever the implementer reported). Mock `subprocess.run` for both paths.
 - **`test-millpy-bg.py`**: Add test verifying the log-file timestamp is UTC-aware (timezone-aware `datetime` object, not naive). This can verify the format output or check that no `DeprecationWarning` is raised.
 
 ## Q&A log
