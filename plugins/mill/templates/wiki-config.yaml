@@ -119,6 +119,8 @@ review:
     reviewer: sonnetmax
     holistic: true
     self_fix_rounds: 2
+    holistic_effort: max        # effort passed to holistic review call; set to medium/low to reduce rate-limit risk on large tasks
+    diff_scope_threshold: 0.25  # per-batch diff/file char ratio below which git diff is used instead of full file content
 
 # ---------------------------------------------------------------------------
 # Notifications
