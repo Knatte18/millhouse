@@ -11,7 +11,7 @@ Two modes, selected by ``batch_name``:
 
 - ``batch_name="<name>"`` — per-batch review. Bulks
   ``00-overview.md`` + the single ``NN-<batch>.md`` + every file under
-  that batch's ``Reads:`` / ``Modifies:`` / ``Creates:`` lines.
+  that batch's ``Context:`` / ``Edits:`` / ``Creates:`` lines.
 - ``batch_name=None`` — holistic review. Bulks ``00-overview.md`` +
   every batch file + the union of all referenced files.
 

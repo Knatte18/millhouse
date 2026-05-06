@@ -30,7 +30,7 @@ Public API:
     aggregate_verdict()  — worst-case verdict across a list of sub-verdicts
     load_reviewer()      — import a _reviewer_<name>.py module by name
     load_config()        — load wiki/config.yaml + optional config.local.yaml
-    parse_batch_refs()   — extract Reads/Modifies/Creates paths from a batch file (case-insensitive none filter)
+    parse_batch_refs()   — extract Context/Edits/Creates paths from a batch file (case-insensitive none filter)
     compute_creates_union() — union of all Creates: tokens across every batch in a plan_dir
     compute_deletes_union() — union of all Deletes: tokens across every batch in a plan_dir
     resolve_ref_paths()  — resolve raw ref strings against project_root; hard-fails on missing paths not in creates_union or deletes_union
@@ -271,19 +271,19 @@ def detect_resume_round(reviews_dir: Path, review_type: str) -> int | None:
 
 
 # Regex constants for parse_batch_refs.
-# Header line: - **Reads:** <inline>  (inline may be empty for multi-line bullet form).
+# Header line: - **Context:** <inline>  (inline may be empty for multi-line bullet form).
 _RE_REFS_HEADER = re.compile(
-    r"^-\s*\*\*(Reads|Modifies|Creates|Deletes):\*\*(?P<inline>.*)$"
+    r"^-\s*\*\*(Context|Edits|Creates|Deletes):\*\*(?P<inline>.*)$"
 )
 # Sub-bullet under a multi-line header (leading whitespace + dash).
 _RE_REFS_SUB = re.compile(r"^\s+-\s*(.+)$")
 
 
 def parse_batch_refs(batch_path: Path) -> list[str]:
-    """Extract raw path strings from a batch file's Reads/Modifies/Creates/Deletes lines.
+    """Extract raw path strings from a batch file's Context/Edits/Creates/Deletes lines.
 
-    Handles the single-line form (- **Reads:** `a`, `b`) and the multi-line
-    bullet form (- **Reads:**\\n  - `a`\\n  - `b`). Filters tokens whose
+    Handles the single-line form (- **Context:** `a`, `b`) and the multi-line
+    bullet form (- **Context:**\\n  - `a`\\n  - `b`). Filters tokens whose
     lowercase form equals ``'none'`` (case-insensitive). Returns a
     deduplicated list preserving first-seen order. Used by both plan review
     and code review to build the source-file bulk.
