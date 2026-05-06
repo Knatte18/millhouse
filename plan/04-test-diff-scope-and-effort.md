@@ -100,17 +100,19 @@ Add tests for all logic introduced in batches 02 and 03. Two test files are exte
   2. In `project_root`, configure git user (`git config user.email/user.name`) and add and commit `src/a.py` with 2000 lines ("x\n" * 2000). `_make_fixture` already called `git init` on the repo; do not call it again — just configure the user and make the initial commit. Capture that commit sha as `start_sha`.
   3. Append 5 lines to `src/a.py` and make a second commit.
   4. Write a `status.md` file at `project_root / "status.md"` with a `## Batches` section containing one entry: `name: alpha, state: approved, start_sha: <start_sha>`. Use the yaml format that `_status.read_batches` expects (see `_status.py`'s `_BATCHES_HEADING` and `_serialise_batches` for the format — or write it directly as text).
-  5. Seed one APPROVE response. Use a `prompt_observer` via `stub.set_prompt_observer(lambda p, kw: captured.append(p))` to capture the prompt text.
+  5. Seed one APPROVE response.
   6. Call `code_run(cfg, SLUG, mill_dir, wiki_root, project_root, batch_name="alpha")`.
-  7. Assert the captured prompt contains `"--- DIFF:"`. Print `"PASS: per-batch with start_sha uses diff-scoping (DIFF delimiter in prompt)"`.
+  7. Assert `stub.captured_prompts()[0][0]` contains `"--- DIFF:"`. Print `"PASS: per-batch with start_sha uses diff-scoping (DIFF delimiter in prompt)"`.
 
   **Test: per-batch with missing start_sha → prompt uses FILE delimiter (no DIFF)**
 
-  Use `_make_fixture` but write a `status.md` with the alpha batch entry having NO `start_sha` field (or with `start_sha: null`). Seed APPROVE. Use a prompt observer. Call per-batch review on alpha. Assert prompt does NOT contain `"--- DIFF:"` (falls back to full file). Print `"PASS: per-batch with missing start_sha falls back to full file content"`.
+  Use `_make_fixture` but write a `status.md` with the alpha batch entry having NO `start_sha` field (or with `start_sha: null`). Seed APPROVE. Call per-batch review on alpha. Assert `stub.captured_prompts()[0][0]` does NOT contain `"--- DIFF:"` (falls back to full file). Print `"PASS: per-batch with missing start_sha falls back to full file content"`.
 
   **Test: per-batch with large diff → prompt uses FILE delimiter (not DIFF)**
 
-  Same setup as the `start_sha present` test, but this time make a large commit that rewrites most of `src/a.py`. The diff should exceed the 0.25 threshold. Assert prompt does NOT contain `"--- DIFF:"`. Print `"PASS: per-batch with large diff falls back to full file content"`.
+  Same setup as the `start_sha present` test, but this time make a large commit that rewrites most of `src/a.py`. The diff should exceed the 0.25 threshold. Assert `stub.captured_prompts()[0][0]` does NOT contain `"--- DIFF:"`. Print `"PASS: per-batch with large diff falls back to full file content"`.
+
+  **Existing test 5 assertion update:** Batch 02 adds `effort` to the stub's captured kwargs dict. The existing test 5 asserts `retry_kwargs == {"session_id": "sid-1", "resume": True, "timeout": None}` — this will fail once `effort` is present. Update that assertion to `{"session_id": "sid-1", "resume": True, "timeout": None, "effort": None}`.
 
   **Status.md fixture format note for the implementer:** `_status.read_batches` reads the `## Batches` section's fenced yaml block. The minimal format is:
 
