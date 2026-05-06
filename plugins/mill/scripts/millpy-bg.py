@@ -63,7 +63,7 @@ if "--_worker" in sys.argv:
 # ── launcher path ─────────────────────────────────────────────────────────────
 import os
 import subprocess
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 
@@ -106,7 +106,7 @@ def _launcher_main(args: list[str]) -> int:
 
     scratch_dir = Path(git_root) / ".scratch"
     scratch_dir.mkdir(exist_ok=True)
-    timestamp = datetime.utcnow().strftime("%Y%m%d-%H%M%S")
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
     log_path = scratch_dir / f"bg-{timestamp}-{slug}.log"
 
     worker_argv = [
