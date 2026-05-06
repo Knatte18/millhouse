@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-review-r1
+phase: planned
 slug: mill-go-infra-fixes
 branch: mill-go-infra-fixes
 plan: plan
@@ -18,4 +18,5 @@ discussing  '2026-05-06T10:43:10Z'
 discussed  2026-05-06T11:33:38Z
 planning  2026-05-06T11:41:43Z
 plan-review-r1  2026-05-06T11:50:45Z
+planned  2026-05-06T11:50:53Z
 ```
