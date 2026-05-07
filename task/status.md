@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-backend-fixes
 slug: review-plan-robustness
 branch: review-plan-robustness
 plan: task/plan
@@ -24,6 +24,7 @@ plan-fix-r2  2026-05-07T09:00:26Z
 plan-review-r3  2026-05-07T09:06:20Z
 planned  2026-05-07T09:06:26Z
 implementing  2026-05-07T09:18:23Z
+approved-backend-fixes  2026-05-07T10:29:32Z
 ```
 
 ## Batches
@@ -31,7 +32,7 @@ implementing  2026-05-07T09:18:23Z
 ```yaml
 batches:
   - name: backend-fixes
-    state: running
+    state: approved
     implementer_session: 6e00fbdd-e5aa-4df3-a774-9c86866a3a7f
     start_sha: 2909671c8c0d086a622f7639ad8d93b7c94b1097
   - name: validator-skip-checks
