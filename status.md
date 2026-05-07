@@ -53,6 +53,6 @@ batches:
     start_sha: 6cca1c52b86c7c949f824f36078ac70b57243421
   - name: Skills and documentation
     state: running
-    implementer_session: db605902-bff1-42a3-9890-93fb6aae5be1
-    start_sha: f089de2f6bf0bf232629dfefbc615dc944ffa666
+    implementer_session: 7e7f339a-2ba3-4f61-8793-3c392d8d511a
+    start_sha: 5b62d4f56ff47c302ca0b428151ebb4308ffcd70
 ```
