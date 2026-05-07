@@ -262,14 +262,13 @@ def main() -> int:
             wiki_path = container / "wiki"
             wiki_path.mkdir()
 
-            container_path = container  # in prefix-form, container == main_root.parent
-            # But resolve_container_path uses git; patch it so the test stays pure.
+            # resolve_container_path uses git; patch it so the test stays pure.
             with patch("mill_cleanup._paths.resolve_container_path", return_value=container):
                 plan = build_plan([], [], wiki_path, hub_root=hub, container_path=container)
 
             orphan_lines = [line for line in plan.to_report if "orphan worktree" in line and "ghost-slug" in line]
             assert len(orphan_lines) == 1, f"expected 1 orphan worktree line, got {plan.to_report}"
-            assert "mill-worktree remove" in orphan_lines[0]
+            assert "git worktree remove --force" in orphan_lines[0]
             print("PASS build_plan — orphan worktree (no active marker) -> reported")
 
         # --- orphan Home.md marker ([active] with no active worktree) ---

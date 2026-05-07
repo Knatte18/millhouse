@@ -34,7 +34,7 @@ Get-ChildItem -Path $SourceDir -Directory | ForEach-Object {
     }
 
     # If target is a junction from a previous symlink-plugins run, remove it
-    # before copying — Copy-Item cannot write into a junction safely.
+    # before copying — robocopy cannot write into a junction safely.
     if (Test-Path $target) {
         $item = Get-Item $target -Force
         if ($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) {
@@ -43,12 +43,10 @@ Get-ChildItem -Path $SourceDir -Directory | ForEach-Object {
         }
     }
 
-    # Remove existing target dir before copy — Copy-Item -Recurse otherwise
-    # nests the source dir as a subdirectory instead of replacing contents.
-    if (Test-Path $target) {
-        Remove-Item $target -Recurse -Force
-    }
-    Copy-Item -Path $_.FullName -Destination $target -Recurse -Force
+    # Mirror source into target via robocopy, excluding .venv — uv creates
+    # .venv in the cache at runtime; its .pyd and .exe files are often locked
+    # and cannot be deleted by Remove-Item.
+    robocopy $_.FullName $target /MIR /XD ".venv" /NFL /NDL /NJH /NJS | Out-Null
     Write-Host "Updated: $name ($version)"
 
     if ($name -eq "mill") {

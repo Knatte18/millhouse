@@ -1,7 +1,7 @@
 ---
 name: mill-self-report
 description: Reflect on session activity and file detected bugs as GitHub issues. Auto-invoked by mill-plan/mill-go at end-of-work; can also be invoked manually.
-argument-hint: "[free-text steering]"
+argument-hint: "[--auto | free-text steering]"
 ---
 
 # mill-self-report
@@ -18,7 +18,7 @@ Exit cleanly. This check fires for BOTH manual and auto-fire invocations — the
 
 ## 2. Invocation modes
 
-- **Auto-fire from `mill-plan` and `mill-go`:** they invoke this skill at end-of-work IF `pipeline.auto_report: true` in the deep-merged wiki/config.yaml + .millhouse/config.local.yaml. The skill receives no argument in this mode.
+- **Auto-fire from `mill-plan` and `mill-go`:** they invoke this skill at end-of-work IF `pipeline.auto_report: true` in the deep-merged wiki/config.yaml + .millhouse/config.local.yaml. The skill receives `--auto` as its argument. This signals auto-file-all mode: all distilled candidates are filed without user confirmation.
 - **Manual:** the user invokes `/mill-self-report` directly.
   - With NO argument, reflect on the current session's events broadly.
   - With a free-text argument (e.g. `/mill-self-report "the Gemini reviewer hung on card 5"`), use the argument as a steering hint focusing the reflection on the topic mentioned.
@@ -60,7 +60,9 @@ Then exit silently — no toast, no Slack ping, no GH issue, no prompt.
 
 ## 6. Step 4 — Present numbered list
 
-Print the candidates as a numbered text list per `mill:conversation` rules (no `AskUserQuestion`):
+**If the skill argument is `--auto`:** skip the numbered list entirely. Proceed directly to Step 5 with all distilled candidates selected (equivalent to the user having typed `all`). Step 6 (the summary line) always runs regardless of mode.
+
+**Otherwise** (no argument or free-text steering argument): print the candidates as a numbered text list per `mill:conversation` rules (no `AskUserQuestion`):
 
 ```
 1) <title-1>

@@ -152,7 +152,7 @@ Loop up to `max_review_rounds` rounds. Each round:
 
 `_status.append_phase(status_path, "planned", _timestamp.now_utc_iso())`. Commit+push.
 
-If the deep-merged config has `pipeline.auto_report: true`, invoke `/mill-self-report` with no argument and let it finish before reporting to the user. The skill checks `gh auth` itself and bails cleanly if absent, so this is always safe to call.
+If the deep-merged config has `pipeline.auto_report: true`, invoke `/mill-self-report --auto` and let it finish before reporting to the user. The skill checks `gh auth` itself and bails cleanly if absent, so this is always safe to call.
 
 Report: **"Plan complete. Run `/mill-go` next to start autonomous implementation."** Do not invoke mill-go yourself — handoff to mill-go is always an explicit user decision, even when auto-report fired.
 
