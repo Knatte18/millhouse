@@ -22,7 +22,8 @@ The goal is a single skill invocation in a fresh thread that drains the `label:b
 - `mill-plan` SKILL.md: handle `pipeline.autonomous_mode: true` — auto-block at max-rounds escape and non-progress halt instead of prompting the user
 - `mill-go` SKILL.md: handle `pipeline.autonomous_mode: true` — auto-block at stuck-batch escalation and holistic-review-exhaustion prompts
 - `plugins/mill/unit_tests/test-gh-issues.py`: add `label_filter` tests
-- New `plugins/mill/unit_tests/test-autofix.py`: slug derivation tests
+- New `plugins/mill/scripts/_autofix.py`: `slug_from_title(title: str, existing_slugs: set[str], issue_number: int) -> str` helper
+- New `plugins/mill/unit_tests/test-autofix.py`: tests for `_autofix.slug_from_title`
 - Root-level `SKILLS.md`: regenerate via `millpy-skills-index.py`
 
 **Out:**
@@ -63,8 +64,8 @@ The goal is a single skill invocation in a fresh thread that drains the `label:b
 
 ### slug-derivation
 
-- Decision: Derive slug from issue title with this algorithm: lowercase → replace non-`[a-z0-9]` chars with `-` → collapse consecutive `-` → strip leading/trailing `-` → truncate to 30 chars (at last `-` boundary where possible). If the resulting slug already exists in Home.md: append `-<issue_number>`. Implemented as a helper inline in the skill instructions.
-- Rationale: Title-derived slugs are human-readable in the wiki and commit history. Issue-number suffix is a stable fallback for collisions.
+- Decision: Derive slug from issue title with this algorithm: lowercase → replace non-`[a-z0-9]` chars with `-` → collapse consecutive `-` → strip leading/trailing `-` → truncate to 30 chars (at last `-` boundary where possible). If the resulting slug already exists in `existing_slugs`: append `-<issue_number>`. Implemented as `slug_from_title(title, existing_slugs, issue_number)` in new helper `plugins/mill/scripts/_autofix.py`. Unit-tested in `test-autofix.py` by importing from `_autofix`.
+- Rationale: Title-derived slugs are human-readable in the wiki and commit history. Issue-number suffix is a stable fallback for collisions. A named Python function makes the algorithm testable independent of the skill session.
 - Rejected: always `fix-<issue_number>` — stable but loses title semantics; LLM-derived slug — adds cost per bug.
 
 ### stuck-task-cleanup
@@ -136,39 +137,43 @@ For simplicity, the skill reads and writes config.local.yaml as a YAML document 
 3. Verify .millhouse/wiki junction exists
 4. Resolve wiki path, sync pull
 5. Parse arguments: --dry-run, --max-bugs N (default: unlimited)
-6. Save config.local.yaml original; set pipeline.autonomous_mode: true
+6. Save config.local.yaml original (config mutation happens AFTER dry-run check)
 
 ## Fetch
 7. _gh_issues.fetch(label_filter=["bug"])
-8. If --dry-run: print table (issue #, title, derived slug) and exit
+8. If --dry-run: print table (issue #, title, derived slug) and exit (config NOT yet modified; no cleanup needed)
 9. Apply --max-bugs limit to the list
+10. Set pipeline.autonomous_mode: true in config.local.yaml (deferred to here so dry-run exits cleanly)
 
 ## Pre-flight
 10. Verify current branch == parent branch (main) — halt if already on a task branch
 11. Verify no active.slug.md (no active task) — halt if another task is in progress
 
 ## Per-bug loop (sequential, for each issue)
-  a. Derive slug (kebab title, truncate, collision suffix)
+  a. Derive slug via _autofix.slug_from_title(title, existing_home_slugs, issue_number)
   b. millpy-add.py: add task to wiki with proposal body = issue body
      - On slug-already-present: read Home.md phase; skip if [active]/[done]; continue on unmarked
-  c. millpy-claim.py --slug <slug>
-  d. Explore codebase for the bug (Glob/Grep/Read)
-  e. Write task/discussion.md (all sections populated)
-  f. Commit: "mill-autofix: write discussion.md for <slug>"
-  g. Push task branch
-  h. Invoke /mill-plan
-     - Read task/status.md; if phase == blocked: run cleanup, record, continue
-  i. Invoke /mill-go
-     - Read task/status.md; if phase != done: run cleanup, record, continue
-  j. Invoke /mill-merge (in-place mode auto-detected by _inplace.is_inplace)
+  c. Pre-claim dirty-tree check: git status --porcelain; if non-empty run git clean -fd task/
+     before proceeding (leftover task/ files from a prior crashed iteration)
+  d. millpy-claim.py --slug <slug>
+  e. Explore codebase for the bug (Glob/Grep/Read)
+  f. Write task/discussion.md (all sections populated)
+  g. Commit: "mill-autofix: write discussion.md for <slug>"
+  h. Push task branch
+  i. Invoke /mill-plan
+     - Read task/status.md; check phase: planned → proceed; blocked → stuck cleanup + record + continue;
+       any other value (unexpected) → treat as blocked, route to stuck cleanup
+  j. Invoke /mill-go
+     - Read task/status.md; check phase: done → proceed; any other value → stuck cleanup + record + continue
+  k. Invoke /mill-merge (in-place mode auto-detected by _inplace.is_inplace)
      - Success detection: mill-merge returns normally AND git branch --show-current == parent_branch
      - Extract squash SHA: git log --oneline -1 <parent_branch> (run AFTER mill-merge returns;
        task/ and task branch are gone at this point — do NOT read task/status.md)
      - PR-path case: mill-merge halts without deleting the task branch; git branch --show-current
        still == task branch → record as "pending PR", run stuck cleanup (git checkout parent,
        remove active.slug.md), continue to next bug; user lands PR and re-runs /mill-merge manually
-  k. _gh_issues.close_with_comment(issue_number, f"Autonomously fixed by mill-autofix. Squash commit: {sha}")
-  l. Check .scratch/autofix-stop — halt if present
+  l. _gh_issues.close_with_comment(issue_number, f"Autonomously fixed by mill-autofix. Squash commit: {sha}")
+  m. Check .scratch/autofix-stop — halt if present
 
 ## Cleanup (always, try/finally equivalent)
   - Restore config.local.yaml to original content
@@ -184,7 +189,8 @@ For simplicity, the skill reads and writes config.local.yaml as a YAML document 
 
 **Stuck cleanup helper (shared within the per-bug loop):**
 ```
-blocked_reason = status["yaml"].get("blocked_reason", "unknown")
+blocked_reason = status["yaml"].get("blocked_reason", "unknown") if status available else "unknown"
+git clean -fd task/        # remove uncommitted task/ files from partial iteration
 git checkout <parent_branch>
 rm .millhouse/active.slug.md
 record in stuck_list: {slug, issue_number, title, phase, blocked_reason}
@@ -209,12 +215,12 @@ No CONSTRAINTS.md found in this repo. Standard mill constraints apply:
 - `label_filter=["nonexistent"]`: empty list returned
 - Issues with empty `labels: []` array: excluded when label_filter is set
 
-**New `test-autofix.py`** (no LLM):
-- Slug derivation: standard title → expected kebab slug
+**New `test-autofix.py`** (no LLM) — imports `slug_from_title` from `_autofix`:
+- Standard title → expected kebab slug
 - Special chars (parens, colons, slashes) stripped
 - Consecutive hyphens collapsed
 - Truncation at 30 chars at word boundary
-- Collision detection: slug already in Home.md text → `-<N>` suffix appended
+- Collision: slug in `existing_slugs` → `-<issue_number>` suffix appended
 
 **No integration tests for the full autofix pipeline** — the skill's orchestration is exercised by running it against real bugs. The unit tests cover the new helper logic; the sub-skills (mill-plan, mill-go, mill-merge) are already tested.
 
