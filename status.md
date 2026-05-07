@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-_gitignore API simplification
+phase: approved-Spawn infrastructure and wiki config
 slug: rename-hub-junctions
 branch: rename-hub-junctions
 plan: plan
@@ -29,6 +29,7 @@ planned  2026-05-07T06:11:45Z
 implementing  2026-05-07T06:16:30Z
 reviewing-_gitignore API simplification-r1  2026-05-07T06:19:17Z
 approved-_gitignore API simplification  2026-05-07T06:21:11Z
+approved-Spawn infrastructure and wiki config  2026-05-07T06:41:11Z
 ```
 
 ## Batches
@@ -42,7 +43,7 @@ batches:
     review_round: 1
     review_file: reviews/20260507-062056-code-review-_gitignore API simplification-r1.md
   - name: Spawn infrastructure and wiki config
-    state: running
+    state: approved
     implementer_session: 62a8c894-5e61-4b0d-9118-111d53dcb3ca
     start_sha: 25fecf4132f2f5ff92ae06aff40201a1cd99b625
   - name: Teardown and migration
