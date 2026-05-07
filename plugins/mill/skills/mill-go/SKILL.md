@@ -19,6 +19,7 @@ You are the **Builder** — a lean orchestrator. You coordinate per-batch implem
    - `review.code.rounds` — max review rounds per batch.
    - `review.code.self_fix_rounds` — passed to the implementer brief.
    - `review.code.holistic` — if true, run one holistic code review after all batches approve.
+   - `review.code.holistic_rounds` — max holistic fix rounds (default 1).
    - `review.code.per_batch` — if false (missing key defaults to true), skip per-batch code review for all batches.
 4. Acquire the builder lock:
    ```bash
@@ -154,13 +155,47 @@ For each round `N` from 1 to `review.code.rounds`:
 
 ## Holistic code review
 
-After every batch in `order` has state `approved`, and only if `review.code.holistic: true`:
+**Guard:** Only execute this section if `cfg.get("review", {}).get("code", {}).get("holistic", True)` is truthy.
 
-- Background via `millpy-bg`: `uv run --project "${CLAUDE_PLUGIN_ROOT}" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-bg.py" --slug review-code-holistic-r<N> -- uv run --project "${CLAUDE_PLUGIN_ROOT}" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-review-code.py"` (no `--batch`). Poll and extract JSON as per the per-batch pattern above.
-- On `REQUEST_CHANGES`: apply the same review-fix loop as per-batch — track holistic state via `_status.append_phase` with dedicated holistic phase names (`"holistic-reviewing"`, `"holistic-fixing"`, `"holistic-approved"`) rather than `_status.set_batch_field` (which would raise `ValueError: Batch 'holistic' not present` since 'holistic' is never initialized via `init_batches`). Spawn the implementer via `_implementer_sonnet.run(prompt_text, session_id=new_uuid, resume=False, cwd=worktree_path)` with the review file pointer (no resume — holistic review's findings span multiple batches; the implementer receives whole-worktree access).
-  `signature: _implementer_sonnet.run(prompt_text: str, *, session_id: str | None = None, resume: bool = False, cwd: Path | str | None = None, timeout: int = 1800) -> tuple[str, str]`
-  Run the same review-fix loop until APPROVE or rounds-exhausted. On rounds-exhausted only, surface to user with the same blocked-batch halt prompt as per-batch flow.
-- On `NEED_CONTEXT` apply the same extra-files / notify path as per-batch.
+`max_holistic_rounds = cfg.get("review", {}).get("code", {}).get("holistic_rounds", 1)`. Loop variable `H` starts at 1. `extra_files = []`.
+
+For each round `H` from 1 to `max_holistic_rounds`:
+
+1. **Crash-recovery.** Scan `reviews/` for a file matching `*-code-review-r{H}.md` (holistic code review files have format `{ts}-code-review-r{N}.md` — no batch-name segment, no `-holistic-` substring; per-batch files embed `{batch_name}` so the glob never collides). If found, skip the CLI and use that file's verdict directly.
+
+2. `_status.append_phase(status_path, "holistic-reviewing", _timestamp.now_utc_iso())`. Commit: `git -C <worktree> add status.md && git -C <worktree> commit -m "mill-go: holistic reviewing round {H}"`.
+
+3. Background via `millpy-bg`:
+   ```bash
+   uv run --project "${CLAUDE_PLUGIN_ROOT}" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-bg.py" \
+     --slug review-code-holistic-r{H} -- \
+     uv run --project "${CLAUDE_PLUGIN_ROOT}" \
+       "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-review-code.py" \
+       [--extra-file <p> ...]
+   ```
+   Include any accumulated `extra_files` from prior `NEED_CONTEXT` rounds via `--extra-file <p>` (one flag per path). Poll and extract JSON as per the per-batch pattern.
+
+4. On `APPROVE`: `_status.append_phase(status_path, "holistic-approved", _timestamp.now_utc_iso())`. Commit status. Proceed to Handoff.
+
+5. On `REQUEST_CHANGES`: **Load `mill-receiving-review` before reading any finding.** Dispatch:
+   ```bash
+   uv run --project "${CLAUDE_PLUGIN_ROOT}" \
+     "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-implement-holistic.py" \
+     --review-file <abs-path-to-holistic-review-file> --round {H}
+   ```
+   Parse stdout JSON (same last-`{"status":...}`-line pattern as per-batch). The CLI handles `holistic-fixing` phase + commit + push itself.
+   - `stuck_type: transient`: one-retry policy (re-invoke once). If still transient: surface to user — retry fresh / skip holistic / block task.
+   - `stuck_type: verify` or `logic`: surface to user — edit plan and retry / skip holistic and proceed to Handoff / block task.
+   - On success: increment H and loop.
+
+6. On `NEED_CONTEXT`: apply the same extra-files / notify path as per-batch.
+
+7. **Rounds exhausted** (`H > max_holistic_rounds`, `REQUEST_CHANGES` still returned): surface to user with a **blocked-task halt** (not blocked-batch):
+   > Holistic review exhausted {max_holistic_rounds} round(s). Task is blocked.
+   > 1) Rethink — revise discussion and re-run mill-plan.
+   > 2) Skip holistic — accept remaining findings and proceed to Handoff.
+   > 3) Block — halt and leave for manual resolution.
+   Wait for user choice before proceeding.
 
 ## Handoff
 
