@@ -32,7 +32,7 @@ _spec.loader.exec_module(millpy_implement)
 
 def _make_fixture(tmp_path: Path) -> None:
     """Create the fake worktree directory tree in tmp_path."""
-    plan_dir = tmp_path / "plan"
+    plan_dir = tmp_path / "task" / "plan"
     plan_dir.mkdir(parents=True, exist_ok=True)
 
     overview_text = (
@@ -73,7 +73,7 @@ def _make_fixture(tmp_path: Path) -> None:
         "    state: pending\n"
         "```\n"
     )
-    (tmp_path / "status.md").write_text(status_text, encoding="utf-8")
+    (tmp_path / "task" / "status.md").write_text(status_text, encoding="utf-8")
 
     millhouse_dir = tmp_path / ".millhouse"
     millhouse_dir.mkdir(parents=True, exist_ok=True)
@@ -149,7 +149,7 @@ class TestMillpyImplement(unittest.TestCase):
 
     def test_1_initial_dispatch_success(self):
         """Initial dispatch: pending batch → success JSON, batch state running."""
-        status_path = self.tmp_path / "status.md"
+        status_path = self.tmp_path / "task" / "status.md"
 
         with unittest.mock.patch.object(
             millpy_implement._implementer_sonnet, "run",
@@ -170,7 +170,7 @@ class TestMillpyImplement(unittest.TestCase):
 
     def test_2_initial_dispatch_running_batch(self):
         """Crash-recovery: batch already running → re-dispatches with new UUID."""
-        status_path = self.tmp_path / "status.md"
+        status_path = self.tmp_path / "task" / "status.md"
         millpy_implement._status.set_batch_field(status_path, "test-batch", "state", "running")
 
         with unittest.mock.patch.object(
@@ -204,7 +204,7 @@ class TestMillpyImplement(unittest.TestCase):
 
     def test_4_resume_path_success(self):
         """Resume path: reads implementer_session, sets fixing, appends phase, git add includes review file."""
-        status_path = self.tmp_path / "status.md"
+        status_path = self.tmp_path / "task" / "status.md"
         millpy_implement._status.set_batch_field(status_path, "test-batch", "state", "reviewing")
         millpy_implement._status.set_batch_field(
             status_path, "test-batch", "implementer_session", "original-session-id"
@@ -244,7 +244,7 @@ class TestMillpyImplement(unittest.TestCase):
         ]
         self.assertGreater(len(git_add_calls), 0, "Expected at least one git add call")
         git_add_argv = git_add_calls[-1].args[0]
-        self.assertIn("status.md", git_add_argv)
+        self.assertIn("task/status.md", git_add_argv)
         review_rel = str(review_file.relative_to(self.tmp_path))
         self.assertTrue(
             review_rel in git_add_argv or str(review_file) in git_add_argv,
@@ -260,7 +260,7 @@ class TestMillpyImplement(unittest.TestCase):
 
     def test_5_resume_llm_session_error(self):
         """Resume path: LLMSessionError → stuck/transient, exit 1."""
-        status_path = self.tmp_path / "status.md"
+        status_path = self.tmp_path / "task" / "status.md"
         millpy_implement._status.set_batch_field(status_path, "test-batch", "state", "reviewing")
         millpy_implement._status.set_batch_field(
             status_path, "test-batch", "implementer_session", "sess"
@@ -284,7 +284,7 @@ class TestMillpyImplement(unittest.TestCase):
 
     def test_5b_resume_llm_error(self):
         """Resume path: bare LLMError → stuck/transient, exit 1."""
-        status_path = self.tmp_path / "status.md"
+        status_path = self.tmp_path / "task" / "status.md"
         millpy_implement._status.set_batch_field(status_path, "test-batch", "state", "reviewing")
         millpy_implement._status.set_batch_field(
             status_path, "test-batch", "implementer_session", "sess"
