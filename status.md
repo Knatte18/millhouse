@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: prune-millhouse
 branch: prune-millhouse
 plan: plan
@@ -21,4 +21,13 @@ plan-review-r1  2026-05-07T07:41:32Z
 plan-fix-r1  2026-05-07T07:41:32Z
 plan-review-r2  2026-05-07T07:46:30Z
 planned  2026-05-07T07:46:39Z
+implementing  2026-05-07T08:10:56Z
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: Prune unused skills and scripts
+    state: pending
 ```
