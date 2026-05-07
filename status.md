@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: discussed
 slug: prune-millhouse
 branch: prune-millhouse
 plan: null
@@ -15,4 +15,5 @@ task_description: |
 
 ```text
 discussing  '2026-05-07T07:00:37Z'
+discussed  2026-05-07T07:11:50Z
 ```
