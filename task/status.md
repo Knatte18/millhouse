@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-Config and autonomous-mode wiring
+phase: approved-Mill-autofix skill
 slug: mill-autofix-bugs
 branch: hanf/mill-autofix-bugs
 plan: task/plan
@@ -24,6 +24,7 @@ planned  2026-05-07T11:23:09Z
 implementing  2026-05-07T11:28:36Z
 approved-Core Python helpers  2026-05-07T11:34:28Z
 approved-Config and autonomous-mode wiring  2026-05-07T11:37:07Z
+approved-Mill-autofix skill  2026-05-07T11:50:34Z
 ```
 
 ## Batches
@@ -39,7 +40,7 @@ batches:
     implementer_session: 1f641550-c020-4c00-ad3f-bfd7356dd31d
     start_sha: 846dd0286392c4d6e8dac9ed5a7bb3765c424a33
   - name: Mill-autofix skill
-    state: running
+    state: approved
     implementer_session: 72dcab03-8cec-43ee-85cb-768dd90b8c78
     start_sha: 8b5df95611889195b302e815e469092fdcea9af1
 ```
