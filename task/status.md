@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-review-r2
+phase: planned
 slug: mill-merge-subagent
 branch: hanf/mill-merge-subagent
 plan: task/plan
@@ -20,4 +20,5 @@ planning  2026-05-07T08:34:49Z
 plan-review-r1  2026-05-07T08:45:49Z
 plan-fix-r1  2026-05-07T08:45:49Z
 plan-review-r2  2026-05-07T08:51:50Z
+planned  2026-05-07T08:51:58Z
 ```
