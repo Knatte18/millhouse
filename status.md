@@ -42,7 +42,9 @@ batches:
     review_round: 1
     review_file: reviews/20260507-062056-code-review-_gitignore API simplification-r1.md
   - name: Spawn infrastructure and wiki config
-    state: pending
+    state: running
+    implementer_session: 62a8c894-5e61-4b0d-9118-111d53dcb3ca
+    start_sha: 25fecf4132f2f5ff92ae06aff40201a1cd99b625
   - name: Teardown and migration
     state: pending
   - name: Skills and documentation
