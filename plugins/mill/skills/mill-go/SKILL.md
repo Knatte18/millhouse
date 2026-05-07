@@ -216,7 +216,7 @@ For each round `H` from 1 to `max_holistic_rounds`:
    ```bash
    uv run --project "$CLAUDE_PLUGIN_ROOT" "$CLAUDE_PLUGIN_ROOT/scripts/millpy-builder-lock.py" release
    ```
-5. If `pipeline.auto_report: true` → invoke `/mill-self-report` directly with no argument. The skill checks `gh auth` itself and bails cleanly if absent. Wait for it to finish before continuing.
+5. If `pipeline.auto_report: true` → invoke `/mill-self-report --auto`. The skill checks `gh auth` itself and bails cleanly if absent. Wait for it to finish before continuing.
 6. If `pipeline.auto_merge: true` → invoke `/mill-merge`. Otherwise tell the user: "Task complete. Run `/mill-merge` to merge the task branch back to parent."
 
 ## Principles
