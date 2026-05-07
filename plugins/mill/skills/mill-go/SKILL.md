@@ -139,6 +139,8 @@ For each round `N` from 1 to `review.code.rounds`:
 
 ### Stuck escalation
 
+If the deep-merged config has `pipeline.autonomous_mode: true`: for any `stuck_type` (`transient` already-retried, `verify`, `logic`): skip the user prompt; set batch state → `blocked`, `blocked_reason: "autonomous-mode stuck: {stuck_type}"`, `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`; commit `git -C <worktree> add task/status.md && git -C <worktree> commit -m "mill-go: blocked on {batch_name} (autonomous-mode)"` and push; go to *Blocked*.
+
 - **CLI emits `stuck_type: transient`** (LLM-layer failure surfaced as the synthetic stuck JSON described in Implement step 2; the CLI exits 1 in that case but stdout carries the JSON) → apply the one-retry policy: re-invoke `millpy-implement.py <batch_name>` once with no `--resume` flag (a fresh session). If the second invocation also reports `stuck_type: transient`, escalate to user with the regular `transient` three-option prompt (retry fresh, edit plan and retry, block).
 - `transient` (already retried once) → surface to user with three options: retry fresh, edit plan and retry, block. User picks.
 - `verify` / `logic` → surface to user with three options: edit plan to clarify then retry fresh, skip this batch (block the task), block the task. User picks.
@@ -190,7 +192,7 @@ For each round `H` from 1 to `max_holistic_rounds`:
 
 6. On `NEED_CONTEXT`: apply the same extra-files / notify path as per-batch.
 
-7. **Rounds exhausted** (`H > max_holistic_rounds`, `REQUEST_CHANGES` still returned): surface to user with a **blocked-task halt** (not blocked-batch):
+7. **Rounds exhausted** (`H > max_holistic_rounds`, `REQUEST_CHANGES` still returned): If the deep-merged config has `pipeline.autonomous_mode: true`: `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`; `_status.update_field(status_path, "blocked_reason", f"holistic review exhausted {max_holistic_rounds} round(s) (autonomous-mode)")`; commit `git -C <worktree> add task/status.md && git -C <worktree> commit -m "mill-go: blocked on holistic review (autonomous-mode)"` and push; halt with "Autonomous mode: holistic review exhausted. Task left as [active]." surface to user with a **blocked-task halt** (not blocked-batch):
    > Holistic review exhausted {max_holistic_rounds} round(s). Task is blocked.
    > 1) Rethink — revise discussion and re-run mill-plan.
    > 2) Skip holistic — accept remaining findings and proceed to Handoff.

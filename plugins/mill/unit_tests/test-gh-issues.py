@@ -1,12 +1,16 @@
-"""Unit tests for _gh_issues._render_body_with_comments."""
+"""Unit tests for _gh_issues._render_body_with_comments and fetch label_filter."""
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
+import _gh_issues  # noqa: E402
 from _gh_issues import _render_body_with_comments  # noqa: E402
 
 
@@ -125,6 +129,72 @@ def main() -> int:
             errors += 1
         else:
             print("PASS: render/empty-body — header present, body section is empty string")
+
+    # --- label_filter tests ---
+
+    # Canned issue list for mocking gh issue list output.
+    _CANNED_ISSUES = [
+        {"number": 1, "title": "Bug 1", "body": "b1", "labels": [{"name": "bug"}], "createdAt": "2026-01-01T00:00:00Z", "comments": []},
+        {"number": 2, "title": "Feature 1", "body": "b2", "labels": [{"name": "enhancement"}], "createdAt": "2026-01-02T00:00:00Z", "comments": []},
+        {"number": 3, "title": "Both labels", "body": "b3", "labels": [{"name": "bug"}, {"name": "enhancement"}], "createdAt": "2026-01-03T00:00:00Z", "comments": []},
+        {"number": 4, "title": "No labels", "body": "b4", "labels": [], "createdAt": "2026-01-04T00:00:00Z", "comments": []},
+        {"number": 5, "title": "Bug 2", "body": "b5", "labels": [{"name": "bug"}], "createdAt": "2026-01-05T00:00:00Z", "comments": []},
+    ]
+
+    def _mock_run(cmd, **kwargs):
+        if len(cmd) > 1 and cmd[1] == "repo":
+            return SimpleNamespace(returncode=0, stdout="owner/repo\n", stderr="")
+        return SimpleNamespace(returncode=0, stdout=json.dumps(_CANNED_ISSUES), stderr="")
+
+    # 9. label_filter=None → all 5 issues returned.
+    with patch("_gh_issues._subprocess_util.run", side_effect=_mock_run):
+        _result = _gh_issues.fetch(label_filter=None)
+    if len(_result) != 5:
+        print(f"FAIL: label_filter/none — expected 5 issues, got {len(_result)}", file=sys.stderr)
+        errors += 1
+    else:
+        print("PASS: label_filter/none — all 5 issues returned")
+
+    # 10. label_filter=["bug"] → issues 1, 3, 5.
+    with patch("_gh_issues._subprocess_util.run", side_effect=_mock_run):
+        _result = _gh_issues.fetch(label_filter=["bug"])
+    _expected_numbers = {1, 3, 5}
+    _got_numbers = {i["number"] for i in _result}
+    if _got_numbers != _expected_numbers:
+        print(f"FAIL: label_filter/bug — expected {_expected_numbers}, got {_got_numbers}", file=sys.stderr)
+        errors += 1
+    else:
+        print("PASS: label_filter/bug — issues 1, 3, 5 returned")
+
+    # 11. label_filter=["bug", "enhancement"] → any-of: issues 1, 2, 3, 5.
+    with patch("_gh_issues._subprocess_util.run", side_effect=_mock_run):
+        _result = _gh_issues.fetch(label_filter=["bug", "enhancement"])
+    _expected_numbers = {1, 2, 3, 5}
+    _got_numbers = {i["number"] for i in _result}
+    if _got_numbers != _expected_numbers:
+        print(f"FAIL: label_filter/any-of — expected {_expected_numbers}, got {_got_numbers}", file=sys.stderr)
+        errors += 1
+    else:
+        print("PASS: label_filter/any-of — issues 1, 2, 3, 5 returned")
+
+    # 12. label_filter=["nonexistent"] → empty list.
+    with patch("_gh_issues._subprocess_util.run", side_effect=_mock_run):
+        _result = _gh_issues.fetch(label_filter=["nonexistent"])
+    if _result != []:
+        print(f"FAIL: label_filter/nonexistent — expected [], got {_result}", file=sys.stderr)
+        errors += 1
+    else:
+        print("PASS: label_filter/nonexistent — empty list returned")
+
+    # 13. Issue with labels: [] is excluded when label_filter is set.
+    with patch("_gh_issues._subprocess_util.run", side_effect=_mock_run):
+        _result = _gh_issues.fetch(label_filter=["bug"])
+    _has_no_label_issue = any(i["number"] == 4 for i in _result)
+    if _has_no_label_issue:
+        print("FAIL: label_filter/empty-labels — issue with no labels should be excluded", file=sys.stderr)
+        errors += 1
+    else:
+        print("PASS: label_filter/empty-labels — issue with no labels excluded")
 
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)

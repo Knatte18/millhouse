@@ -6,10 +6,12 @@ Thin wrapper around the ``gh`` CLI. Skills invoke these via ``python -c``
 authenticated via ``gh auth login``.
 
 Public API:
-    fetch(repo=None, limit=100) -> list[dict]
+    fetch(repo=None, limit=100, label_filter=None) -> list[dict]
         Open issues for the current repo (or an override). Each dict has
         number, title, body, labels, createdAt. When an issue has comments,
         body includes rendered comments appended after the original body.
+        When label_filter is a list of label names, only issues carrying at
+        least one of those labels are returned.
     close_with_comment(number, comment, repo=None) -> None
         Close an issue after posting a single comment. Used by mill-revise-
         tasks when an issue has been turned into (or folded into) a task.
@@ -84,13 +86,18 @@ def _render_body_with_comments(body: str, comments: list[dict]) -> str:
     return result
 
 
-def fetch(repo: str | None = None, limit: int = 100) -> list[dict[str, Any]]:
+def fetch(
+    repo: str | None = None,
+    limit: int = 100,
+    label_filter: list[str] | None = None,
+) -> list[dict[str, Any]]:
     """Return a list of open issues for the given repo.
 
     Each entry has number, title, body, labels, createdAt (per the gh
     ``--json`` fields requested). When an issue has comments, body includes
-    rendered comments appended after the original body. Raises ``GhError``
-    on any non-zero gh exit or unparseable output.
+    rendered comments appended after the original body. When ``label_filter``
+    is provided, only issues carrying at least one of the named labels are
+    returned. Raises ``GhError`` on any non-zero gh exit or unparseable output.
     """
     repo_name = repo or detect_repo()
     if not repo_name:
@@ -117,6 +124,11 @@ def fetch(repo: str | None = None, limit: int = 100) -> list[dict[str, Any]]:
         raise GhError(f"Failed to parse gh output: {exc}") from exc
     for issue in issues:
         issue["body"] = _render_body_with_comments(issue["body"], issue.pop("comments", []))
+    if label_filter is not None:
+        issues = [
+            i for i in issues
+            if any(label["name"] in label_filter for label in i.get("labels", []))
+        ]
     return issues
 
 
