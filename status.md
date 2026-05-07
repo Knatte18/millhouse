@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: holistic-fix-agent
 branch: holistic-fix-agent
 plan: plan
@@ -23,4 +23,15 @@ plan-review-r2  2026-05-06T17:54:30Z
 plan-fix-r2  2026-05-06T17:54:30Z
 plan-review-r3  2026-05-06T18:14:57Z
 planned  2026-05-06T18:15:11Z
+implementing  2026-05-07T05:37:14Z
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: foundation-extract
+    state: pending
+  - name: holistic-implement
+    state: pending
 ```
