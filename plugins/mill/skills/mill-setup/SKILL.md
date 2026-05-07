@@ -460,7 +460,7 @@ Junctions (from wiki config.yaml):
 Hardlinks (from wiki config.yaml):
   <link-a> -> <resolved-target-a>
 
-Next: /mill-add <slug> --title "..." [--summary "..."] [--proposal-body "..."] to add tasks, /mill-list to list them.
+Next: /mill-add <slug> --title "..." [--summary "..."] [--proposal-body "..."] to add tasks, /mill-status to list them.
 ```
 
 ## Error conditions
