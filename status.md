@@ -27,5 +27,7 @@ implementing  2026-05-07T07:26:25Z
 ```yaml
 batches:
   - name: auto-report SKILL.md edits
-    state: pending
+    state: running
+    implementer_session: 18d3ff5a-2cb3-4c16-a736-a4e3c7eccbeb
+    start_sha: 0bae98994a5eadb1e3423de141f16ca9492c9b9d
 ```
