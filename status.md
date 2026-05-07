@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-foundation-extract
+phase: approved-holistic-implement
 slug: holistic-fix-agent
 branch: holistic-fix-agent
 plan: plan
@@ -25,6 +25,7 @@ plan-review-r3  2026-05-06T18:14:57Z
 planned  2026-05-06T18:15:11Z
 implementing  2026-05-07T05:37:14Z
 approved-foundation-extract  2026-05-07T05:43:24Z
+approved-holistic-implement  2026-05-07T06:05:04Z
 ```
 
 ## Batches
@@ -37,7 +38,7 @@ batches:
     start_sha: c1fb66cda269489f7ddb1d4f117c909fb7f17ec8
     review_file: reviews/20260507-054309-code-review-foundation-extract-r1.md
   - name: holistic-implement
-    state: running
+    state: approved
     implementer_session: 37a7caed-1891-4d47-a0a5-3a93f58fbcce
     start_sha: 20a42924aaf895f493714b65ab1be0736966c9de
 ```
