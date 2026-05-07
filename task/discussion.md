@@ -39,9 +39,9 @@ The "lean Builder" principle that governs `mill-go` — the Builder reads only J
 
 ### conflict-context-to-sub-agent
 
-- Decision: Pass only the list of conflicting file paths to the sub-agent. The sub-agent reads them with Read/Bash and resolves the conflict markers.
-- Rationale: Keeps the brief size predictable. Sub-agent has full Read/Bash access; it can inspect markers and run `git diff --cc` or `git show MERGE_HEAD -- <file>` itself for both sides. Embedding raw diffs upfront would balloon the brief for repos with many large conflicts.
-- Rejected: Including raw `git show MERGE_HEAD -- <file>` output per file in the brief.
+- Decision: Pass only the list of conflicting file paths to the sub-agent. The sub-agent reads them with Read/Bash and resolves the conflict markers. The sub-agent stages each resolved file with `git add <file>` but does NOT commit. After the sub-agent returns `{"status":"success"}`, the SKILL runs `git merge --continue` to create the merge commit.
+- Rationale: Keeps the brief size predictable. Sub-agent has full Read/Bash access. `git merge --continue` is a git state transition that belongs to the SKILL, not the sub-agent — keeping commit authority with the SKILL and code resolution with the sub-agent. Embedding raw diffs upfront would balloon the brief for repos with many large conflicts.
+- Rejected: Including raw `git show MERGE_HEAD -- <file>` output per file in the brief. Sub-agent running `git merge --continue` or individual per-file `git commit` — would bypass the SKILL's checkpoint and rollback ownership.
 
 ### verify-fail-context
 
@@ -51,9 +51,9 @@ The "lean Builder" principle that governs `mill-go` — the Builder reads only J
 
 ### verify-fix-rounds-config
 
-- Decision: New config key `merge.verify_fix_rounds` (int, default 3). Read by the CLI via deep-merged config.
-- Rationale: Different semantic from `review.code.self_fix_rounds` (merge verify vs. code-review implementation fix). Separate key keeps intent clear and lets operators tune them independently.
-- Rejected: Reuse `review.code.self_fix_rounds` — conflates two independent concerns.
+- Decision: New config key `merge.verify_fix_rounds` (int, default 3). Read by the CLI via deep-merged config. The CLI is single-shot: it spawns one sub-agent session and passes `<VERIFY_FIX_ROUNDS>` as a token in the brief. The sub-agent self-fixes internally up to that many times before reporting `stuck_type: verify`. The SKILL calls the CLI once and reads the JSON verdict — there is no outer loop in the SKILL.
+- Rationale: Consistent with how the batch implementer works (self-fixes internally up to `self_fix_rounds`, reports stuck after exhaustion). The SKILL stays lean; the sub-agent owns the fix iteration. Different semantic from `review.code.self_fix_rounds` (merge verify vs. code-review implementation fix).
+- Rejected: SKILL-driven loop (SKILL calls CLI once per fix attempt) — adds loop logic to the SKILL, breaking lean-Builder principle.
 
 ### no-status-tracking
 
@@ -105,7 +105,7 @@ mill-merge-in's current Step 4 calls `_plan_dag.iter_batch_verifies(plan_dir)`. 
 `plugin_root = Path(__file__).resolve().parent.parent` — works correctly when script runs from the plugin cache.
 
 ### Verify output capture
-The CLI runs each verify command via `subprocess.run([...], capture_output=True, text=True, cwd=project_root)`. On failure, writes stdout+stderr to a temp file at `.scratch/merge-in-verify-output-<uuid>.txt`. Passes the path as a token to the verify-fix brief. Temp file is cleaned up by the Builder after the sub-agent returns (or left for debug on stuck).
+The CLI runs each verify command via `subprocess.run([...], capture_output=True, text=True, cwd=project_root)`. On failure, writes stdout+stderr to a temp file at `.scratch/merge-in-verify-output-<uuid>.txt`. Passes the path as a token to the verify-fix brief. The CLI deletes the temp file before returning on all exit paths (success and stuck). The content is embedded in the brief, so operators diagnose from the background log, not the temp file.
 
 ## Constraints
 
@@ -153,3 +153,6 @@ TDD candidates: brief token set (verify tokens present in rendered output), `_fo
 - **Q:** Config key for verify-fix rounds? **A:** New `merge.verify_fix_rounds` (default 3) in config.
 - **Q:** Should the sub-agent write to status.md? **A:** No — merge-in is not a task-lifecycle operation; Builder reads JSON verdict only.
 - **Q:** Test approach? **A:** Unit test with mocked `_implementer_sonnet.run`; no new integration test.
+- **Q:** Does the verify-fix loop run in the SKILL or the CLI? **A:** CLI is single-shot; sub-agent self-fixes internally up to `merge.verify_fix_rounds` times before reporting stuck. SKILL calls CLI once.
+- **Q:** Does the conflict sub-agent commit or complete the merge? **A:** Sub-agent stages (`git add`) resolved files only. SKILL runs `git merge --continue` after success to create the merge commit.
+- **Q:** Who deletes the verify output temp file? **A:** CLI deletes it before returning on all paths (success and stuck). Content already embedded in brief; bg log is the diagnostic source.
