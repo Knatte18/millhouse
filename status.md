@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-approved
+phase: done
 slug: prune-millhouse
 branch: prune-millhouse
 plan: plan
@@ -25,6 +25,7 @@ implementing  2026-05-07T08:10:56Z
 approved-Prune unused skills and scripts  2026-05-07T08:18:08Z
 holistic-reviewing  2026-05-07T08:18:20Z
 holistic-approved  2026-05-07T08:21:26Z
+done  2026-05-07T08:21:33Z
 ```
 
 ## Batches
