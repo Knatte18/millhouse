@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-auto-report SKILL.md edits
+phase: holistic-reviewing
 slug: auto-report-auto-submit
 branch: auto-report-auto-submit
 plan: plan
@@ -21,6 +21,7 @@ plan-review-r1  2026-05-07T07:19:00Z
 planned  2026-05-07T07:19:28Z
 implementing  2026-05-07T07:26:25Z
 approved-auto-report SKILL.md edits  2026-05-07T07:29:09Z
+holistic-reviewing  2026-05-07T07:29:24Z
 ```
 
 ## Batches
