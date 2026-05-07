@@ -39,5 +39,7 @@ batches:
     implementer_session: 1f641550-c020-4c00-ad3f-bfd7356dd31d
     start_sha: 846dd0286392c4d6e8dac9ed5a7bb3765c424a33
   - name: Mill-autofix skill
-    state: pending
+    state: running
+    implementer_session: 72dcab03-8cec-43ee-85cb-768dd90b8c78
+    start_sha: 8b5df95611889195b302e815e469092fdcea9af1
 ```
