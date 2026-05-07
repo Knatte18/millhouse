@@ -16,7 +16,10 @@ The fix is straightforward: when mill-self-report is invoked in auto-fire mode, 
 ## Scope
 
 **In:**
-- `mill-self-report/SKILL.md` — add `--auto` mode: when `--auto` argument is present, skip the numbered-list prompt and file all candidates automatically, then print the summary line.
+- `mill-self-report/SKILL.md` — three edits:
+  - Section 2 "Invocation modes": update the auto-fire bullet to state that the skill receives `--auto` (not no argument), and that this triggers auto-file-all behavior without confirmation.
+  - Step 4 ("Present numbered list"): add `--auto` branch — when `--auto` is the argument, skip the numbered list entirely and proceed directly to Step 5.
+  - Frontmatter `argument-hint`: update from `[free-text steering]` to `[--auto | free-text steering]`.
 - `mill-go/SKILL.md` — change the step-5 invocation from `/mill-self-report` (no arg) to `/mill-self-report --auto`.
 - `mill-plan/SKILL.md` — change the Handoff invocation similarly to `/mill-self-report --auto`.
 
@@ -50,7 +53,7 @@ The fix is straightforward: when mill-self-report is invoked in auto-fire mode, 
 
 All three affected files are pure SKILL.md — no Python scripts:
 
-- [plugins/mill/skills/mill-self-report/SKILL.md](plugins/mill/skills/mill-self-report/SKILL.md) — Step 4 (present numbered list) is the blocking step. In `--auto` mode, skip Step 4 entirely and go directly to Step 5 (file all). Step 6 (summary) runs in both modes.
+- [plugins/mill/skills/mill-self-report/SKILL.md](plugins/mill/skills/mill-self-report/SKILL.md) — three edits: (1) Section 2 auto-fire bullet: replace "The skill receives no argument in this mode" with "The skill receives `--auto` as its argument. This signals auto-file-all mode: all distilled candidates are filed without user confirmation." (2) Step 4: when argument is `--auto`, skip the numbered list and proceed directly to Step 5 with all candidates selected. Step 6 (summary) always runs. (3) Frontmatter `argument-hint`: `[--auto | free-text steering]`.
 - [plugins/mill/skills/mill-go/SKILL.md](plugins/mill/skills/mill-go/SKILL.md) — Step 5 of the Handoff section (line 219): `invoke '/mill-self-report' directly with no argument` → change to `invoke '/mill-self-report --auto'`.
 - [plugins/mill/skills/mill-plan/SKILL.md](plugins/mill/skills/mill-plan/SKILL.md) — Handoff section (line 146): `invoke '/mill-self-report' with no argument` → change to `invoke '/mill-self-report --auto'`.
 
