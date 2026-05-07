@@ -68,7 +68,7 @@ def _make_batch_file(
     *,
     deletes: list[str] | None = None,
 ) -> str:
-    """Return batch file text (single-line Reads:/Creates:/Deletes: form)."""
+    """Return batch file text (single-line Context:/Edits:/Creates:/Deletes: form)."""
     reads_part = ", ".join(f"`{r}`" for r in reads) if reads else "none"
     creates_part = ", ".join(f"`{c}`" for c in creates) if creates else "none"
     deletes_part = ", ".join(f"`{d}`" for d in deletes) if deletes else "none"

@@ -10,7 +10,7 @@ Dumps the full YAML block and timeline from each active task's `status.md`, augm
 ## Run it
 
 ```bash
-uv run --project "${CLAUDE_PLUGIN_ROOT}" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-inspect.py" [<slug>] [--json] [--since <phase>]
+uv run --project "$CLAUDE_PLUGIN_ROOT" "$CLAUDE_PLUGIN_ROOT/scripts/millpy-inspect.py" [<slug>] [--json] [--since <phase>]
 ```
 
 Narrow to one task with `<slug>`; filter to a phase and later with `--since`. Exits 0 (with a message) when no active tasks are found. `--json` emits structured output for scripting.

@@ -258,16 +258,16 @@ def _invoke(
     rate_limited = _scan_rate_limit(result.stdout or "")
 
     if result.returncode != 0:
-        stderr_snippet = (result.stderr or "")[:500]
+        error_detail = (result.stderr or result.stdout or "")[:500]
         if rate_limited:
             raise LLMRateLimitError(
-                f"claude rate-limited (exit {result.returncode}): {stderr_snippet}"
+                f"claude rate-limited (exit {result.returncode}): {error_detail}"
             )
         if resume:
             raise LLMSessionError(
-                f"claude --resume {session_id} exited {result.returncode}: {stderr_snippet}"
+                f"claude --resume {session_id} exited {result.returncode}: {error_detail}"
             )
-        raise LLMError(f"claude exited {result.returncode}: {stderr_snippet}")
+        raise LLMError(f"claude exited {result.returncode}: {error_detail}")
 
     text, observed_sid = _parse_stream_json(result.stdout)
     effective_sid = observed_sid or session_id

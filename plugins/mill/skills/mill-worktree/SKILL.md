@@ -10,9 +10,9 @@ Creates, removes, or lists git worktrees without touching the wiki or claiming a
 ## Run it
 
 ```bash
-uv run --project "${CLAUDE_PLUGIN_ROOT}" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-worktree.py" create --branch <name> [--dir-name <name>] [--color <name>] [--dry-run]
-uv run --project "${CLAUDE_PLUGIN_ROOT}" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-worktree.py" remove <worktree_path>
-uv run --project "${CLAUDE_PLUGIN_ROOT}" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-worktree.py" list
+uv run --project "$CLAUDE_PLUGIN_ROOT" "$CLAUDE_PLUGIN_ROOT/scripts/millpy-worktree.py" create --branch <name> [--dir-name <name>] [--color <name>] [--dry-run]
+uv run --project "$CLAUDE_PLUGIN_ROOT" "$CLAUDE_PLUGIN_ROOT/scripts/millpy-worktree.py" remove <worktree_path>
+uv run --project "$CLAUDE_PLUGIN_ROOT" "$CLAUDE_PLUGIN_ROOT/scripts/millpy-worktree.py" list
 ```
 
 Does not write `active.slug.md` or `status.md` — this worktree is not claimed against the wiki. `create` creates the branch locally if it does not exist.
