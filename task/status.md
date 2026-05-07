@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-cli-and-templates
 slug: mill-merge-subagent
 branch: hanf/mill-merge-subagent
 plan: task/plan
@@ -22,6 +22,7 @@ plan-fix-r1  2026-05-07T08:45:49Z
 plan-review-r2  2026-05-07T08:51:50Z
 planned  2026-05-07T08:51:58Z
 implementing  2026-05-07T09:02:09Z
+approved-cli-and-templates  2026-05-07T09:10:30Z
 ```
 
 ## Batches
@@ -29,7 +30,7 @@ implementing  2026-05-07T09:02:09Z
 ```yaml
 batches:
   - name: cli-and-templates
-    state: running
+    state: approved
     implementer_session: b45df3ed-fd2e-442d-81a8-119fcd30f5a3
     start_sha: 95f4a56ef3131a53c80ea28396a257ff35f49067
   - name: skill-and-config
