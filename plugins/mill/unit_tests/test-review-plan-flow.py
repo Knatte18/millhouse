@@ -439,7 +439,7 @@ def main() -> int:
             assert retry_text.startswith("## Re-attached files"), (
                 f"retry prompt must start with '## Re-attached files': {retry_text[:80]!r}"
             )
-            assert retry_kwargs == {"session_id": "sid-1", "resume": True, "timeout": None}, (
+            assert retry_kwargs == {"session_id": "sid-1", "resume": True, "timeout": None, "effort": None}, (
                 f"retry kwargs wrong: {retry_kwargs}"
             )
             print("PASS test6: per-batch NEED_CONTEXT retry → APPROVE, holistic unaffected")
@@ -484,7 +484,7 @@ def main() -> int:
             assert retry_text.startswith("## Re-attached files"), (
                 f"holistic retry prompt must start with '## Re-attached files': {retry_text[:80]!r}"
             )
-            assert retry_kwargs == {"session_id": "sid-2", "resume": True, "timeout": None}, (
+            assert retry_kwargs == {"session_id": "sid-2", "resume": True, "timeout": None, "effort": None}, (
                 f"holistic retry kwargs wrong: {retry_kwargs}"
             )
             print("PASS test7: holistic NEED_CONTEXT retry → APPROVE")
