@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-approved
+phase: done
 slug: rename-hub-junctions
 branch: rename-hub-junctions
 plan: plan
@@ -33,6 +33,7 @@ approved-Spawn infrastructure and wiki config  2026-05-07T06:41:11Z
 approved-Teardown and migration  2026-05-07T07:00:56Z
 approved-Skills and documentation  2026-05-07T07:15:55Z
 holistic-approved  2026-05-07T07:23:25Z
+done  2026-05-07T07:23:33Z
 ```
 
 ## Batches
