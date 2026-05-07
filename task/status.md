@@ -29,7 +29,9 @@ implementing  2026-05-07T11:28:36Z
 ```yaml
 batches:
   - name: Core Python helpers
-    state: pending
+    state: running
+    implementer_session: 09cd111a-062a-4ee9-bbdf-2f7656a59e9f
+    start_sha: f4d3b41e79e3584b66e3d9e58065c36c23fb23ca
   - name: Config and autonomous-mode wiring
     state: pending
   - name: Mill-autofix skill
