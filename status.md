@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-test-fixtures
+phase: fixing-runtime-and-skills-r1
 slug: mill-misc-fixes
 branch: mill-misc-fixes
 plan: plan
@@ -22,6 +22,8 @@ planned  2026-05-07T06:11:37Z
 implementing  2026-05-07T06:16:04Z
 reviewing-test-fixtures-r1  2026-05-07T06:21:05Z
 approved-test-fixtures  2026-05-07T06:24:17Z
+reviewing-runtime-and-skills-r1  2026-05-07T06:30:34Z
+fixing-runtime-and-skills-r1  2026-05-07T06:36:20Z
 ```
 
 ## Batches
@@ -35,7 +37,9 @@ batches:
     review_round: 1
     review_file: reviews/20260507-062359-code-review-test-fixtures-r1.md
   - name: runtime-and-skills
-    state: running
+    state: fixing
     implementer_session: c2b63923-a45f-4a32-a61f-9f1b6c5ecbd2
     start_sha: a1a8b21872d92fd827de6bd90eead89ec38a54e5
+    review_round: 1
+    review_file: c:\Code\millhouse\wts\mill-misc-fixes\reviews\20260507-063544-code-review-runtime-and-skills-r1.md
 ```
