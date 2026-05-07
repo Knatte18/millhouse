@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-runtime-and-skills
+phase: done
 slug: mill-misc-fixes
 branch: mill-misc-fixes
 plan: plan
@@ -25,6 +25,9 @@ approved-test-fixtures  2026-05-07T06:24:17Z
 reviewing-runtime-and-skills-r1  2026-05-07T06:30:34Z
 fixing-runtime-and-skills-r1  2026-05-07T06:36:20Z
 approved-runtime-and-skills  2026-05-07T06:44:40Z
+holistic-reviewing  2026-05-07T06:44:50Z
+holistic-approved  2026-05-07T06:51:01Z
+done  2026-05-07T06:51:01Z
 ```
 
 ## Batches
