@@ -48,7 +48,9 @@ Public API:
     write_initial_status(worktree_path, slug, title, ts, parent_branch, branch) -> Path
         Render + write ``status.md`` at worktree root; stage + commit on task branch;
         return the absolute path of the written file.
-    recreate_active_junction(wiki_path, slug, mill_dir) -> None
+    write_wiki_active_task_md(wiki_path, slug, title, ts) -> None
+        Create `wiki/active/<slug>/task.md`; commit+push in wiki.
+    recreate_active_junction(slug, hub_root, container_path) -> None
         Delete-then-create the ``.active`` junction so it points at the correct
         active-task directory. Used by ``mill-claim``; ``mill-spawn`` handles
         junctions via its own per-worktree junction loop and does not call this.
@@ -686,7 +688,7 @@ def write_initial_status(
     branch: str,
 ) -> Path:
     """
-    Render + write ``status.md`` at worktree root; stage + commit on task branch.
+    Render + write ``task/status.md`` at worktree root; create ``task/`` directory if absent.
 
     Uses ``_status.render_initial`` to produce the file body, writes the
     file to ``worktree_path / "status.md"``, stages and commits on the task
@@ -721,14 +723,15 @@ def write_initial_status(
         slug=slug,
         branch=branch,
     )
-    status_abs = worktree_path / "status.md"
+    status_abs = worktree_path / "task" / "status.md"
+    status_abs.parent.mkdir(parents=True, exist_ok=True)
     status_abs.write_text(status_text, encoding="utf-8")
     result = _subprocess_util.run(
-        ["git", "-C", str(worktree_path), "add", "status.md"],
+        ["git", "-C", str(worktree_path), "add", "task/status.md"],
     )
     if result.returncode != 0:
         raise RuntimeError(
-            f"git add status.md failed: {result.stderr.strip()!r}"
+            f"git add task/status.md failed: {result.stderr.strip()!r}"
         )
     result = _subprocess_util.run(
         ["git", "-C", str(worktree_path), "commit", "-m", f"spawn: init status for {slug}"],
@@ -740,20 +743,40 @@ def write_initial_status(
     return status_abs
 
 
+def write_wiki_active_task_md(
+    wiki_path: Path,
+    slug: str,
+    title: str,
+    ts: str,
+) -> None:
+    """Create ``wiki/active/<slug>/task.md``; commit+push in wiki."""
+    active_dir = wiki_path / "active" / slug
+    active_dir.mkdir(parents=True, exist_ok=True)
+    (active_dir / "task.md").write_text(
+        f"# Task: {title}\n\n```yaml\nslug: {slug}\ntitle: {title}\ncreated_at: {ts}\n```\n",
+        encoding="utf-8",
+    )
+    _wiki.write_commit_push(
+        wiki_path,
+        [f"active/{slug}/task.md"],
+        f"task: create active dir for {slug}",
+        slug=slug,
+    )
+
+
 def recreate_active_junction(
     slug: str,
-    mill_dir: Path,
+    hub_root: Path,
     container_path: Path,
 ) -> None:
     """
-    Delete-then-create the ``.active`` junction at ``mill_dir.parent / ".active"``.
+    Delete-then-create the ``.active`` junction at ``hub_root / ".active"``.
 
     Points the junction at ``container_path / "portals" / slug``. Called by
     ``mill-claim`` after claiming a task in an existing worktree where the
     junction may already exist pointing at a previous task. ``mill-spawn``
-    does NOT call this helper directly — it routes through
-    ``_setup.create_hub_links`` which iterates the full ``junctions:`` block
-    including ``.active``.
+    calls this helper after ``_setup.create_hub_links`` to update the hub's
+    ``.active`` junction.
 
     If the target directory does not yet exist it is created (parents
     included) so ``_junction.create`` does not fail on a missing target.
@@ -763,8 +786,8 @@ def recreate_active_junction(
 
     Args:
         slug: Task slug; determines the target path under portals/.
-        mill_dir: The ``.millhouse/`` directory inside the worktree.
-            The junction is placed at ``mill_dir.parent / ".active"``.
+        hub_root: Absolute path to the hub git checkout. The junction is
+            placed at ``hub_root / ".active"``.
         container_path: The container directory. Derive via
             ``_paths.resolve_container_path(git_root)`` — NOT
             ``git_root.parent``, which returns ``<container>/wts/`` in
@@ -773,7 +796,7 @@ def recreate_active_junction(
     """
     target = container_path / "portals" / slug
     target.mkdir(parents=True, exist_ok=True)
-    link_path = mill_dir.parent / ".active"
+    link_path = hub_root / ".active"
     if link_path.exists() or link_path.is_symlink():
         _junction.remove(link_path)
     _junction.create(target, link_path)

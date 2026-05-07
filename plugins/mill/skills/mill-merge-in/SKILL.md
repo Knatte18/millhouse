@@ -11,7 +11,7 @@ Merge the parent branch into the current branch. Creates a rollback checkpoint f
 
 1. `_wiki.sync_pull(<WIKI_PATH>)` — refresh the wiki clone before reading any task state.
 2. Read the slug via `_active.read_slug(Path(".millhouse"))`. Missing → halt with "this worktree was not created by mill-spawn".
-3. Resolve the parent branch. **Source of truth is `status.md`'s `parent:` row** — call `_parent_branch.resolve(status_path, interactive=True)`. Config does not carry a parent-branch override (YAGNI as of v2.0). If `mill-merge-in` is being called from `mill-merge`'s auto-merge path, pass `interactive=False` and propagate the raised `ParentBranchError`.
+3. Resolve the parent branch. **Source of truth is `task/status.md`'s `parent:` row** — call `_parent_branch.resolve(status_path, interactive=True)` where `status_path = Path("task/status.md").resolve()`. Config does not carry a parent-branch override (YAGNI as of v2.0). If `mill-merge-in` is being called from `mill-merge`'s auto-merge path, pass `interactive=False` and propagate the raised `ParentBranchError`.
 4. Optional positional argument: `<branch>` from the user's invocation overrides both status.md and the prompt. This is for ad-hoc syncing from some other branch than the task's declared parent.
 
 ## Steps
@@ -52,7 +52,7 @@ If any real-code conflict is unresolvable → roll back to checkpoint, preserve 
 
 ### 4. Verify
 
-Replay exactly the tests that ran during implementation. Call `_plan_dag.iter_batch_verifies(plan_dir)` where `plan_dir = <WIKI_PATH>/active/<slug>/plan/`. That yields `(batch_name, verify_cmd)` pairs in DAG order, skipping batches with `verify: null`.
+Replay exactly the tests that ran during implementation. Call `_plan_dag.iter_batch_verifies(plan_dir)` where `plan_dir = Path("task/plan/").resolve()`. That yields `(batch_name, verify_cmd)` pairs in DAG order, skipping batches with `verify: null`.
 
 For each `(name, cmd)`:
 - Run the command from the worktree root.
