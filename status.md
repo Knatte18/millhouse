@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-Teardown and migration
+phase: approved-Skills and documentation
 slug: rename-hub-junctions
 branch: rename-hub-junctions
 plan: plan
@@ -31,6 +31,7 @@ reviewing-_gitignore API simplification-r1  2026-05-07T06:19:17Z
 approved-_gitignore API simplification  2026-05-07T06:21:11Z
 approved-Spawn infrastructure and wiki config  2026-05-07T06:41:11Z
 approved-Teardown and migration  2026-05-07T07:00:56Z
+approved-Skills and documentation  2026-05-07T07:15:55Z
 ```
 
 ## Batches
@@ -52,7 +53,7 @@ batches:
     implementer_session: 6f51905a-c7d1-4f46-b03d-b20f0e567b3d
     start_sha: 6cca1c52b86c7c949f824f36078ac70b57243421
   - name: Skills and documentation
-    state: running
+    state: approved
     implementer_session: 7e7f339a-2ba3-4f61-8793-3c392d8d511a
     start_sha: 5b62d4f56ff47c302ca0b428151ebb4308ffcd70
 ```
