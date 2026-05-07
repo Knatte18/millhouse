@@ -377,7 +377,6 @@ def run(
                 f"on-disk per-batch files; firing holistic only",
                 file=sys.stderr,
             )
-            reviews.extend(_disk_reviews)
         else:
             # Normal path: skip-approved scan + ThreadPoolExecutor.
             approved_carry = _scan_approved_batches(reviews_dir)
