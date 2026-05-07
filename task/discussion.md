@@ -90,7 +90,9 @@ The goal is a single skill invocation in a fresh thread that drains the `label:b
 
 **`plugins/mill/scripts/millpy-add.py`** — exits 1 with "Slug ... already present in Home.md" on collision. Mill-autofix must check the returned exit code and parse stderr to detect this. On collision: parse Home.md to find the existing task's phase marker; if `[active]` or `[done]`, skip; if unmarked, proceed with the claim (the add step was already done previously).
 
-**`plugins/mill/scripts/_status.py`** — `read_full(status_path)` returns `{"yaml": dict, "timeline": list[str]}`. After sub-skill invocations, mill-autofix reads `status_path = Path("task/status.md").resolve()` and checks `status["yaml"]["phase"]`. Expected values: `planned` (mill-plan succeeded), `blocked` (mill-plan or mill-go blocked), `done` (mill-go succeeded), `complete` (not expected in autofix flow).
+**`plugins/mill/scripts/_status.py`** — `read_full(status_path)` returns `{"yaml": dict, "timeline": list[str]}`. After sub-skill invocations, mill-autofix reads `status_path = Path("task/status.md").resolve()` and checks `status["yaml"]["phase"]`. Expected values: `planned` (mill-plan succeeded), `blocked` (mill-plan or mill-go blocked), `done` (mill-go succeeded). Note: `task/status.md` is deleted by mill-merge's cleanup commit before the squash merge lands on the parent — mill-autofix must NOT read status.md after mill-merge returns; success is detected by branch state, not by status.md phase.
+
+**`plugins/mill/scripts/_inplace.py`** — `is_inplace(active_data, git_root, cfg) -> bool`. Mill-merge calls this at entry to auto-detect in-place mode. Detection: (1) current HEAD branch matches `active_data["branch"]` AND (2) no directory exists at `<worktrees-dir>/<slug>/`. For mill-autofix-claimed tasks, criterion 2 always holds (millpy-claim never creates a worktree directory), so mill-merge automatically enters in-place mode. In-place mode: skips Steps 1–2 (no merge lock, no mill-merge-in), does `git checkout <parent_branch>` + `git branch -D $CHILD_BRANCH` + removes `.millhouse/active.slug.md`. No mill-merge SKILL.md changes required — in-place mode is already implemented.
 
 **`plugins/mill/scripts/_wiki.py`** — `sync_pull(wiki_path, slug="mill-autofix")` for entry.
 
@@ -158,8 +160,13 @@ For simplicity, the skill reads and writes config.local.yaml as a YAML document 
      - Read task/status.md; if phase == blocked: run cleanup, record, continue
   i. Invoke /mill-go
      - Read task/status.md; if phase != done: run cleanup, record, continue
-  j. Invoke /mill-merge (in-place mode auto-detected)
-     - Extract squash SHA: git log --oneline -1 <parent_branch>
+  j. Invoke /mill-merge (in-place mode auto-detected by _inplace.is_inplace)
+     - Success detection: mill-merge returns normally AND git branch --show-current == parent_branch
+     - Extract squash SHA: git log --oneline -1 <parent_branch> (run AFTER mill-merge returns;
+       task/ and task branch are gone at this point — do NOT read task/status.md)
+     - PR-path case: mill-merge halts without deleting the task branch; git branch --show-current
+       still == task branch → record as "pending PR", run stuck cleanup (git checkout parent,
+       remove active.slug.md), continue to next bug; user lands PR and re-runs /mill-merge manually
   k. _gh_issues.close_with_comment(issue_number, f"Autonomously fixed by mill-autofix. Squash commit: {sha}")
   l. Check .scratch/autofix-stop — halt if present
 
@@ -221,4 +228,5 @@ No CONSTRAINTS.md found in this repo. Standard mill constraints apply:
 - **Q:** Does mill-autofix push the task branch before mill-merge? **A:** millpy-implement.py pushes the task branch after each batch (per mill-go SKILL.md board discipline). Mill-autofix's own discussion.md commit is pushed in step g of the loop. No additional push needed.
 - **Q:** Should the autofix-report include issue numbers and titles? **A:** Yes. Each entry includes issue #, title, slug, outcome, and (for merged bugs) the squash commit SHA.
 - **Q:** How does mill-autofix detect that mill-plan auto-blocked in autonomous_mode? **A:** After `/mill-plan` returns, mill-autofix reads `task/status.md` and checks `phase:`. If `blocked`, the auto-block path fired. If `planned`, proceed to mill-go.
-- **Q:** If mill-merge fails (e.g., branch protection), what happens? **A:** Mill-merge's PR-path fallback creates a PR and halts at `pr-pending`. Mill-autofix detects `phase != complete` on reading status after merge and records the task as "pending PR" in the report, then continues. User must land the PR manually and re-run `/mill-merge`.
+- **Q:** If mill-merge fails (e.g., branch protection), what happens? **A:** Mill-merge's PR-path fallback creates a PR and sets `pr-pending` on the task branch, then halts WITHOUT deleting the task branch. Mill-autofix detects this because `git branch --show-current` still equals the task branch (not the parent). Mill-autofix runs stuck cleanup (git checkout parent, remove active.slug.md), records "pending PR" in the report, and continues to the next bug. User lands the PR and re-runs `/mill-merge` manually.
+- **Q:** Why not read task/status.md after mill-merge to detect success? **A:** Mill-merge's cleanup commit removes the entire `task/` directory before the squash merge. By the time mill-merge returns in the success path, `task/status.md` is gone and the task branch is deleted. Success is detected by branch state: `git branch --show-current == parent_branch`.
