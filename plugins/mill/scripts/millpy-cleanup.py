@@ -175,7 +175,7 @@ def build_plan(
                 if entry.name not in active_slugs:
                     to_report.append(
                         f"orphan worktree: {entry} (no active marker;"
-                        f" run 'mill-worktree remove {entry}' to clean up)"
+                        f" run 'git worktree remove --force {entry}' to clean up)"
                     )
 
     # Orphan Home.md marker: [active] slug with no active worktree.
