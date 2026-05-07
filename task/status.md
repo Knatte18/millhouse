@@ -29,7 +29,9 @@ implementing  2026-05-07T09:02:09Z
 ```yaml
 batches:
   - name: cli-and-templates
-    state: pending
+    state: running
+    implementer_session: b45df3ed-fd2e-442d-81a8-119fcd30f5a3
+    start_sha: 95f4a56ef3131a53c80ea28396a257ff35f49067
   - name: skill-and-config
     state: pending
   - name: unit-tests
