@@ -1074,6 +1074,94 @@ def test_wiki_config_mutation_modifies_and_creates() -> int:
             return 1
 
 
+def test_skip_checks_filters_wiki_config_mutation() -> int:
+    """skip_checks={"wiki-config-mutation"} suppresses that check entirely."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        wiki_dir = tmp / "wiki"
+        wiki_dir.mkdir()
+        (wiki_dir / "config.yaml").write_text("# placeholder", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file("alpha", edits=["wiki/config.yaml"])
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(
+            plan_dir, project_root,
+            wiki_root=wiki_dir,
+            skip_checks=frozenset({"wiki-config-mutation"}),
+        )
+        try:
+            assert result == [], f"expected no errors, got: {result}"
+            print("PASS test_skip_checks_filters_wiki_config_mutation")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_skip_checks_filters_wiki_config_mutation: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_skip_checks_does_not_suppress_other_checks() -> int:
+    """skip_checks={"wiki-config-mutation"} suppresses that check but not card-missing-field."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        wiki_dir = tmp / "wiki"
+        wiki_dir.mkdir()
+        (wiki_dir / "config.yaml").write_text("# placeholder", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file("alpha", edits=["wiki/config.yaml"], missing_fields={"Commit"})
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(
+            plan_dir, project_root,
+            wiki_root=wiki_dir,
+            skip_checks=frozenset({"wiki-config-mutation"}),
+        )
+        try:
+            assert len(result) == 1, f"expected exactly 1 error, got: {result}"
+            assert result[0]["check"] == "card-missing-field", (
+                f"expected card-missing-field, got: {result[0]['check']!r}"
+            )
+            print("PASS test_skip_checks_does_not_suppress_other_checks")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_skip_checks_does_not_suppress_other_checks: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_skip_checks_unknown_check_silently_ignored() -> int:
+    """Unknown check name in skip_checks raises no exception and returns empty list."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file("alpha")
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        try:
+            result = _plan_validate.run(
+                plan_dir, project_root,
+                skip_checks=frozenset({"nonexistent-check"}),
+            )
+            assert result == [], f"expected no errors, got: {result}"
+            print("PASS test_skip_checks_unknown_check_silently_ignored")
+            return 0
+        except Exception as exc:
+            print(f"FAIL test_skip_checks_unknown_check_silently_ignored: {exc}", file=sys.stderr)
+            return 1
+
+
 def test_reads_token_missing_both_unions_dirty() -> int:
     """(g) Reads: token missing on disk + in neither union → non-existent-path error."""
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -1142,6 +1230,10 @@ def main() -> int:
         test_wiki_config_mutation_creates,
         test_wiki_config_mutation_multi_batch,
         test_wiki_config_mutation_modifies_and_creates,
+        # skip_checks filtering (Card 7 / #188)
+        test_skip_checks_filters_wiki_config_mutation,
+        test_skip_checks_does_not_suppress_other_checks,
+        test_skip_checks_unknown_check_silently_ignored,
     ]
 
     errors = 0
