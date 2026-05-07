@@ -41,7 +41,9 @@ batches:
     implementer_session: 80ef660f-f7b0-4a90-b92d-ec946ef4f764
     start_sha: 8db2ed37ac9520e8c2dc1cf14a4c22834dd46e5b
   - name: cli-skip-checks
-    state: pending
+    state: running
+    implementer_session: b227b490-9bed-4181-9a28-940f54635252
+    start_sha: 07caceebe6dc5742b4819bab1f8755a23006b92b
   - name: skill-md-fixes
     state: pending
 ```
