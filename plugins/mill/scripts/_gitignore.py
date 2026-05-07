@@ -33,6 +33,7 @@ GLOB_ENTRIES: list[str] = [
     "**/.scratch/",
     "**/.wiki/",
     "**/.active/",
+    "**/.portals/",
 ]
 
 
