@@ -19,13 +19,13 @@ TEMPLATE_PATH = TEMPLATES_DIR / "shortcut-wrapper.ps1"
 def main() -> int:
     errors = 0
 
-    # --- render(template, {"SCRIPT": "millpy-list"}) contains uv run call for millpy-list.py ---
-    rendered = render(TEMPLATE_PATH, {"SCRIPT": "millpy-list"})
-    if "millpy-list.py" not in rendered:
-        print("FAIL: rendered template does not contain 'millpy-list.py'", file=sys.stderr)
+    # --- render(template, {"SCRIPT": "millpy-status"}) contains uv run call for millpy-status.py ---
+    rendered = render(TEMPLATE_PATH, {"SCRIPT": "millpy-status"})
+    if "millpy-status.py" not in rendered:
+        print("FAIL: rendered template does not contain 'millpy-status.py'", file=sys.stderr)
         errors += 1
     else:
-        print("PASS: render substitutes <SCRIPT> -> millpy-list.py in template")
+        print("PASS: render substitutes <SCRIPT> -> millpy-status.py in template")
     if "uv run" not in rendered:
         print("FAIL: rendered template does not contain 'uv run'", file=sys.stderr)
         errors += 1
