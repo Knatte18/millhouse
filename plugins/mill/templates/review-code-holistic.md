@@ -15,7 +15,7 @@ Reviewer model: **<REVIEWER_MODEL>**. Round **<ROUND>**.
 
 ## Criteria (apply to the implementation as a whole)
 
-- **End-to-end plan alignment** — every batch's cards are realised; every file listed across all batches' `Reads:`/`Modifies:`/`Creates:` is present in the source files provided.
+- **End-to-end plan alignment** — every batch's cards are realised; every file listed across all batches' `Context:`/`Edits:`/`Creates:` is present in the source files provided.
 - **Shared-decisions alignment** — the `## Shared Decisions` subsections are applied consistently across all batches; deviation is BLOCKING.
 - **Out-of-plan files** — BLOCKING if any source file is present that is not accounted for in any batch's reference lists. If the implementer added it, the batch file must have been updated first; a review with surprise files means that discipline was skipped somewhere.
 - **Cross-batch contracts** — interfaces produced by one batch and consumed by another are compatible. Dependency order implied by `depends-on:` is reflected in the code (consumers don't assume behaviour the producer doesn't guarantee).
