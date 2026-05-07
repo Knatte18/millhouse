@@ -21,6 +21,8 @@ from pathlib import Path
 HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
+import _implementer_common  # noqa: E402
+
 _IMPLEMENT_PATH = HUB / "plugins" / "mill" / "scripts" / "millpy-implement.py"
 
 _spec = importlib.util.spec_from_file_location("millpy_implement", str(_IMPLEMENT_PATH))
@@ -335,7 +337,7 @@ class TestForwardOutput(unittest.TestCase):
     def _call(self, output: str) -> tuple[int, str]:
         buf = io.StringIO()
         with unittest.mock.patch.object(
-            millpy_implement.subprocess, "run",
+            _implementer_common.subprocess, "run",
             return_value=unittest.mock.MagicMock(returncode=1, stdout=""),
         ):
             with unittest.mock.patch("sys.stdout", buf):
@@ -395,7 +397,7 @@ class TestForwardOutput(unittest.TestCase):
         sha = "a" * 40
         buf = io.StringIO()
         with unittest.mock.patch.object(
-            millpy_implement.subprocess, "run",
+            _implementer_common.subprocess, "run",
             return_value=unittest.mock.MagicMock(returncode=0, stdout=sha + "\n"),
         ):
             with unittest.mock.patch("sys.stdout", buf):
@@ -410,7 +412,7 @@ class TestForwardOutput(unittest.TestCase):
         """git rev-parse failure → original commit_sha preserved in output."""
         buf = io.StringIO()
         with unittest.mock.patch.object(
-            millpy_implement.subprocess, "run",
+            _implementer_common.subprocess, "run",
             return_value=unittest.mock.MagicMock(returncode=1, stdout=""),
         ):
             with unittest.mock.patch("sys.stdout", buf):
