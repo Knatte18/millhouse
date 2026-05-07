@@ -605,7 +605,7 @@ def test_main_dry_run_prints_worktree_status_path() -> None:
         raise AssertionError(f"expected exit 0 for --dry-run, got {exit_code}")
 
     output = captured.getvalue()
-    expected_path = str(Path("/fake/worktrees") / "my-task" / "status.md")
+    expected_path = str(Path("/fake/worktrees") / "my-task" / "task" / "status.md")
     if expected_path not in output:
         raise AssertionError(
             f"dry-run output must contain {expected_path!r}\n"

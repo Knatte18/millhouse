@@ -19,7 +19,7 @@ Bootstrap the mill infrastructure from nothing. Produces a working `.millhouse/`
 
 - First-time setup of a hub clone on a new machine
 - After a crash or partial setup
-- When `.millhouse/wiki` junction is missing or broken
+- When `.wiki` junction is missing or broken
 
 ## Preconditions
 
@@ -210,7 +210,7 @@ else:
 "
 ```
 
-`<hub.name>` is the repository directory name (last component of `<hub-path>`). This portal entry is the canonical "hub in portals" that `.others/<repo>` resolves through.
+`<hub.name>` is the repository directory name (last component of `<hub-path>`). This portal entry is the canonical "hub in portals" that `.portals/<repo>` resolves through.
 
 **Idempotency:** `portals.mkdir(exist_ok=True)` is a no-op if the directory already exists. The portal junction check prevents double-creation.
 
@@ -244,38 +244,31 @@ Token reference:
 - `<wiki-dir>` — wiki clone path from Phase 3
 - `<repo>` — repository directory name (e.g. `millhouse`)
 
-**Do NOT add `<SLUG>`** — the token-scope filter skips junction entries that need `<SLUG>` (`.active`, per-task `.others` entries). Those are created by mill-spawn.
+**Do NOT add `<SLUG>`** — the token-scope filter skips junction entries that need `<SLUG>` (`.active`, per-task `.wiki`/`.portals` entries). Those are created by mill-spawn.
 
 Log the created junctions and hardlinks from the returned dict so the user can verify.
 
 ### Phase 4.5b — Manage `.gitignore` marker block
 
-Maintains the `# === mill-managed ... # === end mill-managed ===` block across the repo-root `.gitignore` and (when hub is a subdirectory of the repo) a hub-local `.gitignore`.
+Maintains the `# === mill-managed ... # === end mill-managed ===` block in the hub's `.gitignore`.
 
-Compute `<repo-root-gitignore>` and `<hub-gitignore>`:
-- In container-form (`hub-path == git-toplevel`): both paths are the same (`<git-toplevel>/.gitignore`).
-- In prefix-form (hub is a subfolder of the repo): `<repo-root-gitignore>` is `<git-toplevel>/.gitignore`; `<hub-gitignore>` is `<hub-path>/.gitignore`.
+Compute `<hub-gitignore>` as `<hub-path>/.gitignore` (same path in both container-form and prefix-form).
 
-Read the hardlink entry names (available from Phase 4 output), then call `_gitignore.upsert_split`:
+Read the hardlink entry names (available from Phase 4 output), then call `_gitignore.upsert`:
 
 ```bash
 PYTHONPATH="$CLAUDE_PLUGIN_ROOT/scripts" uv run --project "$CLAUDE_PLUGIN_ROOT" python -c "
 from pathlib import Path
-import _wiki, _gitignore, json
-wiki = Path(r'<wiki-dir>').resolve()
-hardlinks = _wiki.read_hardlinks(wiki)
-hardlink_names = list(hardlinks.keys())
-repo_gi = Path(r'<repo-root-gitignore>').resolve()
+import _wiki, _gitignore
 hub_gi = Path(r'<hub-gitignore>').resolve()
-glob_entries = _gitignore.GLOB_ENTRIES
-anchored_entries = _gitignore.ANCHORED_ENTRIES + hardlink_names
-repo_changed, hub_changed = _gitignore.upsert_split(repo_gi, hub_gi, glob_entries, anchored_entries)
-print('repo .gitignore:', 'updated' if repo_changed else 'already up to date')
-print('hub .gitignore: ', 'updated' if hub_changed else 'already up to date')
+wiki = Path(r'<wiki-dir>').resolve()
+hardlink_names = [f'/{name}' for name in _wiki.read_hardlinks(wiki).keys()]
+changed = _gitignore.upsert(hub_gi, _gitignore.GLOB_ENTRIES + hardlink_names)
+print('hub .gitignore:', 'updated' if changed else 'already up to date')
 "
 ```
 
-Log the result per file. When both paths are the same a single combined block is written; when different, glob entries go to `repo_root_gitignore` and anchored entries go to `hub_gitignore`.
+Log the result. Hardlink names (e.g. `/tasks.md`) are passed as anchored patterns alongside `GLOB_ENTRIES` in a single combined list.
 
 ### Phase 4.7 — PS1 shortcut wrappers
 

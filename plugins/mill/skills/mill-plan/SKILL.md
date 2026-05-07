@@ -13,12 +13,12 @@ You are an autonomous planner running on Opus. Your job is to turn `discussion.m
    `signature: _wiki.sync_pull(wiki_path: Path, *, slug: str) -> None`
 2. Read the slug via `_active.read_slug(Path(".millhouse"))`. Missing → halt with "this worktree was not created by mill-spawn".
 3. Load config — deep-merge `<WIKI_PATH>/config.yaml` with `.millhouse/config.local.yaml`. Read `review.plan.rounds` as `max_review_rounds`.
-4. Read `status.md` (worktree root) and inspect `phase:` + the plan state on disk (`plan/00-overview.md`). Decide entry branch:
+4. Read `task/status.md` and inspect `phase:` + the plan state on disk (`task/plan/00-overview.md`). Decide entry branch:
 
    | state | action |
    | --- | --- |
-   | `phase: discussed`, no `plan/` dir at worktree root | Phase: Plan (fresh write) |
-   | `phase: planning`/`plan-review-*`/`plan-fix-*`, `plan/00-overview.md` exists, `approved: false` | Phase: Plan Review (re-enter loop; do NOT rewrite plan files) |
+   | `phase: discussed`, no `task/plan/` dir at worktree root | Phase: Plan (fresh write) |
+   | `phase: planning`/`plan-review-*`/`plan-fix-*`, `task/plan/00-overview.md` exists, `approved: false` | Phase: Plan Review (re-enter loop; do NOT rewrite plan files) |
    | `approved: true` in overview frontmatter | Tell user: "plan already approved, run `/mill-go`". Halt. |
    | any other phase (`discussing`, `planned`, …) | Tell user what phase is set and which skill should run instead. Halt. |
 
@@ -28,7 +28,7 @@ Report the current phase to the user at each transition.
 
 ### Phase: Plan
 
-Read `discussion.md` at the worktree root in full. Read `CONSTRAINTS.md` at the hub root if present (via `_constraints.read_if_exists()`). Then **think the plan through end-to-end before writing any file** — you are Opus and this is exactly where the planning budget pays off.
+Read `task/discussion.md` in full. Read `CONSTRAINTS.md` at the hub root if present (via `_constraints.read_if_exists()`). Then **think the plan through end-to-end before writing any file** — you are Opus and this is exactly where the planning budget pays off.
 
 **Batch sizing.** A batch is a *smart unit*: code that logically belongs together and that a Sonnet builder with a 200k-token context window can hold in its head while implementing. Split on natural module/subsystem boundaries, not on file count. If a proposed batch would force Sonnet to load the entire codebase to understand its own `Context:` list, split it. If two adjacent batches share >80% of their `Context:`, merge them.
 
@@ -49,20 +49,21 @@ overview_text = _render.render(template_path, tokens)
 
 Apply the same rule when rendering `plan-batch.md` for each batch (`<BATCH_NAME>`, `<BATCH_SLUG>` go through `quote_scalar` too).
 
-1. Render `plugins/mill/templates/plan-overview.md` into `plan/00-overview.md` at the worktree root using the pre-quoted tokens dict.
+1. Render `plugins/mill/templates/plan-overview.md` into `task/plan/00-overview.md` using the pre-quoted tokens dict.
 2. Fill the Batch Index DAG, Shared Decisions, and All Files Touched sections in place. Set `number:` for each entry to the NN integer from the batch filename. Write `depends-on:` as a list of integers (e.g., `depends-on: [1]` meaning this batch depends on batch number 1). Leave `depends-on: []` for root batches.
-3. For each batch, render `plugins/mill/templates/plan-batch.md` into `plan/NN-<batch-slug>.md` at the worktree root using the pre-quoted tokens dict. Fill Batch Scope + Cards + Batch Tests. Set `number: NN` in the rendered frontmatter to the batch's integer (same as the filename prefix).
+3. For each batch, render `plugins/mill/templates/plan-batch.md` into `task/plan/NN-<batch-slug>.md` using the pre-quoted tokens dict. Fill Batch Scope + Cards + Batch Tests. Set `number: NN` in the rendered frontmatter to the batch's integer (same as the filename prefix).
 
 **Card numbering is global across batches**: card 1 lives in batch 01, card 7 might live in batch 02, etc. Never restart at 1 inside each batch — the reviewer and implementer cite cards by number and need uniqueness.
 
-**Self-validate the DAG** before committing: call `_plan_dag.extract_batch_index(overview_text)` then `_plan_dag.validate(batches, sorted(p.name for p in plan_dir.glob("??-*.md") if p.name != "00-overview.md"))`. Any `PlanDAGError` → fix the plan files, then re-validate. Do not commit a plan that fails this check.
+**Self-validate the DAG** before committing: call `_plan_dag.extract_batch_index(overview_text)` then `_plan_dag.validate(batches, sorted(p.name for p in plan_dir.glob("??-*.md") if p.name != "00-overview.md"))` where `plan_dir = Path("task/plan/").resolve()`. Any `PlanDAGError` → fix the plan files, then re-validate. Do not commit a plan that fails this check.
 
-**Update status.md.**
+**Update `task/status.md`.**
 
-- `_status.update_field(status_path, "plan", "plan")` — pointer to the plan dir (worktree-relative).
+- `status_path = Path("task/status.md").resolve()`
+- `_status.update_field(status_path, "plan", "task/plan")` — pointer to the plan dir (worktree-relative).
 - `_status.append_phase(status_path, "planning", _timestamp.now_utc_iso())`.
 
-**Commit on the task branch.** `git -C <worktree> add plan/ status.md && git commit -m "mill-plan: write plan for {slug}"`.
+**Commit on the task branch.** `git -C <worktree> add task/plan/ task/status.md && git commit -m "mill-plan: write plan for {slug}"`.
 
 ### Phase: Plan Review
 
@@ -92,7 +93,7 @@ Loop up to `max_review_rounds` rounds. Each round:
 
    Rows where the fix is "halt" are deliberate: those errors signal a structural planning bug that auto-fixing would mask. The two-pass cap fires for these too (the second pass will produce the same error and trigger halt).
 
-   After applying mechanical fixes for every error in the JSON, mill-plan commits the fix(es) on the task branch: `git -C <worktree> add plan/ && git -C <worktree> commit -m "mill-plan: validator-fix pass for {slug}"` and re-runs the CLI. The commit message uses `validator-fix` to distinguish it from `plan-fix-r{N}` commits (which are LLM-fix-pass commits).
+   After applying mechanical fixes for every error in the JSON, mill-plan commits the fix(es) on the task branch: `git -C <worktree> add task/plan/ && git -C <worktree> commit -m "mill-plan: validator-fix pass for {slug}"` and re-runs the CLI. The commit message uses `validator-fix` to distinguish it from `plan-fix-r{N}` commits (which are LLM-fix-pass commits).
 
 2. Invoke the CLI as a subprocess:
 
@@ -104,7 +105,7 @@ Loop up to `max_review_rounds` rounds. Each round:
 
 3. **BEFORE reading any review file, load the `mill-receiving-review` skill** (`plugins/mill/skills/mill-receiving-review/SKILL.md`). Non-negotiable. The VERIFY → HARM CHECK → FIX-or-PUSH-BACK decision tree is what keeps review loops useful.
 
-4a. On `APPROVE` (verdict from JSON): set overview frontmatter `approved: true` via direct Edit. `_status.append_phase(status_path, f"plan-review-r{N}", iso_ts)`. Commit on the task branch: `git -C <worktree> add plan/ reviews/ status.md && git -C <worktree> commit -m "mill-plan: approve plan for {slug}"`. Push. Break loop → Handoff. `iso_ts` is `_timestamp.now_utc_iso()`.
+4a. On `APPROVE` (verdict from JSON): set overview frontmatter `approved: true` via direct Edit. `_status.append_phase(status_path, f"plan-review-r{N}", iso_ts)`. Commit on the task branch: `git -C <worktree> add task/plan/ task/reviews/ task/status.md && git -C <worktree> commit -m "mill-plan: approve plan for {slug}"`. Push. Break loop → Handoff. `iso_ts` is `_timestamp.now_utc_iso()`.
 
 4.5. **Step 4.5: ERROR-only-aggregate retry (no round consumed)**
 
@@ -116,16 +117,16 @@ Loop up to `max_review_rounds` rounds. Each round:
 
    The round counter is **not** consumed — the round produced no reviewable output. On the **second** consecutive ERROR-only round, halt with `BLOCKED: review ERROR-only round {N}` and surface each entry's `error` string to the user. Do NOT auto-retry beyond the second pass. The two-pass cap mirrors step 1.5's validator gate. *(Closes #84 — `verdict: ERROR` tracking was introduced so ERROR rounds never silently collapse into 4b's NIT path.)*
 
-4b. On `REQUEST_CHANGES` AND `blocking_count == 0` (the JSON's top-level field): the round produced only NITs. Apply NIT fixes per the `mill-receiving-review` Decision Tree (no different from a regular fix-pass), write the fixer report at `reviews/<YYYYMMDD-HHMMSS>-plan-fix-r<N>.md` (worktree root), append `plan-fix-r{N}` to status timeline, set overview frontmatter `approved: true`, commit+push (single commit covering plan + reviews + status), break loop → Handoff. Do NOT run round N+1. Rationale: 0-BLOCKING means the planner and reviewer have converged; further rounds only churn cosmetic NITs.
+4b. On `REQUEST_CHANGES` AND `blocking_count == 0` (the JSON's top-level field): the round produced only NITs. Apply NIT fixes per the `mill-receiving-review` Decision Tree (no different from a regular fix-pass), write the fixer report at `task/reviews/<YYYYMMDD-HHMMSS>-plan-fix-r<N>.md`, append `plan-fix-r{N}` to status timeline, set overview frontmatter `approved: true`, commit+push (single commit covering plan + reviews + status), break loop → Handoff. Do NOT run round N+1. Rationale: 0-BLOCKING means the planner and reviewer have converged; further rounds only churn cosmetic NITs.
 
 4c. On `REQUEST_CHANGES` AND `blocking_count > 0`:
    - `_status.append_phase(status_path, f"plan-review-r{N}", iso_ts)`.
    - Read each review file. For each finding, run the `mill-receiving-review` decision tree.
    - Apply fixes to plan files.
-   - Write a fixer report at `reviews/<YYYYMMDD-HHMMSS>-plan-fix-r<N>.md` (worktree root) with two sections: `## Fixed` (each fixed finding, one-line reference to the review file + quoted finding title) and `## Pushed Back` (each rejected finding, same format + reason citing code/doc/scope).
+   - Write a fixer report at `task/reviews/<YYYYMMDD-HHMMSS>-plan-fix-r<N>.md` with two sections: `## Fixed` (each fixed finding, one-line reference to the review file + quoted finding title) and `## Pushed Back` (each rejected finding, same format + reason citing code/doc/scope).
    - Re-validate the plan DAG (`_plan_dag.validate`).
    - `_status.append_phase(status_path, f"plan-fix-r{N}", iso_ts)`.
-   - Commit on the task branch: `git -C <worktree> add plan/ reviews/ status.md && git commit -m "mill-plan: plan-fix round {N} for {slug}"`.
+   - Commit on the task branch: `git -C <worktree> add task/plan/ task/reviews/ task/status.md && git commit -m "mill-plan: plan-fix round {N} for {slug}"`.
 
 5. **Non-progress check** (after writing each fixer report from round 2 onward): **Skip this check when the latest round's `## Pushed Back` section is empty.** Empty Pushed Back means the planner addressed every finding cleanly — that is convergence, not non-progress. The check only fires when both rounds have a non-empty Pushed Back AND the title set is identical. If the set is identical, halt with `BLOCKED: Plan review non-progress round {N}` and tell the user to look at the fixer reports. Do not escape-hatch — non-progress means the planner and reviewer are stuck in a stable disagreement; user intervention is required.
 
@@ -143,7 +144,7 @@ Loop up to `max_review_rounds` rounds. Each round:
 
 `_status.append_phase(status_path, "planned", _timestamp.now_utc_iso())`. Commit+push.
 
-If the deep-merged config has `pipeline.auto_report: true`, invoke `/mill-self-report` with no argument and let it finish before reporting to the user. The skill checks `gh auth` itself and bails cleanly if absent, so this is always safe to call.
+If the deep-merged config has `pipeline.auto_report: true`, invoke `/mill-self-report --auto` and let it finish before reporting to the user. The skill checks `gh auth` itself and bails cleanly if absent, so this is always safe to call.
 
 Report: **"Plan complete. Run `/mill-go` next to start autonomous implementation."** Do not invoke mill-go yourself — handoff to mill-go is always an explicit user decision, even when auto-report fired.
 
@@ -162,6 +163,6 @@ Always use `_timestamp.now_utc_compact()` / `now_utc_iso()` for any generated ti
 
 ## Board discipline
 
-- Task-state writes (`status.md`, `plan/`, `reviews/`) are committed on the task branch via `git add` + `git commit`, then pushed to remote. They never go through the wiki.
+- Task-state writes (`task/status.md`, `task/plan/`, `task/reviews/`) are committed on the task branch via `git add` + `git commit`, then pushed to remote. They never go through the wiki.
 - Phase transitions via `_status.append_phase`. Hand-editing the status.md yaml block is banned; use `update_field` for the plan pointer.
 - The overview frontmatter's `approved:` field is the exception — it lives in `plan/00-overview.md`, not `status.md`, and is flipped by a direct Edit because `_status.py` only knows about status.md.

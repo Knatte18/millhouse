@@ -45,7 +45,7 @@ import _tasks_md
 import _vscode
 import _wiki
 from _config import load_config as _load_config_lenient
-from _paths import resolve_container_path, resolve_git_root, resolve_hub_path, resolve_main_worktree_root, resolve_short_name, resolve_wiki_path
+from _paths import resolve_container_path, resolve_git_root, resolve_hub_path, resolve_short_name, resolve_wiki_path
 
 
 # --------------------------------------------------------------------------- #
@@ -214,7 +214,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.dry_run:
         print(f"[DryRun] Task:    {picked.title} [{slug}]")
         print(f"[DryRun] Branch:  {branch_name}")
-        print(f"[DryRun] Status:  {wiki_path / 'active' / slug / 'status.md'}")
+        print(f"[DryRun] Status:  {resolve_hub_path() / 'task' / 'status.md'}")
         print("[DryRun] Mode:    in-place")
         return 0
 
@@ -272,32 +272,31 @@ def main(argv: list[str] | None = None) -> int:
             raise SystemExit(1)
 
     # Create the portal entry for this worktree and recreate .active.
-    # Order is CRITICAL: portal entry must exist before recreate_active_junction
-    # because that function calls target.mkdir(exist_ok=True) on portals/<slug>.
-    # If we created portals/<slug> as a real dir first and then tried to make it
-    # a junction, _junction.remove would fail ("not a junction or symlink").
+    # Order is CRITICAL: wiki/active/<slug>/ must exist before the portal entry
+    # points to it (Windows mklink /J requires an existing target dir).
     container_path = resolve_container_path(git_root)
-    main_root = resolve_main_worktree_root(git_root)
     (container_path / "portals").mkdir(parents=True, exist_ok=True)
+
+    ts = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    _spawn_core.write_wiki_active_task_md(wiki_path, slug, picked.title, ts)
 
     portal_link = container_path / "portals" / slug
     if not portal_link.exists() and not portal_link.is_symlink():
-        # First claim: create portal entry pointing at this worktree.
-        _junction.create(target=main_root, link_path=portal_link)
+        # First claim: create portal entry pointing at wiki/active/<slug>/.
+        _junction.create(target=wiki_path / "active" / slug, link_path=portal_link)
     else:
-        # Portal entry exists: check if it points at the current worktree.
+        # Portal entry exists: check if it points at the wiki active dir.
         existing_target = os.path.realpath(str(portal_link))
-        current_target = os.path.realpath(str(main_root))
+        current_target = os.path.realpath(str(wiki_path / "active" / slug))
         if existing_target != current_target:
             # Points elsewhere — remove and recreate.
             _junction.remove(portal_link)
-            _junction.create(target=main_root, link_path=portal_link)
+            _junction.create(target=wiki_path / "active" / slug, link_path=portal_link)
         # else: already correct, skip.
 
-    _spawn_core.recreate_active_junction(slug, mill_dir, container_path)
+    _spawn_core.recreate_active_junction(slug, resolve_hub_path(), container_path)
 
     # Write the per-worktree active marker so downstream skills find this task.
-    ts = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     _spawn_core.write_active_marker(
         mill_dir,
         slug=slug,

@@ -51,7 +51,8 @@ hardlinks:
 # ---------------------------------------------------------------------------
 # mill-spawn
 # ---------------------------------------------------------------------------
-# branch_prefix — prepended to the slug when creating the task branch.
+# branch_prefix — prepended directly to the slug (no separator added).
+#   Include any separator in the prefix itself, e.g. "hanf/" → "hanf/<slug>".
 #   Empty string → branch == slug.
 
 spawn:

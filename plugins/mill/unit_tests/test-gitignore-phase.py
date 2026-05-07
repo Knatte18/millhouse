@@ -9,153 +9,136 @@ HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
 from _gitignore import (  # noqa: E402
-    ANCHORED_ENTRIES,
     END,
     GLOB_ENTRIES,
     START,
     render_block,
-    upsert_split,
+    upsert,
 )
+
 
 def _read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
-def main() -> int:
+def test_anchored_entries_not_exported() -> int:
     errors = 0
+    try:
+        from _gitignore import ANCHORED_ENTRIES  # noqa: F401
+        print("FAIL: ANCHORED_ENTRIES import should have raised ImportError", file=sys.stderr)
+        errors += 1
+    except ImportError:
+        print("PASS: ANCHORED_ENTRIES no longer exported")
+    return errors
 
-    # --- upsert_split: same path → single combined block ---
+
+def test_upsert_first_call_returns_true() -> int:
+    errors = 0
     with tempfile.TemporaryDirectory() as tmpdir:
         gi = Path(tmpdir) / ".gitignore"
         gi.write_text("", encoding="utf-8")
-        repo_changed, hub_changed = upsert_split(gi, gi, GLOB_ENTRIES, ANCHORED_ENTRIES)
+        changed = upsert(gi, GLOB_ENTRIES)
+        if not changed:
+            print("FAIL: upsert first call on empty .gitignore should return True", file=sys.stderr)
+            errors += 1
+        else:
+            print("PASS: upsert first call returns True (wrote new block)")
+    return errors
+
+
+def test_upsert_idempotent() -> int:
+    errors = 0
+    with tempfile.TemporaryDirectory() as tmpdir:
+        gi = Path(tmpdir) / ".gitignore"
+        gi.write_text("", encoding="utf-8")
+        upsert(gi, GLOB_ENTRIES)
+        changed = upsert(gi, GLOB_ENTRIES)
+        if changed:
+            print("FAIL: upsert second call should return False (already up to date)", file=sys.stderr)
+            errors += 1
+        else:
+            print("PASS: upsert second call returns False (idempotent)")
+    return errors
+
+
+def test_upsert_preserves_existing_content() -> int:
+    errors = 0
+    with tempfile.TemporaryDirectory() as tmpdir:
+        gi = Path(tmpdir) / ".gitignore"
+        gi.write_text("*.pyc\n__pycache__/\n", encoding="utf-8")
+        upsert(gi, GLOB_ENTRIES)
         content = _read(gi)
-        if not repo_changed:
-            print("FAIL: upsert_split same-path first run should return (True, False)", file=sys.stderr)
+        if "*.pyc" not in content:
+            print("FAIL: upsert did not preserve existing content above the block", file=sys.stderr)
             errors += 1
-        if hub_changed:
-            print("FAIL: upsert_split same-path hub_changed should be False", file=sys.stderr)
+        if START not in content:
+            print("FAIL: upsert did not append block to non-empty .gitignore", file=sys.stderr)
             errors += 1
-        for entry in GLOB_ENTRIES + ANCHORED_ENTRIES:
-            if entry not in content:
-                print(f"FAIL: upsert_split same-path missing entry: {entry}", file=sys.stderr)
-                errors += 1
-        if errors == 0:
-            print("PASS: upsert_split same-path writes single combined block, returns (True, False)")
-
-    # --- upsert_split: same path → idempotent re-run ---
-    with tempfile.TemporaryDirectory() as tmpdir:
-        gi = Path(tmpdir) / ".gitignore"
-        gi.write_text("", encoding="utf-8")
-        upsert_split(gi, gi, GLOB_ENTRIES, ANCHORED_ENTRIES)
-        repo_changed, hub_changed = upsert_split(gi, gi, GLOB_ENTRIES, ANCHORED_ENTRIES)
-        if repo_changed or hub_changed:
-            print("FAIL: upsert_split same-path re-run should return (False, False)", file=sys.stderr)
-            errors += 1
-        else:
-            print("PASS: upsert_split same-path re-run -> (False, False)")
-
-    # --- upsert_split: different paths → two separate blocks ---
-    with tempfile.TemporaryDirectory() as tmpdir:
-        root_gi = Path(tmpdir) / ".gitignore"
-        hub_dir = Path(tmpdir) / "src" / "hub"
-        hub_dir.mkdir(parents=True)
-        hub_gi = hub_dir / ".gitignore"
-        root_gi.write_text("", encoding="utf-8")
-        hub_gi.write_text("", encoding="utf-8")
-        repo_changed, hub_changed = upsert_split(root_gi, hub_gi, GLOB_ENTRIES, ANCHORED_ENTRIES)
-        root_content = _read(root_gi)
-        hub_content = _read(hub_gi)
-        if not repo_changed:
-            print("FAIL: upsert_split diff-path repo_changed should be True", file=sys.stderr)
-            errors += 1
-        if not hub_changed:
-            print("FAIL: upsert_split diff-path hub_changed should be True", file=sys.stderr)
-            errors += 1
-        # Root gets only glob entries
-        for entry in GLOB_ENTRIES:
-            if entry not in root_content:
-                print(f"FAIL: root .gitignore missing glob entry: {entry}", file=sys.stderr)
-                errors += 1
-        for entry in ANCHORED_ENTRIES:
-            if entry in root_content:
-                print(f"FAIL: root .gitignore should not contain anchored entry: {entry}", file=sys.stderr)
-                errors += 1
-        # Hub gets only anchored entries
-        for entry in ANCHORED_ENTRIES:
-            if entry not in hub_content:
-                print(f"FAIL: hub .gitignore missing anchored entry: {entry}", file=sys.stderr)
-                errors += 1
-        for entry in GLOB_ENTRIES:
-            if entry in hub_content:
-                print(f"FAIL: hub .gitignore should not contain glob entry: {entry}", file=sys.stderr)
-                errors += 1
-        if errors == 0:
-            print("PASS: upsert_split diff-path writes glob-only to root and anchored-only to hub")
-
-    # --- upsert_split: different paths → idempotent re-run on each path ---
-    with tempfile.TemporaryDirectory() as tmpdir:
-        root_gi = Path(tmpdir) / ".gitignore"
-        hub_dir = Path(tmpdir) / "src" / "hub"
-        hub_dir.mkdir(parents=True)
-        hub_gi = hub_dir / ".gitignore"
-        root_gi.write_text("", encoding="utf-8")
-        hub_gi.write_text("", encoding="utf-8")
-        upsert_split(root_gi, hub_gi, GLOB_ENTRIES, ANCHORED_ENTRIES)
-        repo_changed, hub_changed = upsert_split(root_gi, hub_gi, GLOB_ENTRIES, ANCHORED_ENTRIES)
-        if repo_changed or hub_changed:
-            print("FAIL: upsert_split diff-path re-run should return (False, False)", file=sys.stderr)
-            errors += 1
-        else:
-            print("PASS: upsert_split diff-path re-run -> (False, False)")
-
-    # --- upsert_split: anchored entries get / prepended if missing ---
-    with tempfile.TemporaryDirectory() as tmpdir:
-        root_gi = Path(tmpdir) / ".gitignore"
-        hub_dir = Path(tmpdir) / "hub"
-        hub_dir.mkdir()
-        hub_gi = hub_dir / ".gitignore"
-        root_gi.write_text("", encoding="utf-8")
-        hub_gi.write_text("", encoding="utf-8")
-        upsert_split(root_gi, hub_gi, [], ["tasks.md", "/.others"])
-        hub_content = _read(hub_gi)
-        if "/tasks.md" not in hub_content:
-            print("FAIL: bare anchored entry 'tasks.md' not normalised to '/tasks.md'", file=sys.stderr)
-            errors += 1
-        if "//tasks.md" in hub_content:
-            print("FAIL: double-slash in hub .gitignore for bare entry", file=sys.stderr)
-            errors += 1
-        if "/.others" not in hub_content:
-            print("FAIL: already-prefixed entry '/.others' missing from hub .gitignore", file=sys.stderr)
-            errors += 1
-        if "//.others" in hub_content:
-            print("FAIL: double-slash introduced for already-prefixed '/.others'", file=sys.stderr)
+        if content.index("*.pyc") > content.index(START):
+            print("FAIL: existing content should appear before the mill block", file=sys.stderr)
             errors += 1
         if errors == 0:
-            print("PASS: upsert_split anchored entries get / prepended; already-prefixed kept as-is")
+            print("PASS: upsert appends block below existing content, preserving existing lines")
+    return errors
 
-    # --- upsert_split: corrupt-marker ValueError preserved ---
+
+def test_upsert_corrupt_marker_raises() -> int:
+    errors = 0
     with tempfile.TemporaryDirectory() as tmpdir:
         gi = Path(tmpdir) / ".gitignore"
         gi.write_text(f"{START}\n**/.millhouse/\n", encoding="utf-8")
         try:
-            upsert_split(gi, gi, GLOB_ENTRIES, ANCHORED_ENTRIES)
-            print("FAIL: expected ValueError for corrupt marker in upsert_split", file=sys.stderr)
+            upsert(gi, GLOB_ENTRIES)
+            print("FAIL: expected ValueError for corrupt marker (START without END)", file=sys.stderr)
             errors += 1
         except ValueError:
-            print("PASS: upsert_split preserves corrupt-marker ValueError")
+            print("PASS: upsert raises ValueError for corrupt marker (START without END)")
+    return errors
 
-    # --- render_block: **/plugins/*/uv.lock present in GLOB_ENTRIES output ---
-    block = render_block(GLOB_ENTRIES, ANCHORED_ENTRIES)
-    entry = "**/plugins/*/uv.lock"
-    if entry not in block:
-        print(f"FAIL: render_block output missing '{entry}'", file=sys.stderr)
-        errors += 1
-    elif not (block.index(START) < block.index(entry) < block.index(END)):
-        print(f"FAIL: '{entry}' not between START and END markers", file=sys.stderr)
-        errors += 1
-    else:
-        print(f"PASS: render_block includes '{entry}' between START and END markers")
+
+def test_render_block_contains_glob_entries() -> int:
+    errors = 0
+    block = render_block(GLOB_ENTRIES)
+    for entry in GLOB_ENTRIES:
+        if entry not in block:
+            print(f"FAIL: render_block output missing entry: {entry}", file=sys.stderr)
+            errors += 1
+        elif not (block.index(START) < block.index(entry) < block.index(END)):
+            print(f"FAIL: '{entry}' not between START and END markers", file=sys.stderr)
+            errors += 1
+    for removed in ("**/wts/", "**/portals/", "**/plugins/*/uv.lock"):
+        if removed in GLOB_ENTRIES:
+            print(f"FAIL: '{removed}' should not be in GLOB_ENTRIES", file=sys.stderr)
+            errors += 1
+    if errors == 0:
+        print("PASS: render_block includes all five GLOB_ENTRIES between START and END; removed entries absent")
+    return errors
+
+
+def test_glob_entries_contains_new_junction_names() -> int:
+    errors = 0
+    for expected in ("**/.portals/", "**/.wiki/", "**/.active/"):
+        if expected not in GLOB_ENTRIES:
+            print(f"FAIL: GLOB_ENTRIES missing '{expected}'", file=sys.stderr)
+            errors += 1
+    if errors == 0:
+        print("PASS: GLOB_ENTRIES contains **/.portals/, **/.wiki/, **/.active/")
+    return errors
+
+
+def main() -> int:
+    tests = [
+        test_anchored_entries_not_exported,
+        test_upsert_first_call_returns_true,
+        test_upsert_idempotent,
+        test_upsert_preserves_existing_content,
+        test_upsert_corrupt_marker_raises,
+        test_render_block_contains_glob_entries,
+        test_glob_entries_contains_new_junction_names,
+    ]
+    errors = 0
+    for test in tests:
+        errors += test()
 
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)

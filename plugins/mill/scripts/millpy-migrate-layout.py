@@ -8,6 +8,7 @@ Canonical step list: wiki/active/container-restructure/discussion.md
 
 Usage:
     python millpy-migrate-layout.py [--dry-run]
+    python millpy-migrate-layout.py --step rename-junctions [--dry-run]
 
 Options:
     --dry-run   Print planned operations with absolute paths and exit 0.
@@ -20,6 +21,10 @@ Exit codes:
 IMPORTANT: mill-setup MUST NOT be run between deploying the new mill
 code and completing this migration. Run mill-setup AFTER the migration
 completes (Step 6 instructs you to do this).
+
+Pass ``--step rename-junctions`` to migrate an existing container from the old
+``.millhouse/wiki + .others + .active`` junction layout to the new
+``.wiki + .portals`` layout.
 
 This script is NOT registered in _shortcuts.SHORTCUT_SCRIPTS because it
 is intended for manual one-shot invocation outside the normal mill
@@ -34,9 +39,14 @@ import shutil
 import sys
 from pathlib import Path
 
-import _subprocess_util
+import _config
+import _gitignore
 import _junction
+import _setup
+import _spawn_core
 import _status
+import _subprocess_util
+import _timestamp
 
 
 # ---------------------------------------------------------------------------
@@ -172,6 +182,177 @@ def _check_in_flight(wiki_path: Path, dry_run: bool) -> None:
 
 
 # ---------------------------------------------------------------------------
+# rename-junctions step
+# ---------------------------------------------------------------------------
+
+def _step_rename_junctions(args: argparse.Namespace) -> None:
+    """Migrate junction layout from .millhouse/wiki+.others+.active to .wiki+.portals."""
+    from _paths import resolve_git_root, resolve_wiki_path, resolve_container_path, resolve_main_worktree_root
+    dry_run: bool = args.dry_run
+
+    git_root = resolve_git_root()
+    wiki_path = resolve_wiki_path(git_root)
+    container = resolve_container_path(git_root)
+    hub_root = resolve_main_worktree_root(git_root)
+
+    cfg = _config.load_config(wiki_path, hub_root)
+
+    log_fh = None
+    if not dry_run:
+        scratch = hub_root / ".scratch"
+        scratch.mkdir(exist_ok=True)
+        ts_log = _timestamp.now_utc_compact()
+        log_path = scratch / f"migrate-rename-junctions-{ts_log}.log"
+        log_fh = open(log_path, "w", encoding="utf-8")  # noqa: SIM115
+        _log(f"[rename-junctions] Writing log to {log_path}", log_fh, dry_run)
+    else:
+        _log("[rename-junctions] DRY-RUN mode — no filesystem writes will be performed.", log_fh, dry_run)
+
+    try:
+        _run_step_rename_junctions(hub_root, wiki_path, container, cfg, log_fh, dry_run)
+    finally:
+        if log_fh is not None:
+            log_fh.close()
+
+
+def _run_step_rename_junctions(
+    hub_root: Path,
+    wiki_path: Path,
+    container: Path,
+    cfg: dict,
+    log_fh,
+    dry_run: bool,
+) -> None:
+    junctions_cfg = cfg.get("junctions", {})
+    active_wts = _spawn_core.discover_active_worktrees(container / "wts")
+
+    _log(f"[rename-junctions] Found {len(active_wts)} active task worktree(s).", log_fh, dry_run)
+
+    updated = 0
+    for wt_path, slug, title in active_wts:
+        _log(f"\n--- Task worktree: {slug} ({wt_path}) ---", log_fh, dry_run)
+
+        # Strip new-layout junctions (idempotent via _junction.remove).
+        if not dry_run:
+            _junction.strip_all_in_worktree(wt_path, junctions_cfg)
+            for name in [".millhouse/wiki", ".others", ".active"]:
+                _junction.remove(wt_path / name)
+        else:
+            _log(f"  [dry-run] would strip junctions in {wt_path}", log_fh, dry_run)
+
+        # Remove old portals entry.
+        old_portal = container / "portals" / slug
+        if not dry_run:
+            _junction.remove(old_portal)
+        else:
+            _log(f"  [dry-run] would remove portal: {old_portal}", log_fh, dry_run)
+
+        # Create wiki/active/<slug>/task.md and commit+push.
+        if not dry_run:
+            ts = _timestamp.now_utc_compact()
+            _spawn_core.write_wiki_active_task_md(wiki_path, slug, title, ts)
+            _log(f"  [rename-junctions] created wiki/active/{slug}/task.md", log_fh, dry_run)
+        else:
+            _log(f"  [dry-run] would create wiki/active/{slug}/task.md", log_fh, dry_run)
+
+        # Create new portals entry pointing at wiki/active/<slug>.
+        new_portal_target = wiki_path / "active" / slug
+        new_portal_link = container / "portals" / slug
+        if not dry_run:
+            _junction.create(target=new_portal_target, link_path=new_portal_link)
+            _log(f"  [rename-junctions] created portal: {new_portal_link} -> {new_portal_target}", log_fh, dry_run)
+        else:
+            _log(f"  [dry-run] would create portal: {new_portal_link} -> {new_portal_target}", log_fh, dry_run)
+
+        # Recreate junctions in the task worktree.
+        tokens = {
+            "SLUG": slug,
+            "WIKI_PATH": str(wiki_path),
+            "CONTAINER_PATH": str(container),
+            "HUB_PATH": str(hub_root),
+            "CWD_PATH": str(wt_path),
+            "REPO": hub_root.name,
+        }
+        if not dry_run:
+            _setup.create_hub_links(wt_path, wiki_path, tokens)
+        else:
+            _log(f"  [dry-run] would recreate junctions in {wt_path}", log_fh, dry_run)
+
+        # Move working state to task/.
+        result = _subprocess_util.run(
+            ["git", "-C", str(wt_path), "status", "--porcelain"]
+        )
+        if result.returncode != 0 or result.stdout.strip():
+            _log(
+                f"  [rename-junctions] skipping task/ move for {slug}: working tree dirty",
+                log_fh, dry_run,
+            )
+        else:
+            task_dir = wt_path / "task"
+            if not dry_run:
+                task_dir.mkdir(exist_ok=True)
+            else:
+                _log(f"  [dry-run] would mkdir {task_dir}", log_fh, dry_run)
+
+            moved_any = False
+            for src_name in ["status.md", "discussion.md", "plan", "reviews"]:
+                src = wt_path / src_name
+                dst = task_dir / src_name
+                if src.exists():
+                    if not dry_run:
+                        _run(
+                            ["git", "-C", str(wt_path), "mv", str(src), str(dst)],
+                            log_fh, dry_run,
+                        )
+                        moved_any = True
+                    else:
+                        _log(f"  [dry-run] would git mv {src} -> {dst}", log_fh, dry_run)
+
+            if moved_any and not dry_run:
+                _run(
+                    ["git", "-C", str(wt_path), "commit",
+                     "-m", f"migrate: move working state to task/ for {slug}"],
+                    log_fh, dry_run,
+                )
+
+        updated += 1
+
+    # Hub worktree junctions.
+    _log(f"\n--- Hub worktree: {hub_root} ---", log_fh, dry_run)
+    if not dry_run:
+        for name in [".millhouse/wiki", ".others", ".active"]:
+            _junction.remove(hub_root / name)
+        _junction.strip_all_in_worktree(hub_root, junctions_cfg)
+    else:
+        _log(f"  [dry-run] would strip old junctions from hub: {hub_root}", log_fh, dry_run)
+
+    hub_tokens = {
+        "WIKI_PATH": str(wiki_path),
+        "CONTAINER_PATH": str(container),
+        "HUB_PATH": str(hub_root),
+        "CWD_PATH": str(hub_root),
+        "REPO": hub_root.name,
+    }
+    if not dry_run:
+        _setup.create_hub_links(hub_root, wiki_path, hub_tokens)
+    else:
+        _log(f"  [dry-run] would recreate hub junctions in {hub_root}", log_fh, dry_run)
+
+    hub_gitignore = hub_root / ".gitignore"
+    if not dry_run:
+        _gitignore.upsert(hub_gitignore, _gitignore.GLOB_ENTRIES)
+        _log(f"  [rename-junctions] updated .gitignore: {hub_gitignore}", log_fh, dry_run)
+    else:
+        _log(f"  [dry-run] would update .gitignore: {hub_gitignore}", log_fh, dry_run)
+
+    print(
+        f"\nRename-junctions migration complete. {updated} task worktree(s) updated."
+        " Run /mill-setup to refresh hardlinks.",
+        file=sys.stderr,
+    )
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -185,11 +366,22 @@ def main() -> None:
         action="store_true",
         help="Print planned operations and exit 0 without performing any writes.",
     )
+    parser.add_argument(
+        "--step",
+        choices=["rename-junctions"],
+        default=None,
+        help="Which migration step to run. Omit to run the full legacy-layout migration.",
+    )
     args = parser.parse_args()
+
+    if args.step == "rename-junctions":
+        _step_rename_junctions(args)
+        return
+
     dry_run: bool = args.dry_run
 
     # --- Locate main worktree root from cwd ---
-    from _paths import resolve_main_worktree_root, resolve_git_root
+    from _paths import resolve_main_worktree_root, resolve_git_root, resolve_container_path, resolve_wiki_path
     git_root = resolve_git_root()
     main_root = resolve_main_worktree_root(git_root)
 
