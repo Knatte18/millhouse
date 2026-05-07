@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-review-r3
+phase: planned
 slug: review-plan-robustness
 branch: review-plan-robustness
 plan: task/plan
@@ -22,4 +22,5 @@ plan-fix-r1  2026-05-07T08:49:56Z
 plan-review-r2  2026-05-07T09:00:23Z
 plan-fix-r2  2026-05-07T09:00:26Z
 plan-review-r3  2026-05-07T09:06:20Z
+planned  2026-05-07T09:06:26Z
 ```
