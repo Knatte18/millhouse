@@ -74,7 +74,7 @@ Loop up to `max_review_rounds` rounds. Each round:
 1.5. **Step 1.5: pre-review validator gate (auto-run, no round consumed)**
 
    - The CLI auto-runs `_plan_validate` before invoking the LLM. If the validator finds anything, the CLI exits 1 with a JSON envelope on stdout (`{"errors": [...], "summary": "<n> finding(s) across <m> batch(es)"}`). No review file is written; no LLM token is spent; no review round is consumed.
-   - On validator-failure exit, mill-plan parses the JSON and applies one mechanical fix per error dict, per the mapping table below. After fixes, mill-plan re-runs `uv run --project "${CLAUDE_PLUGIN_ROOT}" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-review-plan.py"` (still no round consumed — the validator gate is pre-LLM).
+   - On validator-failure exit, mill-plan parses the JSON and applies one mechanical fix per error dict, per the mapping table below. After fixes, mill-plan re-runs the review CLI via millpy-bg (slug `plan-validator-fix`; still no round consumed). Poll `cat <log-path>` until `[mill-bg] EXIT`, then extract the JSON line from the log.
    - **Two-pass cap:** if the validator fails again on the second pass, mill-plan halts with `BLOCKED: plan-validate non-progress` and writes the unresolved errors to the user. Do NOT auto-retry beyond the second pass. The two-pass cap matches the `review.code.self_fix_rounds` self-fix pattern.
    - If `pipeline.skip_validate: true` ever appears in config (currently it does not; this is a future hook), pass `--skip-validate` to the CLI and skip step 1.5 entirely. mill-plan passes `--skip-validate` only when the fix table instructs it — see the `wiki-config-mutation` row.
 
@@ -98,8 +98,12 @@ Loop up to `max_review_rounds` rounds. Each round:
 2. Invoke the CLI as a subprocess:
 
    ```bash
-   uv run --project "$CLAUDE_PLUGIN_ROOT" "$CLAUDE_PLUGIN_ROOT/scripts/millpy-review-plan.py"
+   uv run --project "$CLAUDE_PLUGIN_ROOT" "$CLAUDE_PLUGIN_ROOT/scripts/millpy-bg.py" \
+       --slug plan-review-r<N> -- \
+       uv run --project "$CLAUDE_PLUGIN_ROOT" "$CLAUDE_PLUGIN_ROOT/scripts/millpy-review-plan.py"
    ```
+
+   This returns immediately with `pid=<N> log=<abs-path>`. Poll `cat <log-path>` until `[mill-bg] EXIT` appears, then read the log and extract the JSON summary line (the last non-empty, non-sentinel line).
 
    The script discovers the slug and round from disk. It prints one JSON line: `{"type": "plan", "round": N, "verdict": "APPROVE" | "REQUEST_CHANGES", "blocking_count": N, "reviews": [...]}` where each review entry has `{scope, verdict, file}`.
 
@@ -112,8 +116,12 @@ Loop up to `max_review_rounds` rounds. Each round:
    When the JSON envelope from step 2 has a non-empty `reviews[]` array AND every entry's `verdict` is `"ERROR"`, skip steps 4a/4b/4c entirely and immediately re-run:
 
    ```bash
-   uv run --project "$CLAUDE_PLUGIN_ROOT" "$CLAUDE_PLUGIN_ROOT/scripts/millpy-review-plan.py"
+   uv run --project "$CLAUDE_PLUGIN_ROOT" "$CLAUDE_PLUGIN_ROOT/scripts/millpy-bg.py" \
+       --slug plan-review-retry-r<N> -- \
+       uv run --project "$CLAUDE_PLUGIN_ROOT" "$CLAUDE_PLUGIN_ROOT/scripts/millpy-review-plan.py"
    ```
+
+   This returns immediately with `pid=<N> log=<abs-path>`. Poll `cat <log-path>` until `[mill-bg] EXIT` appears, then read the log and extract the JSON summary line (the last non-empty, non-sentinel line).
 
    The round counter is **not** consumed — the round produced no reviewable output. On the **second** consecutive ERROR-only round, halt with `BLOCKED: review ERROR-only round {N}` and surface each entry's `error` string to the user. Do NOT auto-retry beyond the second pass. The two-pass cap mirrors step 1.5's validator gate. *(Closes #84 — `verdict: ERROR` tracking was introduced so ERROR rounds never silently collapse into 4b's NIT path.)*
 
