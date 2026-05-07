@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-holistic-implement
+phase: done
 slug: holistic-fix-agent
 branch: holistic-fix-agent
 plan: plan
@@ -26,6 +26,8 @@ planned  2026-05-06T18:15:11Z
 implementing  2026-05-07T05:37:14Z
 approved-foundation-extract  2026-05-07T05:43:24Z
 approved-holistic-implement  2026-05-07T06:05:04Z
+holistic-approved  2026-05-07T06:10:12Z
+done  2026-05-07T06:10:12Z
 ```
 
 ## Batches
