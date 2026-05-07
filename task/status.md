@@ -31,7 +31,9 @@ implementing  2026-05-07T09:18:23Z
 ```yaml
 batches:
   - name: backend-fixes
-    state: pending
+    state: running
+    implementer_session: 6e00fbdd-e5aa-4df3-a774-9c86866a3a7f
+    start_sha: 2909671c8c0d086a622f7639ad8d93b7c94b1097
   - name: validator-skip-checks
     state: pending
   - name: cli-skip-checks
