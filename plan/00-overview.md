@@ -3,7 +3,7 @@
 ```yaml
 task: Restructure hub junction layout
 slug: rename-hub-junctions
-approved: false
+approved: true
 started: 20260506-171445
 parent: main
 root: ""
