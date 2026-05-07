@@ -88,14 +88,15 @@ def main(argv=None) -> int:
         print(str(e), file=sys.stderr)
         return 1
 
-    status_path = project_root / "status.md"
+    plan_dir = cfg.get("paths", {}).get("plan_dir", "task/plan/")
+    status_path = project_root / "task" / "status.md"
     full = _status.read_full(status_path)
     task_title = full["yaml"].get("task", slug)
     branch = _status.read_branch(status_path, cfg=cfg, slug=slug)
     self_fix_rounds = cfg.get("review", {}).get("code", {}).get("self_fix_rounds", 2)
     timeout = cfg.get("llm", {}).get("implementer_timeout", 1800)
 
-    overview_path = project_root / "plan" / "00-overview.md"
+    overview_path = project_root / plan_dir / "00-overview.md"
     if not overview_path.exists():
         print(f"overview not found: {overview_path}", file=sys.stderr)
         return 1
@@ -111,7 +112,7 @@ def main(argv=None) -> int:
         print(f"batch {args.batch_name!r} not found in overview", file=sys.stderr)
         return 1
 
-    batch_file = project_root / "plan" / batch_entry["file"]
+    batch_file = project_root / plan_dir / batch_entry["file"]
     plugin_root = Path(__file__).resolve().parent.parent
 
     if not args.resume:
@@ -132,7 +133,7 @@ def main(argv=None) -> int:
         _status.set_batch_fields(status_path, args.batch_name, {"state": "running", "start_sha": start_sha, "implementer_session": session_id})
 
         result = subprocess.run(
-            ["git", "add", "status.md"],
+            ["git", "add", "task/status.md"],
             capture_output=True,
             text=True,
             cwd=project_root,
@@ -166,7 +167,7 @@ def main(argv=None) -> int:
             "SLUG": slug,
             "BATCH_NAME": args.batch_name,
             "BATCH_FILE": str(batch_file),
-            "OVERVIEW_FILE": str(project_root / "plan" / "00-overview.md"),
+            "OVERVIEW_FILE": str(project_root / plan_dir / "00-overview.md"),
             "PROJECT_ROOT": str(project_root),
             "WIKI_PATH": str(wiki_path),
             "SELF_FIX_ROUNDS": str(self_fix_rounds),
@@ -217,7 +218,7 @@ def main(argv=None) -> int:
             else str(review_file)
         )
         result = subprocess.run(
-            ["git", "add", "status.md", review_file_arg],
+            ["git", "add", "task/status.md", review_file_arg],
             capture_output=True,
             text=True,
             cwd=project_root,
