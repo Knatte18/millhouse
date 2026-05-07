@@ -8,6 +8,7 @@ Flags:
     --max-rounds <N>   Override review.plan.rounds for this invocation.
                        Default: use config value.
     --no-holistic      Skip the holistic plan review; run per-batch reviews only.
+    --skip-check <CHECK>  Skip a named validator check (repeatable). Silently ignores unknown names.
     --skip-validate    Bypass the auto pre-review validator. Use only when you
                        know the validator is false-positive on a finding.
 
@@ -53,6 +54,14 @@ def main(argv: list[str] | None = None) -> int:
             "validator is false-positive on a finding."
         ),
     )
+    parser.add_argument(
+        "--skip-check",
+        action="append",
+        dest="skip_checks",
+        default=[],
+        metavar="CHECK",
+        help="Skip a named validator check (repeatable). Silently ignores unknown names.",
+    )
     args = parser.parse_args(argv)
 
     from _paths import resolve_wiki_path
@@ -70,7 +79,7 @@ def main(argv: list[str] | None = None) -> int:
         if not args.skip_validate:
             from _plan_validate import run as validate_run
             plan_dir = resolve_path(cfg["paths"]["plan_dir"], slug)
-            errors = validate_run(plan_dir, project_root, wiki_root=wiki_root)
+            errors = validate_run(plan_dir, project_root, wiki_root=wiki_root, skip_checks=frozenset(args.skip_checks))
             if errors:
                 n = len(errors)
                 m = len({e["batch"] for e in errors if e["batch"]})
