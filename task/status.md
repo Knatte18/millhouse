@@ -46,5 +46,7 @@ batches:
     implementer_session: b227b490-9bed-4181-9a28-940f54635252
     start_sha: 07caceebe6dc5742b4819bab1f8755a23006b92b
   - name: skill-md-fixes
-    state: pending
+    state: running
+    implementer_session: ec7b9656-c90f-4fbe-8cca-dbbd0771aabc
+    start_sha: c22f4fb1fdbf947e41d5af7e1b4d49e03d5730bb
 ```
