@@ -18,14 +18,14 @@ Claude proposes; you decide; nothing is written until you type `approve`.
    > `.millhouse/wiki/` junction missing. Run `/mill-setup` first.
 2. Resolve the wiki path:
    ```bash
-   uv run --project "${CLAUDE_PLUGIN_ROOT}" python -c "
+   uv run --project "$CLAUDE_PLUGIN_ROOT" python -c "
    import _paths; print(_paths.resolve_wiki_path(_paths.resolve_git_root()))
    "
    ```
    Store as `<WIKI_PATH>`.
 3. `_wiki.sync_pull(<WIKI_PATH>)`:
    ```bash
-   uv run --project "${CLAUDE_PLUGIN_ROOT}" python -c "
+   uv run --project "$CLAUDE_PLUGIN_ROOT" python -c "
    import _paths, _wiki
    wiki = _paths.resolve_wiki_path(_paths.resolve_git_root())
    _wiki.sync_pull(wiki)
@@ -46,7 +46,7 @@ Use these thresholds in Step 3.
 Read `<WIKI_PATH>/Home.md`. Parse with `_tasks_md.parse()`:
 
 ```bash
-uv run --project "${CLAUDE_PLUGIN_ROOT}" python -c "
+uv run --project "$CLAUDE_PLUGIN_ROOT" python -c "
 import _paths, _tasks_md
 wiki = _paths.resolve_wiki_path(_paths.resolve_git_root())
 text = (wiki / 'Home.md').read_text(encoding='utf-8')
@@ -192,7 +192,7 @@ On `reject`: ask what to change, revise decisions, rewrite the proposal, and ask
      `<WIKI_PATH>/proposal-<slug>.md`.
 4. Write all changed files and push via `_wiki.write_commit_push`:
    ```bash
-   uv run --project "${CLAUDE_PLUGIN_ROOT}" python -c "
+   uv run --project "$CLAUDE_PLUGIN_ROOT" python -c "
    import _paths, _wiki
    wiki = _paths.resolve_wiki_path(_paths.resolve_git_root())
    # Build relative_paths = ['Home.md'] + any 'proposal-<slug>.md' created
@@ -203,7 +203,7 @@ On `reject`: ask what to change, revise decisions, rewrite the proposal, and ask
    (omit zero-count terms, e.g. `chore: groom Home.md — 2 shortened, 1 dropped`).
 5. Regenerate the sidebar:
    ```bash
-   uv run --project "${CLAUDE_PLUGIN_ROOT}" python -c "
+   uv run --project "$CLAUDE_PLUGIN_ROOT" python -c "
    import _paths, _sidebar
    wiki = _paths.resolve_wiki_path(_paths.resolve_git_root())
    _sidebar.regenerate(wiki)

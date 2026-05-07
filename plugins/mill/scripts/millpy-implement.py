@@ -22,7 +22,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 import subprocess
 import sys
 import uuid
@@ -37,25 +36,7 @@ import _render
 import _review_common
 import _status
 import _timestamp
-
-
-def _forward_output(output: str) -> int:
-    """Extract the last JSON object containing a 'status' key from output using regex.
-
-    Returns 0 in both success and fallback cases — the JSON on stdout is how the caller reads state.
-    When no valid JSON is found, emits a stuck/logic sentinel.
-    """
-    matches = re.findall(r'\{[^{}]*"status"[^{}]*\}', output)
-    if matches:
-        last = matches[-1]
-        try:
-            json.loads(last)
-            print(last)
-            return 0
-        except json.JSONDecodeError:
-            pass
-    print(json.dumps({"status": "stuck", "stuck_type": "logic", "reason": "no structured report"}))
-    return 0
+from _implementer_common import _forward_output
 
 
 def main(argv=None) -> int:
@@ -148,9 +129,7 @@ def main(argv=None) -> int:
 
         session_id = str(uuid.uuid4())
 
-        _status.set_batch_field(status_path, args.batch_name, "state", "running")
-        _status.set_batch_field(status_path, args.batch_name, "start_sha", start_sha)
-        _status.set_batch_field(status_path, args.batch_name, "implementer_session", session_id)
+        _status.set_batch_fields(status_path, args.batch_name, {"state": "running", "start_sha": start_sha, "implementer_session": session_id})
 
         result = subprocess.run(
             ["git", "add", "status.md"],
@@ -207,7 +186,7 @@ def main(argv=None) -> int:
             print(json.dumps({"status": "stuck", "stuck_type": "transient", "reason": str(e)}))
             print(str(e), file=sys.stderr)
             return 1
-        return _forward_output(output)
+        return _forward_output(output, project_root)
 
     else:
         # Fix-cycle resume
@@ -225,9 +204,7 @@ def main(argv=None) -> int:
             print(f"no implementer_session for batch {args.batch_name!r}", file=sys.stderr)
             return 1
 
-        _status.set_batch_field(status_path, args.batch_name, "state", "fixing")
-        _status.set_batch_field(status_path, args.batch_name, "review_round", args.round)
-        _status.set_batch_field(status_path, args.batch_name, "review_file", str(review_file))
+        _status.set_batch_fields(status_path, args.batch_name, {"state": "fixing", "review_round": args.round, "review_file": str(review_file)})
         _status.append_phase(
             status_path,
             f"fixing-{args.batch_name}-r{args.round}",
@@ -288,7 +265,7 @@ def main(argv=None) -> int:
             print(json.dumps({"status": "stuck", "stuck_type": "transient", "reason": str(e)}))
             print(str(e), file=sys.stderr)
             return 1
-        return _forward_output(output)
+        return _forward_output(output, project_root)
 
 
 if __name__ == "__main__":

@@ -36,18 +36,22 @@ def _make_overview(
 ) -> str:
     """Return 00-overview.md text.
 
-    Each batch dict: {name, file, depends-on (optional, default [])}.
+    Each batch dict: {name, file, number (optional), depends-on (optional, default [])}.
     all_files_touched: optional list of path strings for the section.
     """
     entries = []
     for b in batches:
         deps = b.get("depends-on", [])
-        deps_yaml = "[" + ", ".join(f'"{d}"' for d in deps) + "]"
+        deps_yaml = "[" + ", ".join(str(d) if isinstance(d, int) else f'"{d}"' for d in deps) + "]"
+        if "number" in b:
+            first_line = f"  - number: {b['number']}\n    name: {b['name']}\n"
+        else:
+            first_line = f"  - name: {b['name']}\n"
         entries.append(
-            f"  - name: {b['name']}\n"
-            f"    file: {b['file']}\n"
-            f"    depends-on: {deps_yaml}\n"
-            f"    verify: null"
+            first_line
+            + f"    file: {b['file']}\n"
+            + f"    depends-on: {deps_yaml}\n"
+            + "    verify: null"
         )
     batch_list = "\n".join(entries)
     text = (
@@ -73,15 +77,15 @@ def _make_batch_file(
     name: str,
     card_num: int = 1,
     *,
-    reads: list[str] | None = None,
-    modifies: list[str] | None = None,
+    context: list[str] | None = None,
+    edits: list[str] | None = None,
     creates: list[str] | None = None,
     deletes: list[str] | None = None,
     missing_fields: set[str] | None = None,
 ) -> str:
     """Return a well-formed batch file with one card.
 
-    reads/modifies/creates/deletes: list of path strings (backtick-wrapped
+    context/edits/creates/deletes: list of path strings (backtick-wrapped
         automatically), or None to default to "none".
     missing_fields: set of field names to omit (for check 2 tests).
     """
@@ -100,10 +104,10 @@ def _make_batch_file(
         "## Cards\n\n",
         f"### Card {card_num}: card {card_num}\n\n",
     ]
-    if "Reads" not in missing_fields:
-        parts.append(f"- **Reads:** {fmt(reads)}\n")
-    if "Modifies" not in missing_fields:
-        parts.append(f"- **Modifies:** {fmt(modifies)}\n")
+    if "Context" not in missing_fields:
+        parts.append(f"- **Context:** {fmt(context)}\n")
+    if "Edits" not in missing_fields:
+        parts.append(f"- **Edits:** {fmt(edits)}\n")
     if "Creates" not in missing_fields:
         parts.append(f"- **Creates:** {fmt(creates)}\n")
     if "Deletes" not in missing_fields:
@@ -127,8 +131,8 @@ def _make_batch_file_cards(name: str, card_nums: list[int]) -> str:
     for n in card_nums:
         parts.append(
             f"\n### Card {n}: card {n}\n\n"
-            "- **Reads:** none\n"
-            "- **Modifies:** none\n"
+            "- **Context:** none\n"
+            "- **Edits:** none\n"
             "- **Creates:** none\n"
             "- **Deletes:** none\n"
             "- **Requirements:**\n  See scope.\n"
@@ -161,7 +165,7 @@ def test_check_non_existent_path_clean() -> int:
         existing_file.write_text("# placeholder", encoding="utf-8")
 
         overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
-        batch = _make_batch_file("alpha", reads=["src/a.py"])
+        batch = _make_batch_file("alpha", context=["src/a.py"])
         _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
 
         result = _plan_validate.run(plan_dir, project_root)
@@ -183,7 +187,7 @@ def test_check_non_existent_path_dirty() -> int:
         project_root.mkdir()
 
         overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
-        batch = _make_batch_file("alpha", reads=["nonexistent/path.py"])
+        batch = _make_batch_file("alpha", context=["nonexistent/path.py"])
         _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
 
         result = _plan_validate.run(plan_dir, project_root)
@@ -224,7 +228,7 @@ def test_check_card_missing_field_clean() -> int:
 
 
 def test_check_card_missing_field_dirty() -> int:
-    """Dirty: card omits Modifies: → one card-missing-field error."""
+    """Dirty: card omits Edits: → one card-missing-field error."""
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
         plan_dir = tmp / "plan"
@@ -232,7 +236,7 @@ def test_check_card_missing_field_dirty() -> int:
         project_root.mkdir()
 
         overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
-        batch = _make_batch_file("alpha", missing_fields={"Modifies"})
+        batch = _make_batch_file("alpha", missing_fields={"Edits"})
         _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
 
         result = _plan_validate.run(plan_dir, project_root)
@@ -240,8 +244,8 @@ def test_check_card_missing_field_dirty() -> int:
         try:
             assert len(check2) == 1, f"expected 1 error, got {len(check2)}: {check2}"
             assert check2[0]["card"] == 1, f"wrong card: {check2[0]['card']}"
-            assert "Modifies" in check2[0]["message"], (
-                f"message should mention 'Modifies': {check2[0]['message']!r}"
+            assert "Edits" in check2[0]["message"], (
+                f"message should mention 'Edits': {check2[0]['message']!r}"
             )
             print("PASS test_check_card_missing_field_dirty")
             return 0
@@ -362,7 +366,41 @@ def test_check_depends_on_unknown_clean() -> int:
 
 
 def test_check_depends_on_unknown_dirty() -> int:
-    """Dirty: depends-on references non-existent-batch → one depends-on-unknown error."""
+    """Dirty: depends-on has integer reference to unknown batch number → one depends-on-unknown error."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        overview = _make_overview([
+            {
+                "name": "alpha",
+                "file": "01-alpha.md",
+                "number": 1,
+                "depends-on": [99],
+            }
+        ])
+        batch = _make_batch_file("alpha")
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check4 = [e for e in result if e["check"] == "depends-on-unknown"]
+        try:
+            assert len(check4) == 1, f"expected 1 error, got {len(check4)}: {check4}"
+            assert check4[0]["batch"] == "alpha", f"wrong batch: {check4[0]['batch']!r}"
+            assert "99" in check4[0]["message"], (
+                f"message should mention the unknown number: {check4[0]['message']!r}"
+            )
+            print("PASS test_check_depends_on_unknown_dirty")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_check_depends_on_unknown_dirty: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_check_depends_on_unknown_dirty_legacy_string() -> int:
+    """Dirty (legacy): depends-on string references unknown batch name → one depends-on-unknown error."""
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
         plan_dir = tmp / "plan"
@@ -387,10 +425,10 @@ def test_check_depends_on_unknown_dirty() -> int:
             assert "non-existent-batch" in check4[0]["message"], (
                 f"message should mention the unknown name: {check4[0]['message']!r}"
             )
-            print("PASS test_check_depends_on_unknown_dirty")
+            print("PASS test_check_depends_on_unknown_dirty_legacy_string")
             return 0
         except AssertionError as exc:
-            print(f"FAIL test_check_depends_on_unknown_dirty: {exc}", file=sys.stderr)
+            print(f"FAIL test_check_depends_on_unknown_dirty_legacy_string: {exc}", file=sys.stderr)
             return 1
 
 
@@ -406,8 +444,8 @@ def test_check_parallel_modifies_overlap_clean() -> int:
             {"name": "alpha", "file": "01-alpha.md", "depends-on": []},
             {"name": "beta",  "file": "02-beta.md",  "depends-on": ["alpha"]},
         ])
-        batch_a = _make_batch_file("alpha", modifies=["shared/file.py"])
-        batch_b = _make_batch_file("beta",  modifies=["shared/file.py"])
+        batch_a = _make_batch_file("alpha", edits=["shared/file.py"])
+        batch_b = _make_batch_file("beta",  edits=["shared/file.py"])
         _write_plan(plan_dir, overview, [
             ("01-alpha.md", batch_a),
             ("02-beta.md",  batch_b),
@@ -435,8 +473,8 @@ def test_check_parallel_modifies_overlap_dirty() -> int:
             {"name": "alpha", "file": "01-alpha.md", "depends-on": []},
             {"name": "beta",  "file": "02-beta.md",  "depends-on": []},
         ])
-        batch_a = _make_batch_file("alpha", card_num=1, modifies=["shared/file.py"])
-        batch_b = _make_batch_file("beta",  card_num=2, modifies=["shared/file.py"])
+        batch_a = _make_batch_file("alpha", card_num=1, edits=["shared/file.py"])
+        batch_b = _make_batch_file("beta",  card_num=2, edits=["shared/file.py"])
         _write_plan(plan_dir, overview, [
             ("01-alpha.md", batch_a),
             ("02-beta.md",  batch_b),
@@ -471,7 +509,7 @@ def test_check_reads_not_backtick_path_clean() -> int:
         (project_root / "src" / "a.py").write_text("# placeholder", encoding="utf-8")
 
         overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
-        # Single-line backtick: clean; Modifies: none (exempt)
+        # Single-line backtick: clean; Edits: none (exempt)
         batch_text = (
             "# Batch: alpha\n\n"
             "```yaml\n"
@@ -479,8 +517,8 @@ def test_check_reads_not_backtick_path_clean() -> int:
             "```\n\n"
             "## Cards\n\n"
             "### Card 1: description\n\n"
-            "- **Reads:** `src/a.py`\n"
-            "- **Modifies:** none\n"
+            "- **Context:** `src/a.py`\n"
+            "- **Edits:** none\n"
             "- **Creates:** none\n"
             "- **Deletes:** none\n"
             "- **Requirements:**\n  See scope.\n"
@@ -499,7 +537,7 @@ def test_check_reads_not_backtick_path_clean() -> int:
 
 
 def test_check_reads_not_backtick_path_none_exempt() -> int:
-    """Clean: `- **Reads:** none` returns [] for check 6."""
+    """Clean: `- **Context:** none` returns [] for check 6."""
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
         plan_dir = tmp / "plan"
@@ -542,8 +580,8 @@ def test_check_reads_not_backtick_path_dirty() -> int:
             "```\n\n"
             "## Cards\n\n"
             "### Card 1: description\n\n"
-            "- **Reads:** `src/foo.py` (used by foo)\n"
-            "- **Modifies:** none\n"
+            "- **Context:** `src/foo.py` (used by foo)\n"
+            "- **Edits:** none\n"
             "- **Creates:** none\n"
             "- **Deletes:** none\n"
             "- **Requirements:**\n  See scope.\n"
@@ -633,10 +671,10 @@ def test_run_returns_sorted() -> int:
             {"name": "alpha", "file": "01-alpha.md"},
             {"name": "beta",  "file": "02-beta.md"},
         ])
-        # 01-alpha: card missing Modifies → card-missing-field (batch=01-alpha, card=1)
-        batch_a = _make_batch_file("alpha", missing_fields={"Modifies"})
+        # 01-alpha: card missing Edits → card-missing-field (batch=01-alpha, card=1)
+        batch_a = _make_batch_file("alpha", missing_fields={"Edits"})
         # 02-beta: nonexistent path → non-existent-path (batch=02-beta, card=None→0)
-        batch_b = _make_batch_file("beta", reads=["nonexistent/thing.py"])
+        batch_b = _make_batch_file("beta", context=["nonexistent/thing.py"])
         _write_plan(plan_dir, overview, [
             ("01-alpha.md", batch_a),
             ("02-beta.md",  batch_b),
@@ -815,7 +853,7 @@ def test_reads_token_in_deletes_union_clean() -> int:
         ])
         # alpha reads going/away.py (not on disk); beta declares it as Deletes:.
         # Alpha's Reads: reference must be suppressed by deletes_union.
-        batch_a = _make_batch_file("alpha", card_num=1, reads=["going/away.py"])
+        batch_a = _make_batch_file("alpha", card_num=1, context=["going/away.py"])
         batch_b = _make_batch_file("beta",  card_num=2, deletes=["going/away.py"])
         _write_plan(plan_dir, overview, [
             ("01-alpha.md", batch_a),
@@ -853,7 +891,7 @@ def test_reads_token_in_creates_union_suppressed() -> int:
             {"name": "beta",  "file": "02-beta.md",  "depends-on": ["alpha"]},
         ])
         batch_a = _make_batch_file("alpha", card_num=1, creates=["generated/output.py"])
-        batch_b = _make_batch_file("beta",  card_num=2, reads=["generated/output.py"])
+        batch_b = _make_batch_file("beta",  card_num=2, context=["generated/output.py"])
         _write_plan(plan_dir, overview, [
             ("01-alpha.md", batch_a),
             ("02-beta.md",  batch_b),
@@ -884,7 +922,7 @@ def test_wiki_config_mutation_clean() -> int:
         (wiki_dir / "config.yaml").write_text("# placeholder", encoding="utf-8")
 
         overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
-        batch = _make_batch_file("alpha", reads=["wiki/config.yaml"])
+        batch = _make_batch_file("alpha", context=["wiki/config.yaml"])
         _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
 
         result = _plan_validate.run(plan_dir, project_root)
@@ -913,7 +951,7 @@ def test_wiki_config_mutation_modifies() -> int:
         (wiki_dir / "config.yaml").write_text("# placeholder", encoding="utf-8")
 
         overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
-        batch = _make_batch_file("alpha", modifies=["wiki/config.yaml"])
+        batch = _make_batch_file("alpha", edits=["wiki/config.yaml"])
         _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
 
         result = _plan_validate.run(plan_dir, project_root)
@@ -980,8 +1018,8 @@ def test_wiki_config_mutation_multi_batch() -> int:
             {"name": "alpha", "file": "01-alpha.md", "depends-on": []},
             {"name": "beta",  "file": "02-beta.md",  "depends-on": []},
         ])
-        batch_a = _make_batch_file("alpha", card_num=1, modifies=["wiki/config.yaml"])
-        batch_b = _make_batch_file("beta",  card_num=2, modifies=["wiki/config.yaml"])
+        batch_a = _make_batch_file("alpha", card_num=1, edits=["wiki/config.yaml"])
+        batch_b = _make_batch_file("beta",  card_num=2, edits=["wiki/config.yaml"])
         _write_plan(plan_dir, overview, [
             ("01-alpha.md", batch_a),
             ("02-beta.md",  batch_b),
@@ -1018,7 +1056,7 @@ def test_wiki_config_mutation_modifies_and_creates() -> int:
         overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
         batch = _make_batch_file(
             "alpha",
-            modifies=["wiki/config.yaml"],
+            edits=["wiki/config.yaml"],
             creates=["wiki/config.yaml"],
         )
         _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
@@ -1045,7 +1083,7 @@ def test_reads_token_missing_both_unions_dirty() -> int:
         project_root.mkdir()
 
         overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
-        batch = _make_batch_file("alpha", reads=["totally/missing.py"])
+        batch = _make_batch_file("alpha", context=["totally/missing.py"])
         _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
 
         result = _plan_validate.run(plan_dir, project_root)
@@ -1080,6 +1118,7 @@ def main() -> int:
         test_check_card_numbering_dirty_cross_batch,
         test_check_depends_on_unknown_clean,
         test_check_depends_on_unknown_dirty,
+        test_check_depends_on_unknown_dirty_legacy_string,
         test_check_parallel_modifies_overlap_clean,
         test_check_parallel_modifies_overlap_dirty,
         test_check_reads_not_backtick_path_clean,

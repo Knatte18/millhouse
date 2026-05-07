@@ -10,6 +10,9 @@ can implement in one go, keeping context well under the 200k window.
 There is no hard cap on cards — the planner picks what makes sense.
 Fill every section; no heading-only skeletons.
 
+Replace `NN` in `number: NN` with the integer from the batch filename
+(e.g., `02-field-rename.md` → `number: 2`).
+
 Strip this HTML comment before writing.
 -->
 # Batch: <BATCH_NAME>
@@ -17,6 +20,7 @@ Strip this HTML comment before writing.
 ```yaml
 task: <TASK_TITLE>
 batch: <BATCH_NAME>
+number: NN
 cards: 0
 verify: null
 depends-on: []
@@ -36,22 +40,23 @@ Number cards globally across all batches (no restart-from-1 inside
 each batch) so the reviewer and implementer can cite card numbers
 unambiguously. Fields per card:_
 
-- **Reads:** every file the implementer reads to do this card. Non-empty. One backtick-wrapped path per indented bullet.
-- **Modifies:** files the implementer edits. One backtick-wrapped path per indented bullet.
+- **Context:** every file the implementer reads but does not change. Non-empty. One backtick-wrapped path per indented bullet. Context: is an allowlist — the implementer reads ONLY the files listed here. A file needed but not listed is a plan defect. Files listed in Edits: are implicitly read — do not repeat them in Context:.
+- **Edits:** files the implementer changes (implicitly also read — do not repeat in Context:). One backtick-wrapped path per indented bullet.
 - **Creates:** files the implementer creates. One backtick-wrapped path per indented bullet. When a field has nothing, write the literal "none" on the same line as the field label.
 - **Deletes:** files the implementer deletes. One backtick-wrapped path per indented bullet. Multi-line bullet form supported. When a field has nothing, write the literal "none" on the same line as the field label.
-- **Requirements:** what the card must achieve. Prose — exact
-  assertions live in tests, not here.
+- **Requirements:** what the card must achieve. Use stable identifiers — name the specific function, class, or constant being added, changed, or deleted (e.g., "replace `_load_config` in `mill-claim.py` with `from _config import load_config`"). Never write vague prose ("refactor X") without the specific identifier. Exact assertion shapes live in tests, not here.
 - **Commit:** one-line commit message the implementer will use.
 
-Reads/Modifies/Creates/Deletes fields contain ONLY backtick-wrapped paths in bullet form. No inline parenthetical commentary, no line-range suffixes (e.g. ":55-65"). Inline notes belong in Requirements:. When a field has nothing, write the literal "none" on the same line as the field label.
+Context/Edits/Creates/Deletes fields contain ONLY backtick-wrapped paths in bullet form. No inline parenthetical commentary, no line-range suffixes (e.g. ":55-65"). Inline notes belong in Requirements:. When a field has nothing, write the literal "none" on the same line as the field label.
+
+Note for reviewers: the plan-reviewer bulks `Context: ∪ Edits:` (existing files only; `Creates:` targets do not exist yet). The code-reviewer bulks `Context: ∪ Edits: ∪ Creates:` (all files exist post-implementation).
 
 ### Card N: <short title>
 
-- **Reads:**
+- **Context:**
   - `path/a`
   - `path/b`
-- **Modifies:**
+- **Edits:**
   - `path/c`
 - **Creates:**
   - `path/d`

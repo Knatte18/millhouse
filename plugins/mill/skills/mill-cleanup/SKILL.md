@@ -10,7 +10,7 @@ Scans active dirs for tasks whose `status.md` shows `done` or `abandoned`, then 
 ## Run it
 
 ```bash
-uv run --project "${CLAUDE_PLUGIN_ROOT}" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-cleanup.py" [--apply]
+uv run --project "$CLAUDE_PLUGIN_ROOT" "$CLAUDE_PLUGIN_ROOT/scripts/millpy-cleanup.py" [--apply]
 ```
 
 Default is dry-run — pass `--apply` to execute removals. Must run from the hub, not from a worktree. Takes the wiki lock only when `--apply` is set.

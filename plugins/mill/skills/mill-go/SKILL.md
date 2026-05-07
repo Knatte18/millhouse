@@ -19,10 +19,11 @@ You are the **Builder** — a lean orchestrator. You coordinate per-batch implem
    - `review.code.rounds` — max review rounds per batch.
    - `review.code.self_fix_rounds` — passed to the implementer brief.
    - `review.code.holistic` — if true, run one holistic code review after all batches approve.
+   - `review.code.holistic_rounds` — max holistic fix rounds (default 1).
    - `review.code.per_batch` — if false (missing key defaults to true), skip per-batch code review for all batches.
 4. Acquire the builder lock:
    ```bash
-   uv run --project "${CLAUDE_PLUGIN_ROOT}" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-builder-lock.py" acquire <slug>
+   uv run --project "$CLAUDE_PLUGIN_ROOT" "$CLAUDE_PLUGIN_ROOT/scripts/millpy-builder-lock.py" acquire <slug>
    ```
    On exit code 1: surface the stderr message and halt — a second mill-go will corrupt state.
 5. **Entry phase gate.** Set `status_path = Path("task/status.md").resolve()` and inspect the phase:
@@ -68,7 +69,7 @@ For each batch in `order`:
 
 - Invoke:
   ```bash
-  uv run --project "${CLAUDE_PLUGIN_ROOT}" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-implement.py" <batch_name>
+  uv run --project "$CLAUDE_PLUGIN_ROOT" "$CLAUDE_PLUGIN_ROOT/scripts/millpy-implement.py" <batch_name>
   ```
   The CLI atomically: resolves paths and config, renders the implementer brief, generates a `session_id`, sets batch state → `running`, records `start_sha` and `implementer_session` in status.md, commits and pushes on the task branch, spawns the implementer, and prints the implementer's JSON report on stdout. The Builder reads stdout JSON directly for the Parse step. Note: the CLI exits 0 when the implementer produced JSON (success or stuck). On exit code 1 the stdout still carries a `{"status":"stuck","stuck_type":"transient",...}` line if an LLM-layer failure (timeout, dead session, etc.) occurred — parse it the same way and route through Stuck escalation. Only treat exit 1 as an unrecoverable pre-launch error when stdout is empty.
 
@@ -114,9 +115,9 @@ For each round `N` from 1 to `review.code.rounds`:
 2. Background via `millpy-bg`:
 
    ```bash
-   uv run --project "${CLAUDE_PLUGIN_ROOT}" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-bg.py" \
+   uv run --project "$CLAUDE_PLUGIN_ROOT" "$CLAUDE_PLUGIN_ROOT/scripts/millpy-bg.py" \
        --slug review-code-<batch_name>-r<N> -- \
-       uv run --project "${CLAUDE_PLUGIN_ROOT}" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-review-code.py" \
+       uv run --project "$CLAUDE_PLUGIN_ROOT" "$CLAUDE_PLUGIN_ROOT/scripts/millpy-review-code.py" \
            --batch <batch_name> [--extra-file <p> ...]
    ```
 
@@ -130,7 +131,7 @@ For each round `N` from 1 to `review.code.rounds`:
      `signature: _notify.notify(event: str, detail: str, **context) -> None`
    - `REQUEST_CHANGES` — invoke:
      ```bash
-     uv run --project "${CLAUDE_PLUGIN_ROOT}" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-implement.py" <batch_name> --resume --round <N> --review-file <review-file-abs-path>
+     uv run --project "$CLAUDE_PLUGIN_ROOT" "$CLAUDE_PLUGIN_ROOT/scripts/millpy-implement.py" <batch_name> --resume --round <N> --review-file <review-file-abs-path>
      ```
      The CLI atomically: reads `implementer_session` from status.md, sets batch state → `fixing`, calls `_status.append_phase` for `fixing-{batch_name}-r{N}`, commits and pushes (status.md plus the review file), and resumes the warm implementer session with the fix prompt (which instructs the implementer to load `mill-receiving-review` and apply findings). Parse the JSON report the same way as step 2 — including the exit-code-1-with-stuck-JSON behavior described under "1. Implement". On stuck → escalate.
 
@@ -148,19 +149,53 @@ For each round `N` from 1 to `review.code.rounds`:
 - `_notify.notify("mill-go.blocked", f"batch {batch_name}: {blocked_reason}", slug=slug, batch=batch_name)`.
 - Release the builder lock:
   ```bash
-  uv run --project "${CLAUDE_PLUGIN_ROOT}" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-builder-lock.py" release
+  uv run --project "$CLAUDE_PLUGIN_ROOT" "$CLAUDE_PLUGIN_ROOT/scripts/millpy-builder-lock.py" release
   ```
 - Tell the user: "Batch X blocked with reason Y. Inspect reviews/ and status.md. Re-run `/mill-go` after resolving, or `/mill-abandon` to wind down." Do not proceed to Handoff.
 
 ## Holistic code review
 
-After every batch in `order` has state `approved`, and only if `review.code.holistic: true`:
+**Guard:** Only execute this section if `cfg.get("review", {}).get("code", {}).get("holistic", True)` is truthy.
 
-- Background via `millpy-bg`: `uv run --project "${CLAUDE_PLUGIN_ROOT}" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-bg.py" --slug review-code-holistic-r<N> -- uv run --project "${CLAUDE_PLUGIN_ROOT}" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-review-code.py"` (no `--batch`). Poll and extract JSON as per the per-batch pattern above.
-- On `REQUEST_CHANGES`: apply the same review-fix loop as per-batch — track holistic state via `_status.append_phase` with dedicated holistic phase names (`"holistic-reviewing"`, `"holistic-fixing"`, `"holistic-approved"`) rather than `_status.set_batch_field` (which would raise `ValueError: Batch 'holistic' not present` since 'holistic' is never initialized via `init_batches`). Spawn the implementer via `_implementer_sonnet.run(prompt_text, session_id=new_uuid, resume=False, cwd=worktree_path)` with the review file pointer (no resume — holistic review's findings span multiple batches; the implementer receives whole-worktree access).
-  `signature: _implementer_sonnet.run(prompt_text: str, *, session_id: str | None = None, resume: bool = False, cwd: Path | str | None = None, timeout: int = 1800) -> tuple[str, str]`
-  Run the same review-fix loop until APPROVE or rounds-exhausted. On rounds-exhausted only, surface to user with the same blocked-batch halt prompt as per-batch flow.
-- On `NEED_CONTEXT` apply the same extra-files / notify path as per-batch.
+`max_holistic_rounds = cfg.get("review", {}).get("code", {}).get("holistic_rounds", 1)`. Loop variable `H` starts at 1. `extra_files = []`.
+
+For each round `H` from 1 to `max_holistic_rounds`:
+
+1. **Crash-recovery.** Scan `reviews/` for a file matching `*-code-review-r{H}.md` (holistic code review files have format `{ts}-code-review-r{N}.md` — no batch-name segment, no `-holistic-` substring; per-batch files embed `{batch_name}` so the glob never collides). If found, skip the CLI and use that file's verdict directly.
+
+2. `_status.append_phase(status_path, "holistic-reviewing", _timestamp.now_utc_iso())`. Commit: `git -C <worktree> add status.md && git -C <worktree> commit -m "mill-go: holistic reviewing round {H}"`.
+
+3. Background via `millpy-bg`:
+   ```bash
+   uv run --project "${CLAUDE_PLUGIN_ROOT}" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-bg.py" \
+     --slug review-code-holistic-r{H} -- \
+     uv run --project "${CLAUDE_PLUGIN_ROOT}" \
+       "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-review-code.py" \
+       [--extra-file <p> ...]
+   ```
+   Include any accumulated `extra_files` from prior `NEED_CONTEXT` rounds via `--extra-file <p>` (one flag per path). Poll and extract JSON as per the per-batch pattern.
+
+4. On `APPROVE`: `_status.append_phase(status_path, "holistic-approved", _timestamp.now_utc_iso())`. Commit status. Proceed to Handoff.
+
+5. On `REQUEST_CHANGES`: **Load `mill-receiving-review` before reading any finding.** Dispatch:
+   ```bash
+   uv run --project "${CLAUDE_PLUGIN_ROOT}" \
+     "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-implement-holistic.py" \
+     --review-file <abs-path-to-holistic-review-file> --round {H}
+   ```
+   Parse stdout JSON (same last-`{"status":...}`-line pattern as per-batch). The CLI handles `holistic-fixing` phase + commit + push itself.
+   - `stuck_type: transient`: one-retry policy (re-invoke once). If still transient: surface to user — retry fresh / skip holistic / block task.
+   - `stuck_type: verify` or `logic`: surface to user — edit plan and retry / skip holistic and proceed to Handoff / block task.
+   - On success: increment H and loop.
+
+6. On `NEED_CONTEXT`: apply the same extra-files / notify path as per-batch.
+
+7. **Rounds exhausted** (`H > max_holistic_rounds`, `REQUEST_CHANGES` still returned): surface to user with a **blocked-task halt** (not blocked-batch):
+   > Holistic review exhausted {max_holistic_rounds} round(s). Task is blocked.
+   > 1) Rethink — revise discussion and re-run mill-plan.
+   > 2) Skip holistic — accept remaining findings and proceed to Handoff.
+   > 3) Block — halt and leave for manual resolution.
+   Wait for user choice before proceeding.
 
 ## Handoff
 
@@ -179,7 +214,7 @@ After every batch in `order` has state `approved`, and only if `review.code.holi
 3. `_notify.notify("mill-go.done", f"task {slug} complete", slug=slug)`.
 4. **Release the builder lock immediately:**
    ```bash
-   uv run --project "${CLAUDE_PLUGIN_ROOT}" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-builder-lock.py" release
+   uv run --project "$CLAUDE_PLUGIN_ROOT" "$CLAUDE_PLUGIN_ROOT/scripts/millpy-builder-lock.py" release
    ```
 5. If `pipeline.auto_report: true` → invoke `/mill-self-report` directly with no argument. The skill checks `gh auth` itself and bails cleanly if absent. Wait for it to finish before continuing.
 6. If `pipeline.auto_merge: true` → invoke `/mill-merge`. Otherwise tell the user: "Task complete. Run `/mill-merge` to merge the task branch back to parent."

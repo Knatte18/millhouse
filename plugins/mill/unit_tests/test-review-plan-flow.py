@@ -68,7 +68,7 @@ def _make_batch_file(
     *,
     deletes: list[str] | None = None,
 ) -> str:
-    """Return batch file text (single-line Reads:/Creates:/Deletes: form)."""
+    """Return batch file text (single-line Context:/Edits:/Creates:/Deletes: form)."""
     reads_part = ", ".join(f"`{r}`" for r in reads) if reads else "none"
     creates_part = ", ".join(f"`{c}`" for c in creates) if creates else "none"
     deletes_part = ", ".join(f"`{d}`" for d in deletes) if deletes else "none"
@@ -78,8 +78,8 @@ def _make_batch_file(
         f"task: test\nbatch: {name}\ncards: 1\nverify: null\ndepends-on: []\n"
         "```\n\n"
         "## Cards\n\n### Card 1\n\n"
-        f"- **Reads:** {reads_part}\n"
-        "- **Modifies:** none\n"
+        f"- **Context:** {reads_part}\n"
+        "- **Edits:** none\n"
         f"- **Creates:** {creates_part}\n"
         f"- **Deletes:** {deletes_part}\n"
     )
@@ -439,7 +439,7 @@ def main() -> int:
             assert retry_text.startswith("## Re-attached files"), (
                 f"retry prompt must start with '## Re-attached files': {retry_text[:80]!r}"
             )
-            assert retry_kwargs == {"session_id": "sid-1", "resume": True, "timeout": None}, (
+            assert retry_kwargs == {"session_id": "sid-1", "resume": True, "timeout": None, "effort": None}, (
                 f"retry kwargs wrong: {retry_kwargs}"
             )
             print("PASS test6: per-batch NEED_CONTEXT retry → APPROVE, holistic unaffected")
@@ -484,7 +484,7 @@ def main() -> int:
             assert retry_text.startswith("## Re-attached files"), (
                 f"holistic retry prompt must start with '## Re-attached files': {retry_text[:80]!r}"
             )
-            assert retry_kwargs == {"session_id": "sid-2", "resume": True, "timeout": None}, (
+            assert retry_kwargs == {"session_id": "sid-2", "resume": True, "timeout": None, "effort": None}, (
                 f"holistic retry kwargs wrong: {retry_kwargs}"
             )
             print("PASS test7: holistic NEED_CONTEXT retry → APPROVE")

@@ -22,8 +22,8 @@ the existing `render()` function or to any caller.
 ### Step 01: Add `_read_template` and `render_cached` to `_render.py`
 
 - **Creates:** nothing (adds to existing file)
-- **Modifies:** scripts/_render.py
-- **Reads:** scripts/_render.py
+- **Edits:** `scripts/_render.py`
+- **Context:** `scripts/_render.py`
 - **Requirements:**
   - Add a module-level `@functools.lru_cache(maxsize=None)` decorated private
     function `_read_template(path: Path) -> str` that reads the template file.
