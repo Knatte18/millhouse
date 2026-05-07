@@ -152,7 +152,7 @@ def main(argv: list[str] | None = None) -> int:
     slug = picked.slug
 
     branch_prefix = spawn_cfg.get("branch_prefix", "")
-    branch_name = f"{branch_prefix}/{slug}" if branch_prefix else slug
+    branch_name = f"{branch_prefix}{slug}" if branch_prefix else slug
 
     worktrees_dir = resolve_worktrees_dir(cfg, git_root)
     worktree_path = worktrees_dir / slug
