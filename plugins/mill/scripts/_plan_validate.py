@@ -638,7 +638,7 @@ def _check_wiki_config_mutation(batch_files: list[Path]) -> list[dict]:
                 "path": "wiki/config.yaml",
                 "message": (
                     "batch edits or creates wiki/config.yaml — self-applying layout change risk; "
-                    "use --skip-validate if a bootstrap card is present"
+                    "use --skip-check wiki-config-mutation if a bootstrap card is present"
                 ),
             })
     return errors
