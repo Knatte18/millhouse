@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-backend-fixes
+phase: approved-validator-skip-checks
 slug: review-plan-robustness
 branch: review-plan-robustness
 plan: task/plan
@@ -25,6 +25,7 @@ plan-review-r3  2026-05-07T09:06:20Z
 planned  2026-05-07T09:06:26Z
 implementing  2026-05-07T09:18:23Z
 approved-backend-fixes  2026-05-07T10:29:32Z
+approved-validator-skip-checks  2026-05-07T10:34:48Z
 ```
 
 ## Batches
@@ -36,7 +37,7 @@ batches:
     implementer_session: 6e00fbdd-e5aa-4df3-a774-9c86866a3a7f
     start_sha: 2909671c8c0d086a622f7639ad8d93b7c94b1097
   - name: validator-skip-checks
-    state: running
+    state: approved
     implementer_session: 80ef660f-f7b0-4a90-b92d-ec946ef4f764
     start_sha: 8db2ed37ac9520e8c2dc1cf14a4c22834dd46e5b
   - name: cli-skip-checks
