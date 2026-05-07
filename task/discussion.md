@@ -16,9 +16,9 @@ All five bugs were observed in the same multi-session run (issues #185, #184, #1
 ## Scope
 
 **In:**
-- `mill-plan SKILL.md` — wrap CLI in `millpy-bg.py` (bug A); extend step 4.5 to handle partial-ERROR rounds (bug D)
+- `mill-plan SKILL.md` — wrap CLI in `millpy-bg.py` for all three autonomous call sites (step 2, step 4.5 retry, step 1.5 post-validator-fix re-run) (bug A); extend step 4.5 to handle partial-ERROR rounds (bug D)
 - `_review_plan.py` — catch `ReviewError` from `parse_verdict` in holistic section (bug B); exclude stale per-batch entries from resume-mode JSON (bug C)
-- `_plan_validate.py` — add `skip_checks` parameter to `run()` (bug E)
+- `_plan_validate.py` — add `skip_checks` parameter to `run()`; update `_check_wiki_config_mutation` error message at line 642 from `--skip-validate` to `--skip-check wiki-config-mutation` (bug E)
 - `millpy-review-plan.py` — add `--skip-check <name>` repeatable flag, pass to `_plan_validate` (bug E)
 - `millpy-validate-plan.py` — add `--skip-check <name>` repeatable flag for consistency (bug E)
 - `mill-plan SKILL.md` fix-table — update `wiki-config-mutation` row to use `--skip-check wiki-config-mutation` instead of `--skip-validate` (bug E)
@@ -71,7 +71,7 @@ All five bugs were observed in the same multi-session run (issues #185, #184, #1
 - `plugins/mill/scripts/millpy-validate-plan.py` — standalone validator CLI; calls `_plan_validate.run()` only.
 - `plugins/mill/scripts/_review_plan.py` — backend `run()` function. Sections: per-batch parallel (lines ~342–428), holistic (lines ~430–593), aggregate (lines ~595–604). Bug B and C live in the holistic section.
 - `plugins/mill/scripts/_plan_validate.py` — public `run(plan_dir, project_root, *, root, wiki_root) -> list[dict]`. Eight checks; returns sorted error list.
-- `plugins/mill/skills/mill-plan/SKILL.md` — step 2 (bug A: bare CLI call), step 4.5 (bug D: all-ERROR trigger).
+- `plugins/mill/skills/mill-plan/SKILL.md` — three bare CLI calls for bug A (step 2, step 4.5 retry block, step 1.5 post-validator-fix re-run); step 4.5 trigger for bug D. Step 6's manual user-facing example stays bare.
 - `plugins/mill/unit_tests/test-review-plan-flow.py` — existing flow tests using `_reviewer_test_stub`.
 - `plugins/mill/unit_tests/test-plan-validate.py` — existing validator unit tests.
 - `plugins/mill/unit_tests/test-millpy-validate-plan.py` — existing standalone-CLI tests.
@@ -132,6 +132,10 @@ if skip_checks:
     errors = [e for e in errors if e["check"] not in skip_checks]
 return errors
 ```
+
+Also update the error message string in `_check_wiki_config_mutation` (line 642) from:
+`"use --skip-validate if a bootstrap card is present"` →
+`"use --skip-check wiki-config-mutation if a bootstrap card is present"`
 
 The `millpy-review-plan.py` argparse addition:
 ```python
