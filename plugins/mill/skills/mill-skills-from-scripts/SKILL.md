@@ -57,7 +57,7 @@ for script_path in _skill_writer.iter_target_scripts(plugins_root):
 
 5. After all 12 are written, run `mill-skills-index` to refresh `SKILLS.md`:
    ```bash
-   uv run --project "${CLAUDE_PLUGIN_ROOT}" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-skills-index.py"
+   uv run --project "$CLAUDE_PLUGIN_ROOT" "$CLAUDE_PLUGIN_ROOT/scripts/millpy-skills-index.py"
    ```
 
 6. Commit and push the 12 new SKILL.md files and the regenerated `SKILLS.md` in one commit.

@@ -293,8 +293,11 @@ def main() -> int:
             errors += 1
             print("FAIL: expected LLMRateLimitError, no exception raised", file=sys.stderr)
         except LLMRateLimitError as e:
-            assert "rate_limit_event" in str(e), f"stdout content missing from message: {e}"
-            print("PASS: rate-limit error message includes stdout fallback content")
+            if "rate_limit_event" not in str(e):
+                errors += 1
+                print(f"FAIL: stdout content missing from rate-limit message: {e}", file=sys.stderr)
+            else:
+                print("PASS: rate-limit error message includes stdout fallback content")
         except Exception as exc:
             errors += 1
             print(f"FAIL: expected LLMRateLimitError, got {type(exc).__name__}: {exc}", file=sys.stderr)
