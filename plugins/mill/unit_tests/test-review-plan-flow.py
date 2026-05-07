@@ -892,7 +892,7 @@ def main() -> int:
     # ------------------------------------------------------------------
     # Test 17 — mid-round resume: holistic missing, per-batch on disk (#87)
     # Pre-populate two per-batch r1 files (no holistic); stub fires once
-    # (holistic only); reviews has 3 entries (2 disk + 1 fresh holistic).
+    # (holistic only); reviews has 1 entry (holistic only, bug C fix #184).
     # ------------------------------------------------------------------
     REQUEST_CHANGES_TEXT2 = "# Review: test\n\n```yaml\nverdict: REQUEST_CHANGES\n```\n"
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -920,25 +920,15 @@ def main() -> int:
             assert len(prompts) == 1, (
                 f"mid-round resume: expected 1 prompt (holistic only), got {len(prompts)}"
             )
-            assert len(r.reviews) == 3, (
-                f"expected 3 reviews (2 disk + 1 holistic), got {len(r.reviews)}"
+            assert len(r.reviews) == 1, (
+                f"expected 1 review (holistic only after bug C fix), got {len(r.reviews)}"
             )
-            rv_alpha = next((rv for rv in r.reviews if rv["scope"] == "01-alpha"), None)
-            rv_beta  = next((rv for rv in r.reviews if rv["scope"] == "02-beta"), None)
-            rv_hol   = next((rv for rv in r.reviews if rv["scope"] == "holistic"), None)
-            assert rv_alpha is not None, "01-alpha missing from resume reviews"
-            assert rv_beta is not None, "02-beta missing from resume reviews"
+            rv_hol = next((rv for rv in r.reviews if rv["scope"] == "holistic"), None)
             assert rv_hol is not None, "holistic missing from resume reviews"
-            assert rv_alpha["verdict"] == "APPROVE", (
-                f"disk-loaded alpha verdict should be APPROVE, got {rv_alpha['verdict']}"
-            )
-            assert rv_beta["verdict"] == "REQUEST_CHANGES", (
-                f"disk-loaded beta verdict should be REQUEST_CHANGES, got {rv_beta['verdict']}"
-            )
             assert rv_hol["session_id"] == "sid-hol-resume", (
                 f"holistic should be fresh, got {rv_hol['session_id']!r}"
             )
-            print("PASS test17: mid-round resume — stub fires once (holistic only), 2 disk + 1 fresh (#87)")
+            print("PASS test17: mid-round resume — stub fires once (holistic only), holistic-only result (bug C fix #184)")
         except AssertionError as exc:
             errors += 1
             print(f"FAIL test17: {exc}", file=sys.stderr)
