@@ -29,5 +29,7 @@ implementing  2026-05-07T08:10:56Z
 ```yaml
 batches:
   - name: Prune unused skills and scripts
-    state: pending
+    state: running
+    implementer_session: 68b3976a-bd7f-4eed-bf00-5ee11c490ef2
+    start_sha: a622ce553b95e4349cb238c79ff64480b03078ba
 ```
