@@ -162,12 +162,12 @@ The four bugs:
 
 **Cross-cutting:**
 
-- Run the full unit test suite (`python plugins/mill/unit_tests/run-all.py`) at the end of each batch to catch any regression introduced by the fixture/source changes. Pre-fix: 1 of 47 failing (`test-review-plan-flow.py`). Post-fix: 47/47 passing.
+- Run the full unit test suite (`python plugins/mill/unit_tests/run-all.py`) at the end of each batch to catch any regression introduced by the fixture/source changes. Pre-fix: 1 of 47 test files fails (`test-review-plan-flow.py` — 4 of its test cases fail: tests 4, 5, 6, 7). Post-fix: 47/47 test files passing.
 
 ## Q&A log
 
 - **Q:** Should the integration fixture `01-core.md` and the holistic review template `review-code-holistic.md` (which still mention `Reads:`/`Modifies:`) be in scope, or only the directly-failing test? **A:** In scope — recommended fix-all to prevent the rename from leaving more stale corners.
-- **Q:** Should bug B's fix change `${CLAUDE_PLUGIN_ROOT}` to `$CLAUDE_PLUGIN_ROOT`, add a CLAUDE.md note, or document in `mill:cli`? **A:** All three: brace-form change in fenced code blocks across SKILL.md files, plus a `mill:cli` bullet that explains why agents should not reconstruct `${CLAUDE_PLUGIN_ROOT}` references.
+- **Q:** Should bug B's fix change `${CLAUDE_PLUGIN_ROOT}` to `$CLAUDE_PLUGIN_ROOT`, add a CLAUDE.md note, or document in `mill:cli`? **A:** Both — the brace-form change in fenced code blocks across SKILL.md files, plus a `mill:cli` bullet that explains why agents should not reconstruct `${CLAUDE_PLUGIN_ROOT}` references. No CLAUDE.md edit; `mill:cli` is the canonical home for shell-tool guidance.
 - **Q:** Should the rate-limit error message use `result.stdout` raw (verbose) or extract only the rate_limit_event line? **A:** Use the simple `stderr or stdout` fallback. The 500-char cap protects readability; extraction adds a fragility that doesn't pay off.
 - **Q:** Should bug D's fix add a Monitor-tool bullet to `mill:cli`, or update individual mill-go/mill-plan SKILL.md polling sections? **A:** Add to `mill:cli` only — that's the canonical owner of shell-tool guidance.
 - **Q:** Should bug C's `stderr or stdout` fallback also apply to the LLMSessionError and generic LLMError branches, or only the rate-limit branch? **A:** All three branches — extract `error_detail` once before the if/elif/else and reuse. The bug pattern (empty stderr but useful stdout) is not unique to rate-limit.
