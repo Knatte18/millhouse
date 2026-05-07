@@ -34,7 +34,9 @@ implementing  2026-05-07T06:16:30Z
 ```yaml
 batches:
   - name: _gitignore API simplification
-    state: pending
+    state: running
+    implementer_session: f36aee6f-f65c-4836-8450-ad31d3ae2793
+    start_sha: 8774ec634d0d947620540805343ac3f063d44e5e
   - name: Spawn infrastructure and wiki config
     state: pending
   - name: Teardown and migration
