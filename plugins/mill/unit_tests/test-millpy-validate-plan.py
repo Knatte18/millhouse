@@ -176,6 +176,116 @@ def test_cli_dirty_exits_one_card_missing_field() -> int:
             return 1
 
 
+def test_cli_skip_check_suppresses_target_check() -> int:
+    """--skip-check wiki-config-mutation: exit 0, no errors despite wiki/config.yaml in Edits:."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        fixture_root = Path(tmpdir)
+        plan_dir = fixture_root / "plan"
+        wiki_dir = fixture_root / "wiki"
+        wiki_dir.mkdir()
+        (wiki_dir / "config.yaml").write_text("", encoding="utf-8")
+
+        batch_text = (
+            "# Batch: alpha\n\n"
+            "```yaml\n"
+            "task: test\nbatch: alpha\ncards: 1\nverify: null\ndepends-on: []\n"
+            "```\n\n"
+            "## Cards\n\n"
+            "### Card 1: card 1\n\n"
+            "- **Context:** none\n"
+            "- **Edits:** `wiki/config.yaml`\n"
+            "- **Creates:** none\n"
+            "- **Deletes:** none\n"
+            "- **Requirements:**\n  See scope.\n"
+            "- **Commit:** feat(alpha): card 1\n"
+        )
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        slug = "test-slug"
+        cfg = {"paths": {"plan_dir": "plan"}}
+        captured = io.StringIO()
+
+        orig = os.getcwd()
+        os.chdir(str(fixture_root))
+        try:
+            with unittest.mock.patch("_paths.resolve_git_root", return_value=fixture_root), \
+                 unittest.mock.patch("_paths.resolve_wiki_path", return_value=wiki_dir), \
+                 unittest.mock.patch("_review_common.load_config", return_value=cfg), \
+                 unittest.mock.patch("_review_common.find_active_slug", return_value=slug), \
+                 unittest.mock.patch("_review_common.resolve_path", return_value=plan_dir), \
+                 contextlib.redirect_stdout(captured):
+                rc = _vp_mod.main(["--skip-check", "wiki-config-mutation"])
+        finally:
+            os.chdir(orig)
+
+        try:
+            assert rc == 0, f"expected exit 0, got {rc}"
+            output = captured.getvalue().strip()
+            data = json.loads(output)
+            assert data["errors"] == [], f"expected no errors, got {data['errors']}"
+            print("PASS test_cli_skip_check_suppresses_target_check")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_cli_skip_check_suppresses_target_check: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_cli_multiple_skip_checks_suppress_multiple_checks() -> int:
+    """Multiple --skip-check flags: exit 0, no errors despite wiki-config-mutation and card-missing-field."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        fixture_root = Path(tmpdir)
+        plan_dir = fixture_root / "plan"
+        wiki_dir = fixture_root / "wiki"
+        wiki_dir.mkdir()
+        (wiki_dir / "config.yaml").write_text("", encoding="utf-8")
+
+        batch_text = (
+            "# Batch: alpha\n\n"
+            "```yaml\n"
+            "task: test\nbatch: alpha\ncards: 1\nverify: null\ndepends-on: []\n"
+            "```\n\n"
+            "## Cards\n\n"
+            "### Card 1: card 1\n\n"
+            "- **Context:** none\n"
+            "- **Edits:** `wiki/config.yaml`\n"
+            "- **Creates:** none\n"
+            "- **Deletes:** none\n"
+            "- **Requirements:**\n  See scope.\n"
+            # Commit: field intentionally omitted to trigger card-missing-field
+        )
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        slug = "test-slug"
+        cfg = {"paths": {"plan_dir": "plan"}}
+        captured = io.StringIO()
+
+        orig = os.getcwd()
+        os.chdir(str(fixture_root))
+        try:
+            with unittest.mock.patch("_paths.resolve_git_root", return_value=fixture_root), \
+                 unittest.mock.patch("_paths.resolve_wiki_path", return_value=wiki_dir), \
+                 unittest.mock.patch("_review_common.load_config", return_value=cfg), \
+                 unittest.mock.patch("_review_common.find_active_slug", return_value=slug), \
+                 unittest.mock.patch("_review_common.resolve_path", return_value=plan_dir), \
+                 contextlib.redirect_stdout(captured):
+                rc = _vp_mod.main(["--skip-check", "wiki-config-mutation", "--skip-check", "card-missing-field"])
+        finally:
+            os.chdir(orig)
+
+        try:
+            assert rc == 0, f"expected exit 0, got {rc}"
+            output = captured.getvalue().strip()
+            data = json.loads(output)
+            assert data["errors"] == [], f"expected no errors, got {data['errors']}"
+            print("PASS test_cli_multiple_skip_checks_suppress_multiple_checks")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_cli_multiple_skip_checks_suppress_multiple_checks: {exc}", file=sys.stderr)
+            return 1
+
+
 # ---------------------------------------------------------------------------
 # Runner
 # ---------------------------------------------------------------------------
@@ -184,6 +294,8 @@ def main() -> int:
     tests = [
         test_cli_clean_exits_zero_no_findings,
         test_cli_dirty_exits_one_card_missing_field,
+        test_cli_skip_check_suppresses_target_check,
+        test_cli_multiple_skip_checks_suppress_multiple_checks,
     ]
 
     errors = 0

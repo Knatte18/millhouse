@@ -578,7 +578,7 @@ def main() -> int:
     # ------------------------------------------------------------------
     # Test 9 — all batches approved + holistic re-runs
     # All three batches approved in r1 → stub fires exactly once (holistic).
-    # reviews has 4 entries: 3 carryforward + 1 fresh holistic.
+    # reviews has 1 entry (holistic only, resume path, bug C fix #184).
     # ------------------------------------------------------------------
     with tempfile.TemporaryDirectory() as tmpdir:
         batch_specs = [
@@ -605,13 +605,11 @@ def main() -> int:
             assert len(prompts) == 1, (
                 f"stub should fire exactly once (holistic), got {len(prompts)}"
             )
-            assert len(r.reviews) == 4, f"expected 4 reviews (3 carry + 1 holistic), got {len(r.reviews)}"
-            carry_entries = [rv for rv in r.reviews if rv["session_id"] is None]
+            assert len(r.reviews) == 1, f"expected 1 review (holistic only after bug C fix), got {len(r.reviews)}"
             fresh_entries = [rv for rv in r.reviews if rv["session_id"] is not None]
-            assert len(carry_entries) == 3, f"expected 3 carryforward entries, got {len(carry_entries)}"
             assert len(fresh_entries) == 1, f"expected 1 fresh entry, got {len(fresh_entries)}"
             assert fresh_entries[0]["scope"] == "holistic"
-            print("PASS test9: all approved — stub fires once (holistic only); 3 carry + 1 fresh")
+            print("PASS test9: all approved — stub fires once (holistic only), holistic-only result (bug C fix #184)")
         except AssertionError as exc:
             errors += 1
             print(f"FAIL test9: {exc}", file=sys.stderr)
@@ -892,7 +890,7 @@ def main() -> int:
     # ------------------------------------------------------------------
     # Test 17 — mid-round resume: holistic missing, per-batch on disk (#87)
     # Pre-populate two per-batch r1 files (no holistic); stub fires once
-    # (holistic only); reviews has 3 entries (2 disk + 1 fresh holistic).
+    # (holistic only); reviews has 1 entry (holistic only, bug C fix #184).
     # ------------------------------------------------------------------
     REQUEST_CHANGES_TEXT2 = "# Review: test\n\n```yaml\nverdict: REQUEST_CHANGES\n```\n"
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -920,25 +918,15 @@ def main() -> int:
             assert len(prompts) == 1, (
                 f"mid-round resume: expected 1 prompt (holistic only), got {len(prompts)}"
             )
-            assert len(r.reviews) == 3, (
-                f"expected 3 reviews (2 disk + 1 holistic), got {len(r.reviews)}"
+            assert len(r.reviews) == 1, (
+                f"expected 1 review (holistic only after bug C fix), got {len(r.reviews)}"
             )
-            rv_alpha = next((rv for rv in r.reviews if rv["scope"] == "01-alpha"), None)
-            rv_beta  = next((rv for rv in r.reviews if rv["scope"] == "02-beta"), None)
-            rv_hol   = next((rv for rv in r.reviews if rv["scope"] == "holistic"), None)
-            assert rv_alpha is not None, "01-alpha missing from resume reviews"
-            assert rv_beta is not None, "02-beta missing from resume reviews"
+            rv_hol = next((rv for rv in r.reviews if rv["scope"] == "holistic"), None)
             assert rv_hol is not None, "holistic missing from resume reviews"
-            assert rv_alpha["verdict"] == "APPROVE", (
-                f"disk-loaded alpha verdict should be APPROVE, got {rv_alpha['verdict']}"
-            )
-            assert rv_beta["verdict"] == "REQUEST_CHANGES", (
-                f"disk-loaded beta verdict should be REQUEST_CHANGES, got {rv_beta['verdict']}"
-            )
             assert rv_hol["session_id"] == "sid-hol-resume", (
                 f"holistic should be fresh, got {rv_hol['session_id']!r}"
             )
-            print("PASS test17: mid-round resume — stub fires once (holistic only), 2 disk + 1 fresh (#87)")
+            print("PASS test17: mid-round resume — stub fires once (holistic only), holistic-only result (bug C fix #184)")
         except AssertionError as exc:
             errors += 1
             print(f"FAIL test17: {exc}", file=sys.stderr)
@@ -1018,6 +1006,45 @@ def main() -> int:
         except Exception as exc:
             errors += 1
             print(f"FAIL test19 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
+    # Test 20 — holistic parse_verdict failure → ERROR entry (#185)
+    # One-batch plan; holistic returns raw prose without yaml block →
+    # parse_verdict raises ReviewError → ERROR entry, no raise.
+    # ------------------------------------------------------------------
+    with tempfile.TemporaryDirectory() as tmpdir:
+        batch_specs = [("alpha", "01-alpha.md", ["src/a.py"], [])]
+        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(Path(tmpdir), batch_specs)
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            stub.seed([
+                (APPROVE_TEXT, "sid-batch"),
+                ("# Raw prose without any yaml block\n\nThe plan looks fine.", "sid-hol"),
+            ])
+            r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root)
+            assert r.verdict == "REQUEST_CHANGES", (
+                f"expected REQUEST_CHANGES (APPROVE + ERROR), got {r.verdict}"
+            )
+            assert len(r.reviews) == 2, f"expected 2 reviews, got {len(r.reviews)}"
+            rv_hol = next((rv for rv in r.reviews if rv["scope"] == "holistic"), None)
+            assert rv_hol is not None, "holistic entry missing"
+            assert rv_hol["verdict"] == "ERROR", (
+                f"holistic verdict should be ERROR, got {rv_hol['verdict']}"
+            )
+            assert rv_hol["file"] is not None, "holistic ERROR entry should have a file path"
+            assert "parse_verdict failed" in rv_hol.get("error", ""), (
+                f"error message missing 'parse_verdict failed': {rv_hol.get('error')}"
+            )
+            print("PASS test20: holistic parse_verdict failure → ERROR entry, no ReviewError raised (#185)")
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test20: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test20 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
         finally:
             os.chdir(orig_dir)
 

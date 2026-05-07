@@ -31,7 +31,6 @@ END = "# === end mill-managed ==="
 GLOB_ENTRIES: list[str] = [
     "**/.millhouse/",
     "**/.scratch/",
-    "**/.portals/",
     "**/.wiki/",
     "**/.active/",
 ]

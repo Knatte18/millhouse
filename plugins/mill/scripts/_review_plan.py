@@ -377,7 +377,6 @@ def run(
                 f"on-disk per-batch files; firing holistic only",
                 file=sys.stderr,
             )
-            reviews.extend(_disk_reviews)
         else:
             # Normal path: skip-approved scan + ThreadPoolExecutor.
             approved_carry = _scan_approved_batches(reviews_dir)
@@ -503,43 +502,62 @@ def run(
                 "session_id": None,
             })
         else:
-            verdict = parse_verdict(raw)
+            try:
+                verdict = parse_verdict(raw)
 
-            if verdict == "NEED_CONTEXT":
-                missing_raw = parse_missing_context(raw)
-                missing_paths = resolve_existing_paths(
-                    missing_raw, project_root, root, wiki_root=wiki_root
-                )
-                if missing_paths:
-                    retry_prompt = (
-                        build_reattached_section(missing_paths)
-                        + "\n\n"
-                        + "Please continue your review using the re-attached files above. "
-                        + "The original prompt is already in your session context."
+                if verdict == "NEED_CONTEXT":
+                    missing_raw = parse_missing_context(raw)
+                    missing_paths = resolve_existing_paths(
+                        missing_raw, project_root, root, wiki_root=wiki_root
                     )
-                    print(
-                        f"[_review_plan] holistic NEED_CONTEXT round-1; retrying with resume "
-                        f"({len(missing_paths)} re-attached file(s)) session={(session_id or '?')[:8]}",
-                        file=sys.stderr,
-                    )
-                    try:
-                        raw, session_id = holistic_reviewer.run(
-                            retry_prompt, session_id=session_id, resume=True, timeout=holistic_timeout
+                    if missing_paths:
+                        retry_prompt = (
+                            build_reattached_section(missing_paths)
+                            + "\n\n"
+                            + "Please continue your review using the re-attached files above. "
+                            + "The original prompt is already in your session context."
                         )
-                    except LLMError as exc:
-                        reviews.append({
-                            "scope": "holistic",
-                            "round": round_n,
-                            "verdict": "ERROR",
-                            "blocking_count": 0,
-                            "file": None,
-                            "error": f"resume retry failed: {exc}",
-                            "session_id": None,
-                        })
-                        # error entry appended above; else branch writes the review file on success
+                        print(
+                            f"[_review_plan] holistic NEED_CONTEXT round-1; retrying with resume "
+                            f"({len(missing_paths)} re-attached file(s)) session={(session_id or '?')[:8]}",
+                            file=sys.stderr,
+                        )
+                        try:
+                            raw, session_id = holistic_reviewer.run(
+                                retry_prompt, session_id=session_id, resume=True, timeout=holistic_timeout
+                            )
+                        except LLMError as exc:
+                            reviews.append({
+                                "scope": "holistic",
+                                "round": round_n,
+                                "verdict": "ERROR",
+                                "blocking_count": 0,
+                                "file": None,
+                                "error": f"resume retry failed: {exc}",
+                                "session_id": None,
+                            })
+                            # error entry appended above; else branch writes the review file on success
+                        else:
+                            verdict = parse_verdict(raw)
+                            # Second NEED_CONTEXT propagates to caller untouched.
+                            blocking_count = parse_blocking_count(raw, severity="BLOCKING")
+                            path = write_review_file(
+                                reviews_dir, "plan", round_n, raw, scope="holistic"
+                            )
+                            print(
+                                f"[_review_plan] holistic: verdict={verdict} file={path.name}",
+                                file=sys.stderr,
+                            )
+                            reviews.append({
+                                "scope": "holistic",
+                                "round": round_n,
+                                "verdict": verdict,
+                                "blocking_count": blocking_count,
+                                "file": str(path),
+                                "session_id": session_id,
+                            })
                     else:
-                        verdict = parse_verdict(raw)
-                        # Second NEED_CONTEXT propagates to caller untouched.
+                        # No resolvable paths to re-attach — propagate NEED_CONTEXT.
                         blocking_count = parse_blocking_count(raw, severity="BLOCKING")
                         path = write_review_file(
                             reviews_dir, "plan", round_n, raw, scope="holistic"
@@ -557,7 +575,6 @@ def run(
                             "session_id": session_id,
                         })
                 else:
-                    # No resolvable paths to re-attach — propagate NEED_CONTEXT.
                     blocking_count = parse_blocking_count(raw, severity="BLOCKING")
                     path = write_review_file(
                         reviews_dir, "plan", round_n, raw, scope="holistic"
@@ -574,21 +591,15 @@ def run(
                         "file": str(path),
                         "session_id": session_id,
                     })
-            else:
-                blocking_count = parse_blocking_count(raw, severity="BLOCKING")
-                path = write_review_file(
-                    reviews_dir, "plan", round_n, raw, scope="holistic"
-                )
-                print(
-                    f"[_review_plan] holistic: verdict={verdict} file={path.name}",
-                    file=sys.stderr,
-                )
+            except ReviewError as exc:
+                path = write_review_file(reviews_dir, "plan", round_n, raw, scope="holistic")
                 reviews.append({
                     "scope": "holistic",
                     "round": round_n,
-                    "verdict": verdict,
-                    "blocking_count": blocking_count,
+                    "verdict": "ERROR",
+                    "blocking_count": 0,
                     "file": str(path),
+                    "error": f"parse_verdict failed: {exc}",
                     "session_id": session_id,
                 })
 

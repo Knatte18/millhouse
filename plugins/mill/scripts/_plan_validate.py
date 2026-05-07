@@ -6,7 +6,7 @@ Used by millpy-validate-plan.py (standalone CLI) and by millpy-review-plan.py
 (auto-run gate before each review round).
 
 Public API:
-    run(plan_dir, project_root, *, root=None, wiki_root=None) -> list[dict]
+    run(plan_dir, project_root, *, root=None, wiki_root=None, skip_checks=frozenset()) -> list[dict]
         Validate plan files in plan_dir. Returns a sorted list of error dicts.
         Each error dict has keys: {check, batch, card, path, message}.
 
@@ -638,7 +638,7 @@ def _check_wiki_config_mutation(batch_files: list[Path]) -> list[dict]:
                 "path": "wiki/config.yaml",
                 "message": (
                     "batch edits or creates wiki/config.yaml — self-applying layout change risk; "
-                    "use --skip-validate if a bootstrap card is present"
+                    "use --skip-check wiki-config-mutation if a bootstrap card is present"
                 ),
             })
     return errors
@@ -717,6 +717,7 @@ def run(
     *,
     root: str | None = None,
     wiki_root: Path | None = None,
+    skip_checks: frozenset[str] = frozenset(),
 ) -> list[dict]:
     """Validate plan files in plan_dir.
 
@@ -760,4 +761,6 @@ def run(
     errors.extend(_check_all_files_touched_mismatch(overview_path, batch_files))
 
     errors.sort(key=lambda e: (e["batch"] or "", e["card"] or 0, e["check"]))
+    if skip_checks:
+        errors = [e for e in errors if e["check"] not in skip_checks]
     return errors

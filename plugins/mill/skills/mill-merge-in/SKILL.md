@@ -46,9 +46,9 @@ git merge <parent-branch>
 | Whitespace- / formatting-only differences | Accept current branch version. |
 | Package lock files (`package-lock.json`, `yarn.lock`, `pnpm-lock.yaml`, `poetry.lock`, `Cargo.lock`) | Accept current branch version, then regenerate via the project's install command (`npm install`, `yarn`, `pnpm install`, `poetry lock --no-update`, `cargo build`, etc.). Commit the regenerated file. |
 | Build artefacts (dist/, build/, *.min.*) | Accept current branch version. |
-| Real code conflicts | Attempt resolution based on understanding both sides. **Never** use `-X theirs` or `-X ours` on real code — they silently discard the other side's intent. |
+| Real code conflicts | Enumerate unresolved files via `git diff --name-only --diff-filter=U`. Call: `uv run --project "${CLAUDE_PLUGIN_ROOT}" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-merge-in-subagent.py" --mode conflicts --files <file1> <file2> ...` On `{"status":"success"}`: run `git merge --continue` to create the merge commit. On `{"status":"stuck"}`: roll back → `git reset --hard "$CHK"` — preserve checkpoint, report to caller. |
 
-If any real-code conflict is unresolvable → roll back to checkpoint, preserve the checkpoint, report the conflicting files to the caller. Do not invent a resolution.
+On `{"status":"stuck"}` from the sub-agent → roll back to checkpoint (`git reset --hard "$CHK"`), preserve the checkpoint, report to the caller.
 
 ### 4. Verify
 
@@ -56,8 +56,7 @@ Replay exactly the tests that ran during implementation. Call `_plan_dag.iter_ba
 
 For each `(name, cmd)`:
 - Run the command from the worktree root.
-- On failure → diagnose and fix. Max 3 attempts per batch.
-- On exhaustion → roll back to checkpoint, preserve the checkpoint, escalate to the caller.
+- On failure → call: `uv run --project "${CLAUDE_PLUGIN_ROOT}" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-merge-in-subagent.py" --mode verify-fix --cmd "<cmd>" --checkpoint "$CHK"` On `{"status":"success"}`: continue to next batch verify. On `{"status":"stuck"}`: roll back → `git reset --hard "$CHK"` — preserve checkpoint, escalate to the caller.
 
 If `iter_batch_verifies` returns `[]` (no plan, or every batch had null verify) → skip verify entirely. This covers tasks that were entirely docs or config.
 

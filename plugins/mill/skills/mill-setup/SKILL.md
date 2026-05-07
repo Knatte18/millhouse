@@ -244,7 +244,7 @@ Token reference:
 - `<wiki-dir>` — wiki clone path from Phase 3
 - `<repo>` — repository directory name (e.g. `millhouse`)
 
-**Do NOT add `<SLUG>`** — the token-scope filter skips junction entries that need `<SLUG>` (`.active`, per-task `.wiki`/`.portals` entries). Those are created by mill-spawn.
+**Do NOT add `<SLUG>`** — the token-scope filter skips junction entries that need `<SLUG>` (per-task `.active` and `.wiki` entries). Those are created by mill-spawn.
 
 Log the created junctions and hardlinks from the returned dict so the user can verify.
 
