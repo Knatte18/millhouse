@@ -30,7 +30,7 @@ No code changes; `verify: null`. Depends on batch 3 so that `--skip-check wiki-c
 - **Requirements:** In `SKILL.md`, replace all three autonomous bare `uv run ... millpy-review-plan.py` invocations with the `millpy-bg` wrapper + poll pattern. The three locations are:
 
   **Location 1 — Step 1.5** re-run after validator-fix commit:
-  Find the sentence `"re-runs \`uv run --project "c:/Code/millhouse/wts/millhouse/plugins/mill" "c:/Code/millhouse/wts/millhouse/plugins/mill/scripts/millpy-review-plan.py"\` (still no round consumed — the validator gate is pre-LLM)."` Replace the inline backtick CLI snippet with the millpy-bg invocation and poll instruction, adapting the sentence to read: "re-runs the review CLI via millpy-bg (slug `plan-validator-fix`; still no round consumed). Poll `cat <log-path>` until `[mill-bg] EXIT`, then extract the JSON line from the log."
+  Find the sentence `"re-runs \`uv run --project "${CLAUDE_PLUGIN_ROOT}" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-review-plan.py"\` (still no round consumed — the validator gate is pre-LLM)."` Replace the inline backtick CLI snippet with the millpy-bg invocation and poll instruction, adapting the sentence to read: "re-runs the review CLI via millpy-bg (slug `plan-validator-fix`; still no round consumed). Poll `cat <log-path>` until `[mill-bg] EXIT`, then extract the JSON line from the log."
 
   **Location 2 — Step 2** subprocess invocation:
   Replace the ```bash block:
