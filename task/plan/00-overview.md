@@ -3,7 +3,7 @@
 ```yaml
 task: '29 (A) — mill-merge-in: delegate konflikter og verify-feil til sub-agent'
 slug: mill-merge-subagent
-approved: false
+approved: true
 started: 20260507-083235
 parent: main
 root: ""
