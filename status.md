@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planning
+phase: plan-review-r1
 slug: auto-report-auto-submit
 branch: auto-report-auto-submit
 plan: plan
@@ -17,4 +17,5 @@ task_description: |
 discussing  '2026-05-07T06:59:36Z'
 discussed  2026-05-07T07:13:12Z
 planning  2026-05-07T07:15:48Z
+plan-review-r1  2026-05-07T07:19:00Z
 ```

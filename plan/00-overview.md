@@ -3,7 +3,7 @@
 ```yaml
 task: 26 (A) — auto-report-auto-submit
 slug: auto-report-auto-submit
-approved: false
+approved: true
 started: 20260507-071435
 parent: main
 root: ""
