@@ -85,7 +85,7 @@ def _make_stub_map(
     paths_mod.resolve_container_path = MagicMock(return_value=Path("/fake/container"))
     paths_mod.resolve_main_worktree_root = MagicMock(return_value=Path("/fake/repo"))
     paths_mod.resolve_short_name = MagicMock(return_value="MI")
-    paths_mod.resolve_hub_path = MagicMock(return_value=Path("/fake/repo"))
+    paths_mod.resolve_hub_path = MagicMock(return_value=Path("/fake/repo/subdir"))
 
     tasks_md_mod = MagicMock()
     tasks_md_mod.parse.return_value = [_make_fake_task()]
@@ -138,7 +138,7 @@ def test_smoke_import() -> None:
     paths_mod.resolve_container_path = MagicMock(return_value=Path("/fake/container"))
     paths_mod.resolve_main_worktree_root = MagicMock(return_value=Path("/fake/repo"))
     paths_mod.resolve_short_name = MagicMock(return_value="MI")
-    paths_mod.resolve_hub_path = MagicMock(return_value=Path("/fake/repo"))
+    paths_mod.resolve_hub_path = MagicMock(return_value=Path("/fake/repo/subdir"))
 
     # _config needs load_config at module level.
     config_mod = sys.modules["_config"]
@@ -208,7 +208,7 @@ def test_main_happy_path_calls_spawn_core_helpers() -> None:
     sc.claim_in_wiki.return_value = None
     sc.capture_parent_branch.return_value = "main"
     sc.write_active_marker.return_value = None
-    sc.write_initial_status.return_value = Path("/fake/wiki/active/my-task/status.md")
+    sc.write_initial_status.return_value = Path("/fake/repo/subdir/task/status.md")
     sc.recreate_active_junction.return_value = None
 
     # subprocess: git checkout -b returns success
@@ -238,14 +238,14 @@ def test_main_happy_path_calls_spawn_core_helpers() -> None:
     sc.write_initial_status.assert_called_once()
     sc.recreate_active_junction.assert_called_once()
 
-    # Verify new signature: (slug, mill_dir, container_path)
+    # Verify new signature: (slug, hub_root, container_path)
     rac_call = sc.recreate_active_junction.call_args
-    expected_mill_dir = Path("/fake/repo") / ".millhouse"
+    expected_hub_root = Path("/fake/repo/subdir")
     expected_container = Path("/fake/container")
     if rac_call.args[0] != "my-task":
         raise AssertionError(f"recreate_active_junction slug mismatch: {rac_call}")
-    if rac_call.args[1] != expected_mill_dir:
-        raise AssertionError(f"recreate_active_junction mill_dir mismatch: {rac_call}")
+    if rac_call.args[1] != expected_hub_root:
+        raise AssertionError(f"recreate_active_junction hub_root mismatch: {rac_call}")
     if rac_call.args[2] != expected_container:
         raise AssertionError(f"recreate_active_junction container_path mismatch: {rac_call}")
 
@@ -262,8 +262,8 @@ def test_main_happy_path_calls_spawn_core_helpers() -> None:
         raise AssertionError(f"write_initial_status branch mismatch: {status_call}")
     if "wiki_path" in status_call.kwargs:
         raise AssertionError(f"write_initial_status must not use wiki_path= kwarg: {status_call}")
-    if status_call.kwargs.get("worktree_path") != Path("/fake/repo"):
-        raise AssertionError(f"write_initial_status worktree_path should be hub path /fake/repo: {status_call}")
+    if status_call.kwargs.get("worktree_path") != Path("/fake/repo/subdir"):
+        raise AssertionError(f"write_initial_status worktree_path should be hub path /fake/repo/subdir: {status_call}")
 
     # Verify git checkout -b was invoked via subprocess
     run_calls = subprocess_stub.run.call_args_list
@@ -328,7 +328,7 @@ def test_main_dirty_tree_stash_invokes_git_stash() -> None:
     sc.claim_in_wiki.return_value = None
     sc.capture_parent_branch.return_value = "main"
     sc.write_active_marker.return_value = None
-    sc.write_initial_status.return_value = Path("/fake/wiki/active/my-task/status.md")
+    sc.write_initial_status.return_value = Path("/fake/repo/subdir/task/status.md")
     sc.recreate_active_junction.return_value = None
 
     subprocess_stub = MagicMock()
@@ -393,7 +393,7 @@ def test_main_multi_path_skips_claim_in_wiki() -> None:
     sc.multi_select_groom_then_claim.return_value = merged_task
     sc.capture_parent_branch.return_value = "main"
     sc.write_active_marker.return_value = None
-    sc.write_initial_status.return_value = Path("/fake/wiki/active/merged-task/status.md")
+    sc.write_initial_status.return_value = Path("/fake/repo/subdir/task/status.md")
     sc.recreate_active_junction.return_value = None
 
     subprocess_stub = MagicMock()
@@ -447,7 +447,7 @@ def test_portal_entry_uses_resolve_container_path() -> None:
     sc.claim_in_wiki.return_value = None
     sc.capture_parent_branch.return_value = "main"
     sc.write_active_marker.return_value = None
-    sc.write_initial_status.return_value = Path("/fake/wiki/active/my-task/status.md")
+    sc.write_initial_status.return_value = Path("/fake/repo/subdir/task/status.md")
     sc.recreate_active_junction.return_value = None
 
     subprocess_stub = MagicMock()
@@ -507,7 +507,7 @@ def test_portal_before_recreate_active_junction_order() -> None:
     sc.claim_in_wiki.return_value = None
     sc.capture_parent_branch.return_value = "main"
     sc.write_active_marker.return_value = None
-    sc.write_initial_status.return_value = Path("/fake/wiki/active/my-task/status.md")
+    sc.write_initial_status.return_value = Path("/fake/repo/subdir/task/status.md")
 
     call_log: list[str] = []
     sc.recreate_active_junction.side_effect = lambda *a, **kw: call_log.append("recreate_active_junction")
@@ -567,7 +567,7 @@ def test_portal_idempotent_when_already_correct() -> None:
     sc.claim_in_wiki.return_value = None
     sc.capture_parent_branch.return_value = "main"
     sc.write_active_marker.return_value = None
-    sc.write_initial_status.return_value = Path("/fake/wiki/active/my-task/status.md")
+    sc.write_initial_status.return_value = Path("/fake/repo/subdir/task/status.md")
     sc.recreate_active_junction.return_value = None
 
     subprocess_stub = MagicMock()
@@ -622,7 +622,7 @@ def test_main_hub_title_flip_when_cwd_is_hub() -> None:
     sc.claim_in_wiki.return_value = None
     sc.capture_parent_branch.return_value = "main"
     sc.write_active_marker.return_value = None
-    sc.write_initial_status.return_value = Path("/fake/wiki/active/my-task/status.md")
+    sc.write_initial_status.return_value = Path("/fake/repo/subdir/task/status.md")
     sc.recreate_active_junction.return_value = None
 
     subprocess_stub = MagicMock()
@@ -678,7 +678,7 @@ def test_hub_paths_use_cwd_not_git_root() -> None:
     sc.claim_in_wiki.return_value = None
     sc.capture_parent_branch.return_value = "main"
     sc.write_active_marker.return_value = None
-    sc.write_initial_status.return_value = Path("/fake/repo/src/Models/status.md")
+    sc.write_initial_status.return_value = Path("/fake/repo/src/Models/task/status.md")
     sc.recreate_active_junction.return_value = None
 
     subprocess_stub = MagicMock()
