@@ -31,7 +31,9 @@ implementing  2026-05-07T05:37:14Z
 ```yaml
 batches:
   - name: foundation-extract
-    state: pending
+    state: running
+    implementer_session: 16ad5494-3276-48bc-92e9-835aab91ae90
+    start_sha: c1fb66cda269489f7ddb1d4f117c909fb7f17ec8
   - name: holistic-implement
     state: pending
 ```
