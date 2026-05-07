@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-reviewing
+phase: holistic-approved
 slug: mill-autofix-bugs
 branch: hanf/mill-autofix-bugs
 plan: task/plan
@@ -26,6 +26,7 @@ approved-Core Python helpers  2026-05-07T11:34:28Z
 approved-Config and autonomous-mode wiring  2026-05-07T11:37:07Z
 approved-Mill-autofix skill  2026-05-07T11:50:34Z
 holistic-reviewing  2026-05-07T11:50:56Z
+holistic-approved  2026-05-07T12:01:45Z
 ```
 
 ## Batches
