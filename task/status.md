@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-approved
+phase: done
 slug: review-plan-robustness
 branch: review-plan-robustness
 plan: task/plan
@@ -30,6 +30,7 @@ approved-cli-skip-checks  2026-05-07T10:42:01Z
 approved-skill-md-fixes  2026-05-07T10:46:37Z
 holistic-reviewing  2026-05-07T10:46:47Z
 holistic-approved  2026-05-07T10:50:58Z
+done  2026-05-07T10:51:03Z
 ```
 
 ## Batches
