@@ -34,7 +34,9 @@ batches:
     implementer_session: b45df3ed-fd2e-442d-81a8-119fcd30f5a3
     start_sha: 95f4a56ef3131a53c80ea28396a257ff35f49067
   - name: skill-and-config
-    state: pending
+    state: running
+    implementer_session: ce3af89b-2315-40f1-a8a4-9e1f58f66d8b
+    start_sha: 474d96a6e891f23a593f52e4881ade6a4125d67a
   - name: unit-tests
     state: pending
 ```
