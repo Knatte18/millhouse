@@ -13,7 +13,7 @@ depends-on: []
 
 Fix bugs B and C in `_review_plan.py` and update tests in `test-review-plan-flow.py`. Bug B makes the holistic `parse_verdict` failure path produce an ERROR entry instead of raising to the caller. Bug C removes stale per-batch entries from resume-mode results. Both fixes are in the same function (`run()`) and closely interact — after B, the holistic produces an ERROR entry; after C, a subsequent resume run returns only the fresh holistic entry. Test 17 must be updated to reflect the new resume behavior; test 20 is added for bug B.
 
-This batch delivers the updated `_review_plan.py` and updated `test-review-plan-flow.py`. Batch 4 (SKILL.md step 4.5 trigger change for bug D) depends on this batch's ERROR entry being produced correctly.
+This batch delivers the updated `_review_plan.py` and updated `test-review-plan-flow.py`.
 
 ## Cards
 
@@ -40,8 +40,7 @@ This batch delivers the updated `_review_plan.py` and updated `test-review-plan-
 
 ### Card 3: Test 20 — holistic parse_verdict failure becomes ERROR entry
 
-- **Context:**
-  - `plugins/mill/unit_tests/test-review-plan-flow.py`
+- **Context:** none
 - **Edits:**
   - `plugins/mill/unit_tests/test-review-plan-flow.py`
 - **Creates:** none
@@ -56,8 +55,7 @@ This batch delivers the updated `_review_plan.py` and updated `test-review-plan-
 
 ### Card 4: Update Test 17 for bug C — resume now returns holistic-only
 
-- **Context:**
-  - `plugins/mill/unit_tests/test-review-plan-flow.py`
+- **Context:** none
 - **Edits:**
   - `plugins/mill/unit_tests/test-review-plan-flow.py`
 - **Creates:** none

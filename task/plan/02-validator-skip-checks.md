@@ -44,7 +44,7 @@ This batch delivers the updated `_plan_validate.py` with the new `skip_checks: f
 ### Card 7: Tests — skip_checks filtering in test-plan-validate.py
 
 - **Context:**
-  - `plugins/mill/unit_tests/test-plan-validate.py`
+  - `plugins/mill/scripts/_plan_validate.py`
 - **Edits:**
   - `plugins/mill/unit_tests/test-plan-validate.py`
 - **Creates:** none
@@ -52,10 +52,10 @@ This batch delivers the updated `_plan_validate.py` with the new `skip_checks: f
 - **Requirements:** Add three test cases to `test-plan-validate.py`. Study the existing fixture helpers (`_make_overview`, `_make_batch_file`, `_write_plan`) and the test structure in that file before writing. Add after the existing tests:
 
   **Test: skip_checks filters wiki-config-mutation**
-  Create a plan with one batch where the batch file has `wiki/config.yaml` in Edits: (use `edits=["wiki/config.yaml"]` in `_make_batch_file`). Call `_plan_validate.run(plan_dir, project_root, wiki_root=wiki_dir, skip_checks=frozenset({"wiki-config-mutation"}))`. Assert result is an empty list (no errors).
+  Create a plan with one batch where the batch file has `wiki/config.yaml` in Edits: (use `edits=["wiki/config.yaml"]` in `_make_batch_file`). Create `wiki_dir = tmp / "wiki"`, `wiki_dir.mkdir()`, and write a placeholder `(wiki_dir / "config.yaml").write_text("# placeholder", encoding="utf-8")` (matches pattern in `test_wiki_config_mutation_modifies`). Call `_plan_validate.run(plan_dir, project_root, wiki_root=wiki_dir, skip_checks=frozenset({"wiki-config-mutation"}))`. Assert result is an empty list (no errors).
 
   **Test: skip_checks does not suppress other checks**
-  Create a plan with one batch that has `wiki/config.yaml` in Edits: AND is also missing the `Commit:` field (use `missing_fields={"Commit"}` in `_make_batch_file`). Call `run(..., skip_checks=frozenset({"wiki-config-mutation"}))`. Assert the result has exactly one entry with `check == "card-missing-field"` (wiki-config-mutation is suppressed; card-missing-field is not).
+  Create a plan with one batch that has `wiki/config.yaml` in Edits: AND is also missing the `Commit:` field (use `missing_fields={"Commit"}` in `_make_batch_file`). Create `wiki_dir` and `wiki_dir / "config.yaml"` as above. Call `run(..., skip_checks=frozenset({"wiki-config-mutation"}))`. Assert the result has exactly one entry with `check == "card-missing-field"` (wiki-config-mutation is suppressed; card-missing-field is not).
 
   **Test: unknown check name in skip_checks is silently ignored**
   Use a clean plan (no violations). Call `run(..., skip_checks=frozenset({"nonexistent-check"}))`. Assert no exception is raised and result is empty.

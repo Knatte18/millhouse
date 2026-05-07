@@ -85,7 +85,9 @@ No code changes; `verify: null`. Depends on batch 3 so that `--skip-check wiki-c
   1. `"re-run the CLI with \`--skip-validate\`"` → `"re-run the CLI with \`--skip-check wiki-config-mutation\`"`.
   2. In the co-occurrence sentence `"then re-run with \`--skip-validate\`"` → `"then re-run with \`--skip-check wiki-config-mutation\`"`.
 
-  The `--skip-validate` occurrence in step 1.5's header text `"If \`pipeline.skip_validate: true\` ever appears in config...pass \`--skip-validate\` to the CLI"` is the pipeline-level override and must NOT be changed.
+  Additionally, in step 1.5's header text, find the sentence `"mill-plan passes \`--skip-validate\` only when the fix table instructs it — see the \`wiki-config-mutation\` row."` and change it to `"mill-plan passes \`--skip-check wiki-config-mutation\` only when the fix table instructs it — see the \`wiki-config-mutation\` row."`.
+
+  The `--skip-validate` occurrence in step 1.5's pipeline-level sentence `"If \`pipeline.skip_validate: true\` ever appears in config...pass \`--skip-validate\` to the CLI and skip step 1.5 entirely."` is the pipeline-level override and must NOT be changed.
 - **Commit:** `fix(mill-plan): update wiki-config-mutation row to use --skip-check (#188)`
 
 ## Batch Tests

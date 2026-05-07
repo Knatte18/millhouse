@@ -60,8 +60,7 @@ This batch depends on batch 2 for the `skip_checks` parameter in `_plan_validate
 
 ### Card 10: Tests — --skip-check CLI flag in test-millpy-validate-plan.py
 
-- **Context:**
-  - `plugins/mill/unit_tests/test-millpy-validate-plan.py`
+- **Context:** none
 - **Edits:**
   - `plugins/mill/unit_tests/test-millpy-validate-plan.py`
 - **Creates:** none
@@ -69,10 +68,10 @@ This batch depends on batch 2 for the `skip_checks` parameter in `_plan_validate
 - **Requirements:** Add two test functions to `test-millpy-validate-plan.py`. Study the existing test helpers `_make_overview`, `_make_batch_file`, `_write_plan`, and `test_cli_clean_exits_zero_no_findings` for the mock-patch pattern used to invoke `_vp_mod.main()`. Add after existing tests:
 
   **Test: --skip-check suppresses target check**
-  Create a plan with one batch that has `wiki/config.yaml` in Edits: (add an `edits` kwarg to `_make_batch_file` — if that helper doesn't support it, write the batch file text directly with `- **Edits:** \`wiki/config.yaml\``). Invoke `_vp_mod.main(["--skip-check", "wiki-config-mutation"])`. Assert: return code is 0; JSON `errors` list is empty. Use the same `unittest.mock.patch` context as existing tests.
+  Create a plan with one batch that has `wiki/config.yaml` in Edits: (write the batch file text directly with `- **Edits:** \`wiki/config.yaml\``). Create `wiki_dir = fixture_root / "wiki"`, `wiki_dir.mkdir()`, and write `(wiki_dir / "config.yaml").write_text("")` before calling main. Invoke `_vp_mod.main(["--skip-check", "wiki-config-mutation"])`. Assert: return code is 0; JSON `errors` list is empty. Use the same `unittest.mock.patch` context and `redirect_stdout(captured)` as existing tests.
 
   **Test: multiple --skip-check flags suppress multiple checks**
-  Create a plan with one batch that has `wiki/config.yaml` in Edits: AND is missing the `Commit:` field. Invoke `_vp_mod.main(["--skip-check", "wiki-config-mutation", "--skip-check", "card-missing-field"])`. Assert: return code is 0; JSON `errors` list is empty.
+  Create a plan with one batch that has `wiki/config.yaml` in Edits: AND is missing the `Commit:` field (use `_make_batch_file("alpha", missing_fields={"Commit"})` then append `- **Edits:** \`wiki/config.yaml\`` to the batch text, or write batch text directly). Create `wiki_dir` and `wiki_dir / "config.yaml"` as above. Invoke `_vp_mod.main(["--skip-check", "wiki-config-mutation", "--skip-check", "card-missing-field"])`. Assert: return code is 0; JSON `errors` list is empty.
 
   Add both new tests to the `tests` list in `main()` at the bottom of the file. Follow the same try/except return-int pattern as existing test functions.
 - **Commit:** `test(millpy-validate-plan): add --skip-check CLI tests (#188)`
