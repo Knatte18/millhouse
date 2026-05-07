@@ -129,3 +129,14 @@ notify:
 groom:
   brevity-threshold-lines: 5
   brevity-threshold-chars: 500
+
+# ---------------------------------------------------------------------------
+# mill-merge-in
+# ---------------------------------------------------------------------------
+# verify_fix_rounds: how many self-fix attempts the verify-fix sub-agent makes
+# before reporting stuck. The CLI defaults to 3 if this key is absent, so
+# existing hubs do not need to add this key — only new hubs set up from this
+# template will have it pre-populated.
+
+merge:
+  verify_fix_rounds: 3
