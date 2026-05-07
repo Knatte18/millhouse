@@ -1,10 +1,10 @@
 # Status
 
 ```yaml
-phase: discussed
+phase: planning
 slug: review-plan-robustness
 branch: review-plan-robustness
-plan: null
+plan: task/plan
 parent: main
 task: 28 (A) — review-plan robustness
 task_description: |
@@ -16,4 +16,5 @@ task_description: |
 ```text
 discussing  '2026-05-07T07:32:51Z'
 discussed  2026-05-07T08:17:06Z
+planning  2026-05-07T08:34:05Z
 ```
