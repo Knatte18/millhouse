@@ -10,7 +10,7 @@ Updates `status.md` to `phase: abandoned`, commits, and pushes. Prompts for conf
 ## Run it
 
 ```bash
-uv run --project "${CLAUDE_PLUGIN_ROOT}" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-abandon.py" [--force]
+uv run --project "$CLAUDE_PLUGIN_ROOT" "$CLAUDE_PLUGIN_ROOT/scripts/millpy-abandon.py" [--force]
 ```
 
 Must run from inside the task's worktree, not from the hub. Exits immediately if phase is already `abandoned` or `done`. Respects builder-lock guard unless `--force` is given.
