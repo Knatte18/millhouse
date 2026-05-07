@@ -277,6 +277,28 @@ def main() -> int:
     )
     print(f"PASS: run_implementer uses --allowedTools {tools_value}")
 
+    # rate-limit error message includes stdout fallback content
+    with mock.patch.object(
+        _subprocess_util_mod,
+        "run",
+        lambda argv, **kw: _subprocess_mod.CompletedProcess(
+            args=[],
+            returncode=1,
+            stdout='{"type":"rate_limit_event","limit_type":"requests"}\n',
+            stderr="",
+        ),
+    ):
+        try:
+            run_bulk("ignored prompt", model="claude-sonnet-4-6")
+            errors += 1
+            print("FAIL: expected LLMRateLimitError, no exception raised", file=sys.stderr)
+        except LLMRateLimitError as e:
+            assert "rate_limit_event" in str(e), f"stdout content missing from message: {e}"
+            print("PASS: rate-limit error message includes stdout fallback content")
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL: expected LLMRateLimitError, got {type(exc).__name__}: {exc}", file=sys.stderr)
+
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)
         return 1
