@@ -1,10 +1,10 @@
 # Status
 
 ```yaml
-phase: discussed
+phase: planning
 slug: prune-millhouse
 branch: prune-millhouse
-plan: null
+plan: plan
 parent: main
 task: 27 (A) — Prune unused skills and scripts
 task_description: |
@@ -16,4 +16,5 @@ task_description: |
 ```text
 discussing  '2026-05-07T07:00:37Z'
 discussed  2026-05-07T07:11:50Z
+planning  2026-05-07T07:27:18Z
 ```
