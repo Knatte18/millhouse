@@ -129,9 +129,7 @@ def main(argv=None) -> int:
 
         session_id = str(uuid.uuid4())
 
-        _status.set_batch_field(status_path, args.batch_name, "state", "running")
-        _status.set_batch_field(status_path, args.batch_name, "start_sha", start_sha)
-        _status.set_batch_field(status_path, args.batch_name, "implementer_session", session_id)
+        _status.set_batch_fields(status_path, args.batch_name, {"state": "running", "start_sha": start_sha, "implementer_session": session_id})
 
         result = subprocess.run(
             ["git", "add", "status.md"],
@@ -188,7 +186,7 @@ def main(argv=None) -> int:
             print(json.dumps({"status": "stuck", "stuck_type": "transient", "reason": str(e)}))
             print(str(e), file=sys.stderr)
             return 1
-        return _forward_output(output)
+        return _forward_output(output, project_root)
 
     else:
         # Fix-cycle resume
@@ -206,9 +204,7 @@ def main(argv=None) -> int:
             print(f"no implementer_session for batch {args.batch_name!r}", file=sys.stderr)
             return 1
 
-        _status.set_batch_field(status_path, args.batch_name, "state", "fixing")
-        _status.set_batch_field(status_path, args.batch_name, "review_round", args.round)
-        _status.set_batch_field(status_path, args.batch_name, "review_file", str(review_file))
+        _status.set_batch_fields(status_path, args.batch_name, {"state": "fixing", "review_round": args.round, "review_file": str(review_file)})
         _status.append_phase(
             status_path,
             f"fixing-{args.batch_name}-r{args.round}",
@@ -269,7 +265,7 @@ def main(argv=None) -> int:
             print(json.dumps({"status": "stuck", "stuck_type": "transient", "reason": str(e)}))
             print(str(e), file=sys.stderr)
             return 1
-        return _forward_output(output)
+        return _forward_output(output, project_root)
 
 
 if __name__ == "__main__":

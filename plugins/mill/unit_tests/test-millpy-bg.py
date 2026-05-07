@@ -7,6 +7,7 @@ import re
 import sys
 import tempfile
 import unittest.mock
+import warnings
 from pathlib import Path
 
 HUB = Path(__file__).resolve().parent.parent.parent.parent
@@ -213,6 +214,34 @@ def main() -> int:
         failures.append(f"FAIL (g) missing --: {exc}")
     except Exception as exc:
         failures.append(f"FAIL (g) missing -- ({type(exc).__name__}): {exc}")
+
+    # (m) no DeprecationWarning from utcnow
+    try:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with unittest.mock.patch.object(
+                _launcher_mod.subprocess, "run",
+                return_value=_mock_git_run_result(tmpdir),
+            ), unittest.mock.patch.object(
+                _launcher_mod.subprocess, "Popen",
+                return_value=_mock_popen_instance(),
+            ):
+                with warnings.catch_warnings(record=True) as w:
+                    warnings.simplefilter("always")
+                    with unittest.mock.patch("sys.stdout", io.StringIO()):
+                        ret = _launcher_main(["--slug", "utctest", "--", "echo", "hi"])
+                utcnow_warnings = [
+                    x for x in w
+                    if x.category is DeprecationWarning and "utcnow" in str(x.message)
+                ]
+                assert ret == 0, f"expected 0, got {ret}"
+                assert len(utcnow_warnings) == 0, (
+                    f"DeprecationWarning about utcnow emitted: {utcnow_warnings}"
+                )
+        print("PASS (m): no DeprecationWarning from utcnow in launcher")
+    except AssertionError as exc:
+        failures.append(f"FAIL (m) utcnow warning: {exc}")
+    except Exception as exc:
+        failures.append(f"FAIL (m) utcnow warning ({type(exc).__name__}): {exc}")
 
     # ── Worker mode tests ────────────────────────────────────────────────────
 

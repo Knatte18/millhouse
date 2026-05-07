@@ -22,6 +22,7 @@ from _status import (  # noqa: E402
     read_status,
     render_initial,
     set_batch_field,
+    set_batch_fields,
     update_field,
 )
 
@@ -432,6 +433,58 @@ def main() -> int:
             assert result == "foo", f"expected 'foo', got {result!r}"
             assert "[_status] warning" in buf.getvalue(), "expected warning for empty prefix fallback"
             print("PASS: read_branch with empty prefix returns bare slug with warning")
+
+        # --- set_batch_fields tests ---
+        ts_sbf = "2026-04-22T14:32:05Z"
+        _out_sbf = render_initial("T", "D", ts_sbf, "main", slug="t-slug", branch="hanf/t-slug")
+
+        # Success path: multiple fields written atomically
+        with tempfile.TemporaryDirectory() as tmp:
+            sp = Path(tmp) / "status.md"
+            sp.write_text(_out_sbf, encoding="utf-8")
+            init_batches(sp, ["foundation", "reviewers"])
+            set_batch_fields(sp, "foundation", {"state": "running", "implementer_session": "sess123", "start_sha": "abc"})
+            entry = next(b for b in read_batches(sp) if b["name"] == "foundation")
+            assert entry["state"] == "running", f"state mismatch: {entry['state']!r}"
+            assert entry["implementer_session"] == "sess123", f"session mismatch: {entry['implementer_session']!r}"
+            assert entry["start_sha"] == "abc", f"start_sha mismatch: {entry['start_sha']!r}"
+        print("PASS: set_batch_fields writes multiple fields atomically")
+
+        # Unknown key raises ValueError
+        with tempfile.TemporaryDirectory() as tmp:
+            sp = Path(tmp) / "status.md"
+            sp.write_text(_out_sbf, encoding="utf-8")
+            init_batches(sp, ["foundation"])
+            try:
+                set_batch_fields(sp, "foundation", {"nope": "x"})
+                assert False, "expected ValueError"
+            except ValueError:
+                pass
+        print("PASS: set_batch_fields rejects unknown key")
+
+        # Unknown state raises ValueError
+        with tempfile.TemporaryDirectory() as tmp:
+            sp = Path(tmp) / "status.md"
+            sp.write_text(_out_sbf, encoding="utf-8")
+            init_batches(sp, ["foundation"])
+            try:
+                set_batch_fields(sp, "foundation", {"state": "finished"})
+                assert False, "expected ValueError"
+            except ValueError:
+                pass
+        print("PASS: set_batch_fields rejects unknown state")
+
+        # Unknown batch name raises ValueError
+        with tempfile.TemporaryDirectory() as tmp:
+            sp = Path(tmp) / "status.md"
+            sp.write_text(_out_sbf, encoding="utf-8")
+            init_batches(sp, ["foundation"])
+            try:
+                set_batch_fields(sp, "missing", {"state": "running"})
+                assert False, "expected ValueError"
+            except ValueError:
+                pass
+        print("PASS: set_batch_fields rejects unknown batch name")
 
         print("All _status unit tests passed.")
         return 0

@@ -26,6 +26,7 @@ Public API:
     append_phase(status_path, phase, timestamp) -> None
     init_batches(status_path, names) -> None
     set_batch_field(status_path, name, key, value) -> None
+    set_batch_fields(status_path, name, fields) -> None
     read_batches(status_path) -> list[dict]
     read_status(status_path) -> dict
 """
@@ -649,6 +650,39 @@ def set_batch_field(
                 entry.pop(key, None)
             else:
                 entry[key] = value
+            _write_batches(status_path, batches)
+            return
+    raise ValueError(f"Batch {name!r} not present in {_BATCHES_HEADING}")
+
+
+def set_batch_fields(
+    status_path: Path,
+    name: str,
+    fields: dict[str, str | int | None],
+) -> None:
+    """Atomically mutate multiple fields on one batch entry in ``## Batches``.
+
+    Validates all keys before any mutation — a single
+    ``read_batches → mutate all → _write_batches`` cycle ensures no
+    partial write is possible.
+    """
+    for key in fields:
+        if key not in _BATCH_ALLOWED_KEYS:
+            raise ValueError(
+                f"Unknown batch field {key!r}; allowed: {sorted(_BATCH_ALLOWED_KEYS)}"
+            )
+    if "state" in fields and fields["state"] not in _BATCH_STATES:
+        raise ValueError(
+            f"Unknown batch state {fields['state']!r}; allowed: {sorted(_BATCH_STATES)}"
+        )
+    batches = read_batches(status_path)
+    for entry in batches:
+        if entry.get("name") == name:
+            for key, value in fields.items():
+                if value is None:
+                    entry.pop(key, None)
+                else:
+                    entry[key] = value
             _write_batches(status_path, batches)
             return
     raise ValueError(f"Batch {name!r} not present in {_BATCHES_HEADING}")
