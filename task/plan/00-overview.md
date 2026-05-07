@@ -3,7 +3,7 @@
 ```yaml
 task: '28 (A) — review-plan robustness'
 slug: review-plan-robustness
-approved: false
+approved: true
 started: 20260507-083139
 parent: main
 root: ""
