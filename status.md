@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-misc-fixes
 branch: mill-misc-fixes
 plan: plan
@@ -19,4 +19,15 @@ discussed  2026-05-07T05:50:15Z
 planning  2026-05-07T05:58:16Z
 plan-review-r1  2026-05-07T06:11:23Z
 planned  2026-05-07T06:11:37Z
+implementing  2026-05-07T06:16:04Z
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: test-fixtures
+    state: pending
+  - name: runtime-and-skills
+    state: pending
 ```
