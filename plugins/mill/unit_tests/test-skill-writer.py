@@ -33,9 +33,8 @@ def main() -> int:
     else:
         print("PASS: SKILL_GENERATOR_SKIP is a list")
 
-    # --- iter_target_scripts returns the 13 expected paths ---
+    # --- iter_target_scripts returns the 10 expected paths ---
     expected_stems = sorted([
-        "millpy-list",
         "millpy-status",
         "millpy-inspect",
         "millpy-spawn",
@@ -46,27 +45,25 @@ def main() -> int:
         "millpy-color",
         "millpy-terminal",
         "millpy-vscode",
-        "millpy-worktree",
-        "millpy-fetch-issues",
     ])
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
         scripts_dir = tmp / "mill" / "scripts"
         scripts_dir.mkdir(parents=True)
-        # Touch one file per SHORTCUT_SCRIPTS entry (14 total)
+        # Touch one file per SHORTCUT_SCRIPTS entry (11 total)
         from _shortcuts import SHORTCUT_SCRIPTS  # noqa: E402
         for stem in SHORTCUT_SCRIPTS:
             (scripts_dir / f"{stem}.py").touch()
 
         result = _skill_writer.iter_target_scripts(tmp)
-        if len(result) != 13:
+        if len(result) != 10:
             print(
-                f"FAIL: iter_target_scripts returned {len(result)} paths, expected 13",
+                f"FAIL: iter_target_scripts returned {len(result)} paths, expected 10",
                 file=sys.stderr,
             )
             errors += 1
         else:
-            print("PASS: iter_target_scripts returns 13 paths")
+            print("PASS: iter_target_scripts returns 10 paths")
 
         for path in result:
             if not isinstance(path, Path):
@@ -97,7 +94,7 @@ def main() -> int:
             )
             errors += 1
         else:
-            print("PASS: iter_target_scripts returns exactly the 13 expected stems")
+            print("PASS: iter_target_scripts returns exactly the 10 expected stems")
 
         # Confirm millpy-add.py (skill mill-add) is absent (skip-listed)
         returned_names = [p.name for p in result]
@@ -153,11 +150,11 @@ def main() -> int:
             print("PASS: second write_skill_file overwrites (does not append)")
 
         # Third call: hyphenated skill name — directory must be created
-        hyphen_path = tmp / "mill" / "skills" / "mill-fetch-issues" / "SKILL.md"
-        _skill_writer.write_skill_file("mill-fetch-issues", "fetch body\n", tmp)
-        if not (tmp / "mill" / "skills" / "mill-fetch-issues").is_dir():
+        hyphen_path = tmp / "mill" / "skills" / "mill-self-report" / "SKILL.md"
+        _skill_writer.write_skill_file("mill-self-report", "fetch body\n", tmp)
+        if not (tmp / "mill" / "skills" / "mill-self-report").is_dir():
             print(
-                "FAIL: directory mill-fetch-issues/ not created for hyphenated skill name",
+                "FAIL: directory mill-self-report/ not created for hyphenated skill name",
                 file=sys.stderr,
             )
             errors += 1
@@ -165,12 +162,12 @@ def main() -> int:
             print("PASS: write_skill_file creates directory for hyphenated skill name")
         if not hyphen_path.exists():
             print(
-                f"FAIL: SKILL.md not written for mill-fetch-issues at {hyphen_path}",
+                f"FAIL: SKILL.md not written for mill-self-report at {hyphen_path}",
                 file=sys.stderr,
             )
             errors += 1
         else:
-            print("PASS: SKILL.md written for mill-fetch-issues")
+            print("PASS: SKILL.md written for mill-self-report")
 
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)

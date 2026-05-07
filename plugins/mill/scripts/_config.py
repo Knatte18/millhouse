@@ -7,8 +7,7 @@ load_config(wiki_path, worktree_root) -> dict
     Load ``wiki/config.yaml`` deep-merged with
     ``.millhouse/config.local.yaml``.  Returns an empty dict when
     ``wiki/config.yaml`` does not exist (lenient form used by
-    mill-color, mill-terminal, mill-vscode, mill-worktree, and
-    mill-spawn).
+    mill-color, mill-terminal, mill-vscode, and mill-spawn).
 
 deep_merge(base, overlay) -> dict
     Shallow-recursive deep merge; overlay wins on scalar conflicts.

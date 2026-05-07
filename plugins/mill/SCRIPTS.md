@@ -93,19 +93,6 @@ options:
   -h, --help  show this help message and exit
 ```
 
-## millpy-fetch-issues
-
-```
-usage: mill-fetch-issues [-h] [--limit LIMIT] [--out OUT]
-
-Fetch open GitHub issues and write them to JSON.
-
-options:
-  -h, --help     show this help message and exit
-  --limit LIMIT  Maximum number of issues to fetch (default: 100).
-  --out OUT      Output path (default: <git_root>/.scratch/issues.json).
-```
-
 ## millpy-inspect
 
 ```
@@ -120,12 +107,6 @@ options:
   -h, --help     show this help message and exit
   --json
   --since PHASE  Show only tasks at or after PHASE in the phase order.
-```
-
-## millpy-list
-
-```
-(no --help output; script prints the task list directly)
 ```
 
 ## millpy-migrate-layout
@@ -280,26 +261,8 @@ options:
   --list       Print active worktrees without launching VS Code.
 ```
 
-## millpy-worktree
-
-```
-usage: mill-worktree [-h] {create,remove,list} ...
-
-Generic worktree management (no wiki claim).
-
-positional arguments:
-  {create,remove,list}
-    create              Create a new worktree.
-    remove              Remove a worktree.
-    list                List all registered worktrees.
-
-options:
-  -h, --help            show this help message and exit
-```
-
 ## Generation notes
 
-- `millpy-list.py` — does not implement `--help`; invocation runs the script and prints the task list.
 - `millpy-skills-index.py` — does not implement `--help`; invocation regenerates `SKILLS.md`.
 - `millpy-terminal.py` — accepts `--help` (exit 0) but produces no stdout output.
 - `millpy-validate-plan.py` — exits 1 on `--help`; excluded from sections above.

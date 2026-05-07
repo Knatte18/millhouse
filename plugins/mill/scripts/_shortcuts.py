@@ -27,7 +27,6 @@ import _render
 # as shortcuts.  Excluded: millpy-skills-index, millpy-review-*, mill-merge.
 SHORTCUT_SCRIPTS: list[str] = [
     "millpy-add",
-    "millpy-list",
     "millpy-status",
     "millpy-inspect",
     "millpy-spawn",
@@ -37,8 +36,6 @@ SHORTCUT_SCRIPTS: list[str] = [
     "millpy-color",
     "millpy-terminal",
     "millpy-vscode",
-    "millpy-worktree",
-    "millpy-fetch-issues",
     "millpy-bg",
 ]
 
