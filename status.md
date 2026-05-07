@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-fix-r3
+phase: plan-fix-r4
 slug: rename-hub-junctions
 branch: rename-hub-junctions
 plan: plan
@@ -23,4 +23,5 @@ plan-review-r2  2026-05-06T17:52:08Z
 plan-fix-r2  2026-05-06T17:52:08Z
 plan-review-r3  2026-05-06T18:10:01Z
 plan-fix-r3  2026-05-06T18:10:01Z
+plan-fix-r4  2026-05-07T05:36:33Z
 ```

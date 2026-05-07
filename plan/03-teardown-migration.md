@@ -55,6 +55,7 @@ Update `millpy-cleanup.py` to read status from `task/status.md` (with legacy fal
   - `plugins/mill/scripts/_paths.py`
   - `plugins/mill/scripts/_subprocess_util.py`
   - `plugins/mill/scripts/_config.py`
+  - `plugins/mill/scripts/_timestamp.py`
   - `plugins/mill/scripts/millpy-spawn.py`
 - **Edits:**
   - `plugins/mill/scripts/millpy-migrate-layout.py`
@@ -83,11 +84,11 @@ Update `millpy-cleanup.py` to read status from `task/status.md` (with legacy fal
         - Remove old portals entry: _junction.remove(container / "portals" / slug) (tolerate already-gone).
         - Create wiki/active/<slug>/task.md and commit+push: `ts = _timestamp.now_utc_compact(); _spawn_core.write_wiki_active_task_md(wiki_path, slug, title, ts)`. This creates the dir and task.md idempotently and commits them to the wiki.
         - Create new portals entry: `_junction.create(target=wiki_path / "active" / slug, link_path=container / "portals" / slug)`.
-        - Recreate junctions: `_setup.create_hub_links(wt_path, wiki_path, tokens)` where `tokens` is a dict with at minimum `{"SLUG": slug, "WIKI_PATH": str(wiki_path), "CONTAINER_PATH": str(container), "HUB_PATH": str(hub_root)}`. See `_build_tokens` in `millpy-spawn.py` for the full token construction pattern.
+        - Recreate junctions: `_setup.create_hub_links(wt_path, wiki_path, tokens)` where `tokens` matches the full `_build_tokens` pattern from `millpy-spawn.py`: `{"SLUG": slug, "WIKI_PATH": str(wiki_path), "CONTAINER_PATH": str(container), "HUB_PATH": str(hub_root), "CWD_PATH": str(wt_path), "REPO": hub_root.name}`. Construct via `_spawn_core._build_tokens(...)` if exposed, or replicate the dict here. Missing tokens cause `_junction.resolve_target` to raise `ValueError` if any junction template references them.
         - Move working state to task/: check `git -C <wt_path> status --porcelain` is empty. If not: log warning "skipping task/ move for <slug>: working tree dirty", continue. If clean: first run `(wt_path / "task").mkdir(exist_ok=True)` (`git mv` does not create parent directories). Then for src_name in ["status.md", "discussion.md", "plan", "reviews"]: src = wt_path / src_name; dst = wt_path / "task" / src_name; if src.exists(): run `git -C <wt_path> mv <src> <dst>`. After staging all four moves (for whichever files exist), issue a single commit: `git -C <wt_path> commit -m "migrate: move working state to task/ for {slug}"`. Do NOT commit inside the per-file loop.
      f. For hub worktree:
         - Strip old junctions: for name in [".millhouse/wiki", ".others", ".active"]: manually remove if exists. Also call _junction.strip_all_in_worktree(hub_root, cfg.get("junctions", {})) for any new-layout junctions.
-        - Recreate hub junctions: `_setup.create_hub_links(hub_root, wiki_path, hub_tokens)` where `hub_tokens = {"WIKI_PATH": str(wiki_path), "CONTAINER_PATH": str(container), "HUB_PATH": str(hub_root)}` (no SLUG — hub scope).
+        - Recreate hub junctions: `_setup.create_hub_links(hub_root, wiki_path, hub_tokens)` where `hub_tokens = {"WIKI_PATH": str(wiki_path), "CONTAINER_PATH": str(container), "HUB_PATH": str(hub_root), "CWD_PATH": str(hub_root), "REPO": hub_root.name}` (no SLUG — hub scope; `<SLUG>`-templated junctions are silently skipped by the token-scope filter).
         - Update .gitignore: hub_gitignore = hub_root / ".gitignore"; _gitignore.upsert(hub_gitignore, _gitignore.GLOB_ENTRIES).
         - Do NOT recreate .active — leave absent; the next mill-claim/mill-spawn will create it.
      g. In dry-run mode: log all planned operations but perform no writes. Return.
@@ -113,9 +114,10 @@ Update `millpy-cleanup.py` to read status from `task/status.md` (with legacy fal
   1. Add test `test_build_plan_reads_task_status_md`: create a worktree fixture that has `task/status.md` (not `status.md` at root) with phase `done`. Call `build_plan`. Assert the slug ends up in `to_remove_done`. This confirms the new primary path is read.
   2. Add test `test_build_plan_falls_back_to_root_status_md`: create a worktree fixture that has `status.md` at the root (legacy layout, no `task/` dir) with phase `done`. Call `build_plan`. Assert the slug ends up in `to_remove_done`. This confirms the fallback works for legacy worktrees.
   3. Add test `test_apply_plan_removes_dangling_active_junction`: use the worktree mode mocking pattern from the existing `test apply_plan — portal entry removed for worktree record`. Scenario A: `os.path.lexists` returns `False` for the `.active` path → assert `_junction.remove` is NOT called with `hub_root / ".active"` (no junction present). Scenario B: `os.path.lexists` returns `True` and `Path.is_dir()` returns `False` (dangling junction — target gone) → assert `_junction.remove` IS called with `hub_root / ".active"`. Use `patch("os.path.lexists", ...)` (not `patch.object(Path, "exists")`) and `patch.object(Path, "is_dir")` to control the `os.path.lexists(str(active_link)) and not active_link.is_dir()` condition.
+  4. Add test `test_apply_inplace_record_reads_task_status_md`: create an in-place worktree fixture with `task/status.md` (not `status.md` at root) carrying both a `parent_branch:` field and `phase: done`. Call `_apply_inplace_record` (with whatever mocking the existing in-place tests use) and verify both `read_parent_branch` and `_read_phase` resolve to the `task/` location (e.g. assert that the parent branch returned matches what was written to `task/status.md`, not stale data from a root-level `status.md`). This exercises the fallback path added in Card 10 Req 2.
 
   **test-worktree.py:**
-  4. Add test `test_copy_millhouse_excludes_wiki_and_active`: verify `copy_millhouse(src, dst, exclude={"wiki", "active"})` does not copy items named `wiki` or `active` inside `.millhouse/`. (This test already effectively exists in the file — verify by checking what `test-worktree.py` currently tests; if not present, add it.) Use a tempdir fixture.
+  5. Add test `test_copy_millhouse_excludes_wiki_and_active`: verify `copy_millhouse(src, dst, exclude={"wiki", "active"})` does not copy items named `wiki` or `active` inside `.millhouse/`. (This test already effectively exists in the file — verify by checking what `test-worktree.py` currently tests; if not present, add it.) Use a tempdir fixture.
 - **Commit:** `test: task/status.md fallback; dangling .active cleanup; worktree copy exclusions`
 
 ## Batch Tests
