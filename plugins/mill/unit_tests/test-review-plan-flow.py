@@ -1022,6 +1022,45 @@ def main() -> int:
             os.chdir(orig_dir)
 
     # ------------------------------------------------------------------
+    # Test 20 — holistic parse_verdict failure → ERROR entry (#185)
+    # One-batch plan; holistic returns raw prose without yaml block →
+    # parse_verdict raises ReviewError → ERROR entry, no raise.
+    # ------------------------------------------------------------------
+    with tempfile.TemporaryDirectory() as tmpdir:
+        batch_specs = [("alpha", "01-alpha.md", ["src/a.py"], [])]
+        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(Path(tmpdir), batch_specs)
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            stub.seed([
+                (APPROVE_TEXT, "sid-batch"),
+                ("# Raw prose without any yaml block\n\nThe plan looks fine.", "sid-hol"),
+            ])
+            r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root)
+            assert r.verdict == "REQUEST_CHANGES", (
+                f"expected REQUEST_CHANGES (APPROVE + ERROR), got {r.verdict}"
+            )
+            assert len(r.reviews) == 2, f"expected 2 reviews, got {len(r.reviews)}"
+            rv_hol = next((rv for rv in r.reviews if rv["scope"] == "holistic"), None)
+            assert rv_hol is not None, "holistic entry missing"
+            assert rv_hol["verdict"] == "ERROR", (
+                f"holistic verdict should be ERROR, got {rv_hol['verdict']}"
+            )
+            assert rv_hol["file"] is not None, "holistic ERROR entry should have a file path"
+            assert "parse_verdict failed" in rv_hol.get("error", ""), (
+                f"error message missing 'parse_verdict failed': {rv_hol.get('error')}"
+            )
+            print("PASS test20: holistic parse_verdict failure → ERROR entry, no ReviewError raised (#185)")
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test20: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test20 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
     # Test 6a — batch=null: holistic fires, per-batch skipped
     # ------------------------------------------------------------------
     with tempfile.TemporaryDirectory() as tmpdir:
