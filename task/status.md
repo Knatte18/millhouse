@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-unit-tests
+phase: holistic-reviewing
 slug: mill-merge-subagent
 branch: hanf/mill-merge-subagent
 plan: task/plan
@@ -25,6 +25,7 @@ implementing  2026-05-07T09:02:09Z
 approved-cli-and-templates  2026-05-07T09:10:30Z
 approved-skill-and-config  2026-05-07T09:12:41Z
 approved-unit-tests  2026-05-07T09:24:33Z
+holistic-reviewing  2026-05-07T09:24:43Z
 ```
 
 ## Batches
