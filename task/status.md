@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: review-plan-robustness
 branch: review-plan-robustness
 plan: task/plan
@@ -23,4 +23,19 @@ plan-review-r2  2026-05-07T09:00:23Z
 plan-fix-r2  2026-05-07T09:00:26Z
 plan-review-r3  2026-05-07T09:06:20Z
 planned  2026-05-07T09:06:26Z
+implementing  2026-05-07T09:18:23Z
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: backend-fixes
+    state: pending
+  - name: validator-skip-checks
+    state: pending
+  - name: cli-skip-checks
+    state: pending
+  - name: skill-md-fixes
+    state: pending
 ```
