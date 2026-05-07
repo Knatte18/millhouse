@@ -3,27 +3,23 @@ Idempotent .gitignore marker-block helper for mill-setup Phase 4.5b.
 
 Writes and maintains a ``# === mill-managed ... # === end mill-managed ===``
 block at the end of the repo's ``.gitignore``. The block covers standard
-mill paths and every hardlink entry declared in ``wiki/config.yaml``.
+mill paths declared in ``GLOB_ENTRIES``.
 
 Outside-marker content is NEVER modified. Duplicate entries that already
 exist outside the markers are left alone.
 
 Public API:
-    render_block(glob_entries, anchored_entries)
-        Return the full marker-block text. ``glob_entries`` are written
-        first (as-is); ``anchored_entries`` follow, each normalised to a
-        leading ``/``.
-    upsert_split(repo_root_gitignore, hub_gitignore, glob_entries, anchored_entries)
-        Two-path write. When both paths are the same, writes a single combined
-        block. When different, writes glob entries to ``repo_root_gitignore``
-        and anchored entries to ``hub_gitignore``. Returns ``(repo_changed,
-        hub_changed)``.
+    render_block(glob_entries)
+        Return the full marker-block text. ``glob_entries`` are written as-is.
+    upsert(gitignore_path, glob_entries)
+        Write or rewrite the marker block in a single ``.gitignore`` file.
+        Returns ``True`` if the file was written (content changed), ``False``
+        if already byte-equal.
 
 Constants:
-    START            — opening marker line
-    END              — closing marker line
-    GLOB_ENTRIES     — glob-pattern entries always written to the repo root gitignore
-    ANCHORED_ENTRIES — root-anchored entries written to the hub gitignore
+    START        — opening marker line
+    END          — closing marker line
+    GLOB_ENTRIES — glob-pattern entries always written to the repo root gitignore
 """
 from __future__ import annotations
 
@@ -35,28 +31,20 @@ END = "# === end mill-managed ==="
 GLOB_ENTRIES: list[str] = [
     "**/.millhouse/",
     "**/.scratch/",
-    "**/wts/",
-    "**/portals/",
-    "**/plugins/*/uv.lock",
-]
-
-ANCHORED_ENTRIES: list[str] = [
-    "/.active",
-    "/.others",
+    "**/.portals/",
+    "**/.wiki/",
+    "**/.active/",
 ]
 
 
-def render_block(glob_entries: list[str], anchored_entries: list[str]) -> str:
+def render_block(glob_entries: list[str]) -> str:
     """
     Return the marker-block text.
 
-    ``glob_entries`` are written first, each as-is. ``anchored_entries``
-    follow, each normalised to a leading ``/``.
+    ``glob_entries`` are written as-is between the START and END markers.
 
     Args:
         glob_entries: Glob-pattern entries (e.g. ``GLOB_ENTRIES``).
-        anchored_entries: Root-anchored entries (e.g. ``ANCHORED_ENTRIES``).
-            Each entry is normalised to a leading ``/``.
 
     Returns:
         Multi-line string starting with ``START`` and ending with
@@ -65,9 +53,6 @@ def render_block(glob_entries: list[str], anchored_entries: list[str]) -> str:
     lines = [START]
     for entry in glob_entries:
         lines.append(entry)
-    for entry in anchored_entries:
-        normalised = entry if entry.startswith("/") else f"/{entry}"
-        lines.append(normalised)
     lines.append(END)
     return "\n".join(lines) + "\n"
 
@@ -115,48 +100,23 @@ def _upsert_single(gitignore_path: Path, block_text: str) -> bool:
     return True
 
 
-def upsert_split(
-    repo_root_gitignore: Path,
-    hub_gitignore: Path,
-    glob_entries: list[str],
-    anchored_entries: list[str],
-) -> tuple[bool, bool]:
+def upsert(gitignore_path: Path, glob_entries: list[str]) -> bool:
     """
-    Write or rewrite mill marker blocks, optionally split across two files.
+    Write or rewrite the mill marker block in a single ``.gitignore`` file.
 
-    When ``repo_root_gitignore == hub_gitignore`` (hub is the repo root),
-    writes a single combined block — glob entries then anchored entries —
-    and returns ``(changed, False)``.
-
-    When the paths differ (hub is a sub-directory of the repo), writes glob
-    entries only to ``repo_root_gitignore`` and anchored entries only to
-    ``hub_gitignore``, returning ``(repo_changed, hub_changed)``.
-
-    Idempotent: a re-run on already-correct files returns ``(False, False)``.
+    Renders the block via ``render_block(glob_entries)`` and delegates to
+    ``_upsert_single``.
 
     Args:
-        repo_root_gitignore: Path to the repo-root ``.gitignore``.
-        hub_gitignore: Path to the hub-directory ``.gitignore``. Equals
-            ``repo_root_gitignore`` for the typical case where hub == repo root.
-        glob_entries: Glob-pattern entries (e.g. ``GLOB_ENTRIES``). Written
-            to ``repo_root_gitignore`` (and also ``hub_gitignore`` when equal).
-        anchored_entries: Root-anchored entries (e.g. ``ANCHORED_ENTRIES``).
-            Written to ``hub_gitignore`` (and also ``repo_root_gitignore``
-            when equal).
+        gitignore_path: Path to the ``.gitignore`` file to update.
+        glob_entries: Glob-pattern entries (e.g. ``GLOB_ENTRIES``).
 
     Returns:
-        ``(repo_changed, hub_changed)`` — True for each file that was written.
+        ``True`` if the file was written (content changed), ``False`` if
+        already byte-equal.
 
     Raises:
-        ValueError: START marker present but END marker absent in either file.
+        ValueError: START marker present but END marker absent in the file.
     """
-    if repo_root_gitignore == hub_gitignore:
-        block = render_block(glob_entries, anchored_entries)
-        changed = _upsert_single(repo_root_gitignore, block)
-        return (changed, False)
-
-    glob_block = render_block(glob_entries, [])
-    anchored_block = render_block([], anchored_entries)
-    repo_changed = _upsert_single(repo_root_gitignore, glob_block)
-    hub_changed = _upsert_single(hub_gitignore, anchored_block)
-    return (repo_changed, hub_changed)
+    block = render_block(glob_entries)
+    return _upsert_single(gitignore_path, block)
