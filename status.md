@@ -37,5 +37,7 @@ batches:
     start_sha: c1fb66cda269489f7ddb1d4f117c909fb7f17ec8
     review_file: reviews/20260507-054309-code-review-foundation-extract-r1.md
   - name: holistic-implement
-    state: pending
+    state: running
+    implementer_session: 37a7caed-1891-4d47-a0a5-3a93f58fbcce
+    start_sha: 20a42924aaf895f493714b65ab1be0736966c9de
 ```
