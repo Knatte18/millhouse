@@ -3,7 +3,7 @@
 ```yaml
 task: 27 (A) — Prune unused skills and scripts
 slug: prune-millhouse
-approved: false
+approved: true
 started: 20260507-072611
 parent: main
 root: ""
