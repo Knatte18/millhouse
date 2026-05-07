@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-Mill-autofix skill
+phase: holistic-reviewing
 slug: mill-autofix-bugs
 branch: hanf/mill-autofix-bugs
 plan: task/plan
@@ -25,6 +25,7 @@ implementing  2026-05-07T11:28:36Z
 approved-Core Python helpers  2026-05-07T11:34:28Z
 approved-Config and autonomous-mode wiring  2026-05-07T11:37:07Z
 approved-Mill-autofix skill  2026-05-07T11:50:34Z
+holistic-reviewing  2026-05-07T11:50:56Z
 ```
 
 ## Batches
