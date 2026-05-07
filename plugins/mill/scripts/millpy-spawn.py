@@ -15,8 +15,7 @@ Flow:
        inside the new worktree.
     8. Pick a non-green VS Code title-bar colour not in use by sibling
        worktrees; write ``.vscode/settings.json`` via ``_vscode``.
-    9. Write the initial ``wiki/active/<slug>/status.md`` (phase=discussing)
-       and commit+push.
+    9. Write the initial ``task/status.md`` (phase=discussing) and commit+push.
    10. Print worktree-path, branch, and status path on stdout.
 
 Usage:
@@ -163,7 +162,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"[DryRun] Task:     {picked.title} [{slug}]")
         print(f"[DryRun] Branch:   {branch_name}")
         print(f"[DryRun] Worktree: {worktree_path}")
-        print(f"[DryRun] Status:   {worktree_path / 'status.md'}")
+        print(f"[DryRun] Status:   {worktree_path / 'task' / 'status.md'}")
         return 0
 
     # Claim the task under the wiki lock. Multi mode already claimed inside
@@ -198,19 +197,28 @@ def main(argv: list[str] | None = None) -> int:
         exclude={"wiki", "active"},
     )
 
-    # Create the portals directory and portal entry for the new worktree.
-    # The portal entry (container/portals/<slug> → worktree_path) must exist
-    # BEFORE create_hub_links so that the .others and .active junction targets
-    # both exist when mklink /J runs (Windows fails on missing targets).
+    # Timestamp used for both write_wiki_active_task_md and write_initial_status.
+    ts = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    # Create wiki/active/<slug>/ and commit task.md before the portal entry
+    # points to it (Windows mklink /J requires an existing target dir).
     container_path = resolve_container_path(git_root)
     (container_path / "portals").mkdir(parents=True, exist_ok=True)
-    _junction.create(target=worktree_path, link_path=container_path / "portals" / slug)
+    _spawn_core.write_wiki_active_task_md(wiki_path, slug, picked.title, ts)
+
+    # Portal entry points to wiki/active/<slug>/ so the hub's .active junction
+    # (and the task worktree's .portals junction) navigate to the wiki state dir.
+    _junction.create(target=wiki_path / "active" / slug, link_path=container_path / "portals" / slug)
 
     # Create all junctions and hardlinks from wiki/config.yaml for the new
     # worktree.  _setup.create_hub_links uses the token-scope filter so that
     # entries requiring <SLUG> are only created in slug-bearing (task) worktrees.
     dest_tokens = _build_tokens(dest_hub, wiki_path, slug=slug)
     _setup.create_hub_links(dest_hub, wiki_path, dest_tokens)
+
+    # Update the hub's .active junction to point at container/portals/<slug>
+    # which in turn points to wiki/active/<slug>/.
+    _spawn_core.recreate_active_junction(slug, resolve_hub_path(), container_path)
 
     # Pick a colour + write .vscode/settings.json. The palette scans the
     # *existing* sibling worktrees in the shared worktrees dir; the newly
@@ -219,10 +227,6 @@ def main(argv: list[str] | None = None) -> int:
     color = pick_worktree_color(worktrees_dir)
     short = resolve_short_name(cfg, git_root.name)
     _vscode.write_settings(color_hex=color, target=dest_hub / ".vscode" / "settings.json", short_name=short, slug=slug)
-
-    # Write the per-worktree marker file so every downstream script /
-    # skill in this worktree can locate its task state.
-    ts = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     _spawn_core.write_active_marker(
         dest_hub / ".millhouse",
         slug=slug,
