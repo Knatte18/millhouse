@@ -77,8 +77,7 @@ import _subprocess_util
 _STALE_SECONDS = 5 * 60  # 5 minutes
 
 _JUNCTION_DEFAULTS: dict[str, str] = {
-    ".millhouse/wiki": "<WIKI_PATH>",
-    ".active": "<WIKI_PATH>/active/<SLUG>/",
+    ".wiki": "<WIKI_PATH>",
 }
 
 _HARDLINK_DEFAULTS: dict[str, str] = {}  # no hardlinks unless configured

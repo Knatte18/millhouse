@@ -5,16 +5,15 @@ happy-path cases. A single selective mock covers the cross-volume hardlink
 error path which cannot be triggered without multiple filesystem volumes.
 
 Covers:
-  - Token-scope filter: no <SLUG> in tokens → .active entry skipped
-  - Mixed slug+non-slug entries: all entries created when SLUG present
+  - Token-scope filter: no <SLUG> in tokens → .portals entry skipped; .wiki created
+  - Mixed slug+non-slug entries: both .wiki and .portals created when SLUG present
   - Hardlink inode skip (idempotent re-run)
   - Hardlink inode-mismatch → backup-and-recreate
   - Both empty config blocks → empty result lists
   - Cross-volume hardlink → ValueError with clear source/target in message
-  - Portal-flow integration (Card 8):
-      - .millhouse/wiki junction resolves to fixture wiki path
-      - .others junction resolves to fixture portals dir
-      - .active junction resolves to portals/<slug> junction
+  - Portal-flow integration:
+      - .wiki junction resolves to fixture wiki path
+      - .portals junction resolves to wiki/active/<slug>/ dir
       - tasks.md hardlink shares an inode with wiki/Home.md
 """
 from __future__ import annotations
@@ -54,9 +53,8 @@ def _make_minimal_wiki(wiki_path: Path, cfg: dict) -> None:
 # Config with the full new junctions block + one hardlink (used by most tests)
 _FULL_CFG = {
     "junctions": {
-        ".millhouse/wiki": "<WIKI_PATH>",
-        ".others": "<CONTAINER_PATH>/portals/",
-        ".active": "<CONTAINER_PATH>/portals/<SLUG>/",
+        ".wiki": "<WIKI_PATH>",
+        ".portals": "<WIKI_PATH>/active/<SLUG>/",
     },
     "hardlinks": {
         "tasks.md": "<WIKI_PATH>/Home.md",
@@ -67,7 +65,7 @@ _FULL_CFG = {
 # are filtered when SLUG is absent, yielding empty result lists.
 _ALL_SLUG_CFG = {
     "junctions": {
-        ".active": "<CONTAINER_PATH>/portals/<SLUG>/",
+        ".portals": "<WIKI_PATH>/active/<SLUG>/",
     },
     "hardlinks": {
         "task-status.md": "<WIKI_PATH>/active/<SLUG>/status.md",
@@ -79,7 +77,7 @@ _ALL_SLUG_CFG = {
 # call (which would fail because the junction already exists).
 _HARDLINK_ONLY_CFG = {
     "junctions": {
-        ".active": "<CONTAINER_PATH>/portals/<SLUG>/",  # filtered: needs SLUG
+        ".portals": "<WIKI_PATH>/active/<SLUG>/",  # filtered: needs SLUG
     },
     "hardlinks": {
         "tasks.md": "<WIKI_PATH>/Home.md",
@@ -93,15 +91,14 @@ _HARDLINK_ONLY_CFG = {
 
 
 def test_token_scope_filter_no_slug() -> None:
-    """When SLUG is absent from tokens, entries requiring <SLUG> are skipped."""
+    """When SLUG is absent from tokens, .portals entry is skipped; .wiki is created."""
     with tempfile.TemporaryDirectory() as tmp:
         container = Path(tmp) / "container"
         wiki_path = container / "wiki"
-        portals = container / "portals"
         target_root = container / "wts" / "my-repo"
 
         _make_minimal_wiki(wiki_path, _FULL_CFG)
-        portals.mkdir(parents=True)
+        (wiki_path / "active").mkdir(parents=True)
         target_root.mkdir(parents=True)
 
         tokens = {
@@ -115,23 +112,20 @@ def test_token_scope_filter_no_slug() -> None:
 
         result = create_hub_links(target_root, wiki_path, tokens)
 
-        # .millhouse/wiki and .others must be created
-        wiki_link = target_root / ".millhouse" / "wiki"
-        others_link = target_root / ".others"
+        # .wiki must be created
+        wiki_link = target_root / ".wiki"
         if not (wiki_link.exists() or wiki_link.is_symlink()):
-            raise AssertionError(f".millhouse/wiki junction not created at {wiki_link}")
-        if not (others_link.exists() or others_link.is_symlink()):
-            raise AssertionError(f".others junction not created at {others_link}")
+            raise AssertionError(f".wiki junction not created at {wiki_link}")
 
-        # .active must NOT be created (requires SLUG)
-        active_link = target_root / ".active"
-        if active_link.exists() or active_link.is_symlink():
-            raise AssertionError(".active should be skipped when SLUG absent")
+        # .portals must NOT be created (requires SLUG)
+        portals_link = target_root / ".portals"
+        if portals_link.exists() or portals_link.is_symlink():
+            raise AssertionError(".portals should be skipped when SLUG absent")
 
-        # Return value: 2 junctions, 1 hardlink (tasks.md)
-        if len(result["junctions"]) != 2:
+        # Return value: 1 junction (.wiki), 1 hardlink (tasks.md)
+        if len(result["junctions"]) != 1:
             raise AssertionError(
-                f"expected 2 junctions created, got {len(result['junctions'])}: "
+                f"expected 1 junction created, got {len(result['junctions'])}: "
                 f"{result['junctions']}"
             )
         if len(result["hardlinks"]) != 1:
@@ -140,7 +134,7 @@ def test_token_scope_filter_no_slug() -> None:
                 f"{result['hardlinks']}"
             )
 
-    print("PASS: token-scope filter skips .active when SLUG absent")
+    print("PASS: token-scope filter skips .portals when SLUG absent; .wiki created")
 
 
 # ---------------------------------------------------------------------------
@@ -149,15 +143,14 @@ def test_token_scope_filter_no_slug() -> None:
 
 
 def test_token_scope_filter_with_slug() -> None:
-    """When SLUG is present, all three junctions and the hardlink are created."""
+    """When SLUG is present, both .wiki and .portals junctions and the hardlink are created."""
     with tempfile.TemporaryDirectory() as tmp:
         container = Path(tmp) / "container"
         wiki_path = container / "wiki"
-        portals = container / "portals"
         target_root = container / "wts" / "my-task"
 
         _make_minimal_wiki(wiki_path, _FULL_CFG)
-        portals.mkdir(parents=True)
+        (wiki_path / "active" / "my-task").mkdir(parents=True)
         target_root.mkdir(parents=True)
 
         tokens = {
@@ -171,24 +164,21 @@ def test_token_scope_filter_with_slug() -> None:
 
         result = create_hub_links(target_root, wiki_path, tokens)
 
-        wiki_link = target_root / ".millhouse" / "wiki"
-        others_link = target_root / ".others"
-        active_link = target_root / ".active"
+        wiki_link = target_root / ".wiki"
+        portals_link = target_root / ".portals"
 
         if not (wiki_link.exists() or wiki_link.is_symlink()):
-            raise AssertionError(f".millhouse/wiki not created at {wiki_link}")
-        if not (others_link.exists() or others_link.is_symlink()):
-            raise AssertionError(f".others not created at {others_link}")
-        if not (active_link.exists() or active_link.is_symlink()):
-            raise AssertionError(f".active not created at {active_link}")
+            raise AssertionError(f".wiki not created at {wiki_link}")
+        if not (portals_link.exists() or portals_link.is_symlink()):
+            raise AssertionError(f".portals not created at {portals_link}")
 
         tasks_md = target_root / "tasks.md"
         if not tasks_md.exists():
             raise AssertionError(f"tasks.md hardlink not created at {tasks_md}")
 
-        if len(result["junctions"]) != 3:
+        if len(result["junctions"]) != 2:
             raise AssertionError(
-                f"expected 3 junctions, got {len(result['junctions'])}: "
+                f"expected 2 junctions, got {len(result['junctions'])}: "
                 f"{result['junctions']}"
             )
         if len(result["hardlinks"]) != 1:
@@ -197,7 +187,7 @@ def test_token_scope_filter_with_slug() -> None:
                 f"{result['hardlinks']}"
             )
 
-    print("PASS: all 3 junctions and 1 hardlink created when SLUG present")
+    print("PASS: .wiki and .portals junctions and 1 hardlink created when SLUG present")
 
 
 # ---------------------------------------------------------------------------
@@ -263,11 +253,9 @@ def test_hardlink_inode_mismatch_backup_and_recreate() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         container = Path(tmp) / "container"
         wiki_path = container / "wiki"
-        portals = container / "portals"
         target_root = container / "wts" / "my-repo"
 
         _make_minimal_wiki(wiki_path, _FULL_CFG)
-        portals.mkdir(parents=True)
         target_root.mkdir(parents=True)
 
         # Pre-create a tasks.md that is a regular file (different inode from Home.md)
@@ -398,23 +386,24 @@ def test_cross_volume_hardlink_raises_clear_error() -> None:
 
 
 def test_portal_flow_integration() -> None:
-    """Full fixture with portals structure asserts all four links are correct.
+    """Full fixture with wiki/active structure asserts all links are correct.
 
     Fixture:
       container/
         wts/
-          my-task/        <- target_root (new worktree)
+          my-task/              <- target_root (new worktree)
         portals/
-          my-task/        <- junction → container/wts/my-task/
+          my-task/              <- junction → wiki/active/my-task/
         wiki/
+          active/
+            my-task/            <- wiki state dir (portal target)
           Home.md
           config.yaml
 
-    Asserts (from Card 6 requirements):
-      (a) .others junction inside target_root exists and resolves to portals/
-      (b) .active junction inside target_root exists and resolves to portals/<slug>
+    Asserts:
+      (a) .wiki junction inside target_root exists and resolves to wiki path
+      (b) .portals junction inside target_root exists and resolves to wiki/active/my-task/
       (c) tasks.md hardlink shares an inode with wiki/Home.md
-      (d) .millhouse/wiki junction exists and resolves to wiki path
     """
     import _junction as junction_mod  # real junction helper
 
@@ -425,11 +414,12 @@ def test_portal_flow_integration() -> None:
         target_root = container / "wts" / "my-task"
 
         _make_minimal_wiki(wiki_path, _FULL_CFG)
+        (wiki_path / "active" / "my-task").mkdir(parents=True)
         portals.mkdir(parents=True)
         target_root.mkdir(parents=True)
 
-        # Create portals/<slug> junction → target_root (mirrors mill-spawn step 2)
-        junction_mod.create(target=target_root, link_path=portals / "my-task")
+        # Create portals/<slug> junction → wiki/active/my-task/ (mirrors new mill-spawn)
+        junction_mod.create(target=wiki_path / "active" / "my-task", link_path=portals / "my-task")
 
         tokens = {
             "HUB_PATH": str(target_root),
@@ -442,9 +432,9 @@ def test_portal_flow_integration() -> None:
 
         result = create_hub_links(target_root, wiki_path, tokens)
 
-        if len(result["junctions"]) != 3:
+        if len(result["junctions"]) != 2:
             raise AssertionError(
-                f"expected 3 junctions from portal flow, got {len(result['junctions'])}: "
+                f"expected 2 junctions from portal flow, got {len(result['junctions'])}: "
                 f"{result['junctions']}"
             )
         if len(result["hardlinks"]) != 1:
@@ -453,50 +443,31 @@ def test_portal_flow_integration() -> None:
                 f"{result['hardlinks']}"
             )
 
-        # (d) .millhouse/wiki exists and resolves to wiki path
-        wiki_link = target_root / ".millhouse" / "wiki"
+        # (a) .wiki junction exists and resolves to wiki path
+        wiki_link = target_root / ".wiki"
         if not wiki_link.is_dir():
-            raise AssertionError(f".millhouse/wiki junction not a dir at {wiki_link}")
-        # Write probe into wiki dir and verify via junction
+            raise AssertionError(f".wiki junction not a dir at {wiki_link}")
         probe_wiki = wiki_path / "wiki-probe.txt"
         probe_wiki.write_text("wiki-probe", encoding="utf-8")
-        via_wiki_link = target_root / ".millhouse" / "wiki" / "wiki-probe.txt"
+        via_wiki_link = target_root / ".wiki" / "wiki-probe.txt"
         if not via_wiki_link.exists():
             raise AssertionError(f"wiki probe not accessible via junction at {via_wiki_link}")
         if via_wiki_link.read_text(encoding="utf-8") != "wiki-probe":
             raise AssertionError("wiki probe content mismatch via junction")
         probe_wiki.unlink()
 
-        # (a) .others junction exists and resolves to portals/
-        others_link = target_root / ".others"
-        if not others_link.is_dir():
-            raise AssertionError(f".others junction not a dir at {others_link}")
-        # Write probe into portals dir and verify via .others
-        probe_portals = portals / "portals-probe.txt"
-        probe_portals.write_text("portals-probe", encoding="utf-8")
-        via_others = target_root / ".others" / "portals-probe.txt"
-        if not via_others.exists():
-            raise AssertionError(f"portals probe not accessible via .others at {via_others}")
-        if via_others.read_text(encoding="utf-8") != "portals-probe":
-            raise AssertionError("portals probe content mismatch via .others")
-        probe_portals.unlink()
-
-        # (b) .active junction exists and resolves to portals/<slug>
-        active_link = target_root / ".active"
-        if not active_link.is_dir():
-            raise AssertionError(f".active junction not a dir at {active_link}")
-        # .active → portals/my-task (itself a junction → target_root)
-        # Verify .active is traversable: portals/my-task contains the worktree contents.
-        # Create a probe at portals level (accessible via .active which points there)
-        # portals/my-task is a junction → target_root, so we write through target_root
-        probe_in_target = target_root / "target-probe.txt"
-        probe_in_target.write_text("target-probe", encoding="utf-8")
-        # .active points to portals/my-task which points to target_root, so
-        # .active/target-probe.txt should be accessible
-        via_active = target_root / ".active" / "target-probe.txt"
-        if not via_active.exists():
-            raise AssertionError(f"target probe not accessible via .active at {via_active}")
-        probe_in_target.unlink()
+        # (b) .portals junction exists and resolves to wiki/active/my-task/
+        portals_link = target_root / ".portals"
+        if not portals_link.is_dir():
+            raise AssertionError(f".portals junction not a dir at {portals_link}")
+        probe_active = wiki_path / "active" / "my-task" / "portals-probe.txt"
+        probe_active.write_text("portals-probe", encoding="utf-8")
+        via_portals = target_root / ".portals" / "portals-probe.txt"
+        if not via_portals.exists():
+            raise AssertionError(f"portals probe not accessible via .portals at {via_portals}")
+        if via_portals.read_text(encoding="utf-8") != "portals-probe":
+            raise AssertionError("portals probe content mismatch via .portals")
+        probe_active.unlink()
 
         # (c) tasks.md hardlink shares inode with wiki/Home.md
         tasks_md = target_root / "tasks.md"
@@ -509,7 +480,7 @@ def test_portal_flow_integration() -> None:
                 f"{home_md.stat().st_ino}"
             )
 
-    print("PASS: portal-flow integration — all four links created and traversable")
+    print("PASS: portal-flow integration — .wiki, .portals, and tasks.md hardlink created and traversable")
 
 
 # ---------------------------------------------------------------------------

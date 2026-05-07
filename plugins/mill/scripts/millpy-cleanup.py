@@ -6,6 +6,7 @@ Runs from the hub. Pass --apply to execute removals; default is dry-run.
 from __future__ import annotations
 
 import argparse
+import os
 import shutil
 import sys
 from dataclasses import dataclass
@@ -122,7 +123,9 @@ def build_plan(
             continue
 
         active_slugs.add(slug)
-        phase = _read_phase(wt_path / "status.md")
+        _task_status = wt_path / "task" / "status.md"
+        _legacy_status = wt_path / "status.md"
+        phase = _read_phase(_task_status if _task_status.exists() else _legacy_status)
         if phase is None:
             to_report.append(
                 f"{slug} — status.md unreadable, skipping (inspect manually)"
@@ -135,7 +138,7 @@ def build_plan(
         record = SlugRecord(slug, wt_path, branch, wiki_active_dir, marker_by_slug.get(slug))
 
         if phase == "done":
-            parent_branch = _status.read_parent_branch(wt_path / "status.md")
+            parent_branch = _status.read_parent_branch(_task_status if _task_status.exists() else _legacy_status)
             if parent_branch and record.branch:
                 result = _subprocess_util.run(
                     ["git", "-C", str(hub_root), "log", "--oneline",
@@ -299,7 +302,9 @@ def _apply_inplace_record(
     """
     # Read parent branch from status.md so we can check out safely.
     if record.worktree_path is not None:
-        parent_branch = _status.read_parent_branch(record.worktree_path / "status.md")
+        _task_status = record.worktree_path / "task" / "status.md"
+        _legacy_status = record.worktree_path / "status.md"
+        parent_branch = _status.read_parent_branch(_task_status if _task_status.exists() else _legacy_status)
     else:
         parent_branch = None
 
@@ -327,7 +332,9 @@ def _apply_inplace_record(
     # Determine deletion flag: done tasks get -d (safe); abandoned get -D (force).
     # Phase is re-read from the worktree's status.md; fall back to -D when absent.
     if record.worktree_path is not None:
-        phase = _read_phase(record.worktree_path / "status.md")
+        _task_status_ip = record.worktree_path / "task" / "status.md"
+        _legacy_status_ip = record.worktree_path / "status.md"
+        phase = _read_phase(_task_status_ip if _task_status_ip.exists() else _legacy_status_ip)
         delete_flag = "-d" if phase == "done" else "-D"
     else:
         delete_flag = "-D"
@@ -434,6 +441,11 @@ def apply_plan(
         if record.wiki_active_dir is not None and record.wiki_active_dir.is_dir():
             shutil.rmtree(record.wiki_active_dir)
             wiki_relative_paths.append(f"active/{record.slug}")
+
+    active_link = hub_root / ".active"
+    if os.path.lexists(str(active_link)) and not active_link.is_dir():
+        _junction.remove(active_link)
+        print(f"[cleanup] removed dangling .active junction: {active_link}", file=sys.stderr)
 
     if plan.to_reset_home:
         home_text = (wiki_path / "Home.md").read_text("utf-8")

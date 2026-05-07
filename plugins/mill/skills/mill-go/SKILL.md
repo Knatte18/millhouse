@@ -26,7 +26,7 @@ You are the **Builder** — a lean orchestrator. You coordinate per-batch implem
    uv run --project "$CLAUDE_PLUGIN_ROOT" "$CLAUDE_PLUGIN_ROOT/scripts/millpy-builder-lock.py" acquire <slug>
    ```
    On exit code 1: surface the stderr message and halt — a second mill-go will corrupt state.
-5. **Entry phase gate.** Set `status_path = Path("status.md").resolve()` and inspect the phase:
+5. **Entry phase gate.** Set `status_path = Path("task/status.md").resolve()` and inspect the phase:
    ```python
    status = _status.read_full(status_path)
    phase = status["yaml"]["phase"]
@@ -43,7 +43,7 @@ You are the **Builder** — a lean orchestrator. You coordinate per-batch implem
    | `done` | tell user the task is complete; suggest `/mill-merge` if auto-merge was off |
    | any other | surface + halt |
 
-6. Read the plan overview: `overview_path = Path("plan/00-overview.md").resolve()`. Confirm `approved: true` in the frontmatter. Extract the Batch Index via `_plan_dag.extract_batch_index(overview_text)`, validate via `_plan_dag.validate(batches, sorted(p.name for p in plan_dir.glob("??-*.md") if p.name != "00-overview.md"))`, then compute `order = _plan_dag.topo_order(batches)`.
+6. Read the plan overview: `overview_path = Path("task/plan/00-overview.md").resolve()`. Confirm `approved: true` in the frontmatter. Extract the Batch Index via `_plan_dag.extract_batch_index(overview_text)`, validate via `_plan_dag.validate(batches, sorted(p.name for p in plan_dir.glob("??-*.md") if p.name != "00-overview.md"))` where `plan_dir = Path("task/plan/").resolve()`, then compute `order = _plan_dag.topo_order(batches)`.
    `signature: _plan_dag.extract_batch_index(overview_text: str) -> list[dict]`
    `signature: _plan_dag.validate(batches: list[dict], batch_files: list[str]) -> None`
    `signature: _plan_dag.topo_order(batches: list[dict]) -> list[str]`
@@ -59,7 +59,7 @@ On a fresh run only (no `## Batches` section in status.md):
 - `_status.append_phase(status_path, "implementing", _timestamp.now_utc_iso())`.
   `signature: _status.append_phase(status_path: Path, phase: str, timestamp: str) -> None`
   `signature: _timestamp.now_utc_iso() -> str`
-- Commit on the task branch: `git -C <worktree> add status.md && git -C <worktree> commit -m "mill-go: prepare for {slug}"`.
+- Commit on the task branch: `git -C <worktree> add task/status.md && git -C <worktree> commit -m "mill-go: prepare for {slug}"`.
 
 ## Execute — sequential loop
 
@@ -94,7 +94,7 @@ After a `success` report: run `git -C <worktree> status --porcelain --untracked-
 - `_status.set_batch_field(status_path, batch_name, "state", "blocked")`
 - `_status.set_batch_field(status_path, batch_name, "blocked_reason", "uncommitted working tree after implementer report")`
 - `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`
-- Commit on the task branch: `git -C <worktree> add status.md && git -C <worktree> commit -m "mill-go: blocked on <batch_name> — dirty tree"`
+- Commit on the task branch: `git -C <worktree> add task/status.md && git -C <worktree> commit -m "mill-go: blocked on <batch_name> — dirty tree"`
 - Go to *Blocked*.
 
 If the output is empty, continue to "3. Code Review loop" as normal.
@@ -109,7 +109,7 @@ If `review.code.per_batch` is false: set batch state → `approved`, `_status.ap
 
 For each round `N` from 1 to `review.code.rounds`:
 
-1. **Crash-recovery check.** Before firing the CLI, scan `Path("reviews").resolve()` for a file matching `*-code-review-{batch_name}-r{N}.md`. If found, treat it as this round's review file — parse its verdict from the fenced yaml block via `_review_common.parse_verdict(file_content)` and skip to step 4 below. This covers the case where mill-go crashed after writing the review but before committing state.
+1. **Crash-recovery check.** Before firing the CLI, scan `Path("task/reviews").resolve()` for a file matching `*-code-review-{batch_name}-r{N}.md`. If found, treat it as this round's review file — parse its verdict from the fenced yaml block via `_review_common.parse_verdict(file_content)` and skip to step 4 below. This covers the case where mill-go crashed after writing the review but before committing state.
    `signature: _review_common.parse_verdict(text: str) -> str`
 
 2. Background via `millpy-bg`:
@@ -126,7 +126,7 @@ For each round `N` from 1 to `review.code.rounds`:
 3. **Before reading any review file, load the `mill-receiving-review` skill.** Non-negotiable.
 
 4. Branch on verdict:
-   - `APPROVE` — batch state → `approved`, `review_file: <path>`. `_status.append_phase(status_path, f"approved-{batch_name}", _timestamp.now_utc_iso())`. Use the `file` field from `reviews[0]` in the JSON summary (or the crash-recovery scan path) as `<review_file_path>`. Commit on the task branch: `git -C <worktree> add status.md <review_file_path> && git -C <worktree> commit -m "mill-go: approve batch {batch_name}"`. Break out of the loop → next batch.
+   - `APPROVE` — batch state → `approved`, `review_file: <path>`. `_status.append_phase(status_path, f"approved-{batch_name}", _timestamp.now_utc_iso())`. Use the `file` field from `reviews[0]` in the JSON summary (or the crash-recovery scan path) as `<review_file_path>`. Commit on the task branch: `git -C <worktree> add task/status.md <review_file_path> && git -C <worktree> commit -m "mill-go: approve batch {batch_name}"`. Break out of the loop → next batch.
    - `NEED_CONTEXT` — read the `## Missing context` bullets from the review file. For each listed path, if it exists under the worktree, append to `extra_files` for the NEXT round. `_notify.notify("mill-go.review-need-context", f"batch {batch_name} round {N}", slug=slug, files=len(missing))`. Record this gap for mill-self-report (see Handoff). Increment round and continue the loop. If ALL the missing files are paths already in `extra_files` from a prior round (no new info), treat as a stuck-logic failure and break.
      `signature: _notify.notify(event: str, detail: str, **context) -> None`
    - `REQUEST_CHANGES` — invoke:
@@ -135,14 +135,14 @@ For each round `N` from 1 to `review.code.rounds`:
      ```
      The CLI atomically: reads `implementer_session` from status.md, sets batch state → `fixing`, calls `_status.append_phase` for `fixing-{batch_name}-r{N}`, commits and pushes (status.md plus the review file), and resumes the warm implementer session with the fix prompt (which instructs the implementer to load `mill-receiving-review` and apply findings). Parse the JSON report the same way as step 2 — including the exit-code-1-with-stuck-JSON behavior described under "1. Implement". On stuck → escalate.
 
-5. **Max-rounds exhaustion.** After `review.code.rounds` rounds without APPROVE: `_notify.notify("mill-go.review-exhausted", f"batch {batch_name}", slug=slug, rounds=N)`, set batch state → `blocked`, `blocked_reason: "review rounds exhausted"`, `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`, commit on the task branch: `git -C <worktree> add status.md && git -C <worktree> commit -m "mill-go: blocked on {batch_name} after {N} rounds"`. Go to *Blocked* below.
+5. **Max-rounds exhaustion.** After `review.code.rounds` rounds without APPROVE: `_notify.notify("mill-go.review-exhausted", f"batch {batch_name}", slug=slug, rounds=N)`, set batch state → `blocked`, `blocked_reason: "review rounds exhausted"`, `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`, commit on the task branch: `git -C <worktree> add task/status.md && git -C <worktree> commit -m "mill-go: blocked on {batch_name} after {N} rounds"`. Go to *Blocked* below.
 
 ### Stuck escalation
 
 - **CLI emits `stuck_type: transient`** (LLM-layer failure surfaced as the synthetic stuck JSON described in Implement step 2; the CLI exits 1 in that case but stdout carries the JSON) → apply the one-retry policy: re-invoke `millpy-implement.py <batch_name>` once with no `--resume` flag (a fresh session). If the second invocation also reports `stuck_type: transient`, escalate to user with the regular `transient` three-option prompt (retry fresh, edit plan and retry, block).
 - `transient` (already retried once) → surface to user with three options: retry fresh, edit plan and retry, block. User picks.
 - `verify` / `logic` → surface to user with three options: edit plan to clarify then retry fresh, skip this batch (block the task), block the task. User picks.
-- On user-chosen block: set batch state → `blocked`, `blocked_reason: <reason>`, `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`, commit on the task branch: `git -C <worktree> add status.md && git -C <worktree> commit -m "mill-go: blocked on {batch_name}"`. Go to *Blocked*.
+- On user-chosen block: set batch state → `blocked`, `blocked_reason: <reason>`, `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`, commit on the task branch: `git -C <worktree> add task/status.md && git -C <worktree> commit -m "mill-go: blocked on {batch_name}"`. Go to *Blocked*.
 
 ### Blocked
 
@@ -199,7 +199,7 @@ For each round `H` from 1 to `max_holistic_rounds`:
 
 ## Handoff
 
-1. `_status.append_phase(status_path, "done", _timestamp.now_utc_iso())`. Commit on the task branch: `git -C <worktree> add status.md && git -C <worktree> commit -m "mill-go: done {slug}"`.
+1. `_status.append_phase(status_path, "done", _timestamp.now_utc_iso())`. Commit on the task branch: `git -C <worktree> add task/status.md && git -C <worktree> commit -m "mill-go: done {slug}"`.
 2. Flip Home.md's task line to `[done]`:
    ```python
    home_path = wiki_path / "Home.md"
@@ -231,7 +231,7 @@ For each round `H` from 1 to `max_holistic_rounds`:
 
 ## Board discipline
 
-- Status.md, reviews/<file>, and plan/<file> writes are committed on the **task branch** via `git -C <worktree> add ... && git -C <worktree> commit`. `millpy-implement.py` pushes its own task-branch state commits (batch-start, fix-cycle) to `origin/<task-branch>` immediately after each `git commit`. The Builder's own state commits (Prepare, Approve, blocked, done) and per-card implementer commits do not push — mill-merge pushes the full task branch at task end. Adding push to the Builder's own commits is a follow-up task; this PR scopes the push policy to CLI commits only.
+- `task/status.md`, `task/reviews/<file>`, and `task/plan/<file>` writes are committed on the **task branch** via `git -C <worktree> add ... && git -C <worktree> commit`. `millpy-implement.py` pushes its own task-branch state commits (batch-start, fix-cycle) to `origin/<task-branch>` immediately after each `git commit`. The Builder's own state commits (Prepare, Approve, blocked, done) and per-card implementer commits do not push — mill-merge pushes the full task branch at task end. Adding push to the Builder's own commits is a follow-up task; this PR scopes the push policy to CLI commits only.
 - Home.md writes (the Handoff `[done]` flip) go through `_wiki.write_commit_push(..., slug=...)` inside a `with _wiki.wiki_lock(wiki_path, slug):` block. The wiki helpers acquire the lock internally; the context manager makes the read-modify-write atomic.
 - Phase transitions via `_status.append_phase`; batch-state mutations via `_status.set_batch_field`. Hand-editing either yaml block is banned.
 - The path-invariant rule from CLAUDE.md is load-bearing: working state never goes to the wiki — only Home.md / _Sidebar.md do.

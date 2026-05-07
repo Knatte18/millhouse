@@ -764,6 +764,161 @@ def main() -> int:
             )
             print("PASS build_plan — phase=done, no branch in active marker -> guard skipped, to_remove_done")
 
+        # --- test_build_plan_reads_task_status_md: task/status.md is the primary path ---
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            wts_dir = tmp / "wts"
+            hub = wts_dir / "my-repo"
+            hub.mkdir(parents=True)
+            wt = wts_dir / "task-status-slug"
+            wt.mkdir(parents=True)
+            _write_active_marker(wt, "task-status-slug", "impl/task-status-slug")
+            # Write status.md in task/ only — no root status.md
+            task_dir = wt / "task"
+            task_dir.mkdir()
+            (task_dir / "status.md").write_text(_make_status_md("done"), encoding="utf-8")
+
+            home_tasks = [_make_task("task-status-slug", "done")]
+            wiki_path = tmp / "wiki"
+            wiki_path.mkdir()
+
+            plan = build_plan([wt], home_tasks, wiki_path, hub_root=hub)
+
+            assert any(r.slug == "task-status-slug" for r in plan.to_remove_done), (
+                f"expected task-status-slug in to_remove_done, got {plan.to_remove_done}"
+            )
+            assert not any("task-status-slug" in r for r in plan.to_report), (
+                f"task-status-slug must not be in to_report, got {plan.to_report}"
+            )
+            print("PASS test_build_plan_reads_task_status_md — task/status.md primary path")
+
+        # --- test_build_plan_falls_back_to_root_status_md: legacy layout fallback ---
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            wts_dir = tmp / "wts"
+            hub = wts_dir / "my-repo"
+            hub.mkdir(parents=True)
+            wt = wts_dir / "legacy-status-slug"
+            wt.mkdir(parents=True)
+            _write_active_marker(wt, "legacy-status-slug", "impl/legacy-status-slug")
+            # Write status.md at root only — legacy layout, no task/ dir
+            (wt / "status.md").write_text(_make_status_md("done"), encoding="utf-8")
+
+            home_tasks = [_make_task("legacy-status-slug", "done")]
+            wiki_path = tmp / "wiki"
+            wiki_path.mkdir()
+
+            plan = build_plan([wt], home_tasks, wiki_path, hub_root=hub)
+
+            assert any(r.slug == "legacy-status-slug" for r in plan.to_remove_done), (
+                f"expected legacy-status-slug in to_remove_done, got {plan.to_remove_done}"
+            )
+            assert not any("legacy-status-slug" in r for r in plan.to_report), (
+                f"legacy-status-slug must not be in to_report, got {plan.to_report}"
+            )
+            print("PASS test_build_plan_falls_back_to_root_status_md — legacy layout fallback")
+
+        # --- test_apply_plan_removes_dangling_active_junction ---
+        # Scenario A: os.path.lexists returns False -> _junction.remove NOT called for .active
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            hub_root_da = tmp / "hub"
+            hub_root_da.mkdir()
+            wiki_path_da = tmp / "wiki"
+            wiki_path_da.mkdir()
+            (wiki_path_da / "Home.md").write_text("", encoding="utf-8")
+            plan_da = CleanupPlan(to_remove_done=[], to_remove_abandoned=[], to_reset_home=[], to_report=[])
+
+            junction_remove_calls_a: list = []
+            with patch("os.path.lexists", return_value=False):
+                with patch("mill_cleanup._junction.remove", side_effect=junction_remove_calls_a.append):
+                    apply_plan(plan_da, wiki_path_da, hub_root_da, {})
+
+            active_link_a = hub_root_da / ".active"
+            assert not any(p == active_link_a for p in junction_remove_calls_a), (
+                f"Scenario A: expected no .active removal when lexists=False, got: {junction_remove_calls_a}"
+            )
+            print("PASS test_apply_plan_removes_dangling_active_junction — Scenario A: lexists=False, no removal")
+
+        # Scenario B: os.path.lexists returns True, Path.is_dir returns False (dangling) -> removal
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            hub_root_db = tmp / "hub"
+            hub_root_db.mkdir()
+            wiki_path_db = tmp / "wiki"
+            wiki_path_db.mkdir()
+            (wiki_path_db / "Home.md").write_text("", encoding="utf-8")
+            plan_db = CleanupPlan(to_remove_done=[], to_remove_abandoned=[], to_reset_home=[], to_report=[])
+
+            junction_remove_calls_b: list = []
+            with patch("os.path.lexists", return_value=True):
+                with patch.object(Path, "is_dir", return_value=False):
+                    with patch("mill_cleanup._junction.remove", side_effect=junction_remove_calls_b.append):
+                        apply_plan(plan_db, wiki_path_db, hub_root_db, {})
+
+            active_link_b = hub_root_db / ".active"
+            assert any(p == active_link_b for p in junction_remove_calls_b), (
+                f"Scenario B: expected .active removal when lexists=True and is_dir=False, got: {junction_remove_calls_b}"
+            )
+            print("PASS test_apply_plan_removes_dangling_active_junction — Scenario B: dangling junction removed")
+
+        # --- test_apply_inplace_record_reads_task_status_md ---
+        # task/status.md (done + parent=feature-branch) takes priority over
+        # root status.md (abandoned + parent=stale-branch).
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            hub_root_ip = tmp / "hub"
+            hub_root_ip.mkdir()
+
+            # Write task/status.md with done + feature-branch
+            task_dir_ip = hub_root_ip / "task"
+            task_dir_ip.mkdir()
+            (task_dir_ip / "status.md").write_text(
+                _make_status_md("done", parent="feature-branch"), encoding="utf-8"
+            )
+            # Write root status.md as a stale decoy with different data
+            (hub_root_ip / "status.md").write_text(
+                _make_status_md("abandoned", parent="stale-branch"), encoding="utf-8"
+            )
+
+            record_ip = SlugRecord(
+                slug="my-task",
+                worktree_path=hub_root_ip,
+                branch="impl/my-task",
+                wiki_active_dir=None,
+                home_marker="done",
+            )
+
+            git_calls_ip: list = []
+
+            def _fake_run_ip(argv, **kwargs):
+                git_calls_ip.append(argv)
+                result = MagicMock()
+                result.returncode = 0
+                result.stdout = ""
+                result.stderr = ""
+                return result
+
+            with patch("mill_cleanup._subprocess_util.run", side_effect=_fake_run_ip):
+                with patch("mill_cleanup._junction.remove"):
+                    with patch("mill_cleanup._paths.resolve_container_path", return_value=tmp / "container"):
+                        mod._apply_inplace_record(record_ip, hub_root_ip, task_branch="impl/my-task")
+
+            # read_parent_branch must resolve to task/status.md (feature-branch, not stale-branch)
+            checkout_calls_ip = [args for args in git_calls_ip if "checkout" in args]
+            assert len(checkout_calls_ip) == 1, f"Expected one git checkout call, got: {checkout_calls_ip}"
+            assert "feature-branch" in checkout_calls_ip[0], (
+                f"Expected checkout of 'feature-branch' (task/status.md), got: {checkout_calls_ip[0]}"
+            )
+
+            # _read_phase must resolve to task/status.md (done -> -d, not abandoned -> -D)
+            branch_calls_ip = [args for args in git_calls_ip if "branch" in args and ("-d" in args or "-D" in args)]
+            assert len(branch_calls_ip) == 1, f"Expected one branch delete call, got: {branch_calls_ip}"
+            assert "-d" in branch_calls_ip[0], (
+                f"Expected '-d' (done from task/status.md), not '-D' (abandoned from root), got: {branch_calls_ip[0]}"
+            )
+            print("PASS test_apply_inplace_record_reads_task_status_md — read_parent_branch and _read_phase resolve to task/")
+
         print("All build_plan unit tests passed.")
         return 0
     except AssertionError as exc:

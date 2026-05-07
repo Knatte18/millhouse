@@ -33,8 +33,8 @@ You are an integration engineer. Your job is to merge a completed task branch ba
 2. `_wiki.sync_pull(<WIKI_PATH>, slug=slug)`.
 3. Read slug via `_active.read_slug(Path(".millhouse"))` (already resolved in Step 1; reuse `active_data` — no second read needed).
 4. *(Config already loaded in Step 1.)*
-5. Resolve parent branch via `_parent_branch.resolve(status_path, interactive=<True unless called non-interactively>)`. `status_path` is `git_root / "status.md"` — state lives on the task branch, not in the wiki.
-6. **Phase gate — also the re-entry point for PR-path recovery.** Read `git_root/status.md`'s `phase:`.
+5. Resolve parent branch via `_parent_branch.resolve(status_path, interactive=<True unless called non-interactively>)`. `status_path` is `git_root / "task" / "status.md"` — state lives in `task/` on the task branch, not in the wiki.
+6. **Phase gate — also the re-entry point for PR-path recovery.** Read `git_root/task/status.md`'s `phase:`.
 
    | phase | action |
    | --- | --- |
@@ -72,16 +72,16 @@ Steps 4–10 implement the canonical teardown. Each step is independent; a faile
 
 ### 4. Cleanup commit
 
-On the task branch (current cwd), remove the state files that belong to the task lifecycle, not to production code:
+On the task branch (current cwd), remove the state directory that belongs to the task lifecycle, not to production code:
 
 ```bash
-git rm -r reviews/ discussion.md plan/ status.md
+git rm -r task/
 git commit -m "chore: pre-merge cleanup"
 ```
 
 **Why:** squashing a branch that already has cleanup as its tip means the squash commit on the parent never includes transient task metadata. The cleanup commit is itself preserved under the archive tag created in Step 6.
 
-**Idempotency:** if all four paths are already absent (re-run after partial failure), `git rm -r` will warn "did not match any files" — treat as a no-op. If the resulting working tree has nothing to commit, skip the commit.
+**Idempotency:** if `task/` is already absent (re-run after partial failure), `git rm -r` will warn "did not match any files" — treat as a no-op. If the resulting working tree has nothing to commit, skip the commit.
 
 ### 5. PR path or direct squash?
 
@@ -93,7 +93,7 @@ git commit -m "chore: pre-merge cleanup"
       --body "<one-line summary from status.md>"
   ```
 
-  Update `status.md` via `_status.append_phase(status_path, "pr-pending", _timestamp.now_utc_iso())` and push the task branch so the PR has the cleanup commit. Skip to Step 11 (Release lock) — no Home.md flip, no further cleanup. Re-run `/mill-merge` after the PR lands to continue from the PR-path re-entry.
+  Update `task/status.md` via `_status.append_phase(status_path, "pr-pending", _timestamp.now_utc_iso())` and push the task branch so the PR has the cleanup commit. Skip to Step 11 (Release lock) — no Home.md flip, no further cleanup. Re-run `/mill-merge` after the PR lands to continue from the PR-path re-entry.
 
 - **Direct path** (everything else):
 
@@ -143,14 +143,14 @@ git commit -m "chore: pre-merge cleanup"
      git push origin "$CHILD_BRANCH"
      ```
 
-  6. Append the `pr-pending` phase and commit+push `status.md` on the task branch:
+  6. Append the `pr-pending` phase and commit+push `task/status.md` on the task branch:
 
      ```python
      _status.append_phase(status_path, "pr-pending", _timestamp.now_utc_iso())
      ```
 
      ```bash
-     git add status.md && git commit -m "chore: pr-pending after branch-protection fallback" && git push
+     git add task/status.md && git commit -m "chore: pr-pending after branch-protection fallback" && git push
      ```
 
   7. Report to the user:
@@ -190,7 +190,7 @@ with _wiki.wiki_lock(<WIKI_PATH>, slug):
 
 **Worktree mode:**
 
-Call `_worktree.remove_safe` — it strips every junction declared in `wiki/config.yaml` inside the worktree (`.millhouse/wiki`, `.others`, `.active`, plus any future entries) BEFORE removing the worktree, and falls back to `shutil.rmtree` only if `git worktree remove --force` fails with a long-path error. The junction-strip is non-skippable; you cannot lose the wiki by accident.
+Call `_worktree.remove_safe` — it strips every junction declared in `wiki/config.yaml` inside the worktree (`.wiki`, `.portals`, `.active`, plus any future entries) BEFORE removing the worktree, and falls back to `shutil.rmtree` only if `git worktree remove --force` fails with a long-path error. The junction-strip is non-skippable; you cannot lose the wiki by accident.
 
 ```bash
 python -c "
@@ -229,14 +229,14 @@ _junction.remove(container_path / "portals" / slug)
 
 Tolerate already-gone. `container_path` was resolved in Entry Step 1 via `_paths.resolve_container_path(git_root)`.
 
-### 10. Legacy wiki cleanup (conditional)
+### 10. Remove wiki active directory
 
-If `wiki_path / "active" / slug` exists (a pre-migration clone that still has the old wiki state directory):
+Always attempt to remove `wiki_path / "active" / slug`. An existence guard prevents `FileNotFoundError` from racing or partially-migrated states:
 
-1. `shutil.rmtree(wiki_path / "active" / slug)`.
-2. Commit+push via `_wiki.write_commit_push(<WIKI_PATH>, [f"active/{slug}/"], f"task: cleanup legacy active dir {slug}", slug=slug)`.
+1. `if (wiki_path / "active" / slug).exists(): shutil.rmtree(wiki_path / "active" / slug)`.
+2. If the directory existed and was removed, commit+push via `_wiki.write_commit_push(<WIKI_PATH>, [f"active/{slug}/"], f"task: remove active dir {slug}", slug=slug)`.
 
-If the directory does not exist, skip silently — this is the normal case for post-migration setups.
+If the directory does not exist, skip the commit — the guard makes this safe to call unconditionally.
 
 ### 11. Regenerate sidebar + release merge lock
 
@@ -288,7 +288,7 @@ Post-Step-5 failures (archive tag, Home.md, sidebar, worktree/branch/portal remo
 ## Board discipline
 
 - Home.md writes go through `_wiki.write_commit_push` (which acquires the wiki lock internally). For multi-operation windows use `with _wiki.wiki_lock(wiki_path, slug):`.
-- `active/<slug>/` deletion (legacy, conditional) commits separately via `_wiki.write_commit_push` after the wiki lock is released.
-- Task state (`status.md`, `discussion.md`, `plan/`, `reviews/`) lives on the task branch — never in the wiki for new-layout repos. The cleanup commit removes it from the branch tip before squash.
-- Phase transitions via `_status.append_phase`; hand-editing status.md is banned.
+- `active/<slug>/` deletion commits separately via `_wiki.write_commit_push` after the wiki lock is released (Step 10 always attempts this; the existence guard makes it safe).
+- Task state (`task/status.md`, `task/discussion.md`, `task/plan/`, `task/reviews/`) lives in `task/` on the task branch — never in the wiki. The cleanup commit removes the entire `task/` directory from the branch tip before squash.
+- Phase transitions via `_status.append_phase`; hand-editing `task/status.md` is banned.
 - Merge-lock file lives at `<parent-path>/.scratch/merge.lock`. Never placed anywhere else — other skills expect it there.
