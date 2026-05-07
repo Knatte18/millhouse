@@ -130,11 +130,19 @@ print('autonomous_mode enabled')
 
 ## Phase 3: Per-bug loop
 
-For each issue in `issues` (in order), execute steps 0–10. After the loop (or after the killswitch fires), proceed to Phase 5.
+For each issue in `issues` (in order), execute steps 0–10. After the loop (or after the killswitch fires), proceed to Phase 4.
 
 ---
 
-### Step 0: Killswitch check
+### Step 0: Branch guard + killswitch check
+
+Verify the current branch is `parent_branch`:
+
+```bash
+git branch --show-current
+```
+
+If the output does not equal `parent_branch`: run the **Stuck cleanup helper**, then continue to the next issue.
 
 Check whether `.scratch/autofix-stop` exists:
 
@@ -142,7 +150,7 @@ Check whether `.scratch/autofix-stop` exists:
 test -f .scratch/autofix-stop && echo STOP || echo GO
 ```
 
-If `STOP`: halt the loop immediately. Do **not** delete the file. Proceed to Phase 5 (Cleanup) then Phase 6 (Report).
+If `STOP`: halt the loop immediately. Do **not** delete the file. Proceed to Phase 4 (Cleanup) then Phase 5 (Report).
 
 ---
 
@@ -201,7 +209,7 @@ The `--summary` value is `issue["body"][:200].strip()` (use `""` if body is None
       print('not-found')
   else:
       print(t.phase or 'unmarked')
-  " -- "<wiki_path>/Home.md" "<slug>"
+  " "<wiki_path>/Home.md" "<slug>"
   ```
 
   - Phase `active` or `done` → skip this issue. Do not record in any list. Continue to next issue.
@@ -400,7 +408,7 @@ Note: the wiki `active/<slug>/` directory and the `[active]` marker in Home.md a
 
 ---
 
-## Phase 5: Cleanup — restore autonomous mode
+## Phase 4: Cleanup — restore autonomous mode
 
 **Always run — even if an unhandled error escapes the per-bug loop.**
 
@@ -419,14 +427,14 @@ if original == '__ABSENT__':
 else:
     cfg_path.write_text(original, encoding='utf-8')
     print('config.local.yaml restored')
-" <<EOF
+" <<'EOF'
 <original_cfg_text or literal __ABSENT__>
 EOF
 ```
 
 If `original_cfg_text` was `None` (file did not exist before): delete `.millhouse/config.local.yaml` (`missing_ok=True` — safe if already gone). Otherwise: write back the exact original text byte-for-byte.
 
-## Phase 6: Report
+## Phase 5: Report
 
 Record `end_ts`:
 
@@ -473,7 +481,7 @@ Print to the user:
 
 ## Principles
 
-- **Cleanup is non-skippable.** Treat the per-bug loop as a try block with a guaranteed finally (Phase 5). A crashed or manually interrupted run must be re-started from scratch; bugs already fixed will be skipped via the "already present [done]" path in step 2.
+- **Cleanup is non-skippable.** Treat the per-bug loop as a try block with a guaranteed finally (Phase 4). A crashed or manually interrupted run must be re-started from scratch; bugs already fixed will be skipped via the "already present [done]" path in step 2.
 - **Dry-run is truly read-only.** No config mutations, no wiki writes, no git state changes.
 - **Slug uniqueness across the run.** Add each derived slug to `existing_home_slugs` immediately — `_autofix.slug_from_title` only checks the set you pass in; it does not re-read Home.md.
 - **Killswitch is a soft stop.** `.scratch/autofix-stop` halts after the current bug completes (or after stuck cleanup if the current bug was in-flight). Do not delete the file.
