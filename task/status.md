@@ -34,7 +34,9 @@ batches:
     implementer_session: 09cd111a-062a-4ee9-bbdf-2f7656a59e9f
     start_sha: f4d3b41e79e3584b66e3d9e58065c36c23fb23ca
   - name: Config and autonomous-mode wiring
-    state: pending
+    state: running
+    implementer_session: 1f641550-c020-4c00-ad3f-bfd7356dd31d
+    start_sha: 846dd0286392c4d6e8dac9ed5a7bb3765c424a33
   - name: Mill-autofix skill
     state: pending
 ```
