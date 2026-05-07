@@ -27,7 +27,9 @@ implementing  2026-05-07T06:16:04Z
 ```yaml
 batches:
   - name: test-fixtures
-    state: pending
+    state: running
+    implementer_session: 1443cace-cf4b-4ea8-a449-825014465d8a
+    start_sha: 9073246dd0d4a78ed6d1d2258aa85c582aa4e3e2
   - name: runtime-and-skills
     state: pending
 ```
