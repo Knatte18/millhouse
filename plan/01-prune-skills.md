@@ -11,7 +11,7 @@ depends-on: []
 
 ## Batch Scope
 
-Delete three unused skills (`mill-list`, `mill-fetch-issues`, `mill-worktree`) along with their scripts and test files. Rescue the 7 `_render_body_with_comments` tests into a new `test-gh-issues.py`. Update the seven files that reference the deleted artifacts. Regenerate `SKILLS.md` and manually prune `SCRIPTS.md`. Cards must be executed in order: Card 1 before Card 2 (new test file before source deletion), all others after Card 2.
+Delete three unused skills (`mill-list`, `mill-fetch-issues`, `mill-worktree`) along with their scripts and test files. Rescue the 8 `_render_body_with_comments` tests into a new `test-gh-issues.py`. Update the seven files that reference the deleted artifacts. Regenerate `SKILLS.md` and manually prune `SCRIPTS.md`. Cards must be executed in order: Card 1 before Card 2 (new test file before source deletion), all others after Card 2.
 
 ## Cards
 
@@ -23,7 +23,7 @@ Delete three unused skills (`mill-list`, `mill-fetch-issues`, `mill-worktree`) a
 - **Creates:**
   - `plugins/mill/unit_tests/test-gh-issues.py`
 - **Deletes:** none
-- **Requirements:** Create `test-gh-issues.py` by copying the 7 `_render_body_with_comments` test cases verbatim from `test-millpy-fetch-issues.py`. Keep the identical preamble: `HUB = Path(...).resolve().parent.parent.parent.parent`, `sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))`, and `from _gh_issues import GhError, _render_body_with_comments`. Keep the same `main()` / `if __name__ == "__main__": sys.exit(main())` structure. The 7 cases to copy are: empty-comments, single, ordering, exact-10, 11-comments, 15-comments, deleted-author, empty-body. Omit the 3 CLI wrapper tests (happy path, --out override, GhError path on `mill_fetch_issues.main`). The final print line should read `"All gh-issues unit tests passed."`.
+- **Requirements:** Create `test-gh-issues.py` by copying the 8 `_render_body_with_comments` test cases verbatim from `test-millpy-fetch-issues.py`. Keep the identical preamble: `HUB = Path(...).resolve().parent.parent.parent.parent`, `sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))`, and `from _gh_issues import GhError, _render_body_with_comments`. Keep the same `main()` / `if __name__ == "__main__": sys.exit(main())` structure. The 8 cases to copy are: empty-comments, single, ordering, exact-10, 11-comments, 15-comments, deleted-author, empty-body. Omit the 3 CLI wrapper tests (happy path, --out override, GhError path on `mill_fetch_issues.main`). The final print line should read `"All gh-issues unit tests passed."`.
 - **Commit:** `test(gh-issues): extract _render_body_with_comments tests into test-gh-issues.py`
 
 ### Card 2: Delete pruned skill directories, scripts, and test files
@@ -73,7 +73,7 @@ Delete three unused skills (`mill-list`, `mill-fetch-issues`, `mill-worktree`) a
   - `plugins/mill/unit_tests/test-skill-writer.py`
 - **Creates:** none
 - **Deletes:** none
-- **Requirements:** In `test-cleanup.py` line 272: change `"mill-worktree remove"` to `"git worktree remove --force"` in the `assert ... in orphan_lines[0]` check. In `test-shortcut-wrapper.py` lines 22–28: change both occurrences of `"millpy-list"` to `"millpy-status"` and `"millpy-list.py"` to `"millpy-status.py"` (two string literals in the render-test block). In `test-skill-writer.py` lines 155–173: change all four occurrences of `"mill-fetch-issues"` to `"mill-self-report"`, updating the `hyphen_path` assignment, the `write_skill_file` call, the directory-existence check, and the SKILL.md-existence check; update any path string that contains `"mill-fetch-issues"` to `"mill-self-report"`.
+- **Requirements:** In `test-cleanup.py` line 272: change `"mill-worktree remove"` to `"git worktree remove --force"` in the `assert ... in orphan_lines[0]` check. In `test-shortcut-wrapper.py` lines 22–28: change both occurrences of `"millpy-list"` to `"millpy-status"` and `"millpy-list.py"` to `"millpy-status.py"` (two string literals in the render-test block). In `test-skill-writer.py` lines 155–173: change all four occurrences of `"mill-fetch-issues"` to `"mill-self-report"`, updating the `hyphen_path` assignment, the `write_skill_file` call, the directory-existence check, and the SKILL.md-existence check; update any path string that contains `"mill-fetch-issues"` to `"mill-self-report"`. Also in `test-skill-writer.py` lines 36–100 (the `iter_target_scripts` block): remove `"millpy-list"`, `"millpy-worktree"`, and `"millpy-fetch-issues"` from the `expected_stems` list (leaving 10 stems); change `if len(result) != 13:` to `if len(result) != 10:`; update the error/PASS messages from `13` to `10`; change the comment `# Touch one file per SHORTCUT_SCRIPTS entry (14 total)` to `(11 total)`; change the block heading comment from `the 13 expected paths` to `the 10 expected paths`.
 - **Commit:** `test(mill): update fixtures and assertions for pruned skills`
 
 ### Card 6: Update mill-setup/SKILL.md reference
@@ -104,14 +104,14 @@ Delete three unused skills (`mill-list`, `mill-fetch-issues`, `mill-worktree`) a
   - `SKILLS.md`
 - **Creates:** none
 - **Deletes:** none
-- **Requirements:** From the worktree root, run `python plugins/mill/scripts/millpy-skills-index.py`. This regenerates `SKILLS.md` at the repo root. Verify that the output no longer contains rows for `mill-list`, `mill-fetch-issues`, or `mill-worktree` in the mill section. No manual editing of `SKILLS.md` — the script is the sole writer.
+- **Requirements:** From the worktree root, run `uv run --project "${CLAUDE_PLUGIN_ROOT}" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-skills-index.py"`. This regenerates `SKILLS.md` at the repo root. Verify that the output no longer contains rows for `mill-list`, `mill-fetch-issues`, or `mill-worktree` in the mill section. No manual editing of `SKILLS.md` — the script is the sole writer.
 - **Commit:** `docs: regenerate SKILLS.md — remove pruned mill skills`
 
 ## Batch Tests
 
 The verify command `python plugins/mill/unit_tests/run-all.py` runs every `test-*.py` in `plugins/mill/unit_tests/` as a subprocess. After this batch:
 
-- `test-gh-issues.py` is discovered and its 7 `_render_body_with_comments` tests pass
+- `test-gh-issues.py` is discovered and its 8 `_render_body_with_comments` tests pass
 - `test-cleanup.py` passes with the updated `git worktree remove --force` assertion
 - `test-shortcut-wrapper.py` passes with the `millpy-status` fixture and the reduced `SHORTCUT_SCRIPTS` count
 - `test-skill-writer.py` passes with the `mill-self-report` fixture

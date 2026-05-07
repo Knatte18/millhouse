@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planning
+phase: plan-fix-r1
 slug: prune-millhouse
 branch: prune-millhouse
 plan: plan
@@ -17,4 +17,6 @@ task_description: |
 discussing  '2026-05-07T07:00:37Z'
 discussed  2026-05-07T07:11:50Z
 planning  2026-05-07T07:27:18Z
+plan-review-r1  2026-05-07T07:41:32Z
+plan-fix-r1  2026-05-07T07:41:32Z
 ```
