@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: discussed
 slug: mill-merge-subagent
 branch: hanf/mill-merge-subagent
 plan: null
@@ -15,4 +15,5 @@ task_description: |
 
 ```text
 discussing  '2026-05-07T08:04:50Z'
+discussed  2026-05-07T08:20:33Z
 ```
