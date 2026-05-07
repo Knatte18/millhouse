@@ -35,5 +35,7 @@ batches:
     review_round: 1
     review_file: reviews/20260507-062359-code-review-test-fixtures-r1.md
   - name: runtime-and-skills
-    state: pending
+    state: running
+    implementer_session: c2b63923-a45f-4a32-a61f-9f1b6c5ecbd2
+    start_sha: a1a8b21872d92fd827de6bd90eead89ec38a54e5
 ```
