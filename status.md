@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: rename-hub-junctions
 branch: rename-hub-junctions
 plan: plan
@@ -26,4 +26,19 @@ plan-fix-r3  2026-05-06T18:10:01Z
 plan-fix-r4  2026-05-07T05:36:33Z
 plan-review-r4  2026-05-07T06:11:45Z
 planned  2026-05-07T06:11:45Z
+implementing  2026-05-07T06:16:30Z
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: _gitignore API simplification
+    state: pending
+  - name: Spawn infrastructure and wiki config
+    state: pending
+  - name: Teardown and migration
+    state: pending
+  - name: Skills and documentation
+    state: pending
 ```
