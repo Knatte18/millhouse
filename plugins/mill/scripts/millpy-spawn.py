@@ -206,8 +206,8 @@ def main(argv: list[str] | None = None) -> int:
     (container_path / "portals").mkdir(parents=True, exist_ok=True)
     _spawn_core.write_wiki_active_task_md(wiki_path, slug, picked.title, ts)
 
-    # Portal entry points to wiki/active/<slug>/ so the hub's .active junction
-    # (and the task worktree's .portals junction) navigate to the wiki state dir.
+    # Portal entry points to wiki/active/<slug>/ so both the hub's .active
+    # junction and the task worktree's .active junction navigate to the wiki state dir.
     _junction.create(target=wiki_path / "active" / slug, link_path=container_path / "portals" / slug)
 
     # Create all junctions and hardlinks from wiki/config.yaml for the new

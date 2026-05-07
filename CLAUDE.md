@@ -32,9 +32,8 @@ c:/Code/millhouse/wts/<slug>/
   .millhouse/
     active.slug.md
     config.local.yaml
-  .wiki    -> ../../wiki/         ← junction to wiki clone
-  .portals -> ../../wiki/active/<slug>/← junction to wiki state dir for this task
-  .active  -> ../../portals/<slug>/← resolves through portals to wiki state dir
+  .wiki   -> ../../wiki/              ← junction to wiki clone
+  .active -> ../../wiki/active/<slug>/← junction to wiki state dir for this task
   task/                           ← per-task working state, on the branch
     status.md
     discussion.md
@@ -46,7 +45,7 @@ c:/Code/millhouse/wts/<slug>/
 
 Hard rules — violation causes silent bugs or breaks external repos using mill as a plugin.
 
-- **Junctions and hardlinks are NEVER used by scripts or skills.** `.wiki`, `.portals`, `.active`, `tasks.md`, and any other junction or hardlink exist solely for operator IDE/terminal navigation. Scripts always resolve real paths programmatically via `_paths.py`. Never pass a junction path to a Python helper or reference one in a SKILL.md instruction.
+- **Junctions and hardlinks are NEVER used by scripts or skills.** `.wiki`, `.active`, `tasks.md`, and any other junction or hardlink exist solely for operator IDE/terminal navigation. Scripts always resolve real paths programmatically via `_paths.py`. Never pass a junction path to a Python helper or reference one in a SKILL.md instruction.
 - **`${CLAUDE_PLUGIN_ROOT}` for all intra-plugin paths.** Never hardcode `plugins/mill/…` — external repos have no millhouse source checkout.
 - **Working state is never written to the wiki.** `status.md`, `discussion.md`, `plan/`, `reviews/` live on the task branch. The wiki holds only `Home.md` and `config.yaml`.
 
@@ -112,7 +111,7 @@ A discussion gap is missing information; a plan/code block is a must-fix defect.
 Path rules that keep being forgotten — they live here, not spread across SKILL.md files.
 
 - **Junctions are IDE/terminal convenience only.** Scripts MUST resolve to the real wiki repo via `_paths.resolve_wiki_path(git_toplevel)`, never by treating `.wiki` (or any junction) as a path. Junctions exist so the operator can type shorter paths in a shell and see the wiki in the sidebar — they are not a code contract. (The same invariant is documented in `wiki/config.yaml`'s header comment.)
-- **NTFS junctions are followed by `rmdir /s` and `shutil.rmtree`.** Any recursive deletion targeting a worktree path must call `_junction.strip_all_in_worktree(worktree, junctions_cfg)` first. Skipping this wipes the wiki, the portals dir, or sibling worktrees through the junctions mill-spawn placed inside every worktree (`.wiki`, `.portals`, `.active`, plus any future entries). `git worktree remove --force` is junction-safe by itself, but the long-path fallback (`cmd /c rmdir /s /q`, `shutil.rmtree`) is not. See GitHub issue #100.
+- **NTFS junctions are followed by `rmdir /s` and `shutil.rmtree`.** Any recursive deletion targeting a worktree path must call `_junction.strip_all_in_worktree(worktree, junctions_cfg)` first. Skipping this wipes the wiki, the portals dir, or sibling worktrees through the junctions mill-spawn placed inside every worktree (`.wiki`, `.active`, plus any future entries). `git worktree remove --force` is junction-safe by itself, but the long-path fallback (`cmd /c rmdir /s /q`, `shutil.rmtree`) is not. See GitHub issue #100.
 - **All path resolution goes through `_paths.py`.** The module re-exports `resolve_path` from `_sibling.py` (identical-twin with codeguide's copy per spec 00) and adds `resolve_git_root` + `resolve_wiki_path`. New helpers: `resolve_hub_relative_path(worktree_root, hub_subpath)` for cwd-as-hub resolution (reads `hub_relative_path:` from `.millhouse/config.local.yaml`); `resolve_active_worktree(container_path, slug)` for slug-to-worktree lookup (returns `<container>/wts/<slug>` after verifying `.millhouse/active.slug.md`). New path-resolver helpers go here too — do not scatter private `_resolve_*` functions across `millpy-*.py` CLI scripts.
 - **`_sibling.resolve_path` detects container-form via `repo_root.parent.name == "wts"`.** Container-form returns `parent.parent / role` (sibling of `wts/`). Prefix-form returns `parent / f"{repo_root.name}.{role}"`. Old hub-form (`repo_root.name == "hub"`) is no longer recognised — migrate first.
 - **Working state lives in `task/` on the task branch.** `task/status.md`, `task/discussion.md`, `task/plan/`, and `task/reviews/` are committed to the task branch, not written to the wiki. The wiki holds only the task index (`Home.md`) and shared config (`config.yaml`). mill-merge's cleanup commit removes the `task/` directory before squash-merging back to the parent branch.

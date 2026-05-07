@@ -190,7 +190,7 @@ with _wiki.wiki_lock(<WIKI_PATH>, slug):
 
 **Worktree mode:**
 
-Call `_worktree.remove_safe` — it strips every junction declared in `wiki/config.yaml` inside the worktree (`.wiki`, `.portals`, `.active`, plus any future entries) BEFORE removing the worktree, and falls back to `shutil.rmtree` only if `git worktree remove --force` fails with a long-path error. The junction-strip is non-skippable; you cannot lose the wiki by accident.
+Call `_worktree.remove_safe` — it strips every junction declared in `wiki/config.yaml` inside the worktree (`.wiki`, `.active`, plus any future entries) BEFORE removing the worktree, and falls back to `shutil.rmtree` only if `git worktree remove --force` fails with a long-path error. The junction-strip is non-skippable; you cannot lose the wiki by accident.
 
 ```bash
 python -c "
