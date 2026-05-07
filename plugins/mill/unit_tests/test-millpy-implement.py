@@ -21,6 +21,8 @@ from pathlib import Path
 HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
+import _implementer_common  # noqa: E402
+
 _IMPLEMENT_PATH = HUB / "plugins" / "mill" / "scripts" / "millpy-implement.py"
 
 _spec = importlib.util.spec_from_file_location("millpy_implement", str(_IMPLEMENT_PATH))
@@ -335,7 +337,7 @@ class TestForwardOutput(unittest.TestCase):
     def _call(self, output: str) -> tuple[int, str]:
         buf = io.StringIO()
         with unittest.mock.patch("sys.stdout", buf):
-            rc = millpy_implement._forward_output(output)
+            rc = _implementer_common._forward_output(output)
         return rc, buf.getvalue()
 
     def test_fo_1_bare_json_on_last_line(self):
