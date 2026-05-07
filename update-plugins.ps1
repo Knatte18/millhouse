@@ -50,6 +50,13 @@ Get-ChildItem -Path $SourceDir -Directory | ForEach-Object {
     }
     Copy-Item -Path $_.FullName -Destination $target -Recurse -Force
     Write-Host "Updated: $name ($version)"
+
+    if ($name -eq "mill") {
+        [System.Environment]::SetEnvironmentVariable('CLAUDE_PLUGIN_ROOT', $target, 'User')
+        [System.Environment]::SetEnvironmentVariable('PYTHONPATH', "$target\scripts", 'User')
+        Write-Host "  -> CLAUDE_PLUGIN_ROOT=$target"
+        Write-Host "  -> PYTHONPATH=$target\scripts"
+    }
 }
 
 Write-Host ""
