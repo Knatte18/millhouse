@@ -21,6 +21,7 @@ The "lean Builder" principle that governs `mill-go` — the Builder reads only J
 - Updated `mill-merge-in/SKILL.md` — Steps 3 and 4 now call the new CLI instead of describing inline resolution. Builder reads only the JSON verdict.
 - New config key `merge.verify_fix_rounds` (int, default 3) in `plugins/mill/templates/wiki-config.yaml`.
 - Unit test `test-millpy-merge-in-subagent.py` — mock `_implementer_sonnet.run`, verify brief construction and verdict forwarding.
+- Updated `mill-merge-in/SKILL.md` Step 3 and Step 4 describe calling the CLI and mapping stuck → existing checkpoint rollback (pre-existing rollback behavior is preserved; the SKILL update specifies only the delegation path, not a new rollback step).
 
 **Out:**
 - `millpy-implement.py` and `millpy-implement-holistic.py` path bug (`project_root / "status.md"` vs `task/status.md`) — pre-existing issue, separate task.
@@ -45,9 +46,9 @@ The "lean Builder" principle that governs `mill-go` — the Builder reads only J
 
 ### verify-fail-context
 
-- Decision: Pass failing command, its stdout+stderr (from a temp file written by the CLI), and the diff since checkpoint (`git diff <checkpoint>..HEAD`) to the verify-fix sub-agent.
-- Rationale: Sub-agent gets the targeted context without reconstructing it. Diff is small (just the merge commit changes). This mirrors the holistic review brief which passes a diff range.
-- Rejected: Pass only command + output (sub-agent generates diff itself) — one more Bash call the sub-agent doesn't need.
+- Decision: The CLI embeds verify output as inline content in the brief (`tokens["VERIFY_OUTPUT"] = captured_stdout_stderr`). Also passes the checkpoint-to-HEAD diff inline (`tokens["MERGE_DIFF"] = git diff checkpoint..HEAD output`). The brief token `<VERIFY_OUTPUT>` receives the raw captured output string; `<MERGE_DIFF>` receives the diff string. No temp file is passed to the sub-agent — the CLI captures output in memory, builds tokens, and spawns the sub-agent.
+- Rationale: Brief is self-contained (sub-agent needs no file I/O for context). Simpler cleanup (no file to manage after spawn). Content fits in sub-agent context (200k tokens; typical test failure output is small). Consistent with how holistic review briefs inline diffs.
+- Rejected: Passing a file path as token and having the sub-agent read it — requires file to stay alive across spawn, complicates deletion timing, and contradicts the "brief is self-contained" principle.
 
 ### verify-fix-rounds-config
 
@@ -105,7 +106,7 @@ mill-merge-in's current Step 4 calls `_plan_dag.iter_batch_verifies(plan_dir)`. 
 `plugin_root = Path(__file__).resolve().parent.parent` — works correctly when script runs from the plugin cache.
 
 ### Verify output capture
-The CLI runs each verify command via `subprocess.run([...], capture_output=True, text=True, cwd=project_root)`. On failure, writes stdout+stderr to a temp file at `.scratch/merge-in-verify-output-<uuid>.txt`. Passes the path as a token to the verify-fix brief. The CLI deletes the temp file before returning on all exit paths (success and stuck). The content is embedded in the brief, so operators diagnose from the background log, not the temp file.
+The CLI runs each verify command via `subprocess.run([...], capture_output=True, text=True, cwd=project_root)`. On failure, captures stdout+stderr in memory. Also captures `git diff <checkpoint>..HEAD` output in memory. Both strings are passed as inline tokens to the verify-fix brief — no temp files. The sub-agent receives the full context without any file I/O.
 
 ## Constraints
 
@@ -155,4 +156,5 @@ TDD candidates: brief token set (verify tokens present in rendered output), `_fo
 - **Q:** Test approach? **A:** Unit test with mocked `_implementer_sonnet.run`; no new integration test.
 - **Q:** Does the verify-fix loop run in the SKILL or the CLI? **A:** CLI is single-shot; sub-agent self-fixes internally up to `merge.verify_fix_rounds` times before reporting stuck. SKILL calls CLI once.
 - **Q:** Does the conflict sub-agent commit or complete the merge? **A:** Sub-agent stages (`git add`) resolved files only. SKILL runs `git merge --continue` after success to create the merge commit.
-- **Q:** Who deletes the verify output temp file? **A:** CLI deletes it before returning on all paths (success and stuck). Content already embedded in brief; bg log is the diagnostic source.
+- **Q:** Is verify output passed as a file path or inline content? **A:** Inline content in the brief token (`VERIFY_OUTPUT`). No temp file involved — captured in memory, embedded in brief.
+- **Q:** Is the checkpoint rollback on stuck a new SKILL step or pre-existing? **A:** Pre-existing. The SKILL update maps `{"status":"stuck"}` verdict → existing rollback path (already described in SKILL.md Step 3 as "if unresolvable, roll back to checkpoint").
