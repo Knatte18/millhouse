@@ -3,7 +3,7 @@
 ```yaml
 task: 16 (A) — Autonomous bug-fix pipeline (mill-autofix)
 slug: mill-autofix-bugs
-approved: false
+approved: true
 started: 20260507-105737
 parent: main
 root: ""
