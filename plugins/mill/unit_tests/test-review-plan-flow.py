@@ -578,7 +578,7 @@ def main() -> int:
     # ------------------------------------------------------------------
     # Test 9 — all batches approved + holistic re-runs
     # All three batches approved in r1 → stub fires exactly once (holistic).
-    # reviews has 4 entries: 3 carryforward + 1 fresh holistic.
+    # reviews has 1 entry (holistic only, resume path, bug C fix #184).
     # ------------------------------------------------------------------
     with tempfile.TemporaryDirectory() as tmpdir:
         batch_specs = [
@@ -605,13 +605,11 @@ def main() -> int:
             assert len(prompts) == 1, (
                 f"stub should fire exactly once (holistic), got {len(prompts)}"
             )
-            assert len(r.reviews) == 4, f"expected 4 reviews (3 carry + 1 holistic), got {len(r.reviews)}"
-            carry_entries = [rv for rv in r.reviews if rv["session_id"] is None]
+            assert len(r.reviews) == 1, f"expected 1 review (holistic only after bug C fix), got {len(r.reviews)}"
             fresh_entries = [rv for rv in r.reviews if rv["session_id"] is not None]
-            assert len(carry_entries) == 3, f"expected 3 carryforward entries, got {len(carry_entries)}"
             assert len(fresh_entries) == 1, f"expected 1 fresh entry, got {len(fresh_entries)}"
             assert fresh_entries[0]["scope"] == "holistic"
-            print("PASS test9: all approved — stub fires once (holistic only); 3 carry + 1 fresh")
+            print("PASS test9: all approved — stub fires once (holistic only), holistic-only result (bug C fix #184)")
         except AssertionError as exc:
             errors += 1
             print(f"FAIL test9: {exc}", file=sys.stderr)
