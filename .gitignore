@@ -41,7 +41,7 @@ nul
 **/.millhouse/
 **/.scratch/
 **/wts/
-**/.portals/
+**/.active/
 **/plugins/*/uv.lock
 /.active
 /.others
