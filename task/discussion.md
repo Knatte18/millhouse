@@ -21,7 +21,7 @@ Seven small, independent defects surfaced from the GitHub-issue triage on 2026-0
 - `plugins/mill/scripts/_plan_validate.py` — extend the cards-side union in `_check_all_files_touched_mismatch` to include `Deletes:` tokens.
 - `plugins/mill/scripts/_gh_issues.py` — make `detect_repo` accept an explicit `git_root` and drop `gh repo view` from the resolution chain. Update `fetch` and `close_with_comment` to pass it through.
 - `plugins/mill/skills/mill-autofix/SKILL.md` — update the two `_gh_issues` call sites (`fetch` at line 45, `close_with_comment` at line 377) to pass `git_root=<hub-path>` per the `detect-repo-explicit-git-root` Decision's MUST requirement.
-- `plugins/mill/skills/mill-ghissues-to-tasks/SKILL.md` — update the two `_gh_issues` call sites (`fetch` at line 27, `close_with_comment` at line 127) to pass `git_root=<hub-path>` per the same Decision.
+- `plugins/mill/skills/mill-ghissues-to-tasks/SKILL.md` — update the three `_gh_issues` call sites (`fetch` at line 27, `detect_repo` at line 32, `close_with_comment` at line 127) to pass `git_root=<hub-path>` per the same Decision. The line-32 detect_repo() call records the repo name for the close step; under the new scheme it can either pass `git_root=` to stay correct or be dropped (`close_with_comment` now takes `git_root=` directly, making the recorded repo name redundant). Plan should choose whichever yields a cleaner SKILL.md flow.
 - `plugins/mill/scripts/_spawn_core.py` — in `write_initial_status`, push the initial `spawn: init status for <slug>` commit with `--set-upstream origin <branch>` after the existing add+commit.
 - `plugins/mill/scripts/millpy-builder-lock.py` — emit `[builder-lock] acquired by <slug>` on **stderr** after a successful `_builder_lock.acquire` call.
 - `plugins/mill/skills/mill-plan/SKILL.md` — document the `--holistic-only` and `--no-holistic` flags in the Plan Review phase invocation.
@@ -72,10 +72,11 @@ Seven small, independent defects surfaced from the GitHub-issue triage on 2026-0
 
 ### holistic-implement-paths
 
-- Decision: In `millpy-implement-holistic.py`, change three lines to prefix `task/`:
-  - `status_path = project_root / "status.md"` → `project_root / "task" / "status.md"`
-  - `overview_path = project_root / "plan" / "00-overview.md"` → `project_root / "task" / "plan" / "00-overview.md"`
-  - `["git", "add", "status.md", review_file_arg]` → `["git", "add", "task/status.md", review_file_arg]`
+- Decision: In `millpy-implement-holistic.py`, change four lines to prefix `task/`:
+  - line 77: `status_path = project_root / "status.md"` → `project_root / "task" / "status.md"`
+  - line 91: `overview_path = project_root / "plan" / "00-overview.md"` → `project_root / "task" / "plan" / "00-overview.md"`
+  - line 103: `str(project_root / "plan" / b["file"]) for b in batches` → `str(project_root / "task" / "plan" / b["file"]) for b in batches` (the `BATCH_FILES` token sent to the LLM prompt)
+  - line 123: `["git", "add", "status.md", review_file_arg]` → `["git", "add", "task/status.md", review_file_arg]`
   Also update the corresponding error messages so they reference the `task/`-prefixed paths.
 - Rationale: every other implementer/reviewer script reads working state from `task/`. This was the lone outlier and crashes immediately on dispatch.
 - Rejected: refactoring to use `cfg["paths"]["discussion_file"]` and friends — out of scope; matches the codebase's current approach of referencing `task/...` literals (see `mill-plan/SKILL.md` and `_review_common.py`). Task 33 (paths cleanup) will rationalise this.
@@ -97,7 +98,7 @@ Seven small, independent defects surfaced from the GitHub-issue triage on 2026-0
 
 **Where each fix lands:**
 
-- `#200` — `plugins/mill/scripts/millpy-implement-holistic.py` lines 77, 91, 123 (and the matching error-message lines 88, 93).
+- `#200` — `plugins/mill/scripts/millpy-implement-holistic.py` lines 77, 91, 103, 123 (and the matching error-message lines 88, 93).
 - `#196` — `CLAUDE.md` "Conventions worth carrying" section, the existing `**Mill scripts are invoked via `uv run`...**` bullet.
 - `#194` — `plugins/mill/skills/mill-plan/SKILL.md`, Phase: Plan Review section, immediately after step 2's bash invocation block.
 - `#193` — `plugins/mill/scripts/_plan_validate.py:_check_all_files_touched_mismatch` (lines 651–707). The cards_set union is on lines 678–682; the two finding-message strings are on lines 692–694 and 702–704.
@@ -109,7 +110,7 @@ Seven small, independent defects surfaced from the GitHub-issue triage on 2026-0
 
 - The `git push --set-upstream` call must run on the task worktree, not the hub. `write_initial_status` already uses `git -C <worktree_path> ...` for add/commit, so the push must use the same `-C`.
 - `_gh_issues.detect_repo`'s ssh-URL regex (`^git@github\.com:(.+?)(?:\.git)?$`) and https-URL regex are correct as-is. Only the lookup mechanism changes; the parsing keeps current behaviour.
-- The `mill-autofix` SKILL.md `_gh_issues.fetch(label_filter=['bug'])` call (line 45) and `_gh_issues.close_with_comment(...)` call (line 377) need the `git_root=...` kwarg added; same for `mill-ghissues-to-tasks/SKILL.md` lines 27 and 127.
+- The `mill-autofix` SKILL.md `_gh_issues.fetch(label_filter=['bug'])` call (line 45) and `_gh_issues.close_with_comment(...)` call (line 377) need the `git_root=...` kwarg added; same for `mill-ghissues-to-tasks/SKILL.md` lines 27, 32 (`detect_repo`), and 127.
 - The flag block `scope_group = parser.add_mutually_exclusive_group()` in `millpy-review-plan.py:38-48` is the source of truth for the documented behaviour — the SKILL.md note must match (mutually exclusive, default = both run).
 - `millpy-review-plan.py` is invoked via `millpy-bg.py` in mill-plan. Flag documentation lives in mill-plan's SKILL.md only — the bg wrapper passes through extra args, so the SKILL.md note can show the user adding the flag as a final argument to the inner `uv run …millpy-review-plan.py` part of the pipeline.
 
@@ -159,3 +160,5 @@ Seven small, independent defects surfaced from the GitHub-issue triage on 2026-0
 - **Q:** Test coverage scope? **A:** Unit tests for `_plan_validate` Deletes case and `_gh_issues.detect_repo`. Other fixes verified by code-read + post-merge smoke.
 - **Q (review-r1, GAP):** Are mill-autofix and mill-ghissues-to-tasks SKILL.md files in scope for #202? **A:** Yes — both must be updated to pass `git_root=` to `_gh_issues.fetch` and `close_with_comment` so the explicit-param Decision is realised at every call site. Added to Scope **In:**.
 - **Q (review-r1, NOTE):** After unioning Deletes in `all-files-touched-mismatch`, do the finding-message strings need updating? **A:** Yes — `_plan_validate.py:692-694` and `:702-704` currently say "Edits: or Creates:"; updated to include "Deletes:" so the diagnostics match the broadened union.
+- **Q (review-r2, GAP):** Was line 103 of `millpy-implement-holistic.py` covered by the planned #200 fix? **A:** No — original issue triage missed it. The `BATCH_FILES` token construction `str(project_root / "plan" / b["file"])` is the same `task/` prefix omission and now sits in the holistic-implement-paths Decision alongside lines 77/91/123.
+- **Q (review-r2, NOTE):** Is `mill-ghissues-to-tasks/SKILL.md:32` `detect_repo()` covered? **A:** Now yes — added to Scope. Plan may either pass `git_root=` or drop the line (since `close_with_comment(git_root=...)` makes the recorded repo name redundant). Plan picks whichever flows cleaner.
