@@ -41,8 +41,8 @@ Initialise three result lists (maintained in working context throughout the run)
 
 ```bash
 PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" uv run --project "${CLAUDE_PLUGIN_ROOT}" python -c "
-import _gh_issues, json, sys
-issues = _gh_issues.fetch(label_filter=['bug'])
+import _gh_issues, _paths, json, sys
+issues = _gh_issues.fetch(label_filter=['bug'], git_root=_paths.resolve_git_root())
 json.dump(issues, sys.stdout, indent=2)
 "
 ```
@@ -373,8 +373,8 @@ Close the GitHub issue:
 
 ```bash
 PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" uv run --project "${CLAUDE_PLUGIN_ROOT}" python -c "
-import _gh_issues
-_gh_issues.close_with_comment(<issue_number>, 'Autonomously fixed by mill-autofix. Squash commit: <sha>')
+import _gh_issues, _paths
+_gh_issues.close_with_comment(<issue_number>, 'Autonomously fixed by mill-autofix. Squash commit: <sha>', git_root=_paths.resolve_git_root())
 "
 ```
 
