@@ -23,13 +23,13 @@ Use the `_gh_issues` library. From the hub root:
 
 ```bash
 uv run --project "$CLAUDE_PLUGIN_ROOT" python -c "
-import json, _gh_issues
-issues = _gh_issues.fetch(limit=100)
+import json, _gh_issues, _paths
+issues = _gh_issues.fetch(limit=100, git_root=_paths.resolve_git_root())
 print(json.dumps(issues, indent=2))
 " > .scratch/issues.json
 ```
 
-Read `.scratch/issues.json`. Record the repo name (`_gh_issues.detect_repo()`) for the close step.
+Read `.scratch/issues.json`. Record the repo name (`_gh_issues.detect_repo(git_root=_paths.resolve_git_root())`) for the close step.
 
 ## Step 2 — Read the current Home.md
 
@@ -123,8 +123,8 @@ Print a one-line summary to chat + the path. User replies `approve` or `reject`.
 4. For each consumed issue (new or fold-in), call:
    ```bash
    uv run --project "$CLAUDE_PLUGIN_ROOT" python -c "
-   import _gh_issues
-   _gh_issues.close_with_comment(<N>, 'Consolidated into wiki task: <slug>')
+   import _gh_issues, _paths
+   _gh_issues.close_with_comment(<N>, 'Consolidated into wiki task: <slug>', git_root=_paths.resolve_git_root())
    "
    ```
    On any failure, log the issue number + error and continue; report at the end.
