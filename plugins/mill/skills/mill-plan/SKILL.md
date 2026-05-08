@@ -103,6 +103,8 @@ Loop up to `max_review_rounds` rounds. Each round:
        uv run --project "$CLAUDE_PLUGIN_ROOT" "$CLAUDE_PLUGIN_ROOT/scripts/millpy-review-plan.py"
    ```
 
+   The CLI accepts two optional scope flags (mutually exclusive): `--holistic-only` skips per-batch reviews and runs only the holistic plan review; `--no-holistic` skips the holistic plan review and runs per-batch reviews only. Default — both run per the `review.plan.batch` and `review.plan.holistic` config keys. Append the flag to the inner `uv run …millpy-review-plan.py` portion of the millpy-bg invocation when needed.
+
    This returns immediately with `pid=<N> log=<abs-path>`. Poll `cat <log-path>` until `[mill-bg] EXIT` appears, then read the log and extract the JSON summary line (the last non-empty, non-sentinel line).
 
    The script discovers the slug and round from disk. It prints one JSON line: `{"type": "plan", "round": N, "verdict": "APPROVE" | "REQUEST_CHANGES", "blocking_count": N, "reviews": [...]}` where each review entry has `{scope, verdict, file}`.
