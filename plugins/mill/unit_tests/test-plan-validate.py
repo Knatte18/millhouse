@@ -1191,6 +1191,41 @@ def test_reads_token_missing_both_unions_dirty() -> int:
             return 1
 
 
+def test_all_files_touched_deletes_counted() -> int:
+    """Deletes: token listed in All Files Touched → no all-files-touched-mismatch error."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+
+        # foo.md must exist on disk so non-existent-path check doesn't fire.
+        (project_root / "foo.md").parent.mkdir(parents=True)
+        (project_root / "foo.md").write_text("# foo", encoding="utf-8")
+
+        overview = _make_overview(
+            [{"name": "alpha", "file": "01-alpha.md"}],
+            all_files_touched=["foo.md"],
+        )
+        batch = _make_batch_file("alpha", deletes=["foo.md"])
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        mismatch_errs = [
+            e for e in result
+            if e["check"] == "all-files-touched-mismatch" and e["path"] == "foo.md"
+        ]
+        try:
+            assert len(mismatch_errs) == 0, (
+                f"Deletes: token should count toward all-files-touched union, "
+                f"got: {mismatch_errs}"
+            )
+            print("PASS test_all_files_touched_deletes_counted")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_all_files_touched_deletes_counted: {exc}", file=sys.stderr)
+            return 1
+
+
 # ---------------------------------------------------------------------------
 # Runner
 # ---------------------------------------------------------------------------
@@ -1224,6 +1259,7 @@ def main() -> int:
         test_reads_token_in_deletes_union_clean,
         test_reads_token_in_creates_union_suppressed,
         test_reads_token_missing_both_unions_dirty,
+        test_all_files_touched_deletes_counted,
 
         test_wiki_config_mutation_clean,
         test_wiki_config_mutation_modifies,
