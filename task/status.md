@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-gh-issues
+phase: approved-docs
 slug: mill-misc-fixes-2
 branch: hanf/mill-misc-fixes-2
 plan: task/plan
@@ -24,6 +24,7 @@ planned  2026-05-08T14:06:35Z
 implementing  2026-05-08T14:16:45Z
 approved-script-fixes  2026-05-08T14:27:30Z
 approved-gh-issues  2026-05-08T14:38:23Z
+approved-docs  2026-05-08T14:41:18Z
 ```
 
 ## Batches
@@ -41,7 +42,8 @@ batches:
     start_sha: c122b1677510996f1ffd8bd5042156b98faf1af7
     commit_sha: 31f84a0d4a010df44386abfae4d39dc1bce7c016
   - name: docs
-    state: running
+    state: approved
     implementer_session: b3ff6745-59b1-48df-b4b2-0a407a062992
     start_sha: ac7c6a54cfbfe41b1ef389ecd3f48daeb10c72c1
+    commit_sha: 8f729b5601dc13422b73ce127a9307dea394aca9
 ```
