@@ -136,7 +136,7 @@ def _make_wiki(tmp: str, home_text: str) -> Path:
 
 
 def _make_git_repo(tmp: str, branch: str = "main") -> Path:
-    """Initialise a minimal git repo on ``branch``."""
+    """Initialise a minimal git repo on ``branch`` backed by a local bare remote."""
     repo = Path(tmp) / "repo"
     repo.mkdir()
     subprocess.run(["git", "-C", str(repo), "init"], check=True, capture_output=True)
@@ -170,6 +170,15 @@ def _make_git_repo(tmp: str, branch: str = "main") -> Path:
             check=True,
             capture_output=True,
         )
+    # Bare remote so push succeeds without network.
+    bare = Path(tmp) / "repo-bare"
+    bare.mkdir()
+    subprocess.run(["git", "-C", str(bare), "init", "--bare"], check=True, capture_output=True)
+    subprocess.run(
+        ["git", "-C", str(repo), "remote", "add", "origin", str(bare)],
+        check=True,
+        capture_output=True,
+    )
     return repo
 
 
@@ -372,6 +381,11 @@ def test_write_active_marker() -> None:
 def test_write_initial_status() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         repo = _make_git_repo(tmp, branch="main")
+        subprocess.run(
+            ["git", "-C", str(repo), "checkout", "-b", "hanf/task-one"],
+            check=True,
+            capture_output=True,
+        )
         status_path = write_initial_status(
             worktree_path=repo,
             slug="task-one",
@@ -443,6 +457,57 @@ def test_write_initial_status_forced_failure_raises_runtime_error() -> None:
                 "write_initial_status must raise RuntimeError when git add fails"
             )
     print("PASS: write_initial_status raises RuntimeError with stderr when git add fails")
+
+
+def test_write_initial_status_push_failure_raises_runtime_error() -> None:
+    """No origin remote → push fails → RuntimeError mentioning git push --set-upstream origin."""
+    with tempfile.TemporaryDirectory() as tmp:
+        repo = Path(tmp) / "repo-no-origin"
+        repo.mkdir()
+        subprocess.run(["git", "-C", str(repo), "init"], check=True, capture_output=True)
+        subprocess.run(
+            ["git", "-C", str(repo), "config", "user.email", "test@test.com"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(repo), "config", "user.name", "Test"],
+            check=True,
+            capture_output=True,
+        )
+        (repo / "README.md").write_text("# repo\n", encoding="utf-8")
+        subprocess.run(["git", "-C", str(repo), "add", "."], check=True, capture_output=True)
+        subprocess.run(
+            ["git", "-C", str(repo), "commit", "-m", "init"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(repo), "checkout", "-b", "hanf/task-one"],
+            check=True,
+            capture_output=True,
+        )
+        try:
+            write_initial_status(
+                worktree_path=repo,
+                slug="task-one",
+                title="Task One",
+                ts="2026-04-26T10:00:00Z",
+                parent_branch="main",
+                branch="hanf/task-one",
+            )
+        except RuntimeError as exc:
+            msg = str(exc)
+            if "git push --set-upstream origin" not in msg:
+                raise AssertionError(
+                    f"RuntimeError message should contain 'git push --set-upstream origin'; "
+                    f"got: {msg!r}"
+                )
+        else:
+            raise AssertionError(
+                "write_initial_status must raise RuntimeError when push fails (no origin)"
+            )
+    print("PASS: write_initial_status raises RuntimeError when push fails (no origin)")
 
 
 # ---------------------------------------------------------------------------
@@ -948,6 +1013,7 @@ def main() -> int:
         test_write_active_marker,
         test_write_initial_status,
         test_write_initial_status_forced_failure_raises_runtime_error,
+        test_write_initial_status_push_failure_raises_runtime_error,
         test_recreate_active_junction_creates_link,
         test_recreate_active_junction_idempotent,
         test_write_wiki_active_task_md,
