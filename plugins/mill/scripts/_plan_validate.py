@@ -674,10 +674,11 @@ def _check_all_files_touched_mismatch(
         if m:
             overview_set.add(m.group(1))
 
-    # Compute cards_set = union of Edits: + Creates: across all cards.
+    # Compute cards_set = union of Edits: + Creates: + Deletes: across all cards.
     cards_set: set[str] = set()
     for batch_path in batch_files:
         cards_set |= _parse_edits_only(batch_path)
+        cards_set |= _parse_deletes_only(batch_path)
     # Add Creates: tokens via compute_creates_union.
     cards_set |= compute_creates_union(overview_path.parent)
 
@@ -690,7 +691,7 @@ def _check_all_files_touched_mismatch(
             "path": p,
             "message": (
                 f"path '{p}' listed in overview's All Files Touched "
-                f"but not in any card's Edits: or Creates:"
+                f"but not in any card's Edits:, Creates:, or Deletes:"
             ),
         })
     for p in sorted(cards_set - overview_set):
@@ -700,7 +701,7 @@ def _check_all_files_touched_mismatch(
             "card": None,
             "path": p,
             "message": (
-                f"path '{p}' in card Edits:/Creates: but missing "
+                f"path '{p}' in card Edits:/Creates:/Deletes: but missing "
                 f"from overview's All Files Touched"
             ),
         })
