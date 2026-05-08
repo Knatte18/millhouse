@@ -38,6 +38,7 @@ def main(argv=None) -> int:
         except _builder_lock.LockBusy as exc:
             print(str(exc), file=sys.stderr)
             return 1
+        print(f"[builder-lock] acquired by {args.slug!r}", file=sys.stderr)
         return 0
 
     if args.command == "release":
