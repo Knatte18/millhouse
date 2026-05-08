@@ -3,7 +3,7 @@
 ```yaml
 task: 32 (A) — Bug-fix batch 2
 slug: mill-misc-fixes-2
-approved: false
+approved: true
 started: 20260508-134632
 parent: main
 root: ""
