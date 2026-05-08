@@ -20,6 +20,8 @@ Seven small, independent defects surfaced from the GitHub-issue triage on 2026-0
 - `plugins/mill/scripts/millpy-implement-holistic.py` — prefix `task/` on three local-path constructions.
 - `plugins/mill/scripts/_plan_validate.py` — extend the cards-side union in `_check_all_files_touched_mismatch` to include `Deletes:` tokens.
 - `plugins/mill/scripts/_gh_issues.py` — make `detect_repo` accept an explicit `git_root` and drop `gh repo view` from the resolution chain. Update `fetch` and `close_with_comment` to pass it through.
+- `plugins/mill/skills/mill-autofix/SKILL.md` — update the two `_gh_issues` call sites (`fetch` at line 45, `close_with_comment` at line 377) to pass `git_root=<hub-path>` per the `detect-repo-explicit-git-root` Decision's MUST requirement.
+- `plugins/mill/skills/mill-ghissues-to-tasks/SKILL.md` — update the two `_gh_issues` call sites (`fetch` at line 27, `close_with_comment` at line 127) to pass `git_root=<hub-path>` per the same Decision.
 - `plugins/mill/scripts/_spawn_core.py` — in `write_initial_status`, push the initial `spawn: init status for <slug>` commit with `--set-upstream origin <branch>` after the existing add+commit.
 - `plugins/mill/scripts/millpy-builder-lock.py` — emit `[builder-lock] acquired by <slug>` on **stderr** after a successful `_builder_lock.acquire` call.
 - `plugins/mill/skills/mill-plan/SKILL.md` — document the `--holistic-only` and `--no-holistic` flags in the Plan Review phase invocation.
@@ -52,9 +54,9 @@ Seven small, independent defects surfaced from the GitHub-issue triage on 2026-0
 
 ### deletes-counted-in-all-files-touched
 
-- Decision: In `_check_all_files_touched_mismatch`, union `_parse_deletes_only(batch_path)` for each batch into the `cards_set`. The function already exists and is used by `_check_non_existent_path`.
-- Rationale: All Files Touched is "the union of every path mentioned in cards". Deletes are touched (they vanish), so they belong. The honest fix is one line; documenting "deleted files belong elsewhere" would create a special-case readers must remember.
-- Rejected: documentation-only fix — adds a footnote operators have to recall mid-plan-review; brittle.
+- Decision: In `_check_all_files_touched_mismatch`, union `_parse_deletes_only(batch_path)` for each batch into the `cards_set`. The function already exists and is used by `_check_non_existent_path`. Also update both finding-message strings (`_plan_validate.py:692-694` and `:702-704`) from `"Edits: or Creates:"` / `"Edits:/Creates:"` to `"Edits:, Creates:, or Deletes:"` / `"Edits:/Creates:/Deletes:"` so the post-fix diagnostics match the broadened union.
+- Rationale: All Files Touched is "the union of every path mentioned in cards". Deletes are touched (they vanish), so they belong. The honest fix is one line; documenting "deleted files belong elsewhere" would create a special-case readers must remember. Updating the message strings keeps the validator's diagnostic honest about what is being checked.
+- Rejected: documentation-only fix — adds a footnote operators have to recall mid-plan-review; brittle. Leaving the message strings stale — would mislead the next reader into thinking Deletes is still excluded.
 
 ### push-with-upstream-in-spawn
 
@@ -98,7 +100,7 @@ Seven small, independent defects surfaced from the GitHub-issue triage on 2026-0
 - `#200` — `plugins/mill/scripts/millpy-implement-holistic.py` lines 77, 91, 123 (and the matching error-message lines 88, 93).
 - `#196` — `CLAUDE.md` "Conventions worth carrying" section, the existing `**Mill scripts are invoked via `uv run`...**` bullet.
 - `#194` — `plugins/mill/skills/mill-plan/SKILL.md`, Phase: Plan Review section, immediately after step 2's bash invocation block.
-- `#193` — `plugins/mill/scripts/_plan_validate.py:_check_all_files_touched_mismatch` (lines 651–707). The cards_set union is on lines 678–682.
+- `#193` — `plugins/mill/scripts/_plan_validate.py:_check_all_files_touched_mismatch` (lines 651–707). The cards_set union is on lines 678–682; the two finding-message strings are on lines 692–694 and 702–704.
 - `#192` — `plugins/mill/scripts/millpy-builder-lock.py` lines 35–41 (the `acquire` subcommand body), one new `print(..., file=sys.stderr)` after `_builder_lock.acquire`.
 - `#191` — `plugins/mill/scripts/_spawn_core.py:write_initial_status` (lines 682–743). Add a third `_subprocess_util.run` call for `git push --set-upstream origin <branch>` after the commit succeeds, with the same error-shape pattern.
 - `#202` — `plugins/mill/scripts/_gh_issues.py:35-57` (`detect_repo`), `:89-132` (`fetch`), `:135-169` (`close_with_comment`). Add `git_root` param to all three; remove the `gh repo view` call from `detect_repo`. Update SKILL.md callers in `mill-autofix/SKILL.md` and `mill-ghissues-to-tasks/SKILL.md` to pass the hub git_root explicitly.
@@ -155,3 +157,5 @@ Seven small, independent defects surfaced from the GitHub-issue triage on 2026-0
 - **Q:** Where does the `git push --set-upstream` for the spawn commit live? **A:** Inside `_spawn_core.write_initial_status`, after the existing add+commit.
 - **Q:** Where do the `--holistic-only` / `--no-holistic` docs go in `mill-plan/SKILL.md`? **A:** A short paragraph after the bash invocation block in Phase: Plan Review step 2.
 - **Q:** Test coverage scope? **A:** Unit tests for `_plan_validate` Deletes case and `_gh_issues.detect_repo`. Other fixes verified by code-read + post-merge smoke.
+- **Q (review-r1, GAP):** Are mill-autofix and mill-ghissues-to-tasks SKILL.md files in scope for #202? **A:** Yes — both must be updated to pass `git_root=` to `_gh_issues.fetch` and `close_with_comment` so the explicit-param Decision is realised at every call site. Added to Scope **In:**.
+- **Q (review-r1, NOTE):** After unioning Deletes in `all-files-touched-mismatch`, do the finding-message strings need updating? **A:** Yes — `_plan_validate.py:692-694` and `:702-704` currently say "Edits: or Creates:"; updated to include "Deletes:" so the diagnostics match the broadened union.
