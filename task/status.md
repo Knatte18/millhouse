@@ -29,7 +29,9 @@ implementing  2026-05-08T14:16:45Z
 ```yaml
 batches:
   - name: script-fixes
-    state: pending
+    state: running
+    implementer_session: f91f8757-c2b1-41fc-9272-57d2cb29b98b
+    start_sha: 0eab6cca0f465b0dd34fd4ccf88b0e880ebb77d4
   - name: gh-issues
     state: pending
   - name: docs
