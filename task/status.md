@@ -41,5 +41,7 @@ batches:
     start_sha: c122b1677510996f1ffd8bd5042156b98faf1af7
     commit_sha: 31f84a0d4a010df44386abfae4d39dc1bce7c016
   - name: docs
-    state: pending
+    state: running
+    implementer_session: b3ff6745-59b1-48df-b4b2-0a407a062992
+    start_sha: ac7c6a54cfbfe41b1ef389ecd3f48daeb10c72c1
 ```
