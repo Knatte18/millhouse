@@ -1,4 +1,4 @@
-"""Unit tests for _gh_issues._render_body_with_comments and fetch label_filter."""
+"""Unit tests for _gh_issues._render_body_with_comments, fetch label_filter, and detect_repo."""
 from __future__ import annotations
 
 import json
@@ -12,6 +12,73 @@ sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
 import _gh_issues  # noqa: E402
 from _gh_issues import _render_body_with_comments  # noqa: E402
+
+
+def test_detect_repo_with_explicit_git_root() -> int:
+    errors = 0
+    _git_root = Path("/fake/hub")
+
+    def _stub_run(cmd, **kwargs):
+        return SimpleNamespace(returncode=0, stdout="https://github.com/Knatte18/millhouse.git\n", stderr="")
+
+    with patch("_gh_issues._subprocess_util.run", side_effect=_stub_run) as mock_run:
+        result = _gh_issues.detect_repo(git_root=_git_root)
+
+    try:
+        mock_run.assert_called_with(["git", "-C", str(_git_root), "remote", "get-url", "origin"])
+    except AssertionError:
+        print("FAIL: detect_repo/explicit-git-root — subprocess not called with expected git -C args", file=sys.stderr)
+        errors += 1
+    if result != "Knatte18/millhouse":
+        print(f"FAIL: detect_repo/explicit-git-root — expected 'Knatte18/millhouse', got {result!r}", file=sys.stderr)
+        errors += 1
+    if errors == 0:
+        print("PASS: detect_repo/explicit-git-root — https URL parsed via git -C")
+    return errors
+
+
+def test_detect_repo_with_explicit_git_root_ssh_url() -> int:
+    errors = 0
+    _git_root = Path("/fake/hub")
+
+    def _stub_run(cmd, **kwargs):
+        return SimpleNamespace(returncode=0, stdout="git@github.com:Knatte18/millhouse.git\n", stderr="")
+
+    with patch("_gh_issues._subprocess_util.run", side_effect=_stub_run) as mock_run:
+        result = _gh_issues.detect_repo(git_root=_git_root)
+
+    try:
+        mock_run.assert_called_with(["git", "-C", str(_git_root), "remote", "get-url", "origin"])
+    except AssertionError:
+        print("FAIL: detect_repo/explicit-git-root-ssh — subprocess not called with expected git -C args", file=sys.stderr)
+        errors += 1
+    if result != "Knatte18/millhouse":
+        print(f"FAIL: detect_repo/explicit-git-root-ssh — expected 'Knatte18/millhouse', got {result!r}", file=sys.stderr)
+        errors += 1
+    if errors == 0:
+        print("PASS: detect_repo/explicit-git-root-ssh — ssh URL parsed via git -C")
+    return errors
+
+
+def test_detect_repo_default_falls_back_to_resolve_git_root() -> int:
+    errors = 0
+    _fake_root = Path("/fake/cwd-root")
+
+    def _stub_run(cmd, **kwargs):
+        return SimpleNamespace(returncode=0, stdout="https://github.com/Knatte18/millhouse.git\n", stderr="")
+
+    with patch("_gh_issues._paths.resolve_git_root", return_value=_fake_root):
+        with patch("_gh_issues._subprocess_util.run", side_effect=_stub_run) as mock_run:
+            _gh_issues.detect_repo()
+
+    try:
+        mock_run.assert_called_with(["git", "-C", str(_fake_root), "remote", "get-url", "origin"])
+    except AssertionError:
+        print("FAIL: detect_repo/default-fallback — subprocess not called with git -C from resolve_git_root", file=sys.stderr)
+        errors += 1
+    if errors == 0:
+        print("PASS: detect_repo/default-fallback — default resolves git root from _paths")
+    return errors
 
 
 def main() -> int:
@@ -144,6 +211,10 @@ def main() -> int:
     def _mock_run(cmd, **kwargs):
         if len(cmd) > 1 and cmd[1] == "repo":
             return SimpleNamespace(returncode=0, stdout="owner/repo\n", stderr="")
+        if "rev-parse" in cmd:
+            return SimpleNamespace(returncode=0, stdout="/fake/repo-root\n", stderr="")
+        if "remote" in cmd and "get-url" in cmd:
+            return SimpleNamespace(returncode=0, stdout="https://github.com/owner/repo.git\n", stderr="")
         return SimpleNamespace(returncode=0, stdout=json.dumps(_CANNED_ISSUES), stderr="")
 
     # 9. label_filter=None → all 5 issues returned.
@@ -195,6 +266,10 @@ def main() -> int:
         errors += 1
     else:
         print("PASS: label_filter/empty-labels — issue with no labels excluded")
+
+    errors += test_detect_repo_with_explicit_git_root()
+    errors += test_detect_repo_with_explicit_git_root_ssh_url()
+    errors += test_detect_repo_default_falls_back_to_resolve_git_root()
 
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)

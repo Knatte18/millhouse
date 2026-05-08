@@ -740,6 +740,13 @@ def write_initial_status(
         raise RuntimeError(
             f"git commit status.md failed: {result.stderr.strip()!r}"
         )
+    result = _subprocess_util.run(
+        ["git", "-C", str(worktree_path), "push", "--set-upstream", "origin", branch],
+    )
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"git push --set-upstream origin {branch} failed: {result.stderr.strip()!r}"
+        )
     return status_abs
 
 

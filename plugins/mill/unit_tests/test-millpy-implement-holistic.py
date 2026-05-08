@@ -37,7 +37,7 @@ def _make_fixture(tmp_path: Path) -> Path:
 
     Returns the review file path.
     """
-    plan_dir = tmp_path / "plan"
+    plan_dir = tmp_path / "task" / "plan"
     plan_dir.mkdir(parents=True, exist_ok=True)
 
     overview_text = (
@@ -78,7 +78,7 @@ def _make_fixture(tmp_path: Path) -> Path:
         "    state: pending\n"
         "```\n"
     )
-    (tmp_path / "status.md").write_text(status_text, encoding="utf-8")
+    (tmp_path / "task" / "status.md").write_text(status_text, encoding="utf-8")
 
     millhouse_dir = tmp_path / ".millhouse"
     millhouse_dir.mkdir(parents=True, exist_ok=True)
@@ -160,7 +160,7 @@ class TestMillpyImplementHolistic(unittest.TestCase):
 
     def test_1_fresh_dispatch_success(self):
         """Fresh dispatch: review file supplied → success JSON, holistic-fixing in timeline."""
-        status_path = self.tmp_path / "status.md"
+        status_path = self.tmp_path / "task" / "status.md"
 
         with unittest.mock.patch.object(
             millpy_implement_holistic._implementer_sonnet, "run",
@@ -236,7 +236,7 @@ class TestMillpyImplementHolistic(unittest.TestCase):
         self.assertEqual(rc, 0)
         prompt_text = captured["prompt_text"]
 
-        expected_batch_path = str(self.tmp_path / "plan" / "01-test-batch.md")
+        expected_batch_path = str(self.tmp_path / "task" / "plan" / "01-test-batch.md")
         self.assertIn(
             expected_batch_path, prompt_text,
             f"Expected batch file path {expected_batch_path!r} in prompt_text",

@@ -74,7 +74,7 @@ def main(argv=None) -> int:
         print(str(e), file=sys.stderr)
         return 1
 
-    status_path = project_root / "status.md"
+    status_path = project_root / "task" / "status.md"
     full = _status.read_full(status_path)
     task_title = full["yaml"].get("task", slug)
     branch = _status.read_branch(status_path, cfg=cfg, slug=slug)
@@ -88,7 +88,7 @@ def main(argv=None) -> int:
         print(f"review file not found: {review_file}", file=sys.stderr)
         return 1
 
-    overview_path = project_root / "plan" / "00-overview.md"
+    overview_path = project_root / "task" / "plan" / "00-overview.md"
     if not overview_path.exists():
         print(f"overview not found: {overview_path}", file=sys.stderr)
         return 1
@@ -100,7 +100,7 @@ def main(argv=None) -> int:
         return 1
 
     batch_files_text = "\n".join(
-        str(project_root / "plan" / b["file"]) for b in batches
+        str(project_root / "task" / "plan" / b["file"]) for b in batches
     )
 
     batch_states = _status.read_batches(status_path)
@@ -120,7 +120,7 @@ def main(argv=None) -> int:
     )
 
     result = subprocess.run(
-        ["git", "add", "status.md", review_file_arg],
+        ["git", "add", "task/status.md", review_file_arg],
         capture_output=True,
         text=True,
         cwd=project_root,
