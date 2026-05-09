@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-cleanup-inline-refactor
+phase: approved-review-common-switch
 slug: mill-path-resolution-audit
 branch: hanf/mill-path-resolution-audit
 plan: task/plan
@@ -28,6 +28,7 @@ planned  2026-05-09T11:22:35Z
 implementing  2026-05-09T11:25:13Z
 approved-paths-helpers  2026-05-09T11:34:33Z
 approved-cleanup-inline-refactor  2026-05-09T11:36:16Z
+approved-review-common-switch  2026-05-09T11:45:00Z
 ```
 
 ## Batches
@@ -43,7 +44,7 @@ batches:
     implementer_session: 45282489-7172-413f-b659-c91903a64140
     start_sha: 9f585adcf2843dbbcffb1c5ee5a3e56d5383f2f2
   - name: review-common-switch
-    state: running
+    state: approved
     implementer_session: ffd3da96-1e5f-4506-8858-73bf0e0be75f
     start_sha: f3a70578ed396cd225d20378444bfe5353f59ddc
   - name: abandon-fix
