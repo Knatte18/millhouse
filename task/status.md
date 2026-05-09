@@ -1,10 +1,10 @@
 # Status
 
 ```yaml
-phase: discussed
+phase: planning
 slug: mill-start-question-ux
 branch: hanf/mill-start-question-ux
-plan: null
+plan: task/plan
 parent: main
 task: 39 (A) — mill-start question-format UX
 task_description: |
@@ -16,4 +16,5 @@ task_description: |
 ```text
 discussing  '2026-05-09T10:19:22Z'
 discussed  2026-05-09T10:37:35Z
+planning  2026-05-09T10:51:26Z
 ```
