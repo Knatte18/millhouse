@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-skill-text-rules
 slug: mill-start-question-ux
 branch: hanf/mill-start-question-ux
 plan: task/plan
@@ -22,6 +22,7 @@ plan-fix-r1  2026-05-09T11:01:24Z
 plan-review-r2  2026-05-09T11:07:55Z
 planned  2026-05-09T11:08:12Z
 implementing  2026-05-09T11:25:29Z
+approved-skill-text-rules  2026-05-09T11:29:51Z
 ```
 
 ## Batches
@@ -29,7 +30,7 @@ implementing  2026-05-09T11:25:29Z
 ```yaml
 batches:
   - name: skill-text-rules
-    state: running
+    state: approved
     implementer_session: 91aae427-d659-41f8-a1ca-d3e8fe99e024
     start_sha: 2ea6482724cbc745697d8f961011172a296a76ba
   - name: inplace-reorder
