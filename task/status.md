@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-foundations
+phase: approved-flip
 slug: config-schema-refactor
 branch: hanf/config-schema-refactor
 plan: task/plan
@@ -29,6 +29,7 @@ plan-review-r5  2026-05-09T16:56:16Z
 planned  2026-05-09T16:56:16Z
 implementing  2026-05-09T16:58:45Z
 approved-foundations  2026-05-09T17:09:28Z
+approved-flip  2026-05-09T17:51:45Z
 ```
 
 ## Batches
@@ -41,9 +42,10 @@ batches:
     start_sha: 776eb118ceb3cd2eb04573fb352348960abce492
     commit_sha: a6db15eec268ee7c4fecee0970cff71aa6a0bf92
   - name: flip
-    state: running
+    state: approved
     implementer_session: 66bd9c2d-6401-4c78-98a4-b11a70c68c53
     start_sha: 8b3de9102260edf5dbaa1cc32e7809ec09900cbf
+    commit_sha: 10429c1fdb293d8abb257cf7a8a9fd5e09bf9805
   - name: skills-docs
     state: pending
 ```
