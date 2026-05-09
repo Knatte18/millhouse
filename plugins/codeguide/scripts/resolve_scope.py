@@ -1,4 +1,4 @@
-"""
+r"""
 Scope-resolution for codeguide-update.
 
 Scope-resolution chain
