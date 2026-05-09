@@ -3,7 +3,7 @@
 ```yaml
 task: 'millpy-vscode rework: hybrid spawn/pick + filter active editors'
 slug: mill-vscode-rework
-approved: false
+approved: true
 started: 20260509-154605
 parent: main
 root: ""
