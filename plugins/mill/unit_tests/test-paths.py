@@ -20,7 +20,6 @@ import _sibling  # noqa: E402
 
 _UNIT_TESTS = Path(__file__).resolve().parent
 sys.path.insert(0, str(_UNIT_TESTS))
-from _test_helpers import _make_task_worktree  # noqa: E402
 
 
 def _make_run_result(stdout: str = "", returncode: int = 0, stderr: str = "") -> MagicMock:
@@ -468,13 +467,14 @@ def main() -> int:
             tmp_path = Path(tmp)
             git_root = tmp_path / "hub"
             git_root.mkdir()
-            with patch("_marker.slug_from_branch", return_value="my-task"):
-                with patch("_inplace.resolve_worktrees_dir", return_value=tmp_path / "wts-none"):
-                    got = _paths.resolve_active_worktree(
-                        tmp_path, "my-task",
-                        cfg={"hub_relative_path": "."},
-                        git_root=git_root,
-                    )
+            with patch("_paths.resolve_wiki_path", return_value=tmp_path / "wiki"), \
+                 patch("_marker.slug_from_branch", return_value="my-task"), \
+                 patch("_inplace.resolve_worktrees_dir", return_value=tmp_path / "wts-none"):
+                got = _paths.resolve_active_worktree(
+                    tmp_path, "my-task",
+                    cfg={"hub_relative_path": "."},
+                    git_root=git_root,
+                )
             assert got == git_root, f"M2: got {got}"
         print("PASS: resolve_active_worktree M2 — in-place returns git_root")
 
@@ -482,13 +482,14 @@ def main() -> int:
             tmp_path = Path(tmp)
             git_root = tmp_path / "hub"
             git_root.mkdir()
-            with patch("_marker.slug_from_branch", return_value="my-task"):
-                with patch("_inplace.resolve_worktrees_dir", return_value=tmp_path / "wts-none"):
-                    got = _paths.resolve_active_worktree(
-                        tmp_path, "my-task",
-                        cfg={"hub_relative_path": "src/Models"},
-                        git_root=git_root,
-                    )
+            with patch("_paths.resolve_wiki_path", return_value=tmp_path / "wiki"), \
+                 patch("_marker.slug_from_branch", return_value="my-task"), \
+                 patch("_inplace.resolve_worktrees_dir", return_value=tmp_path / "wts-none"):
+                got = _paths.resolve_active_worktree(
+                    tmp_path, "my-task",
+                    cfg={"hub_relative_path": "src/Models"},
+                    git_root=git_root,
+                )
             assert got == git_root, f"M2+sub: got {got}"
         print("PASS: resolve_active_worktree M2+sub — in-place + sub-dir hub returns git_root")
 
@@ -572,13 +573,14 @@ def main() -> int:
             tmp_path = Path(tmp)
             git_root = tmp_path / "hub"
             git_root.mkdir()
-            with patch("_marker.slug_from_branch", return_value="my-task"):
-                with patch("_inplace.resolve_worktrees_dir", return_value=tmp_path / "wts-none"):
-                    got = _paths.resolve_active_hub(
-                        tmp_path, "my-task",
-                        cfg={"hub_relative_path": "."},
-                        git_root=git_root,
-                    )
+            with patch("_paths.resolve_wiki_path", return_value=tmp_path / "wiki"), \
+                 patch("_marker.slug_from_branch", return_value="my-task"), \
+                 patch("_inplace.resolve_worktrees_dir", return_value=tmp_path / "wts-none"):
+                got = _paths.resolve_active_hub(
+                    tmp_path, "my-task",
+                    cfg={"hub_relative_path": "."},
+                    git_root=git_root,
+                )
             assert got == git_root, f"M2: got {got}"
         print("PASS: resolve_active_hub M2 — in-place + hub_rel=. returns git_root")
 
@@ -586,13 +588,14 @@ def main() -> int:
             tmp_path = Path(tmp)
             git_root = tmp_path / "hub"
             git_root.mkdir()
-            with patch("_marker.slug_from_branch", return_value="my-task"):
-                with patch("_inplace.resolve_worktrees_dir", return_value=tmp_path / "wts-none"):
-                    got = _paths.resolve_active_hub(
-                        tmp_path, "my-task",
-                        cfg={"hub_relative_path": "src/Models"},
-                        git_root=git_root,
-                    )
+            with patch("_paths.resolve_wiki_path", return_value=tmp_path / "wiki"), \
+                 patch("_marker.slug_from_branch", return_value="my-task"), \
+                 patch("_inplace.resolve_worktrees_dir", return_value=tmp_path / "wts-none"):
+                got = _paths.resolve_active_hub(
+                    tmp_path, "my-task",
+                    cfg={"hub_relative_path": "src/Models"},
+                    git_root=git_root,
+                )
             assert got == git_root / "src" / "Models", f"M2+sub: got {got}"
         print("PASS: resolve_active_hub M2+sub — in-place + sub-dir hub, cfg is authoritative")
 

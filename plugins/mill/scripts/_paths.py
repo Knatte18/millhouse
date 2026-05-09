@@ -292,8 +292,9 @@ def resolve_active_worktree(
     import _marker
 
     try:
-        marker_slug = _marker.slug_from_branch(git_root, resolve_wiki_path(git_root), cfg)
-    except _marker.MarkerError:
+        _wiki = resolve_wiki_path(git_root)
+        marker_slug = _marker.slug_from_branch(git_root, _wiki, cfg)
+    except (_marker.MarkerError, SystemExit):
         marker_slug = None
     if marker_slug == slug and _inplace.is_inplace(slug, git_root, cfg):
         return git_root
