@@ -3,7 +3,7 @@
 ```yaml
 task: 34 (A) — Config schema cleanup + reviewer registry
 slug: config-schema-refactor
-approved: false
+approved: true
 started: 20260509-153956
 parent: main
 root: ""
