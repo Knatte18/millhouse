@@ -3,7 +3,7 @@
 ```yaml
 task: 41 (A) — mill-start --auto flag
 slug: mill-start-auto
-approved: false
+approved: true
 started: 20260509-145419
 parent: main
 root: ""
