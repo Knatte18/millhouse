@@ -1,26 +1,27 @@
 """
 Review backend for discussion artefacts.
 
-Single holistic review call. The reviewer's MODE (bulk vs tool-use) decides
-whether the discussion file is inlined into the prompt or the reviewer is
+Single holistic review call. The reviewer's tooluse flag (from the registry spec)
+decides whether the discussion file is inlined into the prompt or the reviewer is
 pointed at its path and reads it via Read/Grep/Glob. The backend writes the
 review file; the LLM does not use Write.
 
 Public API:
-    run(cfg, slug, mill_dir, project_root) -> ReviewResult
+    run(cfg, slug, mill_dir, wiki_root, project_root) -> ReviewResult
 """
 from __future__ import annotations
 
 import sys
 from pathlib import Path
 
+import _reviewer_single
+import _reviewers
 from _llm_claude import LLMError
 from _review_common import (
     ReviewError,
     ReviewResult,
     build_tool_rule,
     discover_round,
-    load_reviewer,
     load_task_title,
     parse_blocking_count,
     parse_verdict,
@@ -35,6 +36,7 @@ def run(
     cfg: dict,
     slug: str,
     mill_dir: Path,
+    wiki_root: Path,
     project_root: Path,
     *,
     max_rounds: int | None = None,
@@ -44,7 +46,7 @@ def run(
     Steps:
     1. Resolve paths.
     2. Determine round number; enforce round cap.
-    3. Load reviewer; verify it is tool-use.
+    3. Load registry, resolve reviewer spec.
     4. Render prompt.
     5. Call reviewer (catch LLMError → total-fail → raise ReviewError).
     6. Parse verdict, write review file, return ReviewResult.
@@ -55,7 +57,7 @@ def run(
 
     # 2. Round discovery and cap check
     round_n = discover_round(reviews_dir, "discussion", "holistic")
-    max_rounds = max_rounds if max_rounds is not None else cfg["review"]["discussion"]["rounds"]
+    max_rounds = max_rounds if max_rounds is not None else cfg["roles"]["discussion-review"]["holistic"]["rounds"]
     if round_n > max_rounds:
         raise ReviewError(
             f"Round {round_n} exceeds max {max_rounds} for discussion review"
@@ -66,13 +68,17 @@ def run(
         file=sys.stderr,
     )
 
-    # 3. Load reviewer; accept bulk or tool-use
-    reviewer_name = cfg["review"]["discussion"]["holistic"]
-    reviewer = load_reviewer(reviewer_name)
-    tool_rule = build_tool_rule(reviewer.MODE)
+    # 3. Resolve reviewer spec via registry
+    reviewer_name = cfg["roles"]["discussion-review"]["holistic"]["reviewer"]
+    if reviewer_name is None:
+        raise ReviewError("discussion-review holistic reviewer is null; nothing to do")
+    registry = _reviewers.load(wiki_root)
+    spec = _reviewers.resolve(registry, reviewer_name)
+    mode = "tool-use" if spec.get("tooluse") else "bulk"
+    tool_rule = build_tool_rule(mode)
 
     # 4. Build mode-specific artefact section + render prompt
-    if reviewer.MODE == "tool-use":
+    if mode == "tool-use":
         artefact_section = (
             f"Read the discussion at `{discussion_path}`. The discussion "
             f"file is the authoritative scope. Read files referenced in "
@@ -100,7 +106,7 @@ def run(
     #    means zero successes → total failure → raise ReviewError so the API
     #    exits 1 with empty stdout.
     try:
-        raw, session_id = reviewer.run(prompt_text)
+        raw, session_id = _reviewer_single.run(spec, prompt_text)
     except LLMError as exc:
         raise ReviewError(f"All sub-reviews failed: {exc}") from exc
 
