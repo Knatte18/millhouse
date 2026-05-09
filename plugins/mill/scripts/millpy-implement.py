@@ -28,6 +28,7 @@ import uuid
 from pathlib import Path
 
 import _active
+import _cleanliness
 import _implementer_sonnet
 import _llm_claude
 import _paths
@@ -126,12 +127,15 @@ def main(argv=None) -> int:
             return 1
         start_sha = result.stdout.strip()
 
+        snapshot_path = project_root / "task" / f".cleanliness-snapshot-{args.batch_name}.txt"
+        _cleanliness.capture_snapshot(project_root, snapshot_path)
+
         session_id = str(uuid.uuid4())
 
         _status.set_batch_fields(status_path, args.batch_name, {"state": "running", "start_sha": start_sha, "implementer_session": session_id})
 
         result = _subprocess_util.run(
-            ["git", "add", "task/status.md"],
+            ["git", "add", "task/status.md", str(snapshot_path.relative_to(project_root))],
             cwd=project_root,
         )
         if result.returncode != 0:

@@ -139,6 +139,9 @@ class TestMillpyImplement(unittest.TestCase):
             millpy_implement.uuid, "uuid4",
             return_value=uuid.UUID("00000000-0000-0000-0000-000000000001"),
         )
+        self.mock_capture_snapshot = _p(
+            millpy_implement._cleanliness, "capture_snapshot",
+        )
 
     def _run_main(self, argv):
         """Run main(argv) with stdout captured. Returns (rc, captured_stdout)."""

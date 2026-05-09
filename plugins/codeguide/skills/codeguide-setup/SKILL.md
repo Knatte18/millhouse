@@ -13,6 +13,10 @@ In both modes, any source-folder subtree can also carry its own `_codeguide/` (s
 
 Does **not** commit in inline mode. Commits in the sibling repo when in sibling mode (the sibling's history is independent).
 
+## Resolution
+
+After parsing flags (Step 1) and detecting the git toplevel (Step 2), run `python ${CLAUDE_PLUGIN_ROOT}/scripts/resolve.py --json` to discover existing codeguide state. The script prints `{mode, cg_root, sibling_anchor, found}`. The `found` flag — together with `mode`, `cg_root`, and `sibling_anchor` — drives the first-time / refresh / subfolder dispatch in Step 5. Do NOT halt on `found == false`; that is the expected result for first-time setup.
+
 ## What this creates (first-time root)
 
 ```
@@ -37,7 +41,7 @@ Where `<root>` is either the target repo (inline) or `<sibling-anchor>/<rel-path
 
 2. **Detect git toplevel:** Run `git rev-parse --show-toplevel`. If not in a git repo, stop with an error.
 
-3. **Resolve existing codeguide state:** Run `python ${CLAUDE_PLUGIN_ROOT}/scripts/resolve.py --json` to locate the nearest `_codeguide/` with config.yaml. Parse the JSON: `{mode, cg_root, sibling_anchor, found}`.
+3. **Resolve existing codeguide state.** See `## Resolution` above. Parse the JSON for `{mode, cg_root, sibling_anchor, found}` to drive the first-time/refresh/subfolder dispatch in Step 5.
 
 4. **Compute target root** `<root>`:
    - Inline mode: `<root> = cwd` (first-time root) or whichever folder the resolve result points at.

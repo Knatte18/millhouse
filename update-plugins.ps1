@@ -1,17 +1,35 @@
-# Update all plugins from the local marketplace, then set mill env vars.
-# Run from the millhouse repo root.
+# Force-sync all plugins from the local source dir to the Claude Code plugin
+# cache. `claude plugin update` is version-gated and skips when marketplace.json
+# version is unchanged, so it cannot deploy in-place file edits without a
+# version bump. We use robocopy directly to mirror the current source into the
+# cache regardless of version. Run from the millhouse repo root.
 
 $ManifestPath = Join-Path $PSScriptRoot ".claude-plugin\marketplace.json"
 $manifest = Get-Content $ManifestPath -Raw | ConvertFrom-Json
 $marketplace = $manifest.name
+$cacheBase = Join-Path $env:USERPROFILE ".claude\plugins\cache\$marketplace"
 
 foreach ($p in $manifest.plugins) {
-    claude plugin update "$($p.name)@$marketplace"
+    $name = $p.name
+    $version = $p.version
+    $sourceDir = Join-Path $PSScriptRoot "plugins\$name"
+    $targetDir = Join-Path $cacheBase "$name\$version"
+
+    if (-not (Test-Path $targetDir)) {
+        Write-Host "Skipped (not installed): $name@$marketplace -- run 'claude plugin install $name@$marketplace' first."
+        continue
+    }
+
+    # Mirror source -> target. Exclude .venv because uv creates it in the cache
+    # at runtime; its .pyd and .exe files are often locked and cannot be
+    # deleted by /MIR's purge step.
+    robocopy $sourceDir $targetDir /MIR /XD ".venv" /NFL /NDL /NJH /NJS | Out-Null
+    Write-Host "Force-synced: $name@$marketplace ($version)"
 }
 
 # Set env vars so mill scripts resolve to the installed version.
 $mill = $manifest.plugins | Where-Object { $_.name -eq "mill" }
-$target = Join-Path $env:USERPROFILE ".claude\plugins\cache\millhouse\mill\$($mill.version)"
+$target = Join-Path $cacheBase "mill\$($mill.version)"
 [System.Environment]::SetEnvironmentVariable('CLAUDE_PLUGIN_ROOT', $target, 'User')
 [System.Environment]::SetEnvironmentVariable('PYTHONPATH', "$target\scripts", 'User')
 Write-Host "  -> CLAUDE_PLUGIN_ROOT=$target"
