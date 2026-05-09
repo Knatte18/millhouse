@@ -35,7 +35,9 @@ implementing  2026-05-09T16:58:45Z
 ```yaml
 batches:
   - name: foundations
-    state: pending
+    state: running
+    implementer_session: 8bd762ab-b8a5-4811-84a7-3c87ebc10f2c
+    start_sha: 776eb118ceb3cd2eb04573fb352348960abce492
   - name: flip
     state: pending
   - name: skills-docs
