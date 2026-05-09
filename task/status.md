@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-skills-docs
+phase: holistic-reviewing
 slug: config-schema-refactor
 branch: hanf/config-schema-refactor
 plan: task/plan
@@ -31,6 +31,7 @@ implementing  2026-05-09T16:58:45Z
 approved-foundations  2026-05-09T17:09:28Z
 approved-flip  2026-05-09T17:51:45Z
 approved-skills-docs  2026-05-09T17:54:16Z
+holistic-reviewing  2026-05-09T17:54:32Z
 ```
 
 ## Batches
