@@ -54,7 +54,7 @@ Batch-local decision (refines the shared `silent-empty-set-on-failure` decision)
      - Convert `cmdline` to a string via `str(cmdline)` (callers may pass `Path` objects from `find_open_vscode_paths()`'s return set).
      - On Windows (`os.name == "nt"`) lowercase both `s` and the cmdline haystack before all comparisons; on POSIX leave both as-is.
      - Define `boundaries = {"", " ", "\t", "\"", "'"}` (the empty string represents start-of-string and end-of-string).
-     - For each `needle` in the iterable `(s, s + os.sep)`: scan the haystack with `hay.find(needle, idx)` in a loop. For each occurrence, check `left = hay[idx-1] if idx > 0 else ""` and `right = hay[idx+len(needle)] if idx+len(needle) < len(hay) else ""`. Return True iff `left in boundaries and right in boundaries`. If no occurrence in either iteration satisfies the boundary check, return False.
+     - For each `needle` in the iterable `(s, s + os.sep)`: initialise `idx = hay.find(needle)` (NOT 0), then run `while idx != -1:` — inside the loop check `left = hay[idx-1] if idx > 0 else ""` and `right = hay[idx+len(needle)] if idx+len(needle) < len(hay) else ""`; if `left in boundaries and right in boundaries`, return True; otherwise `idx = hay.find(needle, idx + 1)` and continue. If no occurrence in either iteration satisfies the boundary check, return False. (The pseudo-code in `task/discussion.md` § "Path matching semantics" is the canonical reference.)
 
   Module docstring at top must summarise the public API in the same style as other `_*.py` helpers under `plugins/mill/scripts/` — list the two exported names with one-line descriptions. No `if __name__ == "__main__":` block.
 

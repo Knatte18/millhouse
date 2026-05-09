@@ -116,15 +116,19 @@ Batch-local decision: the `_spawn_and_open` private helper inside `millpy-vscode
 - **Deletes:** none
 - **Requirements:** Add the new test blocks listed below to `test-millpy-vscode.py`'s `main()` function AND patch three existing single-worktree tests (because Card 3 removes the auto-select-when-single fast path; without those patches, the new code falls into `_filter_open_worktrees` → real subprocess + `input()` → `EOFError` → exit 1).
 
-  **Pre-existing tests to update (this is the ONLY allowed mutation of existing tests):** add `patch("mill_vscode._vscode_processes.find_open_vscode_paths", return_value=set())` and `patch("mill_vscode.input", return_value="1", create=True)` to each of the three single-worktree blocks:
+  **Pre-existing tests to update — patch-chain only (do not change assertion logic, fixture setup, or expected paths):**
+
+  Three single-worktree blocks need both `patch("mill_vscode._vscode_processes.find_open_vscode_paths", return_value=set())` AND `patch("mill_vscode.input", return_value="1", create=True)` added to their existing `with (...)` patch chain. The `input` patch is harmless in the original tests (where auto-select bypassed `input`); under the new code the unified prompt reads `"1"` and selects the sole worktree.
 
   1. `Test: hub_relative_path set in per-worktree config → VS Code launched with <worktree>/src/csharp/X as workspace folder.` (currently around line 175 of the file)
   2. `Test: hub_relative_path = "." → VS Code launched at worktree root.` (currently around line 220)
   3. `Regression: hub config has hub_relative_path: "hub-sub", selected worktree's config has hub_relative_path: "wt-sub" → wt-sub wins.` (currently around line 263)
 
-  Add the two new patches inside each test's existing `with (...)` patch chain. Do NOT alter their assertion logic, fixture setup, or expected paths. The `input` patch is harmless in the original tests (where it would have been bypassed by auto-select); under the new code the unified prompt will read `"1"` and proceed with the same single-worktree selection.
+  One additional test needs the `find_open_vscode_paths` patch only (it already mocks `input`):
 
-  Do NOT modify any other pre-existing test (the two-worktree picker test, `--slug`, `--list`, `no active worktrees → spawn`, `spawn returns non-zero`, `spawn empty backlog`, `--list with no active`, `--slug with no active`).
+  4. `Test: two worktrees, user picks first -> subprocess called with first worktree's path as sole positional arg.` (currently around line 54). Add `patch("mill_vscode._vscode_processes.find_open_vscode_paths", return_value=set())` to this test's `with (...)` chain so the new default-flow filter step doesn't fire a real `powershell`/`ps` subprocess.
+
+  Do NOT modify any other pre-existing test (`--slug`, `--list`, `no active worktrees → spawn`, `spawn returns non-zero`, `spawn empty backlog`, `--list with no active`, `--slug with no active`). For each of those, the new code path either does not reach `_filter_open_worktrees` at all (`--list`, `--slug`, no-active fallbacks) or does reach it but the test's existing `discover_active_worktrees` mock returns an empty list (so `_filter_open_worktrees` is never called against a non-empty list and the subprocess fires only on truly populated active lists — the four tests above).
 
   **New test blocks** follow the existing pattern (`with tempfile.TemporaryDirectory() as tmpdir: ...`, builds a fake repo via `_make_git_repo`, places `_write_active_marker` markers, sets up `patch(...)` chain, calls `mill_vscode.main([...])`, asserts on `subprocess_calls` / `input_calls` / `rc`). Patches in each new test: `mill_vscode._vscode_processes.find_open_vscode_paths` (set via `return_value=<set of cmdlines>`). This patch target is effective because Card 3 references the function via the module attribute (`_vscode_processes.find_open_vscode_paths()`) rather than via a `from … import` binding, so `unittest.mock.patch` rebinds the call site. Where the test exercises spawn, also patch `mill_vscode._load_spawn_main` (with a `MagicMock` whose `return_value` is a callable that returns the rc the test wants) and `mill_vscode._spawn_core.discover_active_worktrees` with `side_effect=[<pre>, <post>]`.
 
