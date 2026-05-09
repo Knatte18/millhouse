@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-reviewing
+phase: blocked
 slug: config-schema-refactor
 branch: hanf/config-schema-refactor
 plan: task/plan
@@ -9,6 +9,7 @@ parent: main
 task: 34 (A) — Config schema cleanup + reviewer registry
 task_description: |
   34 (A) — Config schema cleanup + reviewer registry
+blocked_reason: 'Operator policy: schema flips require backwards-compat rollout (read-both, deploy, verify, then flip). This task atomic-flipped wiki/config.yaml; operator reverted the wiki commit and will take over manually.'
 ```
 
 ## Timeline
@@ -32,6 +33,7 @@ approved-foundations  2026-05-09T17:09:28Z
 approved-flip  2026-05-09T17:51:45Z
 approved-skills-docs  2026-05-09T17:54:16Z
 holistic-reviewing  2026-05-09T17:54:32Z
+blocked  2026-05-09T17:58:39Z
 ```
 
 ## Batches
