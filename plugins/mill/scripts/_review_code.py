@@ -30,6 +30,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import _reviewer_single
+import _reviewers
 from _llm_claude import LLMError
 from _plan_dag import PlanDAGError, extract_batch_index
 import _status
@@ -46,7 +48,6 @@ from _review_common import (
     compute_creates_union,
     compute_deletes_union,
     discover_round,
-    load_reviewer,
     load_task_title,
     parse_batch_refs,
     parse_blocking_count,
@@ -180,10 +181,13 @@ def run(
     reviews_dir = resolve_path(cfg["paths"]["reviews_dir"], slug)
     scope_label = batch_name or "holistic"
     round_n = discover_round(reviews_dir, "code", scope_label)
-    max_rounds = max_rounds if max_rounds is not None else cfg["review"]["code"]["rounds"]
-    if round_n > max_rounds:
+    if batch_name is not None:
+        effective_max = max_rounds if max_rounds is not None else cfg["roles"]["code-review"]["batch"]["rounds"]
+    else:
+        effective_max = max_rounds if max_rounds is not None else cfg["roles"]["code-review"]["holistic"]["rounds"]
+    if round_n > effective_max:
         raise ReviewError(
-            f"Round {round_n} exceeds max {max_rounds} for code review"
+            f"Round {round_n} exceeds max {effective_max} for code review"
         )
     print(
         f"[_review_code] slug={slug!r} round={round_n} scope={scope_label}",
@@ -201,7 +205,7 @@ def run(
 
     # Per-batch diff-scoping: read start_sha from status.md if batch_name is set.
     start_sha: str | None = None
-    diff_threshold: float = cfg["review"]["code"].get("diff_scope_threshold", 0.25)
+    diff_threshold: float = cfg["roles"]["code-review"].get("diff_scope_threshold", 0.25)
     if batch_name is not None:
         try:
             status_path = resolve_path("status.md", slug)
@@ -254,15 +258,24 @@ def run(
     ancestors_on_disk = [p for p in ancestors_on_disk if p not in source_files]
 
     # 4. Reviewer + prompt
-    reviewer_name = cfg["review"]["code"]["reviewer"]
-    holistic_effort: str | None = cfg["review"]["code"].get("holistic_effort", "max") if batch_name is None else None
-    reviewer = load_reviewer(reviewer_name)
+    if batch_name is not None:
+        reviewer_name = cfg["roles"]["code-review"]["batch"]["reviewer"]
+    else:
+        reviewer_name = cfg["roles"]["code-review"]["holistic"]["reviewer"]
+    if reviewer_name is None:
+        raise ReviewError(
+            f"code-review {'batch' if batch_name else 'holistic'} reviewer is null; "
+            f"the orchestrator should not have invoked this scope"
+        )
+    registry = _reviewers.load(wiki_root)
+    spec = _reviewers.resolve(registry, reviewer_name)
     timeout = cfg["llm"]["holistic_timeout"] if batch_name is None else cfg["llm"]["bulk_timeout"]
 
     template_name = "review-code-batch" if batch_name else "review-code-holistic"
-    tool_rule = build_tool_rule(reviewer.MODE)
+    mode = "tool-use" if spec.get("tooluse") else "bulk"
+    tool_rule = build_tool_rule(mode)
     artefact_section = _build_artefact_section(
-        reviewer.MODE, overview_path, batch_files, source_files, ancestors_on_disk,
+        mode, overview_path, batch_files, source_files, ancestors_on_disk,
         deletes_union,
         start_sha=start_sha,
         diff_threshold=diff_threshold,
@@ -284,7 +297,7 @@ def run(
 
     # 5. Dispatch + record
     try:
-        raw, session_id = reviewer.run(prompt_text, timeout=timeout, effort=holistic_effort)
+        raw, session_id = _reviewer_single.run(spec, prompt_text, timeout=timeout)
     except LLMError as exc:
         return ReviewResult(
             type="code",
@@ -320,8 +333,8 @@ def run(
                 file=sys.stderr,
             )
             try:
-                raw, session_id = reviewer.run(
-                    retry_prompt, session_id=session_id, resume=True, timeout=timeout, effort=holistic_effort
+                raw, session_id = _reviewer_single.run(
+                    spec, retry_prompt, session_id=session_id, resume=True, timeout=timeout
                 )
             except LLMError as exc:
                 return ReviewResult(
