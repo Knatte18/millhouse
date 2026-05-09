@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-git-pr-task-contract
+phase: approved-cleanliness-wireup
 slug: mill-misc-fixes-3
 branch: hanf/mill-misc-fixes-3
 plan: task/plan
@@ -22,6 +22,7 @@ planned  2026-05-09T10:26:40Z
 implementing  2026-05-09T10:31:20Z
 approved-cleanliness-helper  2026-05-09T10:36:34Z
 approved-git-pr-task-contract  2026-05-09T10:38:27Z
+approved-cleanliness-wireup  2026-05-09T10:43:20Z
 ```
 
 ## Batches
@@ -39,7 +40,8 @@ batches:
     start_sha: 77e7a2ed0e3acec4af6244ee2666d05b53157e6e
     commit_sha: 40ac74dae823e45ebb18ab90b83089f1fff19d37
   - name: cleanliness-wireup
-    state: running
+    state: approved
     implementer_session: 57357761-8bb5-4fb7-8968-d0b3998aaf0c
     start_sha: 391685d2d5ffdabd550a205eb247239aebf4f6a3
+    commit_sha: 00775391d8be3de5a52a79ef00381a42f2236baf
 ```
