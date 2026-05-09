@@ -16,8 +16,11 @@ painful to maintain case-by-case in v1:
    matching exit breadcrumb, so callers don't have to log their own.
 
 Public API:
-    run(argv, *, cwd=None, input=None, check=False, timeout=None, env=None)
+    run(argv, *, cwd=None, input=None, check=False, timeout=None, env=None,
+        stdout=None, stderr=None)
         Thin wrapper around ``subprocess.Popen`` with the guarantees above.
+    popen_detached(argv, *, stdin=None, stdout=None, stderr=None, cwd=None, env=None)
+        Fire-and-forget detached subprocess. Returns the Popen handle.
 """
 from __future__ import annotations
 
@@ -29,6 +32,8 @@ import time
 from pathlib import Path
 
 _GRACE_SECONDS = 5
+# CREATE_BREAKAWAY_FROM_JOB is not exported by the subprocess module.
+_CREATE_BREAKAWAY_FROM_JOB = 0x01000000
 
 
 def run(
@@ -39,6 +44,8 @@ def run(
     check: bool = False,
     timeout: float | None = None,
     env: dict[str, str] | None = None,
+    stdout=None,
+    stderr=None,
 ) -> subprocess.CompletedProcess[str]:
     """
     Run a subprocess with UTF-8 text I/O and spawn/exit breadcrumbs on stderr.
@@ -61,10 +68,21 @@ def run(
             breadcrumb is emitted before the exception propagates.
         env: Full replacement environment. When None, inherits from
             ``os.environ``.
+        stdout: Override for the stdout stream. When None (default),
+            ``subprocess.PIPE`` is used and output is captured. When
+            overridden, the caller's value flows directly to
+            ``subprocess.Popen``.
+        stderr: Override for the stderr stream. Same semantics as
+            ``stdout``.
 
     Returns:
         The completed ``subprocess.CompletedProcess[str]`` — stdout,
         stderr, and returncode populated as strings.
+
+    Note:
+        When stdout/stderr are overridden to non-PIPE values, the returned
+        CompletedProcess.stdout/.stderr are empty strings — capture is
+        impossible without PIPE.
     """
     child_env = env.copy() if env is not None else os.environ.copy()
     child_env["PYTHONIOENCODING"] = "utf-8"
@@ -73,8 +91,8 @@ def run(
     start = time.monotonic()
 
     popen_kwargs: dict = dict(
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        stdout=subprocess.PIPE if stdout is None else stdout,
+        stderr=subprocess.PIPE if stderr is None else stderr,
         cwd=cwd,
         env=child_env,
         encoding="utf-8",
@@ -92,7 +110,9 @@ def run(
 
     proc = subprocess.Popen(argv, **popen_kwargs)
     try:
-        stdout, stderr = proc.communicate(input=input, timeout=timeout)
+        stdout_out, stderr_out = proc.communicate(input=input, timeout=timeout)
+        stdout_out = stdout_out or ""
+        stderr_out = stderr_out or ""
     except subprocess.TimeoutExpired as exc:
         print(
             f"[subprocess] exit code=timeout duration={time.monotonic() - start:.3f}s",
@@ -125,8 +145,37 @@ def run(
     )
     if check and proc.returncode != 0:
         raise subprocess.CalledProcessError(
-            proc.returncode, argv, output=stdout, stderr=stderr
+            proc.returncode, argv, output=stdout_out, stderr=stderr_out
         )
     return subprocess.CompletedProcess(
-        args=argv, returncode=proc.returncode, stdout=stdout, stderr=stderr
+        args=argv, returncode=proc.returncode, stdout=stdout_out, stderr=stderr_out
     )
+
+
+def popen_detached(
+    argv: list[str],
+    *,
+    stdin=None,
+    stdout=None,
+    stderr=None,
+    cwd: Path | str | None = None,
+    env: dict[str, str] | None = None,
+) -> subprocess.Popen:
+    """Fire-and-forget detached subprocess. Returns the Popen handle."""
+    child_env = (env or os.environ).copy()
+    child_env["PYTHONIOENCODING"] = "utf-8"
+
+    print(f"[subprocess] popen_detached argv={argv!r}", file=sys.stderr)
+
+    popen_kwargs: dict = dict(stdin=stdin, stdout=stdout, stderr=stderr, cwd=cwd, env=child_env)
+    if os.name == "nt":
+        popen_kwargs["creationflags"] = (
+            subprocess.CREATE_NO_WINDOW
+            | subprocess.DETACHED_PROCESS
+            | subprocess.CREATE_NEW_PROCESS_GROUP
+            | _CREATE_BREAKAWAY_FROM_JOB
+        )
+    else:
+        popen_kwargs["start_new_session"] = True
+
+    return subprocess.Popen(argv, **popen_kwargs)
