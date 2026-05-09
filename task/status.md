@@ -33,7 +33,9 @@ implementing  2026-05-09T11:25:13Z
 ```yaml
 batches:
   - name: paths-helpers
-    state: pending
+    state: running
+    implementer_session: 73adc925-d006-4148-86da-14dbc6389587
+    start_sha: 1f31836e9ecf19a68b6e1775e3ab07b44d982838
   - name: cleanup-inline-refactor
     state: pending
   - name: review-common-switch
