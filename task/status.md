@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-abandon-fix
+phase: approved-docs
 slug: mill-path-resolution-audit
 branch: hanf/mill-path-resolution-audit
 plan: task/plan
@@ -30,6 +30,7 @@ approved-paths-helpers  2026-05-09T11:34:33Z
 approved-cleanup-inline-refactor  2026-05-09T11:36:16Z
 approved-review-common-switch  2026-05-09T11:45:00Z
 approved-abandon-fix  2026-05-09T11:57:01Z
+approved-docs  2026-05-09T12:00:11Z
 ```
 
 ## Batches
@@ -53,7 +54,7 @@ batches:
     implementer_session: 84d9b366-bcb3-4ba5-b23a-759e5e60c83f
     start_sha: 25b33c5dc50626b58a7b931e67c8da68bd678c6a
   - name: docs
-    state: running
+    state: approved
     implementer_session: 68479247-8adf-489d-a4a1-3a097e8b0efe
     start_sha: 84a0b2720bdc4f2fbad7f06ded4fa06f51bdbd1e
 ```
