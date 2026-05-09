@@ -39,5 +39,7 @@ batches:
     implementer_session: 3d19e1ad-5d3f-486e-9a96-92da6ad50a20
     start_sha: cb8c7d9cf667182a4da0b99d1ed4f9152de5b793
   - name: subprocess-popup-fix
-    state: pending
+    state: running
+    implementer_session: 99f921bc-422a-49b5-aed8-22e36fa44fc5
+    start_sha: e6776021eb94c6645f9c8374c086ba2bef976a5a
 ```
