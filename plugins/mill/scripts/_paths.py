@@ -55,14 +55,14 @@ Public API:
 
     resolve_active_worktree(container_path, slug, *, cfg, git_root)
         Return the git checkout root for the active task with the given slug.
-        Detection order: (1) in-place mode — when the cwd's hub has an active
-        marker matching ``slug`` AND ``_inplace.is_inplace`` returns True,
-        return ``git_root``; (2) worktree mode — when
-        ``container_path / "wts" / slug`` exists and its marker matches
-        ``slug``, return that path.
+        Detection order: (1) in-place mode — when the current branch of
+        ``git_root`` yields a slug (via ``_marker.slug_from_branch``) matching
+        ``slug`` AND ``_inplace.is_inplace`` returns True, return ``git_root``;
+        (2) worktree mode — when ``container_path / "wts" / slug`` exists and
+        its current branch slug matches ``slug``, return that path.
         Raises ``ActiveWorktreeNotFound`` when neither mode applies.
         Raises ``ActiveWorktreeSlugMismatch`` when the worktree dir exists but
-        its marker slug differs.
+        its branch-derived slug differs.
 
     resolve_active_hub(container_path, slug, *, cfg, git_root)
         Return the hub directory (where ``.millhouse/`` and ``task/`` live)
@@ -278,36 +278,39 @@ def resolve_active_worktree(
     """Return the git checkout root for the active task with the given slug.
 
     Detection order:
-    1. In-place mode: when the cwd's hub has an active marker matching ``slug``
-       AND ``_inplace.is_inplace`` returns True, return ``git_root``.
+    1. In-place mode: when the current branch of ``git_root`` yields slug
+       (via ``_marker.slug_from_branch``) matching ``slug`` AND
+       ``_inplace.is_inplace`` returns True, return ``git_root``.
     2. Worktree mode: when ``container_path / "wts" / slug`` exists and its
-       marker matches ``slug``, return that path.
+       current branch-derived slug matches ``slug``, return that path.
 
     Raises:
         ActiveWorktreeNotFound: neither mode applies.
-        ActiveWorktreeSlugMismatch: worktree-dir exists but marker slug differs.
+        ActiveWorktreeSlugMismatch: worktree-dir exists but branch-derived slug differs.
     """
-    import _active
     import _inplace
+    import _marker
 
-    hub_dir = resolve_hub_relative_path(git_root, cfg.get("hub_relative_path", "."))
     try:
-        active_data = _active.read_all(hub_dir / ".millhouse")
-    except _active.ActiveError:
-        active_data = None
-    if active_data is not None and active_data.get("slug") == slug:
-        if _inplace.is_inplace(active_data, git_root, cfg):
-            return git_root
+        marker_slug = _marker.slug_from_branch(git_root, resolve_wiki_path(git_root), cfg)
+    except _marker.MarkerError:
+        marker_slug = None
+    if marker_slug == slug and _inplace.is_inplace(slug, git_root, cfg):
+        return git_root
 
     worktree = container_path / "wts" / slug
     if not worktree.is_dir():
         raise ActiveWorktreeNotFound(
             f"No worktree directory at {worktree} for slug {slug!r}"
         )
-    marker_slug = _active.read_slug(worktree / ".millhouse")
-    if marker_slug != slug:
+    branch_result = _subprocess_util.run(
+        ["git", "-C", str(worktree), "branch", "--show-current"]
+    )
+    branch = branch_result.stdout.strip()
+    dir_slug = branch.removeprefix(cfg.get("spawn", {}).get("branch_prefix", ""))
+    if dir_slug != slug:
         raise ActiveWorktreeSlugMismatch(
-            f"Worktree at {worktree} has slug {marker_slug!r}, expected {slug!r}"
+            f"Worktree at {worktree} has slug {dir_slug!r}, expected {slug!r}"
         )
     return worktree
 
