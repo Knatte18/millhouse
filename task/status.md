@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-fix-r1
+phase: plan-fix-r2
 slug: config-schema-refactor
 branch: hanf/config-schema-refactor
 plan: task/plan
@@ -19,4 +19,6 @@ discussed  2026-05-09T15:34:24Z
 planning  2026-05-09T15:46:08Z
 plan-review-r1  2026-05-09T16:04:51Z
 plan-fix-r1  2026-05-09T16:04:51Z
+plan-review-r2  2026-05-09T16:13:43Z
+plan-fix-r2  2026-05-09T16:13:43Z
 ```

@@ -100,8 +100,7 @@ Batch-local decisions:
   - `plugins/mill/scripts/_reviewers.py`
   - `plugins/mill/scripts/_reviewer_single.py`
   - `plugins/mill/scripts/_reviewer_test_stub.py`
-- **Edits:**
-  - `plugins/mill/unit_tests/run-all.py`
+- **Edits:** none
 - **Creates:**
   - `plugins/mill/unit_tests/test-reviewers.py`
   - `plugins/mill/unit_tests/test-reviewer-single.py`
@@ -129,7 +128,7 @@ Batch-local decisions:
     4. `spec.provider == "claude"` with `tooluse: false` calls `_llm_claude.run_bulk` with `model=spec["model"]`, `effort=spec["effort"]`. Use monkey-patching: replace `_llm_claude.run_bulk` with a recording stub, restore after.
     5. Same as 4 but with `tooluse: true` calls `_llm_claude.run_tool_use`.
     6. Unknown provider (e.g. `provider: gemini`) raises `ReviewerError` with `"Unknown provider"` substring.
-  - `run-all.py` is updated to invoke the two new test modules. Adopt whatever pattern `run-all.py` already uses.
+  - `run-all.py` requires no source change: it discovers tests via `HERE.glob("test-*.py")` so the new files are picked up automatically.
 - **Commit:** `test(reviewers): cover _reviewers and _reviewer_single`
 
 ## Batch Tests
