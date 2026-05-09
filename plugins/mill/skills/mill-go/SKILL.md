@@ -15,7 +15,7 @@ You are the **Builder** — a lean orchestrator. You coordinate per-batch implem
    `signature: _wiki.sync_pull(wiki_path: Path, *, slug: str) -> None`
 3. Load config — deep-merge `<wiki_path>/config.yaml` with `.millhouse/config.local.yaml` via `_review_common.load_config(wiki_path, Path(".millhouse"))`. Read these keys:
    - `pipeline.auto_merge` — whether to invoke mill-merge after success.
-   - `pipeline.auto_report` — whether to auto-fire mill-self-report at end-of-work.
+   - `pipeline.auto_report` — whether to auto-fire mill-self-report at end-of-work. mill-go does NOT fire it itself; mill-merge does, after its teardown completes. Read here only because it is referenced in the Handoff note.
    - `review.code.rounds` — max review rounds per batch.
    - `review.code.self_fix_rounds` — passed to the implementer brief.
    - `review.code.holistic` — if true, run one holistic code review after all batches approve.
@@ -220,8 +220,7 @@ For each round `H` from 1 to `max_holistic_rounds`:
    ```bash
    uv run --project "$CLAUDE_PLUGIN_ROOT" "$CLAUDE_PLUGIN_ROOT/scripts/millpy-builder-lock.py" release
    ```
-5. If `pipeline.auto_report: true` → invoke `/mill-self-report --auto`. The skill checks `gh auth` itself and bails cleanly if absent. Wait for it to finish before continuing.
-6. If `pipeline.auto_merge: true` → invoke `/mill-merge`. Otherwise tell the user: "Task complete. Run `/mill-merge` to merge the task branch back to parent."
+5. If `pipeline.auto_merge: true` → invoke `/mill-merge`. Otherwise tell the user: "Task complete. Run `/mill-merge` to merge the task branch back to parent." Self-reporting (when `pipeline.auto_report: true`) is fired by `mill-merge` at the end of its teardown sequence — that placement captures merge-time failures (junction teardown, squash conflicts, push rejection, sidebar regen, etc.) that this skill cannot observe.
 
 ## Principles
 
