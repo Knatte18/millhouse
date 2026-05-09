@@ -19,8 +19,10 @@ Wire the `_cleanliness` helper from batch 1 into the two mill-go integration poi
 
 - **Context:**
   - `plugins/mill/scripts/_cleanliness.py`
+  - `plugins/mill/unit_tests/test-millpy-implement.py`
 - **Edits:**
   - `plugins/mill/scripts/millpy-implement.py`
+  - `plugins/mill/unit_tests/test-millpy-implement.py`
 - **Creates:** none
 - **Deletes:** none
 - **Requirements:** Add `import _cleanliness` to the top-level import block in `plugins/mill/scripts/millpy-implement.py`, alphabetically between `import _active` (line 30) and `import _implementer_sonnet` (line 31) — so the new line lands at the second position in the underscore-prefixed import group. In the `if not args.resume:` branch (initial-dispatch path), after the line `start_sha = result.stdout.strip()` (line 129) and before the `_status.set_batch_fields(...)` call (line 133), insert two new lines:
