@@ -39,5 +39,7 @@ batches:
     start_sha: 77e7a2ed0e3acec4af6244ee2666d05b53157e6e
     commit_sha: 40ac74dae823e45ebb18ab90b83089f1fff19d37
   - name: cleanliness-wireup
-    state: pending
+    state: running
+    implementer_session: 57357761-8bb5-4fb7-8968-d0b3998aaf0c
+    start_sha: 391685d2d5ffdabd550a205eb247239aebf4f6a3
 ```
