@@ -80,6 +80,13 @@ The reviewer-module layout couples model + effort + mode in the file name (`_rev
 - Rationale: One source of truth per reviewer behaviour. The "override per call" knob is exactly the asymmetry the proposal is trying to delete.
 - Rejected: Keep a `roles.<role>.<scope>.effort` overlay. Re-introduces asymmetry; makes effort live in two places.
 
+### `--max-rounds <N>` CLI flag clamps both scopes uniformly
+
+- Decision: Today `millpy-review-plan.py` and `millpy-review-code.py` accept `--max-rounds <N>` and pass it through as a single int to the backend. Under the new schema each scope owns its own `rounds`. The CLI flag remains single (`--max-rounds <N>`); when set, both `batch.rounds` and `holistic.rounds` are clamped to `N` for this invocation. The flag is not split into `--max-batch-rounds` / `--max-holistic-rounds`. Backends apply the clamp at the per-scope round-cap check sites (`_review_plan.py:124` and `:433`, `_review_code.py:183`).
+- Rationale: Single flag matches the existing operator workflow (force one round for fast iteration). Splitting the flag adds surface area nobody currently uses.
+- Rejected: Two flags (`--max-batch-rounds`, `--max-holistic-rounds`). Adds complexity for no demonstrated need.
+- Rejected: Drop `--max-rounds` entirely and force operators to edit live config. Highest friction.
+
 ### Skip semantics: `rounds: 0` OR `reviewer: null` → skip
 
 - Decision: Either sentinel disables the scope. `roles.code-review.batch: {rounds: 0, reviewer: <whatever>}` skips per-batch code review; `roles.plan-review.batch: {rounds: 3, reviewer: null}` skips per-batch plan review (already valid today). Both forms are accepted; backends never look at one without the other.
@@ -182,7 +189,7 @@ Today every backend calls `_review_common.load_reviewer(name)` which `importlib.
 
 - `_review_discussion.py:71`, `_review_code.py:259`, `_review_plan.py:324, 330`.
 
-`reviewer.MODE` reads (currently 7 occurrences across `_review_discussion.py`, `_review_plan.py`, `_review_code.py`) become `spec["tooluse"]` reads. Helper `build_tool_rule(mode)` keeps its `"bulk" | "tool-use"` API but is fed by `"tool-use" if spec.get("tooluse") else "bulk"`.
+`reviewer.MODE` reads (currently 8 occurrences: `_review_code.py:263, 265`, `_review_discussion.py:72, 75`, `_review_plan.py:145, 150, 457, 461`) become `spec["tooluse"]` reads. Helper `build_tool_rule(mode)` keeps its `"bulk" | "tool-use"` API but is fed by `"tool-use" if spec.get("tooluse") else "bulk"`.
 
 ### `_reviewers.py` API (new helper)
 
@@ -404,6 +411,7 @@ No `CONSTRAINTS.md` exists at the project root.
 - **Q:** What if `cfg.roles.X.reviewer: typo` references a missing registry entry? **A:** `_reviewers.validate_role_refs(cfg, registry)` (called at API-script startup) raises with all missing names listed.
 - **Q:** Are effort values normalized across providers? **A:** No. Pass-through verbatim. Provider modules reject unknown values with their own errors.
 - **Q:** Is `_implementer_sonnet.py` lifted into the registry? **A:** No — out of scope. `roles.implementer:` carries `self_fix_rounds` only; no `reviewer:` slot.
+- **Q:** What does `--max-rounds <N>` override after the batch/holistic split? **A:** Both scopes uniformly. Single flag clamps `batch.rounds` and `holistic.rounds` to `N` for the invocation.
 - **Q:** Atomic or staged migration of `wiki/config.yaml`? **A:** Atomic. One commit on the task branch rewrites both files together.
 - **Q:** Are old reviewer files (`_reviewer_sonnetmax.py`, `_reviewer_sonnetmax_tool.py`) deleted in this task? **A:** Yes — same commit that introduces `_reviewer_single.py` and rewires consumers.
 - **Q:** Does `_reviewer_cluster.py` exist as a stub? **A:** No file at all. The dispatcher raises `ReviewerError("cluster dispatch not yet implemented; see task 13")`.
