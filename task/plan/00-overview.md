@@ -90,6 +90,7 @@ batches:
 - `plugins/mill/scripts/_reviewer_single.py`
 - `plugins/mill/scripts/_reviewer_sonnetmax.py`
 - `plugins/mill/scripts/_reviewer_sonnetmax_tool.py`
+- `plugins/mill/scripts/_reviewer_test_stub.py`
 - `plugins/mill/scripts/_reviewers.py`
 - `plugins/mill/scripts/millpy-implement-holistic.py`
 - `plugins/mill/scripts/millpy-implement.py`
@@ -103,7 +104,6 @@ batches:
 - `plugins/mill/templates/wiki-config.yaml`
 - `plugins/mill/unit_tests/_test_cfg.py`
 - `plugins/mill/unit_tests/_test_registry.py`
-- `plugins/mill/unit_tests/test-llm-claude.py`
 - `plugins/mill/unit_tests/test-millpy-implement-holistic.py`
 - `plugins/mill/unit_tests/test-millpy-implement.py`
 - `plugins/mill/unit_tests/test-review-cli.py`

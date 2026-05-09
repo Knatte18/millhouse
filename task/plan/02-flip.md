@@ -231,7 +231,6 @@ Batch-local decisions:
   - `plugins/mill/unit_tests/test-review-code-flow.py`
   - `plugins/mill/unit_tests/test-review-cli.py`
   - `plugins/mill/unit_tests/test-review-common.py`
-  - `plugins/mill/unit_tests/test-llm-claude.py`
   - `plugins/mill/unit_tests/test-millpy-implement.py`
   - `plugins/mill/unit_tests/test-millpy-implement-holistic.py`
 - **Creates:** none
@@ -254,20 +253,24 @@ Batch-local decisions:
   - Where a fixture builds a multi-key cfg dict from scratch, prefer importing `make_minimal_cfg` from `_test_cfg` and applying overrides; this keeps each test's intent readable. Inline cfg dicts that exist solely to demonstrate one schema shape can be simplified accordingly.
   - Tests that previously imported `from _review_common import load_reviewer` (e.g. via flow setups that look up the test stub) must change to import `_reviewers` and call `_reviewers.resolve(registry, "test_stub")` to obtain the stub spec, then pass the spec into the backend through whatever wiring the flow tests use. The `_reviewer_test_stub.seed(...)` and `_reviewer_test_stub.captured_prompts()` calls remain unchanged.
   - After rewiring, no test file may contain any `cfg["review"]` reference. Verify with grep.
+  - **`test-llm-claude.py` is NOT in this card's Edits** — it tests `_llm_claude` in isolation with no cfg-building fixtures and contains no `cfg["review"]` references. No migration needed there.
+  - **`test-review-cli.py` migration scope:** the file currently tests only `print_error`; it has no `cfg["review"]` references either. The migration adds a NEW test for cross-validation per discussion.md's Testing section: "assert that a registry missing a name referenced by `cfg.roles.*.<scope>.reviewer` causes the API script to exit non-zero with a clear stderr message". Build a fixture with a wiki containing valid `config.yaml` (new schema) but a `reviewers.yaml` that omits at least one reviewer name referenced by `roles.<role>.<scope>.reviewer`; invoke the CLI module via `subprocess.run(...)` (or by calling `main([...])` and capturing stderr); assert exit code 1 AND a stderr containing the missing name and the path. One CLI is enough — `millpy-review-discussion.py` is the simplest target.
   - **Migration-warning test in `test-review-common.py`:** add a new test function (or extend an existing one) that constructs a `mill_dir` with a `config.local.yaml` containing a top-level `review:` key (e.g. `{"review": {"code": {"rounds": 1}}}`), calls `_review_common.load_config(wiki_root, mill_dir)` with a valid wiki-side config, and asserts `sys.stderr` (captured via `contextlib.redirect_stderr` to a `StringIO`) contains a non-empty warning string that mentions both the overlay path and the orphaned key `review`. The merged cfg returned by `load_config` is otherwise usable for downstream code; do NOT assert anything about the presence/absence of `cfg["review"]` — the deep-merge leaves `cfg["review"]` as a harmless orphan branch and that is intended behaviour per card 7's spec. Use a `tempfile.TemporaryDirectory` for the wiki + mill dirs.
   - **`load_reviewer` test removal in `test-review-common.py`:** delete the `load_reviewer` import line at line ~98 and the test block at lines ~476–482 that asserts `load_reviewer("nonexistent_xyz_abc")` raises `ReviewError`. Card 7 removes `load_reviewer` from `_review_common`; leaving the import causes an `ImportError` at module-load time. The equivalent coverage (unknown-reviewer-name raises `ReviewerError`) is provided by `test-reviewers.py` subtest 11 (introduced in card 4).
-  - **`reviewers.yaml` setup in flow-test fixtures:** Cards 8/9/10 wire `_reviewers.load(wiki_root)` at the top of every backend `run`. `_reviewers.load` raises when `wiki_root / "reviewers.yaml"` is absent; the `test_stub` carve-out lives in `_reviewers.resolve`, NOT in `_reviewers.load`. So every flow-test fixture must create a valid `reviewers.yaml` BEFORE the backend is invoked. Use the `_test_registry.write_to(wiki_root)` helper (added by card 3) to drop a minimal valid registry file at the fixture's `wiki_root`. Concretely, add a single call to `_test_registry.write_to(wiki_root)` inside:
+  - **Discussion-run call-site updates:** Card 8 changes `_review_discussion.run`'s signature to `run(cfg, slug, mill_dir, wiki_root, project_root, *, max_rounds=None)`. Every existing `discussion_run(cfg, SLUG, mill_dir, project_root)` call inside `test-review-discussion-flow.py` must be updated to `discussion_run(cfg, SLUG, mill_dir, wiki_root, project_root)` where `wiki_root` is the path passed to `_test_registry.write_to(wiki_root)`. Without this update every discussion flow test raises `TypeError`.
+  - **`reviewers.yaml` setup in flow-test fixtures:** Cards 8/9/10 wire `_reviewers.load(wiki_root)` at the top of every backend `run`. `_reviewers.load` raises when `wiki_root / "reviewers.yaml"` is absent; the `test_stub` carve-out lives in `_reviewers.resolve`, NOT in `_reviewers.load`. So every flow-test fixture must create a valid `reviewers.yaml` BEFORE the backend is invoked. Use the `_test_registry.write_to(wiki_root)` helper (added by card 3, which mkdirs `wiki_root` defensively) to drop a minimal valid registry file at the fixture's `wiki_root`. Concretely, add a single call to `_test_registry.write_to(wiki_root)` inside:
     - `test-review-discussion-flow.py` `_make_fixture` (or equivalent): the fixture's wiki_root resolves to `tmp/container/wiki/` via `_paths.resolve_wiki_path`.
     - `test-review-plan-flow.py` `_make_fixture` (or equivalent): write at the fixture's `wiki_root` (a `tmp_path / "wiki"` dir or similar).
     - `test-review-code-flow.py` `_make_fixture` AND every ad-hoc inline worktree setup that calls `code_run` (look for the test cases the round-3 review identified: tests 3, 4, 7, 12 plus any test in the 14c/14d/14e cluster — grep for `code_run\(` and ensure each call site has a registry-file in its wiki_root, either via the shared fixture or an inline `_test_registry.write_to(...)`).
   - Imports: each test file gains `import _test_registry` (or the equivalent `from _test_registry import write_to`). The fixture helper goes in the unit_tests dir alongside the test files; `sys.path` already covers it (per existing convention in `test-reviewer-modules.py`).
 - **Commit:** `test(review): migrate fixtures to roles + registry schema`
 
-### Card 14: Delete `_reviewer_sonnetmax*.py` and `test-reviewer-modules.py`
+### Card 14: Delete `_reviewer_sonnetmax*.py` and `test-reviewer-modules.py`; drop dead `MODE` from `_reviewer_test_stub`
 
 - **Context:**
   - `task/discussion.md`
-- **Edits:** none
+- **Edits:**
+  - `plugins/mill/scripts/_reviewer_test_stub.py`
 - **Creates:** none
 - **Deletes:**
   - `plugins/mill/scripts/_reviewer_sonnetmax.py`
@@ -275,6 +278,7 @@ Batch-local decisions:
   - `plugins/mill/unit_tests/test-reviewer-modules.py`
 - **Requirements:**
   Remove the three files. Search the project for any remaining import or reference to `_reviewer_sonnetmax`, `_reviewer_sonnetmax_tool`, or `test-reviewer-modules`; the search must be empty before commit. `run-all.py` requires no edit — it uses `HERE.glob("test-*.py")` so the deleted test file disappears from the discovery set automatically.
+  Additionally, delete the `MODE = "bulk"` line from `_reviewer_test_stub.py`. The constant was retained in earlier plan revisions "for test compatibility" against `test-reviewer-modules.py`, but that file is being deleted in this card. The new dispatch path in `_reviewer_single.run` reads `spec["tooluse"]` rather than `module.MODE`. After this edit no production or test code references `_reviewer_test_stub.MODE`.
 - **Commit:** `chore(review): remove _reviewer_sonnetmax* and test-reviewer-modules`
 
 ## Batch Tests
