@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-paths-helpers
+phase: approved-cleanup-inline-refactor
 slug: mill-path-resolution-audit
 branch: hanf/mill-path-resolution-audit
 plan: task/plan
@@ -27,6 +27,7 @@ plan-review-r4  2026-05-09T11:22:28Z
 planned  2026-05-09T11:22:35Z
 implementing  2026-05-09T11:25:13Z
 approved-paths-helpers  2026-05-09T11:34:33Z
+approved-cleanup-inline-refactor  2026-05-09T11:36:16Z
 ```
 
 ## Batches
@@ -38,7 +39,7 @@ batches:
     implementer_session: 73adc925-d006-4148-86da-14dbc6389587
     start_sha: 1f31836e9ecf19a68b6e1775e3ab07b44d982838
   - name: cleanup-inline-refactor
-    state: running
+    state: approved
     implementer_session: 45282489-7172-413f-b659-c91903a64140
     start_sha: 9f585adcf2843dbbcffb1c5ee5a3e56d5383f2f2
   - name: review-common-switch
