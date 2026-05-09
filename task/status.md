@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: discussed
 slug: mill-vscode-rework
 branch: hanf/mill-vscode-rework
 plan: null
@@ -15,4 +15,5 @@ task_description: |
 
 ```text
 discussing  '2026-05-09T15:07:47Z'
+discussed  2026-05-09T15:42:49Z
 ```
