@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-start-question-ux
 branch: hanf/mill-start-question-ux
 plan: task/plan
@@ -21,4 +21,17 @@ plan-review-r1  2026-05-09T11:01:24Z
 plan-fix-r1  2026-05-09T11:01:24Z
 plan-review-r2  2026-05-09T11:07:55Z
 planned  2026-05-09T11:08:12Z
+implementing  2026-05-09T11:25:29Z
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: skill-text-rules
+    state: pending
+  - name: inplace-reorder
+    state: pending
+  - name: subprocess-popup-fix
+    state: pending
 ```
