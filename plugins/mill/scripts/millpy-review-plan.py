@@ -5,8 +5,8 @@ the plan review backend, and prints JSON to stdout.
 
 Flags:
     --holistic-only    Skip per-batch reviews; run only the holistic plan review.
-    --max-rounds <N>   Override review.plan.rounds for this invocation.
-                       Default: use config value.
+    --max-rounds <N>   Override roles.plan-review.batch.rounds and roles.plan-review.holistic.rounds
+                       (overrides both scopes) for this invocation. Default: use config values.
     --no-holistic      Skip the holistic plan review; run per-batch reviews only.
     --skip-check <CHECK>  Skip a named validator check (repeatable). Silently ignores unknown names.
     --skip-validate    Bypass the auto pre-review validator. Use only when you
@@ -33,7 +33,10 @@ def main(argv: list[str] | None = None) -> int:
         "--max-rounds",
         type=int,
         default=None,
-        help="Override review.plan.rounds for this invocation. Default: use config value.",
+        help=(
+            "Override roles.plan-review.batch.rounds and roles.plan-review.holistic.rounds "
+            "(overrides both scopes) for this invocation. Default: use config values."
+        ),
     )
     scope_group = parser.add_mutually_exclusive_group()
     scope_group.add_argument(
@@ -64,6 +67,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
+    import _reviewers
     from _paths import resolve_wiki_path
     from _review_cli import print_error
     from _review_common import ReviewError, find_active_slug, load_config, resolve_path
@@ -73,6 +77,13 @@ def main(argv: list[str] | None = None) -> int:
     mill_dir = project_root / ".millhouse"
     wiki_root = resolve_wiki_path(project_root)
     cfg = load_config(wiki_root, mill_dir)
+
+    try:
+        registry = _reviewers.load(wiki_root)
+        _reviewers.validate_role_refs(cfg, registry)
+    except _reviewers.ReviewerError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
 
     try:
         slug = find_active_slug(mill_dir)

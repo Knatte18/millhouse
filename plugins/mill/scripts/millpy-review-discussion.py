@@ -4,7 +4,7 @@ Resolves project roots, loads config, finds the active task slug, calls
 the discussion review backend, and prints JSON to stdout.
 
 Flags:
-    --max-rounds <N>   Override review.discussion.rounds for this invocation.
+    --max-rounds <N>   Override roles.discussion-review.holistic.rounds for this invocation.
                        Default: use config value.
 
 Exit codes:
@@ -27,10 +27,11 @@ def main(argv: list[str] | None = None) -> int:
         "--max-rounds",
         type=int,
         default=None,
-        help="Override review.discussion.rounds for this invocation. Default: use config value.",
+        help="Override roles.discussion-review.holistic.rounds for this invocation. Default: use config value.",
     )
     args = parser.parse_args(argv)
 
+    import _reviewers
     from _paths import resolve_wiki_path
     from _review_cli import print_error
     from _review_common import ReviewError, find_active_slug, load_config
@@ -42,8 +43,15 @@ def main(argv: list[str] | None = None) -> int:
     cfg = load_config(wiki_root, mill_dir)
 
     try:
+        registry = _reviewers.load(wiki_root)
+        _reviewers.validate_role_refs(cfg, registry)
+    except _reviewers.ReviewerError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+
+    try:
         slug = find_active_slug(mill_dir)
-        result = run(cfg, slug, mill_dir, project_root, max_rounds=args.max_rounds)
+        result = run(cfg, slug, mill_dir, wiki_root, project_root, max_rounds=args.max_rounds)
         print(json.dumps(result.to_dict()))
         return 0
     except ReviewError as exc:
