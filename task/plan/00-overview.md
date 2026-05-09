@@ -55,10 +55,10 @@ batches:
 - **Rationale:** Symmetric with `_inplace.is_inplace(active_data, git_root, cfg)`. Forbids positional misuse and signals the API change at every call site.
 - **Applies to:** all batches.
 
-### Decision: `resolve_active_hub` reads `hub_relative_path` from the resolved worktree's own `.millhouse/config.local.yaml`
+### Decision: `resolve_active_hub` resolves `hub_relative_path` two-tier (caller's cfg as default, worktree-root stub as override)
 
-- **Decision:** The helper does not consult the cfg the caller has open. After `resolve_active_worktree` returns the worktree path, the helper opens `<wt>/.millhouse/config.local.yaml` itself, falls back to `"."` when the stub is absent or unreadable.
-- **Rationale:** The cfg in the caller's hand reflects the cwd's worktree, which may differ from the worktree being resolved. Reading the resolved worktree's own stub keeps cross-worktree resolution correct.
+- **Decision:** The helper resolves `hub_relative_path` in this order: (1) `cfg.get("hub_relative_path", ".")` from the caller's cfg as the default, (2) worktree-root stub at `<wt>/.millhouse/config.local.yaml` overrides when present and declaring `hub_relative_path:`.
+- **Rationale:** Two consumer profiles need both sources. (a) Cross-worktree consumers (cleanup, status) that have no useful cfg about the target rely on mill-spawn's bootstrap stub at the worktree root. (b) Same-cwd consumers (`_review_common.resolve_path` for in-place M2+sub) already have authoritative cfg from the hub but need a path to the hub from the worktree root — and mill-claim does not bootstrap a stub at the worktree root for sub-dir hub configs. Single-source designs break one or the other; two-tier supports both.
 - **Applies to:** Batch 1 (the helper) and any future caller of `resolve_active_hub`.
 
 ### Decision: Test fixture style — `tempfile` + mocked subprocess; no real git

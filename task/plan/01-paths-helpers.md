@@ -65,11 +65,11 @@ The verify command runs the full `test-paths.py` suite (existing tests for uncha
   - **Error: slug mismatch in worktree dir:** worktree dir exists with marker for a different slug; `git_root` has no marker → raises `ActiveWorktreeSlugMismatch`.
   - **Error: nothing exists:** no worktree dir, no in-place marker → raises `ActiveWorktreeNotFound`.
 
-  Add new test cases for `resolve_active_hub`:
-  - **M1:** same scaffold as M1 above; `cfg["hub_relative_path"]` value irrelevant (hub reads from the worktree's own stub); write a stub at `<wt>/.millhouse/config.local.yaml` with `hub_relative_path: .` → returns `<container>/wts/<slug>`.
-  - **M1+sub:** stub at `<wt>/.millhouse/config.local.yaml` declares `hub_relative_path: src/Models` → returns `<container>/wts/<slug>/src/Models`.
-  - **M2:** in-place scaffold; stub at `<git_root>/.millhouse/config.local.yaml` declares `hub_relative_path: .` → returns `git_root`.
-  - **M2+sub:** in-place scaffold; stub at `<git_root>/.millhouse/config.local.yaml` declares `hub_relative_path: src/Models` → returns `git_root/src/Models`.
+  Add new test cases for `resolve_active_hub`. The helper resolves `hub_relative_path` from the caller's cfg as default and lets the worktree-root stub override when present.
+  - **M1:** same scaffold as M1 above. `cfg = {"hub_relative_path": "."}`. mill-spawn writes a stub at `<wt>/.millhouse/config.local.yaml` with `hub_relative_path: .`; scaffold this stub. Both sources agree → returns `<container>/wts/<slug>`.
+  - **M1+sub:** `cfg = {"hub_relative_path": "src/Models"}`. mill-spawn bootstraps the stub at `<wt>/.millhouse/config.local.yaml` with `hub_relative_path: src/Models`; scaffold both. Both sources agree → returns `<container>/wts/<slug>/src/Models`. Add a third assertion exercising the override path: drop the cfg override (`cfg = {"hub_relative_path": "."}`) but keep the stub at `<wt>/.millhouse/config.local.yaml` declaring `src/Models` → still returns `<container>/wts/<slug>/src/Models` (stub wins).
+  - **M2:** in-place scaffold; `cfg = {"hub_relative_path": "."}`; do NOT write any stub at `<git_root>/.millhouse/config.local.yaml` beyond the active marker (mill-claim does not write a hub_relative_path stub at git_root). Returns `git_root`.
+  - **M2+sub:** in-place scaffold; `cfg = {"hub_relative_path": "src/Models"}`; do NOT write a stub at `<git_root>/.millhouse/config.local.yaml` (mill-claim only writes at the hub). Returns `git_root/src/Models` — the caller's cfg is the only source.
   - **Error propagation:** when neither in-place nor worktree-dir exists → propagates `ActiveWorktreeNotFound` from the inner `resolve_active_worktree` call.
 
   Use `unittest.mock.patch("_subprocess_util.run", return_value=_make_run_result(stdout=branch))` for the branch-name lookup AND `unittest.mock.patch("_inplace.resolve_worktrees_dir", return_value=<some-tmp-dir-without-the-slug>)` to short-circuit `_inplace.is_inplace`'s second subprocess call (`resolve_main_worktree_root → git rev-parse --git-common-dir`). Patching only the subprocess mock works by coincidence (returns the branch name as a fake `--git-common-dir` output, which `Path("branch").parent` happens to resolve to the right tmp_path); patching `resolve_worktrees_dir` directly is the explicit pattern (matches `test-inplace.py`). Apply both patches in M2 and M2+sub.
@@ -148,10 +148,21 @@ The verify command runs the full `test-paths.py` suite (existing tests for uncha
   ) -> Path:
       """Return the hub directory (where ``.millhouse/`` and ``task/`` live) for the slug.
 
-      Calls ``resolve_active_worktree`` then applies ``hub_relative_path`` from
-      the resolved worktree's own ``.millhouse/config.local.yaml``. Reads from
-      the resolved worktree's stub (not from the cfg the caller has open) so
-      cross-worktree resolution works correctly.
+      Calls ``resolve_active_worktree`` then resolves ``hub_relative_path``.
+      Resolution order:
+      1. Default from the caller's cfg: ``cfg.get("hub_relative_path", ".")``.
+      2. Override from the resolved worktree's own ``.millhouse/config.local.yaml``
+         when that file exists and declares ``hub_relative_path:``.
+
+      The two-tier resolution covers both cases:
+      - In-place mode (mill-claim): mill-claim writes the stub only at the hub
+        (``<git_root>/<hub_rel>/.millhouse/``), never at ``<git_root>/.millhouse/``.
+        So the worktree-root stub is absent for M2+sub and the caller's cfg is the
+        authoritative source.
+      - Worktree mode (mill-spawn): mill-spawn bootstraps a stub at
+        ``<wt>/.millhouse/config.local.yaml`` carrying ``hub_relative_path:`` so
+        cross-worktree consumers (cleanup, status) that have no cfg about the
+        target can still resolve correctly.
 
       Propagates ``ActiveWorktreeNotFound`` and ``ActiveWorktreeSlugMismatch``
       from the inner call.
@@ -159,14 +170,16 @@ The verify command runs the full `test-paths.py` suite (existing tests for uncha
       import yaml
 
       wt = resolve_active_worktree(container_path, slug, cfg=cfg, git_root=git_root)
+      hub_subpath = cfg.get("hub_relative_path", ".")
       stub_path = wt / ".millhouse" / "config.local.yaml"
-      hub_subpath = "."
       if stub_path.exists():
           try:
               stub_data = yaml.safe_load(stub_path.read_text(encoding="utf-8")) or {}
-              hub_subpath = stub_data.get("hub_relative_path", ".")
+              stub_value = stub_data.get("hub_relative_path")
+              if stub_value is not None:
+                  hub_subpath = stub_value
           except Exception:
-              hub_subpath = "."
+              pass
       return resolve_hub_relative_path(wt, hub_subpath)
   ```
 
