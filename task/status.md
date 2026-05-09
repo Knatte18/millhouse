@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-scope-helper
+phase: approved-skill-edits
 slug: codeguide-fixes-1
 branch: hanf/codeguide-fixes-1
 plan: task/plan
@@ -23,6 +23,7 @@ plan-review-r2  2026-05-09T10:50:08Z
 planned  2026-05-09T10:50:24Z
 implementing  2026-05-09T10:53:27Z
 approved-scope-helper  2026-05-09T11:07:42Z
+approved-skill-edits  2026-05-09T11:16:18Z
 ```
 
 ## Batches
@@ -34,7 +35,7 @@ batches:
     implementer_session: b889131b-a421-49d9-a822-eb1ea49ffa96
     start_sha: 56a80564761ed46e367b30711c9969479a63eb57
   - name: skill-edits
-    state: running
+    state: approved
     implementer_session: 609fcbce-1791-4cec-8594-68a89887af36
     start_sha: d6a957c0f2c1a665fe842e659fe6b851dc91020e
 ```
