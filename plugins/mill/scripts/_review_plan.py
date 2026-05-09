@@ -331,7 +331,7 @@ def run(
     else:
         holistic_reviewer = None
 
-    task_title = load_task_title(mill_dir, slug)
+    task_title = load_task_title(project_root, wiki_root, cfg, slug)
     constraints = read_constraints_md(project_root)
 
     reviews: list[dict] = []
