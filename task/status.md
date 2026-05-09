@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-path-resolution-audit
 branch: hanf/mill-path-resolution-audit
 plan: task/plan
@@ -25,4 +25,21 @@ plan-review-r3  2026-05-09T11:04:38Z
 plan-fix-r3  2026-05-09T11:04:38Z
 plan-review-r4  2026-05-09T11:22:28Z
 planned  2026-05-09T11:22:35Z
+implementing  2026-05-09T11:25:13Z
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: paths-helpers
+    state: pending
+  - name: cleanup-inline-refactor
+    state: pending
+  - name: review-common-switch
+    state: pending
+  - name: abandon-fix
+    state: pending
+  - name: docs
+    state: pending
 ```
