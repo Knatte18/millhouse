@@ -48,7 +48,9 @@ batches:
     implementer_session: ffd3da96-1e5f-4506-8858-73bf0e0be75f
     start_sha: f3a70578ed396cd225d20378444bfe5353f59ddc
   - name: abandon-fix
-    state: pending
+    state: running
+    implementer_session: 84d9b366-bcb3-4ba5-b23a-759e5e60c83f
+    start_sha: 25b33c5dc50626b58a7b931e67c8da68bd678c6a
   - name: docs
     state: pending
 ```
