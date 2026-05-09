@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-foundations
 slug: config-schema-refactor
 branch: hanf/config-schema-refactor
 plan: task/plan
@@ -28,6 +28,7 @@ plan-fix-r4  2026-05-09T16:48:18Z
 plan-review-r5  2026-05-09T16:56:16Z
 planned  2026-05-09T16:56:16Z
 implementing  2026-05-09T16:58:45Z
+approved-foundations  2026-05-09T17:09:28Z
 ```
 
 ## Batches
@@ -35,9 +36,10 @@ implementing  2026-05-09T16:58:45Z
 ```yaml
 batches:
   - name: foundations
-    state: running
+    state: approved
     implementer_session: 8bd762ab-b8a5-4811-84a7-3c87ebc10f2c
     start_sha: 776eb118ceb3cd2eb04573fb352348960abce492
+    commit_sha: a6db15eec268ee7c4fecee0970cff71aa6a0bf92
   - name: flip
     state: pending
   - name: skills-docs
