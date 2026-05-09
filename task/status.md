@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-vscode-rework
 branch: hanf/mill-vscode-rework
 plan: task/plan
@@ -25,4 +25,15 @@ plan-review-r3  2026-05-09T16:24:46Z
 plan-fix-r3  2026-05-09T16:25:52Z
 plan-review-r4  2026-05-09T16:46:10Z
 planned  2026-05-09T16:46:21Z
+implementing  2026-05-09T16:48:48Z
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: vscode-processes-helper
+    state: pending
+  - name: vscode-cli-integration
+    state: pending
 ```
