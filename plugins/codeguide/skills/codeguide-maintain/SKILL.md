@@ -6,6 +6,10 @@ argument-hint: "[--structure] [project] [module-path]"
 
 Sync existing `_codeguide/` documentation with current source code, Documentation Guide, and local rules. Fixes content accuracy, structural compliance, pointer consistency, and link rules. Does **not** commit.
 
+## Resolution
+
+Before doing anything else, run `python ${CLAUDE_PLUGIN_ROOT}/scripts/resolve.py --json` to find the codeguide root for this repo. The script prints a JSON object: `{mode, cg_root, sibling_anchor, found}`. If `found == false`, halt and tell the user to run `/codeguide-setup` first.
+
 ## Modes
 
 - **Full** (default): reads source files and docs. Fixes content accuracy, structure, pointers, links.
@@ -30,7 +34,7 @@ Sync existing `_codeguide/` documentation with current source code, Documentatio
 
 ## Steps
 
-1. **Find `_codeguide/`:** Run `python ${CLAUDE_PLUGIN_ROOT}/scripts/resolve.py` to locate the nearest `_codeguide/` containing config.yaml. If it exits with an error, stop — run `/codeguide-setup` first.
+1. **Resolve codeguide root.** See `## Resolution` above.
 
 2. **Read the Documentation Guide:** Read `_codeguide/modules/DocumentationGuide.md` in full. This is the authoritative structure.
 

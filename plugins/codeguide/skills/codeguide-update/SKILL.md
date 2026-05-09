@@ -10,6 +10,10 @@ Commit behavior is mode-aware:
 - **Inline mode** → `codeguide_commit.py` stages doc files in the current repo. The outer `@git-commit` skill that invoked us will commit them alongside the source changes.
 - **Sibling mode** → `codeguide_commit.py` stages AND commits doc files inside the sibling repo (its own history). The outer `@git-commit` must NOT try to stage sibling-rooted paths.
 
+## Resolution
+
+Before doing anything else, run `python ${CLAUDE_PLUGIN_ROOT}/scripts/resolve.py --json` to find the codeguide root for this repo. The script prints a JSON object: `{mode, cg_root, sibling_anchor, found}`. If `found == false`, halt and tell the user to run `/codeguide-setup` first.
+
 ## Scope
 
 `$ARGUMENTS` controls which source files are in scope:
