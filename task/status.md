@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-reviewing
+phase: holistic-approved
 slug: mill-start-question-ux
 branch: hanf/mill-start-question-ux
 plan: task/plan
@@ -26,6 +26,7 @@ approved-skill-text-rules  2026-05-09T11:29:51Z
 approved-inplace-reorder  2026-05-09T11:34:15Z
 approved-subprocess-popup-fix  2026-05-09T11:52:53Z
 holistic-reviewing  2026-05-09T11:53:06Z
+holistic-approved  2026-05-09T11:59:39Z
 ```
 
 ## Batches
