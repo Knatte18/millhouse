@@ -1,10 +1,10 @@
 # Status
 
 ```yaml
-phase: discussed
+phase: planning
 slug: codeguide-fixes-1
 branch: hanf/codeguide-fixes-1
-plan: null
+plan: task/plan
 parent: main
 task: 37 (A) — Codeguide bug-fix batch 1
 task_description: |
@@ -16,4 +16,5 @@ task_description: |
 ```text
 discussing  '2026-05-09T09:59:17Z'
 discussed  2026-05-09T10:23:00Z
+planning  2026-05-09T10:37:37Z
 ```
