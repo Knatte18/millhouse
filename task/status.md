@@ -41,7 +41,9 @@ batches:
     start_sha: 776eb118ceb3cd2eb04573fb352348960abce492
     commit_sha: a6db15eec268ee7c4fecee0970cff71aa6a0bf92
   - name: flip
-    state: pending
+    state: running
+    implementer_session: 66bd9c2d-6401-4c78-98a4-b11a70c68c53
+    start_sha: 8b3de9102260edf5dbaa1cc32e7809ec09900cbf
   - name: skills-docs
     state: pending
 ```
