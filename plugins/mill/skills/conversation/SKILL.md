@@ -31,7 +31,7 @@ General behavior rules for Claude Code. These apply regardless of which plugins 
 ## User Choices
 
 - **Never use `AskUserQuestion`.** It requires mouse interaction.
-- **Always use numbered text lists.** Print each option as `1) Label — description`. Recommended option gets `(Recommended)` suffix.
+- **Always use numbered text lists.** Print each option as `1) Label — description`. The recommended option, if any, MUST be option 1; remaining options follow in any order. The `(Recommended)` suffix appears after the label of option 1.
 - The user types the number (e.g. `1`), multiple numbers for multi-select (e.g. `1, 3`), or free text for something else.
 - Keep descriptions short — one line per option.
 
