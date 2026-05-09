@@ -227,14 +227,6 @@ def main(argv: list[str] | None = None) -> int:
     color = pick_worktree_color(worktrees_dir)
     short = resolve_short_name(cfg, git_root.name)
     _vscode.write_settings(color_hex=color, target=dest_hub / ".vscode" / "settings.json", short_name=short, slug=slug)
-    _spawn_core.write_active_marker(
-        dest_hub / ".millhouse",
-        slug=slug,
-        title=picked.title,
-        branch=branch_name,
-        ts=ts,
-    )
-
     # When hub lives in a subfolder, write a bootstrap stub at worktree root so
     # terminal/vscode discovery can find dest_hub without walking the tree.
     if hub_subpath != ".":
