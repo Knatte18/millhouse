@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: discussed
 slug: mill-start-question-ux
 branch: hanf/mill-start-question-ux
 plan: null
@@ -15,4 +15,5 @@ task_description: |
 
 ```text
 discussing  '2026-05-09T10:19:22Z'
+discussed  2026-05-09T10:37:35Z
 ```
