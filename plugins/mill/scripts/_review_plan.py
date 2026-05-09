@@ -18,6 +18,8 @@ import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
+import _reviewer_single
+import _reviewers
 from _llm_claude import LLMError
 from _review_common import (
     RE_BATCH,
@@ -35,7 +37,6 @@ from _review_common import (
     compute_deletes_union,
     detect_resume_round,
     discover_round,
-    load_reviewer,
     load_task_title,
     parse_batch_refs,
     parse_blocking_count,
@@ -110,7 +111,7 @@ def _review_one_batch(
     task_title: str,
     constraints: str,
     batch_reviewer_name: str,
-    batch_reviewer,
+    batch_spec: dict,
     project_root: Path,
     root: str | None,
     creates_union: set[str],
@@ -142,12 +143,13 @@ def _review_one_batch(
         reads_set = {*reads, overview_path, batch_path}
         ancestors_on_disk = [p for p in ancestors_on_disk if p not in reads_set]
 
-        tool_rule = build_tool_rule(batch_reviewer.MODE)
+        mode = "tool-use" if batch_spec.get("tooluse") else "bulk"
+        tool_rule = build_tool_rule(mode)
 
         all_bulked = [overview_path, batch_path, *reads, *ancestors_on_disk]
         manifest = build_manifest_section(all_bulked)
 
-        if batch_reviewer.MODE == "tool-use":
+        if mode == "tool-use":
             read_list = "\n".join(f"- {p}" for p in [*reads, *ancestors_on_disk]) or "(none)"
             artefact_section = (
                 f"{manifest}\n\n"
@@ -180,7 +182,7 @@ def _review_one_batch(
         )
 
         try:
-            raw, session_id = batch_reviewer.run(prompt_text, timeout=bulk_timeout)
+            raw, session_id = _reviewer_single.run(batch_spec, prompt_text, timeout=bulk_timeout)
         except LLMError as exc:
             return {
                 "scope": batch_path.stem,
@@ -212,8 +214,8 @@ def _review_one_batch(
                     file=sys.stderr,
                 )
                 try:
-                    raw, session_id = batch_reviewer.run(
-                        retry_prompt, session_id=session_id, resume=True, timeout=bulk_timeout
+                    raw, session_id = _reviewer_single.run(
+                        batch_spec, retry_prompt, session_id=session_id, resume=True, timeout=bulk_timeout
                     )
                 except LLMError as exc:
                     return {
@@ -284,12 +286,14 @@ def run(
     # 1. Paths and round
     plan_dir = resolve_path(cfg["paths"]["plan_dir"], slug)
     reviews_dir = resolve_path(cfg["paths"]["reviews_dir"], slug)
-    max_rounds = max_rounds if max_rounds is not None else cfg["review"]["plan"]["rounds"]
+    batch_max_rounds = max_rounds if max_rounds is not None else cfg["roles"]["plan-review"]["batch"]["rounds"]
+    holistic_max_rounds = max_rounds if max_rounds is not None else cfg["roles"]["plan-review"]["holistic"]["rounds"]
     bulk_timeout = cfg["llm"]["bulk_timeout"]
     holistic_timeout = cfg["llm"]["holistic_timeout"]
 
     print(
-        f"[_review_plan] slug={slug!r} plan_dir={plan_dir} max_rounds={max_rounds}",
+        f"[_review_plan] slug={slug!r} plan_dir={plan_dir} "
+        f"batch_max_rounds={batch_max_rounds} holistic_max_rounds={holistic_max_rounds}",
         file=sys.stderr,
     )
 
@@ -310,26 +314,21 @@ def run(
     creates_union = compute_creates_union(plan_dir)
     deletes_union = compute_deletes_union(plan_dir)
 
-    # 3. Load reviewers (accept bulk or tool-use)
-    batch_reviewer_name = cfg["review"]["plan"]["batch"]
-    if batch_reviewer_name is None:
-        if cfg["review"]["plan"].get("holistic") is None:
-            raise ReviewError(
-                "review.plan.batch is null and review.plan.holistic is also null"
-                " — at least one must be set"
-            )
+    # 3. Load reviewers via registry
+    registry = _reviewers.load(wiki_root)
+
+    batch_reviewer_name = cfg["roles"]["plan-review"]["batch"]["reviewer"]
+    if batch_reviewer_name is None or cfg["roles"]["plan-review"]["batch"]["rounds"] == 0:
         holistic_only = True
-
-    if not holistic_only:
-        batch_reviewer = load_reviewer(batch_reviewer_name)
+        batch_spec = None
     else:
-        batch_reviewer = None
+        batch_spec = _reviewers.resolve(registry, batch_reviewer_name)
 
-    holistic_name = cfg["review"]["plan"].get("holistic")
-    if holistic_name is not None:
-        holistic_reviewer = load_reviewer(holistic_name)
+    holistic_name = cfg["roles"]["plan-review"]["holistic"]["reviewer"]
+    if holistic_name is None or cfg["roles"]["plan-review"]["holistic"]["rounds"] == 0:
+        holistic_spec = None
     else:
-        holistic_reviewer = None
+        holistic_spec = _reviewers.resolve(registry, holistic_name)
 
     task_title = load_task_title(mill_dir, slug)
     constraints = read_constraints_md(project_root)
@@ -400,11 +399,11 @@ def run(
                                 batch_path,
                                 overview_path,
                                 reviews_dir,
-                                max_rounds,
+                                batch_max_rounds,
                                 task_title,
                                 constraints,
                                 batch_reviewer_name,
-                                batch_reviewer,
+                                batch_spec,
                                 project_root,
                                 root,
                                 creates_union,
@@ -426,11 +425,11 @@ def run(
                 reviews.sort(key=lambda r: order.get(r["scope"], 999))
 
     # 5. Holistic (if not skipped by config or no_holistic flag)
-    if holistic_reviewer is not None and not no_holistic:
+    if holistic_spec is not None and not no_holistic:
         round_n = discover_round(reviews_dir, "plan", "holistic")
-        if round_n > max_rounds:
+        if round_n > holistic_max_rounds:
             raise ReviewError(
-                f"Round {round_n} exceeds max {max_rounds} for plan review (batch=holistic)"
+                f"Round {round_n} exceeds max {holistic_max_rounds} for plan review (batch=holistic)"
             )
         print("[_review_plan] running holistic review", file=sys.stderr)
 
@@ -454,11 +453,12 @@ def run(
         reads_set = {*all_reads, overview_path, *batch_files}
         all_creates_on_disk = [p for p in all_creates_on_disk if p not in reads_set]
 
-        tool_rule = build_tool_rule(holistic_reviewer.MODE)
+        holistic_mode = "tool-use" if holistic_spec.get("tooluse") else "bulk"
+        tool_rule = build_tool_rule(holistic_mode)
 
         manifest = build_manifest_section([overview_path, *batch_files, *all_reads, *all_creates_on_disk])
 
-        if holistic_reviewer.MODE == "tool-use":
+        if holistic_mode == "tool-use":
             batch_list = "\n".join(f"- `{p}`" for p in batch_files) or "(none)"
             read_list = "\n".join(f"- `{p}`" for p in [*all_reads, *all_creates_on_disk]) or "(none)"
             artefact_section = (
@@ -490,7 +490,7 @@ def run(
         )
 
         try:
-            raw, session_id = holistic_reviewer.run(prompt_text, timeout=holistic_timeout)
+            raw, session_id = _reviewer_single.run(holistic_spec, prompt_text, timeout=holistic_timeout)
         except LLMError as exc:
             reviews.append({
                 "scope": "holistic",
@@ -523,8 +523,8 @@ def run(
                             file=sys.stderr,
                         )
                         try:
-                            raw, session_id = holistic_reviewer.run(
-                                retry_prompt, session_id=session_id, resume=True, timeout=holistic_timeout
+                            raw, session_id = _reviewer_single.run(
+                                holistic_spec, retry_prompt, session_id=session_id, resume=True, timeout=holistic_timeout
                             )
                         except LLMError as exc:
                             reviews.append({
