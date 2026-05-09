@@ -3,7 +3,7 @@
 ```yaml
 task: Drop active.slug.md marker
 slug: drop-active-marker
-approved: false
+approved: true
 started: 20260509-161652
 parent: main
 root: ""
