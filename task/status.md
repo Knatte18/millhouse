@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: discussed
 slug: mill-path-resolution-audit
 branch: hanf/mill-path-resolution-audit
 plan: null
@@ -15,4 +15,5 @@ task_description: |
 
 ```text
 discussing  '2026-05-09T09:41:00Z'
+discussed  2026-05-09T10:29:13Z
 ```
