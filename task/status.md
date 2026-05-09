@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: drop-active-marker
 branch: hanf/drop-active-marker
 plan: task/plan
@@ -19,4 +19,19 @@ discussed  2026-05-09T15:39:01Z
 planning  2026-05-09T16:24:02Z
 plan-review-r1  2026-05-09T17:03:40Z
 planned  2026-05-09T17:03:56Z
+implementing  2026-05-09T17:09:23Z
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: foundation
+    state: pending
+  - name: migration
+    state: pending
+  - name: integration-tests
+    state: pending
+  - name: skill-docs
+    state: pending
 ```
