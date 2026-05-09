@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-misc-fixes-3
 branch: hanf/mill-misc-fixes-3
 plan: task/plan
@@ -19,4 +19,17 @@ discussed  2026-05-09T10:03:33Z
 planning  2026-05-09T10:20:01Z
 plan-review-r1  2026-05-09T10:26:24Z
 planned  2026-05-09T10:26:40Z
+implementing  2026-05-09T10:31:20Z
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: cleanliness-helper
+    state: pending
+  - name: git-pr-task-contract
+    state: pending
+  - name: cleanliness-wireup
+    state: pending
 ```
