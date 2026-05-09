@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-approved
+phase: done
 slug: mill-path-resolution-audit
 branch: hanf/mill-path-resolution-audit
 plan: task/plan
@@ -33,6 +33,7 @@ approved-abandon-fix  2026-05-09T11:57:01Z
 approved-docs  2026-05-09T12:00:11Z
 holistic-reviewing  2026-05-09T12:00:20Z
 holistic-approved  2026-05-09T12:06:01Z
+done  2026-05-09T12:06:10Z
 ```
 
 ## Batches
