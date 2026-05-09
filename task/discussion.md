@@ -55,15 +55,15 @@ The rework adds two changes: filter out worktrees whose path appears in any runn
 
 ### post-spawn-identification
 
-- Decision: All three spawn-and-open paths (`<Enter>` at the prompt, `--new`, empty-filter fall-through, and the existing zero-active-worktrees fallback) follow the same pre/post snapshot procedure to identify the newly created worktree:
-  1. Compute the set `pre = {entry.path for entry in discover_active_worktrees(worktrees_dir)}` BEFORE invoking `_load_spawn_main([])`.
-  2. Invoke `_load_spawn_main([])`. If it returns non-zero, propagate that exit code.
-  3. Re-run `discover_active_worktrees(worktrees_dir)` and compute `new_entries = [e for e in post if e.path not in pre]`.
-  4. Exactly one new entry → that's the spawn target; resolve its launch path via `resolve_hub_relative_path` and open it via `code <launch_path>`.
+- Decision: All three spawn-and-open paths (`<Enter>` at the prompt, `--new`, empty-filter fall-through, and the existing zero-active-worktrees fallback) call a single helper `_spawn_and_open(worktrees_dir, pre_active)` where `pre_active` is the active-worktree list `main()` *already* fetched at the top of its body. The helper then:
+  1. Computes `pre_paths = {entry[0] for entry in pre_active}` (no extra `discover_active_worktrees` call — the caller's list is reused).
+  2. Invokes `_load_spawn_main()([])`. If it returns non-zero, propagates that exit code.
+  3. Calls `discover_active_worktrees(worktrees_dir)` once for the post-snapshot and computes `new_entries = [e for e in post if e[0] not in pre_paths]`.
+  4. Exactly one new entry → that's the spawn target; resolves its launch path via `resolve_hub_relative_path` and opens it via `code <launch_path>`.
   5. Zero new entries → spawn was cancelled (e.g. user aborted the picker, no backlog) → exit 0 silently with a one-line stderr message.
   6. Multiple new entries → defensively bail with stderr message and exit 1. (Current spawn semantics produce exactly one new worktree per invocation; this branch is a safety net.)
-- Rationale: `millpy-spawn.main` returns only `int`; printing the worktree path via stdout would require modifying spawn (out of scope per the task). The diff-based approach is local to `millpy-vscode` and uses only public helpers.
-- Rejected: Reading the active marker from disk to identify the new worktree — still requires the pre/post diff to know *which* new directory was just written. Modifying `millpy-spawn.main` to emit a stable stdout token — broader scope; violates "touches `millpy-vscode.py` only" from the task.
+- Rationale: `millpy-spawn.main` returns only `int`; printing the worktree path via stdout would require modifying spawn (out of scope per the task). The diff-based approach is local to `millpy-vscode` and uses only public helpers. Reusing the caller's already-fetched active list as `pre_active` avoids a redundant subprocess walk and keeps the existing `test-millpy-vscode.py` mock that supplies two `side_effect` values for `discover_active_worktrees` (initial fetch in `main()` + post-snapshot in `_spawn_and_open`) working unchanged.
+- Rejected: Reading the active marker from disk to identify the new worktree — still requires the pre/post diff to know *which* new directory was just written. Modifying `millpy-spawn.main` to emit a stable stdout token — broader scope; violates "touches `millpy-vscode.py` only" from the task. Having `_spawn_and_open` re-fetch its own pre-snapshot — adds a third `discover_active_worktrees` call that breaks the existing two-value `side_effect` mock and provides no information `main()` doesn't already have.
 
 ### list-flag-unfiltered
 
@@ -140,14 +140,14 @@ The rework adds two changes: filter out worktrees whose path appears in any runn
 
 - [plugins/mill/scripts/millpy-vscode.py](plugins/mill/scripts/millpy-vscode.py) — `main()` rework. The argparse block adds `--new` (`store_true`) and the `--new` / `--slug` mutex. After `discover_active_worktrees(worktrees_dir)` runs, the filter step calls `_vscode_processes.find_open_vscode_paths()` and removes entries whose `resolve_hub_relative_path(entry_path, hub_subpath)` matches any element of the returned set (using `_vscode_processes._path_matches_cmdline` for boundary-safe substring containment). The numbered prompt is replaced with the unified prompt described in the `prompt-input-grammar` decision. `--new` short-circuits to a helper `_spawn_and_open(worktrees_dir)` (described below) which performs the pre/post snapshot diff per the `post-spawn-identification` decision. The same helper is invoked from the empty-filter fall-through, the existing zero-active-worktrees fallback, and the `<Enter>` branch of the prompt.
 
-  The `_spawn_and_open(worktrees_dir, hub_subpath_resolver)` helper:
-  1. Snapshots `pre = {entry.path for entry in _spawn_core.discover_active_worktrees(worktrees_dir)}`.
+  The `_spawn_and_open(worktrees_dir, pre_active, wiki_path)` helper:
+  1. `pre_paths = {entry[0] for entry in pre_active}` — `pre_active` is the list `main()` already obtained from `_spawn_core.discover_active_worktrees(worktrees_dir)` at the top of its body. No additional discover call here.
   2. Calls `rc = _load_spawn_main()([])`. If `rc != 0`, returns `rc`.
-  3. Recomputes `post = _spawn_core.discover_active_worktrees(worktrees_dir)`.
-  4. `new_entries = [e for e in post if e[0] not in pre]`.
+  3. `post = _spawn_core.discover_active_worktrees(worktrees_dir)`.
+  4. `new_entries = [e for e in post if e[0] not in pre_paths]`.
   5. If `len(new_entries) == 0`: print `"[mill-vscode] spawn produced no new worktree; nothing to open."` to stderr; return 0.
   6. If `len(new_entries) > 1`: print `f"[mill-vscode] spawn produced {len(new_entries)} new worktrees; refusing to guess."` to stderr; return 1.
-  7. Resolve the single new entry's launch path via `resolve_hub_relative_path`, invoke `subprocess.run(_build_code_argv(launch_path))`, return 0.
+  7. For the single new entry `(new_path, new_slug, _)`: load its `hub_relative_path` via `_load_config(wiki_path, new_path)` (mirroring how the existing picker path resolves it); compute `launch_path = resolve_hub_relative_path(new_path, hub_subpath)`; invoke `subprocess.run(_build_code_argv(launch_path))`; return 0.
 - [plugins/mill/scripts/_vscode_processes.py](plugins/mill/scripts/_vscode_processes.py) — new helper. Exposes `find_open_vscode_paths() -> set[Path]`. Internal `_probe_windows()` and `_probe_posix()` shell out via `_subprocess_util.run` with `timeout=5` and `check=False`. Both functions are pure parsers (input: cmdline-string-iterable; output: set of resolved Paths). The OS dispatch picks the right `_probe_*` based on `os.name`. All exceptions inside the probe (subprocess error, parse error) are caught and produce an empty set.
 - [plugins/mill/unit_tests/test-vscode-processes.py](plugins/mill/unit_tests/test-vscode-processes.py) — new test file. Tests parse fixed canned strings for both PowerShell and `ps` output. The subprocess call itself is mocked (`patch("_vscode_processes._subprocess_util.run", ...)`) so the tests run on any platform.
 - [plugins/mill/unit_tests/test-millpy-vscode.py](plugins/mill/unit_tests/test-millpy-vscode.py) — additions only; no existing test is modified except the two-worktree-pick test which currently relies on auto-select-when-single is not affected since it has two worktrees, and the auto-select test (none exists explicitly — the current implementation auto-selects when `len(active) == 1`, but no test asserts that behavior). New cases: (a) filter excludes one of two worktrees → picker shows only the non-open one; (b) filter empties the list → spawn called; (c) `q` input → exit 0, no `subprocess.run` call; (d) `--new` flag → spawn called regardless of active worktrees, then open; (e) `--new --slug X` → argparse error, exit 2; (f) probe-failure → all entries shown.
@@ -203,7 +203,7 @@ Given a launch_path computed from `resolve_hub_relative_path(worktree_path, hub_
 
 The current "two worktrees, user picks first" test does not assert auto-select-when-single (it has two entries and exercises the picker). It does pass `input` returning `"1"`. Under the new prompt grammar, `"1"` still selects index 1, so the test continues to pass without change.
 
-The current "no active worktrees, no flags → spawn called, new worktree opened" test continues to pass because the new code shells into spawn the same way when the (post-filter) list is empty.
+The current "no active worktrees, no flags → spawn called, new worktree opened" test patches `_spawn_core.discover_active_worktrees` with `side_effect=[[], [(wt_new, "task-new", "New Task")]]` — exactly two values. Under the new design `main()` calls `discover_active_worktrees` once at the top, then `_spawn_and_open` calls it once after spawn returns: two calls total. The two-value `side_effect` is exactly right; the test continues to pass without change.
 
 The current `--list` test continues to pass because `--list` keeps its unfiltered semantics.
 
