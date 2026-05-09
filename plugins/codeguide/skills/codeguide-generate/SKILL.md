@@ -6,6 +6,10 @@ argument-hint: "[project] [module-path]"
 
 Generate `_codeguide/` documentation for source files that don't have corresponding docs. Works both for projects with no docs at all and for existing projects with new source files. Does **not** commit.
 
+## Resolution
+
+Before doing anything else, run `python ${CLAUDE_PLUGIN_ROOT}/scripts/resolve.py --json` to find the codeguide root for this repo. The script prints a JSON object: `{mode, cg_root, sibling_anchor, found}`. If `found == false`, halt and tell the user to run `/codeguide-setup` first.
+
 ## Scope
 
 `$ARGUMENTS` controls what gets scanned:
@@ -16,7 +20,7 @@ Generate `_codeguide/` documentation for source files that don't have correspond
 
 ## Steps
 
-1. **Find `_codeguide/`:** Run `python ${CLAUDE_PLUGIN_ROOT}/scripts/resolve.py --json` and parse the JSON object `{mode, cg_root, sibling_anchor, found}`. Also run `git rev-parse --show-toplevel` and bind the result as `git_toplevel`. If the resolve call exits with an error or `found == false`, stop — run `/codeguide-setup` first.
+1. **Resolve codeguide root.** See `## Resolution` above. Bind `git_toplevel` separately via `git rev-parse --show-toplevel` for the placement-rule logic in Step 9.
 
 2. **Read the Documentation Guide:** Read `_codeguide/modules/DocumentationGuide.md` in full. All docs must follow its structure.
 
