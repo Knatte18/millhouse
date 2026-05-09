@@ -33,7 +33,9 @@ implementing  2026-05-09T16:48:48Z
 ```yaml
 batches:
   - name: vscode-processes-helper
-    state: pending
+    state: running
+    implementer_session: dca688bc-97c7-4a67-a731-b2d386c32200
+    start_sha: 1aa7d9228113a9ab5a61fc87f8498c7aaf983f68
   - name: vscode-cli-integration
     state: pending
 ```
