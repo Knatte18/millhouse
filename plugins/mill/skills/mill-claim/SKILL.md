@@ -14,3 +14,11 @@ uv run --project "$CLAUDE_PLUGIN_ROOT" "$CLAUDE_PLUGIN_ROOT/scripts/millpy-claim
 ```
 
 Does not create a new worktree directory. Exits 0 (not 1) when the backlog is empty. Takes the wiki lock during the claim step.
+
+## In-place mode
+
+mill-claim does NOT create a `<container>/wts/<slug>/` directory. The current worktree (the hub itself) IS the task worktree for this slug. The task branch is checked out in place; `.millhouse/active.slug.md` is written at the hub.
+
+Downstream skills (mill-start, mill-plan, mill-go, review scripts) resolve the active worktree via `_paths.resolve_active_worktree(container, slug, *, cfg, git_root)`, which returns the hub path in in-place mode. `task/discussion.md`, `task/plan/`, `task/reviews/`, and `task/status.md` live at `<active_hub>/task/...` — when `hub_relative_path` is set in `.millhouse/config.local.yaml`, that is `<git_root>/<hub_relative_path>/task/...`, NOT `<git_root>/task/...`.
+
+Use mill-spawn instead when you want a separate worktree directory for the task.
