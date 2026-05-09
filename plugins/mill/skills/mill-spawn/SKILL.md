@@ -14,3 +14,5 @@ uv run --project "$CLAUDE_PLUGIN_ROOT" "$CLAUDE_PLUGIN_ROOT/scripts/millpy-spawn
 ```
 
 Exits 0 (not 1) when the backlog is empty. Prints worktree path, branch, and status path on success. Takes and releases the wiki lock during the claim step.
+
+Use mill-claim instead when you want to claim the task in the current checkout (in-place) without creating a separate worktree directory.
