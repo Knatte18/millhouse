@@ -14,7 +14,7 @@ Public API:
     find_active_slug()   — delegate to _active.read_slug for the canonical active.slug.md
     load_task_title()    — delegate to _active.read_all for task_title; fall back to slug on missing/malformed marker
     read_constraints_md()— read CONSTRAINTS.md, empty string if absent
-    resolve_path()       — locate a path inside the active worktree from a config template
+    resolve_path()       — locate a path inside the active hub (where task/ lives) from a config template
     discover_round()     — determine next review round number per (review_type, scope)
     detect_resume_round() — return highest per-batch-only round (no holistic yet), or None
     bulk_files()         — concatenate file contents with FILE delimiters
@@ -153,35 +153,35 @@ def read_constraints_md(project_root: Path) -> str:
 
 
 def resolve_path(path_tmpl: str, slug: str) -> Path:
-    """Resolve a config path template to an absolute path inside the active worktree.
+    """Resolve a config path template to an absolute path inside the active hub.
 
-    Computes the container path internally via
-    ``_paths.resolve_container_path(Path.cwd())`` and locates the active
-    worktree via ``_paths.resolve_active_worktree(container_path, slug)``.
-    Returns ``active_worktree / path_tmpl`` after substituting any ``<SLUG>``
-    token in ``path_tmpl`` — a no-op for the current worktree-relative
-    templates but guards against stale configs that still carry the old
-    ``active/<SLUG>/...`` shape (paths still fail at file-open time in that
-    case; this guard only prevents a literal ``<SLUG>`` segment in the result).
+    Computes the container, git_root, and cfg internally:
+      - git_root via _paths.resolve_git_root()
+      - container via _paths.resolve_container_path(git_root)
+      - hub_dir via _paths.resolve_hub_path() (Path.cwd().resolve() — the hub
+        where mill scripts run; equals git_root for hub_relative_path == ".")
+      - cfg via load_config(_paths.resolve_wiki_path(git_root), hub_dir / ".millhouse")
 
-    Args:
-        path_tmpl: Config path template string (e.g. ``"discussion.md"`` or
-            ``"reviews/"``). Read from ``wiki/config.yaml`` ``paths:`` block.
-        slug: Task slug used to locate the active worktree.
+    cfg is sourced from the hub's own .millhouse/, not from git_root/.millhouse/,
+    because mill-claim writes hub_relative_path only at the hub (it does not
+    bootstrap a stub at git_root/.millhouse/ the way mill-spawn does).
 
-    Returns:
-        Absolute ``Path`` inside the active worktree. No on-disk-existence check.
+    Returns active_hub / path_tmpl after substituting any "<SLUG>" token.
 
     Raises:
-        _paths.ActiveWorktreeNotFound: When no worktree directory exists for
-            ``slug``.
-        _paths.ActiveWorktreeSlugMismatch: When the worktree exists but its
-            marker slug does not match ``slug``.
+        _paths.ActiveWorktreeNotFound | _paths.ActiveWorktreeSlugMismatch:
+            propagated from the inner resolve_active_hub call.
     """
-    container_path = _paths.resolve_container_path(Path.cwd())
-    active_worktree = _paths.resolve_active_worktree(container_path, slug)
+    git_root = _paths.resolve_git_root()
+    container_path = _paths.resolve_container_path(git_root)
+    wiki_root = _paths.resolve_wiki_path(git_root)
+    hub_dir = _paths.resolve_hub_path()
+    cfg = load_config(wiki_root, hub_dir / ".millhouse")
+    active_hub = _paths.resolve_active_hub(
+        container_path, slug, cfg=cfg, git_root=git_root,
+    )
     resolved_tmpl = path_tmpl.replace("<SLUG>", slug)
-    return active_worktree / resolved_tmpl
+    return active_hub / resolved_tmpl
 
 
 def discover_round(reviews_dir: Path, review_type: str, scope: str) -> int:
