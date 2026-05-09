@@ -64,7 +64,8 @@ The fix is two centralized helpers in `_paths.py` plus a tight audit of the demo
   ```python
   def resolve_active_worktree(container, slug, *, cfg, git_root) -> Path:
       """Top-level git checkout for the slug (for git-ops, branch ops)."""
-      active_data = _active.read_all(<hub-of-git_root>/.millhouse)
+      hub_dir = resolve_hub_relative_path(git_root, cfg.get("hub_relative_path", "."))
+      active_data = _active.read_all(hub_dir / ".millhouse")
       if active_data["slug"] == slug and _inplace.is_inplace(active_data, git_root, cfg):
           return git_root
       worktree = container / "wts" / slug
@@ -179,7 +180,7 @@ TDD candidates (write tests first, watch them fail, then implement):
   - M2+sub: `<git_root>/<hub_relative_path>`.
   - Error path: propagates `ActiveWorktreeNotFound` / `ActiveWorktreeSlugMismatch` from the inner call.
 - `_review_common.resolve_path` — focused test exercising the in-place branch. Scaffolds an in-place fixture, calls `resolve_path("task/discussion.md", slug)`, asserts the returned path is `<git_root>/task/discussion.md`. This is the original bug surface; the test must catch a regression.
-- `millpy-abandon.py` — unit test for status-path resolution. Scaffolds a worktree-mode fixture with `<active_worktree>/task/status.md`, calls into the abandon flow with mocked git commit, asserts the path read matches and the commit target is the task branch (not the wiki). Existing abandon tests need updating; check `plugins/mill/unit_tests/test-millpy-abandon.py` (likely exists).
+- `millpy-abandon.py` — unit test for status-path resolution. Scaffolds a worktree-mode fixture with `<active_worktree>/task/status.md`, calls into the abandon flow with mocked git commit, asserts the path read matches and the commit target is the task branch (not the wiki). Existing abandon tests in [plugins/mill/unit_tests/test-abandon.py](plugins/mill/unit_tests/test-abandon.py) need updating to match.
 
 Test runner: `python plugins/mill/unit_tests/run-all.py` from the worktree root. No real git, no real LLM. `tempfile` for filesystem fixtures.
 
