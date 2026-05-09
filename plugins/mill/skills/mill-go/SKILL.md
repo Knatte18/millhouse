@@ -90,14 +90,16 @@ Record `commit_sha` from a successful report on the batch entry.
 
 ### 2b. Cleanliness gate
 
-After a `success` report: run `git -C <worktree> status --porcelain --untracked-files=no`. If the output is non-empty (uncommitted changes to tracked files present):
+After a `success` report: compute new dirt via `_cleanliness.compute_new_dirt(<worktree>, <worktree>/task/.cleanliness-snapshot-<batch_name>.txt)`. If the returned list is non-empty (genuine implementer-introduced dirt that did not pre-date the batch):
 - `_status.set_batch_field(status_path, batch_name, "state", "blocked")`
 - `_status.set_batch_field(status_path, batch_name, "blocked_reason", "uncommitted working tree after implementer report")`
 - `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`
 - Commit on the task branch: `git -C <worktree> add task/status.md && git -C <worktree> commit -m "mill-go: blocked on <batch_name> — dirty tree"`
 - Go to *Blocked*.
 
-If the output is empty, continue to "3. Code Review loop" as normal.
+`signature: _cleanliness.compute_new_dirt(worktree: Path, snapshot_path: Path) -> list[str]`
+
+If the returned list is empty, continue to "3. Code Review loop" as normal.
 
 ### 3. Code Review loop
 
