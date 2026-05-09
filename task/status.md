@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: codeguide-fixes-1
 branch: hanf/codeguide-fixes-1
 plan: task/plan
@@ -21,4 +21,15 @@ plan-review-r1  2026-05-09T10:44:50Z
 plan-fix-r1  2026-05-09T10:44:50Z
 plan-review-r2  2026-05-09T10:50:08Z
 planned  2026-05-09T10:50:24Z
+implementing  2026-05-09T10:53:27Z
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: scope-helper
+    state: pending
+  - name: skill-edits
+    state: pending
 ```
