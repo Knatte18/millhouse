@@ -46,14 +46,13 @@ def _conflict_files(wiki: Path) -> list[str]:
     return [line for line in r.stdout.splitlines() if line]
 
 
-def _push_inner(wiki: Path, *, leave_conflicts: bool) -> int:
-    changed = _changed_files(wiki)
+def _push_inner(wiki: Path, changed: list[str], *, leave_conflicts: bool) -> int:
     if not changed:
         print("no changes")
         return 0
 
     msg = f"wiki: {', '.join(changed)}"
-    add = _run(["git", "-C", str(wiki), "add", "-A"])
+    add = _run(["git", "-C", str(wiki), "add", "--"] + changed)
     if add.returncode != 0:
         print(f"git add failed: {add.stderr.strip()}", file=sys.stderr)
         return 1
@@ -102,9 +101,15 @@ def main(argv: list[str] | None = None) -> int:
     git_root = _paths.resolve_git_root()
     wiki = _paths.resolve_wiki_path(git_root)
 
+    # Capture changed files BEFORE acquiring the lock — _wiki.wiki_lock
+    # writes `.mill-lock` inside the wiki dir, and a post-lock
+    # `git add -A` would sweep that file into the commit. The list
+    # is also our ground truth for the commit message.
+    changed = _changed_files(wiki)
+
     try:
         with _wiki.wiki_lock(wiki, "wikipush"):
-            return _push_inner(wiki, leave_conflicts=args.leave_conflicts)
+            return _push_inner(wiki, changed, leave_conflicts=args.leave_conflicts)
     except _wiki.LockBusy as e:
         print(
             f"wiki lock busy (held by {e.holder!r}, age {e.age_seconds}s)",
