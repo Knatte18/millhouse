@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-review-r4
+phase: planned
 slug: mill-vscode-rework
 branch: hanf/mill-vscode-rework
 plan: task/plan
@@ -24,4 +24,5 @@ plan-fix-r2  2026-05-09T16:12:18Z
 plan-review-r3  2026-05-09T16:24:46Z
 plan-fix-r3  2026-05-09T16:25:52Z
 plan-review-r4  2026-05-09T16:46:10Z
+planned  2026-05-09T16:46:21Z
 ```
