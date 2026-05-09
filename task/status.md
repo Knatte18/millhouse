@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-start-auto
 branch: hanf/mill-start-auto
 plan: task/plan
@@ -19,4 +19,13 @@ discussed  2026-05-09T14:45:07Z
 planning  2026-05-09T14:55:47Z
 plan-review-r1  2026-05-09T14:58:45Z
 planned  2026-05-09T14:59:00Z
+implementing  2026-05-09T15:06:11Z
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: mill-start-auto-skill
+    state: pending
 ```
