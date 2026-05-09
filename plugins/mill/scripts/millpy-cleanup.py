@@ -108,10 +108,7 @@ def build_plan(
                 hub_subpath = stub_data.get("hub_relative_path", ".")
             except Exception:  # noqa: BLE001
                 hub_subpath = "."
-        hub_mill_dir = (
-            wt_path / ".millhouse" if hub_subpath == "."
-            else wt_path / hub_subpath / ".millhouse"
-        )
+        hub_mill_dir = _paths.resolve_hub_relative_path(wt_path, hub_subpath) / ".millhouse"
         try:
             marker_data = _active.read_all(hub_mill_dir)
         except _active.ActiveError:
