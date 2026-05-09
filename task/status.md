@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-paths-helpers
 slug: mill-path-resolution-audit
 branch: hanf/mill-path-resolution-audit
 plan: task/plan
@@ -26,6 +26,7 @@ plan-fix-r3  2026-05-09T11:04:38Z
 plan-review-r4  2026-05-09T11:22:28Z
 planned  2026-05-09T11:22:35Z
 implementing  2026-05-09T11:25:13Z
+approved-paths-helpers  2026-05-09T11:34:33Z
 ```
 
 ## Batches
@@ -33,7 +34,7 @@ implementing  2026-05-09T11:25:13Z
 ```yaml
 batches:
   - name: paths-helpers
-    state: running
+    state: approved
     implementer_session: 73adc925-d006-4148-86da-14dbc6389587
     start_sha: 1f31836e9ecf19a68b6e1775e3ab07b44d982838
   - name: cleanup-inline-refactor
