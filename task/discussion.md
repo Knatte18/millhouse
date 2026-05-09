@@ -40,7 +40,8 @@ autonomy on operator-launched routine tasks: `/mill-spawn → /mill-start --auto
     `- **Q:** <question> **A:** [auto-pick] <option-1-label>. **Why:** <rationale>.`
 - Phase: Discussion Review, when `--auto`:
   - Review still runs up to `max_review_rounds`.
-  - On `GAPS_FOUND`, the assistant auto-resolves each gap: it adds the missing information to discussion.md using best judgment, commits, and re-runs the review.
+  - `mill-receiving-review` is still loaded before reading any review file (the existing non-negotiable rule still applies). Under `--auto` the PUSH BACK path is not available: there is no operator to escalate to. Every gap returned by the reviewer is treated as FIX regardless of the decision-tree outcome (factually-wrong gaps included — the assistant fixes by adding the missing information to discussion.md anyway, since arguing with a non-present operator achieves nothing).
+  - On `GAPS_FOUND`, the assistant auto-resolves each gap: it adds the missing information to discussion.md using best judgment, commits, **pushes**, and re-runs the review.
   - If gaps remain after `max_review_rounds`: append `phase: blocked` via `_status.append_phase(status_path, "blocked", timestamp)`, set `blocked_reason: "auto: discussion review gaps unresolved after <N> rounds"` via `_status.update_field`, commit + push status.md, and halt with that message. Do NOT proceed to Handoff.
 - Discussion.md template usage: every section is filled (no `_TODO:_` placeholders); auto-mode follows the existing template rules.
 
@@ -130,10 +131,10 @@ autonomy on operator-launched routine tasks: `/mill-spawn → /mill-start --auto
 
 - `plugins/mill/skills/mill-start/SKILL.md` — the single file changed in this task.
   - Add `argument-hint: "[--auto]"` to the frontmatter (between `description:` and the closing `---`). Existing frontmatter has only `name:` and `description:`.
-  - Add a new "Auto mode" subsection — recommended placement: immediately after the introductory paragraph "You are a collaborative solution designer…", or as a standalone heading between "Entry" and "Phases". Whichever placement, the subsection must:
+  - Add a new "Auto mode" subsection placed **immediately after the introductory paragraph** ("You are a collaborative solution designer…") — this frames the entire skill before any Phase begins, which keeps the auto-mode rules visible to readers regardless of which phase they jump into. The subsection must:
     - Define the `--auto` argument and its effect.
     - Specify the Phase: Discuss change (numbered-options-only; auto-pick `1)`; log per Q&A format below).
-    - Specify the Phase: Discussion Review change (auto-resolve gaps; halt-to-blocked after `max_review_rounds`).
+    - Specify the Phase: Discussion Review change (auto-resolve gaps; PUSH BACK unavailable; halt-to-blocked after `max_review_rounds`).
     - Specify the Q&A log format extension: `- **Q:** <question> **A:** [auto-pick] <option-1-label>. **Why:** <rationale>.`
     - Note the orthogonality to `pipeline.autonomous_mode`.
 
