@@ -4,7 +4,7 @@ from __future__ import annotations
 import sys
 import tempfile
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 HUB = Path(__file__).resolve().parent.parent.parent.parent
 SCRIPTS = HUB / "plugins" / "mill" / "scripts"
@@ -14,62 +14,24 @@ import _inplace  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
-def _make_active_data(slug: str, branch: str) -> dict:
-    return {"slug": slug, "task_title": "Test task", "branch": branch, "spawned_at": "2026-01-01T00:00:00Z"}
-
-
-def _fake_run_branch(branch: str):
-    """Return a _subprocess_util.run-compatible stub that reports ``branch``."""
-    result = MagicMock()
-    result.returncode = 0
-    result.stdout = branch + "\n"
-    return result
-
-
-# ---------------------------------------------------------------------------
 # is_inplace tests
 # ---------------------------------------------------------------------------
 
 
-def _test_is_inplace_true_when_branch_matches_and_no_worktree_dir():
-    """Returns True when branch matches cwd and worktrees dir absent."""
+def _test_is_inplace_true_when_no_worktree_dir():
+    """Returns True when no worktree directory exists for the slug."""
     with tempfile.TemporaryDirectory() as tmp:
         tmp = Path(tmp)
         git_root = tmp / "hub"
         git_root.mkdir()
-        # No worktrees dir created — is_inplace should return True.
         cfg = {}
-        active_data = _make_active_data("my-task", "my-task")
-
-        with patch("_inplace._subprocess_util.run", return_value=_fake_run_branch("my-task")):
-            with patch("_inplace.resolve_worktrees_dir", return_value=tmp / "worktrees"):
-                result = _inplace.is_inplace(active_data, git_root, cfg)
+        # No worktrees dir created — is_inplace should return True.
+        with patch("_inplace.resolve_worktrees_dir", return_value=tmp / "worktrees"):
+            result = _inplace.is_inplace("my-task", git_root, cfg)
 
         if not result:
             raise AssertionError("Expected is_inplace to return True")
-        print("PASS is_inplace — branch matches, no worktrees dir -> True")
-
-
-def _test_is_inplace_false_on_branch_mismatch():
-    """Returns False when HEAD branch does not match recorded branch."""
-    with tempfile.TemporaryDirectory() as tmp:
-        tmp = Path(tmp)
-        git_root = tmp / "hub"
-        git_root.mkdir()
-        cfg = {}
-        active_data = _make_active_data("my-task", "my-task")
-
-        with patch("_inplace._subprocess_util.run", return_value=_fake_run_branch("other-branch")):
-            with patch("_inplace.resolve_worktrees_dir", return_value=tmp / "worktrees"):
-                result = _inplace.is_inplace(active_data, git_root, cfg)
-
-        if result:
-            raise AssertionError("Expected is_inplace to return False on branch mismatch")
-        print("PASS is_inplace — branch mismatch -> False")
+        print("PASS is_inplace — no worktrees dir -> True")
 
 
 def _test_is_inplace_false_when_worktree_dir_exists_default():
@@ -81,11 +43,9 @@ def _test_is_inplace_false_when_worktree_dir_exists_default():
         worktree_dir = tmp / "worktrees" / "my-task"
         worktree_dir.mkdir(parents=True)
         cfg = {}
-        active_data = _make_active_data("my-task", "my-task")
 
-        with patch("_inplace._subprocess_util.run", return_value=_fake_run_branch("my-task")):
-            with patch("_inplace.resolve_worktrees_dir", return_value=tmp / "worktrees"):
-                result = _inplace.is_inplace(active_data, git_root, cfg)
+        with patch("_inplace.resolve_worktrees_dir", return_value=tmp / "worktrees"):
+            result = _inplace.is_inplace("my-task", git_root, cfg)
 
         if result:
             raise AssertionError("Expected is_inplace to return False when worktree dir exists")
@@ -102,11 +62,9 @@ def _test_is_inplace_false_when_worktree_dir_exists_override():
         worktree_dir = custom_worktrees / "my-task"
         worktree_dir.mkdir(parents=True)
         cfg = {"spawn": {"worktrees_dir": str(custom_worktrees)}}
-        active_data = _make_active_data("my-task", "my-task")
 
-        with patch("_inplace._subprocess_util.run", return_value=_fake_run_branch("my-task")):
-            with patch("_inplace.resolve_worktrees_dir", return_value=custom_worktrees):
-                result = _inplace.is_inplace(active_data, git_root, cfg)
+        with patch("_inplace.resolve_worktrees_dir", return_value=custom_worktrees):
+            result = _inplace.is_inplace("my-task", git_root, cfg)
 
         if result:
             raise AssertionError(
@@ -182,8 +140,7 @@ def _test_prompt_stale_worktree_returns_abort_on_eof():
 
 def main() -> int:
     tests = [
-        _test_is_inplace_true_when_branch_matches_and_no_worktree_dir,
-        _test_is_inplace_false_on_branch_mismatch,
+        _test_is_inplace_true_when_no_worktree_dir,
         _test_is_inplace_false_when_worktree_dir_exists_default,
         _test_is_inplace_false_when_worktree_dir_exists_override,
         _test_prompt_stale_worktree_returns_abort_on_choice_1,
