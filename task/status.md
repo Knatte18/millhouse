@@ -43,7 +43,9 @@ batches:
     implementer_session: 45282489-7172-413f-b659-c91903a64140
     start_sha: 9f585adcf2843dbbcffb1c5ee5a3e56d5383f2f2
   - name: review-common-switch
-    state: pending
+    state: running
+    implementer_session: ffd3da96-1e5f-4506-8858-73bf0e0be75f
+    start_sha: f3a70578ed396cd225d20378444bfe5353f59ddc
   - name: abandon-fix
     state: pending
   - name: docs
