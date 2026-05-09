@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-skill-edits
+phase: holistic-reviewing
 slug: codeguide-fixes-1
 branch: hanf/codeguide-fixes-1
 plan: task/plan
@@ -24,6 +24,7 @@ planned  2026-05-09T10:50:24Z
 implementing  2026-05-09T10:53:27Z
 approved-scope-helper  2026-05-09T11:07:42Z
 approved-skill-edits  2026-05-09T11:16:18Z
+holistic-reviewing  2026-05-09T11:16:27Z
 ```
 
 ## Batches
