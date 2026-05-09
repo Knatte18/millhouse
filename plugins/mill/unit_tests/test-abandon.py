@@ -1,11 +1,12 @@
 """Unit tests for millpy-abandon.py logic.
 
-Uses a trampoline subprocess that pre-patches sys.modules with mock _paths
-and _wiki modules so no real git or wiki I/O occurs.
+Uses a trampoline subprocess that pre-patches sys.modules with mock _paths,
+_review_common, and _subprocess_util modules so no real git or wiki I/O occurs.
 """
 from __future__ import annotations
 
 import datetime
+import json
 import os
 import subprocess
 import sys
@@ -45,31 +46,51 @@ def _make_worktree(tmp: Path, slug: str, phase: str = "implementing") -> tuple[P
     (mill_dir / "active.slug.md").write_text(f"slug: {slug}\n", encoding="utf-8")
     _active.write(mill_dir, slug=slug, task_title="Test task",
                   branch=f"impl/{slug}", spawned_at="2026-04-24T10:00:00Z")
-    wiki = tmp / "wiki"
-    status_path = wiki / "active" / slug / "status.md"
+    status_path = wt / "task" / "status.md"
     _make_status_md(status_path, phase)
     return wt, mill_dir, status_path
 
 
-def _make_trampoline(tmp: Path, wiki_path: Path) -> Path:
-    """Write a subprocess trampoline that mocks _paths/_wiki before loading mill-abandon."""
+def _make_trampoline(tmp: Path) -> Path:
+    """Write a subprocess trampoline that mocks _paths/_review_common/_subprocess_util before loading mill-abandon."""
     abandon_src = (SCRIPTS / "millpy-abandon.py").as_posix()
-    wiki_posix = wiki_path.as_posix()
+    wt_posix = (tmp / "worktree").as_posix()
+    wiki_posix = (tmp / "wiki").as_posix()
+    tmp_posix = tmp.as_posix()
+    cmds_posix = (tmp / "_git_cmds.json").as_posix()
     trampoline = tmp / "_trampoline.py"
     trampoline.write_text(
-        "import sys, types, importlib.util\n"
-        "from contextlib import contextmanager\n"
+        "import sys, types, importlib.util, json\n"
         "from pathlib import Path\n"
         "\n"
         "pm = types.ModuleType('_paths')\n"
-        f"pm.resolve_git_root = lambda: Path(r'{tmp.as_posix()}')\n"
+        f"pm.resolve_git_root = lambda: Path(r'{tmp_posix}')\n"
         f"pm.resolve_wiki_path = lambda g: Path(r'{wiki_posix}')\n"
+        f"pm.resolve_container_path = lambda p: Path(r'{tmp_posix}')\n"
+        f"pm.resolve_hub_path = lambda: Path(r'{wt_posix}')\n"
+        f"pm.resolve_active_hub = lambda container, slug, *, cfg, git_root: Path(r'{wt_posix}')\n"
         "sys.modules['_paths'] = pm\n"
         "\n"
-        "wm = types.ModuleType('_wiki')\n"
-        "wm.wiki_lock = contextmanager(lambda *a, **k: (x for x in [None]))\n"
-        "wm.write_commit_push = lambda *a, **k: None\n"
-        "sys.modules['_wiki'] = wm\n"
+        "rcm = types.ModuleType('_review_common')\n"
+        "rcm.load_config = lambda wiki_root, mill_dir: {}\n"
+        "sys.modules['_review_common'] = rcm\n"
+        "\n"
+        "_recorded = []\n"
+        f"_cmds_file = Path(r'{cmds_posix}')\n"
+        "\n"
+        "class _FakeResult:\n"
+        "    def __init__(self):\n"
+        "        self.returncode = 0\n"
+        "        self.stdout = ''\n"
+        "        self.stderr = ''\n"
+        "\n"
+        "_sub = types.ModuleType('_subprocess_util')\n"
+        "def _mock_run(argv, **kw):\n"
+        "    _recorded.append(list(argv))\n"
+        "    _cmds_file.write_text(json.dumps(_recorded), encoding='utf-8')\n"
+        "    return _FakeResult()\n"
+        "_sub.run = _mock_run\n"
+        "sys.modules['_subprocess_util'] = _sub\n"
         "\n"
         # Use 'mill_abandon' (not '__main__') so the if-__main__ block doesn't fire
         f"spec = importlib.util.spec_from_file_location('mill_abandon', r'{abandon_src}')\n"
@@ -89,6 +110,13 @@ def _run(worktree: Path, trampoline: Path, extra_args: list[str] | None = None,
         cmd, cwd=str(worktree), input=stdin_input,
         capture_output=True, text=True, encoding="utf-8", env=env,
     )
+
+
+def _read_git_cmds(tmp: Path) -> list[list[str]]:
+    p = tmp / "_git_cmds.json"
+    if not p.exists():
+        return []
+    return json.loads(p.read_text(encoding="utf-8"))
 
 
 def main() -> int:
@@ -115,7 +143,7 @@ def main() -> int:
             tmp = Path(tmp_str)
             slug = "test-task"
             wt, mill_dir, status_path = _make_worktree(tmp, slug, "implementing")
-            trampoline = _make_trampoline(tmp, tmp / "wiki")
+            trampoline = _make_trampoline(tmp)
             result = _run(wt, trampoline, ["--force"])
             assert result.returncode == 0, f"exit={result.returncode} stderr={result.stderr}"
             assert slug in result.stdout, f"slug missing from stdout: {result.stdout!r}"
@@ -123,7 +151,16 @@ def main() -> int:
             # status.md should have phase=abandoned
             info = _status.read_status(status_path)
             assert info["phase"] == "abandoned", f"phase={info['phase']!r}"
-            ok("happy path --force: exits 0, status.md updated")
+            # git commands should target the task branch (active_hub == wt for flat-hub)
+            cmds = _read_git_cmds(tmp)
+            wt_str = str(wt)
+            assert ["git", "-C", wt_str, "add", "task/status.md"] in cmds, \
+                f"add not in cmds: {cmds}"
+            assert ["git", "-C", wt_str, "commit", "-m", f"task: abandon {slug}"] in cmds, \
+                f"commit not in cmds: {cmds}"
+            assert ["git", "-C", wt_str, "push"] in cmds, \
+                f"push not in cmds: {cmds}"
+            ok("happy path --force: exits 0, status.md updated, task-branch commits recorded")
     except Exception as exc:
         fail("happy path --force", exc)
 
@@ -133,7 +170,7 @@ def main() -> int:
             tmp = Path(tmp_str)
             hub_root = tmp / "hub"
             hub_root.mkdir()
-            trampoline = _make_trampoline(tmp, tmp / "wiki")
+            trampoline = _make_trampoline(tmp)
             result = _run(hub_root, trampoline, ["--force"])
             assert result.returncode != 0, f"expected non-zero from hub, got {result.returncode}"
             ok("hub check: exits non-zero when active.slug.md absent")
@@ -146,7 +183,7 @@ def main() -> int:
             tmp = Path(tmp_str)
             slug = "test-task"
             wt, mill_dir, status_path = _make_worktree(tmp, slug, "abandoned")
-            trampoline = _make_trampoline(tmp, tmp / "wiki")
+            trampoline = _make_trampoline(tmp)
             result = _run(wt, trampoline, ["--force"])
             assert result.returncode != 0, f"expected non-zero, got {result.returncode}"
             combined = result.stdout + result.stderr
@@ -161,7 +198,7 @@ def main() -> int:
             tmp = Path(tmp_str)
             slug = "test-task"
             wt, mill_dir, status_path = _make_worktree(tmp, slug, "done")
-            trampoline = _make_trampoline(tmp, tmp / "wiki")
+            trampoline = _make_trampoline(tmp)
             result = _run(wt, trampoline, ["--force"])
             assert result.returncode != 0, f"expected non-zero, got {result.returncode}"
             combined = result.stdout + result.stderr
@@ -180,7 +217,7 @@ def main() -> int:
             (mill_dir / _builder_lock.LOCK_FILENAME).write_text(
                 f"```yaml\nslug: other-task\ntimestamp: {now_ts}\n```\n", encoding="utf-8"
             )
-            trampoline = _make_trampoline(tmp, tmp / "wiki")
+            trampoline = _make_trampoline(tmp)
             result = _run(wt, trampoline)  # no --force
             assert result.returncode != 0, f"expected non-zero, got {result.returncode}"
             combined = result.stdout + result.stderr
@@ -199,9 +236,13 @@ def main() -> int:
                 "```yaml\nslug: other-task\ntimestamp: 2000-01-01T00:00:00Z\n```\n",
                 encoding="utf-8",
             )
-            trampoline = _make_trampoline(tmp, tmp / "wiki")
+            trampoline = _make_trampoline(tmp)
             result = _run(wt, trampoline, ["--force"])
             assert result.returncode == 0, f"exit={result.returncode} stderr={result.stderr}"
+            cmds = _read_git_cmds(tmp)
+            wt_str = str(wt)
+            assert ["git", "-C", wt_str, "add", "task/status.md"] in cmds, \
+                f"add not in cmds: {cmds}"
             ok("stale lock → proceed with --force")
     except Exception as exc:
         fail("stale lock proceed", exc)
@@ -219,7 +260,7 @@ def main() -> int:
             _active.write(mill_dir, slug=slug, task_title="Test task",
                           branch=f"impl/{slug}", spawned_at="2026-04-24T10:00:00Z")
             # status.md intentionally NOT created
-            trampoline = _make_trampoline(tmp, tmp / "wiki")
+            trampoline = _make_trampoline(tmp)
             result = _run(wt, trampoline, ["--force"])
             assert result.returncode != 0, f"expected non-zero, got {result.returncode}"
             combined = result.stdout + result.stderr

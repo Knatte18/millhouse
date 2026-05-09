@@ -6,6 +6,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
@@ -59,7 +60,22 @@ def _make_worktree_fixture(tmp: str, slug: str) -> tuple[Path, Path]:
         branch=f"hanf/{slug}",
         spawned_at="2026-04-29T00:00:00Z",
     )
+    wiki_root = container / "wiki"
+    wiki_root.mkdir(parents=True, exist_ok=True)
+    (wiki_root / "config.yaml").write_text(
+        "paths:\n  discussion_file: task/discussion.md\n",
+        encoding="utf-8",
+    )
     return container, worktree
+
+
+def _make_run_result(stdout: str = "", returncode: int = 0, stderr: str = "") -> MagicMock:
+    result = MagicMock()
+    result.stdout = stdout
+    result.returncode = returncode
+    result.stderr = stderr
+    return result
+
 
 from _review_common import (  # noqa: E402
     RE_BATCH,
@@ -278,6 +294,98 @@ def main() -> int:
                 print("PASS: resolve_path raises ActiveWorktreeSlugMismatch on marker mismatch")
         finally:
             os.chdir(original_cwd)
+
+    # resolve_path: M2 in-place mode (hub_rel=".")
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        git_root = tmp_path / "git_root"
+        git_root.mkdir()
+        hub = git_root
+        slug = "my-inplace-task"
+        branch = f"hanf/{slug}"
+
+        wiki_root = tmp_path / "wiki"
+        wiki_root.mkdir()
+        (wiki_root / "config.yaml").write_text(
+            "paths:\n  discussion_file: task/discussion.md\n",
+            encoding="utf-8",
+        )
+
+        hub_mill_dir = hub / ".millhouse"
+        hub_mill_dir.mkdir(parents=True)
+        _active.write(
+            hub_mill_dir,
+            slug=slug,
+            task_title="In-Place Task",
+            branch=branch,
+            spawned_at="2026-01-01T00:00:00Z",
+        )
+        (hub_mill_dir / "config.local.yaml").write_text(
+            "hub_relative_path: .\n", encoding="utf-8"
+        )
+
+        worktrees_dir = tmp_path / "wts"
+        worktrees_dir.mkdir()
+
+        mock_branch = _make_run_result(stdout=branch + "\n")
+
+        with patch("_subprocess_util.run", return_value=mock_branch), \
+             patch("_paths.resolve_git_root", return_value=git_root), \
+             patch("_paths.resolve_wiki_path", return_value=wiki_root), \
+             patch("_paths.resolve_hub_path", return_value=hub), \
+             patch("_paths.resolve_main_worktree_root", return_value=git_root), \
+             patch("_inplace.resolve_worktrees_dir", return_value=worktrees_dir):
+            p = resolve_path("task/discussion.md", slug)
+
+        expected = git_root / "task" / "discussion.md"
+        assert p == expected, f"M2 in-place (hub_rel='.'): expected {expected}, got {p}"
+        print("PASS: resolve_path M2 in-place (hub_rel='.') → git_root/task/discussion.md")
+
+    # resolve_path: M2+sub in-place mode (hub_rel="src/Models")
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        git_root = tmp_path / "git_root"
+        git_root.mkdir()
+        hub = git_root / "src" / "Models"
+        slug = "my-subdir-inplace-task"
+        branch = f"hanf/{slug}"
+
+        wiki_root = tmp_path / "wiki"
+        wiki_root.mkdir()
+        (wiki_root / "config.yaml").write_text(
+            "paths:\n  discussion_file: task/discussion.md\n",
+            encoding="utf-8",
+        )
+
+        hub_mill_dir = hub / ".millhouse"
+        hub_mill_dir.mkdir(parents=True)
+        _active.write(
+            hub_mill_dir,
+            slug=slug,
+            task_title="Sub-Dir In-Place Task",
+            branch=branch,
+            spawned_at="2026-01-01T00:00:00Z",
+        )
+        (hub_mill_dir / "config.local.yaml").write_text(
+            "hub_relative_path: src/Models\n", encoding="utf-8"
+        )
+
+        worktrees_dir = tmp_path / "wts"
+        worktrees_dir.mkdir()
+
+        mock_branch = _make_run_result(stdout=branch + "\n")
+
+        with patch("_subprocess_util.run", return_value=mock_branch), \
+             patch("_paths.resolve_git_root", return_value=git_root), \
+             patch("_paths.resolve_wiki_path", return_value=wiki_root), \
+             patch("_paths.resolve_hub_path", return_value=hub), \
+             patch("_paths.resolve_main_worktree_root", return_value=git_root), \
+             patch("_inplace.resolve_worktrees_dir", return_value=worktrees_dir):
+            p = resolve_path("task/discussion.md", slug)
+
+        expected = git_root / "src" / "Models" / "task" / "discussion.md"
+        assert p == expected, f"M2+sub in-place: expected {expected}, got {p}"
+        print("PASS: resolve_path M2+sub in-place (hub_rel='src/Models') → git_root/src/Models/task/discussion.md")
 
     # parse_verdict: APPROVE
     raw = "# Review: My Task\n\n```yaml\nverdict: APPROVE\nreviewer_model: sonnetmax\n```\n"

@@ -1,8 +1,8 @@
 """mill-abandon — mark the current task abandoned.
 
-Run from inside the task's worktree.  Updates wiki/active/<slug>/status.md,
-commits, and pushes.  Then run mill-cleanup from the hub to remove the
-worktree and active dir.
+Run from inside the task's worktree.  Updates `<active_hub>/task/status.md`
+on the task branch, commits, and pushes.  Then run mill-cleanup from the hub
+to remove the worktree and active dir.
 """
 from __future__ import annotations
 
@@ -17,8 +17,9 @@ sys.path.insert(0, str(_SCRIPTS))
 import _active
 import _builder_lock
 import _paths
+import _review_common
 import _status
-import _wiki
+import _subprocess_util
 
 
 def _parse_iso(ts: str) -> datetime.datetime:
@@ -45,12 +46,21 @@ def main() -> int:
     except _active.ActiveError as exc:
         sys.exit(f"Error reading active slug: {exc}")
 
-    # Step 3: resolve paths
+    # Step 3: resolve paths via the centralized helpers (post-task-32: status.md
+    # lives at <active_hub>/task/status.md on the task branch, not in the wiki).
+    # We use active_hub for both the file path and the git -C target so the
+    # relative argument "task/status.md" stays correct under sub-dir hub configs.
     git_root = _paths.resolve_git_root()
+    container_path = _paths.resolve_container_path(git_root)
     wiki_path = _paths.resolve_wiki_path(git_root)
+    hub_dir = _paths.resolve_hub_path()
+    cfg = _review_common.load_config(wiki_path, hub_dir / ".millhouse")
+    active_hub = _paths.resolve_active_hub(
+        container_path, slug, cfg=cfg, git_root=git_root,
+    )
 
     # Step 4: load status.md and check phase
-    status_path = wiki_path / "active" / slug / "status.md"
+    status_path = active_hub / "task" / "status.md"
     if not status_path.exists():
         sys.exit(f"Error: status.md not found for slug '{slug}'.")
 
@@ -88,17 +98,25 @@ def main() -> int:
         if response.strip().lower() != "y":
             return 0
 
-    # Step 7-10: update wiki
+    # Step 7-10: update task branch
     timestamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
-    with _wiki.wiki_lock(wiki_path, slug):
-        _status.append_phase(status_path, "abandoned", timestamp)
-        _wiki.write_commit_push(
-            wiki_path,
-            [f"active/{slug}/status.md"],
-            f"task: abandon {slug}",
-            slug=slug,
-        )
+    _status.append_phase(status_path, "abandoned", timestamp)
+    add_result = _subprocess_util.run(
+        ["git", "-C", str(active_hub), "add", "task/status.md"]
+    )
+    if add_result.returncode != 0:
+        sys.exit(f"Error: git add failed: {add_result.stderr.strip()!r}")
+    commit_result = _subprocess_util.run(
+        ["git", "-C", str(active_hub), "commit", "-m", f"task: abandon {slug}"]
+    )
+    if commit_result.returncode != 0:
+        sys.exit(f"Error: git commit failed: {commit_result.stderr.strip()!r}")
+    push_result = _subprocess_util.run(
+        ["git", "-C", str(active_hub), "push"]
+    )
+    if push_result.returncode != 0:
+        sys.exit(f"Error: git push failed: {push_result.stderr.strip()!r}")
 
     # Step 11: success
     print(
