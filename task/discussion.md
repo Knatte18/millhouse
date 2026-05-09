@@ -34,7 +34,9 @@ The cascade is large but mechanical: ~14 production files, ~12 test files, 8 SKI
   - `task_data(git_root: Path, wiki_path: Path, cfg: dict) -> dict` — returns `{"slug": str, "branch": str, "task_title": str}`. `task_title` from Home.md task entry.
   - `MarkerError` exception type.
 - Drop `_spawn_core.write_active_marker` (and its call sites in `millpy-spawn.py:230` and `millpy-claim.py:300`).
-- Rewrite `_spawn_core.discover_active_worktrees` to scan `<wts>/<dir>` → `git -C <dir> branch --show-current` → strip prefix → match against Home.md (any phase, not just `[active]`).
+- Rewrite `_spawn_core.discover_active_worktrees`. New signature: `discover_active_worktrees(worktrees_dir: Path, home_tasks: list[_tasks_md.Task]) -> list[tuple[Path, str, str]]`. Body: scan `<wts>/<dir>` → `git -C <dir> branch --show-current` → strip prefix → match against `home_tasks` (any phase, not just `[active]`). Caller pre-loads and parses Home.md; helper does no I/O for the wiki.
+- Update callers `millpy-cleanup.py`, `millpy-vscode.py`, `millpy-terminal.py` to pass `home_tasks` to `discover_active_worktrees`. mill-cleanup already has it; vscode/terminal load `wiki_path = _paths.resolve_wiki_path(git_root)` then `home_tasks = _tasks_md.parse((wiki_path / "Home.md").read_text())` before the call.
+- Retain `_paths.ActiveWorktreeSlugMismatch` and `_paths.ActiveWorktreeNotFound`. The slug-comparison branch in `resolve_active_worktree` is preserved — it now compares the requested slug against the slug derived from `git -C <wts/slug-dir> branch --show-current` instead of the marker file. Tests at `test-paths.py:429,516` and `test-review-common.py:292-294` are adapted to set up a branch+Home.md mismatch state.
 - Rewrite `_inplace.is_inplace` to `is_inplace(slug: str, git_root: Path, cfg: dict) -> bool` — branch-match check is implicit because slug derives from current branch.
 - Rewrite `_paths.resolve_active_worktree` and `_paths.resolve_active_hub` to use the new `_marker` module instead of `_active.read_all` / `read_slug`.
 - Rewrite `_review_common.find_active_slug` and `_review_common.load_task_title` to delegate to `_marker`. New signatures take `(git_root, wiki_path, cfg)` instead of `mill_dir`.
@@ -120,6 +122,18 @@ The cascade is large but mechanical: ~14 production files, ~12 test files, 8 SKI
 - Rationale: Same semantics as today — if you're on a task branch, you're in a worktree, not the hub. Branch+Home.md preserves the existing guard.
 - Rejected: Path-based detection (`Path.cwd().parent.name == "wts"` — works without Home.md but fails when hub_relative_path puts the cwd in a sub-dir); drop the check (silent foot-gun).
 
+### Retain `ActiveWorktreeSlugMismatch` and `ActiveWorktreeNotFound`
+
+- Decision: Both exception types in `_paths.py.__all__` survive the rewrite. `resolve_active_worktree` still raises `ActiveWorktreeSlugMismatch` when `<container>/wts/<slug>/` exists but the slug derived from its current branch differs from the requested slug.
+- Rationale: The semantics are valid post-rewrite — "the worktree dir at this path is on a different task than the one you asked for" is a real condition that should surface as a typed exception, not silently convert into a generic `MarkerError`. Callers already catch these types; tests already cover them. Changing only the *triggering check* (branch-derived vs marker-derived) keeps the public exception surface stable.
+- Rejected: Drop `ActiveWorktreeSlugMismatch` and let `MarkerError` propagate (narrows semantics — "marker error" and "slug mismatch" are different conditions; call sites currently catching `ActiveWorktreeSlugMismatch` would need updates); drop the slug-mismatch detection branch entirely (silent foot-gun: returning a worktree on the wrong branch is a bug that should surface).
+
+### `discover_active_worktrees` signature change: add `home_tasks` parameter
+
+- Decision: New signature `discover_active_worktrees(worktrees_dir: Path, home_tasks: list[_tasks_md.Task]) -> list[tuple[Path, str, str]]`. Caller pre-loads and parses Home.md; helper does no wiki I/O.
+- Rationale: The new body needs Home.md for branch-slug-to-task lookup. Resolving `wiki_path` inside the helper from `worktrees_dir` would couple it to a layout assumption (container-form: `worktrees_dir.parent.parent`) that breaks in prefix-form repos. mill-cleanup already has `home_tasks` in scope; mill-vscode and mill-terminal load it once at startup — a single `Home.md` read per invocation is negligible.
+- Rejected: Internal `wiki_path` resolution via `worktrees_dir.parent.parent` (couples helper to container-form layout); pass `wiki_path: Path` and load+parse inside the helper (helper still does I/O, marginally less pure).
+
 ### Test fixture: `_make_task_worktree` helper
 
 - Decision: New shared helper `_make_task_worktree(tmp, slug, title, *, branch_prefix="", phase="active")` that initializes a real git repo, creates a task branch, writes a minimal Home.md with the slug at the requested phase, and returns `(worktree_path, wiki_path)`.
@@ -146,7 +160,7 @@ The cascade is large but mechanical: ~14 production files, ~12 test files, 8 SKI
 |---|---|---|
 | `plugins/mill/scripts/_active.py` | the module itself | DELETE |
 | `plugins/mill/scripts/_inplace.py:32-71` | `is_inplace(active_data, git_root, cfg)` | `is_inplace(slug, git_root, cfg)` — drop `active_data["branch"]` check; single absence test for `<wts>/<slug>/` |
-| `plugins/mill/scripts/_spawn_core.py:152-202` | `discover_active_worktrees(worktrees_dir)` reads stub + `_active.read_all(hub_mill_dir)` | rewrite: per-dir `git branch --show-current` + Home.md lookup (load Home.md once outside the loop; inject parsed tasks into the helper to avoid per-call I/O) |
+| `plugins/mill/scripts/_spawn_core.py:152-202` | `discover_active_worktrees(worktrees_dir)` reads stub + `_active.read_all(hub_mill_dir)` | new signature: `discover_active_worktrees(worktrees_dir: Path, home_tasks: list[_tasks_md.Task])`. Per-dir `git -C <dir> branch --show-current`, strip `spawn.branch_prefix`, match against `home_tasks` (a `Task` whose slug equals the stripped value, regardless of phase). Helper does no Home.md I/O; caller passes pre-parsed tasks. `hub_relative_path` stub-read for sub-dir hubs preserved. |
 | `plugins/mill/scripts/_spawn_core.py:653-679` | `write_active_marker(...)` | DELETE; remove call sites in `millpy-spawn.py:230` and `millpy-claim.py:300` |
 | `plugins/mill/scripts/_paths.py:295,307` | `_active.read_all(hub_dir/".millhouse")`, `_active.read_slug(worktree/".millhouse")` | `_marker.task_data(git_root, wiki_path, cfg)` and `_marker.slug_from_branch(...)` |
 | `plugins/mill/scripts/_review_common.py:118-140` | `find_active_slug(mill_dir)`, `load_task_title(mill_dir, slug)` | `find_active_slug(git_root, wiki_path, cfg)`, `load_task_title(git_root, wiki_path, cfg, slug)` — keep `slug` arg as the fallback when Home.md entry is missing |
@@ -157,7 +171,8 @@ The cascade is large but mechanical: ~14 production files, ~12 test files, 8 SKI
 | `plugins/mill/scripts/millpy-implement.py:87`, `millpy-implement-holistic.py:72` | `_active.read_slug(mill_dir)` | `_marker.slug_from_branch(...)` |
 | `plugins/mill/scripts/millpy-merge-in-subagent.py:84` | `_active.read_slug(mill_dir)` (existence check) | `_marker.slug_from_branch(...)`; halt on `MarkerError` |
 | `plugins/mill/scripts/millpy-spawn.py:230` | `_spawn_core.write_active_marker(...)` | DELETE |
-| `plugins/mill/scripts/millpy-vscode.py`, `millpy-terminal.py` | `discover_active_worktrees(...)` | unchanged signature; just the rewritten body |
+| `plugins/mill/scripts/millpy-vscode.py`, `millpy-terminal.py` | `discover_active_worktrees(worktrees_dir)` | signature changed — caller now resolves wiki, parses Home.md tasks, passes them in: `home_tasks = _tasks_md.parse((wiki_path / "Home.md").read_text(encoding="utf-8"))`. `wiki_path` resolved via `_paths.resolve_wiki_path(_paths.resolve_git_root())`. |
+| `plugins/mill/scripts/millpy-cleanup.py` (line 480 area) | `discover_active_worktrees(container_path / "wts")` | signature changed — caller already has `home_tasks` parsed at line 484; thread it through. |
 
 **Config dependency (new):** `_marker` must load config to read `spawn.branch_prefix`. `_review_common.load_config(wiki_path, mill_dir)` already exists — but the `mill_dir` argument is now obsolete because `.millhouse/config.local.yaml` lives at hub root, not the marker's mill_dir. Pass `git_root` (the worktree root) and resolve via `_paths.resolve_hub_path()`. Most callers already load config before resolving the slug, so they can pass the cfg dict in directly — the new `_marker` API takes `cfg` as a param to avoid re-loading.
 
@@ -205,6 +220,9 @@ After step 1+2, branch+Home.md gives a complete answer. If spawn fails between s
 - `_marker.task_data` returns `{slug, branch, task_title}` with title from Home.md task entry.
 - `_inplace.is_inplace(slug, git_root, cfg)` returns False when `<wts>/<slug>/` exists.
 - `_inplace.is_inplace(slug, git_root, cfg)` returns True when `<wts>/<slug>/` is absent.
+- `_paths.resolve_active_worktree` raises `ActiveWorktreeSlugMismatch` when `<wts>/<slug>/` exists but its branch's stripped-slug differs from the requested slug.
+- `_paths.resolve_active_worktree` raises `ActiveWorktreeNotFound` when neither in-place mode nor a worktree dir applies.
+- `discover_active_worktrees` accepts `home_tasks` parameter and returns entries only for branches whose stripped-slug appears in the passed task list.
 
 **Coverage scenarios** (must be exercised somewhere in the suite):
 
@@ -245,3 +263,5 @@ After step 1+2, branch+Home.md gives a complete answer. If spawn fails between s
 - **Q:** Test fixture pattern? **A:** Shared `_make_task_worktree` helper that builds real git+Home.md state.
 - **Q:** Test scope? **A:** New `test-marker.py` + update existing tests + integration-test assertion update.
 - **Q:** `config.local.yaml` stub at worktree root for `hub_relative_path`? **A:** Out of scope — different concern (hub-subpath discovery), not the active marker.
+- **Q:** Fate of `_paths.ActiveWorktreeSlugMismatch` and `ActiveWorktreeNotFound`? **A:** Both retained. The slug-comparison branch in `resolve_active_worktree` keeps raising `ActiveWorktreeSlugMismatch`; only the triggering check changes (branch-derived slug instead of marker-derived). Existing tests adapted, not deleted.
+- **Q:** How does `discover_active_worktrees` get Home.md without coupling to a layout assumption? **A:** It doesn't — the signature is changed to accept `home_tasks: list[Task]` from the caller. mill-cleanup has it in scope; mill-vscode / mill-terminal each load+parse Home.md once before the call.
