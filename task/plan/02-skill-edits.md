@@ -17,7 +17,7 @@ SKILL.md prose edits that operationalise both fixes. Card 3 promotes `resolve.py
 
 Batch-local decisions:
 
-- **Resolution callout body is verbatim across the four codeguide-* files.** Identical paragraph text in every skill keeps the agent's mental model consistent and lets a future global edit happen via `replace_all`. The only per-file variation is *which* existing step the back-reference replaces (Step 1 in three skills; Step 3 in `codeguide-setup`).
+- **Resolution callout body is verbatim across the three "consumer" codeguide skills (`codeguide-generate`, `codeguide-maintain`, `codeguide-update`).** Identical paragraph text in those three skills keeps the agent's mental model consistent and lets a future global edit happen via `replace_all`. `codeguide-setup` gets its own variant: the consumer skills halt on `found == false` (no codeguide to operate on), but for `codeguide-setup` `found == false` is the *primary* first-time-setup case — its callout describes how `found`/`mode`/`cg_root`/`sibling_anchor` feed the first-time/refresh/subfolder dispatch in Step 5 instead. The per-file variation in *which* existing step the back-reference replaces stays as before (Step 1 in `codeguide-generate` / `codeguide-maintain`, Step 3 in `codeguide-setup`; `codeguide-update`'s Step 1 is rewritten by Card 4).
 - **No frontmatter changes.** The `description:` field was discussed and explicitly rejected as the discoverability fix (it's too subtle).
 - **Step renumbering keeps stable identifiers.** When `codeguide-update`'s old Step 1 splits into 1a (resolve root) and 1b (enumerate scope), every cross-reference inside the same file is updated in the same edit (e.g. "## Steps" tables, prose like "see step 1"). No dangling references.
 
@@ -35,12 +35,22 @@ Batch-local decisions:
 - **Creates:** none
 - **Deletes:** none
 - **Requirements:**
-  - In each of the four files, insert the following block immediately after the YAML frontmatter (the closing `---`) AND any one-paragraph description that follows it, but BEFORE the first existing `##` heading. The block is verbatim across all four files:
+  - In each of the four files, insert a `## Resolution` block immediately after the YAML frontmatter (the closing `---`) AND any one-paragraph description that follows it, but BEFORE the first existing `##` heading. The block content depends on the file:
+
+    For `codeguide-generate/SKILL.md`, `codeguide-maintain/SKILL.md`, and `codeguide-update/SKILL.md` — verbatim, identical across all three:
 
     ```
     ## Resolution
 
     Before doing anything else, run `python ${CLAUDE_PLUGIN_ROOT}/scripts/resolve.py --json` to find the codeguide root for this repo. The script prints a JSON object: `{mode, cg_root, sibling_anchor, found}`. If `found == false`, halt and tell the user to run `/codeguide-setup` first.
+    ```
+
+    For `codeguide-setup/SKILL.md` — different variant, because `found == false` is the primary first-time-setup case and Steps 1–2 (flag parsing, git-toplevel detection) must run before `resolve.py`:
+
+    ```
+    ## Resolution
+
+    After parsing flags (Step 1) and detecting the git toplevel (Step 2), run `python ${CLAUDE_PLUGIN_ROOT}/scripts/resolve.py --json` to discover existing codeguide state. The script prints `{mode, cg_root, sibling_anchor, found}`. The `found` flag — together with `mode`, `cg_root`, and `sibling_anchor` — drives the first-time / refresh / subfolder dispatch in Step 5. Do NOT halt on `found == false`; that is the expected result for first-time setup.
     ```
 
   - Replace the existing buried resolver step with a one-line back-reference:
