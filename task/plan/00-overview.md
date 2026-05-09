@@ -3,7 +3,7 @@
 ```yaml
 task: 39 (A) — mill-start question-format UX
 slug: mill-start-question-ux
-approved: false
+approved: true
 started: 20260509-104703
 parent: main
 root: ""
