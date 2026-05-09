@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-approved
+phase: done
 slug: mill-vscode-rework
 branch: hanf/mill-vscode-rework
 plan: task/plan
@@ -30,6 +30,7 @@ approved-vscode-processes-helper  2026-05-09T16:59:28Z
 approved-vscode-cli-integration  2026-05-09T17:28:04Z
 holistic-reviewing  2026-05-09T17:28:15Z
 holistic-approved  2026-05-09T17:43:27Z
+done  2026-05-09T17:43:32Z
 ```
 
 ## Batches
