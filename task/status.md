@@ -29,7 +29,9 @@ implementing  2026-05-09T11:25:29Z
 ```yaml
 batches:
   - name: skill-text-rules
-    state: pending
+    state: running
+    implementer_session: 91aae427-d659-41f8-a1ca-d3e8fe99e024
+    start_sha: 2ea6482724cbc745697d8f961011172a296a76ba
   - name: inplace-reorder
     state: pending
   - name: subprocess-popup-fix
