@@ -27,7 +27,9 @@ implementing  2026-05-09T10:31:20Z
 ```yaml
 batches:
   - name: cleanliness-helper
-    state: pending
+    state: running
+    implementer_session: 0297135c-0187-4e1a-a3fa-41ede25337a5
+    start_sha: b6522332ad924286f37ad94136295669e3232610
   - name: git-pr-task-contract
     state: pending
   - name: cleanliness-wireup
