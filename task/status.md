@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-scope-helper
 slug: codeguide-fixes-1
 branch: hanf/codeguide-fixes-1
 plan: task/plan
@@ -22,6 +22,7 @@ plan-fix-r1  2026-05-09T10:44:50Z
 plan-review-r2  2026-05-09T10:50:08Z
 planned  2026-05-09T10:50:24Z
 implementing  2026-05-09T10:53:27Z
+approved-scope-helper  2026-05-09T11:07:42Z
 ```
 
 ## Batches
@@ -29,7 +30,7 @@ implementing  2026-05-09T10:53:27Z
 ```yaml
 batches:
   - name: scope-helper
-    state: running
+    state: approved
     implementer_session: b889131b-a421-49d9-a822-eb1ea49ffa96
     start_sha: 56a80564761ed46e367b30711c9969479a63eb57
   - name: skill-edits
