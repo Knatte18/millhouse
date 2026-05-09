@@ -63,10 +63,10 @@ batches:
 - **Rationale:** Tests across `test-review-*-flow.py` already use `load_reviewer("test_stub")`; preserving a zero-config path keeps test setup unchanged.
 - **Applies to:** batches 1 and 2.
 
-### Decision: `--max-rounds <N>` clamps both scopes uniformly
+### Decision: `--max-rounds <N>` overrides both scopes
 
-- **Decision:** The single CLI flag `--max-rounds <N>` continues to exist on `millpy-review-plan.py` and `millpy-review-code.py`. When set, it clamps both `<role>.batch.rounds` and `<role>.holistic.rounds` to `N` for the invocation. Backends apply the clamp at their per-scope round-cap check sites.
-- **Rationale:** Single flag matches today's operator workflow. No demonstrated need to split.
+- **Decision:** The single CLI flag `--max-rounds <N>` continues to exist on `millpy-review-plan.py` and `millpy-review-code.py`. When set, the effective max for BOTH `<role>.batch.rounds` AND `<role>.holistic.rounds` becomes `N` for the invocation — replacing each scope's configured value. The override is in BOTH directions (it can lower or raise the configured cap), preserving the existing escape-hatch pattern in `mill-plan/SKILL.md` where `--max-rounds {N+1}` extends past the configured cap by one round. Backends pick the right scope based on `batch_name`/scope context and apply the override at their per-scope round-cap check sites.
+- **Rationale:** Today's behaviour in `_review_plan.py:287` and `_review_code.py:183` is `max_rounds = max_rounds if max_rounds is not None else cfg["review"]["<type>"]["rounds"]` — pure override, no min/max clamping. Preserve that semantic; the only change is that "the configured value" now lives at two scope-specific keys instead of one shared key. Splitting the flag is unnecessary and would break the existing escape hatch.
 - **Applies to:** batch 2.
 
 ### Decision: Skill docs in scope
