@@ -72,7 +72,9 @@ The verify command runs the full `test-paths.py` suite (existing tests for uncha
   - **M2+sub:** in-place scaffold; stub at `<git_root>/.millhouse/config.local.yaml` declares `hub_relative_path: src/Models` → returns `git_root/src/Models`.
   - **Error propagation:** when neither in-place nor worktree-dir exists → propagates `ActiveWorktreeNotFound` from the inner `resolve_active_worktree` call.
 
-  Use `unittest.mock.patch("_subprocess_util.run", return_value=_make_run_result(stdout=branch))` for the in-place branch-match scenarios. Tests in this card are expected to fail at the post-card commit; Card 2 makes them pass.
+  Use `unittest.mock.patch("_subprocess_util.run", return_value=_make_run_result(stdout=branch))` for the branch-name lookup AND `unittest.mock.patch("_inplace.resolve_worktrees_dir", return_value=<some-tmp-dir-without-the-slug>)` to short-circuit `_inplace.is_inplace`'s second subprocess call (`resolve_main_worktree_root → git rev-parse --git-common-dir`). Patching only the subprocess mock works by coincidence (returns the branch name as a fake `--git-common-dir` output, which `Path("branch").parent` happens to resolve to the right tmp_path); patching `resolve_worktrees_dir` directly is the explicit pattern (matches `test-inplace.py`). Apply both patches in M2 and M2+sub.
+
+  Tests in this card are expected to fail at the post-card commit; Card 2 makes them pass.
 - **Commit:** `test(paths): add resolve_active_hub + new resolve_active_worktree scenarios`
 
 ### Card 2: implement resolve_active_worktree (new signature) and resolve_active_hub

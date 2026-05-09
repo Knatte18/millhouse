@@ -33,13 +33,13 @@ A focused unit test is added to `test-review-common.py` for the in-place branch.
 - **Deletes:** none
 - **Requirements:** Add a new test case to `test-review-common.py` that exercises the in-place branch of `_review_common.resolve_path`. The test must catch the original bug (`ActiveWorktreeNotFound` for in-place tasks).
 
-  Use the same fixture style as the M2 scenario in `test-paths.py` Card 1: `tempfile.TemporaryDirectory()` for the layout, scaffold `<git_root>/.millhouse/active.slug.md` with matching slug+branch, do NOT create `<container>/wts/<slug>/`, mock `_subprocess_util.run` for `git rev-parse --abbrev-ref HEAD` to return the marker's branch, and patch `Path.cwd` (or `os.chdir`) to point at `git_root`. Patch `_paths.resolve_git_root` to return `git_root` so the helper does not shell out.
+  Use the same fixture style as the M2 scenario in `test-paths.py` Card 1: `tempfile.TemporaryDirectory()` for the layout, scaffold `<hub>/.millhouse/active.slug.md` with matching slug+branch, do NOT create `<container>/wts/<slug>/`, mock `_subprocess_util.run` for `git rev-parse --abbrev-ref HEAD` to return the marker's branch, and patch `_paths.resolve_hub_path` to return `<hub>` (this is what the new `resolve_path` uses to source cfg). Patch `_paths.resolve_git_root` to return `git_root` so the helper does not shell out. Patch `_inplace.resolve_worktrees_dir` to return a tmp dir without the slug subdir so `is_inplace` returns True.
 
-  Also write `<wiki_root>/config.yaml` with the minimum keys `paths: {discussion_file: task/discussion.md}` and write the wiki path so `_review_common.load_config` finds it. The `_paths.resolve_wiki_path` call should resolve to that wiki root — patch it with `unittest.mock.patch("_paths.resolve_wiki_path", return_value=wiki_root)`.
+  For M2 (hub_rel="."): `<hub>` IS `<git_root>`. Write `<hub>/.millhouse/config.local.yaml` with `hub_relative_path: .` and `<wiki_root>/config.yaml` with `paths: {discussion_file: task/discussion.md}`. Patch `_paths.resolve_wiki_path` with `unittest.mock.patch("_paths.resolve_wiki_path", return_value=wiki_root)`.
 
   Assertion: `resolve_path("task/discussion.md", slug) == git_root / "task" / "discussion.md"`.
 
-  Add a second assertion for the in-place + sub-dir hub case (M2+sub): scaffold `<git_root>/src/Models/.millhouse/active.slug.md`, write `<git_root>/.millhouse/config.local.yaml` with `hub_relative_path: src/Models`, also write `<git_root>/src/Models/.millhouse/config.local.yaml` with the same key (the helper reads from the resolved worktree's stub). Assert `resolve_path("task/discussion.md", slug) == git_root / "src" / "Models" / "task" / "discussion.md"`.
+  For M2+sub (in-place + sub-dir hub): `<hub>` is `<git_root>/src/Models`. Scaffold the active marker at `<hub>/.millhouse/active.slug.md` (NOT at `<git_root>/.millhouse/`, which is what mill-claim actually writes — mill-claim does not bootstrap a stub at `git_root/.millhouse/`). Write `<hub>/.millhouse/config.local.yaml` with `hub_relative_path: src/Models`. Patch `_paths.resolve_hub_path` to return `<hub>`. Assert `resolve_path("task/discussion.md", slug) == git_root / "src" / "Models" / "task" / "discussion.md"`.
 
   Test will fail at this card's commit because Card 4 has not yet switched the function — that's expected per TDD-first ordering.
 - **Commit:** `test(review-common): cover in-place + sub-dir hub branches of resolve_path`
@@ -63,9 +63,15 @@ A focused unit test is added to `test-review-common.py` for the in-place branch.
       """Resolve a config path template to an absolute path inside the active hub.
 
       Computes the container, git_root, and cfg internally:
-        - container via _paths.resolve_container_path(Path.cwd())
         - git_root via _paths.resolve_git_root()
-        - cfg via load_config(_paths.resolve_wiki_path(git_root), git_root / ".millhouse")
+        - container via _paths.resolve_container_path(git_root)
+        - hub_dir via _paths.resolve_hub_path() (Path.cwd().resolve() — the hub
+          where mill scripts run; equals git_root for hub_relative_path == ".")
+        - cfg via load_config(_paths.resolve_wiki_path(git_root), hub_dir / ".millhouse")
+
+      cfg is sourced from the hub's own .millhouse/, not from git_root/.millhouse/,
+      because mill-claim writes hub_relative_path only at the hub (it does not
+      bootstrap a stub at git_root/.millhouse/ the way mill-spawn does).
 
       Returns active_hub / path_tmpl after substituting any "<SLUG>" token.
 
@@ -76,7 +82,8 @@ A focused unit test is added to `test-review-common.py` for the in-place branch.
       git_root = _paths.resolve_git_root()
       container_path = _paths.resolve_container_path(git_root)
       wiki_root = _paths.resolve_wiki_path(git_root)
-      cfg = load_config(wiki_root, git_root / ".millhouse")
+      hub_dir = _paths.resolve_hub_path()
+      cfg = load_config(wiki_root, hub_dir / ".millhouse")
       active_hub = _paths.resolve_active_hub(
           container_path, slug, cfg=cfg, git_root=git_root,
       )

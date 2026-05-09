@@ -22,6 +22,7 @@ This batch replaces the inline block with a single call to the existing `resolve
 - **Context:**
   - `plugins/mill/scripts/_paths.py`
   - `plugins/mill/scripts/_active.py`
+  - `plugins/mill/unit_tests/test-cleanup.py`
 - **Edits:**
   - `plugins/mill/scripts/millpy-cleanup.py`
 - **Creates:** none
@@ -64,4 +65,6 @@ This batch replaces the inline block with a single call to the existing `resolve
 
 ## Batch Tests
 
-The verify command runs `test-cleanup.py`. The change is a behavior-preserving refactor; existing tests cover both `hub_relative_path == "."` and the sub-dir cases via the cleanup loop's hub-mill-dir resolution. No test changes needed.
+The verify command runs `test-cleanup.py`. The change is a behavior-preserving 1:1 substitution: the existing two-branch ternary (`wt_path / ".millhouse" if hub_subpath == "."` else `wt_path / hub_subpath / ".millhouse"`) is replaced by `_paths.resolve_hub_relative_path(wt_path, hub_subpath) / ".millhouse"`, which is byte-equivalent for both branches (the helper's own logic).
+
+Coverage caveat: `test-cleanup.py` exercises the cleanup loop only with `hub_relative_path == "."` (its fixtures don't write a sub-dir hub stub). The sub-dir branch's correctness rests on `resolve_hub_relative_path`'s own unit tests in `test-paths.py`, which already cover `.`, single subpath, and nested subpath cases. No new test is added — the substitution is mechanical and the helper is exercised elsewhere.
