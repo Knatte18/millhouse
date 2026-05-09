@@ -34,7 +34,9 @@ batches:
     implementer_session: 91aae427-d659-41f8-a1ca-d3e8fe99e024
     start_sha: 2ea6482724cbc745697d8f961011172a296a76ba
   - name: inplace-reorder
-    state: pending
+    state: running
+    implementer_session: 3d19e1ad-5d3f-486e-9a96-92da6ad50a20
+    start_sha: cb8c7d9cf667182a4da0b99d1ed4f9152de5b793
   - name: subprocess-popup-fix
     state: pending
 ```
