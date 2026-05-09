@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-mill-start-auto-skill
+phase: holistic-reviewing
 slug: mill-start-auto
 branch: hanf/mill-start-auto
 plan: task/plan
@@ -21,6 +21,7 @@ plan-review-r1  2026-05-09T14:58:45Z
 planned  2026-05-09T14:59:00Z
 implementing  2026-05-09T15:06:11Z
 approved-mill-start-auto-skill  2026-05-09T15:09:16Z
+holistic-reviewing  2026-05-09T15:09:28Z
 ```
 
 ## Batches
