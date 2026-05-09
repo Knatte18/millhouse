@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-mill-start-auto-skill
 slug: mill-start-auto
 branch: hanf/mill-start-auto
 plan: task/plan
@@ -20,6 +20,7 @@ planning  2026-05-09T14:55:47Z
 plan-review-r1  2026-05-09T14:58:45Z
 planned  2026-05-09T14:59:00Z
 implementing  2026-05-09T15:06:11Z
+approved-mill-start-auto-skill  2026-05-09T15:09:16Z
 ```
 
 ## Batches
@@ -27,7 +28,8 @@ implementing  2026-05-09T15:06:11Z
 ```yaml
 batches:
   - name: mill-start-auto-skill
-    state: running
+    state: approved
     implementer_session: 7decca48-ee24-4a75-88b1-78e214ed87d2
     start_sha: 55a179632e0901ad3b3de085a5c8fbb359f1c623
+    commit_sha: 99777c79fe5a48285a0090cce0cecbcf2204b0c6
 ```
