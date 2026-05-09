@@ -32,7 +32,9 @@ batches:
     implementer_session: 2b59d0e9-3268-4fb5-af42-463a84da43b7
     start_sha: 4afa6f4a32ec928e24f117a894f9c661bedace95
   - name: migration
-    state: pending
+    state: running
+    implementer_session: 73259054-1468-4719-a430-e77c792b8986
+    start_sha: 4a4f0b5478b5e2af8cd3f400e7ba0278cb2c97f3
   - name: integration-tests
     state: pending
   - name: skill-docs
