@@ -15,7 +15,7 @@ You are the **Builder** — a lean orchestrator. You coordinate per-batch implem
    `signature: _wiki.sync_pull(wiki_path: Path, *, slug: str) -> None`
 3. Load config — deep-merge `<wiki_path>/config.yaml` with `.millhouse/config.local.yaml` via `_review_common.load_config(wiki_path, Path(".millhouse"))`. Read these keys:
    - `pipeline.auto_merge` — whether to invoke mill-merge after success.
-   - `pipeline.auto_report` — whether to auto-fire mill-self-report at end-of-work. mill-go does NOT fire it itself; mill-merge does, after its teardown completes. Read here only because it is referenced in the Handoff note.
+   - `pipeline.auto_report` — whether to auto-fire mill-self-report at end-of-work. mill-go fires it as the final Handoff step (step 6), after any `/mill-merge` invocation in step 5.
    - `review.code.rounds` — max review rounds per batch.
    - `review.code.self_fix_rounds` — passed to the implementer brief.
    - `review.code.holistic` — if true, run one holistic code review after all batches approve.
@@ -220,7 +220,8 @@ For each round `H` from 1 to `max_holistic_rounds`:
    ```bash
    uv run --project "$CLAUDE_PLUGIN_ROOT" "$CLAUDE_PLUGIN_ROOT/scripts/millpy-builder-lock.py" release
    ```
-5. If `pipeline.auto_merge: true` → invoke `/mill-merge`. Otherwise tell the user: "Task complete. Run `/mill-merge` to merge the task branch back to parent." Self-reporting (when `pipeline.auto_report: true`) is fired by `mill-merge` at the end of its teardown sequence — that placement captures merge-time failures (junction teardown, squash conflicts, push rejection, sidebar regen, etc.) that this skill cannot observe.
+5. If `pipeline.auto_merge: true` → invoke `/mill-merge` and wait for it to finish. Otherwise tell the user: "Task complete. Run `/mill-merge` to merge the task branch back to parent."
+6. If `pipeline.auto_report: true` → invoke `/mill-self-report --auto`. Always fires at the end of Handoff, regardless of whether step 5 invoked merge or not. The skill checks `gh auth` itself and bails cleanly if absent. Reflection covers the implementation phase plus, when `auto_merge: true`, any merge-time observations from the freshly-completed `/mill-merge` call. mill-merge itself does not self-report — it is too narrow in scope to host its own reflection pass; cross-thread merges (where the user runs `/mill-merge` separately) are not auto-reflected.
 
 ## Principles
 

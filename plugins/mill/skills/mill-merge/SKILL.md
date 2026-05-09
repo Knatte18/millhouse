@@ -256,13 +256,7 @@ Report to the user:
 
 **Verify after teardown:** confirm `<container>/wts/<slug>` is gone, `$CHILD_BRANCH` is gone from `git branch`, `<container>/portals/<slug>` is gone, `git tag -l archive/<slug>` returns the tag, and `Home.md` shows `[done]` for `<slug>`.
 
-### 13. Auto-fire self-report
-
-If the deep-merged config has `pipeline.auto_report: true`, invoke `/mill-self-report --auto`. The skill checks `gh auth` itself and bails cleanly if absent.
-
-This placement (post-teardown) is deliberate: self-reporting fires after every observable failure mode — implementation, planning, junction teardown, squash conflicts, push rejection, sidebar regen, Home.md flip, etc. mill-go used to fire self-report at its Handoff, but that placement could not observe merge-time failures. The trigger now lives here so a single self-report covers the full task lifecycle.
-
-**Failure path:** if any earlier step in this skill halted (rollback, PR-pending, lock-busy), Step 13 is skipped — those halts already surface diagnostics to the user, and self-report would only add noise. Self-reporting fires only after a successful teardown.
+**No self-report from this skill.** Reflection is the orchestrator's job — `mill-go` fires `/mill-self-report --auto` at its Handoff (step 6) when `pipeline.auto_report: true`. mill-merge is too narrow in scope to host its own reflection pass; if it is invoked from a separate thread (i.e. not chained from mill-go's auto_merge path), the user can run `/mill-self-report` manually if reflection is wanted.
 
 ## PR-path re-entry
 
