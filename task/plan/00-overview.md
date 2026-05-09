@@ -103,6 +103,7 @@ batches:
 - `plugins/mill/templates/wiki-config.yaml`
 - `plugins/mill/unit_tests/_test_cfg.py`
 - `plugins/mill/unit_tests/_test_registry.py`
+- `plugins/mill/unit_tests/run-all.py`
 - `plugins/mill/unit_tests/test-llm-claude.py`
 - `plugins/mill/unit_tests/test-millpy-implement-holistic.py`
 - `plugins/mill/unit_tests/test-millpy-implement.py`
