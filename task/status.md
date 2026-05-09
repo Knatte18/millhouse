@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: discussed
 slug: config-schema-refactor
 branch: hanf/config-schema-refactor
 plan: null
@@ -15,4 +15,5 @@ task_description: |
 
 ```text
 discussing  '2026-05-09T15:06:46Z'
+discussed  2026-05-09T15:34:24Z
 ```
