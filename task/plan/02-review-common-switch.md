@@ -31,9 +31,22 @@ A focused unit test is added to `test-review-common.py` for the in-place branch.
   - `plugins/mill/unit_tests/test-review-common.py`
 - **Creates:** none
 - **Deletes:** none
-- **Requirements:** Add a new test case to `test-review-common.py` that exercises the in-place branch of `_review_common.resolve_path`. The test must catch the original bug (`ActiveWorktreeNotFound` for in-place tasks).
+- **Requirements:** Add a new test case to `test-review-common.py` that exercises the in-place branch of `_review_common.resolve_path`. The test must catch the original bug (`ActiveWorktreeNotFound` for in-place tasks). Also extend `_make_worktree_fixture` so the four existing M1 `resolve_path` tests don't regress when Card 4's `load_config` prerequisite lands.
 
-  Use the same fixture style as the M2 scenario in `test-paths.py` Card 1: `tempfile.TemporaryDirectory()` for the layout, scaffold `<hub>/.millhouse/active.slug.md` with matching slug+branch, do NOT create `<container>/wts/<slug>/`, mock `_subprocess_util.run` for `git rev-parse --abbrev-ref HEAD` to return the marker's branch, and patch `_paths.resolve_hub_path` to return `<hub>` (this is what the new `resolve_path` uses to source cfg). Patch `_paths.resolve_git_root` to return `git_root` so the helper does not shell out. Patch `_inplace.resolve_worktrees_dir` to return a tmp dir without the slug subdir so `is_inplace` returns True.
+  **Pre-step — extend `_make_worktree_fixture`** (currently at `test-review-common.py:22-62`): after creating the worktree git repo + active marker, also write a minimal wiki config. Append these lines just before `return container, worktree`:
+
+  ```python
+  wiki_root = container / "wiki"
+  wiki_root.mkdir(parents=True, exist_ok=True)
+  (wiki_root / "config.yaml").write_text(
+      "paths:\n  discussion_file: task/discussion.md\n",
+      encoding="utf-8",
+  )
+  ```
+
+  Container-form sibling resolution (`_sibling.resolve_path("wiki", main_root)`) lands at `<container>/wiki/`, so `_paths.resolve_wiki_path(worktree)` finds the new file. The four existing M1 `resolve_path` tests stay green because they cd into `<worktree>`, which has no local `.millhouse/config.local.yaml` — `load_config` treats that as optional and returns the shared cfg only. `cfg["hub_relative_path"]` defaults to `"."` via the helpers' `.get(...)` calls.
+
+  **New M2 test:** use a separate fixture (do NOT reuse `_make_worktree_fixture` because M2 has no `<container>/wts/<slug>/` directory). `tempfile.TemporaryDirectory()` for the layout, scaffold `<hub>/.millhouse/active.slug.md` with matching slug+branch, do NOT create `<container>/wts/<slug>/`, mock `_subprocess_util.run` for `git rev-parse --abbrev-ref HEAD` to return the marker's branch, and patch `_paths.resolve_hub_path` to return `<hub>` (this is what the new `resolve_path` uses to source cfg). Patch `_paths.resolve_git_root` to return `git_root` so the helper does not shell out. Patch `_inplace.resolve_worktrees_dir` to return a tmp dir without the slug subdir so `is_inplace` returns True.
 
   For M2 (hub_rel="."): `<hub>` IS `<git_root>`. Write `<hub>/.millhouse/config.local.yaml` with `hub_relative_path: .` and `<wiki_root>/config.yaml` with `paths: {discussion_file: task/discussion.md}`. Patch `_paths.resolve_wiki_path` with `unittest.mock.patch("_paths.resolve_wiki_path", return_value=wiki_root)`.
 
@@ -100,4 +113,4 @@ A focused unit test is added to `test-review-common.py` for the in-place branch.
 
 ## Batch Tests
 
-The batch verify command runs `test-review-common.py`. Existing tests for the worktree-mode behavior (M1) remain green because `resolve_active_hub` returns `<wt>` when `hub_relative_path == "."`, which equals the previous behavior. New tests added in Card 3 cover M2 and M2+sub. There are no Card 4-specific tests beyond what Card 3 added — the impl is verified entirely by Card 3's new assertions plus the existing suite.
+The batch verify command runs `test-review-common.py`. Existing tests for the worktree-mode behavior (M1) remain green after Card 3 extends `_make_worktree_fixture` to scaffold `<container>/wiki/config.yaml` (Card 4 makes `resolve_path` call `load_config`, which requires the shared config to exist). `resolve_active_hub` returns `<wt>` when `hub_relative_path == "."`, matching the previous M1 behavior — no assertion changes needed for the four existing M1 tests. New tests added in Card 3 cover M2 and M2+sub. There are no Card 4-specific tests beyond what Card 3 added — the impl is verified entirely by Card 3's fixture-extension + new assertions plus the existing suite.
