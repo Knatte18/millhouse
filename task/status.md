@@ -33,7 +33,9 @@ batches:
     start_sha: b6522332ad924286f37ad94136295669e3232610
     commit_sha: aa10d2d2a4106b7794a2b8bb99cfedf5e64e58aa
   - name: git-pr-task-contract
-    state: pending
+    state: running
+    implementer_session: 243f553f-3e35-4d00-8ac7-02a1e6c47e2a
+    start_sha: 77e7a2ed0e3acec4af6244ee2666d05b53157e6e
   - name: cleanliness-wireup
     state: pending
 ```
