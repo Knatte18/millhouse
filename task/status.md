@@ -29,7 +29,9 @@ implementing  2026-05-09T10:53:27Z
 ```yaml
 batches:
   - name: scope-helper
-    state: pending
+    state: running
+    implementer_session: b889131b-a421-49d9-a822-eb1ea49ffa96
+    start_sha: 56a80564761ed46e367b30711c9969479a63eb57
   - name: skill-edits
     state: pending
 ```
