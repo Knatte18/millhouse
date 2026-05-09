@@ -2,14 +2,17 @@
 mill-vscode — open VS Code in an active worktree.
 
 Scans the worktrees container directory for subdirectories that carry a
-``.millhouse/active.slug.md`` marker, presents a numbered picker (or uses
-``--slug`` to skip it), then opens VS Code in the selected worktree.
+``.millhouse/active.slug.md`` marker, filters out worktrees that already
+have a VS Code window open, then shows a unified prompt: ``<Enter>`` spawns
+a new task and opens it, a number opens the listed worktree, or ``q`` quits.
 
 Usage:
-    python mill-vscode.py [--slug <slug>] [--list]
+    python millpy-vscode.py [--new | --slug <slug>] [--list]
 
+    --new           Spawn a new task and open it without showing the picker.
     --slug <slug>   Skip the picker and open the worktree for this slug.
     --list          Print the list of active worktrees without launching.
+    --new and --slug are mutually exclusive.
 
 Exit codes:
     0 — VS Code launched (or listing complete, or no active worktrees)
@@ -24,6 +27,7 @@ import sys
 from pathlib import Path
 
 import _spawn_core
+import _vscode_processes
 from _config import load_config as _load_config
 from _paths import resolve_git_root, resolve_hub_relative_path, resolve_wiki_path, resolve_worktrees_dir
 
@@ -57,13 +61,75 @@ def _load_spawn_main():
     return module.main
 
 
+def _filter_open_worktrees(
+    active: list[tuple[Path, str, str]],
+    wiki_path: Path | None,
+    hub_subpath_default: str,
+) -> list[tuple[Path, str, str]]:
+    open_cmdlines = _vscode_processes.find_open_vscode_paths()
+    if not open_cmdlines:
+        return active
+    result = []
+    for entry_path, slug, title in active:
+        hub_subpath = hub_subpath_default
+        if wiki_path is not None:
+            try:
+                entry_cfg = _load_config(wiki_path, entry_path)
+                hub_subpath = entry_cfg.get("hub_relative_path", hub_subpath_default)
+            except SystemExit:
+                hub_subpath = hub_subpath_default
+        launch = resolve_hub_relative_path(entry_path, hub_subpath)
+        if not any(
+            _vscode_processes._path_matches_cmdline(launch, str(cmdline))
+            for cmdline in open_cmdlines
+        ):
+            result.append((entry_path, slug, title))
+    return result
+
+
+def _spawn_and_open(
+    worktrees_dir: Path,
+    pre_active: list[tuple[Path, str, str]],
+    wiki_path: Path | None,
+) -> int:
+    pre_paths = {entry[0] for entry in pre_active}
+    spawn_main = _load_spawn_main()
+    rc = spawn_main([])
+    if rc != 0:
+        return rc
+    post = _spawn_core.discover_active_worktrees(worktrees_dir)
+    new_entries = [e for e in post if e[0] not in pre_paths]
+    if len(new_entries) == 0:
+        print("[mill-vscode] spawn produced no new worktree; nothing to open.", file=sys.stderr)
+        return 0
+    if len(new_entries) > 1:
+        print(
+            f"[mill-vscode] spawn produced {len(new_entries)} new worktrees; refusing to guess.",
+            file=sys.stderr,
+        )
+        return 1
+    new_path, new_slug, _ = new_entries[0]
+    if wiki_path is not None:
+        try:
+            worktree_cfg = _load_config(wiki_path, new_path)
+        except SystemExit:
+            worktree_cfg = {}
+    else:
+        worktree_cfg = {}
+    hub_subpath = worktree_cfg.get("hub_relative_path", ".")
+    launch_path = resolve_hub_relative_path(new_path, hub_subpath)
+    print(f"Opening VS Code in: {launch_path}", file=sys.stderr)
+    subprocess.run(_build_code_argv(launch_path))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     """Open VS Code in an active child worktree selected by the user.
 
     Resolves the worktrees directory from config, discovers all active
-    worktrees via ``_spawn_core.discover_active_worktrees``, then either
-    prints the list (``--list``), auto-selects by slug (``--slug``), or
-    presents a numbered picker.
+    worktrees via ``_spawn_core.discover_active_worktrees``, filters out
+    worktrees that already have a VS Code window open, then presents a
+    unified prompt.
 
     Args:
         argv: Argument vector. Defaults to ``sys.argv[1:]``.
@@ -75,7 +141,13 @@ def main(argv: list[str] | None = None) -> int:
         prog="mill-vscode",
         description="Open VS Code in an active child worktree.",
     )
-    parser.add_argument(
+    mutex = parser.add_mutually_exclusive_group()
+    mutex.add_argument(
+        "--new",
+        action="store_true",
+        help="Spawn a new task and open it without showing the picker.",
+    )
+    mutex.add_argument(
         "--slug",
         default=None,
         help="Skip the picker and open the worktree for this slug.",
@@ -99,21 +171,19 @@ def main(argv: list[str] | None = None) -> int:
     worktrees_dir = resolve_worktrees_dir(cfg, git_root)
     active = _spawn_core.discover_active_worktrees(worktrees_dir)
 
+    if not active and args.list:
+        print("No active worktrees found.", file=sys.stderr)
+        return 0
+
+    if not active and args.slug is not None:
+        print("No active worktrees found.", file=sys.stderr)
+        return 0
+
+    if args.new:
+        return _spawn_and_open(worktrees_dir, active, wiki_path)
+
     if not active:
-        if args.list or args.slug is not None:
-            print("No active worktrees found.", file=sys.stderr)
-            return 0
-        spawn_main = _load_spawn_main()
-        rc = spawn_main([])
-        if rc != 0:
-            return rc
-        active = _spawn_core.discover_active_worktrees(worktrees_dir)
-        if not active:
-            print(
-                "No tasks available and no active worktrees. Add tasks to Home.md first.",
-                file=sys.stderr,
-            )
-            return 0
+        return _spawn_and_open(worktrees_dir, active, wiki_path)
 
     if args.list:
         for i, (path, slug, title) in enumerate(active, start=1):
@@ -130,28 +200,40 @@ def main(argv: list[str] | None = None) -> int:
             )
             return 1
         selected_path = matched[0]
-    elif len(active) == 1:
-        path, slug, title = active[0]
-        print(f"Auto-selecting: {slug}", file=sys.stderr)
-        selected_path = path
     else:
+        filtered = _filter_open_worktrees(active, wiki_path, cfg.get("hub_relative_path", "."))
+        if not filtered:
+            return _spawn_and_open(worktrees_dir, active, wiki_path)
+
         print("Active worktrees:", file=sys.stderr)
-        for i, (path, slug, title) in enumerate(active, start=1):
+        for i, (path, slug, title) in enumerate(filtered, start=1):
             label = f"{slug} — {title}" if title else slug
             print(f"  {i}) {label}", file=sys.stderr)
-        try:
-            raw = input(f"Select worktree (1-{len(active)}): ").strip()
-        except EOFError:
-            print("[mill-vscode] No input available.", file=sys.stderr)
-            return 1
-        try:
-            num = int(raw)
-            if num < 1 or num > len(active):
-                raise ValueError
-        except ValueError:
+
+        selected_path = None
+        for _ in range(3):
+            try:
+                raw = input(
+                    f"<Enter> to spawn new task, 1-{len(filtered)} to open, q to quit: "
+                ).strip()
+            except EOFError:
+                print("[mill-vscode] No input available.", file=sys.stderr)
+                return 1
+            if raw == "":
+                return _spawn_and_open(worktrees_dir, active, wiki_path)
+            if raw.lower() == "q":
+                return 0
+            try:
+                num = int(raw)
+                if 1 <= num <= len(filtered):
+                    selected_path = filtered[num - 1][0]
+                    break
+            except ValueError:
+                pass
             print(f"[mill-vscode] Invalid selection: {raw!r}", file=sys.stderr)
+
+        if selected_path is None:
             return 1
-        selected_path = active[num - 1][0]
 
     # Load per-worktree config to honour hub_relative_path.
     if wiki_path is not None:
