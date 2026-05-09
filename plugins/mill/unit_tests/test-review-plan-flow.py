@@ -20,6 +20,7 @@ sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
 import _active  # noqa: E402
 import _reviewer_test_stub as stub  # noqa: E402
+import _test_registry  # noqa: E402
 from _llm_claude import LLMError  # noqa: E402
 from _review_plan import run as plan_run  # noqa: E402
 from _review_common import ReviewError  # noqa: E402
@@ -104,7 +105,7 @@ def _make_plan_fixture(
     worktree.mkdir(parents=True)
     subprocess.run(["git", "-C", str(worktree), "init"], check=True, capture_output=True)
     mill_dir = worktree / ".millhouse"
-    wiki_root = tmp_path / "wiki"
+    wiki_root = tmp_path / "container" / "wiki"
     project_root = worktree
 
     _active.write(
@@ -132,14 +133,19 @@ def _make_plan_fixture(
                 p.parent.mkdir(parents=True, exist_ok=True)
                 p.write_text("# placeholder", encoding="utf-8")
 
+    _test_registry.write_to(wiki_root)
+
     cfg = {
         "paths": {
             "discussion_file": "discussion.md",
             "plan_dir":        "plan/",
             "reviews_dir":     "reviews/",
         },
-        "review": {
-            "plan": {"rounds": 3, "batch": "test_stub", "holistic": "test_stub"},
+        "roles": {
+            "plan-review": {
+                "batch":   {"rounds": 3, "reviewer": "test_stub"},
+                "holistic": {"rounds": 3, "reviewer": "test_stub"},
+            },
         },
         "llm": {"bulk_timeout": None, "holistic_timeout": None},
     }
@@ -329,9 +335,10 @@ def main() -> int:
             Path(tmpdir), batch_specs, skip_create={"nonexistent/path.py"}
         )
         cfg4 = dict(cfg)
-        cfg4["review"] = dict(cfg["review"])
-        cfg4["review"]["plan"] = dict(cfg["review"]["plan"])
-        cfg4["review"]["plan"]["holistic"] = None  # disable holistic for isolation
+        cfg4["roles"] = dict(cfg["roles"])
+        cfg4["roles"]["plan-review"] = dict(cfg["roles"]["plan-review"])
+        cfg4["roles"]["plan-review"]["holistic"] = dict(cfg["roles"]["plan-review"]["holistic"])
+        cfg4["roles"]["plan-review"]["holistic"]["reviewer"] = None  # disable holistic for isolation
 
         orig_dir = os.getcwd()
         os.chdir(project_root)
@@ -1054,7 +1061,7 @@ def main() -> int:
     with tempfile.TemporaryDirectory() as tmpdir:
         batch_specs = [("core", "01-core.md", ["src/a.py"], [])]
         mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(Path(tmpdir), batch_specs)
-        cfg["review"]["plan"]["batch"] = None  # keep holistic: "test_stub"
+        cfg["roles"]["plan-review"]["batch"]["reviewer"] = None  # keep holistic: "test_stub"
         orig_dir = os.getcwd()
         os.chdir(project_root)
         try:
@@ -1083,8 +1090,8 @@ def main() -> int:
     with tempfile.TemporaryDirectory() as tmpdir:
         batch_specs = [("core", "01-core.md", ["src/a.py"], [])]
         mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(Path(tmpdir), batch_specs)
-        cfg["review"]["plan"]["batch"] = None
-        cfg["review"]["plan"]["holistic"] = None
+        cfg["roles"]["plan-review"]["batch"]["reviewer"] = None
+        cfg["roles"]["plan-review"]["holistic"]["reviewer"] = None
         orig_dir = os.getcwd()
         os.chdir(project_root)
         try:

@@ -330,6 +330,11 @@ def run(
     else:
         holistic_spec = _reviewers.resolve(registry, holistic_name)
 
+    if batch_spec is None and holistic_spec is None:
+        raise ReviewError(
+            "plan-review: batch and holistic reviewers are both null — at least one must be set"
+        )
+
     task_title = load_task_title(mill_dir, slug)
     constraints = read_constraints_md(project_root)
 

@@ -82,7 +82,7 @@ def _make_fixture(tmp_path: Path) -> None:
     wiki_dir = tmp_path / "wiki"
     wiki_dir.mkdir(parents=True, exist_ok=True)
     (wiki_dir / "config.yaml").write_text(
-        "review:\n  code:\n    self_fix_rounds: 2\n", encoding="utf-8"
+        "roles:\n  implementer:\n    self_fix_rounds: 2\n", encoding="utf-8"
     )
 
     (tmp_path / "reviews").mkdir(parents=True, exist_ok=True)
@@ -117,7 +117,7 @@ class TestMillpyImplement(unittest.TestCase):
         self.mock_load_config = _p(
             millpy_implement._review_common, "load_config",
             return_value={
-                "review": {"code": {"self_fix_rounds": 2}},
+                "roles": {"implementer": {"self_fix_rounds": 2}},
                 "llm": {"implementer_timeout": 1800},
             },
         )

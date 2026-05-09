@@ -22,8 +22,6 @@ import threading
 from collections import deque
 from typing import Callable
 
-MODE = "bulk"
-
 # Module-level state — shared across threads so ThreadPoolExecutor
 # workers spawned by `_review_plan.run` see the same seeded queue
 # as the test thread. `deque.popleft()` is atomic under the GIL, so
