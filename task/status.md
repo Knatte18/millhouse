@@ -38,5 +38,7 @@ batches:
     implementer_session: dca688bc-97c7-4a67-a731-b2d386c32200
     start_sha: 1aa7d9228113a9ab5a61fc87f8498c7aaf983f68
   - name: vscode-cli-integration
-    state: pending
+    state: running
+    implementer_session: efd13f6a-7e93-40fc-b2ec-c51c1230de0f
+    start_sha: 92290a30c171c6469092efc07bb64af3a5a02bef
 ```
