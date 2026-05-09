@@ -3,7 +3,7 @@
 ```yaml
 task: "35 (A) — Centralize path resolution across all three modes"
 slug: mill-path-resolution-audit
-approved: false
+approved: true
 started: "20260509-103144"
 parent: main
 root: ""
