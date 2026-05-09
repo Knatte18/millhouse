@@ -27,7 +27,9 @@ implementing  2026-05-09T17:09:23Z
 ```yaml
 batches:
   - name: foundation
-    state: pending
+    state: running
+    implementer_session: 2b59d0e9-3268-4fb5-af42-463a84da43b7
+    start_sha: 4afa6f4a32ec928e24f117a894f9c661bedace95
   - name: migration
     state: pending
   - name: integration-tests
