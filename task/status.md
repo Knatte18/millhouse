@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-inplace-reorder
+phase: approved-subprocess-popup-fix
 slug: mill-start-question-ux
 branch: hanf/mill-start-question-ux
 plan: task/plan
@@ -24,6 +24,7 @@ planned  2026-05-09T11:08:12Z
 implementing  2026-05-09T11:25:29Z
 approved-skill-text-rules  2026-05-09T11:29:51Z
 approved-inplace-reorder  2026-05-09T11:34:15Z
+approved-subprocess-popup-fix  2026-05-09T11:52:53Z
 ```
 
 ## Batches
@@ -39,7 +40,7 @@ batches:
     implementer_session: 3d19e1ad-5d3f-486e-9a96-92da6ad50a20
     start_sha: cb8c7d9cf667182a4da0b99d1ed4f9152de5b793
   - name: subprocess-popup-fix
-    state: running
+    state: approved
     implementer_session: 99f921bc-422a-49b5-aed8-22e36fa44fc5
     start_sha: e6776021eb94c6645f9c8374c086ba2bef976a5a
 ```
