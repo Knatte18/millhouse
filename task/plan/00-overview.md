@@ -3,7 +3,7 @@
 ```yaml
 task: 37 (A) — Codeguide bug-fix batch 1
 slug: codeguide-fixes-1
-approved: false
+approved: true
 started: 20260509-103409
 parent: main
 root: ""
