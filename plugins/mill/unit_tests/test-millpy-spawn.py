@@ -125,7 +125,6 @@ def _run_main_with_mocks(
         spawn_core_mock.capture_parent_branch.side_effect = capture_branch_raises
     else:
         spawn_core_mock.capture_parent_branch.return_value = parent_branch
-    spawn_core_mock.write_active_marker.return_value = None
     spawn_core_mock.write_initial_status.return_value = Path("/fake/worktrees/my-task/status.md")
 
     wiki_mock = MagicMock()
@@ -200,7 +199,7 @@ def _run_main_with_mocks(
 
 def test_main_happy_path_calls_spawn_core_in_order() -> None:
     """main() calls pick_task_single, claim_in_wiki, capture_parent_branch,
-    write_active_marker, write_initial_status in that order."""
+    write_initial_status in that order."""
     task = _make_fake_task(slug="my-task", title="My Task")
     exit_code, sc, _ = _run_main_with_mocks([], picked_task=task)
 
@@ -210,19 +209,7 @@ def test_main_happy_path_calls_spawn_core_in_order() -> None:
     sc.pick_task_single_or_multi.assert_called_once()
     sc.claim_in_wiki.assert_called_once()
     sc.capture_parent_branch.assert_called_once()
-    sc.write_active_marker.assert_called_once()
     sc.write_initial_status.assert_called_once()
-
-    # Verify write_active_marker receives the correct slug and title
-    marker_call = sc.write_active_marker.call_args
-    if marker_call.kwargs.get("slug") != "my-task":
-        raise AssertionError(
-            f"write_active_marker slug mismatch: {marker_call}"
-        )
-    if marker_call.kwargs.get("title") != "My Task":
-        raise AssertionError(
-            f"write_active_marker title mismatch: {marker_call}"
-        )
 
     # Verify write_initial_status receives the correct slug and parent_branch
     status_call = sc.write_initial_status.call_args
@@ -276,7 +263,6 @@ def test_write_settings_uses_short_name_and_slug() -> None:
     spawn_core_mock.BacklogEmpty = type("BacklogEmpty", (Exception,), {})
     spawn_core_mock.claim_in_wiki.return_value = None
     spawn_core_mock.capture_parent_branch.return_value = "main"
-    spawn_core_mock.write_active_marker.return_value = None
     spawn_core_mock.write_initial_status.return_value = Path("/fake/worktrees/my-task/status.md")
 
     vscode_mock = MagicMock()
@@ -485,7 +471,6 @@ def test_create_hub_links_called_after_portal_creation() -> None:
     spawn_core_mock.BacklogEmpty = type("BacklogEmpty", (Exception,), {})
     spawn_core_mock.claim_in_wiki.return_value = None
     spawn_core_mock.capture_parent_branch.return_value = "main"
-    spawn_core_mock.write_active_marker.return_value = None
     spawn_core_mock.write_initial_status.return_value = Path("/fake/worktrees/my-task/status.md")
 
     container_path = Path("/fake/container")
@@ -644,18 +629,6 @@ def _fake_copy_millhouse_real(src: Path, dst: Path, exclude: set) -> None:
             _shutil.copy2(str(item), str(target))
 
 
-def _fake_write_active_marker_real(
-    mill_dir: Path, *, slug: str, title: str, branch: str, ts: str
-) -> None:
-    """Write active.slug.md in the canonical fenced-yaml format."""
-    mill_dir.mkdir(parents=True, exist_ok=True)
-    (mill_dir / "active.slug.md").write_text(
-        f"# Active task\n\n```yaml\nslug: {slug}\ntask_title: {title}\n"
-        f"branch: {branch}\nspawned_at: {ts}\n```\n",
-        encoding="utf-8",
-    )
-
-
 def _run_spawn_real_fs(
     tmpdir: Path,
     hub_subpath: str,
@@ -701,7 +674,6 @@ def _run_spawn_real_fs(
     spawn_core_mock.claim_in_wiki.return_value = None
     spawn_core_mock.capture_parent_branch.return_value = "main"
     spawn_core_mock.write_initial_status.return_value = worktree_path / "status.md"
-    spawn_core_mock.write_active_marker.side_effect = _fake_write_active_marker_real
 
     vscode_mock = MagicMock()
     setup_mock = MagicMock()
@@ -789,14 +761,6 @@ def test_spawn_standard_layout_regression() -> None:
         if exit_code != 0:
             raise AssertionError(f"expected exit 0, got {exit_code}")
 
-        # active marker at the standard location
-        marker = wt / ".millhouse" / "active.slug.md"
-        if not marker.exists():
-            raise AssertionError(f"active.slug.md not found at {marker}")
-        content = marker.read_text(encoding="utf-8")
-        if "test-task" not in content:
-            raise AssertionError(f"slug 'test-task' not in active.slug.md: {content!r}")
-
         # vscode settings target must be at worktree_path/.vscode/settings.json
         ws_call = vscode_mock.write_settings.call_args
         if ws_call is None:
@@ -857,17 +821,7 @@ def test_spawn_subfolder_install_destination_layout() -> None:
 
         dest_hub = wt / hub_subpath
 
-        # (a) active marker at dest_hub/.millhouse/
-        marker = dest_hub / ".millhouse" / "active.slug.md"
-        if not marker.exists():
-            raise AssertionError(f"active.slug.md not found at {marker}")
-        marker_content = marker.read_text(encoding="utf-8")
-        if "subfolder-task" not in marker_content:
-            raise AssertionError(
-                f"slug 'subfolder-task' not in active.slug.md: {marker_content!r}"
-            )
-
-        # (b) vscode target at dest_hub/.vscode/settings.json (via mock call args)
+        # (a) vscode target at dest_hub/.vscode/settings.json (via mock call args)
         ws_call = vscode_mock.write_settings.call_args
         if ws_call is None:
             raise AssertionError("_vscode.write_settings was never called")
@@ -939,37 +893,46 @@ def test_spawn_discovery_round_trip_subfolder() -> None:
         dest_hub = wt / hub_subpath
         (dest_hub / ".millhouse").mkdir(parents=True)
 
-        # Active marker at dest_hub/.millhouse/
-        (dest_hub / ".millhouse" / "active.slug.md").write_text(
-            f"# Active task\n\n```yaml\nslug: {slug}\ntask_title: RT Task\n"
-            f"branch: {slug}\nspawned_at: 2026-05-04T12:00:00Z\n```\n",
-            encoding="utf-8",
-        )
-
         # Real local config at dest_hub/.millhouse/ (operational keys)
-        real_local = {"repo": {"short_name": "RT"}, "spawn": {"branch_prefix": "feat"}}
+        branch_prefix = "feat"
+        real_local = {"repo": {"short_name": "RT"}, "spawn": {"branch_prefix": branch_prefix}}
         (dest_hub / ".millhouse" / "config.local.yaml").write_text(
             yaml.safe_dump(real_local),
             encoding="utf-8",
         )
 
-        # Wiki config
+        # Git repo on task branch so discover_active_worktrees detects this worktree
+        import subprocess as _sp
+        _sp.run(["git", "init", str(wt)], capture_output=True)
+        _sp.run(["git", "-C", str(wt), "config", "user.email", "t@t.com"], capture_output=True)
+        _sp.run(["git", "-C", str(wt), "config", "user.name", "T"], capture_output=True)
+        (wt / ".keep").write_text("", encoding="utf-8")
+        _sp.run(["git", "-C", str(wt), "add", ".keep"], capture_output=True)
+        _sp.run(["git", "-C", str(wt), "commit", "-m", "init"], capture_output=True)
+        _sp.run(["git", "-C", str(wt), "checkout", "-b", f"{branch_prefix}/{slug}"], capture_output=True)
+
+        # Wiki config and Home.md (discover filters by home_tasks)
         wiki = tmpdir / "wiki"
         wiki.mkdir()
         (wiki / "config.yaml").write_text("junctions: {}\nhardlinks: {}\n", encoding="utf-8")
+        (wiki / "Home.md").write_text(
+            f"## RT Task\n[[{slug}]] [active]\n\n_body_\n", encoding="utf-8"
+        )
 
         # Import real module implementations (scripts dir is on sys.path)
         # Temporarily clear any stubs injected by previous tests.
-        _to_clear = ["_spawn_core", "_config", "_paths", "_active", "_yaml_writer",
-                     "_sibling", "_subprocess_util"]
+        _to_clear = ["_spawn_core", "_config", "_paths", "_yaml_writer",
+                     "_sibling", "_subprocess_util", "_tasks_md"]
         _saved = {n: sys.modules.pop(n, None) for n in _to_clear}
         try:
             import _spawn_core as real_sc
             import _config as real_cfg_mod
             import _paths as real_paths_mod
+            import _tasks_md as real_tasks_md
 
-            # 1. discover_active_worktrees
-            discovered = real_sc.discover_active_worktrees(worktrees)
+            # 1. discover_active_worktrees with new signature
+            home_tasks = real_tasks_md.parse((wiki / "Home.md").read_text(encoding="utf-8"))
+            discovered = real_sc.discover_active_worktrees(worktrees, home_tasks, branch_prefix)
             if len(discovered) != 1:
                 raise AssertionError(
                     f"expected 1 discovered worktree, got {len(discovered)}: {discovered}"
