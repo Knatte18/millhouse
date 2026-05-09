@@ -18,7 +18,7 @@ Exit cleanly. This check fires for BOTH manual and auto-fire invocations — the
 
 ## 2. Invocation modes
 
-- **Auto-fire from `mill-plan` and `mill-go`:** they invoke this skill at end-of-work IF `pipeline.auto_report: true` in the deep-merged wiki/config.yaml + .millhouse/config.local.yaml. The skill receives `--auto` as its argument. This signals auto-file-all mode: all distilled candidates are filed without user confirmation. mill-go fires it at Handoff step 5, BEFORE invoking `/mill-merge` in step 6 — that ordering ensures implementation reflection is captured even when mill-merge halts in PR mode. mill-merge does not self-report — only the orchestrator does.
+- **Auto-fire from `mill-plan` and `mill-go`:** they invoke this skill at end-of-work IF `pipeline.auto_report: true` in the deep-merged wiki/config.yaml + .millhouse/config.local.yaml. The skill receives `--auto` as its argument. This signals auto-file-all mode: all distilled candidates are filed without user confirmation. mill-go fires it at Handoff step 6, AFTER invoking `/mill-merge` in step 5 — including after PR-pending halts (mill-go's step 6 explicitly says "do not treat PR-pending as termination"). mill-merge does not self-report — only the orchestrator does.
 - **Manual:** the user invokes `/mill-self-report` directly.
   - With NO argument, reflect on the current session's events broadly.
   - With a free-text argument (e.g. `/mill-self-report "the Gemini reviewer hung on card 5"`), use the argument as a steering hint focusing the reflection on the topic mentioned.

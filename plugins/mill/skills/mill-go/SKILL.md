@@ -15,7 +15,7 @@ You are the **Builder** — a lean orchestrator. You coordinate per-batch implem
    `signature: _wiki.sync_pull(wiki_path: Path, *, slug: str) -> None`
 3. Load config — deep-merge `<wiki_path>/config.yaml` with `.millhouse/config.local.yaml` via `_review_common.load_config(wiki_path, Path(".millhouse"))`. Read these keys:
    - `pipeline.auto_merge` — whether to invoke mill-merge after success.
-   - `pipeline.auto_report` — whether to auto-fire mill-self-report at end-of-work. mill-go fires it at Handoff step 5, BEFORE any `/mill-merge` invocation in step 6 — see the rationale comment in step 5 (PR-mode halt on pr-pending).
+   - `pipeline.auto_report` — whether to auto-fire mill-self-report at end-of-work. mill-go fires it at Handoff step 6, AFTER any `/mill-merge` invocation in step 5 — including after PR-pending halts. See step 6 for the explicit "do not treat PR-pending as termination" rule.
    - `review.code.rounds` — max review rounds per batch.
    - `review.code.self_fix_rounds` — passed to the implementer brief.
    - `review.code.holistic` — if true, run one holistic code review after all batches approve.
@@ -220,8 +220,8 @@ For each round `H` from 1 to `max_holistic_rounds`:
    ```bash
    uv run --project "$CLAUDE_PLUGIN_ROOT" "$CLAUDE_PLUGIN_ROOT/scripts/millpy-builder-lock.py" release
    ```
-5. If `pipeline.auto_report: true` → invoke `/mill-self-report --auto`. Fires BEFORE any merge invocation in step 6, so the report covers the implementation phase regardless of how merge resolves. The skill checks `gh auth` itself and bails cleanly if absent. **Why before merge:** in PR mode (`git.require-pr-to-base: true`), `/mill-merge` halts on `pr-pending` after creating the PR; if that halt propagates up to mill-go, a step-after-merge self-report would never fire and implementation insight would be lost. mill-merge itself does not self-report — only the orchestrator does. Cross-thread merges and merge-time failures are not auto-reflected; user can run `/mill-self-report` manually if reflection on those is wanted.
-6. If `pipeline.auto_merge: true` → invoke `/mill-merge`. Otherwise tell the user: "Task complete. Run `/mill-merge` to merge the task branch back to parent."
+5. If `pipeline.auto_merge: true` → invoke `/mill-merge`. Otherwise tell the user: "Task complete. Run `/mill-merge` to merge the task branch back to parent." mill-merge may halt on `pr-pending` in PR mode (`git.require-pr-to-base: true`) — that is a skill-level halt and is expected; treat it as completion of step 5 and continue to step 6.
+6. If `pipeline.auto_report: true` → invoke `/mill-self-report --auto`. **Always fires** at the end of Handoff, including after a `pr-pending` halt in step 5 — do NOT treat the PR-pending message as task termination. The skill checks `gh auth` itself and bails cleanly if absent. mill-merge itself does not self-report — only the orchestrator (mill-go) does. Cross-thread merges and post-PR teardowns are not auto-reflected; user can run `/mill-self-report` manually if wanted.
 
 ## Principles
 
