@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-review-r4
+phase: planned
 slug: mill-path-resolution-audit
 branch: hanf/mill-path-resolution-audit
 plan: task/plan
@@ -24,4 +24,5 @@ plan-fix-r2  2026-05-09T10:58:48Z
 plan-review-r3  2026-05-09T11:04:38Z
 plan-fix-r3  2026-05-09T11:04:38Z
 plan-review-r4  2026-05-09T11:22:28Z
+planned  2026-05-09T11:22:35Z
 ```
