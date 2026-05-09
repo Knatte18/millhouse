@@ -109,8 +109,10 @@ def main(argv: list[str] | None = None) -> int:
     print(f"Launching Claude Code in: {launch_path}", file=sys.stderr)
     print(f"Session name: {selected_slug}", file=sys.stderr)
     if os.name == "nt":
+        # Interactive launcher — must keep its console; do NOT route through _subprocess_util.run.
         subprocess.run(["cmd", "/c", "claude", "--name", selected_slug], cwd=launch_path)
     else:
+        # Interactive launcher — must keep its console; do NOT route through _subprocess_util.run.
         subprocess.run(["claude", "--name", selected_slug], cwd=launch_path)
     return 0
 

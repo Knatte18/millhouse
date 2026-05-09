@@ -166,6 +166,7 @@ def main(argv: list[str] | None = None) -> int:
 
     print(f"Opening VS Code in: {launch_path}", file=sys.stderr)
     code_argv = _build_code_argv(launch_path)
+    # Interactive launcher — must keep its console; do NOT route through _subprocess_util.run.
     subprocess.run(code_argv)
     return 0
 
