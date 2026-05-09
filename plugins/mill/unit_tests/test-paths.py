@@ -41,6 +41,18 @@ def _container_form(tmp_path: Path) -> Path:
     return main_root
 
 
+def _make_active_marker(mill_dir, *, slug, branch, title="Test", spawned_at="2026-01-01T00:00:00Z"):
+    mill_dir.mkdir(parents=True, exist_ok=True)
+    _active.write(mill_dir, slug=slug, task_title=title, branch=branch, spawned_at=spawned_at)
+
+
+def _write_stub(mill_dir, hub_relative_path):
+    mill_dir.mkdir(parents=True, exist_ok=True)
+    (mill_dir / "config.local.yaml").write_text(
+        f"hub_relative_path: {hub_relative_path}\n", encoding="utf-8"
+    )
+
+
 def main() -> int:
     try:
         assert _paths.resolve_path is _sibling.resolve_path, \
@@ -372,7 +384,11 @@ def main() -> int:
                 branch="hanf/my-task",
                 spawned_at="2026-01-01T00:00:00Z",
             )
-            got = _paths.resolve_active_worktree(tmp_path, "my-task")
+            got = _paths.resolve_active_worktree(
+                tmp_path, "my-task",
+                cfg={"hub_relative_path": "."},
+                git_root=tmp_path / "other-git-root",
+            )
             assert got == worktree, f"happy path: got {got}"
         print("PASS: resolve_active_worktree happy path returns container_path/wts/slug")
 
@@ -380,7 +396,11 @@ def main() -> int:
             tmp_path = Path(tmp)
             (tmp_path / "wts").mkdir()
             try:
-                _paths.resolve_active_worktree(tmp_path, "missing-slug")
+                _paths.resolve_active_worktree(
+                    tmp_path, "missing-slug",
+                    cfg={"hub_relative_path": "."},
+                    git_root=tmp_path / "other",
+                )
                 raise AssertionError("expected ActiveWorktreeNotFound")
             except _paths.ActiveWorktreeNotFound:
                 pass
@@ -401,11 +421,209 @@ def main() -> int:
                 spawned_at="2026-01-01T00:00:00Z",
             )
             try:
-                _paths.resolve_active_worktree(tmp_path, "my-task")
+                _paths.resolve_active_worktree(
+                    tmp_path, "my-task",
+                    cfg={"hub_relative_path": "."},
+                    git_root=tmp_path / "other",
+                )
                 raise AssertionError("expected ActiveWorktreeSlugMismatch")
             except _paths.ActiveWorktreeSlugMismatch:
                 pass
         print("PASS: resolve_active_worktree raises ActiveWorktreeSlugMismatch when marker slug differs")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            wts_dir = tmp_path / "wts"
+            wts_dir.mkdir()
+            worktree = wts_dir / "my-task"
+            worktree.mkdir()
+            _make_active_marker(worktree / ".millhouse", slug="my-task", branch="hanf/my-task")
+            got = _paths.resolve_active_worktree(
+                tmp_path, "my-task",
+                cfg={"hub_relative_path": "."},
+                git_root=tmp_path / "other-git-root",
+            )
+            assert got == worktree, f"M1 new sig: got {got}"
+        print("PASS: resolve_active_worktree M1 (new sig) — container-form returns checkout root")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            wts_dir = tmp_path / "wts"
+            wts_dir.mkdir()
+            worktree = wts_dir / "my-task"
+            worktree.mkdir()
+            _make_active_marker(worktree / ".millhouse", slug="my-task", branch="hanf/my-task")
+            got = _paths.resolve_active_worktree(
+                tmp_path, "my-task",
+                cfg={"hub_relative_path": "src/Models"},
+                git_root=tmp_path / "other-git-root",
+            )
+            assert got == worktree, f"M1+sub: got {got}"
+        print("PASS: resolve_active_worktree M1+sub — sub-dir hub cfg still returns worktree root")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            git_root = tmp_path / "hub"
+            git_root.mkdir()
+            _make_active_marker(git_root / ".millhouse", slug="my-task", branch="hanf/my-task")
+            branch = "hanf/my-task"
+            mock_run = _make_run_result(stdout=branch + "\n")
+            with patch("_subprocess_util.run", return_value=mock_run):
+                with patch("_inplace.resolve_worktrees_dir", return_value=tmp_path / "wts-none"):
+                    got = _paths.resolve_active_worktree(
+                        tmp_path, "my-task",
+                        cfg={"hub_relative_path": "."},
+                        git_root=git_root,
+                    )
+            assert got == git_root, f"M2: got {got}"
+        print("PASS: resolve_active_worktree M2 — in-place returns git_root")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            git_root = tmp_path / "hub"
+            git_root.mkdir()
+            _make_active_marker(
+                git_root / "src" / "Models" / ".millhouse",
+                slug="my-task", branch="hanf/my-task",
+            )
+            branch = "hanf/my-task"
+            mock_run = _make_run_result(stdout=branch + "\n")
+            with patch("_subprocess_util.run", return_value=mock_run):
+                with patch("_inplace.resolve_worktrees_dir", return_value=tmp_path / "wts-none"):
+                    got = _paths.resolve_active_worktree(
+                        tmp_path, "my-task",
+                        cfg={"hub_relative_path": "src/Models"},
+                        git_root=git_root,
+                    )
+            assert got == git_root, f"M2+sub: got {got}"
+        print("PASS: resolve_active_worktree M2+sub — in-place + sub-dir hub returns git_root")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            wts_dir = tmp_path / "wts"
+            wts_dir.mkdir()
+            worktree = wts_dir / "my-task"
+            worktree.mkdir()
+            _make_active_marker(
+                worktree / ".millhouse", slug="different-slug", branch="hanf/different"
+            )
+            try:
+                _paths.resolve_active_worktree(
+                    tmp_path, "my-task",
+                    cfg={"hub_relative_path": "."},
+                    git_root=tmp_path / "other",
+                )
+                raise AssertionError("expected ActiveWorktreeSlugMismatch")
+            except _paths.ActiveWorktreeSlugMismatch:
+                pass
+        print("PASS: resolve_active_worktree — worktree-dir slug mismatch raises ActiveWorktreeSlugMismatch")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            (tmp_path / "wts").mkdir()
+            try:
+                _paths.resolve_active_worktree(
+                    tmp_path, "no-such-slug",
+                    cfg={"hub_relative_path": "."},
+                    git_root=tmp_path / "other",
+                )
+                raise AssertionError("expected ActiveWorktreeNotFound")
+            except _paths.ActiveWorktreeNotFound:
+                pass
+        print("PASS: resolve_active_worktree — nothing exists raises ActiveWorktreeNotFound")
+
+        # resolve_active_hub
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            wts_dir = tmp_path / "wts"
+            wts_dir.mkdir()
+            worktree = wts_dir / "my-task"
+            worktree.mkdir()
+            _make_active_marker(worktree / ".millhouse", slug="my-task", branch="hanf/my-task")
+            _write_stub(worktree / ".millhouse", ".")
+            got = _paths.resolve_active_hub(
+                tmp_path, "my-task",
+                cfg={"hub_relative_path": "."},
+                git_root=tmp_path / "other",
+            )
+            assert got == worktree, f"M1: got {got}"
+        print("PASS: resolve_active_hub M1 — hub_relative_path=. returns worktree root")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            wts_dir = tmp_path / "wts"
+            wts_dir.mkdir()
+            worktree = wts_dir / "my-task"
+            worktree.mkdir()
+            _make_active_marker(worktree / ".millhouse", slug="my-task", branch="hanf/my-task")
+            _write_stub(worktree / ".millhouse", "src/Models")
+            # cfg and stub agree
+            got = _paths.resolve_active_hub(
+                tmp_path, "my-task",
+                cfg={"hub_relative_path": "src/Models"},
+                git_root=tmp_path / "other",
+            )
+            assert got == worktree / "src" / "Models", f"M1+sub cfg+stub: got {got}"
+            # stub overrides cfg when cfg says "."
+            got = _paths.resolve_active_hub(
+                tmp_path, "my-task",
+                cfg={"hub_relative_path": "."},
+                git_root=tmp_path / "other",
+            )
+            assert got == worktree / "src" / "Models", f"M1+sub stub override: got {got}"
+        print("PASS: resolve_active_hub M1+sub — stub overrides caller cfg; both sources agree")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            git_root = tmp_path / "hub"
+            git_root.mkdir()
+            _make_active_marker(git_root / ".millhouse", slug="my-task", branch="hanf/my-task")
+            branch = "hanf/my-task"
+            mock_run = _make_run_result(stdout=branch + "\n")
+            with patch("_subprocess_util.run", return_value=mock_run):
+                with patch("_inplace.resolve_worktrees_dir", return_value=tmp_path / "wts-none"):
+                    got = _paths.resolve_active_hub(
+                        tmp_path, "my-task",
+                        cfg={"hub_relative_path": "."},
+                        git_root=git_root,
+                    )
+            assert got == git_root, f"M2: got {got}"
+        print("PASS: resolve_active_hub M2 — in-place + hub_rel=. returns git_root")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            git_root = tmp_path / "hub"
+            git_root.mkdir()
+            _make_active_marker(
+                git_root / "src" / "Models" / ".millhouse",
+                slug="my-task", branch="hanf/my-task",
+            )
+            branch = "hanf/my-task"
+            mock_run = _make_run_result(stdout=branch + "\n")
+            with patch("_subprocess_util.run", return_value=mock_run):
+                with patch("_inplace.resolve_worktrees_dir", return_value=tmp_path / "wts-none"):
+                    got = _paths.resolve_active_hub(
+                        tmp_path, "my-task",
+                        cfg={"hub_relative_path": "src/Models"},
+                        git_root=git_root,
+                    )
+            assert got == git_root / "src" / "Models", f"M2+sub: got {got}"
+        print("PASS: resolve_active_hub M2+sub — in-place + sub-dir hub, cfg is authoritative")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            (tmp_path / "wts").mkdir()
+            try:
+                _paths.resolve_active_hub(
+                    tmp_path, "no-such-slug",
+                    cfg={"hub_relative_path": "."},
+                    git_root=tmp_path / "other",
+                )
+                raise AssertionError("expected ActiveWorktreeNotFound")
+            except _paths.ActiveWorktreeNotFound:
+                pass
+        print("PASS: resolve_active_hub — propagates ActiveWorktreeNotFound")
 
         # resolve_container_path
 
