@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-review-r1
+phase: planned
 slug: mill-start-auto
 branch: hanf/mill-start-auto
 plan: task/plan
@@ -18,4 +18,5 @@ discussing  '2026-05-09T14:33:16Z'
 discussed  2026-05-09T14:45:07Z
 planning  2026-05-09T14:55:47Z
 plan-review-r1  2026-05-09T14:58:45Z
+planned  2026-05-09T14:59:00Z
 ```
