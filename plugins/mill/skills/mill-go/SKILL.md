@@ -16,11 +16,11 @@ You are the **Builder** — a lean orchestrator. You coordinate per-batch implem
 3. Load config — deep-merge `<wiki_path>/config.yaml` with `.millhouse/config.local.yaml` via `_review_common.load_config(wiki_path, Path(".millhouse"))`. Read these keys:
    - `pipeline.auto_merge` — whether to invoke mill-merge after success.
    - `pipeline.auto_report` — whether to auto-fire mill-self-report at end-of-work. mill-go fires it at Handoff step 6, AFTER any `/mill-merge` invocation in step 5 — including after PR-pending halts. See step 6 for the explicit "do not treat PR-pending as termination" rule.
-   - `review.code.rounds` — max review rounds per batch.
-   - `review.code.self_fix_rounds` — passed to the implementer brief.
-   - `review.code.holistic` — if true, run one holistic code review after all batches approve.
-   - `review.code.holistic_rounds` — max holistic fix rounds (default 1).
-   - `review.code.per_batch` — if false (missing key defaults to true), skip per-batch code review for all batches.
+   - `roles.code-review.batch.rounds` — max review rounds per batch.
+   - `roles.code-review.holistic.rounds` — max holistic review rounds (parallel cap for the holistic scope, default 1).
+   - `roles.implementer.self_fix_rounds` — passed to the implementer brief.
+   - `roles.code-review.holistic.reviewer` — if non-null, run one holistic code review after all batches approve.
+   - `roles.code-review.batch.reviewer` — if null (or rounds: 0), skip per-batch code review for all batches.
 4. Acquire the builder lock:
    ```bash
    uv run --project "$CLAUDE_PLUGIN_ROOT" "$CLAUDE_PLUGIN_ROOT/scripts/millpy-builder-lock.py" acquire <slug>
@@ -103,13 +103,13 @@ If the returned list is empty, continue to "3. Code Review loop" as normal.
 
 ### 3. Code Review loop
 
-If `review.code.per_batch` is false: set batch state → `approved`, `_status.append_phase(status_path, f"approved-{batch_name}", _timestamp.now_utc_iso())`, commit on the task branch: `git -C <worktree> add status.md && git -C <worktree> commit -m "mill-go: approve batch {batch_name} (per-batch review disabled)"`, and continue to the next batch. Skip the rest of this section.
+If `roles.code-review.batch.reviewer` is null (or rounds: 0): set batch state → `approved`, `_status.append_phase(status_path, f"approved-{batch_name}", _timestamp.now_utc_iso())`, commit on the task branch: `git -C <worktree> add status.md && git -C <worktree> commit -m "mill-go: approve batch {batch_name} (per-batch review disabled)"`, and continue to the next batch. Skip the rest of this section.
 
 - Set batch state → `reviewing`, `review_round: 1`.
 - `_status.append_phase(status_path, f"reviewing-{batch_name}-r1", _timestamp.now_utc_iso())`.
 - `extra_files = []`.
 
-For each round `N` from 1 to `review.code.rounds`:
+For each round `N` from 1 to `roles.code-review.batch.rounds`:
 
 1. **Crash-recovery check.** Before firing the CLI, scan `Path("task/reviews").resolve()` for a file matching `*-code-review-{batch_name}-r{N}.md`. If found, treat it as this round's review file — parse its verdict from the fenced yaml block via `_review_common.parse_verdict(file_content)` and skip to step 4 below. This covers the case where mill-go crashed after writing the review but before committing state.
    `signature: _review_common.parse_verdict(text: str) -> str`
@@ -137,7 +137,7 @@ For each round `N` from 1 to `review.code.rounds`:
      ```
      The CLI atomically: reads `implementer_session` from status.md, sets batch state → `fixing`, calls `_status.append_phase` for `fixing-{batch_name}-r{N}`, commits and pushes (status.md plus the review file), and resumes the warm implementer session with the fix prompt (which instructs the implementer to load `mill-receiving-review` and apply findings). Parse the JSON report the same way as step 2 — including the exit-code-1-with-stuck-JSON behavior described under "1. Implement". On stuck → escalate.
 
-5. **Max-rounds exhaustion.** After `review.code.rounds` rounds without APPROVE: `_notify.notify("mill-go.review-exhausted", f"batch {batch_name}", slug=slug, rounds=N)`, set batch state → `blocked`, `blocked_reason: "review rounds exhausted"`, `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`, commit on the task branch: `git -C <worktree> add task/status.md && git -C <worktree> commit -m "mill-go: blocked on {batch_name} after {N} rounds"`. Go to *Blocked* below.
+5. **Max-rounds exhaustion.** After `roles.code-review.batch.rounds` rounds without APPROVE: `_notify.notify("mill-go.review-exhausted", f"batch {batch_name}", slug=slug, rounds=N)`, set batch state → `blocked`, `blocked_reason: "review rounds exhausted"`, `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`, commit on the task branch: `git -C <worktree> add task/status.md && git -C <worktree> commit -m "mill-go: blocked on {batch_name} after {N} rounds"`. Go to *Blocked* below.
 
 ### Stuck escalation
 
@@ -159,9 +159,9 @@ If the deep-merged config has `pipeline.autonomous_mode: true`: for any `stuck_t
 
 ## Holistic code review
 
-**Guard:** Only execute this section if `cfg.get("review", {}).get("code", {}).get("holistic", True)` is truthy.
+**Guard:** The skip semantics have two conditions: `reviewer: null` OR `rounds: 0` means "skip holistic". Only execute this section if `cfg.get("roles", {}).get("code-review", {}).get("holistic", {}).get("reviewer") is not None`.
 
-`max_holistic_rounds = cfg.get("review", {}).get("code", {}).get("holistic_rounds", 1)`. Loop variable `H` starts at 1. `extra_files = []`.
+`max_holistic_rounds = cfg.get("roles", {}).get("code-review", {}).get("holistic", {}).get("rounds", 1)`. Loop variable `H` starts at 1. `extra_files = []`.
 
 For each round `H` from 1 to `max_holistic_rounds`:
 

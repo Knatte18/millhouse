@@ -12,7 +12,7 @@ You are a collaborative solution designer. Your job is to help the user understa
 1. Resolve the wiki path via `_paths.resolve_wiki_path(_paths.resolve_git_root())` and call `_wiki.sync_pull(wiki_path, slug="mill-start")`.
    `signature: _wiki.sync_pull(wiki_path: Path, *, slug: str) -> None`
 2. Read the slug from `.millhouse/active.slug.md` via `_active.read_slug(Path(".millhouse"))`. If missing, halt and tell the user this worktree was not created by `mill-spawn`.
-3. Load config — deep-merge `<WIKI_PATH>/config.yaml` (shared) with `.millhouse/config.local.yaml` (gitignored overlay). Read `review.discussion.rounds` as `max_review_rounds`.
+3. Load config — deep-merge `<WIKI_PATH>/config.yaml` (shared) with `.millhouse/config.local.yaml` (gitignored overlay). Read `roles.discussion-review.holistic.rounds` as `max_review_rounds`.
 
 ## Phases
 
@@ -63,7 +63,7 @@ Commit on the task branch: `git -C <worktree> add task/discussion.md && git comm
 
 ### Phase: Discussion Review
 
-If `max_review_rounds == 0`: skip straight to Handoff.
+The new schema has two skip conditions: `rounds: 0` OR `reviewer: null` means "skip discussion review". If `max_review_rounds == 0` OR `roles.discussion-review.holistic.reviewer` is `None`: skip straight to Handoff.
 
 Loop up to `max_review_rounds` rounds. Each round:
 
