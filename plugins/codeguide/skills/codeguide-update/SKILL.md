@@ -23,13 +23,17 @@ Before doing anything else, run `python ${CLAUDE_PLUGIN_ROOT}/scripts/resolve.py
 - `HEAD~3` → files changed in the last 3 commits
 - Explicit file/folder paths → only those
 
+On a non-base branch with no argument, the no-arg default expands to `<parent-branch>..HEAD ∪ current-diff` so the post-commit / pre-PR case (clean tree, work already committed) is non-empty. Parent detection is git-native: `origin/HEAD` first, then `origin/main`, then `origin/master`; if none exist, the helper degrades to current-diff-only. File enumeration is delegated to `resolve_scope.py` — see Step 1b below.
+
 ## Steps
 
-1. **Resolve per file → group by cg-root.** For each source file in scope, run `python ${CLAUDE_PLUGIN_ROOT}/scripts/resolve.py --json` from that file's directory to get `{mode, cg_root, sibling_anchor}`. Group files whose resolve result shares the same `cg_root`. Files with `found == false` (no governing codeguide) → flag and skip.
+1. **Resolve codeguide root.** See `## Resolution` above.
 
-   Most repos have a single root codeguide, so typically you get one group. Multi-codeguide repos (repo-level + one-or-more subfolder workspaces) get one group per subtree.
+2. **Enumerate source files in scope.** Run `python ${CLAUDE_PLUGIN_ROOT}/scripts/resolve_scope.py $ARGUMENTS` from the repo root. Stdout is one absolute path per line, deduped. Stderr's last non-empty line is a JSON summary `{mode, parent, base_branch, included_committed, included_diff}` for traceability. The helper handles `$ARGUMENTS` parsing (no-arg / `1h` / `HEAD~3` / explicit paths), parent-branch detection via `origin/HEAD`/`origin/main`/`origin/master`, and the `<parent>..HEAD ∪ current-diff` union for the no-arg-on-task-branch case.
 
-2. **For each group** — each group has its own `mode`, `cg_root`, and (for sibling) `sibling_anchor`:
+3. **Resolve per file → group by cg-root.** For each source file from Step 2, run `python ${CLAUDE_PLUGIN_ROOT}/scripts/resolve.py --json` from that file's directory to get `{mode, cg_root, sibling_anchor}`. Group files whose resolve result shares the same `cg_root`. Files with `found == false` (no governing codeguide) → flag and skip. Most repos have a single root codeguide, so typically you get one group. Multi-codeguide repos (repo-level + one-or-more subfolder workspaces) get one group per subtree.
+
+4. **For each group** — each group has its own `mode`, `cg_root`, and (for sibling) `sibling_anchor`:
 
    a. **Read config:** Load source extensions from `<cg_root>/config.yaml`. Filter the group's files to recognized source extensions only.
 
@@ -60,7 +64,7 @@ Before doing anything else, run `python ${CLAUDE_PLUGIN_ROOT}/scripts/resolve.py
 
       Pass the `mode` and (if sibling) `sibling-anchor` that resolve.py returned for THIS group. Never re-invoke `resolve.py` from the helper.
 
-3. **Report** per group: cg_root, mode, files updated/created/flagged. In sibling mode, report the sibling commit SHA for traceability.
+5. **Report** per group: cg_root, mode, files updated/created/flagged. In sibling mode, report the sibling commit SHA for traceability.
 
 ## Rules
 
