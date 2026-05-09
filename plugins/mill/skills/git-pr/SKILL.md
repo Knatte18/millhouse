@@ -31,6 +31,24 @@ git branch --show-current
 
 If on `main` or `master`: stop and tell the user "You're on main — switch to a feature branch first."
 
+### 1.5 Detect task branch
+
+Check whether the current worktree contains `task/status.md`:
+
+```bash
+GIT_ROOT=$(git rev-parse --show-toplevel)
+if [ -f "$GIT_ROOT/task/status.md" ]; then
+    # halt with the redirect message below
+    :
+fi
+```
+
+If `task/status.md` exists at the worktree root, halt with the following message and return without running any subsequent step:
+
+> This is a mill task branch — `task/` files would land in the PR. Use `/mill-merge` to handle the cleanup commit, archive tag, and Home.md flip in one shot. For mid-task collaborator review, push the branch directly with `git push` and open a draft PR via the GitHub UI.
+
+If the file does not exist, proceed to step 2.
+
 ### 2. Determine base branch
 
 Resolve the base branch in this order:
