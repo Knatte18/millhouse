@@ -38,14 +38,14 @@ Batch-local decision: the `_spawn_and_open` private helper inside `millpy-vscode
 - **Deletes:** none
 - **Requirements:** Refactor `plugins/mill/scripts/millpy-vscode.py` per the discussion's `Files touched > millpy-vscode.py` block. Do not modify `_build_code_argv` or `_load_spawn_main`. Concretely:
 
-  1. **Imports.** Add `import _vscode_processes` and `from _vscode_processes import find_open_vscode_paths, _path_matches_cmdline` at the top, alongside the existing imports.
+  1. **Imports.** Add `import _vscode_processes` at the top, alongside the existing imports. Do NOT use `from _vscode_processes import …` — every call must go through the module reference (e.g. `_vscode_processes.find_open_vscode_paths()`, `_vscode_processes._path_matches_cmdline(...)`) so that the `mill_vscode._vscode_processes.find_open_vscode_paths` patch target used by the tests actually rebinds the call site.
 
   2. **argparse.** Inside `main()`, after `parser = argparse.ArgumentParser(...)`, add `--new` (`store_true`) and put both `--slug` and `--new` inside `parser.add_mutually_exclusive_group()` so that passing both raises argparse's standard usage error (`SystemExit(2)`). The existing `--list` stays at top level (it's compatible with both). The `--list` flag retains its current behavior — it must NOT consult the filter.
 
   3. **Filter step.** Add a new private helper `_filter_open_worktrees(active: list[tuple[Path, str, str]], wiki_path: Path | None, hub_subpath_default: str) -> list[tuple[Path, str, str]]` defined below `_load_spawn_main`. It:
-     - Calls `open_cmdlines = find_open_vscode_paths()`.
+     - Calls `open_cmdlines = _vscode_processes.find_open_vscode_paths()`.
      - If `open_cmdlines` is empty, returns `active` unchanged.
-     - Otherwise iterates `active`. For each `(entry_path, slug, title)`: load that worktree's per-worktree `hub_relative_path` via `_load_config(wiki_path, entry_path)` if `wiki_path is not None` else use `hub_subpath_default`; compute `launch = resolve_hub_relative_path(entry_path, hub_subpath)`; KEEP the entry iff no element of `open_cmdlines` makes `_path_matches_cmdline(launch, str(cmdline))` return True.
+     - Otherwise iterates `active`. For each `(entry_path, slug, title)`: load that worktree's per-worktree `hub_relative_path` via `_load_config(wiki_path, entry_path)` if `wiki_path is not None` else use `hub_subpath_default`; compute `launch = resolve_hub_relative_path(entry_path, hub_subpath)`; KEEP the entry iff no element of `open_cmdlines` makes `_vscode_processes._path_matches_cmdline(launch, str(cmdline))` return True.
      - On any exception during a single entry's per-worktree config load (`SystemExit` from `_load_config`), fall back to `hub_subpath_default` for that entry.
      - Returns the filtered list, preserving original order.
 
@@ -82,7 +82,8 @@ Batch-local decision: the `_spawn_and_open` private helper inside `millpy-vscode
 
   5. **Wire up `main()`.** Restructure the body after `active = _spawn_core.discover_active_worktrees(worktrees_dir)`:
 
-     - **`--list` branch (unchanged semantics).** If `args.list`, print all of `active` (UNFILTERED — same as today) and return 0. Move this branch to immediately after `discover_active_worktrees` so the filter never runs in `--list` mode.
+     - **`--list` branch (unchanged semantics).** If `args.list`, print all of `active` (UNFILTERED — same as today) and return 0. Move this branch to immediately after `discover_active_worktrees` so the filter never runs in `--list` mode. The empty-active case for `--list` is preserved by an explicit `if not active and args.list: print("No active worktrees found.", file=sys.stderr); return 0` guard *before* the loop, matching today's behavior and the existing test "`--list` with empty active list → spawn not called".
+     - **No active worktrees + `--slug` set.** Add the explicit guard `if not active and args.slug is not None: print("No active worktrees found.", file=sys.stderr); return 0` BEFORE the `--new` branch. This preserves today's behavior — and the existing test "`--slug` with no active worktrees → spawn NOT called, exit 0".
      - **`--new` branch.** If `args.new`, return `_spawn_and_open(worktrees_dir, active, wiki_path)`. Skip everything below.
      - **No active worktrees + no `--slug`/`--list`/`--new`.** Behave exactly as today's "auto-spawn fallback": delegate to `_spawn_and_open(worktrees_dir, active, wiki_path)` (here `active == []` so `pre_paths` is empty and any newly spawned worktree is the diff target). Return its rc.
      - **`--slug` branch.** Skip the filter. Resolve the slug against `active` (same code as today). If matched, `selected_path = matched[0]` and continue to the open path. If not matched, print the error and return 1.
@@ -113,7 +114,7 @@ Batch-local decision: the `_spawn_and_open` private helper inside `millpy-vscode
   - `plugins/mill/unit_tests/test-millpy-vscode.py`
 - **Creates:** none
 - **Deletes:** none
-- **Requirements:** Add the following test blocks to `test-millpy-vscode.py`'s `main()` function. Preserve every existing test exactly as-is. Each new block follows the existing pattern (`with tempfile.TemporaryDirectory() as tmpdir: ...`, builds a fake repo via `_make_git_repo`, places `_write_active_marker` markers, sets up `patch(...)` chain, calls `mill_vscode.main([...])`, asserts on `subprocess_calls` / `input_calls` / `rc`). Patches: every new test patches `mill_vscode._vscode_processes.find_open_vscode_paths` (set via `return_value=<set of cmdlines>`). Where the test exercises spawn, also patch `mill_vscode._load_spawn_main` (with a `MagicMock` whose `return_value` is a callable that returns the rc the test wants) and `mill_vscode._spawn_core.discover_active_worktrees` with `side_effect=[<pre>, <post>]`.
+- **Requirements:** Add the following test blocks to `test-millpy-vscode.py`'s `main()` function. Preserve every existing test exactly as-is. Each new block follows the existing pattern (`with tempfile.TemporaryDirectory() as tmpdir: ...`, builds a fake repo via `_make_git_repo`, places `_write_active_marker` markers, sets up `patch(...)` chain, calls `mill_vscode.main([...])`, asserts on `subprocess_calls` / `input_calls` / `rc`). Patches: every new test patches `mill_vscode._vscode_processes.find_open_vscode_paths` (set via `return_value=<set of cmdlines>`). This patch target is effective because Card 3 references the function via the module attribute (`_vscode_processes.find_open_vscode_paths()`) rather than via a `from … import` binding, so `unittest.mock.patch` rebinds the call site. Where the test exercises spawn, also patch `mill_vscode._load_spawn_main` (with a `MagicMock` whose `return_value` is a callable that returns the rc the test wants) and `mill_vscode._spawn_core.discover_active_worktrees` with `side_effect=[<pre>, <post>]`.
 
   Test blocks to add (each prints `PASS:` / `FAIL:` and bumps `errors`):
 

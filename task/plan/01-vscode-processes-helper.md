@@ -85,13 +85,27 @@ Batch-local decision (refines the shared `silent-empty-set-on-failure` decision)
   - **probe_subprocess_nonzero_exit**: `_subprocess_util.run` returns `CompletedProcess(returncode=1, stdout="", stderr="boom", args=[])`. Assert empty set.
   - **probe_subprocess_timeout**: `_subprocess_util.run` raises `subprocess.TimeoutExpired(cmd=[], timeout=5)`. Assert empty set.
   - **probe_subprocess_oserror**: `_subprocess_util.run` raises `FileNotFoundError("powershell missing")`. Assert empty set.
-  - **path_match_helper_bare**: `_path_matches_cmdline(Path("/wts/foo"), "code /wts/foo")` returns True. (On Windows the test must construct the Path from a Windows-shaped string; use `os.sep` to construct the test inputs so the same assertion runs on both platforms — alternatively, patch `os.name="posix"` and use forward-slash literals.)
-  - **path_match_helper_trailing_slash**: with `os.name="posix"`, `_path_matches_cmdline(Path("/wts/foo"), "code /wts/foo/")` returns True.
-  - **path_match_helper_subpath_excluded**: with `os.name="posix"`, `_path_matches_cmdline(Path("/wts/foo"), "code /wts/foo/src")` returns False.
-  - **path_match_helper_prefix_collision**: with `os.name="posix"`, `_path_matches_cmdline(Path("/wts/foo"), "code /wts/foo-bar")` returns False.
-  - **path_match_helper_quoted_path**: with `os.name="posix"`, `_path_matches_cmdline(Path("/wts/foo bar"), 'code "/wts/foo bar"')` returns True.
-  - **path_match_helper_end_of_string**: with `os.name="posix"`, `_path_matches_cmdline(Path("/wts/foo"), "code /wts/foo")` (no trailing whitespace) returns True.
-  - **path_match_helper_windows_case_insensitive**: patch `os.name="nt"`; `_path_matches_cmdline(Path("C:\\wts\\foo"), "code C:\\WTS\\FOO")` returns True. The Path object's resolved-string lowercased should match the lowercased haystack.
+  Path-match tests must use real filesystem paths via `tempfile.TemporaryDirectory()` so that `Path.resolve()` produces the same string the haystack contains, on either platform. Construct each test like:
+
+  ```python
+  with tempfile.TemporaryDirectory() as tmpdir:
+      foo = Path(tmpdir) / "foo"
+      foo.mkdir()
+      resolved = str(foo.resolve())
+      assert _path_matches_cmdline(foo, f"code {resolved}") is True
+  ```
+
+  Where the test asserts a sub-path is NOT a match, build the sub-path as `f"{resolved}{os.sep}src"` (or `resolved + os.sep + "src"`). Where the test asserts a prefix-collision is NOT a match, build the haystack as `f"code {resolved}-bar"`. Where the test exercises a quoted path with a space, materialise a directory whose name contains a space (e.g. `Path(tmpdir) / "foo bar"`).
+
+  - **path_match_helper_bare**: build `foo` via tempfile; `_path_matches_cmdline(foo, f"code {resolved}")` returns True.
+  - **path_match_helper_trailing_slash**: `_path_matches_cmdline(foo, f"code {resolved}{os.sep}")` returns True.
+  - **path_match_helper_subpath_excluded**: `_path_matches_cmdline(foo, f"code {resolved}{os.sep}src")` returns False.
+  - **path_match_helper_prefix_collision**: `_path_matches_cmdline(foo, f"code {resolved}-bar")` returns False.
+  - **path_match_helper_quoted_path**: build `foo bar` directory via tempfile; `_path_matches_cmdline(foo_bar, f'code "{resolved}"')` returns True.
+  - **path_match_helper_end_of_string**: `_path_matches_cmdline(foo, f"code {resolved}")` with no trailing whitespace returns True (asserted by the bare test, but kept as a separate block to lock in end-of-string boundary semantics — verifying that `right_index == len(hay)` triggers the boundary check).
+  - **path_match_helper_windows_case_insensitive**: skip on POSIX (`if os.name != "nt": skip with a print and continue`). On Windows, build `foo` via tempfile; compute `upper = str(foo.resolve()).upper()`; assert `_path_matches_cmdline(foo, f"code {upper}")` returns True. The lowercase normalisation inside `_path_matches_cmdline` must match `resolved.lower()` against `upper.lower()`.
+
+  All other parser tests (`windows_parser_*`, `posix_parser_*`, `probe_subprocess_*`) keep the `patch("_vscode_processes.os.name", "nt")` / `"posix"` pattern as planned — only the path-match tests need real-path tempfiles.
 
   All tests must be platform-independent — they run unchanged on Windows and Linux because every OS-sensitive assertion patches `os.name`. Where `Path("/wts/foo").resolve()` differs across platforms (Windows resolves to a drive-relative path on POSIX-style input, etc.), construct test paths via `tempfile.TemporaryDirectory()` if needed — but for the boundary tests, `os.name="posix"` plus `pathlib.PurePosixPath`-style strings keep the assertions deterministic.
 
