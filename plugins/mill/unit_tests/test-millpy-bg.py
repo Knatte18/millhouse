@@ -59,10 +59,10 @@ def main() -> int:
     try:
         with tempfile.TemporaryDirectory() as tmpdir:
             with unittest.mock.patch.object(
-                _launcher_mod.subprocess, "run",
+                _launcher_mod._subprocess_util, "run",
                 return_value=_mock_git_run_result(tmpdir),
             ), unittest.mock.patch.object(
-                _launcher_mod.subprocess, "Popen",
+                _launcher_mod._subprocess_util, "popen_detached",
                 return_value=_mock_popen_instance(),
             ):
                 buf = io.StringIO()
@@ -90,10 +90,10 @@ def main() -> int:
             scratch = Path(tmpdir) / ".scratch"
             assert not scratch.exists(), ".scratch/ should not exist before call"
             with unittest.mock.patch.object(
-                _launcher_mod.subprocess, "run",
+                _launcher_mod._subprocess_util, "run",
                 return_value=_mock_git_run_result(tmpdir),
             ), unittest.mock.patch.object(
-                _launcher_mod.subprocess, "Popen",
+                _launcher_mod._subprocess_util, "popen_detached",
                 return_value=_mock_popen_instance(),
             ):
                 with unittest.mock.patch("sys.stdout", io.StringIO()):
@@ -110,10 +110,10 @@ def main() -> int:
     try:
         with tempfile.TemporaryDirectory() as tmpdir:
             with unittest.mock.patch.object(
-                _launcher_mod.subprocess, "run",
+                _launcher_mod._subprocess_util, "run",
                 return_value=_mock_git_run_result(tmpdir),
             ), unittest.mock.patch.object(
-                _launcher_mod.subprocess, "Popen",
+                _launcher_mod._subprocess_util, "popen_detached",
                 return_value=_mock_popen_instance(pid=42),
             ):
                 buf = io.StringIO()
@@ -130,64 +130,58 @@ def main() -> int:
     except Exception as exc:
         failures.append(f"FAIL (c) stdout one line ({type(exc).__name__}): {exc}")
 
-    # (d) Windows creationflags
+    # (d) Windows path forwards pid via popen_detached
     try:
-        expected_flags = 0x00000008 | 0x00000200 | 0x01000000  # = 0x01000208
         with tempfile.TemporaryDirectory() as tmpdir:
-            with unittest.mock.patch.object(_launcher_mod.os, "name", "nt"), \
+            with unittest.mock.patch.object(_launcher_mod._subprocess_util.os, "name", "nt"), \
                  unittest.mock.patch.object(
-                     _launcher_mod.subprocess, "run",
+                     _launcher_mod._subprocess_util, "run",
                      return_value=_mock_git_run_result(tmpdir),
                  ), unittest.mock.patch.object(
-                     _launcher_mod.subprocess, "Popen",
+                     _launcher_mod._subprocess_util.subprocess, "Popen",
                      return_value=_mock_popen_instance(pid=1),
                  ) as mock_popen_cls:
-                with unittest.mock.patch("sys.stdout", io.StringIO()):
+                buf = io.StringIO()
+                with unittest.mock.patch("sys.stdout", buf):
                     _launcher_main(["--slug", "win-test", "--", "echo", "hi"])
 
-                call_kwargs = mock_popen_cls.call_args[1]
-                assert "creationflags" in call_kwargs, "creationflags missing from Popen kwargs"
-                assert call_kwargs["creationflags"] == expected_flags, (
-                    f"creationflags={call_kwargs['creationflags']:#010x}, "
-                    f"expected {expected_flags:#010x}"
+                assert mock_popen_cls.call_count == 1, (
+                    "popen_detached should call Popen exactly once"
                 )
-                assert "start_new_session" not in call_kwargs, (
-                    "start_new_session must not be set on nt"
+                assert "pid=1" in buf.getvalue(), (
+                    f"pid=1 not found in output: {buf.getvalue()!r}"
                 )
-        print(f"PASS (d): Windows creationflags = {expected_flags:#010x}")
+        print("PASS (d): Windows path forwards pid via popen_detached")
     except AssertionError as exc:
         failures.append(f"FAIL (d) Windows flags: {exc}")
     except Exception as exc:
         failures.append(f"FAIL (d) Windows flags ({type(exc).__name__}): {exc}")
 
-    # (e) POSIX start_new_session, no creationflags
+    # (e) POSIX path forwards pid via popen_detached
     try:
-        # Capture the concrete platform Path class (WindowsPath on Windows) so that
-        # mocking os.name="posix" does not cause pathlib.Path.__new__ to dispatch to
-        # PosixPath, which cannot be instantiated on Windows.
+        # Keep WindowsPath on Windows when os.name is mocked to "posix".
         _concrete_path_cls = type(_launcher_mod.Path("."))
         with tempfile.TemporaryDirectory() as tmpdir:
-            with unittest.mock.patch.object(_launcher_mod.os, "name", "posix"), \
+            with unittest.mock.patch.object(_launcher_mod._subprocess_util.os, "name", "posix"), \
                  unittest.mock.patch.object(_launcher_mod, "Path", _concrete_path_cls), \
                  unittest.mock.patch.object(
-                     _launcher_mod.subprocess, "run",
+                     _launcher_mod._subprocess_util, "run",
                      return_value=_mock_git_run_result(tmpdir),
                  ), unittest.mock.patch.object(
-                     _launcher_mod.subprocess, "Popen",
+                     _launcher_mod._subprocess_util.subprocess, "Popen",
                      return_value=_mock_popen_instance(pid=2),
                  ) as mock_popen_cls:
-                with unittest.mock.patch("sys.stdout", io.StringIO()):
+                buf = io.StringIO()
+                with unittest.mock.patch("sys.stdout", buf):
                     _launcher_main(["--slug", "posix-test", "--", "echo", "hi"])
 
-                call_kwargs = mock_popen_cls.call_args[1]
-                assert call_kwargs.get("start_new_session") is True, (
-                    f"start_new_session should be True, "
-                    f"got {call_kwargs.get('start_new_session')!r}"
+                assert mock_popen_cls.call_count == 1, (
+                    "popen_detached should call Popen exactly once"
                 )
-                assert "creationflags" not in call_kwargs, (
-                    "creationflags must not be set on posix"
+                assert "pid=2" in buf.getvalue(), (
+                    f"pid=2 not found in output: {buf.getvalue()!r}"
                 )
-        print("PASS (e): POSIX start_new_session=True, no creationflags")
+        print("PASS (e): POSIX path forwards pid via popen_detached")
     except AssertionError as exc:
         failures.append(f"FAIL (e) POSIX flags: {exc}")
     except Exception as exc:
@@ -219,10 +213,10 @@ def main() -> int:
     try:
         with tempfile.TemporaryDirectory() as tmpdir:
             with unittest.mock.patch.object(
-                _launcher_mod.subprocess, "run",
+                _launcher_mod._subprocess_util, "run",
                 return_value=_mock_git_run_result(tmpdir),
             ), unittest.mock.patch.object(
-                _launcher_mod.subprocess, "Popen",
+                _launcher_mod._subprocess_util, "popen_detached",
                 return_value=_mock_popen_instance(),
             ):
                 with warnings.catch_warnings(record=True) as w:

@@ -130,7 +130,7 @@ class TestMillpyImplement(unittest.TestCase):
             return_value="test-branch",
         )
         self.mock_subprocess_run = _p(
-            millpy_implement.subprocess, "run",
+            millpy_implement._subprocess_util, "run",
             return_value=subprocess.CompletedProcess(
                 args=[], returncode=0, stdout="abc1234\n", stderr=""
             ),
@@ -340,7 +340,7 @@ class TestForwardOutput(unittest.TestCase):
     def _call(self, output: str) -> tuple[int, str]:
         buf = io.StringIO()
         with unittest.mock.patch.object(
-            _implementer_common.subprocess, "run",
+            _implementer_common._subprocess_util, "run",
             return_value=unittest.mock.MagicMock(returncode=1, stdout=""),
         ):
             with unittest.mock.patch("sys.stdout", buf):
@@ -400,7 +400,7 @@ class TestForwardOutput(unittest.TestCase):
         sha = "a" * 40
         buf = io.StringIO()
         with unittest.mock.patch.object(
-            _implementer_common.subprocess, "run",
+            _implementer_common._subprocess_util, "run",
             return_value=unittest.mock.MagicMock(returncode=0, stdout=sha + "\n"),
         ):
             with unittest.mock.patch("sys.stdout", buf):
@@ -415,7 +415,7 @@ class TestForwardOutput(unittest.TestCase):
         """git rev-parse failure → original commit_sha preserved in output."""
         buf = io.StringIO()
         with unittest.mock.patch.object(
-            _implementer_common.subprocess, "run",
+            _implementer_common._subprocess_util, "run",
             return_value=unittest.mock.MagicMock(returncode=1, stdout=""),
         ):
             with unittest.mock.patch("sys.stdout", buf):

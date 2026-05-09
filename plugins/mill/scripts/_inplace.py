@@ -81,17 +81,18 @@ def prompt_stale_worktree(slug: str, worktree_path: Path) -> str:
 
     Presents a numbered list per ``mill:conversation`` conventions:
 
-        1) Treat as in-place — skip worktree remove
-        2) Treat as worktree — run git worktree remove
-        3) Abort (Recommended)
+        1) Abort (Recommended)
+        2) Treat as in-place — skip worktree remove
+        3) Treat as worktree — run git worktree remove
 
     Args:
         slug: Task slug; used in the prompt text for clarity.
         worktree_path: Absolute path to the suspected stale worktree dir.
 
     Returns:
-        ``"inplace"`` when the user picks 1, ``"worktree"`` when 2,
-        ``"abort"`` when 3 or on invalid / EOF input.
+        ``"abort"`` when the user picks 1, ``"inplace"`` when 2,
+        ``"worktree"`` when 3; ``"abort"`` also on invalid / EOF input (the
+        fail-safe default).
     """
     print(
         f"[inplace] Stale-worktree ambiguity for {slug!r}:\n"
@@ -99,9 +100,9 @@ def prompt_stale_worktree(slug: str, worktree_path: Path) -> str:
         "Choose how to proceed:",
         file=sys.stderr,
     )
-    print("  1) Treat as in-place — skip worktree remove", file=sys.stderr)
-    print("  2) Treat as worktree — run git worktree remove", file=sys.stderr)
-    print("  3) Abort (Recommended)", file=sys.stderr)
+    print("  1) Abort (Recommended)", file=sys.stderr)
+    print("  2) Treat as in-place — skip worktree remove", file=sys.stderr)
+    print("  3) Treat as worktree — run git worktree remove", file=sys.stderr)
 
     try:
         raw = input("Choice [1/2/3]: ").strip()
@@ -110,11 +111,11 @@ def prompt_stale_worktree(slug: str, worktree_path: Path) -> str:
         return "abort"
 
     if raw == "1":
-        return "inplace"
-    if raw == "2":
-        return "worktree"
-    if raw == "3":
         return "abort"
+    if raw == "2":
+        return "inplace"
+    if raw == "3":
+        return "worktree"
 
     print(
         f"[inplace] Unrecognised choice {raw!r}; aborting to be safe.",

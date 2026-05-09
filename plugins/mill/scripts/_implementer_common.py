@@ -1,7 +1,7 @@
 """Shared helpers for millpy-implement.py and millpy-implement-holistic.py."""
 import json
 import re
-import subprocess
+import _subprocess_util
 from pathlib import Path
 
 
@@ -16,10 +16,8 @@ def _forward_output(output: str, project_root: Path) -> int:
         last = matches[-1]
         try:
             parsed = json.loads(last)
-            result = subprocess.run(
+            result = _subprocess_util.run(
                 ["git", "rev-parse", "HEAD"],
-                capture_output=True,
-                text=True,
                 cwd=project_root,
             )
             if result.returncode == 0:

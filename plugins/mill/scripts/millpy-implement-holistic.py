@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import argparse
 import json
-import subprocess
+import _subprocess_util
 import sys
 import uuid
 from pathlib import Path
@@ -119,30 +119,24 @@ def main(argv=None) -> int:
         else str(review_file)
     )
 
-    result = subprocess.run(
+    result = _subprocess_util.run(
         ["git", "add", "task/status.md", review_file_arg],
-        capture_output=True,
-        text=True,
         cwd=project_root,
     )
     if result.returncode != 0:
         print(result.stderr, file=sys.stderr)
         return 1
 
-    result = subprocess.run(
+    result = _subprocess_util.run(
         ["git", "commit", "-m", f"mill-go: holistic fix round {args.round}"],
-        capture_output=True,
-        text=True,
         cwd=project_root,
     )
     if result.returncode != 0:
         print(result.stderr, file=sys.stderr)
         return 1
 
-    result = subprocess.run(
+    result = _subprocess_util.run(
         ["git", "push", "origin", branch],
-        capture_output=True,
-        text=True,
         cwd=project_root,
     )
     if result.returncode != 0:
