@@ -11,8 +11,8 @@ Public API:
     ReviewResult         — dataclass; serialised to the CLI's stdout JSON
     RE_SIMPLE            — regex matching simple review filenames
     RE_BATCH             — regex matching plan-batch review filenames
-    find_active_slug()   — delegate to _active.read_slug for the canonical active.slug.md
-    load_task_title()    — delegate to _active.read_all for task_title; fall back to slug on missing/malformed marker
+    find_active_slug()   — delegate to _marker.slug_from_branch for slug derivation
+    load_task_title()    — delegate to _marker.task_data for task_title; fall back to slug on MarkerError
     read_constraints_md()— read CONSTRAINTS.md, empty string if absent
     resolve_path()       — locate a path inside the active hub (where task/ lives) from a config template
     discover_round()     — determine next review round number per (review_type, scope)
@@ -50,7 +50,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-import _active
+import _marker
 import _paths
 import _render
 
@@ -115,27 +115,23 @@ class ReviewResult:
 # Helper functions
 # ---------------------------------------------------------------------------
 
-def find_active_slug(mill_dir: Path) -> str:
-    """Delegate to _active.read_slug for the canonical active.slug.md.
+def find_active_slug(git_root: Path, wiki_path: Path, cfg: dict) -> str:
+    """Delegate to _marker.slug_from_branch for slug derivation.
 
-    Raises ReviewError (wrapping ActiveError) so callers using
+    Raises ReviewError (wrapping MarkerError) so callers using
     ``except ReviewError:`` keep working unchanged.
     """
     try:
-        return _active.read_slug(mill_dir)
-    except _active.ActiveError as exc:
+        return _marker.slug_from_branch(git_root, wiki_path, cfg)
+    except _marker.MarkerError as exc:
         raise ReviewError(str(exc)) from exc
 
 
-def load_task_title(mill_dir: Path, slug: str) -> str:
-    """Delegate to _active.read_all for task_title; fall back to slug on missing/malformed marker.
-
-    The ``slug`` parameter is kept for signature compatibility but is not used
-    as a filename. It is returned when the marker is absent or has no task_title.
-    """
+def load_task_title(git_root: Path, wiki_path: Path, cfg: dict, slug: str) -> str:
+    """Delegate to _marker.task_data for task_title; fall back to slug on MarkerError."""
     try:
-        data = _active.read_all(mill_dir)
-    except _active.ActiveError:
+        data = _marker.task_data(git_root, wiki_path, cfg)
+    except _marker.MarkerError:
         return slug
     return data.get("task_title") or slug
 
