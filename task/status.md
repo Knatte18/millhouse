@@ -27,5 +27,7 @@ implementing  2026-05-09T15:06:11Z
 ```yaml
 batches:
   - name: mill-start-auto-skill
-    state: pending
+    state: running
+    implementer_session: 7decca48-ee24-4a75-88b1-78e214ed87d2
+    start_sha: 55a179632e0901ad3b3de085a5c8fbb359f1c623
 ```
