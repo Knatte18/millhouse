@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: config-schema-refactor
 branch: hanf/config-schema-refactor
 plan: task/plan
@@ -27,4 +27,17 @@ plan-review-r4  2026-05-09T16:48:18Z
 plan-fix-r4  2026-05-09T16:48:18Z
 plan-review-r5  2026-05-09T16:56:16Z
 planned  2026-05-09T16:56:16Z
+implementing  2026-05-09T16:58:45Z
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: foundations
+    state: pending
+  - name: flip
+    state: pending
+  - name: skills-docs
+    state: pending
 ```
