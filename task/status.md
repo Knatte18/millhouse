@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-vscode-processes-helper
+phase: approved-vscode-cli-integration
 slug: mill-vscode-rework
 branch: hanf/mill-vscode-rework
 plan: task/plan
@@ -27,6 +27,7 @@ plan-review-r4  2026-05-09T16:46:10Z
 planned  2026-05-09T16:46:21Z
 implementing  2026-05-09T16:48:48Z
 approved-vscode-processes-helper  2026-05-09T16:59:28Z
+approved-vscode-cli-integration  2026-05-09T17:28:04Z
 ```
 
 ## Batches
@@ -38,7 +39,7 @@ batches:
     implementer_session: dca688bc-97c7-4a67-a731-b2d386c32200
     start_sha: 1aa7d9228113a9ab5a61fc87f8498c7aaf983f68
   - name: vscode-cli-integration
-    state: running
+    state: approved
     implementer_session: efd13f6a-7e93-40fc-b2ec-c51c1230de0f
     start_sha: 92290a30c171c6469092efc07bb64af3a5a02bef
 ```
