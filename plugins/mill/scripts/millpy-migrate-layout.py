@@ -46,6 +46,7 @@ import _setup
 import _spawn_core
 import _status
 import _subprocess_util
+import _tasks_md
 import _timestamp
 
 
@@ -224,7 +225,10 @@ def _run_step_rename_junctions(
     dry_run: bool,
 ) -> None:
     junctions_cfg = cfg.get("junctions", {})
-    active_wts = _spawn_core.discover_active_worktrees(container / "wts")
+    branch_prefix = cfg.get("spawn", {}).get("branch_prefix", "")
+    home_md = wiki_path / "Home.md"
+    home_tasks_list = _tasks_md.parse(home_md.read_text(encoding="utf-8")) if home_md.exists() else []
+    active_wts = _spawn_core.discover_active_worktrees(container / "wts", home_tasks_list, branch_prefix)
 
     _log(f"[rename-junctions] Found {len(active_wts)} active task worktree(s).", log_fh, dry_run)
 
@@ -381,7 +385,7 @@ def main() -> None:
     dry_run: bool = args.dry_run
 
     # --- Locate main worktree root from cwd ---
-    from _paths import resolve_main_worktree_root, resolve_git_root, resolve_container_path, resolve_wiki_path
+    from _paths import resolve_main_worktree_root, resolve_git_root
     git_root = resolve_git_root()
     main_root = resolve_main_worktree_root(git_root)
 
