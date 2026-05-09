@@ -36,7 +36,7 @@ SHORTCUT_SCRIPTS: list[str] = [
     "millpy-color",
     "millpy-terminal",
     "millpy-vscode",
-    "millpy-bg",
+    "millpy-wikipush",
 ]
 
 # Template path relative to this file's package root.

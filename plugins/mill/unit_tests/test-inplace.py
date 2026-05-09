@@ -120,37 +120,37 @@ def _test_is_inplace_false_when_worktree_dir_exists_override():
 # ---------------------------------------------------------------------------
 
 
-def _test_prompt_stale_worktree_returns_inplace_on_choice_1():
-    """Returns 'inplace' when the user enters '1'."""
+def _test_prompt_stale_worktree_returns_abort_on_choice_1():
+    """Returns 'abort' when the user enters '1'."""
     with tempfile.TemporaryDirectory() as tmp:
         worktree_path = Path(tmp) / "worktrees" / "my-task"
         with patch("builtins.input", return_value="1"):
             result = _inplace.prompt_stale_worktree("my-task", worktree_path)
-        if result != "inplace":
-            raise AssertionError(f"Expected 'inplace', got {result!r}")
-        print("PASS prompt_stale_worktree — input '1' -> 'inplace'")
+        if result != "abort":
+            raise AssertionError(f"Expected 'abort', got {result!r}")
+        print("PASS prompt_stale_worktree — input '1' -> 'abort'")
 
 
-def _test_prompt_stale_worktree_returns_worktree_on_choice_2():
-    """Returns 'worktree' when the user enters '2'."""
+def _test_prompt_stale_worktree_returns_inplace_on_choice_2():
+    """Returns 'inplace' when the user enters '2'."""
     with tempfile.TemporaryDirectory() as tmp:
         worktree_path = Path(tmp) / "worktrees" / "my-task"
         with patch("builtins.input", return_value="2"):
             result = _inplace.prompt_stale_worktree("my-task", worktree_path)
-        if result != "worktree":
-            raise AssertionError(f"Expected 'worktree', got {result!r}")
-        print("PASS prompt_stale_worktree — input '2' -> 'worktree'")
+        if result != "inplace":
+            raise AssertionError(f"Expected 'inplace', got {result!r}")
+        print("PASS prompt_stale_worktree — input '2' -> 'inplace'")
 
 
-def _test_prompt_stale_worktree_returns_abort_on_choice_3():
-    """Returns 'abort' when the user enters '3'."""
+def _test_prompt_stale_worktree_returns_worktree_on_choice_3():
+    """Returns 'worktree' when the user enters '3'."""
     with tempfile.TemporaryDirectory() as tmp:
         worktree_path = Path(tmp) / "worktrees" / "my-task"
         with patch("builtins.input", return_value="3"):
             result = _inplace.prompt_stale_worktree("my-task", worktree_path)
-        if result != "abort":
-            raise AssertionError(f"Expected 'abort', got {result!r}")
-        print("PASS prompt_stale_worktree — input '3' -> 'abort'")
+        if result != "worktree":
+            raise AssertionError(f"Expected 'worktree', got {result!r}")
+        print("PASS prompt_stale_worktree — input '3' -> 'worktree'")
 
 
 def _test_prompt_stale_worktree_returns_abort_on_invalid_choice():
@@ -186,9 +186,9 @@ def main() -> int:
         _test_is_inplace_false_on_branch_mismatch,
         _test_is_inplace_false_when_worktree_dir_exists_default,
         _test_is_inplace_false_when_worktree_dir_exists_override,
-        _test_prompt_stale_worktree_returns_inplace_on_choice_1,
-        _test_prompt_stale_worktree_returns_worktree_on_choice_2,
-        _test_prompt_stale_worktree_returns_abort_on_choice_3,
+        _test_prompt_stale_worktree_returns_abort_on_choice_1,
+        _test_prompt_stale_worktree_returns_inplace_on_choice_2,
+        _test_prompt_stale_worktree_returns_worktree_on_choice_3,
         _test_prompt_stale_worktree_returns_abort_on_invalid_choice,
         _test_prompt_stale_worktree_returns_abort_on_eof,
     ]

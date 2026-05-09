@@ -41,10 +41,10 @@ def main() -> int:
         "millpy-claim",
         "millpy-cleanup",
         "millpy-abandon",
-        "millpy-bg",
         "millpy-color",
         "millpy-terminal",
         "millpy-vscode",
+        "millpy-wikipush",
     ])
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)

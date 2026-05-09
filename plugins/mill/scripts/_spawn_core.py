@@ -804,6 +804,8 @@ def recreate_active_junction(
     target = container_path / "portals" / slug
     target.mkdir(parents=True, exist_ok=True)
     link_path = hub_root / ".active"
-    if link_path.exists() or link_path.is_symlink():
-        _junction.remove(link_path)
+    # Always remove first; _junction.remove is idempotent and uses os.path.lexists
+    # internally, so it correctly detects existing junctions with missing targets
+    # (where Path.exists() and Path.is_symlink() both return False on Windows).
+    _junction.remove(link_path)
     _junction.create(target, link_path)

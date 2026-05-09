@@ -42,7 +42,7 @@ Before asking a single question, explore the relevant parts of the codebase.
 
 ### Phase: Discuss
 
-Interview the user relentlessly about every aspect of the task. Ask questions in **focused batches**. Questions that don't depend on each other's answers can be asked together. For each question, provide your **recommended answer**. Prefer multiple-choice (A/B/C with trade-offs) when there are distinct options.
+Interview the user relentlessly about every aspect of the task. Ask questions in **focused batches**. Questions that don't depend on each other's answers can be asked together. For each question, provide your **recommended answer**. Prefer multiple-choice (A/B/C with trade-offs) when there are distinct options. Cap each batch at ≤5 questions; ask the rest in subsequent batches after the user answers.
 
 Cover these categories:
 

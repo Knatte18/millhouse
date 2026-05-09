@@ -46,7 +46,12 @@ if "--_worker" in sys.argv:
             print("mill-bg worker: missing --log", file=sys.stderr)
             return 1
         with open(log_path, "w", encoding="utf-8", buffering=1) as log_f:
-            result = subprocess.run(cmd, stdout=log_f, stderr=subprocess.STDOUT)
+            result = subprocess.run(
+                cmd,
+                stdout=log_f,
+                stderr=subprocess.STDOUT,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
             log_f.write(f"\n[mill-bg] EXIT {result.returncode}\n")
             log_f.flush()
         return 0
@@ -61,8 +66,8 @@ if "--_worker" in sys.argv:
     sys.exit(0)
 
 # ── launcher path ─────────────────────────────────────────────────────────────
-import os
 import subprocess
+import _subprocess_util
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -91,11 +96,7 @@ def _launcher_main(args: list[str]) -> int:
         print("mill-bg: missing --slug", file=sys.stderr)
         return 1
 
-    git_result = subprocess.run(
-        ["git", "rev-parse", "--show-toplevel"],
-        capture_output=True,
-        text=True,
-    )
+    git_result = _subprocess_util.run(["git", "rev-parse", "--show-toplevel"])
     if git_result.returncode != 0:
         print(
             f"mill-bg: git rev-parse failed: {git_result.stderr.strip()}",
@@ -118,22 +119,12 @@ def _launcher_main(args: list[str]) -> int:
         "--",
     ] + cmd
 
-    popen_kwargs: dict = dict(
+    proc = _subprocess_util.popen_detached(
+        worker_argv,
         stdin=subprocess.DEVNULL,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
-    if os.name == "nt":
-        DETACHED_PROCESS = 0x00000008
-        CREATE_NEW_PROCESS_GROUP = 0x00000200
-        CREATE_BREAKAWAY_FROM_JOB = 0x01000000
-        popen_kwargs["creationflags"] = (
-            DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP | CREATE_BREAKAWAY_FROM_JOB
-        )
-    else:
-        popen_kwargs["start_new_session"] = True
-
-    proc = subprocess.Popen(worker_argv, **popen_kwargs)
     print(f"pid={proc.pid} log={log_path}")
     return 0
 

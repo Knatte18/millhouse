@@ -141,7 +141,7 @@ class TestMillpyImplementHolistic(unittest.TestCase):
             return_value="test-branch",
         )
         self.mock_subprocess_run = _p(
-            millpy_implement_holistic.subprocess, "run",
+            millpy_implement_holistic._subprocess_util, "run",
             return_value=subprocess.CompletedProcess(
                 args=[], returncode=0, stdout="abc1234\n", stderr=""
             ),

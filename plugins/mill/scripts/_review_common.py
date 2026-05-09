@@ -42,7 +42,7 @@ from __future__ import annotations
 
 import importlib
 import re
-import subprocess
+import _subprocess_util
 import sys
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -607,12 +607,8 @@ def bulk_files_with_diff(
         except ValueError:
             rel_path = str(p)
 
-        result = subprocess.run(
+        result = _subprocess_util.run(
             ["git", "-C", str(project_root), "diff", f"{start_sha}..HEAD", "--", rel_path],
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            capture_output=True,
         )
 
         if result.returncode != 0:

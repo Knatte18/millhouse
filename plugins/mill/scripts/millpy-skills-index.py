@@ -15,7 +15,7 @@ keeps re-runs byte-identical across platforms.
 """
 from __future__ import annotations
 
-import subprocess
+import _subprocess_util
 import sys
 from pathlib import Path
 
@@ -24,11 +24,8 @@ import yaml
 
 def _repo_root() -> Path:
     """Return the hub repo root via `git rev-parse --show-toplevel`."""
-    result = subprocess.run(
+    result = _subprocess_util.run(
         ["git", "rev-parse", "--show-toplevel"],
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
     )
     if result.returncode != 0:
         raise RuntimeError(f"not a git repo: {result.stderr.strip()}")

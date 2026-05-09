@@ -22,12 +22,13 @@ from __future__ import annotations
 
 import argparse
 import json
-import subprocess
+import _subprocess_util
 import sys
 import uuid
 from pathlib import Path
 
 import _active
+import _cleanliness
 import _implementer_sonnet
 import _llm_claude
 import _paths
@@ -117,10 +118,8 @@ def main(argv=None) -> int:
 
     if not args.resume:
         # Initial dispatch
-        result = subprocess.run(
+        result = _subprocess_util.run(
             ["git", "rev-parse", "HEAD"],
-            capture_output=True,
-            text=True,
             cwd=project_root,
         )
         if result.returncode != 0:
@@ -128,33 +127,30 @@ def main(argv=None) -> int:
             return 1
         start_sha = result.stdout.strip()
 
+        snapshot_path = project_root / "task" / f".cleanliness-snapshot-{args.batch_name}.txt"
+        _cleanliness.capture_snapshot(project_root, snapshot_path)
+
         session_id = str(uuid.uuid4())
 
         _status.set_batch_fields(status_path, args.batch_name, {"state": "running", "start_sha": start_sha, "implementer_session": session_id})
 
-        result = subprocess.run(
-            ["git", "add", "task/status.md"],
-            capture_output=True,
-            text=True,
+        result = _subprocess_util.run(
+            ["git", "add", "task/status.md", str(snapshot_path.relative_to(project_root))],
             cwd=project_root,
         )
         if result.returncode != 0:
             print(result.stderr, file=sys.stderr)
             return 1
-        result = subprocess.run(
+        result = _subprocess_util.run(
             ["git", "commit", "-m", f"mill-go: start batch {args.batch_name}"],
-            capture_output=True,
-            text=True,
             cwd=project_root,
         )
         if result.returncode != 0:
             print(result.stderr, file=sys.stderr)
             return 1
 
-        result = subprocess.run(
+        result = _subprocess_util.run(
             ["git", "push", "origin", branch],
-            capture_output=True,
-            text=True,
             cwd=project_root,
         )
         if result.returncode != 0:
@@ -217,29 +213,23 @@ def main(argv=None) -> int:
             if review_file.is_relative_to(project_root)
             else str(review_file)
         )
-        result = subprocess.run(
+        result = _subprocess_util.run(
             ["git", "add", "task/status.md", review_file_arg],
-            capture_output=True,
-            text=True,
             cwd=project_root,
         )
         if result.returncode != 0:
             print(result.stderr, file=sys.stderr)
             return 1
-        result = subprocess.run(
+        result = _subprocess_util.run(
             ["git", "commit", "-m", f"mill-go: fixing batch {args.batch_name} round {args.round}"],
-            capture_output=True,
-            text=True,
             cwd=project_root,
         )
         if result.returncode != 0:
             print(result.stderr, file=sys.stderr)
             return 1
 
-        result = subprocess.run(
+        result = _subprocess_util.run(
             ["git", "push", "origin", branch],
-            capture_output=True,
-            text=True,
             cwd=project_root,
         )
         if result.returncode != 0:

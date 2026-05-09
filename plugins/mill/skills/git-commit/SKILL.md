@@ -16,7 +16,7 @@ Detect the project language (see `@mill:workflow` Language Detection) and run th
 
 ### 2. Codeguide sync (only if codeguide is initialized)
 
-Run `@codeguide:codeguide-update` whenever codeguide is initialized for this repo — either **inline** (`_codeguide/Overview.md` exists under the repo) or **sibling** (a separate `<container>/<repo>.codeguide/` or `<container>/codeguide/` repo exists). `codeguide-update` resolves the mode itself via `resolve.py` and handles both.
+Run `python ${CLAUDE_PLUGIN_ROOT}/scripts/resolve.py --json` from the repo root. Parse the JSON object `{mode, cg_root, sibling_anchor, found}`. If `found == false`, skip this step entirely (codeguide is not initialised for this repo). Otherwise invoke `@codeguide:codeguide-update`; the `codeguide-update` skill re-resolves per file and handles inline / sibling itself.
 
 - **Inline mode** → doc files live inside this repo. `codeguide-update`'s helper (`codeguide_commit.py --mode inline`) stages them; this skill commits them alongside source changes as part of step 3.
 - **Sibling mode** → doc files live in the sibling repo and are committed there by `codeguide_commit.py --mode sibling` as its own commit. **Do not** try to stage sibling-rooted paths in this commit — the sibling has its own history.

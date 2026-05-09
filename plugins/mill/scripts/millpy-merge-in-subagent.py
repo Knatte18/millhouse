@@ -25,6 +25,7 @@ from __future__ import annotations
 import argparse
 import json
 import subprocess
+import _subprocess_util
 import sys
 from pathlib import Path
 
@@ -130,6 +131,7 @@ def _run_verify_fix(args, project_root: Path, plugin_root: Path, cfg: dict, time
         print("--checkpoint is required for verify-fix mode", file=sys.stderr)
         return 1
 
+    # Shell-escaped user verify command — _subprocess_util.run does not support shell=True.
     result = subprocess.run(
         args.cmd,
         shell=True,
@@ -139,10 +141,8 @@ def _run_verify_fix(args, project_root: Path, plugin_root: Path, cfg: dict, time
     )
 
     if result.returncode == 0:
-        sha_result = subprocess.run(
+        sha_result = _subprocess_util.run(
             ["git", "rev-parse", "HEAD"],
-            capture_output=True,
-            text=True,
             cwd=project_root,
         )
         sha = sha_result.stdout.strip() if sha_result.returncode == 0 else ""
@@ -151,10 +151,8 @@ def _run_verify_fix(args, project_root: Path, plugin_root: Path, cfg: dict, time
 
     verify_output = (result.stdout + result.stderr).strip()
 
-    diff_result = subprocess.run(
+    diff_result = _subprocess_util.run(
         ["git", "diff", f"{args.checkpoint}..HEAD"],
-        capture_output=True,
-        text=True,
         cwd=project_root,
     )
     merge_diff = diff_result.stdout if diff_result.returncode == 0 else "(diff unavailable)"

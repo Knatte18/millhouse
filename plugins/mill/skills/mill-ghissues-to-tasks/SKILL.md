@@ -55,7 +55,7 @@ For each fetched issue, show the issue number, title, and a brief summary of its
 3) Skip
 ```
 
-Append `(Recommended)` to option 1 if there is no obvious overlap with current Home.md tasks; to option 2 if the title or first paragraph overlaps with an existing entry (assistant judgement, not a hard heuristic).
+If the issue does not overlap with any current Home.md task, present: `1) New task (Recommended) / 2) Fold into existing task / 3) Skip`. If it overlaps, present: `1) Fold into <slug> (Recommended) / 2) New task / 3) Skip`. The recommended option is always at position 1; overlap is detected by assistant judgement, not a hard heuristic.
 
 **On selection 1 (New task):**
 - Prompt for slug (validate `[a-z][a-z0-9-]*`; re-prompt on invalid).

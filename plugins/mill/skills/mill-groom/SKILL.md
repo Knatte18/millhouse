@@ -111,25 +111,24 @@ When the user enters a number, look up the task at that position.
   ```
   Confirm with the user. Record the drop decision. Return to Step 3.
 
-- **Otherwise (unmarked, `[s]`)** → show the full action menu:
-  ```
-  1) Keep as-is
-  2) Shorten
-  3) Fold into <slug>
-  4) Drop
-  5) Extract to proposal
-  ```
-  Append `(Recommended)` to one action using these heuristics (at most one recommendation per task):
-  - Body exceeds `groom.brevity-threshold-lines` lines OR `groom.brevity-threshold-chars` chars → `5) Extract to proposal (Recommended)`
-  - Empty body → `4) Drop (Recommended)` (or `2) Shorten (Recommended)` if title hints at real content)
-  - Otherwise → no Recommended tag
+- **Otherwise (unmarked, `[s]`)** → apply the heuristic below to determine which action to recommend, then build the menu: if the recommended action is not `Keep as-is`, **swap** it into position 1; the remaining options keep their relative order from the canonical sequence (Keep / Shorten / Fold / Drop / Extract). The `(Recommended)` suffix appears after the label of option 1.
+
+  Heuristic (at most one recommendation per task):
+  - Body exceeds `groom.brevity-threshold-lines` lines OR `groom.brevity-threshold-chars` chars → recommend "Extract to proposal"
+  - Empty body → recommend "Drop" (or "Shorten" if title hints at real content)
+  - Otherwise → no recommendation
+
+  Example menus:
+  - Heuristic recommends "Drop" → `1) Drop (Recommended) / 2) Keep as-is / 3) Shorten / 4) Fold into <slug> / 5) Extract to proposal`
+  - Heuristic recommends "Extract" → `1) Extract to proposal (Recommended) / 2) Keep as-is / 3) Shorten / 4) Fold into <slug> / 5) Drop`
+  - No recommendation → `1) Keep as-is / 2) Shorten / 3) Fold / 4) Drop / 5) Extract`
 
   **On user selection:**
-  - `1` (Keep): record decision. Return to Step 3.
-  - `2` (Shorten): prompt for the new body inline. Record decision. Return to Step 3.
-  - `3` (Fold): prompt for target slug. Validate against existing slugs from the parse output — re-prompt if the slug is not found. Record decision. Return to Step 3.
-  - `4` (Drop): prompt for a one-line reason (recorded in the commit message). Record decision. Return to Step 3.
-  - `5` (Extract): flag if `proposal-<slug>.md` already exists in `<WIKI_PATH>` — warn the user now; Step 6 enforces the final guard. Record decision. Return to Step 3.
+  - `Keep`: record decision. Return to Step 3.
+  - `Shorten`: prompt for the new body inline. Record decision. Return to Step 3.
+  - `Fold`: prompt for target slug. Validate against existing slugs from the parse output — re-prompt if the slug is not found. Record decision. Return to Step 3.
+  - `Drop`: prompt for a one-line reason (recorded in the commit message). Record decision. Return to Step 3.
+  - `Extract`: flag if `proposal-<slug>.md` already exists in `<WIKI_PATH>` — warn the user now; Step 6 enforces the final guard. Record decision. Return to Step 3.
 
 When the user types `done`, fall through to Step 5.
 
