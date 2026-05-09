@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: discussed
 slug: drop-active-marker
 branch: hanf/drop-active-marker
 plan: null
@@ -15,4 +15,5 @@ task_description: |
 
 ```text
 discussing  '2026-05-09T15:05:35Z'
+discussed  2026-05-09T15:39:01Z
 ```
