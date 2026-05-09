@@ -53,11 +53,26 @@ Public API:
         returns ``worktree_root / hub_subpath`` (trailing slash normalised).
         Absolute values raise ``ValueError``.
 
-    resolve_active_worktree(container_path, slug)
-        Return ``container_path / "wts" / slug`` when that directory exists
-        and its ``.millhouse/active.slug.md`` marker matches the slug.
-        Raises ``ActiveWorktreeNotFound`` when the directory is absent.
-        Raises ``ActiveWorktreeSlugMismatch`` when the marker slug differs.
+    resolve_active_worktree(container_path, slug, *, cfg, git_root)
+        Return the git checkout root for the active task with the given slug.
+        Detection order: (1) in-place mode — when the cwd's hub has an active
+        marker matching ``slug`` AND ``_inplace.is_inplace`` returns True,
+        return ``git_root``; (2) worktree mode — when
+        ``container_path / "wts" / slug`` exists and its marker matches
+        ``slug``, return that path.
+        Raises ``ActiveWorktreeNotFound`` when neither mode applies.
+        Raises ``ActiveWorktreeSlugMismatch`` when the worktree dir exists but
+        its marker slug differs.
+
+    resolve_active_hub(container_path, slug, *, cfg, git_root)
+        Return the hub directory (where ``.millhouse/`` and ``task/`` live)
+        for the active task with the given slug. Calls
+        ``resolve_active_worktree`` then resolves ``hub_relative_path`` with
+        a two-tier lookup: (1) default from ``cfg.get("hub_relative_path",
+        ".")``; (2) override from the resolved worktree's own
+        ``.millhouse/config.local.yaml`` when it declares
+        ``hub_relative_path:``. Propagates ``ActiveWorktreeNotFound`` and
+        ``ActiveWorktreeSlugMismatch`` from the inner call.
 
     resolve_hub_path(cwd)
         Return the hub directory — assumes CC's cwd equals the hub when mill
@@ -81,6 +96,7 @@ __all__ = [
     "resolve_short_name",
     "resolve_hub_relative_path",
     "resolve_active_worktree",
+    "resolve_active_hub",
     "resolve_container_path",
     "ActiveWorktreeNotFound",
     "ActiveWorktreeSlugMismatch",
@@ -252,44 +268,92 @@ class ActiveWorktreeSlugMismatch(RuntimeError):
     """Raised when a worktree directory exists but its marker slug differs from the requested slug."""
 
 
-def resolve_active_worktree(container_path: Path, slug: str) -> Path:
-    """Return the path to an active task worktree within the container.
+def resolve_active_worktree(
+    container_path: Path,
+    slug: str,
+    *,
+    cfg: dict,
+    git_root: Path,
+) -> Path:
+    """Return the git checkout root for the active task with the given slug.
 
-    The canonical answer to "given a slug, where does that worktree live on
-    disk". Every cross-worktree consumer that needs to locate a task worktree
-    routes through this helper.
-
-    Args:
-        container_path: Absolute path to the container directory (grandparent
-            of all worktrees in container-form, i.e. the directory that
-            contains ``wts/``).
-        slug: The task slug to look up.
-
-    Returns:
-        Absolute ``Path`` of ``container_path / "wts" / slug`` when the
-        directory exists and its ``.millhouse/active.slug.md`` marker parses
-        to the same slug.
+    Detection order:
+    1. In-place mode: when the cwd's hub has an active marker matching ``slug``
+       AND ``_inplace.is_inplace`` returns True, return ``git_root``.
+    2. Worktree mode: when ``container_path / "wts" / slug`` exists and its
+       marker matches ``slug``, return that path.
 
     Raises:
-        ActiveWorktreeNotFound: When ``container_path / "wts" / slug`` does
-            not exist on disk.
-        ActiveWorktreeSlugMismatch: When the directory exists but the marker
-            slug does not match ``slug``.
+        ActiveWorktreeNotFound: neither mode applies.
+        ActiveWorktreeSlugMismatch: worktree-dir exists but marker slug differs.
     """
     import _active
+    import _inplace
+
+    hub_dir = resolve_hub_relative_path(git_root, cfg.get("hub_relative_path", "."))
+    try:
+        active_data = _active.read_all(hub_dir / ".millhouse")
+    except _active.ActiveError:
+        active_data = None
+    if active_data is not None and active_data.get("slug") == slug:
+        if _inplace.is_inplace(active_data, git_root, cfg):
+            return git_root
 
     worktree = container_path / "wts" / slug
     if not worktree.is_dir():
         raise ActiveWorktreeNotFound(
             f"No worktree directory at {worktree} for slug {slug!r}"
         )
-    mill_dir = worktree / ".millhouse"
-    marker_slug = _active.read_slug(mill_dir)
+    marker_slug = _active.read_slug(worktree / ".millhouse")
     if marker_slug != slug:
         raise ActiveWorktreeSlugMismatch(
             f"Worktree at {worktree} has slug {marker_slug!r}, expected {slug!r}"
         )
     return worktree
+
+
+def resolve_active_hub(
+    container_path: Path,
+    slug: str,
+    *,
+    cfg: dict,
+    git_root: Path,
+) -> Path:
+    """Return the hub directory (where ``.millhouse/`` and ``task/`` live) for the slug.
+
+    Calls ``resolve_active_worktree`` then resolves ``hub_relative_path``.
+    Resolution order:
+    1. Default from the caller's cfg: ``cfg.get("hub_relative_path", ".")``.
+    2. Override from the resolved worktree's own ``.millhouse/config.local.yaml``
+       when that file exists and declares ``hub_relative_path:``.
+
+    The two-tier resolution covers both cases:
+    - In-place mode (mill-claim): mill-claim writes the stub only at the hub
+      (``<git_root>/<hub_rel>/.millhouse/``), never at ``<git_root>/.millhouse/``.
+      So the worktree-root stub is absent for M2+sub and the caller's cfg is the
+      authoritative source.
+    - Worktree mode (mill-spawn): mill-spawn bootstraps a stub at
+      ``<wt>/.millhouse/config.local.yaml`` carrying ``hub_relative_path:`` so
+      cross-worktree consumers (cleanup, status) that have no cfg about the
+      target can still resolve correctly.
+
+    Propagates ``ActiveWorktreeNotFound`` and ``ActiveWorktreeSlugMismatch``
+    from the inner call.
+    """
+    import yaml
+
+    wt = resolve_active_worktree(container_path, slug, cfg=cfg, git_root=git_root)
+    hub_subpath = cfg.get("hub_relative_path", ".")
+    stub_path = wt / ".millhouse" / "config.local.yaml"
+    if stub_path.exists():
+        try:
+            stub_data = yaml.safe_load(stub_path.read_text(encoding="utf-8")) or {}
+            stub_value = stub_data.get("hub_relative_path")
+            if stub_value is not None:
+                hub_subpath = stub_value
+        except Exception:  # noqa: BLE001
+            pass
+    return resolve_hub_relative_path(wt, hub_subpath)
 
 
 def resolve_wiki_path(git_toplevel: Path) -> Path:
