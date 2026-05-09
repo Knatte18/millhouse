@@ -47,5 +47,7 @@ batches:
     start_sha: 8b3de9102260edf5dbaa1cc32e7809ec09900cbf
     commit_sha: 10429c1fdb293d8abb257cf7a8a9fd5e09bf9805
   - name: skills-docs
-    state: pending
+    state: running
+    implementer_session: 4edddf37-f47c-4cc7-bf42-2311162252c8
+    start_sha: ac14eefa1e0716e4873b2ab74a54476402297fd9
 ```
