@@ -893,15 +893,15 @@ def test_spawn_discovery_round_trip_subfolder() -> None:
         dest_hub = wt / hub_subpath
         (dest_hub / ".millhouse").mkdir(parents=True)
 
-        # Real local config at dest_hub/.millhouse/ (operational keys)
-        branch_prefix = "feat"
+        # Git repo on task branch so discover_active_worktrees detects this worktree.
+        # branch_prefix includes trailing slash (standard convention, e.g. "feat/").
+        branch_prefix = "feat/"
         real_local = {"repo": {"short_name": "RT"}, "spawn": {"branch_prefix": branch_prefix}}
         (dest_hub / ".millhouse" / "config.local.yaml").write_text(
             yaml.safe_dump(real_local),
             encoding="utf-8",
         )
 
-        # Git repo on task branch so discover_active_worktrees detects this worktree
         import subprocess as _sp
         _sp.run(["git", "init", str(wt)], capture_output=True)
         _sp.run(["git", "-C", str(wt), "config", "user.email", "t@t.com"], capture_output=True)
@@ -909,7 +909,7 @@ def test_spawn_discovery_round_trip_subfolder() -> None:
         (wt / ".keep").write_text("", encoding="utf-8")
         _sp.run(["git", "-C", str(wt), "add", ".keep"], capture_output=True)
         _sp.run(["git", "-C", str(wt), "commit", "-m", "init"], capture_output=True)
-        _sp.run(["git", "-C", str(wt), "checkout", "-b", f"{branch_prefix}/{slug}"], capture_output=True)
+        _sp.run(["git", "-C", str(wt), "checkout", "-b", f"{branch_prefix}{slug}"], capture_output=True)
 
         # Wiki config and Home.md (discover filters by home_tasks)
         wiki = tmpdir / "wiki"
