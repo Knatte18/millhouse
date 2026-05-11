@@ -377,6 +377,12 @@ def resolve_wiki_path(git_toplevel: Path) -> Path:
     IDE/terminal convenience; the real wiki path is computed from the
     repo's own git-toplevel.
     """
+    if Path(git_toplevel).name == "wiki":
+        raise SystemExit(
+            f"cwd is inside wiki ({git_toplevel}) — scripts must run from a task worktree"
+            " or the main repo, not the wiki. Wiki mutations go through"
+            " git -C <wiki_path> or _wiki.write_commit_push."
+        )
     import yaml
 
     main_root = resolve_main_worktree_root(git_toplevel)
