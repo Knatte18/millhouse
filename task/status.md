@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-fix-r1
+phase: planned
 slug: discussion-review-gap-batching
 branch: hanf/discussion-review-gap-batching
 plan: task/plan
@@ -19,4 +19,5 @@ discussion-fix-r1  2026-05-11T10:42:28Z
 discussed  2026-05-11T10:42:57Z
 planning  2026-05-11T10:47:15Z
 plan-fix-r1  2026-05-11T10:55:15Z
+planned  2026-05-11T10:55:48Z
 ```
