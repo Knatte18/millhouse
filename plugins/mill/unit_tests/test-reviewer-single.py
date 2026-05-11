@@ -121,12 +121,42 @@ def test_claude_tool_use_mode() -> None:
     print("PASS: claude tool-use mode calls run_tool_use with model, effort, and timeout")
 
 
+def test_gemini_bulk_mode() -> None:
+    """spec.provider == 'gemini' with tooluse=False calls _llm_gemini.run_bulk."""
+    import _llm_gemini as llm_gemini
+
+    calls: list[dict] = []
+
+    def fake_run_bulk(prompt_text: str, **kwargs) -> tuple[str, str]:
+        calls.append({"prompt_text": prompt_text, **kwargs})
+        return ("gemini bulk response", "sid-gemini-bulk")
+
+    original = llm_gemini.run_bulk
+    llm_gemini.run_bulk = fake_run_bulk
+    try:
+        spec = {
+            "type": "single",
+            "provider": "gemini",
+            "model": "gemini-2.5-flash",
+            "effort": None,
+            "tooluse": False,
+        }
+        text, sid = _reviewer_single.run(spec, "test prompt", session_id="abc")
+        assert text == "gemini bulk response"
+        assert len(calls) == 1
+        assert calls[0]["model"] == "gemini-2.5-flash"
+    finally:
+        llm_gemini.run_bulk = original
+
+    print("PASS: gemini bulk mode calls run_bulk with model")
+
+
 def test_unknown_provider_raises() -> None:
-    """Unknown provider (e.g. 'gemini') raises ReviewerError with 'Unknown provider' substring."""
+    """A truly unknown provider raises ReviewerError with 'Unknown provider' substring."""
     spec = {
         "type": "single",
-        "provider": "gemini",
-        "model": "gemini-pro",
+        "provider": "unk_provider_xyz",
+        "model": "some-model",
         "effort": "medium",
         "tooluse": False,
     }
@@ -135,7 +165,7 @@ def test_unknown_provider_raises() -> None:
         raise AssertionError("Expected ReviewerError")
     except ReviewerError as exc:
         assert "Unknown provider" in str(exc)
-        assert "gemini" in str(exc)
+        assert "unk_provider_xyz" in str(exc)
     print("PASS: unknown provider raises ReviewerError")
 
 
@@ -146,6 +176,7 @@ def main() -> int:
         test_test_stub_forwards_prompt,
         test_claude_bulk_mode,
         test_claude_tool_use_mode,
+        test_gemini_bulk_mode,
         test_unknown_provider_raises,
     ]
     failures = 0
