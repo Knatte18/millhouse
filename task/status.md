@@ -43,7 +43,9 @@ batches:
     start_sha: 7b6ebe127f9f2e10919bdb5dc7aefb1d252a84fd
     commit_sha: ba7d1781268d4fda4817a2c1e03288efb64c2028
   - name: review-common-divergence-warning
-    state: pending
+    state: running
+    implementer_session: 20a6eb98-0b7b-4f6c-9604-21aba74a0a18
+    start_sha: 78daf048d9d9d7d84d5f576228997c52270f2610
   - name: review-fixture-seeding
     state: pending
   - name: merge-in-briefs-protocol-violation
