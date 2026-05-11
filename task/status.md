@@ -49,7 +49,9 @@ batches:
     start_sha: 78daf048d9d9d7d84d5f576228997c52270f2610
     commit_sha: 04a0209d88140c30fb8b58fae0b3c478908bf03d
   - name: review-fixture-seeding
-    state: pending
+    state: running
+    implementer_session: 5063d636-89e3-42fc-aec6-db77187bf77e
+    start_sha: 9ad7db534561e08f93655225fd78ae79189c41a4
   - name: merge-in-briefs-protocol-violation
     state: pending
   - name: wiki-config-template-sync
