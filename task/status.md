@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-merge-in-briefs-protocol-violation
+phase: approved-wiki-config-template-sync
 slug: mill-misc-fixes-4
 branch: hanf/mill-misc-fixes-4
 plan: task/plan
@@ -29,6 +29,7 @@ approved-llm-claude-fast-fail-retry  2026-05-11T11:30:43Z
 approved-review-common-divergence-warning  2026-05-11T11:33:56Z
 approved-review-fixture-seeding  2026-05-11T11:51:32Z
 approved-merge-in-briefs-protocol-violation  2026-05-11T12:04:23Z
+approved-wiki-config-template-sync  2026-05-11T12:09:17Z
 ```
 
 ## Batches
@@ -61,9 +62,10 @@ batches:
     start_sha: 98b8a09c1814e4fd82a20a5346695094770f96c1
     commit_sha: 50950d9e8dd7f18e447293c5f4fdafb7246bdeb0
   - name: wiki-config-template-sync
-    state: running
+    state: approved
     implementer_session: 65103dba-1591-4e30-b0d4-91ecabad65f9
     start_sha: 3a347f704bc5d40a4067287f146abc95471e5edd
+    commit_sha: 4f65d70839e9b408a782421261177dd019aead76
   - name: review-code-error-aggregation
     state: pending
   - name: skill-md-edits
