@@ -14,9 +14,9 @@ from pathlib import Path
 
 import yaml
 
-import _active
 import _inplace
 import _junction
+import _marker
 import _paths
 import _sidebar
 import _spawn_core
@@ -65,6 +65,7 @@ def build_plan(
     hub_root: Path,
     *,
     container_path: Path | None = None,
+    branch_prefix: str = "",
 ) -> CleanupPlan:
     """
     Build a CleanupPlan from current repo state.
@@ -75,8 +76,8 @@ def build_plan(
     ``_spawn_core.discover_active_worktrees``.
 
     Args:
-        active_worktrees: List of worktree root paths, each carrying a
-            valid ``.millhouse/active.slug.md`` marker.
+        active_worktrees: List of worktree root paths, each on a task
+            branch detected via ``_spawn_core.discover_active_worktrees``.
         home_tasks: Tasks parsed from wiki ``Home.md``.
         wiki_path: Path to the wiki clone root.
         hub_root: Absolute path to the hub git checkout.
@@ -100,23 +101,16 @@ def build_plan(
     }
 
     for wt_path in active_worktrees:
-        hub_subpath = "."
-        stub_path = wt_path / ".millhouse" / "config.local.yaml"
-        if stub_path.exists():
-            try:
-                stub_data = yaml.safe_load(stub_path.read_text(encoding="utf-8")) or {}
-                hub_subpath = stub_data.get("hub_relative_path", ".")
-            except Exception:  # noqa: BLE001
-                hub_subpath = "."
-        hub_mill_dir = _paths.resolve_hub_relative_path(wt_path, hub_subpath) / ".millhouse"
-        try:
-            marker_data = _active.read_all(hub_mill_dir)
-        except _active.ActiveError:
+        branch_proc = _subprocess_util.run(
+            ["git", "-C", str(wt_path), "branch", "--show-current"]
+        )
+        if branch_proc.returncode != 0 or not branch_proc.stdout.strip():
             continue
-
-        slug = marker_data.get("slug", "")
-        branch = marker_data.get("branch")
-        if not slug:
+        branch = branch_proc.stdout.strip()
+        if branch_prefix and not branch.startswith(branch_prefix):
+            continue
+        slug = branch.removeprefix(branch_prefix) if branch_prefix else branch
+        if slug not in marker_by_slug:
             continue
 
         active_slugs.add(slug)
@@ -218,16 +212,17 @@ def _print_plan(plan: CleanupPlan) -> None:
 def _resolve_inplace_mode(
     record: "SlugRecord",
     hub_root: Path,
+    wiki_path: Path,
     cfg: dict,
 ) -> tuple[str, str]:
     """Determine whether a sweep record should use in-place or worktree cleanup.
 
-    Reads the hub's ``.millhouse/active.slug.md`` marker once and delegates
-    to ``_inplace.is_inplace``. When the stale-worktree edge applies (branch
-    matches AND a worktree dir exists), prompts the user and returns their
-    choice. The resolved task branch is returned alongside the mode so
-    callers can pass it directly to ``_apply_inplace_record`` without a
-    second read of the marker.
+    Derives the hub's current slug via ``_marker.slug_from_branch`` and
+    delegates to ``_inplace.is_inplace``. When the stale-worktree edge
+    applies (branch matches AND a worktree dir exists), prompts the user
+    and returns their choice. The resolved task branch is returned alongside
+    the mode so callers can pass it directly to ``_apply_inplace_record``
+    without a second branch lookup.
 
     Args:
         record: The SlugRecord being evaluated.
@@ -239,30 +234,27 @@ def _resolve_inplace_mode(
         - ``"inplace"`` — skip worktree remove, delete branch only.
         - ``"worktree"`` — standard worktree remove flow.
         - ``"abort"`` — user aborted; caller should skip this record.
-        ``task_branch`` is the branch name from the active marker when
+        ``task_branch`` is the current branch name when
         ``mode == "inplace"``, and ``""`` otherwise.
     """
     try:
-        active_data = _active.read_all(hub_root / ".millhouse")
-    except _active.ActiveError:
+        slug_for_record = _marker.slug_from_branch(hub_root, wiki_path, cfg)
+    except _marker.MarkerError:
         return ("worktree", "")
 
-    if active_data.get("slug") != record.slug:
+    if slug_for_record != record.slug:
         return ("worktree", "")
 
-    task_branch = active_data.get("branch", "")
-
-    # Stale-worktree edge: branch matches current HEAD AND worktree dir exists.
-    recorded_branch = task_branch
-    result = _subprocess_util.run(
-        ["git", "-C", str(hub_root), "rev-parse", "--abbrev-ref", "HEAD"]
+    result_branch = _subprocess_util.run(
+        ["git", "-C", str(hub_root), "branch", "--show-current"]
     )
-    current_branch = result.stdout.strip() if result.returncode == 0 else ""
+    task_branch = result_branch.stdout.strip() if result_branch.returncode == 0 else ""
 
+    # Stale-worktree edge: hub is on task branch AND worktree dir exists.
     worktrees_dir = _paths.resolve_worktrees_dir(cfg, hub_root)
     worktree_dir = worktrees_dir / record.slug
 
-    if current_branch == recorded_branch and worktree_dir.is_dir():
+    if worktree_dir.is_dir():
         choice = _inplace.prompt_stale_worktree(record.slug, worktree_dir)
         if choice == "inplace":
             return ("inplace", task_branch)
@@ -270,7 +262,7 @@ def _resolve_inplace_mode(
             return ("worktree", "")
         return ("abort", "")
 
-    if _inplace.is_inplace(active_data, hub_root, cfg):
+    if _inplace.is_inplace(record.slug, hub_root, cfg):
         return ("inplace", task_branch)
 
     return ("worktree", "")
@@ -285,16 +277,16 @@ def _apply_inplace_record(
 
     Reads the parent branch from ``status.md``, checks out the parent
     branch so we are not deleting the currently-checked-out branch,
-    deletes the task branch (``-d`` for done, ``-D`` for abandoned),
-    removes the ``.active`` junction at ``hub_root / ".active"``, and
-    removes the ``active.slug.md`` marker. This function does NOT remove
-    the wiki active dir — ``apply_plan`` handles that uniformly.
+    deletes the task branch (``-d`` for done, ``-D`` for abandoned), and
+    removes the ``.active`` junction at ``hub_root / ".active"``. This
+    function does NOT remove the wiki active dir — ``apply_plan`` handles
+    that uniformly.
 
     Args:
         record: The SlugRecord for the in-place task being cleaned.
         hub_root: Absolute path to the hub git checkout.
         task_branch: The task branch name resolved by ``_resolve_inplace_mode``
-            from the active marker. Avoids a second read of the marker file.
+            via the current branch. Avoids a second git branch query.
 
     """
     # Read parent branch from status.md so we can check out safely.
@@ -358,12 +350,6 @@ def _apply_inplace_record(
     _junction.remove(active_junction)
     print(f"[cleanup] removed .active junction: {active_junction}", file=sys.stderr)
 
-    # Remove the active marker file.
-    marker_path = hub_root / ".millhouse" / "active.slug.md"
-    if marker_path.exists():
-        marker_path.unlink()
-        print(f"[cleanup] removed active marker: {marker_path}", file=sys.stderr)
-
     # Remove the portal entry for this task.
     container_path = _paths.resolve_container_path(hub_root)
     _junction.remove(container_path / "portals" / record.slug)
@@ -422,7 +408,7 @@ def apply_plan(
 
     for record in plan.to_remove_done + plan.to_remove_abandoned:
         # Determine whether this is an in-place task (no separate worktree dir).
-        mode, task_branch = _resolve_inplace_mode(record, hub_root, cfg)
+        mode, task_branch = _resolve_inplace_mode(record, hub_root, wiki_path, cfg)
         if mode == "abort":
             print(
                 f"[cleanup] skipping {record.slug} — user aborted stale-worktree prompt.",
@@ -468,26 +454,35 @@ def main() -> None:
     parser.add_argument("--apply", action="store_true", help="Execute removals (default: dry-run).")
     args = parser.parse_args()
 
-    if (Path.cwd() / ".millhouse" / "active.slug.md").exists():
-        sys.exit("Error: mill-cleanup must run from the hub, not from a worktree.")
-
     git_root = _paths.resolve_git_root()
     wiki_path = _paths.resolve_wiki_path(git_root)
+    cfg = _load_config(wiki_path, git_root)
+    branch_prefix = cfg.get("spawn", {}).get("branch_prefix", "")
     container_path = _paths.resolve_container_path(git_root)
 
-    _wiki.sync_pull(wiki_path, slug="mill-cleanup")
+    # Hub check: if current branch is an active task branch, refuse to run.
+    _br = _subprocess_util.run(["git", "-C", str(Path.cwd()), "branch", "--show-current"])
+    _cur_branch = _br.stdout.strip() if _br.returncode == 0 else ""
+    _home_md = wiki_path / "Home.md"
+    _home_for_check = _tasks_md.parse(_home_md.read_text(encoding="utf-8")) if _home_md.exists() else []
+    _check_slug = _cur_branch.removeprefix(branch_prefix) if branch_prefix and _cur_branch.startswith(branch_prefix) else (_cur_branch if not branch_prefix else "")
+    if _check_slug and any(t.slug == _check_slug and t.phase == "active" for t in _home_for_check):
+        sys.exit("Error: mill-cleanup must run from the hub, not from a worktree.")
 
-    active_wt_list = _spawn_core.discover_active_worktrees(container_path / "wts")
-    active_worktrees = [path for path, _slug, _title in active_wt_list]
+    _wiki.sync_pull(wiki_path, slug="mill-cleanup")
 
     home_text = (wiki_path / "Home.md").read_text("utf-8")
     home_tasks = _tasks_md.parse(home_text)
     junctions_cfg = _wiki.read_junctions(wiki_path)
 
-    cfg = _load_config(wiki_path, git_root)
+    active_wt_list = _spawn_core.discover_active_worktrees(
+        container_path / "wts", home_tasks, branch_prefix
+    )
+    active_worktrees = [path for path, _slug, _title in active_wt_list]
+
     plan = build_plan(
         active_worktrees, home_tasks, wiki_path,
-        hub_root=git_root, container_path=container_path,
+        hub_root=git_root, container_path=container_path, branch_prefix=branch_prefix,
     )
     _print_plan(plan)
 

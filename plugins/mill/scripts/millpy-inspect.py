@@ -13,6 +13,7 @@ from pathlib import Path
 _SCRIPTS = Path(__file__).resolve().parent
 sys.path.insert(0, str(_SCRIPTS))
 
+import _config
 import _paths
 import _spawn_core
 import _status
@@ -43,9 +44,21 @@ def _phase_index(phase: str | None) -> int:
 def _collect(git_root: Path, slug_filter: str | None) -> list[dict]:
     wiki = _paths.resolve_wiki_path(git_root)
     container_path = _paths.resolve_container_path(git_root)
+    cfg = _config.load_config(wiki, git_root)
+    branch_prefix = cfg.get("spawn", {}).get("branch_prefix", "")
+
+    home_md = wiki / "Home.md"
+    home_tasks_list: list = []
+    home_marker_map: dict[str, str] = {}
+    if home_md.exists():
+        home_tasks_list = _tasks_md.parse(home_md.read_text(encoding="utf-8"))
+        for task in home_tasks_list:
+            home_marker_map[task.slug] = task.phase if task.phase is not None else "unclaimed"
 
     # Active worktrees: (path, slug, title) triples from <container>/wts/
-    active_worktree_list = _spawn_core.discover_active_worktrees(container_path / "wts")
+    active_worktree_list = _spawn_core.discover_active_worktrees(
+        container_path / "wts", home_tasks_list, branch_prefix
+    )
     worktree_map: dict[str, Path] = {slug: path for path, slug, _ in active_worktree_list}
     slugs = sorted(worktree_map)
 
@@ -57,12 +70,6 @@ def _collect(git_root: Path, slug_filter: str | None) -> list[dict]:
             print(f"error: no active task with slug {slug_filter!r}", file=sys.stderr)
             sys.exit(1)
         slugs = [slug_filter]
-
-    home_md = wiki / "Home.md"
-    home_marker_map: dict[str, str] = {}
-    if home_md.exists():
-        for task in _tasks_md.parse(home_md.read_text(encoding="utf-8")):
-            home_marker_map[task.slug] = task.phase if task.phase is not None else "unclaimed"
 
     records = []
     for slug in slugs:

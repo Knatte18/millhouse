@@ -36,6 +36,7 @@ def run(
     slug: str,
     mill_dir: Path,
     project_root: Path,
+    wiki_root: Path,
     *,
     max_rounds: int | None = None,
 ) -> ReviewResult:
@@ -88,7 +89,7 @@ def run(
 
     prompt_text = render_prompt(
         "review-discussion",
-        task_title=load_task_title(mill_dir, slug),
+        task_title=load_task_title(project_root, wiki_root, cfg, slug),
         tool_rule=tool_rule,
         artefact_section=artefact_section,
         constraints=read_constraints_md(project_root),

@@ -14,8 +14,8 @@ from pathlib import Path
 _SCRIPTS = Path(__file__).resolve().parent
 sys.path.insert(0, str(_SCRIPTS))
 
-import _active
 import _builder_lock
+import _marker
 import _paths
 import _review_common
 import _status
@@ -34,27 +34,22 @@ def main() -> int:
                         help="Skip confirmation prompt and builder-lock guard.")
     args = parser.parse_args()
 
-    mill_dir = Path.cwd() / ".millhouse"
-
-    # Step 1: verify we are inside a worktree
-    if not (mill_dir / "active.slug.md").exists():
-        sys.exit("Error: mill-abandon must run from a worktree, not from the hub.")
-
-    # Step 2: resolve slug
+    # Step 1+2: resolve paths and derive slug from current branch
+    git_root = _paths.resolve_git_root()
+    wiki_path = _paths.resolve_wiki_path(git_root)
+    hub_dir = _paths.resolve_hub_path()
+    mill_dir = hub_dir / ".millhouse"
+    cfg = _review_common.load_config(wiki_path, mill_dir)
     try:
-        slug = _active.read_slug(mill_dir)
-    except _active.ActiveError as exc:
-        sys.exit(f"Error reading active slug: {exc}")
+        slug = _marker.slug_from_branch(git_root, wiki_path, cfg)
+    except _marker.MarkerError as exc:
+        sys.exit(f"Error: mill-abandon must run from a worktree. ({exc})")
 
     # Step 3: resolve paths via the centralized helpers (post-task-32: status.md
     # lives at <active_hub>/task/status.md on the task branch, not in the wiki).
     # We use active_hub for both the file path and the git -C target so the
     # relative argument "task/status.md" stays correct under sub-dir hub configs.
-    git_root = _paths.resolve_git_root()
     container_path = _paths.resolve_container_path(git_root)
-    wiki_path = _paths.resolve_wiki_path(git_root)
-    hub_dir = _paths.resolve_hub_path()
-    cfg = _review_common.load_config(wiki_path, hub_dir / ".millhouse")
     active_hub = _paths.resolve_active_hub(
         container_path, slug, cfg=cfg, git_root=git_root,
     )

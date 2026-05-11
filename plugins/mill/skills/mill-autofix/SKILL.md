@@ -394,12 +394,6 @@ git clean -fd task/
 git checkout <parent_branch>
 ```
 
-Then remove the per-worktree active marker:
-
-```bash
-rm -f .millhouse/active.slug.md
-```
-
 **Why `git reset --hard HEAD` before `git checkout`:** the implementer session inside mill-go may have left uncommitted tracked-file changes. Without this reset, `git checkout <parent_branch>` aborts when tracked source files differ between branches.
 
 On any git error in the stuck cleanup helper, print to stderr and continue — the report captures the partial state.

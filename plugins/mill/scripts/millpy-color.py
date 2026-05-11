@@ -23,7 +23,7 @@ import json
 import sys
 from pathlib import Path
 
-import _active
+import _marker
 import _vscode
 from _config import load_config as _load_config
 from _paths import resolve_git_root, resolve_hub_path, resolve_short_name, resolve_wiki_path
@@ -84,6 +84,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if existing_title is None:
         # Derive a title from config + active marker.
+        wiki_path = None
         try:
             wiki_path = resolve_wiki_path(git_root)
             cfg = _load_config(wiki_path, resolve_hub_path())
@@ -91,12 +92,12 @@ def main(argv: list[str] | None = None) -> int:
             cfg = {}
         short_name = resolve_short_name(cfg, git_root.name)
 
-        mill_dir = resolve_hub_path() / ".millhouse"
         slug: str | None = None
-        try:
-            slug = _active.read_slug(mill_dir)
-        except _active.ActiveError:
-            pass
+        if wiki_path is not None:
+            try:
+                slug = _marker.slug_from_branch(git_root, wiki_path, cfg)
+            except _marker.MarkerError:
+                pass
 
         window_title = f"{short_name}: {slug}" if slug else short_name
     else:

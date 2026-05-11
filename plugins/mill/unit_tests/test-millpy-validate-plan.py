@@ -1,8 +1,9 @@
 """Unit tests for millpy-validate-plan.py CLI main().
 
 Tests invoke main() in-process via importlib, patching helpers that require
-real git/wiki state. Two test paths: clean fixture (exit 0, no findings) and
-dirty fixture (exit 1, card-missing-field error).
+real git/wiki state. Four test paths: clean/dirty fixture, --skip-check single,
+and --skip-check multiple. find_active_slug is patched via return_value which
+accepts the new (git_root, wiki_path, cfg) signature without assertion changes.
 """
 from __future__ import annotations
 

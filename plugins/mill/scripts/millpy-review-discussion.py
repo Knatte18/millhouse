@@ -42,8 +42,8 @@ def main(argv: list[str] | None = None) -> int:
     cfg = load_config(wiki_root, mill_dir)
 
     try:
-        slug = find_active_slug(mill_dir)
-        result = run(cfg, slug, mill_dir, project_root, max_rounds=args.max_rounds)
+        slug = find_active_slug(project_root, wiki_root, cfg)
+        result = run(cfg, slug, mill_dir, project_root, wiki_root, max_rounds=args.max_rounds)
         print(json.dumps(result.to_dict()))
         return 0
     except ReviewError as exc:

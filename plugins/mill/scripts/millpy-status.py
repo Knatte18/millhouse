@@ -13,6 +13,7 @@ from pathlib import Path
 _SCRIPTS = Path(__file__).resolve().parent
 sys.path.insert(0, str(_SCRIPTS))
 
+import _config
 import _paths
 import _spawn_core
 import _status
@@ -22,16 +23,22 @@ import _tasks_md
 def _build_rows(git_root: Path) -> list[dict]:
     wiki = _paths.resolve_wiki_path(git_root)
     container_path = _paths.resolve_container_path(git_root)
+    cfg = _config.load_config(wiki, git_root)
+    branch_prefix = cfg.get("spawn", {}).get("branch_prefix", "")
 
     # Home.md tasks
     home_md = wiki / "Home.md"
     if home_md.exists():
-        home_tasks = {t.slug: t for t in _tasks_md.parse(home_md.read_text(encoding="utf-8"))}
+        home_tasks_list = _tasks_md.parse(home_md.read_text(encoding="utf-8"))
+        home_tasks = {t.slug: t for t in home_tasks_list}
     else:
+        home_tasks_list = []
         home_tasks = {}
 
     # Active worktrees: (path, slug, title) triples from <container>/wts/
-    active_worktree_list = _spawn_core.discover_active_worktrees(container_path / "wts")
+    active_worktree_list = _spawn_core.discover_active_worktrees(
+        container_path / "wts", home_tasks_list, branch_prefix
+    )
     worktree_map: dict[str, str] = {slug: str(path) for path, slug, _ in active_worktree_list}
     active_worktree_paths: dict[str, Path] = {slug: path for path, slug, _ in active_worktree_list}
     active_slugs: set[str] = set(worktree_map)

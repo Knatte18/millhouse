@@ -11,7 +11,10 @@ from unittest.mock import MagicMock, patch
 HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
-import _active  # noqa: E402
+_UNIT_TESTS = Path(__file__).resolve().parent
+sys.path.insert(0, str(_UNIT_TESTS))
+
+from _test_helpers import _make_task_worktree  # noqa: E402
 from _paths import ActiveWorktreeSlugMismatch  # noqa: E402
 
 
@@ -24,8 +27,8 @@ def _make_worktree_fixture(tmp: str, slug: str) -> tuple[Path, Path]:
     """Create a container-form git fixture at ``<tmp>/container/wts/<slug>``.
 
     Layout:
-        <tmp>/container/wts/<slug>/          ← git repo + active.slug.md marker
-        <tmp>/container/wts/<slug>/.millhouse/active.slug.md
+        <tmp>/container/wts/<slug>/  ← git repo on task branch ``hanf/<slug>``
+        <tmp>/container/wiki/        ← wiki with Home.md and config.yaml
 
     Returns:
         ``(container_path, worktree_path)``
@@ -51,19 +54,19 @@ def _make_worktree_fixture(tmp: str, slug: str) -> tuple[Path, Path]:
         ["git", "-C", str(worktree), "commit", "-m", "init"],
         check=True, capture_output=True,
     )
-    mill_dir = worktree / ".millhouse"
-    mill_dir.mkdir(parents=True, exist_ok=True)
-    _active.write(
-        mill_dir,
-        slug=slug,
-        task_title="Test Task",
-        branch=f"hanf/{slug}",
-        spawned_at="2026-04-29T00:00:00Z",
+    subprocess.run(
+        ["git", "-C", str(worktree), "checkout", "-b", f"hanf/{slug}"],
+        check=True, capture_output=True,
     )
     wiki_root = container / "wiki"
     wiki_root.mkdir(parents=True, exist_ok=True)
     (wiki_root / "config.yaml").write_text(
-        "paths:\n  discussion_file: task/discussion.md\n",
+        "paths:\n  discussion_file: task/discussion.md\n"
+        "spawn:\n  branch_prefix: \"hanf/\"\n",
+        encoding="utf-8",
+    )
+    (wiki_root / "Home.md").write_text(
+        f"## Test Task\n[[{slug}]] [active]\n\n_body_\n",
         encoding="utf-8",
     )
     return container, worktree
@@ -189,35 +192,36 @@ def main() -> int:
         assert result == 1, f"expected 1, got {result}"
         print(f"PASS: discover_round per-scope code/batch-b (absent for code): {result}")
 
-    # find_active_slug: empty dir -> ActiveError re-raised as ReviewError
+    # find_active_slug: not on a task branch -> MarkerError re-raised as ReviewError
     with tempfile.TemporaryDirectory() as tmpdir:
+        wt, wiki = _make_task_worktree(Path(tmpdir) / "sub", "some-task", "Some Task", branch_prefix="hanf/")
+        subprocess.run(["git", "-C", str(wt), "checkout", "main"], check=True, capture_output=True)
+        cfg = {"spawn": {"branch_prefix": "hanf/"}}
         try:
-            find_active_slug(Path(tmpdir))
+            find_active_slug(wt, wiki, cfg)
             errors += 1
-            print("FAIL: expected ReviewError for empty mill_dir", file=sys.stderr)
-        except ReviewError as e:
-            assert "active.slug.md" in str(e)
-            print("PASS: find_active_slug empty dir -> ReviewError (ActiveError translation)")
+            print("FAIL: expected ReviewError for non-task branch", file=sys.stderr)
+        except ReviewError:
+            print("PASS: find_active_slug non-task branch -> ReviewError (MarkerError translation)")
 
-    # find_active_slug: canonical active.slug.md present -> returns slug
+    # find_active_slug: on task branch -> returns slug
     with tempfile.TemporaryDirectory() as tmpdir:
-        mill_dir = Path(tmpdir)
-        _active.write(mill_dir, slug="my-task", task_title="My Task", branch="main", spawned_at="2026-01-01T00:00:00Z")
-        assert find_active_slug(mill_dir) == "my-task"
+        wt, wiki = _make_task_worktree(Path(tmpdir), "my-task", "My Task", branch_prefix="hanf/")
+        cfg = {"spawn": {"branch_prefix": "hanf/"}}
+        assert find_active_slug(wt, wiki, cfg) == "my-task"
         print("PASS: find_active_slug: 'my-task'")
 
-    # load_task_title: task_title present in active marker
+    # load_task_title: task_title present in Home.md
     with tempfile.TemporaryDirectory() as tmpdir:
-        mill_dir = Path(tmpdir)
-        _active.write(mill_dir, slug="my-task", task_title="My Task Title", branch="main", spawned_at="2026-01-01T00:00:00Z")
-        assert load_task_title(mill_dir, "my-task") == "My Task Title"
-        print("PASS: load_task_title with task_title in active marker")
+        wt, wiki = _make_task_worktree(Path(tmpdir), "my-task", "My Task Title", branch_prefix="hanf/")
+        cfg = {"spawn": {"branch_prefix": "hanf/"}}
+        assert load_task_title(wt, wiki, cfg, "my-task") == "My Task Title"
+        print("PASS: load_task_title with task_title in Home.md")
 
-    # load_task_title: marker missing -> falls back to slug
+    # load_task_title: non-task branch -> falls back to slug
     with tempfile.TemporaryDirectory() as tmpdir:
-        mill_dir = Path(tmpdir)
-        assert load_task_title(mill_dir, "my-task") == "my-task"
-        print("PASS: load_task_title marker missing -> fallback to slug")
+        assert load_task_title(Path(tmpdir), Path(tmpdir), {}, "my-task") == "my-task"
+        print("PASS: load_task_title non-task branch -> fallback to slug")
 
     # resolve_path: discussion.md → worktree root
     with tempfile.TemporaryDirectory() as tmp:
@@ -269,19 +273,29 @@ def main() -> int:
     with tempfile.TemporaryDirectory() as tmp:
         slug = "my-task"
         container, worktree = _make_worktree_fixture(tmp, slug)
-        # Create a directory for a different slug but with the wrong marker slug inside it.
+        # Create a directory named "wrong-slug" but checked out on branch "hanf/my-task"
+        # (directory slug ≠ branch-derived slug → mismatch).
         wrong_slug = "wrong-slug"
         wrong_dir = container / "wts" / wrong_slug
         wrong_dir.mkdir(parents=True)
-        wrong_mill = wrong_dir / ".millhouse"
-        wrong_mill.mkdir()
-        # Write marker with slug="my-task" into the "wrong-slug" directory.
-        _active.write(
-            wrong_mill,
-            slug="my-task",  # deliberate mismatch: dir is wrong-slug but marker says my-task
-            task_title="Test",
-            branch="hanf/my-task",
-            spawned_at="2026-04-29T00:00:00Z",
+        subprocess.run(["git", "-C", str(wrong_dir), "init"], check=True, capture_output=True)
+        subprocess.run(
+            ["git", "-C", str(wrong_dir), "config", "user.email", "test@test.com"],
+            check=True, capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(wrong_dir), "config", "user.name", "Test"],
+            check=True, capture_output=True,
+        )
+        (wrong_dir / ".keep").write_text("", encoding="utf-8")
+        subprocess.run(["git", "-C", str(wrong_dir), "add", "."], check=True, capture_output=True)
+        subprocess.run(
+            ["git", "-C", str(wrong_dir), "commit", "-m", "init"],
+            check=True, capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(wrong_dir), "checkout", "-b", "hanf/my-task"],
+            check=True, capture_output=True,
         )
         original_cwd = Path.cwd()
         os.chdir(worktree)
@@ -291,7 +305,7 @@ def main() -> int:
                 errors += 1
                 print("FAIL: expected ActiveWorktreeSlugMismatch for wrong slug", file=sys.stderr)
             except ActiveWorktreeSlugMismatch:
-                print("PASS: resolve_path raises ActiveWorktreeSlugMismatch on marker mismatch")
+                print("PASS: resolve_path raises ActiveWorktreeSlugMismatch on branch mismatch")
         finally:
             os.chdir(original_cwd)
 
@@ -302,7 +316,6 @@ def main() -> int:
         git_root.mkdir()
         hub = git_root
         slug = "my-inplace-task"
-        branch = f"hanf/{slug}"
 
         wiki_root = tmp_path / "wiki"
         wiki_root.mkdir()
@@ -313,13 +326,6 @@ def main() -> int:
 
         hub_mill_dir = hub / ".millhouse"
         hub_mill_dir.mkdir(parents=True)
-        _active.write(
-            hub_mill_dir,
-            slug=slug,
-            task_title="In-Place Task",
-            branch=branch,
-            spawned_at="2026-01-01T00:00:00Z",
-        )
         (hub_mill_dir / "config.local.yaml").write_text(
             "hub_relative_path: .\n", encoding="utf-8"
         )
@@ -327,9 +333,7 @@ def main() -> int:
         worktrees_dir = tmp_path / "wts"
         worktrees_dir.mkdir()
 
-        mock_branch = _make_run_result(stdout=branch + "\n")
-
-        with patch("_subprocess_util.run", return_value=mock_branch), \
+        with patch("_marker.slug_from_branch", return_value=slug), \
              patch("_paths.resolve_git_root", return_value=git_root), \
              patch("_paths.resolve_wiki_path", return_value=wiki_root), \
              patch("_paths.resolve_hub_path", return_value=hub), \
@@ -348,7 +352,6 @@ def main() -> int:
         git_root.mkdir()
         hub = git_root / "src" / "Models"
         slug = "my-subdir-inplace-task"
-        branch = f"hanf/{slug}"
 
         wiki_root = tmp_path / "wiki"
         wiki_root.mkdir()
@@ -359,13 +362,6 @@ def main() -> int:
 
         hub_mill_dir = hub / ".millhouse"
         hub_mill_dir.mkdir(parents=True)
-        _active.write(
-            hub_mill_dir,
-            slug=slug,
-            task_title="Sub-Dir In-Place Task",
-            branch=branch,
-            spawned_at="2026-01-01T00:00:00Z",
-        )
         (hub_mill_dir / "config.local.yaml").write_text(
             "hub_relative_path: src/Models\n", encoding="utf-8"
         )
@@ -373,9 +369,7 @@ def main() -> int:
         worktrees_dir = tmp_path / "wts"
         worktrees_dir.mkdir()
 
-        mock_branch = _make_run_result(stdout=branch + "\n")
-
-        with patch("_subprocess_util.run", return_value=mock_branch), \
+        with patch("_marker.slug_from_branch", return_value=slug), \
              patch("_paths.resolve_git_root", return_value=git_root), \
              patch("_paths.resolve_wiki_path", return_value=wiki_root), \
              patch("_paths.resolve_hub_path", return_value=hub), \

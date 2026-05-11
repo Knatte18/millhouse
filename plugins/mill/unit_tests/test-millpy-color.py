@@ -7,7 +7,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
@@ -141,27 +141,16 @@ def main() -> int:
         hub_path.mkdir(parents=True, exist_ok=True)
 
         captured_write: list[dict] = []
-        captured_read_slug_args: list[Path] = []
 
         def mock_write_settings2(color_hex, target, *, window_title=None, **kwargs):
             captured_write.append({"color_hex": color_hex, "target": target})
-
-        class _FakeActiveError(Exception):
-            pass
-
-        def mock_read_slug(mill_dir: Path) -> str:
-            captured_read_slug_args.append(mill_dir)
-            raise _FakeActiveError("no active")
-
-        active_mock = MagicMock()
-        active_mock.ActiveError = _FakeActiveError
-        active_mock.read_slug.side_effect = mock_read_slug
 
         with (
             patch("mill_color.resolve_git_root", return_value=git_root),
             patch("mill_color.resolve_hub_path", return_value=hub_path),
             patch("mill_color._vscode.write_settings", side_effect=mock_write_settings2),
-            patch("mill_color._active", active_mock),
+            patch("mill_color._marker.slug_from_branch",
+                  side_effect=mill_color._marker.MarkerError("no branch")),
             patch("mill_color.resolve_wiki_path", return_value=git_root / "wiki"),
             patch("mill_color._load_config", return_value={}),
         ):
@@ -180,19 +169,10 @@ def main() -> int:
                 )
                 errors += 1
             else:
-                expected_mill_dir = hub_path / ".millhouse"
-                if not captured_read_slug_args or captured_read_slug_args[0] != expected_mill_dir:
-                    print(
-                        f"FAIL: read_slug mill_dir should be {expected_mill_dir}, "
-                        f"got {captured_read_slug_args[0] if captured_read_slug_args else 'nothing'}",
-                        file=sys.stderr,
-                    )
-                    errors += 1
-                else:
-                    print(
-                        "PASS: settings and mill_dir use hub_path (cwd), not git_root, "
-                        "when they differ"
-                    )
+                print(
+                    "PASS: settings target uses hub_path (cwd), not git_root, "
+                    "when they differ"
+                )
 
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)

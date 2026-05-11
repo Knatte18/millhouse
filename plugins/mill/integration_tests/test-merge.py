@@ -52,7 +52,6 @@ import _junction  # noqa: E402
 import _parent_branch  # noqa: E402
 import _plan_dag  # noqa: E402
 import _sidebar  # noqa: E402
-import _status  # noqa: E402
 import _tasks_md  # noqa: E402
 import _timestamp  # noqa: E402
 import _wiki  # noqa: E402
@@ -100,7 +99,8 @@ def _setup_trio(container: Path) -> tuple[Path, Path, Path, str]:
     # Seed wiki: Home.md with [active], plan dir, status.md done, config.
     (wiki / "Home.md").write_text(
         "# Tasks\n\n"
-        f"## Demo merge [{slug}] [active]\n\n"
+        f"## Demo merge\n"
+        f"[{slug}] [active]\n\n"
         "Seed task for mill-merge integration test.\n",
         encoding="utf-8",
     )
@@ -184,7 +184,7 @@ def _setup_trio(container: Path) -> tuple[Path, Path, Path, str]:
     _run(["git", "-C", str(hub), "add", "README.md"], cwd=container)
     _run(["git", "-C", str(hub), "commit", "-m", "init"], cwd=container)
 
-    # .millhouse on hub with wiki junction + active.slug.md; .scratch/ at cwd-root.
+    # .millhouse on hub with wiki junction; .scratch/ at cwd-root.
     millhouse = hub / ".millhouse"
     millhouse.mkdir()
     if sys.platform == "win32":
@@ -209,7 +209,7 @@ def _setup_trio(container: Path) -> tuple[Path, Path, Path, str]:
         cwd=container,
     )
 
-    # Worktree's .millhouse: wiki junction, active.slug.md, active junction.
+    # Worktree's .millhouse: wiki junction, active junction.
     wt_mill = worktree / ".millhouse"
     wt_mill.mkdir()
     if sys.platform == "win32":
@@ -219,15 +219,6 @@ def _setup_trio(container: Path) -> tuple[Path, Path, Path, str]:
         )
     else:
         os.symlink(str(wiki), str(wt_mill / "wiki"))
-    (wt_mill / "active.slug.md").write_text(
-        "---\n"
-        f"slug: {slug}\n"
-        "task_title: Demo merge\n"
-        f"branch: test/{slug}\n"
-        "spawned_at: 2026-04-22T12:00:00Z\n"
-        "---\n",
-        encoding="utf-8",
-    )
     # .active junction at worktree root -> wiki/active/<slug>/
     if sys.platform == "win32":
         subprocess.run(

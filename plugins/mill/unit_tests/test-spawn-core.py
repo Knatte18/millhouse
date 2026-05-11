@@ -9,7 +9,6 @@ from pathlib import Path
 HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
-import _active  # noqa: E402
 from _spawn_core import (  # noqa: E402
     BacklogEmpty,
     capture_parent_branch,
@@ -20,7 +19,6 @@ from _spawn_core import (  # noqa: E402
     pick_task_single_or_multi,
     prompt_merged_entry,
     recreate_active_junction,
-    write_active_marker,
     write_initial_status,
     write_wiki_active_task_md,
 )
@@ -345,32 +343,6 @@ def test_capture_parent_branch_on_non_repo_raises() -> None:
             print("PASS: capture_parent_branch raises RuntimeError on non-repo path")
         else:
             raise AssertionError("expected RuntimeError")
-
-
-# ---------------------------------------------------------------------------
-# write_active_marker
-# ---------------------------------------------------------------------------
-
-
-def test_write_active_marker() -> None:
-    with tempfile.TemporaryDirectory() as tmp:
-        mill_dir = Path(tmp) / ".millhouse"
-        write_active_marker(
-            mill_dir,
-            slug="my-task",
-            title="My Task",
-            branch="feature/my-task",
-            ts="2026-04-26T10:00:00Z",
-        )
-        marker = mill_dir / "active.slug.md"
-        if not marker.exists():
-            raise AssertionError("active.slug.md should have been written")
-        text = marker.read_text(encoding="utf-8")
-        if "slug: my-task" not in text:
-            raise AssertionError("slug not written correctly")
-        if "task_title: My Task" not in text:
-            raise AssertionError("task_title not written correctly")
-    print("PASS: write_active_marker writes active.slug.md with correct content")
 
 
 # ---------------------------------------------------------------------------
@@ -915,23 +887,30 @@ def test_prompt_merged_entry_bad_slug_raises() -> None:
 # ---------------------------------------------------------------------------
 
 
+def _make_worktree_repo(wt_dir: Path, branch: str) -> None:
+    """Init a git repo in wt_dir and checkout branch (for discover tests)."""
+    wt_dir.mkdir(parents=True, exist_ok=True)
+    subprocess.run(["git", "init", str(wt_dir)], capture_output=True, check=True)
+    subprocess.run(["git", "-C", str(wt_dir), "config", "user.email", "t@t.com"], capture_output=True, check=True)
+    subprocess.run(["git", "-C", str(wt_dir), "config", "user.name", "T"], capture_output=True, check=True)
+    (wt_dir / ".keep").write_text("", encoding="utf-8")
+    subprocess.run(["git", "-C", str(wt_dir), "add", ".keep"], capture_output=True, check=True)
+    subprocess.run(["git", "-C", str(wt_dir), "commit", "-m", "init"], capture_output=True, check=True)
+    subprocess.run(["git", "-C", str(wt_dir), "checkout", "-b", branch], capture_output=True, check=True)
+
+
 def test_discover_active_worktrees_standard_layout() -> None:
-    """Standard layout (no stub): active marker at entry/.millhouse/ is found."""
+    """Standard layout: worktree on task branch is found via branch detection."""
     with tempfile.TemporaryDirectory() as tmp:
         wts_dir = Path(tmp) / "wts"
         wts_dir.mkdir()
         entry = wts_dir / "my-task"
-        entry.mkdir()
-        mill_dir = entry / ".millhouse"
-        _active.write(
-            mill_dir,
-            slug="my-task",
-            task_title="My Task",
-            branch="hanf/my-task",
-            spawned_at="2026-01-01T00:00:00Z",
-        )
+        _make_worktree_repo(entry, branch="hanf/my-task")
 
-        results = discover_active_worktrees(wts_dir)
+        home_md = "# Home\n\n## My Task\n[[my-task]] [active]\n"
+        home_tasks = _tasks_md.parse(home_md)
+
+        results = discover_active_worktrees(wts_dir, home_tasks, "hanf/")
 
         if len(results) != 1:
             raise AssertionError(f"expected 1 result, got {len(results)}: {results}")
@@ -940,33 +919,22 @@ def test_discover_active_worktrees_standard_layout() -> None:
             raise AssertionError(f"expected entry {entry}, got {path}")
         if slug != "my-task":
             raise AssertionError(f"expected slug='my-task', got {slug!r}")
-    print("PASS: discover_active_worktrees standard layout finds active marker")
+    print("PASS: discover_active_worktrees standard layout finds worktree via branch")
 
 
 def test_discover_active_worktrees_subfolder_install() -> None:
-    """Subfolder-install layout: stub at entry/.millhouse/ points to src/hub; active marker found there."""
+    """Subfolder-install layout: worktree git root is the entry dir regardless of hub_subpath."""
     with tempfile.TemporaryDirectory() as tmp:
         wts_dir = Path(tmp) / "wts"
         wts_dir.mkdir()
         entry = wts_dir / "my-task"
-        entry.mkdir()
-        # Stub at the worktree root .millhouse
-        stub_dir = entry / ".millhouse"
-        stub_dir.mkdir()
-        (stub_dir / "config.local.yaml").write_text(
-            "hub_relative_path: src/hub\n", encoding="utf-8"
-        )
-        # Real active marker at src/hub/.millhouse
-        hub_mill_dir = entry / "src" / "hub" / ".millhouse"
-        _active.write(
-            hub_mill_dir,
-            slug="my-task",
-            task_title="My Subfolder Task",
-            branch="hanf/my-task",
-            spawned_at="2026-01-01T00:00:00Z",
-        )
+        # Git root is entry/ even though the hub lives at entry/src/hub/
+        _make_worktree_repo(entry, branch="hanf/my-task")
 
-        results = discover_active_worktrees(wts_dir)
+        home_md = "# Home\n\n## My Subfolder Task\n[[my-task]] [active]\n"
+        home_tasks = _tasks_md.parse(home_md)
+
+        results = discover_active_worktrees(wts_dir, home_tasks, "hanf/")
 
         if len(results) != 1:
             raise AssertionError(f"expected 1 result, got {len(results)}: {results}")
@@ -975,7 +943,7 @@ def test_discover_active_worktrees_subfolder_install() -> None:
             raise AssertionError(f"expected entry {entry}, got {path}")
         if slug != "my-task":
             raise AssertionError(f"expected slug='my-task', got {slug!r}")
-    print("PASS: discover_active_worktrees subfolder-install layout finds active marker via stub")
+    print("PASS: discover_active_worktrees subfolder-install layout finds worktree via branch")
 
 
 # ---------------------------------------------------------------------------
@@ -1010,7 +978,6 @@ def main() -> int:
         test_claim_in_wiki,
         test_capture_parent_branch_returns_branch_name,
         test_capture_parent_branch_on_non_repo_raises,
-        test_write_active_marker,
         test_write_initial_status,
         test_write_initial_status_forced_failure_raises_runtime_error,
         test_write_initial_status_push_failure_raises_runtime_error,

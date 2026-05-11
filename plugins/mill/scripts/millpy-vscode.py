@@ -1,8 +1,8 @@
 """
 mill-vscode — open VS Code in an active worktree.
 
-Scans the worktrees container directory for subdirectories that carry a
-``.millhouse/active.slug.md`` marker, filters out worktrees that already
+Scans the worktrees container directory for subdirectories whose current git
+branch matches an active task in Home.md, filters out worktrees that already
 have a VS Code window open, then shows a unified prompt: ``<Enter>`` spawns
 a new task and opens it, a number opens the listed worktree, or ``q`` quits.
 
@@ -27,6 +27,7 @@ import sys
 from pathlib import Path
 
 import _spawn_core
+import _tasks_md
 import _vscode_processes
 from _config import load_config as _load_config
 from _paths import resolve_git_root, resolve_hub_relative_path, resolve_wiki_path, resolve_worktrees_dir
@@ -162,14 +163,19 @@ def main(argv: list[str] | None = None) -> int:
     git_root = resolve_git_root()
 
     wiki_path = None
+    home_tasks: list = []
     try:
         wiki_path = resolve_wiki_path(git_root)
         cfg = _load_config(wiki_path, git_root)
+        home_md = wiki_path / "Home.md"
+        if home_md.exists():
+            home_tasks = _tasks_md.parse(home_md.read_text(encoding="utf-8"))
     except SystemExit:
         cfg = {}
 
+    branch_prefix = cfg.get("spawn", {}).get("branch_prefix", "")
     worktrees_dir = resolve_worktrees_dir(cfg, git_root)
-    active = _spawn_core.discover_active_worktrees(worktrees_dir)
+    active = _spawn_core.discover_active_worktrees(worktrees_dir, home_tasks, branch_prefix)
 
     if not active and args.list:
         print("No active worktrees found.", file=sys.stderr)

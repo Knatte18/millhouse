@@ -1,8 +1,8 @@
 """
 mill-terminal — open Claude Code in an active worktree.
 
-Scans the worktrees container directory for subdirectories that carry a
-``.millhouse/active.slug.md`` marker, presents a numbered picker, then
+Scans the worktrees container directory for subdirectories whose current git
+branch matches an active task in Home.md, presents a numbered picker, then
 launches Claude Code in the selected worktree via ``subprocess.run``.
 
 Usage:
@@ -20,6 +20,7 @@ import sys
 from pathlib import Path
 
 import _spawn_core
+import _tasks_md
 from _config import load_config as _load_config
 from _paths import resolve_git_root, resolve_hub_relative_path, resolve_wiki_path, resolve_worktrees_dir
 
@@ -49,21 +50,26 @@ def main(argv: list[str] | None = None) -> int:
     git_root = resolve_git_root()
 
     wiki_path = None
+    home_tasks: list = []
     try:
         wiki_path = resolve_wiki_path(git_root)
         cfg = _load_config(wiki_path, git_root)
+        home_md = wiki_path / "Home.md"
+        if home_md.exists():
+            home_tasks = _tasks_md.parse(home_md.read_text(encoding="utf-8"))
     except SystemExit:
         cfg = {}
 
+    branch_prefix = cfg.get("spawn", {}).get("branch_prefix", "")
     worktrees_dir = resolve_worktrees_dir(cfg, git_root)
-    active = _spawn_core.discover_active_worktrees(worktrees_dir)
+    active = _spawn_core.discover_active_worktrees(worktrees_dir, home_tasks, branch_prefix)
 
     if not active:
         spawn_main = _load_spawn_main()
         rc = spawn_main([])
         if rc != 0:
             return rc
-        active = _spawn_core.discover_active_worktrees(worktrees_dir)
+        active = _spawn_core.discover_active_worktrees(worktrees_dir, home_tasks, branch_prefix)
         if not active:
             print(
                 "No tasks available and no active worktrees. Add tasks to Home.md first.",
