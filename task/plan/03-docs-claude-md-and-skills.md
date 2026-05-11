@@ -65,4 +65,4 @@ Batch-local decision: the per-SKILL.md note is a single line placed immediately 
 
 ## Batch Tests
 
-`verify: null`. No runnable surface — these are documentation-only edits. Manual smoke check: after the batch lands, `grep -rn "Wiki access:" plugins/mill/skills/` returns nine lines (one per SKILL plus the CLAUDE.md section header). The walker test in batch 2 still passes because every edited file is in its hardcoded allowlist.
+`verify: null`. No runnable surface — these are documentation-only edits. Manual smoke check: after the batch lands, `grep -rn "Wiki access:" plugins/mill/skills/` returns exactly 8 lines (one per SKILL.md note). CLAUDE.md's new section uses the heading `## Wiki access` (no trailing colon) and is not matched by the `"Wiki access:"` pattern — that is intentional and the count stays 8. The walker test in batch 2 still passes because every edited SKILL.md is in its hardcoded allowlist (CLAUDE.md is outside the walker's scope and not allowlisted, per Card 7's updated wording).
