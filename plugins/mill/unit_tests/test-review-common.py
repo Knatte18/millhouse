@@ -98,7 +98,6 @@ from _review_common import (  # noqa: E402
     discover_round,
     find_active_slug,
     load_config,
-    load_reviewer,
     load_task_title,
     parse_batch_refs,
     parse_blocking_count,
@@ -467,14 +466,6 @@ def main() -> int:
     assert aggregate_verdict([]) == "APPROVE"
     print("PASS: aggregate_verdict (incl. NEED_CONTEXT precedence)")
 
-    # load_reviewer: nonexistent -> ReviewError
-    try:
-        load_reviewer("nonexistent_xyz_abc")
-        errors += 1
-    except ReviewError as e:
-        assert "nonexistent_xyz_abc" in str(e)
-        print("PASS: load_reviewer nonexistent -> ReviewError")
-
     # build_tool_rule modes
     assert "Do NOT request tool calls" in build_tool_rule("bulk")
     assert "MAY use Read, Grep, and Glob" in build_tool_rule("tool-use")
@@ -494,20 +485,20 @@ def main() -> int:
         mill = Path(tmpdir) / ".millhouse"
         mill.mkdir()
         (wiki / "config.yaml").write_text(
-            "review:\n  plan:\n    rounds: 3\n    batch: sonnetmax\n",
+            "roles:\n  plan-review:\n    batch:\n      rounds: 3\n      reviewer: sonnetmax\n",
             encoding="utf-8",
         )
         cfg = load_config(wiki, mill)
-        assert cfg["review"]["plan"]["rounds"] == 3
+        assert cfg["roles"]["plan-review"]["batch"]["rounds"] == 3
         print("PASS: load_config loads shared config")
 
         (mill / "config.local.yaml").write_text(
-            "review:\n  plan:\n    rounds: 1\n",
+            "roles:\n  plan-review:\n    batch:\n      rounds: 1\n",
             encoding="utf-8",
         )
         cfg = load_config(wiki, mill)
-        assert cfg["review"]["plan"]["rounds"] == 1
-        assert cfg["review"]["plan"]["batch"] == "sonnetmax"
+        assert cfg["roles"]["plan-review"]["batch"]["rounds"] == 1
+        assert cfg["roles"]["plan-review"]["batch"]["reviewer"] == "sonnetmax"
         print("PASS: load_config local override wins; other keys preserved")
 
     # load_config: missing config -> ReviewError
@@ -522,6 +513,32 @@ def main() -> int:
         except ReviewError as e:
             assert "Missing config" in str(e)
             print("PASS: load_config missing config -> ReviewError")
+
+    # load_config: stale review: overlay in config.local.yaml -> stderr warning
+    with tempfile.TemporaryDirectory() as tmpdir:
+        import io as _io
+        import contextlib as _cl
+        wiki = Path(tmpdir) / "wiki"
+        wiki.mkdir()
+        mill = Path(tmpdir) / ".millhouse"
+        mill.mkdir()
+        (wiki / "config.yaml").write_text(
+            "roles:\n  plan-review:\n    batch:\n      rounds: 3\n      reviewer: sonnetmax\n",
+            encoding="utf-8",
+        )
+        (mill / "config.local.yaml").write_text(
+            "review:\n  code:\n    rounds: 1\n",
+            encoding="utf-8",
+        )
+        _err_buf = _io.StringIO()
+        with _cl.redirect_stderr(_err_buf):
+            cfg = load_config(wiki, mill)
+        _warning = _err_buf.getvalue()
+        assert _warning, "expected a stderr warning, got empty string"
+        assert "review" in _warning, f"warning should mention 'review': {_warning!r}"
+        local_path_str = str(mill / "config.local.yaml")
+        assert local_path_str in _warning, f"warning should mention overlay path: {_warning!r}"
+        print("PASS: load_config stale review: overlay emits stderr warning with overlay path")
 
     # parse_batch_refs: multi-line bullet form returns all sub-bullet paths
     with tempfile.TemporaryDirectory() as tmpdir:

@@ -12,8 +12,8 @@ Flags:
                        ``NEED_CONTEXT`` retry: the prior round listed the
                        files it could not find; the orchestrator passes
                        them explicitly here.
-    --max-rounds <N>   Override review.code.rounds for this invocation.
-                       Default: use config value.
+    --max-rounds <N>   Override roles.code-review.batch.rounds and roles.code-review.holistic.rounds
+                       (overrides the active scope) for this invocation. Default: use config values.
 
 Exit codes:
     0 — review complete; JSON result on stdout
@@ -50,10 +50,14 @@ def main(argv: list[str] | None = None) -> int:
         "--max-rounds",
         type=int,
         default=None,
-        help="Override review.code.rounds for this invocation. Default: use config value.",
+        help=(
+            "Override roles.code-review.batch.rounds and roles.code-review.holistic.rounds "
+            "(overrides the active scope) for this invocation. Default: use config values."
+        ),
     )
     args = parser.parse_args(argv)
 
+    import _reviewers
     from _paths import resolve_wiki_path
     from _review_cli import print_error
     from _review_common import ReviewError, find_active_slug, load_config
@@ -63,6 +67,13 @@ def main(argv: list[str] | None = None) -> int:
     mill_dir = project_root / ".millhouse"
     wiki_root = resolve_wiki_path(project_root)
     cfg = load_config(wiki_root, mill_dir)
+
+    try:
+        registry = _reviewers.load(wiki_root)
+        _reviewers.validate_role_refs(cfg, registry)
+    except _reviewers.ReviewerError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
 
     extra_files: list[Path] = []
     for raw in args.extra_file:

@@ -91,7 +91,7 @@ Commit on the task branch: `git -C <worktree> add task/discussion.md && git comm
 
 ### Phase: Discussion Review
 
-If `max_review_rounds == 0`: skip straight to Handoff.
+The new schema has two skip conditions: `rounds: 0` OR `reviewer: null` means "skip discussion review". If `max_review_rounds == 0` OR `roles.discussion-review.holistic.reviewer` is `None`: skip straight to Handoff.
 
 Loop up to `max_review_rounds` rounds. Each round:
 

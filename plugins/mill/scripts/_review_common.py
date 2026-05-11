@@ -29,7 +29,6 @@ Public API:
     parse_blocking_count() — count "### [<severity>]" headings in review output
     write_review_file()  — write a review file with a canonical timestamp name
     aggregate_verdict()  — worst-case verdict across a list of sub-verdicts
-    load_reviewer()      — import a _reviewer_<name>.py module by name
     load_config()        — load wiki/config.yaml + optional config.local.yaml
     parse_batch_refs()   — extract Context/Edits/Creates paths from a batch file (case-insensitive none filter)
     compute_creates_union() — union of all Creates: tokens across every batch in a plan_dir
@@ -40,7 +39,6 @@ Public API:
 """
 from __future__ import annotations
 
-import importlib
 import re
 import _subprocess_util
 import sys
@@ -930,19 +928,6 @@ def aggregate_verdict(sub_verdicts: list[str]) -> str:
     return "APPROVE"
 
 
-def load_reviewer(name: str):
-    """Import and return the _reviewer_<name> module.
-
-    Raises ReviewError if the module cannot be found.
-    """
-    try:
-        return importlib.import_module(f"_reviewer_{name}")
-    except ModuleNotFoundError:
-        raise ReviewError(
-            f"Unknown reviewer '{name}': no _reviewer_{name}.py found"
-        )
-
-
 def _deep_merge(base: dict, override: dict) -> dict:
     """Recursively merge override into base. override wins on conflict."""
     result = base.copy()
@@ -974,6 +959,14 @@ def load_config(wiki_root: Path, mill_dir: Path) -> dict:
     if local_path.exists():
         with local_path.open(encoding="utf-8") as fh:
             local_cfg = yaml.safe_load(fh) or {}
+        stale_review = local_cfg.get("review")
+        if stale_review:
+            orphaned = sorted(stale_review.keys())
+            print(
+                f"[load_config] warning: {local_path} contains stale 'review:' keys "
+                f"(orphaned: {orphaned}); remove them or update to 'roles:'",
+                file=sys.stderr,
+            )
         cfg = _deep_merge(cfg, local_cfg)
 
     return cfg

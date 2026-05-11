@@ -4,6 +4,9 @@
 # Local (non-secret) overrides go in .millhouse/config.local.yaml (gitignored).
 # Secrets belong in .env at the repo root, not here.
 #
+# Review roles live under `roles:`. Reviewer names reference wiki/reviewers.yaml.
+# Skip semantics: rounds: 0 OR reviewer: null → skip the scope.
+#
 # Path tokens (substituted by mill scripts at run time, always UPPERCASE):
 #   <HUB_PATH>        — primary clone root
 #   <CONTAINER_PATH>  — parent of HUB_PATH (holds hub/, wiki/, worktrees/)
@@ -81,6 +84,7 @@ paths:
 
 llm:
   bulk_timeout: 600
+  holistic_timeout: 1800
   tool_use_timeout: 900
   implementer_timeout: 3600
 
@@ -93,27 +97,35 @@ pipeline:
   auto_report: true
 
 # ---------------------------------------------------------------------------
-# Layer 02: review settings
+# Layer 02: reviewer roles
 # ---------------------------------------------------------------------------
+# Reviewer names reference wiki/reviewers.yaml entries.
 
-review:
-  discussion:
-    rounds: 2
-    holistic: sonnetmax_tool
+roles:
+  discussion-review:
+    holistic:
+      rounds: 2
+      reviewer: sonnetmax_tool
 
-  plan:
-    rounds: 3
-    batch: sonnetmax            # per-batch reviewer; MODE must be "bulk". null = skip per-batch (holistic must be set)
-    holistic: sonnetmax
+  plan-review:
+    batch:
+      rounds: 3
+      reviewer: sonnetmax
+    holistic:
+      rounds: 3
+      reviewer: sonnetmax
 
-  code:
-    rounds: 3
-    reviewer: sonnetmax
-    holistic: true
-    per_batch: false            # false = skip per-batch code review; holistic gate is independent
+  code-review:
+    batch:
+      rounds: 3
+      reviewer: sonnetmax
+    holistic:
+      rounds: 1
+      reviewer: sonnetmax
+    diff_scope_threshold: 0.25
+
+  implementer:
     self_fix_rounds: 2
-    holistic_effort: max        # effort passed to holistic review call; set to medium/low to reduce rate-limit risk on large tasks
-    diff_scope_threshold: 0.25  # per-batch diff/file char ratio below which git diff is used instead of full file content
 
 # ---------------------------------------------------------------------------
 # Notifications

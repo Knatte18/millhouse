@@ -87,7 +87,7 @@ def _make_fixture(tmp_path: Path) -> Path:
     wiki_dir = tmp_path / "wiki"
     wiki_dir.mkdir(parents=True, exist_ok=True)
     (wiki_dir / "config.yaml").write_text(
-        "review:\n  code:\n    self_fix_rounds: 2\n    holistic_rounds: 1\n",
+        "roles:\n  implementer:\n    self_fix_rounds: 2\n",
         encoding="utf-8",
     )
 
@@ -128,7 +128,7 @@ class TestMillpyImplementHolistic(unittest.TestCase):
         self.mock_load_config = _p(
             millpy_implement_holistic._review_common, "load_config",
             return_value={
-                "review": {"code": {"self_fix_rounds": 2, "holistic_rounds": 1}},
+                "roles": {"implementer": {"self_fix_rounds": 2}},
                 "llm": {"implementer_timeout": 1800},
             },
         )

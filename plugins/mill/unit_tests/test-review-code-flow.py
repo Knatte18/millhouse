@@ -20,6 +20,7 @@ HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
 import _reviewer_test_stub as stub  # noqa: E402
+import _test_registry  # noqa: E402
 from _llm_claude import LLMError  # noqa: E402
 from _review_code import run as code_run  # noqa: E402
 from _review_common import ReviewError  # noqa: E402
@@ -135,6 +136,8 @@ def _make_fixture(tmp_path: Path) -> tuple[Path, Path, Path, dict]:
             p.parent.mkdir(parents=True, exist_ok=True)
             p.write_text("# placeholder", encoding="utf-8")
 
+    _test_registry.write_to(wiki_root)
+
     cfg = {
         "paths": {
             "discussion_file": "discussion.md",
@@ -145,12 +148,10 @@ def _make_fixture(tmp_path: Path) -> tuple[Path, Path, Path, dict]:
             "bulk_timeout":     None,
             "holistic_timeout": None,
         },
-        "review": {
-            "code": {
-                "rounds": 3,
-                "reviewer": "test_stub",
-                "self_fix_rounds": 0,
-                "holistic": True,
+        "roles": {
+            "code-review": {
+                "batch":   {"rounds": 3, "reviewer": "test_stub"},
+                "holistic": {"rounds": 3, "reviewer": "test_stub"},
             },
         },
     }
@@ -302,10 +303,14 @@ def main() -> int:
                 "reviews_dir":     "reviews/",
             },
             "llm": {"bulk_timeout": None, "holistic_timeout": None},
-            "review": {
-                "code": {"rounds": 3, "reviewer": "test_stub", "self_fix_rounds": 0, "holistic": True},
+            "roles": {
+                "code-review": {
+                    "batch":   {"rounds": 3, "reviewer": "test_stub"},
+                    "holistic": {"rounds": 3, "reviewer": "test_stub"},
+                },
             },
         }
+        _test_registry.write_to(wiki_root)
         orig_dir = os.getcwd()
         os.chdir(project_root)
         _seed_approve(1)
@@ -359,10 +364,14 @@ def main() -> int:
                 "reviews_dir":     "reviews/",
             },
             "llm": {"bulk_timeout": None, "holistic_timeout": None},
-            "review": {
-                "code": {"rounds": 3, "reviewer": "test_stub", "self_fix_rounds": 0, "holistic": True},
+            "roles": {
+                "code-review": {
+                    "batch":   {"rounds": 3, "reviewer": "test_stub"},
+                    "holistic": {"rounds": 3, "reviewer": "test_stub"},
+                },
             },
         }
+        _test_registry.write_to(wiki_root)
         orig_dir = os.getcwd()
         os.chdir(project_root)
         _seed_approve(1)
@@ -494,10 +503,14 @@ def main() -> int:
                 "reviews_dir":     "reviews/",
             },
             "llm": {"bulk_timeout": None, "holistic_timeout": None},
-            "review": {
-                "code": {"rounds": 3, "reviewer": "test_stub", "self_fix_rounds": 0, "holistic": True},
+            "roles": {
+                "code-review": {
+                    "batch":   {"rounds": 3, "reviewer": "test_stub"},
+                    "holistic": {"rounds": 3, "reviewer": "test_stub"},
+                },
             },
         }
+        _test_registry.write_to(wiki_root)
 
         orig_dir = os.getcwd()
         os.chdir(project_root)
@@ -710,10 +723,14 @@ def main() -> int:
                 "reviews_dir":     "reviews/",
             },
             "llm": {"bulk_timeout": None, "holistic_timeout": None},
-            "review": {
-                "code": {"rounds": 3, "reviewer": "test_stub", "self_fix_rounds": 0, "holistic": True},
+            "roles": {
+                "code-review": {
+                    "batch":   {"rounds": 3, "reviewer": "test_stub"},
+                    "holistic": {"rounds": 3, "reviewer": "test_stub"},
+                },
             },
         }
+        _test_registry.write_to(wiki_root)
         orig_dir = os.getcwd()
         os.chdir(project_root)
         _seed_approve(1)
@@ -776,55 +793,8 @@ def main() -> int:
             os.chdir(orig_dir)
 
     # ------------------------------------------------------------------
-    # Test 14 — effort threading and diff-scoping
+    # Test 14 — diff-scoping (effort threading removed; covered by test-reviewer-single.py)
     # ------------------------------------------------------------------
-
-    # 14a: holistic call passes holistic_effort='medium' to reviewer
-    with tempfile.TemporaryDirectory() as tmpdir:
-        mill_dir, wiki_root, project_root, cfg = _make_fixture(Path(tmpdir))
-        cfg["review"]["code"]["holistic_effort"] = "medium"
-        orig_dir = os.getcwd()
-        os.chdir(project_root)
-        try:
-            _seed_approve(1)
-            code_run(cfg, SLUG, mill_dir, wiki_root, project_root, batch_name=None)
-            prompts = stub.captured_prompts()
-            assert prompts, "expected at least one captured prompt"
-            assert prompts[0][1]["effort"] == "medium", (
-                f"expected effort='medium', got {prompts[0][1]['effort']!r}"
-            )
-            print("PASS test14a: holistic call passes holistic_effort='medium' to reviewer")
-        except AssertionError as exc:
-            errors += 1
-            print(f"FAIL test14a: {exc}", file=sys.stderr)
-        except Exception as exc:
-            errors += 1
-            print(f"FAIL test14a (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
-        finally:
-            os.chdir(orig_dir)
-
-    # 14b: per-batch call passes effort=None to reviewer
-    with tempfile.TemporaryDirectory() as tmpdir:
-        mill_dir, wiki_root, project_root, cfg = _make_fixture(Path(tmpdir))
-        orig_dir = os.getcwd()
-        os.chdir(project_root)
-        try:
-            _seed_approve(1)
-            code_run(cfg, SLUG, mill_dir, wiki_root, project_root, batch_name="alpha")
-            prompts = stub.captured_prompts()
-            assert prompts, "expected at least one captured prompt"
-            assert prompts[0][1]["effort"] is None, (
-                f"expected effort=None for per-batch, got {prompts[0][1]['effort']!r}"
-            )
-            print("PASS test14b: per-batch call passes effort=None (no holistic_effort override)")
-        except AssertionError as exc:
-            errors += 1
-            print(f"FAIL test14b: {exc}", file=sys.stderr)
-        except Exception as exc:
-            errors += 1
-            print(f"FAIL test14b (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
-        finally:
-            os.chdir(orig_dir)
 
     # 14c: per-batch with start_sha present → prompt contains DIFF delimiter
     with tempfile.TemporaryDirectory() as tmpdir:

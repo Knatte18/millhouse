@@ -19,6 +19,7 @@ HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
 import _reviewer_test_stub as stub  # noqa: E402
+import _test_registry  # noqa: E402
 from _review_discussion import run as discussion_run  # noqa: E402
 
 SLUG = "test-slug"
@@ -51,6 +52,7 @@ def _make_fixture(tmp: Path) -> tuple[Path, Path, Path]:
     (mill_dir / "config.local.yaml").write_text(
         f"paths:\n  wiki: '{wiki_root.as_posix()}'\n", encoding="utf-8"
     )
+    _test_registry.write_to(wiki_root)
     return mill_dir, worktree, wiki_root
 
 
@@ -74,8 +76,10 @@ def main() -> int:
                 "plan_dir":        "plan/",
                 "reviews_dir":     "reviews/",
             },
-            "review": {
-                "discussion": {"rounds": 2, "holistic": "test_stub"},
+            "roles": {
+                "discussion-review": {
+                    "holistic": {"rounds": 2, "reviewer": "test_stub"},
+                },
             },
         }
 
@@ -134,8 +138,10 @@ def main() -> int:
                 "plan_dir":        "plan/",
                 "reviews_dir":     "reviews/",
             },
-            "review": {
-                "discussion": {"rounds": 2, "holistic": "test_stub"},
+            "roles": {
+                "discussion-review": {
+                    "holistic": {"rounds": 2, "reviewer": "test_stub"},
+                },
             },
         }
 
@@ -192,8 +198,10 @@ def main() -> int:
                 "plan_dir":        "plan/",
                 "reviews_dir":     "reviews/",
             },
-            "review": {
-                "discussion": {"rounds": 5, "holistic": "test_stub"},
+            "roles": {
+                "discussion-review": {
+                    "holistic": {"rounds": 5, "reviewer": "test_stub"},
+                },
             },
         }
 

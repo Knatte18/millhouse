@@ -78,7 +78,7 @@ def main(argv=None) -> int:
     full = _status.read_full(status_path)
     task_title = full["yaml"].get("task", slug)
     branch = _status.read_branch(status_path, cfg=cfg, slug=slug)
-    self_fix_rounds = cfg.get("review", {}).get("code", {}).get("self_fix_rounds", 2)
+    self_fix_rounds = cfg.get("roles", {}).get("implementer", {}).get("self_fix_rounds", 2)
     timeout = cfg.get("llm", {}).get("implementer_timeout", 1800)
 
     review_file = Path(args.review_file)
