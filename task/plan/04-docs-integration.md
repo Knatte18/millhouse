@@ -26,10 +26,19 @@ This final batch lands two consumer-facing changes that depend on the state mach
   - `plugins/mill/skills/mill-status/SKILL.md`
 - **Creates:** none
 - **Deletes:** none
-- **Requirements:** Update `plugins/mill/skills/mill-status/SKILL.md` so its Home.md phase / status.md phase tables reflect the new state machine. The file currently documents `[active]` / `[done]` / `[abandoned]` for Home.md and a finite set of `status.md phase:` values. Find every table or bullet list enumerating Home.md markers and extend it to include `[ready-to-merge]` and `[pr-pending]`, in order between `[active]` and `[done]`. For each new row, document:
-  - `[ready-to-merge]`: written by mill-go Handoff step 2. Means "mill-go completed implementation, mill-merge has not been invoked yet." `status.md phase: done`. Next action: run `/mill-merge`.
-  - `[pr-pending]`: written by mill-merge Step 5 (both PR-creation paths). Means "mill-merge created a GitHub PR; awaiting human/CI merge." `status.md phase: pr-pending`. Next action: wait for PR to merge, then run `/mill-cleanup --apply` for teardown.
-  If the file has a status.md `phase:` enumeration, add `pr-pending` to it (between `done` and `blocked` or wherever fits the existing ordering). Do not rewrite the file beyond these additions; preserve the existing prose style. If a "Lifecycle diagram" or similar ASCII state graph exists, extend it to show `active → ready-to-merge → done` and the optional `ready-to-merge → pr-pending → done` PR detour. Cross-reference: `[done]` rows should mention "teardown handled by `/mill-cleanup`, not by `/mill-merge`" to reflect the new responsibility split.
+- **Requirements:** Update `plugins/mill/skills/mill-status/SKILL.md` to document the new Home.md state machine. The current file has NO phase table or bullet list of states — only a short description and a `## Run it` block. Create a new `## Phase reference` section immediately after the `## Run it` section, containing a markdown table with the following rows (in order):
+
+  | Home.md marker | status.md phase | Written by | Next action |
+  |---|---|---|---|
+  | (unmarked) | n/a | — backlog | run `/mill-spawn` to claim |
+  | `[s]` | n/a | — spawn-ready fast-path | run `/mill-spawn` to claim |
+  | `[active]` | `discussing`/`discussed`/`planning`/`planned`/`implementing`/`reviewing`/`fixing`/`blocked` | mill-spawn / mill-claim | continue work via mill-start, mill-plan, mill-go |
+  | `[ready-to-merge]` | `done` | mill-go Handoff step 2 | run `/mill-merge` to squash to parent |
+  | `[pr-pending]` | `pr-pending` | mill-merge Step 5 (both PR-creation paths) | wait for GitHub PR to merge, then `/mill-cleanup --apply` |
+  | `[done]` | `done` | mill-merge Step 7 (post-squash) | run `/mill-cleanup --apply` for worktree/branch/portal teardown |
+  | `[abandoned]` | `abandoned` | mill-abandon | run `/mill-cleanup --apply` for teardown |
+
+  Add a paragraph after the table summarising the lifecycle: `active → ready-to-merge → done` for the common path; `active → ready-to-merge → pr-pending → done` for the PR path; `active → abandoned` for the abandon path. Cross-reference: teardown for both `[done]` and `[abandoned]` is handled by `/mill-cleanup`, not by `/mill-merge`. Preserve the existing description and `## Run it` block above; only append the new section.
 - **Commit:** `docs(mill-status): document [ready-to-merge] and [pr-pending] states`
 
 ### Card 20: Integration test `test-merge.py` — drop teardown assertions

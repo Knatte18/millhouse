@@ -24,7 +24,7 @@ This batch absorbs mill-merge's old teardown into `millpy-cleanup.py` and adds P
   - `plugins/mill/scripts/millpy-cleanup.py`
 - **Creates:** none
 - **Deletes:** none
-- **Requirements:** In `plugins/mill/scripts/millpy-cleanup.py`, add a fifth field to the `CleanupPlan` `@dataclass(frozen=True)` (currently lines ~40–46): `to_reap_pr: list[SlugRecord]`, declared between `to_remove_abandoned` and `to_reset_home`. Update every `CleanupPlan(...)` construction site in the module to pass `to_reap_pr=[]` (or the appropriate list) — there is one in `build_plan` (`return CleanupPlan(...)` at the bottom). Update `_print_plan` (currently lines ~193–209) to print a new section between `to_remove_abandoned` and `to_report`: for each record in `plan.to_reap_pr`, print `f"REAP-PR:           {r.slug}  [worktree={r.worktree_path}, branch={r.branch}]"`. Update the `"Nothing to do."` early-return guard to also check `plan.to_reap_pr` (line 194). Do not modify `build_plan` or `apply_plan` logic in this card; those changes land in cards 12–15.
+- **Requirements:** In `plugins/mill/scripts/millpy-cleanup.py`, add a fifth field to the `CleanupPlan` `@dataclass(frozen=True)` (currently lines ~40–46): `to_reap_pr: list[SlugRecord] = field(default_factory=list)`, declared between `to_remove_abandoned` and `to_reset_home`. The `default_factory=list` is mandatory — existing `CleanupPlan(...)` constructions in `test-cleanup.py` pass only the original four fields and would raise `TypeError` without the default. Add `field` to the `from dataclasses import …` line at the top of the file (currently imports only `dataclass`). Update the `build_plan` `return CleanupPlan(...)` call site to pass `to_reap_pr=to_reap_pr` once card 13 declares the list. Update `_print_plan` (currently lines ~193–209) to print a new section between `to_remove_abandoned` and `to_report`: for each record in `plan.to_reap_pr`, print `f"REAP-PR:           {r.slug}  [worktree={r.worktree_path}, branch={r.branch}]"`. Update the `"Nothing to do."` early-return guard to also check `plan.to_reap_pr` (line 194). Do not modify `build_plan` or `apply_plan` logic in this card; those changes land in cards 12–15.
 - **Commit:** `feat(cleanup): add to_reap_pr field to CleanupPlan dataclass`
 
 ### Card 12: `build_plan` — gate `phase==done` teardown on Home.md marker + archive tag
@@ -34,6 +34,7 @@ This batch absorbs mill-merge's old teardown into `millpy-cleanup.py` and adds P
   - `plugins/mill/scripts/_tasks_md.py`
 - **Edits:**
   - `plugins/mill/scripts/millpy-cleanup.py`
+  - `plugins/mill/unit_tests/test-cleanup.py`
 - **Creates:** none
 - **Deletes:** none
 - **Requirements:** In `plugins/mill/scripts/millpy-cleanup.py`, rewrite the `if phase == "done":` branch in `build_plan` (currently lines ~131–144). Replace the existing `parent_branch = _status.read_parent_branch(...)` + `git log --oneline {parent_branch}..{record.branch}` guard with the following logic. Read the Home.md marker for this slug from `marker_by_slug` (already computed at the top of the function as `{t.slug: t.phase for t in home_tasks}`):
@@ -41,6 +42,8 @@ This batch absorbs mill-merge's old teardown into `millpy-cleanup.py` and adds P
   - If `marker_by_slug.get(slug) == "ready-to-merge"`: skip silently — the task is live, waiting on mill-merge. Do NOT add to any list. (This is the `pass` branch.)
   - Otherwise (Home.md marker is `active`, `s`, `abandoned`, `None`, or something unexpected): append to `to_report`: `f"{slug} — status.md phase=done but Home.md marker is {marker_by_slug.get(slug)!r}; inspect manually"`. Do NOT add to `to_remove_done`.
   Leave the surrounding `elif phase == "abandoned":` and `elif phase in _LIVE_PHASES:` branches unchanged. Do NOT change `_LIVE_PHASES`; it stays as the live-phase set for status.md.
+  
+  **Test cleanup (mandatory — stale tests otherwise break `verify:`).** In `plugins/mill/unit_tests/test-cleanup.py`, delete or rewrite the four `guard-slug-1` through `guard-slug-4` test blocks: they mock `git log --oneline parent..branch` and assert against the substring `"unmerged commits"`, which no longer matches the new "archive tag absent" path. Two options per block: (a) delete the block entirely (cards 17–18 supersede the coverage with archive-tag-aware tests); (b) rewrite the mock to return `"archive/<slug>\n"` for the `["git", "-C", ..., "tag", "-l", ...]` invocation and update the assertion to check `to_remove_done`. Use option (a) — simpler and the new tests in Card 17 cover the equivalent scenarios. Also update `_mock_branch_run` (top of file): remove the `"log" in argv and "--oneline" in argv` branch (no production caller uses it anymore) and add a `"tag" in argv and "-l" in argv` branch returning `"archive/<slug>\n"` by default (card 17's tests will override this per-block as needed).
 - **Commit:** `refactor(cleanup): gate done-teardown on Home.md marker + archive tag`
 
 ### Card 13: `build_plan` — detect `[pr-pending]` tasks for PR-reap
