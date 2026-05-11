@@ -54,9 +54,12 @@ On `{"status":"stuck"}` from the sub-agent → roll back to checkpoint (`git res
 
 Replay exactly the tests that ran during implementation. Call `_plan_dag.iter_batch_verifies(plan_dir)` where `plan_dir = Path("task/plan/").resolve()`. That yields `(batch_name, verify_cmd)` pairs in DAG order, skipping batches with `verify: null`.
 
+Before the loop, load config and read the allowlist: call `cfg = _config.load_config(wiki_path, git_root)`, then read `skip_list = (cfg.get("verify") or {}).get("skip_known_broken") or []`. `skip_list` is the empty list when the key is absent (the default for all existing hubs). Initialise counters `ran = 0` and `skipped = 0`.
+
 For each `(name, cmd)`:
-- Run the command from the worktree root.
-- On failure → call: `uv run --project "${CLAUDE_PLUGIN_ROOT}" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-merge-in-subagent.py" --mode verify-fix --cmd "<cmd>" --checkpoint "$CHK"` On `{"status":"success"}`: continue to next batch verify. On `{"status":"stuck"}`: roll back → `git reset --hard "$CHK"` — preserve checkpoint, escalate to the caller.
+- Allowlist pre-check: iterate `skip_list`; on the first entry `p` where `p in cmd` is true, print `[verify] skipped {p} (allowlisted as known-broken)` to stdout (where `{p}` is the literal matched entry), increment `skipped`, and `continue` to the next `(name, cmd)` pair without running the command and without invoking the verify-fix sub-agent. If no entry in `skip_list` matches, fall through to the next bullet.
+- Run the command from the worktree root. On success: increment `ran` and continue to the next pair.
+- On failure → call: `uv run --project "${CLAUDE_PLUGIN_ROOT}" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-merge-in-subagent.py" --mode verify-fix --cmd "<cmd>" --checkpoint "$CHK"` On `{"status":"success"}`: increment `ran`, continue to next batch verify. On `{"status":"stuck"}`: roll back → `git reset --hard "$CHK"` — preserve checkpoint, escalate to the caller.
 
 If `iter_batch_verifies` returns `[]` (no plan, or every batch had null verify) → skip verify entirely. This covers tasks that were entirely docs or config.
 
@@ -73,9 +76,11 @@ If `_codeguide/Overview.md` is absent → skip silently. This is the documented 
 
 ```
 Merged <parent-branch> into <current-branch>. <N> commits integrated.
-Verify: <M> batch tests ran.
+Verify: <ran> batch tests ran.
 Checkpoint: <CHK> (delete manually once you are confident the merge is stable).
 ```
+
+Emit `Verify: <ran> batch tests ran.` when `skipped == 0`; emit `Verify: <ran> batch tests ran, <skipped> skipped (allowlisted as known-broken).` when `skipped >= 1`.
 
 Leave the checkpoint branch in place on success. The user decides when to delete it — typically after mill-merge's squash lands on parent without follow-up fixes.
 
