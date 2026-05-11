@@ -321,12 +321,13 @@ Batch-local decisions:
 
 - **Context:**
   - `plugins/mill/scripts/_marker.py`
-- **Edits:** none
+- **Edits:**
+  - `plugins/mill/integration_tests/test-abandon.py`
 - **Creates:** none
 - **Deletes:**
   - `plugins/mill/scripts/_active.py`
   - `plugins/mill/unit_tests/test-active.py`
-- **Requirements:** Delete both files. Before deletion, verify (via `grep -r "import _active" plugins/mill/`) that no source file in `plugins/mill/scripts/` or `plugins/mill/unit_tests/` still imports `_active`. The integration tests under `plugins/mill/integration_tests/` are updated separately in Batch 3 — they import `_active` today but `run-all.py` does NOT discover them, so deletion in this card does not break Batch 2's verify. After deletion, the unit test suite must still pass via `run-all.py`.
+- **Requirements:** Delete both files. Before deletion, verify (via `grep -r "import _active" plugins/mill/`) that no source file in `plugins/mill/scripts/` or `plugins/mill/unit_tests/` still imports `_active`. Also update `plugins/mill/integration_tests/test-abandon.py` to remove its `import _active` line and replace the marker-write fixture setup with branch+Home.md state (done early in Batch 2; Batch 3 handles the remaining integration tests). After deletion, the unit test suite must still pass via `run-all.py`.
 - **Commit:** `refactor: delete _active module and test-active.py`
 
 ### Card 25: drop `_yaml_writer.quote_scalar` import in `_active.py` … (placeholder removed)
