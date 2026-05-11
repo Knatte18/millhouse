@@ -37,19 +37,8 @@ repo:
   short_name: ""    # e.g. "MH" for millhouse
 
 junctions:
-  .millhouse/wiki: <WIKI_PATH>
+  .wiki: <WIKI_PATH>
   .active: <WIKI_PATH>/active/<SLUG>/
-
-# ---------------------------------------------------------------------------
-# Hardlinks
-# ---------------------------------------------------------------------------
-# Each entry: `<link-path>: <target-template>`.
-# Created by mill-setup at hub root. Same token substitution as junctions.
-# Entries are automatically added to .gitignore so they are never committed.
-# Windows hardlinks require source and target on the same volume.
-
-hardlinks:
-  tasks.md: <WIKI_PATH>/Home.md
 
 # ---------------------------------------------------------------------------
 # mill-spawn
@@ -70,7 +59,7 @@ spawn:
 #   base-branch: main          # branch to target; defaults to main if absent
 
 # ---------------------------------------------------------------------------
-# Layer 02: file-path templates (relative to wiki root, <SLUG> substituted)
+# File-path templates (relative to active worktree root)
 # ---------------------------------------------------------------------------
 
 paths:
@@ -89,7 +78,7 @@ llm:
   implementer_timeout: 3600
 
 # ---------------------------------------------------------------------------
-# Layer 03: mill-go pipeline
+# mill-go pipeline
 # ---------------------------------------------------------------------------
 
 pipeline:
@@ -97,7 +86,7 @@ pipeline:
   auto_report: true
 
 # ---------------------------------------------------------------------------
-# Layer 02: reviewer roles
+# Reviewer roles
 # ---------------------------------------------------------------------------
 # Reviewer names reference wiki/reviewers.yaml entries.
 

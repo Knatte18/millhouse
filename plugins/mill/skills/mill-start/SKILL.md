@@ -42,6 +42,7 @@ Operator-driven entries keep the existing bare format (`- **Q:** … **A:** …`
    `signature: _wiki.sync_pull(wiki_path: Path, *, slug: str) -> None`
 2. Read the slug via `_marker.slug_from_branch(git_root, wiki_path, cfg)`. On `MarkerError`, halt and tell the user this worktree was not created by `mill-spawn`.
 3. Load config — deep-merge `<WIKI_PATH>/config.yaml` (shared) with `.millhouse/config.local.yaml` (gitignored overlay). Read `roles.discussion-review.holistic.rounds` as `max_review_rounds`.
+   `signature: _config.load_config(wiki_path: Path, worktree_root: Path) -> dict`
 
 ## Phases
 
