@@ -22,7 +22,6 @@ SlugRecord = mod.SlugRecord
 apply_plan = mod.apply_plan
 _resolve_inplace_mode = mod._resolve_inplace_mode
 
-import _active  # noqa: E402
 import _status  # noqa: E402
 import _tasks_md  # noqa: E402
 
@@ -48,17 +47,20 @@ def _make_task(slug: str, phase_marker: str | None) -> _tasks_md.Task:
     return _tasks_md.Task(slug=slug, title="test", phase=phase_marker, has_proposal=False, heading_line_no=1)
 
 
-def _write_active_marker(wt_path: Path, slug: str, branch: str = "") -> None:
-    """Write a valid active.slug.md under ``<wt_path>/.millhouse/``."""
-    mill_dir = wt_path / ".millhouse"
-    mill_dir.mkdir(parents=True, exist_ok=True)
-    _active.write(
-        mill_dir,
-        slug=slug,
-        task_title=f"Task {slug}",
-        branch=branch or f"impl/{slug}",
-        spawned_at="2026-01-01T00:00:00Z",
-    )
+def _mock_branch_run(branch: str, *, log_has_commits: bool = False):
+    """Return a side_effect for _subprocess_util.run covering branch+log calls in build_plan."""
+    def _run(argv, **kwargs):
+        r = MagicMock()
+        r.returncode = 0
+        r.stderr = ""
+        if "--show-current" in argv:
+            r.stdout = f"{branch}\n"
+        elif "log" in argv and "--oneline" in argv:
+            r.stdout = "abc1234 some commit\n" if log_has_commits else ""
+        else:
+            r.stdout = ""
+        return r
+    return _run
 
 
 def _make_git_repo(path: Path) -> None:
@@ -118,14 +120,14 @@ def main() -> int:
             hub.mkdir(parents=True)
             wt = wts_dir / "done-slug"
             wt.mkdir(parents=True)
-            _write_active_marker(wt, "done-slug", "impl/done-slug")
             (wt / "status.md").write_text(_make_status_md("done"), encoding="utf-8")
 
             home_tasks = [_make_task("done-slug", "done")]
             wiki_path = tmp / "wiki"
             wiki_path.mkdir()
 
-            plan = build_plan([wt], home_tasks, wiki_path, hub_root=hub)
+            with patch("mill_cleanup._subprocess_util.run", side_effect=_mock_branch_run("impl/done-slug")):
+                plan = build_plan([wt], home_tasks, wiki_path, hub_root=hub, branch_prefix="impl/")
 
             assert len(plan.to_remove_done) == 1, f"expected 1 done, got {len(plan.to_remove_done)}"
             assert plan.to_remove_done[0].slug == "done-slug"
@@ -146,7 +148,6 @@ def main() -> int:
             hub.mkdir(parents=True)
             wt = wts_dir / "done-slug"
             wt.mkdir(parents=True)
-            _write_active_marker(wt, "done-slug", "impl/done-slug")
             (wt / "status.md").write_text(_make_status_md("done"), encoding="utf-8")
 
             # Create legacy wiki/active/<slug>/ dir
@@ -156,7 +157,8 @@ def main() -> int:
             (legacy_active / "status.md").write_text(_make_status_md("done"), encoding="utf-8")
 
             home_tasks = [_make_task("done-slug", "done")]
-            plan = build_plan([wt], home_tasks, wiki_path, hub_root=hub)
+            with patch("mill_cleanup._subprocess_util.run", side_effect=_mock_branch_run("impl/done-slug")):
+                plan = build_plan([wt], home_tasks, wiki_path, hub_root=hub, branch_prefix="impl/")
 
             assert len(plan.to_remove_done) == 1
             assert plan.to_remove_done[0].wiki_active_dir == legacy_active, (
@@ -172,13 +174,13 @@ def main() -> int:
             hub.mkdir(parents=True)
             wt = wts_dir / "abandoned-slug"
             wt.mkdir(parents=True)
-            _write_active_marker(wt, "abandoned-slug")
             (wt / "status.md").write_text(_make_status_md("abandoned"), encoding="utf-8")
 
             home_tasks = [_make_task("abandoned-slug", "active")]
             wiki_path = tmp / "wiki"
             wiki_path.mkdir()
-            plan = build_plan([wt], home_tasks, wiki_path, hub_root=hub)
+            with patch("mill_cleanup._subprocess_util.run", side_effect=_mock_branch_run("impl/abandoned-slug")):
+                plan = build_plan([wt], home_tasks, wiki_path, hub_root=hub, branch_prefix="impl/")
 
             assert len(plan.to_remove_abandoned) == 1
             assert plan.to_reset_home == ["abandoned-slug"]
@@ -193,13 +195,13 @@ def main() -> int:
             hub.mkdir(parents=True)
             wt = wts_dir / "bad-abandoned-slug"
             wt.mkdir(parents=True)
-            _write_active_marker(wt, "bad-abandoned-slug")
             (wt / "status.md").write_text(_make_status_md("abandoned"), encoding="utf-8")
 
             home_tasks = [_make_task("bad-abandoned-slug", "done")]
             wiki_path = tmp / "wiki"
             wiki_path.mkdir()
-            plan = build_plan([wt], home_tasks, wiki_path, hub_root=hub)
+            with patch("mill_cleanup._subprocess_util.run", side_effect=_mock_branch_run("impl/bad-abandoned-slug")):
+                plan = build_plan([wt], home_tasks, wiki_path, hub_root=hub, branch_prefix="impl/")
 
             assert plan.to_remove_abandoned == []
             assert plan.to_reset_home == []
@@ -215,13 +217,13 @@ def main() -> int:
             hub.mkdir(parents=True)
             wt = wts_dir / "live-slug"
             wt.mkdir(parents=True)
-            _write_active_marker(wt, "live-slug")
             (wt / "status.md").write_text(_make_status_md("implementing"), encoding="utf-8")
 
             home_tasks = [_make_task("live-slug", "active")]
             wiki_path = tmp / "wiki"
             wiki_path.mkdir()
-            plan = build_plan([wt], home_tasks, wiki_path, hub_root=hub)
+            with patch("mill_cleanup._subprocess_util.run", side_effect=_mock_branch_run("impl/live-slug")):
+                plan = build_plan([wt], home_tasks, wiki_path, hub_root=hub, branch_prefix="impl/")
 
             assert plan.to_remove_done == [] and plan.to_remove_abandoned == [] and plan.to_reset_home == []
             print("PASS build_plan — live phase (implementing) -> no action")
@@ -234,13 +236,13 @@ def main() -> int:
             hub.mkdir(parents=True)
             wt = wts_dir / "bad-slug"
             wt.mkdir(parents=True)
-            _write_active_marker(wt, "bad-slug")
             # no status.md written
 
             home_tasks = [_make_task("bad-slug", None)]
             wiki_path = tmp / "wiki"
             wiki_path.mkdir()
-            plan = build_plan([wt], home_tasks, wiki_path, hub_root=hub)
+            with patch("mill_cleanup._subprocess_util.run", side_effect=_mock_branch_run("impl/bad-slug")):
+                plan = build_plan([wt], home_tasks, wiki_path, hub_root=hub, branch_prefix="impl/")
 
             assert len(plan.to_report) == 1
             assert "bad-slug" in plan.to_report[0]
@@ -284,7 +286,9 @@ def main() -> int:
             assert len(orphan_lines) == 1, f"expected 1 orphan marker line, got {plan.to_report}"
             print("PASS build_plan — orphan [active] Home.md marker -> reported")
 
-        # --- orphan active worktree (active marker but no Home.md entry) ---
+        # --- orphan active worktree (task branch but no Home.md entry) ---
+        # discover_active_worktrees skips worktrees not in Home.md, so build_plan
+        # receives active_worktrees=[] and detects the dir via container_path wts scan.
         with tempfile.TemporaryDirectory() as tmp:
             tmp = Path(tmp)
             wts_dir = tmp / "wts"
@@ -292,15 +296,13 @@ def main() -> int:
             hub.mkdir(parents=True)
             wt = wts_dir / "no-home-slug"
             wt.mkdir(parents=True)
-            _write_active_marker(wt, "no-home-slug")
-            (wt / "status.md").write_text(_make_status_md("implementing"), encoding="utf-8")
 
             wiki_path = tmp / "wiki"
             wiki_path.mkdir()
-            plan = build_plan([wt], [], wiki_path, hub_root=hub)
+            plan = build_plan([], [], wiki_path, hub_root=hub, container_path=tmp)
             orphan_lines = [line for line in plan.to_report if "orphan" in line and "no-home-slug" in line]
-            assert len(orphan_lines) == 1, f"expected 1 orphan active worktree line, got {plan.to_report}"
-            print("PASS build_plan — orphan active worktree (no Home.md entry) -> reported")
+            assert len(orphan_lines) == 1, f"expected 1 orphan worktree line, got {plan.to_report}"
+            print("PASS build_plan — orphan active worktree (no Home.md entry) -> reported via wts scan")
 
         # --- in-place cleanup: branch matches, no worktree dir -> branch delete, no worktree remove ---
         with tempfile.TemporaryDirectory() as tmp:
@@ -314,15 +316,6 @@ def main() -> int:
             # worktree_path = hub_root for in-place.
             (hub_root / "status.md").write_text(
                 _make_status_md("done", parent="main"), encoding="utf-8"
-            )
-
-            # Write the active.slug.md marker.
-            _active.write(
-                mill_dir,
-                slug="my-task",
-                task_title="My task",
-                branch="impl/my-task",
-                spawned_at="2026-01-01T00:00:00Z",
             )
 
             record = SlugRecord(
@@ -381,11 +374,7 @@ def main() -> int:
                 f"Expected _junction.remove called with {expected_junction!r}, "
                 f"got calls: {junction_call_paths}"
             )
-            marker_path = hub_root / ".millhouse" / "active.slug.md"
-            assert not marker_path.exists(), (
-                f"Expected active.slug.md to be deleted after apply_plan, but it still exists: {marker_path}"
-            )
-            print("PASS apply_plan — in-place cleanup (done): no worktree remove, git branch -d, junction removed, marker deleted")
+            print("PASS apply_plan — in-place cleanup (done): no worktree remove, git branch -d, junction removed")
 
         # --- apply_plan: portal entry removed for worktree record ---
         with tempfile.TemporaryDirectory() as tmp:
@@ -549,14 +538,6 @@ def main() -> int:
                 _make_status_md("abandoned", parent="main"), encoding="utf-8"
             )
 
-            _active.write(
-                mill_dir,
-                slug="my-task",
-                task_title="My task",
-                branch="impl/my-task",
-                spawned_at="2026-01-01T00:00:00Z",
-            )
-
             # Pre-create the worktree dir to trigger stale-worktree edge.
             stale_dir = tmp / "my-task"
             stale_dir.mkdir(parents=True)
@@ -582,25 +563,25 @@ def main() -> int:
                 result.stderr = ""
                 return result
 
-            with patch("mill_cleanup._subprocess_util.run", side_effect=_fake_run2):
-                with patch("mill_cleanup._inplace.prompt_stale_worktree", return_value="inplace") as mock_prompt:
-                    with patch("mill_cleanup._junction.remove") as mock_junction_remove2:
-                        with patch("mill_cleanup._wiki.write_commit_push"):
-                            with patch("mill_cleanup._sidebar.regenerate"):
-                                with patch("mill_cleanup._paths.resolve_container_path", return_value=tmp / "container"):
-                                    wiki_path = tmp / "wiki"
-                                    wiki_path.mkdir(exist_ok=True)
-                                    (wiki_path / "Home.md").write_text(
-                                        "## My task\n[my-task] [active]\n",
-                                        encoding="utf-8",
-                                    )
-                                    plan = CleanupPlan(
-                                        to_remove_done=[],
-                                        to_remove_abandoned=[record],
-                                        to_reset_home=["my-task"],
-                                        to_report=[],
-                                    )
-                                    apply_plan(plan, wiki_path, hub_root, {})
+            wiki_path = tmp / "wiki"
+            wiki_path.mkdir(exist_ok=True)
+            (wiki_path / "Home.md").write_text("## My task\n[my-task] [active]\n", encoding="utf-8")
+            plan_stale = CleanupPlan(
+                to_remove_done=[],
+                to_remove_abandoned=[record],
+                to_reset_home=["my-task"],
+                to_report=[],
+            )
+            with (
+                patch("mill_cleanup._subprocess_util.run", side_effect=_fake_run2),
+                patch("mill_cleanup._marker.slug_from_branch", return_value="my-task"),
+                patch("mill_cleanup._inplace.prompt_stale_worktree", return_value="inplace") as mock_prompt,
+                patch("mill_cleanup._junction.remove") as mock_junction_remove2,
+                patch("mill_cleanup._wiki.write_commit_push"),
+                patch("mill_cleanup._sidebar.regenerate"),
+                patch("mill_cleanup._paths.resolve_container_path", return_value=tmp / "container"),
+            ):
+                apply_plan(plan_stale, wiki_path, hub_root, {})
 
             assert mock_prompt.called, (
                 "Expected _inplace.prompt_stale_worktree to be called by "
@@ -628,11 +609,7 @@ def main() -> int:
                 f"Expected _junction.remove called with {expected_junction2!r}, "
                 f"got calls: {junction_call_paths2}"
             )
-            marker_path2 = hub_root / ".millhouse" / "active.slug.md"
-            assert not marker_path2.exists(), (
-                f"Expected active.slug.md to be deleted after apply_plan, but it still exists: {marker_path2}"
-            )
-            print("PASS apply_plan — stale-worktree-dir: inplace choice taken, no worktree remove, git branch -D, junction removed, marker deleted")
+            print("PASS apply_plan — stale-worktree-dir: inplace choice taken, no worktree remove, git branch -D, junction removed")
 
         # --- build_plan guard: phase=done, unmerged commits -> to_report ---
         with tempfile.TemporaryDirectory() as tmp:
@@ -642,18 +619,15 @@ def main() -> int:
             hub.mkdir(parents=True)
             wt = wts_dir / "guard-slug-1"
             wt.mkdir(parents=True)
-            _write_active_marker(wt, "guard-slug-1", "impl/guard-slug-1")
             (wt / "status.md").write_text(_make_status_md("done", parent="main"), encoding="utf-8")
 
             home_tasks = [_make_task("guard-slug-1", "done")]
             wiki_path = tmp / "wiki"
             wiki_path.mkdir()
 
-            unmerged_result = subprocess.CompletedProcess(
-                args=[], returncode=0, stdout="abc1234 some commit\n", stderr=""
-            )
-            with patch("mill_cleanup._subprocess_util.run", return_value=unmerged_result):
-                plan = build_plan([wt], home_tasks, wiki_path, hub_root=hub)
+            with patch("mill_cleanup._subprocess_util.run",
+                       side_effect=_mock_branch_run("impl/guard-slug-1", log_has_commits=True)):
+                plan = build_plan([wt], home_tasks, wiki_path, hub_root=hub, branch_prefix="impl/")
 
             assert any("guard-slug-1" in r and "unmerged commits" in r for r in plan.to_report), (
                 f"expected to_report with 'unmerged commits', got {plan.to_report}"
@@ -671,18 +645,15 @@ def main() -> int:
             hub.mkdir(parents=True)
             wt = wts_dir / "guard-slug-2"
             wt.mkdir(parents=True)
-            _write_active_marker(wt, "guard-slug-2", "impl/guard-slug-2")
             (wt / "status.md").write_text(_make_status_md("done", parent="main"), encoding="utf-8")
 
             home_tasks = [_make_task("guard-slug-2", "done")]
             wiki_path = tmp / "wiki"
             wiki_path.mkdir()
 
-            merged_result = subprocess.CompletedProcess(
-                args=[], returncode=0, stdout="", stderr=""
-            )
-            with patch("mill_cleanup._subprocess_util.run", return_value=merged_result):
-                plan = build_plan([wt], home_tasks, wiki_path, hub_root=hub)
+            with patch("mill_cleanup._subprocess_util.run",
+                       side_effect=_mock_branch_run("impl/guard-slug-2")):
+                plan = build_plan([wt], home_tasks, wiki_path, hub_root=hub, branch_prefix="impl/")
 
             assert any(r.slug == "guard-slug-2" for r in plan.to_remove_done), (
                 f"expected guard-slug-2 in to_remove_done, got {plan.to_remove_done}"
@@ -700,7 +671,6 @@ def main() -> int:
             hub.mkdir(parents=True)
             wt = wts_dir / "guard-slug-3"
             wt.mkdir(parents=True)
-            _write_active_marker(wt, "guard-slug-3", "impl/guard-slug-3")
             no_parent_status = (
                 "# Status\n\n"
                 "```yaml\n"
@@ -718,7 +688,8 @@ def main() -> int:
             wiki_path = tmp / "wiki"
             wiki_path.mkdir()
 
-            plan = build_plan([wt], home_tasks, wiki_path, hub_root=hub)
+            with patch("mill_cleanup._subprocess_util.run", side_effect=_mock_branch_run("impl/guard-slug-3")):
+                plan = build_plan([wt], home_tasks, wiki_path, hub_root=hub, branch_prefix="impl/")
 
             assert any(r.slug == "guard-slug-3" for r in plan.to_remove_done), (
                 f"expected guard-slug-3 in to_remove_done (guard skipped, no parent), got {plan.to_remove_done}"
@@ -728,7 +699,7 @@ def main() -> int:
             )
             print("PASS build_plan — phase=done, no parent: key -> guard skipped, to_remove_done")
 
-        # --- build_plan guard: phase=done, no branch in active marker -> guard skipped, to_remove_done ---
+        # --- build_plan guard: phase=done, fully merged (guard passes) -> to_remove_done ---
         with tempfile.TemporaryDirectory() as tmp:
             tmp = Path(tmp)
             wts_dir = tmp / "wts"
@@ -736,32 +707,22 @@ def main() -> int:
             hub.mkdir(parents=True)
             wt = wts_dir / "guard-slug-4"
             wt.mkdir(parents=True)
-            mill_dir = wt / ".millhouse"
-            mill_dir.mkdir(parents=True, exist_ok=True)
-            (mill_dir / "active.slug.md").write_text(
-                "# Active task\n\n"
-                "```yaml\n"
-                "slug: guard-slug-4\n"
-                "task_title: Task guard-slug-4\n"
-                "spawned_at: \"2026-01-01T00:00:00Z\"\n"
-                "```\n",
-                encoding="utf-8",
-            )
             (wt / "status.md").write_text(_make_status_md("done", parent="main"), encoding="utf-8")
 
             home_tasks = [_make_task("guard-slug-4", "done")]
             wiki_path = tmp / "wiki"
             wiki_path.mkdir()
 
-            plan = build_plan([wt], home_tasks, wiki_path, hub_root=hub)
+            with patch("mill_cleanup._subprocess_util.run", side_effect=_mock_branch_run("impl/guard-slug-4")):
+                plan = build_plan([wt], home_tasks, wiki_path, hub_root=hub, branch_prefix="impl/")
 
             assert any(r.slug == "guard-slug-4" for r in plan.to_remove_done), (
-                f"expected guard-slug-4 in to_remove_done (guard skipped, no branch), got {plan.to_remove_done}"
+                f"expected guard-slug-4 in to_remove_done (fully merged), got {plan.to_remove_done}"
             )
             assert not any("guard-slug-4" in r for r in plan.to_report), (
                 f"guard-slug-4 must not be in to_report, got {plan.to_report}"
             )
-            print("PASS build_plan — phase=done, no branch in active marker -> guard skipped, to_remove_done")
+            print("PASS build_plan — phase=done, fully merged -> to_remove_done")
 
         # --- test_build_plan_reads_task_status_md: task/status.md is the primary path ---
         with tempfile.TemporaryDirectory() as tmp:
@@ -771,7 +732,6 @@ def main() -> int:
             hub.mkdir(parents=True)
             wt = wts_dir / "task-status-slug"
             wt.mkdir(parents=True)
-            _write_active_marker(wt, "task-status-slug", "impl/task-status-slug")
             # Write status.md in task/ only — no root status.md
             task_dir = wt / "task"
             task_dir.mkdir()
@@ -781,7 +741,9 @@ def main() -> int:
             wiki_path = tmp / "wiki"
             wiki_path.mkdir()
 
-            plan = build_plan([wt], home_tasks, wiki_path, hub_root=hub)
+            with patch("mill_cleanup._subprocess_util.run",
+                       side_effect=_mock_branch_run("impl/task-status-slug")):
+                plan = build_plan([wt], home_tasks, wiki_path, hub_root=hub, branch_prefix="impl/")
 
             assert any(r.slug == "task-status-slug" for r in plan.to_remove_done), (
                 f"expected task-status-slug in to_remove_done, got {plan.to_remove_done}"
@@ -799,7 +761,6 @@ def main() -> int:
             hub.mkdir(parents=True)
             wt = wts_dir / "legacy-status-slug"
             wt.mkdir(parents=True)
-            _write_active_marker(wt, "legacy-status-slug", "impl/legacy-status-slug")
             # Write status.md at root only — legacy layout, no task/ dir
             (wt / "status.md").write_text(_make_status_md("done"), encoding="utf-8")
 
@@ -807,7 +768,9 @@ def main() -> int:
             wiki_path = tmp / "wiki"
             wiki_path.mkdir()
 
-            plan = build_plan([wt], home_tasks, wiki_path, hub_root=hub)
+            with patch("mill_cleanup._subprocess_util.run",
+                       side_effect=_mock_branch_run("impl/legacy-status-slug")):
+                plan = build_plan([wt], home_tasks, wiki_path, hub_root=hub, branch_prefix="impl/")
 
             assert any(r.slug == "legacy-status-slug" for r in plan.to_remove_done), (
                 f"expected legacy-status-slug in to_remove_done, got {plan.to_remove_done}"

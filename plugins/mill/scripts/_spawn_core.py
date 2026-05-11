@@ -43,8 +43,6 @@ Public API:
     capture_parent_branch(git_root) -> str
         Return the current HEAD branch name via ``git rev-parse --abbrev-ref HEAD``.
         Raises ``RuntimeError`` on non-zero exit.
-    write_active_marker(mill_dir, slug, title, branch, ts) -> None
-        Thin wrapper around ``_active.write``.
     write_initial_status(worktree_path, slug, title, ts, parent_branch, branch) -> Path
         Render + write ``status.md`` at worktree root; stage + commit on task branch;
         return the absolute path of the written file.
@@ -54,9 +52,10 @@ Public API:
         Delete-then-create the ``.active`` junction so it points at the correct
         active-task directory. Used by ``mill-claim``; ``mill-spawn`` handles
         junctions via its own per-worktree junction loop and does not call this.
-    discover_active_worktrees(worktrees_dir) -> list[tuple[Path, str, str]]
-        Scan ``<worktrees_dir>/*/.millhouse/active.slug.md`` and return
-        ``(path, slug, task_title)`` triples for all valid entries.
+    discover_active_worktrees(worktrees_dir, home_tasks, branch_prefix) -> list[tuple[Path, str, str]]
+        Scan ``worktrees_dir`` for directories whose current branch slug
+        (after stripping ``branch_prefix``) matches an entry in
+        ``home_tasks``. Returns ``(path, slug, task_title)`` triples.
 """
 from __future__ import annotations
 
@@ -66,7 +65,6 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-import _active
 import _junction
 import _sidebar
 import _status
@@ -151,54 +149,48 @@ def pick_worktree_color(worktrees_dir: Path) -> str:
 
 def discover_active_worktrees(
     worktrees_dir: Path,
+    home_tasks: list[_tasks_md.Task],
+    branch_prefix: str,
 ) -> list[tuple[Path, str, str]]:
     """
-    Scan ``worktrees_dir`` for worktrees that carry an ``active.slug.md`` marker.
+    Scan ``worktrees_dir`` for worktrees whose current branch slug matches Home.md.
 
-    For each immediate subdirectory of ``worktrees_dir``, uses a two-step
-    stub-aware read: first reads the stub at ``<entry>/.millhouse/config.local.yaml``
-    for ``hub_relative_path``; when present and non-root, reads the active marker
-    from ``<entry>/<hub_subpath>/.millhouse/`` instead. Entries whose stub is
-    malformed, or whose real ``.millhouse/`` is absent, are silently skipped.
-    Results are returned in filesystem iteration order (non-deterministic on most
-    platforms).
+    For each immediate subdirectory of ``worktrees_dir``, reads the current
+    git branch via ``git branch --show-current``. Skips entries where the
+    command fails, returns empty output, or whose branch does not start with
+    ``branch_prefix`` (when non-empty). The slug after stripping the prefix
+    is looked up in ``home_tasks``; entries not present in Home.md are skipped.
 
     Args:
         worktrees_dir: Container directory holding per-task worktrees.
+        home_tasks: Tasks parsed from wiki Home.md (any phase accepted).
+        branch_prefix: Branch prefix to strip when deriving slug from branch.
+            Empty string means slug equals branch directly.
 
     Returns:
-        List of ``(path, slug, task_title)`` triples, one per valid worktree.
-        Empty list when ``worktrees_dir`` does not exist or contains no
-        valid markers.
+        List of ``(path, slug, task_title)`` triples, one per matched worktree.
+        Empty list when ``worktrees_dir`` does not exist or no matches found.
     """
-    import yaml
-
+    slugs_in_home = {t.slug: t for t in home_tasks}
     results: list[tuple[Path, str, str]] = []
     if not worktrees_dir.exists():
         return results
     for entry in worktrees_dir.iterdir():
         if not entry.is_dir():
             continue
-        hub_subpath = "."
-        stub_path = entry / ".millhouse" / "config.local.yaml"
-        if stub_path.exists():
-            try:
-                stub_data = yaml.safe_load(stub_path.read_text(encoding="utf-8")) or {}
-                hub_subpath = stub_data.get("hub_relative_path", ".")
-            except Exception:  # noqa: BLE001
-                hub_subpath = "."
-        hub_mill_dir = (
-            entry / ".millhouse" if hub_subpath == "."
-            else entry / hub_subpath / ".millhouse"
+        branch_proc = _subprocess_util.run(
+            ["git", "-C", str(entry), "branch", "--show-current"]
         )
-        try:
-            data = _active.read_all(hub_mill_dir)
-        except _active.ActiveError:
+        if branch_proc.returncode != 0 or not branch_proc.stdout.strip():
             continue
-        slug = data.get("slug", "")
-        title = data.get("task_title", "")
-        if slug:
-            results.append((entry, slug, title))
+        branch = branch_proc.stdout.strip()
+        if branch_prefix and not branch.startswith(branch_prefix):
+            continue
+        slug = branch.removeprefix(branch_prefix) if branch_prefix else branch
+        task = slugs_in_home.get(slug)
+        if task is None:
+            continue
+        results.append((entry, slug, task.title))
     return results
 
 
@@ -648,35 +640,6 @@ def capture_parent_branch(git_root: Path) -> str:
             f"Could not resolve hub parent branch: {result.stderr.strip()!r}"
         )
     return result.stdout.strip()
-
-
-def write_active_marker(
-    mill_dir: Path,
-    slug: str,
-    title: str,
-    branch: str,
-    ts: str,
-) -> None:
-    """
-    Write the per-worktree marker file at ``mill_dir / "active.slug.md"``.
-
-    Thin wrapper around ``_active.write``; exists so downstream callers
-    import from ``_spawn_core`` without depending on ``_active`` directly.
-
-    Args:
-        mill_dir: The ``.millhouse/`` directory inside the worktree.
-        slug: Task slug.
-        title: Human-readable task title.
-        branch: Branch name the worktree is on.
-        ts: ISO-8601 UTC timestamp of spawn time.
-    """
-    _active.write(
-        mill_dir,
-        slug=slug,
-        task_title=title,
-        branch=branch,
-        spawned_at=ts,
-    )
 
 
 def write_initial_status(

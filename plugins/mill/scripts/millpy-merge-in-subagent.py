@@ -29,9 +29,9 @@ import _subprocess_util
 import sys
 from pathlib import Path
 
-import _active
 import _implementer_sonnet
 import _llm_claude
+import _marker
 import _paths
 import _render
 import _review_common
@@ -81,8 +81,8 @@ def main(argv=None) -> int:
         return 1
 
     try:
-        _active.read_slug(mill_dir)
-    except _active.ActiveError as e:
+        _marker.slug_from_branch(git_root, wiki_path, cfg)
+    except _marker.MarkerError as e:
         print(str(e), file=sys.stderr)
         return 1
 

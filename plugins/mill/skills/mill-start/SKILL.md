@@ -1,18 +1,46 @@
 ---
 name: mill-start
 description: In a spawned worktree, discuss the solution with the user and produce a self-contained discussion.md that mill-plan can consume with zero conversation history.
+argument-hint: "[--auto]"
 ---
 
 # mill-start
 
 You are a collaborative solution designer. Your job is to help the user understand the problem fully, explore the codebase, and produce a thorough `discussion.md` that captures every decision needed for autonomous plan-writing. You are critical and thorough — you challenge assumptions, expose edge cases, and ensure the design covers everything before handing off to `/mill-plan`. The user makes the final call, but you make sure they are making an informed one.
 
+## Auto mode
+
+If the skill argument is `--auto`, the rules in this subsection override the default operator-interaction behaviour of Phase: Discuss and Phase: Discussion Review. The bare `--auto` flag is the only supported form; `--auto=<value>` is not accepted.
+
+**Phase: Discuss — `--auto` changes:**
+
+- Every operator prompt MUST be formatted as a numbered-options list per the `mill:conversation` rule "the recommended option, if any, MUST be option 1". Free-text questions are forbidden — the SKILL must coerce any candidate question into options.
+- Instead of waiting for operator input, the assistant immediately auto-picks option `1)` (the recommendation).
+- Each auto-pick is appended to discussion.md's `## Q&A log` section.
+
+**Q&A log format under `--auto`:**
+
+```
+- **Q:** <question> **A:** [auto-pick] <option-1-label>. **Why:** <rationale>.
+```
+
+Operator-driven entries keep the existing bare format (`- **Q:** … **A:** …`).
+
+**Phase: Discussion Review — `--auto` changes:**
+
+- Review still runs up to `max_review_rounds` (no skip).
+- The `mill-receiving-review` skill is still loaded before reading any review file (the existing non-negotiable rule applies). Under `--auto` the PUSH BACK path of the decision tree is unavailable: there is no operator to escalate to. Every gap returned by the reviewer is treated as FIX regardless of the decision-tree outcome (factually-wrong gaps included).
+- On `GAPS_FOUND`, the assistant auto-resolves each gap by adding the missing information to discussion.md using best judgment, commits, **pushes**, and re-runs the review.
+- If gaps remain after `max_review_rounds`: call `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`, then `_status.update_field(status_path, "blocked_reason", "auto: discussion review gaps unresolved after <N> rounds")` (substituting the actual round count for `<N>`), then `git -C <worktree> add task/status.md && git commit -m "mill-start: blocked (auto: discussion review gaps unresolved) for <slug>" && git push`, then halt with that message. Do NOT proceed to Handoff.
+
+`--auto` is independent from `pipeline.autonomous_mode`: `--auto` is a per-invocation flag controlling Phase: Discuss / Discussion Review behaviour in mill-start; `pipeline.autonomous_mode` is a config key controlling mill-go's stuck-handling. The Auto mode subsection neither reads nor writes `pipeline.autonomous_mode`. Operators opt into each separately.
+
 ## Entry
 
 1. Resolve the wiki path via `_paths.resolve_wiki_path(_paths.resolve_git_root())` and call `_wiki.sync_pull(wiki_path, slug="mill-start")`.
    `signature: _wiki.sync_pull(wiki_path: Path, *, slug: str) -> None`
-2. Read the slug from `.millhouse/active.slug.md` via `_active.read_slug(Path(".millhouse"))`. If missing, halt and tell the user this worktree was not created by `mill-spawn`.
-3. Load config — deep-merge `<WIKI_PATH>/config.yaml` (shared) with `.millhouse/config.local.yaml` (gitignored overlay). Read `roles.discussion-review.holistic.rounds` as `max_review_rounds`.
+2. Read the slug via `_marker.slug_from_branch(git_root, wiki_path, cfg)`. On `MarkerError`, halt and tell the user this worktree was not created by `mill-spawn`.
+3. Load config — deep-merge `<WIKI_PATH>/config.yaml` (shared) with `.millhouse/config.local.yaml` (gitignored overlay). Read `review.discussion.rounds` as `max_review_rounds`.
 
 ## Phases
 
@@ -24,7 +52,7 @@ Read `.vscode/settings.json`; extract `titleBar.activeBackground`. Map to a Clau
 
 ### Phase: Select
 
-Read `<WIKI_PATH>/Home.md`, find the task heading whose slug matches the one from `active.slug.md`. The entry's phase marker must be `[active]`. If not, halt with a message explaining what `mill-spawn` should have done.
+Read `<WIKI_PATH>/Home.md`, find the task heading whose slug matches the slug derived from the current branch. The entry's phase marker must be `[active]`. If not, halt with a message explaining what `mill-spawn` should have done.
 
 ### Phase: Active
 

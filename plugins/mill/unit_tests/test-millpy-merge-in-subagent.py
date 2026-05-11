@@ -38,7 +38,6 @@ class TestMillpyMergeInSubagent(unittest.TestCase):
         millhouse_dir = self.tmp_path / ".millhouse"
         millhouse_dir.mkdir(parents=True, exist_ok=True)
         (millhouse_dir / "config.local.yaml").write_text("{}", encoding="utf-8")
-        (millhouse_dir / "active.slug.md").write_text("test-slug", encoding="utf-8")
 
         wiki_dir = self.tmp_path / "wiki"
         wiki_dir.mkdir(parents=True, exist_ok=True)
@@ -66,8 +65,8 @@ class TestMillpyMergeInSubagent(unittest.TestCase):
             millpy_merge_in_subagent._review_common, "load_config",
             return_value={"merge": {"verify_fix_rounds": 3}, "llm": {"implementer_timeout": 1800}},
         )
-        self.mock_read_slug = _p(
-            millpy_merge_in_subagent._active, "read_slug",
+        self.mock_slug_from_branch = _p(
+            millpy_merge_in_subagent._marker, "slug_from_branch",
             return_value="test-slug",
         )
 
@@ -271,10 +270,10 @@ class TestMillpyMergeInSubagent(unittest.TestCase):
         self.assertEqual(cm.exception.code, 2)
 
     def test_10_missing_slug(self):
-        """ActiveError from read_slug → exit 1."""
+        """MarkerError from slug_from_branch → exit 1."""
         with unittest.mock.patch.object(
-            millpy_merge_in_subagent._active, "read_slug",
-            side_effect=millpy_merge_in_subagent._active.ActiveError("no slug"),
+            millpy_merge_in_subagent._marker, "slug_from_branch",
+            side_effect=millpy_merge_in_subagent._marker.MarkerError("no slug"),
         ):
             rc, _ = self._run_main(["--mode", "conflicts", "--files", "f.py"])
         self.assertEqual(rc, 1)

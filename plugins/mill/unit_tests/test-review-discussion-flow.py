@@ -18,7 +18,6 @@ from pathlib import Path
 HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
-import _active  # noqa: E402
 import _reviewer_test_stub as stub  # noqa: E402
 import _test_registry  # noqa: E402
 from _review_discussion import run as discussion_run  # noqa: E402
@@ -31,23 +30,29 @@ APPROVE_TEXT = "# Review: test\n\n```yaml\nverdict: APPROVE\n```\n"
 def _make_fixture(tmp: Path) -> tuple[Path, Path, Path]:
     """Create a container/wts/<slug> worktree fixture.
 
-    Returns (mill_dir, wiki_root, project_root). project_root is the worktree
-    path; callers must os.chdir(project_root) before invoking discussion_run.
+    Returns (mill_dir, project_root, wiki_root). project_root is the worktree path;
+    callers must os.chdir(project_root) before invoking discussion_run.
     """
     worktree = tmp / "container" / "wts" / SLUG
     worktree.mkdir(parents=True)
     subprocess.run(["git", "-C", str(worktree), "init"], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(worktree), "checkout", "-b", f"hanf/{SLUG}"], capture_output=True)
     mill_dir = worktree / ".millhouse"
-    wiki_root = tmp / "container" / "wiki"
-    _active.write(
-        mill_dir,
-        slug=SLUG,
-        task_title="Test Task",
-        branch="test-branch",
-        spawned_at="2026-01-01T00:00:00Z",
+    mill_dir.mkdir(parents=True, exist_ok=True)
+    wiki_root = tmp / "wiki"
+    wiki_root.mkdir(parents=True, exist_ok=True)
+    (wiki_root / "config.yaml").write_text(
+        "paths:\n  discussion_file: discussion.md\n  plan_dir: plan/\n  reviews_dir: reviews/\n"
+        "spawn:\n  branch_prefix: \"hanf/\"\n",
+        encoding="utf-8",
     )
-    _test_registry.write_to(wiki_root)
-    return mill_dir, wiki_root, worktree
+    (wiki_root / "Home.md").write_text(
+        f"## Test Task\n[[{SLUG}]] [active]\n\n_body_\n", encoding="utf-8"
+    )
+    (mill_dir / "config.local.yaml").write_text(
+        f"paths:\n  wiki: '{wiki_root.as_posix()}'\n", encoding="utf-8"
+    )
+    return mill_dir, worktree, wiki_root
 
 
 def main() -> int:
@@ -57,7 +62,7 @@ def main() -> int:
     # Single test — per-scope round counter for holistic discussion review
     # ------------------------------------------------------------------
     with tempfile.TemporaryDirectory() as tmpdir:
-        mill_dir, wiki_root, project_root = _make_fixture(Path(tmpdir))
+        mill_dir, project_root, wiki_root = _make_fixture(Path(tmpdir))
 
         # Create discussion file at worktree root
         (project_root / "discussion.md").write_text(
@@ -82,7 +87,7 @@ def main() -> int:
         try:
             # Round 1
             stub.seed([(APPROVE_TEXT, "sid-1")])
-            r = discussion_run(cfg, SLUG, mill_dir, wiki_root, project_root)
+            r = discussion_run(cfg, SLUG, mill_dir, project_root, wiki_root)
             assert r.verdict == "APPROVE", f"expected APPROVE, got {r.verdict}"
             assert r.round == 1, f"expected round 1, got {r.round}"
             fname = Path(r.reviews[0]["file"]).name
@@ -100,7 +105,7 @@ def main() -> int:
 
             # Round 2 — same reviews_dir, counter should increment
             stub.seed([(APPROVE_TEXT, "sid-2")])
-            r2 = discussion_run(cfg, SLUG, mill_dir, wiki_root, project_root)
+            r2 = discussion_run(cfg, SLUG, mill_dir, project_root, wiki_root)
             assert r2.verdict == "APPROVE"
             assert r2.round == 2, f"expected round 2, got {r2.round}"
             fname2 = Path(r2.reviews[0]["file"]).name
@@ -121,7 +126,7 @@ def main() -> int:
     # max_rounds override
     # ------------------------------------------------------------------
     with tempfile.TemporaryDirectory() as tmpdir:
-        mill_dir, wiki_root, project_root = _make_fixture(Path(tmpdir))
+        mill_dir, project_root, wiki_root = _make_fixture(Path(tmpdir))
         (project_root / "discussion.md").write_text(
             "# Discussion\n\nTest.\n", encoding="utf-8"
         )
@@ -144,13 +149,13 @@ def main() -> int:
         try:
             # Pre-populate 2 review files by running rounds 1 and 2
             stub.seed([(APPROVE_TEXT, "sid-r1"), (APPROVE_TEXT, "sid-r2")])
-            discussion_run(cfg, SLUG, mill_dir, wiki_root, project_root)
-            discussion_run(cfg, SLUG, mill_dir, wiki_root, project_root)
+            discussion_run(cfg, SLUG, mill_dir, project_root, wiki_root)
+            discussion_run(cfg, SLUG, mill_dir, project_root, wiki_root)
 
             # Round 3 without kwarg: cfg.rounds == 2 → ReviewError
             try:
                 stub.seed([(APPROVE_TEXT, "sid-r3")])
-                discussion_run(cfg, SLUG, mill_dir, wiki_root, project_root)
+                discussion_run(cfg, SLUG, mill_dir, project_root, wiki_root)
                 errors += 1
                 print("FAIL max_rounds override: expected ReviewError for round 3 with cfg max=2", file=sys.stderr)
             except Exception as exc:
@@ -162,7 +167,7 @@ def main() -> int:
 
             # Round 3 with max_rounds=5 kwarg: should succeed
             stub.seed([(APPROVE_TEXT, "sid-r3b")])
-            r3 = discussion_run(cfg, SLUG, mill_dir, wiki_root, project_root, max_rounds=5)
+            r3 = discussion_run(cfg, SLUG, mill_dir, project_root, wiki_root, max_rounds=5)
             assert r3.round == 3, f"expected round 3, got {r3.round}"
             fname3 = Path(r3.reviews[0]["file"]).name
             assert "discussion-review-r3" in fname3, f"unexpected filename: {fname3}"
@@ -181,7 +186,7 @@ def main() -> int:
     # blocking_count populated from GAP headings
     # ------------------------------------------------------------------
     with tempfile.TemporaryDirectory() as tmpdir:
-        mill_dir, wiki_root, project_root = _make_fixture(Path(tmpdir))
+        mill_dir, project_root, wiki_root = _make_fixture(Path(tmpdir))
         (project_root / "discussion.md").write_text(
             "# Discussion\n\nTest.\n", encoding="utf-8"
         )
@@ -210,13 +215,13 @@ def main() -> int:
                 "```yaml\nverdict: GAPS_FOUND\n```\n"
             )
             stub.seed([(two_gaps, "sid-gaps")])
-            r = discussion_run(cfg, SLUG, mill_dir, wiki_root, project_root)
+            r = discussion_run(cfg, SLUG, mill_dir, project_root, wiki_root)
             assert r.blocking_count == 2, f"expected blocking_count=2, got {r.blocking_count}"
             print("PASS blocking_count: two GAP headings → blocking_count == 2")
 
             # Zero GAPs → blocking_count == 0
             stub.seed([(APPROVE_TEXT, "sid-no-gaps")])
-            r2 = discussion_run(cfg, SLUG, mill_dir, wiki_root, project_root)
+            r2 = discussion_run(cfg, SLUG, mill_dir, project_root, wiki_root)
             assert r2.blocking_count == 0, f"expected blocking_count=0, got {r2.blocking_count}"
             print("PASS blocking_count: no GAP headings → blocking_count == 0")
 

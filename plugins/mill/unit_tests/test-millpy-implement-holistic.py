@@ -132,8 +132,8 @@ class TestMillpyImplementHolistic(unittest.TestCase):
                 "llm": {"implementer_timeout": 1800},
             },
         )
-        self.mock_read_slug = _p(
-            millpy_implement_holistic._active, "read_slug",
+        self.mock_slug_from_branch = _p(
+            millpy_implement_holistic._marker, "slug_from_branch",
             return_value="test-slug",
         )
         self.mock_read_branch = _p(

@@ -19,7 +19,6 @@ from pathlib import Path
 HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
-import _active  # noqa: E402
 import _reviewer_test_stub as stub  # noqa: E402
 import _test_registry  # noqa: E402
 from _llm_claude import LLMError  # noqa: E402
@@ -98,17 +97,23 @@ def _make_fixture(tmp_path: Path) -> tuple[Path, Path, Path, dict]:
     worktree = tmp_path / "container" / "wts" / SLUG
     worktree.mkdir(parents=True)
     subprocess.run(["git", "-C", str(worktree), "init"], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(worktree), "checkout", "-b", f"hanf/{SLUG}"], capture_output=True)
     mill_dir = worktree / ".millhouse"
-    wiki_root = tmp_path / "container" / "wiki"
-    project_root = worktree
-
-    _active.write(
-        mill_dir,
-        slug=SLUG,
-        task_title="Test Task",
-        branch="test-branch",
-        spawned_at="2026-01-01T00:00:00Z",
+    mill_dir.mkdir(parents=True, exist_ok=True)
+    wiki_root = tmp_path / "wiki"
+    wiki_root.mkdir(parents=True, exist_ok=True)
+    (wiki_root / "config.yaml").write_text(
+        "paths:\n  discussion_file: discussion.md\n  plan_dir: plan/\n  reviews_dir: reviews/\n"
+        "spawn:\n  branch_prefix: \"hanf/\"\n",
+        encoding="utf-8",
     )
+    (wiki_root / "Home.md").write_text(
+        f"## Test Task\n[[{SLUG}]] [active]\n\n_body_\n", encoding="utf-8"
+    )
+    (mill_dir / "config.local.yaml").write_text(
+        f"paths:\n  wiki: '{wiki_root.as_posix()}'\n", encoding="utf-8"
+    )
+    project_root = worktree
 
     plan_dir = worktree / "plan"
     plan_dir.mkdir(parents=True)
@@ -260,14 +265,20 @@ def main() -> int:
         worktree = Path(tmpdir) / "container" / "wts" / SLUG
         worktree.mkdir(parents=True)
         subprocess.run(["git", "-C", str(worktree), "init"], check=True, capture_output=True)
+        subprocess.run(["git", "-C", str(worktree), "checkout", "-b", f"hanf/{SLUG}"], capture_output=True)
         mill_dir = worktree / ".millhouse"
-        wiki_root = Path(tmpdir) / "container" / "wiki"
-        project_root = worktree
-        _active.write(
-            mill_dir,
-            slug=SLUG, task_title="Test", branch="test",
-            spawned_at="2026-01-01T00:00:00Z",
+        mill_dir.mkdir(parents=True, exist_ok=True)
+        wiki_root = Path(tmpdir) / "wiki"
+        wiki_root.mkdir(parents=True, exist_ok=True)
+        (wiki_root / "config.yaml").write_text(
+            "paths:\n  discussion_file: discussion.md\n  plan_dir: plan/\n  reviews_dir: reviews/\n"
+            "spawn:\n  branch_prefix: \"hanf/\"\n", encoding="utf-8",
         )
+        (wiki_root / "Home.md").write_text(f"## Test Task\n[[{SLUG}]] [active]\n\n_body_\n", encoding="utf-8")
+        (mill_dir / "config.local.yaml").write_text(
+            f"paths:\n  wiki: '{wiki_root.as_posix()}'\n", encoding="utf-8"
+        )
+        project_root = worktree
         plan_dir = worktree / "plan"
         plan_dir.mkdir(parents=True)
         (plan_dir / "00-overview.md").write_text(
@@ -323,14 +334,20 @@ def main() -> int:
         worktree = Path(tmpdir) / "container" / "wts" / SLUG
         worktree.mkdir(parents=True)
         subprocess.run(["git", "-C", str(worktree), "init"], check=True, capture_output=True)
+        subprocess.run(["git", "-C", str(worktree), "checkout", "-b", f"hanf/{SLUG}"], capture_output=True)
         mill_dir = worktree / ".millhouse"
-        wiki_root = Path(tmpdir) / "container" / "wiki"
-        project_root = worktree
-        _active.write(
-            mill_dir,
-            slug=SLUG, task_title="Test", branch="test",
-            spawned_at="2026-01-01T00:00:00Z",
+        mill_dir.mkdir(parents=True, exist_ok=True)
+        wiki_root = Path(tmpdir) / "wiki"
+        wiki_root.mkdir(parents=True, exist_ok=True)
+        (wiki_root / "config.yaml").write_text(
+            "paths:\n  discussion_file: discussion.md\n  plan_dir: plan/\n  reviews_dir: reviews/\n"
+            "spawn:\n  branch_prefix: \"hanf/\"\n", encoding="utf-8",
         )
+        (wiki_root / "Home.md").write_text(f"## Test Task\n[[{SLUG}]] [active]\n\n_body_\n", encoding="utf-8")
+        (mill_dir / "config.local.yaml").write_text(
+            f"paths:\n  wiki: '{wiki_root.as_posix()}'\n", encoding="utf-8"
+        )
+        project_root = worktree
         plan_dir = worktree / "plan"
         plan_dir.mkdir(parents=True)
         (plan_dir / "00-overview.md").write_text(
@@ -455,12 +472,18 @@ def main() -> int:
         project_root = Path(tmpdir) / "container" / "wts" / SLUG
         project_root.mkdir(parents=True)
         subprocess.run(["git", "-C", str(project_root), "init"], check=True, capture_output=True)
-        wiki_root = Path(tmpdir) / "container" / "wiki"
+        subprocess.run(["git", "-C", str(project_root), "checkout", "-b", f"hanf/{SLUG}"], capture_output=True)
+        wiki_root = Path(tmpdir) / "wiki"
+        wiki_root.mkdir(parents=True, exist_ok=True)
+        (wiki_root / "config.yaml").write_text(
+            "paths:\n  discussion_file: discussion.md\n  plan_dir: plan/\n  reviews_dir: reviews/\n"
+            "spawn:\n  branch_prefix: \"hanf/\"\n", encoding="utf-8",
+        )
+        (wiki_root / "Home.md").write_text(f"## Test Task\n[[{SLUG}]] [active]\n\n_body_\n", encoding="utf-8")
         mill_dir = project_root / ".millhouse"
-        _active.write(
-            mill_dir,
-            slug=SLUG, task_title="Test", branch="test",
-            spawned_at="2026-01-01T00:00:00Z",
+        mill_dir.mkdir(parents=True, exist_ok=True)
+        (mill_dir / "config.local.yaml").write_text(
+            f"paths:\n  wiki: '{wiki_root.as_posix()}'\n", encoding="utf-8"
         )
         plan_dir = project_root / "plan"
         plan_dir.mkdir(parents=True)
@@ -668,14 +691,20 @@ def main() -> int:
         worktree = Path(tmpdir) / "container" / "wts" / SLUG
         worktree.mkdir(parents=True)
         subprocess.run(["git", "-C", str(worktree), "init"], check=True, capture_output=True)
+        subprocess.run(["git", "-C", str(worktree), "checkout", "-b", f"hanf/{SLUG}"], capture_output=True)
         mill_dir = worktree / ".millhouse"
-        wiki_root = Path(tmpdir) / "container" / "wiki"
-        project_root = worktree
-        _active.write(
-            mill_dir,
-            slug=SLUG, task_title="Test", branch="test",
-            spawned_at="2026-01-01T00:00:00Z",
+        mill_dir.mkdir(parents=True, exist_ok=True)
+        wiki_root = Path(tmpdir) / "wiki"
+        wiki_root.mkdir(parents=True, exist_ok=True)
+        (wiki_root / "config.yaml").write_text(
+            "paths:\n  discussion_file: discussion.md\n  plan_dir: plan/\n  reviews_dir: reviews/\n"
+            "spawn:\n  branch_prefix: \"hanf/\"\n", encoding="utf-8",
         )
+        (wiki_root / "Home.md").write_text(f"## Test Task\n[[{SLUG}]] [active]\n\n_body_\n", encoding="utf-8")
+        (mill_dir / "config.local.yaml").write_text(
+            f"paths:\n  wiki: '{wiki_root.as_posix()}'\n", encoding="utf-8"
+        )
+        project_root = worktree
         plan_dir = worktree / "plan"
         plan_dir.mkdir(parents=True)
         (plan_dir / "00-overview.md").write_text(

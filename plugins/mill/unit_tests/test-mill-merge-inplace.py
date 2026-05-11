@@ -19,9 +19,9 @@ def _test_is_inplace_importable_and_callable():
         raise AssertionError("_inplace has no is_inplace function")
     sig = inspect.signature(fn)
     params = list(sig.parameters.keys())
-    if params != ["active_data", "git_root", "cfg"]:
+    if params != ["slug", "git_root", "cfg"]:
         raise AssertionError(
-            f"is_inplace signature mismatch: expected ['active_data', 'git_root', 'cfg'], got {params}"
+            f"is_inplace signature mismatch: expected ['slug', 'git_root', 'cfg'], got {params}"
         )
     print("PASS _inplace.is_inplace — importable with correct signature")
 

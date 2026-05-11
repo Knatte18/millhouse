@@ -27,10 +27,10 @@ import sys
 import uuid
 from pathlib import Path
 
-import _active
 import _cleanliness
 import _implementer_sonnet
 import _llm_claude
+import _marker
 import _paths
 import _plan_dag
 import _render
@@ -84,8 +84,8 @@ def main(argv=None) -> int:
         return 1
 
     try:
-        slug = _active.read_slug(mill_dir)
-    except _active.ActiveError as e:
+        slug = _marker.slug_from_branch(git_root, wiki_path, cfg)
+    except _marker.MarkerError as e:
         print(str(e), file=sys.stderr)
         return 1
 

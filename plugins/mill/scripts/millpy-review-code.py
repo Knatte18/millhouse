@@ -86,7 +86,7 @@ def main(argv: list[str] | None = None) -> int:
         extra_files.append(p)
 
     try:
-        slug = find_active_slug(mill_dir)
+        slug = find_active_slug(project_root, wiki_root, cfg)
         result = run(
             cfg,
             slug,

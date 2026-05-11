@@ -18,7 +18,7 @@ Flow:
     8. Check out a new branch via ``git checkout -b <branch_name>``.
     9. If stash was chosen, pop the stash onto the new branch.
    10. Recreate the ``.active`` junction pointing at this task's wiki dir.
-   11. Write the per-worktree active marker and the initial status.md.
+   11. Write the initial status.md.
    12. Print Branch / Status / "in-place".
 
 Usage:
@@ -165,7 +165,6 @@ def main(argv: list[str] | None = None) -> int:
 
     git_root = resolve_git_root()
     wiki_path = resolve_wiki_path(git_root)
-    mill_dir = resolve_hub_path() / ".millhouse"
     cfg = _load_config(wiki_path, resolve_hub_path())
     spawn_cfg = cfg.get("spawn", {})
 
@@ -295,15 +294,6 @@ def main(argv: list[str] | None = None) -> int:
         # else: already correct, skip.
 
     _spawn_core.recreate_active_junction(slug, resolve_hub_path(), container_path)
-
-    # Write the per-worktree active marker so downstream skills find this task.
-    _spawn_core.write_active_marker(
-        mill_dir,
-        slug=slug,
-        title=picked.title,
-        branch=branch_name,
-        ts=ts,
-    )
 
     # Render and write the initial status.md; commit on task branch.
     status_abs = _spawn_core.write_initial_status(

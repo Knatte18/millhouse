@@ -36,6 +36,11 @@ SCRIPTS = HUB / "plugins" / "mill" / "scripts"
 PLUGIN_ROOT = HUB / "plugins" / "mill"
 SCRATCH = HUB / ".scratch"
 
+sys.path.insert(0, str(SCRIPTS))
+
+import _spawn_core  # noqa: E402
+import _tasks_md  # noqa: E402
+
 
 def _run(cmd: list[str], *, cwd: Path, check: bool = True) -> subprocess.CompletedProcess:
     """Invoke ``cmd`` in ``cwd`` with UTF-8 output capture."""
@@ -77,7 +82,8 @@ def _setup_pair(container: Path) -> tuple[Path, Path, Path]:
     # Seed Home.md with one spawn-ready task so pick_task hits fast-path.
     (wiki / "Home.md").write_text(
         "# Tasks\n\n"
-        "## Demo task [demo-task] [s]\n\n"
+        "## Demo task\n"
+        "[demo-task] [s]\n\n"
         "Seed task for the mill-spawn integration test.\n",
         encoding="utf-8",
     )
@@ -91,7 +97,7 @@ def _setup_pair(container: Path) -> tuple[Path, Path, Path]:
         "  .active: <WIKI_PATH>/active/<SLUG>/\n"
         "\n"
         "spawn:\n"
-        "  branch_prefix: test\n",
+        '  branch_prefix: "test/"\n',
         encoding="utf-8",
     )
     _run(["git", "-C", str(wiki), "add", "."], cwd=container)
@@ -196,13 +202,12 @@ def main() -> int:
             f"status.md missing parent branch:\n{status_text}",
         )
 
-        # Per-worktree marker file written by mill-spawn.
-        marker_path = worktree / ".millhouse" / "active.slug.md"
-        _assert(marker_path.exists(), f"active.slug.md missing: {marker_path}")
-        marker_text = marker_path.read_text(encoding="utf-8")
+        # discover_active_worktrees finds the new worktree by branch slug.
+        home_tasks = _tasks_md.parse((wiki / "Home.md").read_text(encoding="utf-8"))
+        found = _spawn_core.discover_active_worktrees(worktrees_dir, home_tasks, "test/")
         _assert(
-            "slug: demo-task" in marker_text and "branch: test/demo-task" in marker_text,
-            f"active.slug.md content unexpected:\n{marker_text}",
+            any(s == "demo-task" for _, s, _ in found),
+            f"discover_active_worktrees did not find demo-task in {worktrees_dir}; found={found}",
         )
 
         # vscode settings with non-green colour.
@@ -260,5 +265,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.path.insert(0, str(SCRIPTS))
     sys.exit(main())

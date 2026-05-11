@@ -169,9 +169,15 @@ def popen_detached(
 
     popen_kwargs: dict = dict(stdin=stdin, stdout=stdout, stderr=stderr, cwd=cwd, env=child_env)
     if os.name == "nt":
+        # DETACHED_PROCESS combined with CREATE_NO_WINDOW is known to cause
+        # a brief console window to flash on screen — DETACHED_PROCESS can
+        # trigger console-creation that overrides CREATE_NO_WINDOW for the
+        # child process group. Use CREATE_NO_WINDOW alone (plus the process-
+        # group / breakaway flags needed for true detachment) and skip
+        # DETACHED_PROCESS entirely. CREATE_NO_WINDOW ensures no console is
+        # ever attached, which is what we actually want.
         popen_kwargs["creationflags"] = (
             subprocess.CREATE_NO_WINDOW
-            | subprocess.DETACHED_PROCESS
             | subprocess.CREATE_NEW_PROCESS_GROUP
             | _CREATE_BREAKAWAY_FROM_JOB
         )

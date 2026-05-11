@@ -1,4 +1,8 @@
-"""Unit tests for plugins/mill/scripts/millpy-terminal.py."""
+"""Unit tests for plugins/mill/scripts/millpy-terminal.py.
+
+All discover_active_worktrees calls are mocked with return_value which accepts
+the new (worktrees_dir, home_tasks, branch_prefix) signature unchanged.
+"""
 from __future__ import annotations
 
 import importlib.util
@@ -18,9 +22,6 @@ mill_terminal = importlib.util.module_from_spec(_spec)
 sys.modules["mill_terminal"] = mill_terminal
 _spec.loader.exec_module(mill_terminal)
 
-import _active  # noqa: E402
-
-
 def _make_git_repo(tmp: Path) -> Path:
     """Initialise a minimal bare-enough git repo and return its path."""
     subprocess.run(
@@ -31,18 +32,6 @@ def _make_git_repo(tmp: Path) -> Path:
         check=True, capture_output=True,
     )
     return tmp
-
-
-def _write_active_marker(worktree_path: Path, slug: str, title: str) -> None:
-    """Write a valid active.slug.md under ``<worktree_path>/.millhouse/``."""
-    mill_dir = worktree_path / ".millhouse"
-    _active.write(
-        mill_dir,
-        slug=slug,
-        task_title=title,
-        branch=slug,
-        spawned_at="2026-04-26T00:00:00Z",
-    )
 
 
 def main() -> int:
@@ -61,8 +50,6 @@ def main() -> int:
         wt2 = worktrees_dir / "task-beta"
         wt1.mkdir(parents=True)
         wt2.mkdir(parents=True)
-        _write_active_marker(wt1, "task-alpha", "Alpha Task")
-        _write_active_marker(wt2, "task-beta", "Beta Task")
 
         subprocess_calls: list = []
 
@@ -73,6 +60,8 @@ def main() -> int:
             patch("mill_terminal.resolve_git_root", return_value=root),
             patch("mill_terminal.resolve_wiki_path", return_value=root / "wiki"),
             patch("mill_terminal.resolve_worktrees_dir", return_value=worktrees_dir),
+            patch("mill_terminal._spawn_core.discover_active_worktrees",
+                  return_value=[(wt1, "task-alpha", "Alpha Task"), (wt2, "task-beta", "Beta Task")]),
             patch("mill_terminal.subprocess.run", side_effect=mock_subprocess_run),
             patch("mill_terminal.input", return_value="1", create=True),
         ):
@@ -105,7 +94,6 @@ def main() -> int:
         worktrees_dir = root / "worktrees"
         wt1 = worktrees_dir / "solo-task"
         wt1.mkdir(parents=True)
-        _write_active_marker(wt1, "solo-task", "Solo Task")
 
         subprocess_calls = []
         input_calls: list = []
@@ -118,6 +106,8 @@ def main() -> int:
             patch("mill_terminal.resolve_git_root", return_value=root),
             patch("mill_terminal.resolve_wiki_path", return_value=root / "wiki"),
             patch("mill_terminal.resolve_worktrees_dir", return_value=worktrees_dir),
+            patch("mill_terminal._spawn_core.discover_active_worktrees",
+                  return_value=[(wt1, "solo-task", "Solo Task")]),
             patch("mill_terminal.subprocess.run", side_effect=lambda *a, **kw: subprocess_calls.append(kw.get("cwd"))),
             patch("mill_terminal.input", side_effect=mock_input, create=True),
         ):
@@ -180,14 +170,12 @@ def main() -> int:
         wt1 = worktrees_dir / "task-alpha"
         wt1.mkdir(parents=True)
 
-        # Stub at worktree root pointing at sub-path; active marker lives
-        # under the sub-path (mirrors the real hub-relative-path layout).
+        # Stub at worktree root pointing at sub-path.
         stub_dir = wt1 / ".millhouse"
         stub_dir.mkdir(exist_ok=True)
         (stub_dir / "config.local.yaml").write_text(
             "hub_relative_path: src/csharp/X\n", encoding="utf-8"
         )
-        _write_active_marker(wt1 / "src" / "csharp" / "X", "task-alpha", "Alpha Task")
 
         subprocess_calls: list = []
         wiki_path = root / "wiki"
@@ -197,6 +185,8 @@ def main() -> int:
             patch("mill_terminal.resolve_git_root", return_value=root),
             patch("mill_terminal.resolve_wiki_path", return_value=wiki_path),
             patch("mill_terminal.resolve_worktrees_dir", return_value=worktrees_dir),
+            patch("mill_terminal._spawn_core.discover_active_worktrees",
+                  return_value=[(wt1, "task-alpha", "Alpha Task")]),
             patch("mill_terminal.subprocess.run", side_effect=lambda *a, **kw: subprocess_calls.append(kw.get("cwd"))),
         ):
             rc = mill_terminal.main([])
@@ -224,7 +214,6 @@ def main() -> int:
         worktrees_dir = root / "worktrees"
         wt1 = worktrees_dir / "task-dot"
         wt1.mkdir(parents=True)
-        _write_active_marker(wt1, "task-dot", "Dot Task")
 
         mill_dir = wt1 / ".millhouse"
         mill_dir.mkdir(exist_ok=True)
@@ -240,6 +229,8 @@ def main() -> int:
             patch("mill_terminal.resolve_git_root", return_value=root),
             patch("mill_terminal.resolve_wiki_path", return_value=wiki_path),
             patch("mill_terminal.resolve_worktrees_dir", return_value=worktrees_dir),
+            patch("mill_terminal._spawn_core.discover_active_worktrees",
+                  return_value=[(wt1, "task-dot", "Dot Task")]),
             patch("mill_terminal.subprocess.run", side_effect=lambda *a, **kw: subprocess_calls.append(kw.get("cwd"))),
         ):
             rc = mill_terminal.main([])
@@ -281,8 +272,6 @@ def main() -> int:
         (wt_mill_dir / "config.local.yaml").write_text(
             "hub_relative_path: wt-sub\n", encoding="utf-8"
         )
-        # Active marker lives under the sub-path per the stub.
-        _write_active_marker(wt1 / "wt-sub", "task-reg", "Regression Task")
 
         subprocess_calls = []
         wiki_path = root / "wiki"
@@ -292,6 +281,8 @@ def main() -> int:
             patch("mill_terminal.resolve_git_root", return_value=root),
             patch("mill_terminal.resolve_wiki_path", return_value=wiki_path),
             patch("mill_terminal.resolve_worktrees_dir", return_value=worktrees_dir),
+            patch("mill_terminal._spawn_core.discover_active_worktrees",
+                  return_value=[(wt1, "task-reg", "Regression Task")]),
             patch("mill_terminal.subprocess.run", side_effect=lambda *a, **kw: subprocess_calls.append(kw.get("cwd"))),
         ):
             rc = mill_terminal.main([])

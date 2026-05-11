@@ -86,7 +86,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     try:
-        slug = find_active_slug(mill_dir)
+        slug = find_active_slug(project_root, wiki_root, cfg)
         if not args.skip_validate:
             from _plan_validate import run as validate_run
             plan_dir = resolve_path(cfg["paths"]["plan_dir"], slug)

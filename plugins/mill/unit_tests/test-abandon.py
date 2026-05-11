@@ -1,7 +1,8 @@
 """Unit tests for millpy-abandon.py logic.
 
 Uses a trampoline subprocess that pre-patches sys.modules with mock _paths,
-_review_common, and _subprocess_util modules so no real git or wiki I/O occurs.
+_marker, _review_common, and _subprocess_util modules so no real git or wiki
+I/O occurs.
 """
 from __future__ import annotations
 
@@ -17,9 +18,8 @@ HUB = Path(__file__).resolve().parent.parent.parent.parent
 SCRIPTS = HUB / "plugins" / "mill" / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
-import _active
-import _builder_lock
-import _status
+import _builder_lock  # noqa: E402
+import _status  # noqa: E402
 
 
 def _make_status_md(path: Path, phase: str = "implementing") -> None:
@@ -43,21 +43,36 @@ def _make_worktree(tmp: Path, slug: str, phase: str = "implementing") -> tuple[P
     wt.mkdir(exist_ok=True)
     mill_dir = wt / ".millhouse"
     mill_dir.mkdir(exist_ok=True)
-    (mill_dir / "active.slug.md").write_text(f"slug: {slug}\n", encoding="utf-8")
-    _active.write(mill_dir, slug=slug, task_title="Test task",
-                  branch=f"impl/{slug}", spawned_at="2026-04-24T10:00:00Z")
     status_path = wt / "task" / "status.md"
     _make_status_md(status_path, phase)
     return wt, mill_dir, status_path
 
 
-def _make_trampoline(tmp: Path) -> Path:
-    """Write a subprocess trampoline that mocks _paths/_review_common/_subprocess_util before loading mill-abandon."""
+def _make_trampoline(tmp: Path, slug: str | None = "test-task") -> Path:
+    """Write a subprocess trampoline that mocks _paths/_marker/_review_common/_subprocess_util."""
     abandon_src = (SCRIPTS / "millpy-abandon.py").as_posix()
     wt_posix = (tmp / "worktree").as_posix()
     wiki_posix = (tmp / "wiki").as_posix()
     tmp_posix = tmp.as_posix()
     cmds_posix = (tmp / "_git_cmds.json").as_posix()
+
+    if slug is not None:
+        marker_block = (
+            "mm = types.ModuleType('_marker')\n"
+            "mm.MarkerError = type('MarkerError', (RuntimeError,), {})\n"
+            f"mm.slug_from_branch = lambda *a, **kw: {slug!r}\n"
+            "sys.modules['_marker'] = mm\n"
+        )
+    else:
+        marker_block = (
+            "mm = types.ModuleType('_marker')\n"
+            "mm.MarkerError = type('MarkerError', (RuntimeError,), {})\n"
+            "def _marker_err(*a, **kw):\n"
+            "    raise mm.MarkerError('not a worktree branch')\n"
+            "mm.slug_from_branch = _marker_err\n"
+            "sys.modules['_marker'] = mm\n"
+        )
+
     trampoline = tmp / "_trampoline.py"
     trampoline.write_text(
         "import sys, types, importlib.util, json\n"
@@ -70,6 +85,8 @@ def _make_trampoline(tmp: Path) -> Path:
         f"pm.resolve_hub_path = lambda: Path(r'{wt_posix}')\n"
         f"pm.resolve_active_hub = lambda container, slug, *, cfg, git_root: Path(r'{wt_posix}')\n"
         "sys.modules['_paths'] = pm\n"
+        "\n"
+        + marker_block +
         "\n"
         "rcm = types.ModuleType('_review_common')\n"
         "rcm.load_config = lambda wiki_root, mill_dir: {}\n"
@@ -143,7 +160,7 @@ def main() -> int:
             tmp = Path(tmp_str)
             slug = "test-task"
             wt, mill_dir, status_path = _make_worktree(tmp, slug, "implementing")
-            trampoline = _make_trampoline(tmp)
+            trampoline = _make_trampoline(tmp, slug=slug)
             result = _run(wt, trampoline, ["--force"])
             assert result.returncode == 0, f"exit={result.returncode} stderr={result.stderr}"
             assert slug in result.stdout, f"slug missing from stdout: {result.stdout!r}"
@@ -164,18 +181,20 @@ def main() -> int:
     except Exception as exc:
         fail("happy path --force", exc)
 
-    # --- (b) hub check: no active.slug.md ---
+    # --- (b) non-worktree: MarkerError → refuse ---
     try:
         with tempfile.TemporaryDirectory() as tmp_str:
             tmp = Path(tmp_str)
             hub_root = tmp / "hub"
             hub_root.mkdir()
-            trampoline = _make_trampoline(tmp)
+            trampoline = _make_trampoline(tmp, slug=None)
             result = _run(hub_root, trampoline, ["--force"])
-            assert result.returncode != 0, f"expected non-zero from hub, got {result.returncode}"
-            ok("hub check: exits non-zero when active.slug.md absent")
+            assert result.returncode != 0, f"expected non-zero from non-worktree, got {result.returncode}"
+            combined = result.stdout + result.stderr
+            assert "worktree" in combined, f"'worktree' not in output: {combined!r}"
+            ok("non-worktree: MarkerError → refuse with non-zero exit")
     except Exception as exc:
-        fail("hub check", exc)
+        fail("non-worktree MarkerError", exc)
 
     # --- (c) phase already abandoned → refuse ---
     try:
@@ -183,11 +202,11 @@ def main() -> int:
             tmp = Path(tmp_str)
             slug = "test-task"
             wt, mill_dir, status_path = _make_worktree(tmp, slug, "abandoned")
-            trampoline = _make_trampoline(tmp)
+            trampoline = _make_trampoline(tmp, slug=slug)
             result = _run(wt, trampoline, ["--force"])
             assert result.returncode != 0, f"expected non-zero, got {result.returncode}"
             combined = result.stdout + result.stderr
-            assert "already abandoned" in combined, f"'already abandoned' not in output"
+            assert "already abandoned" in combined, "'already abandoned' not in output"
             ok("phase=abandoned → refuse")
     except Exception as exc:
         fail("phase=abandoned refuse", exc)
@@ -198,7 +217,7 @@ def main() -> int:
             tmp = Path(tmp_str)
             slug = "test-task"
             wt, mill_dir, status_path = _make_worktree(tmp, slug, "done")
-            trampoline = _make_trampoline(tmp)
+            trampoline = _make_trampoline(tmp, slug=slug)
             result = _run(wt, trampoline, ["--force"])
             assert result.returncode != 0, f"expected non-zero, got {result.returncode}"
             combined = result.stdout + result.stderr
@@ -217,7 +236,7 @@ def main() -> int:
             (mill_dir / _builder_lock.LOCK_FILENAME).write_text(
                 f"```yaml\nslug: other-task\ntimestamp: {now_ts}\n```\n", encoding="utf-8"
             )
-            trampoline = _make_trampoline(tmp)
+            trampoline = _make_trampoline(tmp, slug=slug)
             result = _run(wt, trampoline)  # no --force
             assert result.returncode != 0, f"expected non-zero, got {result.returncode}"
             combined = result.stdout + result.stderr
@@ -236,7 +255,7 @@ def main() -> int:
                 "```yaml\nslug: other-task\ntimestamp: 2000-01-01T00:00:00Z\n```\n",
                 encoding="utf-8",
             )
-            trampoline = _make_trampoline(tmp)
+            trampoline = _make_trampoline(tmp, slug=slug)
             result = _run(wt, trampoline, ["--force"])
             assert result.returncode == 0, f"exit={result.returncode} stderr={result.stderr}"
             cmds = _read_git_cmds(tmp)
@@ -256,11 +275,8 @@ def main() -> int:
             wt.mkdir()
             mill_dir = wt / ".millhouse"
             mill_dir.mkdir()
-            (mill_dir / "active.slug.md").write_text(f"slug: {slug}\n", encoding="utf-8")
-            _active.write(mill_dir, slug=slug, task_title="Test task",
-                          branch=f"impl/{slug}", spawned_at="2026-04-24T10:00:00Z")
             # status.md intentionally NOT created
-            trampoline = _make_trampoline(tmp)
+            trampoline = _make_trampoline(tmp, slug=slug)
             result = _run(wt, trampoline, ["--force"])
             assert result.returncode != 0, f"expected non-zero, got {result.returncode}"
             combined = result.stdout + result.stderr

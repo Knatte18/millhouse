@@ -3,7 +3,7 @@
 Verifies:
   - top-level import succeeds (smoke test)
   - main() dry-run with --slug exits 0 and prints expected lines
-  - main() happy path calls claim_in_wiki, write_active_marker,
+  - main() happy path calls claim_in_wiki,
     write_initial_status, and recreate_active_junction in order
   - dirty-tree path with option 3 (Abort) exits 1
   - dirty-tree path with option 1 (Stash) invokes git stash
@@ -193,8 +193,7 @@ def test_main_dry_run_exits_zero() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Happy path: claim_in_wiki, write_active_marker, write_initial_status,
-# recreate_active_junction all called
+# Happy path: claim_in_wiki, write_initial_status, recreate_active_junction all called
 # ---------------------------------------------------------------------------
 
 
@@ -207,7 +206,6 @@ def test_main_happy_path_calls_spawn_core_helpers() -> None:
     sc.pick_task_single_or_multi.return_value = ("single", task, [])
     sc.claim_in_wiki.return_value = None
     sc.capture_parent_branch.return_value = "main"
-    sc.write_active_marker.return_value = None
     sc.write_initial_status.return_value = Path("/fake/repo/subdir/task/status.md")
     sc.recreate_active_junction.return_value = None
 
@@ -234,7 +232,6 @@ def test_main_happy_path_calls_spawn_core_helpers() -> None:
 
     sc.claim_in_wiki.assert_called_once()
     sc.capture_parent_branch.assert_called_once()
-    sc.write_active_marker.assert_called_once()
     sc.write_initial_status.assert_called_once()
     sc.recreate_active_junction.assert_called_once()
 
@@ -248,10 +245,6 @@ def test_main_happy_path_calls_spawn_core_helpers() -> None:
         raise AssertionError(f"recreate_active_junction hub_root mismatch: {rac_call}")
     if rac_call.args[2] != expected_container:
         raise AssertionError(f"recreate_active_junction container_path mismatch: {rac_call}")
-
-    marker_call = sc.write_active_marker.call_args
-    if marker_call.kwargs.get("slug") != "my-task":
-        raise AssertionError(f"write_active_marker slug mismatch: {marker_call}")
 
     status_call = sc.write_initial_status.call_args
     if status_call.kwargs.get("slug") != "my-task":
@@ -327,7 +320,6 @@ def test_main_dirty_tree_stash_invokes_git_stash() -> None:
     sc.pick_task_single_or_multi.return_value = ("single", task, [])
     sc.claim_in_wiki.return_value = None
     sc.capture_parent_branch.return_value = "main"
-    sc.write_active_marker.return_value = None
     sc.write_initial_status.return_value = Path("/fake/repo/subdir/task/status.md")
     sc.recreate_active_junction.return_value = None
 
@@ -392,7 +384,6 @@ def test_main_multi_path_skips_claim_in_wiki() -> None:
     )
     sc.multi_select_groom_then_claim.return_value = merged_task
     sc.capture_parent_branch.return_value = "main"
-    sc.write_active_marker.return_value = None
     sc.write_initial_status.return_value = Path("/fake/repo/subdir/task/status.md")
     sc.recreate_active_junction.return_value = None
 
@@ -424,11 +415,6 @@ def test_main_multi_path_skips_claim_in_wiki() -> None:
     source_slugs_arg = groom_call.args[1] if len(groom_call.args) > 1 else groom_call.kwargs.get("source_slugs")
     if set(source_slugs_arg) != {"task-a", "task-b"}:
         raise AssertionError(f"unexpected source_slugs: {source_slugs_arg!r}")
-    # write_active_marker and write_initial_status use the merged task's slug
-    sc.write_active_marker.assert_called_once()
-    marker_call = sc.write_active_marker.call_args
-    if marker_call.kwargs.get("slug") != "merged-task":
-        raise AssertionError(f"write_active_marker slug should be merged-task: {marker_call}")
     print("PASS: multi-select path skips claim_in_wiki and uses merged task")
 
 
@@ -446,7 +432,6 @@ def test_portal_entry_uses_resolve_container_path() -> None:
     sc.pick_task_single_or_multi.return_value = ("single", task, [])
     sc.claim_in_wiki.return_value = None
     sc.capture_parent_branch.return_value = "main"
-    sc.write_active_marker.return_value = None
     sc.write_initial_status.return_value = Path("/fake/repo/subdir/task/status.md")
     sc.recreate_active_junction.return_value = None
 
@@ -506,7 +491,6 @@ def test_portal_before_recreate_active_junction_order() -> None:
     sc.pick_task_single_or_multi.return_value = ("single", task, [])
     sc.claim_in_wiki.return_value = None
     sc.capture_parent_branch.return_value = "main"
-    sc.write_active_marker.return_value = None
     sc.write_initial_status.return_value = Path("/fake/repo/subdir/task/status.md")
 
     call_log: list[str] = []
@@ -566,7 +550,6 @@ def test_portal_idempotent_when_already_correct() -> None:
     sc.pick_task_single_or_multi.return_value = ("single", task, [])
     sc.claim_in_wiki.return_value = None
     sc.capture_parent_branch.return_value = "main"
-    sc.write_active_marker.return_value = None
     sc.write_initial_status.return_value = Path("/fake/repo/subdir/task/status.md")
     sc.recreate_active_junction.return_value = None
 
@@ -621,7 +604,6 @@ def test_main_hub_title_flip_when_cwd_is_hub() -> None:
     sc.pick_task_single_or_multi.return_value = ("single", task, [])
     sc.claim_in_wiki.return_value = None
     sc.capture_parent_branch.return_value = "main"
-    sc.write_active_marker.return_value = None
     sc.write_initial_status.return_value = Path("/fake/repo/subdir/task/status.md")
     sc.recreate_active_junction.return_value = None
 
@@ -677,7 +659,6 @@ def test_hub_paths_use_cwd_not_git_root() -> None:
     sc.pick_task_single_or_multi.return_value = ("single", task, [])
     sc.claim_in_wiki.return_value = None
     sc.capture_parent_branch.return_value = "main"
-    sc.write_active_marker.return_value = None
     sc.write_initial_status.return_value = Path("/fake/repo/src/Models/task/status.md")
     sc.recreate_active_junction.return_value = None
 
@@ -712,14 +693,6 @@ def test_hub_paths_use_cwd_not_git_root() -> None:
         raise AssertionError(
             f"write_initial_status worktree_path should be hub path {hub_path}, "
             f"not git_root: {status_call}"
-        )
-
-    # write_active_marker's mill_dir arg must be hub_path / ".millhouse".
-    marker_call = sc.write_active_marker.call_args
-    expected_mill_dir = hub_path / ".millhouse"
-    if marker_call.args[0] != expected_mill_dir:
-        raise AssertionError(
-            f"write_active_marker mill_dir should be {expected_mill_dir}, got: {marker_call}"
         )
 
     print("PASS: hub paths (.vscode, .millhouse) resolve from cwd, not git_root")

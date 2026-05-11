@@ -24,8 +24,7 @@ PLUGIN_ROOT = HUB / "plugins" / "mill"
 SCRATCH = HUB / ".scratch"
 
 sys.path.insert(0, str(SCRIPTS))
-import _status
-import _active
+import _status  # noqa: E402
 
 
 def _run(cmd: list[str], *, cwd: Path, check: bool = True,
@@ -56,7 +55,12 @@ def _git_init(repo: Path) -> None:
 
 
 def _setup_fixture(container: Path) -> tuple[Path, Path, Path, str]:
-    """Build hub+wiki fixture.  Returns (hub, wiki_clone, worktree, slug)."""
+    """Build hub+wiki fixture.
+
+    The worktree is placed on branch ``impl/<slug>`` and Home.md is seeded
+    with ``[slug] [active]`` so ``_marker.slug_from_branch`` succeeds without
+    a marker file. Returns ``(hub, wiki_clone, worktree, slug)``.
+    """
     container.mkdir(parents=True, exist_ok=True)
     bare = container / "wiki.git"
     wiki = container / "wiki"
@@ -76,42 +80,50 @@ def _setup_fixture(container: Path) -> tuple[Path, Path, Path, str]:
 
     slug = "test-abandon-task"
 
-    # Seed status.md in wiki
-    status_path = wiki / "active" / slug / "status.md"
-    status_path.parent.mkdir(parents=True, exist_ok=True)
+    # Seed Home.md in wiki — _marker.slug_from_branch validates against this
+    home_md = wiki / "Home.md"
+    home_md.write_text(
+        f"## Test abandon task\n[{slug}] [active]\n", encoding="utf-8"
+    )
+    _run(["git", "-C", str(wiki), "add", "."], cwd=wiki)
+    _run(["git", "-C", str(wiki), "commit", "-m", "seed"], cwd=wiki)
+    _run(["git", "-C", str(wiki), "push", "origin", "main"], cwd=wiki)
+
+    # Create worktree at <container>/wts/<slug> (standard container layout)
+    wts_dir = container / "wts"
+    wts_dir.mkdir()
+    wt_path = wts_dir / slug
+    _run(["git", "-C", str(hub), "worktree", "add", "-b", f"impl/{slug}", str(wt_path)],
+         cwd=hub)
+
+    # Seed status.md on the task branch in the worktree
+    task_status_path = wt_path / "task" / "status.md"
+    task_status_path.parent.mkdir(parents=True, exist_ok=True)
     content = _status.render_initial(
         task_title="Test abandon task",
         task_description="A task for the abandon integration test.",
         timestamp="2026-04-24T10:00:00Z",
         parent_branch="main",
-        slug="my-slug",
-        branch="hanf/my-slug",
+        slug=slug,
+        branch=f"impl/{slug}",
     )
-    status_path.write_text(content, encoding="utf-8")
-    _run(["git", "-C", str(wiki), "add", "."], cwd=wiki)
-    _run(["git", "-C", str(wiki), "commit", "-m", "seed"], cwd=wiki)
-    _run(["git", "-C", str(wiki), "push", "origin", "main"], cwd=wiki)
+    task_status_path.write_text(content, encoding="utf-8")
+    _run(["git", "-C", str(wt_path), "add", "task/status.md"], cwd=wt_path)
+    _run(["git", "-C", str(wt_path), "commit", "-m", "seed: status.md"], cwd=wt_path)
 
-    # Create worktree from hub
-    wt_path = worktrees_dir / slug
-    _run(["git", "-C", str(hub), "worktree", "add", "-b", f"impl/{slug}", str(wt_path)],
-         cwd=hub)
-
-    # Seed .millhouse in worktree
-    mill_dir = wt_path / ".millhouse"
-    mill_dir.mkdir(exist_ok=True)
-    _active.write(mill_dir, slug=slug, task_title="Test abandon task",
-                  branch=f"impl/{slug}", spawned_at="2026-04-24T10:00:00Z")
-
-    # Hub .millhouse config pointing to wiki clone
+    # Hub .millhouse config with wiki path and branch prefix
     hub_mill = hub / ".millhouse"
     hub_mill.mkdir(exist_ok=True)
     (hub_mill / "config.local.yaml").write_text(
-        f"paths:\n  wiki: {wiki.as_posix()}\n", encoding="utf-8"
+        f"paths:\n  wiki: {wiki.as_posix()}\nspawn:\n  branch_prefix: 'impl/'\n",
+        encoding="utf-8",
     )
-    # Worktree .millhouse also needs wiki config
+    # Worktree .millhouse stub pointing at hub config for path resolution
+    mill_dir = wt_path / ".millhouse"
+    mill_dir.mkdir(exist_ok=True)
     (mill_dir / "config.local.yaml").write_text(
-        f"paths:\n  wiki: {wiki.as_posix()}\n", encoding="utf-8"
+        f"paths:\n  wiki: {wiki.as_posix()}\nspawn:\n  branch_prefix: 'impl/'\n",
+        encoding="utf-8",
     )
 
     return hub, wiki, wt_path, slug
@@ -140,7 +152,7 @@ def main() -> int:
         assert "mill-cleanup" in result.stdout, "Scenario A: expected mill-cleanup hint"
 
         # Verify status.md has phase=abandoned and a timeline row
-        status_path = wiki / "active" / slug / "status.md"
+        status_path = worktree / "task" / "status.md"
         info = _status.read_status(status_path)
         assert info["phase"] == "abandoned", (
             f"Scenario A: expected phase=abandoned, got {info['phase']!r}"
@@ -149,8 +161,8 @@ def main() -> int:
             f"Scenario A: expected abandoned in timeline: {info['last_timeline_entry']!r}"
         )
 
-        # Verify git commit was made in wiki
-        log = _run(["git", "log", "--oneline", "-3"], cwd=wiki).stdout
+        # Verify git commit was made on the task branch in the worktree
+        log = _run(["git", "log", "--oneline", "-3"], cwd=worktree).stdout
         assert f"abandon {slug}" in log, f"Scenario A: expected abandon commit in log: {log!r}"
 
         print("PASS Scenario A: happy path — status.md updated, wiki committed")

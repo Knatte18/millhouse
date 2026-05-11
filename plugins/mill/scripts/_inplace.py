@@ -10,10 +10,11 @@ to run ``git worktree remove`` (worktree mode) or only ``git branch -d``
 (in-place mode).
 
 Public API:
-    is_inplace(active_data, git_root, cfg) -> bool
-        Returns True when the current branch matches the branch recorded in
-        the active marker AND no worktree directory exists at the resolved
-        worktrees-container / slug path.
+    is_inplace(slug, git_root, cfg) -> bool
+        Returns True when no worktree directory exists at the resolved
+        worktrees-container / slug path. The slug is already derived from
+        the current branch by the caller (via ``_marker.slug_from_branch``),
+        so no branch re-fetch is needed here.
 
     prompt_stale_worktree(slug, worktree_path) -> str
         Interactive numbered prompt for the stale-worktree edge case (branch
@@ -25,50 +26,27 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-import _subprocess_util
 from _paths import resolve_worktrees_dir
 
 
-def is_inplace(active_data: dict, git_root: Path, cfg: dict) -> bool:
+def is_inplace(slug: str, git_root: Path, cfg: dict) -> bool:
     """Return True when this task is running in-place (no separate worktree dir).
 
-    Detection criteria (both must hold):
-    1. The current HEAD branch matches the ``branch`` recorded in
-       ``active_data``.
-    2. No directory exists at ``<worktrees-dir>/<slug>/``.
+    Detection criterion: no directory exists at ``<worktrees-dir>/<slug>/``.
 
-    When criterion 2 holds but criterion 1 does not (branch mismatch),
-    returns False — the caller is on an unexpected branch and should not
-    assume in-place mode.
+    The slug is already validated against the current branch by the caller
+    via ``_marker.slug_from_branch``, so no branch re-fetch is required.
 
     Args:
-        active_data: Dict returned by ``_active.read_all``. Must contain
-            ``"slug"`` and ``"branch"`` keys.
+        slug: Task slug derived from the current branch name.
         git_root: Absolute path to the hub git checkout.
         cfg: Deep-merged config dict (wiki config.yaml + config.local.yaml).
 
     Returns:
         True if the task is in-place; False otherwise.
     """
-    slug = active_data["slug"]
-    recorded_branch = active_data["branch"]
-
-    result = _subprocess_util.run(
-        ["git", "-C", str(git_root), "rev-parse", "--abbrev-ref", "HEAD"]
-    )
-    if result.returncode != 0:
-        return False
-    current_branch = result.stdout.strip()
-
-    if current_branch != recorded_branch:
-        return False
-
     worktrees_dir = resolve_worktrees_dir(cfg, git_root)
-    worktree_path = worktrees_dir / slug
-    if worktree_path.is_dir():
-        return False
-
-    return True
+    return not (worktrees_dir / slug).is_dir()
 
 
 def prompt_stale_worktree(slug: str, worktree_path: Path) -> str:
