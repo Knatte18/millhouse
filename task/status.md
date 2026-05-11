@@ -30,7 +30,9 @@ implementing  2026-05-11T12:23:49Z
 ```yaml
 batches:
   - name: error-hierarchy-extract
-    state: pending
+    state: running
+    implementer_session: fe33d85b-4608-42a2-9d3f-e236ab0f82b0
+    start_sha: d7a91838f186b81837a2d9f3f8829d0bc58d39b2
   - name: gemini-llm-provider
     state: pending
   - name: registry-and-smoke
