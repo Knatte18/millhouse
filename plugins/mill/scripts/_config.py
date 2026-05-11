@@ -5,7 +5,10 @@ Exports
 -------
 load_config(wiki_path, worktree_root) -> dict
     Load ``wiki/config.yaml`` deep-merged with
-    ``.millhouse/config.local.yaml``.  Returns an empty dict when
+    ``~/.millhouse/config.machine.yaml`` and
+    ``.millhouse/config.local.yaml``.  Machine layer (read via
+    ``_machine.load_layer``) lands between wiki and worktree layers;
+    later layers win on key conflicts.  Returns an empty dict when
     ``wiki/config.yaml`` does not exist (lenient form used by
     mill-color, mill-terminal, mill-vscode, and mill-spawn).
 
@@ -23,6 +26,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import yaml
+import _machine
 
 
 def load_config(wiki_path: Path, worktree_root: Path) -> dict:
@@ -37,6 +41,11 @@ def load_config(wiki_path: Path, worktree_root: Path) -> dict:
     ``hub_relative_path`` from the stub is available alongside all
     operational keys from the real config.
 
+    The machine layer at ``~/.millhouse/config.machine.yaml`` is read
+    between the wiki and worktree-stub layers via ``_machine.load_layer()``.
+    Missing machine file → ``_machine.load_layer`` returns ``{}`` and the
+    merge is a no-op.
+
     Returns an empty dict when ``wiki/config.yaml`` does not exist.
     Callers that require the file to be present should add their own
     guard after calling this function.
@@ -46,12 +55,15 @@ def load_config(wiki_path: Path, worktree_root: Path) -> dict:
         worktree_root: Absolute path to the worktree git repository root.
 
     Returns:
-        Merged configuration dict (may be empty).
+        Merged configuration dict (may be empty). Merge order, lowest to
+        highest precedence: wiki → machine → worktree-stub → worktree-real.
     """
     shared_path = wiki_path / "config.yaml"
     cfg: dict = {}
     if shared_path.exists():
         cfg = yaml.safe_load(shared_path.read_text(encoding="utf-8")) or {}
+
+    cfg = deep_merge(cfg, _machine.load_layer())
 
     stub_path = worktree_root / ".millhouse" / "config.local.yaml"
     hub_subpath = "."

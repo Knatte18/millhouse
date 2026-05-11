@@ -16,6 +16,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from unittest.mock import patch
 
 HUB = Path(__file__).resolve().parent.parent.parent.parent
 SCRIPTS_DIR = HUB / "plugins" / "mill" / "scripts"
@@ -155,6 +156,100 @@ def test_load_config_stub_only_real_absent() -> None:
             f"Real config keys should be absent; got spawn={cfg.get('spawn')!r}"
         )
     print("PASS load_config — stub-only (real config absent): hub_relative_path present, real keys absent")
+
+
+# Tests below patch Path.home; pre-existing tests use the real home dir but their assertions only check seeded keys, so machine-config presence is benign.
+
+
+def test_load_config_machine_layer_present_merged() -> None:
+    """Machine-layer keys are merged between wiki and worktree layers."""
+    with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as tmp_home:
+        tmp_path = Path(tmp)
+        wiki = tmp_path / "wiki"
+        wt_root = tmp_path / "hub"
+        _git_init(wt_root)
+        _write_yaml(wiki / "config.yaml", "spawn:\n  branch_prefix: feat\n")
+        _write_yaml(
+            Path(tmp_home) / ".millhouse" / "config.machine.yaml",
+            "roles:\n  discussion-review:\n    holistic:\n      reviewer: cluster-gemini\n",
+        )
+
+        with patch.object(Path, "home", return_value=Path(tmp_home)):
+            cfg = _config.load_config(wiki, wt_root)
+
+        assert cfg["spawn"]["branch_prefix"] == "feat", (
+            f"Wiki key should be present; got {cfg['spawn'].get('branch_prefix')!r}"
+        )
+        assert cfg["roles"]["discussion-review"]["holistic"]["reviewer"] == "cluster-gemini", (
+            f"Machine key should be merged; got {cfg.get('roles')!r}"
+        )
+    print("PASS load_config — machine layer present and merged alongside wiki keys")
+
+
+def test_load_config_machine_absent_graceful() -> None:
+    """Missing machine config file is silently skipped (returns wiki-only dict)."""
+    with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as tmp_home:
+        tmp_path = Path(tmp)
+        wiki = tmp_path / "wiki"
+        wt_root = tmp_path / "hub"
+        _git_init(wt_root)
+        _write_yaml(wiki / "config.yaml", "spawn:\n  branch_prefix: feat\n")
+
+        with patch.object(Path, "home", return_value=Path(tmp_home)):
+            cfg = _config.load_config(wiki, wt_root)
+
+        assert cfg == {"spawn": {"branch_prefix": "feat"}}, (
+            f"Expected wiki-only dict; got {cfg!r}"
+        )
+    print("PASS load_config — machine config absent → wiki-only dict, no exception")
+
+
+def test_load_config_machine_overrides_wiki() -> None:
+    """Machine layer wins over wiki on the same key."""
+    with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as tmp_home:
+        tmp_path = Path(tmp)
+        wiki = tmp_path / "wiki"
+        wt_root = tmp_path / "hub"
+        _git_init(wt_root)
+        _write_yaml(wiki / "config.yaml", "spawn:\n  branch_prefix: shared\n")
+        _write_yaml(
+            Path(tmp_home) / ".millhouse" / "config.machine.yaml",
+            "spawn:\n  branch_prefix: machine\n",
+        )
+
+        with patch.object(Path, "home", return_value=Path(tmp_home)):
+            cfg = _config.load_config(wiki, wt_root)
+
+        assert cfg["spawn"]["branch_prefix"] == "machine", (
+            f"Machine layer should override wiki; got {cfg['spawn'].get('branch_prefix')!r}"
+        )
+    print("PASS load_config — machine layer overrides wiki on conflict")
+
+
+def test_load_config_worktree_overrides_machine() -> None:
+    """Worktree-local layer wins over machine layer on the same key."""
+    with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as tmp_home:
+        tmp_path = Path(tmp)
+        wiki = tmp_path / "wiki"
+        wt_root = tmp_path / "hub"
+        _git_init(wt_root)
+        _write_yaml(wiki / "config.yaml", "spawn:\n  branch_prefix: shared\n")
+        _write_yaml(
+            Path(tmp_home) / ".millhouse" / "config.machine.yaml",
+            "spawn:\n  branch_prefix: machine\n",
+        )
+        _write_yaml(
+            wt_root / ".millhouse" / "config.local.yaml",
+            "spawn:\n  branch_prefix: worktree\n",
+        )
+
+        with patch.object(Path, "home", return_value=Path(tmp_home)):
+            cfg = _config.load_config(wiki, wt_root)
+
+        assert cfg["spawn"]["branch_prefix"] == "worktree", (
+            f"Worktree layer should override machine; got {cfg['spawn'].get('branch_prefix')!r}"
+        )
+    print("PASS load_config — worktree-local layer overrides machine layer on conflict")
 
 
 # ---------------------------------------------------------------------------
@@ -301,6 +396,10 @@ def main() -> int:
         test_load_config_wiki_config_absent,
         test_load_config_subfolder_install,
         test_load_config_stub_only_real_absent,
+        test_load_config_machine_layer_present_merged,
+        test_load_config_machine_absent_graceful,
+        test_load_config_machine_overrides_wiki,
+        test_load_config_worktree_overrides_machine,
         test_deep_merge_scalar_wins,
         test_deep_merge_nested_merge,
         test_deep_merge_empty_overlay,

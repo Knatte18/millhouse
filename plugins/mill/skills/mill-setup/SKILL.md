@@ -345,6 +345,28 @@ else:
 "
 ```
 
+### Phase 4.95 — Probe machine-level config (read-only)
+
+Read-only check that `~/.millhouse/config.machine.yaml` is present and parseable. Never creates, prompts, or halts.
+
+```bash
+PYTHONPATH="$CLAUDE_PLUGIN_ROOT/scripts" uv run --project "$CLAUDE_PLUGIN_ROOT" python -c "
+import _machine
+status, detail = _machine.probe()
+path = _machine.machine_config_path()
+if status == _machine.MISSING:
+    print(f'{path}: not present (optional - copy plugins/mill/templates/config.machine.yaml here to set machine-wide overrides)')
+elif status == _machine.PRESENT:
+    keys = sorted(detail.keys()) if isinstance(detail, dict) else []
+    summary = ', '.join(keys) if keys else '(empty)'
+    print(f'{path}: loaded ({len(keys)} top-level keys: {summary})')
+else:
+    print(f'{path}: present but parse failed ({detail}); fix or remove the file')
+"
+```
+
+MALFORMED status is reported but does NOT halt the phase — the operator is responsible for fixing the file; subsequent mill commands will still hit the YAML parse error when they load config, so this phase is purely an early warning.
+
 ### Phase 5 — Seed `.millhouse/config.local.yaml`
 
 1. If `.millhouse/config.local.yaml` exists: skip.
@@ -420,6 +442,7 @@ Check every invariant; halt with a specific error if any fails:
 - Every hardlink (from `wiki/config.yaml`) exists and shares an inode with its target
 - `.gitignore` contains the mill-managed marker block with glob and anchored entries
 - `hub_relative_path:` is set in `.millhouse/config.local.yaml`
+- Machine-level config at `~/.millhouse/config.machine.yaml` (if present) parses as valid YAML — verify via `_machine.probe()` returning `MISSING` or `PRESENT`, not `MALFORMED`.
 - Every script in `_shortcuts.SHORTCUT_SCRIPTS` has a wrapper at `.millhouse/<script>.ps1` (and no legacy `.millhouse/<script>.py` exists)
 - `PYTHONPATH` user env var contains `<CLAUDE_PLUGIN_ROOT>/scripts` (verify via `[System.Environment]::GetEnvironmentVariable('PYTHONPATH', 'User')`)
 - `.millhouse/config.local.yaml` exists
@@ -438,6 +461,7 @@ mill-setup complete.
   Wiki clone:        <WIKI_PATH>
   Local config:      .millhouse/config.local.yaml
   hub_relative_path: <hub_subpath>
+  Machine config:    <path-or-"(none)">
   Tasks (Home):      <WIKI_PATH>/Home.md  (hardlinked as tasks.md)
   Sidebar:           <WIKI_PATH>/_Sidebar.md
   VS Code:           .vscode/settings.json (titleBar = #2d7d46 green)
@@ -455,6 +479,8 @@ Hardlinks (from wiki config.yaml):
 
 Next: /mill-add <slug> --title "..." [--summary "..."] [--proposal-body "..."] to add tasks, /mill-status to list them.
 ```
+
+`Machine config:` format: when `_machine.probe()` returns `MISSING`, print `(none)`; on `PRESENT`, print the absolute path; on `MALFORMED`, print `<path> (MALFORMED — fix manually)`.
 
 ## Error conditions
 
