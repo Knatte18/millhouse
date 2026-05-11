@@ -5,6 +5,8 @@ description: claim a task from the wiki Home.md in the current worktree.
 
 # mill-claim
 
+> Wiki access: never `cd .wiki/`. Use the documented helpers — see CLAUDE.md `## Wiki access`.
+
 Like `mill-spawn` but in-place: claims a task and creates a new branch in the current checkout without creating a separate worktree directory. Handles dirty working trees with a stash/carry/abort prompt.
 
 ## Run it

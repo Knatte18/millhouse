@@ -118,3 +118,15 @@ Path rules that keep being forgotten — they live here, not spread across SKILL
 - **`_sibling.resolve_path` detects container-form via `repo_root.parent.name == "wts"`.** Container-form returns `parent.parent / role` (sibling of `wts/`). Prefix-form returns `parent / f"{repo_root.name}.{role}"`. Old hub-form (`repo_root.name == "hub"`) is no longer recognised — migrate first.
 - **Working state lives in `task/` on the task branch.** `task/status.md`, `task/discussion.md`, `task/plan/`, and `task/reviews/` are committed to the task branch, not written to the wiki. The wiki holds only the task index (`Home.md`) and shared config (`config.yaml`). mill-merge's cleanup commit removes the `task/` directory before squash-merging back to the parent branch.
 - **Scratch lives at `<cwd>/.scratch/`, not under `.millhouse/`.** Shared with other plugins the engineer uses that default to top-level `.scratch/`. `.gitignore` covers it via `**/.scratch/`. Never write to `/tmp/` or `$env:TEMP`. (See `plugins/mill/skills/conversation/SKILL.md` for the full file-writing conventions.)
+- **cwd is always cwd, and scripts never rewrite it.** Wiki mutations go through `git -C <wiki_path>` or `_wiki.write_commit_push` — never by changing cwd to wiki. If a script detects cwd is inside the wiki clone, it halts with a clear `SystemExit` (or `ValueError` for `_sibling.resolve_path`): that is operator error, not something to recover from. Enforced by `_paths.resolve_git_root` (name + path-equality check), `_paths.resolve_wiki_path` (name check), and `_sibling.resolve_path` (name check; mirrored to the codeguide twin). Regression-guarded by `plugins/mill/unit_tests/test-no-wiki-cwd.py`.
+
+## Wiki access
+
+Scripts mutate the wiki only through `_wiki.write_commit_push` or `git -C <wiki_path>` inside a `_wiki.wiki_lock` block. Reads go through helper APIs (`_wiki.sync_pull`) or `read_text(wiki_path / …)`. Never `cd` into the wiki, never set `cwd=<wiki_path>` in a subprocess.
+
+| Anti-pattern | Correct replacement |
+|---|---|
+| `cd .wiki/ && git pull --ff-only` | `_wiki.sync_pull(wiki_path)` |
+| `cd .wiki/ && git <anything>` | `git -C <wiki_path> <anything>` |
+| `cd .wiki/ && cat <file>` | `read_text(wiki_path / "<file>")` |
+| `cwd=<wiki_path>` in subprocess | `cwd=<task_worktree>` + `git -C <wiki_path>` |

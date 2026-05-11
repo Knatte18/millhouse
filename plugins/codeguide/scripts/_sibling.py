@@ -57,6 +57,8 @@ from pathlib import Path
 
 def resolve_path(role: str, repo_root: Path) -> Path:
     repo_root = Path(repo_root)
+    if repo_root.name == "wiki":
+        raise ValueError("resolve_path called from wiki repo — wiki cannot resolve its own wiki path")
     parent = repo_root.parent
     if parent.name == "wts":
         # Container-form: main worktree is <container>/wts/<repo-name>;

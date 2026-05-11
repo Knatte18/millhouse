@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import ast
+import importlib.util
 import subprocess
 import sys
 from pathlib import Path
@@ -96,6 +97,48 @@ def main() -> int:
         assert bad.returncode == 2, f"expected exit 2 for bad args, got {bad.returncode}"
         assert "usage" in bad.stderr.lower()
         print("PASS: CLI exits 2 with usage message on bad args")
+
+        # Wiki-repo guard in mill _sibling.py
+
+        # Case 1: raises ValueError when repo_root.name == "wiki" (role=wiki)
+        try:
+            resolve_path("wiki", Path("/c/Code/wiki"))
+            raise AssertionError("expected ValueError for wiki repo_root")
+        except ValueError as exc:
+            assert "resolve_path called from wiki repo" in str(exc), f"unexpected message: {exc}"
+        print("PASS: resolve_path raises ValueError when repo_root.name == 'wiki' (role=wiki)")
+
+        # Case 2: raises ValueError regardless of role (role-agnostic)
+        try:
+            resolve_path("plan", Path("/c/Code/wiki"))
+            raise AssertionError("expected ValueError for wiki repo_root")
+        except ValueError as exc:
+            assert "resolve_path called from wiki repo" in str(exc), f"unexpected message: {exc}"
+        print("PASS: resolve_path raises ValueError when repo_root.name == 'wiki' (role=plan, role-agnostic)")
+
+        # Case 3: raises ValueError even when parent is wts (container-form parent does not bypass guard)
+        try:
+            resolve_path("worktrees", Path("/projects/wts/wiki"))
+            raise AssertionError("expected ValueError for wiki repo_root in container-form")
+        except ValueError as exc:
+            assert "resolve_path called from wiki repo" in str(exc), f"unexpected message: {exc}"
+        print("PASS: resolve_path raises ValueError when repo_root.name == 'wiki' even in container-form parent")
+
+        # Case 4: regression guard — non-wiki repo_root does not raise
+        got = resolve_path("wiki", Path("/c/Code/wts/millhouse"))
+        assert got == Path("/c/Code/wiki"), f"regression guard: got {got}"
+        print("PASS: resolve_path does not raise when repo_root.name != 'wiki' (regression guard)")
+
+        # Case 5: codeguide _sibling.py raises the same ValueError (identical-twin mirror is functional)
+        spec = importlib.util.spec_from_file_location("_sibling_codeguide", CODEGUIDE_SIBLING_PY)
+        cg_mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cg_mod)
+        try:
+            cg_mod.resolve_path("wiki", Path("/c/Code/wiki"))
+            raise AssertionError("expected ValueError from codeguide _sibling.py")
+        except ValueError as exc:
+            assert "resolve_path called from wiki repo" in str(exc), f"codeguide message: {exc}"
+        print("PASS: codeguide _sibling.py raises same ValueError — identical-twin mirror is functional")
 
         # Identical-twin invariant: both _sibling.py files are byte-equal outside their module docstrings
         mill_source = SIBLING_PY.read_text(encoding="utf-8")

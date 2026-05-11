@@ -6,6 +6,8 @@ argument-hint: "[--from-url <url>] [--branch <name>]"
 
 # mill-setup
 
+> Wiki access: never `cd .wiki/`. Use the documented helpers — see CLAUDE.md `## Wiki access`.
+
 Bootstrap the mill infrastructure from nothing. Produces a working `.millhouse/` + wiki + container layout in the current working clone.
 
 ## Usage

@@ -635,6 +635,81 @@ def main() -> int:
             assert got == tmp_path, f"prefix-form: got {got}"
         print("PASS: resolve_container_path prefix-form -> parent dir")
 
+        # resolve_git_root wiki-cwd guards
+
+        # Case 1: name check fires when resolved root name == "wiki"
+        with patch("_subprocess_util.run", return_value=_make_run_result(stdout="C:/Code/millhouse/wiki\n")):
+            try:
+                _paths.resolve_git_root()
+                raise AssertionError("expected SystemExit from name check, got none")
+            except SystemExit as exc:
+                msg = str(exc)
+                assert "cwd is inside wiki" in msg, f"missing 'cwd is inside wiki': {msg!r}"
+                assert str(Path("C:/Code/millhouse/wiki")) in msg, f"missing path: {msg!r}"
+        print("PASS: resolve_git_root raises SystemExit when cwd name == 'wiki'")
+
+        # Case 2: path-equality guard fires when cwd equals wiki path (non-wiki name)
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp).resolve()
+            with patch("_subprocess_util.run", return_value=_make_run_result(stdout=str(tmp_path) + "\n")), \
+                 patch("_paths.resolve_wiki_path", return_value=tmp_path):
+                try:
+                    _paths.resolve_git_root()
+                    raise AssertionError("expected SystemExit via path-equality, got none")
+                except SystemExit:
+                    pass
+        print("PASS: resolve_git_root raises SystemExit via path-equality when cwd equals resolved wiki path")
+
+        # Case 3: falls through when neither name nor equality matches
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp).resolve()
+            other_path = tmp_path.parent / ("other_" + tmp_path.name)
+            with patch("_subprocess_util.run", return_value=_make_run_result(stdout=str(tmp_path) + "\n")), \
+                 patch("_paths.resolve_wiki_path", return_value=other_path):
+                got = _paths.resolve_git_root()
+            assert got == tmp_path, f"expected {tmp_path}, got {got}"
+        print("PASS: resolve_git_root falls through when neither name nor equality matches")
+
+        # Case 4: name check fires before nested-halt from resolve_wiki_path can propagate
+        with patch("_paths.resolve_wiki_path", side_effect=SystemExit("nested-halt")):
+            # Non-wiki sub-case: (Exception, SystemExit) swallow absorbs the inner halt
+            with patch("_subprocess_util.run", return_value=_make_run_result(stdout="/tmp/not-wiki\n")):
+                got = _paths.resolve_git_root()
+            assert got == Path("/tmp/not-wiki"), f"non-wiki sub-case: got {got}"
+            # Wiki sub-case: name check fires first, nested halt cannot propagate
+            with patch("_subprocess_util.run", return_value=_make_run_result(stdout="C:/Code/millhouse/wiki\n")):
+                try:
+                    _paths.resolve_git_root()
+                    raise AssertionError("expected SystemExit from name check, got none")
+                except SystemExit as exc:
+                    msg = str(exc)
+                    assert "cwd is inside wiki" in msg, f"wrong message: {msg!r}"
+                    assert str(Path("C:/Code/millhouse/wiki")) in msg, f"path missing: {msg!r}"
+                    assert "nested-halt" not in msg, f"inner halt leaked: {msg!r}"
+        print("PASS: resolve_git_root name-check fires before nested-halt from resolve_wiki_path can propagate")
+
+        # resolve_wiki_path wiki-cwd guards
+
+        # Case 5: raises SystemExit when git_toplevel.name == "wiki"
+        test_wiki_path = Path("/tmp/anything/wiki")
+        try:
+            _paths.resolve_wiki_path(test_wiki_path)
+            raise AssertionError("expected SystemExit, got none")
+        except SystemExit as exc:
+            msg = str(exc)
+            assert "cwd is inside wiki" in msg, f"missing 'cwd is inside wiki': {msg!r}"
+            assert str(test_wiki_path) in msg, f"missing path: {msg!r}"
+        print("PASS: resolve_wiki_path raises SystemExit when git_toplevel.name == 'wiki'")
+
+        # Case 6: falls through (no exception) when git_toplevel.name != "wiki"
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            main_root = _container_form(tmp_path)
+            with patch("_paths.resolve_main_worktree_root", return_value=main_root):
+                got = _paths.resolve_wiki_path(main_root)
+            assert isinstance(got, Path), f"expected Path, got {type(got)}"
+        print("PASS: resolve_wiki_path falls through (no exception) when git_toplevel.name != 'wiki'")
+
         print("All _paths unit tests passed.")
         return 0
     except AssertionError as exc:
