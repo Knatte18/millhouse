@@ -887,30 +887,39 @@ def test_prompt_merged_entry_bad_slug_raises() -> None:
 # ---------------------------------------------------------------------------
 
 
-def _make_worktree_repo(wt_dir: Path, branch: str) -> None:
-    """Init a git repo in wt_dir and checkout branch (for discover tests)."""
-    wt_dir.mkdir(parents=True, exist_ok=True)
-    subprocess.run(["git", "init", str(wt_dir)], capture_output=True, check=True)
-    subprocess.run(["git", "-C", str(wt_dir), "config", "user.email", "t@t.com"], capture_output=True, check=True)
-    subprocess.run(["git", "-C", str(wt_dir), "config", "user.name", "T"], capture_output=True, check=True)
-    (wt_dir / ".keep").write_text("", encoding="utf-8")
-    subprocess.run(["git", "-C", str(wt_dir), "add", ".keep"], capture_output=True, check=True)
-    subprocess.run(["git", "-C", str(wt_dir), "commit", "-m", "init"], capture_output=True, check=True)
-    subprocess.run(["git", "-C", str(wt_dir), "checkout", "-b", branch], capture_output=True, check=True)
+def _make_parent_with_worktree(tmp: Path, wt_name: str, branch: str) -> tuple[Path, Path]:
+    """Init a parent repo + add a git worktree at wts/<wt_name> on `branch`.
+
+    Returns (parent_repo, wts_dir).
+    """
+    parent = tmp / "parent"
+    parent.mkdir()
+    subprocess.run(["git", "init", str(parent)], capture_output=True, check=True)
+    subprocess.run(["git", "-C", str(parent), "config", "user.email", "t@t.com"], capture_output=True, check=True)
+    subprocess.run(["git", "-C", str(parent), "config", "user.name", "T"], capture_output=True, check=True)
+    (parent / ".keep").write_text("", encoding="utf-8")
+    subprocess.run(["git", "-C", str(parent), "add", ".keep"], capture_output=True, check=True)
+    subprocess.run(["git", "-C", str(parent), "commit", "-m", "init"], capture_output=True, check=True)
+    wts_dir = tmp / "wts"
+    wts_dir.mkdir()
+    entry = wts_dir / wt_name
+    subprocess.run(
+        ["git", "-C", str(parent), "worktree", "add", "-b", branch, str(entry)],
+        capture_output=True, check=True,
+    )
+    return parent, wts_dir
 
 
 def test_discover_active_worktrees_standard_layout() -> None:
-    """Standard layout: worktree on task branch is found via branch detection."""
+    """Standard layout: worktree on task branch is found via git worktree list."""
     with tempfile.TemporaryDirectory() as tmp:
-        wts_dir = Path(tmp) / "wts"
-        wts_dir.mkdir()
-        entry = wts_dir / "my-task"
-        _make_worktree_repo(entry, branch="hanf/my-task")
+        parent, wts_dir = _make_parent_with_worktree(Path(tmp), "my-task", "hanf/my-task")
+        entry = (wts_dir / "my-task").resolve()
 
         home_md = "# Home\n\n## My Task\n[[my-task]] [active]\n"
         home_tasks = _tasks_md.parse(home_md)
 
-        results = discover_active_worktrees(wts_dir, home_tasks, "hanf/")
+        results = discover_active_worktrees(wts_dir, home_tasks, "hanf/", cwd=parent)
 
         if len(results) != 1:
             raise AssertionError(f"expected 1 result, got {len(results)}: {results}")
@@ -919,22 +928,19 @@ def test_discover_active_worktrees_standard_layout() -> None:
             raise AssertionError(f"expected entry {entry}, got {path}")
         if slug != "my-task":
             raise AssertionError(f"expected slug='my-task', got {slug!r}")
-    print("PASS: discover_active_worktrees standard layout finds worktree via branch")
+    print("PASS: discover_active_worktrees standard layout finds worktree via porcelain")
 
 
 def test_discover_active_worktrees_subfolder_install() -> None:
     """Subfolder-install layout: worktree git root is the entry dir regardless of hub_subpath."""
     with tempfile.TemporaryDirectory() as tmp:
-        wts_dir = Path(tmp) / "wts"
-        wts_dir.mkdir()
-        entry = wts_dir / "my-task"
-        # Git root is entry/ even though the hub lives at entry/src/hub/
-        _make_worktree_repo(entry, branch="hanf/my-task")
+        parent, wts_dir = _make_parent_with_worktree(Path(tmp), "my-task", "hanf/my-task")
+        entry = (wts_dir / "my-task").resolve()
 
         home_md = "# Home\n\n## My Subfolder Task\n[[my-task]] [active]\n"
         home_tasks = _tasks_md.parse(home_md)
 
-        results = discover_active_worktrees(wts_dir, home_tasks, "hanf/")
+        results = discover_active_worktrees(wts_dir, home_tasks, "hanf/", cwd=parent)
 
         if len(results) != 1:
             raise AssertionError(f"expected 1 result, got {len(results)}: {results}")
@@ -943,7 +949,7 @@ def test_discover_active_worktrees_subfolder_install() -> None:
             raise AssertionError(f"expected entry {entry}, got {path}")
         if slug != "my-task":
             raise AssertionError(f"expected slug='my-task', got {slug!r}")
-    print("PASS: discover_active_worktrees subfolder-install layout finds worktree via branch")
+    print("PASS: discover_active_worktrees subfolder-install layout finds worktree via porcelain")
 
 
 # ---------------------------------------------------------------------------
