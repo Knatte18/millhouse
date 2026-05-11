@@ -96,20 +96,33 @@ def main() -> int:
     print("PASS: _build_argv tool-use has no -e ''")
 
     # ------------------------------------------------------------------
-    # _parse_gemini_stream_json: result event
+    # _parse_gemini_stream_json: current format — message/assistant with string content
+    # ------------------------------------------------------------------
+    raw = (
+        '{"type":"init","session_id":"sid-init","model":"gemini-2.5-flash"}\n'
+        '{"type":"message","role":"user","content":"prompt"}\n'
+        '{"type":"message","role":"assistant","content":"APPROVE","delta":true,"session_id":"sid-init"}\n'
+        '{"type":"result","status":"success","stats":{}}\n'
+    )
+    text, sid = _parse_gemini_stream_json(raw)
+    assert text == "APPROVE" and sid == "sid-init", f"message/assistant parse: {(text, sid)!r}"
+    print("PASS: _parse_gemini_stream_json message/assistant (current format) returns (text, session_id)")
+
+    # ------------------------------------------------------------------
+    # _parse_gemini_stream_json: legacy result event with inline text
     # ------------------------------------------------------------------
     raw = '{"type":"system","subtype":"init","session_id":"abc"}\n{"type":"result","result":"APPROVE","session_id":"abc"}\n'
     text, sid = _parse_gemini_stream_json(raw)
     assert text == "APPROVE" and sid == "abc", f"result parse: {(text, sid)!r}"
-    print("PASS: _parse_gemini_stream_json result event returns (text, session_id)")
+    print("PASS: _parse_gemini_stream_json legacy result event returns (text, session_id)")
 
     # ------------------------------------------------------------------
-    # _parse_gemini_stream_json: assistant event
+    # _parse_gemini_stream_json: legacy assistant event
     # ------------------------------------------------------------------
     raw = '{"type":"assistant","message":{"content":[{"type":"text","text":"OK"}]},"session_id":"sid1"}\n'
     text, sid = _parse_gemini_stream_json(raw)
     assert text == "OK" and sid == "sid1", f"assistant parse: {(text, sid)!r}"
-    print("PASS: _parse_gemini_stream_json assistant event returns (text, session_id)")
+    print("PASS: _parse_gemini_stream_json legacy assistant event returns (text, session_id)")
 
     # ------------------------------------------------------------------
     # _parse_gemini_stream_json: system-only -> LLMError

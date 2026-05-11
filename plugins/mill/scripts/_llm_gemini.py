@@ -110,10 +110,11 @@ def _parse_gemini_stream_json(stdout: str) -> tuple[str, str | None]:
     """Parse gemini's stream-json output.
 
     Returns ``(final_text, session_id)``. ``session_id`` is extracted from any
-    top-level ``session_id`` field (last-wins). Final text is taken from the
-    last ``"result"`` event whose ``result`` field is a non-empty string, or
-    from the last ``"assistant"`` event whose ``message.content`` list yields
-    non-empty text after concatenation.
+    top-level ``session_id`` field (last-wins). Final text is taken from (in
+    priority order, last-wins): a ``"message"`` event with ``role == "assistant"``
+    and a non-empty ``content`` string or list; a ``"result"`` event with a
+    non-empty ``result`` string (legacy CLI format); or a ``"assistant"`` event
+    with a nested ``message.content`` list (legacy format).
 
     Stream-json emits one JSON object per line. Lines that fail JSON parsing
     emit a stderr warning and are skipped.
@@ -141,11 +142,27 @@ def _parse_gemini_stream_json(stdout: str) -> tuple[str, str | None]:
             session_id = sid
 
         event_type = obj.get("type", "")
-        if event_type == "result":
+        if event_type == "message" and obj.get("role") == "assistant":
+            # Current gemini CLI emits assistant text here (content is a plain string).
+            content = obj.get("content", "")
+            if isinstance(content, str) and content.strip():
+                final_text = content
+            elif isinstance(content, list):
+                parts = [
+                    block.get("text", "")
+                    for block in content
+                    if isinstance(block, dict) and block.get("type") == "text"
+                ]
+                combined = "".join(parts)
+                if combined.strip():
+                    final_text = combined
+        elif event_type == "result":
+            # Older CLI versions emitted text in "result"; current versions use "message".
             result_value = obj.get("result", "")
             if isinstance(result_value, str) and result_value.strip():
                 final_text = result_value
         elif event_type == "assistant":
+            # Legacy format where type itself is "assistant" with nested message object.
             message = obj.get("message", {})
             content = message.get("content", [])
             if isinstance(content, list):
