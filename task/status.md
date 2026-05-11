@@ -32,5 +32,7 @@ batches:
     implementer_session: 9ad96e91-90f3-4e65-b6f9-8cad6c665b40
     start_sha: 569043587e9b8e74c78a9effa13b35788453a6e5
   - name: integrate-and-document
-    state: pending
+    state: running
+    implementer_session: be06d5ef-4ab6-4f7e-9798-010b8ade883a
+    start_sha: 8797957184d07a6ebc88fc77d24c345bf8e79550
 ```
