@@ -36,7 +36,6 @@ def run(
     cfg: dict,
     slug: str,
     mill_dir: Path,
-    wiki_root: Path,
     project_root: Path,
     wiki_root: Path,
     *,
