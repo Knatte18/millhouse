@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: discussion-fix-r1
 slug: fix-wiki-cwd-cascade
 branch: hanf/fix-wiki-cwd-cascade
 plan: null
@@ -15,4 +15,5 @@ task_description: |
 
 ```text
 discussing  '2026-05-11T11:33:21Z'
+discussion-fix-r1  2026-05-11T11:42:45Z
 ```
