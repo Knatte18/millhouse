@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-integrate-and-document
+phase: holistic-reviewing
 slug: machine-level-config
 branch: hanf/machine-level-config
 plan: task/plan
@@ -22,6 +22,7 @@ planned  2026-05-11T10:47:46Z
 implementing  2026-05-11T10:56:43Z
 approved-machine-layer-module  2026-05-11T10:59:01Z
 approved-integrate-and-document  2026-05-11T11:15:52Z
+holistic-reviewing  2026-05-11T11:16:02Z
 ```
 
 ## Batches
