@@ -48,6 +48,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+import _machine
 import _marker
 import _paths
 import _render
@@ -940,10 +941,13 @@ def _deep_merge(base: dict, override: dict) -> dict:
 
 
 def load_config(wiki_root: Path, mill_dir: Path) -> dict:
-    """Load config.yaml from wiki_root, optionally merging config.local.yaml.
+    """Load config.yaml from wiki_root, deep-merged with ~/.millhouse/config.machine.yaml (via _machine.load_layer) and optionally with mill_dir/config.local.yaml.
 
-    Uses PyYAML (yaml.safe_load). The shared config must exist; the local
-    override is optional. When both exist, local wins on conflict (deep merge).
+    Merge order, lowest to highest precedence: wiki → machine → worktree-local.
+
+    Uses PyYAML (yaml.safe_load). The shared config must exist; the machine
+    and local layers are optional. When multiple layers exist, later layers
+    win on conflict (deep merge).
 
     Raises ReviewError if the shared config file is absent.
     Returns a plain dict.
@@ -954,6 +958,8 @@ def load_config(wiki_root: Path, mill_dir: Path) -> dict:
 
     with shared_path.open(encoding="utf-8") as fh:
         cfg = yaml.safe_load(fh) or {}
+
+    cfg = _deep_merge(cfg, _machine.load_layer())
 
     local_path = mill_dir / "config.local.yaml"
     if local_path.exists():
