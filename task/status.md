@@ -37,7 +37,9 @@ batches:
     start_sha: 5479ac5ac48ecd078019e8d92ad8ce2cd85fc3f2
     commit_sha: 563b7c152d5ecc334f4d5e7d88fd02cf83e9e465
   - name: llm-claude-fast-fail-retry
-    state: pending
+    state: running
+    implementer_session: 79afa7ec-24e5-4418-ae4d-588c872c8055
+    start_sha: 7b6ebe127f9f2e10919bdb5dc7aefb1d252a84fd
   - name: review-common-divergence-warning
     state: pending
   - name: review-fixture-seeding
