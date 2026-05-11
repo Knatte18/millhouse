@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-review-r2
+phase: planned
 slug: gemini-reviewer
 branch: hanf/gemini-reviewer
 plan: task/plan
@@ -21,4 +21,5 @@ planning  2026-05-11T12:10:10Z
 plan-review-r1  2026-05-11T12:15:29Z
 plan-fix-r1  2026-05-11T12:15:29Z
 plan-review-r2  2026-05-11T12:19:42Z
+planned  2026-05-11T12:19:58Z
 ```
