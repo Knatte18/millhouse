@@ -23,6 +23,7 @@ import _test_registry  # noqa: E402
 from _llm_claude import LLMError  # noqa: E402
 from _review_plan import run as plan_run  # noqa: E402
 from _review_common import ReviewError  # noqa: E402
+from _test_helpers import seed_wiki_config  # noqa: E402
 
 SLUG = "test-slug"
 
@@ -108,11 +109,7 @@ def _make_plan_fixture(
     mill_dir.mkdir(parents=True, exist_ok=True)
     wiki_root = tmp_path / "wiki"
     wiki_root.mkdir(parents=True, exist_ok=True)
-    (wiki_root / "config.yaml").write_text(
-        "paths:\n  discussion_file: discussion.md\n  plan_dir: plan/\n  reviews_dir: reviews/\n"
-        "spawn:\n  branch_prefix: \"hanf/\"\n",
-        encoding="utf-8",
-    )
+    seed_wiki_config(wiki_root)
     (wiki_root / "Home.md").write_text(
         f"## Test Task\n[[{SLUG}]] [active]\n\n_body_\n", encoding="utf-8"
     )

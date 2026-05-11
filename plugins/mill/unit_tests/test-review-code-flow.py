@@ -24,6 +24,7 @@ import _test_registry  # noqa: E402
 from _llm_claude import LLMError  # noqa: E402
 from _review_code import run as code_run  # noqa: E402
 from _review_common import ReviewError  # noqa: E402
+from _test_helpers import seed_wiki_config  # noqa: E402
 
 SLUG = "test-slug"
 
@@ -102,11 +103,7 @@ def _make_fixture(tmp_path: Path) -> tuple[Path, Path, Path, dict]:
     mill_dir.mkdir(parents=True, exist_ok=True)
     wiki_root = tmp_path / "wiki"
     wiki_root.mkdir(parents=True, exist_ok=True)
-    (wiki_root / "config.yaml").write_text(
-        "paths:\n  discussion_file: discussion.md\n  plan_dir: plan/\n  reviews_dir: reviews/\n"
-        "spawn:\n  branch_prefix: \"hanf/\"\n",
-        encoding="utf-8",
-    )
+    seed_wiki_config(wiki_root)
     (wiki_root / "Home.md").write_text(
         f"## Test Task\n[[{SLUG}]] [active]\n\n_body_\n", encoding="utf-8"
     )
@@ -270,10 +267,7 @@ def main() -> int:
         mill_dir.mkdir(parents=True, exist_ok=True)
         wiki_root = Path(tmpdir) / "wiki"
         wiki_root.mkdir(parents=True, exist_ok=True)
-        (wiki_root / "config.yaml").write_text(
-            "paths:\n  discussion_file: discussion.md\n  plan_dir: plan/\n  reviews_dir: reviews/\n"
-            "spawn:\n  branch_prefix: \"hanf/\"\n", encoding="utf-8",
-        )
+        seed_wiki_config(wiki_root)
         (wiki_root / "Home.md").write_text(f"## Test Task\n[[{SLUG}]] [active]\n\n_body_\n", encoding="utf-8")
         (mill_dir / "config.local.yaml").write_text(
             f"paths:\n  wiki: '{wiki_root.as_posix()}'\n", encoding="utf-8"
@@ -339,10 +333,7 @@ def main() -> int:
         mill_dir.mkdir(parents=True, exist_ok=True)
         wiki_root = Path(tmpdir) / "wiki"
         wiki_root.mkdir(parents=True, exist_ok=True)
-        (wiki_root / "config.yaml").write_text(
-            "paths:\n  discussion_file: discussion.md\n  plan_dir: plan/\n  reviews_dir: reviews/\n"
-            "spawn:\n  branch_prefix: \"hanf/\"\n", encoding="utf-8",
-        )
+        seed_wiki_config(wiki_root)
         (wiki_root / "Home.md").write_text(f"## Test Task\n[[{SLUG}]] [active]\n\n_body_\n", encoding="utf-8")
         (mill_dir / "config.local.yaml").write_text(
             f"paths:\n  wiki: '{wiki_root.as_posix()}'\n", encoding="utf-8"
@@ -475,10 +466,7 @@ def main() -> int:
         subprocess.run(["git", "-C", str(project_root), "checkout", "-b", f"hanf/{SLUG}"], capture_output=True)
         wiki_root = Path(tmpdir) / "wiki"
         wiki_root.mkdir(parents=True, exist_ok=True)
-        (wiki_root / "config.yaml").write_text(
-            "paths:\n  discussion_file: discussion.md\n  plan_dir: plan/\n  reviews_dir: reviews/\n"
-            "spawn:\n  branch_prefix: \"hanf/\"\n", encoding="utf-8",
-        )
+        seed_wiki_config(wiki_root)
         (wiki_root / "Home.md").write_text(f"## Test Task\n[[{SLUG}]] [active]\n\n_body_\n", encoding="utf-8")
         mill_dir = project_root / ".millhouse"
         mill_dir.mkdir(parents=True, exist_ok=True)
@@ -696,10 +684,7 @@ def main() -> int:
         mill_dir.mkdir(parents=True, exist_ok=True)
         wiki_root = Path(tmpdir) / "wiki"
         wiki_root.mkdir(parents=True, exist_ok=True)
-        (wiki_root / "config.yaml").write_text(
-            "paths:\n  discussion_file: discussion.md\n  plan_dir: plan/\n  reviews_dir: reviews/\n"
-            "spawn:\n  branch_prefix: \"hanf/\"\n", encoding="utf-8",
-        )
+        seed_wiki_config(wiki_root)
         (wiki_root / "Home.md").write_text(f"## Test Task\n[[{SLUG}]] [active]\n\n_body_\n", encoding="utf-8")
         (mill_dir / "config.local.yaml").write_text(
             f"paths:\n  wiki: '{wiki_root.as_posix()}'\n", encoding="utf-8"
