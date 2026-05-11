@@ -198,9 +198,8 @@ def main() -> int:
             call_kwargs = mock_popen_cls.call_args[1]
             expected_flags = (
                 subprocess.CREATE_NO_WINDOW
-                | subprocess.DETACHED_PROCESS
                 | subprocess.CREATE_NEW_PROCESS_GROUP
-                | 0x01000000
+                | 0x01000000  # CREATE_BREAKAWAY_FROM_JOB
             )
             assert call_kwargs["creationflags"] == expected_flags, (
                 f"expected creationflags={expected_flags:#010x}, "
