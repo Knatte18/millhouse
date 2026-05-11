@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-approved
+phase: done
 slug: discussion-review-gap-batching
 branch: hanf/discussion-review-gap-batching
 plan: task/plan
@@ -24,6 +24,7 @@ implementing  2026-05-11T11:06:10Z
 approved-skill-edits  2026-05-11T11:09:38Z
 holistic-reviewing  2026-05-11T11:09:53Z
 holistic-approved  2026-05-11T11:13:53Z
+done  2026-05-11T11:14:07Z
 ```
 
 ## Batches
