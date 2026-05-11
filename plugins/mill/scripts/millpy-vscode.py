@@ -81,7 +81,7 @@ def _filter_open_worktrees(
                 hub_subpath = hub_subpath_default
         launch = resolve_hub_relative_path(entry_path, hub_subpath)
         if not any(
-            _vscode_processes._path_matches_cmdline(launch, str(cmdline))
+            _vscode_processes.signature_matches(launch, slug, str(cmdline))
             for cmdline in open_cmdlines
         ):
             result.append((entry_path, slug, title))
@@ -92,13 +92,15 @@ def _spawn_and_open(
     worktrees_dir: Path,
     pre_active: list[tuple[Path, str, str]],
     wiki_path: Path | None,
+    home_tasks: list,
+    branch_prefix: str,
 ) -> int:
     pre_paths = {entry[0] for entry in pre_active}
     spawn_main = _load_spawn_main()
     rc = spawn_main([])
     if rc != 0:
         return rc
-    post = _spawn_core.discover_active_worktrees(worktrees_dir)
+    post = _spawn_core.discover_active_worktrees(worktrees_dir, home_tasks, branch_prefix)
     new_entries = [e for e in post if e[0] not in pre_paths]
     if len(new_entries) == 0:
         print("[mill-vscode] spawn produced no new worktree; nothing to open.", file=sys.stderr)
@@ -186,10 +188,10 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.new:
-        return _spawn_and_open(worktrees_dir, active, wiki_path)
+        return _spawn_and_open(worktrees_dir, active, wiki_path, home_tasks, branch_prefix)
 
     if not active:
-        return _spawn_and_open(worktrees_dir, active, wiki_path)
+        return _spawn_and_open(worktrees_dir, active, wiki_path, home_tasks, branch_prefix)
 
     if args.list:
         for i, (path, slug, title) in enumerate(active, start=1):
@@ -209,7 +211,7 @@ def main(argv: list[str] | None = None) -> int:
     else:
         filtered = _filter_open_worktrees(active, wiki_path, cfg.get("hub_relative_path", "."))
         if not filtered:
-            return _spawn_and_open(worktrees_dir, active, wiki_path)
+            return _spawn_and_open(worktrees_dir, active, wiki_path, home_tasks, branch_prefix)
 
         print("Active worktrees:", file=sys.stderr)
         for i, (path, slug, title) in enumerate(filtered, start=1):
@@ -226,7 +228,7 @@ def main(argv: list[str] | None = None) -> int:
                 print("[mill-vscode] No input available.", file=sys.stderr)
                 return 1
             if raw == "":
-                return _spawn_and_open(worktrees_dir, active, wiki_path)
+                return _spawn_and_open(worktrees_dir, active, wiki_path, home_tasks, branch_prefix)
             if raw.lower() == "q":
                 return 0
             try:
