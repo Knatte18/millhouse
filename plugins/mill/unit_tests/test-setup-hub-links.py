@@ -15,6 +15,8 @@ Covers:
       - .wiki junction resolves to fixture wiki path
       - .portals junction resolves to wiki/active/<slug>/ dir
       - tasks.md hardlink shares an inode with wiki/Home.md
+  - Graceful absence: missing hardlinks block → empty hardlinks list
+  - Graceful absence: hardlinks: null → empty hardlinks list
 """
 from __future__ import annotations
 
@@ -484,6 +486,87 @@ def test_portal_flow_integration() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Graceful absence: missing hardlinks block
+# ---------------------------------------------------------------------------
+
+
+def test_create_hub_links_handles_missing_hardlinks_block() -> None:
+    """No hardlinks: block in config → hardlinks result is empty, junctions created."""
+    with tempfile.TemporaryDirectory() as tmp:
+        container = Path(tmp) / "container"
+        wiki_path = container / "wiki"
+        target_root = container / "wts" / "my-repo"
+
+        cfg_no_hardlinks = {
+            "junctions": {
+                ".wiki": "<WIKI_PATH>",
+            },
+            # deliberately no hardlinks key
+        }
+        _make_minimal_wiki(wiki_path, cfg_no_hardlinks)
+        target_root.mkdir(parents=True)
+
+        tokens = {
+            "HUB_PATH": str(target_root),
+            "CWD_PATH": str(target_root),
+            "CONTAINER_PATH": str(container),
+            "WIKI_PATH": str(wiki_path),
+            "REPO": "my-repo",
+        }
+
+        result = create_hub_links(target_root, wiki_path, tokens)
+
+        if result["hardlinks"] != []:
+            raise AssertionError(
+                f"expected empty hardlinks list, got {result['hardlinks']}"
+            )
+        if len(result["junctions"]) != 1:
+            raise AssertionError(
+                f"expected 1 junction, got {len(result['junctions'])}: {result['junctions']}"
+            )
+
+    print("PASS: missing hardlinks block → empty hardlinks list, junction created normally")
+
+
+def test_create_hub_links_handles_null_hardlinks_block() -> None:
+    """hardlinks: null in config → hardlinks result is empty, junctions created."""
+    with tempfile.TemporaryDirectory() as tmp:
+        container = Path(tmp) / "container"
+        wiki_path = container / "wiki"
+        target_root = container / "wts" / "my-repo"
+
+        cfg_null_hardlinks = {
+            "junctions": {
+                ".wiki": "<WIKI_PATH>",
+            },
+            "hardlinks": None,  # explicit null → yaml.safe_load yields None
+        }
+        _make_minimal_wiki(wiki_path, cfg_null_hardlinks)
+        target_root.mkdir(parents=True)
+
+        tokens = {
+            "HUB_PATH": str(target_root),
+            "CWD_PATH": str(target_root),
+            "CONTAINER_PATH": str(container),
+            "WIKI_PATH": str(wiki_path),
+            "REPO": "my-repo",
+        }
+
+        result = create_hub_links(target_root, wiki_path, tokens)
+
+        if result["hardlinks"] != []:
+            raise AssertionError(
+                f"expected empty hardlinks list for null block, got {result['hardlinks']}"
+            )
+        if len(result["junctions"]) != 1:
+            raise AssertionError(
+                f"expected 1 junction, got {len(result['junctions'])}: {result['junctions']}"
+            )
+
+    print("PASS: hardlinks: null → empty hardlinks list, junction created normally")
+
+
+# ---------------------------------------------------------------------------
 # Main runner
 # ---------------------------------------------------------------------------
 
@@ -497,6 +580,8 @@ def main() -> int:
         test_all_entries_filtered_return_empty_lists,
         test_cross_volume_hardlink_raises_clear_error,
         test_portal_flow_integration,
+        test_create_hub_links_handles_missing_hardlinks_block,
+        test_create_hub_links_handles_null_hardlinks_block,
     ]
 
     failures: list[str] = []
