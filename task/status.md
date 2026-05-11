@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-approved
+phase: done
 slug: fix-wiki-cwd-cascade
 branch: hanf/fix-wiki-cwd-cascade
 plan: task/plan
@@ -30,6 +30,7 @@ approved-docs-claude-md-and-skills  2026-05-11T12:56:14Z
 approved-wiki-log-cleanup  2026-05-11T12:59:28Z
 holistic-reviewing  2026-05-11T12:59:43Z
 holistic-approved  2026-05-11T13:02:41Z
+done  2026-05-11T13:02:51Z
 ```
 
 ## Batches
