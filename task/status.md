@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-reviewing
+phase: holistic-approved
 slug: drop-active-marker
 branch: hanf/drop-active-marker
 plan: task/plan
@@ -25,6 +25,7 @@ approved-migration  2026-05-11T06:03:04Z
 approved-integration-tests  2026-05-11T06:15:23Z
 approved-skill-docs  2026-05-11T06:17:47Z
 holistic-reviewing  2026-05-11T06:18:02Z
+holistic-approved  2026-05-11T06:38:40Z
 ```
 
 ## Batches
