@@ -42,5 +42,7 @@ batches:
     start_sha: 4cd7132c84e10bd4e2028d496885706ec84ef632
     commit_sha: 5ccac5dd43840cb53de409ae11bd85e99320cf7e
   - name: registry-and-smoke
-    state: pending
+    state: running
+    implementer_session: 9e12f965-de26-4ce0-84cd-21431b12f2aa
+    start_sha: 65768aefa57c2cb9b1d1d941484e4dab190dc751
 ```
