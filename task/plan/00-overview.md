@@ -3,7 +3,7 @@
 ```yaml
 task: 45 (A) — Machine-level config layer
 slug: machine-level-config
-approved: false
+approved: true
 started: 20260511-104021
 parent: main
 root: ""
