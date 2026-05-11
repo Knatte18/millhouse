@@ -31,7 +31,9 @@ implementing  2026-05-11T12:29:38Z
 ```yaml
 batches:
   - name: defensive-guards
-    state: pending
+    state: running
+    implementer_session: 49d9e2c6-e066-49fa-a7b7-1072fd828570
+    start_sha: acd91cd658f4bd6614e4c32422fd435cc64b3196
   - name: anti-pattern-walker-test
     state: pending
   - name: docs-claude-md-and-skills
