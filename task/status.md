@@ -61,7 +61,9 @@ batches:
     start_sha: 98b8a09c1814e4fd82a20a5346695094770f96c1
     commit_sha: 50950d9e8dd7f18e447293c5f4fdafb7246bdeb0
   - name: wiki-config-template-sync
-    state: pending
+    state: running
+    implementer_session: 65103dba-1591-4e30-b0d4-91ecabad65f9
+    start_sha: 3a347f704bc5d40a4067287f146abc95471e5edd
   - name: review-code-error-aggregation
     state: pending
   - name: skill-md-edits
