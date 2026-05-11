@@ -31,7 +31,9 @@ implementing  2026-05-11T11:24:10Z
 ```yaml
 batches:
   - name: gitignore-and-claudemd
-    state: pending
+    state: running
+    implementer_session: 4c247f0a-40a4-4a07-9c4c-3cf7d5b99a46
+    start_sha: 5479ac5ac48ecd078019e8d92ad8ce2cd85fc3f2
   - name: llm-claude-fast-fail-retry
     state: pending
   - name: review-common-divergence-warning
