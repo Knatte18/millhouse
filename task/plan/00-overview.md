@@ -3,7 +3,7 @@
 ```yaml
 task: 43 (A) — Discussion-review gaps in batches + NOTE-finding handling
 slug: discussion-review-gap-batching
-approved: false
+approved: true
 started: 20260511-104557
 parent: main
 root: ""
