@@ -37,7 +37,7 @@ Batch-local decisions: none beyond the Shared Decisions in `00-overview.md`.
 
 ### Card 2: Add commented `verify:` section to template wiki-config.yaml
 
-- **Context:** none
+- **Context:** none — the sole file the implementer reads is `plugins/mill/templates/wiki-config.yaml`, listed in Edits: and therefore implicitly read; no additional reference files are needed.
 - **Edits:**
   - `plugins/mill/templates/wiki-config.yaml`
 - **Creates:** none
