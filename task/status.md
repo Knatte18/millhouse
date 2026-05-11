@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-docs-claude-md-and-skills
+phase: approved-wiki-log-cleanup
 slug: fix-wiki-cwd-cascade
 branch: hanf/fix-wiki-cwd-cascade
 plan: task/plan
@@ -27,6 +27,7 @@ implementing  2026-05-11T12:29:38Z
 approved-defensive-guards  2026-05-11T12:44:30Z
 approved-anti-pattern-walker-test  2026-05-11T12:53:19Z
 approved-docs-claude-md-and-skills  2026-05-11T12:56:14Z
+approved-wiki-log-cleanup  2026-05-11T12:59:28Z
 ```
 
 ## Batches
@@ -46,7 +47,7 @@ batches:
     implementer_session: e49dce76-8391-430d-80fc-c5c113ffeda8
     start_sha: 1e1d939c254e4090e44d87a35c9a5b05f1dab975
   - name: wiki-log-cleanup
-    state: running
+    state: approved
     implementer_session: 43a142fc-e7b7-414e-bddc-6068b9059879
     start_sha: d3d0021a0323bd794737e37fed12499d1693da0b
 ```
