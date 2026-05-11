@@ -12,7 +12,7 @@ You are an autonomous planner running on Opus. Your job is to turn `discussion.m
 1. Resolve the wiki path via `_paths.resolve_wiki_path(_paths.resolve_git_root())` and call `_wiki.sync_pull(wiki_path, slug="mill-plan")`.
    `signature: _wiki.sync_pull(wiki_path: Path, *, slug: str) -> None`
 2. Read the slug via `_marker.slug_from_branch(git_root, wiki_path, cfg)`. On `MarkerError` → halt with "this worktree was not created by mill-spawn".
-3. Load config — deep-merge `<WIKI_PATH>/config.yaml` with `.millhouse/config.local.yaml`. Read `review.plan.rounds` as `max_review_rounds`.
+3. Load config — deep-merge `<WIKI_PATH>/config.yaml` with `.millhouse/config.local.yaml`. Read `roles.plan-review.holistic.rounds` as `max_review_rounds`.
 4. Read `task/status.md` and inspect `phase:` + the plan state on disk (`task/plan/00-overview.md`). Decide entry branch:
 
    | state | action |
