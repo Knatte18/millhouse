@@ -167,6 +167,36 @@ If the deep-merged config has `pipeline.autonomous_mode: true`: for any `stuck_t
   ```
 - Tell the user: "Batch X blocked with reason Y. Inspect reviews/ and status.md. Re-run `/mill-go` after resolving, or `/mill-abandon` to wind down." Do not proceed to Handoff.
 
+## Resume
+
+When mill-go's Entry-step 5 phase gate routes here (phase is `implementing`, `reviewing`, or `fixing`), the previous run was interrupted mid-batch. The CLIs that mutate task state (`millpy-implement.py`, `millpy-review-code.py`) are atomic — they record state-mutation commits before the heavy work starts and after each transition — so the resume playbook is simple: read the current batch entry and re-invoke the CLI for the current state.
+
+1. Read `task/status.md`; locate the current batch entry (the single entry whose `state` is non-terminal: `running`, `reviewing`, or `fixing`).
+2. Branch on the batch's `state`:
+   - **`running`** — the implementer was mid-implementation. Re-invoke (via `millpy-bg`):
+     ```bash
+     uv run --project "$CLAUDE_PLUGIN_ROOT" "$CLAUDE_PLUGIN_ROOT/scripts/millpy-bg.py" \
+         --slug implement-<batch_name>-resume -- \
+         uv run --project "$CLAUDE_PLUGIN_ROOT" "$CLAUDE_PLUGIN_ROOT/scripts/millpy-implement.py" <batch_name> --resume
+     ```
+     The CLI re-attaches the warm session via the stored `implementer_session`. If `LLMSessionError` propagates (visible as `stuck_type: transient` in the JSON), apply the standard one-retry-fresh policy from Stuck escalation. After parsing the report, continue at Execute step 2b (cleanliness gate).
+   - **`reviewing`** — the implementer report was already consumed; the reviewer was running. Re-invoke the per-batch code-review CLI from the start of round `review_round` (read this field from the batch entry):
+     ```bash
+     uv run --project "$CLAUDE_PLUGIN_ROOT" "$CLAUDE_PLUGIN_ROOT/scripts/millpy-bg.py" \
+         --slug review-code-<batch_name>-r<review_round>-resume -- \
+         uv run --project "$CLAUDE_PLUGIN_ROOT" "$CLAUDE_PLUGIN_ROOT/scripts/millpy-review-code.py" --batch <batch_name>
+     ```
+     The CLI's crash-recovery scan handles a written-but-uncommitted review file. After parsing the JSON verdict, continue at Execute step 3 sub-step 3 (load `mill-receiving-review`) and step 4 (branch on verdict).
+   - **`fixing`** — the reviewer returned `REQUEST_CHANGES`; the fix-implementer was running. Re-invoke:
+     ```bash
+     uv run --project "$CLAUDE_PLUGIN_ROOT" "$CLAUDE_PLUGIN_ROOT/scripts/millpy-bg.py" \
+         --slug fix-<batch_name>-r<review_round>-resume -- \
+         uv run --project "$CLAUDE_PLUGIN_ROOT" "$CLAUDE_PLUGIN_ROOT/scripts/millpy-implement.py" <batch_name> --resume --round <review_round> --review-file <review-file-abs-path>
+     ```
+     The `<review-file-abs-path>` is the most recent `task/reviews/*-code-review-<batch_name>-r<review_round>.md` file. After parsing the report, continue at Execute step 3 sub-step 5 (max-rounds check) or back to step 3 round N+1 if the fix produced an APPROVE-eligible state on next review.
+3. **No state mutation before resume.** Do NOT pre-emptively flip `state` or call `_status.append_phase` before re-invoking the CLI. The CLI handles state transitions atomically; double-writes corrupt the timeline.
+4. **`mill-receiving-review` is still mandatory.** When resume lands you at any point that reads a review file, load the skill first (per the existing rule at Execute step 3 sub-step 3 and Holistic step 5).
+
 ## Holistic code review
 
 **Guard:** The skip semantics have two conditions: `reviewer: null` OR `rounds: 0` means "skip holistic". Only execute this section if `cfg.get("roles", {}).get("code-review", {}).get("holistic", {}).get("reviewer") is not None`.
