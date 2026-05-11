@@ -1,10 +1,10 @@
 # Status
 
 ```yaml
-phase: discussed
+phase: planning
 slug: fix-wiki-cwd-cascade
 branch: hanf/fix-wiki-cwd-cascade
-plan: null
+plan: task/plan
 parent: main
 task: 49 (A) — Defensive guards mot cwd-inni-wiki kjedereaksjoner
 task_description: |
@@ -17,4 +17,5 @@ task_description: |
 discussing  '2026-05-11T11:33:21Z'
 discussion-fix-r1  2026-05-11T11:42:45Z
 discussed  2026-05-11T11:43:01Z
+planning  2026-05-11T12:10:03Z
 ```
