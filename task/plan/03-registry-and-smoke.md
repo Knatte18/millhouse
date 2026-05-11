@@ -49,7 +49,10 @@ Operator validation (out of scope for this batch but documented for completeness
 - **Context:**
   - `plugins/mill/scripts/_llm_gemini.py`
   - `plugins/mill/integration_tests/smoke-llm-claude.py`
-- **Edits:** none
+  - `plugins/mill/unit_tests/test-llm-gemini.py`
+- **Edits:**
+  - `plugins/mill/scripts/_llm_gemini.py`
+  - `plugins/mill/unit_tests/test-llm-gemini.py`
 - **Creates:**
   - `plugins/mill/integration_tests/smoke-llm-gemini.py`
 - **Deletes:** none
