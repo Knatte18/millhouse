@@ -24,7 +24,7 @@ Both problems stem from the two-state Home.md (`[active]`/`[done]`): mill-merge 
 - `_tasks_md.py`: add `[ready-to-merge]` and `[pr-pending]` to `_HEADING_RE`, `_VALID_PHASES`, and `Task.phase` type annotation.
 - `_marker.py` (`slug_from_branch`): remove `[active]`-only phase check; validate only that slug exists in Home.md.
 - `mill-go` SKILL.md, Handoff step 2: flip `[active]` → `[ready-to-merge]` instead of `[done]`.
-- `mill-merge` SKILL.md: remove Steps 8–10 (worktree, portal, wiki active-dir teardown); flip Home.md to `[pr-pending]` (not `[active]`) on the PR path; Step 12 report updated to say "worktree intact — run `/mill-cleanup` to remove."
+- `mill-merge` SKILL.md: remove Steps 8–10 (worktree, portal, wiki active-dir teardown); flip Home.md to `[pr-pending]` (not `[active]`) on BOTH PR-creation points in Step 5 (primary PR path AND branch-protection fallback); update `## PR-path re-entry` section to remove obsolete worktree/branch/portal references; Step 12 report updated to say "worktree intact — run `/mill-cleanup` to remove."
 - `millpy-cleanup.py`: change teardown trigger from `status.md phase: done` to `Home.md marker [done]` (+ archive tag sanity check); add PR-reap for `[pr-pending]` tasks; add `to_reap_pr` to `CleanupPlan`.
 - `mill-cleanup` SKILL.md: document PR-reap, new states, and that teardown now originates here.
 - `mill-status` SKILL.md: add `[ready-to-merge]`, `[pr-pending]` columns to state table.
@@ -110,7 +110,13 @@ Steps 8 (drop worktree + branch), 9 (remove portal), and 10 (remove wiki active 
 
 The `WorktreeLockedError` handling block in Step 8 becomes obsolete and is removed with Step 8.
 
-The PR path (Step 5) adds a Home.md flip to `[pr-pending]` before halting:
+The PR path (Step 5) adds a Home.md flip to `[pr-pending]` before halting. **This flip applies to BOTH PR-creation paths in Step 5:**
+
+1. **Primary PR path** (`git.require-pr-to-base: true` AND parent equals base) — current SKILL.md lines ~90–98.
+2. **Branch-protection fallback** (activated when direct push is rejected by repository rule violations) — current SKILL.md sub-steps 1–8 within Step 5, lines ~108–164. Sub-step 6 already appends `pr-pending` to status.md; the Home.md flip must be added there too.
+
+Both paths end with status.md `phase: pr-pending` and must execute the same Home.md flip before halting at Step 11:
+
 ```python
 with _wiki.wiki_lock(wiki_path, slug):
     home_text = home_path.read_text(encoding="utf-8")
@@ -118,6 +124,10 @@ with _wiki.wiki_lock(wiki_path, slug):
     home_path.write_text(new_text, encoding="utf-8")
     _wiki.write_commit_push(wiki_path, ["Home.md"], f"task: pr-pending {slug}", slug=slug)
 ```
+
+Missing the flip in either path would leave Home.md stuck at `[active]` during PR wait — the `[active]`-overloading problem the `pr-pending-home-md-flip` decision rejects.
+
+**PR-path re-entry section (SKILL.md `## PR-path re-entry`, lines ~261–270):** with teardown moved to mill-cleanup, the "MERGED" sub-bullet's prose must change. Old text: *"continue to Step 6 (archive tag). … The rest of the teardown (tag, Home.md flip, worktree/branch/portal removal, legacy wiki cleanup) runs as normal."* New text: *"continue to Step 6 (archive tag). Steps 6–7 run (archive tag + Home.md `[done]` flip). Worktree, branch, portal, and legacy wiki active directory are now handled by `/mill-cleanup --apply` — direct the operator to run it."*
 
 ### `millpy-cleanup.py`
 
@@ -148,7 +158,7 @@ if phase == "done":
         )
 ```
 
-New branch for `[pr-pending]` tasks (note: these come from Home.md, not status.md phase — but the worktree's status.md will show `phase: pr-pending`):
+New branch for `[pr-pending]` tasks (detected via status.md `phase: pr-pending`, appended by mill-merge Step 5 in both PR-creation paths; the Home.md `[pr-pending]` marker is the human-visible coordination signal but is not the gate read by `build_plan`):
 ```python
 elif phase == "pr-pending":
     to_reap_pr.append(record)
