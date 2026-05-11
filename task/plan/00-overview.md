@@ -3,7 +3,7 @@
 ```yaml
 task: '47 (A) — mill-merge-in: allowlist for known-broken pre-existing test failures'
 slug: verify-skip-known-broken
-approved: true
+approved: false
 started: 20260511-181206
 parent: main
 root: ""
