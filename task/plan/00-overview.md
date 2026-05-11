@@ -3,7 +3,7 @@
 ```yaml
 task: "46 (A) — Home.md state machine + split mill-merge teardown into mill-cleanup"
 slug: home-md-states-teardown-split
-approved: true
+approved: false
 started: "20260511-181145"
 parent: main
 root: ""
