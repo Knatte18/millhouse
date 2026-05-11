@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-registry-and-smoke
+phase: holistic-reviewing
 slug: gemini-reviewer
 branch: hanf/gemini-reviewer
 plan: task/plan
@@ -26,6 +26,7 @@ implementing  2026-05-11T12:23:49Z
 approved-error-hierarchy-extract  2026-05-11T12:32:09Z
 approved-gemini-llm-provider  2026-05-11T12:36:43Z
 approved-registry-and-smoke  2026-05-11T12:52:47Z
+holistic-reviewing  2026-05-11T12:53:39Z
 ```
 
 ## Batches
