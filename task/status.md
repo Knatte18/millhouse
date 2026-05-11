@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: discussed
 slug: machine-level-config
 branch: hanf/machine-level-config
 plan: null
@@ -15,4 +15,5 @@ task_description: |
 
 ```text
 discussing  '2026-05-11T10:27:14Z'
+discussed  2026-05-11T10:37:57Z
 ```
