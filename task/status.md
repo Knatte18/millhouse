@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-defensive-guards
 slug: fix-wiki-cwd-cascade
 branch: hanf/fix-wiki-cwd-cascade
 plan: task/plan
@@ -24,6 +24,7 @@ plan-review-r2  2026-05-11T12:27:32Z
 plan-fix-r2  2026-05-11T12:27:32Z
 planned  2026-05-11T12:27:42Z
 implementing  2026-05-11T12:29:38Z
+approved-defensive-guards  2026-05-11T12:44:30Z
 ```
 
 ## Batches
@@ -31,7 +32,7 @@ implementing  2026-05-11T12:29:38Z
 ```yaml
 batches:
   - name: defensive-guards
-    state: running
+    state: approved
     implementer_session: 49d9e2c6-e066-49fa-a7b7-1072fd828570
     start_sha: acd91cd658f4bd6614e4c32422fd435cc64b3196
   - name: anti-pattern-walker-test
