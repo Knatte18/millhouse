@@ -73,7 +73,7 @@ def _build_argv(model: str, *, tooluse: bool) -> list[str]:
     """
     argv = [
         *_gemini_argv_prefix(),
-        "-p",
+        "-p", "",  # empty value triggers headless mode; actual prompt arrives via stdin
         "-o", "stream-json",
         "-m", model,
         "--approval-mode", "plan",

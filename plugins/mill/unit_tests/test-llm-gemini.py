@@ -83,7 +83,7 @@ def main() -> int:
     # ------------------------------------------------------------------
     prefix = _gemini_argv_prefix()
     argv = _build_argv("gemini-2.5-flash", tooluse=False)
-    expected = [*prefix, "-p", "-o", "stream-json", "-m", "gemini-2.5-flash", "--approval-mode", "plan", "-e", ""]
+    expected = [*prefix, "-p", "", "-o", "stream-json", "-m", "gemini-2.5-flash", "--approval-mode", "plan", "-e", ""]
     assert argv == expected, f"bulk argv mismatch: {argv!r}"
     print("PASS: _build_argv bulk appends -e ''")
 
@@ -91,7 +91,7 @@ def main() -> int:
     # _build_argv: tool-use mode has no -e ""
     # ------------------------------------------------------------------
     argv = _build_argv("gemini-2.5-flash", tooluse=True)
-    expected = [*prefix, "-p", "-o", "stream-json", "-m", "gemini-2.5-flash", "--approval-mode", "plan"]
+    expected = [*prefix, "-p", "", "-o", "stream-json", "-m", "gemini-2.5-flash", "--approval-mode", "plan"]
     assert argv == expected, f"tool-use argv mismatch: {argv!r}"
     print("PASS: _build_argv tool-use has no -e ''")
 
