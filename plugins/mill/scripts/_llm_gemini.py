@@ -110,18 +110,22 @@ def _parse_gemini_stream_json(stdout: str) -> tuple[str, str | None]:
     """Parse gemini's stream-json output.
 
     Returns ``(final_text, session_id)``. ``session_id`` is extracted from any
-    top-level ``session_id`` field (last-wins). Final text is taken from (in
-    priority order, last-wins): a ``"message"`` event with ``role == "assistant"``
-    and a non-empty ``content`` string or list; a ``"result"`` event with a
-    non-empty ``result`` string (legacy CLI format); or a ``"assistant"`` event
-    with a nested ``message.content`` list (legacy format).
+    top-level ``session_id`` field (last-wins). Final text is built by
+    concatenating all ``"message"`` events with ``role == "assistant"``
+    (current CLI format, which streams delta chunks); or from the last
+    ``"result"`` event with a ``result`` text field (legacy format); or from
+    the last ``"assistant"`` event with a nested ``message.content`` list
+    (legacy format).
 
     Stream-json emits one JSON object per line. Lines that fail JSON parsing
     emit a stderr warning and are skipped.
 
     Raises LLMError if no assistant text is found after consuming all lines.
     """
-    final_text: str | None = None
+    # Accumulates delta chunks from current CLI format (concatenated, not last-wins).
+    assistant_chunks: list[str] = []
+    # Fallback for legacy CLI formats that use "result" or "assistant" event types.
+    legacy_text: str | None = None
     session_id: str | None = None
 
     for line in stdout.splitlines():
@@ -143,24 +147,22 @@ def _parse_gemini_stream_json(stdout: str) -> tuple[str, str | None]:
 
         event_type = obj.get("type", "")
         if event_type == "message" and obj.get("role") == "assistant":
-            # Current gemini CLI emits assistant text here (content is a plain string).
+            # Current gemini CLI streams assistant content as delta chunks.
             content = obj.get("content", "")
-            if isinstance(content, str) and content.strip():
-                final_text = content
+            if isinstance(content, str) and content:
+                assistant_chunks.append(content)
             elif isinstance(content, list):
                 parts = [
                     block.get("text", "")
                     for block in content
                     if isinstance(block, dict) and block.get("type") == "text"
                 ]
-                combined = "".join(parts)
-                if combined.strip():
-                    final_text = combined
+                assistant_chunks.append("".join(parts))
         elif event_type == "result":
             # Older CLI versions emitted text in "result"; current versions use "message".
             result_value = obj.get("result", "")
             if isinstance(result_value, str) and result_value.strip():
-                final_text = result_value
+                legacy_text = result_value
         elif event_type == "assistant":
             # Legacy format where type itself is "assistant" with nested message object.
             message = obj.get("message", {})
@@ -173,7 +175,10 @@ def _parse_gemini_stream_json(stdout: str) -> tuple[str, str | None]:
                 ]
                 combined = "".join(parts)
                 if combined.strip():
-                    final_text = combined
+                    legacy_text = combined
+
+    assembled = "".join(assistant_chunks).strip()
+    final_text = assembled if assembled else legacy_text
 
     if final_text is None:
         raise LLMError("gemini returned no content")

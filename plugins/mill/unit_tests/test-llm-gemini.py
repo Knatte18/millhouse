@@ -109,6 +109,19 @@ def main() -> int:
     print("PASS: _parse_gemini_stream_json message/assistant (current format) returns (text, session_id)")
 
     # ------------------------------------------------------------------
+    # _parse_gemini_stream_json: current format — multi-chunk delta streaming
+    # ------------------------------------------------------------------
+    raw = (
+        '{"type":"init","session_id":"sid-delta"}\n'
+        '{"type":"message","role":"assistant","content":"ver","delta":true}\n'
+        '{"type":"message","role":"assistant","content":"dict: APPROVE","delta":true}\n'
+        '{"type":"result","status":"success","stats":{}}\n'
+    )
+    text, sid = _parse_gemini_stream_json(raw)
+    assert text == "verdict: APPROVE" and sid == "sid-delta", f"delta chunks: {(text, sid)!r}"
+    print("PASS: _parse_gemini_stream_json concatenates delta assistant chunks")
+
+    # ------------------------------------------------------------------
     # _parse_gemini_stream_json: legacy result event with inline text
     # ------------------------------------------------------------------
     raw = '{"type":"system","subtype":"init","session_id":"abc"}\n{"type":"result","result":"APPROVE","session_id":"abc"}\n'
