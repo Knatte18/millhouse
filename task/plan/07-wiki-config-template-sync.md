@@ -31,22 +31,21 @@ depends-on: []
   5. After editing, verify by hand-diff that the only structural changes are the three listed. Comment-only edits are acceptable for clarification, but the YAML structure (key paths) is unchanged except for the hardlinks deletion and the junction-key rename.
 - **Commit:** `fix(template): sync wiki-config.yaml to production conventions (#235)`
 
-### Card 14: Make `_setup.create_hub_links` and `_wiki.read_hardlinks` tolerate missing `hardlinks:` block
+### Card 14: Verify `_setup.create_hub_links` and `_wiki.read_hardlinks` already tolerate missing `hardlinks:` block; tighten docstring
 
 - **Context:**
   - `plugins/mill/scripts/_setup.py`
 - **Edits:**
   - `plugins/mill/scripts/_wiki.py`
-  - `plugins/mill/scripts/_setup.py`
 - **Creates:** none
 - **Deletes:** none
 - **Requirements:**
-  1. Read `_wiki.read_hardlinks` (around line 108). If it currently does `cfg["hardlinks"]` (raising `KeyError` on absence) or returns a non-empty default on absence, change it to: read the `hardlinks:` value from the parsed config via `cfg.get("hardlinks", {}) or {}` (the `or {}` covers the explicit `hardlinks: null` case which `yaml.safe_load` returns as `None`). Returns `dict[str, str]` — empty dict when the block is absent or null.
-  2. Read `_setup.create_hub_links`. The function iterates `hardlinks_cfg.items()` (line 111 in current code) — confirm that with an empty dict input, the loop body does NOT execute and the return value is `{"junctions": [...], "hardlinks": []}` (the `created_hardlinks` list stays empty). If `_setup` already handles this case (the loop just skips), no edit needed; if it dereferences before iterating, fix the dereference.
-  3. Add (or expand) a docstring sentence on `read_hardlinks` describing the absence behavior: `Returns an empty dict when the wiki/config.yaml has no hardlinks: block, or when the block is explicitly null (hardlinks: null). Callers must tolerate empty results.`
-  4. Do NOT add a runtime warning or breadcrumb — absent hardlinks is a valid configuration.
-  5. Re-check by reading the helper signature: if `_wiki.read_hardlinks` is also used elsewhere (grep across `plugins/mill/scripts/`), ensure no caller assumes a non-empty result.
-- **Commit:** `fix(_wiki,_setup): tolerate missing hardlinks block (#235)`
+  1. **Verification first.** Read `_wiki.read_hardlinks` (around line 108) and the surrounding `_HARDLINK_DEFAULTS` constant. Today the code reads: `raw = cfg.get("hardlinks"); if not raw: return dict(_HARDLINK_DEFAULTS)`. `_HARDLINK_DEFAULTS` is `{}` (no hardlinks unless configured). So the function already returns `{}` when (a) the key is absent, (b) the value is `None` (yaml `hardlinks: null`), or (c) the value is an empty dict — all collapse via the falsy check. Read `_setup.create_hub_links` (the iteration is at approximately line 111: `for link_rel, target_template in hardlinks_cfg.items():`). With an empty dict input, the loop body does not execute and `created_hardlinks` stays empty — verified by inspection. **Conclusion:** the runtime code already handles the missing-block case correctly; no code change to `_wiki.py` runtime behavior or `_setup.py` is needed.
+  2. **Docstring update.** Even though the absent-block behavior is correct, the docstring on `_wiki.read_hardlinks` should explicitly call it out so future callers know they must tolerate `{}`. Find the existing docstring (lines 108–117 area). The current docstring says: `Missing config file or missing 'hardlinks:' block returns an empty dict (no hardlinks configured).` Append a sentence: `Also returns an empty dict when the block is explicitly null (hardlinks: null), since yaml.safe_load yields None for an explicit-null and the falsy check collapses both cases. Callers (e.g. _setup.create_hub_links) must tolerate an empty result.` Place it as the last sentence of the docstring, before the closing triple quotes.
+  3. Do NOT modify `_setup.create_hub_links` at all — its iteration is already correct.
+  4. Do NOT modify any other functions in `_wiki.py`.
+  5. The regression test in Card 15 backstops this card's "verification" — even though the docstring update is the only file change, Card 15 ensures the behavior cannot regress silently.
+- **Commit:** `docs(_wiki): note read_hardlinks tolerates missing or null block (#235)`
 
 ### Card 15: Regression test for graceful absence in `test-setup-hub-links.py`
 

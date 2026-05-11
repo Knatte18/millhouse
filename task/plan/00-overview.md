@@ -96,7 +96,6 @@ batches:
 - `plugins/mill/scripts/_review_code.py`
 - `plugins/mill/scripts/_review_common.py`
 - `plugins/mill/scripts/_review_plan.py`
-- `plugins/mill/scripts/_setup.py`
 - `plugins/mill/scripts/_wiki.py`
 - `plugins/mill/skills/mill-go/SKILL.md`
 - `plugins/mill/skills/mill-plan/SKILL.md`

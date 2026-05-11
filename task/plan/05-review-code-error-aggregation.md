@@ -53,7 +53,7 @@ Depends on Batch 4 because this batch's verify re-runs `test-review-code-flow.py
   4. Do NOT change the mill-plan SKILL.md step 4.5 — that is already correctly written for top-level ERROR detection.
 - **Commit:** `fix(_review_plan): align all-ERROR aggregation with code reviewer (#228)`
 
-### Card 11: Test all-ERROR aggregation in `test-review-code-flow.py` and `test-review-plan-flow.py`
+### Card 11: Update existing ERROR-path tests to assert top-level `verdict == "ERROR"`
 
 - **Context:**
   - `plugins/mill/scripts/_review_code.py`
@@ -64,15 +64,16 @@ Depends on Batch 4 because this batch's verify re-runs `test-review-code-flow.py
   - `plugins/mill/unit_tests/test-review-plan-flow.py`
 - **Creates:** none
 - **Deletes:** none
-- **Requirements:** Add two new test functions in each file (four total):
-  1. In `test-review-code-flow.py`:
-     - `test_review_code_all_error_returns_top_level_error` — fixture builds a worktree + wiki tree, monkeypatches `_reviewer_single.run` to raise `LLMError("simulated rate limit")` on every call. Invoke `_review_code.run(...)` (or the entry the existing tests use). Assert returned `ReviewResult` has `verdict == "ERROR"` (top-level) AND `len(reviews) >= 1` AND `all(r["verdict"] == "ERROR" for r in reviews)`.
-     - `test_review_code_mixed_returns_parsed_verdict` — monkeypatch `_reviewer_single.run` so the FIRST sub-review raises, but a hypothetical second one succeeds. If `_review_code.run` only does one sub-review (typical), this test is replaced with `test_review_code_single_error_returns_error` — single sub-review that raises, top-level becomes "ERROR" (same as the all-error case but with the explicit single-entry assertion).
-  2. In `test-review-plan-flow.py`:
-     - `test_review_plan_all_error_returns_top_level_error` — same shape as code-flow version: monkeypatch so all sub-reviews raise; assert top-level `verdict == "ERROR"`.
-     - `test_review_plan_single_error_returns_error` — single sub-review that raises; top-level becomes "ERROR".
-  3. Use the existing fixture patterns in each file (read `test_review_code_*` for the worktree-build pattern). If the fixtures depend on Batch 4's seeded config.yaml, they will already be wired up; do not re-seed.
-- **Commit:** `test(review-flow): cover all-ERROR top-level verdict aggregation`
+- **Requirements:** The existing tests already cover the all-ERROR scenarios but assert the old behavior. Update their assertions to match the new top-level ERROR contract; do NOT add net-new test functions (the coverage is already there).
+  1. In `test-review-code-flow.py`, find every assertion of the form `assert r.verdict == "REQUEST_CHANGES", f"expected REQUEST_CHANGES, got {r.verdict}"` that is preceded by a fixture monkeypatching the reviewer to raise `LLMError` on every call (search for the `raise LLMError("seeded boom")` lines — there are three such test fixtures at approximately lines 597, 629, 664; their assertions are at approximately lines 602, 634, 669). For EACH of these three tests:
+     - Change the top-level assertion from `r.verdict == "REQUEST_CHANGES"` to `r.verdict == "ERROR"` and update the f-string message to `f"expected ERROR for all-ERROR run, got {r.verdict}"`.
+     - LEAVE the per-sub assertion `assert rev["verdict"] == "ERROR"` exactly as-is — that already matches the new code.
+     - Add one new assertion immediately after the per-sub `ERROR` check: `assert all(rv["verdict"] == "ERROR" for rv in r.reviews), f"expected all sub-reviews ERROR, got {[rv['verdict'] for rv in r.reviews]}"` — this explicitly documents the "all-ERROR" precondition for the new top-level convention.
+  2. In `test-review-plan-flow.py`, locate the analogous test at approximately line 866–890 (the one with the comment `# Monkey-patch stub.run to raise LLMError for every call.` and assertion `expected REQUEST_CHANGES for all-ERROR run`). Apply the same three changes: flip top-level assertion to `ERROR`, update the f-string, add the `all(rv["verdict"] == "ERROR" ...)` assertion.
+  3. LEAVE the mixed APPROVE+ERROR tests alone — `test-review-plan-flow.py` line ~354 (alpha APPROVE + beta ERROR fixture) and line ~1040 (similar mixed scenario). These tests cover the contract that *partial* failure still surfaces as `REQUEST_CHANGES` so the orchestrator can re-dispatch the implementer for the surviving findings. Verify by reading the test: if `_reviewer_single.run` is monkeypatched to succeed for at least one sub-review and fail for at least one, the test should KEEP its `verdict == "REQUEST_CHANGES"` assertion.
+  4. Do NOT add brand-new test functions in this card — the existing tests provide full all-ERROR coverage once their assertions are updated. If after the implementation Sonnet discovers an all-ERROR path that is NOT covered by any existing test, add ONE new test (named `test_*_all_error_returns_top_level_error` per language convention). Otherwise the four assertion-updates above are the entirety of the card.
+  5. After the edits, the batch verify (`test-review-code-flow.py && test-review-plan-flow.py`) must pass. If any pre-existing test breaks for an unrelated reason, the failure is a regression from Card 9/10 and should be diagnosed in the implementer's fix loop — not by re-flipping the assertion back.
+- **Commit:** `test(review-flow): assert top-level ERROR on all-ERROR sub-review aggregation`
 
 ## Batch Tests
 
