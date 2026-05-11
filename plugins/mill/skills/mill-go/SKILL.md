@@ -147,6 +147,21 @@ For each round `N` from 1 to `roles.code-review.batch.rounds`:
 
      The CLI atomically: reads `implementer_session` from status.md, sets batch state → `fixing`, calls `_status.append_phase` for `fixing-{batch_name}-r{N}`, commits and pushes (status.md plus the review file), and resumes the warm implementer session with the fix prompt (which instructs the implementer to load `mill-receiving-review` and apply findings). Parse the JSON report the same way as step 2 — including the exit-code-1-with-stuck-JSON behavior described under "1. Implement". On stuck → escalate.
 
+4.5. **Step 4.5: ERROR-only-aggregate retry (no round consumed)**
+
+   When the JSON envelope from sub-step 2 has top-level `verdict: "ERROR"` (or, equivalently, every entry in `reviews[]` has `verdict: "ERROR"`), skip sub-step 4 entirely and immediately re-run:
+
+   ```bash
+   uv run --project "$CLAUDE_PLUGIN_ROOT" "$CLAUDE_PLUGIN_ROOT/scripts/millpy-bg.py" \
+       --slug review-code-<batch_name>-retry-r<N> -- \
+       uv run --project "$CLAUDE_PLUGIN_ROOT" "$CLAUDE_PLUGIN_ROOT/scripts/millpy-review-code.py" \
+           --batch <batch_name> [--extra-file <p> ...]
+   ```
+
+   Returns immediately with `pid=<N> log=<abs-path>`. Poll `cat <log-path>` until `[mill-bg] EXIT` appears, then extract the JSON summary line from the log.
+
+   The round counter `N` is **not** consumed — the round produced no reviewable output. On the **second** consecutive run that still has top-level `verdict: "ERROR"`, halt with `BLOCKED: code review ERROR-only round {N}` and surface each entry's `error` string from `reviews[]` to the user. Do NOT auto-retry beyond the second pass. The two-pass cap mirrors mill-plan's existing step 4.5. *(Closes #228 — rate-limit errors no longer mis-dispatch the implementer with a null review file.)*
+
 5. **Max-rounds exhaustion.** After `roles.code-review.batch.rounds` rounds without APPROVE: `_notify.notify("mill-go.review-exhausted", f"batch {batch_name}", slug=slug, rounds=N)`, set batch state → `blocked`, `blocked_reason: "review rounds exhausted"`, `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`, commit on the task branch: `git -C <worktree> add task/status.md && git -C <worktree> commit -m "mill-go: blocked on {batch_name} after {N} rounds"`. Go to *Blocked* below.
 
 ### Stuck escalation
@@ -218,6 +233,22 @@ For each round `H` from 1 to `max_holistic_rounds`:
        [--extra-file <p> ...]
    ```
    Include any accumulated `extra_files` from prior `NEED_CONTEXT` rounds via `--extra-file <p>` (one flag per path). Poll and extract JSON as per the per-batch pattern.
+
+3.5. **Step 3.5: ERROR-only-aggregate retry (no round consumed)**
+
+   When the JSON envelope from step 3 has top-level `verdict: "ERROR"` (or, equivalently, every entry in `reviews[]` has `verdict: "ERROR"`), skip steps 4 and 5 entirely and immediately re-run:
+
+   ```bash
+   uv run --project "${CLAUDE_PLUGIN_ROOT}" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-bg.py" \
+     --slug review-code-holistic-retry-r<H> -- \
+     uv run --project "${CLAUDE_PLUGIN_ROOT}" \
+       "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-review-code.py" \
+       [--extra-file <p> ...]
+   ```
+
+   Returns immediately with `pid=<N> log=<abs-path>`. Poll `cat <log-path>` until `[mill-bg] EXIT` appears, then extract the JSON summary line from the log.
+
+   The round counter `H` is **not** consumed — the round produced no reviewable output. On the **second** consecutive run that still has top-level `verdict: "ERROR"`, halt with `BLOCKED: holistic code review ERROR-only round {H}` and surface each entry's `error` string from `reviews[]` to the user. Do NOT auto-retry beyond the second pass. The two-pass cap mirrors mill-plan's existing step 4.5.
 
 4. On `APPROVE`: `_status.append_phase(status_path, "holistic-approved", _timestamp.now_utc_iso())`. Commit status. Proceed to Handoff.
 
