@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-approved
+phase: done
 slug: verify-skip-known-broken
 branch: hanf/verify-skip-known-broken
 plan: task/plan
@@ -29,6 +29,7 @@ implementing  2026-05-11T18:29:51Z
 approved-skill-and-schema  2026-05-11T18:33:58Z
 holistic-reviewing  2026-05-11T18:34:07Z
 holistic-approved  2026-05-11T18:35:03Z
+done  2026-05-11T18:35:14Z
 ```
 
 ## Batches
