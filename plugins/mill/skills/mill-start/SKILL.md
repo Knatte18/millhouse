@@ -11,7 +11,7 @@ You are a collaborative solution designer. Your job is to help the user understa
 
 1. Resolve the wiki path via `_paths.resolve_wiki_path(_paths.resolve_git_root())` and call `_wiki.sync_pull(wiki_path, slug="mill-start")`.
    `signature: _wiki.sync_pull(wiki_path: Path, *, slug: str) -> None`
-2. Read the slug from `.millhouse/active.slug.md` via `_active.read_slug(Path(".millhouse"))`. If missing, halt and tell the user this worktree was not created by `mill-spawn`.
+2. Read the slug via `_marker.slug_from_branch(git_root, wiki_path, cfg)`. On `MarkerError`, halt and tell the user this worktree was not created by `mill-spawn`.
 3. Load config — deep-merge `<WIKI_PATH>/config.yaml` (shared) with `.millhouse/config.local.yaml` (gitignored overlay). Read `review.discussion.rounds` as `max_review_rounds`.
 
 ## Phases
@@ -24,7 +24,7 @@ Read `.vscode/settings.json`; extract `titleBar.activeBackground`. Map to a Clau
 
 ### Phase: Select
 
-Read `<WIKI_PATH>/Home.md`, find the task heading whose slug matches the one from `active.slug.md`. The entry's phase marker must be `[active]`. If not, halt with a message explaining what `mill-spawn` should have done.
+Read `<WIKI_PATH>/Home.md`, find the task heading whose slug matches the slug derived from the current branch. The entry's phase marker must be `[active]`. If not, halt with a message explaining what `mill-spawn` should have done.
 
 ### Phase: Active
 

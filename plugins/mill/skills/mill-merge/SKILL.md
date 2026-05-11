@@ -16,7 +16,7 @@ You are an integration engineer. Your job is to merge a completed task branch ba
 ## Entry
 
 1. **Step 1 — Resolve mode + load config.**
-   Resolve `git_root` via `_paths.resolve_git_root()`, `wiki_path` via `_paths.resolve_wiki_path(git_root)`, and `container_path` via `_paths.resolve_container_path(git_root)`. Load the deep-merged config: read `<wiki_path>/config.yaml` and overlay `<git_root>/.millhouse/config.local.yaml` if present (same deep-merge pattern used elsewhere). Try to call `active_data = _active.read_all(Path('.millhouse'))`. On `_active.ActiveError` (no marker / malformed), halt immediately with: *"This worktree has no active marker — `mill-merge` needs `status.md` to know the parent branch. Run `mill-claim` to convert this worktree to a tracked task, or merge manually."* On success: extract `slug = active_data['slug']` and call `mode_inplace = _inplace.is_inplace(active_data, git_root, cfg)`. Set `mode = 'inplace'` if `mode_inplace` else `mode = 'worktree'`.
+   Resolve `git_root` via `_paths.resolve_git_root()`, `wiki_path` via `_paths.resolve_wiki_path(git_root)`, and `container_path` via `_paths.resolve_container_path(git_root)`. Load the deep-merged config: read `<wiki_path>/config.yaml` and overlay `<git_root>/.millhouse/config.local.yaml` if present (same deep-merge pattern used elsewhere). Try to call `active_data = _marker.task_data(git_root, wiki_path, cfg)`. On `_marker.MarkerError` (detached HEAD, prefix mismatch, slug absent from Home.md, or not [active]), halt immediately with: *"This worktree has no active task branch — `mill-merge` needs `status.md` to know the parent branch. Run `mill-claim` to convert this worktree to a tracked task, or merge manually."* On success: extract `slug = active_data['slug']` and call `mode_inplace = _inplace.is_inplace(slug, git_root, cfg)`. Set `mode = 'inplace'` if `mode_inplace` else `mode = 'worktree'`.
 
    Stale-worktree edge: if `active_data` is not None AND the corresponding `<worktrees-dir>/<slug>/` directory exists AND the branch matches, call `_inplace.prompt_stale_worktree(slug, worktree_path)` and override `mode` based on the user's choice (`"inplace"` → `mode = 'inplace'`; `"worktree"` → `mode = 'worktree'`; `"abort"` → halt).
 
@@ -31,7 +31,7 @@ You are an integration engineer. Your job is to merge a completed task branch ba
    **In-place mode bypass:** when `mode == 'inplace'`, the existing Steps 1 (acquire merge lock on parent) and 2 (invoke `mill-merge-in`) are SKIPPED. There is no separate parent worktree to lock; the merge is purely local. Continue from Step 3 (capture child branch) onward, but treat "child" and "parent" as branches in the same working tree (cwd is the hub). For the squash merge in Step 4 (Direct path), omit the `-C <parent-path>` flag — the merge runs against the current working tree directly.
 
 2. `_wiki.sync_pull(<WIKI_PATH>, slug=slug)`.
-3. Read slug via `_active.read_slug(Path(".millhouse"))` (already resolved in Step 1; reuse `active_data` — no second read needed).
+3. Slug already resolved in Step 1; reuse `active_data['slug']` — no second read needed.
 4. *(Config already loaded in Step 1.)*
 5. Resolve parent branch via `_parent_branch.resolve(status_path, interactive=<True unless called non-interactively>)`. `status_path` is `git_root / "task" / "status.md"` — state lives in `task/` on the task branch, not in the wiki.
 6. **Phase gate — also the re-entry point for PR-path recovery.** Read `git_root/task/status.md`'s `phase:`.
@@ -218,8 +218,6 @@ git -C <parent-path> branch -D "$CHILD_BRANCH"
 git checkout <parent_branch>
 git branch -D "$CHILD_BRANCH"
 ```
-
-Also remove `<git_root>/.millhouse/active.slug.md` (the canonical in-place marker).
 
 ### 9. Remove portal entry
 

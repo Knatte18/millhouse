@@ -5,7 +5,7 @@ description: open Claude Code in an active worktree.
 
 # mill-terminal
 
-Scans the worktrees container for directories with an `active.slug.md` marker, presents a numbered picker, and launches `claude --name <slug>` in the selected worktree. When no active worktrees exist, auto-invokes mill-spawn to create one first. Auto-selects when only one active worktree exists.
+Scans the worktrees container for directories whose current branch maps to an active task in Home.md, presents a numbered picker, and launches `claude --name <slug>` in the selected worktree. When no active worktrees exist, auto-invokes mill-spawn to create one first. Auto-selects when only one active worktree exists.
 
 ## Run it
 
