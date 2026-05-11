@@ -33,6 +33,7 @@ import time
 from pathlib import Path
 
 import _subprocess_util
+from _llm_common import LLMError, LLMSessionError, LLMRateLimitError
 
 
 def _claude_argv_prefix() -> list[str]:
@@ -60,30 +61,7 @@ def _claude_argv_prefix() -> list[str]:
 # Exceptions
 # ---------------------------------------------------------------------------
 
-class LLMError(Exception):
-    """Raised on timeout, auth failure, or non-zero exit from claude CLI.
-
-    Callers use str(exc) to get a human-readable error message. Backends
-    catch LLMError at the per-sub-review boundary and record
-    {verdict: "ERROR", file: null, error: "<msg>"} in the ReviewResult.
-    """
-
-
-class LLMSessionError(LLMError):
-    """Raised when `claude -p --resume <id>` fails because the session is gone.
-
-    Callers (mill-go's builder) catch this specifically to fall back to a
-    fresh session instead of aborting the batch.
-    """
-
-
-class LLMRateLimitError(LLMError):
-    """Raised when the claude CLI exits non-zero AND stream-json indicates a rate-limit/throttle event.
-
-    Backends record verdict: ERROR with error: 'rate_limit: ...' and the orchestrator's
-    ERROR-only retry handles it. Inherits from LLMError so existing catch sites continue
-    to handle it as a generic provider failure unless they specifically want the typed split.
-    """
+# Re-exported from _llm_common — see that module for the class definitions.
 
 
 # ---------------------------------------------------------------------------
