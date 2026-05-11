@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-review-r1
+phase: planned
 slug: verify-skip-known-broken
 branch: hanf/verify-skip-known-broken
 plan: task/plan
@@ -19,4 +19,5 @@ discussion-fix-r1  2026-05-11T17:57:05Z
 discussed  2026-05-11T17:57:19Z
 planning  2026-05-11T18:12:17Z
 plan-review-r1  2026-05-11T18:16:54Z
+planned  2026-05-11T18:17:05Z
 ```
