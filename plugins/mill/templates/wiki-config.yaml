@@ -102,7 +102,7 @@ roles:
       reviewer: sonnetmedium
     holistic:
       rounds: 3
-      reviewer: sonnetmedium
+      reviewer: sonnetmax
 
   code-review:
     batch:
