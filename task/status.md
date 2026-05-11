@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-anti-pattern-walker-test
+phase: approved-docs-claude-md-and-skills
 slug: fix-wiki-cwd-cascade
 branch: hanf/fix-wiki-cwd-cascade
 plan: task/plan
@@ -26,6 +26,7 @@ planned  2026-05-11T12:27:42Z
 implementing  2026-05-11T12:29:38Z
 approved-defensive-guards  2026-05-11T12:44:30Z
 approved-anti-pattern-walker-test  2026-05-11T12:53:19Z
+approved-docs-claude-md-and-skills  2026-05-11T12:56:14Z
 ```
 
 ## Batches
@@ -41,7 +42,7 @@ batches:
     implementer_session: 91c6bfb8-2a32-49ed-820e-788bb327ec85
     start_sha: 5e0e4935718b79134842ebd8c0758daca5099cc1
   - name: docs-claude-md-and-skills
-    state: running
+    state: approved
     implementer_session: e49dce76-8391-430d-80fc-c5c113ffeda8
     start_sha: 1e1d939c254e4090e44d87a35c9a5b05f1dab975
   - name: wiki-log-cleanup
