@@ -141,3 +141,14 @@ groom:
 
 merge:
   verify_fix_rounds: 3
+
+# ---------------------------------------------------------------------------
+# mill-merge-in: verify allowlist
+# ---------------------------------------------------------------------------
+# verify.skip_known_broken is a list of path substrings. If any entry appears
+# as a substring of a plan batch's verify: command, mill-merge-in skips that
+# command and logs: [verify] skipped <path> (allowlisted as known-broken).
+# Values are per-machine and belong in .millhouse/config.local.yaml, not here
+# in the shared wiki config — this block is for schema documentation only.
+# verify:
+#   skip_known_broken: []  # e.g. ["tests/foo/test_flaky.py"]
