@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-llm-claude-fast-fail-retry
+phase: approved-review-common-divergence-warning
 slug: mill-misc-fixes-4
 branch: hanf/mill-misc-fixes-4
 plan: task/plan
@@ -26,6 +26,7 @@ planned  2026-05-11T11:21:31Z
 implementing  2026-05-11T11:24:10Z
 approved-gitignore-and-claudemd  2026-05-11T11:26:03Z
 approved-llm-claude-fast-fail-retry  2026-05-11T11:30:43Z
+approved-review-common-divergence-warning  2026-05-11T11:33:56Z
 ```
 
 ## Batches
@@ -43,9 +44,10 @@ batches:
     start_sha: 7b6ebe127f9f2e10919bdb5dc7aefb1d252a84fd
     commit_sha: ba7d1781268d4fda4817a2c1e03288efb64c2028
   - name: review-common-divergence-warning
-    state: running
+    state: approved
     implementer_session: 20a6eb98-0b7b-4f6c-9604-21aba74a0a18
     start_sha: 78daf048d9d9d7d84d5f576228997c52270f2610
+    commit_sha: 04a0209d88140c30fb8b58fae0b3c478908bf03d
   - name: review-fixture-seeding
     state: pending
   - name: merge-in-briefs-protocol-violation
