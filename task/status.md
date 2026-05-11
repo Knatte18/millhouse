@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-review-fixture-seeding
+phase: approved-merge-in-briefs-protocol-violation
 slug: mill-misc-fixes-4
 branch: hanf/mill-misc-fixes-4
 plan: task/plan
@@ -28,6 +28,7 @@ approved-gitignore-and-claudemd  2026-05-11T11:26:03Z
 approved-llm-claude-fast-fail-retry  2026-05-11T11:30:43Z
 approved-review-common-divergence-warning  2026-05-11T11:33:56Z
 approved-review-fixture-seeding  2026-05-11T11:51:32Z
+approved-merge-in-briefs-protocol-violation  2026-05-11T12:04:23Z
 ```
 
 ## Batches
@@ -55,9 +56,10 @@ batches:
     start_sha: 9ad7db534561e08f93655225fd78ae79189c41a4
     commit_sha: e994feeadf358b74d15edbc5d0c4835c840e95ab
   - name: merge-in-briefs-protocol-violation
-    state: running
+    state: approved
     implementer_session: 62a14902-27df-43b0-8aff-2c5f4b84e1cc
     start_sha: 98b8a09c1814e4fd82a20a5346695094770f96c1
+    commit_sha: 50950d9e8dd7f18e447293c5f4fdafb7246bdeb0
   - name: wiki-config-template-sync
     state: pending
   - name: review-code-error-aggregation
