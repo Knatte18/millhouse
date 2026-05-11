@@ -75,7 +75,8 @@ Both problems stem from the two-state Home.md (`[active]`/`[done]`): mill-merge 
 ### pr-reap-teardown-sequence
 
 - **Decision:** When cleanup detects a `[pr-pending]` task whose PR is `MERGED`: (1) verify archive tag (create if absent — safety net); (2) flip Home.md `[done]`; (3) run standard worktree teardown (same `_apply_worktree_record` / `_apply_inplace_record` as for `[done]` tasks). When PR is `OPEN`: no-op. When PR is `CLOSED` (unmerged): report to operator for manual decision (abandon? reopen?).
-- **Rationale:** Same teardown code as `[done]` tasks avoids duplication. Archive tag creation as a safety net handles the edge case where mill-merge created the PR but crashed before creating the tag (unlikely but possible).
+- **Archive tag commit target:** mill-merge's PR path does NOT create the archive tag before halting (it halts at Step 11, skipping Step 6). mill-cleanup's PR-reap creates the tag. The tag should point to the cleanup-commit tip of the child branch. Sequence: (a) run `git fetch origin <child_branch>` — if the branch still exists remotely, tag the fetched tip; (b) if the fetch fails (GitHub auto-deleted the branch after merge), use the `mergeCommit` SHA from the `gh pr list` JSON, fetching it via `git fetch origin <mergeCommit_sha>` first. The tag is created via `git tag archive/<slug> <sha>` and `git push origin archive/<slug>`.
+- **Rationale:** Same teardown code as `[done]` tasks avoids duplication. Archive tag commit target must be specified explicitly because GitHub may auto-delete the child branch after PR merge.
 - **Rejected:** Calling mill-merge re-entry for PR-reap — mill-merge re-entry is designed for the cleanup commit + archive tag + Home.md flip, all of which may already be done; running it again is not idempotent for the Home.md flip.
 
 ### invalid-argument-is-lock
@@ -152,6 +153,8 @@ New branch for `[pr-pending]` tasks (note: these come from Home.md, not status.m
 elif phase == "pr-pending":
     to_reap_pr.append(record)
 ```
+
+**Orphan detection for new states:** The existing orphan check fires only for `task.phase == "active"` tasks with no active worktree. Extend to also report `[ready-to-merge]` and `[pr-pending]` tasks with no active worktree — same `to_report` message pattern: `f"{slug} — Home.md marker is [{task.phase}] but has no active worktree"`. These can arise if a worktree is manually deleted mid-teardown, leaving the Home.md marker stranded. They should be reported so the operator can clean them up manually (e.g., flip Home.md or re-run mill-cleanup after resolving the worktree state). The orphan check extension is a one-line change to the phase condition: `if task.phase in ("active", "ready-to-merge", "pr-pending") and task.slug not in active_slugs`.
 
 **`apply_plan` changes:** Add PR-reap loop over `plan.to_reap_pr`. For each record:
 1. Run `gh pr list --head <branch> --state all --json state,mergeCommit,number`.
