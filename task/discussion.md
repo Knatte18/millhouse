@@ -86,10 +86,12 @@ for (name, cmd):
   on failure → millpy-merge-in-subagent.py --mode verify-fix
 ```
 
-**Config loading** — `_config.load_config(wiki_path, worktree_root)` is already called in Entry (step 3 of mill-merge-in). The `cfg` dict is available throughout the skill. Deep-merge order: wiki → machine → worktree-stub → worktree-real. The local `.millhouse/config.local.yaml` wins.
+**Config loading** — `mill-merge-in`'s Entry has no explicit config-load step; `cfg` is implicitly required by Entry step 2 (`_marker.slug_from_branch(git_root, wiki_path, cfg)`). In practice the LLM executing the SKILL already has `cfg` available. The plan must add an explicit `cfg = _config.load_config(wiki_path, git_root)` instruction at the top of Step 4 (before the verify loop) to make this requirement clear and auditable. Deep-merge order: wiki → machine → worktree-stub → worktree-real; the local `.millhouse/config.local.yaml` wins.
+
+**Step 6 Report update** — in-scope. When `K ≥ 1` verify commands were skipped, Step 6 Report must read `<M> batch tests ran, <K> skipped (allowlisted as known-broken)`. When `K = 0` (no allowlist, or allowlist does not match any command), the existing format `<M> batch tests ran` is unchanged.
 
 **Files to change:**
-- `plugins/mill/skills/mill-merge-in/SKILL.md` — update Step 4, add allowlist pre-check.
+- `plugins/mill/skills/mill-merge-in/SKILL.md` — update Step 4 (allowlist pre-check + explicit cfg load) and Step 6 Report (add skip count).
 - `plugins/mill/templates/wiki-config.yaml` — add commented `verify:` section.
 - `C:/Code/millhouse/wiki/config.yaml` (production wiki config) — mirror the template change.
 
