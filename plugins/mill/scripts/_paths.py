@@ -108,7 +108,29 @@ def resolve_git_root() -> Path:
     result = _subprocess_util.run(["git", "rev-parse", "--show-toplevel"])
     if result.returncode != 0:
         raise SystemExit(f"Not in a git repository: {result.stderr.strip()!r}")
-    return Path(result.stdout.strip())
+    repo_root = Path(result.stdout.strip())
+    if repo_root.name == "wiki":
+        raise SystemExit(
+            f"cwd is inside wiki ({repo_root}) — scripts must run from a task worktree"
+            " or the main repo, not the wiki. Wiki mutations go through"
+            " git -C <wiki_path> or _wiki.write_commit_push."
+        )
+    try:
+        wiki_path = resolve_wiki_path(repo_root)
+    except (Exception, SystemExit):
+        wiki_path = None
+    if wiki_path is not None:
+        try:
+            same = repo_root.samefile(wiki_path)
+        except OSError:
+            same = repo_root.resolve() == wiki_path.resolve()
+        if same:
+            raise SystemExit(
+                f"cwd is inside wiki ({wiki_path}) — scripts must run from a task worktree"
+                " or the main repo, not the wiki. Wiki mutations go through"
+                " git -C <wiki_path> or _wiki.write_commit_push."
+            )
+    return repo_root
 
 
 def resolve_hub_path(cwd: Path | None = None) -> Path:
