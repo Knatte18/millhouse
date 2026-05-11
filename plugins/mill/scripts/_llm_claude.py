@@ -232,6 +232,12 @@ def _invoke(
     Raises LLMError on failure. When resume=True and the subprocess exits
     non-zero, raises LLMSessionError instead so callers can distinguish a
     dead-session fallback path from a generic failure.
+
+    When the subprocess exits non-zero within 2 seconds with empty stdout,
+    and resume=False and no rate-limit was detected, the call is retried
+    once with the same argv (see issue #153 — cmd /c claude shim flakes
+    immediately after a prior session interrupt). The retry's outcome
+    propagates as the final result.
     """
     sess_label = f" session={session_id[:8]}..." if session_id else ""
     mode_suffix = "/resume" if resume else ""
@@ -256,6 +262,19 @@ def _invoke(
 
     dt = time.monotonic() - start
     rate_limited = _scan_rate_limit(result.stdout or "")
+    if (
+        result.returncode != 0
+        and dt < 2.0
+        and not result.stdout.strip()
+        and not resume
+        and not rate_limited
+    ):
+        print(
+            f"[_llm_claude] fast-fail retry (duration={dt:.2f}s exit={result.returncode})",
+            file=sys.stderr,
+        )
+        result = _subprocess_util.run(argv, input=prompt_text, timeout=float(timeout), cwd=cwd)
+        rate_limited = _scan_rate_limit(result.stdout or "")
 
     if result.returncode != 0:
         error_detail = (result.stderr or result.stdout or "")[:500]

@@ -24,6 +24,7 @@ import _test_registry  # noqa: E402
 from _llm_claude import LLMError  # noqa: E402
 from _review_code import run as code_run  # noqa: E402
 from _review_common import ReviewError  # noqa: E402
+from _test_helpers import seed_wiki_config  # noqa: E402
 
 SLUG = "test-slug"
 
@@ -102,11 +103,7 @@ def _make_fixture(tmp_path: Path) -> tuple[Path, Path, Path, dict]:
     mill_dir.mkdir(parents=True, exist_ok=True)
     wiki_root = tmp_path / "wiki"
     wiki_root.mkdir(parents=True, exist_ok=True)
-    (wiki_root / "config.yaml").write_text(
-        "paths:\n  discussion_file: discussion.md\n  plan_dir: plan/\n  reviews_dir: reviews/\n"
-        "spawn:\n  branch_prefix: \"hanf/\"\n",
-        encoding="utf-8",
-    )
+    seed_wiki_config(wiki_root)
     (wiki_root / "Home.md").write_text(
         f"## Test Task\n[[{SLUG}]] [active]\n\n_body_\n", encoding="utf-8"
     )
@@ -270,10 +267,7 @@ def main() -> int:
         mill_dir.mkdir(parents=True, exist_ok=True)
         wiki_root = Path(tmpdir) / "wiki"
         wiki_root.mkdir(parents=True, exist_ok=True)
-        (wiki_root / "config.yaml").write_text(
-            "paths:\n  discussion_file: discussion.md\n  plan_dir: plan/\n  reviews_dir: reviews/\n"
-            "spawn:\n  branch_prefix: \"hanf/\"\n", encoding="utf-8",
-        )
+        seed_wiki_config(wiki_root)
         (wiki_root / "Home.md").write_text(f"## Test Task\n[[{SLUG}]] [active]\n\n_body_\n", encoding="utf-8")
         (mill_dir / "config.local.yaml").write_text(
             f"paths:\n  wiki: '{wiki_root.as_posix()}'\n", encoding="utf-8"
@@ -339,10 +333,7 @@ def main() -> int:
         mill_dir.mkdir(parents=True, exist_ok=True)
         wiki_root = Path(tmpdir) / "wiki"
         wiki_root.mkdir(parents=True, exist_ok=True)
-        (wiki_root / "config.yaml").write_text(
-            "paths:\n  discussion_file: discussion.md\n  plan_dir: plan/\n  reviews_dir: reviews/\n"
-            "spawn:\n  branch_prefix: \"hanf/\"\n", encoding="utf-8",
-        )
+        seed_wiki_config(wiki_root)
         (wiki_root / "Home.md").write_text(f"## Test Task\n[[{SLUG}]] [active]\n\n_body_\n", encoding="utf-8")
         (mill_dir / "config.local.yaml").write_text(
             f"paths:\n  wiki: '{wiki_root.as_posix()}'\n", encoding="utf-8"
@@ -475,10 +466,7 @@ def main() -> int:
         subprocess.run(["git", "-C", str(project_root), "checkout", "-b", f"hanf/{SLUG}"], capture_output=True)
         wiki_root = Path(tmpdir) / "wiki"
         wiki_root.mkdir(parents=True, exist_ok=True)
-        (wiki_root / "config.yaml").write_text(
-            "paths:\n  discussion_file: discussion.md\n  plan_dir: plan/\n  reviews_dir: reviews/\n"
-            "spawn:\n  branch_prefix: \"hanf/\"\n", encoding="utf-8",
-        )
+        seed_wiki_config(wiki_root)
         (wiki_root / "Home.md").write_text(f"## Test Task\n[[{SLUG}]] [active]\n\n_body_\n", encoding="utf-8")
         mill_dir = project_root / ".millhouse"
         mill_dir.mkdir(parents=True, exist_ok=True)
@@ -599,13 +587,14 @@ def main() -> int:
         stub.seed([])  # clear prompts log
         try:
             r = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, batch_name="alpha")
-            assert r.verdict == "REQUEST_CHANGES", f"expected REQUEST_CHANGES, got {r.verdict}"
+            assert r.verdict == "ERROR", f"expected ERROR for all-ERROR run, got {r.verdict}"
             assert len(r.reviews) == 1
             rev = r.reviews[0]
             assert rev["verdict"] == "ERROR", f"expected ERROR entry, got {rev['verdict']}"
             assert rev["file"] is None, f"expected file=None, got {rev['file']}"
             assert "seeded boom" in rev["error"], f"error field wrong: {rev['error']}"
             assert rev["session_id"] is None
+            assert all(rv["verdict"] == "ERROR" for rv in r.reviews), f"expected all sub-reviews ERROR, got {[rv['verdict'] for rv in r.reviews]}"
             print("PASS test9: initial LLM failure → ReviewResult(ERROR) not raise")
         except AssertionError as exc:
             errors += 1
@@ -631,11 +620,12 @@ def main() -> int:
         stub.seed([])
         try:
             r = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, batch_name=None)
-            assert r.verdict == "REQUEST_CHANGES", f"expected REQUEST_CHANGES, got {r.verdict}"
+            assert r.verdict == "ERROR", f"expected ERROR for all-ERROR run, got {r.verdict}"
             rev = r.reviews[0]
             assert rev["verdict"] == "ERROR"
             assert rev["scope"] == "holistic"
             assert "seeded boom" in rev["error"]
+            assert all(rv["verdict"] == "ERROR" for rv in r.reviews), f"expected all sub-reviews ERROR, got {[rv['verdict'] for rv in r.reviews]}"
             print("PASS test10: holistic LLM failure → ReviewResult(ERROR) not raise")
         except AssertionError as exc:
             errors += 1
@@ -666,13 +656,14 @@ def main() -> int:
         stub.run = _seq
         try:
             r = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, batch_name="alpha")
-            assert r.verdict == "REQUEST_CHANGES", f"expected REQUEST_CHANGES, got {r.verdict}"
+            assert r.verdict == "ERROR", f"expected ERROR for all-ERROR run, got {r.verdict}"
             rev = r.reviews[0]
             assert rev["verdict"] == "ERROR"
             assert rev["error"].startswith("resume retry failed:"), (
                 f"error should start with 'resume retry failed:': {rev['error']}"
             )
             assert rev["session_id"] is None
+            assert all(rv["verdict"] == "ERROR" for rv in r.reviews), f"expected all sub-reviews ERROR, got {[rv['verdict'] for rv in r.reviews]}"
             print("PASS test11: resume LLM failure → ERROR entry with 'resume retry failed:' prefix")
         except AssertionError as exc:
             errors += 1
@@ -696,10 +687,7 @@ def main() -> int:
         mill_dir.mkdir(parents=True, exist_ok=True)
         wiki_root = Path(tmpdir) / "wiki"
         wiki_root.mkdir(parents=True, exist_ok=True)
-        (wiki_root / "config.yaml").write_text(
-            "paths:\n  discussion_file: discussion.md\n  plan_dir: plan/\n  reviews_dir: reviews/\n"
-            "spawn:\n  branch_prefix: \"hanf/\"\n", encoding="utf-8",
-        )
+        seed_wiki_config(wiki_root)
         (wiki_root / "Home.md").write_text(f"## Test Task\n[[{SLUG}]] [active]\n\n_body_\n", encoding="utf-8")
         (mill_dir / "config.local.yaml").write_text(
             f"paths:\n  wiki: '{wiki_root.as_posix()}'\n", encoding="utf-8"

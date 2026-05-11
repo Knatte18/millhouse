@@ -23,6 +23,7 @@ import _test_registry  # noqa: E402
 from _llm_claude import LLMError  # noqa: E402
 from _review_plan import run as plan_run  # noqa: E402
 from _review_common import ReviewError  # noqa: E402
+from _test_helpers import seed_wiki_config  # noqa: E402
 
 SLUG = "test-slug"
 
@@ -108,11 +109,7 @@ def _make_plan_fixture(
     mill_dir.mkdir(parents=True, exist_ok=True)
     wiki_root = tmp_path / "wiki"
     wiki_root.mkdir(parents=True, exist_ok=True)
-    (wiki_root / "config.yaml").write_text(
-        "paths:\n  discussion_file: discussion.md\n  plan_dir: plan/\n  reviews_dir: reviews/\n"
-        "spawn:\n  branch_prefix: \"hanf/\"\n",
-        encoding="utf-8",
-    )
+    seed_wiki_config(wiki_root)
     (wiki_root / "Home.md").write_text(
         f"## Test Task\n[[{SLUG}]] [active]\n\n_body_\n", encoding="utf-8"
     )
@@ -880,15 +877,16 @@ def main() -> int:
         stub.run = _raises_llmerror
         try:
             r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root)
-            assert r.verdict == "REQUEST_CHANGES", (
-                f"expected REQUEST_CHANGES for all-ERROR run, got {r.verdict}"
+            assert r.verdict == "ERROR", (
+                f"expected ERROR for all-ERROR run, got {r.verdict}"
             )
             assert len(r.reviews) >= 1, "expected at least 1 review entry"
             for rv in r.reviews:
                 assert rv["verdict"] == "ERROR", (
                     f"expected ERROR entry, got {rv['verdict']}"
                 )
-            print("PASS test16: all-ERROR run returns ReviewResult(REQUEST_CHANGES) rather than raising (#84)")
+            assert all(rv["verdict"] == "ERROR" for rv in r.reviews), f"expected all sub-reviews ERROR, got {[rv['verdict'] for rv in r.reviews]}"
+            print("PASS test16: all-ERROR run returns ReviewResult(ERROR) rather than raising (#84, #228)")
         except AssertionError as exc:
             errors += 1
             print(f"FAIL test16: {exc}", file=sys.stderr)

@@ -1243,6 +1243,102 @@ def main() -> int:
     print("PASS: parse_blocking_count mid-line marker not counted -> 0")
 
     # ---------------------------------------------------------------------------
+    # parse_blocking_count divergence warning
+    # ---------------------------------------------------------------------------
+
+    def test_parse_blocking_count_warns_on_prose_divergence_numeric():
+        import contextlib
+        import io
+        raw = (
+            "### [BLOCKING] finding one\n"
+            "### [BLOCKING] finding two\n"
+            "### [BLOCKING] finding three\n"
+            "There are 5 blocking findings in this review.\n"
+        )
+        buf = io.StringIO()
+        with contextlib.redirect_stderr(buf):
+            count = parse_blocking_count(raw, severity="BLOCKING")
+        assert count == 3, f"expected 3, got {count}"
+        assert "heading count 3 diverges from prose count 5" in buf.getvalue(), (
+            f"expected divergence warning, got: {buf.getvalue()!r}"
+        )
+        print("PASS: parse_blocking_count_warns_on_prose_divergence_numeric")
+
+    def test_parse_blocking_count_warns_on_prose_divergence_spelled():
+        import contextlib
+        import io
+        raw = (
+            "### [BLOCKING] finding one\n"
+            "### [BLOCKING] finding two\n"
+            "### [BLOCKING] finding three\n"
+            "Five blocking issues remain in this review.\n"
+        )
+        buf = io.StringIO()
+        with contextlib.redirect_stderr(buf):
+            count = parse_blocking_count(raw, severity="BLOCKING")
+        assert count == 3, f"expected 3, got {count}"
+        assert "heading count 3 diverges from prose count 5" in buf.getvalue(), (
+            f"expected divergence warning, got: {buf.getvalue()!r}"
+        )
+        print("PASS: parse_blocking_count_warns_on_prose_divergence_spelled")
+
+    def test_parse_blocking_count_silent_when_aligned():
+        import contextlib
+        import io
+        raw = (
+            "### [BLOCKING] finding one\n"
+            "### [BLOCKING] finding two\n"
+            "### [BLOCKING] finding three\n"
+            "3 blocking issues found.\n"
+        )
+        buf = io.StringIO()
+        with contextlib.redirect_stderr(buf):
+            count = parse_blocking_count(raw, severity="BLOCKING")
+        assert count == 3, f"expected 3, got {count}"
+        assert buf.getvalue() == "", f"expected no warning, got: {buf.getvalue()!r}"
+        print("PASS: parse_blocking_count_silent_when_aligned")
+
+    def test_parse_blocking_count_silent_when_no_prose_count():
+        import contextlib
+        import io
+        raw = (
+            "### [BLOCKING] finding one\n"
+            "### [BLOCKING] finding two\n"
+            "### [BLOCKING] finding three\n"
+            "No prose count phrase here.\n"
+        )
+        buf = io.StringIO()
+        with contextlib.redirect_stderr(buf):
+            count = parse_blocking_count(raw, severity="BLOCKING")
+        assert count == 3, f"expected 3, got {count}"
+        assert buf.getvalue() == "", f"expected no warning, got: {buf.getvalue()!r}"
+        print("PASS: parse_blocking_count_silent_when_no_prose_count")
+
+    def test_parse_blocking_count_warns_for_gap_severity():
+        import contextlib
+        import io
+        raw = (
+            "### [GAP] missing edge case\n"
+            "### [GAP] another gap\n"
+            "Three gaps remain in the discussion.\n"
+        )
+        buf = io.StringIO()
+        with contextlib.redirect_stderr(buf):
+            count = parse_blocking_count(raw, severity="GAP")
+        assert count == 2, f"expected 2, got {count}"
+        stderr = buf.getvalue()
+        assert "heading count 2 diverges from prose count 3 (severity=GAP)" in stderr, (
+            f"expected GAP divergence warning, got: {stderr!r}"
+        )
+        print("PASS: parse_blocking_count_warns_for_gap_severity")
+
+    test_parse_blocking_count_warns_on_prose_divergence_numeric()
+    test_parse_blocking_count_warns_on_prose_divergence_spelled()
+    test_parse_blocking_count_silent_when_aligned()
+    test_parse_blocking_count_silent_when_no_prose_count()
+    test_parse_blocking_count_warns_for_gap_severity()
+
+    # ---------------------------------------------------------------------------
     # _load_root_from_overview: importable from _review_common
     # ---------------------------------------------------------------------------
 
