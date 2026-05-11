@@ -92,3 +92,7 @@ External interface batch 3 will consume: `from _llm_gemini import run_bulk, run_
 ## Batch Tests
 
 `verify: uv run --project plugins/mill python plugins/mill/unit_tests/test-llm-gemini.py`. The new test file is self-contained — every subprocess interaction is monkeypatched, so the verify command does not require the live `gemini` binary. After this batch, `python plugins/mill/unit_tests/run-all.py` will pick up the new test alongside the existing ones (the runner auto-discovers `test-*.py` files in `unit_tests/`); a manual confirmation pass after merge is not required.
+
+## Post-implementation fix: test-reviewer-single.py
+
+`plugins/mill/unit_tests/test-reviewer-single.py` has a `test_unknown_provider_raises` test that used `provider: "gemini"` as its "unknown provider" example. Adding `_llm_gemini.py` in this batch makes `gemini` a valid importable provider, so the test now routes to the live gemini CLI and fails with `LLMError` (model not found) instead of `ReviewerError`. Fix: rename the unknown-provider test to use a truly non-importable provider name (e.g. `"unk_provider_xyz"`), and add a `test_gemini_bulk_mode` that monkeypatches `_llm_gemini.run_bulk` (mirrors `test_claude_bulk_mode`).
