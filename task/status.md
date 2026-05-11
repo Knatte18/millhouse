@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-integration-tests
+phase: approved-skill-docs
 slug: drop-active-marker
 branch: hanf/drop-active-marker
 plan: task/plan
@@ -23,6 +23,7 @@ implementing  2026-05-09T17:09:23Z
 approved-foundation  2026-05-09T17:17:11Z
 approved-migration  2026-05-11T06:03:04Z
 approved-integration-tests  2026-05-11T06:15:23Z
+approved-skill-docs  2026-05-11T06:17:47Z
 ```
 
 ## Batches
@@ -42,7 +43,7 @@ batches:
     implementer_session: 0fcebd39-b5ce-4b87-9d4f-a16cdfc64852
     start_sha: 627598124f50abb430df6e9dc8e85d96ce4c9a7d
   - name: skill-docs
-    state: running
+    state: approved
     implementer_session: b2176d93-2377-4755-a053-87224ebd7747
     start_sha: 907db644a64ba84c5d373eb4a493c45ada14052a
 ```
