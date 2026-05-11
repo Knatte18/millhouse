@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-skill-md-edits
+phase: holistic-reviewing
 slug: mill-misc-fixes-4
 branch: hanf/mill-misc-fixes-4
 plan: task/plan
@@ -32,6 +32,7 @@ approved-merge-in-briefs-protocol-violation  2026-05-11T12:04:23Z
 approved-wiki-config-template-sync  2026-05-11T12:09:17Z
 approved-review-code-error-aggregation  2026-05-11T12:20:24Z
 approved-skill-md-edits  2026-05-11T12:29:36Z
+holistic-reviewing  2026-05-11T12:29:55Z
 ```
 
 ## Batches
