@@ -64,6 +64,7 @@ def main() -> int:
                   return_value=[(wt1, "task-alpha", "Alpha Task"), (wt2, "task-beta", "Beta Task")]),
             patch("mill_vscode.subprocess.run", side_effect=mock_subprocess_run),
             patch("mill_vscode.input", return_value="1", create=True),
+            patch("mill_vscode._vscode_processes.find_open_vscode_paths", return_value=set()),
         ):
             rc = mill_vscode.main([])
 
@@ -188,6 +189,8 @@ def main() -> int:
             patch("mill_vscode._spawn_core.discover_active_worktrees",
                   return_value=[(wt1, "task-alpha", "Alpha Task")]),
             patch("mill_vscode.subprocess.run", side_effect=lambda a, **kw: subprocess_calls.append({"argv": a})),
+            patch("mill_vscode._vscode_processes.find_open_vscode_paths", return_value=set()),
+            patch("mill_vscode.input", return_value="1", create=True),
         ):
             rc = mill_vscode.main([])
 
@@ -232,6 +235,8 @@ def main() -> int:
             patch("mill_vscode._spawn_core.discover_active_worktrees",
                   return_value=[(wt1, "task-dot", "Dot Task")]),
             patch("mill_vscode.subprocess.run", side_effect=lambda a, **kw: subprocess_calls.append({"argv": a})),
+            patch("mill_vscode._vscode_processes.find_open_vscode_paths", return_value=set()),
+            patch("mill_vscode.input", return_value="1", create=True),
         ):
             rc = mill_vscode.main([])
 
@@ -282,6 +287,8 @@ def main() -> int:
             patch("mill_vscode._spawn_core.discover_active_worktrees",
                   return_value=[(wt1, "task-reg", "Regression Task")]),
             patch("mill_vscode.subprocess.run", side_effect=lambda a, **kw: subprocess_calls.append({"argv": a})),
+            patch("mill_vscode._vscode_processes.find_open_vscode_paths", return_value=set()),
+            patch("mill_vscode.input", return_value="1", create=True),
         ):
             rc = mill_vscode.main([])
 
@@ -478,6 +485,425 @@ def main() -> int:
             errors += 1
         else:
             print("PASS: --slug with empty active list → spawn not called")
+
+    # ------------------------------------------------------------------
+    # Test: filter_excludes_open_worktree — alpha open → only beta shown,
+    # input "1" selects beta.
+    # ------------------------------------------------------------------
+    with tempfile.TemporaryDirectory() as tmpdir:
+        root = Path(tmpdir)
+        _make_git_repo(root)
+
+        worktrees_dir = root / "worktrees"
+        wt_alpha = worktrees_dir / "task-alpha"
+        wt_beta = worktrees_dir / "task-beta"
+        wt_alpha.mkdir(parents=True)
+        wt_beta.mkdir(parents=True)
+        _write_active_marker(wt_alpha, "task-alpha", "Alpha")
+        _write_active_marker(wt_beta, "task-beta", "Beta")
+
+        subprocess_calls: list[dict] = []
+
+        with (
+            patch("mill_vscode.resolve_git_root", return_value=root),
+            patch("mill_vscode.resolve_wiki_path", return_value=root / "wiki"),
+            patch("mill_vscode.resolve_worktrees_dir", return_value=worktrees_dir),
+            patch("mill_vscode.subprocess.run", side_effect=lambda a, **kw: subprocess_calls.append({"argv": a})),
+            patch("mill_vscode._vscode_processes.find_open_vscode_paths", return_value={Path(str(wt_alpha))}),
+            patch("mill_vscode.input", return_value="1", create=True),
+        ):
+            rc = mill_vscode.main([])
+
+        if rc != 0:
+            print(f"FAIL: filter_excludes_open_worktree returned {rc}", file=sys.stderr)
+            errors += 1
+        elif not subprocess_calls or str(wt_beta) not in subprocess_calls[0]["argv"]:
+            print(
+                f"FAIL: filter_excludes_open_worktree: expected {wt_beta} in code argv, got {subprocess_calls}",
+                file=sys.stderr,
+            )
+            errors += 1
+        else:
+            print("PASS: filter_excludes_open_worktree — open worktree filtered, remaining selected")
+
+    # ------------------------------------------------------------------
+    # Test: filter_empties_list_calls_spawn_then_opens — one worktree open,
+    # filter empties list, spawn called, new worktree opened.
+    # ------------------------------------------------------------------
+    with tempfile.TemporaryDirectory() as tmpdir:
+        root = Path(tmpdir)
+        _make_git_repo(root)
+
+        worktrees_dir = root / "worktrees"
+        wt_alpha = worktrees_dir / "task-alpha"
+        wt_beta = worktrees_dir / "task-beta"
+        wt_alpha.mkdir(parents=True)
+        _write_active_marker(wt_alpha, "task-alpha", "Alpha")
+
+        spawn_callable = MagicMock(return_value=0)
+        subprocess_calls = []
+
+        with (
+            patch("mill_vscode.resolve_git_root", return_value=root),
+            patch("mill_vscode.resolve_wiki_path", return_value=root / "wiki"),
+            patch("mill_vscode.resolve_worktrees_dir", return_value=worktrees_dir),
+            patch(
+                "mill_vscode._spawn_core.discover_active_worktrees",
+                side_effect=[
+                    [(wt_alpha, "task-alpha", "Alpha")],
+                    [(wt_alpha, "task-alpha", "Alpha"), (wt_beta, "task-beta", "Beta")],
+                ],
+            ),
+            patch("mill_vscode._load_spawn_main", return_value=spawn_callable),
+            patch("mill_vscode.subprocess.run", side_effect=lambda a, **kw: subprocess_calls.append({"argv": a})),
+            patch("mill_vscode._vscode_processes.find_open_vscode_paths", return_value={Path(str(wt_alpha))}),
+        ):
+            rc = mill_vscode.main([])
+
+        if not spawn_callable.called:
+            print("FAIL: filter_empties_list_calls_spawn_then_opens: spawn not called", file=sys.stderr)
+            errors += 1
+        elif spawn_callable.call_args_list[0] != call([]):
+            print(
+                f"FAIL: filter_empties_list_calls_spawn_then_opens: spawn args wrong: {spawn_callable.call_args_list}",
+                file=sys.stderr,
+            )
+            errors += 1
+        elif not subprocess_calls or str(wt_beta) not in subprocess_calls[0]["argv"]:
+            print(
+                f"FAIL: filter_empties_list_calls_spawn_then_opens: expected {wt_beta} in argv, got {subprocess_calls}",
+                file=sys.stderr,
+            )
+            errors += 1
+        else:
+            print("PASS: filter_empties_list_calls_spawn_then_opens — all filtered → spawn + open new")
+
+    # ------------------------------------------------------------------
+    # Test: q_quits_with_zero — q input exits 0, no VS Code launched.
+    # ------------------------------------------------------------------
+    with tempfile.TemporaryDirectory() as tmpdir:
+        root = Path(tmpdir)
+        _make_git_repo(root)
+
+        worktrees_dir = root / "worktrees"
+        wt_alpha = worktrees_dir / "task-alpha"
+        wt_beta = worktrees_dir / "task-beta"
+        wt_alpha.mkdir(parents=True)
+        wt_beta.mkdir(parents=True)
+        _write_active_marker(wt_alpha, "task-alpha", "Alpha")
+        _write_active_marker(wt_beta, "task-beta", "Beta")
+
+        subprocess_calls = []
+
+        with (
+            patch("mill_vscode.resolve_git_root", return_value=root),
+            patch("mill_vscode.resolve_wiki_path", return_value=root / "wiki"),
+            patch("mill_vscode.resolve_worktrees_dir", return_value=worktrees_dir),
+            patch("mill_vscode.subprocess.run", side_effect=lambda a, **kw: subprocess_calls.append({"argv": a})),
+            patch("mill_vscode._vscode_processes.find_open_vscode_paths", return_value=set()),
+            patch("mill_vscode.input", return_value="q", create=True),
+        ):
+            rc = mill_vscode.main([])
+
+        if rc != 0:
+            print(f"FAIL: q_quits_with_zero returned {rc}, expected 0", file=sys.stderr)
+            errors += 1
+        elif subprocess_calls:
+            print("FAIL: q_quits_with_zero: subprocess.run called despite q", file=sys.stderr)
+            errors += 1
+        else:
+            print("PASS: q_quits_with_zero — q input → exit 0, no VS Code")
+
+    # ------------------------------------------------------------------
+    # Test: enter_spawns_and_opens — empty input triggers spawn, new
+    # worktree (gamma) opened via pre/post diff.
+    # ------------------------------------------------------------------
+    with tempfile.TemporaryDirectory() as tmpdir:
+        root = Path(tmpdir)
+        _make_git_repo(root)
+
+        worktrees_dir = root / "worktrees"
+        wt_alpha = worktrees_dir / "task-alpha"
+        wt_beta = worktrees_dir / "task-beta"
+        wt_gamma = worktrees_dir / "task-gamma"
+        wt_alpha.mkdir(parents=True)
+        wt_beta.mkdir(parents=True)
+        _write_active_marker(wt_alpha, "task-alpha", "Alpha")
+        _write_active_marker(wt_beta, "task-beta", "Beta")
+
+        spawn_callable = MagicMock(return_value=0)
+        subprocess_calls = []
+
+        with (
+            patch("mill_vscode.resolve_git_root", return_value=root),
+            patch("mill_vscode.resolve_wiki_path", return_value=root / "wiki"),
+            patch("mill_vscode.resolve_worktrees_dir", return_value=worktrees_dir),
+            patch(
+                "mill_vscode._spawn_core.discover_active_worktrees",
+                side_effect=[
+                    [(wt_alpha, "task-alpha", "Alpha"), (wt_beta, "task-beta", "Beta")],
+                    [(wt_alpha, "task-alpha", "Alpha"), (wt_beta, "task-beta", "Beta"), (wt_gamma, "task-gamma", "Gamma")],
+                ],
+            ),
+            patch("mill_vscode._load_spawn_main", return_value=spawn_callable),
+            patch("mill_vscode.subprocess.run", side_effect=lambda a, **kw: subprocess_calls.append({"argv": a})),
+            patch("mill_vscode._vscode_processes.find_open_vscode_paths", return_value=set()),
+            patch("mill_vscode.input", return_value="", create=True),
+        ):
+            rc = mill_vscode.main([])
+
+        if not spawn_callable.called:
+            print("FAIL: enter_spawns_and_opens: spawn not called", file=sys.stderr)
+            errors += 1
+        elif spawn_callable.call_args_list[0] != call([]):
+            print(
+                f"FAIL: enter_spawns_and_opens: spawn args wrong: {spawn_callable.call_args_list}",
+                file=sys.stderr,
+            )
+            errors += 1
+        elif not subprocess_calls or str(wt_gamma) not in subprocess_calls[0]["argv"]:
+            print(
+                f"FAIL: enter_spawns_and_opens: expected {wt_gamma} in argv, got {subprocess_calls}",
+                file=sys.stderr,
+            )
+            errors += 1
+        else:
+            print("PASS: enter_spawns_and_opens — <Enter> → spawn + open new worktree (gamma)")
+
+    # ------------------------------------------------------------------
+    # Test: new_flag_skips_list_and_opens_new — --new flag bypasses filter
+    # and prompt, spawns and opens new worktree.
+    # ------------------------------------------------------------------
+    with tempfile.TemporaryDirectory() as tmpdir:
+        root = Path(tmpdir)
+        _make_git_repo(root)
+
+        worktrees_dir = root / "worktrees"
+        wt_alpha = worktrees_dir / "task-alpha"
+        wt_beta = worktrees_dir / "task-beta"
+        wt_gamma = worktrees_dir / "task-gamma"
+        wt_alpha.mkdir(parents=True)
+        wt_beta.mkdir(parents=True)
+        _write_active_marker(wt_alpha, "task-alpha", "Alpha")
+        _write_active_marker(wt_beta, "task-beta", "Beta")
+
+        spawn_callable = MagicMock(return_value=0)
+        subprocess_calls = []
+        find_open_mock = MagicMock()
+        input_mock = MagicMock()
+
+        with (
+            patch("mill_vscode.resolve_git_root", return_value=root),
+            patch("mill_vscode.resolve_wiki_path", return_value=root / "wiki"),
+            patch("mill_vscode.resolve_worktrees_dir", return_value=worktrees_dir),
+            patch(
+                "mill_vscode._spawn_core.discover_active_worktrees",
+                side_effect=[
+                    [(wt_alpha, "task-alpha", "Alpha"), (wt_beta, "task-beta", "Beta")],
+                    [(wt_alpha, "task-alpha", "Alpha"), (wt_beta, "task-beta", "Beta"), (wt_gamma, "task-gamma", "Gamma")],
+                ],
+            ),
+            patch("mill_vscode._load_spawn_main", return_value=spawn_callable),
+            patch("mill_vscode.subprocess.run", side_effect=lambda a, **kw: subprocess_calls.append({"argv": a})),
+            patch("mill_vscode._vscode_processes.find_open_vscode_paths", find_open_mock),
+            patch("mill_vscode.input", input_mock, create=True),
+        ):
+            rc = mill_vscode.main(["--new"])
+
+        if find_open_mock.called:
+            print("FAIL: new_flag_skips_list_and_opens_new: find_open_vscode_paths called", file=sys.stderr)
+            errors += 1
+        elif input_mock.called:
+            print("FAIL: new_flag_skips_list_and_opens_new: input() called", file=sys.stderr)
+            errors += 1
+        elif not spawn_callable.called:
+            print("FAIL: new_flag_skips_list_and_opens_new: spawn not called", file=sys.stderr)
+            errors += 1
+        elif not subprocess_calls or str(wt_gamma) not in subprocess_calls[0]["argv"]:
+            print(
+                f"FAIL: new_flag_skips_list_and_opens_new: expected {wt_gamma} in argv, got {subprocess_calls}",
+                file=sys.stderr,
+            )
+            errors += 1
+        else:
+            print("PASS: new_flag_skips_list_and_opens_new — --new skips filter+prompt, opens new worktree")
+
+    # ------------------------------------------------------------------
+    # Test: spawn_returns_zero_no_new_entries — <Enter> at prompt, spawn
+    # succeeds but post-diff finds no new worktree → exit 0, no VS Code.
+    # ------------------------------------------------------------------
+    with tempfile.TemporaryDirectory() as tmpdir:
+        root = Path(tmpdir)
+        _make_git_repo(root)
+
+        worktrees_dir = root / "worktrees"
+        wt_alpha = worktrees_dir / "task-alpha"
+        wt_alpha.mkdir(parents=True)
+        _write_active_marker(wt_alpha, "task-alpha", "Alpha")
+
+        spawn_callable = MagicMock(return_value=0)
+        subprocess_calls = []
+
+        with (
+            patch("mill_vscode.resolve_git_root", return_value=root),
+            patch("mill_vscode.resolve_wiki_path", return_value=root / "wiki"),
+            patch("mill_vscode.resolve_worktrees_dir", return_value=worktrees_dir),
+            patch(
+                "mill_vscode._spawn_core.discover_active_worktrees",
+                side_effect=[
+                    [(wt_alpha, "task-alpha", "Alpha")],
+                    [(wt_alpha, "task-alpha", "Alpha")],
+                ],
+            ),
+            patch("mill_vscode._load_spawn_main", return_value=spawn_callable),
+            patch("mill_vscode.subprocess.run", side_effect=lambda a, **kw: subprocess_calls.append({"argv": a})),
+            patch("mill_vscode._vscode_processes.find_open_vscode_paths", return_value=set()),
+            patch("mill_vscode.input", return_value="", create=True),
+        ):
+            rc = mill_vscode.main([])
+
+        if rc != 0:
+            print(f"FAIL: spawn_returns_zero_no_new_entries returned {rc}, expected 0", file=sys.stderr)
+            errors += 1
+        elif subprocess_calls:
+            print("FAIL: spawn_returns_zero_no_new_entries: subprocess.run called", file=sys.stderr)
+            errors += 1
+        else:
+            print("PASS: spawn_returns_zero_no_new_entries — spawn ok but no new entry → exit 0, no VS Code")
+
+    # ------------------------------------------------------------------
+    # Test: spawn_returns_nonzero — <Enter> at prompt, spawn returns 1 →
+    # exit 1, no VS Code.
+    # ------------------------------------------------------------------
+    with tempfile.TemporaryDirectory() as tmpdir:
+        root = Path(tmpdir)
+        _make_git_repo(root)
+
+        worktrees_dir = root / "worktrees"
+        wt_alpha = worktrees_dir / "task-alpha"
+        wt_alpha.mkdir(parents=True)
+        _write_active_marker(wt_alpha, "task-alpha", "Alpha")
+
+        spawn_callable = MagicMock(return_value=1)
+        subprocess_calls = []
+
+        with (
+            patch("mill_vscode.resolve_git_root", return_value=root),
+            patch("mill_vscode.resolve_wiki_path", return_value=root / "wiki"),
+            patch("mill_vscode.resolve_worktrees_dir", return_value=worktrees_dir),
+            patch(
+                "mill_vscode._spawn_core.discover_active_worktrees",
+                return_value=[(wt_alpha, "task-alpha", "Alpha")],
+            ),
+            patch("mill_vscode._load_spawn_main", return_value=spawn_callable),
+            patch("mill_vscode.subprocess.run", side_effect=lambda a, **kw: subprocess_calls.append({"argv": a})),
+            patch("mill_vscode._vscode_processes.find_open_vscode_paths", return_value=set()),
+            patch("mill_vscode.input", return_value="", create=True),
+        ):
+            rc = mill_vscode.main([])
+
+        if rc != 1:
+            print(f"FAIL: spawn_returns_nonzero returned {rc}, expected 1", file=sys.stderr)
+            errors += 1
+        elif subprocess_calls:
+            print("FAIL: spawn_returns_nonzero: subprocess.run called despite spawn failure", file=sys.stderr)
+            errors += 1
+        else:
+            print("PASS: spawn_returns_nonzero — spawn rc 1 → exit 1, no VS Code")
+
+    # ------------------------------------------------------------------
+    # Test: new_and_slug_mutex — --new and --slug together → SystemExit(2).
+    # ------------------------------------------------------------------
+    try:
+        mill_vscode.main(["--new", "--slug", "x"])
+        print("FAIL: new_and_slug_mutex: no SystemExit raised", file=sys.stderr)
+        errors += 1
+    except SystemExit as exc:
+        if exc.code == 2:
+            print("PASS: new_and_slug_mutex — --new + --slug → SystemExit(2)")
+        else:
+            print(f"FAIL: new_and_slug_mutex: expected exit 2, got {exc.code}", file=sys.stderr)
+            errors += 1
+
+    # ------------------------------------------------------------------
+    # Test: probe_failure_falls_back — empty probe result means all
+    # worktrees shown unfiltered; input "1" selects first (alpha).
+    # ------------------------------------------------------------------
+    with tempfile.TemporaryDirectory() as tmpdir:
+        root = Path(tmpdir)
+        _make_git_repo(root)
+
+        worktrees_dir = root / "worktrees"
+        wt_alpha = worktrees_dir / "task-alpha"
+        wt_beta = worktrees_dir / "task-beta"
+
+        subprocess_calls = []
+
+        with (
+            patch("mill_vscode.resolve_git_root", return_value=root),
+            patch("mill_vscode.resolve_wiki_path", return_value=root / "wiki"),
+            patch("mill_vscode.resolve_worktrees_dir", return_value=worktrees_dir),
+            patch(
+                "mill_vscode._spawn_core.discover_active_worktrees",
+                return_value=[(wt_alpha, "task-alpha", "Alpha"), (wt_beta, "task-beta", "Beta")],
+            ),
+            patch("mill_vscode.subprocess.run", side_effect=lambda a, **kw: subprocess_calls.append({"argv": a})),
+            patch("mill_vscode._vscode_processes.find_open_vscode_paths", return_value=set()),
+            patch("mill_vscode.input", return_value="1", create=True),
+        ):
+            rc = mill_vscode.main([])
+
+        if rc != 0:
+            print(f"FAIL: probe_failure_falls_back returned {rc}, expected 0", file=sys.stderr)
+            errors += 1
+        elif not subprocess_calls or str(wt_alpha) not in subprocess_calls[0]["argv"]:
+            print(
+                f"FAIL: probe_failure_falls_back: expected {wt_alpha} in code argv, got {subprocess_calls}",
+                file=sys.stderr,
+            )
+            errors += 1
+        else:
+            print("PASS: probe_failure_falls_back — empty probe → all shown, user picks 1 (alpha)")
+
+    # ------------------------------------------------------------------
+    # Test: probe_returns_unrelated_paths — unrelated paths don't filter
+    # anything; input "2" selects beta.
+    # ------------------------------------------------------------------
+    with tempfile.TemporaryDirectory() as tmpdir:
+        root = Path(tmpdir)
+        _make_git_repo(root)
+
+        worktrees_dir = root / "worktrees"
+        wt_alpha = worktrees_dir / "task-alpha"
+        wt_beta = worktrees_dir / "task-beta"
+
+        subprocess_calls = []
+
+        with (
+            patch("mill_vscode.resolve_git_root", return_value=root),
+            patch("mill_vscode.resolve_wiki_path", return_value=root / "wiki"),
+            patch("mill_vscode.resolve_worktrees_dir", return_value=worktrees_dir),
+            patch(
+                "mill_vscode._spawn_core.discover_active_worktrees",
+                return_value=[(wt_alpha, "task-alpha", "Alpha"), (wt_beta, "task-beta", "Beta")],
+            ),
+            patch("mill_vscode.subprocess.run", side_effect=lambda a, **kw: subprocess_calls.append({"argv": a})),
+            patch("mill_vscode._vscode_processes.find_open_vscode_paths", return_value={Path("/some/unrelated/path")}),
+            patch("mill_vscode.input", return_value="2", create=True),
+        ):
+            rc = mill_vscode.main([])
+
+        if rc != 0:
+            print(f"FAIL: probe_returns_unrelated_paths returned {rc}, expected 0", file=sys.stderr)
+            errors += 1
+        elif not subprocess_calls or str(wt_beta) not in subprocess_calls[0]["argv"]:
+            print(
+                f"FAIL: probe_returns_unrelated_paths: expected {wt_beta} in code argv, got {subprocess_calls}",
+                file=sys.stderr,
+            )
+            errors += 1
+        else:
+            print("PASS: probe_returns_unrelated_paths — unrelated probe paths → no filter, user picks 2 (beta)")
 
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)
