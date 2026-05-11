@@ -34,6 +34,26 @@ def _make_git_repo(tmp: Path) -> Path:
     return tmp
 
 
+def _write_active_marker(worktree: Path, slug: str, title: str) -> None:
+    """Init a git repo on branch <slug> and register the task in wiki/Home.md."""
+    subprocess.run(["git", "init", str(worktree)], check=True, capture_output=True)
+    subprocess.run(
+        ["git", "-C", str(worktree), "commit", "--allow-empty", "-m", "init"],
+        check=True, capture_output=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(worktree), "branch", "-M", slug],
+        check=True, capture_output=True,
+    )
+    wiki_dir = worktree.parent.parent / "wiki"
+    wiki_dir.mkdir(parents=True, exist_ok=True)
+    home_md = wiki_dir / "Home.md"
+    existing = home_md.read_text(encoding="utf-8") if home_md.exists() else ""
+    entry = f"## {title}\n[{slug}]\n"
+    text = (existing.rstrip() + "\n\n" + entry) if existing.strip() else entry
+    home_md.write_text(text, encoding="utf-8")
+
+
 def main() -> int:
     errors = 0
 
