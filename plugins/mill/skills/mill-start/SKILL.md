@@ -108,7 +108,9 @@ Loop up to `max_review_rounds` rounds. Each round:
 
 3. **BEFORE reading the review file, load the `mill-receiving-review` skill** (see `plugins/mill/skills/mill-receiving-review/SKILL.md`). This is non-negotiable — the decision tree it encodes is what keeps review loops useful instead of adversarial.
 
-4. On `APPROVE`: break the loop and proceed to Handoff.
+4a. On APPROVE (verdict from JSON) with no NOTE findings: read the review file at the absolute path supplied by `reviews[0].file` in the JSON envelope from step 2 and confirm zero `[NOTE]`-prefixed findings. Break the loop and proceed to Handoff.
+
+4b. On APPROVE with one or more `[NOTE]` findings: apply each NOTE fix per the `mill-receiving-review` decision tree by editing `task/discussion.md` directly. Write a fixer report at `task/reviews/<YYYYMMDD-HHMMSS>-discussion-fix-r<N>.md` (timestamp from `_timestamp.now_utc_compact()`) with two sections — `## Fixed` (one line per fixed NOTE: short reference to the source review file + quoted finding title) and `## Pushed Back` (one line per rejected NOTE: short reference + reason citing code, doc, or scope per `mill-receiving-review`'s legitimate-pushback rules). Call `_status.append_phase(status_path, f"discussion-fix-r{N}", _timestamp.now_utc_iso())`. Single git commit covering exactly three pathspecs — `task/discussion.md`, `task/reviews/`, `task/status.md` — with message `mill-start: discussion-fix round {N} for {slug}`. Push. Break loop → Handoff. Do NOT run round N+1. Do NOT advance the round counter; the fixer report's `discussion-fix-r<N>` reuses the just-completed review round's `N` value.
 
 5. On `GAPS_FOUND`: read the review file, **present each gap to the user one at a time, and wait for their response before updating `discussion.md`**. Do not auto-fix gaps. After user answers and discussion.md is updated, commit+push the update and start the next round.
 
