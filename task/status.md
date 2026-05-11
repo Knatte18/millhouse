@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-fix-r1
+phase: plan-fix-r2
 slug: fix-wiki-cwd-cascade
 branch: hanf/fix-wiki-cwd-cascade
 plan: task/plan
@@ -20,4 +20,6 @@ discussed  2026-05-11T11:43:01Z
 planning  2026-05-11T12:10:03Z
 plan-review-r1  2026-05-11T12:18:01Z
 plan-fix-r1  2026-05-11T12:18:01Z
+plan-review-r2  2026-05-11T12:27:32Z
+plan-fix-r2  2026-05-11T12:27:32Z
 ```

@@ -3,7 +3,7 @@
 ```yaml
 task: 49 (A) — Defensive guards mot cwd-inni-wiki kjedereaksjoner
 slug: fix-wiki-cwd-cascade
-approved: false
+approved: true
 started: 20260511-120733
 parent: main
 root: ""
