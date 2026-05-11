@@ -112,7 +112,10 @@ def read_hardlinks(wiki_root: Path) -> dict[str, str]:
     Tokens in the target are NOT substituted here — callers pass the raw
     template through ``_junction.resolve_target`` with the appropriate token
     map. Missing config file or missing ``hardlinks:`` block returns an empty
-    dict (no hardlinks configured).
+    dict (no hardlinks configured). Also returns an empty dict when the block
+    is explicitly null (hardlinks: null), since yaml.safe_load yields None for
+    an explicit-null and the falsy check collapses both cases. Callers (e.g.
+    _setup.create_hub_links) must tolerate an empty result.
     """
     cfg_path = wiki_root / "config.yaml"
     if not cfg_path.exists():
