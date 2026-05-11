@@ -67,7 +67,9 @@ batches:
     start_sha: 3a347f704bc5d40a4067287f146abc95471e5edd
     commit_sha: 4f65d70839e9b408a782421261177dd019aead76
   - name: review-code-error-aggregation
-    state: pending
+    state: running
+    implementer_session: f5360801-0a4b-4994-b472-991cd9efd243
+    start_sha: 06cc0581ea0bd2e60e23cac68a179e1981b02e48
   - name: skill-md-edits
     state: pending
 ```
