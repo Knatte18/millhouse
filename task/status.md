@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-gemini-llm-provider
+phase: approved-registry-and-smoke
 slug: gemini-reviewer
 branch: hanf/gemini-reviewer
 plan: task/plan
@@ -25,6 +25,7 @@ planned  2026-05-11T12:19:58Z
 implementing  2026-05-11T12:23:49Z
 approved-error-hierarchy-extract  2026-05-11T12:32:09Z
 approved-gemini-llm-provider  2026-05-11T12:36:43Z
+approved-registry-and-smoke  2026-05-11T12:52:47Z
 ```
 
 ## Batches
@@ -42,7 +43,8 @@ batches:
     start_sha: 4cd7132c84e10bd4e2028d496885706ec84ef632
     commit_sha: 5ccac5dd43840cb53de409ae11bd85e99320cf7e
   - name: registry-and-smoke
-    state: running
+    state: approved
     implementer_session: 9e12f965-de26-4ce0-84cd-21431b12f2aa
     start_sha: 65768aefa57c2cb9b1d1d941484e4dab190dc751
+    commit_sha: 70c95b19dce09aaf42e1940a4a652599e19fa344
 ```
