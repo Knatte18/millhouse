@@ -99,18 +99,18 @@ roles:
   plan-review:
     batch:
       rounds: 3
-      reviewer: sonnetmax
+      reviewer: sonnetmedium
     holistic:
       rounds: 3
-      reviewer: sonnetmax
+      reviewer: sonnetmedium
 
   code-review:
     batch:
       rounds: 3
-      reviewer: sonnetmax
+      reviewer: sonnetmedium
     holistic:
       rounds: 1
-      reviewer: sonnetmax
+      reviewer: sonnetmedium
     diff_scope_threshold: 0.25
 
   implementer:
