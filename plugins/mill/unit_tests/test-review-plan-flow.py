@@ -877,15 +877,16 @@ def main() -> int:
         stub.run = _raises_llmerror
         try:
             r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root)
-            assert r.verdict == "REQUEST_CHANGES", (
-                f"expected REQUEST_CHANGES for all-ERROR run, got {r.verdict}"
+            assert r.verdict == "ERROR", (
+                f"expected ERROR for all-ERROR run, got {r.verdict}"
             )
             assert len(r.reviews) >= 1, "expected at least 1 review entry"
             for rv in r.reviews:
                 assert rv["verdict"] == "ERROR", (
                     f"expected ERROR entry, got {rv['verdict']}"
                 )
-            print("PASS test16: all-ERROR run returns ReviewResult(REQUEST_CHANGES) rather than raising (#84)")
+            assert all(rv["verdict"] == "ERROR" for rv in r.reviews), f"expected all sub-reviews ERROR, got {[rv['verdict'] for rv in r.reviews]}"
+            print("PASS test16: all-ERROR run returns ReviewResult(ERROR) rather than raising (#84, #228)")
         except AssertionError as exc:
             errors += 1
             print(f"FAIL test16: {exc}", file=sys.stderr)
