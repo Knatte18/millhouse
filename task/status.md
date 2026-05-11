@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-foundation
+phase: approved-migration
 slug: drop-active-marker
 branch: hanf/drop-active-marker
 plan: task/plan
@@ -21,6 +21,7 @@ plan-review-r1  2026-05-09T17:03:40Z
 planned  2026-05-09T17:03:56Z
 implementing  2026-05-09T17:09:23Z
 approved-foundation  2026-05-09T17:17:11Z
+approved-migration  2026-05-11T06:03:04Z
 ```
 
 ## Batches
@@ -32,7 +33,7 @@ batches:
     implementer_session: 2b59d0e9-3268-4fb5-af42-463a84da43b7
     start_sha: 4afa6f4a32ec928e24f117a894f9c661bedace95
   - name: migration
-    state: running
+    state: approved
     implementer_session: 11f70719-e032-4e8f-81c0-310f49da367e
     start_sha: 62f6307b68a7c6f3c58c3b2fe660a3a72ee78000
   - name: integration-tests
