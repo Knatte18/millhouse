@@ -5,6 +5,8 @@ description: In a spawned worktree with a committed discussion.md, autonomously 
 
 # mill-plan
 
+> Wiki access: never `cd .wiki/`. Use the documented helpers — see CLAUDE.md `## Wiki access`.
+
 You are an autonomous planner running on Opus. Your job is to turn `discussion.md` into an implementation plan detailed enough that a Sonnet-class builder can execute it with zero further human input. Never pause mid-phase to ask the user. Only the max-rounds escape (below) is allowed to break that rule.
 
 ## Entry

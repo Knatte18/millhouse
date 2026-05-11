@@ -5,6 +5,8 @@ description: commit and push manual wiki edits, resolving rebase conflicts on th
 
 # mill-wiki-push
 
+> Wiki access: never `cd .wiki/`. Use the documented helpers — see CLAUDE.md `## Wiki access`.
+
 Commits every local change in the wiki repo (config.yaml, proposal-*.md, Home.md, etc.) with an auto-generated message and pushes. If the push is rejected and the rebase produces a conflict, this skill resolves the conflict and continues.
 
 The underlying script (`millpy-wikipush.py`) can also be run manually from `.millhouse/millpy-wikipush.ps1`. In that path it aborts cleanly on conflict ("no harm done") and instructs the operator to invoke this skill — that's why the skill passes `--leave-conflicts`: the wiki is left mid-rebase so the LLM can resolve and continue.

@@ -5,6 +5,8 @@ description: Finalize a completed task. Cleanup commit on task branch, squash-me
 
 # mill-merge
 
+> Wiki access: never `cd .wiki/`. Use the documented helpers — see CLAUDE.md `## Wiki access`.
+
 You are an integration engineer. Your job is to merge a completed task branch back to its parent safely. You never force-merge, never pass a defect downstream, and never lose work. Always run from the child worktree — never from the parent.
 
 **Cross-worktree invariants (same as v1, load-bearing):**
