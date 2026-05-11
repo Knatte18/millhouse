@@ -28,7 +28,7 @@ batches:
     name: registry-and-smoke
     file: 03-registry-and-smoke.md
     depends-on: [2]
-    verify: uv run --project plugins/mill python plugins/mill/unit_tests/test-reviewers.py
+    verify: uv run --project plugins/mill python plugins/mill/integration_tests/smoke-llm-gemini.py && uv run --project plugins/mill python plugins/mill/unit_tests/test-reviewers.py
 ```
 
 ## Shared Decisions
@@ -56,6 +56,12 @@ batches:
 - **Decision:** Each card's `Commit:` line is a single conventional-commit subject. The implementer invokes the `@git-commit` skill once per card.
 - **Rationale:** Existing mill-go convention. Per-card commits trigger lint + codeguide-update; squashing into batch-level commits loses that signal.
 - **Applies to:** all batches.
+
+### Decision: `_reviewer_single.py` requires no edit — dispatch already routes by `provider:`
+
+- **Decision:** `plugins/mill/scripts/_reviewer_single.py` is intentionally absent from `## All Files Touched`. The existing `run(spec, ...)` body reads `spec.get("provider")` and calls `importlib.import_module(f"_llm_{provider}")` — `provider: gemini` already routes to `_llm_gemini.py` (the file batch 2 creates) without any code change in `_reviewer_single.py`. Adding a card to edit it would be a no-op at best and could introduce regressions in the existing `_llm_claude` / `test_stub` paths.
+- **Rationale:** Task 34 (`_reviewer_single.py`'s introduction) designed this for exactly this scenario: drop in a new `_llm_<provider>.py` + registry entries and dispatch works. Documenting the load-bearing fact here saves a future maintainer from re-discovering it during the next provider addition.
+- **Applies to:** all batches (defines what is intentionally NOT touched).
 
 ### Decision: Wiki edits commit on the wiki repo, not the task branch
 

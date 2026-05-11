@@ -5,7 +5,7 @@ task: 31 (A) — Simple Gemini Flash reviewer
 batch: registry-and-smoke
 number: 3
 cards: 2
-verify: uv run --project plugins/mill python plugins/mill/unit_tests/test-reviewers.py
+verify: uv run --project plugins/mill python plugins/mill/integration_tests/smoke-llm-gemini.py && uv run --project plugins/mill python plugins/mill/unit_tests/test-reviewers.py
 depends-on: [2]
 ```
 
@@ -69,4 +69,9 @@ Operator validation (out of scope for this batch but documented for completeness
 
 ## Batch Tests
 
-`verify: uv run --project plugins/mill python plugins/mill/unit_tests/test-reviewers.py`. The registry edit is the only change with a unit-test-visible surface — `test-reviewers.py` calls `_reviewers.load` on the live wiki registry and asserts every entry parses; the two new gemini entries must pass that validation (`type: single`, string `provider`, string `model`). The smoke test itself is integration-only and is run manually via `python plugins/mill/integration_tests/smoke-llm-gemini.py` against a machine with `gemini` installed; it is not part of `verify:`.
+`verify: uv run --project plugins/mill python plugins/mill/integration_tests/smoke-llm-gemini.py && uv run --project plugins/mill python plugins/mill/unit_tests/test-reviewers.py`. Two commands chained with `&&`:
+
+1. **Integration smoke first.** `smoke-llm-gemini.py` is CI-safe because of the `shutil.which("gemini") is None → return 0` guard at the top of `main()`. On machines without the binary it exits 0 and the second command runs; on machines with the binary it exercises the real `gemini` CLI for bulk + tool-use + the `resume=True → LLMSessionError` negative case. This is the only end-to-end signal that the wiring works.
+2. **Registry validation second.** `test-reviewers.py` calls `_reviewers.load` on the live wiki registry and asserts every entry parses. The two new gemini entries must pass that validation (`type: single`, string `provider`, string `model`).
+
+The integration smoke does not require `_reviewer_single.py` to be modified — per the Shared Decision in `00-overview.md`, `_reviewer_single.py` already routes `provider: gemini` to `_llm_gemini` via `importlib.import_module`, so the smoke and the live operator validation flow both work without further code changes.
