@@ -126,7 +126,7 @@ This collides with `mill-receiving-review`'s "Default: fix everything" rule. The
 
 ### Status timeline phase names
 
-- `discussion-fix-r{N}` is the new phase-name prefix for fixer rounds. Mirrors mill-plan's `plan-fix-r{N}`. `_status.append_phase` validates phase names against a regex but accepts arbitrary lowercase-with-hyphens-and-digits; no regex change needed (verify by reading `_status.py` before final SKILL.md wording).
+- `discussion-fix-r{N}` is the new phase-name prefix for fixer rounds. Mirrors mill-plan's `plan-fix-r{N}`. `_status.append_phase` accepts arbitrary phase strings (passed through `_yaml_writer.quote_scalar` only — no input validation), so the new `discussion-fix-r{N}` value needs no helper change.
 
 ### Fixer-report filename pattern
 
