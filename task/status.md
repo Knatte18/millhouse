@@ -1,10 +1,10 @@
 # Status
 
 ```yaml
-phase: discussed
+phase: planning
 slug: discussion-review-gap-batching
 branch: hanf/discussion-review-gap-batching
-plan: null
+plan: task/plan
 parent: main
 task: 43 (A) — Discussion-review gaps in batches + NOTE-finding handling
 task_description: |
@@ -17,4 +17,5 @@ task_description: |
 discussing  '2026-05-11T10:21:37Z'
 discussion-fix-r1  2026-05-11T10:42:28Z
 discussed  2026-05-11T10:42:57Z
+planning  2026-05-11T10:47:15Z
 ```
