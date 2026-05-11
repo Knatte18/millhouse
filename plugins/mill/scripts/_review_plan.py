@@ -20,7 +20,7 @@ from pathlib import Path
 
 import _reviewer_single
 import _reviewers
-from _llm_claude import LLMError
+from _llm_common import LLMError
 from _review_common import (
     RE_BATCH,
     RE_SIMPLE,
