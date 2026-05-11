@@ -36,7 +36,9 @@ batches:
     implementer_session: 49d9e2c6-e066-49fa-a7b7-1072fd828570
     start_sha: acd91cd658f4bd6614e4c32422fd435cc64b3196
   - name: anti-pattern-walker-test
-    state: pending
+    state: running
+    implementer_session: 91c6bfb8-2a32-49ed-820e-788bb327ec85
+    start_sha: 5e0e4935718b79134842ebd8c0758daca5099cc1
   - name: docs-claude-md-and-skills
     state: pending
   - name: wiki-log-cleanup
