@@ -28,5 +28,7 @@ implementing  2026-05-11T11:06:10Z
 ```yaml
 batches:
   - name: skill-edits
-    state: pending
+    state: running
+    implementer_session: 7a6d178b-2104-47e2-a20e-ec110cace65d
+    start_sha: be4d2e4083d636ed72e9d02f6934417a43a0f1fb
 ```
