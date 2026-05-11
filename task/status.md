@@ -33,5 +33,7 @@ implementing  2026-05-11T18:29:51Z
 ```yaml
 batches:
   - name: skill-and-schema
-    state: pending
+    state: running
+    implementer_session: 3308c1f3-7195-4ea9-84a6-4dddad3e3f63
+    start_sha: 9dd0099da77916e5e29d64469f564ac253674933
 ```
