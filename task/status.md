@@ -46,5 +46,7 @@ batches:
     implementer_session: e49dce76-8391-430d-80fc-c5c113ffeda8
     start_sha: 1e1d939c254e4090e44d87a35c9a5b05f1dab975
   - name: wiki-log-cleanup
-    state: pending
+    state: running
+    implementer_session: 43a142fc-e7b7-414e-bddc-6068b9059879
+    start_sha: d3d0021a0323bd794737e37fed12499d1693da0b
 ```
