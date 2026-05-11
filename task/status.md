@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-review-r1
+phase: planned
 slug: machine-level-config
 branch: hanf/machine-level-config
 plan: task/plan
@@ -18,4 +18,5 @@ discussing  '2026-05-11T10:27:14Z'
 discussed  2026-05-11T10:37:57Z
 planning  2026-05-11T10:43:28Z
 plan-review-r1  2026-05-11T10:47:30Z
+planned  2026-05-11T10:47:46Z
 ```
