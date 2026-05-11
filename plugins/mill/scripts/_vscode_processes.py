@@ -33,11 +33,15 @@ def find_open_vscode_paths() -> set[Path]:
 
 
 def _probe_windows() -> set[Path]:
+    # VS Code on Windows doesn't expose workspace paths via Win32_Process.CommandLine —
+    # only renderer/extension args appear there. Workspace info lives in MainWindowTitle,
+    # which our .vscode/settings.json sets to "<short_name>: <slug>" for worktrees.
+    # Returned as Path objects for return-type compatibility; treat as opaque strings.
     argv = [
         "powershell",
         "-NoProfile",
         "-Command",
-        "Get-CimInstance Win32_Process -Filter \"Name='Code.exe'\" | Select-Object -ExpandProperty CommandLine",
+        "Get-Process Code -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowTitle -ne '' } | Select-Object -ExpandProperty MainWindowTitle",
     ]
     try:
         result = _subprocess_util.run(argv, timeout=5, check=False)
@@ -45,12 +49,12 @@ def _probe_windows() -> set[Path]:
         return set()
     if result.returncode != 0:
         return set()
-    paths: set[Path] = set()
+    titles: set[Path] = set()
     for line in result.stdout.split("\n"):
         line = line.rstrip("\r")
         if line.strip():
-            paths.add(Path(line))
-    return paths
+            titles.add(Path(line))
+    return titles
 
 
 def _probe_posix() -> set[Path]:
@@ -70,6 +74,26 @@ def _probe_posix() -> set[Path]:
         if Path(token).name.startswith("code"):
             paths.add(Path(line))
     return paths
+
+
+def signature_matches(launch_path: Path, slug: str, signature: str) -> bool:
+    """Return True iff signature represents an open VS Code window for the given worktree.
+
+    Two complementary checks:
+
+    1. POSIX cmdline-form: ``code /path/to/worktree`` — uses bounded path match
+       via ``_path_matches_cmdline``.
+    2. Windows title-form: ``<short_name>: <slug>`` from our ``.vscode/settings.json``
+       window.title template — uses slug-substring match (case-insensitive on Windows).
+
+    Either match passes. The two checks are independent: tests that mock signatures
+    as paths still hit the cmdline branch; real Windows runtime hits the slug branch.
+    """
+    if _path_matches_cmdline(launch_path, signature):
+        return True
+    hay = signature.lower() if os.name == "nt" else signature
+    needle = slug.lower() if os.name == "nt" else slug
+    return needle in hay
 
 
 def _path_matches_cmdline(launch_path: Path, cmdline: str) -> bool:
