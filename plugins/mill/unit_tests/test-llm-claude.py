@@ -7,7 +7,9 @@ invoke the live ``claude`` CLI — those tests live in
 """
 from __future__ import annotations
 
+import contextlib
 import inspect
+import io
 import subprocess as _subprocess_mod
 import sys
 import unittest.mock as mock
@@ -16,6 +18,7 @@ from pathlib import Path
 HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
+import _llm_claude as _llm_claude_mod  # noqa: E402
 import _subprocess_util as _subprocess_util_mod  # noqa: E402
 from _llm_claude import (  # noqa: E402
     LLMError,
@@ -298,6 +301,109 @@ def main() -> int:
                 print(f"FAIL: stdout content missing from rate-limit message: {e}", file=sys.stderr)
             else:
                 print("PASS: rate-limit error message includes stdout fallback content")
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL: expected LLMRateLimitError, got {type(exc).__name__}: {exc}", file=sys.stderr)
+
+    # --- fast-fail retry path ---
+    _RETRY_OK_STDOUT = '{"type":"result","result":"ok","session_id":"abc"}\n'
+
+    # test_invoke_retries_on_fast_fail_then_succeeds
+    _retry_call_count = [0]
+
+    def _fast_fail_then_ok(argv, **kwargs):
+        _retry_call_count[0] += 1
+        if _retry_call_count[0] == 1:
+            return _subprocess_mod.CompletedProcess(args=argv, returncode=1, stdout="", stderr="shim fail")
+        return _subprocess_mod.CompletedProcess(args=argv, returncode=0, stdout=_RETRY_OK_STDOUT, stderr="")
+
+    _retry_call_count[0] = 0
+    _stderr_buf = io.StringIO()
+    with mock.patch.object(_subprocess_util_mod, "run", _fast_fail_then_ok):
+        with contextlib.redirect_stderr(_stderr_buf):
+            _retry_result = run_bulk("prompt", model="m")
+    if _retry_call_count[0] != 2:
+        errors += 1
+        print(f"FAIL: expected 2 calls, got {_retry_call_count[0]}", file=sys.stderr)
+    elif "fast-fail retry" not in _stderr_buf.getvalue():
+        errors += 1
+        print("FAIL: 'fast-fail retry' not found in stderr", file=sys.stderr)
+    elif _retry_result != ("ok", "abc"):
+        errors += 1
+        print(f"FAIL: unexpected retry result: {_retry_result}", file=sys.stderr)
+    else:
+        print("PASS: _invoke retries on fast-fail then succeeds (2 calls, breadcrumb emitted)")
+
+    # test_invoke_does_not_retry_on_slow_fail
+    _slow_call_count = [0]
+
+    def _slow_fail(argv, **kwargs):
+        _slow_call_count[0] += 1
+        return _subprocess_mod.CompletedProcess(args=argv, returncode=1, stdout="", stderr="slow fail")
+
+    _slow_call_count[0] = 0
+    with mock.patch.object(_subprocess_util_mod, "run", _slow_fail):
+        with mock.patch.object(_llm_claude_mod.time, "monotonic", side_effect=[0.0, 3.0]):
+            try:
+                run_bulk("prompt", model="m")
+                errors += 1
+                print("FAIL: expected LLMError on slow fail, no exception raised", file=sys.stderr)
+            except LLMError:
+                if _slow_call_count[0] != 1:
+                    errors += 1
+                    print(f"FAIL: expected 1 call on slow fail, got {_slow_call_count[0]}", file=sys.stderr)
+                else:
+                    print("PASS: _invoke does not retry on slow fail (dt >= 2.0s)")
+            except Exception as exc:
+                errors += 1
+                print(f"FAIL: expected LLMError on slow fail, got {type(exc).__name__}: {exc}", file=sys.stderr)
+
+    # test_invoke_does_not_retry_when_resume_true
+    _resume_call_count = [0]
+
+    def _fast_fail_resume(argv, **kwargs):
+        _resume_call_count[0] += 1
+        return _subprocess_mod.CompletedProcess(args=argv, returncode=1, stdout="", stderr="shim fail")
+
+    _resume_call_count[0] = 0
+    with mock.patch.object(_subprocess_util_mod, "run", _fast_fail_resume):
+        try:
+            run_bulk("prompt", model="m", session_id="abc", resume=True)
+            errors += 1
+            print("FAIL: expected LLMSessionError with resume=True, no exception raised", file=sys.stderr)
+        except LLMSessionError:
+            if _resume_call_count[0] != 1:
+                errors += 1
+                print(f"FAIL: expected 1 call with resume=True, got {_resume_call_count[0]}", file=sys.stderr)
+            else:
+                print("PASS: _invoke does not retry when resume=True (raises LLMSessionError, 1 call)")
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL: expected LLMSessionError, got {type(exc).__name__}: {exc}", file=sys.stderr)
+
+    # test_invoke_does_not_retry_on_rate_limit
+    _rl_fast_call_count = [0]
+
+    def _rate_limit_fast(argv, **kwargs):
+        _rl_fast_call_count[0] += 1
+        return _subprocess_mod.CompletedProcess(
+            args=argv, returncode=1,
+            stdout='{"type":"rate_limit_event","limit_type":"requests"}\n',
+            stderr="rate limited",
+        )
+
+    _rl_fast_call_count[0] = 0
+    with mock.patch.object(_subprocess_util_mod, "run", _rate_limit_fast):
+        try:
+            run_bulk("prompt", model="m")
+            errors += 1
+            print("FAIL: expected LLMRateLimitError, no exception raised", file=sys.stderr)
+        except LLMRateLimitError:
+            if _rl_fast_call_count[0] != 1:
+                errors += 1
+                print(f"FAIL: expected 1 call on rate-limit, got {_rl_fast_call_count[0]}", file=sys.stderr)
+            else:
+                print("PASS: _invoke does not retry on rate-limit (raises LLMRateLimitError, 1 call)")
         except Exception as exc:
             errors += 1
             print(f"FAIL: expected LLMRateLimitError, got {type(exc).__name__}: {exc}", file=sys.stderr)
