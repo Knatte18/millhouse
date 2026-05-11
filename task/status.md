@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussion-fix-r1
+phase: discussed
 slug: verify-skip-known-broken
 branch: hanf/verify-skip-known-broken
 plan: null
@@ -16,4 +16,5 @@ task_description: |
 ```text
 discussing  '2026-05-11T17:44:21Z'
 discussion-fix-r1  2026-05-11T17:57:05Z
+discussed  2026-05-11T17:57:19Z
 ```
