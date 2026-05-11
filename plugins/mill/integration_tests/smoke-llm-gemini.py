@@ -15,7 +15,6 @@ from pathlib import Path
 
 HUB = Path(__file__).resolve().parent.parent.parent.parent
 SCRIPTS = HUB / "plugins" / "mill" / "scripts"
-SCRATCH = HUB / ".scratch"
 # Gemini CLI only accesses files inside its workspace and skips gitignored paths.
 # .scratch/ is gitignored, so tool-use tests use a non-gitignored tmp dir next
 # to this file (integration_tests/). The dir is deleted on success.

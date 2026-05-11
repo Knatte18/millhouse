@@ -80,6 +80,11 @@ def main() -> int:
 
     # ------------------------------------------------------------------
     # _build_argv: bulk mode appends -e ""
+    # NOTE: The plan spec lists ["-p", "-o", ...] (no empty string between them).
+    # The implementation intentionally inserts "" after "-p" so that the gemini
+    # CLI treats "-p" as entering headless mode with the prompt arriving on stdin
+    # rather than as a positional argument. These assertions pin that intentional
+    # deviation so a regression back to the plan-literal argv is caught here.
     # ------------------------------------------------------------------
     prefix = _gemini_argv_prefix()
     argv = _build_argv("gemini-2.5-flash", tooluse=False)
