@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: verify-skip-known-broken
 branch: hanf/verify-skip-known-broken
 plan: task/plan
@@ -25,4 +25,13 @@ plan-fix-r2  2026-05-11T18:23:49Z
 plan-review-r3  2026-05-11T18:27:57Z
 plan-fix-r3  2026-05-11T18:27:57Z
 planned  2026-05-11T18:28:11Z
+implementing  2026-05-11T18:29:51Z
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: skill-and-schema
+    state: pending
 ```
