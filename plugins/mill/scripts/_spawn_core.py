@@ -151,46 +151,75 @@ def discover_active_worktrees(
     worktrees_dir: Path,
     home_tasks: list[_tasks_md.Task],
     branch_prefix: str,
+    cwd: Path | None = None,
 ) -> list[tuple[Path, str, str]]:
     """
-    Scan ``worktrees_dir`` for worktrees whose current branch slug matches Home.md.
+    Discover task worktrees under ``worktrees_dir`` whose branch matches Home.md.
 
-    For each immediate subdirectory of ``worktrees_dir``, reads the current
-    git branch via ``git branch --show-current``. Skips entries where the
-    command fails, returns empty output, or whose branch does not start with
-    ``branch_prefix`` (when non-empty). The slug after stripping the prefix
-    is looked up in ``home_tasks``; entries not present in Home.md are skipped.
+    Uses ``git worktree list --porcelain`` (single git call) instead of walking
+    ``worktrees_dir`` and running ``git branch --show-current`` per entry —
+    orphan directories on disk (leftover from failed mill-merge teardowns) are
+    not in the worktree registry, so they don't appear at all and don't waste
+    git subprocess calls.
+
+    Skips worktrees whose path is not under ``worktrees_dir``, whose branch
+    does not start with ``branch_prefix`` (when non-empty), or whose slug is
+    not present in ``home_tasks``.
 
     Args:
         worktrees_dir: Container directory holding per-task worktrees.
         home_tasks: Tasks parsed from wiki Home.md (any phase accepted).
         branch_prefix: Branch prefix to strip when deriving slug from branch.
             Empty string means slug equals branch directly.
+        cwd: Optional path to run ``git worktree list`` from. When None,
+            uses the current process cwd. Callers running from outside the
+            repo (e.g. tests with a tempdir fixture) must pass this.
 
     Returns:
         List of ``(path, slug, task_title)`` triples, one per matched worktree.
-        Empty list when ``worktrees_dir`` does not exist or no matches found.
+        Empty list when no matches.
     """
     slugs_in_home = {t.slug: t for t in home_tasks}
     results: list[tuple[Path, str, str]] = []
-    if not worktrees_dir.exists():
+
+    argv = ["git"]
+    if cwd is not None:
+        argv += ["-C", str(cwd)]
+    argv += ["worktree", "list", "--porcelain"]
+    proc = _subprocess_util.run(argv)
+    if proc.returncode != 0:
         return results
-    for entry in worktrees_dir.iterdir():
-        if not entry.is_dir():
+
+    # Parse porcelain output: blocks separated by blank lines, each block has
+    # `worktree <path>` and optional `branch refs/heads/<name>` / `detached`.
+    current_path: Path | None = None
+    current_branch: str | None = None
+    for line in proc.stdout.split("\n") + [""]:
+        line = line.rstrip("\r")
+        if not line.strip():
+            # End of block — emit if path + branch + slug match.
+            if current_path is not None and current_branch is not None:
+                try:
+                    current_path.relative_to(worktrees_dir)
+                except ValueError:
+                    pass
+                else:
+                    if not branch_prefix or current_branch.startswith(branch_prefix):
+                        slug = (
+                            current_branch.removeprefix(branch_prefix)
+                            if branch_prefix
+                            else current_branch
+                        )
+                        task = slugs_in_home.get(slug)
+                        if task is not None:
+                            results.append((current_path, slug, task.title))
+            current_path = None
+            current_branch = None
             continue
-        branch_proc = _subprocess_util.run(
-            ["git", "-C", str(entry), "branch", "--show-current"]
-        )
-        if branch_proc.returncode != 0 or not branch_proc.stdout.strip():
-            continue
-        branch = branch_proc.stdout.strip()
-        if branch_prefix and not branch.startswith(branch_prefix):
-            continue
-        slug = branch.removeprefix(branch_prefix) if branch_prefix else branch
-        task = slugs_in_home.get(slug)
-        if task is None:
-            continue
-        results.append((entry, slug, task.title))
+        if line.startswith("worktree "):
+            current_path = Path(line[len("worktree "):]).resolve()
+        elif line.startswith("branch refs/heads/"):
+            current_branch = line[len("branch refs/heads/"):]
     return results
 
 
