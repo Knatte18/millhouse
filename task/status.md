@@ -73,5 +73,7 @@ batches:
     start_sha: 06cc0581ea0bd2e60e23cac68a179e1981b02e48
     commit_sha: 9cde37a55372cc6a64bdca2422ab93ed3bfabaa0
   - name: skill-md-edits
-    state: pending
+    state: running
+    implementer_session: dd0f1935-dfc6-4bd1-b549-8e7dcef036d6
+    start_sha: 68ecd51b04c0f486ac0ba1e567b545ff131ed31f
 ```
