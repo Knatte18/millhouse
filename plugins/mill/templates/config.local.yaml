@@ -5,6 +5,15 @@
 # the keys you want to override locally. Loaded by _review_common.load_config;
 # local values win on any conflict.
 #
+# Merge layers (lowest -> highest precedence):
+#   1. wiki/config.yaml                  - shared, git-tracked in the wiki
+#   2. ~/.millhouse/config.machine.yaml  - per-machine, untracked (lives outside every repo)
+#   3. THIS FILE                         - per-worktree, gitignored
+#
+# Keys that should be the same across all worktrees on this machine belong in
+# ~/.millhouse/config.machine.yaml, not here. Template at
+# plugins/mill/templates/config.machine.yaml.
+#
 # Secrets DO NOT belong here. Put API keys in .env at the repo root
 # (standard dotenv convention). This file is for non-secret preferences.
 #
