@@ -34,6 +34,8 @@ If you cannot resolve one or more conflicts:
 
 {"status":"stuck","stuck_type":"logic","reason":"<one-line description of what you could not resolve>"}
 
+Anything other than this JSON object on the last line is a protocol violation; the merge-in dispatcher treats that as stuck_type: logic with reason "no structured report" — your work is lost. Do not wrap the JSON in a code fence; do not add commentary after it.
+
 ## Tools
 
 Available: Read, Edit, Write, Bash, Grep, Glob. Use `git -C <PROJECT_ROOT>` for any git commands; do not `cd`. Worktree cwd is `<PROJECT_ROOT>`.

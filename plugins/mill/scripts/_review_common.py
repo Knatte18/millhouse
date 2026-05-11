@@ -855,6 +855,29 @@ def parse_verdict(raw_output: str) -> str:
     )
 
 
+def _warn_if_prose_diverges(raw_output: str, severity: str, heading_count: int) -> None:
+    _WORD_TO_INT = {
+        "one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
+        "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
+    }
+    pattern = re.compile(
+        r"\b(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+" + re.escape(severity),
+        re.IGNORECASE,
+    )
+    matches = pattern.findall(raw_output)
+    if not matches:
+        return
+    raw_val = matches[0]
+    prose_count = int(raw_val) if raw_val.isdigit() else _WORD_TO_INT.get(raw_val.lower(), -1)
+    if prose_count != heading_count:
+        print(
+            f"[_review_common] warning: parse_blocking_count heading count {heading_count} "
+            f"diverges from prose count {prose_count} (severity={severity}) "
+            f"— check review file for missing heading.",
+            file=sys.stderr,
+        )
+
+
 def parse_blocking_count(raw_output: str, *, severity: str) -> int:
     """Count "### [<severity>]" ATX headings in review output.
 
@@ -862,12 +885,18 @@ def parse_blocking_count(raw_output: str, *, severity: str) -> int:
     MULTILINE mode. The severity argument is required (keyword-only).
     Match is case-sensitive. Only line-start headings are counted —
     mid-line occurrences are ignored.
+
+    Emits a one-line stderr warning when a prose count phrase in the output
+    (e.g. "Five blocking issues remain") disagrees with the heading count.
+    The returned count is unchanged; the warning is for log inspection only (#225).
     """
     pattern = re.compile(
         r"^###\s+\[" + re.escape(severity) + r"\]\s+",
         re.MULTILINE,
     )
-    return len(pattern.findall(raw_output))
+    heading_count = len(pattern.findall(raw_output))
+    _warn_if_prose_diverges(raw_output, severity, heading_count)
+    return heading_count
 
 
 def write_review_file(

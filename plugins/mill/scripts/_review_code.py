@@ -62,6 +62,15 @@ from _review_common import (
 )
 
 
+def _aggregate_top_verdict(reviews_list: list[dict], parsed_verdict: str) -> str:
+    """Return 'ERROR' if every sub-review has verdict 'ERROR', else parsed_verdict."""
+    return (
+        "ERROR"
+        if reviews_list and all(r.get("verdict") == "ERROR" for r in reviews_list)
+        else parsed_verdict
+    )
+
+
 def _collect_batch_files(
     plan_dir: Path,
     batch_name: str | None,
@@ -299,18 +308,19 @@ def run(
     try:
         raw, session_id = _reviewer_single.run(spec, prompt_text, timeout=timeout)
     except LLMError as exc:
+        _reviews = [{
+            "scope": scope_label,
+            "verdict": "ERROR",
+            "file": None,
+            "error": str(exc),
+            "session_id": None,
+        }]
         return ReviewResult(
             type="code",
             round=round_n,
-            verdict="REQUEST_CHANGES",
+            verdict=_aggregate_top_verdict(_reviews, "REQUEST_CHANGES"),
             blocking_count=0,
-            reviews=[{
-                "scope": scope_label,
-                "verdict": "ERROR",
-                "file": None,
-                "error": str(exc),
-                "session_id": None,
-            }],
+            reviews=_reviews,
         )
 
     verdict = parse_verdict(raw)
@@ -337,18 +347,19 @@ def run(
                     spec, retry_prompt, session_id=session_id, resume=True, timeout=timeout
                 )
             except LLMError as exc:
+                _reviews = [{
+                    "scope": scope_label,
+                    "verdict": "ERROR",
+                    "file": None,
+                    "error": f"resume retry failed: {exc}",
+                    "session_id": None,
+                }]
                 return ReviewResult(
                     type="code",
                     round=round_n,
-                    verdict="REQUEST_CHANGES",
+                    verdict=_aggregate_top_verdict(_reviews, "REQUEST_CHANGES"),
                     blocking_count=0,
-                    reviews=[{
-                        "scope": scope_label,
-                        "verdict": "ERROR",
-                        "file": None,
-                        "error": f"resume retry failed: {exc}",
-                        "session_id": None,
-                    }],
+                    reviews=_reviews,
                 )
             verdict = parse_verdict(raw)
             # Second NEED_CONTEXT propagates to caller untouched.
@@ -366,17 +377,18 @@ def run(
         file=sys.stderr,
     )
 
+    _reviews = [
+        {
+            "scope": scope_label,
+            "verdict": verdict,
+            "file": str(path),
+            "session_id": session_id,
+        }
+    ]
     return ReviewResult(
         type="code",
         round=round_n,
-        verdict=verdict,
+        verdict=_aggregate_top_verdict(_reviews, verdict),
         blocking_count=blocking_count,
-        reviews=[
-            {
-                "scope": scope_label,
-                "verdict": verdict,
-                "file": str(path),
-                "session_id": session_id,
-            }
-        ],
+        reviews=_reviews,
     )

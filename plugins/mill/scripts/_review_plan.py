@@ -3,8 +3,8 @@ Review backend for plan artefacts.
 
 Per-batch reviews run in parallel via ThreadPoolExecutor (bulk mode).
 An optional holistic review follows (also bulk). Results are aggregated
-worst-case; all-ERROR runs return REQUEST_CHANGES (no raise) so the
-caller receives valid JSON even when every sub-review fails (#84).
+worst-case; all-ERROR runs return ERROR (no raise) so the caller
+receives valid JSON even when every sub-review fails (#84, #228).
 
 Public API:
     run(cfg, slug, mill_dir, wiki_root, project_root) -> ReviewResult
@@ -278,7 +278,7 @@ def run(
     4. Parallel per-batch reviews (skipped if batch_files is empty, holistic_only, or batch reviewer is null).
        Mid-round resume fires holistic only when per-batch files exist but holistic is missing.
     5. Holistic review (skipped if cfg.review.plan.holistic is None or no_holistic).
-    6. Aggregate and return ReviewResult (all-ERROR → REQUEST_CHANGES; no raise).
+    6. Aggregate and return ReviewResult (all-ERROR → ERROR; no raise).
     """
     if holistic_only and no_holistic:
         raise ReviewError("--holistic-only and --no-holistic are mutually exclusive")
@@ -609,6 +609,8 @@ def run(
                 })
 
     aggregate = aggregate_verdict([r["verdict"] for r in reviews])
+    if reviews and all(r.get("verdict") == "ERROR" for r in reviews):
+        aggregate = "ERROR"
     agg_round = max(r["round"] for r in reviews) if reviews else 0
     aggregate_blocking = sum(r.get("blocking_count", 0) for r in reviews)
     return ReviewResult(

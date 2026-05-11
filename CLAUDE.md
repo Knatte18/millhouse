@@ -105,6 +105,7 @@ A discussion gap is missing information; a plan/code block is a must-fix defect.
 - **Generated markdown uses fenced ```yaml for metadata**, not `---` frontmatter. `---` is reserved for `SKILL.md` and plugin manifests. (See `plugins/mill/skills/markdown/SKILL.md`.)
 - **Reviews match the tight v1 style**: per-finding = severity-label + 3–4 short bullets. Target a few hundred tokens total, not thousands. The fix-thread has full context and does not need narrative explanation.
 - **Loading `mill-receiving-review` is mandatory** before reading any review output. See `plugins/mill/skills/mill-receiving-review/SKILL.md`.
+- **Template `wiki-config.yaml` mirrors production `wiki/config.yaml`.** When changing a config key in production wiki/config.yaml, mirror the change in `plugins/mill/templates/wiki-config.yaml`. The template ships to new hubs via mill-setup; drift means new hubs are seeded with a stale schema. Production is the source of truth for valid schema; the template is the source of truth for documentation comments inside the file.
 
 ## Path invariants
 

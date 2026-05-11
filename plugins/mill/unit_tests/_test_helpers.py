@@ -111,3 +111,35 @@ def _make_task_worktree(
         )
 
     return (worktree_path, wiki_path)
+
+
+def seed_wiki_config(wiki_root: Path, *, include_roles: bool = False) -> None:
+    """Write a minimal wiki config.yaml that _review_common.load_config requires.
+
+    Creates wiki_root/config.yaml with the paths: and spawn: blocks. Review-flow
+    test fixtures that use a container-form layout need this file in the wiki
+    directory so load_config does not raise ReviewError(Missing config). Pass
+    include_roles=True to also write a roles: block with stub test_stub reviewer
+    entries for discussion-review, plan-review, and code-review.
+    """
+    content = (
+        "paths:\n"
+        "  discussion_file: discussion.md\n"
+        "  plan_dir: plan/\n"
+        "  reviews_dir: reviews/\n"
+        "spawn:\n"
+        "  branch_prefix: \"hanf/\"\n"
+    )
+    if include_roles:
+        content += (
+            "roles:\n"
+            "  discussion-review:\n"
+            "    holistic: {rounds: 1, reviewer: test_stub}\n"
+            "  plan-review:\n"
+            "    batch: {rounds: 1, reviewer: test_stub}\n"
+            "    holistic: {rounds: 1, reviewer: test_stub}\n"
+            "  code-review:\n"
+            "    batch: {rounds: 1, reviewer: test_stub}\n"
+            "    holistic: {rounds: 1, reviewer: test_stub}\n"
+        )
+    (wiki_root / "config.yaml").write_text(content, encoding="utf-8")

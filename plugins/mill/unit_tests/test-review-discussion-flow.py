@@ -21,6 +21,7 @@ sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 import _reviewer_test_stub as stub  # noqa: E402
 import _test_registry  # noqa: E402
 from _review_discussion import run as discussion_run  # noqa: E402
+from _test_helpers import seed_wiki_config  # noqa: E402
 
 SLUG = "test-slug"
 
@@ -41,11 +42,7 @@ def _make_fixture(tmp: Path) -> tuple[Path, Path, Path]:
     mill_dir.mkdir(parents=True, exist_ok=True)
     wiki_root = tmp / "wiki"
     wiki_root.mkdir(parents=True, exist_ok=True)
-    (wiki_root / "config.yaml").write_text(
-        "paths:\n  discussion_file: discussion.md\n  plan_dir: plan/\n  reviews_dir: reviews/\n"
-        "spawn:\n  branch_prefix: \"hanf/\"\n",
-        encoding="utf-8",
-    )
+    seed_wiki_config(wiki_root)
     (wiki_root / "Home.md").write_text(
         f"## Test Task\n[[{SLUG}]] [active]\n\n_body_\n", encoding="utf-8"
     )
