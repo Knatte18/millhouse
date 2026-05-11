@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: blocked
+phase: done
 slug: config-schema-refactor
 branch: hanf/config-schema-refactor
 plan: task/plan
@@ -34,6 +34,8 @@ approved-flip  2026-05-09T17:51:45Z
 approved-skills-docs  2026-05-09T17:54:16Z
 holistic-reviewing  2026-05-09T17:54:32Z
 blocked  2026-05-09T17:58:39Z
+holistic-skipped  2026-05-11T07:07:57Z
+done  2026-05-11T07:07:57Z
 ```
 
 ## Batches
