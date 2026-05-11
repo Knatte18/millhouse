@@ -92,7 +92,7 @@ The review subsystem currently calls Claude (Sonnet/Opus) for every discussion-g
 
 ### rate-limit-detection
 
-- **Decision:** Add `_scan_gemini_rate_limit(stdout, stderr)` that case-insensitively searches the combined text for any of the substrings: `RESOURCE_EXHAUSTED`, `rate_limit`, `rate limit`, `quota`, `429`, `too many requests`. When `result.returncode != 0` and the scan returns True, raise `LLMRateLimitError`; when returncode != 0 and scan returns False, raise the regular `LLMError` (or `LLMSessionError` if resume=True, matching Claude's pattern).
+- **Decision:** Add `_scan_gemini_rate_limit(stdout, stderr)` that case-insensitively searches the combined text for any of the substrings: `RESOURCE_EXHAUSTED`, `rate_limit`, `rate limit`, `quota`, `429`, `too many requests`. When `result.returncode != 0` and the scan returns True, raise `LLMRateLimitError`; when returncode != 0 and scan returns False, raise the regular `LLMError`. The `resume=True` path never reaches the subprocess — see `session-reuse-not-supported`, which raises `LLMSessionError` before spawn — so the non-zero-exit branch only handles fresh-call failures.
 - **Rationale:** The mill-go ERROR-only retry path catches `LLMRateLimitError` specifically and applies a longer backoff than for transient errors. False positives (mis-classifying a generic crash as rate-limited) only cause that longer backoff, which is harmless. False negatives mean the loop retries too fast on a real quota event and hits the same wall — survivable but worse. The bias toward false-positive is correct.
 - **Rejected:** Skip detection; surface every non-zero exit as generic `LLMError`. Loses the typed signal mill-go uses for backoff selection.
 

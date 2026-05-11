@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: discussion-fix-r1
 slug: gemini-reviewer
 branch: hanf/gemini-reviewer
 plan: null
@@ -15,4 +15,5 @@ task_description: |
 
 ```text
 discussing  '2026-05-11T11:32:40Z'
+discussion-fix-r1  2026-05-11T11:45:19Z
 ```
