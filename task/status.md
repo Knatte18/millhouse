@@ -33,8 +33,8 @@ batches:
     start_sha: 4afa6f4a32ec928e24f117a894f9c661bedace95
   - name: migration
     state: running
-    implementer_session: bba4a899-1c11-4e93-aeda-6b6e748e96ae
-    start_sha: 879a0fcaa48a7b3ea09c5649526738ec602ec1e3
+    implementer_session: 11f70719-e032-4e8f-81c0-310f49da367e
+    start_sha: 62f6307b68a7c6f3c58c3b2fe660a3a72ee78000
   - name: integration-tests
     state: pending
   - name: skill-docs
