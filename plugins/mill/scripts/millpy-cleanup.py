@@ -76,8 +76,8 @@ def build_plan(
     ``_spawn_core.discover_active_worktrees``.
 
     Args:
-        active_worktrees: List of worktree root paths, each carrying a
-            valid ``.millhouse/active.slug.md`` marker.
+        active_worktrees: List of worktree root paths, each on a task
+            branch detected via ``_spawn_core.discover_active_worktrees``.
         home_tasks: Tasks parsed from wiki ``Home.md``.
         wiki_path: Path to the wiki clone root.
         hub_root: Absolute path to the hub git checkout.
@@ -217,12 +217,12 @@ def _resolve_inplace_mode(
 ) -> tuple[str, str]:
     """Determine whether a sweep record should use in-place or worktree cleanup.
 
-    Reads the hub's ``.millhouse/active.slug.md`` marker once and delegates
-    to ``_inplace.is_inplace``. When the stale-worktree edge applies (branch
-    matches AND a worktree dir exists), prompts the user and returns their
-    choice. The resolved task branch is returned alongside the mode so
-    callers can pass it directly to ``_apply_inplace_record`` without a
-    second read of the marker.
+    Derives the hub's current slug via ``_marker.slug_from_branch`` and
+    delegates to ``_inplace.is_inplace``. When the stale-worktree edge
+    applies (branch matches AND a worktree dir exists), prompts the user
+    and returns their choice. The resolved task branch is returned alongside
+    the mode so callers can pass it directly to ``_apply_inplace_record``
+    without a second branch lookup.
 
     Args:
         record: The SlugRecord being evaluated.
@@ -234,7 +234,7 @@ def _resolve_inplace_mode(
         - ``"inplace"`` — skip worktree remove, delete branch only.
         - ``"worktree"`` — standard worktree remove flow.
         - ``"abort"`` — user aborted; caller should skip this record.
-        ``task_branch`` is the branch name from the active marker when
+        ``task_branch`` is the current branch name when
         ``mode == "inplace"``, and ``""`` otherwise.
     """
     try:
@@ -277,16 +277,16 @@ def _apply_inplace_record(
 
     Reads the parent branch from ``status.md``, checks out the parent
     branch so we are not deleting the currently-checked-out branch,
-    deletes the task branch (``-d`` for done, ``-D`` for abandoned),
-    removes the ``.active`` junction at ``hub_root / ".active"``, and
-    removes the ``active.slug.md`` marker. This function does NOT remove
-    the wiki active dir — ``apply_plan`` handles that uniformly.
+    deletes the task branch (``-d`` for done, ``-D`` for abandoned), and
+    removes the ``.active`` junction at ``hub_root / ".active"``. This
+    function does NOT remove the wiki active dir — ``apply_plan`` handles
+    that uniformly.
 
     Args:
         record: The SlugRecord for the in-place task being cleaned.
         hub_root: Absolute path to the hub git checkout.
         task_branch: The task branch name resolved by ``_resolve_inplace_mode``
-            from the active marker. Avoids a second read of the marker file.
+            via the current branch. Avoids a second git branch query.
 
     """
     # Read parent branch from status.md so we can check out safely.

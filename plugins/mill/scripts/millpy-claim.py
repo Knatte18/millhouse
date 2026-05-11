@@ -18,7 +18,7 @@ Flow:
     8. Check out a new branch via ``git checkout -b <branch_name>``.
     9. If stash was chosen, pop the stash onto the new branch.
    10. Recreate the ``.active`` junction pointing at this task's wiki dir.
-   11. Write the per-worktree active marker and the initial status.md.
+   11. Write the initial status.md.
    12. Print Branch / Status / "in-place".
 
 Usage:
