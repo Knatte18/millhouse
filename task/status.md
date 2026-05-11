@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-fix-r1
+phase: planned
 slug: home-md-states-teardown-split
 branch: hanf/home-md-states-teardown-split
 plan: task/plan
@@ -22,4 +22,5 @@ discussed  2026-05-11T18:07:50Z
 planning  2026-05-11T18:15:02Z
 plan-review-r1  2026-05-11T18:19:18Z
 plan-fix-r1  2026-05-11T18:19:18Z
+planned  2026-05-11T18:19:29Z
 ```
