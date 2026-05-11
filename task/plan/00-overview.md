@@ -3,7 +3,7 @@
 ```yaml
 task: 31 (A) — Simple Gemini Flash reviewer
 slug: gemini-reviewer
-approved: false
+approved: true
 started: 20260511-120728
 parent: main
 root: ""
