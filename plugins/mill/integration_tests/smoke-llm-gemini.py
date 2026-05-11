@@ -16,6 +16,10 @@ from pathlib import Path
 HUB = Path(__file__).resolve().parent.parent.parent.parent
 SCRIPTS = HUB / "plugins" / "mill" / "scripts"
 SCRATCH = HUB / ".scratch"
+# Gemini CLI only accesses files inside its workspace and skips gitignored paths.
+# .scratch/ is gitignored, so tool-use tests use a non-gitignored tmp dir next
+# to this file (integration_tests/). The dir is deleted on success.
+INTEGRATION_TESTS = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPTS))
 
 import _llm_gemini  # noqa: E402
@@ -94,9 +98,8 @@ def test_tool_use() -> int:
     print("TEST 2: run_tool_use reading a real file via built-in read tool", file=sys.stderr)
     print("=" * 60, file=sys.stderr)
 
-    SCRATCH.mkdir(parents=True, exist_ok=True)
-    tmp = SCRATCH / f"mill-smoke-llm-{uuid.uuid4().hex[:8]}"
-    tmp.mkdir()
+    tmp = INTEGRATION_TESTS / f"_smoke_tmp_{uuid.uuid4().hex[:8]}"
+    tmp.mkdir(parents=True, exist_ok=True)
     failed = False
     try:
         test_file = tmp / "sample.py"
