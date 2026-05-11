@@ -103,7 +103,7 @@ If the returned list is empty, continue to "3. Code Review loop" as normal.
 
 ### 3. Code Review loop
 
-If `roles.code-review.batch.reviewer` is null (or rounds: 0): set batch state → `approved`, `_status.append_phase(status_path, f"approved-{batch_name}", _timestamp.now_utc_iso())`, commit on the task branch: `git -C <worktree> add status.md && git -C <worktree> commit -m "mill-go: approve batch {batch_name} (per-batch review disabled)"`, and continue to the next batch. Skip the rest of this section.
+If `roles.code-review.batch.reviewer` is null (or rounds: 0): set batch state → `approved`, `_status.append_phase(status_path, f"approved-{batch_name}", _timestamp.now_utc_iso())`, commit on the task branch: `git -C <worktree> add task/status.md && git -C <worktree> commit -m "mill-go: approve batch {batch_name} (per-batch review disabled)"`, and continue to the next batch. Skip the rest of this section.
 
 - Set batch state → `reviewing`, `review_round: 1`.
 - `_status.append_phase(status_path, f"reviewing-{batch_name}-r1", _timestamp.now_utc_iso())`.
@@ -167,7 +167,7 @@ For each round `H` from 1 to `max_holistic_rounds`:
 
 1. **Crash-recovery.** Scan `reviews/` for a file matching `*-code-review-r{H}.md` (holistic code review files have format `{ts}-code-review-r{N}.md` — no batch-name segment, no `-holistic-` substring; per-batch files embed `{batch_name}` so the glob never collides). If found, skip the CLI and use that file's verdict directly.
 
-2. `_status.append_phase(status_path, "holistic-reviewing", _timestamp.now_utc_iso())`. Commit: `git -C <worktree> add status.md && git -C <worktree> commit -m "mill-go: holistic reviewing round {H}"`.
+2. `_status.append_phase(status_path, "holistic-reviewing", _timestamp.now_utc_iso())`. Commit: `git -C <worktree> add task/status.md && git -C <worktree> commit -m "mill-go: holistic reviewing round {H}"`.
 
 3. Background via `millpy-bg`:
    ```bash
