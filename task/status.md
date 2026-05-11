@@ -27,7 +27,9 @@ implementing  2026-05-11T10:56:43Z
 ```yaml
 batches:
   - name: machine-layer-module
-    state: pending
+    state: running
+    implementer_session: 9ad96e91-90f3-4e65-b6f9-8cad6c665b40
+    start_sha: 569043587e9b8e74c78a9effa13b35788453a6e5
   - name: integrate-and-document
     state: pending
 ```
