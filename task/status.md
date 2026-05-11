@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: gemini-reviewer
 branch: hanf/gemini-reviewer
 plan: task/plan
@@ -22,4 +22,17 @@ plan-review-r1  2026-05-11T12:15:29Z
 plan-fix-r1  2026-05-11T12:15:29Z
 plan-review-r2  2026-05-11T12:19:42Z
 planned  2026-05-11T12:19:58Z
+implementing  2026-05-11T12:23:49Z
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: error-hierarchy-extract
+    state: pending
+  - name: gemini-llm-provider
+    state: pending
+  - name: registry-and-smoke
+    state: pending
 ```
