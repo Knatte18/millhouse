@@ -36,7 +36,9 @@ batches:
     start_sha: d7a91838f186b81837a2d9f3f8829d0bc58d39b2
     commit_sha: 93c8687ea0dc477e17cd02b447d3c050ba50fd42
   - name: gemini-llm-provider
-    state: pending
+    state: running
+    implementer_session: d383e89d-13c6-49f8-906e-1683608c33c3
+    start_sha: 4cd7132c84e10bd4e2028d496885706ec84ef632
   - name: registry-and-smoke
     state: pending
 ```
