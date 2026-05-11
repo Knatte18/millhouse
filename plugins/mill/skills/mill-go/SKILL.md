@@ -67,11 +67,17 @@ For each batch in `order`:
 
 ### 1. Implement
 
-- Invoke:
-  ```bash
-  uv run --project "$CLAUDE_PLUGIN_ROOT" "$CLAUDE_PLUGIN_ROOT/scripts/millpy-implement.py" <batch_name>
-  ```
-  The CLI atomically: resolves paths and config, renders the implementer brief, generates a `session_id`, sets batch state → `running`, records `start_sha` and `implementer_session` in status.md, commits and pushes on the task branch, spawns the implementer, and prints the implementer's JSON report on stdout. The Builder reads stdout JSON directly for the Parse step. Note: the CLI exits 0 when the implementer produced JSON (success or stuck). On exit code 1 the stdout still carries a `{"status":"stuck","stuck_type":"transient",...}` line if an LLM-layer failure (timeout, dead session, etc.) occurred — parse it the same way and route through Stuck escalation. Only treat exit 1 as an unrecoverable pre-launch error when stdout is empty.
+Background via millpy-bg:
+
+```bash
+uv run --project "$CLAUDE_PLUGIN_ROOT" "$CLAUDE_PLUGIN_ROOT/scripts/millpy-bg.py" \
+    --slug implement-<batch_name> -- \
+    uv run --project "$CLAUDE_PLUGIN_ROOT" "$CLAUDE_PLUGIN_ROOT/scripts/millpy-implement.py" <batch_name>
+```
+
+Returns immediately with `pid=<N> log=<abs-path>`. Do not use `run_in_background: true` on the Bash tool — that routes output to CC's temp dir. Poll the log file with `cat <log-path>` until `[mill-bg] EXIT` appears. Once it does, read the log and extract the JSON summary line (the last non-empty, non-sentinel line in the log).
+
+The CLI atomically: resolves paths and config, renders the implementer brief, generates a `session_id`, sets batch state → `running`, records `start_sha` and `implementer_session` in status.md, commits and pushes on the task branch, and spawns the implementer. The Builder reads the JSON summary from the log file. Note: the CLI exits 0 when the implementer produced JSON (success or stuck). On exit code 1 the JSON line in the log file still carries a `{"status":"stuck","stuck_type":"transient",...}` line if an LLM-layer failure (timeout, dead session, etc.) occurred — parse it the same way and route through Stuck escalation. Only treat exit 1 as an unrecoverable pre-launch error when the JSON line in the log file is absent.
 
 ### 2. Parse implementer report
 
@@ -131,10 +137,14 @@ For each round `N` from 1 to `roles.code-review.batch.rounds`:
    - `APPROVE` — batch state → `approved`, `review_file: <path>`. `_status.append_phase(status_path, f"approved-{batch_name}", _timestamp.now_utc_iso())`. Use the `file` field from `reviews[0]` in the JSON summary (or the crash-recovery scan path) as `<review_file_path>`. Commit on the task branch: `git -C <worktree> add task/status.md <review_file_path> && git -C <worktree> commit -m "mill-go: approve batch {batch_name}"`. Break out of the loop → next batch.
    - `NEED_CONTEXT` — read the `## Missing context` bullets from the review file. For each listed path, if it exists under the worktree, append to `extra_files` for the NEXT round. `_notify.notify("mill-go.review-need-context", f"batch {batch_name} round {N}", slug=slug, files=len(missing))`. Record this gap for mill-self-report (see Handoff). Increment round and continue the loop. If ALL the missing files are paths already in `extra_files` from a prior round (no new info), treat as a stuck-logic failure and break.
      `signature: _notify.notify(event: str, detail: str, **context) -> None`
-   - `REQUEST_CHANGES` — invoke:
+   - `REQUEST_CHANGES` — Background via millpy-bg:
      ```bash
-     uv run --project "$CLAUDE_PLUGIN_ROOT" "$CLAUDE_PLUGIN_ROOT/scripts/millpy-implement.py" <batch_name> --resume --round <N> --review-file <review-file-abs-path>
+     uv run --project "$CLAUDE_PLUGIN_ROOT" "$CLAUDE_PLUGIN_ROOT/scripts/millpy-bg.py" \
+         --slug fix-<batch_name>-r<N> -- \
+         uv run --project "$CLAUDE_PLUGIN_ROOT" "$CLAUDE_PLUGIN_ROOT/scripts/millpy-implement.py" <batch_name> --resume --round <N> --review-file <review-file-abs-path>
      ```
+     Returns immediately with `pid=<N> log=<abs-path>`. Do not use `run_in_background: true` on the Bash tool — that routes output to CC's temp dir. Poll the log file with `cat <log-path>` until `[mill-bg] EXIT` appears. Once it does, read the log and extract the JSON summary line (the last non-empty, non-sentinel line in the log).
+
      The CLI atomically: reads `implementer_session` from status.md, sets batch state → `fixing`, calls `_status.append_phase` for `fixing-{batch_name}-r{N}`, commits and pushes (status.md plus the review file), and resumes the warm implementer session with the fix prompt (which instructs the implementer to load `mill-receiving-review` and apply findings). Parse the JSON report the same way as step 2 — including the exit-code-1-with-stuck-JSON behavior described under "1. Implement". On stuck → escalate.
 
 5. **Max-rounds exhaustion.** After `roles.code-review.batch.rounds` rounds without APPROVE: `_notify.notify("mill-go.review-exhausted", f"batch {batch_name}", slug=slug, rounds=N)`, set batch state → `blocked`, `blocked_reason: "review rounds exhausted"`, `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`, commit on the task branch: `git -C <worktree> add task/status.md && git -C <worktree> commit -m "mill-go: blocked on {batch_name} after {N} rounds"`. Go to *Blocked* below.
