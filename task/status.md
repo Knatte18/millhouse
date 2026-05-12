@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-vscode-filter-open
+phase: approved-mill-setup-skill
 slug: ps1-startup-speedup
 branch: hanf/ps1-startup-speedup
 plan: task/plan
@@ -24,6 +24,7 @@ implementing  '2026-05-12T10:55:27Z'
 approved-benchmark  '2026-05-12T10:59:18Z'
 approved-shortcut-speedup  '2026-05-12T11:07:16Z'
 approved-vscode-filter-open  '2026-05-12T11:19:44Z'
+approved-mill-setup-skill  '2026-05-12T11:23:24Z'
 ```
 
 ## Batches
@@ -43,7 +44,7 @@ batches:
     implementer_session: ab2ba61b-d676-4238-b2e3-f9c1f1986564
     start_sha: dac7f154f7d49e3c22b2360907793350d5ddfb36
   - name: mill-setup-skill
-    state: running
+    state: approved
     implementer_session: b54bfce3-4f62-4f63-a6e3-74613ad24ecb
     start_sha: 4faf29490e99164478f132ac180920c58224d3c0
 ```
