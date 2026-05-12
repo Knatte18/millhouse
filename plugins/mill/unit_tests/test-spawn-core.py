@@ -366,10 +366,10 @@ def test_write_initial_status() -> None:
             parent_branch="main",
             branch="hanf/task-one",
         )
-        # status.md must be at task/status.md under the worktree root
-        if status_path != repo / "task" / "status.md":
+        # status.md must be at _mill/status.md under the worktree root
+        if status_path != repo / "_mill" / "status.md":
             raise AssertionError(
-                f"status.md must be at task/ subdir; expected {repo / 'task' / 'status.md'}, "
+                f"status.md must be at _mill/ subdir; expected {repo / '_mill' / 'status.md'}, "
                 f"got {status_path}"
             )
         if not status_path.exists():
@@ -384,7 +384,7 @@ def test_write_initial_status() -> None:
 
         # git log for just task/status.md must show one commit with the expected message
         log = subprocess.run(
-            ["git", "-C", str(repo), "log", "--oneline", "task/status.md"],
+            ["git", "-C", str(repo), "log", "--oneline", "_mill/status.md"],
             capture_output=True,
             text=True,
         )
@@ -416,7 +416,7 @@ def test_write_initial_status_forced_failure_raises_runtime_error() -> None:
             )
         except RuntimeError as exc:
             msg = str(exc)
-            if "git add task/status.md failed" not in msg:
+            if "git add _mill/status.md failed" not in msg:
                 raise AssertionError(
                     f"RuntimeError message missing expected prefix; got: {msg!r}"
                 )

@@ -43,7 +43,7 @@ def _make_worktree(tmp: Path, slug: str, phase: str = "implementing") -> tuple[P
     wt.mkdir(exist_ok=True)
     mill_dir = wt / ".millhouse"
     mill_dir.mkdir(exist_ok=True)
-    status_path = wt / "task" / "status.md"
+    status_path = wt / "_mill" / "status.md"
     _make_status_md(status_path, phase)
     return wt, mill_dir, status_path
 
@@ -179,7 +179,7 @@ def main() -> int:
             # git commands should target the task branch (active_hub == wt for flat-hub)
             cmds = _read_git_cmds(tmp)
             wt_str = str(wt)
-            assert ["git", "-C", wt_str, "add", "task/status.md"] in cmds, \
+            assert ["git", "-C", wt_str, "add", "_mill/status.md"] in cmds, \
                 f"add not in cmds: {cmds}"
             assert ["git", "-C", wt_str, "commit", "-m", f"task: abandon {slug}"] in cmds, \
                 f"commit not in cmds: {cmds}"
@@ -268,7 +268,7 @@ def main() -> int:
             assert result.returncode == 0, f"exit={result.returncode} stderr={result.stderr}"
             cmds = _read_git_cmds(tmp)
             wt_str = str(wt)
-            assert ["git", "-C", wt_str, "add", "task/status.md"] in cmds, \
+            assert ["git", "-C", wt_str, "add", "_mill/status.md"] in cmds, \
                 f"add not in cmds: {cmds}"
             ok("stale lock -> proceed with --force")
     except Exception as exc:

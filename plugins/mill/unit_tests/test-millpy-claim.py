@@ -206,7 +206,7 @@ def test_main_happy_path_calls_spawn_core_helpers() -> None:
     sc.pick_task_single_or_multi.return_value = ("single", task, [])
     sc.claim_in_wiki.return_value = None
     sc.capture_parent_branch.return_value = "main"
-    sc.write_initial_status.return_value = Path("/fake/repo/subdir/task/status.md")
+    sc.write_initial_status.return_value = Path("/fake/repo/subdir/_mill/status.md")
     sc.recreate_active_junction.return_value = None
 
     # subprocess: git checkout -b returns success
@@ -320,7 +320,7 @@ def test_main_dirty_tree_stash_invokes_git_stash() -> None:
     sc.pick_task_single_or_multi.return_value = ("single", task, [])
     sc.claim_in_wiki.return_value = None
     sc.capture_parent_branch.return_value = "main"
-    sc.write_initial_status.return_value = Path("/fake/repo/subdir/task/status.md")
+    sc.write_initial_status.return_value = Path("/fake/repo/subdir/_mill/status.md")
     sc.recreate_active_junction.return_value = None
 
     subprocess_stub = MagicMock()
@@ -384,7 +384,7 @@ def test_main_multi_path_skips_claim_in_wiki() -> None:
     )
     sc.multi_select_groom_then_claim.return_value = merged_task
     sc.capture_parent_branch.return_value = "main"
-    sc.write_initial_status.return_value = Path("/fake/repo/subdir/task/status.md")
+    sc.write_initial_status.return_value = Path("/fake/repo/subdir/_mill/status.md")
     sc.recreate_active_junction.return_value = None
 
     subprocess_stub = MagicMock()
@@ -432,7 +432,7 @@ def test_portal_entry_uses_resolve_container_path() -> None:
     sc.pick_task_single_or_multi.return_value = ("single", task, [])
     sc.claim_in_wiki.return_value = None
     sc.capture_parent_branch.return_value = "main"
-    sc.write_initial_status.return_value = Path("/fake/repo/subdir/task/status.md")
+    sc.write_initial_status.return_value = Path("/fake/repo/subdir/_mill/status.md")
     sc.recreate_active_junction.return_value = None
 
     subprocess_stub = MagicMock()
@@ -491,7 +491,7 @@ def test_portal_before_recreate_active_junction_order() -> None:
     sc.pick_task_single_or_multi.return_value = ("single", task, [])
     sc.claim_in_wiki.return_value = None
     sc.capture_parent_branch.return_value = "main"
-    sc.write_initial_status.return_value = Path("/fake/repo/subdir/task/status.md")
+    sc.write_initial_status.return_value = Path("/fake/repo/subdir/_mill/status.md")
 
     call_log: list[str] = []
     sc.recreate_active_junction.side_effect = lambda *a, **kw: call_log.append("recreate_active_junction")
@@ -550,7 +550,7 @@ def test_portal_idempotent_when_already_correct() -> None:
     sc.pick_task_single_or_multi.return_value = ("single", task, [])
     sc.claim_in_wiki.return_value = None
     sc.capture_parent_branch.return_value = "main"
-    sc.write_initial_status.return_value = Path("/fake/repo/subdir/task/status.md")
+    sc.write_initial_status.return_value = Path("/fake/repo/subdir/_mill/status.md")
     sc.recreate_active_junction.return_value = None
 
     subprocess_stub = MagicMock()
@@ -604,7 +604,7 @@ def test_main_hub_title_flip_when_cwd_is_hub() -> None:
     sc.pick_task_single_or_multi.return_value = ("single", task, [])
     sc.claim_in_wiki.return_value = None
     sc.capture_parent_branch.return_value = "main"
-    sc.write_initial_status.return_value = Path("/fake/repo/subdir/task/status.md")
+    sc.write_initial_status.return_value = Path("/fake/repo/subdir/_mill/status.md")
     sc.recreate_active_junction.return_value = None
 
     subprocess_stub = MagicMock()
@@ -659,7 +659,7 @@ def test_hub_paths_use_cwd_not_git_root() -> None:
     sc.pick_task_single_or_multi.return_value = ("single", task, [])
     sc.claim_in_wiki.return_value = None
     sc.capture_parent_branch.return_value = "main"
-    sc.write_initial_status.return_value = Path("/fake/repo/src/Models/task/status.md")
+    sc.write_initial_status.return_value = Path("/fake/repo/src/Models/_mill/status.md")
     sc.recreate_active_junction.return_value = None
 
     subprocess_stub = MagicMock()
