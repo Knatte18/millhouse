@@ -292,6 +292,11 @@ def _resolve_inplace_mode(
     return ("worktree", "")
 
 
+def _apply_orphan_portal(portal_path: Path) -> None:
+    _junction.remove(portal_path)
+    print(f"[cleanup] removed orphan portal: {portal_path}", file=sys.stderr)
+
+
 def _apply_inplace_record(
     record: SlugRecord,
     hub_root: Path,
