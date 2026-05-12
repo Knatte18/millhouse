@@ -18,7 +18,9 @@ PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}"
 if [ -z "$PLUGIN_ROOT" ]; then
     PLUGIN_ROOT="$(git rev-parse --show-toplevel)/plugins/mill"
     echo "[mill-go] CLAUDE_PLUGIN_ROOT unset; resolved to: $PLUGIN_ROOT"
+    echo "[mill-go] NOTE: source-tree venv must exist at $PLUGIN_ROOT/.venv — run 'uv sync --project $PLUGIN_ROOT' if not."
 fi
+MILL_PYTHON="${PLUGIN_ROOT}/.venv/Scripts/python.exe"
 ```
 
 Use `$PLUGIN_ROOT` in place of `$CLAUDE_PLUGIN_ROOT` for all subsequent `uv run` commands in this skill.
