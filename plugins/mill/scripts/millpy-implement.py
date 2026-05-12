@@ -136,7 +136,7 @@ def main(argv=None) -> int:
         _status.set_batch_fields(status_path, args.batch_name, {"state": "running", "start_sha": start_sha, "implementer_session": session_id})
 
         result = _subprocess_util.run(
-            ["git", "add", str(status_path.relative_to(project_root)), str(snapshot_path.relative_to(project_root))],
+            ["git", "add", status_path.relative_to(project_root).as_posix(), str(snapshot_path.relative_to(project_root))],
             cwd=project_root,
         )
         if result.returncode != 0:
@@ -215,7 +215,7 @@ def main(argv=None) -> int:
             else str(review_file)
         )
         result = _subprocess_util.run(
-            ["git", "add", str(status_path.relative_to(project_root)), review_file_arg],
+            ["git", "add", status_path.relative_to(project_root).as_posix(), review_file_arg],
             cwd=project_root,
         )
         if result.returncode != 0:

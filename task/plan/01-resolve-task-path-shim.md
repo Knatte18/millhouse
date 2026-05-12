@@ -86,7 +86,7 @@ Batch-02 (task-to-mill-rename) will update config to say `_mill/`; after that th
   (1) Add `import _paths` (if not already present — check current imports).
   (2) Replace `status_path = project_root / "task" / "status.md"` (line 93) with `status_path = _paths.resolve_task_path(project_root, "_mill/status.md")`.
   (3) Replace the `plan_dir`-based `project_root / plan_dir / "00-overview.md"` construction (line 100): instead of `overview_path = project_root / plan_dir / "00-overview.md"` write `plan_base = _paths.resolve_task_path(project_root, plan_dir); overview_path = plan_base / "00-overview.md"`. Similarly `batch_file = plan_base / batch_entry["file"]` instead of `project_root / plan_dir / batch_entry["file"]`.
-  (4) Replace the literal `"task/status.md"` in git add calls at lines 138 and 217 with `str(status_path.relative_to(project_root))`.
+  (4) Replace the literal `"task/status.md"` in git add calls at lines 139 and 218 with `status_path.relative_to(project_root).as_posix()` (not `str(...)` -- Windows produces backslashes).
   Note: the cleanliness snapshot path (`project_root / "task" / f".cleanliness-snapshot-..."`) is an internal mill state file — do NOT add shim for it here. It will be renamed directly in batch 02.
 - **Commit:** `fix(implement): use resolve_task_path shim for status and plan paths`
 

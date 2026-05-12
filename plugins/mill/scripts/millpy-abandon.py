@@ -98,7 +98,7 @@ def main() -> int:
 
     _status.append_phase(status_path, "abandoned", timestamp)
     add_result = _subprocess_util.run(
-        ["git", "-C", str(active_hub), "add", str(status_path.relative_to(active_hub))]
+        ["git", "-C", str(active_hub), "add", status_path.relative_to(active_hub).as_posix()]
     )
     if add_result.returncode != 0:
         sys.exit(f"Error: git add failed: {add_result.stderr.strip()!r}")
