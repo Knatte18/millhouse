@@ -88,13 +88,21 @@ Batch-local decision: when a junction exists but points to the wrong target, the
       target.mkdir(parents=True, exist_ok=True)
 
   # Idempotency: skip on correct, recreate on drift, refuse on real directory.
-  if link_path.exists() or link_path.is_symlink():
+  # Use os.path.lexists (does NOT follow links) so a broken NTFS junction —
+  # whose target was deleted, making Path.exists() return False because it
+  # follows the junction to a missing target, and Path.is_symlink() return
+  # False because junctions are not Python symlinks — is still recognised
+  # as present and routed through the drift branch. This mirrors
+  # `_junction.remove`'s own lexists-based guard at line 162. Requires
+  # `import os` at the top of `_setup.py`.
+  if os.path.lexists(str(link_path)):
       if _junction.points_to(link_path, target):
           # Already correct — silent skip (mirrors hardlink inode-skip at line 137).
           continue
-      # Drift: junction points elsewhere, or link_path is a regular file/dir.
-      # `_junction.remove` raises ValueError on a real directory (existing
-      # safety guard at line 191) — propagate that ValueError unchanged.
+      # Drift: junction points elsewhere, is broken, or link_path is a
+      # regular file/dir. `_junction.remove` raises ValueError on a real
+      # directory (existing safety guard at line 191) — propagate that
+      # ValueError unchanged.
       _junction.remove(link_path)
 
   _junction.create(target, link_path)
@@ -102,12 +110,14 @@ Batch-local decision: when a junction exists but points to the wrong target, the
   print(f"[setup] junction created: {link_path} -> {target}", file=sys.stderr)
   ```
 
+  Add `import os` to the imports block at the top of `plugins/mill/scripts/_setup.py`. Current imports (line 17–23): `from __future__ import annotations`, blank, `import re`, `import sys`, `from pathlib import Path`, blank, `import _junction`, `import _wiki`. Insert `import os` between `import re` and `import sys` (alphabetical) — final order becomes `import os`, `import re`, `import sys`.
+
   Observable behaviour after this card:
-  - Junction absent: created as before; appended to `created_junctions`; same stderr log.
+  - Junction absent (`os.path.lexists` returns False): created as before; appended to `created_junctions`; same stderr log.
   - Junction present pointing at the correct target: silent skip, NOT appended to `created_junctions`, no stderr log (matches the hardlink `continue` at line 137 — no log on skip).
   - Junction present pointing at the WRONG target: `_junction.remove` invoked first (which emits the existing `[junction] removed junction <path>` stderr line), then `_junction.create` recreates and appends.
   - A regular file or directory at `link_path` (not a junction or symlink): `_junction.remove`'s existing `ValueError` propagates unchanged — the operator-facing error is `<link_path> is not a junction or symlink — refusing to remove`.
-  - Broken junction (target deleted): `points_to` returns False (the new OSError handling in Card 4), so the drift branch fires — `_junction.remove` removes the broken junction (it is still detectable as a junction via the reparse-point bit even if its target is gone, per `remove()`'s existing 0x400 detection), then `_junction.create` recreates fresh against the now-existing target.
+  - Broken junction (target deleted after creation): `os.path.lexists` returns True (the reparse point still exists on the filesystem even though its target is gone), so the outer guard FIRES — unlike `Path.exists() or Path.is_symlink()` which would both return False for a broken NTFS junction and bypass the guard entirely. Inside the guard, `points_to` returns False (the new `OSError` handling in Card 4 catches `Path.resolve()`'s failure on the broken junction). The drift branch fires — `_junction.remove` removes the broken junction (its reparse-point bit is still detectable via `_is_junction_or_symlink`, per `remove()`'s existing 0x400 check), then `_junction.create` recreates fresh against the now-existing target.
 
   Do not change the hardlinks loop (lines 110–152). Do not change the function signature or return shape. Do not change `_required_tokens` or the module docstring.
 - **Commit:** `fix(setup): create_hub_links junctions loop idempotent on re-run`

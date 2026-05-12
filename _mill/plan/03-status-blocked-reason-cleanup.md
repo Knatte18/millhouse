@@ -69,7 +69,7 @@ Batch-local decision: the deletion happens as part of the same single read+write
 - **Creates:** none
 - **Deletes:** none
 - **Requirements:**
-  Extend `plugins/mill/unit_tests/test-status.py` with three new test cases inside the existing `main()` function. Insert them inside the `# --- set_blocked tests ---` region (currently after the existing Test 3 at line 207), as new tests 4 / 5 / 6 in the file's existing `try / finally` structure (the file uses inline test cases inside `main()` rather than top-level test functions — keep that pattern).
+  Extend `plugins/mill/unit_tests/test-status.py` with three new test cases inside the existing `main()` function. Insert them inside the `# --- set_blocked tests ---` region (currently after the existing Test 3 at line 207), as new tests 4 / 5 / 6 in the file's existing single top-level `try: ... except AssertionError:` block (the file uses inline `assert` statements + `print("PASS: ...")` on success, NO `passed += 1` / `failed += 1` counters and NO `ok` / `fail` helpers — that pattern belongs to `test-setup-hub-links.py`, not here).
 
   Tests required (each runs inside its own `with tempfile.TemporaryDirectory() as tmp:` block matching the existing Tests 1–3 style):
 
@@ -93,7 +93,7 @@ Batch-local decision: the deletion happens as part of the same single read+write
     3. Assert: `read_full(sp)`; `data["yaml"]["phase"] == "discussed"`; `"blocked_reason" not in data["yaml"]`. Raw-text assert: `"blocked_reason:" not in file_text` (no row spuriously introduced).
     4. Print `PASS: append_phase preserves clean status when no blocked_reason present`.
 
-  All three tests count toward the file's existing `passed += 1` counters and surface failures via the existing `failed += 1` + `traceback.print_exc()` pattern (see the surrounding tests for the exact shape).
+  All three tests sit inside the existing single top-level `try:` block alongside Tests 1–3, use raw `assert ...` statements followed by `print("PASS: <name>")` on success, and rely on `test-status.py`'s outer `except AssertionError` (in `main()`) to surface failures with a non-zero exit. NO `passed += 1` / `failed += 1` counters, NO `ok(name)` / `fail(name, exc)` helpers, NO `traceback.print_exc()` — see lines 148–207 (`# --- set_blocked tests ---` Tests 1, 2, 3) for the exact assertion-then-print idiom to mirror.
 
   Imports at the top of the file already cover everything needed (`render_initial`, `set_blocked`, `append_phase`, `read_full`, `tempfile`, `pathlib.Path`). No new imports required.
 - **Commit:** `test(status): append_phase clears stale blocked_reason on non-blocked transitions`
