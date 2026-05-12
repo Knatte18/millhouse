@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-reviewing
+phase: holistic-approved
 slug: ps1-startup-speedup
 branch: hanf/ps1-startup-speedup
 plan: task/plan
@@ -26,6 +26,7 @@ approved-shortcut-speedup  '2026-05-12T11:07:16Z'
 approved-vscode-filter-open  '2026-05-12T11:19:44Z'
 approved-mill-setup-skill  '2026-05-12T11:23:24Z'
 holistic-reviewing  '2026-05-12T11:23:41Z'
+holistic-approved  '2026-05-12T11:25:30Z'
 ```
 
 ## Batches
