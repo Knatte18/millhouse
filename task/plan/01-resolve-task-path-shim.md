@@ -64,11 +64,14 @@ Batch-02 (task-to-mill-rename) will update config to say `_mill/`; after that th
 - **Context:**
   - `plugins/mill/scripts/millpy-abandon.py`
   - `plugins/mill/scripts/_paths.py`
+  - `plugins/mill/unit_tests/test-abandon.py`
 - **Edits:**
   - `plugins/mill/scripts/millpy-abandon.py`
+  - `plugins/mill/unit_tests/test-abandon.py`
 - **Creates:** none
 - **Deletes:** none
-- **Requirements:** Replace the hardcoded `status_path = active_hub / "task" / "status.md"` (line 58) with `status_path = _paths.resolve_task_path(active_hub, "_mill/status.md")`. Replace the literal `"task/status.md"` string in the `git add` subprocess call (line 101) with `str(status_path.relative_to(active_hub))`. The import of `_paths` is already present. After batch 02 sets config to `_mill/`, new tasks will use `_mill/status.md`; old in-flight tasks get `task/status.md` via the shim.
+- **Requirements:** Replace the hardcoded `status_path = active_hub / "task" / "status.md"` (line 58) with `status_path = _paths.resolve_task_path(active_hub, "_mill/status.md")`. Replace the literal `"task/status.md"` string in the `git add` subprocess call (line 101) with `status_path.relative_to(active_hub).as_posix()` (not `str(...)` -- Windows produces backslashes). The import of `_paths` is already present. After batch 02 sets config to `_mill/`, new tasks will use `_mill/status.md`; old in-flight tasks get `task/status.md` via the shim.
+  In `test-abandon.py`, `_make_trampoline()` builds a minimal mock `_paths` module that is missing `resolve_task_path`. Add it after the existing attribute assignments, implementing the same `_mill/` -> `task/` fallback logic using `Path.exists()`.
 - **Commit:** `fix(abandon): use resolve_task_path shim for status.md path`
 
 ### Card 4: Update `millpy-implement.py` to use shim
