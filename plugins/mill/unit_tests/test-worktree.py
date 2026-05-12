@@ -201,6 +201,29 @@ def main() -> int:
             assert raised_locked, "expected WorktreeLockedError when rmtree fallback raises PermissionError"
             print("PASS: remove_safe raises WorktreeLockedError when rmtree fallback raises PermissionError")
 
+        # --- remove_safe raises WorktreeLockedError on "Invalid argument" in git stderr ---
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "wt"
+            path.mkdir()
+            cwd = Path(tmp) / "cwd"
+            cwd.mkdir()
+            mock_result = MagicMock()
+            mock_result.returncode = 1
+            mock_result.stderr = "error: Invalid argument"
+            raised_locked = False
+            locked_exc = None
+            with patch("_worktree._subprocess_util.run", return_value=mock_result):
+                try:
+                    remove_safe(path, cwd=cwd, junctions_cfg={})
+                except WorktreeLockedError as exc:
+                    raised_locked = True
+                    locked_exc = exc
+            assert raised_locked, "expected WorktreeLockedError for Invalid argument"
+            assert locked_exc is not None and "Invalid argument" in str(locked_exc), (
+                f"expected 'Invalid argument' in error message: {locked_exc}"
+            )
+            print("PASS: remove_safe raises WorktreeLockedError on Invalid argument")
+
         print("All _worktree unit tests passed.")
         return 0
     except AssertionError as exc:

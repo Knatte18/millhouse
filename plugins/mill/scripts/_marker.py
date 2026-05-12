@@ -37,8 +37,7 @@ def slug_from_branch(git_root: Path, wiki_path: Path, cfg: dict) -> str:
         The validated task slug.
 
     Raises:
-        MarkerError: On detached HEAD, prefix mismatch, missing slug, or
-            slug not in [active] phase.
+        MarkerError: On detached HEAD, prefix mismatch, or missing slug.
     """
     result = _subprocess_util.run(
         ["git", "-C", str(git_root), "branch", "--show-current"]
@@ -60,10 +59,6 @@ def slug_from_branch(git_root: Path, wiki_path: Path, cfg: dict) -> str:
     task = next((t for t in tasks if t.slug == slug), None)
     if task is None:
         raise MarkerError(f"branch slug {slug!r} not present in Home.md")
-    if task.phase != "active":
-        raise MarkerError(
-            f"task {slug!r} is not [active] in Home.md (phase={task.phase!r})"
-        )
     return slug
 
 

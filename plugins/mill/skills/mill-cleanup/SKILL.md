@@ -5,7 +5,19 @@ description: "sweeper: reconcile hub git worktrees, wiki active/<slug>/ dirs, an
 
 # mill-cleanup
 
-Scans active dirs for tasks whose `status.md` shows `done` or `abandoned`, then removes matching worktrees, branches, and wiki dirs, and resets Home.md markers. Reports orphan worktrees and unreadable status files without removing them.
+Sweeps task artefacts: removes worktrees, branches, portals, and legacy wiki active-dirs for tasks whose Home.md marker is `[done]` (with archive tag confirming the squash landed); polls `gh pr list` for `[pr-pending]` tasks and finalises teardown when the PR merges; reports orphan worktrees and stranded Home.md markers. Runs from the hub, never from a task worktree.
+
+## States handled
+
+| Home.md marker | status.md phase | Action |
+|---|---|---|
+| `[done]` | `done` (+ archive tag present) | Remove worktree, branch, portal, legacy wiki active-dir |
+| `[done]` | `done` (archive tag absent) | Report — squash never landed, run mill-merge first |
+| `[ready-to-merge]` | `done` | Skip — task is live, waiting on mill-merge |
+| `[pr-pending]` | `pr-pending` | Poll `gh pr list`; if MERGED → create archive tag (if absent) + flip `[done]` + teardown; OPEN → skip; CLOSED → report for manual triage |
+| `[active]` / `[ready-to-merge]` / `[pr-pending]` with no active worktree | n/a | Report as orphan Home.md marker |
+
+Cleanup takes the wiki lock only when `--apply` is set. PR-reap also runs only under `--apply` — dry-run mode reports which `[pr-pending]` tasks WOULD be polled.
 
 ## Run it
 

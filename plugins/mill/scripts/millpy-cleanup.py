@@ -6,10 +6,11 @@ Runs from the hub. Pass --apply to execute removals; default is dry-run.
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import shutil
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import yaml
@@ -43,6 +44,7 @@ class CleanupPlan:
     to_remove_abandoned: list[SlugRecord]
     to_reset_home: list[str]
     to_report: list[str]
+    to_reap_pr: list[SlugRecord] = field(default_factory=list)
 
 
 # Returns None if status.md is missing or phase: is unreadable.
@@ -94,6 +96,7 @@ def build_plan(
     to_remove_abandoned: list[SlugRecord] = []
     to_reset_home: list[str] = []
     to_report: list[str] = []
+    to_reap_pr: list[SlugRecord] = []
 
     _LIVE_PHASES = {
         "discussing", "discussed", "planning", "planned",
@@ -129,19 +132,25 @@ def build_plan(
         record = SlugRecord(slug, wt_path, branch, wiki_active_dir, marker_by_slug.get(slug))
 
         if phase == "done":
-            parent_branch = _status.read_parent_branch(_task_status if _task_status.exists() else _legacy_status)
-            if parent_branch and record.branch:
+            home_marker = marker_by_slug.get(slug)
+            if home_marker == "done":
                 result = _subprocess_util.run(
-                    ["git", "-C", str(hub_root), "log", "--oneline",
-                     f"{parent_branch}..{record.branch}"]
+                    ["git", "-C", str(hub_root), "tag", "-l", f"archive/{slug}"]
                 )
                 if result.returncode == 0 and result.stdout.strip():
+                    to_remove_done.append(record)
+                else:
                     to_report.append(
-                        f"{slug} — phase=done but has unmerged commits relative to "
-                        f"{parent_branch!r}; run mill-merge first"
+                        f"{slug} — Home.md=[done] but archive tag archive/{slug} absent;"
+                        f" run mill-merge first"
                     )
-                    continue
-            to_remove_done.append(record)
+            elif home_marker == "ready-to-merge":
+                pass
+            else:
+                to_report.append(
+                    f"{slug} — status.md phase=done but Home.md marker is {home_marker!r};"
+                    f" inspect manually"
+                )
         elif phase == "abandoned":
             if record.home_marker == "active":
                 to_remove_abandoned.append(record)
@@ -151,6 +160,8 @@ def build_plan(
                     f"{slug} — phase=abandoned but Home.md marker is "
                     f"{record.home_marker!r}, not [active]; skipping (inspect manually)"
                 )
+        elif phase == "pr-pending":
+            to_reap_pr.append(record)
         elif phase in _LIVE_PHASES:
             pass
         else:
@@ -172,11 +183,11 @@ def build_plan(
                         f" run 'git worktree remove --force {entry}' to clean up)"
                     )
 
-    # Orphan Home.md marker: [active] slug with no active worktree.
+    # Orphan Home.md marker: [active]/[ready-to-merge]/[pr-pending] slug with no active worktree.
     for task in home_tasks:
-        if task.phase == "active" and task.slug not in active_slugs:
+        if task.phase in ("active", "ready-to-merge", "pr-pending") and task.slug not in active_slugs:
             to_report.append(
-                f"orphan Home.md marker: {task.slug} is [active] but has no "
+                f"orphan Home.md marker: {task.slug} is [{task.phase}] but has no "
                 f"active worktree"
             )
 
@@ -187,11 +198,11 @@ def build_plan(
                 f"orphan active worktree: {slug} has active marker but no Home.md entry"
             )
 
-    return CleanupPlan(to_remove_done, to_remove_abandoned, to_reset_home, to_report)
+    return CleanupPlan(to_remove_done, to_remove_abandoned, to_reset_home, to_report, to_reap_pr=to_reap_pr)
 
 
 def _print_plan(plan: CleanupPlan) -> None:
-    if not any([plan.to_remove_done, plan.to_remove_abandoned, plan.to_report]):
+    if not any([plan.to_remove_done, plan.to_remove_abandoned, plan.to_reap_pr, plan.to_report]):
         print("Nothing to do.")
         return
     for r in plan.to_remove_done:
@@ -205,6 +216,8 @@ def _print_plan(plan: CleanupPlan) -> None:
             f"[worktree={r.worktree_path}, branch={r.branch}, wiki_active_dir={r.wiki_active_dir}]"
             f"  \u2192 Home.md marker reset to unclaimed"
         )
+    for r in plan.to_reap_pr:
+        print(f"REAP-PR:           {r.slug}  [worktree={r.worktree_path}, branch={r.branch}]")
     for line in plan.to_report:
         print(f"REPORT: {line}")
 
@@ -395,6 +408,112 @@ def _apply_worktree_record(
     print(f"[cleanup] removed portal entry: {container_path / 'portals' / record.slug}", file=sys.stderr)
 
 
+def _apply_pr_reap_record(
+    record: SlugRecord,
+    hub_root: Path,
+    wiki_path: Path,
+    junctions_cfg: dict[str, str],
+    cfg: dict,
+) -> list[str]:
+    """Poll gh pr list for a [pr-pending] record and finalise teardown when the PR has merged.
+
+    Returns a list of wiki-relative paths mutated (empty on early-exit paths).
+    """
+    wiki_relative_paths: list[str] = []
+
+    result = _subprocess_util.run(
+        ["gh", "pr", "list", "--head", record.branch, "--state", "all",
+         "--json", "state,mergeCommit,number", "--jq", ".[0]"],
+        cwd=hub_root,
+    )
+    if result.returncode != 0 or not result.stdout.strip():
+        print(
+            f"[cleanup] PR-reap {record.slug}: gh pr list failed: {result.stderr!r}",
+            file=sys.stderr,
+        )
+        return wiki_relative_paths
+
+    pr_data = json.loads(result.stdout.strip())
+    state = pr_data.get("state")
+    merge_commit = pr_data.get("mergeCommit")
+    number = pr_data.get("number")
+
+    if state == "OPEN":
+        print(f"[cleanup] PR-reap {record.slug}: PR #{number} still OPEN — skipping")
+        return wiki_relative_paths
+
+    if state == "CLOSED":
+        print(
+            f"[cleanup] PR-reap {record.slug}: PR #{number} CLOSED without merge"
+            f" — inspect manually (abandon or reopen)",
+            file=sys.stderr,
+        )
+        return wiki_relative_paths
+
+    if state != "MERGED":
+        print(
+            f"[cleanup] PR-reap {record.slug}: unexpected PR state {state!r}; skipping",
+            file=sys.stderr,
+        )
+        return wiki_relative_paths
+
+    # MERGED: create archive tag if absent, flip Home.md, run standard teardown.
+    tag_check = _subprocess_util.run(
+        ["git", "-C", str(hub_root), "tag", "-l", f"archive/{record.slug}"]
+    )
+    if not (tag_check.returncode == 0 and tag_check.stdout.strip()):
+        fetch_branch = _subprocess_util.run(
+            ["git", "-C", str(hub_root), "fetch", "origin", record.branch]
+        )
+        if fetch_branch.returncode == 0:
+            # Use FETCH_HEAD so the tag points to the remote's tip (what was
+            # actually merged), not the local worktree copy which may lag behind.
+            tag_target = "FETCH_HEAD"
+        else:
+            merge_sha = (merge_commit or {}).get("oid") if merge_commit else None
+            if not merge_sha:
+                print(
+                    f"[cleanup] PR-reap {record.slug}: no merge SHA available; skipping",
+                    file=sys.stderr,
+                )
+                return wiki_relative_paths
+            _subprocess_util.run(
+                ["git", "-C", str(hub_root), "fetch", "origin", merge_sha],
+                check=True,
+            )
+            tag_target = merge_sha
+        _subprocess_util.run(
+            ["git", "-C", str(hub_root), "tag", f"archive/{record.slug}", tag_target]
+        )
+        _subprocess_util.run(
+            ["git", "-C", str(hub_root), "push", "origin", f"archive/{record.slug}"]
+        )
+
+    home_path = wiki_path / "Home.md"
+    home_text = home_path.read_text(encoding="utf-8")
+    home_text = _tasks_md.set_phase(home_text, record.slug, "done")
+    home_path.write_text(home_text, encoding="utf-8")
+    wiki_relative_paths.append("Home.md")
+
+    mode, task_branch = _resolve_inplace_mode(record, hub_root, wiki_path, cfg)
+    if mode == "abort":
+        print(
+            f"[cleanup] PR-reap {record.slug}: user aborted stale-worktree prompt.",
+            file=sys.stderr,
+        )
+        return wiki_relative_paths
+    if mode == "inplace":
+        _apply_inplace_record(record, hub_root, task_branch)
+    else:
+        _apply_worktree_record(record, hub_root, wiki_path, junctions_cfg)
+
+    if record.wiki_active_dir is not None and record.wiki_active_dir.is_dir():
+        shutil.rmtree(record.wiki_active_dir)
+        wiki_relative_paths.append(f"active/{record.slug}")
+
+    return wiki_relative_paths
+
+
 def apply_plan(
     plan: CleanupPlan,
     wiki_path: Path,
@@ -425,6 +544,11 @@ def apply_plan(
             shutil.rmtree(record.wiki_active_dir)
             wiki_relative_paths.append(f"active/{record.slug}")
 
+    for record in plan.to_reap_pr:
+        wiki_relative_paths.extend(
+            _apply_pr_reap_record(record, hub_root, wiki_path, junctions_cfg, cfg)
+        )
+
     active_link = hub_root / ".active"
     if os.path.lexists(str(active_link)) and not active_link.is_dir():
         _junction.remove(active_link)
@@ -444,7 +568,7 @@ def apply_plan(
             wiki_path,
             wiki_relative_paths,
             f"chore: cleanup — {len(plan.to_remove_done)} done, "
-            f"{len(plan.to_remove_abandoned)} abandoned",
+            f"{len(plan.to_remove_abandoned)} abandoned, {len(plan.to_reap_pr)} pr-reaped",
             slug="mill-cleanup",
         )
 
@@ -496,6 +620,7 @@ def main() -> None:
     print(
         f"\nDone: {len(plan.to_remove_done)} done, "
         f"{len(plan.to_remove_abandoned)} abandoned removed. "
+        f"{len(plan.to_reap_pr)} pr-reaped. "
         f"{len(plan.to_report)} orphans/unreadable reported."
     )
 

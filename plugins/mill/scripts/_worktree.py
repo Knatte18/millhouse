@@ -39,7 +39,7 @@ class WorktreeError(RuntimeError):
 
 
 class WorktreeLockedError(WorktreeError):
-    """Raised when a worktree directory cannot be removed because it is in use (NTFS CWD lock or PermissionError)."""
+    """Raised when a worktree directory cannot be removed because it is in use (NTFS CWD lock, PermissionError, or Windows 'Invalid argument' on locked handles)."""
 
 
 def create(branch: str, target: Path, cwd: Path) -> None:
@@ -251,7 +251,7 @@ def remove_safe(
 
     stderr = result.stderr.strip()
     long_path_marker = "Filename too long" in stderr or "filename too long" in stderr
-    _lock_patterns = ("Permission denied", "is in use", "Access is denied")
+    _lock_patterns = ("Permission denied", "is in use", "Access is denied", "Invalid argument")
     if any(p in stderr for p in _lock_patterns):
         raise WorktreeLockedError(f"worktree is locked (path={path}): {stderr!r}")
     if not long_path_marker:

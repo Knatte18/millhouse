@@ -89,52 +89,69 @@ def test_slug_from_branch_unknown_slug() -> None:
     print("PASS: test_slug_from_branch_unknown_slug")
 
 
-def test_slug_from_branch_phase_done() -> None:
+def test_slug_from_branch_ready_to_merge() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = Path(tmp)
+        worktree_path, wiki_path = _test_helpers._make_task_worktree(
+            tmp, "foo", "Foo Title", branch_prefix="hanf/", phase="ready-to-merge"
+        )
+        cfg = {"spawn": {"branch_prefix": "hanf/"}}
+        slug = _marker.slug_from_branch(worktree_path, wiki_path, cfg)
+        if slug != "foo":
+            raise AssertionError(f"expected 'foo', got {slug!r}")
+    print("PASS: test_slug_from_branch_ready_to_merge")
+
+
+def test_slug_from_branch_pr_pending() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = Path(tmp)
+        worktree_path, wiki_path = _test_helpers._make_task_worktree(
+            tmp, "foo", "Foo Title", branch_prefix="hanf/", phase="pr-pending"
+        )
+        cfg = {"spawn": {"branch_prefix": "hanf/"}}
+        slug = _marker.slug_from_branch(worktree_path, wiki_path, cfg)
+        if slug != "foo":
+            raise AssertionError(f"expected 'foo', got {slug!r}")
+    print("PASS: test_slug_from_branch_pr_pending")
+
+
+def test_slug_from_branch_done() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         tmp = Path(tmp)
         worktree_path, wiki_path = _test_helpers._make_task_worktree(
             tmp, "foo", "Foo Title", branch_prefix="hanf/", phase="done"
         )
         cfg = {"spawn": {"branch_prefix": "hanf/"}}
-        try:
-            _marker.slug_from_branch(worktree_path, wiki_path, cfg)
-        except _marker.MarkerError:
-            pass
-        else:
-            raise AssertionError("expected MarkerError for phase=done")
-    print("PASS: test_slug_from_branch_phase_done")
+        slug = _marker.slug_from_branch(worktree_path, wiki_path, cfg)
+        if slug != "foo":
+            raise AssertionError(f"expected 'foo', got {slug!r}")
+    print("PASS: test_slug_from_branch_done")
 
 
-def test_slug_from_branch_phase_abandoned() -> None:
+def test_slug_from_branch_abandoned() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         tmp = Path(tmp)
         worktree_path, wiki_path = _test_helpers._make_task_worktree(
             tmp, "foo", "Foo Title", branch_prefix="hanf/", phase="abandoned"
         )
         cfg = {"spawn": {"branch_prefix": "hanf/"}}
-        try:
-            _marker.slug_from_branch(worktree_path, wiki_path, cfg)
-        except _marker.MarkerError:
-            pass
-        else:
-            raise AssertionError("expected MarkerError for phase=abandoned")
-    print("PASS: test_slug_from_branch_phase_abandoned")
+        slug = _marker.slug_from_branch(worktree_path, wiki_path, cfg)
+        if slug != "foo":
+            raise AssertionError(f"expected 'foo', got {slug!r}")
+    print("PASS: test_slug_from_branch_abandoned")
 
 
-def test_slug_from_branch_phase_none() -> None:
+def test_slug_from_branch_none() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         tmp = Path(tmp)
         worktree_path, wiki_path = _test_helpers._make_task_worktree(
             tmp, "foo", "Foo Title", branch_prefix="hanf/", phase="none"
         )
         cfg = {"spawn": {"branch_prefix": "hanf/"}}
-        try:
-            _marker.slug_from_branch(worktree_path, wiki_path, cfg)
-        except _marker.MarkerError:
-            pass
-        else:
-            raise AssertionError("expected MarkerError for no phase marker")
-    print("PASS: test_slug_from_branch_phase_none")
+        slug = _marker.slug_from_branch(worktree_path, wiki_path, cfg)
+        if slug != "foo":
+            raise AssertionError(f"expected 'foo', got {slug!r}")
+    print("PASS: test_slug_from_branch_none")
 
 
 def test_slug_from_branch_prefix_mismatch() -> None:
@@ -174,9 +191,11 @@ def main() -> int:
         test_slug_from_branch_empty_prefix,
         test_slug_from_branch_detached_head,
         test_slug_from_branch_unknown_slug,
-        test_slug_from_branch_phase_done,
-        test_slug_from_branch_phase_abandoned,
-        test_slug_from_branch_phase_none,
+        test_slug_from_branch_ready_to_merge,
+        test_slug_from_branch_pr_pending,
+        test_slug_from_branch_done,
+        test_slug_from_branch_abandoned,
+        test_slug_from_branch_none,
         test_slug_from_branch_prefix_mismatch,
         test_task_data_happy_path,
     ]
