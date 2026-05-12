@@ -32,7 +32,9 @@ implementing  '2026-05-12T10:17:09Z'
 ```yaml
 batches:
   - name: mill-finalize skill
-    state: pending
+    state: running
+    implementer_session: 7f390904-ab5b-4e80-8a08-5bdf9dd013a6
+    start_sha: 2baae69daf3b1ccc8286b14ab46350e92407eff3
   - name: mill-merge refactor
     state: pending
   - name: unit tests
