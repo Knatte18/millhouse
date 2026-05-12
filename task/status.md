@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-benchmark
 slug: ps1-startup-speedup
 branch: hanf/ps1-startup-speedup
 plan: task/plan
@@ -21,6 +21,7 @@ planning  '2026-05-12T09:33:41Z'
 plan-fix-r1  '2026-05-12T10:09:14Z'
 planned  '2026-05-12T10:09:26Z'
 implementing  '2026-05-12T10:55:27Z'
+approved-benchmark  '2026-05-12T10:59:18Z'
 ```
 
 ## Batches
@@ -28,7 +29,7 @@ implementing  '2026-05-12T10:55:27Z'
 ```yaml
 batches:
   - name: benchmark
-    state: running
+    state: approved
     implementer_session: 63eae816-5cef-44f7-aadd-fbae10b01780
     start_sha: 114b9f77f47f2168ac83a5abd0b8836703029d5e
   - name: shortcut-speedup
