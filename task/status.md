@@ -54,7 +54,9 @@ batches:
     implementer_session: b7c6d601-3ac2-4888-b48a-d6f4028e763e
     start_sha: 14c07d67c56e153a7157731d2fac904786690fff
   - name: mill-cleanup-logic
-    state: pending
+    state: running
+    implementer_session: 8ad22096-9441-4159-a056-da32b89d762e
+    start_sha: 6b1ece1d2482df3e3ca61560308b0f1dd5227def
   - name: docs-integration
     state: pending
 ```
