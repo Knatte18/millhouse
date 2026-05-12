@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-fix-r1
+phase: planned
 slug: mill-paths-cleanup
 branch: hanf/mill-paths-cleanup
 plan: task/plan
@@ -20,4 +20,5 @@ discussed  '2026-05-12T13:21:17Z'
 planning  '2026-05-12T13:49:13Z'
 plan-review-r1  '2026-05-12T14:08:09Z'
 plan-fix-r1  '2026-05-12T14:08:09Z'
+planned  '2026-05-12T14:08:43Z'
 ```
