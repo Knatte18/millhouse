@@ -229,9 +229,7 @@ def remove_safe(
             ``shutil.rmtree(ignore_errors=...)`` decision.
 
     Raises:
-        WorktreeError: ``git worktree remove`` failed for a reason other
-            than long-path (e.g., "is in use"), and the fallback was not
-            attempted.
+        WorktreeError: git worktree remove failed for a reason other than long-path or "not a working tree" (e.g., "is in use"), and the fallback was not attempted.
     """
     import _junction
 
@@ -250,19 +248,18 @@ def remove_safe(
         return
 
     stderr = result.stderr.strip()
-    long_path_marker = "Filename too long" in stderr or "filename too long" in stderr
+    rmtree_fallback = "Filename too long" in stderr or "filename too long" in stderr or "is not a working tree" in stderr
     _lock_patterns = ("Permission denied", "is in use", "Access is denied", "Invalid argument")
     if any(p in stderr for p in _lock_patterns):
         raise WorktreeLockedError(f"worktree is locked (path={path}): {stderr!r}")
-    if not long_path_marker:
+    if not rmtree_fallback:
         raise WorktreeError(
             f"git worktree remove failed (path={path}): {stderr!r}"
         )
 
-    # Long-path fallback. Junctions are stripped, so shutil.rmtree is safe.
+    # Long-path / not-a-working-tree fallback. Junctions are stripped, so shutil.rmtree is safe.
     print(
-        "[worktree] remove_safe: git failed with long-path error; "
-        "falling back to shutil.rmtree (junctions already stripped)",
+        "[worktree] remove_safe: git failed; falling back to shutil.rmtree (junctions already stripped)",
         file=sys.stderr,
     )
     if path.exists():
