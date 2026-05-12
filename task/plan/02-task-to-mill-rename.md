@@ -28,6 +28,7 @@ Updates `wiki/config.yaml`, the config template, spawn/implement scripts, and un
   - `plan_dir:        task/plan/` → `plan_dir:        _mill/plan/`
   - `reviews_dir:     task/reviews/` → `reviews_dir:     _mill/reviews/`
   Leave all other keys, comments, and whitespace untouched.
+  **Bootstrap safety justification:** This config mutation is safe mid-flight because batch 01 wired every caller through `_paths.resolve_task_path`. After batch 01, when a caller reads `paths.plan_dir = "_mill/plan/"` from config, the shim checks `_mill/plan/` first; if absent (in-flight worktree), it falls back to `task/plan/` and logs a compat warning. No in-flight worktree is broken by this change. New worktrees spawned after batch 02 will write to `_mill/` natively. Old worktrees remain on `task/` until cleaned up.
 - **Commit:** `feat(config): rename task/ paths to _mill/ in wiki config`
 
 ### Card 9: Update `plugins/mill/templates/wiki-config.yaml` paths block

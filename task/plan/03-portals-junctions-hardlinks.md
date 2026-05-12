@@ -69,6 +69,7 @@ Implements the portal redesign: `portals/<slug>` now points directly at `wts/<sl
   (1) Change `.active: <WIKI_PATH>/active/<SLUG>/` to `.active: <CONTAINER_PATH>/portals/<SLUG>/`. The `.active` junction now points at the portal entry (which in turn points at `wts/<slug>/_mill/`), not at the wiki.
   (2) Add a new entry below `.wiki`: `.portals: <CONTAINER_PATH>/portals/`. This is hub-scope (no `<SLUG>` token), so mill-setup creates it in the hub worktree during initial setup.
   Leave all surrounding comment lines and other config keys untouched.
+  **Bootstrap safety justification:** This config mutation is safe mid-flight because junctions are IDE/terminal convenience only — scripts never read junction config to resolve paths (per CLAUDE.md path invariants). The `.active` target change means operators' `.active` shortcuts will point to the new portal location for new task worktrees; existing worktrees' `.active` junctions won't update until the next `recreate_active_junction` call (at spawn/claim time), which is fine since operators can navigate directly. The `.portals` key addition is consumed by new code in the same batch (mill-spawn/claim) and by mill-setup re-runs; its absence in existing hub worktrees is handled gracefully (mill-setup creates it on next run).
 - **Commit:** `feat(config): update .active junction target, add .portals junction`
 
 ### Card 19: Update `plugins/mill/templates/wiki-config.yaml` junctions block
