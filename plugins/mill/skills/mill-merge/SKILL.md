@@ -222,9 +222,9 @@ Delete `<parent-path>/.scratch/merge.lock`. Run this in a `finally:` equivalent 
 
 Report to the user:
 
-> "Merge complete for `<slug>`. Worktree and branch removed. Archive tag `archive/<slug>` created. Home.md updated."
+> "Merge complete for `<slug>`. Worktree intact — run `/mill-cleanup --apply` to remove worktree, branch, portal, and legacy wiki active-dir. Archive tag `archive/<slug>` created. Home.md updated to `[done]`."
 
-**Verify after teardown:** confirm `<container>/wts/<slug>` is gone, `$CHILD_BRANCH` is gone from `git branch`, `<container>/portals/<slug>` is gone, `git tag -l archive/<slug>` returns the tag, and `Home.md` shows `[done]` for `<slug>`.
+**Verify after teardown:** confirm `git tag -l archive/<slug>` returns the tag, and `Home.md` shows `[done]` for `<slug>`.
 
 **No self-report from this skill.** Reflection is the orchestrator's job — `mill-go` fires `/mill-self-report --auto` at its Handoff (step 6) when `pipeline.auto_report: true`. mill-merge is too narrow in scope to host its own reflection pass; if it is invoked from a separate thread (i.e. not chained from mill-go's auto_merge path), the user can run `/mill-self-report` manually if reflection is wanted.
 
@@ -234,7 +234,7 @@ When the entry-phase gate sees `phase: pr-pending`:
 
 1. Resolve the PR via `gh pr list --head "$CHILD_BRANCH" --state all --json state,mergeCommit,number --jq '.[0]'`.
 2. Interpret:
-   - `state == "MERGED"` → continue to Step 6 (archive tag). Skip Steps 1–5 (merge lock no longer needed; squash has already landed via the external PR). The rest of the teardown (tag, Home.md flip, worktree/branch/portal removal, legacy wiki cleanup) runs as normal.
+   - `state == "MERGED"` → continue to Step 6 (archive tag). Skip Steps 1–5 (merge lock no longer needed; squash has already landed via the external PR). Steps 6–7 run (archive tag + Home.md `[done]` flip). Worktree, branch, portal, and legacy wiki active-dir teardown are now handled by `/mill-cleanup --apply` — direct the operator to run it after Step 9 reports.
    - `state == "OPEN"` → report "PR #<N> still open. Waiting — re-run `/mill-merge` after it lands." Halt.
    - `state == "CLOSED"` without merge → report "PR #<N> closed without merging. Task branch is orphaned — run `/mill-abandon` if you want to discard, or open a new PR manually."
    - No PR found → report "status.md says pr-pending but no PR on this branch; inspect manually."
