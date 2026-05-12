@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-skills-docs-claude-md
+phase: holistic-reviewing
 slug: mill-paths-cleanup
 branch: hanf/mill-paths-cleanup
 plan: task/plan
@@ -28,6 +28,7 @@ approved-portals-junctions-hardlinks  '2026-05-12T15:45:16Z'
 approved-cleanup-orphan-scan  '2026-05-12T15:55:53Z'
 approved-unicode-output-cleanup  '2026-05-12T16:06:50Z'
 approved-skills-docs-claude-md  '2026-05-12T16:13:25Z'
+holistic-reviewing  '2026-05-12T16:13:37Z'
 ```
 
 ## Batches
