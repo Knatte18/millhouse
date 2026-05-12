@@ -45,5 +45,7 @@ batches:
     implementer_session: 1cc9fae1-c1d2-4f99-983a-1cb43ffc2b43
     start_sha: 9f056bf77a4c3f0f6eca352ff09d95e7a8d74573
   - name: skill-docs
-    state: pending
+    state: running
+    implementer_session: 79d143e3-98c5-4cd8-bdad-cd5bf72ae354
+    start_sha: 32e594f5d68e5a92a364f4434d76f1f074eda787
 ```
