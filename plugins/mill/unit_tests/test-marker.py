@@ -171,6 +171,36 @@ def test_slug_from_branch_prefix_mismatch() -> None:
     print("PASS: test_slug_from_branch_prefix_mismatch")
 
 
+def test_slug_from_branch_user_prefix_no_config_prefix() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = Path(tmp)
+        worktree_path, wiki_path = _test_helpers._make_task_worktree(
+            tmp, "foo", "Foo Title", branch_prefix="hanf/", phase="active"
+        )
+        cfg = {}
+        slug = _marker.slug_from_branch(worktree_path, wiki_path, cfg)
+        if slug != "foo":
+            raise AssertionError(f"expected 'foo', got {slug!r}")
+    print("PASS: test_slug_from_branch_user_prefix_no_config_prefix")
+
+
+def test_slug_from_branch_user_prefix_slug_not_found() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = Path(tmp)
+        worktree_path, wiki_path = _test_helpers._make_task_worktree(
+            tmp, "bar", "Bar", branch_prefix="hanf/", phase="active"
+        )
+        (wiki_path / "Home.md").write_text("[[foo]] [active]\n", encoding="utf-8")
+        cfg = {}
+        try:
+            _marker.slug_from_branch(worktree_path, wiki_path, cfg)
+        except _marker.MarkerError:
+            pass
+        else:
+            raise AssertionError("expected MarkerError when stripped slug not found in Home.md")
+    print("PASS: test_slug_from_branch_user_prefix_slug_not_found")
+
+
 def test_task_data_happy_path() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         tmp = Path(tmp)
@@ -197,6 +227,8 @@ def main() -> int:
         test_slug_from_branch_abandoned,
         test_slug_from_branch_none,
         test_slug_from_branch_prefix_mismatch,
+        test_slug_from_branch_user_prefix_no_config_prefix,
+        test_slug_from_branch_user_prefix_slug_not_found,
         test_task_data_happy_path,
     ]
 
