@@ -112,11 +112,23 @@ guarantees the v2 rewrite is built around.
     any further tool calls."
   - **Fallback in `_implementer_common._forward_output`**: when the regex finds
     no JSON object, before emitting the `stuck_type: logic` sentinel, check
-    whether the worktree is clean (`_cleanliness.is_clean(project_root)`) AND
-    `git rev-parse HEAD` differs from the brief's `start_sha` (passed in
-    via env or argv — see Decisions). If both hold: emit
+    *new* dirt since batch start using the existing snapshot:
+    `compute_new_dirt(project_root, snapshot_path)` (from `_cleanliness.py`)
+    returns `[]` iff the implementer left no uncommitted changes beyond what
+    was already present at batch start. AND `git rev-parse HEAD` differs from
+    the brief's `start_sha` (proving the implementer committed work). If both
+    hold: emit
     `{"status":"success","commit_sha":"<HEAD>","session_id":"<unknown>","inferred":true}`
     instead. Otherwise emit the existing stuck-logic sentinel.
+    The `snapshot_path` is the same path mill-go's batch-start commit wrote
+    via `capture_snapshot` — `millpy-implement.py` already resolves it for
+    the initial-dispatch path; pass it through to `_forward_output` as a new
+    keyword argument (`snapshot_path: Path | None = None`). When
+    `snapshot_path` is None or missing on disk, the fallback degrades to the
+    existing stuck-logic sentinel (no inference attempted) — matches the
+    existing `compute_new_dirt` "treat pre-batch as empty + stderr warning"
+    behaviour, but for `_forward_output` we refuse to infer success without a
+    real baseline.
 
 **Out:**
 
@@ -223,14 +235,18 @@ guarantees the v2 rewrite is built around.
 
 - **Decision:** Both the implementer-brief reinforcement AND the
   `_forward_output` fallback ship together. The fallback path is guarded by
-  *two* conditions: (1) `_cleanliness.is_clean(project_root)` returns True,
-  AND (2) `git rev-parse HEAD` differs from a known `start_sha` provided to
-  the script. The start_sha source is mill-go's existing
+  *three* conditions: (1) `_cleanliness.compute_new_dirt(project_root,
+  snapshot_path)` returns `[]` (no new uncommitted changes since batch
+  start), (2) `git rev-parse HEAD` differs from a known `start_sha`, AND
+  (3) `snapshot_path` exists on disk (we refuse to infer success without a
+  real baseline). The `start_sha` source is mill-go's existing
   `status.md` `batches[].start_sha` — `millpy-implement.py` already has the
-  batch name in argv; it reads `start_sha` via
-  `_status.read_batches(status_path)`. If `start_sha` is absent in the
-  batch entry, the fallback degrades to the existing stuck-logic sentinel —
-  no false positives on a fresh batch with no prior commit.
+  batch name in argv; it reads `start_sha` and `snapshot_path` via
+  `_status.read_batches(status_path)` and passes both to `_forward_output`
+  as new keyword arguments (`start_sha: str | None`, `snapshot_path: Path |
+  None`). If either argument is None or the snapshot file is missing, the
+  fallback degrades to the existing stuck-logic sentinel — no false
+  positives on a fresh batch with no prior commit or no snapshot.
 - **Rationale:** Template alone leaves already-stuck runs in their broken
   state and only helps future sessions. Fallback alone weakens the brief
   contract — a brief that doesn't insist on JSON tells the implementer the
@@ -275,10 +291,16 @@ guarantees the v2 rewrite is built around.
 - **`plugins/mill/scripts/_implementer_common.py`** — owns
   `_forward_output`. The fallback path lives here. Calls
   `_subprocess_util.run` for `git rev-parse`; will additionally call
-  `_cleanliness.is_clean` (existing helper) and `_status.read_batches`.
-- **`plugins/mill/scripts/_cleanliness.py`** — `is_clean(project_root) -> bool`
-  is the public API (verified via grep). Returns True iff the worktree has
-  no uncommitted changes, no untracked files outside ignore.
+  `_cleanliness.compute_new_dirt` and `_status.read_batches`.
+- **`plugins/mill/scripts/_cleanliness.py`** — already exposes
+  `capture_snapshot(worktree, snapshot_path)` and
+  `compute_new_dirt(worktree, snapshot_path) -> list[str]`. No new function
+  added in this task. The fallback uses `compute_new_dirt(...) == []` as
+  the "no new dirt since batch start" predicate. `compute_new_dirt`'s
+  existing behaviour when the snapshot file is missing (warn + treat pre-batch
+  as empty) does NOT carry over — `_forward_output` refuses to infer success
+  when `snapshot_path` does not exist on disk and falls back to the
+  stuck-logic sentinel instead.
 - **`plugins/mill/scripts/_review_plan.py`** — docstring at line 280 mentions
   `cfg.review.plan.holistic`. Edit-only; no logic change.
 - **`plugins/mill/SCRIPTS.md`** — auto-generated. Look at the top of the file
@@ -307,7 +329,10 @@ guarantees the v2 rewrite is built around.
   call. Mark it explicit if pylint complains about private access; it's
   already used cross-function inside `_status.py`.
 - `_subprocess_util.run` — public CompletedProcess wrapper.
-- `_cleanliness.is_clean` — public.
+- `_cleanliness.compute_new_dirt` — public; returns the line-set diff of
+  current `git status --porcelain` against the per-batch snapshot.
+- `_status.read_batches` — public; needed by `_forward_output` to look up
+  `start_sha` for the current batch.
 
 ### Things that look fragile but aren't
 
@@ -350,16 +375,23 @@ returns empty). Repo-level constraints from CLAUDE.md apply unchanged:
 - **`_status.append_phase` quoting (#248)** — add one assertion: append a
   phase, read the resulting file's last timeline row, regex-match
   `^\w+\s+'[^']+'$`.
-- **`_implementer_common._forward_output` fallback (#243)** — two new
-  cases in `test-implementer-common.py` (file may need creating; check first):
-  1. Clean worktree + commits-since-start_sha + no JSON in stdout →
-     emits success-inferred JSON with `"inferred": true`.
-  2. Clean worktree + zero commits-since-start_sha + no JSON in stdout →
-     emits the existing stuck-logic sentinel (no false positive on
-     no-progress runs).
-  3. Dirty worktree → emits stuck-logic sentinel regardless.
+- **`_implementer_common._forward_output` fallback (#243)** — four cases in
+  `test-implementer-common.py` (file may need creating; check first):
+  1. Snapshot file exists + `compute_new_dirt == []` + new commits since
+     `start_sha` + no JSON in stdout → emits success-inferred JSON with
+     `"inferred": true`.
+  2. Snapshot file exists + `compute_new_dirt == []` + zero new commits
+     since `start_sha` + no JSON in stdout → emits the existing
+     stuck-logic sentinel.
+  3. Snapshot file exists + `compute_new_dirt` returns non-empty (dirty) +
+     new commits since `start_sha` + no JSON in stdout → emits the
+     existing stuck-logic sentinel.
+  4. Snapshot file missing (or `snapshot_path is None`) + everything else
+     fine → emits the existing stuck-logic sentinel (no inference
+     attempted).
   Use `tempfile.TemporaryDirectory` + `git init` for the fixture, same
-  pattern as `test-review-common.py`.
+  pattern as `test-review-common.py`. Use `capture_snapshot` to seed the
+  baseline file in each case.
 - **Encoding guard (#251)** — add `test-no-unicode-arrow.py` (or a function
   inside `run-all.py`) that scans every `test-*.py` for `→`. Hit →
   print the file path and exit non-zero.
