@@ -60,6 +60,7 @@ This batch has no file dependencies on other batches (creates a new file from sc
   4. Resolve task data: `active_data = _marker.task_data(git_root, wiki_path, cfg)`. On `MarkerError` → halt: "This worktree has no registered task branch — mill-finalize needs a tracked branch. Run mill-claim to register it, or merge manually."
   5. `slug = active_data['slug']`.
   6. `status_path = git_root / "task" / "status.md"`. Call `data = _status.read_status(status_path)`. Verify `data["phase"] == "done"`. If not: halt "status.md phase is `<value>`; mill-finalize expects `done`. Run mill-go first to bring the task to done."
+     `signature: _status.read_status(status_path: Path) -> dict` — returns flat dict with keys `phase`, `task`, `current_batch`, `last_timeline_entry`, `blocked_reason`. Access phase via `data["phase"]` (not `data["yaml"]["phase"]` — that is `read_full`'s shape).
   ```
 
   **Dispatch section:**
