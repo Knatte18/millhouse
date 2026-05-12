@@ -1,4 +1,4 @@
-"""Regression guard: no U+2192 arrow character in unit-test prints."""
+"""Regression guard: no U+2192 arrow character in any test-*.py file."""
 from __future__ import annotations
 import sys
 from pathlib import Path

@@ -56,7 +56,7 @@ def main() -> int:
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         base_sha = _setup_fixture(project_root)
-        snapshot_path = project_root / ".cleanliness-snapshot-test.txt"
+        snapshot_path = project_root / "task" / ".cleanliness-snapshot-test.txt"
         _cleanliness.capture_snapshot(project_root, snapshot_path)
         subprocess.run(
             ["git", "-C", str(project_root), "commit", "--allow-empty", "-m", "second"],
@@ -88,7 +88,7 @@ def main() -> int:
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         base_sha = _setup_fixture(project_root)
-        snapshot_path = project_root / ".cleanliness-snapshot-test.txt"
+        snapshot_path = project_root / "task" / ".cleanliness-snapshot-test.txt"
         _cleanliness.capture_snapshot(project_root, snapshot_path)
         # NO new commit — HEAD == start_sha
         rc, captured = _capture_stdout(
@@ -112,7 +112,7 @@ def main() -> int:
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         base_sha = _setup_fixture(project_root)
-        snapshot_path = project_root / ".cleanliness-snapshot-test.txt"
+        snapshot_path = project_root / "task" / ".cleanliness-snapshot-test.txt"
         _cleanliness.capture_snapshot(project_root, snapshot_path)
         # New commit so HEAD != start_sha
         subprocess.run(
@@ -138,12 +138,48 @@ def main() -> int:
             print(f"FAIL: case 3 ({exc}) captured={captured!r}", file=sys.stderr)
             errors += 1
 
+    # Case 3b: snapshot has pre-existing dirt; no new dirt added -> inference succeeds
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        base_sha = _setup_fixture(project_root)
+        snapshot_path = project_root / "task" / ".cleanliness-snapshot-test.txt"
+        # Dirty README.md before snapshot — simulates pre-existing worktree dirt from a prior batch
+        (project_root / "README.md").write_text("pre-existing dirty", encoding="utf-8")
+        _cleanliness.capture_snapshot(project_root, snapshot_path)
+        # New commit so HEAD != start_sha
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "--allow-empty", "-m", "second"],
+            check=True, capture_output=True,
+        )
+        new_head = subprocess.run(
+            ["git", "-C", str(project_root), "rev-parse", "HEAD"],
+            check=True, capture_output=True, text=True,
+        ).stdout.strip()
+        # README.md remains dirty (pre-existing) — implementer added no new dirt
+        rc, captured = _capture_stdout(
+            lambda: _forward_output(
+                "garbage with no json",
+                project_root,
+                start_sha=base_sha,
+                snapshot_path=snapshot_path,
+            )
+        )
+        try:
+            data = json.loads(captured.strip())
+            assert data["status"] == "success", f"expected status=success, got {data}"
+            assert data.get("inferred") is True, f"expected inferred=True, got {data}"
+            assert data["commit_sha"] == new_head, f"expected commit_sha={new_head}, got {data}"
+            print("PASS: pre-existing dirt in snapshot, no new dirt -> inferred success")
+        except Exception as exc:
+            print(f"FAIL: case 3b ({exc}) captured={captured!r}", file=sys.stderr)
+            errors += 1
+
     # Case 4: missing snapshot -> no inference -> stuck/logic
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         base_sha = _setup_fixture(project_root)
         # SKIP capture_snapshot — snapshot file does not exist
-        snapshot_path = project_root / ".cleanliness-snapshot-nonexistent.txt"
+        snapshot_path = project_root / "task" / ".cleanliness-snapshot-nonexistent.txt"
         subprocess.run(
             ["git", "-C", str(project_root), "commit", "--allow-empty", "-m", "second"],
             check=True, capture_output=True,
