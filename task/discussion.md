@@ -11,106 +11,122 @@ parent: main
 
 The `.millhouse/*.ps1` wrappers have become noticeably slow. Every call pays three
 layers of overhead: (1) `Get-ChildItem | Sort-Object` to discover the latest plugin
-cache version at runtime, (2) `uv run --project $latest` which starts the Rust uv
-binary before Python, and (3) for `millpy-vscode.py` specifically, a synchronous
-`powershell.exe` spawn inside `_probe_windows()` that scans all running VS Code
-processes. These layers stack on every PS1 invocation.
+cache version at runtime, (2) `uv run --project $latest` which triggers uv's
+project/lockfile resolution before starting Python, and (3) for `millpy-vscode.py`
+specifically, a synchronous `powershell.exe` spawn inside `_probe_windows()` that
+scans all running VS Code processes. These layers stack on every PS1 invocation.
 
 The fix strategy is benchmark-first: measure each layer with `Measure-Command` before
-touching anything, then apply only the fixes whose cost the benchmarks confirm. The
-proposal already identifies four candidates; this task implements all four for the
-confirmed bottlenecks and leaves the rest undisturbed.
+touching anything, then apply only the fixes whose cost the benchmarks confirm.
 
 ## Scope
 
 **In:**
 - Benchmark harness — `Measure-Command` script covering every candidate layer; results
   written to `.scratch/benchmark-results.md` before any production code is written.
-- New `shortcut-wrapper.ps1` template with `<VENV_PYTHON>`, `<SCRIPT_PATH>`, and
-  `<SCRIPT>` tokens, replacing the `Get-ChildItem` scan and `uv run` call in one change.
+- mill-setup: new phase that writes a venv activation line to `$PROFILE` with a
+  `# mill-venv` marker for idempotent updates. Creates the file if it does not exist.
+- New `shortcut-wrapper.ps1` template: `uv run --active "<SCRIPT_PATH>" @args` —
+  eliminates the `Get-ChildItem` scan and uv project-resolution in one change.
 - `_shortcuts.write_all(mill_dir, latest_path: Path)` — add required `latest_path`
-  parameter; compute `<VENV_PYTHON>` and `<SCRIPT_PATH>` from it per script.
+  parameter; compute `<SCRIPT_PATH>` from it per script.
 - mill-setup SKILL.md Phase 4.7 — update inline Python call to compute and pass
-  `latest_path` before calling `write_all`.
+  `latest_path` before calling `write_all`; document the new `$PROFILE` phase.
 - `millpy-vscode.py` — add `--filter-open` CLI flag; default to no PowerShell probe;
   move `import _vscode_processes` inside `_filter_open_worktrees` (lazy import).
 - `test-shortcut-wrapper.py` — update call sites to pass a fake `latest_path`; update
-  assertions (remove `"uv run"` check, add venv Python path checks).
+  assertions (remove `"uv run --project"` check, add `"uv run --active"` and
+  `<SCRIPT_PATH>` checks).
 - `test-millpy-vscode.py` — add tests for `--filter-open` flag: probe not called by
   default, probe called when flag is present.
 
 **Out:**
-- No POSIX/macOS changes — PS1 wrappers are Windows-only; `_probe_posix()` in
-  `_vscode_processes.py` is untouched.
+- No POSIX/macOS changes — PS1 wrappers and `$PROFILE` patching are Windows-only;
+  `_probe_posix()` in `_vscode_processes.py` is untouched.
 - No daemon or background caching layer.
 - No changes to any script's output, flags, or observable behavior beyond
   `--filter-open` in `millpy-vscode.py`.
-- No lazy-import changes outside `millpy-vscode.py` — `_spawn_core` and other imports
-  in `millpy-status.py`, `millpy-spawn.py`, etc. are needed on every call.
-- No changes to `_vscode_processes._probe_posix()` or `_probe_windows()` internals.
-- Fixes 2 and 4 (lazy `_vscode_processes` import and `--filter-open` flag) are applied
-  regardless of benchmark outcome — even if the probe cost is smaller than expected,
-  the default no-probe behavior is strictly better UX (shows all worktrees instantly).
+- No lazy-import changes outside `millpy-vscode.py`.
+- No changes to `_vscode_processes._probe_windows()` internals.
 
 ## Decisions
 
 ### benchmark-first-gate
 
 - **Decision:** Plan batch 0 is a benchmark step. Implementer runs the `Measure-Command`
-  harness (see Technical context), writes results to `.scratch/benchmark-results.md`,
-  and includes them in the commit message for the first implementation batch so the fix
-  rationale is traceable.
+  harness, writes results to `.scratch/benchmark-results.md`, and includes them in the
+  commit message for the first implementation batch so the fix rationale is traceable.
 - **Rationale:** Proposal and task description both mandate data-first. Hardcoded in plan
   ordering to prevent accidental skip.
-- **Rejected:** Treat benchmarks as optional post-implementation validation — contradicts
-  scope.
+- **Rejected:** Treat benchmarks as optional post-implementation validation.
+
+### uv-run-active-with-profile-activation
+
+- **Decision:** PS1 wrappers call `uv run --active "<hardcoded-script-path>" @args`.
+  The venv is activated once at shell startup via a line mill-setup writes to `$PROFILE`.
+  This eliminates uv's project/lockfile resolution per call while keeping uv in the
+  execution path.
+- **Rationale:** uv with `--active` skips all project resolution and uses the already-
+  activated venv directly. The plugin-cache venv is not worktree-specific — all
+  worktrees share the same venv and the same script paths. Worktree context is discovered
+  at runtime via `git rev-parse`. Keeping `uv run` preserves the uv-managed execution
+  environment the operator prefers.
+- **Rejected (direct Python):** `& "<venv>\python.exe" "<script>" @args` — marginally
+  faster (no uv startup), but drops uv from the invocation path, which the operator
+  wants to keep.
+- **Rejected (uv run --project each time):** current approach — pays full project
+  resolution on every call.
+
+### profile-activation-strategy
+
+- **Decision:** mill-setup writes exactly one line to `$PROFILE`, delimited by
+  `# mill-venv-start` / `# mill-venv-end` markers. Re-runs replace the block
+  (idempotent). Creates `$PROFILE` if it does not exist. The block is:
+  ```powershell
+  # mill-venv-start — managed by mill-setup, do not edit manually
+  . "<latest_path>\.venv\Scripts\Activate.ps1"
+  # mill-venv-end
+  ```
+- **Rationale:** Marker-delimited block is the standard idempotent pattern for
+  profile injection. Clear label prevents confusion with user-written lines.
+- **Rejected (manual):** user adds activation themselves — error-prone; defeats
+  the goal of mill-setup being the single setup action.
 
 ### merge-fixes-1-and-3
 
-- **Decision:** Fixes 1 (direct venv Python) and 3 (hardcode `$latest`) are a single
-  template change. The new template is two lines: a comment and the invocation. Tokens:
-  `<SCRIPT>` (stem for comment), `<VENV_PYTHON>` (full path to `python.exe` in venv),
-  `<SCRIPT_PATH>` (full path to the script `.py` file). Both are expanded at mill-setup
-  time; no runtime PowerShell lookup remains.
-- **Rationale:** The two fixes target the same PS1 block. A staged approach produces an
-  intermediate state (hardcoded `$latest` + `uv run`) with no independent value.
-- **Rejected:** Separate commits — more history noise, no benefit.
+- **Decision:** Fixes 1 (eliminate uv project-resolution) and 3 (hardcode script path,
+  eliminating `Get-ChildItem` scan) are a single template change. New template tokens:
+  `<SCRIPT>` (stem, for comment) and `<SCRIPT_PATH>` (full path to the `.py` file).
+- **Rationale:** Both fixes target the same PS1 block; combining them avoids an
+  intermediate state with no independent value.
+- **Rejected:** Separate commits.
 
 ### write-all-required-latest-path
 
 - **Decision:** `_shortcuts.write_all(mill_dir: Path, latest_path: Path) -> list[Path]`
-  — `latest_path` is a required positional parameter. `_shortcuts.py` does no filesystem
-  discovery. `write_all` passes `{"SCRIPT": script, "VENV_PYTHON": str(latest_path /
-  ".venv" / "Scripts" / "python.exe"), "SCRIPT_PATH": str(latest_path / "scripts" /
-  f"{script}.py")}` to `_render.render`.
-- **Rationale:** Explicit is better than hidden env-var dependency. mill-setup always has
-  `latest_path`. Unit tests provide a fake `Path` — no real filesystem or env var needed.
-- **Rejected:** Optional param with auto-compute fallback — dead code path never used in
-  production; env-var dependency makes tests fragile.
+  — `latest_path` is a required positional parameter. Computes
+  `{"SCRIPT": script, "SCRIPT_PATH": str(latest_path / "scripts" / f"{script}.py")}`
+  per script and passes to `_render.render`.
+- **Rationale:** Explicit, testable, no hidden filesystem dependencies. mill-setup
+  always has this value. Unit tests provide a fake `Path`.
+- **Rejected:** Optional param with auto-compute fallback — dead code path never used
+  in production.
 
 ### filter-open-flag-default-off
 
 - **Decision:** Add `--filter-open` argument to `millpy-vscode.py`'s argparse. Default:
   no PowerShell probe. Only when `--filter-open` is passed does the code call
-  `_filter_open_worktrees` (which in turn calls `_vscode_processes.find_open_vscode_paths`).
-  The import `import _vscode_processes` is moved from module level to the top of
-  `_filter_open_worktrees`.
-- **Rationale:** The PowerShell spawn is the dominant overhead in `millpy-vscode.py`. The
-  default path should be the fast path. When users explicitly want open-window filtering
-  they pass `--filter-open`. Lazy import ensures the module load doesn't happen on
-  non-filter-open invocations.
-- **Rejected (faster probe):** Replace `_probe_windows()` with a Win32 ctypes call —
-  more complex, harder to maintain, and changes behavior not scope.
+  `_filter_open_worktrees`. Import of `_vscode_processes` moved from module level to
+  inside `_filter_open_worktrees`.
+- **Rationale:** The PowerShell spawn is the dominant overhead in `millpy-vscode.py`.
+  Default path should be the fast path.
+- **Rejected:** Optimize `_probe_windows()` internals — more complex, out of scope.
 
 ### lazy-import-scope
 
-- **Decision:** Only `import _vscode_processes` is made lazy (moved inside
-  `_filter_open_worktrees`). No other imports in `millpy-vscode.py` or other scripts are
-  changed.
-- **Rationale:** `_spawn_core` is called unconditionally in `main()` regardless of flags,
-  so deferring it saves nothing. Other scripts' imports are all on the hot path.
-- **Rejected:** Broad lazy-import pass across all scripts — YAGNI; benchmarks may show
-  Python import is not a meaningful contributor.
+- **Decision:** Only `import _vscode_processes` is made lazy. No other imports changed.
+- **Rationale:** `_spawn_core` is called unconditionally in `main()`; deferring saves
+  nothing. Other scripts' imports are all hot-path.
 
 ## Technical context
 
@@ -118,42 +134,55 @@ confirmed bottlenecks and leaves the rest undisturbed.
 
 | File | Change |
 |---|---|
-| `plugins/mill/templates/shortcut-wrapper.ps1` | New template: 2 lines, 3 tokens (`<SCRIPT>`, `<VENV_PYTHON>`, `<SCRIPT_PATH>`) |
-| `plugins/mill/scripts/_shortcuts.py` | `write_all(mill_dir, latest_path)` — add required param; update token dict |
-| `plugins/mill/scripts/millpy-vscode.py` | Add `--filter-open` flag; default no-probe; lazy import `_vscode_processes` |
-| `plugins/mill/skills/mill-setup/SKILL.md` | Phase 4.7: compute `latest_path` in Python before calling `write_all` |
-| `plugins/mill/unit_tests/test-shortcut-wrapper.py` | Pass fake `latest_path` to `write_all`; update assertions |
-| `plugins/mill/unit_tests/test-millpy-vscode.py` | Add `--filter-open` behavior tests |
+| `plugins/mill/templates/shortcut-wrapper.ps1` | New template: `uv run --active "<SCRIPT_PATH>" @args` |
+| `plugins/mill/scripts/_shortcuts.py` | `write_all(mill_dir, latest_path)` — required param; `SCRIPT_PATH` token |
+| `plugins/mill/scripts/millpy-vscode.py` | Add `--filter-open`; lazy import `_vscode_processes` |
+| `plugins/mill/skills/mill-setup/SKILL.md` | New `$PROFILE` phase + updated Phase 4.7 call |
+| `plugins/mill/unit_tests/test-shortcut-wrapper.py` | Pass fake `latest_path`; updated assertions |
+| `plugins/mill/unit_tests/test-millpy-vscode.py` | `--filter-open` behavior tests |
 
 **Key modules:**
 
 - `_shortcuts.py` → `write_all(mill_dir, latest_path)` — only caller is mill-setup
   Phase 4.7. Currently calls `_render.render(_TEMPLATE_PATH, {"SCRIPT": script})`.
 - `_render.py` → `render(template_path, values)` — raises `KeyError` on unresolved
-  tokens. New template adds two tokens; all must be present in every `render` call.
-- `millpy-vscode.py` → `_filter_open_worktrees(active, wiki_path, hub_subpath_default)`
-  — calls `_vscode_processes.find_open_vscode_paths()` at line 70. `main()` calls this
-  without any guard; after the change it is only called when `--filter-open` is set.
-- `_vscode_processes.py` → `_probe_windows()` spawns
-  `powershell -NoProfile -Command "Get-Process Code ..."` — the expensive call.
+  tokens. New template has two tokens; both must be present in every `render` call.
+- `millpy-vscode.py` → `_filter_open_worktrees` calls `_vscode_processes.find_open_vscode_paths()`
+  at line 70. After change: only reached when `--filter-open` is set; import moved inside.
+- `_vscode_processes.py` → `_probe_windows()` spawns `powershell.exe Get-Process Code`.
 - mill-setup Phase 4.7 inline Python currently: `_shortcuts.write_all(Path('.millhouse'))`.
-  After change: compute `latest_path = max(cache.iterdir(), key=lambda p: p.name)` where
-  `cache = Path(os.environ["USERPROFILE"]) / ".claude" / "plugins" / "cache" / "millhouse" / "mill"`,
-  then call `_shortcuts.write_all(Path('.millhouse'), latest_path)`.
+  After: compute `latest_path`, call `_shortcuts.write_all(Path('.millhouse'), latest_path)`.
 
-**New template body** (replace entire `shortcut-wrapper.ps1`):
+**New template body** (full replacement of `shortcut-wrapper.ps1`):
 ```
 # Wrapper for <SCRIPT> — generated by mill-setup Phase 4.7. Do not edit manually — re-run mill-setup.
-& "<VENV_PYTHON>" "<SCRIPT_PATH>" @args
+uv run --active "<SCRIPT_PATH>" @args
 ```
 
-**Benchmark harness** (from proposal — run before any code change):
+**`$PROFILE` block written by mill-setup:**
+```powershell
+# mill-venv-start — managed by mill-setup, do not edit manually
+. "<latest_path>\.venv\Scripts\Activate.ps1"
+# mill-venv-end
+```
+
+**`latest_path` computation in mill-setup Phase 4.7:**
+```python
+import os
+from pathlib import Path
+cache = Path(os.environ["USERPROFILE"]) / ".claude" / "plugins" / "cache" / "millhouse" / "mill"
+latest_path = max((p for p in cache.iterdir() if p.is_dir()), key=lambda p: p.name)
+```
+
+**Benchmark harness** (run before any code change):
 ```powershell
 # Full wrapper (baseline):
 Measure-Command { & "c:/Code/millhouse/wts/millhouse/.millhouse/millpy-status.ps1" }
-# uv run alone:
+# uv run --project alone:
 $latest = (Get-ChildItem "$HOME\.claude\plugins\cache\millhouse\mill" -Directory | Sort-Object Name -Descending | Select-Object -First 1).FullName
 Measure-Command { uv run --project $latest python -c "print('ok')" }
+# uv run --active alone (venv must be activated first):
+Measure-Command { uv run --active python -c "print('ok')" }
 # Direct venv Python alone:
 Measure-Command { & "$latest\.venv\Scripts\python.exe" -c "print('ok')" }
 # Python import overhead:
@@ -162,52 +191,52 @@ Measure-Command { & "$latest\.venv\Scripts\python.exe" -c "import _config, _path
 Measure-Command { & "$latest\.venv\Scripts\python.exe" -c "import _vscode_processes; _vscode_processes._probe_windows()" }
 ```
 
-**mill-setup Phase 4.7 idempotency:** already idempotent (`write_all` skips files with
-matching content). Re-run after `update-plugins.ps1` refreshes the hardcoded paths to the
-new plugin version — this is the documented and correct workflow.
+**Venv sharing across worktrees:** the plugin-cache venv is not worktree-specific.
+All `.millhouse/*.ps1` wrappers across all worktrees point to identical script paths
+under the same `$latest` cache entry. Worktree context is discovered at runtime via
+`git rev-parse --show-toplevel` inside each script.
 
-**Backward compat:** existing `.millhouse/*.ps1` files keep working until mill-setup is
-re-run. After re-run, they point directly to the venv Python. No migration step needed
-beyond re-running mill-setup.
+**mill-setup idempotency:** `$PROFILE` block replaced on re-run (marker-based);
+`write_all` skips files with matching content. Re-run after `update-plugins.ps1`
+refreshes both the profile activation path and the hardcoded script paths.
 
 ## Constraints
 
-- PS1 wrappers are Windows-only. No POSIX changes anywhere.
-- `_render.render` raises `KeyError` if any token in the template is absent from the
-  `values` dict. All three new tokens (`SCRIPT`, `VENV_PYTHON`, `SCRIPT_PATH`) must be
-  passed on every `render` call.
-- mill-setup SKILL.md is operator-facing documentation — the inline Python snippet shown
-  there must stay runnable as a verbatim copy-paste.
-- Behavior must not change: same scripts, same flags, same output. Exception: the default
-  `millpy-vscode.py` call no longer filters open windows (opt-in via `--filter-open`).
-- The `test-shortcut-wrapper.py` assertion `"uv run" in rendered` must be removed or
-  inverted. All other idempotency and legacy-cleanup tests remain valid.
+- PS1 wrappers and `$PROFILE` patching are Windows-only. No POSIX changes.
+- `_render.render` raises `KeyError` if any template token is absent. Both `SCRIPT`
+  and `SCRIPT_PATH` must be passed on every `render` call.
+- mill-setup SKILL.md inline Python snippets must remain verbatim copy-pasteable.
+- Behavior must not change except: `millpy-vscode.py` default no longer filters open
+  windows (opt-in via `--filter-open`).
+- Existing `test-shortcut-wrapper.py` assertion `"uv run"` still passes (new template
+  still contains `uv run`); assertion `"--project"` must be removed or inverted.
 
 ## Testing
 
 **`test-shortcut-wrapper.py` — changes required:**
-- All `write_all(mill_dir)` calls → `write_all(mill_dir, fake_latest_path)` where
+- All `write_all(mill_dir)` → `write_all(mill_dir, fake_latest_path)` where
   `fake_latest_path = Path(tmpdir) / "fake-latest"`.
-- Remove assertion `"uv run" in rendered`.
-- Add assertion: `str(fake_latest_path / ".venv" / "Scripts" / "python.exe") in rendered`.
+- Remove/invert assertion for `"uv run --project"` (or `"uv run"` if that's the
+  current check — verify and update accordingly).
+- Add assertion: `"uv run --active" in rendered`.
 - Add assertion: `str(fake_latest_path / "scripts" / "millpy-status.py") in rendered`.
-- Idempotency tests (same content → no rewrite) still valid; rendered content changes but
-  comparison logic is unchanged.
-- Legacy `.py` cleanup tests unchanged.
+- Idempotency and legacy-cleanup tests remain valid.
 
 **`test-millpy-vscode.py` — new tests:**
-- `--filter-open` not passed: mock `_vscode_processes.find_open_vscode_paths` and assert
+- Without `--filter-open`: mock `_vscode_processes.find_open_vscode_paths` and assert
   it is never called.
-- `--filter-open` passed: assert `find_open_vscode_paths` is called exactly once and
-  filtering is applied (existing filtered-worktree behavior tested).
-- Existing two-worktree picker tests and `--slug` tests are unaffected.
+- With `--filter-open`: assert `find_open_vscode_paths` is called exactly once.
+- Existing picker and `--slug` tests unaffected.
 
 **Run all unit tests** via `python plugins/mill/unit_tests/run-all.py` after each batch.
 
 ## Q&A log
 
-- **Q:** Should the benchmark step be a mandatory plan batch gating later implementation? **A:** [auto-pick] Yes — plan batch 0 is the benchmark; implementer writes `.scratch/benchmark-results.md` before any code change. **Why:** proposal and task description both mandate data-first; ordering in the plan enforces this.
-- **Q:** Should Fixes 1 and 3 be merged into a single template change? **A:** [auto-pick] Yes — single new template with `<VENV_PYTHON>` and `<SCRIPT_PATH>` tokens. **Why:** both fixes target the same PS1 block; no value in an intermediate state.
-- **Q:** How should `write_all` receive the venv path? **A:** [auto-pick] Required `latest_path: Path` parameter. **Why:** explicit, no hidden env-var dependency, unit tests pass a fake Path.
+- **Q:** Should the benchmark step be a mandatory plan batch gating later implementation? **A:** [auto-pick] Yes — plan batch 0 is the benchmark; implementer writes `.scratch/benchmark-results.md` before any code change. **Why:** proposal and task description both mandate data-first.
+- **Q:** Should Fixes 1 and 3 be merged into a single template change? **A:** [auto-pick] Yes — single new template with `<SCRIPT_PATH>` token. **Why:** both fixes target the same PS1 block; no value in an intermediate state.
+- **Q:** How should `write_all` receive the script path? **A:** [auto-pick] Required `latest_path: Path` parameter. **Why:** explicit, no hidden env-var dependency, unit tests pass a fake Path.
+- **Q:** Keep `uv run` in the invocation path? **A:** Yes (operator preference) — use `uv run --active` with profile-level venv activation rather than calling Python directly.
+- **Q:** Who activates the venv? **A:** mill-setup writes a marker-delimited block to `$PROFILE`; idempotent on re-run; creates file if missing.
+- **Q:** Does this work across worktrees? **A:** Yes — plugin-cache venv is shared; all worktrees use identical script paths; worktree context discovered at runtime.
 - **Q:** Should `--filter-open` flip the default in `millpy-vscode.py`? **A:** [auto-pick] Yes — default no-probe, `--filter-open` opts in. **Why:** PowerShell spawn is the dominant overhead; fast path should be the default.
-- **Q:** Should lazy import be scoped to `_vscode_processes` only? **A:** [auto-pick] Yes — only `_vscode_processes` in `millpy-vscode.py`. **Why:** `_spawn_core` is on every code path; other scripts' imports are all hot-path.
+- **Q:** Should lazy import be scoped to `_vscode_processes` only? **A:** [auto-pick] Yes. **Why:** `_spawn_core` is on every code path; other scripts' imports are all hot-path.
