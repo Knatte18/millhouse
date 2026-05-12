@@ -66,7 +66,27 @@ Batch-local decisions:
 
 - **Context:** none
 - **Edits:**
+  - `plugins/mill/unit_tests/test-abandon.py`
+  - `plugins/mill/unit_tests/test-cleanliness.py`
+  - `plugins/mill/unit_tests/test-config.py`
+  - `plugins/mill/unit_tests/test-gh-issues.py`
+  - `plugins/mill/unit_tests/test-millpy-add.py`
+  - `plugins/mill/unit_tests/test-millpy-claim.py`
+  - `plugins/mill/unit_tests/test-millpy-implement-holistic.py`
+  - `plugins/mill/unit_tests/test-millpy-implement.py`
+  - `plugins/mill/unit_tests/test-millpy-merge-in-subagent.py`
+  - `plugins/mill/unit_tests/test-millpy-spawn.py`
+  - `plugins/mill/unit_tests/test-millpy-terminal.py`
+  - `plugins/mill/unit_tests/test-millpy-vscode.py`
+  - `plugins/mill/unit_tests/test-plan-validate.py`
+  - `plugins/mill/unit_tests/test-review-code-flow.py`
   - `plugins/mill/unit_tests/test-review-common.py`
+  - `plugins/mill/unit_tests/test-review-discussion-flow.py`
+  - `plugins/mill/unit_tests/test-review-plan-flow.py`
+  - `plugins/mill/unit_tests/test-setup-hub-links.py`
+  - `plugins/mill/unit_tests/test-shortcut-wrapper.py`
+  - `plugins/mill/unit_tests/test-spawn-core.py`
+  - `plugins/mill/unit_tests/test-vscode-processes.py`
 - **Creates:**
   - `plugins/mill/unit_tests/test-no-unicode-arrow.py`
 - **Deletes:** none
