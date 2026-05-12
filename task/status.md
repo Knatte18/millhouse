@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-pause
 branch: hanf/mill-pause
 plan: task/plan
@@ -19,4 +19,13 @@ discussed  '2026-05-12T14:00:08Z'
 planning  '2026-05-12T14:03:26Z'
 plan-review-r1  '2026-05-12T14:04:41Z'
 planned  '2026-05-12T14:04:53Z'
+implementing  '2026-05-12T14:06:19Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: skill-and-index
+    state: pending
 ```
