@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-approved
+phase: done
 slug: mill-finalize
 branch: hanf/mill-finalize
 plan: task/plan
@@ -31,6 +31,7 @@ approved-unit tests  '2026-05-12T10:25:07Z'
 approved-mill-go, config template, and SKILLS index  '2026-05-12T10:28:09Z'
 holistic-reviewing  '2026-05-12T10:28:29Z'
 holistic-approved  '2026-05-12T10:30:23Z'
+done  '2026-05-12T10:30:38Z'
 ```
 
 ## Batches
