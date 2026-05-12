@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-status-helpers
+phase: approved-small-fixes
 slug: mill-misc-fixes-5
 branch: hanf/mill-misc-fixes-5
 plan: task/plan
@@ -24,6 +24,7 @@ plan-review-r2  2026-05-12T06:51:32Z
 planned  2026-05-12T06:51:42Z
 implementing  2026-05-12T06:53:41Z
 approved-status-helpers  2026-05-12T07:02:31Z
+approved-small-fixes  2026-05-12T07:07:15Z
 ```
 
 ## Batches
@@ -35,7 +36,7 @@ batches:
     implementer_session: 8c9c66be-6684-4959-b994-0be9976d2d7a
     start_sha: dfdd32615ddfc521252d319a9e70469fd2447a83
   - name: small-fixes
-    state: running
+    state: approved
     implementer_session: bae4ab37-ba29-4dbc-9495-41ba99da30d4
     start_sha: 05c2673990cdccb8d13b57fcb6319fbd61376208
   - name: implementer-jsonreport
