@@ -77,11 +77,12 @@ Batch-local decisions:
   1. Change the signature to `def _forward_output(output: str, project_root: Path, *, start_sha: str | None = None, snapshot_path: Path | None = None) -> int:`. Both new kwargs default to `None` so callers that do not yet pass them retain today's behaviour.
   2. Add `import _cleanliness` at the top of the file alongside the existing `import _subprocess_util`.
   3. The first regex-find-and-emit block (current lines 14–28) stays unchanged: when a JSON object containing `"status"` is found, augment with `commit_sha` and print.
-  4. When the regex finds nothing, BEFORE emitting the existing `{"status":"stuck","stuck_type":"logic","reason":"no structured report"}` sentinel, attempt the inference path:
+  4. When the regex finds nothing, BEFORE emitting the existing `{"status":"stuck","stuck_type":"logic","reason":"no structured report"}` sentinel, attempt the inference path INSIDE a single `try: ... except Exception: pass` block so that any unexpected exception (e.g. `_cleanliness.compute_new_dirt` raising `CalledProcessError` because the worktree is corrupt) falls through to the stuck-logic sentinel without propagating. The "always emit JSON" invariant of `_forward_output` is preserved unconditionally.
      - Guard: if `start_sha is None` or `snapshot_path is None` or `not snapshot_path.exists()` → skip inference; fall through to the stuck-logic sentinel.
      - Compute `new_dirt = _cleanliness.compute_new_dirt(project_root, snapshot_path)`. If `new_dirt != []` → skip inference (worktree has new dirt the implementer left behind); fall through.
      - Compute current HEAD via `_subprocess_util.run(["git", "rev-parse", "HEAD"], cwd=project_root)`. If the call fails (returncode != 0) or the stdout-stripped value equals `start_sha` (no new commits) → skip inference; fall through.
      - All checks passed: build the inferred payload `{"status": "success", "commit_sha": "<head>", "session_id": "unknown", "inferred": True}` (Python dict; json.dumps emits `true`), print it, return 0.
+     The `except Exception: pass` is intentional: this is a best-effort recovery path and any exception inside it must NEVER cause `_forward_output` to return without emitting JSON.
   5. The final `print(json.dumps({"status": "stuck", ...}))` line stays as the catch-all fall-through, reached only when inference is skipped or fails any of its checks.
   Update the module docstring to reflect the new signature: the existing one-liner `"""Shared helpers for millpy-implement.py and millpy-implement-holistic.py."""` is fine; do NOT add a long docstring to `_forward_output` (the function is private and the call sites document context).
 - **Commit:** `feat(_implementer_common): infer success when JSON missing but worktree clean`
@@ -97,14 +98,12 @@ Batch-local decisions:
 - **Deletes:** none
 - **Requirements:** In `plugins/mill/scripts/millpy-implement.py`:
   1. **Initial-dispatch path (line 186):** the call `return _forward_output(output, project_root)` already has `start_sha` and `snapshot_path` in scope (lines 128 and 130). Change to `return _forward_output(output, project_root, start_sha=start_sha, snapshot_path=snapshot_path)`.
-  2. **Fix-cycle resume path (line 259):** the call `return _forward_output(output, project_root)` does NOT yet have `start_sha` or `snapshot_path` in scope. Immediately before the `return` line, read both from existing batch state:
+  2. **Fix-cycle resume path (line 259):** the call `return _forward_output(output, project_root)` does NOT yet have `start_sha` or `snapshot_path` in scope, but `batch_state` is already computed on line 198 from `existing = _status.read_batches(status_path)` and holds the same data needed here. Immediately before the `return` line, read both values without re-calling `read_batches`:
      ```python
-     batch_state_for_forward = next((b for b in _status.read_batches(status_path) if b["name"] == args.batch_name), None)
-     start_sha_for_forward = batch_state_for_forward.get("start_sha") if batch_state_for_forward else None
+     start_sha_for_forward = batch_state.get("start_sha") if batch_state else None
      snapshot_path_for_forward = project_root / "task" / f".cleanliness-snapshot-{args.batch_name}.txt"
      ```
-     Then change the return to `return _forward_output(output, project_root, start_sha=start_sha_for_forward, snapshot_path=snapshot_path_for_forward)`.
-     Variable names use the `_for_forward` suffix to avoid shadowing the existing `batch_state` (line 198) and `session_id` (line 199) locals.
+     Then change the return to `return _forward_output(output, project_root, start_sha=start_sha_for_forward, snapshot_path=snapshot_path_for_forward)`. The `_for_forward` suffix avoids shadowing the existing `batch_state` (line 198) and `session_id` (line 199) locals while staying within a single `read_batches` invocation.
   3. `millpy-implement-holistic.py` is OUT of scope for this card — it currently calls `_forward_output(output, project_root)` too (verify by grep before committing this card). The fix for the holistic implementer would require parallel plumbing of `start_sha`/`snapshot_path` from a different code path; #243's repro is the per-batch implementer and that is what ships here. Leave `millpy-implement-holistic.py` unchanged; add no fallback for it in this task.
 - **Commit:** `feat(millpy-implement): pass start_sha + snapshot_path to _forward_output`
 

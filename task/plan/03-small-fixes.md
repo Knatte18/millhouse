@@ -104,7 +104,7 @@ Batch-local decisions:
          sys.exit(main())
      ```
 
-     The file MUST itself contain `→` as the escape sequence (not the literal character) so it does not self-fail. The `SELF = Path(__file__).name` guard skips the file from its own scan as a belt-and-braces (the escape sequence in source is already safe).
+     The `SELF = Path(__file__).name` guard is the primary protection — the file's `glob` skips itself by filename, so the literal `→` in `if "→" in text:` is safe. The implementer MAY write the literal character (as shown in the code template above) OR may use `"→"` if they prefer an ASCII-only source — both are equally correct because the SELF guard prevents self-fail.
 - **Commit:** `fix(tests): replace U+2192 with -> + add regression guard`
 
 ## Batch Tests
