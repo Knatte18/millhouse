@@ -55,8 +55,8 @@ spawn:
 # ---------------------------------------------------------------------------
 # Uncomment if your remote enforces PRs to the base branch (branch protection).
 # git:
-#   require-pr-to-base: true   # create a PR instead of pushing directly
-#   base-branch: main          # branch to target; defaults to main if absent
+#   require_pr_to_base: true   # create a PR instead of pushing directly; dispatch lives in mill-finalize
+#   base_branch: main          # branch to target; defaults to main if absent
 
 # ---------------------------------------------------------------------------
 # File-path templates (relative to active worktree root)
