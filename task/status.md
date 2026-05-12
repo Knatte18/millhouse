@@ -44,7 +44,9 @@ batches:
     start_sha: 10d6385af272f1bddb2824024e06080d44226e1e
     commit_sha: 4fc03b027ac5446441e994ff2e8ec9dc46bef8b8
   - name: unit tests
-    state: pending
+    state: running
+    implementer_session: 8230838b-0616-4c76-8c01-358b4cfade3c
+    start_sha: d2a6859572264867f5b61c3a2ffe11be642da179
   - name: mill-go, config template, and SKILLS index
     state: pending
 ```
