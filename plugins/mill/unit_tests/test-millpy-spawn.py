@@ -566,6 +566,35 @@ def test_create_hub_links_called_after_portal_creation() -> None:
             f"create_hub_links first arg should be {expected_worktree}, got {first_arg!r}"
         )
 
+    # Verify portal target is worktree/_mill (not wiki/active/)
+    all_create_calls = junction_mock.create.call_args_list
+    expected_portal_link = container_path / "portals" / "my-task"
+    portal_create_call = next(
+        (c for c in all_create_calls
+         if (c.kwargs.get("link_path") or (c.args[1] if len(c.args) > 1 else None))
+         == expected_portal_link),
+        None,
+    )
+    if portal_create_call is None:
+        raise AssertionError(f"No junction.create call with portal link_path {expected_portal_link}")
+    portal_target = portal_create_call.kwargs.get("target") or (portal_create_call.args[0] if portal_create_call.args else None)
+    expected_portal_target = Path("/fake/worktrees") / "my-task" / "_mill"
+    if portal_target != expected_portal_target:
+        raise AssertionError(
+            f"portal target should be {expected_portal_target!r}, got {portal_target!r}"
+        )
+
+    # Verify .portals junction is created inside the task worktree
+    expected_portals_link = Path("/fake/worktrees") / "my-task" / ".portals"
+    portals_create_call = next(
+        (c for c in all_create_calls
+         if (c.kwargs.get("link_path") or (c.args[1] if len(c.args) > 1 else None))
+         == expected_portals_link),
+        None,
+    )
+    if portals_create_call is None:
+        raise AssertionError(f".portals junction not created at {expected_portals_link}")
+
     print("PASS: _setup.create_hub_links called after portal _junction.create")
 
 
