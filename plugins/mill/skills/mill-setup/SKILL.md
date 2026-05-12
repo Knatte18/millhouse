@@ -56,17 +56,17 @@ The form is decided by `_sibling.py wiki <HUB_PATH>` in Phase 3 — callers just
 
 ## How to invoke the helpers
 
-mill-setup is the bootstrapper that **creates** the global `PYTHONPATH` Windows user environment variable. That variable does not exist in the current process (or in any child process spawned during this session) until Phase 4.7 completes and a new shell is opened. Therefore, every Python invocation in this skill uses the inline prefix:
+mill-setup is the bootstrapper that **creates** the global `PYTHONPATH` Windows user environment variable. That variable does not exist in the current process (or in any child process spawned during this session) until Phase 4.7 completes and a new shell is opened. The mill convention is to invoke the venv Python binary directly with an explicit `PYTHONPATH=` shell prefix on every call — this works whether the global env var is set or not:
 
 ```bash
 # WRONG — invokes from source tree
 PYTHONPATH="plugins/mill/scripts" uv run --project plugins/mill python -c "..."
 
-# RIGHT — invokes from cache (mill-setup's unique inline-prefix form)
-PYTHONPATH="$CLAUDE_PLUGIN_ROOT/scripts" uv run --project "$CLAUDE_PLUGIN_ROOT" python -c "..."
+# RIGHT — invokes from cache (the canonical mill-script form, shared with every other mill SKILL.md)
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "..."
 ```
 
-This inline `PYTHONPATH=` prefix is required in mill-setup and in any skill invocation within the same CC session where mill-setup ran (before a new shell is opened). Skills running in a new CC session started after mill-setup completes rely on the global Windows user env var set by Phase 4.7 and need no prefix.
+This direct-binary form is used by every mill SKILL.md (mill-go uses an equivalent form with `$MILL_PYTHON`, an alias defined in its Step 0 block). The source-tree form (`uv run --project plugins/mill ...`) remains the documented exception for cases where the cache path is unavailable — for example, running unit tests from the millhouse repo itself.
 
 Helpers used by this skill: `_setup` (Phase 4 — `create_hub_links`), `_gitignore` (Phase 4.5b), `_shortcuts` (Phase 4.7), `_sidebar` (Phase 6a), `_vscode` (Phase 7), `_render` (transitively via `_vscode` and `_shortcuts`), `_wiki` (Phase 3, 3.1, 6, 6a).
 
@@ -128,7 +128,7 @@ Run `git ls-remote <wiki-url>`. If it fails (exit non-zero), halt with a conditi
 First compute `<wiki-dir>` using the sibling-path helper — this yields `<container>/wiki/` in container-form, otherwise `<container>/<repo>.wiki/`. Use the printed path as `<wiki-dir>` for the remainder of mill-setup:
 
 ```bash
-PYTHONPATH="$CLAUDE_PLUGIN_ROOT/scripts" uv run --project "$CLAUDE_PLUGIN_ROOT" "$CLAUDE_PLUGIN_ROOT/scripts/_sibling.py" wiki "<hub-path>"
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" "${CLAUDE_PLUGIN_ROOT}/scripts/_sibling.py" wiki "<hub-path>"
 ```
 
 `<hub-path>` is derived via `git rev-parse --show-toplevel`. Users can override via `.millhouse/config.local.yaml`'s `wiki_path:` key.
@@ -136,7 +136,7 @@ PYTHONPATH="$CLAUDE_PLUGIN_ROOT/scripts" uv run --project "$CLAUDE_PLUGIN_ROOT" 
 After `<wiki-dir>` is computed, call `_wiki.clone_or_init`:
 
 ```bash
-PYTHONPATH="$CLAUDE_PLUGIN_ROOT/scripts" uv run --project "$CLAUDE_PLUGIN_ROOT" python -c "
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "
 from pathlib import Path
 import _wiki, json
 result = _wiki.clone_or_init(
@@ -161,7 +161,7 @@ If the helper raises `WikiPushError` (from the pull path — `git pull --ff-only
 3. Commit and push via `_wiki.write_commit_push`:
 
    ```bash
-   PYTHONPATH="$CLAUDE_PLUGIN_ROOT/scripts" uv run --project "$CLAUDE_PLUGIN_ROOT" python -c "from pathlib import Path; import _wiki; _wiki.write_commit_push(Path(r'<wiki-dir>').resolve(), ['config.yaml'], 'chore: init wiki/config.yaml')"
+   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "from pathlib import Path; import _wiki; _wiki.write_commit_push(Path(r'<wiki-dir>').resolve(), ['config.yaml'], 'chore: init wiki/config.yaml')"
    ```
 
 **Why verbatim copy:** the token placeholders (`<WIKI_PATH>` etc.) are resolved by `_junction.resolve_target` and `_wiki.read_hardlinks` at runtime. Substituting at seed time would bake in machine-specific paths.
@@ -171,7 +171,7 @@ If the helper raises `WikiPushError` (from the pull path — `git pull --ff-only
 Runs only when `<cli-from-url>` or `<cli-branch>` was explicitly supplied on the CLI in this run. When both came from config or derived defaults, this phase is a no-op.
 
 ```bash
-PYTHONPATH="$CLAUDE_PLUGIN_ROOT/scripts" uv run --project "$CLAUDE_PLUGIN_ROOT" python -c "
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "
 from pathlib import Path
 import _config
 changed = _config.set_local_wiki_overrides(
@@ -191,12 +191,37 @@ Note: comments in `.millhouse/config.local.yaml` are lost when this phase rewrit
 
 Idempotency: re-running mill-setup with the same flags (or no flags after a prior persisted run) leaves the file untouched — the helper returns `False` when the on-disk content already matches the desired content.
 
+### Phase 3.7 — Create container scaffolding
+
+Create the `<container>/portals/` directory (if missing) and the main-worktree portal entry pointing at the hub:
+
+```bash
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "
+from pathlib import Path
+import _junction
+container = Path(r'<container>').resolve()
+portals = container / 'portals'
+portals.mkdir(parents=True, exist_ok=True)
+hub = Path(r'<hub-path>').resolve()
+portal_entry = portals / hub.name
+if not portal_entry.exists():
+    _junction.create(hub, portal_entry)
+    print(f'created portal entry: {portal_entry} -> {hub}')
+else:
+    print('portal entry already exists, skipping')
+"
+```
+
+`<hub.name>` is the repository directory name (last component of `<hub-path>`). This portal entry is the canonical "hub in portals" that `.portals/<repo>` resolves through.
+
+**Idempotency:** `portals.mkdir(exist_ok=True)` is a no-op if the directory already exists. The portal junction check prevents double-creation.
+
 ### Phase 4 — Create hub links (junctions + hardlinks)
 
 Call `_setup.create_hub_links` with the hub token set (no `<SLUG>` — that is mill-spawn's concern). The helper reads both the `junctions:` and `hardlinks:` blocks from `<wiki-dir>/config.yaml`, applies the token-scope filter (silently skipping entries whose templates reference `<SLUG>`), creates all hub-scope junctions, and creates all hardlinks idempotently:
 
 ```bash
-PYTHONPATH="$CLAUDE_PLUGIN_ROOT/scripts" uv run --project "$CLAUDE_PLUGIN_ROOT" python -c "
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "
 from pathlib import Path
 import json, _setup
 result = _setup.create_hub_links(
@@ -234,7 +259,7 @@ Compute `<hub-gitignore>` as `<hub-path>/.gitignore` (same path in both containe
 Call `_gitignore.upsert`:
 
 ```bash
-PYTHONPATH="$CLAUDE_PLUGIN_ROOT/scripts" uv run --project "$CLAUDE_PLUGIN_ROOT" python -c "
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "
 from pathlib import Path
 import _gitignore
 hub_gi = Path(r'<hub-gitignore>').resolve()
@@ -250,7 +275,7 @@ Log the result.
 Creates `.millhouse/<script>.ps1` forwarders for every user-callable mill script. Each wrapper hardcodes the path of the currently-latest plugin cache entry and delegates to the real script via `uv run --active`.
 
 ```bash
-PYTHONPATH="$CLAUDE_PLUGIN_ROOT/scripts" uv run --project "$CLAUDE_PLUGIN_ROOT" python -c "
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "
 import os
 import _shortcuts
 from pathlib import Path
@@ -320,7 +345,7 @@ The `hub_relative_path` key tells mill-terminal and mill-vscode where the effect
 Compute the value:
 
 ```bash
-PYTHONPATH="$CLAUDE_PLUGIN_ROOT/scripts" uv run --project "$CLAUDE_PLUGIN_ROOT" python -c "
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "
 from pathlib import Path
 cwd = Path.cwd().resolve()
 git_toplevel = Path(r'<git-toplevel>').resolve()
@@ -338,7 +363,7 @@ print(rel)
 Write the value into `.millhouse/config.local.yaml`. If the file already exists and already contains `hub_relative_path:`, update it in-place; if missing or absent from the file, append/insert it before the first non-comment key:
 
 ```bash
-PYTHONPATH="$CLAUDE_PLUGIN_ROOT/scripts" uv run --project "$CLAUDE_PLUGIN_ROOT" python -c "
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "
 from pathlib import Path
 import yaml, re
 cfg_path = Path('.millhouse/config.local.yaml')
@@ -362,7 +387,7 @@ else:
 Read-only check that `~/.millhouse/config.machine.yaml` is present and parseable. Never creates, prompts, or halts.
 
 ```bash
-PYTHONPATH="$CLAUDE_PLUGIN_ROOT/scripts" uv run --project "$CLAUDE_PLUGIN_ROOT" python -c "
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "
 import _machine
 status, detail = _machine.probe()
 path = _machine.machine_config_path()
@@ -401,7 +426,7 @@ For "missing" and "GitHub default" cases:
 2. Commit and push via `_wiki.write_commit_push`:
 
    ```bash
-   PYTHONPATH="$CLAUDE_PLUGIN_ROOT/scripts" uv run --project "$CLAUDE_PLUGIN_ROOT" python -c "from pathlib import Path; import _wiki; _wiki.write_commit_push(Path(r'<wiki-dir>').resolve(), ['Home.md'], '<commit-msg>')"
+   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "from pathlib import Path; import _wiki; _wiki.write_commit_push(Path(r'<wiki-dir>').resolve(), ['Home.md'], '<commit-msg>')"
    ```
 
 **GitHub-default detection:** read the file, strip outer whitespace, match the pattern `^Welcome to the .+ wiki!$` (single line).
@@ -411,7 +436,7 @@ For "missing" and "GitHub default" cases:
 Regenerate the wiki sidebar every time mill-setup runs:
 
 ```bash
-PYTHONPATH="$CLAUDE_PLUGIN_ROOT/scripts" uv run --project "$CLAUDE_PLUGIN_ROOT" python -c "from pathlib import Path; import _sidebar; _sidebar.regenerate(Path(r'<wiki-dir>').resolve())"
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "from pathlib import Path; import _sidebar; _sidebar.regenerate(Path(r'<wiki-dir>').resolve())"
 ```
 
 Then commit + push if the file changed:
@@ -421,7 +446,7 @@ Then commit + push if the file changed:
 3. Otherwise commit:
 
    ```bash
-   PYTHONPATH="$CLAUDE_PLUGIN_ROOT/scripts" uv run --project "$CLAUDE_PLUGIN_ROOT" python -c "from pathlib import Path; import _wiki; _wiki.write_commit_push(Path(r'<wiki-dir>').resolve(), ['_Sidebar.md'], 'chore: regenerate _Sidebar.md')"
+   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "from pathlib import Path; import _wiki; _wiki.write_commit_push(Path(r'<wiki-dir>').resolve(), ['_Sidebar.md'], 'chore: regenerate _Sidebar.md')"
    ```
 
 ### Phase 7 — VS Code window colour (hub = green)
@@ -438,7 +463,7 @@ The hub is always coloured `#2d7d46` so the operator can spot it instantly. mill
 Render and write via `_vscode.write_settings`:
 
 ```bash
-PYTHONPATH="$CLAUDE_PLUGIN_ROOT/scripts" uv run --project "$CLAUDE_PLUGIN_ROOT" python -c "from pathlib import Path; import yaml; import _vscode; from _paths import resolve_short_name; cfg = yaml.safe_load(Path('<wiki-dir>/config.yaml').read_text(encoding='utf-8')); _vscode.write_settings(color_hex='#2d7d46', target=Path('.vscode/settings.json'), short_name=resolve_short_name(cfg, '<repo-name>'))"
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "from pathlib import Path; import yaml; import _vscode; from _paths import resolve_short_name; cfg = yaml.safe_load(Path('<wiki-dir>/config.yaml').read_text(encoding='utf-8')); _vscode.write_settings(color_hex='#2d7d46', target=Path('.vscode/settings.json'), short_name=resolve_short_name(cfg, '<repo-name>'))"
 ```
 
 ### Phase 8 — Verify + report

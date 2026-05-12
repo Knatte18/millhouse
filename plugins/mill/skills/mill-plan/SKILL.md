@@ -103,9 +103,9 @@ Loop up to `max_review_rounds` rounds. Each round:
 2. Invoke the CLI as a subprocess:
 
    ```bash
-   uv run --project "$CLAUDE_PLUGIN_ROOT" "$CLAUDE_PLUGIN_ROOT/scripts/millpy-bg.py" \
+   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-bg.py" \
        --slug plan-review-r<N> -- \
-       uv run --project "$CLAUDE_PLUGIN_ROOT" "$CLAUDE_PLUGIN_ROOT/scripts/millpy-review-plan.py"
+       "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-review-plan.py"
    ```
 
    The CLI accepts two optional scope flags (mutually exclusive): `--holistic-only` skips per-batch reviews and runs only the holistic plan review; `--no-holistic` skips the holistic plan review and runs per-batch reviews only. Default — both run per the `roles.plan-review.batch.reviewer` and `roles.plan-review.holistic.reviewer` config keys. Append the flag to the inner `uv run …millpy-review-plan.py` portion of the millpy-bg invocation when needed.
@@ -125,9 +125,9 @@ Loop up to `max_review_rounds` rounds. Each round:
    When the JSON envelope from step 2 has a non-empty `reviews[]` array AND at least one entry's `verdict` is `"ERROR"`, skip steps 4a/4b/4c/4d entirely and immediately re-run:
 
    ```bash
-   uv run --project "$CLAUDE_PLUGIN_ROOT" "$CLAUDE_PLUGIN_ROOT/scripts/millpy-bg.py" \
+   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-bg.py" \
        --slug plan-review-retry-r<N> -- \
-       uv run --project "$CLAUDE_PLUGIN_ROOT" "$CLAUDE_PLUGIN_ROOT/scripts/millpy-review-plan.py"
+       "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-review-plan.py"
    ```
 
    This returns immediately with `pid=<N> log=<abs-path>`. Poll `cat <log-path>` until `[mill-bg] EXIT` appears, then read the log and extract the JSON summary line (the last non-empty, non-sentinel line).
@@ -151,7 +151,7 @@ Loop up to `max_review_rounds` rounds. Each round:
 
    > After {N} rounds, {M} BLOCKING findings remain unresolved (blocking_count from latest round's review JSON). Options:
    > A) Deep problems — rethink approach. Go back to mill-start and revise discussion.
-   > B) Shallow — one more review round. Invoke: `uv run --project "${CLAUDE_PLUGIN_ROOT}" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-review-plan.py" --max-rounds {N+1}` (the `--max-rounds` flag overrides the configured cap; without it the script re-reads config and exits at the same cap again).
+   > B) Shallow — one more review round. Invoke: `PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-review-plan.py" --max-rounds {N+1}` (the `--max-rounds` flag overrides the configured cap; without it the script re-reads config and exits at the same cap again).
    > C) Override — accept findings and proceed to mill-go anyway.
    > Recommended: {A/B/C} based on {analysis of remaining findings}.
 
