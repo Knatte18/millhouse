@@ -38,7 +38,9 @@ batches:
     implementer_session: be48ffae-f770-4ebd-9142-c0f0bcb30340
     start_sha: bd5e1d393e51b354c8fb159d3b15f3dc9087a846
   - name: vscode-filter-open
-    state: pending
+    state: running
+    implementer_session: ab2ba61b-d676-4238-b2e3-f9c1f1986564
+    start_sha: dac7f154f7d49e3c22b2360907793350d5ddfb36
   - name: mill-setup-skill
     state: pending
 ```
