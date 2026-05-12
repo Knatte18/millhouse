@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussion-fix-r2
+phase: discussed
 slug: mill-paths-cleanup
 branch: hanf/mill-paths-cleanup
 plan: null
@@ -16,4 +16,5 @@ task_description: |
 ```text
 discussing  '2026-05-12T11:46:11Z'
 discussion-fix-r2  '2026-05-12T13:21:01Z'
+discussed  '2026-05-12T13:21:17Z'
 ```
