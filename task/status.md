@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-mill-merge refactor
+phase: approved-unit tests
 slug: mill-finalize
 branch: hanf/mill-finalize
 plan: task/plan
@@ -27,6 +27,7 @@ planned  '2026-05-12T10:15:04Z'
 implementing  '2026-05-12T10:17:09Z'
 approved-mill-finalize skill  '2026-05-12T10:19:41Z'
 approved-mill-merge refactor  '2026-05-12T10:22:07Z'
+approved-unit tests  '2026-05-12T10:25:07Z'
 ```
 
 ## Batches
@@ -44,9 +45,10 @@ batches:
     start_sha: 10d6385af272f1bddb2824024e06080d44226e1e
     commit_sha: 4fc03b027ac5446441e994ff2e8ec9dc46bef8b8
   - name: unit tests
-    state: running
+    state: approved
     implementer_session: 8230838b-0616-4c76-8c01-358b4cfade3c
     start_sha: d2a6859572264867f5b61c3a2ffe11be642da179
+    commit_sha: 5826cac09b95ad15952b8b4deadcbbaedc6e7a4d
   - name: mill-go, config template, and SKILLS index
     state: pending
 ```
