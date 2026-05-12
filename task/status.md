@@ -59,5 +59,7 @@ batches:
     start_sha: 6aff782c62978e0f3658678793ffdf157d247316
     commit_sha: 624042d116979eab73106e8c08c843de8e8dd9a1
   - name: skills-docs-claude-md
-    state: pending
+    state: running
+    implementer_session: 5170ae95-6fb6-4de7-bce4-30957858f479
+    start_sha: 924520f1c76296b7525309d926bc179269ab0f39
 ```
