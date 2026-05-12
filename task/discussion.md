@@ -60,7 +60,7 @@ Folded-in: GitHub issue #268 — in PR mode, `task/` currently appears in the PR
 ### config-key rename: breaking, no alias shim
 
 - Decision: `git.require-pr-to-base` → `git.require_pr_to_base`, `git.base-branch` → `git.base_branch`. Code reads new keys only. Operators update their `wiki/config.yaml` manually. Template ships new keys. No backwards-compat shim.
-- Rationale: 10+ keys in the config already use snake_case; only the `git:` block used kebab-case. Consistent snake_case allows cleaner Python dict access. A shim prolongs the transition without benefit.
+- Rationale: 10+ keys in the config already use snake_case; most of the `git:` block used kebab-case. Consistent snake_case allows cleaner Python dict access. A shim prolongs the transition without benefit. Note: `git.parent-branch` is also kebab-case but is intentionally excluded (different purpose, lower usage, deferred scope — see Technical context).
 - Rejected: Read both spellings with deprecation warning — the warning would be invisible in most runs; shims accumulate.
 
 ### Branch-protection fallback in mill-merge direct path: keep
@@ -102,7 +102,7 @@ Updated text: `"If pipeline.auto_merge: true → invoke /mill-finalize."` — re
 Files to update (`git.require-pr-to-base` → `git.require_pr_to_base`, `git.base-branch` → `git.base_branch`):
 
 - `plugins/mill/skills/mill-merge/SKILL.md` — Step 1 (config key read), Step 5 (condition comment)
-- `plugins/mill/skills/git-pr/SKILL.md` — Step 2 (base-branch lookup — note: git-pr reads `git.parent-branch`, not `git.base-branch`; verify on reading)
+- `plugins/mill/skills/git-pr/SKILL.md` — Step 2 reads `git.parent-branch` (a different key used as PR base override). This key is intentionally excluded from this rename: it serves a different purpose (ad-hoc base override for standalone PR creation), has separate per-user `.millhouse/config.yaml` placement, and is not part of the `wiki/config.yaml` schema being normalised. Deferring it keeps scope tight. Verify during implementation that no other git: kebab-case keys sneak in.
 - `plugins/mill/templates/wiki-config.yaml` — config template, update commented-out example keys
 - `plugins/codeguide/skills/codeguide-update/SKILL.md` — references `base-branch` for parent detection (verify usage)
 - `plugins/codeguide/scripts/resolve_scope.py` — `_detect_base_branch` function (verify which key it reads)
@@ -143,14 +143,13 @@ Scenarios:
 - Old kebab-case key `require-pr-to-base` → not recognised (returns false/absent) — documents the breaking change
 - Config deep-merge: local override of `require_pr_to_base` wins over wiki config
 
-### mill-merge phase gate (update existing test)
+### mill-merge phase gate (no removals needed)
 
 File: `plugins/mill/unit_tests/test-mill-merge-inplace.py`
 
-Changes:
-- Remove PR-path creation tests from mill-merge (moved to mill-finalize)
-- Add: phase gate with absent `task/status.md` + Home.md `[pr-pending]` → re-entry
-- Add: phase gate with absent `task/status.md` + Home.md `[active]` → halt
+The existing file contains only `_inplace` module signature smoke tests (`is_inplace`, `prompt_stale_worktree`). There are no PR-path tests to remove.
+
+The updated phase-gate (absent `task/status.md` → Home.md fallback) is SKILL.md agent logic with no backing Python helper — no unit test is needed for it. Leave `test-mill-merge-inplace.py` unchanged.
 
 ### No TDD candidates
 

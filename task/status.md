@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: discussion-fix-r1
 slug: mill-finalize
 branch: hanf/mill-finalize
 plan: null
@@ -15,4 +15,5 @@ task_description: |
 
 ```text
 discussing  '2026-05-12T08:58:41Z'
+discussion-fix-r1  '2026-05-12T09:11:22Z'
 ```
