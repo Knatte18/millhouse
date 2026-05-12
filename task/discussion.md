@@ -17,8 +17,9 @@ Commit 3c9f955 already replaced `uv run --project` with `uv run --active` in the
 
 **In:**
 - All `uv run --project "${CLAUDE_PLUGIN_ROOT}"` invocations in `plugins/mill/skills/*/SKILL.md` files — both script calls and `python -c "..."` inline forms.
-- mill-go's `PLUGIN_ROOT` fallback block — the fallback itself keeps `uv run --project`; the comment is updated to explain why.
+- mill-go's `PLUGIN_ROOT` body calls (22 occurrences) — converted to use `MILL_PYTHON` variable; Step 0 block updated to set `MILL_PYTHON` after the fallback check; fallback note added.
 - `CLAUDE.md` at the repo root — update the "Mill scripts are invoked via `uv run`" paragraph to document the new pattern.
+- mill-setup SKILL.md "How to invoke the helpers" prose section (lines ~57–69) — the "unique inline-prefix form" framing is outdated after conversion; update to reflect that all skills now use direct Python with an explicit PYTHONPATH prefix.
 
 **Out:**
 - Source-tree forms (`uv run --project plugins/mill ...`) in mill-add and mill-setup SKILL.md — these are the documented exception per CLAUDE.md; they stay as `uv run --project`.
@@ -48,11 +49,25 @@ Commit 3c9f955 already replaced `uv run --project` with `uv run --active` in the
 - **Rationale:** All mill operators run Windows 11. Adding `if [ ! -f "$MILL_PYTHON" ]; then ...` boilerplate to every skill for a hypothetical Linux/Mac operator violates YAGNI.
 - **Rejected:** Cross-platform wrapper with OS detection — unnecessary complexity.
 
-### Source-tree forms and fallbacks stay as `uv run --project`
+### Source-tree forms stay as `uv run --project`; mill-go body calls are converted via `MILL_PYTHON`
 
-- **Decision:** Leave all `uv run --project plugins/mill ...` forms unchanged. Leave mill-go's `PLUGIN_ROOT` fallback using `uv run --project` (add a comment explaining why).
-- **Rationale:** Source-tree paths are the documented exception in CLAUDE.md. The fallback fires when `CLAUDE_PLUGIN_ROOT` is unset, which only happens in developer scenarios where the plugin venv may not exist yet — `uv run` handles venv creation on demand.
-- **Rejected:** Updating the fallback too — would fail silently when the source-tree venv doesn't exist.
+- **Decision:** Leave all `uv run --project plugins/mill ...` forms in mill-add and mill-setup unchanged (source-tree exception). Convert mill-go's 22 body calls to use a `MILL_PYTHON` variable that is set after the fallback check. Add a note in the fallback block that the source-tree venv must already exist.
+- **Rationale:** mill-go uses `$PLUGIN_ROOT` (not `${CLAUDE_PLUGIN_ROOT}`) for all its calls. Converting those calls requires deriving the Python binary from `$PLUGIN_ROOT` too. The fallback fires only when `CLAUDE_PLUGIN_ROOT` is unset — a dev-only scenario. In that case, the source-tree venv is expected to exist (created by any prior `uv run --project plugins/mill` invocation). Leaving mill-go's 22 body calls unconverted would forfeit the largest performance gain (mill-go has the most invocations of any skill).
+- **Rejected:** Leaving mill-go entirely as `uv run --project` — forfeits the bulk of the performance benefit; mill-go is the most frequently invoked orchestration skill.
+- **Rejected:** A runtime existence check (`if [ ! -f "$MILL_PYTHON" ]`) that falls back to `uv run` — adds branching complexity to every call site; the note in the fallback block is sufficient for the dev edge case.
+
+The Step 0 block in mill-go SKILL.md becomes:
+```bash
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}"
+if [ -z "$PLUGIN_ROOT" ]; then
+    PLUGIN_ROOT="$(git rev-parse --show-toplevel)/plugins/mill"
+    echo "[mill-go] CLAUDE_PLUGIN_ROOT unset; resolved to: $PLUGIN_ROOT"
+    echo "[mill-go] NOTE: source-tree venv must exist at $PLUGIN_ROOT/.venv — run 'uv sync --project $PLUGIN_ROOT' if not."
+fi
+MILL_PYTHON="${PLUGIN_ROOT}/.venv/Scripts/python.exe"
+```
+
+All 22 body calls change from `uv run --project "$PLUGIN_ROOT" "$PLUGIN_ROOT/scripts/..."` to `PYTHONPATH="${PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${PLUGIN_ROOT}/scripts/..."`.
 
 ### Update CLAUDE.md
 
@@ -131,16 +146,18 @@ New text should state:
 No new logic is being introduced — this is a mechanical text substitution across SKILL.md files and one CLAUDE.md paragraph. There are no unit tests for SKILL.md content.
 
 **Manual verification steps for mill-plan to include in the plan:**
-1. After editing, grep for any remaining `uv run --project "${CLAUDE_PLUGIN_ROOT}"` lines in `plugins/mill/skills/*/SKILL.md` — result must be zero (source-tree forms are `plugins/mill`, not `${CLAUDE_PLUGIN_ROOT}`).
-2. Grep for `uv run --project plugins/mill` — these should remain; count should match the pre-edit count.
-3. Spot-check the CLAUDE.md paragraph to ensure both the new pattern and the source-tree exception are documented.
-4. Optionally: run one of the updated SKILL.md invocations in a fresh shell to confirm the direct Python binary resolves and runs correctly.
+1. After editing, grep for any remaining `uv run --project "${CLAUDE_PLUGIN_ROOT}"` (or `"$CLAUDE_PLUGIN_ROOT"`) in `plugins/mill/skills/*/SKILL.md` — result must be zero.
+2. Grep for `uv run --project.*PLUGIN_ROOT` in `plugins/mill/skills/mill-go/SKILL.md` — result must be zero (all 22 body calls converted).
+3. Grep for `uv run --project plugins/mill` — these should remain (source-tree exception forms in mill-add, mill-setup); count should match the pre-edit count.
+4. Spot-check the CLAUDE.md paragraph to ensure both the new pattern and the source-tree exception are documented.
+5. Spot-check mill-setup SKILL.md lines ~57–69 to confirm "unique inline-prefix form" prose is updated.
+6. Optionally: run one of the updated SKILL.md invocations in a fresh shell to confirm the direct Python binary resolves and runs correctly.
 
 ## Q&A log
 
 - **Q:** What invocation form should replace `uv run --project "${CLAUDE_PLUGIN_ROOT}"`? **A:** [auto-pick] Direct venv Python binary. **Why:** venv exists in plugin cache; avoids all uv overhead; `uv run --active` unavailable because Bash tool doesn't activate the mill venv.
 - **Q:** Should PYTHONPATH always be prefixed explicitly? **A:** [auto-pick] Yes, always prefix `PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts"`. **Why:** Bash subshells sometimes don't inherit the Windows user env var; inline python calls already used the prefix; consistent.
 - **Q:** Windows-only or cross-platform? **A:** [auto-pick] Windows-only (`.venv/Scripts/python.exe`). **Why:** all operators run Windows 11; cross-platform detection is YAGNI.
-- **Q:** How to handle mill-go's source-tree `PLUGIN_ROOT` fallback? **A:** [auto-pick] Keep `uv run --project` for the fallback; add a comment explaining why. **Why:** source-tree venv may not exist; `uv run` creates it on demand.
+- **Q:** How to handle mill-go's `PLUGIN_ROOT` body calls and fallback? **A:** [auto-pick, revised after review r1] Convert the 22 body calls via a `MILL_PYTHON` variable set in Step 0; add fallback note that source-tree venv must exist. **Why:** leaving body calls unconverted forfeits the largest performance gain; the fallback is dev-only and source-tree venv is expected to already exist.
 - **Q:** Should source-tree forms (`uv run --project plugins/mill ...`) be updated? **A:** [auto-pick] No, keep as-is. **Why:** documented exception in CLAUDE.md; changing them adds no practical value and risks breakage when venv doesn't exist.
 - **Q:** Should CLAUDE.md be updated? **A:** [auto-pick] Yes. **Why:** CLAUDE.md is loaded on every session start; stale pattern docs cause wrong invocations.

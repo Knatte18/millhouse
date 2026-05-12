@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: discussion-fix-r1
 slug: skills-direct-venv-invocation
 branch: hanf/skills-direct-venv-invocation
 plan: null
@@ -15,4 +15,5 @@ task_description: |
 
 ```text
 discussing  '2026-05-12T13:50:33Z'
+discussion-fix-r1  '2026-05-12T14:04:58Z'
 ```
