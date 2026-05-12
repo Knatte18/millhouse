@@ -86,6 +86,8 @@ or, when stuck:
 
 Anything other than this JSON on the last line is a protocol violation; mill-go treats that as `stuck_type: logic` with reason "no structured report".
 
+**Long-session reminder:** if you have produced a lot of tool output earlier in this session (e.g. many `Bash` calls, large `Read` results), your final assistant turn's text output may be truncated by the orchestrator before the JSON line is captured. To protect against this, emit the JSON line as the **first** non-tool content of your final assistant turn, before any optional commentary or further tool calls. Re-emit the JSON line at the end of the same turn as well — duplicate JSON is fine, `_implementer_common._forward_output` reads the last match.
+
 ## On review resume
 
 If mill-go resumes this session with a new message pointing you at a code-review file, load the **mill-receiving-review** skill before reading any finding. The decision tree (VERIFY → HARM CHECK → FIX or PUSH BACK) is non-negotiable — it is what keeps this loop useful instead of adversarial. Apply fixes, re-run `verify:`, then re-emit the JSON report (same shape) reflecting the post-fix state.
