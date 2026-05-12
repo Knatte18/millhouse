@@ -6,6 +6,7 @@ Runs from the hub. Pass --apply to execute removals; default is dry-run.
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import shutil
 import sys
@@ -407,6 +408,106 @@ def _apply_worktree_record(
     print(f"[cleanup] removed portal entry: {container_path / 'portals' / record.slug}", file=sys.stderr)
 
 
+def _apply_pr_reap_record(
+    record: SlugRecord,
+    hub_root: Path,
+    wiki_path: Path,
+    junctions_cfg: dict[str, str],
+    cfg: dict,
+) -> list[str]:
+    """Poll gh pr list for a [pr-pending] record and finalise teardown when the PR has merged.
+
+    Returns a list of wiki-relative paths mutated (empty on early-exit paths).
+    """
+    wiki_relative_paths: list[str] = []
+
+    result = _subprocess_util.run(
+        ["gh", "pr", "list", "--head", record.branch, "--state", "all",
+         "--json", "state,mergeCommit,number", "--jq", ".[0]"],
+        cwd=hub_root,
+    )
+    if result.returncode != 0 or not result.stdout.strip():
+        print(
+            f"[cleanup] PR-reap {record.slug}: gh pr list failed: {result.stderr!r}",
+            file=sys.stderr,
+        )
+        return wiki_relative_paths
+
+    pr_data = json.loads(result.stdout.strip())
+    state = pr_data.get("state")
+    merge_commit = pr_data.get("mergeCommit")
+    number = pr_data.get("number")
+
+    if state == "OPEN":
+        print(f"[cleanup] PR-reap {record.slug}: PR #{number} still OPEN — skipping")
+        return wiki_relative_paths
+
+    if state == "CLOSED":
+        print(
+            f"[cleanup] PR-reap {record.slug}: PR #{number} CLOSED without merge"
+            f" — inspect manually (abandon or reopen)"
+        )
+        return wiki_relative_paths
+
+    if state != "MERGED":
+        print(
+            f"[cleanup] PR-reap {record.slug}: unexpected PR state {state!r}; skipping",
+            file=sys.stderr,
+        )
+        return wiki_relative_paths
+
+    # MERGED: create archive tag if absent, flip Home.md, run standard teardown.
+    tag_check = _subprocess_util.run(
+        ["git", "-C", str(hub_root), "tag", "-l", f"archive/{record.slug}"]
+    )
+    if not (tag_check.returncode == 0 and tag_check.stdout.strip()):
+        fetch_branch = _subprocess_util.run(
+            ["git", "-C", str(hub_root), "fetch", "origin", record.branch]
+        )
+        if fetch_branch.returncode == 0:
+            tag_target = record.branch
+        else:
+            merge_sha = (merge_commit or {}).get("oid") if merge_commit else None
+            if not merge_sha:
+                print(
+                    f"[cleanup] PR-reap {record.slug}: no merge SHA available; skipping",
+                    file=sys.stderr,
+                )
+                return wiki_relative_paths
+            _subprocess_util.run(["git", "-C", str(hub_root), "fetch", "origin", merge_sha])
+            tag_target = merge_sha
+        _subprocess_util.run(
+            ["git", "-C", str(hub_root), "tag", f"archive/{record.slug}", tag_target]
+        )
+        _subprocess_util.run(
+            ["git", "-C", str(hub_root), "push", "origin", f"archive/{record.slug}"]
+        )
+
+    home_path = wiki_path / "Home.md"
+    home_text = home_path.read_text(encoding="utf-8")
+    home_text = _tasks_md.set_phase(home_text, record.slug, "done")
+    home_path.write_text(home_text, encoding="utf-8")
+    wiki_relative_paths.append("Home.md")
+
+    mode, task_branch = _resolve_inplace_mode(record, hub_root, wiki_path, cfg)
+    if mode == "abort":
+        print(
+            f"[cleanup] PR-reap {record.slug}: user aborted stale-worktree prompt.",
+            file=sys.stderr,
+        )
+        return wiki_relative_paths
+    if mode == "inplace":
+        _apply_inplace_record(record, hub_root, task_branch)
+    else:
+        _apply_worktree_record(record, hub_root, wiki_path, junctions_cfg)
+
+    if record.wiki_active_dir is not None and record.wiki_active_dir.is_dir():
+        shutil.rmtree(record.wiki_active_dir)
+        wiki_relative_paths.append(f"active/{record.slug}")
+
+    return wiki_relative_paths
+
+
 def apply_plan(
     plan: CleanupPlan,
     wiki_path: Path,
@@ -437,6 +538,11 @@ def apply_plan(
             shutil.rmtree(record.wiki_active_dir)
             wiki_relative_paths.append(f"active/{record.slug}")
 
+    for record in plan.to_reap_pr:
+        wiki_relative_paths.extend(
+            _apply_pr_reap_record(record, hub_root, wiki_path, junctions_cfg, cfg)
+        )
+
     active_link = hub_root / ".active"
     if os.path.lexists(str(active_link)) and not active_link.is_dir():
         _junction.remove(active_link)
@@ -456,7 +562,7 @@ def apply_plan(
             wiki_path,
             wiki_relative_paths,
             f"chore: cleanup — {len(plan.to_remove_done)} done, "
-            f"{len(plan.to_remove_abandoned)} abandoned",
+            f"{len(plan.to_remove_abandoned)} abandoned, {len(plan.to_reap_pr)} pr-reaped",
             slug="mill-cleanup",
         )
 
@@ -508,6 +614,7 @@ def main() -> None:
     print(
         f"\nDone: {len(plan.to_remove_done)} done, "
         f"{len(plan.to_remove_abandoned)} abandoned removed. "
+        f"{len(plan.to_reap_pr)} pr-reaped. "
         f"{len(plan.to_report)} orphans/unreadable reported."
     )
 
