@@ -38,7 +38,8 @@ repo:
 
 junctions:
   .wiki: <WIKI_PATH>
-  .active: <WIKI_PATH>/active/<SLUG>/
+  .portals: <CONTAINER_PATH>/portals/
+  .active: <CONTAINER_PATH>/portals/<SLUG>/
 
 # ---------------------------------------------------------------------------
 # mill-spawn
