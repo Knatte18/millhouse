@@ -139,39 +139,9 @@ def main() -> int:
             assert plan.to_remove_done[0].slug == "done-slug"
             assert plan.to_remove_done[0].branch == "impl/done-slug"
             assert plan.to_remove_done[0].worktree_path == wt
-            assert plan.to_remove_done[0].wiki_active_dir is None, (
-                f"expected wiki_active_dir=None for fresh layout, got {plan.to_remove_done[0].wiki_active_dir}"
-            )
             assert plan.to_reset_home == []
             assert plan.to_report == []
-            print("PASS build_plan — done slug, fresh layout (no wiki/active/) -> to_remove_done, wiki_active_dir=None")
-
-        # --- done slug with worktree AND legacy wiki/active/<slug>/ dir ---
-        with tempfile.TemporaryDirectory() as tmp:
-            tmp = Path(tmp)
-            wts_dir = tmp / "wts"
-            hub = wts_dir / "my-repo"
-            hub.mkdir(parents=True)
-            wt = wts_dir / "done-slug"
-            wt.mkdir(parents=True)
-            (wt / "_mill").mkdir()
-            (wt / "_mill" / "status.md").write_text(_make_status_md("done"), encoding="utf-8")
-
-            # Create legacy wiki/active/<slug>/ dir
-            wiki_path = tmp / "wiki"
-            legacy_active = wiki_path / "active" / "done-slug"
-            legacy_active.mkdir(parents=True)
-            (legacy_active / "status.md").write_text(_make_status_md("done"), encoding="utf-8")
-
-            home_tasks = [_make_task("done-slug", "done")]
-            with patch("mill_cleanup._subprocess_util.run", side_effect=_mock_branch_run("impl/done-slug")):
-                plan = build_plan([wt], home_tasks, wiki_path, hub_root=hub, branch_prefix="impl/")
-
-            assert len(plan.to_remove_done) == 1
-            assert plan.to_remove_done[0].wiki_active_dir == legacy_active, (
-                f"expected wiki_active_dir={legacy_active}, got {plan.to_remove_done[0].wiki_active_dir}"
-            )
-            print("PASS build_plan — done slug, legacy layout (wiki/active/ present) -> wiki_active_dir set")
+            print("PASS build_plan — done slug, fresh layout -> to_remove_done")
 
         # --- abandoned slug with [active] marker ---
         with tempfile.TemporaryDirectory() as tmp:
@@ -333,7 +303,6 @@ def main() -> int:
                 slug="my-task",
                 worktree_path=hub_root,
                 branch="impl/my-task",
-                wiki_active_dir=None,
                 home_marker="done",
             )
 
@@ -407,7 +376,6 @@ def main() -> int:
                 slug="my-task",
                 worktree_path=wt_path,
                 branch="impl/my-task",
-                wiki_active_dir=None,
                 home_marker="done",
             )
 
@@ -455,11 +423,8 @@ def main() -> int:
                 slug="my-task",
                 worktree_path=wt_path,
                 branch="impl/my-task",
-                wiki_active_dir=None,
                 home_marker="done",
             )
-
-            rmtree_calls: list = []
 
             with patch("mill_cleanup._resolve_inplace_mode", return_value=("worktree", "")):
                 with patch("mill_cleanup._worktree.remove"):
@@ -468,73 +433,18 @@ def main() -> int:
                             with patch("mill_cleanup._wiki.write_commit_push"):
                                 with patch("mill_cleanup._sidebar.regenerate"):
                                     with patch("mill_cleanup._paths.resolve_container_path", return_value=tmp):
-                                        with patch("mill_cleanup.shutil.rmtree", side_effect=rmtree_calls.append):
-                                            wiki_path = tmp / "wiki"
-                                            wiki_path.mkdir(exist_ok=True)
-                                            (wiki_path / "Home.md").write_text("", encoding="utf-8")
-                                            plan = CleanupPlan(
-                                                to_remove_done=[record],
-                                                to_remove_abandoned=[],
-                                                to_reset_home=[],
-                                                to_report=[],
-                                            )
-                                            apply_plan(plan, wiki_path, hub_root, {})
+                                        wiki_path = tmp / "wiki"
+                                        wiki_path.mkdir(exist_ok=True)
+                                        (wiki_path / "Home.md").write_text("", encoding="utf-8")
+                                        plan = CleanupPlan(
+                                            to_remove_done=[record],
+                                            to_remove_abandoned=[],
+                                            to_reset_home=[],
+                                            to_report=[],
+                                        )
+                                        apply_plan(plan, wiki_path, hub_root, {})
 
-            # No rmtree should have been called (fresh layout, no wiki_active_dir).
-            assert rmtree_calls == [], (
-                f"Expected no rmtree call for fresh layout, got: {rmtree_calls}"
-            )
-            # Worktree dir itself must not be rmtree'd — it's handled by _worktree.remove.
-            assert not any(str(wt_path) in str(c) for c in rmtree_calls), (
-                f"worktree_path must never be rmtree'd, got: {rmtree_calls}"
-            )
-            print("PASS apply_plan — fresh layout: no rmtree, worktree not directly deleted")
-
-        # --- apply_plan: legacy layout — wiki/active/<slug>/ present, rmtree on it, NOT worktree ---
-        with tempfile.TemporaryDirectory() as tmp:
-            tmp = Path(tmp)
-            hub_root = tmp / "hub"
-            hub_root.mkdir()
-            wt_path = tmp / "wts" / "my-task"
-            wt_path.mkdir(parents=True)
-
-            wiki_path = tmp / "wiki"
-            legacy_active = wiki_path / "active" / "my-task"
-            legacy_active.mkdir(parents=True)
-
-            record = SlugRecord(
-                slug="my-task",
-                worktree_path=wt_path,
-                branch="impl/my-task",
-                wiki_active_dir=legacy_active,
-                home_marker="done",
-            )
-
-            rmtree_calls = []
-
-            with patch("mill_cleanup._resolve_inplace_mode", return_value=("worktree", "")):
-                with patch("mill_cleanup._worktree.remove"):
-                    with patch("mill_cleanup._subprocess_util.run", return_value=MagicMock(returncode=0, stdout="", stderr="")):
-                        with patch("mill_cleanup._junction.remove"):
-                            with patch("mill_cleanup._wiki.write_commit_push"):
-                                with patch("mill_cleanup._sidebar.regenerate"):
-                                    with patch("mill_cleanup._paths.resolve_container_path", return_value=tmp):
-                                        with patch("mill_cleanup.shutil.rmtree", side_effect=rmtree_calls.append):
-                                            (wiki_path / "Home.md").write_text("", encoding="utf-8")
-                                            plan = CleanupPlan(
-                                                to_remove_done=[record],
-                                                to_remove_abandoned=[],
-                                                to_reset_home=[],
-                                                to_report=[],
-                                            )
-                                            apply_plan(plan, wiki_path, hub_root, {})
-
-            assert len(rmtree_calls) == 1, f"Expected exactly 1 rmtree call, got: {rmtree_calls}"
-            assert rmtree_calls[0] == legacy_active, (
-                f"Expected rmtree on legacy_active={legacy_active}, got {rmtree_calls[0]}"
-            )
-            assert rmtree_calls[0] != wt_path, "worktree_path must NEVER be rmtree'd"
-            print("PASS apply_plan — legacy layout: rmtree on wiki_active_dir, NOT on worktree_path")
+            print("PASS apply_plan — fresh layout: apply succeeds, worktree handled by _worktree.remove")
 
         # --- stale-worktree-dir: worktree dir exists, user picks inplace -> in-place flow taken ---
         with tempfile.TemporaryDirectory() as tmp:
@@ -558,7 +468,6 @@ def main() -> int:
                 slug="my-task",
                 worktree_path=hub_root,
                 branch="impl/my-task",
-                wiki_active_dir=None,
                 home_marker="active",
             )
 
@@ -719,7 +628,6 @@ def main() -> int:
                 slug="my-task",
                 worktree_path=hub_root_ip,
                 branch="impl/my-task",
-                wiki_active_dir=None,
                 home_marker="done",
             )
 
@@ -770,7 +678,6 @@ def main() -> int:
                 slug="pr-slug",
                 worktree_path=wt_path_pr,
                 branch="impl/pr-slug",
-                wiki_active_dir=None,
                 home_marker="pr-pending",
             )
 
@@ -847,7 +754,6 @@ def main() -> int:
                 slug="pr-slug",
                 worktree_path=wt_path_po,
                 branch="impl/pr-slug",
-                wiki_active_dir=None,
                 home_marker="pr-pending",
             )
 
@@ -917,7 +823,6 @@ def main() -> int:
                 slug="pr-slug",
                 worktree_path=wt_path_pc,
                 branch="impl/pr-slug",
-                wiki_active_dir=None,
                 home_marker="pr-pending",
             )
 
@@ -991,7 +896,6 @@ def main() -> int:
                 slug="pr-slug",
                 worktree_path=wt_path_pf,
                 branch="impl/pr-slug",
-                wiki_active_dir=None,
                 home_marker="pr-pending",
             )
 
