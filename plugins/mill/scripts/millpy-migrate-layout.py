@@ -288,7 +288,7 @@ def _run_step_rename_junctions(
         )
         if result.returncode != 0 or result.stdout.strip():
             _log(
-                f"  [rename-junctions] skipping task/ move for {slug}: working tree dirty",
+                f"  [rename-junctions] skipping _mill/ move for {slug}: working tree dirty",
                 log_fh, dry_run,
             )
         else:
