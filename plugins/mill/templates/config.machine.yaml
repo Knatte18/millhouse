@@ -1,38 +1,70 @@
-# ~/.millhouse/config.machine.yaml — machine-level overrides for mill.
+# ~/.millhouse/config.machine.yaml — per-machine overrides for mill.
 #
 # File location: $HOME/.millhouse/config.machine.yaml
-# Lives outside every git repo — automatically untracked, no gitignore needed.
+# Lives outside every git repo — untracked, no gitignore needed.
+# Applies to ALL worktrees on this machine.
 #
-# Scope: one file per machine. All worktrees on this machine read it.
-#
-# Merge order (lowest -> highest precedence):
-#   1. wiki/config.yaml                  - shared, git-tracked in the wiki
-#   2. THIS FILE                         - per-machine, untracked
+# Merge layers (lowest -> highest precedence):
+#   1. wiki/config.yaml                         - shared, git-tracked in the wiki
+#   2. THIS FILE                                - per-machine
 #   3. <worktree>/.millhouse/config.local.yaml  - per-worktree, highest precedence
 #
-# Typical uses:
-#   - Machine-specific reviewer mode (e.g. cluster-gemini on a GPU-rich box,
-#     sonnet elsewhere).
-#   - Per-machine notification settings.
-#
-# mill-setup behaviour: probes for this file and reports status during Phase 4.95.
-# mill-setup NEVER creates this file. Copy it by hand:
+# mill-setup probes for this file but NEVER creates it.
+# Copy the template by hand:
 #   cp plugins/mill/templates/config.machine.yaml ~/.millhouse/config.machine.yaml
 #
 # Secrets DO NOT belong here. Put API keys in .env at the repo root.
 #
-# Examples (uncomment + edit to use):
-#
+# Full schema below (mirrors wiki/config.yaml defaults). Uncomment to override.
+
+# ---------------------------------------------------------------------------
+# LLM-provider timeouts (seconds)
+# ---------------------------------------------------------------------------
+# llm:
+#   bulk_timeout: 900
+#   holistic_timeout: 1800
+#   tool_use_timeout: 900
+#   implementer_timeout: 1800
+
+# ---------------------------------------------------------------------------
+# mill-go pipeline
+# ---------------------------------------------------------------------------
+# pipeline:
+#   auto_merge: true
+#   auto_report: true
+
+# ---------------------------------------------------------------------------
+# Reviewer roles — names reference wiki/reviewers.yaml entries.
+# rounds: 0 OR reviewer: null → skip that scope.
+# ---------------------------------------------------------------------------
 # roles:
 #   discussion-review:
 #     holistic:
-#       reviewer: cluster-gemini
+#       rounds: 2
+#       reviewer: sonnetmax_tool
+#
 #   plan-review:
+#     batch:
+#       rounds: 0
+#       reviewer: null
 #     holistic:
-#       reviewer: cluster-gemini
+#       rounds: 3
+#       reviewer: sonnetmax
+#
 #   code-review:
 #     batch:
-#       reviewer: cluster-gemini
+#       rounds: 0
+#       reviewer: null
+#     holistic:
+#       rounds: 3
+#       reviewer: sonnetmedium
+#     diff_scope_threshold: 0.25
 #
-# notifications:
-#   toast: true
+#   implementer:
+#     self_fix_rounds: 2
+
+# ---------------------------------------------------------------------------
+# Notifications
+# ---------------------------------------------------------------------------
+# notify:
+#   backend: stdout   # stdout | toast

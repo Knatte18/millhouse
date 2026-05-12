@@ -52,11 +52,11 @@ def test_load_layer_present_returns_dict() -> None:
         config_path = Path(tmp) / ".millhouse" / "config.machine.yaml"
         config_path.parent.mkdir(parents=True, exist_ok=True)
         config_path.write_text(
-            "roles:\n  discussion-review:\n    holistic:\n      reviewer: cluster-gemini\n",
+            "roles:\n  discussion-review:\n    holistic:\n      reviewer: g25flash\n",
             encoding="utf-8",
         )
         result = _machine.load_layer(home_dir=Path(tmp))
-        assert result["roles"]["discussion-review"]["holistic"]["reviewer"] == "cluster-gemini", (
+        assert result["roles"]["discussion-review"]["holistic"]["reviewer"] == "g25flash", (
             f"Unexpected result: {result!r}"
         )
     print("PASS test_load_layer_present_returns_dict")

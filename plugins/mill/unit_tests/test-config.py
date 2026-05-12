@@ -171,7 +171,7 @@ def test_load_config_machine_layer_present_merged() -> None:
         _write_yaml(wiki / "config.yaml", "spawn:\n  branch_prefix: feat\n")
         _write_yaml(
             Path(tmp_home) / ".millhouse" / "config.machine.yaml",
-            "roles:\n  discussion-review:\n    holistic:\n      reviewer: cluster-gemini\n",
+            "roles:\n  discussion-review:\n    holistic:\n      reviewer: g25flash\n",
         )
 
         with patch.object(Path, "home", return_value=Path(tmp_home)):
@@ -180,7 +180,7 @@ def test_load_config_machine_layer_present_merged() -> None:
         assert cfg["spawn"]["branch_prefix"] == "feat", (
             f"Wiki key should be present; got {cfg['spawn'].get('branch_prefix')!r}"
         )
-        assert cfg["roles"]["discussion-review"]["holistic"]["reviewer"] == "cluster-gemini", (
+        assert cfg["roles"]["discussion-review"]["holistic"]["reviewer"] == "g25flash", (
             f"Machine key should be merged; got {cfg.get('roles')!r}"
         )
     print("PASS load_config — machine layer present and merged alongside wiki keys")
