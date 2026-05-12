@@ -306,6 +306,40 @@ Log: `Set PYTHONPATH (User) = <scripts>. Note: takes effect in NEW shell session
 
 **Note:** After running `update-plugins.ps1` to install a new plugin version, re-run `/mill-setup` to refresh PYTHONPATH and the PS1 wrappers to the new version. If upgrading from a pre-PS1 hub (one where `.millhouse/` still contains `.py` wrappers), re-run `/mill-setup` — Phase 4.7 is idempotent and will replace the `.py` wrappers with `.ps1` wrappers in a single pass, and Phase 8 will verify their absence.
 
+### Phase 4.8 — Venv activation in $PROFILE
+
+Writes a marker-delimited venv activation block to PowerShell `$PROFILE` so that
+`uv run --active` works in every new shell session without manual activation.
+Idempotent: re-run replaces the existing block (if any). Creates `$PROFILE` if
+it does not exist.
+
+```powershell
+$profilePath = $PROFILE
+$latest = (Get-ChildItem "$HOME\.claude\plugins\cache\millhouse\mill" -Directory | Sort-Object Name -Descending | Select-Object -First 1).FullName
+$activateLine = ". `"$latest\.venv\Scripts\Activate.ps1`""
+$startMarker = "# mill-venv-start — managed by mill-setup, do not edit manually"
+$endMarker = "# mill-venv-end"
+$block = "$startMarker`n$activateLine`n$endMarker"
+
+if (-not (Test-Path $profilePath)) {
+    New-Item -ItemType File -Path $profilePath -Force | Out-Null
+    Write-Host "[mill-setup] Created $profilePath"
+}
+$content = Get-Content $profilePath -Raw -ErrorAction SilentlyContinue
+if ($content -match [regex]::Escape($startMarker)) {
+    $content = $content -replace "(?s)$([regex]::Escape($startMarker)).*?$([regex]::Escape($endMarker))", $block
+    Set-Content $profilePath $content -NoNewline
+    Write-Host "[mill-setup] Updated mill-venv block in $profilePath"
+} else {
+    Add-Content $profilePath "`n$block"
+    Write-Host "[mill-setup] Added mill-venv block to $profilePath"
+}
+```
+
+Log `Updated mill-venv block in <path>` or `Added mill-venv block to <path>` per the script output.
+
+**Note:** This phase hardcodes the path of the currently-latest cache entry into `$PROFILE`. After running `update-plugins.ps1` to install a new plugin version, re-run `/mill-setup` — Phase 4.8 is idempotent and will update the activation path to the new version.
+
 ### Phase 4.9 — Seed `hub_relative_path` in `config.local.yaml`
 
 The `hub_relative_path` key tells mill-terminal and mill-vscode where the effective hub directory is within the worktree. Write it before seeding `config.local.yaml` (Phase 5) so it appears in the seeded file if the file doesn't exist yet, and update it if the file already exists.
@@ -450,6 +484,7 @@ Check every invariant; halt with a specific error if any fails:
 - Machine-level config at `~/.millhouse/config.machine.yaml` (if present) parses as valid YAML — verify via `_machine.probe()` returning `MISSING` or `PRESENT`, not `MALFORMED`.
 - Every script in `_shortcuts.SHORTCUT_SCRIPTS` has a wrapper at `.millhouse/<script>.ps1` (and no legacy `.millhouse/<script>.py` exists)
 - `PYTHONPATH` user env var contains `<CLAUDE_PLUGIN_ROOT>/scripts` (verify via `[System.Environment]::GetEnvironmentVariable('PYTHONPATH', 'User')`)
+- `$PROFILE` contains the `# mill-venv-start` / `# mill-venv-end` block (verify via `Select-String -Path $PROFILE -Pattern "mill-venv-start" -Quiet`)
 - `.millhouse/config.local.yaml` exists
 - `<WIKI_PATH>/Home.md` exists and starts with `# Tasks`
 - `<WIKI_PATH>/_Sidebar.md` exists and begins with `### Navigation`
@@ -472,6 +507,7 @@ mill-setup complete.
   VS Code:           .vscode/settings.json (titleBar = #2d7d46 green)
   Shortcut wrappers: N PS1 scripts under .millhouse/
   PYTHONPATH (User): <scripts>
+  Profile activation: $PROFILE — mill-venv-start block present
 
 Junctions (from wiki config.yaml):
   Hub-scope (created now):
