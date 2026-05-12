@@ -46,8 +46,6 @@ Public API:
     write_initial_status(worktree_path, slug, title, ts, parent_branch, branch) -> Path
         Render + write ``status.md`` at worktree root; stage + commit on task branch;
         return the absolute path of the written file.
-    write_wiki_active_task_md(wiki_path, slug, title, ts) -> None
-        Create `wiki/active/<slug>/task.md`; commit+push in wiki.
     recreate_active_junction(slug, hub_root, container_path) -> None
         Delete-then-create the ``.active`` junction so it points at the correct
         active-task directory. Used by ``mill-claim``; ``mill-spawn`` handles

@@ -576,7 +576,7 @@ def apply_plan(
         _wiki.write_commit_push(
             wiki_path,
             wiki_relative_paths,
-            f"chore: cleanup — {len(plan.to_remove_done)} done, "
+            f"chore: cleanup -- {len(plan.to_remove_done)} done, "
             f"{len(plan.to_remove_abandoned)} abandoned, {len(plan.to_reap_pr)} pr-reaped",
             slug="mill-cleanup",
         )

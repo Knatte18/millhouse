@@ -251,16 +251,8 @@ def _run_step_rename_junctions(
         else:
             _log(f"  [dry-run] would remove portal: {old_portal}", log_fh, dry_run)
 
-        # Create wiki/active/<slug>/task.md and commit+push.
-        if not dry_run:
-            ts = _timestamp.now_utc_compact()
-            _spawn_core.write_wiki_active_task_md(wiki_path, slug, title, ts)
-            _log(f"  [rename-junctions] created wiki/active/{slug}/task.md", log_fh, dry_run)
-        else:
-            _log(f"  [dry-run] would create wiki/active/{slug}/task.md", log_fh, dry_run)
-
-        # Create new portals entry pointing at wiki/active/<slug>.
-        new_portal_target = wiki_path / "active" / slug
+        # Create new portals entry pointing at wts/<slug>/_mill/.
+        new_portal_target = wt_path / "_mill"
         new_portal_link = container / "portals" / slug
         if not dry_run:
             _junction.create(target=new_portal_target, link_path=new_portal_link)

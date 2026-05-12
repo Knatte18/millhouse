@@ -121,7 +121,7 @@ def main(argv=None) -> int:
     )
 
     result = _subprocess_util.run(
-        ["git", "add", str(status_path.relative_to(project_root)), review_file_arg],
+        ["git", "add", status_path.relative_to(project_root).as_posix(), review_file_arg],
         cwd=project_root,
     )
     if result.returncode != 0:

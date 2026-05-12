@@ -65,7 +65,7 @@ Public API:
         its branch-derived slug differs.
 
     resolve_active_hub(container_path, slug, *, cfg, git_root)
-        Return the hub directory (where ``.millhouse/`` and ``task/`` live)
+        Return the hub directory (where ``.millhouse/`` and ``_mill/`` live)
         for the active task with the given slug. Calls
         ``resolve_active_worktree`` then resolves ``hub_relative_path`` with
         a two-tier lookup: (1) default from ``cfg.get("hub_relative_path",
@@ -346,7 +346,7 @@ def resolve_active_hub(
     cfg: dict,
     git_root: Path,
 ) -> Path:
-    """Return the hub directory (where ``.millhouse/`` and ``task/`` live) for the slug.
+    """Return the hub directory (where ``.millhouse/`` and ``_mill/`` live) for the slug.
 
     Calls ``resolve_active_worktree`` then resolves ``hub_relative_path``.
     Resolution order:

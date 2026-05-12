@@ -1,6 +1,6 @@
 """mill-abandon — mark the current task abandoned.
 
-Run from inside the task's worktree.  Updates `<active_hub>/task/status.md`
+Run from inside the task's worktree.  Updates `<active_hub>/_mill/status.md`
 on the task branch, commits, and pushes.  Then run mill-cleanup from the hub
 to remove the worktree and active dir.
 """
@@ -46,9 +46,9 @@ def main() -> int:
         sys.exit(f"Error: mill-abandon must run from a worktree. ({exc})")
 
     # Step 3: resolve paths via the centralized helpers (post-task-32: status.md
-    # lives at <active_hub>/task/status.md on the task branch, not in the wiki).
+    # lives at <active_hub>/_mill/status.md on the task branch, not in the wiki).
     # We use active_hub for both the file path and the git -C target so the
-    # relative argument "task/status.md" stays correct under sub-dir hub configs.
+    # relative argument "_mill/status.md" stays correct under sub-dir hub configs.
     container_path = _paths.resolve_container_path(git_root)
     active_hub = _paths.resolve_active_hub(
         container_path, slug, cfg=cfg, git_root=git_root,

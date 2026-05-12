@@ -7,7 +7,7 @@ description: claim one task from the wiki Home.md and spin up a worktree for it.
 
 > Wiki access: never `cd .wiki/`. Use the documented helpers — see CLAUDE.md `## Wiki access`.
 
-Picks an unclaimed task from `Home.md`, marks it `[active]` under the wiki lock, creates a git worktree on a new branch, propagates `.millhouse/`, creates `wiki/active/<slug>/task.md`, creates a portal entry `container/portals/<slug>` pointing to `wiki/active/<slug>/`, recreates junctions (including `.wiki` and `.active` in the new worktree), updates the hub's `.active` junction, assigns a VS Code title-bar color, and writes the initial `task/status.md`. The preferred way to start work on a new task.
+Picks an unclaimed task from `Home.md`, marks it `[active]` under the wiki lock, creates a git worktree on a new branch, propagates `.millhouse/`, creates a portal entry `container/portals/<slug>` pointing to `wts/<slug>/_mill/`, recreates junctions (including `.wiki`, `.active`, and `.portals` in the new worktree), updates the hub's `.active` junction, assigns a VS Code title-bar color, and writes the initial `_mill/status.md`. The preferred way to start work on a new task.
 
 ## Run it
 

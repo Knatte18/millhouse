@@ -5,7 +5,7 @@ description: Autonomously fetch open GitHub bug issues, synthesise discussion.md
 
 # mill-autofix
 
-You are the autonomous bug-fix orchestrator. Your job: drain the GitHub bug queue. For each open issue labelled `bug`, claim it via mill-claim (in-place on the hub), write `task/discussion.md`, run mill-plan → mill-go → mill-merge in sequence, close the issue on success, then move to the next bug. You run entirely in a single CC session in the hub worktree — no sub-LLM spawning.
+You are the autonomous bug-fix orchestrator. Your job: drain the GitHub bug queue. For each open issue labelled `bug`, claim it via mill-claim (in-place on the hub), write `_mill/discussion.md`, run mill-plan → mill-go → mill-merge in sequence, close the issue on success, then move to the next bug. You run entirely in a single CC session in the hub worktree — no sub-LLM spawning.
 
 **The cleanup phase is non-negotiable.** `pipeline.autonomous_mode: true` is a temporary mutation of `.millhouse/config.local.yaml`. It must be restored on every exit path: success, block, killswitch, or unhandled error.
 
@@ -228,10 +228,10 @@ git status --porcelain
 If output is non-empty (uncommitted changes in the working tree), run:
 
 ```bash
-git clean -fd task/
+git clean -fd _mill/
 ```
 
-Re-run `git status --porcelain`. If still non-empty: record in `errored_list` as `{slug, issue_number, title, error: "dirty tree after git clean -fd task/"}` and continue to next issue.
+Re-run `git status --porcelain`. If still non-empty: record in `errored_list` as `{slug, issue_number, title, error: "dirty tree after git clean -fd _mill/"}` and continue to next issue.
 
 ---
 
@@ -259,7 +259,7 @@ import _constraints; c = _constraints.read_if_exists(); print(c or '')
 "
 ```
 
-Write `task/discussion.md` with these required sections:
+Write `_mill/discussion.md` with these required sections:
 
 ```
 ## Problem
@@ -293,7 +293,7 @@ Make each section self-contained. mill-plan consumes `discussion.md` cold with z
 ### Step 6: Commit and push discussion.md
 
 ```bash
-git add task/discussion.md
+git add _mill/discussion.md
 git commit -m "mill-autofix: write discussion.md for <slug>"
 git push
 ```
@@ -308,13 +308,13 @@ On any failure: record in `stuck_list` as `{slug, issue_number, title, phase: "d
 /mill-plan
 ```
 
-After it returns, read `task/status.md`'s `phase:` and `blocked_reason:`:
+After it returns, read `_mill/status.md`'s `phase:` and `blocked_reason:`:
 
 ```bash
 PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" uv run --project "${CLAUDE_PLUGIN_ROOT}" python -c "
 import _status
 from pathlib import Path
-s = _status.read_status(Path('task/status.md'))
+s = _status.read_status(Path('_mill/status.md'))
 print(s['phase'])
 print(s.get('blocked_reason') or '')
 "
@@ -334,7 +334,7 @@ print(s.get('blocked_reason') or '')
 /mill-go
 ```
 
-After it returns, read `task/status.md`'s `phase:` and `blocked_reason:` (same helper as step 7).
+After it returns, read `_mill/status.md`'s `phase:` and `blocked_reason:` (same helper as step 7).
 
 - `done` → success. Proceed to step 9.
 - `blocked` → record in `stuck_list` as `{slug, issue_number, title, phase: "mill-go", blocked_reason: <value>}`. Run **Stuck cleanup helper**. Continue to next issue.
@@ -390,7 +390,7 @@ Run this whenever a bug gets stuck at any phase (step 6, 7, 8, or 9) to restore 
 
 ```bash
 git reset --hard HEAD
-git clean -fd task/
+git clean -fd _mill/
 git checkout <parent_branch>
 ```
 
