@@ -120,10 +120,13 @@ guarantees the v2 rewrite is built around.
     hold: emit
     `{"status":"success","commit_sha":"<HEAD>","session_id":"<unknown>","inferred":true}`
     instead. Otherwise emit the existing stuck-logic sentinel.
-    The `snapshot_path` is the same path mill-go's batch-start commit wrote
-    via `capture_snapshot` — `millpy-implement.py` already resolves it for
-    the initial-dispatch path; pass it through to `_forward_output` as a new
-    keyword argument (`snapshot_path: Path | None = None`). When
+    The `snapshot_path` is derived inline by `millpy-implement.py` at
+    line 130 as
+    `project_root / "task" / f".cleanliness-snapshot-{batch_name}.txt"`
+    (the same path mill-go's batch-start commit wrote via
+    `capture_snapshot`). It is NOT stored in batch yaml. Pass it through to
+    `_forward_output` as a new keyword argument
+    (`snapshot_path: Path | None = None`). When
     `snapshot_path` is None or missing on disk, the fallback degrades to the
     existing stuck-logic sentinel (no inference attempted) — matches the
     existing `compute_new_dirt` "treat pre-batch as empty + stderr warning"
@@ -247,6 +250,11 @@ guarantees the v2 rewrite is built around.
   None`). If either argument is None or the snapshot file is missing, the
   fallback degrades to the existing stuck-logic sentinel — no false
   positives on a fresh batch with no prior commit or no snapshot.
+  `start_sha` is read via `_status.read_batches(status_path)`;
+  `snapshot_path` is NOT stored in batch data — it is derived inline as
+  `project_root / "task" / f".cleanliness-snapshot-{batch_name}.txt"`
+  (already in scope in `millpy-implement.py` at line 130). `_forward_output`
+  receives both as keyword arguments from the caller.
 - **Rationale:** Template alone leaves already-stuck runs in their broken
   state and only helps future sessions. Fallback alone weakens the brief
   contract — a brief that doesn't insist on JSON tells the implementer the
