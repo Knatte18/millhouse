@@ -36,13 +36,15 @@ You are an integration engineer. Your job is to merge a completed task branch ba
 3. Slug already resolved in Step 1; reuse `active_data['slug']` — no second read needed.
 4. *(Config already loaded in Step 1.)*
 5. Resolve parent branch via `_parent_branch.resolve(status_path, interactive=<True unless called non-interactively>)`. `status_path` is `git_root / "task" / "status.md"` — state lives in `task/` on the task branch, not in the wiki.
-6. **Phase gate — also the re-entry point for PR-path recovery.** Read `git_root/task/status.md`'s `phase:`.
+6. **Phase gate — also the re-entry point for PR-path recovery.**
+
+   **Try `task/status.md` first.** If `status_path.exists()`, read `phase:` from it and apply the table below. If `task/status.md` is absent (the PR-path cleanup commit already removed `task/`), read `Home.md` instead: call `_wiki.sync_pull(wiki_path, slug=slug)`, read `home_text = (wiki_path / "Home.md").read_text(encoding="utf-8")`, parse with `tasks = _tasks_md.parse(home_text)` (`signature: _tasks_md.parse(text: str) -> list[Task]` — Task has `.slug: str` and `.phase: str | None` attributes), then `task = next((t for t in tasks if t.slug == slug), None)`. Guard: `if task is None: halt("task/status.md absent and slug '<slug>' not found in Home.md; cannot determine merge state.")`. Otherwise: if `task.phase == "pr-pending"` → treat as `pr-pending` below. Otherwise → halt with "task/status.md absent and Home.md does not show pr-pending for '<slug>'; cannot determine merge state."
 
    | phase | action |
    | --- | --- |
    | `done` | fresh merge — continue to Step 1 |
    | `pr-pending` | see *PR-path re-entry* below |
-   | `complete` / missing / other | halt with "status.md phase is <value>; mill-merge expects `done`. If the task is not finished, run mill-go first." |
+   | `complete` / missing / other | halt with "status.md phase is `<value>`; mill-merge expects `done`. If the task is not finished, run mill-go first." |
 
 ## Steps
 
@@ -85,29 +87,11 @@ git commit -m "chore: pre-merge cleanup"
 
 **Idempotency:** if `task/` is already absent (re-run after partial failure), `git rm -r` will warn "did not match any files" — treat as a no-op. If the resulting working tree has nothing to commit, skip the commit.
 
-### 5. PR path or direct squash?
+### 5. Direct squash
 
-Both PR-creation paths flip Home.md to `[pr-pending]` before halting at Step 8 so the coordination state is visible.
+PR dispatch lives in mill-finalize. This step is direct path only.
 
-- **PR path** — activate when `git.require-pr-to-base: true` AND `parent-branch == base-branch`:
-
-  ```bash
-  gh pr create --base "<base-branch>" --head "$CHILD_BRANCH" \
-      --title "<task: field from status.md>" \
-      --body "<one-line summary from status.md>"
-  ```
-
-  ```python
-  with _wiki.wiki_lock(<WIKI_PATH>, slug):
-      home_text = (wiki_path / "Home.md").read_text(encoding="utf-8")
-      new_text = _tasks_md.set_phase(home_text, slug, "pr-pending")
-      (wiki_path / "Home.md").write_text(new_text, encoding="utf-8")
-      _wiki.write_commit_push(<WIKI_PATH>, ["Home.md"], f"task: pr-pending {slug}", slug=slug)
-  ```
-
-  Update `task/status.md` via `_status.append_phase(status_path, "pr-pending", _timestamp.now_utc_iso())` and push the task branch so the PR has the cleanup commit. Skip to Step 8 (Release lock) — no further cleanup. Re-run `/mill-merge` after the PR lands to continue from the PR-path re-entry.
-
-- **Direct path** (everything else):
+- **Direct path:**
 
   ```bash
   git -C <parent-path> merge --squash "$CHILD_BRANCH"
