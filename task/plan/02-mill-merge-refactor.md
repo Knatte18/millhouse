@@ -92,7 +92,7 @@ Refactor `plugins/mill/skills/mill-merge/SKILL.md` to strip PR-creation logic (m
   ```
   6. **Phase gate — also the re-entry point for PR-path recovery.**
 
-     **Try `task/status.md` first.** If `status_path.exists()`, read `phase:` from it and apply the table below. If `task/status.md` is absent (the PR-path cleanup commit already removed `task/`), read `Home.md` instead: call `_wiki.sync_pull(wiki_path, slug=slug)`, read `(wiki_path / "Home.md").read_text(encoding="utf-8")`, parse with `tasks = _tasks_md.parse(home_text)`, find `task = next((t for t in tasks if t.slug == slug), None)`. If `task.phase == "pr-pending"` → treat as `pr-pending` below. Otherwise → halt with "task/status.md absent and Home.md does not show pr-pending for `<slug>`; cannot determine merge state."
+     **Try `task/status.md` first.** If `status_path.exists()`, read `phase:` from it and apply the table below. If `task/status.md` is absent (the PR-path cleanup commit already removed `task/`), read `Home.md` instead: call `_wiki.sync_pull(wiki_path, slug=slug)`, read `(wiki_path / "Home.md").read_text(encoding="utf-8")`, parse with `tasks = _tasks_md.parse(home_text)`, find `task = next((t for t in tasks if t.slug == slug), None)`. Guard: `if task is None: halt("task/status.md absent and slug `<slug>` not found in Home.md; cannot determine merge state.")`. Otherwise: if `task.phase == "pr-pending"` → treat as `pr-pending` below. Otherwise → halt with "task/status.md absent and Home.md does not show pr-pending for `<slug>`; cannot determine merge state."
 
      | phase | action |
      | --- | --- |

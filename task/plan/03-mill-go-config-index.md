@@ -28,9 +28,13 @@ Cards 4 and 5 can be committed separately; card 6's commit should follow after t
 - **Deletes:** none
 - **Requirements:**
 
-  Edit `plugins/mill/skills/mill-go/SKILL.md`. Two changes, both in the Handoff section:
+  Edit `plugins/mill/skills/mill-go/SKILL.md`. Four changes:
 
-  **Change A — Handoff Step 5.**
+  **Change A — Frontmatter `description:` field.**
+
+  Find the current frontmatter `description:` value (the line in the `---` block at the top of the file). It currently ends with "Hand off to mill-merge." Replace only that suffix phrase: change "Hand off to mill-merge." → "Hand off to mill-finalize."
+
+  **Change B — Handoff Step 5.**
 
   Find the current Step 5 text (exact match):
   ```
@@ -42,7 +46,7 @@ Cards 4 and 5 can be committed separately; card 6's commit should follow after t
   5. If `pipeline.auto_merge: true` → invoke `/mill-finalize`. Otherwise tell the user: "Task complete. Run `/mill-finalize` to finalize the task (creates a PR or squashes directly, depending on config)." mill-finalize may halt on `pr-pending` in PR mode — that is expected; treat it as completion of step 5 and continue to step 6.
   ```
 
-  **Change B — Handoff Step 6** (remove the mill-merge-specific "mill-merge itself does not self-report" clause).
+  **Change C — Handoff Step 6** (remove the mill-merge-specific "mill-merge itself does not self-report" clause).
 
   Find in the current Step 6 text (the sentence to remove):
   ```
@@ -51,7 +55,7 @@ Cards 4 and 5 can be committed separately; card 6's commit should follow after t
 
   Delete that sentence from Step 6. The sentence is true of mill-finalize too, but it belongs in a mill-go principle statement, not as an implementation detail in the step text. (The rest of Step 6 is unchanged.)
 
-  Also find and remove or update the Handoff config-key reference in Step 19 (the config keys read at the top of the Handoff section):
+  **Change D — Entry Step 3 config-key bullet** (the config keys read at the top of the Handoff section are actually listed under a "Config keys read" or similar bullet near the Handoff header — locate by text, not by step number):
   ```
   - `pipeline.auto_merge` — whether to invoke mill-merge after success.
   ```
@@ -59,6 +63,14 @@ Cards 4 and 5 can be committed separately; card 6's commit should follow after t
   ```
   - `pipeline.auto_merge` — whether to invoke mill-finalize after success.
   ```
+
+  **Change E — Entry Phase Gate `done` row.**
+
+  In mill-go's Entry section, there is a phase-gate table. Find the `done` row that currently tells the user to run `/mill-merge`:
+  ```
+  | `done` | … suggest /mill-merge … |
+  ```
+  (The exact text may vary; locate the row in the phase-gate table whose action mentions `/mill-merge` in the context of "task complete" or "suggest running mill-merge".) Replace every occurrence of `/mill-merge` in that row's action cell with `/mill-finalize`.
 
 - **Commit:** `refactor(mill-go): handoff delegates to mill-finalize instead of mill-merge`
 
