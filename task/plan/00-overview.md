@@ -3,7 +3,7 @@
 ```yaml
 task: Replace uv-run-project with direct venv Python in SKILL.md invocations
 slug: skills-direct-venv-invocation
-approved: false
+approved: true
 started: 20260512-141739
 parent: main
 root: ""
@@ -62,6 +62,16 @@ batches:
 - **Decision:** The direct Python binary path is hardcoded as `.venv/Scripts/python.exe` (Windows convention). No cross-platform OS detection or fallback to `.venv/bin/python`.
 - **Rationale:** All mill operators run Windows 11. Adding OS detection adds boilerplate to every line for a hypothetical Linux/Mac operator.
 - **Applies to:** all batches
+
+## Global post-edit verification
+
+After every batch is implemented and verified locally, run this global grep across the entire `plugins/mill/skills/` tree to catch any SKILL.md file inadvertently omitted from the plan:
+
+- `grep -rE 'uv run --project "\$\{?CLAUDE_PLUGIN_ROOT\}?"' plugins/mill/skills/` — expected zero matches.
+- `grep -rE 'uv run --project ["]?\$\{?PLUGIN_ROOT\}?["]?' plugins/mill/skills/mill-go/SKILL.md` — expected zero matches (mill-go specific).
+- `grep -rc 'uv run --project plugins/mill' plugins/mill/skills/` — expected to equal the pre-edit total **plus one** (Card 5's prose addition); broken down per file: counts for every file except `mill-setup/SKILL.md` must equal their pre-edit counts; `mill-setup/SKILL.md` must equal pre-edit-count + 1.
+
+A non-zero match on the first or second grep indicates either a missed SKILL.md file or an incomplete substitution — investigate before declaring the plan done.
 
 ## All Files Touched
 

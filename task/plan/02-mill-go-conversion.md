@@ -112,6 +112,16 @@ This batch touches only `plugins/mill/skills/mill-go/SKILL.md`. It does not chan
 
   **Standalone (non-bg) body calls** — e.g. `uv run --project "$PLUGIN_ROOT" "$PLUGIN_ROOT/scripts/millpy-builder-lock.py" acquire <slug>` — are Shape A: they are top-level shell lines, not after a `--`, so they get the PYTHONPATH prefix.
 
+  **Multi-line continuation forms.** Several mill-go Shape A invocations are written across multiple shell-continuation lines, e.g.:
+  ```bash
+  uv run --project "${PLUGIN_ROOT}" \
+      "${PLUGIN_ROOT}/scripts/millpy-bg.py" \
+      --slug review-code-r1 -- \
+      uv run --project "${PLUGIN_ROOT}" \
+          "${PLUGIN_ROOT}/scripts/millpy-review-code.py" --batch <batch_name>
+  ```
+  In this form the `uv run --project "${PLUGIN_ROOT}"` and the trailing `"${PLUGIN_ROOT}/scripts/<script>.py"` are on separate lines joined by `\`. Collapse such pairs onto a single converted line, preserving any further `\`-joined argument lines: the Shape A outer line above becomes `PYTHONPATH="${PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${PLUGIN_ROOT}/scripts/millpy-bg.py" \` (one line), and the inner Shape B becomes `"$MILL_PYTHON" "${PLUGIN_ROOT}/scripts/millpy-review-code.py" --batch <batch_name>` (one line, no PYTHONPATH prefix). Continuation backslashes on argument-only lines (e.g. `--batch <batch_name> \`) are preserved as-is.
+
   **DO NOT TOUCH:**
   - The Step 0 block (modified by Card 2; leave its post-Card-2 form intact).
   - Any line that does not match the `uv run --project "$PLUGIN_ROOT" ...` pattern.

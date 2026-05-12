@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-fix-r1
+phase: plan-fix-r2
 blocked_reason: 'auto: discussion review gaps unresolved after 2 rounds'
 slug: skills-direct-venv-invocation
 branch: hanf/skills-direct-venv-invocation
@@ -22,4 +22,5 @@ discussed  '2026-05-12T14:13:51Z'
 planning  '2026-05-12T14:20:49Z'
 plan-review-r1  '2026-05-12T14:29:20Z'
 plan-fix-r1  '2026-05-12T14:29:20Z'
+plan-fix-r2  '2026-05-12T14:52:51Z'
 ```

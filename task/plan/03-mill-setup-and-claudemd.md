@@ -162,7 +162,7 @@ This is a documentation-only batch; `verify: null`.
 Verification is mechanical and performed by the implementer after applying all three cards:
 
 1. `grep -E 'uv run --project "\$\{?CLAUDE_PLUGIN_ROOT\}?"' plugins/mill/skills/mill-setup/SKILL.md` — expected zero matches.
-2. `grep -c 'uv run --project plugins/mill' plugins/mill/skills/mill-setup/SKILL.md` — expected to equal the pre-edit count (source-tree forms unchanged).
+2. `grep -c 'uv run --project plugins/mill' plugins/mill/skills/mill-setup/SKILL.md` — expected to equal the pre-edit count **plus one** (Card 5's rewritten prose adds one new mention of `uv run --project plugins/mill` inside a sentence describing the source-tree exception). The "+1" applies only after Card 5 runs; if Card 4 is verified separately before Card 5, the count for Card 4 alone must equal the pre-edit count.
 3. `grep -c 'unique inline-prefix form' plugins/mill/skills/mill-setup/SKILL.md` — expected zero (old framing removed).
 4. `grep -c 'the canonical mill-script form, shared with every other mill SKILL.md' plugins/mill/skills/mill-setup/SKILL.md` — expected exactly one (new framing present).
 5. `grep -c 'Mill scripts are invoked via the cache venv' CLAUDE.md` — expected exactly one.
