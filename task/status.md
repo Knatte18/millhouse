@@ -32,7 +32,9 @@ implementing  '2026-05-12T15:05:57Z'
 ```yaml
 batches:
   - name: bulk-skill-conversion
-    state: pending
+    state: running
+    implementer_session: a215aa77-8160-43df-b64f-78d9f39b206b
+    start_sha: 1262d878f0c85fc5bbe2fa88c0866504c7a6504a
   - name: mill-go-conversion
     state: pending
   - name: mill-setup-and-claudemd
