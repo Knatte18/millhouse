@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-finalize
 branch: hanf/mill-finalize
 plan: task/plan
@@ -24,4 +24,19 @@ plan-review-r2  '2026-05-12T10:07:52Z'
 plan-fix-r2  '2026-05-12T10:07:52Z'
 plan-fix-r3  '2026-05-12T10:14:42Z'
 planned  '2026-05-12T10:15:04Z'
+implementing  '2026-05-12T10:17:09Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: mill-finalize skill
+    state: pending
+  - name: mill-merge refactor
+    state: pending
+  - name: unit tests
+    state: pending
+  - name: mill-go, config template, and SKILLS index
+    state: pending
 ```
