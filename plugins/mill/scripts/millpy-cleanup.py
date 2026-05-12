@@ -95,6 +95,7 @@ def build_plan(
     to_remove_abandoned: list[SlugRecord] = []
     to_reset_home: list[str] = []
     to_report: list[str] = []
+    to_reap_pr: list[SlugRecord] = []
 
     _LIVE_PHASES = {
         "discussing", "discussed", "planning", "planned",
@@ -158,6 +159,8 @@ def build_plan(
                     f"{slug} — phase=abandoned but Home.md marker is "
                     f"{record.home_marker!r}, not [active]; skipping (inspect manually)"
                 )
+        elif phase == "pr-pending":
+            to_reap_pr.append(record)
         elif phase in _LIVE_PHASES:
             pass
         else:
@@ -194,7 +197,7 @@ def build_plan(
                 f"orphan active worktree: {slug} has active marker but no Home.md entry"
             )
 
-    return CleanupPlan(to_remove_done, to_remove_abandoned, to_reset_home, to_report)
+    return CleanupPlan(to_remove_done, to_remove_abandoned, to_reset_home, to_report, to_reap_pr=to_reap_pr)
 
 
 def _print_plan(plan: CleanupPlan) -> None:
