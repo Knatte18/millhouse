@@ -213,7 +213,7 @@ def build_plan(
 
 
 def _print_plan(plan: CleanupPlan) -> None:
-    if not any([plan.to_remove_done, plan.to_remove_abandoned, plan.to_reap_pr, plan.to_report]):
+    if not any([plan.to_remove_done, plan.to_remove_abandoned, plan.to_reap_pr, plan.to_report, plan.orphan_portals]):
         print("Nothing to do.")
         return
     for r in plan.to_remove_done:
@@ -231,6 +231,8 @@ def _print_plan(plan: CleanupPlan) -> None:
         print(f"REAP-PR:           {r.slug}  [worktree={r.worktree_path}, branch={r.branch}]")
     for line in plan.to_report:
         print(f"REPORT: {line}")
+    for p in plan.orphan_portals:
+        print(f"ORPHAN-PORTAL:     {p.name}  [target gone or not in Home.md]")
 
 
 def _resolve_inplace_mode(
@@ -552,6 +554,9 @@ def apply_plan(
         wiki_relative_paths.extend(
             _apply_pr_reap_record(record, hub_root, wiki_path, junctions_cfg, cfg)
         )
+
+    for portal_path in plan.orphan_portals:
+        _apply_orphan_portal(portal_path)
 
     active_link = hub_root / ".active"
     if os.path.lexists(str(active_link)) and not active_link.is_dir():
