@@ -274,13 +274,16 @@ Log the result. Hardlink names (e.g. `/tasks.md`) are passed as anchored pattern
 
 ### Phase 4.7 — PS1 shortcut wrappers
 
-Creates `.millhouse/<script>.ps1` forwarders for every user-callable mill script. Each wrapper locates the latest installed millhouse plugin cache and delegates to the real script via `uv run`.
+Creates `.millhouse/<script>.ps1` forwarders for every user-callable mill script. Each wrapper hardcodes the path of the currently-latest plugin cache entry and delegates to the real script via `uv run --active`.
 
 ```bash
 PYTHONPATH="$CLAUDE_PLUGIN_ROOT/scripts" uv run --project "$CLAUDE_PLUGIN_ROOT" python -c "
-from pathlib import Path
+import os
 import _shortcuts
-written = _shortcuts.write_all(Path('.millhouse'))
+from pathlib import Path
+cache = Path(os.environ['USERPROFILE']) / '.claude' / 'plugins' / 'cache' / 'millhouse' / 'mill'
+latest_path = max((p for p in cache.iterdir() if p.is_dir()), key=lambda p: p.name)
+written = _shortcuts.write_all(Path('.millhouse'), latest_path)
 print(f'wrote {len(written)} wrappers' if written else 'wrappers up to date')
 "
 ```
