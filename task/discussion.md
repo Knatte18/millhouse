@@ -32,13 +32,17 @@ touching anything, then apply only the fixes whose cost the benchmarks confirm.
   parameter; compute `<SCRIPT_PATH>` from it per script.
 - mill-setup SKILL.md Phase 4.7 — update inline Python call to compute and pass
   `latest_path` before calling `write_all`; document the new `$PROFILE` phase.
-- `millpy-vscode.py` — add `--filter-open` CLI flag; default to no PowerShell probe;
-  move `import _vscode_processes` inside `_filter_open_worktrees` (lazy import).
-- `test-shortcut-wrapper.py` — update call sites to pass a fake `latest_path`; update
-  assertions (remove `"uv run --project"` check, add `"uv run --active"` and
-  `<SCRIPT_PATH>` checks).
+- `millpy-vscode.py` — add `--filter-open` CLI flag; gate `_filter_open_worktrees` call
+  on the flag; `import _vscode_processes` stays at module level.
+- `test-shortcut-wrapper.py` — update all `write_all(mill_dir)` call sites to pass
+  `fake_latest_path`; update the standalone `render(TEMPLATE_PATH, {"SCRIPT": ...})`
+  call at line 23 to also pass `"SCRIPT_PATH"`; remove `"uv run --project"` assertion,
+  add `"uv run --active"` and `<SCRIPT_PATH>` checks.
 - `test-millpy-vscode.py` — add tests for `--filter-open` flag: probe not called by
-  default, probe called when flag is present.
+  default; probe called when flag is present. Update existing tests
+  `filter_excludes_open_worktree` and `filter_empties_list_calls_spawn_then_opens` to
+  call `main(["--filter-open"])` instead of `main([])` (both tests assert probe-based
+  filtering which only occurs with the flag).
 
 **Out:**
 - No POSIX/macOS changes — PS1 wrappers and `$PROFILE` patching are Windows-only;
@@ -46,7 +50,7 @@ touching anything, then apply only the fixes whose cost the benchmarks confirm.
 - No daemon or background caching layer.
 - No changes to any script's output, flags, or observable behavior beyond
   `--filter-open` in `millpy-vscode.py`.
-- No lazy-import changes outside `millpy-vscode.py`.
+- No lazy-import changes — `_vscode_processes` import stays at module level.
 - No changes to `_vscode_processes._probe_windows()` internals.
 
 ## Decisions
@@ -116,17 +120,16 @@ touching anything, then apply only the fixes whose cost the benchmarks confirm.
 
 - **Decision:** Add `--filter-open` argument to `millpy-vscode.py`'s argparse. Default:
   no PowerShell probe. Only when `--filter-open` is passed does the code call
-  `_filter_open_worktrees`. Import of `_vscode_processes` moved from module level to
-  inside `_filter_open_worktrees`.
-- **Rationale:** The PowerShell spawn is the dominant overhead in `millpy-vscode.py`.
-  Default path should be the fast path.
-- **Rejected:** Optimize `_probe_windows()` internals — more complex, out of scope.
-
-### lazy-import-scope
-
-- **Decision:** Only `import _vscode_processes` is made lazy. No other imports changed.
-- **Rationale:** `_spawn_core` is called unconditionally in `main()`; deferring saves
-  nothing. Other scripts' imports are all hot-path.
+  `_filter_open_worktrees`. `import _vscode_processes` stays at module level — only the
+  *call* to `_filter_open_worktrees` is gated.
+- **Rationale:** The PowerShell spawn (`_probe_windows()`) is the dominant overhead.
+  The module import itself is negligible; keeping it at module level preserves the
+  existing `patch("mill_vscode._vscode_processes...")` mock surface in ~10 existing
+  tests. Gating the call achieves the performance goal without disrupting tests.
+- **Rejected (lazy import):** Moving `import _vscode_processes` inside the function
+  breaks ~10 existing test mock paths via `AttributeError` at patch setup time; import
+  cost is not the bottleneck.
+- **Rejected (optimize probe):** More complex, out of scope.
 
 ## Technical context
 
@@ -136,7 +139,7 @@ touching anything, then apply only the fixes whose cost the benchmarks confirm.
 |---|---|
 | `plugins/mill/templates/shortcut-wrapper.ps1` | New template: `uv run --active "<SCRIPT_PATH>" @args` |
 | `plugins/mill/scripts/_shortcuts.py` | `write_all(mill_dir, latest_path)` — required param; `SCRIPT_PATH` token |
-| `plugins/mill/scripts/millpy-vscode.py` | Add `--filter-open`; lazy import `_vscode_processes` |
+| `plugins/mill/scripts/millpy-vscode.py` | Add `--filter-open`; gate `_filter_open_worktrees` call on flag |
 | `plugins/mill/skills/mill-setup/SKILL.md` | New `$PROFILE` phase + updated Phase 4.7 call |
 | `plugins/mill/unit_tests/test-shortcut-wrapper.py` | Pass fake `latest_path`; updated assertions |
 | `plugins/mill/unit_tests/test-millpy-vscode.py` | `--filter-open` behavior tests |
@@ -148,7 +151,8 @@ touching anything, then apply only the fixes whose cost the benchmarks confirm.
 - `_render.py` → `render(template_path, values)` — raises `KeyError` on unresolved
   tokens. New template has two tokens; both must be present in every `render` call.
 - `millpy-vscode.py` → `_filter_open_worktrees` calls `_vscode_processes.find_open_vscode_paths()`
-  at line 70. After change: only reached when `--filter-open` is set; import moved inside.
+  at line 70. After change: `_vscode_processes` import stays at module level; the call to
+  `_filter_open_worktrees` is only made when `--filter-open` is set.
 - `_vscode_processes.py` → `_probe_windows()` spawns `powershell.exe Get-Process Code`.
 - mill-setup Phase 4.7 inline Python currently: `_shortcuts.write_all(Path('.millhouse'))`.
   After: compute `latest_path`, call `_shortcuts.write_all(Path('.millhouse'), latest_path)`.
@@ -216,17 +220,24 @@ refreshes both the profile activation path and the hardcoded script paths.
 **`test-shortcut-wrapper.py` — changes required:**
 - All `write_all(mill_dir)` → `write_all(mill_dir, fake_latest_path)` where
   `fake_latest_path = Path(tmpdir) / "fake-latest"`.
-- Remove/invert assertion for `"uv run --project"` (or `"uv run"` if that's the
-  current check — verify and update accordingly).
-- Add assertion: `"uv run --active" in rendered`.
+- Update the standalone `render(TEMPLATE_PATH, {"SCRIPT": "millpy-status"})` call at
+  line 23 to also pass `"SCRIPT_PATH": str(fake_latest_path / "scripts" / "millpy-status.py")`.
+- Current assertion is `"uv run" in rendered` — this still passes. Add assertion:
+  `"uv run --active" in rendered`. Remove any assertion for `"--project"` or add
+  `"--project" not in rendered`.
 - Add assertion: `str(fake_latest_path / "scripts" / "millpy-status.py") in rendered`.
 - Idempotency and legacy-cleanup tests remain valid.
 
-**`test-millpy-vscode.py` — new tests:**
-- Without `--filter-open`: mock `_vscode_processes.find_open_vscode_paths` and assert
-  it is never called.
-- With `--filter-open`: assert `find_open_vscode_paths` is called exactly once.
-- Existing picker and `--slug` tests unaffected.
+**`test-millpy-vscode.py` — changes required:**
+- Update `filter_excludes_open_worktree` (line 535) and
+  `filter_empties_list_calls_spawn_then_opens` (line 581): change `main([])` →
+  `main(["--filter-open"])`. Both tests assert probe-based filtering, which only occurs
+  with the flag. All other existing tests using `main([])` remain unchanged.
+- Add new test: without `--filter-open`, mock `_vscode_processes.find_open_vscode_paths`
+  and assert it is never called.
+- Add new test: with `--filter-open`, assert `find_open_vscode_paths` is called once.
+- `patch("mill_vscode._vscode_processes.find_open_vscode_paths", ...)` continues to work
+  because the import stays at module level.
 
 **Run all unit tests** via `python plugins/mill/unit_tests/run-all.py` after each batch.
 
@@ -239,4 +250,4 @@ refreshes both the profile activation path and the hardcoded script paths.
 - **Q:** Who activates the venv? **A:** mill-setup writes a marker-delimited block to `$PROFILE`; idempotent on re-run; creates file if missing.
 - **Q:** Does this work across worktrees? **A:** Yes — plugin-cache venv is shared; all worktrees use identical script paths; worktree context discovered at runtime.
 - **Q:** Should `--filter-open` flip the default in `millpy-vscode.py`? **A:** [auto-pick] Yes — default no-probe, `--filter-open` opts in. **Why:** PowerShell spawn is the dominant overhead; fast path should be the default.
-- **Q:** Should lazy import be scoped to `_vscode_processes` only? **A:** [auto-pick] Yes. **Why:** `_spawn_core` is on every code path; other scripts' imports are all hot-path.
+- **Q:** Should `_vscode_processes` be lazily imported? **A:** No — keep module-level import; gate only the `_filter_open_worktrees` call. **Why:** import cost is negligible; lazy import breaks ~10 existing `patch("mill_vscode._vscode_processes...")` mock paths.
