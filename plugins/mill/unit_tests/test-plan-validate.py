@@ -154,7 +154,7 @@ def _write_plan(plan_dir: Path, overview_text: str, batches: list[tuple[str, str
 # ---------------------------------------------------------------------------
 
 def test_check_non_existent_path_clean() -> int:
-    """Clean: all Reads:/Creates: paths exist on disk → no errors."""
+    """Clean: all Reads:/Creates: paths exist on disk -> no errors."""
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
         plan_dir = tmp / "plan"
@@ -179,7 +179,7 @@ def test_check_non_existent_path_clean() -> int:
 
 
 def test_check_non_existent_path_dirty() -> int:
-    """Dirty: Reads: has nonexistent/path.py → one non-existent-path error."""
+    """Dirty: Reads: has nonexistent/path.py -> one non-existent-path error."""
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
         plan_dir = tmp / "plan"
@@ -206,7 +206,7 @@ def test_check_non_existent_path_dirty() -> int:
 
 
 def test_check_card_missing_field_clean() -> int:
-    """Clean: all required fields present → no card-missing-field errors."""
+    """Clean: all required fields present -> no card-missing-field errors."""
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
         plan_dir = tmp / "plan"
@@ -228,7 +228,7 @@ def test_check_card_missing_field_clean() -> int:
 
 
 def test_check_card_missing_field_dirty() -> int:
-    """Dirty: card omits Edits: → one card-missing-field error."""
+    """Dirty: card omits Edits: -> one card-missing-field error."""
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
         plan_dir = tmp / "plan"
@@ -255,7 +255,7 @@ def test_check_card_missing_field_dirty() -> int:
 
 
 def test_check_card_numbering_clean() -> int:
-    """Clean: sequential cards [1, 2, 3] → no card-numbering errors."""
+    """Clean: sequential cards [1, 2, 3] -> no card-numbering errors."""
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
         plan_dir = tmp / "plan"
@@ -277,7 +277,7 @@ def test_check_card_numbering_clean() -> int:
 
 
 def test_check_card_numbering_dirty_gap() -> int:
-    """Dirty: cards [1, 2, 4] in one batch → one card-numbering error."""
+    """Dirty: cards [1, 2, 4] in one batch -> one card-numbering error."""
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
         plan_dir = tmp / "plan"
@@ -309,7 +309,7 @@ def test_check_card_numbering_dirty_gap() -> int:
 
 
 def test_check_card_numbering_dirty_cross_batch() -> int:
-    """Dirty: card 1 in batch-a AND batch-b → two card-numbering errors."""
+    """Dirty: card 1 in batch-a AND batch-b -> two card-numbering errors."""
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
         plan_dir = tmp / "plan"
@@ -344,7 +344,7 @@ def test_check_card_numbering_dirty_cross_batch() -> int:
 
 
 def test_check_depends_on_unknown_clean() -> int:
-    """Clean: no depends-on entries → no depends-on-unknown errors."""
+    """Clean: no depends-on entries -> no depends-on-unknown errors."""
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
         plan_dir = tmp / "plan"
@@ -366,7 +366,7 @@ def test_check_depends_on_unknown_clean() -> int:
 
 
 def test_check_depends_on_unknown_dirty() -> int:
-    """Dirty: depends-on has integer reference to unknown batch number → one depends-on-unknown error."""
+    """Dirty: depends-on has integer reference to unknown batch number -> one depends-on-unknown error."""
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
         plan_dir = tmp / "plan"
@@ -400,7 +400,7 @@ def test_check_depends_on_unknown_dirty() -> int:
 
 
 def test_check_depends_on_unknown_dirty_legacy_string() -> int:
-    """Dirty (legacy): depends-on string references unknown batch name → one depends-on-unknown error."""
+    """Dirty (legacy): depends-on string references unknown batch name -> one depends-on-unknown error."""
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
         plan_dir = tmp / "plan"
@@ -433,7 +433,7 @@ def test_check_depends_on_unknown_dirty_legacy_string() -> int:
 
 
 def test_check_parallel_modifies_overlap_clean() -> int:
-    """Clean: batch-b depends on batch-a, both modify same file → no error (not parallel-eligible)."""
+    """Clean: batch-b depends on batch-a, both modify same file -> no error (not parallel-eligible)."""
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
         plan_dir = tmp / "plan"
@@ -462,7 +462,7 @@ def test_check_parallel_modifies_overlap_clean() -> int:
 
 
 def test_check_parallel_modifies_overlap_dirty() -> int:
-    """Dirty: two batches with no deps both modify shared/file.py → one error."""
+    """Dirty: two batches with no deps both modify shared/file.py -> one error."""
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
         plan_dir = tmp / "plan"
@@ -498,7 +498,7 @@ def test_check_parallel_modifies_overlap_dirty() -> int:
 
 
 def test_check_reads_not_backtick_path_clean() -> int:
-    """Clean: backtick-only bullets and 'none' sentinel → no reads-not-backtick-path errors."""
+    """Clean: backtick-only bullets and 'none' sentinel -> no reads-not-backtick-path errors."""
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
         plan_dir = tmp / "plan"
@@ -562,7 +562,7 @@ def test_check_reads_not_backtick_path_none_exempt() -> int:
 
 
 def test_check_reads_not_backtick_path_dirty() -> int:
-    """Dirty: Reads: bullet has prose alongside backtick path → one reads-not-backtick-path error."""
+    """Dirty: Reads: bullet has prose alongside backtick path -> one reads-not-backtick-path error."""
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
         plan_dir = tmp / "plan"
@@ -602,7 +602,7 @@ def test_check_reads_not_backtick_path_dirty() -> int:
 
 
 def test_check_all_files_touched_mismatch_clean_no_section() -> int:
-    """Clean: overview without All Files Touched section → no errors for check 8."""
+    """Clean: overview without All Files Touched section -> no errors for check 8."""
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
         plan_dir = tmp / "plan"
@@ -627,7 +627,7 @@ def test_check_all_files_touched_mismatch_clean_no_section() -> int:
 
 
 def test_check_all_files_touched_mismatch_dirty() -> int:
-    """Dirty: overview lists path/extra.py not in any card's Modifies:/Creates: → one error."""
+    """Dirty: overview lists path/extra.py not in any card's Modifies:/Creates: -> one error."""
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
         plan_dir = tmp / "plan"
@@ -671,9 +671,9 @@ def test_run_returns_sorted() -> int:
             {"name": "alpha", "file": "01-alpha.md"},
             {"name": "beta",  "file": "02-beta.md"},
         ])
-        # 01-alpha: card missing Edits → card-missing-field (batch=01-alpha, card=1)
+        # 01-alpha: card missing Edits -> card-missing-field (batch=01-alpha, card=1)
         batch_a = _make_batch_file("alpha", missing_fields={"Edits"})
-        # 02-beta: nonexistent path → non-existent-path (batch=02-beta, card=None→0)
+        # 02-beta: nonexistent path -> non-existent-path (batch=02-beta, card=None->0)
         batch_b = _make_batch_file("beta", context=["nonexistent/thing.py"])
         _write_plan(plan_dir, overview, [
             ("01-alpha.md", batch_a),
@@ -694,7 +694,7 @@ def test_run_returns_sorted() -> int:
 
 
 def test_run_no_overview() -> int:
-    """Empty plan_dir (no overview) → one missing-overview error."""
+    """Empty plan_dir (no overview) -> one missing-overview error."""
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
         plan_dir = tmp / "plan"
@@ -720,7 +720,7 @@ def test_run_no_overview() -> int:
 # ---------------------------------------------------------------------------
 
 def test_deletes_field_required() -> int:
-    """(a) Card without - **Deletes:** line → card-missing-field error mentioning 'Deletes:'."""
+    """(a) Card without - **Deletes:** line -> card-missing-field error mentioning 'Deletes:'."""
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
         plan_dir = tmp / "plan"
@@ -753,7 +753,7 @@ def test_deletes_field_required() -> int:
 
 
 def test_deletes_token_on_disk_clean() -> int:
-    """(b) Deletes: token resolves to an on-disk file → no non-existent-path error."""
+    """(b) Deletes: token resolves to an on-disk file -> no non-existent-path error."""
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
         plan_dir = tmp / "plan"
@@ -780,7 +780,7 @@ def test_deletes_token_on_disk_clean() -> int:
 
 
 def test_deletes_token_in_creates_union_clean() -> int:
-    """(c) Deletes: token missing on disk + in another batch's Creates: → no error."""
+    """(c) Deletes: token missing on disk + in another batch's Creates: -> no error."""
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
         plan_dir = tmp / "plan"
@@ -811,7 +811,7 @@ def test_deletes_token_in_creates_union_clean() -> int:
 
 
 def test_deletes_token_missing_not_in_creates_dirty() -> int:
-    """(d) Deletes: token missing on disk + not in any Creates: → non-existent-path with Deletes-specific message."""
+    """(d) Deletes: token missing on disk + not in any Creates: -> non-existent-path with Deletes-specific message."""
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
         plan_dir = tmp / "plan"
@@ -840,7 +840,7 @@ def test_deletes_token_missing_not_in_creates_dirty() -> int:
 
 
 def test_reads_token_in_deletes_union_clean() -> int:
-    """(e) Reads: token missing on disk + in another batch's Deletes: → no error for that token."""
+    """(e) Reads: token missing on disk + in another batch's Deletes: -> no error for that token."""
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
         plan_dir = tmp / "plan"
@@ -879,7 +879,7 @@ def test_reads_token_in_deletes_union_clean() -> int:
 
 
 def test_reads_token_in_creates_union_suppressed() -> int:
-    """(f) Reads: token missing on disk + in creates_union → no error (existing behaviour)."""
+    """(f) Reads: token missing on disk + in creates_union -> no error (existing behaviour)."""
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
         plan_dir = tmp / "plan"
@@ -910,7 +910,7 @@ def test_reads_token_in_creates_union_suppressed() -> int:
 
 
 def test_wiki_config_mutation_clean() -> int:
-    """wiki/config.yaml only in Reads: (not Modifies/Creates) → zero wiki-config-mutation errors."""
+    """wiki/config.yaml only in Reads: (not Modifies/Creates) -> zero wiki-config-mutation errors."""
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
         plan_dir = tmp / "plan"
@@ -939,7 +939,7 @@ def test_wiki_config_mutation_clean() -> int:
 
 
 def test_wiki_config_mutation_modifies() -> int:
-    """wiki/config.yaml in Modifies: → exactly one wiki-config-mutation error with correct shape."""
+    """wiki/config.yaml in Modifies: -> exactly one wiki-config-mutation error with correct shape."""
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
         plan_dir = tmp / "plan"
@@ -973,7 +973,7 @@ def test_wiki_config_mutation_modifies() -> int:
 
 
 def test_wiki_config_mutation_creates() -> int:
-    """wiki/config.yaml in Creates: → exactly one wiki-config-mutation error with correct shape."""
+    """wiki/config.yaml in Creates: -> exactly one wiki-config-mutation error with correct shape."""
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
         plan_dir = tmp / "plan"
@@ -1003,7 +1003,7 @@ def test_wiki_config_mutation_creates() -> int:
 
 
 def test_wiki_config_mutation_multi_batch() -> int:
-    """Two batches each with wiki/config.yaml in Modifies: → exactly two wiki-config-mutation errors."""
+    """Two batches each with wiki/config.yaml in Modifies: -> exactly two wiki-config-mutation errors."""
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
         plan_dir = tmp / "plan"
@@ -1042,7 +1042,7 @@ def test_wiki_config_mutation_multi_batch() -> int:
 
 
 def test_wiki_config_mutation_modifies_and_creates() -> int:
-    """wiki/config.yaml in both Modifies: and Creates: → exactly one error (deduplicated)."""
+    """wiki/config.yaml in both Modifies: and Creates: -> exactly one error (deduplicated)."""
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
         plan_dir = tmp / "plan"
@@ -1163,7 +1163,7 @@ def test_skip_checks_unknown_check_silently_ignored() -> int:
 
 
 def test_reads_token_missing_both_unions_dirty() -> int:
-    """(g) Reads: token missing on disk + in neither union → non-existent-path error."""
+    """(g) Reads: token missing on disk + in neither union -> non-existent-path error."""
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
         plan_dir = tmp / "plan"
@@ -1192,7 +1192,7 @@ def test_reads_token_missing_both_unions_dirty() -> int:
 
 
 def test_all_files_touched_deletes_counted() -> int:
-    """Deletes: token listed in All Files Touched → no all-files-touched-mismatch error."""
+    """Deletes: token listed in All Files Touched -> no all-files-touched-mismatch error."""
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
         plan_dir = tmp / "plan"

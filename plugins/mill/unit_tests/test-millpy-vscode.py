@@ -180,7 +180,7 @@ def main() -> int:
             print("PASS: --list prints candidates without launching VS Code")
 
     # ------------------------------------------------------------------
-    # Test: hub_relative_path set in per-worktree config → VS Code
+    # Test: hub_relative_path set in per-worktree config -> VS Code
     # launched with <worktree>/src/csharp/X as workspace folder.
     # ------------------------------------------------------------------
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -225,10 +225,10 @@ def main() -> int:
             )
             errors += 1
         else:
-            print("PASS: hub_relative_path (sub-dir) → VS Code launched in sub-dir")
+            print("PASS: hub_relative_path (sub-dir) -> VS Code launched in sub-dir")
 
     # ------------------------------------------------------------------
-    # Test: hub_relative_path = "." → VS Code launched at worktree root.
+    # Test: hub_relative_path = "." -> VS Code launched at worktree root.
     # ------------------------------------------------------------------
     with tempfile.TemporaryDirectory() as tmpdir:
         root = Path(tmpdir)
@@ -270,11 +270,11 @@ def main() -> int:
             )
             errors += 1
         else:
-            print("PASS: hub_relative_path=. → VS Code launched at worktree root")
+            print("PASS: hub_relative_path=. -> VS Code launched at worktree root")
 
     # ------------------------------------------------------------------
     # Regression: hub config has hub_relative_path: "hub-sub", selected
-    # worktree's config has hub_relative_path: "wt-sub" → wt-sub wins.
+    # worktree's config has hub_relative_path: "wt-sub" -> wt-sub wins.
     # ------------------------------------------------------------------
     with tempfile.TemporaryDirectory() as tmpdir:
         root = Path(tmpdir)
@@ -326,7 +326,7 @@ def main() -> int:
             print("PASS: per-worktree hub_relative_path wins over hub config value")
 
     # ------------------------------------------------------------------
-    # Test: no active worktrees, no flags → spawn called, new worktree opened.
+    # Test: no active worktrees, no flags -> spawn called, new worktree opened.
     # ------------------------------------------------------------------
     with tempfile.TemporaryDirectory() as tmpdir:
         root = Path(tmpdir)
@@ -374,10 +374,10 @@ def main() -> int:
             )
             errors += 1
         else:
-            print("PASS: no active worktrees + no flags → spawn called, new worktree opened")
+            print("PASS: no active worktrees + no flags -> spawn called, new worktree opened")
 
     # ------------------------------------------------------------------
-    # Test: no active worktrees, spawn returns non-zero → exit 1, no VS Code.
+    # Test: no active worktrees, spawn returns non-zero -> exit 1, no VS Code.
     # ------------------------------------------------------------------
     with tempfile.TemporaryDirectory() as tmpdir:
         root = Path(tmpdir)
@@ -403,16 +403,16 @@ def main() -> int:
             rc = mill_vscode.main([])
 
         if rc != 1:
-            print(f"FAIL: spawn non-zero rc → expected exit 1, got {rc}", file=sys.stderr)
+            print(f"FAIL: spawn non-zero rc -> expected exit 1, got {rc}", file=sys.stderr)
             errors += 1
         elif subprocess_calls:
             print("FAIL: subprocess.run called despite spawn failure", file=sys.stderr)
             errors += 1
         else:
-            print("PASS: spawn non-zero rc → exit 1, no VS Code")
+            print("PASS: spawn non-zero rc -> exit 1, no VS Code")
 
     # ------------------------------------------------------------------
-    # Test: no active worktrees, spawn returns 0 but backlog empty → exit 0, no VS Code.
+    # Test: no active worktrees, spawn returns 0 but backlog empty -> exit 0, no VS Code.
     # ------------------------------------------------------------------
     with tempfile.TemporaryDirectory() as tmpdir:
         root = Path(tmpdir)
@@ -438,16 +438,16 @@ def main() -> int:
             rc = mill_vscode.main([])
 
         if rc != 0:
-            print(f"FAIL: empty backlog → expected exit 0, got {rc}", file=sys.stderr)
+            print(f"FAIL: empty backlog -> expected exit 0, got {rc}", file=sys.stderr)
             errors += 1
         elif subprocess_calls:
             print("FAIL: subprocess.run called despite empty backlog", file=sys.stderr)
             errors += 1
         else:
-            print("PASS: spawn empty backlog → exit 0, no VS Code")
+            print("PASS: spawn empty backlog -> exit 0, no VS Code")
 
     # ------------------------------------------------------------------
-    # Test: --list with no active worktrees → spawn NOT called, exit 0.
+    # Test: --list with no active worktrees -> spawn NOT called, exit 0.
     # ------------------------------------------------------------------
     with tempfile.TemporaryDirectory() as tmpdir:
         root = Path(tmpdir)
@@ -471,13 +471,13 @@ def main() -> int:
             print("FAIL: _load_spawn_main called despite --list flag", file=sys.stderr)
             errors += 1
         elif rc != 0:
-            print(f"FAIL: --list empty → expected exit 0, got {rc}", file=sys.stderr)
+            print(f"FAIL: --list empty -> expected exit 0, got {rc}", file=sys.stderr)
             errors += 1
         else:
-            print("PASS: --list with empty active list → spawn not called")
+            print("PASS: --list with empty active list -> spawn not called")
 
     # ------------------------------------------------------------------
-    # Test: --slug with no active worktrees → spawn NOT called, exit 0.
+    # Test: --slug with no active worktrees -> spawn NOT called, exit 0.
     # ------------------------------------------------------------------
     with tempfile.TemporaryDirectory() as tmpdir:
         root = Path(tmpdir)
@@ -501,13 +501,13 @@ def main() -> int:
             print("FAIL: _load_spawn_main called despite --slug flag", file=sys.stderr)
             errors += 1
         elif rc != 0:
-            print(f"FAIL: --slug empty → expected exit 0, got {rc}", file=sys.stderr)
+            print(f"FAIL: --slug empty -> expected exit 0, got {rc}", file=sys.stderr)
             errors += 1
         else:
-            print("PASS: --slug with empty active list → spawn not called")
+            print("PASS: --slug with empty active list -> spawn not called")
 
     # ------------------------------------------------------------------
-    # Test: filter_excludes_open_worktree — alpha open → only beta shown,
+    # Test: filter_excludes_open_worktree — alpha open -> only beta shown,
     # input "1" selects beta.
     # ------------------------------------------------------------------
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -596,7 +596,7 @@ def main() -> int:
             )
             errors += 1
         else:
-            print("PASS: filter_empties_list_calls_spawn_then_opens — all filtered → spawn + open new")
+            print("PASS: filter_empties_list_calls_spawn_then_opens — all filtered -> spawn + open new")
 
     # ------------------------------------------------------------------
     # Test: q_quits_with_zero — q input exits 0, no VS Code launched.
@@ -632,7 +632,7 @@ def main() -> int:
             print("FAIL: q_quits_with_zero: subprocess.run called despite q", file=sys.stderr)
             errors += 1
         else:
-            print("PASS: q_quits_with_zero — q input → exit 0, no VS Code")
+            print("PASS: q_quits_with_zero — q input -> exit 0, no VS Code")
 
     # ------------------------------------------------------------------
     # Test: enter_spawns_and_opens — empty input triggers spawn, new
@@ -688,7 +688,7 @@ def main() -> int:
             )
             errors += 1
         else:
-            print("PASS: enter_spawns_and_opens — <Enter> → spawn + open new worktree (gamma)")
+            print("PASS: enter_spawns_and_opens — <Enter> -> spawn + open new worktree (gamma)")
 
     # ------------------------------------------------------------------
     # Test: new_flag_skips_list_and_opens_new — --new flag bypasses filter
@@ -750,7 +750,7 @@ def main() -> int:
 
     # ------------------------------------------------------------------
     # Test: spawn_returns_zero_no_new_entries — <Enter> at prompt, spawn
-    # succeeds but post-diff finds no new worktree → exit 0, no VS Code.
+    # succeeds but post-diff finds no new worktree -> exit 0, no VS Code.
     # ------------------------------------------------------------------
     with tempfile.TemporaryDirectory() as tmpdir:
         root = Path(tmpdir)
@@ -789,10 +789,10 @@ def main() -> int:
             print("FAIL: spawn_returns_zero_no_new_entries: subprocess.run called", file=sys.stderr)
             errors += 1
         else:
-            print("PASS: spawn_returns_zero_no_new_entries — spawn ok but no new entry → exit 0, no VS Code")
+            print("PASS: spawn_returns_zero_no_new_entries — spawn ok but no new entry -> exit 0, no VS Code")
 
     # ------------------------------------------------------------------
-    # Test: spawn_returns_nonzero — <Enter> at prompt, spawn returns 1 →
+    # Test: spawn_returns_nonzero — <Enter> at prompt, spawn returns 1 ->
     # exit 1, no VS Code.
     # ------------------------------------------------------------------
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -829,10 +829,10 @@ def main() -> int:
             print("FAIL: spawn_returns_nonzero: subprocess.run called despite spawn failure", file=sys.stderr)
             errors += 1
         else:
-            print("PASS: spawn_returns_nonzero — spawn rc 1 → exit 1, no VS Code")
+            print("PASS: spawn_returns_nonzero — spawn rc 1 -> exit 1, no VS Code")
 
     # ------------------------------------------------------------------
-    # Test: new_and_slug_mutex — --new and --slug together → SystemExit(2).
+    # Test: new_and_slug_mutex — --new and --slug together -> SystemExit(2).
     # ------------------------------------------------------------------
     try:
         mill_vscode.main(["--new", "--slug", "x"])
@@ -840,7 +840,7 @@ def main() -> int:
         errors += 1
     except SystemExit as exc:
         if exc.code == 2:
-            print("PASS: new_and_slug_mutex — --new + --slug → SystemExit(2)")
+            print("PASS: new_and_slug_mutex — --new + --slug -> SystemExit(2)")
         else:
             print(f"FAIL: new_and_slug_mutex: expected exit 2, got {exc.code}", file=sys.stderr)
             errors += 1
@@ -883,7 +883,7 @@ def main() -> int:
             )
             errors += 1
         else:
-            print("PASS: probe_failure_falls_back — empty probe → all shown, user picks 1 (alpha)")
+            print("PASS: probe_failure_falls_back — empty probe -> all shown, user picks 1 (alpha)")
 
     # ------------------------------------------------------------------
     # Test: probe_returns_unrelated_paths — unrelated paths don't filter
@@ -923,7 +923,7 @@ def main() -> int:
             )
             errors += 1
         else:
-            print("PASS: probe_returns_unrelated_paths — unrelated probe paths → no filter, user picks 2 (beta)")
+            print("PASS: probe_returns_unrelated_paths — unrelated probe paths -> no filter, user picks 2 (beta)")
 
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)

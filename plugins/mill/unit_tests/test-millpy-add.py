@@ -114,7 +114,7 @@ def test_proposal_body_file_reads_content() -> None:
 
 
 def test_proposal_body_and_file_mutually_exclusive() -> None:
-    """--proposal-body and --proposal-body-file together → non-zero SystemExit."""
+    """--proposal-body and --proposal-body-file together -> non-zero SystemExit."""
     with tempfile.TemporaryDirectory() as tmpdir:
         wiki_path = Path(tmpdir)
         (wiki_path / "Home.md").write_text("# Tasks\n", encoding="utf-8")
@@ -151,7 +151,7 @@ def test_proposal_body_and_file_mutually_exclusive() -> None:
 
 
 def test_proposal_body_file_missing_path() -> None:
-    """--proposal-body-file with non-existent path → clean SystemExit, no partial wiki writes."""
+    """--proposal-body-file with non-existent path -> clean SystemExit, no partial wiki writes."""
     missing_path = "/nonexistent/path/that/cannot/exist/body.md"
 
     with tempfile.TemporaryDirectory() as tmpdir:

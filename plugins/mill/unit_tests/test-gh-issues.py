@@ -217,7 +217,7 @@ def main() -> int:
             return SimpleNamespace(returncode=0, stdout="https://github.com/owner/repo.git\n", stderr="")
         return SimpleNamespace(returncode=0, stdout=json.dumps(_CANNED_ISSUES), stderr="")
 
-    # 9. label_filter=None → all 5 issues returned.
+    # 9. label_filter=None -> all 5 issues returned.
     with patch("_gh_issues._subprocess_util.run", side_effect=_mock_run):
         _result = _gh_issues.fetch(label_filter=None)
     if len(_result) != 5:
@@ -226,7 +226,7 @@ def main() -> int:
     else:
         print("PASS: label_filter/none — all 5 issues returned")
 
-    # 10. label_filter=["bug"] → issues 1, 3, 5.
+    # 10. label_filter=["bug"] -> issues 1, 3, 5.
     with patch("_gh_issues._subprocess_util.run", side_effect=_mock_run):
         _result = _gh_issues.fetch(label_filter=["bug"])
     _expected_numbers = {1, 3, 5}
@@ -237,7 +237,7 @@ def main() -> int:
     else:
         print("PASS: label_filter/bug — issues 1, 3, 5 returned")
 
-    # 11. label_filter=["bug", "enhancement"] → any-of: issues 1, 2, 3, 5.
+    # 11. label_filter=["bug", "enhancement"] -> any-of: issues 1, 2, 3, 5.
     with patch("_gh_issues._subprocess_util.run", side_effect=_mock_run):
         _result = _gh_issues.fetch(label_filter=["bug", "enhancement"])
     _expected_numbers = {1, 2, 3, 5}
@@ -248,7 +248,7 @@ def main() -> int:
     else:
         print("PASS: label_filter/any-of — issues 1, 2, 3, 5 returned")
 
-    # 12. label_filter=["nonexistent"] → empty list.
+    # 12. label_filter=["nonexistent"] -> empty list.
     with patch("_gh_issues._subprocess_util.run", side_effect=_mock_run):
         _result = _gh_issues.fetch(label_filter=["nonexistent"])
     if _result != []:

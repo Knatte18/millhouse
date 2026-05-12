@@ -80,7 +80,7 @@ class TestMillpyMergeInSubagent(unittest.TestCase):
     # ---- conflicts mode ----
 
     def test_1_conflicts_success(self):
-        """conflicts mode: sub-agent returns success → exit 0, success JSON."""
+        """conflicts mode: sub-agent returns success -> exit 0, success JSON."""
         with unittest.mock.patch.object(
             millpy_merge_in_subagent._render, "render",
             return_value="rendered",
@@ -109,7 +109,7 @@ class TestMillpyMergeInSubagent(unittest.TestCase):
         self.assertIn("PROJECT_ROOT", values)
 
     def test_2_conflicts_stuck(self):
-        """conflicts mode: sub-agent returns stuck → exit 0, stuck JSON."""
+        """conflicts mode: sub-agent returns stuck -> exit 0, stuck JSON."""
         with unittest.mock.patch.object(
             millpy_merge_in_subagent._implementer_sonnet, "run",
             return_value=('{"status":"stuck","stuck_type":"logic","reason":"ambiguous"}\n', "fake"),
@@ -128,13 +128,13 @@ class TestMillpyMergeInSubagent(unittest.TestCase):
         self.assertEqual(data["stuck_type"], "logic")
 
     def test_3_conflicts_no_files(self):
-        """conflicts mode: --files absent → exit 1, no JSON on stdout."""
+        """conflicts mode: --files absent -> exit 1, no JSON on stdout."""
         rc, out = self._run_main(["--mode", "conflicts"])
         self.assertEqual(rc, 1)
         self.assertEqual(out.strip(), "")
 
     def test_4_conflicts_llm_error(self):
-        """conflicts mode: LLMError from sub-agent → exit 1, transient stuck JSON."""
+        """conflicts mode: LLMError from sub-agent -> exit 1, transient stuck JSON."""
         with unittest.mock.patch.object(
             millpy_merge_in_subagent._implementer_sonnet, "run",
             side_effect=millpy_merge_in_subagent._llm_claude.LLMError("quota"),
@@ -149,7 +149,7 @@ class TestMillpyMergeInSubagent(unittest.TestCase):
     # ---- verify-fix mode ----
 
     def test_5_verify_fix_success_no_subagent(self):
-        """verify-fix mode: verify passes on first run → exit 0, success JSON, sub-agent not called."""
+        """verify-fix mode: verify passes on first run -> exit 0, success JSON, sub-agent not called."""
         with unittest.mock.patch.object(
             millpy_merge_in_subagent.subprocess, "run",
             return_value=subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr=""),
@@ -173,7 +173,7 @@ class TestMillpyMergeInSubagent(unittest.TestCase):
         mock_subagent.assert_not_called()
 
     def test_6_verify_fix_failure_subagent_success(self):
-        """verify-fix mode: verify fails → sub-agent dispatched, returns success."""
+        """verify-fix mode: verify fails -> sub-agent dispatched, returns success."""
         # call 1 (verify cmd, shell=True): subprocess.run; calls 2+3 (git diff, git rev-parse): _subprocess_util.run
         with unittest.mock.patch.object(
             millpy_merge_in_subagent._render, "render",
@@ -218,7 +218,7 @@ class TestMillpyMergeInSubagent(unittest.TestCase):
         self.assertEqual(values.get("VERIFY_FIX_ROUNDS"), "3")
 
     def test_7_verify_fix_subagent_stuck(self):
-        """verify-fix mode: verify fails, sub-agent returns stuck → exit 0, stuck JSON."""
+        """verify-fix mode: verify fails, sub-agent returns stuck -> exit 0, stuck JSON."""
         # call 1 (verify cmd, shell=True): subprocess.run; calls 2+3 (git diff, git rev-parse): _subprocess_util.run
         with unittest.mock.patch.object(
             millpy_merge_in_subagent.subprocess, "run",
@@ -256,7 +256,7 @@ class TestMillpyMergeInSubagent(unittest.TestCase):
         self.assertEqual(data["stuck_type"], "verify")
 
     def test_8_verify_fix_missing_cmd(self):
-        """verify-fix mode: --cmd absent → exit 1, no JSON on stdout."""
+        """verify-fix mode: --cmd absent -> exit 1, no JSON on stdout."""
         rc, out = self._run_main(["--mode", "verify-fix", "--checkpoint", "chk"])
         self.assertEqual(rc, 1)
         self.assertEqual(out.strip(), "")
@@ -264,13 +264,13 @@ class TestMillpyMergeInSubagent(unittest.TestCase):
     # ---- shared ----
 
     def test_9_missing_mode(self):
-        """--mode absent → argparse SystemExit(2)."""
+        """--mode absent -> argparse SystemExit(2)."""
         with self.assertRaises(SystemExit) as cm:
             millpy_merge_in_subagent.main([])
         self.assertEqual(cm.exception.code, 2)
 
     def test_10_missing_slug(self):
-        """MarkerError from slug_from_branch → exit 1."""
+        """MarkerError from slug_from_branch -> exit 1."""
         with unittest.mock.patch.object(
             millpy_merge_in_subagent._marker, "slug_from_branch",
             side_effect=millpy_merge_in_subagent._marker.MarkerError("no slug"),

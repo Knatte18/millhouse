@@ -1,9 +1,9 @@
 """Unit tests for plugins/mill/scripts/_config.py.
 
 Covers:
-  - load_config: shared config present → returned as dict
+  - load_config: shared config present -> returned as dict
   - load_config: local override wins via deep_merge
-  - load_config: wiki config absent → returns empty dict
+  - load_config: wiki config absent -> returns empty dict
   - load_config: subfolder-install layout — stub + real config merged
   - load_config: stub-only (real config absent) — hub_relative_path present
   - deep_merge: scalar in overlay wins over scalar in base
@@ -102,7 +102,7 @@ def test_load_config_wiki_config_absent() -> None:
         cfg = _config.load_config(wiki, wt_root)
 
         assert cfg == {}, f"Expected empty dict for missing config, got {cfg!r}"
-    print("PASS load_config — wiki config absent → empty dict")
+    print("PASS load_config — wiki config absent -> empty dict")
 
 
 def test_load_config_subfolder_install() -> None:
@@ -201,7 +201,7 @@ def test_load_config_machine_absent_graceful() -> None:
         assert cfg == {"spawn": {"branch_prefix": "feat"}}, (
             f"Expected wiki-only dict; got {cfg!r}"
         )
-    print("PASS load_config — machine config absent → wiki-only dict, no exception")
+    print("PASS load_config — machine config absent -> wiki-only dict, no exception")
 
 
 def test_load_config_machine_overrides_wiki() -> None:

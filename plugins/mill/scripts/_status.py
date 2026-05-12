@@ -23,6 +23,7 @@ Public API:
     read_slug(status_path) -> str
     read_branch(status_path, *, cfg, slug) -> str
     update_field(status_path, key, value) -> None
+    set_blocked(status_path, reason, *, timestamp) -> None
     append_phase(status_path, phase, timestamp) -> None
     init_batches(status_path, names) -> None
     set_batch_field(status_path, name, key, value) -> None
@@ -189,6 +190,84 @@ def update_field(status_path: Path, key: str, value: str) -> None:
     raise ValueError(f"Key {key!r} not found in yaml block of {status_path}")
 
 
+def set_blocked(status_path: Path, reason: str, *, timestamp: str) -> None:
+    """
+    Transition a task into the blocked state in ``status.md``.
+
+    Three mutations happen atomically from the caller's viewpoint:
+
+    1. ``phase:`` in the top yaml block is overwritten with ``blocked``
+       (via ``_yaml_writer.quote_scalar`` for consistency with
+       ``append_phase``).
+    2. ``blocked_reason:`` in the top yaml block is written with ``reason``
+       (via ``_yaml_writer.quote_scalar``). If the key already exists it is
+       rewritten in place; if absent, a new row is inserted immediately after
+       the ``phase:`` row.
+    3. A ``blocked  '<quoted timestamp>'`` row is appended to the
+       ``## Timeline`` code block.
+
+    The function reads and writes the file exactly once.
+
+    Args:
+        status_path: Absolute path to the status.md file.
+        reason: Human-readable explanation for the block; written through
+            ``_yaml_writer.quote_scalar`` so colons and other YAML-special
+            characters are handled automatically.
+        timestamp: ISO-8601 UTC timestamp for the timeline row; written
+            through ``_yaml_writer.quote_scalar`` to match
+            ``render_initial``'s quoted form.
+
+    Raises:
+        ValueError: yaml block is missing / malformed, ``phase:`` key is
+            absent from the yaml block, or the timeline block is absent.
+    """
+    text = status_path.read_text(encoding="utf-8")
+    lines = text.splitlines(keepends=True)
+
+    y_start, y_end = _split_fences(text, _YAML_FENCE)
+
+    # Step 1: Rewrite phase: blocked.
+    phase_line_idx: int | None = None
+    for i in range(y_start, y_end):
+        stripped = lines[i].rstrip("\r\n")
+        match = re.match(r"^(phase:\s*).*$", stripped)
+        if match is None:
+            continue
+        eol = lines[i][len(stripped):]
+        lines[i] = f"phase: {quote_scalar('blocked')}{eol}"
+        phase_line_idx = i
+        break
+    if phase_line_idx is None:
+        raise ValueError(f"phase: key missing from yaml block of {status_path}")
+
+    # Step 2: Write blocked_reason: — rewrite in place or insert after phase:.
+    # y_end is still valid (no insertion has happened yet).
+    blocked_reason_idx: int | None = None
+    for i in range(y_start, y_end):
+        stripped = lines[i].rstrip("\r\n")
+        match = re.match(r"^(blocked_reason:\s*).*$", stripped)
+        if match is None:
+            continue
+        blocked_reason_idx = i
+        break
+    if blocked_reason_idx is not None:
+        stripped = lines[blocked_reason_idx].rstrip("\r\n")
+        eol = lines[blocked_reason_idx][len(stripped):]
+        lines[blocked_reason_idx] = f"blocked_reason: {quote_scalar(reason)}{eol}"
+    else:
+        lines.insert(phase_line_idx + 1, f"blocked_reason: {quote_scalar(reason)}\n")
+
+    # Step 3: Append to Timeline block.
+    rewritten = "".join(lines)
+    tl_lines = rewritten.splitlines(keepends=True)
+    tl_text = "".join(tl_lines)
+    t_start, t_end = _split_fences(tl_text, _TIMELINE_FENCE)
+    phase_label = "blocked"
+    new_row = f"{phase_label}  {quote_scalar(timestamp)}\n"
+    tl_lines.insert(t_end, new_row)
+    status_path.write_text("".join(tl_lines), encoding="utf-8")
+
+
 def append_phase(status_path: Path, phase: str, timestamp: str) -> None:
     """
     Record a phase transition in ``status.md``.
@@ -212,6 +291,8 @@ def append_phase(status_path: Path, phase: str, timestamp: str) -> None:
             unquoted; the helper guards against future phase names that
             might contain YAML-special characters.
         timestamp: ISO-8601 UTC timestamp for the timeline row.
+            The value is written through `_yaml_writer.quote_scalar` so the
+            on-disk row matches `render_initial`'s quoted form.
 
     Raises:
         ValueError: yaml block is missing / malformed, ``phase:`` key is
@@ -245,7 +326,7 @@ def append_phase(status_path: Path, phase: str, timestamp: str) -> None:
     # phases ("discussing" / "discussed" / "planning" / "coding" / "done").
     # We use two spaces as the separator; callers can post-fix alignment
     # if a new phase breaks the visual column.
-    new_row = f"{phase}  {timestamp}\n"
+    new_row = f"{phase}  {quote_scalar(timestamp)}\n"
     tl_lines.insert(t_end, new_row)
     status_path.write_text("".join(tl_lines), encoding="utf-8")
 

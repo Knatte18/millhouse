@@ -1,11 +1,18 @@
 """Shared helpers for millpy-implement.py and millpy-implement-holistic.py."""
 import json
 import re
+import _cleanliness
 import _subprocess_util
 from pathlib import Path
 
 
-def _forward_output(output: str, project_root: Path) -> int:
+def _forward_output(
+    output: str,
+    project_root: Path,
+    *,
+    start_sha: str | None = None,
+    snapshot_path: Path | None = None,
+) -> int:
     """Extract the last JSON object containing a 'status' key from output using regex.
 
     Returns 0 in both success and fallback cases — the JSON on stdout is how the caller reads state.
@@ -28,5 +35,16 @@ def _forward_output(output: str, project_root: Path) -> int:
             return 0
         except json.JSONDecodeError:
             pass
+    try:
+        if start_sha is not None and snapshot_path is not None and snapshot_path.exists():
+            new_dirt = _cleanliness.compute_new_dirt(project_root, snapshot_path)
+            if new_dirt == []:
+                result = _subprocess_util.run(["git", "rev-parse", "HEAD"], cwd=project_root)
+                if result.returncode == 0 and result.stdout.strip() != start_sha:
+                    head = result.stdout.strip()
+                    print(json.dumps({"status": "success", "commit_sha": head, "session_id": "unknown", "inferred": True}))
+                    return 0
+    except Exception:
+        pass
     print(json.dumps({"status": "stuck", "stuck_type": "logic", "reason": "no structured report"}))
     return 0

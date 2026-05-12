@@ -201,7 +201,7 @@ def main() -> int:
             )
             print("PASS test1a: first run — all scopes r1")
 
-            # Second run — per-batch batches all APPROVE → carryforward (r1 files);
+            # Second run — per-batch batches all APPROVE -> carryforward (r1 files);
             # only holistic fires fresh (r2). Skip-approved scan active.
             _seed_approve(1)  # only holistic needs a response
             r2 = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root)
@@ -325,7 +325,7 @@ def main() -> int:
 
     # ------------------------------------------------------------------
     # Test 4 — hard-fail surfaces as ERROR per-batch entry, not full-run failure
-    # alpha (clean) succeeds; beta (bad ref) → ERROR entry; holistic disabled.
+    # alpha (clean) succeeds; beta (bad ref) -> ERROR entry; holistic disabled.
     # Aggregate must be REQUEST_CHANGES (not ReviewError), since not all ERROR.
     # ------------------------------------------------------------------
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -362,7 +362,7 @@ def main() -> int:
             assert "nonexistent/path.py" in rv_beta.get("error", ""), (
                 f"path not in error message: {rv_beta.get('error')}"
             )
-            print("PASS test4: per-batch ReviewError → ERROR entry, aggregate REQUEST_CHANGES (#41)")
+            print("PASS test4: per-batch ReviewError -> ERROR entry, aggregate REQUEST_CHANGES (#41)")
         except AssertionError as exc:
             errors += 1
             print(f"FAIL test4: {exc}", file=sys.stderr)
@@ -374,8 +374,8 @@ def main() -> int:
 
     # ------------------------------------------------------------------
     # Test 5 — hard-fail in holistic block surfaces as ReviewError
-    # alpha + gamma succeed; beta has bad ref → ERROR entry (no reviewer call).
-    # Holistic resolver encounters beta's bad ref → ReviewError propagates.
+    # alpha + gamma succeed; beta has bad ref -> ERROR entry (no reviewer call).
+    # Holistic resolver encounters beta's bad ref -> ReviewError propagates.
     # ------------------------------------------------------------------
     with tempfile.TemporaryDirectory() as tmpdir:
         batch_specs = [
@@ -418,7 +418,7 @@ def main() -> int:
 
     # ------------------------------------------------------------------
     # Test 6 — NEED_CONTEXT resume fallback in per-batch (#5/#7)
-    # Single batch (alpha) + holistic. Alpha retries once → APPROVE.
+    # Single batch (alpha) + holistic. Alpha retries once -> APPROVE.
     # ------------------------------------------------------------------
     with tempfile.TemporaryDirectory() as tmpdir:
         batch_specs = [("alpha", "01-alpha.md", ["src/a.py"], [])]
@@ -427,7 +427,7 @@ def main() -> int:
         )
         orig_dir = os.getcwd()
         os.chdir(project_root)
-        # alpha: NEED_CONTEXT → retry APPROVE; holistic: APPROVE
+        # alpha: NEED_CONTEXT -> retry APPROVE; holistic: APPROVE
         stub.seed([
             (NEED_CONTEXT_TEXT, "sid-1"),  # alpha first call
             (APPROVE_TEXT,      "sid-2"),  # alpha retry
@@ -451,7 +451,7 @@ def main() -> int:
             assert retry_kwargs == {"session_id": "sid-1", "resume": True, "timeout": None, "effort": None}, (
                 f"retry kwargs wrong: {retry_kwargs}"
             )
-            print("PASS test6: per-batch NEED_CONTEXT retry → APPROVE, holistic unaffected")
+            print("PASS test6: per-batch NEED_CONTEXT retry -> APPROVE, holistic unaffected")
         except AssertionError as exc:
             errors += 1
             print(f"FAIL test6: {exc}", file=sys.stderr)
@@ -463,7 +463,7 @@ def main() -> int:
 
     # ------------------------------------------------------------------
     # Test 7 — NEED_CONTEXT resume fallback in holistic block (#5/#7)
-    # Single batch (alpha) succeeds; holistic NEED_CONTEXT → retry APPROVE.
+    # Single batch (alpha) succeeds; holistic NEED_CONTEXT -> retry APPROVE.
     # ------------------------------------------------------------------
     with tempfile.TemporaryDirectory() as tmpdir:
         batch_specs = [("alpha", "01-alpha.md", ["src/a.py"], [])]
@@ -472,7 +472,7 @@ def main() -> int:
         )
         orig_dir = os.getcwd()
         os.chdir(project_root)
-        # alpha: APPROVE; holistic: NEED_CONTEXT → retry APPROVE
+        # alpha: APPROVE; holistic: NEED_CONTEXT -> retry APPROVE
         stub.seed([
             (APPROVE_TEXT,      "sid-1"),  # alpha
             (NEED_CONTEXT_TEXT, "sid-2"),  # holistic first call
@@ -496,7 +496,7 @@ def main() -> int:
             assert retry_kwargs == {"session_id": "sid-2", "resume": True, "timeout": None, "effort": None}, (
                 f"holistic retry kwargs wrong: {retry_kwargs}"
             )
-            print("PASS test7: holistic NEED_CONTEXT retry → APPROVE")
+            print("PASS test7: holistic NEED_CONTEXT retry -> APPROVE")
         except AssertionError as exc:
             errors += 1
             print(f"FAIL test7: {exc}", file=sys.stderr)
@@ -586,7 +586,7 @@ def main() -> int:
 
     # ------------------------------------------------------------------
     # Test 9 — all batches approved + holistic re-runs
-    # All three batches approved in r1 → stub fires exactly once (holistic).
+    # All three batches approved in r1 -> stub fires exactly once (holistic).
     # reviews has 1 entry (holistic only, resume path, bug C fix #184).
     # ------------------------------------------------------------------
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -630,7 +630,7 @@ def main() -> int:
 
     # ------------------------------------------------------------------
     # Test 10 — malformed prior review file
-    # 01-a r1 file has unparseable content → treated as not-approved.
+    # 01-a r1 file has unparseable content -> treated as not-approved.
     # Stub fires for 01-a, 02-b, 03-c, and holistic (4 calls).
     # ------------------------------------------------------------------
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -663,7 +663,7 @@ def main() -> int:
                 f"malformed file should cause 01-a to re-review; expected 4 prompts, got {len(prompts)}"
             )
             assert r.verdict == "APPROVE"
-            print("PASS test10: malformed prior review → 01-a treated as not-approved, all 4 scopes fire")
+            print("PASS test10: malformed prior review -> 01-a treated as not-approved, all 4 scopes fire")
         except AssertionError as exc:
             errors += 1
             print(f"FAIL test10: {exc}", file=sys.stderr)
@@ -806,7 +806,7 @@ def main() -> int:
     # Test 15 — max_rounds kwarg override for plan review
     # Pre-populate 3 per-batch review files and 3 holistic files.
     # Without kwarg (cfg max=3): raises ReviewError (round 4 would exceed max).
-    # With max_rounds=5: holistic r4 succeeds (per-batch all approved → carryforward).
+    # With max_rounds=5: holistic r4 succeeds (per-batch all approved -> carryforward).
     # ------------------------------------------------------------------
     with tempfile.TemporaryDirectory() as tmpdir:
         batch_specs = [("alpha", "01-alpha.md", ["src/a.py"], [])]
@@ -828,7 +828,7 @@ def main() -> int:
                     APPROVE_TEXT, encoding="utf-8"
                 )
 
-            # Without kwarg: round 4 exceeds cfg max=3 → ReviewError
+            # Without kwarg: round 4 exceeds cfg max=3 -> ReviewError
             try:
                 stub.seed([(APPROVE_TEXT, "sid-x")])
                 plan_run(cfg, SLUG, mill_dir, wiki_root, project_root)
@@ -848,7 +848,7 @@ def main() -> int:
             assert rv_hol is not None, "holistic entry missing"
             fname = Path(rv_hol["file"]).name
             assert "plan-review-r4" in fname, f"expected holistic r4, got {fname}"
-            print(f"PASS test15b: max_rounds=5 → holistic r4 succeeds → {fname}")
+            print(f"PASS test15b: max_rounds=5 -> holistic r4 succeeds -> {fname}")
         except AssertionError as exc:
             errors += 1
             print(f"FAIL test15: {exc}", file=sys.stderr)
@@ -985,7 +985,7 @@ def main() -> int:
             os.chdir(orig_dir)
 
     # ------------------------------------------------------------------
-    # Test 19 — timeout plumbing: bulk_timeout → per-batch, holistic_timeout → holistic
+    # Test 19 — timeout plumbing: bulk_timeout -> per-batch, holistic_timeout -> holistic
     # Single-batch fixture so captured_prompts() ordering is deterministic.
     # ------------------------------------------------------------------
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -1009,7 +1009,7 @@ def main() -> int:
             assert hol_kwargs["timeout"] == 1800, (
                 f"holistic timeout should be 1800, got {hol_kwargs['timeout']!r}"
             )
-            print("PASS test19: timeout plumbing — bulk_timeout=900 → per-batch, holistic_timeout=1800 → holistic")
+            print("PASS test19: timeout plumbing — bulk_timeout=900 -> per-batch, holistic_timeout=1800 -> holistic")
         except AssertionError as exc:
             errors += 1
             print(f"FAIL test19: {exc}", file=sys.stderr)
@@ -1020,9 +1020,9 @@ def main() -> int:
             os.chdir(orig_dir)
 
     # ------------------------------------------------------------------
-    # Test 20 — holistic parse_verdict failure → ERROR entry (#185)
-    # One-batch plan; holistic returns raw prose without yaml block →
-    # parse_verdict raises ReviewError → ERROR entry, no raise.
+    # Test 20 — holistic parse_verdict failure -> ERROR entry (#185)
+    # One-batch plan; holistic returns raw prose without yaml block ->
+    # parse_verdict raises ReviewError -> ERROR entry, no raise.
     # ------------------------------------------------------------------
     with tempfile.TemporaryDirectory() as tmpdir:
         batch_specs = [("alpha", "01-alpha.md", ["src/a.py"], [])]
@@ -1048,7 +1048,7 @@ def main() -> int:
             assert "parse_verdict failed" in rv_hol.get("error", ""), (
                 f"error message missing 'parse_verdict failed': {rv_hol.get('error')}"
             )
-            print("PASS test20: holistic parse_verdict failure → ERROR entry, no ReviewError raised (#185)")
+            print("PASS test20: holistic parse_verdict failure -> ERROR entry, no ReviewError raised (#185)")
         except AssertionError as exc:
             errors += 1
             print(f"FAIL test20: {exc}", file=sys.stderr)

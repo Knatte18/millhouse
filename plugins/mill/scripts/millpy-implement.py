@@ -183,7 +183,7 @@ def main(argv=None) -> int:
             print(json.dumps({"status": "stuck", "stuck_type": "transient", "reason": str(e)}))
             print(str(e), file=sys.stderr)
             return 1
-        return _forward_output(output, project_root)
+        return _forward_output(output, project_root, start_sha=start_sha, snapshot_path=snapshot_path)
 
     else:
         # Fix-cycle resume
@@ -256,7 +256,9 @@ def main(argv=None) -> int:
             print(json.dumps({"status": "stuck", "stuck_type": "transient", "reason": str(e)}))
             print(str(e), file=sys.stderr)
             return 1
-        return _forward_output(output, project_root)
+        start_sha_for_forward = batch_state.get("start_sha") if batch_state else None
+        snapshot_path_for_forward = project_root / "task" / f".cleanliness-snapshot-{args.batch_name}.txt"
+        return _forward_output(output, project_root, start_sha=start_sha_for_forward, snapshot_path=snapshot_path_for_forward)
 
 
 if __name__ == "__main__":

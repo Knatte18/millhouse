@@ -61,7 +61,7 @@ def main() -> int:
         if errors == 0:
             print("PASS: all wrappers contain the correct script reference")
 
-    # --- write_all against tempdir already containing same files → returns empty list ---
+    # --- write_all against tempdir already containing same files -> returns empty list ---
     with tempfile.TemporaryDirectory() as tmpdir:
         mill_dir = Path(tmpdir)
         write_all(mill_dir)  # first run — writes all
@@ -75,7 +75,7 @@ def main() -> int:
         else:
             print("PASS: second write_all returns empty list (all up-to-date)")
 
-    # --- write_all against tempdir with one stale wrapper → only that one rewritten ---
+    # --- write_all against tempdir with one stale wrapper -> only that one rewritten ---
     with tempfile.TemporaryDirectory() as tmpdir:
         mill_dir = Path(tmpdir)
         write_all(mill_dir)  # seed all files
@@ -108,7 +108,7 @@ def main() -> int:
         else:
             print(f"PASS: refreshed wrapper for {stale_script} has correct content")
 
-    # --- write_all against tempdir with legacy .py wrappers → .py files deleted, .ps1 files present ---
+    # --- write_all against tempdir with legacy .py wrappers -> .py files deleted, .ps1 files present ---
     with tempfile.TemporaryDirectory() as tmpdir:
         mill_dir = Path(tmpdir)
         for script in SHORTCUT_SCRIPTS:

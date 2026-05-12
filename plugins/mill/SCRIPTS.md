@@ -163,8 +163,10 @@ options:
                         bulk. Repeat for each file. Typically supplied by the
                         orchestrator after a prior NEED_CONTEXT verdict.
   --max-rounds MAX_ROUNDS
-                        Override review.code.rounds for this invocation.
-                        Default: use config value.
+                        Override roles.code-review.batch.rounds and
+                        roles.code-review.holistic.rounds (overrides the
+                        active scope) for this invocation. Default: use config
+                        values.
 ```
 
 ## millpy-review-discussion
@@ -177,8 +179,8 @@ Run a discussion review for the active task.
 options:
   -h, --help            show this help message and exit
   --max-rounds MAX_ROUNDS
-                        Override review.discussion.rounds for this invocation.
-                        Default: use config value.
+                        Override roles.discussion-review.holistic.rounds for
+                        this invocation. Default: use config value.
 ```
 
 ## millpy-review-plan
@@ -186,20 +188,25 @@ options:
 ```
 usage: millpy-review-plan.py [-h] [--max-rounds MAX_ROUNDS] [--holistic-only |
                              --no-holistic] [--skip-validate]
+                             [--skip-check CHECK]
 
 Run a plan review for the active task.
 
 options:
   -h, --help            show this help message and exit
   --max-rounds MAX_ROUNDS
-                        Override review.plan.rounds for this invocation.
-                        Default: use config value.
+                        Override roles.plan-review.batch.rounds and
+                        roles.plan-review.holistic.rounds (overrides both
+                        scopes) for this invocation. Default: use config
+                        values.
   --holistic-only       Skip per-batch reviews; run only the holistic plan
                         review.
   --no-holistic         Skip the holistic plan review; run per-batch reviews
                         only.
   --skip-validate       Bypass the auto pre-review validator. Use only when
                         you know the validator is false-positive on a finding.
+  --skip-check CHECK    Skip a named validator check (repeatable). Silently
+                        ignores unknown names.
 ```
 
 ## millpy-skills-index

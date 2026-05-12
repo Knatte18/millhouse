@@ -432,7 +432,7 @@ def test_write_initial_status_forced_failure_raises_runtime_error() -> None:
 
 
 def test_write_initial_status_push_failure_raises_runtime_error() -> None:
-    """No origin remote → push fails → RuntimeError mentioning git push --set-upstream origin."""
+    """No origin remote -> push fails -> RuntimeError mentioning git push --set-upstream origin."""
     with tempfile.TemporaryDirectory() as tmp:
         repo = Path(tmp) / "repo-no-origin"
         repo.mkdir()
@@ -568,7 +568,7 @@ def test_write_wiki_active_task_md() -> None:
 
 
 def test_pick_task_single_or_multi_single_number() -> None:
-    """Single number from numbered prompt → mode='single'."""
+    """Single number from numbered prompt -> mode='single'."""
     tasks = _tasks_md.parse(_HOME_MD_UNMARKED_ONLY)
     import io
     original_stdin = sys.stdin
@@ -583,7 +583,7 @@ def test_pick_task_single_or_multi_single_number() -> None:
         raise AssertionError(f"expected task-one, got {picked.slug!r}")
     if candidates != []:
         raise AssertionError(f"expected candidates=[], got {candidates!r}")
-    print("PASS: pick_task_single_or_multi single number → mode=single")
+    print("PASS: pick_task_single_or_multi single number -> mode=single")
 
 
 # ---------------------------------------------------------------------------
@@ -592,7 +592,7 @@ def test_pick_task_single_or_multi_single_number() -> None:
 
 
 def test_pick_task_single_or_multi_multi_numbers() -> None:
-    """Comma-separated numbers → mode='multi' with correct tasks."""
+    """Comma-separated numbers -> mode='multi' with correct tasks."""
     tasks = _tasks_md.parse(_HOME_MD_THREE_TASKS)
     import io
     original_stdin = sys.stdin
@@ -608,7 +608,7 @@ def test_pick_task_single_or_multi_multi_numbers() -> None:
     slugs = [t.slug for t in picked]
     if slugs != ["task-alpha", "task-gamma"]:
         raise AssertionError(f"expected [task-alpha, task-gamma], got {slugs!r}")
-    print("PASS: pick_task_single_or_multi comma-separated → mode=multi")
+    print("PASS: pick_task_single_or_multi comma-separated -> mode=multi")
 
 
 def test_pick_task_single_or_multi_dedup() -> None:
@@ -626,7 +626,7 @@ def test_pick_task_single_or_multi_dedup() -> None:
     slugs = [t.slug for t in picked]
     if slugs != ["task-alpha", "task-beta"]:
         raise AssertionError(f"expected [task-alpha, task-beta], got {slugs!r}")
-    print("PASS: pick_task_single_or_multi de-duplicates 1,1,2 → [task-alpha, task-beta]")
+    print("PASS: pick_task_single_or_multi de-duplicates 1,1,2 -> [task-alpha, task-beta]")
 
 
 # ---------------------------------------------------------------------------
@@ -635,7 +635,7 @@ def test_pick_task_single_or_multi_dedup() -> None:
 
 
 def test_pick_task_single_or_multi_out_of_range_then_valid() -> None:
-    """Out-of-range on first attempt, valid on second → succeeds."""
+    """Out-of-range on first attempt, valid on second -> succeeds."""
     tasks = _tasks_md.parse(_HOME_MD_UNMARKED_ONLY)
     import io
     original_stdin = sys.stdin
@@ -648,7 +648,7 @@ def test_pick_task_single_or_multi_out_of_range_then_valid() -> None:
         raise AssertionError(f"expected mode=single, got {mode!r}")
     if picked.slug != "task-one":
         raise AssertionError(f"expected task-one, got {picked.slug!r}")
-    print("PASS: pick_task_single_or_multi out-of-range then valid → mode=single")
+    print("PASS: pick_task_single_or_multi out-of-range then valid -> mode=single")
 
 
 def test_pick_task_single_or_multi_three_bad_attempts_raises() -> None:
@@ -660,7 +660,7 @@ def test_pick_task_single_or_multi_three_bad_attempts_raises() -> None:
     try:
         pick_task_single_or_multi(tasks)
     except ValueError:
-        print("PASS: pick_task_single_or_multi three bad attempts → ValueError")
+        print("PASS: pick_task_single_or_multi three bad attempts -> ValueError")
     else:
         raise AssertionError("expected ValueError after 3 bad attempts")
     finally:
@@ -673,14 +673,14 @@ def test_pick_task_single_or_multi_three_bad_attempts_raises() -> None:
 
 
 def test_pick_task_single_or_multi_empty_backlog() -> None:
-    """No unmarked tasks → mode='empty', picked=None."""
+    """No unmarked tasks -> mode='empty', picked=None."""
     tasks = _tasks_md.parse(_HOME_MD_EMPTY)
     mode, picked, candidates = pick_task_single_or_multi(tasks)
     if mode != "empty":
         raise AssertionError(f"expected mode=empty, got {mode!r}")
     if picked is not None:
         raise AssertionError(f"expected picked=None, got {picked!r}")
-    print("PASS: pick_task_single_or_multi no candidates → mode=empty")
+    print("PASS: pick_task_single_or_multi no candidates -> mode=empty")
 
 
 def test_pick_task_single_or_multi_slug_bypass() -> None:
@@ -691,7 +691,7 @@ def test_pick_task_single_or_multi_slug_bypass() -> None:
         raise AssertionError(f"expected mode=single, got {mode!r}")
     if picked.slug != "fix-login":
         raise AssertionError(f"expected fix-login, got {picked.slug!r}")
-    print("PASS: pick_task_single_or_multi --slug → mode=single, no prompt")
+    print("PASS: pick_task_single_or_multi --slug -> mode=single, no prompt")
 
 
 def test_pick_task_single_or_multi_fast_path_s() -> None:
@@ -702,7 +702,7 @@ def test_pick_task_single_or_multi_fast_path_s() -> None:
         raise AssertionError(f"expected mode=single for [s] fast-path, got {mode!r}")
     if picked.slug != "dark-mode":
         raise AssertionError(f"expected dark-mode, got {picked.slug!r}")
-    print("PASS: pick_task_single_or_multi [s] fast-path → mode=single")
+    print("PASS: pick_task_single_or_multi [s] fast-path -> mode=single")
 
 
 # ---------------------------------------------------------------------------
@@ -793,7 +793,7 @@ def test_prompt_merged_entry_happy_path_no_proposal() -> None:
     sys.stdin = io.StringIO(
         "My Merged Title\n"   # Merged title
         "my-merged-slug\n"    # Merged slug
-        "N\n"                 # Extract to proposal? → No
+        "N\n"                 # Extract to proposal? -> No
         "- bullet one\n"      # Body line 1
         "- bullet two\n"      # Body line 2
         "END\n"               # Sentinel
@@ -826,7 +826,7 @@ def test_prompt_merged_entry_with_proposal() -> None:
     sys.stdin = io.StringIO(
         "Proposal Title\n"     # Merged title
         "proposal-slug\n"      # Merged slug
-        "y\n"                  # Extract to proposal? → Yes
+        "y\n"                  # Extract to proposal? -> Yes
         "- detail line\n"      # Body line
         "END\n"                # Sentinel
     )
