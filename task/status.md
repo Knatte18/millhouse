@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-bulk-skill-conversion
+phase: approved-mill-go-conversion
 blocked_reason: 'auto: discussion review gaps unresolved after 2 rounds'
 slug: skills-direct-venv-invocation
 branch: hanf/skills-direct-venv-invocation
@@ -26,6 +26,7 @@ plan-fix-r2  '2026-05-12T14:52:51Z'
 planned  '2026-05-12T14:53:00Z'
 implementing  '2026-05-12T15:05:57Z'
 approved-bulk-skill-conversion  '2026-05-12T15:17:31Z'
+approved-mill-go-conversion  '2026-05-12T15:22:57Z'
 ```
 
 ## Batches
@@ -37,7 +38,7 @@ batches:
     implementer_session: a215aa77-8160-43df-b64f-78d9f39b206b
     start_sha: 1262d878f0c85fc5bbe2fa88c0866504c7a6504a
   - name: mill-go-conversion
-    state: running
+    state: approved
     implementer_session: 29acc526-3b0d-4b2d-986b-22e3948599c4
     start_sha: 6bc6b6cdf84e282603b3f454eb743aeaf398c2e2
   - name: mill-setup-and-claudemd
