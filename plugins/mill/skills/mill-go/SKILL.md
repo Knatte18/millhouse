@@ -1,6 +1,6 @@
 ---
 name: mill-go
-description: In a spawned worktree with an approved plan, sequentially execute every batch in the plan's DAG. Per batch spawn one implementer Sonnet, run code review, loop with receive-review on REQUEST_CHANGES, halt on stuck. Hand off to mill-merge.
+description: In a spawned worktree with an approved plan, sequentially execute every batch in the plan's DAG. Per batch spawn one implementer Sonnet, run code review, loop with receive-review on REQUEST_CHANGES, halt on stuck. Hand off to mill-finalize.
 ---
 
 # mill-go
@@ -16,7 +16,7 @@ You are the **Builder** — a lean orchestrator. You coordinate per-batch implem
 2. Resolve the wiki path: `wiki_path = _paths.resolve_wiki_path(_paths.resolve_git_root())`. Sync the wiki clone: `_wiki.sync_pull(wiki_path, slug=slug)`.
    `signature: _wiki.sync_pull(wiki_path: Path, *, slug: str) -> None`
 3. Load config — deep-merge `<wiki_path>/config.yaml` with `.millhouse/config.local.yaml` via `_review_common.load_config(wiki_path, Path(".millhouse"))`. Read these keys:
-   - `pipeline.auto_merge` — whether to invoke mill-merge after success.
+   - `pipeline.auto_merge` — whether to invoke mill-finalize after success.
    - `pipeline.auto_report` — whether to auto-fire mill-self-report at end-of-work. mill-go fires it at Handoff step 6, AFTER any `/mill-merge` invocation in step 5 — including after PR-pending halts. See step 6 for the explicit "do not treat PR-pending as termination" rule.
    - `roles.code-review.batch.rounds` — max review rounds per batch.
    - `roles.code-review.holistic.rounds` — max holistic review rounds (parallel cap for the holistic scope, default 1).
@@ -42,7 +42,7 @@ You are the **Builder** — a lean orchestrator. You coordinate per-batch implem
    | `implementing` / `reviewing` / `fixing` | resume (see *Resume*) |
    | `blocked` | surface `blocked_reason` from status.md and halt |
    | `discussed` / `discussing` / `planning` | tell user to finish mill-plan and halt |
-   | `done` | tell user the task is complete; suggest `/mill-merge` if auto-merge was off |
+   | `done` | tell user the task is complete; suggest `/mill-finalize` if auto-merge was off |
    | any other | surface + halt |
 
 6. Read the plan overview: `overview_path = Path("task/plan/00-overview.md").resolve()`. Confirm `approved: true` in the frontmatter. Extract the Batch Index via `_plan_dag.extract_batch_index(overview_text)`, validate via `_plan_dag.validate(batches, sorted(p.name for p in plan_dir.glob("??-*.md") if p.name != "00-overview.md"))` where `plan_dir = Path("task/plan/").resolve()`, then compute `order = _plan_dag.topo_order(batches)`.
@@ -293,8 +293,8 @@ For each round `H` from 1 to `max_holistic_rounds`:
    ```bash
    uv run --project "$CLAUDE_PLUGIN_ROOT" "$CLAUDE_PLUGIN_ROOT/scripts/millpy-builder-lock.py" release
    ```
-5. If `pipeline.auto_merge: true` → invoke `/mill-merge`. Otherwise tell the user: "Task complete. Run `/mill-merge` to merge the task branch back to parent." mill-merge may halt on `pr-pending` in PR mode (`git.require-pr-to-base: true`) — that is a skill-level halt and is expected; treat it as completion of step 5 and continue to step 6.
-6. If `pipeline.auto_report: true` → invoke `/mill-self-report --auto`. **Always fires** at the end of Handoff, including after a `pr-pending` halt in step 5 — do NOT treat the PR-pending message as task termination. The skill checks `gh auth` itself and bails cleanly if absent. mill-merge itself does not self-report — only the orchestrator (mill-go) does. Cross-thread merges and post-PR teardowns are not auto-reflected; user can run `/mill-self-report` manually if wanted.
+5. If `pipeline.auto_merge: true` → invoke `/mill-finalize`. Otherwise tell the user: "Task complete. Run `/mill-finalize` to finalize the task (creates a PR or squashes directly, depending on config)." mill-finalize may halt on `pr-pending` in PR mode — that is expected; treat it as completion of step 5 and continue to step 6.
+6. If `pipeline.auto_report: true` → invoke `/mill-self-report --auto`. **Always fires** at the end of Handoff, including after a `pr-pending` halt in step 5 — do NOT treat the PR-pending message as task termination. The skill checks `gh auth` itself and bails cleanly if absent. Cross-thread merges and post-PR teardowns are not auto-reflected; user can run `/mill-self-report` manually if wanted.
 
 ## Principles
 
