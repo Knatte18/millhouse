@@ -7,11 +7,12 @@ have a VS Code window open, then shows a unified prompt: ``<Enter>`` spawns
 a new task and opens it, a number opens the listed worktree, or ``q`` quits.
 
 Usage:
-    python millpy-vscode.py [--new | --slug <slug>] [--list]
+    python millpy-vscode.py [--new | --slug <slug>] [--list] [--filter-open]
 
     --new           Spawn a new task and open it without showing the picker.
     --slug <slug>   Skip the picker and open the worktree for this slug.
     --list          Print the list of active worktrees without launching.
+    --filter-open   Filter out worktrees that already have a VS Code window open.
     --new and --slug are mutually exclusive.
 
 Exit codes:
@@ -160,6 +161,11 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Print active worktrees without launching VS Code.",
     )
+    parser.add_argument(
+        "--filter-open",
+        action="store_true",
+        help="Filter out worktrees that already have a VS Code window open.",
+    )
     args = parser.parse_args(argv)
 
     git_root = resolve_git_root()
@@ -209,9 +215,12 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         selected_path = matched[0]
     else:
-        filtered = _filter_open_worktrees(active, wiki_path, cfg.get("hub_relative_path", "."))
-        if not filtered:
-            return _spawn_and_open(worktrees_dir, active, wiki_path, home_tasks, branch_prefix)
+        if args.filter_open:
+            filtered = _filter_open_worktrees(active, wiki_path, cfg.get("hub_relative_path", "."))
+            if not filtered:
+                return _spawn_and_open(worktrees_dir, active, wiki_path, home_tasks, branch_prefix)
+        else:
+            filtered = active
 
         print("Active worktrees:", file=sys.stderr)
         for i, (path, slug, title) in enumerate(filtered, start=1):
