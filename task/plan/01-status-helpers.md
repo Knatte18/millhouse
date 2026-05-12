@@ -70,7 +70,15 @@ Batch-local decisions:
   - `plugins/mill/unit_tests/test-status.py`
 - **Creates:** none
 - **Deletes:** none
-- **Requirements:** Extend `test-status.py` with four new test blocks inserted before the existing `init_batches` test block, each printing one `PASS:` line on success and `assert`-failing on regression:
+- **Requirements:** Extend `test-status.py` in two ways:
+
+  **A. Update existing assertions broken by Card 2's quoting change.** Three existing lines compare against unquoted-timestamp forms; after Card 2 lands they must compare against the quoted forms:
+  - Line 129: `assert "discussed  2026-04-22T15:00:00Z" in contents` → `assert "discussed  '2026-04-22T15:00:00Z'" in contents`.
+  - Line 184: `assert "discussed  2026-04-22T15:00:00Z" in contents` (same change as line 129; same fixture).
+  - Line 229: `assert r["last_timeline_entry"] == f"discussed  {ts2}"` → `assert r["last_timeline_entry"] == f"discussed  '{ts2}'"`.
+  These are the three remaining post-Card-2 mismatches; no other assertion in the file inspects an `append_phase`-written row. Grep the file for `"discussed  "` before committing to confirm zero unquoted-form expectations remain.
+
+  **B. Add four new test blocks** inserted before the existing `init_batches` test block, each printing one `PASS:` line on success and `assert`-failing on regression:
   1. **`set_blocked` happy path on fresh status:** call `render_initial` to produce a starting file (timestamp `"2026-05-12T00:00:00Z"`, phase `discussing`). Write it to a temp path. Call `set_blocked(path, "auto: discussion review gaps unresolved after 2 rounds", timestamp="2026-05-12T01:00:00Z")`. Assert `read_status(path)["phase"] == "blocked"`, `read_status(path)["blocked_reason"] == "auto: discussion review gaps unresolved after 2 rounds"`, and `read_status(path)["last_timeline_entry"]` matches the regex `r"^blocked\s+'2026-05-12T01:00:00Z'$"`.
   2. **`set_blocked` add-if-missing path:** same fixture as case 1 (top yaml block has no `blocked_reason:` row). After the call, read the file text, locate the yaml block via splitlines, and assert that the row at index `phase_index + 1` starts with `blocked_reason:` — i.e. the new row was inserted directly after `phase:`.
   3. **`set_blocked` rewrite-in-place path:** seed the file with an existing `blocked_reason: foo` row (use `_yaml_writer.quote_scalar` to format) inside the yaml block. Call `set_blocked(path, "new reason", timestamp="...")`. Assert the file text contains `blocked_reason: 'new reason'` exactly once (`text.count("blocked_reason:") == 1`) and does not contain the literal `foo`.

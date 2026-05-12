@@ -123,7 +123,7 @@ Batch-local decisions:
 
   Case 2 — **no new commits → no inference**: seed worktree → `capture_snapshot` → DO NOT make a new commit → call `_forward_output(...)` same way. Assert stdout contains `"status": "stuck"` and `"stuck_type": "logic"` — inference skipped because HEAD == start_sha.
 
-  Case 3 — **dirty worktree → no inference**: seed worktree → `capture_snapshot` → make a new commit → write an uncommitted file (`(project_root / "dirty.txt").write_text("x", encoding="utf-8")`) → call `_forward_output(...)`. Assert stuck-logic JSON — inference skipped because `compute_new_dirt` returns non-empty.
+  Case 3 — **dirty worktree → no inference**: seed worktree (the base commit MUST include a tracked file such as `README.md` — extend the fixture commit to `(project_root / "README.md").write_text("seed", encoding="utf-8")` then `git add README.md && git commit -m initial`) → `capture_snapshot` → make a new commit → MODIFY the already-tracked `README.md` without committing (`(project_root / "README.md").write_text("dirty", encoding="utf-8")`) → call `_forward_output(...)`. The modified-but-uncommitted tracked file appears as ` M README.md` in `git status --porcelain --untracked-files=no`, making `compute_new_dirt` return a non-empty list. Assert stuck-logic JSON — inference skipped. Note: untracked files (e.g. `dirty.txt` created from scratch) would be invisible to `--untracked-files=no` and would NOT trigger the dirty-worktree branch, defeating the test's intent.
 
   Case 4 — **missing snapshot → no inference**: seed worktree → SKIP `capture_snapshot` → make a new commit → call `_forward_output(..., snapshot_path=<nonexistent path>)`. Assert stuck-logic JSON — inference skipped because `snapshot_path.exists()` is False.
 
