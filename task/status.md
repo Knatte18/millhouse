@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-implementer-jsonreport
+phase: approved-skill-docs
 slug: mill-misc-fixes-5
 branch: hanf/mill-misc-fixes-5
 plan: task/plan
@@ -26,6 +26,7 @@ implementing  2026-05-12T06:53:41Z
 approved-status-helpers  2026-05-12T07:02:31Z
 approved-small-fixes  2026-05-12T07:07:15Z
 approved-implementer-jsonreport  2026-05-12T07:13:16Z
+approved-skill-docs  2026-05-12T07:20:01Z
 ```
 
 ## Batches
@@ -45,7 +46,7 @@ batches:
     implementer_session: 1cc9fae1-c1d2-4f99-983a-1cb43ffc2b43
     start_sha: 9f056bf77a4c3f0f6eca352ff09d95e7a8d74573
   - name: skill-docs
-    state: running
+    state: approved
     implementer_session: 79d143e3-98c5-4cd8-bdad-cd5bf72ae354
     start_sha: 32e594f5d68e5a92a364f4434d76f1f074eda787
 ```
