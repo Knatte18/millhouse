@@ -43,7 +43,7 @@ def _make_worktree(tmp: Path, slug: str, phase: str = "implementing") -> tuple[P
     wt.mkdir(exist_ok=True)
     mill_dir = wt / ".millhouse"
     mill_dir.mkdir(exist_ok=True)
-    status_path = wt / "task" / "status.md"
+    status_path = wt / "_mill" / "status.md"
     _make_status_md(status_path, phase)
     return wt, mill_dir, status_path
 
@@ -84,6 +84,14 @@ def _make_trampoline(tmp: Path, slug: str | None = "test-task") -> Path:
         f"pm.resolve_container_path = lambda p: Path(r'{tmp_posix}')\n"
         f"pm.resolve_hub_path = lambda: Path(r'{wt_posix}')\n"
         f"pm.resolve_active_hub = lambda container, slug, *, cfg, git_root: Path(r'{wt_posix}')\n"
+        "def _rtp(wt, rel):\n"
+        "    t = wt / rel\n"
+        "    if t.exists(): return t\n"
+        "    if '_mill/' in rel:\n"
+        "        fb = wt / rel.replace('_mill/', 'task/', 1)\n"
+        "        if fb.exists(): return fb\n"
+        "    return t\n"
+        "pm.resolve_task_path = _rtp\n"
         "sys.modules['_paths'] = pm\n"
         "\n"
         + marker_block +
@@ -171,7 +179,7 @@ def main() -> int:
             # git commands should target the task branch (active_hub == wt for flat-hub)
             cmds = _read_git_cmds(tmp)
             wt_str = str(wt)
-            assert ["git", "-C", wt_str, "add", "task/status.md"] in cmds, \
+            assert ["git", "-C", wt_str, "add", "_mill/status.md"] in cmds, \
                 f"add not in cmds: {cmds}"
             assert ["git", "-C", wt_str, "commit", "-m", f"task: abandon {slug}"] in cmds, \
                 f"commit not in cmds: {cmds}"
@@ -260,7 +268,7 @@ def main() -> int:
             assert result.returncode == 0, f"exit={result.returncode} stderr={result.stderr}"
             cmds = _read_git_cmds(tmp)
             wt_str = str(wt)
-            assert ["git", "-C", wt_str, "add", "task/status.md"] in cmds, \
+            assert ["git", "-C", wt_str, "add", "_mill/status.md"] in cmds, \
                 f"add not in cmds: {cmds}"
             ok("stale lock -> proceed with --force")
     except Exception as exc:

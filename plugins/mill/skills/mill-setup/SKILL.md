@@ -68,7 +68,7 @@ PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/
 
 This direct-binary form is used by every mill SKILL.md (mill-go uses an equivalent form with `$MILL_PYTHON`, an alias defined in its Step 0 block). The source-tree form (`uv run --project plugins/mill ...`) remains the documented exception for cases where the cache path is unavailable — for example, running unit tests from the millhouse repo itself.
 
-Helpers used by this skill: `_setup` (Phase 4 — `create_hub_links`), `_gitignore` (Phase 4.5b), `_shortcuts` (Phase 4.7), `_sidebar` (Phase 6a), `_vscode` (Phase 7), `_render` (transitively via `_vscode` and `_shortcuts`), `_wiki` (Phase 3, 3.1, 6, 6a), `_junction` (Phase 3.7).
+Helpers used by this skill: `_setup` (Phase 4 — `create_hub_links`), `_gitignore` (Phase 4.5b), `_shortcuts` (Phase 4.7), `_sidebar` (Phase 6a), `_vscode` (Phase 7), `_render` (transitively via `_vscode` and `_shortcuts`), `_wiki` (Phase 3, 3.1, 6, 6a).
 
 ## Phases
 
@@ -256,21 +256,19 @@ Maintains the `# === mill-managed ... # === end mill-managed ===` block in the h
 
 Compute `<hub-gitignore>` as `<hub-path>/.gitignore` (same path in both container-form and prefix-form).
 
-Read the hardlink entry names (available from Phase 4 output), then call `_gitignore.upsert`:
+Call `_gitignore.upsert`:
 
 ```bash
 PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "
 from pathlib import Path
-import _wiki, _gitignore
+import _gitignore
 hub_gi = Path(r'<hub-gitignore>').resolve()
-wiki = Path(r'<wiki-dir>').resolve()
-hardlink_names = [f'/{name}' for name in _wiki.read_hardlinks(wiki).keys()]
-changed = _gitignore.upsert(hub_gi, _gitignore.GLOB_ENTRIES + hardlink_names)
+changed = _gitignore.upsert(hub_gi, _gitignore.GLOB_ENTRIES)
 print('hub .gitignore:', 'updated' if changed else 'already up to date')
 "
 ```
 
-Log the result. Hardlink names (e.g. `/tasks.md`) are passed as anchored patterns alongside `GLOB_ENTRIES` in a single combined list.
+Log the result.
 
 ### Phase 4.7 — PS1 shortcut wrappers
 
@@ -476,10 +474,9 @@ Check every invariant; halt with a specific error if any fails:
 - `<WIKI_PATH>/config.yaml` exists
 - `<container>/wts/` exists (container-form) or `<container>/` exists (prefix-form)
 - `<container>/portals/` exists (container-form)
-- `<container>/portals/<repo>/` portal entry exists and points at `<hub-path>` (container-form)
+- `hub/.portals` exists and resolves to `<container>/portals/`
 - Every hub junction (entries without `<SLUG>` from `wiki/config.yaml`) exists and resolves to its expected target
-- Every hardlink (from `wiki/config.yaml`) exists and shares an inode with its target
-- `.gitignore` contains the mill-managed marker block with glob and anchored entries
+- `.gitignore` contains the mill-managed marker block with glob entries
 - `hub_relative_path:` is set in `.millhouse/config.local.yaml`
 - Machine-level config at `~/.millhouse/config.machine.yaml` (if present) parses as valid YAML — verify via `_machine.probe()` returning `MISSING` or `PRESENT`, not `MALFORMED`.
 - Every script in `_shortcuts.SHORTCUT_SCRIPTS` has a wrapper at `.millhouse/<script>.ps1` (and no legacy `.millhouse/<script>.py` exists)
@@ -515,9 +512,6 @@ Junctions (from wiki config.yaml):
   Per-worktree (created by mill-spawn):
     <path-c> -> <template-c>    (contains <SLUG>)
 
-Hardlinks (from wiki config.yaml):
-  <link-a> -> <resolved-target-a>
-
 Next: /mill-add <slug> --title "..." [--summary "..."] [--proposal-body "..."] to add tasks, /mill-status to list them.
 ```
 
@@ -542,7 +536,7 @@ Every phase checks current state before acting. Re-running after a partial or co
 
 - Wiki already cloned → pulls latest.
 - `wiki/config.yaml` present → skipped (Phase 3.1).
-- `portals/` and main-worktree portal entry present → skipped (Phase 3.7).
+- `portals/` dir present → created by Phase 4 via `_setup.create_hub_links` (idempotent via `exist_ok=True` on the junction target).
 - `create_hub_links` re-checks each junction and hardlink — skips already-correct ones (Phase 4).
 - `.gitignore` marker block already up-to-date → not rewritten (Phase 4.5b).
 - `hub_relative_path` already set → updated to current value (Phase 4.9).

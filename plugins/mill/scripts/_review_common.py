@@ -176,7 +176,7 @@ def resolve_path(path_tmpl: str, slug: str) -> Path:
         container_path, slug, cfg=cfg, git_root=git_root,
     )
     resolved_tmpl = path_tmpl.replace("<SLUG>", slug)
-    return active_hub / resolved_tmpl
+    return _paths.resolve_task_path(active_hub, resolved_tmpl)
 
 
 def discover_round(reviews_dir: Path, review_type: str, scope: str) -> int:

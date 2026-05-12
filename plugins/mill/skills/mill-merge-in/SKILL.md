@@ -11,7 +11,7 @@ Merge the parent branch into the current branch. Creates a rollback checkpoint f
 
 1. `_wiki.sync_pull(<WIKI_PATH>, slug="mill-merge-in")` — refresh the wiki clone before reading any task state.
 2. Read the slug via `_marker.slug_from_branch(git_root, wiki_path, cfg)`. On `MarkerError` → halt with "this worktree was not created by mill-spawn".
-3. Resolve the parent branch. **Source of truth is `task/status.md`'s `parent:` row** — call `_parent_branch.resolve(status_path, interactive=True)` where `status_path = Path("task/status.md").resolve()`. Config does not carry a parent-branch override (YAGNI as of v2.0). If `mill-merge-in` is being called from `mill-merge`'s auto-merge path, pass `interactive=False` and propagate the raised `ParentBranchError`.
+3. Resolve the parent branch. **Source of truth is `_mill/status.md`'s `parent:` row** — call `_parent_branch.resolve(status_path, interactive=True)` where `status_path = Path("_mill/status.md").resolve()`. Config does not carry a parent-branch override (YAGNI as of v2.0). If `mill-merge-in` is being called from `mill-merge`'s auto-merge path, pass `interactive=False` and propagate the raised `ParentBranchError`.
 4. Optional positional argument: `<branch>` from the user's invocation overrides both status.md and the prompt. This is for ad-hoc syncing from some other branch than the task's declared parent.
 
 ## Steps
@@ -52,7 +52,7 @@ On `{"status":"stuck"}` from the sub-agent → roll back to checkpoint (`git res
 
 ### 4. Verify
 
-Replay exactly the tests that ran during implementation. Call `_plan_dag.iter_batch_verifies(plan_dir)` where `plan_dir = Path("task/plan/").resolve()`. That yields `(batch_name, verify_cmd)` pairs in DAG order, skipping batches with `verify: null`.
+Replay exactly the tests that ran during implementation. Call `_plan_dag.iter_batch_verifies(plan_dir)` where `plan_dir = Path("_mill/plan/").resolve()`. That yields `(batch_name, verify_cmd)` pairs in DAG order, skipping batches with `verify: null`.
 
 Before the loop, load config and read the allowlist: call `cfg = _config.load_config(wiki_path, git_root)`, then read `skip_list = (cfg.get("verify") or {}).get("skip_known_broken") or []`. `skip_list` is the empty list when the key is absent (the default for all existing hubs). Initialise counters `ran = 0` and `skipped = 0`.
 
