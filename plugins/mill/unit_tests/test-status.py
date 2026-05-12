@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import contextlib
 import io
+import re
 import sys
 import tempfile
 from pathlib import Path
@@ -23,8 +24,10 @@ from _status import (  # noqa: E402
     render_initial,
     set_batch_field,
     set_batch_fields,
+    set_blocked,
     update_field,
 )
+from _yaml_writer import quote_scalar  # noqa: E402
 
 
 def main() -> int:
@@ -126,7 +129,7 @@ def main() -> int:
             append_phase(sp, "discussed", "2026-04-22T15:00:00Z")
             contents = sp.read_text(encoding="utf-8")
             assert "phase: discussed" in contents, "phase yaml row not updated"
-            assert "discussed  2026-04-22T15:00:00Z" in contents, "timeline row not appended"
+            assert "discussed  '2026-04-22T15:00:00Z'" in contents, "timeline row not appended"
             print("PASS: append_phase updates phase yaml + appends timeline row")
 
         # Colon in phase round-trip — separate file to avoid contaminating shared sp.
@@ -139,6 +142,94 @@ def main() -> int:
                 f"append_phase colon round-trip failed: {data_weird['yaml']['phase']!r}"
             )
             print("PASS: append_phase quotes phase with colon")
+
+        # --- set_blocked tests ---
+
+        # Test 1: set_blocked happy path on fresh status.
+        with tempfile.TemporaryDirectory() as tmp:
+            sp = Path(tmp) / "status.md"
+            sp.write_text(
+                render_initial("T", "D", "2026-05-12T00:00:00Z", "main", slug="t-slug", branch="hanf/t-slug"),
+                encoding="utf-8",
+            )
+            set_blocked(sp, "auto: discussion review gaps unresolved after 2 rounds", timestamp="2026-05-12T01:00:00Z")
+            r = read_status(sp)
+            assert r["phase"] == "blocked", f"expected blocked, got {r['phase']!r}"
+            assert r["blocked_reason"] == "auto: discussion review gaps unresolved after 2 rounds", (
+                f"blocked_reason mismatch: {r['blocked_reason']!r}"
+            )
+            assert re.match(r"^blocked\s+'2026-05-12T01:00:00Z'$", r["last_timeline_entry"]), (
+                f"unexpected last_timeline_entry: {r['last_timeline_entry']!r}"
+            )
+            print("PASS: set_blocked happy path on fresh status")
+
+        # Test 2: set_blocked inserts blocked_reason directly after phase: when absent.
+        with tempfile.TemporaryDirectory() as tmp:
+            sp = Path(tmp) / "status.md"
+            sp.write_text(
+                render_initial("T", "D", "2026-05-12T00:00:00Z", "main", slug="t-slug", branch="hanf/t-slug"),
+                encoding="utf-8",
+            )
+            set_blocked(sp, "auto: discussion review gaps unresolved after 2 rounds", timestamp="2026-05-12T01:00:00Z")
+            file_text = sp.read_text(encoding="utf-8")
+            text_lines = file_text.splitlines()
+            phase_index = None
+            for idx, line in enumerate(text_lines):
+                if line.strip().startswith("phase:"):
+                    phase_index = idx
+                    break
+            assert phase_index is not None, "phase: row not found in file"
+            assert text_lines[phase_index + 1].startswith("blocked_reason:"), (
+                f"expected blocked_reason: at index {phase_index + 1}, got {text_lines[phase_index + 1]!r}"
+            )
+            print("PASS: set_blocked inserts blocked_reason directly after phase:")
+
+        # Test 3: set_blocked rewrites blocked_reason in place when already present.
+        with tempfile.TemporaryDirectory() as tmp:
+            sp = Path(tmp) / "status.md"
+            content = render_initial("T", "D", "2026-05-12T00:00:00Z", "main", slug="t-slug", branch="hanf/t-slug")
+            content = content.replace(
+                "phase: discussing\n",
+                f"phase: discussing\nblocked_reason: {quote_scalar('foo')}\n",
+            )
+            sp.write_text(content, encoding="utf-8")
+            set_blocked(sp, "new reason", timestamp="2026-05-12T01:00:00Z")
+            file_text = sp.read_text(encoding="utf-8")
+            assert file_text.count("blocked_reason:") == 1, (
+                f"expected exactly one blocked_reason: row, got {file_text.count('blocked_reason:')}"
+            )
+            expected_br = f"blocked_reason: {quote_scalar('new reason')}"
+            assert expected_br in file_text, (
+                f"rewritten blocked_reason not found; expected {expected_br!r}"
+            )
+            assert "foo" not in file_text, "old blocked_reason value 'foo' still present"
+            print("PASS: set_blocked rewrites blocked_reason in place")
+
+        # Test 4: append_phase quoting regression.
+        with tempfile.TemporaryDirectory() as tmp:
+            sp = Path(tmp) / "status.md"
+            sp.write_text(
+                render_initial("T", "D", "2026-05-12T00:00:00Z", "main", slug="t-slug", branch="hanf/t-slug"),
+                encoding="utf-8",
+            )
+            append_phase(sp, "planning", "2026-05-12T02:00:00Z")
+            file_text = sp.read_text(encoding="utf-8")
+            lines_all = file_text.splitlines()
+            in_tl = False
+            tl_lines_content = []
+            for line in lines_all:
+                if line.strip() == "```text":
+                    in_tl = True
+                    continue
+                if in_tl and line.strip() == "```":
+                    break
+                if in_tl and line.strip():
+                    tl_lines_content.append(line.strip())
+            last_tl = tl_lines_content[-1] if tl_lines_content else ""
+            assert re.match(r"^planning\s+'2026-05-12T02:00:00Z'$", last_tl), (
+                f"unexpected quoted timeline row: {last_tl!r}"
+            )
+            print("PASS: append_phase writes quoted timestamp in timeline row")
 
         with tempfile.TemporaryDirectory() as tmp:
             sp = Path(tmp) / "status.md"
@@ -181,7 +272,7 @@ def main() -> int:
 
             contents = sp.read_text(encoding="utf-8")
             assert "phase: discussed" in contents, "batches edit damaged top yaml"
-            assert "discussed  2026-04-22T15:00:00Z" in contents, "batches edit damaged timeline"
+            assert "discussed  '2026-04-22T15:00:00Z'" in contents, "batches edit damaged timeline"
             print("PASS: batches edits preserve top yaml + timeline")
 
             set_batch_field(sp, "foundation", "blocked_reason", "missing key: foo")
@@ -226,7 +317,7 @@ def main() -> int:
             append_phase(sp, "discussed", ts2)
             r = read_status(sp)
             assert r["phase"] == "discussed", f"expected discussed, got {r['phase']}"
-            assert r["last_timeline_entry"] == f"discussed  {ts2}", (
+            assert r["last_timeline_entry"] == f"discussed  '{ts2}'", (
                 f"unexpected last entry: {r['last_timeline_entry']!r}"
             )
             print("PASS: read_status after append_phase")
