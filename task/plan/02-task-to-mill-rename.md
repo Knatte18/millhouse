@@ -81,12 +81,14 @@ Updates `wiki/config.yaml`, the config template, spawn/implement scripts, and un
 - **Context:**
   - `plugins/mill/scripts/millpy-spawn.py`
   - `plugins/mill/scripts/millpy-claim.py`
+  - `plugins/mill/unit_tests/test-millpy-spawn.py`
 - **Edits:**
   - `plugins/mill/scripts/millpy-spawn.py`
   - `plugins/mill/scripts/millpy-claim.py`
+  - `plugins/mill/unit_tests/test-millpy-spawn.py`
 - **Creates:** none
 - **Deletes:** none
-- **Requirements:** In both files, find the dry-run print statement that describes creating the `task/` working-state directory (look for strings containing `task/` near a `--dry-run` or `[dry-run]` context). Update the user-visible string to say `_mill/` instead. These are display strings only — no filesystem path logic changes. If no dry-run print for `task/` exists in a file, skip that file.
+- **Requirements:** In both files, find the dry-run print statement that describes creating the `task/` working-state directory (look for strings containing `task/` near a `--dry-run` or `[dry-run]` context). Update the user-visible string to say `_mill/` instead. These are display strings only — no filesystem path logic changes. If no dry-run print for `task/` exists in a file, skip that file. Update the corresponding assertion in `test-millpy-spawn.py` (`test_main_dry_run_prints_worktree_status_path`) to expect `_mill/status.md` instead of `task/status.md`.
 - **Commit:** `feat(spawn,claim): update dry-run prints to reference _mill/`
 
 ### Card 13: Update `millpy-migrate-layout.py` log message strings
