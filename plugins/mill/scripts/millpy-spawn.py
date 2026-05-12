@@ -197,18 +197,15 @@ def main(argv: list[str] | None = None) -> int:
         exclude={"wiki", "active"},
     )
 
-    # Timestamp used for both write_wiki_active_task_md and write_initial_status.
+    # Timestamp used for write_initial_status.
     ts = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
-    # Create wiki/active/<slug>/ and commit task.md before the portal entry
-    # points to it (Windows mklink /J requires an existing target dir).
     container_path = resolve_container_path(git_root)
     (container_path / "portals").mkdir(parents=True, exist_ok=True)
-    _spawn_core.write_wiki_active_task_md(wiki_path, slug, picked.title, ts)
-
-    # Portal entry points to wiki/active/<slug>/ so both the hub's .active
-    # junction and the task worktree's .active junction navigate to the wiki state dir.
-    _junction.create(target=wiki_path / "active" / slug, link_path=container_path / "portals" / slug)
+    # Portal entry points to wts/<slug>/_mill/ directly; .portals junction gives the worktree a view of the shared portals dir.
+    (worktree_path / "_mill").mkdir(parents=True, exist_ok=True)
+    _junction.create(target=worktree_path / "_mill", link_path=container_path / "portals" / slug)
+    _junction.create(target=container_path / "portals", link_path=dest_hub / ".portals")
 
     # Create all junctions and hardlinks from wiki/config.yaml for the new
     # worktree.  _setup.create_hub_links uses the token-scope filter so that
