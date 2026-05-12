@@ -9,7 +9,7 @@ After writing PS1 wrappers, any legacy ``.py`` wrappers for the same scripts
 that still exist in ``mill_dir`` are deleted (idempotent cleanup).
 
 Public API:
-    write_all(mill_dir)
+    write_all(mill_dir, latest_path)
         Render and write every shortcut wrapper under ``mill_dir``.
         Returns the list of PS1 paths that were created or overwritten
         (legacy .py deletion is a side effect, not part of the return).
@@ -43,7 +43,7 @@ SHORTCUT_SCRIPTS: list[str] = [
 _TEMPLATE_PATH = Path(__file__).resolve().parent.parent / "templates" / "shortcut-wrapper.ps1"
 
 
-def write_all(mill_dir: Path) -> list[Path]:
+def write_all(mill_dir: Path, latest_path: Path) -> list[Path]:
     """
     Render and write all shortcut wrappers under ``mill_dir``.
 
@@ -61,6 +61,8 @@ def write_all(mill_dir: Path) -> list[Path]:
         mill_dir: Directory in which to write the wrappers (typically
             ``.millhouse/`` at the repo root). The directory must already
             exist; this function does not create it.
+        latest_path: Path — Absolute path to the latest plugin cache entry;
+            used to construct SCRIPT_PATH tokens.
 
     Returns:
         List of ``Path`` objects for every PS1 file that was created or
@@ -68,7 +70,7 @@ def write_all(mill_dir: Path) -> list[Path]:
     """
     written: list[Path] = []
     for script in SHORTCUT_SCRIPTS:
-        rendered = _render.render(_TEMPLATE_PATH, {"SCRIPT": script})
+        rendered = _render.render(_TEMPLATE_PATH, {"SCRIPT": script, "SCRIPT_PATH": str(latest_path / "scripts" / f"{script}.py")})
         target = mill_dir / f"{script}.ps1"
         if target.exists() and target.read_text(encoding="utf-8") == rendered:
             continue
