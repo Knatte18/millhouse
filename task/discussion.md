@@ -119,8 +119,19 @@ matches the pre-existing "small infra fixes batch N" backlog tradition).
   loop, since holistic review fires the same `millpy-review-code.py` that
   loads wiki config. On `WikiHealthError`, mill-go halts the entire run with
   the message `wiki appears missing or corrupted at <path> — re-run mill-setup
-  to restore it`, without writing a `blocked` state. The builder lock IS
-  released before halt (otherwise the next mill-go would self-deadlock).
+  to restore it`, without writing a `blocked` state.
+
+  **Lock-release ordering on health-check failure** — the SKILL.md sub-step
+  follows the same shape as the existing "Blocked" section
+  (mill-go SKILL.md lines 192–199): the orchestrator detects the failure,
+  calls `PYTHONPATH=... "$MILL_PYTHON" "${PLUGIN_ROOT}/scripts/millpy-builder-lock.py"
+  release` first, then surfaces the error message to the user and halts.
+  Skipping the lock release would deadlock subsequent mill-go invocations on
+  the same task. The "no new shell-side error handling needed" remark in
+  Technical Context refers to ad-hoc `|| { ... }` Bash constructs, NOT to
+  these explicit orchestrator steps — the plan writer MUST emit a SKILL.md
+  diff that lists the lock-release-then-halt sequence verbatim, mirroring the
+  existing Blocked section.
 - Rationale: Wiki corruption is a system-level failure that will affect every
   subsequent batch; halting forces operator attention at the right layer.
   Block-batch would silently move on. The inline `python -c "..."` approach
@@ -156,10 +167,14 @@ matches the pre-existing "small infra fixes batch N" backlog tradition).
   Add `_junction.points_to(link_path: Path, target: Path) -> bool` helper.
   Implementation: returns False if `link_path` is not a junction/symlink (uses
   the same Windows reparse-point detection as `_junction.remove`); otherwise
-  compares `link_path.resolve()` with `target.resolve()` (string equality on
-  the canonical form — both must already exist for `resolve()` to canonicalise,
-  which is fine: the target must exist for the original junction creation to
-  have succeeded).
+  compares `link_path.resolve()` with `target.resolve()` for canonical-form
+  equality. The helper MUST wrap both `resolve()` calls in a `try/except
+  OSError` and return `False` on either failure — a stale Windows junction
+  whose target was deleted after creation causes `Path.resolve()` to raise
+  rather than return a path, and the correct semantics for "broken junction"
+  is "does not point to target", not a crash. Returning `False` lets the
+  caller fall through to the drift-handling branch (remove + recreate),
+  which is the right recovery for a broken junction anyway.
 
   Factor the "is junction or symlink on Windows / POSIX" detection logic out
   of `_junction.remove` into a private `_is_junction_or_symlink(link_path)`
@@ -257,12 +272,23 @@ PYTHONPATH="${PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
 import _paths, _wiki
 wiki_path = _paths.resolve_wiki_path(_paths.resolve_git_root())
 _wiki.health_check(wiki_path)
-"
+" || {
+    PYTHONPATH="${PLUGIN_ROOT}/scripts" "$MILL_PYTHON" \
+        "${PLUGIN_ROOT}/scripts/millpy-builder-lock.py" release
+    echo "[mill-go] HALT: wiki appears missing or corrupted — re-run mill-setup to restore it" >&2
+    exit 1
+}
 ```
 
-If the inline Python exits non-zero, the Bash tool surfaces the stderr line,
-and mill-go halts. No new shell-side error handling needed — the existing
-Bash exit-code semantics carry the failure.
+The shell-side `|| { ... }` block enforces the release-then-halt sequence
+called out in D1. The lock release must happen BEFORE the halt so a
+subsequent `/mill-go` does not self-deadlock against the failed run's lock.
+The inline Python prints the helper's own error to stderr via the typed
+`WikiHealthError` raising as `SystemExit(1)` (the `python -c` block also
+raises `SystemExit(1)` via an `except WikiHealthError: print(...); raise
+SystemExit(1)` wrapper — the plan writer should make that try/except
+explicit). The orchestrator-level halt message (`HALT: wiki appears...`)
+adds the operator-facing remediation pointer.
 
 **`Path.resolve()` semantics on Windows junctions** — junctions are reparse
 points; `Path.resolve()` follows them and returns the canonical path of the
