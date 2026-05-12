@@ -35,7 +35,9 @@ batches:
     start_sha: cff395ded3fc6c8bf83191917944d189c1ccd6d3
     commit_sha: 48673f413895d7715387ea622c1c458ed6e82afe
   - name: task-to-mill-rename
-    state: pending
+    state: running
+    implementer_session: 11ab6b89-a703-4be0-a6c7-a437e43f44fb
+    start_sha: 67f57c3aa70103370611fd5602b616233ec75598
   - name: portals-junctions-hardlinks
     state: pending
   - name: cleanup-orphan-scan
