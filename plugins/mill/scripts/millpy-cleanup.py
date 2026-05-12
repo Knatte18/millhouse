@@ -58,6 +58,17 @@ def _read_phase(status_path: Path) -> str | None:
         return None
 
 
+def _scan_orphan_portals(portals_dir: Path, active_slugs: set[str]) -> list[Path]:
+    if not portals_dir.is_dir():
+        return []
+    stale: list[Path] = []
+    for entry in portals_dir.iterdir():
+        # Two-condition oracle: slug missing from Home.md OR target gone.
+        if entry.name not in active_slugs or not entry.exists():
+            stale.append(entry)
+    return stale
+
+
 def build_plan(
     active_worktrees: list[Path],
     home_tasks: list[_tasks_md.Task],
