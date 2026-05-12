@@ -117,9 +117,7 @@ def build_plan(
             continue
 
         active_slugs.add(slug)
-        _task_status = wt_path / "task" / "status.md"
-        _legacy_status = wt_path / "status.md"
-        phase = _read_phase(_task_status if _task_status.exists() else _legacy_status)
+        phase = _read_phase(_paths.resolve_task_path(wt_path, "_mill/status.md"))
         if phase is None:
             to_report.append(
                 f"{slug} — status.md unreadable, skipping (inspect manually)"
@@ -304,9 +302,7 @@ def _apply_inplace_record(
     """
     # Read parent branch from status.md so we can check out safely.
     if record.worktree_path is not None:
-        _task_status = record.worktree_path / "task" / "status.md"
-        _legacy_status = record.worktree_path / "status.md"
-        parent_branch = _status.read_parent_branch(_task_status if _task_status.exists() else _legacy_status)
+        parent_branch = _status.read_parent_branch(_paths.resolve_task_path(record.worktree_path, "_mill/status.md"))
     else:
         parent_branch = None
 
@@ -334,9 +330,7 @@ def _apply_inplace_record(
     # Determine deletion flag: done tasks get -d (safe); abandoned get -D (force).
     # Phase is re-read from the worktree's status.md; fall back to -D when absent.
     if record.worktree_path is not None:
-        _task_status_ip = record.worktree_path / "task" / "status.md"
-        _legacy_status_ip = record.worktree_path / "status.md"
-        phase = _read_phase(_task_status_ip if _task_status_ip.exists() else _legacy_status_ip)
+        phase = _read_phase(_paths.resolve_task_path(record.worktree_path, "_mill/status.md"))
         delete_flag = "-d" if phase == "done" else "-D"
     else:
         delete_flag = "-D"

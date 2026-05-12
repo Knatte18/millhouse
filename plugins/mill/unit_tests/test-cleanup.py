@@ -125,7 +125,8 @@ def main() -> int:
             hub.mkdir(parents=True)
             wt = wts_dir / "done-slug"
             wt.mkdir(parents=True)
-            (wt / "status.md").write_text(_make_status_md("done"), encoding="utf-8")
+            (wt / "task").mkdir()
+            (wt / "task" / "status.md").write_text(_make_status_md("done"), encoding="utf-8")
 
             home_tasks = [_make_task("done-slug", "done")]
             wiki_path = tmp / "wiki"
@@ -153,7 +154,8 @@ def main() -> int:
             hub.mkdir(parents=True)
             wt = wts_dir / "done-slug"
             wt.mkdir(parents=True)
-            (wt / "status.md").write_text(_make_status_md("done"), encoding="utf-8")
+            (wt / "task").mkdir()
+            (wt / "task" / "status.md").write_text(_make_status_md("done"), encoding="utf-8")
 
             # Create legacy wiki/active/<slug>/ dir
             wiki_path = tmp / "wiki"
@@ -179,7 +181,8 @@ def main() -> int:
             hub.mkdir(parents=True)
             wt = wts_dir / "abandoned-slug"
             wt.mkdir(parents=True)
-            (wt / "status.md").write_text(_make_status_md("abandoned"), encoding="utf-8")
+            (wt / "task").mkdir()
+            (wt / "task" / "status.md").write_text(_make_status_md("abandoned"), encoding="utf-8")
 
             home_tasks = [_make_task("abandoned-slug", "active")]
             wiki_path = tmp / "wiki"
@@ -200,7 +203,8 @@ def main() -> int:
             hub.mkdir(parents=True)
             wt = wts_dir / "bad-abandoned-slug"
             wt.mkdir(parents=True)
-            (wt / "status.md").write_text(_make_status_md("abandoned"), encoding="utf-8")
+            (wt / "task").mkdir()
+            (wt / "task" / "status.md").write_text(_make_status_md("abandoned"), encoding="utf-8")
 
             home_tasks = [_make_task("bad-abandoned-slug", "done")]
             wiki_path = tmp / "wiki"
@@ -222,7 +226,8 @@ def main() -> int:
             hub.mkdir(parents=True)
             wt = wts_dir / "live-slug"
             wt.mkdir(parents=True)
-            (wt / "status.md").write_text(_make_status_md("implementing"), encoding="utf-8")
+            (wt / "task").mkdir()
+            (wt / "task" / "status.md").write_text(_make_status_md("implementing"), encoding="utf-8")
 
             home_tasks = [_make_task("live-slug", "active")]
             wiki_path = tmp / "wiki"
@@ -317,9 +322,10 @@ def main() -> int:
             mill_dir = hub_root / ".millhouse"
             mill_dir.mkdir()
 
-            # Status.md lives at worktree root (hub root for in-place tasks).
+            # Status.md lives in task/ subdir (hub root for in-place tasks).
             # worktree_path = hub_root for in-place.
-            (hub_root / "status.md").write_text(
+            (hub_root / "task").mkdir()
+            (hub_root / "task" / "status.md").write_text(
                 _make_status_md("done", parent="main"), encoding="utf-8"
             )
 
@@ -538,8 +544,9 @@ def main() -> int:
             mill_dir = hub_root / ".millhouse"
             mill_dir.mkdir()
 
-            # Status.md at worktree root (hub root for in-place).
-            (hub_root / "status.md").write_text(
+            # Status.md in task/ subdir (hub root for in-place).
+            (hub_root / "task").mkdir()
+            (hub_root / "task" / "status.md").write_text(
                 _make_status_md("abandoned", parent="main"), encoding="utf-8"
             )
 
@@ -644,33 +651,6 @@ def main() -> int:
                 f"task-status-slug must not be in to_report, got {plan.to_report}"
             )
             print("PASS test_build_plan_reads_task_status_md — task/status.md primary path")
-
-        # --- test_build_plan_falls_back_to_root_status_md: legacy layout fallback ---
-        with tempfile.TemporaryDirectory() as tmp:
-            tmp = Path(tmp)
-            wts_dir = tmp / "wts"
-            hub = wts_dir / "my-repo"
-            hub.mkdir(parents=True)
-            wt = wts_dir / "legacy-status-slug"
-            wt.mkdir(parents=True)
-            # Write status.md at root only — legacy layout, no task/ dir
-            (wt / "status.md").write_text(_make_status_md("done"), encoding="utf-8")
-
-            home_tasks = [_make_task("legacy-status-slug", "done")]
-            wiki_path = tmp / "wiki"
-            wiki_path.mkdir()
-
-            with patch("mill_cleanup._subprocess_util.run",
-                       side_effect=_mock_branch_run("impl/legacy-status-slug")):
-                plan = build_plan([wt], home_tasks, wiki_path, hub_root=hub, branch_prefix="impl/")
-
-            assert any(r.slug == "legacy-status-slug" for r in plan.to_remove_done), (
-                f"expected legacy-status-slug in to_remove_done, got {plan.to_remove_done}"
-            )
-            assert not any("legacy-status-slug" in r for r in plan.to_report), (
-                f"legacy-status-slug must not be in to_report, got {plan.to_report}"
-            )
-            print("PASS test_build_plan_falls_back_to_root_status_md — legacy layout fallback")
 
         # --- test_apply_plan_removes_dangling_active_junction ---
         # Scenario A: os.path.lexists returns False -> _junction.remove NOT called for .active
@@ -1079,7 +1059,8 @@ def main() -> int:
             hub.mkdir(parents=True)
             wt = wts_dir / "done-tag-slug"
             wt.mkdir(parents=True)
-            (wt / "status.md").write_text(_make_status_md("done"), encoding="utf-8")
+            (wt / "task").mkdir()
+            (wt / "task" / "status.md").write_text(_make_status_md("done"), encoding="utf-8")
 
             home_tasks = [_make_task("done-tag-slug", "done")]
             wiki_path = tmp / "wiki"
@@ -1104,7 +1085,8 @@ def main() -> int:
             hub.mkdir(parents=True)
             wt = wts_dir / "done-no-tag"
             wt.mkdir(parents=True)
-            (wt / "status.md").write_text(_make_status_md("done"), encoding="utf-8")
+            (wt / "task").mkdir()
+            (wt / "task" / "status.md").write_text(_make_status_md("done"), encoding="utf-8")
 
             home_tasks = [_make_task("done-no-tag", "done")]
             wiki_path = tmp / "wiki"
@@ -1136,7 +1118,8 @@ def main() -> int:
             hub.mkdir(parents=True)
             wt = wts_dir / "rtm-slug"
             wt.mkdir(parents=True)
-            (wt / "status.md").write_text(_make_status_md("done"), encoding="utf-8")
+            (wt / "task").mkdir()
+            (wt / "task" / "status.md").write_text(_make_status_md("done"), encoding="utf-8")
 
             home_tasks = [_make_task("rtm-slug", "ready-to-merge")]
             wiki_path = tmp / "wiki"
@@ -1161,7 +1144,8 @@ def main() -> int:
             hub.mkdir(parents=True)
             wt = wts_dir / "pr-slug"
             wt.mkdir(parents=True)
-            (wt / "status.md").write_text(_make_status_md("pr-pending"), encoding="utf-8")
+            (wt / "task").mkdir()
+            (wt / "task" / "status.md").write_text(_make_status_md("pr-pending"), encoding="utf-8")
 
             home_tasks = [_make_task("pr-slug", "pr-pending")]
             wiki_path = tmp / "wiki"
