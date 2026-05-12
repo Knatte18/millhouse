@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-benchmark
+phase: approved-shortcut-speedup
 slug: ps1-startup-speedup
 branch: hanf/ps1-startup-speedup
 plan: task/plan
@@ -22,6 +22,7 @@ plan-fix-r1  '2026-05-12T10:09:14Z'
 planned  '2026-05-12T10:09:26Z'
 implementing  '2026-05-12T10:55:27Z'
 approved-benchmark  '2026-05-12T10:59:18Z'
+approved-shortcut-speedup  '2026-05-12T11:07:16Z'
 ```
 
 ## Batches
@@ -33,7 +34,7 @@ batches:
     implementer_session: 63eae816-5cef-44f7-aadd-fbae10b01780
     start_sha: 114b9f77f47f2168ac83a5abd0b8836703029d5e
   - name: shortcut-speedup
-    state: running
+    state: approved
     implementer_session: be48ffae-f770-4ebd-9142-c0f0bcb30340
     start_sha: bd5e1d393e51b354c8fb159d3b15f3dc9087a846
   - name: vscode-filter-open
