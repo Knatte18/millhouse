@@ -41,7 +41,9 @@ batches:
     start_sha: 67f57c3aa70103370611fd5602b616233ec75598
     commit_sha: d32600394a7392c44bc80d17ce19ac2c41fd5d28
   - name: portals-junctions-hardlinks
-    state: pending
+    state: running
+    implementer_session: 01665f17-36db-4307-80db-b8102137397b
+    start_sha: bd3e1e3234989aa83a3d698701a9c0c49fa52a71
   - name: cleanup-orphan-scan
     state: pending
   - name: unicode-output-cleanup
