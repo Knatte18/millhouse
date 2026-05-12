@@ -63,9 +63,9 @@ spawn:
 # ---------------------------------------------------------------------------
 
 paths:
-  discussion_file: active/<SLUG>/discussion.md
-  plan_dir:        active/<SLUG>/plan/
-  reviews_dir:     active/<SLUG>/reviews/
+  discussion_file: _mill/discussion.md
+  plan_dir:        _mill/plan/
+  reviews_dir:     _mill/reviews/
 
 # ---------------------------------------------------------------------------
 # LLM-provider timeouts (seconds)
