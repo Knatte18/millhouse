@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-mill-setup-and-claudemd
+phase: holistic-reviewing
 blocked_reason: 'auto: discussion review gaps unresolved after 2 rounds'
 slug: skills-direct-venv-invocation
 branch: hanf/skills-direct-venv-invocation
@@ -28,6 +28,7 @@ implementing  '2026-05-12T15:05:57Z'
 approved-bulk-skill-conversion  '2026-05-12T15:17:31Z'
 approved-mill-go-conversion  '2026-05-12T15:22:57Z'
 approved-mill-setup-and-claudemd  '2026-05-12T15:30:54Z'
+holistic-reviewing  '2026-05-12T15:31:09Z'
 ```
 
 ## Batches
