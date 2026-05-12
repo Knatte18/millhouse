@@ -22,7 +22,7 @@ Leaving claimed-but-open issues on GitHub is a forgetting hazard — that's why 
 Use the `_gh_issues` library. From the hub root:
 
 ```bash
-uv run --project "$CLAUDE_PLUGIN_ROOT" python -c "
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "
 import json, _gh_issues, _paths
 issues = _gh_issues.fetch(limit=100, git_root=_paths.resolve_git_root())
 print(json.dumps(issues, indent=2))
@@ -36,7 +36,7 @@ Read `.scratch/issues.json`. Record the repo name (`_gh_issues.detect_repo(git_r
 Resolve the wiki path:
 
 ```bash
-uv run --project "$CLAUDE_PLUGIN_ROOT" python -c "
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "
 import _paths; print(_paths.resolve_wiki_path(_paths.resolve_git_root()))
 "
 ```
@@ -122,7 +122,7 @@ Print a one-line summary to chat + the path. User replies `approve` or `reject`.
 3. Regenerate the sidebar (`_sidebar.regenerate`) and commit if it changed.
 4. For each consumed issue (new or fold-in), call:
    ```bash
-   uv run --project "$CLAUDE_PLUGIN_ROOT" python -c "
+   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "
    import _gh_issues, _paths
    _gh_issues.close_with_comment(<N>, 'Consolidated into wiki task: <slug>', git_root=_paths.resolve_git_root())
    "

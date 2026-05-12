@@ -90,11 +90,11 @@ The structure is a suggestion, not a contract. Match it to what the discussion a
 uv run --project plugins/mill plugins/mill/scripts/millpy-add.py <slug>
 
 # RIGHT — invokes from cache
-uv run --project "$CLAUDE_PLUGIN_ROOT" "$CLAUDE_PLUGIN_ROOT/scripts/millpy-add.py" <slug>
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-add.py" <slug>
 ```
 
 ```powershell
-uv run --project "${CLAUDE_PLUGIN_ROOT}" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-add.py" <slug> `
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-add.py" <slug> `
     --title "<Title>" `
     --summary "<summary paragraph>" `
     --proposal-body "<proposal body in markdown>"    # omit when no proposal
@@ -110,7 +110,7 @@ Notes:
 ### Example — short task, no proposal
 
 ```powershell
-uv run --project "${CLAUDE_PLUGIN_ROOT}" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-add.py" sidebar-tasks-alphabetise `
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-add.py" sidebar-tasks-alphabetise `
     --title "Alphabetise the Tasks section in _Sidebar.md" `
     --summary "The sidebar currently lists tasks in Home.md order. For easier scanning once we have more than 5 tasks, sort them alphabetically by slug at render time. Purely a _sidebar.py change; no new format."
 ```
@@ -136,7 +136,7 @@ Single-reviewer runs catch most issues, but we saw N false negatives ...
 - Does ensemble need its own prompt variant?
 "@
 
-uv run --project "${CLAUDE_PLUGIN_ROOT}" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-add.py" mill-review-ensemble `
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-add.py" mill-review-ensemble `
     --title "Add ensemble reviewer script" `
     --summary "Spawn N workers, aggregate findings via a handler model. Separate script, not part of core mill-review." `
     --proposal-body $body
@@ -165,7 +165,7 @@ Single-reviewer runs catch most issues, but we saw N false negatives ...
 - Does ensemble need its own prompt variant?
 "@
 
-uv run --project "${CLAUDE_PLUGIN_ROOT}" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-add.py" mill-review-ensemble `
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-add.py" mill-review-ensemble `
     --title "Add ensemble reviewer script" `
     --summary "Spawn N workers, aggregate findings via a handler model. Separate script, not part of core mill-review." `
     --proposal-body-file .scratch/proposal-mill-review-ensemble.md

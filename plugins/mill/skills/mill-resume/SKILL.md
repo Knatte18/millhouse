@@ -145,7 +145,7 @@ Read `<container>/wts/<slug>/status.md` from the newly added worktree. Parse the
 Invoke the `regenerate_sidebar` entrypoint to keep `_Sidebar.md` in sync:
 
 ```bash
-uv run --project "$CLAUDE_PLUGIN_ROOT" python -c "from pathlib import Path; import _sidebar; _sidebar.regenerate(Path(r'<wiki-dir>').resolve())"
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "from pathlib import Path; import _sidebar; _sidebar.regenerate(Path(r'<wiki-dir>').resolve())"
 ```
 
 The `[active]` entry is already present in `Home.md` — regenerating the sidebar ensures any proposals added while the task was paused are reflected.

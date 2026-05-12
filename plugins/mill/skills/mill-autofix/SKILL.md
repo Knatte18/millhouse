@@ -25,7 +25,7 @@ git branch --show-current
 Record `start_ts` (do not guess — use the clock):
 
 ```bash
-PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" uv run --project "${CLAUDE_PLUGIN_ROOT}" python -c "
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "
 import _timestamp; print(_timestamp.now_utc_iso())
 "
 ```
@@ -40,7 +40,7 @@ Initialise three result lists (maintained in working context throughout the run)
 ### 1a. Fetch bug issues
 
 ```bash
-PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" uv run --project "${CLAUDE_PLUGIN_ROOT}" python -c "
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "
 import _gh_issues, _paths, json, sys
 issues = _gh_issues.fetch(label_filter=['bug'], git_root=_paths.resolve_git_root())
 json.dump(issues, sys.stdout, indent=2)
@@ -56,7 +56,7 @@ Store result as `all_issues`. Apply `--max-bugs` cap: `issues = all_issues[:N]` 
 Resolve the wiki path:
 
 ```bash
-PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" uv run --project "${CLAUDE_PLUGIN_ROOT}" python -c "
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "
 from _paths import resolve_git_root, resolve_wiki_path
 print(resolve_wiki_path(resolve_git_root()))
 "
@@ -98,7 +98,7 @@ Resolve `cfg_path = <git_root>/.millhouse/config.local.yaml`.
 Read the original file content (store as `original_cfg_text`, or `None` if the file does not exist):
 
 ```bash
-PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" uv run --project "${CLAUDE_PLUGIN_ROOT}" python -c "
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "
 from pathlib import Path
 cfg = Path('.millhouse/config.local.yaml')
 if cfg.exists():
@@ -114,7 +114,7 @@ If the output starts with `EXISTS`, `original_cfg_text` = the rest. If `ABSENT`,
 Set `pipeline.autonomous_mode: true`:
 
 ```bash
-PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" uv run --project "${CLAUDE_PLUGIN_ROOT}" python -c "
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "
 from pathlib import Path
 import yaml
 cfg_path = Path('.millhouse/config.local.yaml')
@@ -168,7 +168,7 @@ Apply the slug algorithm to `issue["title"]` and `existing_home_slugs`:
 This is `_autofix.slug_from_title(title, existing_home_slugs, issue_number)`. You may apply the algorithm mentally or via subprocess:
 
 ```bash
-PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" uv run --project "${CLAUDE_PLUGIN_ROOT}" python -c "
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "
 import _autofix, json, sys
 d = json.loads(sys.stdin.read())
 print(_autofix.slug_from_title(d['title'], set(d['existing']), d['num']))
@@ -184,7 +184,7 @@ EOF
 ### Step 2: Add to Home.md
 
 ```bash
-uv run --project "${CLAUDE_PLUGIN_ROOT}" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-add.py" \
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-add.py" \
     <slug> \
     --title "<issue title>" \
     --summary "<issue body first 200 chars>"
@@ -199,7 +199,7 @@ The `--summary` value is `issue["body"][:200].strip()` (use `""` if body is None
 - **Contains `"already present"`** (the exact phrase from millpy-add.py's SystemExit): parse the phase of the existing task:
 
   ```bash
-  PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" uv run --project "${CLAUDE_PLUGIN_ROOT}" python -c "
+  PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "
   import _tasks_md, sys
   from pathlib import Path
   home_text = Path(sys.argv[1]).read_text(encoding='utf-8')
@@ -238,7 +238,7 @@ Re-run `git status --porcelain`. If still non-empty: record in `errored_list` as
 ### Step 4: Claim
 
 ```bash
-uv run --project "${CLAUDE_PLUGIN_ROOT}" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-claim.py" \
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-claim.py" \
     --slug <slug>
 ```
 
@@ -254,7 +254,7 @@ Use Glob, Grep, and Read to explore the codebase for evidence of the bug. Consul
 Read project-level constraints (may be empty):
 
 ```bash
-PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" uv run --project "${CLAUDE_PLUGIN_ROOT}" python -c "
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "
 import _constraints; c = _constraints.read_if_exists(); print(c or '')
 "
 ```
@@ -311,7 +311,7 @@ On any failure: record in `stuck_list` as `{slug, issue_number, title, phase: "d
 After it returns, read `task/status.md`'s `phase:` and `blocked_reason:`:
 
 ```bash
-PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" uv run --project "${CLAUDE_PLUGIN_ROOT}" python -c "
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "
 import _status
 from pathlib import Path
 s = _status.read_status(Path('task/status.md'))
@@ -372,7 +372,7 @@ Parse the first space-delimited token as `sha`.
 Close the GitHub issue:
 
 ```bash
-PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" uv run --project "${CLAUDE_PLUGIN_ROOT}" python -c "
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "
 import _gh_issues, _paths
 _gh_issues.close_with_comment(<issue_number>, 'Autonomously fixed by mill-autofix. Squash commit: <sha>', git_root=_paths.resolve_git_root())
 "
@@ -409,7 +409,7 @@ Note: the wiki `active/<slug>/` directory and the `[active]` marker in Home.md a
 Restore `config.local.yaml` to its original state:
 
 ```bash
-PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" uv run --project "${CLAUDE_PLUGIN_ROOT}" python -c "
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "
 from pathlib import Path
 import sys
 cfg_path = Path('.millhouse/config.local.yaml')
@@ -433,7 +433,7 @@ If `original_cfg_text` was `None` (file did not exist before): delete `.millhous
 Record `end_ts`:
 
 ```bash
-PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" uv run --project "${CLAUDE_PLUGIN_ROOT}" python -c "
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "
 import _timestamp; print(_timestamp.now_utc_iso())
 "
 ```

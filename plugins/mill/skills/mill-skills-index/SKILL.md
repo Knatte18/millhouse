@@ -20,7 +20,7 @@ v2 only writes the root `SKILLS.md` — per-plugin `INDEX.md` files from v1 are 
 1. **Run the scanner.** v2's flat-layout entrypoint is `plugins/mill/scripts/millpy-skills-index.py`:
 
    ```bash
-   uv run --project "$CLAUDE_PLUGIN_ROOT" "$CLAUDE_PLUGIN_ROOT/scripts/millpy-skills-index.py"
+   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-skills-index.py"
    ```
 
 2. **Parse stdout.** The entrypoint prints a one-line summary followed by the list of written file paths. Relay that list to the user.

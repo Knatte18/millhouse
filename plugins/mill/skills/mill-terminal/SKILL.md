@@ -10,7 +10,7 @@ Scans the worktrees container for directories whose current branch maps to an ac
 ## Run it
 
 ```bash
-uv run --project "$CLAUDE_PLUGIN_ROOT" "$CLAUDE_PLUGIN_ROOT/scripts/millpy-terminal.py"
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-terminal.py"
 ```
 
 Takes no arguments. Exits 0 (with a message) when no active worktrees exist and the backlog is empty after auto-spawn. Exits 1 on invalid selection or if the `claude` launcher is not on PATH.
