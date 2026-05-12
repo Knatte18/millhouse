@@ -44,7 +44,9 @@ implementing  2026-05-12T06:45:42Z
 ```yaml
 batches:
   - name: foundation
-    state: pending
+    state: running
+    implementer_session: 97161c70-eb6d-4c79-a8ce-2f03b92c55a8
+    start_sha: f1a4b3f5a8e2efd8a6830fffb142f1100e2f4428
   - name: state-machine-skills
     state: pending
   - name: mill-cleanup-logic
