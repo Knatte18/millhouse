@@ -680,7 +680,7 @@ def write_initial_status(
     branch: str,
 ) -> Path:
     """
-    Render + write ``task/status.md`` at worktree root; create ``task/`` directory if absent.
+    Render + write ``_mill/status.md`` at worktree root; create ``_mill/`` directory if absent.
 
     Uses ``_status.render_initial`` to produce the file body, writes the
     file to ``worktree_path / "status.md"``, stages and commits on the task
@@ -715,15 +715,15 @@ def write_initial_status(
         slug=slug,
         branch=branch,
     )
-    status_abs = worktree_path / "task" / "status.md"
+    status_abs = worktree_path / "_mill" / "status.md"
     status_abs.parent.mkdir(parents=True, exist_ok=True)
     status_abs.write_text(status_text, encoding="utf-8")
     result = _subprocess_util.run(
-        ["git", "-C", str(worktree_path), "add", "task/status.md"],
+        ["git", "-C", str(worktree_path), "add", "_mill/status.md"],
     )
     if result.returncode != 0:
         raise RuntimeError(
-            f"git add task/status.md failed: {result.stderr.strip()!r}"
+            f"git add _mill/status.md failed: {result.stderr.strip()!r}"
         )
     result = _subprocess_util.run(
         ["git", "-C", str(worktree_path), "commit", "-m", f"spawn: init status for {slug}"],
