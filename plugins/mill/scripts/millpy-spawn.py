@@ -162,7 +162,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"[DryRun] Task:     {picked.title} [{slug}]")
         print(f"[DryRun] Branch:   {branch_name}")
         print(f"[DryRun] Worktree: {worktree_path}")
-        print(f"[DryRun] Status:   {worktree_path / 'task' / 'status.md'}")
+        print(f"[DryRun] Status:   {worktree_path / '_mill' / 'status.md'}")
         return 0
 
     # Claim the task under the wiki lock. Multi mode already claimed inside

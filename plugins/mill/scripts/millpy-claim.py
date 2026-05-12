@@ -213,7 +213,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.dry_run:
         print(f"[DryRun] Task:    {picked.title} [{slug}]")
         print(f"[DryRun] Branch:  {branch_name}")
-        print(f"[DryRun] Status:  {resolve_hub_path() / 'task' / 'status.md'}")
+        print(f"[DryRun] Status:  {resolve_hub_path() / '_mill' / 'status.md'}")
         print("[DryRun] Mode:    in-place")
         return 0
 
