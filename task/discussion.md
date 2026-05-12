@@ -13,6 +13,8 @@ When the user invokes `/mill-pause` mid-session, the orchestrator (mill-go or mi
 
 There is no existing mechanism to signal "stop after the current operation." Without this skill, the user must interrupt the session forcefully (Ctrl-C or close the terminal), leaving unknown-clean state that may confuse the resume path.
 
+If no poll is currently awaited (e.g. during mill-go's Entry/Prepare phase or at a dispatch decision point between polls), the skill's effect is simply "do not dispatch the next CLI call" — the pause applies at the earliest opportunity in the current turn.
+
 ## Scope
 
 **In:**
@@ -49,9 +51,9 @@ There is no existing mechanism to signal "stop after the current operation." Wit
 
 ### confirmation-message
 
-- Decision: When stopping, the LLM outputs: `"Paused after [operation description]. State is consistent. Run /mill-go to resume."` (mill-go context) or the equivalent for mill-plan.
+- Decision: When stopping, the LLM outputs a context-sensitive confirmation message: `"Paused after [operation description]. State is consistent. Run /mill-go to resume."` in a mill-go session; `"Paused after [operation description]. State is consistent. Run /mill-plan to resume."` in a mill-plan session.
 - Rationale: The user's explicit goal is to safely sleep the machine. An explicit confirmation removes ambiguity. No file write needed — the terminal message is sufficient.
-- Rejected: Silent stop — not safe for user; they need to know it's clean.
+- Rejected: Silent stop — not safe for user; they need to know it's clean. "Or the equivalent for mill-plan" left unresolved — the plan writer needs a definitive answer; mill-plan's resume command is `/mill-plan` (not `/mill-go`).
 
 ## Technical context
 
