@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussion-fix-r2
+phase: discussed
 slug: ps1-startup-speedup
 branch: hanf/ps1-startup-speedup
 plan: null
@@ -16,4 +16,5 @@ task_description: |
 ```text
 discussing  '2026-05-12T08:33:20Z'
 discussion-fix-r2  '2026-05-12T09:24:40Z'
+discussed  '2026-05-12T09:25:02Z'
 ```
