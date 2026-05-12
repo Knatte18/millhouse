@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-foundation
 slug: home-md-states-teardown-split
 branch: hanf/home-md-states-teardown-split
 plan: task/plan
@@ -37,6 +37,7 @@ plan-review-r7  2026-05-12T06:38:57Z
 plan-fix-r7  2026-05-12T06:38:57Z
 planned  2026-05-12T06:39:21Z
 implementing  2026-05-12T06:45:42Z
+approved-foundation  2026-05-12T06:52:13Z
 ```
 
 ## Batches
@@ -44,7 +45,7 @@ implementing  2026-05-12T06:45:42Z
 ```yaml
 batches:
   - name: foundation
-    state: running
+    state: approved
     implementer_session: 97161c70-eb6d-4c79-a8ce-2f03b92c55a8
     start_sha: f1a4b3f5a8e2efd8a6830fffb142f1100e2f4428
   - name: state-machine-skills
