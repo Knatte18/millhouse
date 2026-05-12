@@ -4,7 +4,7 @@
 task: Replace uv-run-project with direct venv Python in SKILL.md invocations
 batch: mill-setup-and-claudemd
 number: 3
-cards: 3
+cards: 4
 verify: null
 depends-on: []
 ```
@@ -121,6 +121,40 @@ mill-setup has both source-tree forms (e.g. `uv run --project plugins/mill ...`)
 
 - **Commit:** `docs(claude.md): document direct-venv Python invocation pattern and exceptions`
 
+### Card 7: Update CLAUDE.md cache-vs-source-tree example to use direct-venv form
+
+- **Context:**
+  - `task/plan/03-mill-setup-and-claudemd.md`
+- **Edits:**
+  - `CLAUDE.md`
+- **Creates:** none
+- **Deletes:** none
+- **Requirements:**
+
+  Locate the bullet under `## Conventions worth carrying` whose body begins:
+
+  > **In operational Bash commands typed at the agent level, never reference `plugins/mill/...` or `plugins/codeguide/...` source-tree paths. Use `${CLAUDE_PLUGIN_ROOT}` (which resolves to the cache). Tests run as `python plugins/mill/unit_tests/...` are the sole exception, and only when explicitly invoked from a test runner.**
+
+  This bullet is immediately FOLLOWED by an indented fenced ```bash block containing a WRONG/RIGHT example pair. The RIGHT line currently reads:
+
+  ```
+  uv run --project "${CLAUDE_PLUGIN_ROOT}" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-spawn.py"
+  ```
+
+  Replace that RIGHT line (and only that line — leave the `# WRONG — invokes from source tree` line and its accompanying `uv run --project plugins/mill plugins/mill/scripts/millpy-spawn.py` line UNCHANGED, since the WRONG example illustrates a source-tree path which remains a valid documented exception) with:
+
+  ```
+  PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-spawn.py"
+  ```
+
+  Reason: post-Card-6 the canonical invocation form is direct venv Python. Leaving this RIGHT example as `uv run --project "${CLAUDE_PLUGIN_ROOT}"` would create an adjacent contradiction with the bullet Card 6 rewrites — that bullet labels `uv run --project` cache-form as the OLD pattern, while this example still labels it RIGHT.
+
+  **DO NOT TOUCH outside that single line:** the surrounding bullet's prose, the WRONG/RIGHT comment lines, the source-tree WRONG example, the bullet that follows (rewritten by Card 6), and every other bullet in `## Conventions worth carrying`.
+
+  Post-edit invariant: `grep -c 'uv run --project "${CLAUDE_PLUGIN_ROOT}" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-spawn.py"' CLAUDE.md` returns zero. `grep -c '${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe.*millpy-spawn.py' CLAUDE.md` returns exactly one (the new RIGHT example).
+
+- **Commit:** `docs(claude.md): update cache-path example to direct-venv form`
+
 ## Batch Tests
 
 This is a documentation-only batch; `verify: null`.
@@ -133,4 +167,6 @@ Verification is mechanical and performed by the implementer after applying all t
 4. `grep -c 'the canonical mill-script form, shared with every other mill SKILL.md' plugins/mill/skills/mill-setup/SKILL.md` — expected exactly one (new framing present).
 5. `grep -c 'Mill scripts are invoked via the cache venv' CLAUDE.md` — expected exactly one.
 6. `grep -c 'Mill scripts are invoked via .uv run., not .python.' CLAUDE.md` — expected zero (old framing removed).
-7. Spot-read the rewritten mill-setup section and the rewritten CLAUDE.md bullet to confirm fenced code blocks render correctly (no broken markdown after the edit).
+7. `grep -c 'uv run --project "${CLAUDE_PLUGIN_ROOT}" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-spawn.py"' CLAUDE.md` — expected zero (Card 7 replaced this RIGHT example).
+8. `grep -c '${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe.*millpy-spawn.py' CLAUDE.md` — expected exactly one (Card 7's new RIGHT example).
+9. Spot-read the rewritten mill-setup section, the rewritten CLAUDE.md bullet (Card 6), and the updated cache-path example (Card 7) to confirm fenced code blocks render correctly (no broken markdown after the edits).

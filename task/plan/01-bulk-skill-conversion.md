@@ -46,7 +46,19 @@ This is a mechanical text substitution: no logic changes, no script changes, no 
 - **Deletes:** none
 - **Requirements:**
 
-  Apply the following four substitution rules to every file in `Edits:`. Process each file independently; do not aggregate edits. After substitution, the file MUST satisfy: `grep -E 'uv run --project "\$\{?CLAUDE_PLUGIN_ROOT\}?"' <file>` returns zero matches. Source-tree forms (`uv run --project plugins/mill ...`) MUST remain unchanged — confirm by counting `uv run --project plugins/mill` occurrences before and after; the count must be identical for each file.
+  Apply the following five substitution rules to every file in `Edits:`. Process each file independently; do not aggregate edits. After substitution, the file MUST satisfy: `grep -E 'uv run --project "\$\{?CLAUDE_PLUGIN_ROOT\}?"' <file>` returns zero matches. Source-tree forms (`uv run --project plugins/mill ...`) MUST remain unchanged — confirm by counting `uv run --project plugins/mill` occurrences before and after; the count must be identical for each file.
+
+  **Two shapes per cache-form invocation.** Rules 1–4 below describe Shape A — direct (top-level) shell lines. Rule 5 describes Shape B — calls that appear AFTER `--` inside a `millpy-bg.py` launcher line, which MUST NOT carry the PYTHONPATH= prefix (see the `nested-call-exception` Shared Decision in `00-overview.md`). Identify Shape B by the preceding line: if the previous non-empty line in the same fenced ```bash block ends in `-- \`, the current line is Shape B; otherwise it is Shape A. Specifically the multi-line pattern
+
+  ```
+  uv run --project "${CLAUDE_PLUGIN_ROOT}" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-bg.py" \
+      --slug <slug> -- \
+      uv run --project "${CLAUDE_PLUGIN_ROOT}" "${CLAUDE_PLUGIN_ROOT}/scripts/<inner-script>.py" [args]
+  ```
+
+  contains one Shape A line (the launcher calling `millpy-bg.py`) and one Shape B line (the inner command after `-- \`). They convert differently — Rules 1–4 vs Rule 5.
+
+  Known files containing Shape B nested calls (from current grep): `mill-plan/SKILL.md` (Phase: Plan Review step 2 and step 4.5 — two nested invocations), `mill-start/SKILL.md` (Phase: Discussion Review step 2 — one nested invocation). The implementer MUST also inspect every other file in `Edits:` for nested bg invocations; new ones may exist that this list missed.
 
   **Rule 1 — Script invocation, braced form.** Replace the pattern
   ```
@@ -88,6 +100,16 @@ This is a mechanical text substitution: no logic changes, no script changes, no 
   ```
   Same for the unbraced form, normalising braces. The PYTHONPATH prefix is ADDED (it was not present in the original).
 
+  **Rule 5 — Shape B nested call after `-- \` (no PYTHONPATH= prefix).** Replace
+  ```
+  uv run --project "${CLAUDE_PLUGIN_ROOT}" "${CLAUDE_PLUGIN_ROOT}/scripts/<script>.py" [args]
+  ```
+  with
+  ```
+  "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" "${CLAUDE_PLUGIN_ROOT}/scripts/<script>.py" [args]
+  ```
+  ONLY when the line is Shape B — i.e. the previous non-empty line in the same fenced ```bash block ends in `-- \`. The PYTHONPATH= prefix is NOT added; PYTHONPATH is inherited from the outer launcher process environment through `millpy-bg.py`'s worker. Tokens after `--` are passed as argv to `subprocess.run`; a `PYTHONPATH=...` token would be treated as the executable name and the spawn would fail. Same for the unbraced form, normalising braces. The `python -c "..."` nested variant (rare; not currently present in any in-scope file) uses the same prefix-less form: `"${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "..."`.
+
   **DO NOT TOUCH:**
   - Lines containing `uv run --project plugins/mill` (source-tree forms — leave unchanged).
   - Lines containing `PYTHONPATH="plugins/mill/scripts"` (source-tree inline form — leave unchanged).
@@ -107,4 +129,5 @@ Verification is mechanical and is performed by the implementer immediately after
 1. For each file in `Edits:`, run `grep -E 'uv run --project "\$\{?CLAUDE_PLUGIN_ROOT\}?"' <file>` — expected zero matches.
 2. For each file in `Edits:`, count `uv run --project plugins/mill` occurrences pre-edit and post-edit — counts must be identical (source-tree forms unchanged).
 3. For each file in `Edits:`, count `${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe` occurrences post-edit — expected ≥1 (substitution actually fired).
-4. Spot-check three random converted lines for grammatical correctness (proper quoting, line continuations preserved).
+4. For `mill-plan/SKILL.md` and `mill-start/SKILL.md`, locate every line containing `${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe` that is preceded by a line ending in `-- \`. Confirm those lines do NOT begin with `PYTHONPATH=` (Shape B nested-call rule). Expected: at least 2 such lines in `mill-plan/SKILL.md`, at least 1 in `mill-start/SKILL.md`.
+5. Spot-check three random converted lines for grammatical correctness (proper quoting, line continuations preserved).

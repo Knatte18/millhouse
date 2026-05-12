@@ -43,7 +43,7 @@ batches:
 
 - **Decision:** When a Python invocation appears AFTER `--` inside a `millpy-bg.py` launcher line, it MUST NOT carry the `PYTHONPATH="${...}/scripts"` shell prefix. The nested form is `"$MILL_PYTHON" "${PLUGIN_ROOT}/scripts/..."` (or the `${CLAUDE_PLUGIN_ROOT}` equivalent) with no PYTHONPATH= prefix.
 - **Rationale:** Tokens after `--` are passed as argv to `subprocess.run` inside the millpy-bg worker — not parsed as shell env-assignment. If the prefix is included, the subprocess tries to exec a binary named `PYTHONPATH=…` and fails. The outer launcher already set PYTHONPATH in the process environment; it is inherited automatically through launcher → worker → subprocess.
-- **Applies to:** mill-go-conversion (and any future skill that adopts nested bg invocations)
+- **Applies to:** all batches
 
 ### Decision: source-tree-forms-untouched
 
