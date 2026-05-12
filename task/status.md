@@ -27,5 +27,7 @@ implementing  '2026-05-12T14:06:19Z'
 ```yaml
 batches:
   - name: skill-and-index
-    state: pending
+    state: running
+    implementer_session: 8888bac8-a9a2-4b01-81f3-1b607b6cfad0
+    start_sha: 6a398663f911303d74c195f527fee991f53ac131
 ```
