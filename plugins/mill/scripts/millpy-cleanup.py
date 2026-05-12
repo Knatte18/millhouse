@@ -8,7 +8,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import shutil
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -34,7 +33,6 @@ class SlugRecord:
     slug: str
     worktree_path: Path | None
     branch: str | None
-    wiki_active_dir: Path | None
     home_marker: str | None
 
 
@@ -124,10 +122,7 @@ def build_plan(
             )
             continue
 
-        wiki_active_dir_candidate = wiki_path / "active" / slug
-        wiki_active_dir = wiki_active_dir_candidate if wiki_active_dir_candidate.is_dir() else None
-
-        record = SlugRecord(slug, wt_path, branch, wiki_active_dir, marker_by_slug.get(slug))
+        record = SlugRecord(slug, wt_path, branch, marker_by_slug.get(slug))
 
         if phase == "done":
             home_marker = marker_by_slug.get(slug)
@@ -206,12 +201,12 @@ def _print_plan(plan: CleanupPlan) -> None:
     for r in plan.to_remove_done:
         print(
             f"REMOVE (done):      {r.slug}  "
-            f"[worktree={r.worktree_path}, branch={r.branch}, wiki_active_dir={r.wiki_active_dir}]"
+            f"[worktree={r.worktree_path}, branch={r.branch}]"
         )
     for r in plan.to_remove_abandoned:
         print(
             f"REMOVE (abandoned): {r.slug}  "
-            f"[worktree={r.worktree_path}, branch={r.branch}, wiki_active_dir={r.wiki_active_dir}]"
+            f"[worktree={r.worktree_path}, branch={r.branch}]"
             f"  \u2192 Home.md marker reset to unclaimed"
         )
     for r in plan.to_reap_pr:
@@ -501,10 +496,6 @@ def _apply_pr_reap_record(
     else:
         _apply_worktree_record(record, hub_root, wiki_path, junctions_cfg)
 
-    if record.wiki_active_dir is not None and record.wiki_active_dir.is_dir():
-        shutil.rmtree(record.wiki_active_dir)
-        wiki_relative_paths.append(f"active/{record.slug}")
-
     return wiki_relative_paths
 
 
@@ -533,10 +524,6 @@ def apply_plan(
             _apply_inplace_record(record, hub_root, task_branch)
         else:
             _apply_worktree_record(record, hub_root, wiki_path, junctions_cfg)
-
-        if record.wiki_active_dir is not None and record.wiki_active_dir.is_dir():
-            shutil.rmtree(record.wiki_active_dir)
-            wiki_relative_paths.append(f"active/{record.slug}")
 
     for record in plan.to_reap_pr:
         wiki_relative_paths.extend(
