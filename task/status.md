@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-skill-and-index
 slug: mill-pause
 branch: hanf/mill-pause
 plan: task/plan
@@ -20,6 +20,7 @@ planning  '2026-05-12T14:03:26Z'
 plan-review-r1  '2026-05-12T14:04:41Z'
 planned  '2026-05-12T14:04:53Z'
 implementing  '2026-05-12T14:06:19Z'
+approved-skill-and-index  '2026-05-12T14:08:20Z'
 ```
 
 ## Batches
@@ -27,7 +28,7 @@ implementing  '2026-05-12T14:06:19Z'
 ```yaml
 batches:
   - name: skill-and-index
-    state: running
+    state: approved
     implementer_session: 8888bac8-a9a2-4b01-81f3-1b607b6cfad0
     start_sha: 6a398663f911303d74c195f527fee991f53ac131
 ```
