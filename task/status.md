@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: home-md-states-teardown-split
 branch: hanf/home-md-states-teardown-split
 plan: task/plan
@@ -36,4 +36,19 @@ plan-fix-r6  2026-05-12T06:11:42Z
 plan-review-r7  2026-05-12T06:38:57Z
 plan-fix-r7  2026-05-12T06:38:57Z
 planned  2026-05-12T06:39:21Z
+implementing  2026-05-12T06:45:42Z
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: foundation
+    state: pending
+  - name: state-machine-skills
+    state: pending
+  - name: mill-cleanup-logic
+    state: pending
+  - name: docs-integration
+    state: pending
 ```
