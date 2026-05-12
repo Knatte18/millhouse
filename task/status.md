@@ -47,7 +47,9 @@ batches:
     start_sha: bd3e1e3234989aa83a3d698701a9c0c49fa52a71
     commit_sha: 9cd2dc9950e981605a51531b1e01dce55c10f4d6
   - name: cleanup-orphan-scan
-    state: pending
+    state: running
+    implementer_session: ea02d57b-5ad0-415d-8d2b-174221e1e645
+    start_sha: bca8ffef190b0479131266711eb94040646e5597
   - name: unicode-output-cleanup
     state: pending
   - name: skills-docs-claude-md
