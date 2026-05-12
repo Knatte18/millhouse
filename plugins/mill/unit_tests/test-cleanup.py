@@ -77,6 +77,73 @@ def _make_git_repo(path: Path) -> None:
     )
 
 
+def test_scan_orphan_portals() -> None:
+    _scan_orphan_portals = mod._scan_orphan_portals
+
+    # Case 1: portals_dir does not exist -> empty list
+    with tempfile.TemporaryDirectory() as tmp:
+        result = _scan_orphan_portals(Path(tmp) / "nonexistent", set())
+        assert result == [], f"Case 1: expected [], got {result!r}"
+        print("PASS _scan_orphan_portals — nonexistent portals_dir -> []")
+
+    # Case 2: slug in active_slugs AND target exists -> NOT stale
+    with tempfile.TemporaryDirectory() as tmp:
+        portals_dir = Path(tmp) / "portals"
+        portals_dir.mkdir()
+        (portals_dir / "active-slug").mkdir()
+        result = _scan_orphan_portals(portals_dir, {"active-slug"})
+        assert result == [], f"Case 2: expected [], got {result!r}"
+        print("PASS _scan_orphan_portals — slug in active_slugs + target exists -> not stale")
+
+    # Case 3: slug NOT in active_slugs -> stale (condition a), regardless of target existence
+    with tempfile.TemporaryDirectory() as tmp:
+        portals_dir = Path(tmp) / "portals"
+        portals_dir.mkdir()
+        stale_entry = portals_dir / "not-in-slugs"
+        stale_entry.mkdir()
+        result = _scan_orphan_portals(portals_dir, set())
+        assert result == [stale_entry], f"Case 3: expected [{stale_entry}], got {result!r}"
+        print("PASS _scan_orphan_portals — slug not in active_slugs -> stale (condition a)")
+
+    # Case 4: slug in active_slugs but entry.exists() False -> stale (condition b)
+    with tempfile.TemporaryDirectory() as tmp:
+        portals_dir = Path(tmp) / "portals"
+        portals_dir.mkdir()
+        portal_path = portals_dir / "broken-slug"
+        portal_path.mkdir()  # present so iterdir() yields it; mocked to report exists()=False
+        _original_exists = Path.exists
+
+        def _mock_exists_4(self: Path) -> bool:
+            if self == portal_path:
+                return False
+            return _original_exists(self)
+
+        with patch.object(Path, "exists", _mock_exists_4):
+            result = _scan_orphan_portals(portals_dir, {"broken-slug"})
+        assert result == [portal_path], f"Case 4: expected [{portal_path}], got {result!r}"
+        print("PASS _scan_orphan_portals — slug in active_slugs but target gone -> stale (condition b)")
+
+    # Case 5: both conditions true simultaneously -> returned exactly once
+    with tempfile.TemporaryDirectory() as tmp:
+        portals_dir = Path(tmp) / "portals"
+        portals_dir.mkdir()
+        portal_path = portals_dir / "both-stale"
+        portal_path.mkdir()
+        _original_exists2 = Path.exists
+
+        def _mock_exists_5(self: Path) -> bool:
+            if self == portal_path:
+                return False
+            return _original_exists2(self)
+
+        with patch.object(Path, "exists", _mock_exists_5):
+            result = _scan_orphan_portals(portals_dir, set())  # not in active_slugs either
+        assert len(result) == 1 and result[0] == portal_path, (
+            f"Case 5: expected [{portal_path}] once, got {result!r}"
+        )
+        print("PASS _scan_orphan_portals — both conditions true -> returned once")
+
+
 def main() -> int:
     try:
         # --- read_parent_branch: missing file -> None ---
@@ -1094,6 +1161,7 @@ def main() -> int:
             )
             print("PASS build_plan — orphan check covers [ready-to-merge], [pr-pending], and [active]")
 
+        test_scan_orphan_portals()
         print("All build_plan unit tests passed.")
         return 0
     except AssertionError as exc:
