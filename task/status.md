@@ -50,5 +50,7 @@ batches:
     start_sha: d2a6859572264867f5b61c3a2ffe11be642da179
     commit_sha: 5826cac09b95ad15952b8b4deadcbbaedc6e7a4d
   - name: mill-go, config template, and SKILLS index
-    state: pending
+    state: running
+    implementer_session: 234805c0-c649-4a54-b58f-0e95ec2b3ec1
+    start_sha: fe2d4938cf3e8f7ce78db8833f9314df1975a41d
 ```
