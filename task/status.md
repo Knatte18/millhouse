@@ -29,7 +29,9 @@ implementing  '2026-05-12T14:10:24Z'
 ```yaml
 batches:
   - name: resolve-task-path-shim
-    state: pending
+    state: running
+    implementer_session: 5f825844-4780-4b7c-830e-5d6210a8d134
+    start_sha: 3fe3ecaf0892f225eb881aef2a31261914686190
   - name: task-to-mill-rename
     state: pending
   - name: portals-junctions-hardlinks
