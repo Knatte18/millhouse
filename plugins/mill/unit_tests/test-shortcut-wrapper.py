@@ -19,8 +19,9 @@ TEMPLATE_PATH = TEMPLATES_DIR / "shortcut-wrapper.ps1"
 def main() -> int:
     errors = 0
 
-    # --- render(template, {"SCRIPT": "millpy-status"}) contains uv run call for millpy-status.py ---
-    rendered = render(TEMPLATE_PATH, {"SCRIPT": "millpy-status"})
+    # --- render(template, {"SCRIPT": ..., "SCRIPT_PATH": ...}) contains uv run --active call ---
+    fake_latest_path = Path("/fake/latest")
+    rendered = render(TEMPLATE_PATH, {"SCRIPT": "millpy-status", "SCRIPT_PATH": str(fake_latest_path / "scripts" / "millpy-status.py")})
     if "millpy-status.py" not in rendered:
         print("FAIL: rendered template does not contain 'millpy-status.py'", file=sys.stderr)
         errors += 1
@@ -31,11 +32,27 @@ def main() -> int:
         errors += 1
     else:
         print("PASS: rendered template contains uv run")
+    if "uv run --active" not in rendered:
+        print("FAIL: rendered template does not contain 'uv run --active'", file=sys.stderr)
+        errors += 1
+    else:
+        print("PASS: rendered template contains uv run --active")
+    if str(fake_latest_path / "scripts" / "millpy-status.py") not in rendered:
+        print("FAIL: rendered template does not contain SCRIPT_PATH", file=sys.stderr)
+        errors += 1
+    else:
+        print("PASS: rendered template contains SCRIPT_PATH")
+    if "--project" in rendered:
+        print("FAIL: rendered template still contains '--project'", file=sys.stderr)
+        errors += 1
+    else:
+        print("PASS: rendered template does not contain '--project'")
 
     # --- write_all against empty tempdir creates one PS1 file per SHORTCUT_SCRIPTS entry ---
     with tempfile.TemporaryDirectory() as tmpdir:
         mill_dir = Path(tmpdir)
-        written = write_all(mill_dir)
+        fake_latest_path = Path(tmpdir) / "fake-latest"
+        written = write_all(mill_dir, fake_latest_path)
         expected_count = len(SHORTCUT_SCRIPTS)
         if len(written) != expected_count:
             print(
@@ -64,8 +81,9 @@ def main() -> int:
     # --- write_all against tempdir already containing same files -> returns empty list ---
     with tempfile.TemporaryDirectory() as tmpdir:
         mill_dir = Path(tmpdir)
-        write_all(mill_dir)  # first run — writes all
-        written_second = write_all(mill_dir)  # second run — all identical
+        fake_latest_path = Path(tmpdir) / "fake-latest"
+        write_all(mill_dir, fake_latest_path)  # first run — writes all
+        written_second = write_all(mill_dir, fake_latest_path)  # second run — all identical
         if written_second:
             print(
                 f"FAIL: second write_all returned {len(written_second)} paths, expected 0",
@@ -78,11 +96,12 @@ def main() -> int:
     # --- write_all against tempdir with one stale wrapper -> only that one rewritten ---
     with tempfile.TemporaryDirectory() as tmpdir:
         mill_dir = Path(tmpdir)
-        write_all(mill_dir)  # seed all files
+        fake_latest_path = Path(tmpdir) / "fake-latest"
+        write_all(mill_dir, fake_latest_path)  # seed all files
         stale_script = SHORTCUT_SCRIPTS[0]
         stale_path = mill_dir / f"{stale_script}.ps1"
         stale_path.write_text("# stale content\n", encoding="utf-8")
-        written_third = write_all(mill_dir)
+        written_third = write_all(mill_dir, fake_latest_path)
         if len(written_third) != 1:
             print(
                 f"FAIL: expected 1 rewritten file, got {len(written_third)}",
@@ -111,9 +130,10 @@ def main() -> int:
     # --- write_all against tempdir with legacy .py wrappers -> .py files deleted, .ps1 files present ---
     with tempfile.TemporaryDirectory() as tmpdir:
         mill_dir = Path(tmpdir)
+        fake_latest_path = Path(tmpdir) / "fake-latest"
         for script in SHORTCUT_SCRIPTS:
             (mill_dir / f"{script}.py").write_text("# legacy wrapper\n", encoding="utf-8")
-        write_all(mill_dir)
+        write_all(mill_dir, fake_latest_path)
         legacy_errors = 0
         for script in SHORTCUT_SCRIPTS:
             if (mill_dir / f"{script}.py").exists():
