@@ -528,11 +528,13 @@ def main() -> int:
             patch("mill_vscode.resolve_git_root", return_value=root),
             patch("mill_vscode.resolve_wiki_path", return_value=root / "wiki"),
             patch("mill_vscode.resolve_worktrees_dir", return_value=worktrees_dir),
+            patch("mill_vscode._spawn_core.discover_active_worktrees",
+                  return_value=[(wt_alpha, "task-alpha", "Alpha"), (wt_beta, "task-beta", "Beta")]),
             patch("mill_vscode.subprocess.run", side_effect=lambda a, **kw: subprocess_calls.append({"argv": a})),
             patch("mill_vscode._vscode_processes.find_open_vscode_paths", return_value={Path(str(wt_alpha))}),
             patch("mill_vscode.input", return_value="1", create=True),
         ):
-            rc = mill_vscode.main([])
+            rc = mill_vscode.main(["--filter-open"])
 
         if rc != 0:
             print(f"FAIL: filter_excludes_open_worktree returned {rc}", file=sys.stderr)
@@ -578,7 +580,7 @@ def main() -> int:
             patch("mill_vscode.subprocess.run", side_effect=lambda a, **kw: subprocess_calls.append({"argv": a})),
             patch("mill_vscode._vscode_processes.find_open_vscode_paths", return_value={Path(str(wt_alpha))}),
         ):
-            rc = mill_vscode.main([])
+            rc = mill_vscode.main(["--filter-open"])
 
         if not spawn_callable.called:
             print("FAIL: filter_empties_list_calls_spawn_then_opens: spawn not called", file=sys.stderr)
@@ -619,6 +621,8 @@ def main() -> int:
             patch("mill_vscode.resolve_git_root", return_value=root),
             patch("mill_vscode.resolve_wiki_path", return_value=root / "wiki"),
             patch("mill_vscode.resolve_worktrees_dir", return_value=worktrees_dir),
+            patch("mill_vscode._spawn_core.discover_active_worktrees",
+                  return_value=[(wt_alpha, "task-alpha", "Alpha"), (wt_beta, "task-beta", "Beta")]),
             patch("mill_vscode.subprocess.run", side_effect=lambda a, **kw: subprocess_calls.append({"argv": a})),
             patch("mill_vscode._vscode_processes.find_open_vscode_paths", return_value=set()),
             patch("mill_vscode.input", return_value="q", create=True),
@@ -911,7 +915,7 @@ def main() -> int:
             patch("mill_vscode._vscode_processes.find_open_vscode_paths", return_value={Path("/some/unrelated/path")}),
             patch("mill_vscode.input", return_value="2", create=True),
         ):
-            rc = mill_vscode.main([])
+            rc = mill_vscode.main(["--filter-open"])
 
         if rc != 0:
             print(f"FAIL: probe_returns_unrelated_paths returned {rc}, expected 0", file=sys.stderr)
@@ -924,6 +928,71 @@ def main() -> int:
             errors += 1
         else:
             print("PASS: probe_returns_unrelated_paths — unrelated probe paths -> no filter, user picks 2 (beta)")
+
+    # ------------------------------------------------------------------
+    # Test: default_no_probe — without --filter-open, find_open_vscode_paths
+    # is never called.
+    # ------------------------------------------------------------------
+    with tempfile.TemporaryDirectory() as tmpdir:
+        root = Path(tmpdir)
+        _make_git_repo(root)
+
+        worktrees_dir = root / "worktrees"
+        wt_alpha = worktrees_dir / "task-alpha"
+        wt_alpha.mkdir(parents=True)
+
+        find_open_mock = MagicMock(return_value=set())
+
+        with (
+            patch("mill_vscode.resolve_git_root", return_value=root),
+            patch("mill_vscode.resolve_wiki_path", return_value=root / "wiki"),
+            patch("mill_vscode.resolve_worktrees_dir", return_value=worktrees_dir),
+            patch("mill_vscode._spawn_core.discover_active_worktrees",
+                  return_value=[(wt_alpha, "task-alpha", "Alpha")]),
+            patch("mill_vscode._vscode_processes.find_open_vscode_paths", find_open_mock),
+            patch("mill_vscode.input", return_value="q", create=True),
+        ):
+            mill_vscode.main([])
+
+        if find_open_mock.called:
+            print("FAIL: default_no_probe: find_open_vscode_paths was called without --filter-open", file=sys.stderr)
+            errors += 1
+        else:
+            print("PASS: default_no_probe — without --filter-open, probe not called")
+
+    # ------------------------------------------------------------------
+    # Test: filter_open_probe_called — with --filter-open, find_open_vscode_paths
+    # is called exactly once.
+    # ------------------------------------------------------------------
+    with tempfile.TemporaryDirectory() as tmpdir:
+        root = Path(tmpdir)
+        _make_git_repo(root)
+
+        worktrees_dir = root / "worktrees"
+        wt_alpha = worktrees_dir / "task-alpha"
+        wt_alpha.mkdir(parents=True)
+
+        find_open_mock = MagicMock(return_value=set())
+
+        with (
+            patch("mill_vscode.resolve_git_root", return_value=root),
+            patch("mill_vscode.resolve_wiki_path", return_value=root / "wiki"),
+            patch("mill_vscode.resolve_worktrees_dir", return_value=worktrees_dir),
+            patch("mill_vscode._spawn_core.discover_active_worktrees",
+                  return_value=[(wt_alpha, "task-alpha", "Alpha")]),
+            patch("mill_vscode._vscode_processes.find_open_vscode_paths", find_open_mock),
+            patch("mill_vscode.input", return_value="q", create=True),
+        ):
+            mill_vscode.main(["--filter-open"])
+
+        if not find_open_mock.called:
+            print("FAIL: filter_open_probe_called: find_open_vscode_paths not called with --filter-open", file=sys.stderr)
+            errors += 1
+        elif find_open_mock.call_count != 1:
+            print(f"FAIL: filter_open_probe_called: expected 1 call, got {find_open_mock.call_count}", file=sys.stderr)
+            errors += 1
+        else:
+            print("PASS: filter_open_probe_called — with --filter-open, probe called exactly once")
 
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)
