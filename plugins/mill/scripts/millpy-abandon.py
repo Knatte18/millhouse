@@ -55,7 +55,7 @@ def main() -> int:
     )
 
     # Step 4: load status.md and check phase
-    status_path = active_hub / "task" / "status.md"
+    status_path = _paths.resolve_task_path(active_hub, "_mill/status.md")
     if not status_path.exists():
         sys.exit(f"Error: status.md not found for slug '{slug}'.")
 
@@ -98,7 +98,7 @@ def main() -> int:
 
     _status.append_phase(status_path, "abandoned", timestamp)
     add_result = _subprocess_util.run(
-        ["git", "-C", str(active_hub), "add", "task/status.md"]
+        ["git", "-C", str(active_hub), "add", str(status_path.relative_to(active_hub))]
     )
     if add_result.returncode != 0:
         sys.exit(f"Error: git add failed: {add_result.stderr.strip()!r}")
