@@ -59,5 +59,7 @@ batches:
     implementer_session: 8ad22096-9441-4159-a056-da32b89d762e
     start_sha: 6b1ece1d2482df3e3ca61560308b0f1dd5227def
   - name: docs-integration
-    state: pending
+    state: running
+    implementer_session: 624b1be4-36a4-47cb-87cb-7a7da6106b8b
+    start_sha: e3a13526543cb159e2aa36cb01a5e3944a420117
 ```
