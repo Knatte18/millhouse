@@ -277,12 +277,12 @@ For each round `H` from 1 to `max_holistic_rounds`:
 ## Handoff
 
 1. `_status.append_phase(status_path, "done", _timestamp.now_utc_iso())`. Commit on the task branch: `git -C <worktree> add task/status.md && git -C <worktree> commit -m "mill-go: done {slug}"`.
-2. Flip Home.md's task line to `[done]`:
+2. Flip Home.md's task line to `[ready-to-merge]` — the new intermediate state signalling 'mill-go done, mill-merge pending':
    ```python
    home_path = wiki_path / "Home.md"
    with _wiki.wiki_lock(wiki_path, slug):
-       _tasks_md.set_phase_at(home_path, slug, "done")
-       _wiki.write_commit_push(wiki_path, ["Home.md"], f"task: complete {slug}", slug=slug)
+       _tasks_md.set_phase_at(home_path, slug, "ready-to-merge")
+       _wiki.write_commit_push(wiki_path, ["Home.md"], f"task: ready-to-merge {slug}", slug=slug)
    ```
    `signature: _tasks_md.set_phase_at(path: Path, slug: str, phase: str | None) -> None`
    `signature: _wiki.wiki_lock(wiki_path: Path, slug: str) -> ContextManager[None]`
