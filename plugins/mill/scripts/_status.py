@@ -291,6 +291,8 @@ def append_phase(status_path: Path, phase: str, timestamp: str) -> None:
             unquoted; the helper guards against future phase names that
             might contain YAML-special characters.
         timestamp: ISO-8601 UTC timestamp for the timeline row.
+            The value is written through `_yaml_writer.quote_scalar` so the
+            on-disk row matches `render_initial`'s quoted form.
 
     Raises:
         ValueError: yaml block is missing / malformed, ``phase:`` key is
@@ -324,7 +326,7 @@ def append_phase(status_path: Path, phase: str, timestamp: str) -> None:
     # phases ("discussing" / "discussed" / "planning" / "coding" / "done").
     # We use two spaces as the separator; callers can post-fix alignment
     # if a new phase breaks the visual column.
-    new_row = f"{phase}  {timestamp}\n"
+    new_row = f"{phase}  {quote_scalar(timestamp)}\n"
     tl_lines.insert(t_end, new_row)
     status_path.write_text("".join(tl_lines), encoding="utf-8")
 
