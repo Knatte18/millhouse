@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-resolve-task-path-shim
 slug: mill-paths-cleanup
 branch: hanf/mill-paths-cleanup
 plan: task/plan
@@ -22,6 +22,7 @@ plan-review-r1  '2026-05-12T14:08:09Z'
 plan-fix-r1  '2026-05-12T14:08:09Z'
 planned  '2026-05-12T14:08:43Z'
 implementing  '2026-05-12T14:10:24Z'
+approved-resolve-task-path-shim  '2026-05-12T14:49:55Z'
 ```
 
 ## Batches
@@ -29,9 +30,10 @@ implementing  '2026-05-12T14:10:24Z'
 ```yaml
 batches:
   - name: resolve-task-path-shim
-    state: running
+    state: approved
     implementer_session: a83a6e13-c3a9-40f1-af48-d37fc76c5eb2
     start_sha: cff395ded3fc6c8bf83191917944d189c1ccd6d3
+    commit_sha: 48673f413895d7715387ea622c1c458ed6e82afe
   - name: task-to-mill-rename
     state: pending
   - name: portals-junctions-hardlinks
