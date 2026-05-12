@@ -29,5 +29,7 @@ implementing  '2026-05-12T09:28:28Z'
 ```yaml
 batches:
   - name: fixes
-    state: pending
+    state: running
+    implementer_session: 0ff9f4f1-2ba6-4b7e-8b3e-cf4c5a918a85
+    start_sha: 68f94ca4c20594390d8ed76c56a282b9d6870494
 ```
