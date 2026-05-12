@@ -768,6 +768,141 @@ def main() -> int:
             )
             print("PASS test_apply_inplace_record_reads_task_status_md — read_parent_branch and _read_phase resolve to task/")
 
+        # --- build_plan: phase=done + home_marker=done + archive tag present -> to_remove_done ---
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            wts_dir = tmp / "wts"
+            hub = wts_dir / "my-repo"
+            hub.mkdir(parents=True)
+            wt = wts_dir / "done-tag-slug"
+            wt.mkdir(parents=True)
+            (wt / "status.md").write_text(_make_status_md("done"), encoding="utf-8")
+
+            home_tasks = [_make_task("done-tag-slug", "done")]
+            wiki_path = tmp / "wiki"
+            wiki_path.mkdir()
+
+            with patch("mill_cleanup._subprocess_util.run", side_effect=_mock_branch_run("impl/done-tag-slug")):
+                plan = build_plan([wt], home_tasks, wiki_path, hub_root=hub, branch_prefix="impl/")
+
+            assert any(r.slug == "done-tag-slug" for r in plan.to_remove_done), (
+                f"expected done-tag-slug in to_remove_done, got {plan.to_remove_done}"
+            )
+            assert not any("done-tag-slug" in r for r in plan.to_report), (
+                f"done-tag-slug must not be in to_report, got {plan.to_report}"
+            )
+            print("PASS build_plan — phase=done + home_marker=done + archive tag present -> to_remove_done")
+
+        # --- build_plan: phase=done + home_marker=done + archive tag absent -> to_report ---
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            wts_dir = tmp / "wts"
+            hub = wts_dir / "my-repo"
+            hub.mkdir(parents=True)
+            wt = wts_dir / "done-no-tag"
+            wt.mkdir(parents=True)
+            (wt / "status.md").write_text(_make_status_md("done"), encoding="utf-8")
+
+            home_tasks = [_make_task("done-no-tag", "done")]
+            wiki_path = tmp / "wiki"
+            wiki_path.mkdir()
+
+            def _mock_no_tag_run(argv, **kwargs):
+                r = MagicMock()
+                r.returncode = 0
+                r.stderr = ""
+                r.stdout = "impl/done-no-tag\n" if "--show-current" in argv else ""
+                return r
+
+            with patch("mill_cleanup._subprocess_util.run", side_effect=_mock_no_tag_run):
+                plan = build_plan([wt], home_tasks, wiki_path, hub_root=hub, branch_prefix="impl/")
+
+            assert not any(r.slug == "done-no-tag" for r in plan.to_remove_done), (
+                f"done-no-tag must NOT be in to_remove_done when archive tag absent, got {plan.to_remove_done}"
+            )
+            assert any("done-no-tag" in r and "archive tag" in r and "absent" in r for r in plan.to_report), (
+                f"expected to_report with 'archive tag' and 'absent', got {plan.to_report}"
+            )
+            print("PASS build_plan — phase=done + home_marker=done + archive tag absent -> to_report")
+
+        # --- build_plan: phase=done + home_marker=ready-to-merge -> skipped silently ---
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            wts_dir = tmp / "wts"
+            hub = wts_dir / "my-repo"
+            hub.mkdir(parents=True)
+            wt = wts_dir / "rtm-slug"
+            wt.mkdir(parents=True)
+            (wt / "status.md").write_text(_make_status_md("done"), encoding="utf-8")
+
+            home_tasks = [_make_task("rtm-slug", "ready-to-merge")]
+            wiki_path = tmp / "wiki"
+            wiki_path.mkdir()
+
+            with patch("mill_cleanup._subprocess_util.run", side_effect=_mock_branch_run("impl/rtm-slug")):
+                plan = build_plan([wt], home_tasks, wiki_path, hub_root=hub, branch_prefix="impl/")
+
+            assert plan.to_remove_done == [], (
+                f"expected to_remove_done empty for ready-to-merge, got {plan.to_remove_done}"
+            )
+            assert not any("rtm-slug" in r for r in plan.to_report), (
+                f"rtm-slug must not be in to_report, got {plan.to_report}"
+            )
+            print("PASS build_plan — phase=done + home_marker=ready-to-merge -> skipped silently")
+
+        # --- build_plan: phase=pr-pending -> to_reap_pr ---
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            wts_dir = tmp / "wts"
+            hub = wts_dir / "my-repo"
+            hub.mkdir(parents=True)
+            wt = wts_dir / "pr-slug"
+            wt.mkdir(parents=True)
+            (wt / "status.md").write_text(_make_status_md("pr-pending"), encoding="utf-8")
+
+            home_tasks = [_make_task("pr-slug", "pr-pending")]
+            wiki_path = tmp / "wiki"
+            wiki_path.mkdir()
+
+            with patch("mill_cleanup._subprocess_util.run", side_effect=_mock_branch_run("impl/pr-slug")):
+                plan = build_plan([wt], home_tasks, wiki_path, hub_root=hub, branch_prefix="impl/")
+
+            assert len(plan.to_reap_pr) == 1, (
+                f"expected 1 pr-reap record, got {plan.to_reap_pr}"
+            )
+            assert plan.to_reap_pr[0].slug == "pr-slug", (
+                f"expected slug 'pr-slug', got {plan.to_reap_pr[0].slug!r}"
+            )
+            print("PASS build_plan — phase=pr-pending -> to_reap_pr")
+
+        # --- build_plan: orphan check covers ready-to-merge, pr-pending, active ---
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            hub = tmp / "hub"
+            hub.mkdir()
+            wiki_path = tmp / "wiki"
+            wiki_path.mkdir()
+            home_tasks = [
+                _make_task("rtm", "ready-to-merge"),
+                _make_task("pp", "pr-pending"),
+                _make_task("act", "active"),
+            ]
+            plan = build_plan([], home_tasks, wiki_path, hub_root=hub)
+            orphan_lines = [line for line in plan.to_report if "orphan Home.md marker" in line]
+            assert len(orphan_lines) == 3, (
+                f"expected 3 orphan-marker lines, got {orphan_lines}"
+            )
+            assert any("[ready-to-merge]" in line and "rtm" in line for line in orphan_lines), (
+                f"expected [ready-to-merge] orphan for 'rtm', got {orphan_lines}"
+            )
+            assert any("[pr-pending]" in line and "pp" in line for line in orphan_lines), (
+                f"expected [pr-pending] orphan for 'pp', got {orphan_lines}"
+            )
+            assert any("[active]" in line and "act" in line for line in orphan_lines), (
+                f"expected [active] orphan for 'act', got {orphan_lines}"
+            )
+            print("PASS build_plan — orphan check covers [ready-to-merge], [pr-pending], and [active]")
+
         print("All build_plan unit tests passed.")
         return 0
     except AssertionError as exc:
