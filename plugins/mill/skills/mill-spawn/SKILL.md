@@ -12,7 +12,7 @@ Picks an unclaimed task from `Home.md`, marks it `[active]` under the wiki lock,
 ## Run it
 
 ```bash
-uv run --project "$CLAUDE_PLUGIN_ROOT" "$CLAUDE_PLUGIN_ROOT/scripts/millpy-spawn.py" [--slug <slug>] [--dry-run]
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-spawn.py" [--slug <slug>] [--dry-run]
 ```
 
 Exits 0 (not 1) when the backlog is empty. Prints worktree path, branch, and status path on success. Takes and releases the wiki lock during the claim step.
