@@ -43,6 +43,7 @@ class CleanupPlan:
     to_reset_home: list[str]
     to_report: list[str]
     to_reap_pr: list[SlugRecord] = field(default_factory=list)
+    orphan_portals: list[Path] = field(default_factory=list)
 
 
 # Returns None if status.md is missing or phase: is unreadable.
@@ -187,6 +188,12 @@ def build_plan(
                         f" run 'git worktree remove --force {entry}' to clean up)"
                     )
 
+    orphan_portals: list[Path] = []
+    if container_path is not None:
+        orphan_portals = _scan_orphan_portals(
+            container_path / "portals", active_slugs
+        )
+
     # Orphan Home.md marker: [active]/[ready-to-merge]/[pr-pending] slug with no active worktree.
     for task in home_tasks:
         if task.phase in ("active", "ready-to-merge", "pr-pending") and task.slug not in active_slugs:
@@ -202,7 +209,7 @@ def build_plan(
                 f"orphan active worktree: {slug} has active marker but no Home.md entry"
             )
 
-    return CleanupPlan(to_remove_done, to_remove_abandoned, to_reset_home, to_report, to_reap_pr=to_reap_pr)
+    return CleanupPlan(to_remove_done, to_remove_abandoned, to_reset_home, to_report, to_reap_pr=to_reap_pr, orphan_portals=orphan_portals)
 
 
 def _print_plan(plan: CleanupPlan) -> None:
