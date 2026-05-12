@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-fixing
+phase: holistic-reviewing
 slug: home-md-states-teardown-split
 branch: hanf/home-md-states-teardown-split
 plan: task/plan
@@ -43,6 +43,7 @@ approved-mill-cleanup-logic  2026-05-12T07:18:47Z
 approved-docs-integration  2026-05-12T07:24:17Z
 holistic-reviewing  2026-05-12T07:24:25Z
 holistic-fixing  2026-05-12T07:25:34Z
+holistic-reviewing  2026-05-12T07:33:05Z
 ```
 
 ## Batches
