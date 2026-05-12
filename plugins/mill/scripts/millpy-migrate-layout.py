@@ -107,7 +107,7 @@ def _rmdir(path: Path, log_fh, dry_run: bool) -> None:
     except OSError as exc:
         print(
             f"ERROR: rmdir {path} failed: {exc}\n"
-            f"  The directory is not empty — a worktree-move may have failed silently.",
+            f"  The directory is not empty -- a worktree-move may have failed silently.",
             file=sys.stderr,
         )
         sys.exit(1)
@@ -116,9 +116,9 @@ def _rmdir(path: Path, log_fh, dry_run: bool) -> None:
 def _shutil_move(src: Path, dst: Path, log_fh, dry_run: bool) -> None:
     """Move ``src`` to ``dst`` via shutil.move, logging the operation."""
     if dry_run:
-        _log(f"  [dry-run] would move: {src}  →  {dst}", log_fh, dry_run)
+        _log(f"  [dry-run] would move: {src}  ->  {dst}", log_fh, dry_run)
         return
-    _log(f"  [move] {src}  →  {dst}", log_fh, dry_run)
+    _log(f"  [move] {src}  ->  {dst}", log_fh, dry_run)
     shutil.move(str(src), str(dst))
 
 
@@ -174,7 +174,7 @@ def _check_in_flight(wiki_path: Path, dry_run: bool) -> None:
 
     if in_flight:
         print(
-            "ERROR: Cannot migrate — the following tasks are still in flight:\n"
+            "ERROR: Cannot migrate -- the following tasks are still in flight:\n"
             + "\n".join(f"  {s}" for s in in_flight)
             + "\n\nMerge or abandon all in-flight tasks before running this migration.",
             file=sys.stderr,
@@ -207,7 +207,7 @@ def _step_rename_junctions(args: argparse.Namespace) -> None:
         log_fh = open(log_path, "w", encoding="utf-8")  # noqa: SIM115
         _log(f"[rename-junctions] Writing log to {log_path}", log_fh, dry_run)
     else:
-        _log("[rename-junctions] DRY-RUN mode — no filesystem writes will be performed.", log_fh, dry_run)
+        _log("[rename-junctions] DRY-RUN mode -- no filesystem writes will be performed.", log_fh, dry_run)
 
     try:
         _run_step_rename_junctions(hub_root, wiki_path, container, cfg, log_fh, dry_run)
@@ -408,7 +408,7 @@ def main() -> None:
         log_fh = open(log_path, "w", encoding="utf-8")  # noqa: SIM115
         print(f"[migrate] Writing log to {log_path}", file=sys.stderr)
     else:
-        print("[migrate] DRY-RUN mode — no filesystem writes will be performed.", file=sys.stderr)
+        print("[migrate] DRY-RUN mode -- no filesystem writes will be performed.", file=sys.stderr)
 
     try:
         _run_migration(main_root, container, wiki_path, log_fh, dry_run)
@@ -472,7 +472,7 @@ def _run_migration(
         for old_wt in child_worktrees:
             slug = old_wt.name
             new_wt = wts_dir / slug
-            _log(f"  Moving child worktree: {old_wt}  →  {new_wt}", log_fh, dry_run)
+            _log(f"  Moving child worktree: {old_wt}  ->  {new_wt}", log_fh, dry_run)
             _run(
                 ["git", "-C", str(hub_path), "worktree", "move", str(old_wt), str(new_wt)],
                 log_fh, dry_run,
@@ -484,7 +484,7 @@ def _run_migration(
     # Step 3: Move main worktree hub → wts/<repo>; then git worktree repair
     # -----------------------------------------------------------------------
     _log("--- Step 3: Move main worktree ---", log_fh, dry_run)
-    _log(f"  Moving main worktree: {hub_path}  →  {new_main_root}", log_fh, dry_run)
+    _log(f"  Moving main worktree: {hub_path}  ->  {new_main_root}", log_fh, dry_run)
     _shutil_move(hub_path, new_main_root, log_fh, dry_run)
     _log("  Running git worktree repair ...", log_fh, dry_run)
     _run(
@@ -524,7 +524,7 @@ def _run_migration(
         target = wts_dir / wt_name
 
         if dry_run:
-            _log(f"  [dry-run] would create portal: {link_path}  →  {target}", log_fh, dry_run)
+            _log(f"  [dry-run] would create portal: {link_path}  ->  {target}", log_fh, dry_run)
             continue
 
         # Explicit pre-check: skip already-correct, halt on wrong target.
@@ -542,7 +542,7 @@ def _run_migration(
                 )
                 sys.exit(1)
         else:
-            _log(f"  Creating portal: {link_path}  →  {target}", log_fh, dry_run)
+            _log(f"  Creating portal: {link_path}  ->  {target}", log_fh, dry_run)
             _junction.create(target=target, link_path=link_path)
 
     # -----------------------------------------------------------------------
