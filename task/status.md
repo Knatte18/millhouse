@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-misc-fixes-5
 branch: hanf/mill-misc-fixes-5
 plan: task/plan
@@ -22,4 +22,19 @@ plan-review-r1  2026-05-12T06:44:43Z
 plan-fix-r1  2026-05-12T06:44:43Z
 plan-review-r2  2026-05-12T06:51:32Z
 planned  2026-05-12T06:51:42Z
+implementing  2026-05-12T06:53:41Z
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: status-helpers
+    state: pending
+  - name: small-fixes
+    state: pending
+  - name: implementer-jsonreport
+    state: pending
+  - name: skill-docs
+    state: pending
 ```
