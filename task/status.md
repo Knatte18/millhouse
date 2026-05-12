@@ -33,7 +33,9 @@ batches:
     implementer_session: 63eae816-5cef-44f7-aadd-fbae10b01780
     start_sha: 114b9f77f47f2168ac83a5abd0b8836703029d5e
   - name: shortcut-speedup
-    state: pending
+    state: running
+    implementer_session: be48ffae-f770-4ebd-9142-c0f0bcb30340
+    start_sha: bd5e1d393e51b354c8fb159d3b15f3dc9087a846
   - name: vscode-filter-open
     state: pending
   - name: mill-setup-skill
