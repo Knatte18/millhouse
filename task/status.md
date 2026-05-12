@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-cleanup-orphan-scan
+phase: approved-unicode-output-cleanup
 slug: mill-paths-cleanup
 branch: hanf/mill-paths-cleanup
 plan: task/plan
@@ -26,6 +26,7 @@ approved-resolve-task-path-shim  '2026-05-12T14:49:55Z'
 approved-task-to-mill-rename  '2026-05-12T15:19:29Z'
 approved-portals-junctions-hardlinks  '2026-05-12T15:45:16Z'
 approved-cleanup-orphan-scan  '2026-05-12T15:55:53Z'
+approved-unicode-output-cleanup  '2026-05-12T16:06:50Z'
 ```
 
 ## Batches
@@ -53,9 +54,10 @@ batches:
     start_sha: bca8ffef190b0479131266711eb94040646e5597
     commit_sha: 56b40b725ab7dabe46b924946c7cfa444f1c1f14
   - name: unicode-output-cleanup
-    state: running
+    state: approved
     implementer_session: ba60bb54-8d5c-4891-8b3a-57b2244f85e8
     start_sha: 6aff782c62978e0f3658678793ffdf157d247316
+    commit_sha: 624042d116979eab73106e8c08c843de8e8dd9a1
   - name: skills-docs-claude-md
     state: pending
 ```
