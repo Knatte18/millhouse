@@ -40,7 +40,9 @@ batches:
     implementer_session: bae4ab37-ba29-4dbc-9495-41ba99da30d4
     start_sha: 05c2673990cdccb8d13b57fcb6319fbd61376208
   - name: implementer-jsonreport
-    state: pending
+    state: running
+    implementer_session: 1cc9fae1-c1d2-4f99-983a-1cb43ffc2b43
+    start_sha: 9f056bf77a4c3f0f6eca352ff09d95e7a8d74573
   - name: skill-docs
     state: pending
 ```
