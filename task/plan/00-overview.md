@@ -3,7 +3,7 @@
 ```yaml
 task: '40 (B) — mill-finalize: lift PR decision out of mill-merge'
 slug: mill-finalize
-approved: false
+approved: true
 started: 20260512-091645
 parent: main
 root: ""

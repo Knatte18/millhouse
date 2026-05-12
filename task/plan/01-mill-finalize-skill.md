@@ -57,6 +57,7 @@ This batch has no file dependencies on other batches (creates a new file from sc
   1. Resolve `git_root` via `_paths.resolve_git_root()`, `wiki_path` via `_paths.resolve_wiki_path(git_root)`.
   2. `_wiki.sync_pull(wiki_path, slug="mill-finalize")`.
   3. Load config: `cfg = _config.load_config(wiki_path, git_root)`.
+     `signature: _config.load_config(wiki_path: Path, worktree_root: Path) -> dict` — deep-merges `<wiki_path>/config.yaml` with `<worktree_root>/.millhouse/config.local.yaml`.
   4. Resolve task data: `active_data = _marker.task_data(git_root, wiki_path, cfg)`. On `MarkerError` → halt: "This worktree has no registered task branch — mill-finalize needs a tracked branch. Run mill-claim to register it, or merge manually."
   5. `slug = active_data['slug']`.
   6. `status_path = git_root / "task" / "status.md"`. Call `data = _status.read_status(status_path)`. Verify `data["phase"] == "done"`. If not: halt "status.md phase is `<value>`; mill-finalize expects `done`. Run mill-go first to bring the task to done."

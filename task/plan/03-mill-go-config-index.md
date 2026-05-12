@@ -55,7 +55,7 @@ Cards 4 and 5 can be committed separately; card 6's commit should follow after t
 
   Delete that sentence from Step 6. The sentence is true of mill-finalize too, but it belongs in a mill-go principle statement, not as an implementation detail in the step text. (The rest of Step 6 is unchanged.)
 
-  **Change D — Entry Step 3 config-key bullet** (the config keys read at the top of the Handoff section are actually listed under a "Config keys read" or similar bullet near the Handoff header — locate by text, not by step number):
+  **Change D — Entry Step 3 config-key bullet** (located in mill-go's Entry section, Step 3 or the config-key bullet list near it — locate by text match):
   ```
   - `pipeline.auto_merge` — whether to invoke mill-merge after success.
   ```
