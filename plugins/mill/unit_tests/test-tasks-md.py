@@ -38,6 +38,31 @@ def main() -> int:
         assert reparsed[0].phase == "active", f"Expected active, got {reparsed[0].phase!r}"
         print("PASS: claim() sets [active] on the target heading")
 
+        rtm = set_phase(sample, "task-one", "ready-to-merge")
+        assert parse(rtm)[0].phase == "ready-to-merge"
+        print("PASS: set_phase sets [ready-to-merge] on the target heading")
+
+        pp = set_phase(sample, "task-one", "pr-pending")
+        assert parse(pp)[0].phase == "pr-pending"
+        print("PASS: set_phase sets [pr-pending] on the target heading")
+
+        multi_phase = (
+            "# Tasks\n\n"
+            "## Task One\n[task-one] [ready-to-merge]\n\nBody.\n\n"
+            "## Task Two\n[task-two] [pr-pending]\n\nBody.\n"
+        )
+        multi_parsed = parse(multi_phase)
+        assert multi_parsed[0].phase == "ready-to-merge"
+        assert multi_parsed[1].phase == "pr-pending"
+        print("PASS: parse() correctly handles [ready-to-merge] and [pr-pending] markers")
+
+        try:
+            set_phase(sample, "task-one", "invalid-phase")
+        except ValueError as exc:
+            print(f"PASS: set_phase raises on invalid phase ({exc})")
+        else:
+            raise AssertionError("Expected ValueError for invalid phase in set_phase")
+
         cleared = set_phase(claimed, "task-one", None)
         assert parse(cleared)[0].phase is None
         print("PASS: set_phase(..., None) strips the marker")
