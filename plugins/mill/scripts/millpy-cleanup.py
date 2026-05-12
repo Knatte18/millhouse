@@ -130,19 +130,25 @@ def build_plan(
         record = SlugRecord(slug, wt_path, branch, wiki_active_dir, marker_by_slug.get(slug))
 
         if phase == "done":
-            parent_branch = _status.read_parent_branch(_task_status if _task_status.exists() else _legacy_status)
-            if parent_branch and record.branch:
+            home_marker = marker_by_slug.get(slug)
+            if home_marker == "done":
                 result = _subprocess_util.run(
-                    ["git", "-C", str(hub_root), "log", "--oneline",
-                     f"{parent_branch}..{record.branch}"]
+                    ["git", "-C", str(hub_root), "tag", "-l", f"archive/{slug}"]
                 )
                 if result.returncode == 0 and result.stdout.strip():
+                    to_remove_done.append(record)
+                else:
                     to_report.append(
-                        f"{slug} — phase=done but has unmerged commits relative to "
-                        f"{parent_branch!r}; run mill-merge first"
+                        f"{slug} — Home.md=[done] but archive tag archive/{slug} absent;"
+                        f" run mill-merge first"
                     )
-                    continue
-            to_remove_done.append(record)
+            elif home_marker == "ready-to-merge":
+                pass
+            else:
+                to_report.append(
+                    f"{slug} — status.md phase=done but Home.md marker is {home_marker!r};"
+                    f" inspect manually"
+                )
         elif phase == "abandoned":
             if record.home_marker == "active":
                 to_remove_abandoned.append(record)

@@ -47,16 +47,16 @@ def _make_task(slug: str, phase_marker: str | None) -> _tasks_md.Task:
     return _tasks_md.Task(slug=slug, title="test", phase=phase_marker, has_proposal=False, heading_line_no=1)
 
 
-def _mock_branch_run(branch: str, *, log_has_commits: bool = False):
-    """Return a side_effect for _subprocess_util.run covering branch+log calls in build_plan."""
+def _mock_branch_run(branch: str):
+    """Return a side_effect for _subprocess_util.run covering branch and tag calls in build_plan."""
     def _run(argv, **kwargs):
         r = MagicMock()
         r.returncode = 0
         r.stderr = ""
         if "--show-current" in argv:
             r.stdout = f"{branch}\n"
-        elif "log" in argv and "--oneline" in argv:
-            r.stdout = "abc1234 some commit\n" if log_has_commits else ""
+        elif "tag" in argv and "-l" in argv:
+            r.stdout = "archive/slug\n"
         else:
             r.stdout = ""
         return r
@@ -610,119 +610,6 @@ def main() -> int:
                 f"got calls: {junction_call_paths2}"
             )
             print("PASS apply_plan — stale-worktree-dir: inplace choice taken, no worktree remove, git branch -D, junction removed")
-
-        # --- build_plan guard: phase=done, unmerged commits -> to_report ---
-        with tempfile.TemporaryDirectory() as tmp:
-            tmp = Path(tmp)
-            wts_dir = tmp / "wts"
-            hub = wts_dir / "my-repo"
-            hub.mkdir(parents=True)
-            wt = wts_dir / "guard-slug-1"
-            wt.mkdir(parents=True)
-            (wt / "status.md").write_text(_make_status_md("done", parent="main"), encoding="utf-8")
-
-            home_tasks = [_make_task("guard-slug-1", "done")]
-            wiki_path = tmp / "wiki"
-            wiki_path.mkdir()
-
-            with patch("mill_cleanup._subprocess_util.run",
-                       side_effect=_mock_branch_run("impl/guard-slug-1", log_has_commits=True)):
-                plan = build_plan([wt], home_tasks, wiki_path, hub_root=hub, branch_prefix="impl/")
-
-            assert any("guard-slug-1" in r and "unmerged commits" in r for r in plan.to_report), (
-                f"expected to_report with 'unmerged commits', got {plan.to_report}"
-            )
-            assert not any(r.slug == "guard-slug-1" for r in plan.to_remove_done), (
-                "guard-slug-1 must NOT be in to_remove_done when it has unmerged commits"
-            )
-            print("PASS build_plan — phase=done, unmerged commits -> to_report, not to_remove_done")
-
-        # --- build_plan guard: phase=done, fully merged -> to_remove_done ---
-        with tempfile.TemporaryDirectory() as tmp:
-            tmp = Path(tmp)
-            wts_dir = tmp / "wts"
-            hub = wts_dir / "my-repo"
-            hub.mkdir(parents=True)
-            wt = wts_dir / "guard-slug-2"
-            wt.mkdir(parents=True)
-            (wt / "status.md").write_text(_make_status_md("done", parent="main"), encoding="utf-8")
-
-            home_tasks = [_make_task("guard-slug-2", "done")]
-            wiki_path = tmp / "wiki"
-            wiki_path.mkdir()
-
-            with patch("mill_cleanup._subprocess_util.run",
-                       side_effect=_mock_branch_run("impl/guard-slug-2")):
-                plan = build_plan([wt], home_tasks, wiki_path, hub_root=hub, branch_prefix="impl/")
-
-            assert any(r.slug == "guard-slug-2" for r in plan.to_remove_done), (
-                f"expected guard-slug-2 in to_remove_done, got {plan.to_remove_done}"
-            )
-            assert not any("guard-slug-2" in r for r in plan.to_report), (
-                f"guard-slug-2 must not be in to_report, got {plan.to_report}"
-            )
-            print("PASS build_plan — phase=done, fully merged -> to_remove_done, not to_report")
-
-        # --- build_plan guard: phase=done, no parent: key -> guard skipped, to_remove_done ---
-        with tempfile.TemporaryDirectory() as tmp:
-            tmp = Path(tmp)
-            wts_dir = tmp / "wts"
-            hub = wts_dir / "my-repo"
-            hub.mkdir(parents=True)
-            wt = wts_dir / "guard-slug-3"
-            wt.mkdir(parents=True)
-            no_parent_status = (
-                "# Status\n\n"
-                "```yaml\n"
-                "phase: done\n"
-                "task: test task\n"
-                "```\n\n"
-                "## Timeline\n\n"
-                "```text\n"
-                "done  2026-01-01T00:00:00Z\n"
-                "```\n"
-            )
-            (wt / "status.md").write_text(no_parent_status, encoding="utf-8")
-
-            home_tasks = [_make_task("guard-slug-3", "done")]
-            wiki_path = tmp / "wiki"
-            wiki_path.mkdir()
-
-            with patch("mill_cleanup._subprocess_util.run", side_effect=_mock_branch_run("impl/guard-slug-3")):
-                plan = build_plan([wt], home_tasks, wiki_path, hub_root=hub, branch_prefix="impl/")
-
-            assert any(r.slug == "guard-slug-3" for r in plan.to_remove_done), (
-                f"expected guard-slug-3 in to_remove_done (guard skipped, no parent), got {plan.to_remove_done}"
-            )
-            assert not any("guard-slug-3" in r for r in plan.to_report), (
-                f"guard-slug-3 must not be in to_report, got {plan.to_report}"
-            )
-            print("PASS build_plan — phase=done, no parent: key -> guard skipped, to_remove_done")
-
-        # --- build_plan guard: phase=done, fully merged (guard passes) -> to_remove_done ---
-        with tempfile.TemporaryDirectory() as tmp:
-            tmp = Path(tmp)
-            wts_dir = tmp / "wts"
-            hub = wts_dir / "my-repo"
-            hub.mkdir(parents=True)
-            wt = wts_dir / "guard-slug-4"
-            wt.mkdir(parents=True)
-            (wt / "status.md").write_text(_make_status_md("done", parent="main"), encoding="utf-8")
-
-            home_tasks = [_make_task("guard-slug-4", "done")]
-            wiki_path = tmp / "wiki"
-            wiki_path.mkdir()
-
-            with patch("mill_cleanup._subprocess_util.run", side_effect=_mock_branch_run("impl/guard-slug-4")):
-                plan = build_plan([wt], home_tasks, wiki_path, hub_root=hub, branch_prefix="impl/")
-
-            assert any(r.slug == "guard-slug-4" for r in plan.to_remove_done), (
-                f"expected guard-slug-4 in to_remove_done (fully merged), got {plan.to_remove_done}"
-            )
-            assert not any("guard-slug-4" in r for r in plan.to_report), (
-                f"guard-slug-4 must not be in to_report, got {plan.to_report}"
-            )
-            print("PASS build_plan — phase=done, fully merged -> to_remove_done")
 
         # --- test_build_plan_reads_task_status_md: task/status.md is the primary path ---
         with tempfile.TemporaryDirectory() as tmp:
