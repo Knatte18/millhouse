@@ -53,7 +53,9 @@ batches:
     start_sha: bca8ffef190b0479131266711eb94040646e5597
     commit_sha: 56b40b725ab7dabe46b924946c7cfa444f1c1f14
   - name: unicode-output-cleanup
-    state: pending
+    state: running
+    implementer_session: ba60bb54-8d5c-4891-8b3a-57b2244f85e8
+    start_sha: 6aff782c62978e0f3658678793ffdf157d247316
   - name: skills-docs-claude-md
     state: pending
 ```
