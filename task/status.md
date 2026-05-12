@@ -38,7 +38,9 @@ batches:
     start_sha: 2baae69daf3b1ccc8286b14ab46350e92407eff3
     commit_sha: d26fb4acdb346a3d7019a061146d153a4e8026ca
   - name: mill-merge refactor
-    state: pending
+    state: running
+    implementer_session: 581da0b3-e5df-42b1-84bd-51c74e6187e2
+    start_sha: 10d6385af272f1bddb2824024e06080d44226e1e
   - name: unit tests
     state: pending
   - name: mill-go, config template, and SKILLS index
