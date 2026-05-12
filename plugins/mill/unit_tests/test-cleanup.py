@@ -1,7 +1,9 @@
 """Unit tests for build_plan() and in-place cleanup in millpy-cleanup.py."""
 from __future__ import annotations
 
+import contextlib
 import importlib.util
+import io
 import subprocess
 import sys
 import tempfile
@@ -767,6 +769,304 @@ def main() -> int:
                 f"Expected '-d' (done from task/status.md), not '-D' (abandoned from root), got: {branch_calls_ip[0]}"
             )
             print("PASS test_apply_inplace_record_reads_task_status_md — read_parent_branch and _read_phase resolve to task/")
+
+        # --- apply_plan PR-reap: MERGED -> archive tag created, Home.md flipped, worktree removed ---
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            hub_root_pr = tmp / "hub"
+            hub_root_pr.mkdir()
+            wiki_path_pr = tmp / "wiki"
+            wiki_path_pr.mkdir()
+            home_md_pr = wiki_path_pr / "Home.md"
+            home_md_pr.write_text("## PR slug task\n[pr-slug] [pr-pending]\n", encoding="utf-8")
+
+            wt_path_pr = tmp / "wts" / "pr-slug"
+            wt_path_pr.mkdir(parents=True)
+
+            record_pr = SlugRecord(
+                slug="pr-slug",
+                worktree_path=wt_path_pr,
+                branch="impl/pr-slug",
+                wiki_active_dir=None,
+                home_marker="pr-pending",
+            )
+
+            run_calls_18a: list = []
+
+            def _mock_run_18a(argv, **kwargs):
+                run_calls_18a.append(list(argv))
+                result = MagicMock()
+                result.returncode = 0
+                result.stderr = ""
+                if "gh" in argv and "pr" in argv:
+                    result.stdout = '{"state": "MERGED", "mergeCommit": {"oid": "abc123"}, "number": 42}'
+                elif "tag" in argv and "-l" in argv:
+                    result.stdout = ""
+                else:
+                    result.stdout = ""
+                return result
+
+            remove_safe_calls_18a: list = []
+
+            def _fake_remove_safe_18a(path, **kwargs):
+                remove_safe_calls_18a.append(path)
+
+            plan_pr_merged = CleanupPlan(
+                to_remove_done=[],
+                to_remove_abandoned=[],
+                to_reset_home=[],
+                to_report=[],
+                to_reap_pr=[record_pr],
+            )
+
+            with (
+                patch("mill_cleanup._subprocess_util.run", side_effect=_mock_run_18a),
+                patch("mill_cleanup._resolve_inplace_mode", return_value=("worktree", "")),
+                patch("mill_cleanup._worktree.remove_safe", side_effect=_fake_remove_safe_18a),
+                patch("mill_cleanup._junction.remove"),
+                patch("mill_cleanup._wiki.write_commit_push"),
+                patch("mill_cleanup._sidebar.regenerate"),
+                patch("mill_cleanup._paths.resolve_container_path", return_value=tmp / "container"),
+            ):
+                apply_plan(plan_pr_merged, wiki_path_pr, hub_root_pr, {})
+
+            tag_create_calls = [
+                c for c in run_calls_18a
+                if "tag" in c and "-l" not in c and any("archive/" in str(a) for a in c)
+            ]
+            assert len(tag_create_calls) >= 1, (
+                f"Expected a git tag create call, got run_calls: {run_calls_18a}"
+            )
+            home_text_after = home_md_pr.read_text("utf-8")
+            done_tasks = [t for t in _tasks_md.parse(home_text_after) if t.slug == "pr-slug" and t.phase == "done"]
+            assert len(done_tasks) == 1, (
+                f"Expected pr-slug to be [done] in Home.md, got: {home_text_after!r}"
+            )
+            assert any(c == wt_path_pr for c in remove_safe_calls_18a), (
+                f"Expected remove_safe called with {wt_path_pr}, got: {remove_safe_calls_18a}"
+            )
+            print("PASS apply_plan — PR-reap MERGED: archive tag created, Home.md flipped to [done], worktree removed")
+
+        # --- apply_plan PR-reap: OPEN -> no-op ---
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            hub_root_po = tmp / "hub"
+            hub_root_po.mkdir()
+            wiki_path_po = tmp / "wiki"
+            wiki_path_po.mkdir()
+            home_md_po = wiki_path_po / "Home.md"
+            home_md_po.write_text("## PR slug task\n[pr-slug] [pr-pending]\n", encoding="utf-8")
+
+            wt_path_po = tmp / "wts" / "pr-slug"
+            wt_path_po.mkdir(parents=True)
+
+            record_po = SlugRecord(
+                slug="pr-slug",
+                worktree_path=wt_path_po,
+                branch="impl/pr-slug",
+                wiki_active_dir=None,
+                home_marker="pr-pending",
+            )
+
+            run_calls_18b: list = []
+
+            def _mock_run_18b(argv, **kwargs):
+                run_calls_18b.append(list(argv))
+                result = MagicMock()
+                result.returncode = 0
+                result.stderr = ""
+                result.stdout = (
+                    '{"state": "OPEN", "number": 42}'
+                    if "gh" in argv and "pr" in argv
+                    else ""
+                )
+                return result
+
+            remove_safe_calls_18b: list = []
+
+            def _fake_remove_safe_18b(path, **kwargs):
+                remove_safe_calls_18b.append(path)
+
+            plan_pr_open = CleanupPlan(
+                to_remove_done=[],
+                to_remove_abandoned=[],
+                to_reset_home=[],
+                to_report=[],
+                to_reap_pr=[record_po],
+            )
+
+            with (
+                patch("mill_cleanup._subprocess_util.run", side_effect=_mock_run_18b),
+                patch("mill_cleanup._worktree.remove_safe", side_effect=_fake_remove_safe_18b),
+                patch("mill_cleanup._junction.remove"),
+                patch("mill_cleanup._wiki.write_commit_push"),
+                patch("mill_cleanup._sidebar.regenerate"),
+                patch("mill_cleanup._paths.resolve_container_path", return_value=tmp / "container"),
+            ):
+                apply_plan(plan_pr_open, wiki_path_po, hub_root_po, {})
+
+            tag_calls_18b = [c for c in run_calls_18b if "tag" in c]
+            assert tag_calls_18b == [], f"Expected no tag calls for OPEN, got: {tag_calls_18b}"
+            home_text_po = home_md_po.read_text("utf-8")
+            pr_tasks_po = [t for t in _tasks_md.parse(home_text_po) if t.slug == "pr-slug"]
+            assert len(pr_tasks_po) == 1 and pr_tasks_po[0].phase == "pr-pending", (
+                f"Expected pr-slug still [pr-pending], got: {home_text_po!r}"
+            )
+            assert remove_safe_calls_18b == [], (
+                f"Expected no remove_safe calls for OPEN, got: {remove_safe_calls_18b}"
+            )
+            print("PASS apply_plan — PR-reap OPEN: no tag, no teardown, Home.md unchanged")
+
+        # --- apply_plan PR-reap: CLOSED -> reported to stderr, no teardown ---
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            hub_root_pc = tmp / "hub"
+            hub_root_pc.mkdir()
+            wiki_path_pc = tmp / "wiki"
+            wiki_path_pc.mkdir()
+            home_md_pc = wiki_path_pc / "Home.md"
+            home_md_pc.write_text("## PR slug task\n[pr-slug] [pr-pending]\n", encoding="utf-8")
+
+            wt_path_pc = tmp / "wts" / "pr-slug"
+            wt_path_pc.mkdir(parents=True)
+
+            record_pc = SlugRecord(
+                slug="pr-slug",
+                worktree_path=wt_path_pc,
+                branch="impl/pr-slug",
+                wiki_active_dir=None,
+                home_marker="pr-pending",
+            )
+
+            run_calls_18c: list = []
+
+            def _mock_run_18c(argv, **kwargs):
+                run_calls_18c.append(list(argv))
+                result = MagicMock()
+                result.returncode = 0
+                result.stderr = ""
+                result.stdout = (
+                    '{"state": "CLOSED", "mergeCommit": null, "number": 42}'
+                    if "gh" in argv and "pr" in argv
+                    else ""
+                )
+                return result
+
+            remove_safe_calls_18c: list = []
+
+            def _fake_remove_safe_18c(path, **kwargs):
+                remove_safe_calls_18c.append(path)
+
+            plan_pr_closed = CleanupPlan(
+                to_remove_done=[],
+                to_remove_abandoned=[],
+                to_reset_home=[],
+                to_report=[],
+                to_reap_pr=[record_pc],
+            )
+
+            stderr_18c = io.StringIO()
+            with (
+                patch("mill_cleanup._subprocess_util.run", side_effect=_mock_run_18c),
+                patch("mill_cleanup._worktree.remove_safe", side_effect=_fake_remove_safe_18c),
+                patch("mill_cleanup._junction.remove"),
+                patch("mill_cleanup._wiki.write_commit_push"),
+                patch("mill_cleanup._sidebar.regenerate"),
+                patch("mill_cleanup._paths.resolve_container_path", return_value=tmp / "container"),
+            ):
+                with contextlib.redirect_stderr(stderr_18c):
+                    apply_plan(plan_pr_closed, wiki_path_pc, hub_root_pc, {})
+
+            tag_calls_18c = [c for c in run_calls_18c if "tag" in c]
+            assert tag_calls_18c == [], f"Expected no tag calls for CLOSED, got: {tag_calls_18c}"
+            assert remove_safe_calls_18c == [], (
+                f"Expected no remove_safe calls for CLOSED, got: {remove_safe_calls_18c}"
+            )
+            stderr_text_18c = stderr_18c.getvalue()
+            assert "CLOSED" in stderr_text_18c, (
+                f"Expected 'CLOSED' in stderr, got: {stderr_text_18c!r}"
+            )
+            assert "pr-slug" in stderr_text_18c, (
+                f"Expected 'pr-slug' in stderr, got: {stderr_text_18c!r}"
+            )
+            print("PASS apply_plan — PR-reap CLOSED: no tag, no teardown, stderr reports CLOSED + slug")
+
+        # --- apply_plan PR-reap: gh pr list failed -> early return, no state mutation ---
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            hub_root_pf = tmp / "hub"
+            hub_root_pf.mkdir()
+            wiki_path_pf = tmp / "wiki"
+            wiki_path_pf.mkdir()
+            home_md_pf = wiki_path_pf / "Home.md"
+            home_md_pf.write_text("## PR slug task\n[pr-slug] [pr-pending]\n", encoding="utf-8")
+
+            wt_path_pf = tmp / "wts" / "pr-slug"
+            wt_path_pf.mkdir(parents=True)
+
+            record_pf = SlugRecord(
+                slug="pr-slug",
+                worktree_path=wt_path_pf,
+                branch="impl/pr-slug",
+                wiki_active_dir=None,
+                home_marker="pr-pending",
+            )
+
+            run_calls_18d: list = []
+
+            def _mock_run_18d(argv, **kwargs):
+                run_calls_18d.append(list(argv))
+                result = MagicMock()
+                if "gh" in argv and "pr" in argv:
+                    result.returncode = 1
+                    result.stdout = ""
+                    result.stderr = "gh: command not found"
+                else:
+                    result.returncode = 0
+                    result.stdout = ""
+                    result.stderr = ""
+                return result
+
+            remove_safe_calls_18d: list = []
+
+            def _fake_remove_safe_18d(path, **kwargs):
+                remove_safe_calls_18d.append(path)
+
+            plan_pr_failed = CleanupPlan(
+                to_remove_done=[],
+                to_remove_abandoned=[],
+                to_reset_home=[],
+                to_report=[],
+                to_reap_pr=[record_pf],
+            )
+
+            stderr_18d = io.StringIO()
+            with (
+                patch("mill_cleanup._subprocess_util.run", side_effect=_mock_run_18d),
+                patch("mill_cleanup._worktree.remove_safe", side_effect=_fake_remove_safe_18d),
+                patch("mill_cleanup._junction.remove"),
+                patch("mill_cleanup._wiki.write_commit_push"),
+                patch("mill_cleanup._sidebar.regenerate"),
+                patch("mill_cleanup._paths.resolve_container_path", return_value=tmp / "container"),
+            ):
+                with contextlib.redirect_stderr(stderr_18d):
+                    apply_plan(plan_pr_failed, wiki_path_pf, hub_root_pf, {})
+
+            tag_calls_18d = [c for c in run_calls_18d if "tag" in c]
+            assert tag_calls_18d == [], f"Expected no tag calls on gh failure, got: {tag_calls_18d}"
+            assert remove_safe_calls_18d == [], (
+                f"Expected no remove_safe calls on gh failure, got: {remove_safe_calls_18d}"
+            )
+            home_text_pf = home_md_pf.read_text("utf-8")
+            pr_tasks_pf = [t for t in _tasks_md.parse(home_text_pf) if t.slug == "pr-slug"]
+            assert len(pr_tasks_pf) == 1 and pr_tasks_pf[0].phase == "pr-pending", (
+                f"Expected pr-slug still [pr-pending] after gh failure, got: {home_text_pf!r}"
+            )
+            stderr_text_18d = stderr_18d.getvalue()
+            assert "pr-slug" in stderr_text_18d, (
+                f"Expected 'pr-slug' in stderr on gh failure, got: {stderr_text_18d!r}"
+            )
+            print("PASS apply_plan — PR-reap gh pr list failed: early return, no tag, no teardown, no Home.md mutation")
 
         # --- build_plan: phase=done + home_marker=done + archive tag present -> to_remove_done ---
         with tempfile.TemporaryDirectory() as tmp:

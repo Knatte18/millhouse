@@ -445,7 +445,8 @@ def _apply_pr_reap_record(
     if state == "CLOSED":
         print(
             f"[cleanup] PR-reap {record.slug}: PR #{number} CLOSED without merge"
-            f" — inspect manually (abandon or reopen)"
+            f" — inspect manually (abandon or reopen)",
+            file=sys.stderr,
         )
         return wiki_relative_paths
 
