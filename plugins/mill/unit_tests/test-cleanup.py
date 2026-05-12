@@ -58,7 +58,10 @@ def _mock_branch_run(branch: str):
         if "--show-current" in argv:
             r.stdout = f"{branch}\n"
         elif "tag" in argv and "-l" in argv:
-            r.stdout = "archive/slug\n"
+            # Return the queried tag name (last arg is "archive/<slug>") so the
+            # mock correctly signals "tag present" for the specific slug being checked.
+            tag_arg = next((a for a in argv if a.startswith("archive/")), "archive/slug")
+            r.stdout = f"{tag_arg}\n"
         else:
             r.stdout = ""
         return r

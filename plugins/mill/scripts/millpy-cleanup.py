@@ -466,7 +466,9 @@ def _apply_pr_reap_record(
             ["git", "-C", str(hub_root), "fetch", "origin", record.branch]
         )
         if fetch_branch.returncode == 0:
-            tag_target = record.branch
+            # Use FETCH_HEAD so the tag points to the remote's tip (what was
+            # actually merged), not the local worktree copy which may lag behind.
+            tag_target = "FETCH_HEAD"
         else:
             merge_sha = (merge_commit or {}).get("oid") if merge_commit else None
             if not merge_sha:
@@ -475,7 +477,10 @@ def _apply_pr_reap_record(
                     file=sys.stderr,
                 )
                 return wiki_relative_paths
-            _subprocess_util.run(["git", "-C", str(hub_root), "fetch", "origin", merge_sha])
+            _subprocess_util.run(
+                ["git", "-C", str(hub_root), "fetch", "origin", merge_sha],
+                check=True,
+            )
             tag_target = merge_sha
         _subprocess_util.run(
             ["git", "-C", str(hub_root), "tag", f"archive/{record.slug}", tag_target]

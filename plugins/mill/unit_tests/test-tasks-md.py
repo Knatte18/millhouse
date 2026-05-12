@@ -38,11 +38,11 @@ def main() -> int:
         assert reparsed[0].phase == "active", f"Expected active, got {reparsed[0].phase!r}"
         print("PASS: claim() sets [active] on the target heading")
 
-        rtm = set_phase(sample, "task-one", "ready-to-merge")
+        rtm = set_phase(claimed, "task-one", "ready-to-merge")
         assert parse(rtm)[0].phase == "ready-to-merge"
         print("PASS: set_phase sets [ready-to-merge] on the target heading")
 
-        pp = set_phase(sample, "task-one", "pr-pending")
+        pp = set_phase(claimed, "task-one", "pr-pending")
         assert parse(pp)[0].phase == "pr-pending"
         print("PASS: set_phase sets [pr-pending] on the target heading")
 
