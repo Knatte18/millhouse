@@ -159,7 +159,7 @@ class TestMillpyImplementHolistic(unittest.TestCase):
         return rc, buf.getvalue()
 
     def test_1_fresh_dispatch_success(self):
-        """Fresh dispatch: review file supplied → success JSON, holistic-fixing in timeline."""
+        """Fresh dispatch: review file supplied -> success JSON, holistic-fixing in timeline."""
         status_path = self.tmp_path / "task" / "status.md"
 
         with unittest.mock.patch.object(
@@ -182,7 +182,7 @@ class TestMillpyImplementHolistic(unittest.TestCase):
         )
 
     def test_2_llm_error(self):
-        """LLMError from implementer → stuck/transient JSON on stdout, exit 1."""
+        """LLMError from implementer -> stuck/transient JSON on stdout, exit 1."""
         with unittest.mock.patch.object(
             millpy_implement_holistic._implementer_sonnet, "run",
             side_effect=millpy_implement_holistic._llm_claude.LLMError("timeout"),
@@ -195,7 +195,7 @@ class TestMillpyImplementHolistic(unittest.TestCase):
         self.assertEqual(data["stuck_type"], "transient")
 
     def test_3_no_json_from_implementer(self):
-        """Implementer output with no valid JSON → stuck/logic JSON, exit 0."""
+        """Implementer output with no valid JSON -> stuck/logic JSON, exit 0."""
         with unittest.mock.patch.object(
             millpy_implement_holistic._implementer_sonnet, "run",
             return_value=("no json here\n", "sess"),
@@ -208,13 +208,13 @@ class TestMillpyImplementHolistic(unittest.TestCase):
         self.assertEqual(data["stuck_type"], "logic")
 
     def test_4_missing_review_file_flag(self):
-        """No --review-file flag → exit 1, stdout empty."""
+        """No --review-file flag -> exit 1, stdout empty."""
         rc, out = self._run_main([])
         self.assertEqual(rc, 1)
         self.assertEqual(out.strip(), "")
 
     def test_5_review_file_not_found(self):
-        """--review-file points to nonexistent path → exit 1, stdout empty."""
+        """--review-file points to nonexistent path -> exit 1, stdout empty."""
         rc, out = self._run_main(["--review-file", "nonexistent.md"])
         self.assertEqual(rc, 1)
         self.assertEqual(out.strip(), "")

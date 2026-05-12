@@ -341,7 +341,7 @@ def test_write_settings_uses_short_name_and_slug() -> None:
 
 
 # ---------------------------------------------------------------------------
-# BacklogEmpty → exit 0
+# BacklogEmpty -> exit 0
 # ---------------------------------------------------------------------------
 
 
@@ -413,7 +413,7 @@ def test_main_backlog_empty_exits_zero() -> None:
 
 
 # ---------------------------------------------------------------------------
-# ValueError → exit 1
+# ValueError -> exit 1
 # ---------------------------------------------------------------------------
 
 
@@ -429,7 +429,7 @@ def test_main_value_error_from_picker_exits_one() -> None:
 
 
 # ---------------------------------------------------------------------------
-# RuntimeError from capture_parent_branch → SystemExit
+# RuntimeError from capture_parent_branch -> SystemExit
 # ---------------------------------------------------------------------------
 
 

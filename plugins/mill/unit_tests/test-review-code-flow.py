@@ -187,7 +187,7 @@ def main() -> int:
             assert str(project_root / "reviews") in r.reviews[0]["file"], (
                 f"review file must be under worktree/reviews/, got {r.reviews[0]['file']!r}"
             )
-            print(f"PASS test1a: alpha r1 → {fname}")
+            print(f"PASS test1a: alpha r1 -> {fname}")
 
             # alpha round 2 (counter increments per-scope)
             _seed_approve(1)
@@ -195,7 +195,7 @@ def main() -> int:
             assert r.round == 2, f"expected round 2, got {r.round}"
             fname = Path(r.reviews[0]["file"]).name
             assert "code-review-alpha-r2" in fname, f"unexpected filename: {fname}"
-            print(f"PASS test1b: alpha r2 → {fname}")
+            print(f"PASS test1b: alpha r2 -> {fname}")
 
             # beta round 1 (fresh per-scope counter, not r3)
             _seed_approve(1)
@@ -203,7 +203,7 @@ def main() -> int:
             assert r.round == 1, f"expected round 1 for beta, got {r.round}"
             fname = Path(r.reviews[0]["file"]).name
             assert "code-review-beta-r1" in fname, f"unexpected filename: {fname}"
-            print(f"PASS test1c: beta r1 (independent of alpha counter) → {fname}")
+            print(f"PASS test1c: beta r1 (independent of alpha counter) -> {fname}")
 
             # holistic round 1 (independent of both per-batch counters)
             _seed_approve(1)
@@ -214,7 +214,7 @@ def main() -> int:
             assert "alpha" not in fname and "beta" not in fname, (
                 f"batch name leaked into holistic filename: {fname}"
             )
-            print(f"PASS test1d: holistic r1 (per-scope regression #21/#62/#63) → {fname}")
+            print(f"PASS test1d: holistic r1 (per-scope regression #21/#62/#63) -> {fname}")
         except AssertionError as exc:
             errors += 1
             print(f"FAIL test1: {exc}", file=sys.stderr)
@@ -388,14 +388,14 @@ def main() -> int:
             os.chdir(orig_dir)
 
     # ------------------------------------------------------------------
-    # Test 5 — NEED_CONTEXT resume fallback: 1 retry → APPROVE (#5/#7)
+    # Test 5 — NEED_CONTEXT resume fallback: 1 retry -> APPROVE (#5/#7)
     # ------------------------------------------------------------------
     with tempfile.TemporaryDirectory() as tmpdir:
         mill_dir, wiki_root, project_root, cfg = _make_fixture(Path(tmpdir))
         orig_dir = os.getcwd()
         os.chdir(project_root)
         # src/a.py exists on disk (created by _make_fixture); NEED_CONTEXT_TEXT
-        # claims it is missing so resolve_existing_paths returns it → retry fires.
+        # claims it is missing so resolve_existing_paths returns it -> retry fires.
         stub.seed([
             (NEED_CONTEXT_TEXT, "sid-1"),
             (APPROVE_TEXT,      "sid-2"),
@@ -416,7 +416,7 @@ def main() -> int:
             assert r.reviews[0]["session_id"] == "sid-2", (
                 f"expected session_id 'sid-2', got {r.reviews[0]['session_id']!r}"
             )
-            print("PASS test5: NEED_CONTEXT retry → APPROVE, session_id from retry captured")
+            print("PASS test5: NEED_CONTEXT retry -> APPROVE, session_id from retry captured")
         except AssertionError as exc:
             errors += 1
             print(f"FAIL test5: {exc}", file=sys.stderr)
@@ -509,7 +509,7 @@ def main() -> int:
             code_run(cfg7, SLUG, mill_dir, wiki_root, project_root, batch_name="foo")
             code_run(cfg7, SLUG, mill_dir, wiki_root, project_root, batch_name="foo")
 
-            # Round 4 without kwarg: cfg.rounds == 3 → ReviewError
+            # Round 4 without kwarg: cfg.rounds == 3 -> ReviewError
             try:
                 _seed_approve(1)
                 code_run(cfg7, SLUG, mill_dir, wiki_root, project_root, batch_name="foo")
@@ -528,7 +528,7 @@ def main() -> int:
             assert r4.round == 4, f"expected round 4, got {r4.round}"
             fname4 = Path(r4.reviews[0]["file"]).name
             assert "code-review-foo-r4" in fname4, f"unexpected filename: {fname4}"
-            print(f"PASS test7b: round 4 succeeds with max_rounds=5 → {fname4}")
+            print(f"PASS test7b: round 4 succeeds with max_rounds=5 -> {fname4}")
 
         except AssertionError as exc:
             errors += 1
@@ -557,12 +557,12 @@ def main() -> int:
             stub.seed([(three_blockings, "sid-b1")])
             r = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, batch_name="alpha")
             assert r.blocking_count == 3, f"expected blocking_count=3, got {r.blocking_count}"
-            print("PASS test8a: three BLOCKING headings → blocking_count == 3")
+            print("PASS test8a: three BLOCKING headings -> blocking_count == 3")
 
             stub.seed([(APPROVE_TEXT, "sid-b2")])
             r2 = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, batch_name="beta")
             assert r2.blocking_count == 0, f"expected blocking_count=0, got {r2.blocking_count}"
-            print("PASS test8b: no BLOCKING headings → blocking_count == 0")
+            print("PASS test8b: no BLOCKING headings -> blocking_count == 0")
 
         except AssertionError as exc:
             errors += 1
@@ -595,7 +595,7 @@ def main() -> int:
             assert "seeded boom" in rev["error"], f"error field wrong: {rev['error']}"
             assert rev["session_id"] is None
             assert all(rv["verdict"] == "ERROR" for rv in r.reviews), f"expected all sub-reviews ERROR, got {[rv['verdict'] for rv in r.reviews]}"
-            print("PASS test9: initial LLM failure → ReviewResult(ERROR) not raise")
+            print("PASS test9: initial LLM failure -> ReviewResult(ERROR) not raise")
         except AssertionError as exc:
             errors += 1
             print(f"FAIL test9: {exc}", file=sys.stderr)
@@ -626,7 +626,7 @@ def main() -> int:
             assert rev["scope"] == "holistic"
             assert "seeded boom" in rev["error"]
             assert all(rv["verdict"] == "ERROR" for rv in r.reviews), f"expected all sub-reviews ERROR, got {[rv['verdict'] for rv in r.reviews]}"
-            print("PASS test10: holistic LLM failure → ReviewResult(ERROR) not raise")
+            print("PASS test10: holistic LLM failure -> ReviewResult(ERROR) not raise")
         except AssertionError as exc:
             errors += 1
             print(f"FAIL test10: {exc}", file=sys.stderr)
@@ -664,7 +664,7 @@ def main() -> int:
             )
             assert rev["session_id"] is None
             assert all(rv["verdict"] == "ERROR" for rv in r.reviews), f"expected all sub-reviews ERROR, got {[rv['verdict'] for rv in r.reviews]}"
-            print("PASS test11: resume LLM failure → ERROR entry with 'resume retry failed:' prefix")
+            print("PASS test11: resume LLM failure -> ERROR entry with 'resume retry failed:' prefix")
         except AssertionError as exc:
             errors += 1
             print(f"FAIL test11: {exc}", file=sys.stderr)
@@ -784,7 +784,7 @@ def main() -> int:
     # Test 14 — diff-scoping (effort threading removed; covered by test-reviewer-single.py)
     # ------------------------------------------------------------------
 
-    # 14c: per-batch with start_sha present → prompt contains DIFF delimiter
+    # 14c: per-batch with start_sha present -> prompt contains DIFF delimiter
     with tempfile.TemporaryDirectory() as tmpdir:
         mill_dir, wiki_root, project_root, cfg = _make_fixture(Path(tmpdir))
         orig_dir = os.getcwd()
@@ -850,7 +850,7 @@ def main() -> int:
         finally:
             os.chdir(orig_dir)
 
-    # 14d: per-batch with missing start_sha → prompt uses FILE delimiter (no DIFF)
+    # 14d: per-batch with missing start_sha -> prompt uses FILE delimiter (no DIFF)
     with tempfile.TemporaryDirectory() as tmpdir:
         mill_dir, wiki_root, project_root, cfg = _make_fixture(Path(tmpdir))
         orig_dir = os.getcwd()
@@ -885,7 +885,7 @@ def main() -> int:
         finally:
             os.chdir(orig_dir)
 
-    # 14e: per-batch with large diff → prompt uses FILE delimiter (not DIFF)
+    # 14e: per-batch with large diff -> prompt uses FILE delimiter (not DIFF)
     with tempfile.TemporaryDirectory() as tmpdir:
         mill_dir, wiki_root, project_root, cfg = _make_fixture(Path(tmpdir))
         orig_dir = os.getcwd()

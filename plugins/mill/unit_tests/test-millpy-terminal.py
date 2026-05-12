@@ -38,7 +38,7 @@ def main() -> int:
     errors = 0
 
     # ------------------------------------------------------------------
-    # Test: two worktrees present, user picks first → subprocess called
+    # Test: two worktrees present, user picks first -> subprocess called
     # with first worktree's path.
     # ------------------------------------------------------------------
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -85,7 +85,7 @@ def main() -> int:
                 print("PASS: two worktrees -- user picks 1 -> subprocess called with first path")
 
     # ------------------------------------------------------------------
-    # Test: single worktree → auto-selected, subprocess called without prompt.
+    # Test: single worktree -> auto-selected, subprocess called without prompt.
     # ------------------------------------------------------------------
     with tempfile.TemporaryDirectory() as tmpdir:
         root = Path(tmpdir)
@@ -129,7 +129,7 @@ def main() -> int:
             print("PASS: single worktree auto-selected, no prompt, subprocess called")
 
     # ------------------------------------------------------------------
-    # Test: no active worktrees, spawn returns 0, backlog empty → exit 0.
+    # Test: no active worktrees, spawn returns 0, backlog empty -> exit 0.
     # ------------------------------------------------------------------
     with tempfile.TemporaryDirectory() as tmpdir:
         root = Path(tmpdir)
@@ -150,16 +150,16 @@ def main() -> int:
             rc = mill_terminal.main([])
 
         if rc != 0:
-            print(f"FAIL: empty backlog → expected exit 0, got {rc}", file=sys.stderr)
+            print(f"FAIL: empty backlog -> expected exit 0, got {rc}", file=sys.stderr)
             errors += 1
         elif subprocess_calls:
             print("FAIL: subprocess.run called despite empty backlog", file=sys.stderr)
             errors += 1
         else:
-            print("PASS: spawn empty backlog → exit 0, no claude")
+            print("PASS: spawn empty backlog -> exit 0, no claude")
 
     # ------------------------------------------------------------------
-    # Test: hub_relative_path set in per-worktree config → subprocess
+    # Test: hub_relative_path set in per-worktree config -> subprocess
     # launched with <worktree>/src/csharp/X as cwd.
     # ------------------------------------------------------------------
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -202,10 +202,10 @@ def main() -> int:
             )
             errors += 1
         else:
-            print("PASS: hub_relative_path (sub-dir) → subprocess launched in sub-dir")
+            print("PASS: hub_relative_path (sub-dir) -> subprocess launched in sub-dir")
 
     # ------------------------------------------------------------------
-    # Test: hub_relative_path = "." → subprocess launched at worktree root.
+    # Test: hub_relative_path = "." -> subprocess launched at worktree root.
     # ------------------------------------------------------------------
     with tempfile.TemporaryDirectory() as tmpdir:
         root = Path(tmpdir)
@@ -245,11 +245,11 @@ def main() -> int:
             )
             errors += 1
         else:
-            print("PASS: hub_relative_path=. → subprocess launched at worktree root")
+            print("PASS: hub_relative_path=. -> subprocess launched at worktree root")
 
     # ------------------------------------------------------------------
     # Regression: hub config has hub_relative_path: "hub-sub", selected
-    # worktree's config has hub_relative_path: "wt-sub" → wt-sub wins.
+    # worktree's config has hub_relative_path: "wt-sub" -> wt-sub wins.
     # ------------------------------------------------------------------
     with tempfile.TemporaryDirectory() as tmpdir:
         root = Path(tmpdir)
@@ -301,7 +301,7 @@ def main() -> int:
             print("PASS: per-worktree hub_relative_path wins over hub config value")
 
     # ------------------------------------------------------------------
-    # Test: no active worktrees → spawn called, new worktree, claude launched.
+    # Test: no active worktrees -> spawn called, new worktree, claude launched.
     # ------------------------------------------------------------------
     with tempfile.TemporaryDirectory() as tmpdir:
         root = Path(tmpdir)
@@ -349,10 +349,10 @@ def main() -> int:
             )
             errors += 1
         else:
-            print("PASS: no active worktrees → spawn called, claude launched in new worktree")
+            print("PASS: no active worktrees -> spawn called, claude launched in new worktree")
 
     # ------------------------------------------------------------------
-    # Test: no active worktrees, spawn returns non-zero → exit 1, no claude.
+    # Test: no active worktrees, spawn returns non-zero -> exit 1, no claude.
     # ------------------------------------------------------------------
     with tempfile.TemporaryDirectory() as tmpdir:
         root = Path(tmpdir)
@@ -378,13 +378,13 @@ def main() -> int:
             rc = mill_terminal.main([])
 
         if rc != 1:
-            print(f"FAIL: spawn non-zero rc → expected exit 1, got {rc}", file=sys.stderr)
+            print(f"FAIL: spawn non-zero rc -> expected exit 1, got {rc}", file=sys.stderr)
             errors += 1
         elif subprocess_calls:
             print("FAIL: subprocess.run called despite spawn failure", file=sys.stderr)
             errors += 1
         else:
-            print("PASS: spawn non-zero rc → exit 1, no claude")
+            print("PASS: spawn non-zero rc -> exit 1, no claude")
 
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)

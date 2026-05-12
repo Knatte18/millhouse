@@ -181,7 +181,7 @@ def main() -> int:
     except Exception as exc:
         fail("happy path --force", exc)
 
-    # --- (b) non-worktree: MarkerError → refuse ---
+    # --- (b) non-worktree: MarkerError -> refuse ---
     try:
         with tempfile.TemporaryDirectory() as tmp_str:
             tmp = Path(tmp_str)
@@ -192,11 +192,11 @@ def main() -> int:
             assert result.returncode != 0, f"expected non-zero from non-worktree, got {result.returncode}"
             combined = result.stdout + result.stderr
             assert "worktree" in combined, f"'worktree' not in output: {combined!r}"
-            ok("non-worktree: MarkerError → refuse with non-zero exit")
+            ok("non-worktree: MarkerError -> refuse with non-zero exit")
     except Exception as exc:
         fail("non-worktree MarkerError", exc)
 
-    # --- (c) phase already abandoned → refuse ---
+    # --- (c) phase already abandoned -> refuse ---
     try:
         with tempfile.TemporaryDirectory() as tmp_str:
             tmp = Path(tmp_str)
@@ -207,11 +207,11 @@ def main() -> int:
             assert result.returncode != 0, f"expected non-zero, got {result.returncode}"
             combined = result.stdout + result.stderr
             assert "already abandoned" in combined, "'already abandoned' not in output"
-            ok("phase=abandoned → refuse")
+            ok("phase=abandoned -> refuse")
     except Exception as exc:
         fail("phase=abandoned refuse", exc)
 
-    # --- (d) phase done → refuse ---
+    # --- (d) phase done -> refuse ---
     try:
         with tempfile.TemporaryDirectory() as tmp_str:
             tmp = Path(tmp_str)
@@ -222,11 +222,11 @@ def main() -> int:
             assert result.returncode != 0, f"expected non-zero, got {result.returncode}"
             combined = result.stdout + result.stderr
             assert "done" in combined, "'done' not in output"
-            ok("phase=done → refuse")
+            ok("phase=done -> refuse")
     except Exception as exc:
         fail("phase=done refuse", exc)
 
-    # --- (e) non-stale builder lock → refuse ---
+    # --- (e) non-stale builder lock -> refuse ---
     try:
         with tempfile.TemporaryDirectory() as tmp_str:
             tmp = Path(tmp_str)
@@ -241,11 +241,11 @@ def main() -> int:
             assert result.returncode != 0, f"expected non-zero, got {result.returncode}"
             combined = result.stdout + result.stderr
             assert "builder lock" in combined, "'builder lock' not in output"
-            ok("non-stale lock → refuse without --force")
+            ok("non-stale lock -> refuse without --force")
     except Exception as exc:
         fail("non-stale lock", exc)
 
-    # --- (f) stale builder lock → proceed ---
+    # --- (f) stale builder lock -> proceed ---
     try:
         with tempfile.TemporaryDirectory() as tmp_str:
             tmp = Path(tmp_str)
@@ -262,11 +262,11 @@ def main() -> int:
             wt_str = str(wt)
             assert ["git", "-C", wt_str, "add", "task/status.md"] in cmds, \
                 f"add not in cmds: {cmds}"
-            ok("stale lock → proceed with --force")
+            ok("stale lock -> proceed with --force")
     except Exception as exc:
         fail("stale lock proceed", exc)
 
-    # --- (g) missing status.md → refuse ---
+    # --- (g) missing status.md -> refuse ---
     try:
         with tempfile.TemporaryDirectory() as tmp_str:
             tmp = Path(tmp_str)
@@ -281,7 +281,7 @@ def main() -> int:
             assert result.returncode != 0, f"expected non-zero, got {result.returncode}"
             combined = result.stdout + result.stderr
             assert "status.md" in combined, "'status.md' not in output"
-            ok("missing status.md → refuse")
+            ok("missing status.md -> refuse")
     except Exception as exc:
         fail("missing status.md", exc)
 

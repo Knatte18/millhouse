@@ -150,7 +150,7 @@ def main() -> int:
             discussion_run(cfg, SLUG, mill_dir, project_root, wiki_root)
             discussion_run(cfg, SLUG, mill_dir, project_root, wiki_root)
 
-            # Round 3 without kwarg: cfg.rounds == 2 → ReviewError
+            # Round 3 without kwarg: cfg.rounds == 2 -> ReviewError
             try:
                 stub.seed([(APPROVE_TEXT, "sid-r3")])
                 discussion_run(cfg, SLUG, mill_dir, project_root, wiki_root)
@@ -169,7 +169,7 @@ def main() -> int:
             assert r3.round == 3, f"expected round 3, got {r3.round}"
             fname3 = Path(r3.reviews[0]["file"]).name
             assert "discussion-review-r3" in fname3, f"unexpected filename: {fname3}"
-            print(f"PASS max_rounds override: round 3 succeeds with max_rounds=5 → {fname3}")
+            print(f"PASS max_rounds override: round 3 succeeds with max_rounds=5 -> {fname3}")
 
         except AssertionError as exc:
             errors += 1
@@ -205,7 +205,7 @@ def main() -> int:
         orig_dir = os.getcwd()
         os.chdir(project_root)
         try:
-            # Two GAP headings → blocking_count == 2
+            # Two GAP headings -> blocking_count == 2
             two_gaps = (
                 "# Review\n\n"
                 "### [GAP] missing rationale\n\n- bullet\n\n"
@@ -215,13 +215,13 @@ def main() -> int:
             stub.seed([(two_gaps, "sid-gaps")])
             r = discussion_run(cfg, SLUG, mill_dir, project_root, wiki_root)
             assert r.blocking_count == 2, f"expected blocking_count=2, got {r.blocking_count}"
-            print("PASS blocking_count: two GAP headings → blocking_count == 2")
+            print("PASS blocking_count: two GAP headings -> blocking_count == 2")
 
-            # Zero GAPs → blocking_count == 0
+            # Zero GAPs -> blocking_count == 0
             stub.seed([(APPROVE_TEXT, "sid-no-gaps")])
             r2 = discussion_run(cfg, SLUG, mill_dir, project_root, wiki_root)
             assert r2.blocking_count == 0, f"expected blocking_count=0, got {r2.blocking_count}"
-            print("PASS blocking_count: no GAP headings → blocking_count == 0")
+            print("PASS blocking_count: no GAP headings -> blocking_count == 0")
 
         except AssertionError as exc:
             errors += 1

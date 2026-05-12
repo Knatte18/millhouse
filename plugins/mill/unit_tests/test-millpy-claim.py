@@ -536,7 +536,7 @@ def test_portal_before_recreate_active_junction_order() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Idempotent re-claim: portal exists + same target → skip, no second create
+# Idempotent re-claim: portal exists + same target -> skip, no second create
 # ---------------------------------------------------------------------------
 
 

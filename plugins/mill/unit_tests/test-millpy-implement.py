@@ -151,7 +151,7 @@ class TestMillpyImplement(unittest.TestCase):
         return rc, buf.getvalue()
 
     def test_1_initial_dispatch_success(self):
-        """Initial dispatch: pending batch → success JSON, batch state running."""
+        """Initial dispatch: pending batch -> success JSON, batch state running."""
         status_path = self.tmp_path / "task" / "status.md"
 
         with unittest.mock.patch.object(
@@ -172,7 +172,7 @@ class TestMillpyImplement(unittest.TestCase):
         self.assertEqual(batches[0]["implementer_session"], "00000000-0000-0000-0000-000000000001")
 
     def test_2_initial_dispatch_running_batch(self):
-        """Crash-recovery: batch already running → re-dispatches with new UUID."""
+        """Crash-recovery: batch already running -> re-dispatches with new UUID."""
         status_path = self.tmp_path / "task" / "status.md"
         millpy_implement._status.set_batch_field(status_path, "test-batch", "state", "running")
 
@@ -191,7 +191,7 @@ class TestMillpyImplement(unittest.TestCase):
         self.assertEqual(batches[0]["implementer_session"], "00000000-0000-0000-0000-000000000001")
 
     def test_3_initial_dispatch_stuck(self):
-        """Initial dispatch: implementer returns stuck → exit 0, stuck JSON."""
+        """Initial dispatch: implementer returns stuck -> exit 0, stuck JSON."""
         with unittest.mock.patch.object(
             millpy_implement._implementer_sonnet, "run",
             return_value=(
@@ -262,7 +262,7 @@ class TestMillpyImplement(unittest.TestCase):
         )
 
     def test_5_resume_llm_session_error(self):
-        """Resume path: LLMSessionError → stuck/transient, exit 1."""
+        """Resume path: LLMSessionError -> stuck/transient, exit 1."""
         status_path = self.tmp_path / "task" / "status.md"
         millpy_implement._status.set_batch_field(status_path, "test-batch", "state", "reviewing")
         millpy_implement._status.set_batch_field(
@@ -286,7 +286,7 @@ class TestMillpyImplement(unittest.TestCase):
         self.assertEqual(data["stuck_type"], "transient")
 
     def test_5b_resume_llm_error(self):
-        """Resume path: bare LLMError → stuck/transient, exit 1."""
+        """Resume path: bare LLMError -> stuck/transient, exit 1."""
         status_path = self.tmp_path / "task" / "status.md"
         millpy_implement._status.set_batch_field(status_path, "test-batch", "state", "reviewing")
         millpy_implement._status.set_batch_field(
@@ -310,13 +310,13 @@ class TestMillpyImplement(unittest.TestCase):
         self.assertEqual(data["stuck_type"], "transient")
 
     def test_6_batch_not_found(self):
-        """Unknown batch name → exit 1, no JSON on stdout."""
+        """Unknown batch name -> exit 1, no JSON on stdout."""
         rc, out = self._run_main(["nonexistent-batch"])
         self.assertEqual(rc, 1)
         self.assertEqual(out.strip(), "")
 
     def test_7_malformed_json_from_implementer(self):
-        """Implementer output with no valid JSON → exit 0, stuck/logic JSON."""
+        """Implementer output with no valid JSON -> exit 0, stuck/logic JSON."""
         with unittest.mock.patch.object(
             millpy_implement._implementer_sonnet, "run",
             return_value=("implementer output with no json\n", "sess"),
@@ -329,7 +329,7 @@ class TestMillpyImplement(unittest.TestCase):
         self.assertEqual(data["stuck_type"], "logic")
 
     def test_8_resume_without_review_file(self):
-        """--resume without --review-file → exit 1, no JSON on stdout."""
+        """--resume without --review-file -> exit 1, no JSON on stdout."""
         rc, out = self._run_main(["test-batch", "--resume"])
         self.assertEqual(rc, 1)
         self.assertEqual(out.strip(), "")
@@ -348,14 +348,14 @@ class TestForwardOutput(unittest.TestCase):
         return rc, buf.getvalue()
 
     def test_fo_1_bare_json_on_last_line(self):
-        """Bare JSON with status key on last line → printed verbatim, exit 0."""
+        """Bare JSON with status key on last line -> printed verbatim, exit 0."""
         json_str = '{"status":"success","commit_sha":"abc"}'
         rc, out = self._call(f"some preamble\n{json_str}")
         self.assertEqual(rc, 0)
         self.assertEqual(json.loads(out.strip()), json.loads(json_str))
 
     def test_fo_2_json_in_fence(self):
-        """JSON inside ```json fence → extracted and printed, exit 0."""
+        """JSON inside ```json fence -> extracted and printed, exit 0."""
         json_str = '{"status":"success","commit_sha":"abc"}'
         output = f"```json\n{json_str}\n```"
         rc, out = self._call(output)
@@ -363,7 +363,7 @@ class TestForwardOutput(unittest.TestCase):
         self.assertEqual(json.loads(out.strip()), json.loads(json_str))
 
     def test_fo_3_json_in_fence_trailing_blank_lines(self):
-        """JSON in fence with trailing blank lines → extracted correctly, exit 0."""
+        """JSON in fence with trailing blank lines -> extracted correctly, exit 0."""
         json_str = '{"status":"success","commit_sha":"abc"}'
         output = f"```json\n{json_str}\n```\n\n\n"
         rc, out = self._call(output)
@@ -371,7 +371,7 @@ class TestForwardOutput(unittest.TestCase):
         self.assertEqual(json.loads(out.strip()), json.loads(json_str))
 
     def test_fo_4_multiple_json_lines_last_wins(self):
-        """Multiple lines with status JSON → last one printed."""
+        """Multiple lines with status JSON -> last one printed."""
         first = '{"status":"stuck","stuck_type":"verify","reason":"oops"}'
         last = '{"status":"success","commit_sha":"def"}'
         rc, out = self._call(f"{first}\n{last}")
@@ -379,7 +379,7 @@ class TestForwardOutput(unittest.TestCase):
         self.assertEqual(json.loads(out.strip()), json.loads(last))
 
     def test_fo_5_no_json_anywhere(self):
-        """No JSON-like pattern in output → stuck/logic sentinel printed, exit 0."""
+        """No JSON-like pattern in output -> stuck/logic sentinel printed, exit 0."""
         rc, out = self._call("implementer ran but produced no report")
         self.assertEqual(rc, 0)
         data = json.loads(out.strip())
@@ -388,7 +388,7 @@ class TestForwardOutput(unittest.TestCase):
         self.assertIn("no structured report", data["reason"])
 
     def test_fo_6_malformed_json_last_valid_earlier(self):
-        """Unclosed brace last (regex miss) + valid JSON earlier → earlier valid one printed."""
+        """Unclosed brace last (regex miss) + valid JSON earlier -> earlier valid one printed."""
         valid = '{"status":"success","commit_sha":"x"}'
         output = f'{valid}\n{{"status":"broken"'
         rc, out = self._call(output)
@@ -396,7 +396,7 @@ class TestForwardOutput(unittest.TestCase):
         self.assertEqual(json.loads(out.strip()), json.loads(valid))
 
     def test_fo_7_sha_normalized(self):
-        """git rev-parse success → commit_sha in output replaced with HEAD sha."""
+        """git rev-parse success -> commit_sha in output replaced with HEAD sha."""
         sha = "a" * 40
         buf = io.StringIO()
         with unittest.mock.patch.object(
@@ -412,7 +412,7 @@ class TestForwardOutput(unittest.TestCase):
         self.assertEqual(json.loads(buf.getvalue().strip())["commit_sha"], sha)
 
     def test_fo_8_sha_git_failure(self):
-        """git rev-parse failure → original commit_sha preserved in output."""
+        """git rev-parse failure -> original commit_sha preserved in output."""
         buf = io.StringIO()
         with unittest.mock.patch.object(
             _implementer_common._subprocess_util, "run",

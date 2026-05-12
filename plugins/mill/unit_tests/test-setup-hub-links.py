@@ -5,18 +5,18 @@ happy-path cases. A single selective mock covers the cross-volume hardlink
 error path which cannot be triggered without multiple filesystem volumes.
 
 Covers:
-  - Token-scope filter: no <SLUG> in tokens → .portals entry skipped; .wiki created
+  - Token-scope filter: no <SLUG> in tokens -> .portals entry skipped; .wiki created
   - Mixed slug+non-slug entries: both .wiki and .portals created when SLUG present
   - Hardlink inode skip (idempotent re-run)
-  - Hardlink inode-mismatch → backup-and-recreate
-  - Both empty config blocks → empty result lists
-  - Cross-volume hardlink → ValueError with clear source/target in message
+  - Hardlink inode-mismatch -> backup-and-recreate
+  - Both empty config blocks -> empty result lists
+  - Cross-volume hardlink -> ValueError with clear source/target in message
   - Portal-flow integration:
       - .wiki junction resolves to fixture wiki path
       - .portals junction resolves to wiki/active/<slug>/ dir
       - tasks.md hardlink shares an inode with wiki/Home.md
-  - Graceful absence: missing hardlinks block → empty hardlinks list
-  - Graceful absence: hardlinks: null → empty hardlinks list
+  - Graceful absence: missing hardlinks block -> empty hardlinks list
+  - Graceful absence: hardlinks: null -> empty hardlinks list
 """
 from __future__ import annotations
 
@@ -88,7 +88,7 @@ _HARDLINK_ONLY_CFG = {
 
 
 # ---------------------------------------------------------------------------
-# Token-scope filter: no <SLUG> → .active skipped
+# Token-scope filter: no <SLUG> -> .active skipped
 # ---------------------------------------------------------------------------
 
 
@@ -218,10 +218,10 @@ def test_hardlink_inode_skip_idempotent() -> None:
             "CONTAINER_PATH": str(container),
             "WIKI_PATH": str(wiki_path),
             "REPO": "my-repo",
-            # deliberately omit SLUG → junction entry is filtered
+            # deliberately omit SLUG -> junction entry is filtered
         }
 
-        # First call: junction filtered → 0 junctions; hardlink created → 1
+        # First call: junction filtered -> 0 junctions; hardlink created -> 1
         result1 = create_hub_links(target_root, wiki_path, tokens)
         if len(result1["junctions"]) != 0:
             raise AssertionError(f"first call: expected 0 junctions, got {result1['junctions']}")
@@ -231,7 +231,7 @@ def test_hardlink_inode_skip_idempotent() -> None:
         tasks_md = target_root / "tasks.md"
         inode_first = tasks_md.stat().st_ino
 
-        # Second call: hardlink inode matches → skipped
+        # Second call: hardlink inode matches -> skipped
         result2 = create_hub_links(target_root, wiki_path, tokens)
         if len(result2["hardlinks"]) != 0:
             raise AssertionError(
@@ -246,7 +246,7 @@ def test_hardlink_inode_skip_idempotent() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Hardlink inode mismatch → backup-and-recreate
+# Hardlink inode mismatch -> backup-and-recreate
 # ---------------------------------------------------------------------------
 
 
@@ -302,7 +302,7 @@ def test_hardlink_inode_mismatch_backup_and_recreate() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Empty config blocks → empty result lists
+# Empty config blocks -> empty result lists
 # ---------------------------------------------------------------------------
 
 
@@ -327,7 +327,7 @@ def test_all_entries_filtered_return_empty_lists() -> None:
             "CONTAINER_PATH": str(Path(tmp)),
             "WIKI_PATH": str(wiki_path),
             "REPO": "repo",
-            # no SLUG → every entry is filtered
+            # no SLUG -> every entry is filtered
         }
 
         result = create_hub_links(target_root, wiki_path, tokens)
@@ -337,11 +337,11 @@ def test_all_entries_filtered_return_empty_lists() -> None:
         if result["hardlinks"] != []:
             raise AssertionError(f"expected empty hardlinks, got {result['hardlinks']}")
 
-    print("PASS: all-SLUG config with no SLUG token → both result lists empty")
+    print("PASS: all-SLUG config with no SLUG token -> both result lists empty")
 
 
 # ---------------------------------------------------------------------------
-# Cross-volume hardlink → ValueError with clear message
+# Cross-volume hardlink -> ValueError with clear message
 # ---------------------------------------------------------------------------
 
 
@@ -395,7 +395,7 @@ def test_portal_flow_integration() -> None:
         wts/
           my-task/              <- target_root (new worktree)
         portals/
-          my-task/              <- junction → wiki/active/my-task/
+          my-task/              <- junction -> wiki/active/my-task/
         wiki/
           active/
             my-task/            <- wiki state dir (portal target)
@@ -420,7 +420,7 @@ def test_portal_flow_integration() -> None:
         portals.mkdir(parents=True)
         target_root.mkdir(parents=True)
 
-        # Create portals/<slug> junction → wiki/active/my-task/ (mirrors new mill-spawn)
+        # Create portals/<slug> junction -> wiki/active/my-task/ (mirrors new mill-spawn)
         junction_mod.create(target=wiki_path / "active" / "my-task", link_path=portals / "my-task")
 
         tokens = {
@@ -491,7 +491,7 @@ def test_portal_flow_integration() -> None:
 
 
 def test_create_hub_links_handles_missing_hardlinks_block() -> None:
-    """No hardlinks: block in config → hardlinks result is empty, junctions created."""
+    """No hardlinks: block in config -> hardlinks result is empty, junctions created."""
     with tempfile.TemporaryDirectory() as tmp:
         container = Path(tmp) / "container"
         wiki_path = container / "wiki"
@@ -525,11 +525,11 @@ def test_create_hub_links_handles_missing_hardlinks_block() -> None:
                 f"expected 1 junction, got {len(result['junctions'])}: {result['junctions']}"
             )
 
-    print("PASS: missing hardlinks block → empty hardlinks list, junction created normally")
+    print("PASS: missing hardlinks block -> empty hardlinks list, junction created normally")
 
 
 def test_create_hub_links_handles_null_hardlinks_block() -> None:
-    """hardlinks: null in config → hardlinks result is empty, junctions created."""
+    """hardlinks: null in config -> hardlinks result is empty, junctions created."""
     with tempfile.TemporaryDirectory() as tmp:
         container = Path(tmp) / "container"
         wiki_path = container / "wiki"
@@ -539,7 +539,7 @@ def test_create_hub_links_handles_null_hardlinks_block() -> None:
             "junctions": {
                 ".wiki": "<WIKI_PATH>",
             },
-            "hardlinks": None,  # explicit null → yaml.safe_load yields None
+            "hardlinks": None,  # explicit null -> yaml.safe_load yields None
         }
         _make_minimal_wiki(wiki_path, cfg_null_hardlinks)
         target_root.mkdir(parents=True)
@@ -563,7 +563,7 @@ def test_create_hub_links_handles_null_hardlinks_block() -> None:
                 f"expected 1 junction, got {len(result['junctions'])}: {result['junctions']}"
             )
 
-    print("PASS: hardlinks: null → empty hardlinks list, junction created normally")
+    print("PASS: hardlinks: null -> empty hardlinks list, junction created normally")
 
 
 # ---------------------------------------------------------------------------

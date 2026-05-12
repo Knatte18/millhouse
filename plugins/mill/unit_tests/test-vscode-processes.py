@@ -117,7 +117,7 @@ def main() -> int:
         print("PASS: posix_parser_basic")
 
     # ------------------------------------------------------------------
-    # Test: posix_parser_no_code_processes — no code basename → empty set.
+    # Test: posix_parser_no_code_processes — no code basename -> empty set.
     # ------------------------------------------------------------------
     with (
         patch("_vscode_processes.os.name", "posix"),
