@@ -37,6 +37,7 @@ Batch-local decisions: see `merge-fixes-1-and-3` and `write-all-required-latest-
   - **`_shortcuts.write_all` new signature**: `write_all(mill_dir: Path, latest_path: Path) -> list[Path]`. `latest_path` is a required positional parameter — no default value, no optional fallback.
   - **Per-script rendering**: replace `_render.render(_TEMPLATE_PATH, {"SCRIPT": script})` with `_render.render(_TEMPLATE_PATH, {"SCRIPT": script, "SCRIPT_PATH": str(latest_path / "scripts" / f"{script}.py")})` inside the write loop.
   - Update the module docstring's `Public API:` section to document the new `latest_path` parameter.
+  - Also update the `write_all` function docstring `Args:` section to include: `latest_path: Path — Absolute path to the latest plugin cache entry; used to construct SCRIPT_PATH tokens.`
   - The rest of `write_all` (idempotency check, legacy `.py` cleanup) is unchanged.
   - Commit message body must embed the `uv run --project` vs `uv run --active` median timing delta from `task/benchmark-notes.md` as one sentence, e.g. "uv run --project: Xms → uv run --active: Yms".
 - **Commit:** `feat(shortcuts): replace uv-project wrapper template with uv-active + hardcoded path`

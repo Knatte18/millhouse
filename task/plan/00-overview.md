@@ -3,7 +3,7 @@
 ```yaml
 task: 53 (A) — Speed up PS1 wrappers by invoking venv Python directly
 slug: ps1-startup-speedup
-approved: false
+approved: true
 started: 20260512-093109
 parent: main
 root: ""
