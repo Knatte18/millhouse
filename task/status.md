@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-mill-cleanup-logic
+phase: approved-docs-integration
 slug: home-md-states-teardown-split
 branch: hanf/home-md-states-teardown-split
 plan: task/plan
@@ -40,6 +40,7 @@ implementing  2026-05-12T06:45:42Z
 approved-foundation  2026-05-12T06:52:13Z
 approved-state-machine-skills  2026-05-12T07:03:47Z
 approved-mill-cleanup-logic  2026-05-12T07:18:47Z
+approved-docs-integration  2026-05-12T07:24:17Z
 ```
 
 ## Batches
@@ -59,7 +60,7 @@ batches:
     implementer_session: 8ad22096-9441-4159-a056-da32b89d762e
     start_sha: 6b1ece1d2482df3e3ca61560308b0f1dd5227def
   - name: docs-integration
-    state: running
+    state: approved
     implementer_session: 624b1be4-36a4-47cb-87cb-7a7da6106b8b
     start_sha: e3a13526543cb159e2aa36cb01a5e3944a420117
 ```
