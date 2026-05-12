@@ -11,6 +11,18 @@ You are the **Builder** — a lean orchestrator. You coordinate per-batch implem
 
 ## Entry
 
+**Step 0: Resolve `PLUGIN_ROOT`.**
+
+```bash
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}"
+if [ -z "$PLUGIN_ROOT" ]; then
+    PLUGIN_ROOT="$(git rev-parse --show-toplevel)/plugins/mill"
+    echo "[mill-go] CLAUDE_PLUGIN_ROOT unset; resolved to: $PLUGIN_ROOT"
+fi
+```
+
+Use `$PLUGIN_ROOT` in place of `$CLAUDE_PLUGIN_ROOT` for all subsequent `uv run` commands in this skill.
+
 1. Read the task slug: `slug = _marker.slug_from_branch(git_root, wiki_path, cfg)`. On `MarkerError` → halt with "this worktree was not created by mill-spawn".
    `signature: _marker.slug_from_branch(git_root: Path, wiki_path: Path, cfg: dict) -> str`
 2. Resolve the wiki path: `wiki_path = _paths.resolve_wiki_path(_paths.resolve_git_root())`. Sync the wiki clone: `_wiki.sync_pull(wiki_path, slug=slug)`.
@@ -25,7 +37,7 @@ You are the **Builder** — a lean orchestrator. You coordinate per-batch implem
    - `roles.code-review.batch.reviewer` — if null (or rounds: 0), skip per-batch code review for all batches.
 4. Acquire the builder lock:
    ```bash
-   uv run --project "$CLAUDE_PLUGIN_ROOT" "$CLAUDE_PLUGIN_ROOT/scripts/millpy-builder-lock.py" acquire <slug>
+   uv run --project "$PLUGIN_ROOT" "$PLUGIN_ROOT/scripts/millpy-builder-lock.py" acquire <slug>
    ```
    On exit code 1: surface the stderr message and halt — a second mill-go will corrupt state.
 5. **Entry phase gate.** Set `status_path = Path("task/status.md").resolve()` and inspect the phase:
@@ -72,9 +84,9 @@ For each batch in `order`:
 Background via millpy-bg:
 
 ```bash
-uv run --project "$CLAUDE_PLUGIN_ROOT" "$CLAUDE_PLUGIN_ROOT/scripts/millpy-bg.py" \
+uv run --project "$PLUGIN_ROOT" "$PLUGIN_ROOT/scripts/millpy-bg.py" \
     --slug implement-<batch_name> -- \
-    uv run --project "$CLAUDE_PLUGIN_ROOT" "$CLAUDE_PLUGIN_ROOT/scripts/millpy-implement.py" <batch_name>
+    uv run --project "$PLUGIN_ROOT" "$PLUGIN_ROOT/scripts/millpy-implement.py" <batch_name>
 ```
 
 Returns immediately with `pid=<N> log=<abs-path>`. Do not use `run_in_background: true` on the Bash tool — that routes output to CC's temp dir. Poll the log file with `cat <log-path>` until `[mill-bg] EXIT` appears. Once it does, read the log and extract the JSON summary line (the last non-empty, non-sentinel line in the log).
@@ -125,9 +137,9 @@ For each round `N` from 1 to `roles.code-review.batch.rounds`:
 2. Background via `millpy-bg`:
 
    ```bash
-   uv run --project "$CLAUDE_PLUGIN_ROOT" "$CLAUDE_PLUGIN_ROOT/scripts/millpy-bg.py" \
+   uv run --project "$PLUGIN_ROOT" "$PLUGIN_ROOT/scripts/millpy-bg.py" \
        --slug review-code-<batch_name>-r<N> -- \
-       uv run --project "$CLAUDE_PLUGIN_ROOT" "$CLAUDE_PLUGIN_ROOT/scripts/millpy-review-code.py" \
+       uv run --project "$PLUGIN_ROOT" "$PLUGIN_ROOT/scripts/millpy-review-code.py" \
            --batch <batch_name> [--extra-file <p> ...]
    ```
 
@@ -141,9 +153,9 @@ For each round `N` from 1 to `roles.code-review.batch.rounds`:
      `signature: _notify.notify(event: str, detail: str, **context) -> None`
    - `REQUEST_CHANGES` — Background via millpy-bg:
      ```bash
-     uv run --project "$CLAUDE_PLUGIN_ROOT" "$CLAUDE_PLUGIN_ROOT/scripts/millpy-bg.py" \
+     uv run --project "$PLUGIN_ROOT" "$PLUGIN_ROOT/scripts/millpy-bg.py" \
          --slug fix-<batch_name>-r<N> -- \
-         uv run --project "$CLAUDE_PLUGIN_ROOT" "$CLAUDE_PLUGIN_ROOT/scripts/millpy-implement.py" <batch_name> --resume --round <N> --review-file <review-file-abs-path>
+         uv run --project "$PLUGIN_ROOT" "$PLUGIN_ROOT/scripts/millpy-implement.py" <batch_name> --resume --round <N> --review-file <review-file-abs-path>
      ```
      Returns immediately with `pid=<N> log=<abs-path>`. Do not use `run_in_background: true` on the Bash tool — that routes output to CC's temp dir. Poll the log file with `cat <log-path>` until `[mill-bg] EXIT` appears. Once it does, read the log and extract the JSON summary line (the last non-empty, non-sentinel line in the log).
 
@@ -154,9 +166,9 @@ For each round `N` from 1 to `roles.code-review.batch.rounds`:
    When the JSON envelope from sub-step 2 has top-level `verdict: "ERROR"` (or, equivalently, every entry in `reviews[]` has `verdict: "ERROR"`), skip sub-step 4 entirely and immediately re-run:
 
    ```bash
-   uv run --project "$CLAUDE_PLUGIN_ROOT" "$CLAUDE_PLUGIN_ROOT/scripts/millpy-bg.py" \
+   uv run --project "$PLUGIN_ROOT" "$PLUGIN_ROOT/scripts/millpy-bg.py" \
        --slug review-code-<batch_name>-retry-r<N> -- \
-       uv run --project "$CLAUDE_PLUGIN_ROOT" "$CLAUDE_PLUGIN_ROOT/scripts/millpy-review-code.py" \
+       uv run --project "$PLUGIN_ROOT" "$PLUGIN_ROOT/scripts/millpy-review-code.py" \
            --batch <batch_name> [--extra-file <p> ...]
    ```
 
@@ -180,7 +192,7 @@ If the deep-merged config has `pipeline.autonomous_mode: true`: for any `stuck_t
 - `_notify.notify("mill-go.blocked", f"batch {batch_name}: {blocked_reason}", slug=slug, batch=batch_name)`.
 - Release the builder lock:
   ```bash
-  uv run --project "$CLAUDE_PLUGIN_ROOT" "$CLAUDE_PLUGIN_ROOT/scripts/millpy-builder-lock.py" release
+  uv run --project "$PLUGIN_ROOT" "$PLUGIN_ROOT/scripts/millpy-builder-lock.py" release
   ```
 - Tell the user: "Batch X blocked with reason Y. Inspect reviews/ and status.md. Re-run `/mill-go` after resolving, or `/mill-abandon` to wind down." Do not proceed to Handoff.
 
@@ -192,23 +204,23 @@ When mill-go's Entry-step 5 phase gate routes here (phase is `implementing`, `re
 2. Branch on the batch's `state`:
    - **`running`** — the implementer was mid-implementation. Re-invoke (via `millpy-bg`):
      ```bash
-     uv run --project "$CLAUDE_PLUGIN_ROOT" "$CLAUDE_PLUGIN_ROOT/scripts/millpy-bg.py" \
+     uv run --project "$PLUGIN_ROOT" "$PLUGIN_ROOT/scripts/millpy-bg.py" \
          --slug implement-<batch_name>-resume -- \
-         uv run --project "$CLAUDE_PLUGIN_ROOT" "$CLAUDE_PLUGIN_ROOT/scripts/millpy-implement.py" <batch_name> --resume
+         uv run --project "$PLUGIN_ROOT" "$PLUGIN_ROOT/scripts/millpy-implement.py" <batch_name> --resume
      ```
      The CLI re-attaches the warm session via the stored `implementer_session`. If `LLMSessionError` propagates (visible as `stuck_type: transient` in the JSON), apply the standard one-retry-fresh policy from Stuck escalation. After parsing the report, continue at Execute step 2b (cleanliness gate).
    - **`reviewing`** — the implementer report was already consumed; the reviewer was running. Re-invoke the per-batch code-review CLI from the start of round `review_round` (read this field from the batch entry):
      ```bash
-     uv run --project "$CLAUDE_PLUGIN_ROOT" "$CLAUDE_PLUGIN_ROOT/scripts/millpy-bg.py" \
+     uv run --project "$PLUGIN_ROOT" "$PLUGIN_ROOT/scripts/millpy-bg.py" \
          --slug review-code-<batch_name>-r<review_round>-resume -- \
-         uv run --project "$CLAUDE_PLUGIN_ROOT" "$CLAUDE_PLUGIN_ROOT/scripts/millpy-review-code.py" --batch <batch_name>
+         uv run --project "$PLUGIN_ROOT" "$PLUGIN_ROOT/scripts/millpy-review-code.py" --batch <batch_name>
      ```
      The CLI's crash-recovery scan handles a written-but-uncommitted review file. After parsing the JSON verdict, continue at Execute step 3 sub-step 3 (load `mill-receiving-review`) and step 4 (branch on verdict).
    - **`fixing`** — the reviewer returned `REQUEST_CHANGES`; the fix-implementer was running. Re-invoke:
      ```bash
-     uv run --project "$CLAUDE_PLUGIN_ROOT" "$CLAUDE_PLUGIN_ROOT/scripts/millpy-bg.py" \
+     uv run --project "$PLUGIN_ROOT" "$PLUGIN_ROOT/scripts/millpy-bg.py" \
          --slug fix-<batch_name>-r<review_round>-resume -- \
-         uv run --project "$CLAUDE_PLUGIN_ROOT" "$CLAUDE_PLUGIN_ROOT/scripts/millpy-implement.py" <batch_name> --resume --round <review_round> --review-file <review-file-abs-path>
+         uv run --project "$PLUGIN_ROOT" "$PLUGIN_ROOT/scripts/millpy-implement.py" <batch_name> --resume --round <review_round> --review-file <review-file-abs-path>
      ```
      The `<review-file-abs-path>` is the most recent `task/reviews/*-code-review-<batch_name>-r<review_round>.md` file. After parsing the report, continue at Execute step 3 sub-step 5 (max-rounds check) or back to step 3 round N+1 if the fix produced an APPROVE-eligible state on next review.
 3. **No state mutation before resume.** Do NOT pre-emptively flip `state` or call `_status.append_phase` before re-invoking the CLI. The CLI handles state transitions atomically; double-writes corrupt the timeline.
@@ -228,10 +240,10 @@ For each round `H` from 1 to `max_holistic_rounds`:
 
 3. Background via `millpy-bg`:
    ```bash
-   uv run --project "${CLAUDE_PLUGIN_ROOT}" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-bg.py" \
+   uv run --project "${PLUGIN_ROOT}" "${PLUGIN_ROOT}/scripts/millpy-bg.py" \
      --slug review-code-holistic-r{H} -- \
-     uv run --project "${CLAUDE_PLUGIN_ROOT}" \
-       "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-review-code.py" \
+     uv run --project "${PLUGIN_ROOT}" \
+       "${PLUGIN_ROOT}/scripts/millpy-review-code.py" \
        [--extra-file <p> ...]
    ```
    Include any accumulated `extra_files` from prior `NEED_CONTEXT` rounds via `--extra-file <p>` (one flag per path). Poll and extract JSON as per the per-batch pattern.
@@ -241,10 +253,10 @@ For each round `H` from 1 to `max_holistic_rounds`:
    When the JSON envelope from step 3 has top-level `verdict: "ERROR"` (or, equivalently, every entry in `reviews[]` has `verdict: "ERROR"`), skip steps 4 and 5 entirely and immediately re-run:
 
    ```bash
-   uv run --project "${CLAUDE_PLUGIN_ROOT}" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-bg.py" \
+   uv run --project "${PLUGIN_ROOT}" "${PLUGIN_ROOT}/scripts/millpy-bg.py" \
      --slug review-code-holistic-retry-r<H> -- \
-     uv run --project "${CLAUDE_PLUGIN_ROOT}" \
-       "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-review-code.py" \
+     uv run --project "${PLUGIN_ROOT}" \
+       "${PLUGIN_ROOT}/scripts/millpy-review-code.py" \
        [--extra-file <p> ...]
    ```
 
@@ -256,8 +268,8 @@ For each round `H` from 1 to `max_holistic_rounds`:
 
 5. On `REQUEST_CHANGES`: **Load `mill-receiving-review` before reading any finding.** Dispatch:
    ```bash
-   uv run --project "${CLAUDE_PLUGIN_ROOT}" \
-     "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-implement-holistic.py" \
+   uv run --project "${PLUGIN_ROOT}" \
+     "${PLUGIN_ROOT}/scripts/millpy-implement-holistic.py" \
      --review-file <abs-path-to-holistic-review-file> --round {H}
    ```
    Parse stdout JSON (same last-`{"status":...}`-line pattern as per-batch). The CLI handles `holistic-fixing` phase + commit + push itself.
@@ -291,7 +303,7 @@ For each round `H` from 1 to `max_holistic_rounds`:
 3. `_notify.notify("mill-go.done", f"task {slug} complete", slug=slug)`.
 4. **Release the builder lock immediately:**
    ```bash
-   uv run --project "$CLAUDE_PLUGIN_ROOT" "$CLAUDE_PLUGIN_ROOT/scripts/millpy-builder-lock.py" release
+   uv run --project "$PLUGIN_ROOT" "$PLUGIN_ROOT/scripts/millpy-builder-lock.py" release
    ```
 5. If `pipeline.auto_merge: true` → invoke `/mill-merge`. Otherwise tell the user: "Task complete. Run `/mill-merge` to merge the task branch back to parent." mill-merge may halt on `pr-pending` in PR mode (`git.require-pr-to-base: true`) — that is a skill-level halt and is expected; treat it as completion of step 5 and continue to step 6.
 6. If `pipeline.auto_report: true` → invoke `/mill-self-report --auto`. **Always fires** at the end of Handoff, including after a `pr-pending` halt in step 5 — do NOT treat the PR-pending message as task termination. The skill checks `gh auth` itself and bails cleanly if absent. mill-merge itself does not self-report — only the orchestrator (mill-go) does. Cross-thread merges and post-PR teardowns are not auto-reflected; user can run `/mill-self-report` manually if wanted.

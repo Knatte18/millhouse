@@ -58,6 +58,12 @@ def slug_from_branch(git_root: Path, wiki_path: Path, cfg: dict) -> str:
 
     task = next((t for t in tasks if t.slug == slug), None)
     if task is None:
+        if "/" in branch and not prefix:
+            stripped_slug = branch.split("/", 1)[1]
+            task = next((t for t in tasks if t.slug == stripped_slug), None)
+            if task is not None:
+                return stripped_slug
+            raise MarkerError(f"branch slugs {slug!r} and {stripped_slug!r} not found in Home.md")
         raise MarkerError(f"branch slug {slug!r} not present in Home.md")
     return slug
 
