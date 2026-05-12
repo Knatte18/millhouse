@@ -3,7 +3,7 @@
 ```yaml
 task: 'mill-pause: graceful orchestrator pause between operations'
 slug: mill-pause
-approved: false
+approved: true
 started: 20260512-140157
 parent: main
 root: ""

@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planning
+phase: plan-review-r1
 slug: mill-pause
 branch: hanf/mill-pause
 plan: task/plan
@@ -17,4 +17,5 @@ task_description: |
 discussing  '2026-05-12T13:49:39Z'
 discussed  '2026-05-12T14:00:08Z'
 planning  '2026-05-12T14:03:26Z'
+plan-review-r1  '2026-05-12T14:04:41Z'
 ```
