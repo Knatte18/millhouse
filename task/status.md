@@ -4,7 +4,7 @@
 phase: planning
 slug: mill-misc-fixes-7
 branch: hanf/mill-misc-fixes-7
-plan: task/plan
+plan: _mill/plan
 parent: main
 task: (A) — Small infra fixes batch 7
 task_description: |
