@@ -21,9 +21,10 @@ Optionally with a phase marker on the slug line:
     [[<slug>]](proposal-<slug>) [done]
 
 Phases: ``None`` (unmarked backlog), ``"s"`` (spawn-ready fast-path),
-``"active"``, ``"done"``. ``[abandoned]`` is accepted on parse for
-forward/backward compatibility but v2 does not produce it (mill-cleanup
-returns abandoned work to unmarked instead).
+``"active"``, ``"ready-to-merge"``, ``"pr-pending"``, ``"done"``.
+``[abandoned]`` is accepted on parse for forward/backward compatibility
+but v2 does not produce it (mill-cleanup returns abandoned work to
+unmarked instead).
 
 Public API:
     Task                              dataclass.
@@ -47,12 +48,12 @@ _HEADING_RE = re.compile(
     r"^## (?P<title>.+?)\n"
     r"\[(?P<bracket>\[?)(?P<slug>[a-z][a-z0-9-]*)\]?\]"
     r"(?:\((?P<proposal>proposal-[^)]+)\))?"
-    r"(?: \[(?P<phase>s|active|done|abandoned)\])?"
+    r"(?: \[(?P<phase>s|active|ready-to-merge|pr-pending|done|abandoned)\])?"
     r"[ \t]*$",
     re.MULTILINE,
 )
 
-_VALID_PHASES = (None, "s", "active", "done", "abandoned")
+_VALID_PHASES = (None, "s", "active", "ready-to-merge", "pr-pending", "done", "abandoned")
 
 
 @dataclass(frozen=True)
