@@ -277,7 +277,7 @@ def run(
     3. Load reviewers; verify bulk mode.
     4. Parallel per-batch reviews (skipped if batch_files is empty, holistic_only, or batch reviewer is null).
        Mid-round resume fires holistic only when per-batch files exist but holistic is missing.
-    5. Holistic review (skipped if cfg.review.plan.holistic is None or no_holistic).
+    5. Holistic review (skipped if cfg["roles"]["plan-review"]["holistic"]["reviewer"] is None or no_holistic).
     6. Aggregate and return ReviewResult (all-ERROR → ERROR; no raise).
     """
     if holistic_only and no_holistic:
