@@ -9,7 +9,7 @@ import argparse
 import os
 import shutil
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import yaml
@@ -43,6 +43,7 @@ class CleanupPlan:
     to_remove_abandoned: list[SlugRecord]
     to_reset_home: list[str]
     to_report: list[str]
+    to_reap_pr: list[SlugRecord] = field(default_factory=list)
 
 
 # Returns None if status.md is missing or phase: is unreadable.
@@ -191,7 +192,7 @@ def build_plan(
 
 
 def _print_plan(plan: CleanupPlan) -> None:
-    if not any([plan.to_remove_done, plan.to_remove_abandoned, plan.to_report]):
+    if not any([plan.to_remove_done, plan.to_remove_abandoned, plan.to_reap_pr, plan.to_report]):
         print("Nothing to do.")
         return
     for r in plan.to_remove_done:
@@ -205,6 +206,8 @@ def _print_plan(plan: CleanupPlan) -> None:
             f"[worktree={r.worktree_path}, branch={r.branch}, wiki_active_dir={r.wiki_active_dir}]"
             f"  \u2192 Home.md marker reset to unclaimed"
         )
+    for r in plan.to_reap_pr:
+        print(f"REAP-PR:           {r.slug}  [worktree={r.worktree_path}, branch={r.branch}]")
     for line in plan.to_report:
         print(f"REPORT: {line}")
 
