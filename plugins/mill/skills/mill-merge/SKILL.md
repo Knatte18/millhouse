@@ -87,6 +87,8 @@ git commit -m "chore: pre-merge cleanup"
 
 ### 5. PR path or direct squash?
 
+Both PR-creation paths flip Home.md to `[pr-pending]` before halting at Step 8 so the coordination state is visible.
+
 - **PR path** — activate when `git.require-pr-to-base: true` AND `parent-branch == base-branch`:
 
   ```bash
@@ -95,7 +97,15 @@ git commit -m "chore: pre-merge cleanup"
       --body "<one-line summary from status.md>"
   ```
 
-  Update `task/status.md` via `_status.append_phase(status_path, "pr-pending", _timestamp.now_utc_iso())` and push the task branch so the PR has the cleanup commit. Skip to Step 8 (Release lock) — no Home.md flip, no further cleanup. Re-run `/mill-merge` after the PR lands to continue from the PR-path re-entry.
+  ```python
+  with _wiki.wiki_lock(<WIKI_PATH>, slug):
+      home_text = (wiki_path / "Home.md").read_text(encoding="utf-8")
+      new_text = _tasks_md.set_phase(home_text, slug, "pr-pending")
+      (wiki_path / "Home.md").write_text(new_text, encoding="utf-8")
+      _wiki.write_commit_push(<WIKI_PATH>, ["Home.md"], f"task: pr-pending {slug}", slug=slug)
+  ```
+
+  Update `task/status.md` via `_status.append_phase(status_path, "pr-pending", _timestamp.now_utc_iso())` and push the task branch so the PR has the cleanup commit. Skip to Step 8 (Release lock) — no further cleanup. Re-run `/mill-merge` after the PR lands to continue from the PR-path re-entry.
 
 - **Direct path** (everything else):
 
@@ -155,13 +165,23 @@ git commit -m "chore: pre-merge cleanup"
      git add task/status.md && git commit -m "chore: pr-pending after branch-protection fallback" && git push
      ```
 
-  7. Report to the user:
+  7. Flip Home.md to `[pr-pending]`:
+
+     ```python
+     with _wiki.wiki_lock(<WIKI_PATH>, slug):
+         home_text = (wiki_path / "Home.md").read_text(encoding="utf-8")
+         new_text = _tasks_md.set_phase(home_text, slug, "pr-pending")
+         (wiki_path / "Home.md").write_text(new_text, encoding="utf-8")
+         _wiki.write_commit_push(<WIKI_PATH>, ["Home.md"], f"task: pr-pending {slug}", slug=slug)
+     ```
+
+  8. Report to the user:
 
      ```
      Direct push rejected by branch protection — switched to PR path. PR: <url>. Consider setting `git.require-pr-to-base: true` in wiki/config.yaml.
      ```
 
-  8. Skip to Step 8 (Release lock). Do not run Steps 6 (archive tag) or 7 (Home.md flip). Re-run `/mill-merge` after the PR lands to complete teardown.
+  9. Skip to Step 8 (Release lock). Do not run Steps 6 (archive tag) or 7 (Home.md flip). Re-run `/mill-merge` after the PR lands to complete teardown.
 
   **Idempotency check:** if `git merge --squash` prints "Already up to date" or `git commit` prints "nothing to commit" → skip `push` and proceed to Step 6.
 
