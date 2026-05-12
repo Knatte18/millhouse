@@ -224,6 +224,57 @@ def main() -> int:
             )
             print("PASS: remove_safe raises WorktreeLockedError on Invalid argument")
 
+        # --- remove_safe exits cleanly via rmtree fallback on "is not a working tree" (path exists) ---
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "wt"
+            path.mkdir()
+            cwd = Path(tmp) / "cwd"
+            cwd.mkdir()
+            mock_result = MagicMock()
+            mock_result.returncode = 1
+            mock_result.stderr = "fatal: 'path' is not a working tree"
+            mock_prune = MagicMock()
+            mock_prune.returncode = 0
+            mock_prune.stderr = ""
+            with patch("_worktree._subprocess_util.run", side_effect=[mock_result, mock_prune]):
+                remove_safe(path, cwd=cwd, junctions_cfg={})
+            assert not path.exists(), f"expected path to be removed by rmtree, but it still exists: {path}"
+            print("PASS: remove_safe exits cleanly via rmtree fallback on 'is not a working tree' (path exists)")
+
+        # --- remove_safe raises WorktreeLockedError when rmtree raises PermissionError on "is not a working tree" ---
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "wt"
+            path.mkdir()
+            cwd = Path(tmp) / "cwd"
+            cwd.mkdir()
+            mock_result = MagicMock()
+            mock_result.returncode = 1
+            mock_result.stderr = "fatal: 'path' is not a working tree"
+            raised_locked = False
+            with patch("_worktree._subprocess_util.run", return_value=mock_result):
+                with patch("_worktree.shutil.rmtree", side_effect=PermissionError("locked")):
+                    try:
+                        remove_safe(path, cwd=cwd, junctions_cfg={})
+                    except WorktreeLockedError:
+                        raised_locked = True
+            assert raised_locked, "expected WorktreeLockedError when rmtree raises PermissionError on 'is not a working tree'"
+            print("PASS: remove_safe raises WorktreeLockedError when rmtree raises PermissionError on 'is not a working tree'")
+
+        # --- remove_safe exits cleanly when path absent and "is not a working tree" ---
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "wt"
+            cwd = Path(tmp) / "cwd"
+            cwd.mkdir()
+            mock_result = MagicMock()
+            mock_result.returncode = 1
+            mock_result.stderr = "fatal: 'path' is not a working tree"
+            mock_prune = MagicMock()
+            mock_prune.returncode = 1
+            mock_prune.stderr = "warning: prune warning"
+            with patch("_worktree._subprocess_util.run", side_effect=[mock_result, mock_prune]):
+                remove_safe(path, cwd=cwd, junctions_cfg={})
+            print("PASS: remove_safe exits cleanly when path absent and 'is not a working tree'")
+
         print("All _worktree unit tests passed.")
         return 0
     except AssertionError as exc:
