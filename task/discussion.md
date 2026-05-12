@@ -24,14 +24,18 @@ touching anything, then apply only the fixes whose cost the benchmarks confirm.
 **In:**
 - Benchmark harness — `Measure-Command` script covering every candidate layer; results
   written to `.scratch/benchmark-results.md` before any production code is written.
-- mill-setup: new phase that writes a venv activation line to `$PROFILE` with a
-  `# mill-venv` marker for idempotent updates. Creates the file if it does not exist.
+- mill-setup: new phase that writes a venv activation block to `$PROFILE` delimited by
+  `# mill-venv-start` / `# mill-venv-end` markers; idempotent on re-run; creates file
+  if it does not exist.
 - New `shortcut-wrapper.ps1` template: `uv run --active "<SCRIPT_PATH>" @args` —
   eliminates the `Get-ChildItem` scan and uv project-resolution in one change.
 - `_shortcuts.write_all(mill_dir, latest_path: Path)` — add required `latest_path`
   parameter; compute `<SCRIPT_PATH>` from it per script.
 - mill-setup SKILL.md Phase 4.7 — update inline Python call to compute and pass
   `latest_path` before calling `write_all`; document the new `$PROFILE` phase.
+- mill-setup SKILL.md Phase 8 (Verify + report) — add a verification step that checks
+  the `# mill-venv-start` / `# mill-venv-end` block exists in `$PROFILE` after the new
+  phase runs. A failed profile write must surface as a visible error, not a silent pass.
 - `millpy-vscode.py` — add `--filter-open` CLI flag; gate `_filter_open_worktrees` call
   on the flag; `import _vscode_processes` stays at module level.
 - `test-shortcut-wrapper.py` — update all `write_all(mill_dir)` call sites to pass
