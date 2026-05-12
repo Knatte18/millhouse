@@ -222,7 +222,7 @@ def main() -> int:
         assert load_task_title(Path(tmpdir), Path(tmpdir), {}, "my-task") == "my-task"
         print("PASS: load_task_title non-task branch -> fallback to slug")
 
-    # resolve_path: discussion.md → worktree root
+    # resolve_path: discussion.md -> worktree root
     with tempfile.TemporaryDirectory() as tmp:
         slug = "my-task"
         container, worktree = _make_worktree_fixture(tmp, slug)
@@ -234,7 +234,7 @@ def main() -> int:
             os.chdir(original_cwd)
         expected = worktree / "discussion.md"
         assert p == expected, f"Expected {expected}, got {p}"
-        print("PASS: resolve_path('discussion.md', slug) → worktree/discussion.md")
+        print("PASS: resolve_path('discussion.md', slug) -> worktree/discussion.md")
 
     # resolve_path: plan/ and reviews/ templates
     with tempfile.TemporaryDirectory() as tmp:
@@ -273,7 +273,7 @@ def main() -> int:
         slug = "my-task"
         container, worktree = _make_worktree_fixture(tmp, slug)
         # Create a directory named "wrong-slug" but checked out on branch "hanf/my-task"
-        # (directory slug ≠ branch-derived slug → mismatch).
+        # (directory slug ≠ branch-derived slug -> mismatch).
         wrong_slug = "wrong-slug"
         wrong_dir = container / "wts" / wrong_slug
         wrong_dir.mkdir(parents=True)
@@ -342,7 +342,7 @@ def main() -> int:
 
         expected = git_root / "task" / "discussion.md"
         assert p == expected, f"M2 in-place (hub_rel='.'): expected {expected}, got {p}"
-        print("PASS: resolve_path M2 in-place (hub_rel='.') → git_root/task/discussion.md")
+        print("PASS: resolve_path M2 in-place (hub_rel='.') -> git_root/task/discussion.md")
 
     # resolve_path: M2+sub in-place mode (hub_rel="src/Models")
     with tempfile.TemporaryDirectory() as tmp:
@@ -378,7 +378,7 @@ def main() -> int:
 
         expected = git_root / "src" / "Models" / "task" / "discussion.md"
         assert p == expected, f"M2+sub in-place: expected {expected}, got {p}"
-        print("PASS: resolve_path M2+sub in-place (hub_rel='src/Models') → git_root/src/Models/task/discussion.md")
+        print("PASS: resolve_path M2+sub in-place (hub_rel='src/Models') -> git_root/src/Models/task/discussion.md")
 
     # parse_verdict: APPROVE
     raw = "# Review: My Task\n\n```yaml\nverdict: APPROVE\nreviewer_model: sonnetmax\n```\n"
@@ -1117,7 +1117,7 @@ def main() -> int:
     # parse_missing_context
     # ---------------------------------------------------------------------------
 
-    # No ## Missing context heading → []
+    # No ## Missing context heading -> []
     result = parse_missing_context("# Review\n\n```yaml\nverdict: NEED_CONTEXT\n```\n")
     assert result == [], f"Got {result}"
     print("PASS: parse_missing_context no heading -> []")
@@ -1151,19 +1151,19 @@ def main() -> int:
     assert result == ["x/y.py"], f"Got {result}"
     print("PASS: parse_missing_context stops at next ## heading")
 
-    # Bullet without backticks → not captured
+    # Bullet without backticks -> not captured
     text = "## Missing context\n\n- a/b.py — reason\n"
     result = parse_missing_context(text)
     assert result == [], f"Got {result}"
     print("PASS: parse_missing_context bullet without backticks not captured")
 
-    # Bullet with `none` token → filtered (lowercase)
+    # Bullet with `none` token -> filtered (lowercase)
     text = "## Missing context\n\n- `none` — reason\n"
     result = parse_missing_context(text)
     assert result == [], f"Got {result}"
     print("PASS: parse_missing_context `none` token filtered")
 
-    # Bullet with `None` token → filtered (capital N)
+    # Bullet with `None` token -> filtered (capital N)
     text = "## Missing context\n\n- `None` — reason\n"
     result = parse_missing_context(text)
     assert result == [], f"Got {result}"
@@ -1173,12 +1173,12 @@ def main() -> int:
     # build_reattached_section
     # ---------------------------------------------------------------------------
 
-    # Empty input → ""
+    # Empty input -> ""
     result = build_reattached_section([])
     assert result == "", f"Got {result!r}"
     print("PASS: build_reattached_section empty input -> ''")
 
-    # One path → heading + blank line + FILE delimiter
+    # One path -> heading + blank line + FILE delimiter
     with tempfile.TemporaryDirectory() as tmpdir:
         f = Path(tmpdir) / "foo.py"
         f.write_text("content")
@@ -1188,7 +1188,7 @@ def main() -> int:
         assert "--- FILE:" in result, f"No FILE delimiter in: {result!r}"
         print("PASS: build_reattached_section one path -> heading + FILE delimiter")
 
-    # Two paths → both delimiters in order
+    # Two paths -> both delimiters in order
     with tempfile.TemporaryDirectory() as tmpdir:
         fa = Path(tmpdir) / "a.py"
         fb = Path(tmpdir) / "b.py"
@@ -1204,7 +1204,7 @@ def main() -> int:
     # parse_blocking_count
     # ---------------------------------------------------------------------------
 
-    # Empty string → 0
+    # Empty string -> 0
     result = parse_blocking_count("", severity="BLOCKING")
     assert result == 0, f"expected 0, got {result}"
     print("PASS: parse_blocking_count empty string -> 0")
