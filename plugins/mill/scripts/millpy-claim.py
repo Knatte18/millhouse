@@ -271,27 +271,28 @@ def main(argv: list[str] | None = None) -> int:
             raise SystemExit(1)
 
     # Create the portal entry for this worktree and recreate .active.
-    # Order is CRITICAL: wiki/active/<slug>/ must exist before the portal entry
-    # points to it (Windows mklink /J requires an existing target dir).
     container_path = resolve_container_path(git_root)
     (container_path / "portals").mkdir(parents=True, exist_ok=True)
 
     ts = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    _spawn_core.write_wiki_active_task_md(wiki_path, slug, picked.title, ts)
+    (resolve_hub_path() / "_mill").mkdir(parents=True, exist_ok=True)
 
     portal_link = container_path / "portals" / slug
     if not portal_link.exists() and not portal_link.is_symlink():
-        # First claim: create portal entry pointing at wiki/active/<slug>/.
-        _junction.create(target=wiki_path / "active" / slug, link_path=portal_link)
+        # First claim: create portal entry pointing at hub/_mill/.
+        _junction.create(target=resolve_hub_path() / "_mill", link_path=portal_link)
     else:
-        # Portal entry exists: check if it points at the wiki active dir.
+        # Portal entry exists: check if it points at the correct target.
         existing_target = os.path.realpath(str(portal_link))
-        current_target = os.path.realpath(str(wiki_path / "active" / slug))
+        current_target = os.path.realpath(str(resolve_hub_path() / "_mill"))
         if existing_target != current_target:
             # Points elsewhere — remove and recreate.
             _junction.remove(portal_link)
-            _junction.create(target=wiki_path / "active" / slug, link_path=portal_link)
+            _junction.create(target=resolve_hub_path() / "_mill", link_path=portal_link)
         # else: already correct, skip.
+
+    if not (resolve_hub_path() / ".portals").exists():
+        _junction.create(target=container_path / "portals", link_path=resolve_hub_path() / ".portals")
 
     _spawn_core.recreate_active_junction(slug, resolve_hub_path(), container_path)
 
