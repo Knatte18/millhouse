@@ -3,7 +3,7 @@
 ```yaml
 task: 33 (A) -- Working-dir rename + portals redesign + junction cleanup
 slug: mill-paths-cleanup
-approved: false
+approved: true
 started: 20260512-133522
 parent: main
 root: ""

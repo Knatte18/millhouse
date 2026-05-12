@@ -27,7 +27,24 @@ Batch-02 (task-to-mill-rename) will update config to say `_mill/`; after that th
   - `plugins/mill/scripts/_paths.py`
 - **Creates:** none
 - **Deletes:** none
-- **Requirements:** Add `resolve_task_path(worktree_root: Path, cfg_relative_path: str) -> Path` to `_paths.py`. The function: (1) computes `target = worktree_root / cfg_relative_path`; (2) if `target.exists()` returns `target`; (3) if `cfg_relative_path` contains `_mill/`, computes `fallback_rel = cfg_relative_path.replace("_mill/", "task/", 1)`, checks `fallback = worktree_root / fallback_rel`, if `fallback.exists()` prints `[compat] falling back to task/ for {cfg_relative_path!r}` to stderr and returns `fallback`; (4) returns `target` (no-fallback case). Add `"resolve_task_path"` to `__all__`. Add a one-line docstring: "Resolve config-relative path with _mill/->task/ fallback for in-flight worktrees."
+- **Requirements:** Add `resolve_task_path(worktree_root: Path, cfg_relative_path: str) -> Path` to `_paths.py`. The exact function body:
+  ```python
+  def resolve_task_path(worktree_root: Path, cfg_relative_path: str) -> Path:
+      """Resolve config-relative path with _mill/->task/ fallback for in-flight worktrees."""
+      target = worktree_root / cfg_relative_path
+      if target.exists():
+          return target
+      if "_mill/" in cfg_relative_path:
+          fallback_rel = cfg_relative_path.replace("_mill/", "task/", 1)
+          fallback = worktree_root / fallback_rel
+          if fallback.exists():
+              import sys
+              print(f"[compat] falling back to task/ for {cfg_relative_path!r}", file=sys.stderr)
+              return fallback
+      return target
+  ```
+  Callers always pass the config-driven `_mill/` path (e.g. `"_mill/discussion.md"`, `"_mill/plan/"`) — NOT the raw config value verbatim without prefix. Worked example: after Card 8 sets `discussion_file: _mill/discussion.md`, `_review_common.py` passes `resolved_tmpl = "_mill/discussion.md"` to `resolve_task_path(active_hub, "_mill/discussion.md")`. The shim checks `active_hub / "_mill/discussion.md"` first; if absent (in-flight worktree), tries `active_hub / "task/discussion.md"`, returns that if it exists, otherwise returns the `_mill/` path (caller handles missing-file). The fallback computes `_mill/` → `task/` via `.replace("_mill/", "task/", 1)` — it REPLACES the prefix, it does not PREPEND anything. No caller can produce `task/_mill/discussion.md`.
+  Add `"resolve_task_path"` to `__all__`.
 - **Commit:** `feat(paths): add resolve_task_path compat shim for _mill/->/task/ fallback`
 
 ### Card 2: Wire `_review_common.resolve_path` through shim
