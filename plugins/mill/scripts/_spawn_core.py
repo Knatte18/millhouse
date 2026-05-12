@@ -742,27 +742,6 @@ def write_initial_status(
     return status_abs
 
 
-def write_wiki_active_task_md(
-    wiki_path: Path,
-    slug: str,
-    title: str,
-    ts: str,
-) -> None:
-    """Create ``wiki/active/<slug>/task.md``; commit+push in wiki."""
-    active_dir = wiki_path / "active" / slug
-    active_dir.mkdir(parents=True, exist_ok=True)
-    (active_dir / "task.md").write_text(
-        f"# Task: {title}\n\n```yaml\nslug: {slug}\ntitle: {title}\ncreated_at: {ts}\n```\n",
-        encoding="utf-8",
-    )
-    _wiki.write_commit_push(
-        wiki_path,
-        [f"active/{slug}/task.md"],
-        f"task: create active dir for {slug}",
-        slug=slug,
-    )
-
-
 def recreate_active_junction(
     slug: str,
     hub_root: Path,
