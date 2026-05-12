@@ -1,7 +1,8 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: blocked
+blocked_reason: 'auto: discussion review gaps unresolved after 2 rounds'
 slug: mill-fold
 branch: hanf/mill-fold
 plan: null
@@ -15,4 +16,5 @@ task_description: |
 
 ```text
 discussing  '2026-05-12T16:56:36Z'
+blocked  '2026-05-12T17:09:51Z'
 ```
