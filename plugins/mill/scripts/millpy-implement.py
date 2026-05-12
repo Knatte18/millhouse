@@ -89,7 +89,7 @@ def main(argv=None) -> int:
         print(str(e), file=sys.stderr)
         return 1
 
-    plan_dir = cfg.get("paths", {}).get("plan_dir", "task/plan/")
+    plan_dir = cfg.get("paths", {}).get("plan_dir", "_mill/plan/")
     status_path = _paths.resolve_task_path(project_root, "_mill/status.md")
     full = _status.read_full(status_path)
     task_title = full["yaml"].get("task", slug)
@@ -128,7 +128,7 @@ def main(argv=None) -> int:
             return 1
         start_sha = result.stdout.strip()
 
-        snapshot_path = project_root / "task" / f".cleanliness-snapshot-{args.batch_name}.txt"
+        snapshot_path = project_root / "_mill" / f".cleanliness-snapshot-{args.batch_name}.txt"
         _cleanliness.capture_snapshot(project_root, snapshot_path)
 
         session_id = str(uuid.uuid4())
@@ -258,7 +258,7 @@ def main(argv=None) -> int:
             print(str(e), file=sys.stderr)
             return 1
         start_sha_for_forward = batch_state.get("start_sha") if batch_state else None
-        snapshot_path_for_forward = project_root / "task" / f".cleanliness-snapshot-{args.batch_name}.txt"
+        snapshot_path_for_forward = project_root / "_mill" / f".cleanliness-snapshot-{args.batch_name}.txt"
         return _forward_output(output, project_root, start_sha=start_sha_for_forward, snapshot_path=snapshot_path_for_forward)
 
 
