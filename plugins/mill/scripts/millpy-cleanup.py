@@ -130,7 +130,7 @@ def build_plan(
         phase = _read_phase(_paths.resolve_task_path(wt_path, "_mill/status.md"))
         if phase is None:
             to_report.append(
-                f"{slug} — status.md unreadable, skipping (inspect manually)"
+                f"{slug} -- status.md unreadable, skipping (inspect manually)"
             )
             continue
 
@@ -146,14 +146,14 @@ def build_plan(
                     to_remove_done.append(record)
                 else:
                     to_report.append(
-                        f"{slug} — Home.md=[done] but archive tag archive/{slug} absent;"
+                        f"{slug} -- Home.md=[done] but archive tag archive/{slug} absent;"
                         f" run mill-merge first"
                     )
             elif home_marker == "ready-to-merge":
                 pass
             else:
                 to_report.append(
-                    f"{slug} — status.md phase=done but Home.md marker is {home_marker!r};"
+                    f"{slug} -- status.md phase=done but Home.md marker is {home_marker!r};"
                     f" inspect manually"
                 )
         elif phase == "abandoned":
@@ -162,7 +162,7 @@ def build_plan(
                 to_reset_home.append(slug)
             else:
                 to_report.append(
-                    f"{slug} — phase=abandoned but Home.md marker is "
+                    f"{slug} -- phase=abandoned but Home.md marker is "
                     f"{record.home_marker!r}, not [active]; skipping (inspect manually)"
                 )
         elif phase == "pr-pending":
@@ -170,7 +170,7 @@ def build_plan(
         elif phase in _LIVE_PHASES:
             pass
         else:
-            to_report.append(f"{slug} — unknown phase {phase!r}, skipping")
+            to_report.append(f"{slug} -- unknown phase {phase!r}, skipping")
 
     # Orphan worktree detection: wts/ dirs without active markers.
     if container_path is not None:
@@ -225,7 +225,7 @@ def _print_plan(plan: CleanupPlan) -> None:
         print(
             f"REMOVE (abandoned): {r.slug}  "
             f"[worktree={r.worktree_path}, branch={r.branch}]"
-            f"  \u2192 Home.md marker reset to unclaimed"
+            f"  -> Home.md marker reset to unclaimed"
         )
     for r in plan.to_reap_pr:
         print(f"REAP-PR:           {r.slug}  [worktree={r.worktree_path}, branch={r.branch}]")
@@ -453,13 +453,13 @@ def _apply_pr_reap_record(
     number = pr_data.get("number")
 
     if state == "OPEN":
-        print(f"[cleanup] PR-reap {record.slug}: PR #{number} still OPEN — skipping")
+        print(f"[cleanup] PR-reap {record.slug}: PR #{number} still OPEN -- skipping")
         return wiki_relative_paths
 
     if state == "CLOSED":
         print(
             f"[cleanup] PR-reap {record.slug}: PR #{number} CLOSED without merge"
-            f" — inspect manually (abandon or reopen)",
+            f" -- inspect manually (abandon or reopen)",
             file=sys.stderr,
         )
         return wiki_relative_paths
@@ -540,7 +540,7 @@ def apply_plan(
         mode, task_branch = _resolve_inplace_mode(record, hub_root, wiki_path, cfg)
         if mode == "abort":
             print(
-                f"[cleanup] skipping {record.slug} — user aborted stale-worktree prompt.",
+                f"[cleanup] skipping {record.slug} -- user aborted stale-worktree prompt.",
                 file=sys.stderr,
             )
             continue
