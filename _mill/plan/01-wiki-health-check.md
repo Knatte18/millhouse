@@ -35,6 +35,8 @@ Batch-local decision: the SKILL.md inline `python -c "..."` block uses an explic
 
   Add the helper to the module docstring's "Public API" list at the top of the file (between `sync_pull` and `write_commit_push`). Function docstring states purpose, signature, when it raises, and the message format. No `sys.exit` calls; raise the typed exception only.
 
+  Append `WikiHealthError` to the `Exceptions:` block in the module docstring (currently lines 52–62 of `_wiki.py`, listing `LockBusy`, `WikiPushError`, `WikiSetupError`). Insert it immediately AFTER `WikiSetupError`, matching the same two-line shape: a short summary of when it is raised, with the second line documenting that it carries the `wiki_path` attribute.
+
   Update the `__all__` list if present (check the file). Otherwise no further surface change.
 - **Commit:** `feat(wiki): add health_check and WikiHealthError to _wiki`
 

@@ -69,7 +69,7 @@ Batch-local decision: the deletion happens as part of the same single read+write
 - **Creates:** none
 - **Deletes:** none
 - **Requirements:**
-  Extend `plugins/mill/unit_tests/test-status.py` with three new test cases inside the existing `main()` function. Insert them inside the `# --- set_blocked tests ---` region (currently after the existing Test 3 at line 207), as new tests 4 / 5 / 6 in the file's existing single top-level `try: ... except AssertionError:` block (the file uses inline `assert` statements + `print("PASS: ...")` on success, NO `passed += 1` / `failed += 1` counters and NO `ok` / `fail` helpers — that pattern belongs to `test-setup-hub-links.py`, not here).
+  Extend `plugins/mill/unit_tests/test-status.py` with three new test blocks inside the existing `main()` function. Insert them inside the `# --- set_blocked tests ---` region (currently after the existing Test 3 at line 207), within the file's existing single top-level `try: ... except AssertionError:` block (the file uses inline `assert` statements + `print("PASS: ...")` on success, NO `passed += 1` / `failed += 1` counters and NO `ok` / `fail` helpers — that pattern belongs to `test-setup-hub-links.py`, not here). Each new test block uses a descriptive `# Test: <one-line summary>` comment label rather than a sequential test number, because `test-status.py` already contains a `# Test 4: append_phase quoting regression.` comment later in the same `try:` block — sequential numbering here would collide.
 
   Tests required (each runs inside its own `with tempfile.TemporaryDirectory() as tmp:` block matching the existing Tests 1–3 style):
 
