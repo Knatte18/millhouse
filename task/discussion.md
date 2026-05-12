@@ -67,7 +67,19 @@ fi
 MILL_PYTHON="${PLUGIN_ROOT}/.venv/Scripts/python.exe"
 ```
 
-All 22 body calls change from `uv run --project "$PLUGIN_ROOT" "$PLUGIN_ROOT/scripts/..."` to `PYTHONPATH="${PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${PLUGIN_ROOT}/scripts/..."`.
+mill-go body calls come in two forms and must be handled differently:
+
+- **Direct calls** (the outer `millpy-bg.py` launcher line, and all non-bg calls): use the `PYTHONPATH=` shell prefix — `PYTHONPATH="${PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${PLUGIN_ROOT}/scripts/..."`.
+- **Nested calls after `--`** (the inner command passed to `millpy-bg.py`): must NOT carry the `PYTHONPATH=...` shell prefix. After `--`, the token `PYTHONPATH=...` is treated as the first argv element — it is not a shell env assignment — so the subprocess tries to exec a binary named `PYTHONPATH=…`, which fails. The outer call already set PYTHONPATH in the process environment; it is inherited automatically through launcher → worker → subprocess. The nested form is simply `"$MILL_PYTHON" "${PLUGIN_ROOT}/scripts/..."` without any prefix.
+
+Example of a converted bg call:
+```bash
+# outer launcher — PYTHONPATH prefix on the millpy-bg.py call itself
+PYTHONPATH="${PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${PLUGIN_ROOT}/scripts/millpy-bg.py" \
+    --slug review-code-r1 -- \
+    "$MILL_PYTHON" "${PLUGIN_ROOT}/scripts/millpy-review-code.py" [args]
+#   ^^^ nested call after -- : NO PYTHONPATH= prefix
+```
 
 ### Update CLAUDE.md
 
@@ -101,7 +113,7 @@ PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/
 
 **Variable naming in SKILL.md files:**
 - Most skills use `${CLAUDE_PLUGIN_ROOT}` with double-quotes.
-- `mill-go` uses `$PLUGIN_ROOT` (set from `${CLAUDE_PLUGIN_ROOT}` at the top of its Step 0 block). Its fallback stays as `uv run --project`.
+- `mill-go` uses `$PLUGIN_ROOT` and `$MILL_PYTHON` (set in Step 0). Its body calls use `$MILL_PYTHON`; see the Step 0 block above for the canonical form.
 - Some older skills use `"$CLAUDE_PLUGIN_ROOT"` without braces — normalise to `"${CLAUDE_PLUGIN_ROOT}"` when touching that line anyway.
 
 **Files with the most changes (by occurrence count):**
@@ -117,15 +129,15 @@ uv run --project plugins/mill plugins/mill/scripts/millpy-X.py ...
 PYTHONPATH="plugins/mill/scripts" uv run --project plugins/mill python -c "..."
 ```
 
-**mill-go PLUGIN_ROOT fallback block (keep `uv run --project`, add comment):**
+**mill-go Step 0 block (canonical form — see also Decisions section):**
 ```bash
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}"
 if [ -z "$PLUGIN_ROOT" ]; then
     PLUGIN_ROOT="$(git rev-parse --show-toplevel)/plugins/mill"
     echo "[mill-go] CLAUDE_PLUGIN_ROOT unset; resolved to: $PLUGIN_ROOT"
+    echo "[mill-go] NOTE: source-tree venv must exist at $PLUGIN_ROOT/.venv — run 'uv sync --project $PLUGIN_ROOT' if not."
 fi
-# Note: subsequent calls use uv run --project for the fallback path because
-# the source-tree venv may not exist yet; uv creates it on demand.
+MILL_PYTHON="${PLUGIN_ROOT}/.venv/Scripts/python.exe"
 ```
 
 **CLAUDE.md paragraph to update:**
