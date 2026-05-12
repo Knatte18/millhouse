@@ -37,9 +37,10 @@ Implements the portal redesign: `portals/<slug>` now points directly at `wts/<sl
 - **Deletes:** none
 - **Requirements:** In `millpy-spawn.py`, around lines 200-221, make these changes:
   (1) Remove the call to `_spawn_core.write_wiki_active_task_md(wiki_path, slug, picked.title, ts)` (line 207) entirely. Remove the surrounding comment block on lines 203-204 that described it.
-  (2) Change the `_junction.create` call (line 211) so the portal target is `worktree_path / "_mill"` instead of `wiki_path / "active" / slug`. The link_path argument `container_path / "portals" / slug` stays unchanged.
-  (3) After the `_junction.create` portal call, add a new line to create the `.portals` junction inside the new worktree: `_junction.create(target=container_path / "portals", link_path=dest_hub / ".portals")`. This gives the task worktree a `.portals` convenience junction pointing at the shared portals directory.
-  (4) Update the comment block on lines 209-211 (formerly: "Portal entry points to wiki/active/<slug>/...") to: "Portal entry points to wts/<slug>/_mill/ directly; .portals junction gives the worktree a view of the shared portals dir."
+  (2) Immediately before the `_junction.create` portal call, add `(worktree_path / "_mill").mkdir(parents=True, exist_ok=True)`. Windows `mklink /J` requires the target directory to exist at junction-creation time; `_mill/` is not yet on disk at this point because `write_initial_status` fires after this block. This mkdir ensures the junction target exists.
+  (3) Change the `_junction.create` call (line 211) so the portal target is `worktree_path / "_mill"` instead of `wiki_path / "active" / slug`. The link_path argument `container_path / "portals" / slug` stays unchanged.
+  (4) After the `_junction.create` portal call, add a new line to create the `.portals` junction inside the new worktree: `_junction.create(target=container_path / "portals", link_path=dest_hub / ".portals")`. This gives the task worktree a `.portals` convenience junction pointing at the shared portals directory.
+  (5) Update the comment block on lines 209-211 (formerly: "Portal entry points to wiki/active/<slug>/...") to: "Portal entry points to wts/<slug>/_mill/ directly; .portals junction gives the worktree a view of the shared portals dir."
   Note: `recreate_active_junction` call on line 221 remains correct — it already points `.active` at `container_path / "portals" / slug`, which after this change resolves transitively to `wts/<slug>/_mill/`.
 - **Commit:** `feat(spawn): portal points at wts/<slug>/_mill/, add .portals junction in task worktree`
 
@@ -53,8 +54,9 @@ Implements the portal redesign: `portals/<slug>` now points directly at `wts/<sl
 - **Deletes:** none
 - **Requirements:** In `millpy-claim.py`, around lines 275-296, make these changes:
   (1) Remove the call to `_spawn_core.write_wiki_active_task_md(wiki_path, slug, picked.title, ts)` (line 280) and its associated comment.
-  (2) In the portal junction creation block (lines 282-294): change all occurrences of `wiki_path / "active" / slug` (the junction target) to `resolve_hub_path() / "_mill"`. The junction link_path `container_path / "portals" / slug` stays unchanged. The logic that checks whether the portal already points at the correct target and recreates it if not must be updated to compare against `resolve_hub_path() / "_mill"` instead of `wiki_path / "active" / slug`.
-  (3) After the portal junction block, add a `.portals` junction creation inside the hub (worktree): `_junction.create(target=container_path / "portals", link_path=resolve_hub_path() / ".portals")`. Use the same guard as spawn: only create if not already present (check `not (resolve_hub_path() / ".portals").exists()`).
+  (2) In the portal junction creation block (lines 282-294): immediately before the `_junction.create` portal call, add `(resolve_hub_path() / "_mill").mkdir(parents=True, exist_ok=True)`. Windows `mklink /J` requires the target directory to exist at junction-creation time; `_mill/` may not yet exist when claim runs on an in-place worktree.
+  (3) Change all occurrences of `wiki_path / "active" / slug` (the junction target) to `resolve_hub_path() / "_mill"`. The junction link_path `container_path / "portals" / slug` stays unchanged. The logic that checks whether the portal already points at the correct target and recreates it if not must be updated to compare against `resolve_hub_path() / "_mill"` instead of `wiki_path / "active" / slug`.
+  (4) After the portal junction block, add a `.portals` junction creation inside the hub (worktree): `_junction.create(target=container_path / "portals", link_path=resolve_hub_path() / ".portals")`. Use the same guard as spawn: only create if not already present (check `not (resolve_hub_path() / ".portals").exists()`).
 - **Commit:** `feat(claim): portal points at hub/_mill/, add .portals junction`
 
 ### Card 18: Update `wiki/config.yaml` junctions block
@@ -101,6 +103,7 @@ Implements the portal redesign: `portals/<slug>` now points directly at `wts/<sl
   (4) In `apply_plan` (lines 543-545): remove the `if record.wiki_active_dir is not None ...` block (3 lines: the if check, the rmtree call, and the wiki_relative_paths.append).
   (5) In `_apply_pr_reap_record` (lines 510-512): remove the equivalent `if record.wiki_active_dir is not None ...` block.
   The `import shutil` at the top of the file can be removed if it is now unused — check whether any other code in the file still calls `shutil`.
+  **Legacy wiki/active/ directories:** Removing `wiki_active_dir` means any pre-redesign worktree that has a `wiki/active/<slug>/` directory will no longer be cleaned up automatically by mill-cleanup. These directories will accumulate silently. Add a note to the commit message body that operators should manually remove stale `wiki/active/` subdirectories after upgrading (e.g. `rm -rf wiki/active/` once all active tasks have been re-spawned with the new code). Batch 4's `_scan_orphan_portals` is scoped to the `portals/` directory and does not cover this case; manual cleanup is sufficient given this is a one-time migration artifact.
 - **Commit:** `feat(cleanup): remove wiki_active_dir from SlugRecord (portals redesign)`
 
 ### Card 21: Update `test-millpy-spawn.py` and `test-millpy-claim.py` for portal changes

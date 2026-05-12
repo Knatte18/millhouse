@@ -54,10 +54,11 @@ Updates `wiki/config.yaml`, the config template, spawn/implement scripts, and un
   - `plugins/mill/scripts/_spawn_core.py`
 - **Creates:** none
 - **Deletes:** none
-- **Requirements:** In `_spawn_core.py`, locate `write_initial_status`. Make three changes within this function:
+- **Requirements:** In `_spawn_core.py`, locate `write_initial_status`. Make four changes:
   (1) Line 718: `worktree_path / "task" / "status.md"` → `worktree_path / "_mill" / "status.md"`.
   (2) Line 722: `["git", "-C", str(worktree_path), "add", "task/status.md"]` → `["git", "-C", str(worktree_path), "add", "_mill/status.md"]`.
   (3) The error message string at line 726 `"git add task/status.md failed: ..."` → `"git add _mill/status.md failed: ..."`.
+  (4) Update the function's first docstring line from `"Render + write \`task/status.md\`"` to `"Render + write \`_mill/status.md\`"`. Also update the module-level `Public API` docstring entry for `write_initial_status` wherever it references `task/status.md` — change it to `_mill/status.md`.
   The `parent.mkdir(parents=True, exist_ok=True)` call derives its directory from the updated path on line 718, so it will automatically create `_mill/` instead of `task/` — no change needed there.
 - **Commit:** `feat(spawn-core): write initial status to _mill/status.md`
 

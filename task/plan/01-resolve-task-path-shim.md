@@ -100,7 +100,8 @@ Batch-02 (task-to-mill-rename) will update config to say `_mill/`; after that th
   (2) In `_apply_inplace_record` first occurrence (lines ~307-309): replace the same two-candidate pattern for `read_parent_branch` with `_status.read_parent_branch(_paths.resolve_task_path(record.worktree_path, "_mill/status.md"))`.
   (3) In `_apply_inplace_record` second occurrence (lines ~337-339): replace the two-candidate pattern for `_read_phase` with `_read_phase(_paths.resolve_task_path(record.worktree_path, "_mill/status.md"))`.
   The import `import _paths` is already present at the top of millpy-cleanup.py.
-- **Commit:** `fix(cleanup): use resolve_task_path shim in _read_phase calls`
+  **Root-level fallback drop (intentional):** The existing two-candidate pattern also checked `wt_path / "status.md"` (the pre-task-32 root layout). The `resolve_task_path` shim covers `_mill/` → `task/` but does NOT cover `task/` → root. Pre-task-32 worktrees with only a root-level `status.md` are intentionally unsupported after this change — they predate the task-32 working-state migration and should have been cleaned up long ago. Remove the test `test_build_plan_falls_back_to_root_status_md` from `plugins/mill/unit_tests/test-cleanup.py` as part of this card's commit (it tests the now-dropped root fallback).
+- **Commit:** `fix(cleanup): use resolve_task_path shim in _read_phase calls, drop pre-task-32 root fallback`
 
 ### Card 7: Add `resolve_task_path` unit tests to `test-paths.py`
 
