@@ -1,6 +1,6 @@
 ---
 name: mill-merge
-description: Finalize a completed task. Cleanup commit on task branch, squash-merge to parent, archive tag, Home.md flip. Worktree, branch, portal, and legacy wiki cleanup are handled by /mill-cleanup. PR-path honoured via git.require-pr-to-base. Runs from the child worktree.
+description: Squash-merge a completed task branch to its parent, create archive tag, flip Home.md [done]. Direct merge only — PR dispatch lives in mill-finalize. Worktree, branch, portal, and legacy wiki cleanup handled by /mill-cleanup. Runs from the child worktree.
 ---
 
 # mill-merge
@@ -27,8 +27,8 @@ You are an integration engineer. Your job is to merge a completed task branch ba
    - When `active_data` is not None → halt with: "mill-merge from the main worktree requires in-place mode (no separate worktree exists for the active slug). The active marker says `<slug>` is on branch `<branch>`; mill-merge cannot proceed."
 
    Config keys to read:
-   - `git.require-pr-to-base` (bool, default false) — when true AND parent-branch equals base-branch, the skill creates a PR instead of merging directly.
-   - `git.base-branch` (string) — the repo's canonical base (usually `main`). Falls back to `main` if absent.
+   - `git.require_pr_to_base` (bool, default false) — read for the branch-protection fallback message only; PR dispatch itself is handled by mill-finalize.
+   - `git.base_branch` (string) — the repo's canonical base (usually `main`). Falls back to `main` if absent. Used in the branch-protection fallback to set the PR `--base` target correctly.
 
    **In-place mode bypass:** when `mode == 'inplace'`, the existing Steps 1 (acquire merge lock on parent) and 2 (invoke `mill-merge-in`) are SKIPPED. There is no separate parent worktree to lock; the merge is purely local. Continue from Step 3 (capture child branch) onward, but treat "child" and "parent" as branches in the same working tree (cwd is the hub). For the squash merge in Step 4 (Direct path), omit the `-C <parent-path>` flag — the merge runs against the current working tree directly.
 
@@ -178,7 +178,7 @@ Both PR-creation paths flip Home.md to `[pr-pending]` before halting at Step 8 s
   8. Report to the user:
 
      ```
-     Direct push rejected by branch protection — switched to PR path. PR: <url>. Consider setting `git.require-pr-to-base: true` in wiki/config.yaml.
+     Direct push rejected by branch protection — switched to PR path. PR: <url>. Consider setting `git.require_pr_to_base: true` in wiki/config.yaml.
      ```
 
   9. Skip to Step 8 (Release lock). Do not run Steps 6 (archive tag) or 7 (Home.md flip). Re-run `/mill-merge` after the PR lands to complete teardown.
