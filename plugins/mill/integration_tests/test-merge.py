@@ -1,9 +1,13 @@
 """
 Integration test for mill-merge + mill-merge-in.
 
+Verifies mill-merge lands squash + archive tag + Home.md [done] flip;
+worktree, branch, portal, and wiki active-dir teardown are mill-cleanup's
+responsibility (separate test).
+
 The skills themselves are prose; the test exercises the backing helpers
 and the exact git sequence the skills prescribe. That way we catch
-regressions in `_wiki`, `_junction`, `_sidebar`, `_tasks_md`, the new
+regressions in `_wiki`, `_sidebar`, `_tasks_md`, the new
 `_parent_branch`, and `_plan_dag.iter_batch_verifies` whenever any of
 them change shape.
 
@@ -22,14 +26,13 @@ Flow under test (mirrors mill-merge SKILL.md step numbering):
     1. Acquire merge lock on the parent's .scratch/.
     2. mill-merge-in no-op check (parent has no new commits).
     3. Direct squash-merge child -> parent.
-    4. Home.md [active] -> [done].
-    5. Delete active/<slug>/.
-    6. Regenerate sidebar.
-    7. Remove junctions.
-    8. Release merge lock.
-    9. Drop worktree + branch.
+    4. Archive tag creation (Step 6).
+    5. Home.md [active] -> [done] (Step 7).
+    6. Regenerate sidebar (Step 8).
+    7. Release merge lock (Step 8).
 
-Asserts each side effect. Exits 0 on PASS, 1 on any failure; scratch
+Asserts each side effect. Worktree, branch, and wiki active-dir remain
+intact — mill-cleanup's job. Exits 0 on PASS, 1 on any failure; scratch
 is preserved on failure for inspection.
 """
 from __future__ import annotations
@@ -48,7 +51,6 @@ SCRATCH = HUB / ".scratch"
 
 sys.path.insert(0, str(SCRIPTS))
 
-import _junction  # noqa: E402
 import _parent_branch  # noqa: E402
 import _plan_dag  # noqa: E402
 import _sidebar  # noqa: E402
@@ -286,7 +288,13 @@ def main() -> int:
                 "feature.txt not present in parent after squash-merge")
         print("PASS: direct squash-merge landed on parent")
 
-        # --- Home.md [active] -> [done] under wiki lock ---
+        # --- archive tag (Step 6) ---
+        subprocess.run(
+            ["git", "-C", str(hub), "tag", f"archive/{slug}", child_branch], check=True
+        )
+        print(f"PASS: archive tag archive/{slug} created")
+
+        # --- Home.md [active] -> [done] under wiki lock (Step 7) ---
         with _wiki.wiki_lock(wiki, slug):
             home_text = (wiki / "Home.md").read_text(encoding="utf-8")
             new_text = _tasks_md.set_phase(home_text, slug, "done")
@@ -295,19 +303,13 @@ def main() -> int:
                 wiki, ["Home.md"], f"task: complete and merge {slug}", slug=slug
             )
 
-            # --- delete active/<slug>/ ---
-            shutil.rmtree(wiki / "active" / slug)
-            _wiki.write_commit_push(
-                wiki, [f"active/{slug}/"], f"task: complete and merge {slug}", slug=slug
-            )
-
         home_after = (wiki / "Home.md").read_text(encoding="utf-8")
         _assert(f"[{slug}] [done]" in home_after,
                 f"Home.md did not flip to [done]:\n{home_after}")
         print("PASS: Home.md flipped to [done]")
-        _assert(not (wiki / "active" / slug).exists(),
-                f"active/{slug}/ not deleted")
-        print("PASS: active/<slug>/ deleted and committed")
+        _assert((wiki / "active" / slug).exists(),
+                f"active/{slug}/ must remain intact — teardown is mill-cleanup's job")
+        print("PASS: active/<slug>/ intact (mill-cleanup's responsibility)")
 
         # --- regenerate sidebar ---
         _sidebar.regenerate(wiki)
@@ -317,39 +319,28 @@ def main() -> int:
                 "sidebar regenerated but state unclear; check manually")
         print("PASS: _sidebar.regenerate ran without error")
 
-        # --- remove junctions owned by worktree ---
-        # Call unconditionally — `.active` is a broken junction at this
-        # point (its target was just removed) and `os.path.exists` returns
-        # False on a broken junction, so a guard on `.exists()` would leave
-        # the reparse-point entry behind. `_junction.remove` handles both
-        # live and broken junctions via `os.path.lexists`.
-        for rel in (".millhouse/wiki", ".active"):
-            junction_path = worktree / rel
-            _junction.remove(junction_path)
-            _assert(
-                not os.path.lexists(str(junction_path)),
-                f"junction {rel} still present (lexists)",
-            )
-        print("PASS: worktree junctions removed")
-
         # --- release merge lock ---
         lock_path.unlink()
         _assert(not lock_path.exists(), "merge.lock not removed")
         print("PASS: merge lock released")
 
-        # --- drop worktree + branch ---
-        _run(
-            ["git", "-C", str(hub), "worktree", "remove", "--force", str(worktree)],
-            cwd=container,
-        )
-        _run(["git", "-C", str(hub), "branch", "-D", child_branch], cwd=container)
-        _assert(not worktree.exists(), "worktree dir still present")
+        # --- worktree and branch must remain intact after mill-merge ---
+        _assert(worktree.exists(),
+                "worktree must remain intact after mill-merge — teardown is mill-cleanup's job")
         branches = _run(
             ["git", "-C", str(hub), "branch", "--list", child_branch],
             cwd=container,
         ).stdout.strip()
-        _assert(not branches, f"child branch still listed: {branches!r}")
-        print("PASS: worktree + branch removed")
+        _assert(branches != "", f"child branch must still exist after mill-merge, got {branches!r}")
+        print("PASS: worktree and branch intact (mill-cleanup's responsibility)")
+
+        # --- archive tag exists ---
+        tag_result = subprocess.run(
+            ["git", "-C", str(hub), "tag", "-l", f"archive/{slug}"],
+            capture_output=True, text=True,
+        )
+        _assert(tag_result.stdout.strip() != "", f"archive tag archive/{slug} not found")
+        print(f"PASS: archive tag archive/{slug} present")
 
         print("PASS -- mill-merge end-to-end")
         return 0
