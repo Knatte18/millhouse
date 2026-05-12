@@ -3,7 +3,7 @@
 ```yaml
 task: (A) — Add /mill-fold skill with active-task guard
 slug: mill-fold
-approved: false
+approved: true
 started: 20260512-171727
 parent: main
 root: ""

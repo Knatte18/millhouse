@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planning
+phase: plan-fix-r1
 blocked_reason: 'auto: discussion review gaps unresolved after 2 rounds'
 slug: mill-fold
 branch: hanf/mill-fold
@@ -20,4 +20,5 @@ blocked  '2026-05-12T17:09:51Z'
 discussing  '2026-05-12T17:11:31Z'
 discussed  '2026-05-12T17:15:34Z'
 planning  '2026-05-12T17:21:32Z'
+plan-fix-r1  '2026-05-12T17:28:02Z'
 ```
