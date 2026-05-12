@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 blocked_reason: 'auto: discussion review gaps unresolved after 2 rounds'
 slug: skills-direct-venv-invocation
 branch: hanf/skills-direct-venv-invocation
@@ -24,4 +24,17 @@ plan-review-r1  '2026-05-12T14:29:20Z'
 plan-fix-r1  '2026-05-12T14:29:20Z'
 plan-fix-r2  '2026-05-12T14:52:51Z'
 planned  '2026-05-12T14:53:00Z'
+implementing  '2026-05-12T15:05:57Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: bulk-skill-conversion
+    state: pending
+  - name: mill-go-conversion
+    state: pending
+  - name: mill-setup-and-claudemd
+    state: pending
 ```
