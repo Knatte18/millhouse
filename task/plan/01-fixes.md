@@ -65,7 +65,7 @@ Six tightly coupled fixes to production code and their unit tests. Cards 1–4 p
     fi
     ```
     Followed by a single explanatory sentence: "Use `$PLUGIN_ROOT` in place of `$CLAUDE_PLUGIN_ROOT` for all subsequent `uv run` commands in this skill."
-  - Replace every occurrence of `$CLAUDE_PLUGIN_ROOT` inside fenced bash/shell code blocks in the file with `$PLUGIN_ROOT`. There are 25 such occurrences. Do not alter occurrences in prose text (there are none — all 25 are inside code blocks).
+  - Replace every occurrence of `$CLAUDE_PLUGIN_ROOT` (unbraced) inside fenced bash/shell code blocks with `$PLUGIN_ROOT`, and every occurrence of `${CLAUDE_PLUGIN_ROOT}` (braced) with `${PLUGIN_ROOT}`. There are 34 unbraced and 10 braced occurrences (44 total). Do not alter occurrences in prose text (there are none — all 44 are inside code blocks).
 - **Commit:** `fix(mill-go): add PLUGIN_ROOT fallback for empty CLAUDE_PLUGIN_ROOT (#262)`
 
 ### Card 4: Delete dead opus reviewer files
