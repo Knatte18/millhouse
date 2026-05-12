@@ -961,7 +961,7 @@ def test_spawn_discovery_round_trip_subfolder() -> None:
 
             # 1. discover_active_worktrees with new signature
             home_tasks = real_tasks_md.parse((wiki / "Home.md").read_text(encoding="utf-8"))
-            discovered = real_sc.discover_active_worktrees(worktrees, home_tasks, branch_prefix)
+            discovered = real_sc.discover_active_worktrees(worktrees, home_tasks, branch_prefix, cwd=wt)
             if len(discovered) != 1:
                 raise AssertionError(
                     f"expected 1 discovered worktree, got {len(discovered)}: {discovered}"
