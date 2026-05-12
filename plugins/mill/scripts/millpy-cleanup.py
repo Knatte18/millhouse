@@ -182,11 +182,11 @@ def build_plan(
                         f" run 'git worktree remove --force {entry}' to clean up)"
                     )
 
-    # Orphan Home.md marker: [active] slug with no active worktree.
+    # Orphan Home.md marker: [active]/[ready-to-merge]/[pr-pending] slug with no active worktree.
     for task in home_tasks:
-        if task.phase == "active" and task.slug not in active_slugs:
+        if task.phase in ("active", "ready-to-merge", "pr-pending") and task.slug not in active_slugs:
             to_report.append(
-                f"orphan Home.md marker: {task.slug} is [active] but has no "
+                f"orphan Home.md marker: {task.slug} is [{task.phase}] but has no "
                 f"active worktree"
             )
 
