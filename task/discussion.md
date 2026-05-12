@@ -17,13 +17,13 @@ These ten related issues are consolidated into one task because they all touch t
 
 **In:**
 - Rename working-state directory `task/` → `_mill/` across all scripts, SKILL.md files, unit tests, integration tests, wiki/config.yaml `paths:` block, templates/wiki-config.yaml, and CLAUDE.md.
-- Add compat shim in `_status.py`/relevant path resolvers: try `_mill/` first, fall back to `task/` with a deprecation log — allows in-flight worktrees to continue working without forced migration.
+- Add compat shim covering all three config-driven paths: a `resolve_task_path(worktree_root, cfg_relative_path)` helper that, given a config path like `_mill/discussion.md`, checks if the `_mill/` target exists; if not but the equivalent `task/` path does, returns the `task/` path with a deprecation log. Callers of `cfg["paths"]["discussion_file"]`, `cfg["paths"]["plan_dir"]`, and `cfg["paths"]["reviews_dir"]` (and `status.md`) go through this helper. Allows all in-flight worktrees to continue through mill-go, review, and mill-merge without a forced `task/` → `_mill/` rename.
 - Portals redesign: `portals/<slug>` now points directly at `wts/<slug>/_mill/` (not `wiki/active/<slug>/`). Remove wiki/active mechanism entirely — stop creating `wiki/active/<slug>/task.md`, remove existing `wiki/active/` content from the wiki repo, remove wiki/active from cleanup.
 - Hub junction inventory cleanup: drop `.others` (legacy), drop hub-self-portal `portals/<repo>` from mill-setup Phase 3.7, add `.portals` junction (hub-scope and per-worktree) pointing at `<CONTAINER_PATH>/portals/`.
 - Update per-worktree `.active` junction target from `<WIKI_PATH>/active/<SLUG>/` to `<CONTAINER_PATH>/portals/<SLUG>/`.
 - Mill-merge SKILL.md: add step that clears hub's `.active` junction if it points at the task being merged (handled in mill-cleanup's done-record teardown).
 - Drop `tasks.md` hardlink: remove `hardlinks:` block from wiki/config.yaml and templates/wiki-config.yaml; remove `/tasks.md` from `.gitignore` mill-managed block; update mill-setup Phase 4.5b/Phase 8 verification.
-- Mill-cleanup extension: orphan-scan of `portals/` — remove any `portals/<slug>` entry whose target path does not exist, including stale hub-self-portal entries (`portals/<repo>`).
+- Mill-cleanup extension: orphan-scan of `portals/` — remove any entry `portals/<X>` where X is not an `[active]` slug in Home.md OR the portal target path does not exist. Covers stale hub-self-portals, slugs removed from Home.md without cleanup, and worktrees deleted out-of-band.
 - Unicode-in-output cleanup: replace all non-ASCII characters (em-dashes, arrows, etc.) in `print()`/`_log()` output strings across all `plugins/mill/scripts/` files. Add CLAUDE.md rule banning Unicode in stdout/stderr/log output.
 - Write `plugins/mill/doc/task-files-contract.md` formalising the invariant: per-task working state is git-tracked on the task branch, never merged to main, never written to the wiki. Pin from mill:workflow and mill:mill-merge SKILL.md.
 - Mill-setup Phase 4.7: also set `CLAUDE_PLUGIN_ROOT` as a Windows user env var (alongside PYTHONPATH). Update SKILL.md examples to use `PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(dirname "$PYTHONPATH")}"` as fallback pattern.
@@ -31,7 +31,7 @@ These ten related issues are consolidated into one task because they all touch t
 **Out:**
 - No change to how mill-spawn chooses tasks or writes status.md content.
 - No change to the `_paths.py` `resolve_path` / `resolve_wiki_path` / `resolve_active_worktree` APIs (only internal path segment strings change).
-- No migration of existing in-flight worktrees' `task/` dirs (compat shim handles these transparently).
+- No forced migration of existing in-flight worktrees' `task/` dirs — the compat shim transparently falls back to `task/` for all config-driven paths until the operator renames.
 - No change to millpy-migrate-layout.py layout-migration logic for the old→new container-form restructuring.
 - No change to the review subsystem (templates, reviewers, LLM providers).
 - No change to the wiki sidebar, color assignment, or VS Code integration.
@@ -41,9 +41,9 @@ These ten related issues are consolidated into one task because they all touch t
 
 ### task/ → _mill/ rename strategy
 
-- **Decision:** Mechanical string-replace throughout scripts, skills, tests, templates, and docs. Add a compat shim in `_status.py` (and wherever `status.md` paths are constructed) that tries `_mill/` first, falls back to `task/` with a deprecation log line.
-- **Rationale:** The underscore prefix signals "system-managed" to any reader who opens the worktree. The compat shim lets the ~5 existing in-flight branches continue through mill-merge without a forced migration step.
-- **Rejected:** Config-key gate (`paths.task_dir`) — adds complexity for a one-time transition. Clean break (no shim) — operational risk during the transition window.
+- **Decision:** Mechanical string-replace throughout scripts, skills, tests, templates, and docs. Add `resolve_task_path(worktree_root: Path, cfg_relative_path: str) -> Path` to `_paths.py` (or `_status.py`): given a config path beginning with `_mill/`, if `worktree_root / cfg_relative_path` does not exist but the equivalent `task/` path does, return the `task/` path with a `[compat] falling back to task/ for <path>` log line. All callers of the three config-driven paths (`discussion_file`, `plan_dir`, `reviews_dir`) and `status.md` go through this helper. The shim covers all four paths so mill-go, review, and mill-merge all continue to work against in-flight branches.
+- **Rationale:** The underscore prefix signals "system-managed" to any reader who opens the worktree. The extended shim (all four paths) ensures no in-flight task breaks at any mill operation boundary, not just mill-merge.
+- **Rejected:** Config-key gate (`paths.task_dir`) — adds complexity for a one-time transition. Clean break (no shim) — operational risk during the transition window. Shim for `status.md` only — leaves review and plan operations broken for in-flight tasks.
 
 ### portals redesign — target
 
@@ -62,8 +62,8 @@ These ten related issues are consolidated into one task because they all touch t
 - **Decision:**
   - Drop `.others` from all junction config and code (already absent from wiki/config.yaml; remove from millpy-spawn.py exclude list if still referenced).
   - Drop hub-self-portal: remove Phase 3.7 from mill-setup SKILL.md and `_setup_hub_portal()` / equivalent code. Existing `portals/<repo>` entries cleaned up by mill-cleanup orphan scan.
-  - Add `.portals: <CONTAINER_PATH>/portals/` as hub-scope junction (mill-setup creates it) and per-worktree junction (mill-spawn creates it via wiki/config.yaml entry — no `<SLUG>` token so hub-scope filter applies to both; mill-spawn must explicitly create it alongside other per-worktree junctions or a new dedicated entry with explicit scope).
-  - Actually: `.portals` has no `<SLUG>` so it is hub-scope under the current filter. Mill-spawn should also create it in new task worktrees explicitly, OR add it to wiki/config.yaml as a per-worktree entry with a non-slug token. The simpler approach: mill-spawn creates `.portals` in the new worktree as part of the junction-propagation step (propagated from hub's `.millhouse/`, similar to how `.wiki` is propagated via the junctions list).
+  - Add `.portals: <CONTAINER_PATH>/portals/` as hub-scope junction (mill-setup creates it). Because `.portals` contains no `<SLUG>` token it is classified hub-scope by the existing filter in `_setup.create_hub_links`, so wiki/config.yaml alone does not propagate it to task worktrees. **Decision: mill-spawn explicitly creates `.portals` in the new task worktree during its junction-setup pass** — the same step that already creates `.wiki` and `.active`. Mill-spawn reads `<CONTAINER_PATH>/portals/` as the target (already available from `container_path`), creates `<worktree_root>/.portals → container_path/portals/`, and logs it alongside the other junctions. No new wiki/config.yaml entry or token type is needed.
+  - **Why this mechanism, not a new wiki/config.yaml entry:** Adding a non-slug-scoped but worktree-targeted entry would require extending the scope-filter logic. Explicit creation in mill-spawn's junction pass is simpler and localises the knowledge ("task worktrees need `.portals`") in one place.
 - **Rationale:** Clean inventory: `.wiki`, `.active`, `.portals` — three well-named entries, each serving a clear IDE-navigation purpose.
 - **Rejected:** Keeping hub-self-portal — it conflates "portals" (task working states) with "main worktree navigation"; the main worktree is navigated via file explorer or the hub itself.
 
@@ -75,9 +75,9 @@ These ten related issues are consolidated into one task because they all touch t
 
 ### mill-cleanup orphan portal scan
 
-- **Decision:** In `millpy-cleanup.py`, after the existing worktree/slug reconciliation, add a sweep over `<container>/portals/`: for each entry, if the junction target path does not exist → mark for removal. Covers both stale task portals (`wts/<slug>/` removed without going through mill-cleanup) and stale hub-self-portals (`portals/<repo>`). Mill-cleanup's `--apply` flag governs whether removal is dry-run or live.
-- **Rationale:** Target-not-exists is the correct oracle — it requires no slug-vs-repo-name discrimination and handles any future portal entry type automatically.
-- **Rejected:** Check slug against Home.md — doesn't catch portals that point at non-slug entries (hub self-portal) or portals for tasks that were force-deleted from Home.md.
+- **Decision:** In `millpy-cleanup.py`, after the existing worktree/slug reconciliation, add a sweep over `<container>/portals/`: a portal entry `portals/<X>` is stale if EITHER (a) `X` is not registered as an `[active]` slug in Home.md, OR (b) the junction target path does not exist. Mark stale entries for removal; honour the `--apply` flag for dry-run vs live.
+- **Rationale:** The two-condition oracle is necessary because neither condition alone is sufficient. Target-not-exists misses hub-self-portals (`portals/millhouse` points at a real dir that exists). Slug-vs-Home.md alone misses tasks still listed in Home.md whose worktrees were deleted without mill-cleanup (the portal target is gone but the slug is still `[active]`). The union catches all three failure modes: hub-self-portals, abandoned slugs removed from Home.md, and worktrees deleted out-of-band.
+- **Rejected:** Target-not-exists alone — misses hub-self-portals pointing at live dirs. Slug-vs-Home.md alone — misses portals for active slugs whose targets are gone.
 
 ### mill-merge .active clearing
 
@@ -111,7 +111,7 @@ These ten related issues are consolidated into one task because they all touch t
 - `plugins/mill/scripts/_spawn_core.py` — `write_wiki_active_task_md` (delete), `recreate_active_junction` (update target), `write_initial_status` (path from `task/status.md` → `_mill/status.md`).
 - `plugins/mill/scripts/millpy-cleanup.py` — remove wiki_active_dir references (`SlugRecord` field, teardown logic), add portal orphan scan, add `.active` clearing in done-record handler.
 - `plugins/mill/scripts/millpy-claim.py` — portal creation uses new target; remove wiki/active write.
-- `plugins/mill/scripts/_status.py` — compat shim: `resolve_status_path(hub_dir)` tries `_mill/status.md`, falls back to `task/status.md`.
+- `plugins/mill/scripts/_paths.py` (or `_status.py`) — add `resolve_task_path(worktree_root: Path, cfg_relative_path: str) -> Path` compat helper: if the `_mill/` path doesn't exist but the equivalent `task/` path does, return the `task/` path with a deprecation log. Callers of all four config-driven paths (`discussion_file`, `plan_dir`, `reviews_dir`, `status.md`) go through this.
 - `plugins/mill/scripts/_paths.py` — update `"task"` path segment in `resolve_active_hub` and related helpers.
 - `plugins/mill/scripts/millpy-abandon.py`, `millpy-implement.py`, `millpy-implement-holistic.py` — update `task/` path segments.
 - `plugins/mill/scripts/_review_discussion.py`, `_review_plan.py`, `_review_code.py` — update path segments (already go through `cfg["paths"]`, so mainly `wiki/config.yaml` update propagates).
@@ -121,7 +121,7 @@ These ten related issues are consolidated into one task because they all touch t
 - `plugins/mill/scripts/_setup.py` — remove hardlinks support or leave as no-op when `hardlinks:` block absent.
 - `plugins/mill/scripts/_wiki.py` — check for `read_hardlinks` usage (called from `_setup.py`).
 - `plugins/mill/scripts/_gitignore.py` — `GLOB_ENTRIES` may need to add `**/_mill/` (currently has `**/.wiki/`, `**/.active/`, `**/.portals/`).
-- `plugins/mill/templates/wiki-config.yaml` — remove `hardlinks:` block, update `paths:` to `_mill/`, add `.portals` junction entry, update `.active` target.
+- `plugins/mill/templates/wiki-config.yaml` — remove `hardlinks:` block, update `paths:` to `_mill/`, add `.portals` junction entry, update `.active` target. **Important:** the template's `paths:` block currently uses `active/<SLUG>/` prefixes (e.g. `active/<SLUG>/discussion.md`), not `task/`. A mechanical `task/` → `_mill/` find/replace will silently miss these lines. The plan batch for the template must explicitly rewrite the entire `paths:` block to the new `_mill/` values, not rely on string substitution.
 - Wiki `config.yaml` (live) — same changes as template.
 - `plugins/mill/skills/mill-setup/SKILL.md` — remove Phase 3.7 hub-self-portal, remove Phase 4.5b hardlink logic, update Phase 8 verification, add CLAUDE_PLUGIN_ROOT to Phase 4.7.
 - `plugins/mill/skills/mill-spawn/SKILL.md`, `mill-claim/SKILL.md`, `mill-merge/SKILL.md`, `mill-start/SKILL.md`, `mill-plan/SKILL.md`, `mill-go/SKILL.md`, `mill-autofix/SKILL.md`, `mill-finalize/SKILL.md`, `mill-merge-in/SKILL.md` — replace all `task/` path references with `_mill/`.
@@ -137,7 +137,7 @@ These ten related issues are consolidated into one task because they all touch t
 - `_setup.py:create_hub_links` — already handles absent `hardlinks:` block (returns empty list); no code change needed there.
 - `_gitignore.py:upsert` — called by mill-setup Phase 4.5b with hardlink names; after removing hardlinks, pass only `GLOB_ENTRIES`.
 - `_spawn_core.py:write_initial_status` — writes `task/status.md`; rename to `_mill/status.md`.
-- `_status.py` — `append_phase`, `set_blocked`, `read_status` all take a `status_path` argument; callers need to pass the new path. Add `resolve_status_path(hub_dir: Path) -> Path` helper for compat shim.
+- `_status.py` — `append_phase`, `set_blocked`, `read_status` all take a `status_path` argument; callers pass the path returned by `resolve_task_path`. No internal changes to `_status.py` needed.
 
 **Portals chain after redesign:**
 
@@ -183,15 +183,19 @@ paths:
 
 ## Testing
 
-- **Unit tests for `_status.py` compat shim:** Add test in `test-status.py` that creates a temp worktree with `task/status.md` (old path), calls `resolve_status_path`, and verifies it returns the `task/` path and logs a deprecation message. Also test `_mill/` path (no fallback needed).
-- **Unit tests for millpy-cleanup.py orphan portal scan:** Add test cases in `test-cleanup.py`:
-  - `portals/<slug>` target exists → no removal.
-  - `portals/<slug>` target missing → marked for removal.
-  - `portals/<repo>` (hub self-portal) → target is `wts/<repo>/` which exists → but since hub-self-portal concept is gone, the scan should detect this as a "non-slug portal pointing at a non-`_mill/` target" and flag it. OR: simpler — just detect missing target (hub self-portal points at a real dir, so it won't be caught by "target missing"). Need a different criterion for hub-self-portals: a slug portal's target must end with `/_mill/`; if not, it's a legacy entry and flagged.
-  - Actually: the cleanest criterion is that `portals/<slug>` is valid IFF: (a) a git worktree exists for that slug AND (b) the junction target exists. Hub self-portals would fail criterion (a) since "millhouse" isn't a slug. Mill-cleanup already has the list of active slugs from Home.md; a portal entry with no matching slug in Home.md is stale.
+- **Unit tests for `resolve_task_path` compat shim:** Add tests in `test-paths.py` (or `test-status.py`) covering:
+  - `_mill/discussion.md` exists → returns `_mill/` path, no log.
+  - `_mill/discussion.md` absent, `task/discussion.md` present → returns `task/` path, emits deprecation log.
+  - Neither exists → returns `_mill/` path (no fallback), no log (caller handles missing-file error).
+  - Same three cases for `plan_dir` and `reviews_dir`.
+- **Unit tests for millpy-cleanup.py orphan portal scan:** Add test cases in `test-cleanup.py` using the combined oracle (stale = not in Home.md active slugs OR target missing):
+  - `portals/<slug>` where slug is `[active]` in Home.md AND target exists → not stale.
+  - `portals/<slug>` where slug is `[active]` in Home.md but target missing → stale (worktree deleted out-of-band).
+  - `portals/<repo>` (hub self-portal) where `repo` is not a slug in Home.md → stale, even if target dir exists.
+  - `portals/<slug>` where slug was removed from Home.md → stale.
 - **Unit test for millpy-cleanup.py `.active` clearing:** Verify that when a done-record is processed and hub `.active` points at the same portal, `.active` junction is removed.
 - **Unit tests for `_setup.py` hardlinks removal:** Verify `create_hub_links` with a config missing the `hardlinks:` block returns `{"junctions": [...], "hardlinks": []}`.
-- **TDD candidates:** `resolve_status_path` shim, orphan portal scan predicate, `.active` clearing logic.
+- **TDD candidates:** `resolve_task_path` compat helper, orphan portal scan predicate, `.active` clearing logic.
 - **Integration test (manual):** After implementing, run `millpy-spawn.py --dry-run` on a test task and verify portal target is `wts/<slug>/_mill/`, `.portals` junction exists, no wiki/active write.
 
 ## Q&A log
@@ -201,7 +205,7 @@ paths:
 - **Q:** How to handle the stale `portals/<repo>` (hub self-portal) on existing hubs? **A:** [auto-pick] mill-cleanup orphan scan — portal entry with no matching slug in Home.md is stale. **Why:** mill-cleanup is the sweeper; no separate migration script needed.
 - **Q:** What fallback pattern for `CLAUDE_PLUGIN_ROOT` in SKILL.md examples? **A:** [auto-pick] `PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(dirname "$PYTHONPATH")}"`. **Why:** PYTHONPATH points to `<cache>/scripts`; its dirname is the plugin root. Concrete and copy-pasteable.
 - **Q:** Should `.portals` junction be hub-scope only or also per-worktree? **A:** [auto-pick] Both hub and per-worktree — as stated in the proposal. **Why:** Per-worktree `.portals` lets operators `cd .portals/<slug>` from inside any task worktree.
-- **Q:** What triggers "orphan" in the portal orphan scan? **A:** [auto-pick] Portal entry with no matching slug in Home.md (covers hub-self-portals and slugs removed without cleanup). **Why:** Slug-vs-Home.md check is the most reliable oracle available in mill-cleanup's existing context.
+- **Q:** What triggers "orphan" in the portal orphan scan? **A:** [auto-pick revised] Combined oracle: stale if slug NOT in Home.md active slugs OR junction target doesn't exist. **Why:** Neither condition alone is sufficient — target-not-exists misses live hub-self-portals; slug-vs-Home.md misses active-but-orphaned worktrees. The union handles all three failure modes.
 - **Q:** Where does hub `.active` clearing on merge happen? **A:** [auto-pick] millpy-cleanup.py done-record teardown — after portal removal, clear hub `.active` if it points at that portal. **Why:** Keeps teardown atomic; no new operator step.
 - **Q:** Where to place the task-files-contract doc? **A:** [auto-pick] `plugins/mill/doc/task-files-contract.md` (new `doc/` dir). **Why:** Separates stable contract from CLAUDE.md conventions; citable from multiple skills.
 - **Q:** Where to add the Unicode-output rule in CLAUDE.md? **A:** [auto-pick] Inline into "Conventions worth carrying" block. **Why:** Collocates with other operational rules implementers read; single-sentence rule doesn't need its own section.
