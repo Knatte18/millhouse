@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: status-md-in-paths-config
 branch: hanf/status-md-in-paths-config
 plan: _mill/plan
@@ -24,4 +24,15 @@ plan-review-r2  '2026-05-13T08:03:04Z'
 plan-fix-r2  '2026-05-13T08:03:04Z'
 plan-fix-r3  '2026-05-13T08:07:44Z'
 planned  '2026-05-13T08:07:55Z'
+implementing  '2026-05-13T08:16:18Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: helper-foundation
+    state: pending
+  - name: callsite-refactor
+    state: pending
 ```
