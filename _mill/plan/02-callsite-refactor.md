@@ -86,6 +86,13 @@ Card 4 is the largest piece (3 files, signature change to `write_initial_status`
   - `plugins/mill/scripts/millpy-cleanup.py`
   - `plugins/mill/scripts/millpy-implement.py`
   - `plugins/mill/scripts/millpy-implement-holistic.py`
+  - `plugins/mill/unit_tests/test-abandon.py`
+  - `plugins/mill/unit_tests/test-cleanup.py`
+  - `plugins/mill/unit_tests/test-millpy-implement.py`
+  - `plugins/mill/unit_tests/test-millpy-implement-holistic.py`
+  - `plugins/mill/unit_tests/test-millpy-spawn.py`
+  - `plugins/mill/unit_tests/test-review-code-flow.py`
+  - `plugins/mill/unit_tests/test-spawn-core.py`
 - **Creates:** none
 - **Deletes:** none
 - **Requirements:**
