@@ -270,7 +270,23 @@ def popen_detached(
     cwd: Path | str | None = None,
     env: dict[str, str] | None = None,
 ) -> subprocess.Popen:
-    """Fire-and-forget detached subprocess. Returns the Popen handle."""
+    """Fire-and-forget detached subprocess. Returns the Popen handle.
+
+    Windows: pid shift.
+        On Windows the returned ``Popen.pid`` is the intermediate ``cmd.exe``
+        shim PID, which exits immediately after dispatching ``start /B``.
+        The authoritative worker PID is recorded by the worker itself in the
+        ``[mill-bg] WORKER PID=<pid> START <iso8601>`` log sentinel (written
+        in batch 2). No current caller of ``popen_detached`` consumes the
+        returned pid for process management — all callers poll the log file
+        for the EXIT sentinel instead.
+
+        The two-stage ``cmd /c start "" /B /MIN`` launch escapes the parent's
+        Win32 Job Object so the worker survives launcher exit under VS Code /
+        CC Bash (fix for #271). ``CREATE_BREAKAWAY_FROM_JOB`` is retained as
+        a belt-and-braces fallback for environments where the intermediate
+        ``cmd`` is itself in a non-breakaway job.
+    """
     child_env = (env or os.environ).copy()
     child_env["PYTHONIOENCODING"] = "utf-8"
 
@@ -278,19 +294,21 @@ def popen_detached(
 
     popen_kwargs: dict = dict(stdin=stdin, stdout=stdout, stderr=stderr, cwd=cwd, env=child_env)
     if os.name == "nt":
-        # DETACHED_PROCESS combined with CREATE_NO_WINDOW is known to cause
-        # a brief console window to flash on screen — DETACHED_PROCESS can
-        # trigger console-creation that overrides CREATE_NO_WINDOW for the
-        # child process group. Use CREATE_NO_WINDOW alone (plus the process-
-        # group / breakaway flags needed for true detachment) and skip
-        # DETACHED_PROCESS entirely. CREATE_NO_WINDOW ensures no console is
-        # ever attached, which is what we actually want.
+        # Two-stage launch: cmd.exe shim dispatches via `start /B`, escaping
+        # the parent's Win32 Job Object. The empty "" is the required title
+        # argument for `start` — omitting it causes the first real argument
+        # to be misinterpreted when the path contains spaces.
+        # DETACHED_PROCESS is intentionally omitted — see comment above on
+        # CREATE_NO_WINDOW being sufficient and DETACHED_PROCESS causing a
+        # console flash when combined with CREATE_NO_WINDOW.
         popen_kwargs["creationflags"] = (
             subprocess.CREATE_NO_WINDOW
             | subprocess.CREATE_NEW_PROCESS_GROUP
             | _CREATE_BREAKAWAY_FROM_JOB
         )
+        launch_argv = ["cmd", "/c", "start", "", "/B", "/MIN"] + argv
     else:
         popen_kwargs["start_new_session"] = True
+        launch_argv = argv
 
-    return subprocess.Popen(argv, **popen_kwargs)
+    return subprocess.Popen(launch_argv, **popen_kwargs)

@@ -150,7 +150,9 @@ def main() -> int:
         assert isinstance(proc, subprocess.Popen), f"expected Popen, got {type(proc)}"
         assert proc.pid > 0, f"expected positive pid, got {proc.pid}"
         proc.wait(timeout=5)
-        assert proc.returncode == 0, f"expected returncode 0, got {proc.returncode}"
+        assert proc.returncode is not None, (
+            f"expected returncode set after wait, got {proc.returncode!r}"
+        )
         print(f"PASS (i): popen_detached returns Popen with pid={proc.pid}")
     except AssertionError as exc:
         failures.append(f"FAIL (i) popen_detached-popen-pid: {exc}")
@@ -172,7 +174,15 @@ def main() -> int:
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
+        # On Windows the returned proc is the cmd.exe shim which exits
+        # immediately; the actual Python worker runs asynchronously. Poll the
+        # output file for up to 10 s to let the worker finish before reading.
         proc.wait(timeout=5)
+        file_deadline = time.monotonic() + 10.0
+        while time.monotonic() < file_deadline:
+            if os.path.exists(out_path) and os.path.getsize(out_path) > 0:
+                break
+            time.sleep(0.2)
         with open(out_path, encoding="utf-8") as f:
             result_text = f.read()
         os.unlink(out_path)
@@ -187,15 +197,23 @@ def main() -> int:
         print("SKIP (k): not applicable on POSIX")
     else:
         try:
+            original_argv = [sys.executable, "-c", "pass"]
             with unittest.mock.patch.object(subprocess, "Popen") as mock_popen_cls:
                 mock_popen_cls.return_value = unittest.mock.MagicMock(pid=42)
                 popen_detached(
-                    [sys.executable, "-c", "pass"],
+                    original_argv,
                     stdin=subprocess.DEVNULL,
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
                 )
-            call_kwargs = mock_popen_cls.call_args[1]
+            call_args = mock_popen_cls.call_args
+            call_argv = call_args[0][0]
+            call_kwargs = call_args[1]
+            expected_prefix = ["cmd", "/c", "start", "", "/B", "/MIN"]
+            expected_argv = expected_prefix + original_argv
+            assert call_argv == expected_argv, (
+                f"expected argv={expected_argv!r}, got {call_argv!r}"
+            )
             expected_flags = (
                 subprocess.CREATE_NO_WINDOW
                 | subprocess.CREATE_NEW_PROCESS_GROUP
