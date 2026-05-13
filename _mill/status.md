@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-approved
+phase: done
 slug: subprocess-fixes
 branch: hanf/subprocess-fixes
 plan: _mill/plan
@@ -28,6 +28,7 @@ approved-session-id-propagation  '2026-05-13T13:32:57Z'
 approved-millpy-bg-start-sentinel  '2026-05-13T13:49:33Z'
 holistic-reviewing  '2026-05-13T13:49:49Z'
 holistic-approved  '2026-05-13T13:53:09Z'
+done  '2026-05-13T13:53:16Z'
 ```
 
 ## Batches
