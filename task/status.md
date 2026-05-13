@@ -30,7 +30,9 @@ implementing  '2026-05-13T06:33:24Z'
 ```yaml
 batches:
   - name: wiki-health-check
-    state: pending
+    state: running
+    implementer_session: a72f63c8-0a06-4bd2-9139-b97466014b47
+    start_sha: 833344d7a9b633fee61dedb3e999b650aea66732
   - name: setup-junction-idempotency
     state: pending
   - name: status-blocked-reason-cleanup
