@@ -248,13 +248,18 @@ mill code outside an explicit whitelist.
 ### Platform behaviour
 
 - Decision: The blacklist refusal and `allowed_root` containment
-  check apply on all platforms. The reparse-walk step is a no-op on
-  POSIX (no junctions; symlinks are skipped via
-  `os.scandir(follow_symlinks=False)` which `shutil.rmtree` already
-  handles correctly).
+  check apply on all platforms. The reparse-walk runs on all
+  platforms too, but only the junction-specific detection branches
+  (`os.path.isjunction` / `st_file_attributes & 0x400`) are guarded
+  by `os.name == "nt"`. The symlink branch (`entry.is_symlink()`
+  -> `_junction.remove`) runs cross-platform -- POSIX symlinks
+  inside a tree are also stripped before `shutil.rmtree` to keep
+  cross-platform behaviour symmetric with the Windows path.
 - Rationale: The refusal logic protects against logic bugs (caller
   passes the wrong path); those bugs exist on every platform.
-  Reparse-points are Windows-specific.
+  Reparse-points are Windows-specific; symlinks are universal and
+  carry the same blast-radius risk if `shutil.rmtree` were allowed
+  to follow them.
 - Rejected:
   - Windows-only refusal -- weakens cross-platform safety;
     integration tests run on POSIX CI.
@@ -366,8 +371,6 @@ prefix per the existing convention for non-CLI helper modules.
   this file. The line-241/242 string `expected path to be removed
   by rmtree` is a comment / string and also matches the regex; the
   whitelist takes care of it.
-- `test-cleanup.py:481` -- comment string only. Whitelist or
-  reword.
 
 `plugins/mill/integration_tests/`:
 - `smoke-llm-claude.py:154`, `smoke-llm-gemini.py:142`,
