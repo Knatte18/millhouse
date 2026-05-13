@@ -27,6 +27,7 @@ _ALLOWLIST = {
     "plugins/mill/skills/mill-setup/SKILL.md",
     "plugins/mill/skills/mill-claim/SKILL.md",
     "plugins/mill/skills/mill-spawn/SKILL.md",
+    "plugins/mill/skills/mill-finalize/SKILL.md",
 }
 
 _PATTERNS = [
