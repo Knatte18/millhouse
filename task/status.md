@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-helper-foundation
+phase: approved-callsite-refactor
 slug: status-md-in-paths-config
 branch: hanf/status-md-in-paths-config
 plan: _mill/plan
@@ -26,6 +26,7 @@ plan-fix-r3  '2026-05-13T08:07:44Z'
 planned  '2026-05-13T08:07:55Z'
 implementing  '2026-05-13T08:16:18Z'
 approved-helper-foundation  '2026-05-13T08:25:56Z'
+approved-callsite-refactor  '2026-05-13T13:35:08Z'
 ```
 
 ## Batches
@@ -37,7 +38,7 @@ batches:
     implementer_session: 9539ca61-a30b-4e34-a021-12ac6be2e5f7
     start_sha: 7fbf3593e6ab080bb522b7229b32e8e0a5b96e34
   - name: callsite-refactor
-    state: running
+    state: approved
     implementer_session: 58f24a6a-72c3-44be-9812-a3e595f5fac2
     start_sha: a780b45aa32d21aa4997898fd65ab024955e418f
 ```
