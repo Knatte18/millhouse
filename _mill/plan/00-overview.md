@@ -94,6 +94,7 @@ batches:
 - `plugins/mill/integration_tests/test-wiki-concurrency.py`
 - `plugins/mill/scripts/_safe_rmtree.py`
 - `plugins/mill/scripts/_worktree.py`
+- `plugins/mill/scripts/millpy-cleanup.py`
 - `plugins/mill/unit_tests/test-millpy-implement-holistic.py`
 - `plugins/mill/unit_tests/test-millpy-implement.py`
 - `plugins/mill/unit_tests/test-millpy-merge-in-subagent.py`
