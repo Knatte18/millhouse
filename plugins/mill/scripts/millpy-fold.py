@@ -1,0 +1,164 @@
+"""
+mill-fold — append a fold entry to a task in the wiki's Home.md.
+
+Resolves the wiki clone via ``_paths.resolve_wiki_path``. Note: ``.millhouse/wiki``
+is a junction for IDE/terminal convenience only — scripts never use it as a
+code path. Acquires the shared ``.mill-lock`` around the read-append-sidebar-commit
+sequence, then optionally closes the GitHub issue after the wiki commit succeeds
+and the lock is released.
+
+Operation order (``fold-operation-order`` shared decision):
+    lock → parse → phase-guard → fetch_one (GH path only) → body-append →
+    sidebar regen → commit/push → release → optional GH close-with-comment
+
+Phases that reject fold operations (``locked-fold-phases-tuple`` shared decision):
+    LOCKED_FOLD_PHASES = ("active", "ready-to-merge", "pr-pending")
+    The plan is frozen once a task enters these phases; scope additions would
+    silently invalidate it.
+
+GitHub issue close-comment string (``close-comment-strings`` shared decision):
+    "Folded into wiki task: <slug>"
+
+Slug rules (``Home.schema.md``): kebab-case matching ``[a-z][a-z0-9-]*``.
+
+Usage:
+    python plugins/mill/scripts/millpy-fold.py <target_slug> --issue <N>
+    python plugins/mill/scripts/millpy-fold.py <target_slug> --scope <text>
+
+Exit codes:
+    0 — fold appended and pushed (GH close may have soft-failed; see stderr)
+    1 — validation, environment, phase-guard, or GH-state error
+"""
+from __future__ import annotations
+
+import argparse
+import sys
+
+import _gh_issues
+import _sidebar
+import _tasks_md
+import _wiki
+from _paths import resolve_git_root, resolve_wiki_path
+
+
+def _build_fold_line(issue_dict: dict | None, scope_text: str | None) -> str:
+    assert (issue_dict is None) != (scope_text is None), (
+        "_build_fold_line requires exactly one of issue_dict or scope_text"
+    )
+    if issue_dict is not None:
+        return f"- Sources: #{issue_dict['number']} — {issue_dict['title']}"
+    return f"- Folded in: {scope_text}"
+
+
+def main(argv: list[str] | None = None, *, _fetch_one=None, _close_with_comment=None) -> int:
+    parser = argparse.ArgumentParser(
+        description="Append a fold entry to a wiki Home.md task."
+    )
+    parser.add_argument(
+        "target_slug",
+        help="Task slug to fold into — kebab-case, e.g. 'fix-foo'.",
+    )
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument(
+        "--issue", "-i",
+        type=int,
+        metavar="N",
+        help="GitHub issue number to fold in (GH path).",
+    )
+    group.add_argument(
+        "--scope",
+        metavar="TEXT",
+        help="Scope item text to fold in (scope path).",
+    )
+    args = parser.parse_args(argv)
+
+    target_slug = args.target_slug
+    if not _tasks_md._SLUG_RE.match(target_slug):
+        raise SystemExit(f"Invalid slug {target_slug!r}: must match [a-z][a-z0-9-]*")
+
+    git_root = resolve_git_root()
+    wiki_path = resolve_wiki_path(git_root)
+
+    fetch_one_fn = _fetch_one or _gh_issues.fetch_one
+    close_with_comment_fn = _close_with_comment or _gh_issues.close_with_comment
+
+    issue = None
+
+    with _wiki.wiki_lock(wiki_path, target_slug):
+        home_path = wiki_path / "Home.md"
+        if not home_path.exists():
+            raise SystemExit(f"Wiki not found at {wiki_path}.")
+
+        home_text = home_path.read_text(encoding="utf-8")
+        tasks = _tasks_md.parse(home_text)
+        target_task = next((t for t in tasks if t.slug == target_slug), None)
+        if target_task is None:
+            raise SystemExit(f"Slug {target_slug!r} not found in Home.md.")
+
+        phase = target_task.phase
+        if phase in _tasks_md.LOCKED_FOLD_PHASES:
+            raise SystemExit(
+                f"Cannot fold into {target_slug!r}: task is [{phase}]. "
+                "Plan is frozen — scope additions silently invalidate it."
+            )
+
+        if args.issue is not None:
+            try:
+                issue = fetch_one_fn(args.issue, git_root=git_root)
+            except _gh_issues.GhError as exc:
+                raise SystemExit(str(exc)) from exc
+
+            draft_line = _build_fold_line(issue, None)
+
+            if sys.stdin.isatty():
+                for _attempt in range(3):
+                    print(draft_line)
+                    choice = input("1) Use as-is (Recommended) / 2) Edit / 3) Abort\n> ").strip()
+                    if choice == "1":
+                        fold_line = draft_line
+                        break
+                    elif choice == "2":
+                        new_title = input("Enter new title: ").strip()
+                        issue = dict(issue)
+                        issue["title"] = new_title
+                        fold_line = _build_fold_line(issue, None)
+                        break
+                    elif choice == "3":
+                        raise SystemExit("Aborted by user.")
+                else:
+                    raise SystemExit("Aborted by user.")
+            else:
+                fold_line = draft_line
+        else:
+            fold_line = _build_fold_line(None, args.scope)
+
+        new_home_text = _tasks_md.append_to_body(home_text, target_slug, fold_line)
+        home_path.write_text(new_home_text, encoding="utf-8")
+        _sidebar.regenerate(wiki_path)
+
+        if args.issue is not None:
+            commit_msg = f"fold #{args.issue} into {target_slug}"
+        else:
+            commit_msg = f"fold scope item into {target_slug}"
+
+        _wiki.write_commit_push(wiki_path, ["Home.md", "_Sidebar.md"], commit_msg, slug=target_slug)
+
+    if args.issue is not None:
+        try:
+            close_with_comment_fn(
+                args.issue,
+                f"Folded into wiki task: {target_slug}",
+                git_root=git_root,
+            )
+        except _gh_issues.GhError as exc:
+            print(
+                f"Warning: wiki commit succeeded but issue close failed: {exc}",
+                file=sys.stderr,
+            )
+
+    print(f"Folded into wiki task: {target_slug!r}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

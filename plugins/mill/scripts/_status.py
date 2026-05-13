@@ -280,7 +280,10 @@ def append_phase(status_path: Path, phase: str, timestamp: str) -> None:
 
     The function reads, rewrites, and writes the file once — we don't use
     ``update_field`` for step 1 because it would re-read and re-write the
-    file, doubling I/O for no gain.
+    file, doubling I/O for no gain. When the new phase is anything other
+    than ``blocked``, any existing ``blocked_reason:`` row in the top yaml
+    block is removed in the same write — ``blocked_reason:`` only has
+    meaning while ``phase: blocked``.
 
     Args:
         status_path: Absolute path to the status.md file.
@@ -314,6 +317,21 @@ def append_phase(status_path: Path, phase: str, timestamp: str) -> None:
         break
     if not updated_phase:
         raise ValueError(f"phase: key missing from yaml block of {status_path}")
+
+    # Auto-clear blocked_reason: when transitioning to a non-blocked phase.
+    # blocked_reason: only has meaning while phase: blocked; leaving the row
+    # behind after advancing past blocked produces stale, misleading status.md.
+    # Mirrors set_blocked's in-place row discovery (lines 244-258) in inverse:
+    # same scan, but delete the line instead of rewriting it.
+    if phase != "blocked":
+        for i in range(y_start, y_end):
+            stripped = lines[i].rstrip("\r\n")
+            if re.match(r"^blocked_reason:\s*", stripped):
+                del lines[i]
+                # y_end is no longer valid after deletion, but we exit the
+                # loop immediately — no further indices used inside the yaml
+                # range.
+                break
 
     # Timeline block: insert a new row at the end of the ```text block.
     # We need to find the fences in the rewritten text, not the original,
