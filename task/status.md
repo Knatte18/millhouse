@@ -37,5 +37,7 @@ batches:
     implementer_session: 9539ca61-a30b-4e34-a021-12ac6be2e5f7
     start_sha: 7fbf3593e6ab080bb522b7229b32e8e0a5b96e34
   - name: callsite-refactor
-    state: pending
+    state: running
+    implementer_session: c316c5a8-3a42-4e35-a5ed-0e1243badb6a
+    start_sha: f016b2f51822030822fbd71d6e5de49ff9228432
 ```
