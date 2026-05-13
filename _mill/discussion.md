@@ -74,6 +74,12 @@ mill-start / mill-plan run that goes through CC.
 - `plugins/mill/scripts/millpy-implement.py` — both call sites
   (initial dispatch and resume) pass the known `session_id` to
   `_forward_output`.
+- `plugins/mill/scripts/millpy-implement-holistic.py` — the
+  `_forward_output` call site on line 176 passes the
+  `session_id` (the uuid generated on line 113) for the same
+  reason the per-batch implementer does. Same minimal change, same
+  rationale (the caller chose the id; losing it breaks any
+  follow-on `--resume` reattachment).
 - `plugins/mill/unit_tests/test-subprocess-util.py` — add coverage for
   the new watchdog path (timeout fires within budget when child holds
   pipes open), and for the updated detach creationflags.
@@ -213,6 +219,25 @@ mill-start / mill-plan run that goes through CC.
   entire purpose (CC's Bash tool blocks for the review duration). (d)
   Use `schtasks /create /run /delete` — requires admin in some
   configurations and creates an audit-log noise tail.
+- **Caveat — `proc.pid` semantics shift:** After the two-stage
+  launch, the `subprocess.Popen` returned by `popen_detached` is
+  the intermediate `cmd.exe` shim, not the worker. The shim exits
+  almost immediately after dispatching `start /B`. The
+  `millpy-bg.py` launcher's `pid={proc.pid}` print therefore
+  surfaces the shim PID, not the worker PID. The authoritative
+  worker PID lives in the new
+  `[mill-bg] WORKER PID=<pid> START <iso8601>` sentinel inside the
+  log file (see Decision: worker-start-sentinel). Every existing
+  caller of `popen_detached` and `millpy-bg.py` only consumes the
+  `log=<path>` value — none consume the printed PID for
+  process-management purposes (`mill-start`, `mill-plan`,
+  `mill-go` all poll the log for the EXIT sentinel and never call
+  `taskkill` against the printed pid). Confirmed by grep of
+  caller code at discussion time; the plan must re-confirm
+  during implementation. No caller updates are needed; the only
+  user-visible change is the printed pid is the shim's, not the
+  worker's. Documented inline in `popen_detached`'s docstring
+  and in `millpy-bg.py`'s launcher comment.
 
 ### worker-start-sentinel
 
@@ -247,10 +272,15 @@ mill-start / mill-plan run that goes through CC.
   `session_id: str | None = None` keyword-only parameter. When the
   inferred-success fallback path fires (no parseable JSON, new
   commit detected, snapshot-dirt empty), the emitted JSON uses
-  `session_id=session_id or "unknown"`. Both call sites in
-  `millpy-implement.py` pass the known session id: the initial
-  dispatch path passes the uuid generated on line 134; the resume
-  path passes `batch_state.get("implementer_session")`.
+  `session_id=session_id or "unknown"`. All three call sites pass
+  the known session id: `millpy-implement.py` initial dispatch
+  passes the uuid generated on its line 134, the resume path
+  passes `batch_state.get("implementer_session")`, and
+  `millpy-implement-holistic.py` line 176 passes the uuid
+  generated on its line 113. The "holistic" caller is plumbed for
+  the same reason as the per-batch one: the caller chose the id;
+  emitting `"unknown"` strips a value that is always known in
+  scope and breaks any follow-on `--resume` reattachment.
 - **Rationale:** The caller always knows the session id because the
   caller chose it (initial dispatch) or read it from status.md
   (resume). Falling back to `"unknown"` is gratuitous information
@@ -512,13 +542,26 @@ Integration scenarios:
   grandchild, run under `_subprocess_util.run(..., timeout=2.0)`,
   poll `tasklist /FI "PID eq <grandchild_pid>"` after the call
   returns and assert the grandchild is gone. Skip on POSIX.
-- **Windows-only #271 detached worker**: launch `millpy-bg.py
-  --slug it-detach -- python -c "print('hi')"` from inside a
-  parent that has `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` set on its
-  job, wait 3 seconds, assert the log file contains the start
-  sentinel and the EXIT sentinel. Skip on POSIX. This test is the
-  only place we can prove the two-stage launch actually escapes
-  the parent job.
+- **Windows-only #271 detached worker**: the test must guarantee
+  the job-bound parent condition rather than relying on the
+  harness shell. The integration test creates the condition itself
+  via ctypes: it calls `CreateJobObjectW(NULL, NULL)`, sets
+  `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` via
+  `SetInformationJobObject` with a
+  `JOBOBJECT_BASIC_LIMIT_INFORMATION` struct, calls
+  `AssignProcessToJobObject(job, GetCurrentProcess())` to enrol
+  the test process itself in the job, then spawns `millpy-bg.py
+  --slug it-detach -- python -c "print('hi')"` from inside that
+  job-bound test process. Without the fix, the worker dies when
+  the test process exits (kill-on-job-close); with the fix, the
+  two-stage `cmd /c start /B` escapes the job and the worker
+  writes its sentinels. The test polls for up to 5 seconds for
+  the start sentinel and up to 10 seconds for the EXIT sentinel.
+  Skip on POSIX. Relying on "must be run from VS Code / CC Bash"
+  was rejected because it makes the test vacuously pass under
+  plain cmd.exe (which doesn't impose the job condition), exactly
+  the case that the bug report's hypothesis would hide. Building
+  the job condition in the test eliminates that ambiguity.
 
 Scenarios that must be covered (not full assertion sets — that's
 mill-plan's job):
@@ -630,3 +673,44 @@ mill-plan's job):
   already has the session_id from its own uuid generation
   (initial path) or batch state (resume path). Plumbing it
   through `_forward_output` is the minimal change.
+
+- **Q:** [round 1 gap] Should `millpy-implement-holistic.py`'s
+  `_forward_output` call site (line 176) be included in the
+  session_id plumbing, or excluded?
+  **A:** [auto-pick] Include it.
+  **Why:** Symptom-identical to the per-batch case: line 113
+  generates a uuid that is passed to claude via `--session-id`,
+  and line 176 calls `_forward_output(output, project_root)`
+  without it, so the inferred-success fallback emits
+  `"session_id": "unknown"` even though the caller knows the
+  id. Same fix, same rationale, same minimal change. Excluding
+  it would leave the holistic dispatcher in the broken state
+  the bug report describes.
+
+- **Q:** [round 1 gap] How does the #271 integration test
+  guarantee the job-bound parent condition?
+  **A:** [auto-pick] The test manufactures the job condition
+  itself via ctypes (`CreateJobObjectW` +
+  `SetInformationJobObject(JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE)`
+  + `AssignProcessToJobObject(job, GetCurrentProcess())`)
+  before spawning `millpy-bg.py`.
+  **Why:** Documenting a "must run from VS Code / CC Bash"
+  requirement makes the test vacuously pass under plain
+  cmd.exe (which doesn't impose the job condition) — exactly
+  the silent-success failure mode the bug report describes.
+  Building the job in the test process gives a deterministic,
+  CI-portable proof that the two-stage launch actually escapes
+  the job. ctypes is already an acceptable dependency for
+  Windows integration tests.
+
+- **Q:** [round 1 note] Does the `proc.pid` returned by the
+  new `popen_detached` need a caller update?
+  **A:** [auto-pick] No caller update needed; document the
+  shift inline.
+  **Why:** Greps of caller code show no caller consumes the
+  printed PID for process-management (taskkill, polling). All
+  callers consume the `log=<path>` value only. The worker PID
+  is recoverable from the new `[mill-bg] WORKER PID=...`
+  sentinel if a future caller needs it. Documenting the shift
+  in `popen_detached`'s docstring and the launcher's print
+  comment is sufficient.
