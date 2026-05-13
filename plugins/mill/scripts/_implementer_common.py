@@ -12,11 +12,14 @@ def _forward_output(
     *,
     start_sha: str | None = None,
     snapshot_path: Path | None = None,
+    session_id: str | None = None,
 ) -> int:
     """Extract the last JSON object containing a 'status' key from output using regex.
 
     Returns 0 in both success and fallback cases — the JSON on stdout is how the caller reads state.
     When no valid JSON is found, emits a stuck/logic sentinel.
+    When the inferred-success fallback fires, the emitted JSON uses ``session_id`` if supplied,
+    falling back to the literal ``"unknown"`` for backwards compatibility with callers that don't pass it.
     """
     matches = re.findall(r'\{[^{}]*"status"[^{}]*\}', output)
     if matches:
@@ -42,7 +45,7 @@ def _forward_output(
                 result = _subprocess_util.run(["git", "rev-parse", "HEAD"], cwd=project_root)
                 if result.returncode == 0 and result.stdout.strip() != start_sha:
                     head = result.stdout.strip()
-                    print(json.dumps({"status": "success", "commit_sha": head, "session_id": "unknown", "inferred": True}))
+                    print(json.dumps({"status": "success", "commit_sha": head, "session_id": session_id or "unknown", "inferred": True}))
                     return 0
     except Exception:
         pass
