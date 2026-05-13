@@ -30,6 +30,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import _paths
 import _reviewer_single
 import _reviewers
 from _llm_common import LLMError
@@ -217,7 +218,7 @@ def run(
     diff_threshold: float = cfg["roles"]["code-review"].get("diff_scope_threshold", 0.25)
     if batch_name is not None:
         try:
-            status_path = resolve_path("status.md", slug)
+            status_path = _paths.status_path(project_root, cfg)
             batches_list = _status.read_batches(status_path)
             entry = next((b for b in batches_list if b.get("name") == batch_name), None)
             start_sha = entry.get("start_sha") if entry else None
