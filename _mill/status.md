@@ -35,7 +35,9 @@ batches:
     implementer_session: f06eed38-4108-4c60-be60-8b220fb15a66
     start_sha: b7921cf0b5ac70e5a87282ae655d4793dbb768ff
   - name: session-id-propagation
-    state: pending
+    state: running
+    implementer_session: f7fb7385-5b01-44cf-ad23-3e6033a5a8a7
+    start_sha: e191aa02ee6dc277c39f6512f0e48e2d91285cf4
   - name: millpy-bg-start-sentinel
     state: pending
 ```
