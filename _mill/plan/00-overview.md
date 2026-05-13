@@ -3,7 +3,7 @@
 ```yaml
 task: (A) -- Central safe-rmtree helper + ban direct rmtree
 slug: safe-rmtree
-approved: false
+approved: true
 started: '20260513-075214'
 parent: main
 root: ""

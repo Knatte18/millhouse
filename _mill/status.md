@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-fix-r4
+phase: plan-fix-r5
 slug: safe-rmtree
 branch: hanf/safe-rmtree
 plan: _mill/plan
@@ -26,4 +26,5 @@ plan-review-r3  '2026-05-13T08:21:54Z'
 plan-fix-r3  '2026-05-13T08:21:54Z'
 plan-review-r4  '2026-05-13T08:34:38Z'
 plan-fix-r4  '2026-05-13T08:34:38Z'
+plan-fix-r5  '2026-05-13T13:20:28Z'
 ```
