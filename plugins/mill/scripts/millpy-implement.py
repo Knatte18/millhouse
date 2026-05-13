@@ -89,15 +89,16 @@ def main(argv=None) -> int:
         print(str(e), file=sys.stderr)
         return 1
 
-    plan_dir = cfg.get("paths", {}).get("plan_dir", "task/plan/")
-    status_path = project_root / "task" / "status.md"
+    plan_dir = cfg.get("paths", {}).get("plan_dir", "_mill/plan/")
+    status_path = _paths.resolve_task_path(project_root, "_mill/status.md")
     full = _status.read_full(status_path)
     task_title = full["yaml"].get("task", slug)
     branch = _status.read_branch(status_path, cfg=cfg, slug=slug)
     self_fix_rounds = cfg.get("roles", {}).get("implementer", {}).get("self_fix_rounds", 2)
     timeout = cfg.get("llm", {}).get("implementer_timeout", 1800)
 
-    overview_path = project_root / plan_dir / "00-overview.md"
+    plan_base = _paths.resolve_task_path(project_root, plan_dir)
+    overview_path = plan_base / "00-overview.md"
     if not overview_path.exists():
         print(f"overview not found: {overview_path}", file=sys.stderr)
         return 1
@@ -113,7 +114,7 @@ def main(argv=None) -> int:
         print(f"batch {args.batch_name!r} not found in overview", file=sys.stderr)
         return 1
 
-    batch_file = project_root / plan_dir / batch_entry["file"]
+    batch_file = plan_base / batch_entry["file"]
     plugin_root = Path(__file__).resolve().parent.parent
 
     if not args.resume:
@@ -127,7 +128,7 @@ def main(argv=None) -> int:
             return 1
         start_sha = result.stdout.strip()
 
-        snapshot_path = project_root / "task" / f".cleanliness-snapshot-{args.batch_name}.txt"
+        snapshot_path = project_root / "_mill" / f".cleanliness-snapshot-{args.batch_name}.txt"
         _cleanliness.capture_snapshot(project_root, snapshot_path)
 
         session_id = str(uuid.uuid4())
@@ -135,7 +136,7 @@ def main(argv=None) -> int:
         _status.set_batch_fields(status_path, args.batch_name, {"state": "running", "start_sha": start_sha, "implementer_session": session_id})
 
         result = _subprocess_util.run(
-            ["git", "add", "task/status.md", str(snapshot_path.relative_to(project_root))],
+            ["git", "add", status_path.relative_to(project_root).as_posix(), str(snapshot_path.relative_to(project_root))],
             cwd=project_root,
         )
         if result.returncode != 0:
@@ -163,7 +164,7 @@ def main(argv=None) -> int:
             "SLUG": slug,
             "BATCH_NAME": args.batch_name,
             "BATCH_FILE": str(batch_file),
-            "OVERVIEW_FILE": str(project_root / plan_dir / "00-overview.md"),
+            "OVERVIEW_FILE": str(overview_path),
             "PROJECT_ROOT": str(project_root),
             "WIKI_PATH": str(wiki_path),
             "SELF_FIX_ROUNDS": str(self_fix_rounds),
@@ -214,7 +215,7 @@ def main(argv=None) -> int:
             else str(review_file)
         )
         result = _subprocess_util.run(
-            ["git", "add", "task/status.md", review_file_arg],
+            ["git", "add", status_path.relative_to(project_root).as_posix(), review_file_arg],
             cwd=project_root,
         )
         if result.returncode != 0:
@@ -257,7 +258,7 @@ def main(argv=None) -> int:
             print(str(e), file=sys.stderr)
             return 1
         start_sha_for_forward = batch_state.get("start_sha") if batch_state else None
-        snapshot_path_for_forward = project_root / "task" / f".cleanliness-snapshot-{args.batch_name}.txt"
+        snapshot_path_for_forward = project_root / "_mill" / f".cleanliness-snapshot-{args.batch_name}.txt"
         return _forward_output(output, project_root, start_sha=start_sha_for_forward, snapshot_path=snapshot_path_for_forward)
 
 

@@ -46,8 +46,6 @@ Public API:
     write_initial_status(worktree_path, slug, title, ts, parent_branch, branch) -> Path
         Render + write ``status.md`` at worktree root; stage + commit on task branch;
         return the absolute path of the written file.
-    write_wiki_active_task_md(wiki_path, slug, title, ts) -> None
-        Create `wiki/active/<slug>/task.md`; commit+push in wiki.
     recreate_active_junction(slug, hub_root, container_path) -> None
         Delete-then-create the ``.active`` junction so it points at the correct
         active-task directory. Used by ``mill-claim``; ``mill-spawn`` handles
@@ -680,7 +678,7 @@ def write_initial_status(
     branch: str,
 ) -> Path:
     """
-    Render + write ``task/status.md`` at worktree root; create ``task/`` directory if absent.
+    Render + write ``_mill/status.md`` at worktree root; create ``_mill/`` directory if absent.
 
     Uses ``_status.render_initial`` to produce the file body, writes the
     file to ``worktree_path / "status.md"``, stages and commits on the task
@@ -715,15 +713,15 @@ def write_initial_status(
         slug=slug,
         branch=branch,
     )
-    status_abs = worktree_path / "task" / "status.md"
+    status_abs = worktree_path / "_mill" / "status.md"
     status_abs.parent.mkdir(parents=True, exist_ok=True)
     status_abs.write_text(status_text, encoding="utf-8")
     result = _subprocess_util.run(
-        ["git", "-C", str(worktree_path), "add", "task/status.md"],
+        ["git", "-C", str(worktree_path), "add", "_mill/status.md"],
     )
     if result.returncode != 0:
         raise RuntimeError(
-            f"git add task/status.md failed: {result.stderr.strip()!r}"
+            f"git add _mill/status.md failed: {result.stderr.strip()!r}"
         )
     result = _subprocess_util.run(
         ["git", "-C", str(worktree_path), "commit", "-m", f"spawn: init status for {slug}"],
@@ -740,27 +738,6 @@ def write_initial_status(
             f"git push --set-upstream origin {branch} failed: {result.stderr.strip()!r}"
         )
     return status_abs
-
-
-def write_wiki_active_task_md(
-    wiki_path: Path,
-    slug: str,
-    title: str,
-    ts: str,
-) -> None:
-    """Create ``wiki/active/<slug>/task.md``; commit+push in wiki."""
-    active_dir = wiki_path / "active" / slug
-    active_dir.mkdir(parents=True, exist_ok=True)
-    (active_dir / "task.md").write_text(
-        f"# Task: {title}\n\n```yaml\nslug: {slug}\ntitle: {title}\ncreated_at: {ts}\n```\n",
-        encoding="utf-8",
-    )
-    _wiki.write_commit_push(
-        wiki_path,
-        [f"active/{slug}/task.md"],
-        f"task: create active dir for {slug}",
-        slug=slug,
-    )
 
 
 def recreate_active_junction(

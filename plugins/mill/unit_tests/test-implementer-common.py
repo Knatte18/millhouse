@@ -56,7 +56,7 @@ def main() -> int:
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         base_sha = _setup_fixture(project_root)
-        snapshot_path = project_root / "task" / ".cleanliness-snapshot-test.txt"
+        snapshot_path = project_root / "_mill" / ".cleanliness-snapshot-test.txt"
         _cleanliness.capture_snapshot(project_root, snapshot_path)
         subprocess.run(
             ["git", "-C", str(project_root), "commit", "--allow-empty", "-m", "second"],
@@ -88,7 +88,7 @@ def main() -> int:
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         base_sha = _setup_fixture(project_root)
-        snapshot_path = project_root / "task" / ".cleanliness-snapshot-test.txt"
+        snapshot_path = project_root / "_mill" / ".cleanliness-snapshot-test.txt"
         _cleanliness.capture_snapshot(project_root, snapshot_path)
         # NO new commit — HEAD == start_sha
         rc, captured = _capture_stdout(
@@ -112,7 +112,7 @@ def main() -> int:
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         base_sha = _setup_fixture(project_root)
-        snapshot_path = project_root / "task" / ".cleanliness-snapshot-test.txt"
+        snapshot_path = project_root / "_mill" / ".cleanliness-snapshot-test.txt"
         _cleanliness.capture_snapshot(project_root, snapshot_path)
         # New commit so HEAD != start_sha
         subprocess.run(
@@ -142,7 +142,7 @@ def main() -> int:
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         base_sha = _setup_fixture(project_root)
-        snapshot_path = project_root / "task" / ".cleanliness-snapshot-test.txt"
+        snapshot_path = project_root / "_mill" / ".cleanliness-snapshot-test.txt"
         # Dirty README.md before snapshot — simulates pre-existing worktree dirt from a prior batch
         (project_root / "README.md").write_text("pre-existing dirty", encoding="utf-8")
         _cleanliness.capture_snapshot(project_root, snapshot_path)
@@ -179,7 +179,7 @@ def main() -> int:
         project_root = Path(tmpdir)
         base_sha = _setup_fixture(project_root)
         # SKIP capture_snapshot — snapshot file does not exist
-        snapshot_path = project_root / "task" / ".cleanliness-snapshot-nonexistent.txt"
+        snapshot_path = project_root / "_mill" / ".cleanliness-snapshot-nonexistent.txt"
         subprocess.run(
             ["git", "-C", str(project_root), "commit", "--allow-empty", "-m", "second"],
             check=True, capture_output=True,

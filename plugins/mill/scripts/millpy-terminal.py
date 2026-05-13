@@ -79,13 +79,13 @@ def main(argv: list[str] | None = None) -> int:
 
     if len(active) == 1:
         path, slug, title = active[0]
-        print(f"Auto-selecting: {slug} — {title}", file=sys.stderr)
+        print(f"Auto-selecting: {slug} -- {title}", file=sys.stderr)
         selected_path = path
         selected_slug = slug
     else:
         print("Active worktrees:", file=sys.stderr)
         for i, (path, slug, title) in enumerate(active, start=1):
-            label = f"{slug} — {title}" if title else slug
+            label = f"{slug} -- {title}" if title else slug
             print(f"  {i}) {label}", file=sys.stderr)
         try:
             raw = input(f"Select worktree (1-{len(active)}): ").strip()
