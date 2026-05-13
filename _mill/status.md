@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planning
+phase: plan-fix-r1
 slug: subprocess-fixes
 branch: hanf/subprocess-fixes
 plan: _mill/plan
@@ -18,4 +18,6 @@ discussing  '2026-05-13T07:56:36Z'
 discussion-fix-r2  '2026-05-13T08:12:35Z'
 discussed  '2026-05-13T08:13:00Z'
 planning  '2026-05-13T08:17:11Z'
+plan-review-r1  '2026-05-13T08:24:45Z'
+plan-fix-r1  '2026-05-13T08:24:45Z'
 ```

@@ -18,12 +18,12 @@ batches:
     name: subprocess-util-windows-fixes
     file: 01-subprocess-util-windows-fixes.md
     depends-on: []
-    verify: python plugins/mill/unit_tests/test-subprocess-util.py
+    verify: python plugins/mill/unit_tests/test-subprocess-util.py && python plugins/mill/integration_tests/test-subprocess-tree-kill.py
   - number: 2
     name: millpy-bg-start-sentinel
     file: 02-millpy-bg-start-sentinel.md
     depends-on: [1]
-    verify: python plugins/mill/unit_tests/test-millpy-bg.py
+    verify: python plugins/mill/unit_tests/test-millpy-bg.py && python plugins/mill/integration_tests/test-millpy-bg-detached.py
   - number: 3
     name: session-id-propagation
     file: 03-session-id-propagation.md
@@ -57,10 +57,10 @@ batches:
 - **Rationale:** Red-then-green proves the test would have caught the regression. A test added alongside the fix without a red-state assertion is a coverage afterthought, not a regression guard.
 - **Applies to:** batch 1 (card 1, card 3), batch 2 (card 5, card 6).
 
-### Decision: Integration tests are local-dev-only
+### Decision: Integration tests are Windows-only and chained into `verify:`
 
-- **Decision:** New files under `plugins/mill/integration_tests/` are Windows-only and not invoked by any `verify:` command in this plan. They open with a clear `if os.name != "nt": print("SKIP: …"); sys.exit(0)` guard. The `verify:` commands on each batch run only the unit-test suite for that batch's module. The integration tests are exercised manually by the operator (or by a future CI Windows runner that is out of scope for this task).
-- **Rationale:** The existing `integration_tests/` directory is documented as local-dev only (see `test-spawn.py` header). Auto-running them in CI is a separate, larger workstream — not load-bearing for this task's regression fixes.
+- **Decision:** New files under `plugins/mill/integration_tests/` are Windows-only and ARE chained into their batch's `verify:` command via `&&`. They open with a clear `if os.name != "nt": print("SKIP <name>: Windows-only"); sys.exit(0)` guard. On POSIX they exit 0 immediately (no-op chain link); on Windows they execute end-to-end. This closes the regression-coverage gap for Windows operators running `verify:` locally while keeping POSIX CI runs fast. `verify:` is a single shell command; the chain syntax `cmd-a && cmd-b` is portable across cmd.exe, PowerShell, and bash.
+- **Rationale:** Excluding the integration tests from `verify:` was rejected on review as creating a regression-coverage gap. The skip-guard pattern (`if os.name != "nt": sys.exit(0)`) gives us automatic POSIX no-op behaviour, so the only cost on POSIX is a Python interpreter spin-up. On Windows, the tests are the only place the cross-process kill-tree and cross-job detach are exercised end-to-end; running them as part of `verify:` is what we want.
 - **Applies to:** batch 1, batch 2.
 
 ### Decision: Shared `_subprocess_util` module constant — `_GRACE_SECONDS`
