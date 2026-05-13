@@ -10,6 +10,10 @@ Launcher mode (default):
     that log file, and prints:
         pid=<N> log=<path>
 
+    (On Windows the pid is the cmd-shim launcher PID, which exits
+    almost immediately after dispatching the worker; the authoritative
+    worker PID is logged inside the file as [mill-bg] WORKER PID=...)
+
 Worker mode (internal — spawned by launcher):
     millpy-bg.py --_worker --log <abs-path> -- <cmd> [args...]
 
@@ -140,6 +144,9 @@ def _launcher_main(args: list[str]) -> int:
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
+    # NOTE: on Windows (after the two-stage cmd /c start /B launch) proc.pid is
+    # the cmd-shim PID, which exits almost immediately. The authoritative worker
+    # PID is inside the log file as [mill-bg] WORKER PID=... sentinel.
     print(f"pid={proc.pid} log={log_path}")
     return 0
 
