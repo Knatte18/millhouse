@@ -81,6 +81,27 @@ On a fresh run only (no `## Batches` section in status.md):
 
 For each batch in `order`:
 
+### 0. Wiki health-check
+
+Before launching the implementer / reviewer for this batch, verify the wiki is intact. If the check fails, release the builder lock and halt — the wiki disappeared mid-run and the implementer's downstream "Missing config" error would mask the root cause.
+
+```bash
+PYTHONPATH="${PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
+import sys
+import _paths, _wiki
+wiki_path = _paths.resolve_wiki_path(_paths.resolve_git_root())
+try:
+    _wiki.health_check(wiki_path)
+except _wiki.WikiHealthError as e:
+    print(f'[mill-go] wiki health check failed: {e}', file=sys.stderr)
+    raise SystemExit(1)
+" || {
+    PYTHONPATH="${PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${PLUGIN_ROOT}/scripts/millpy-builder-lock.py" release
+    echo "[mill-go] HALT: wiki appears missing or corrupted — re-run mill-setup to restore it" >&2
+    exit 1
+}
+```
+
 ### 1. Implement
 
 Background via millpy-bg:
@@ -235,6 +256,27 @@ When mill-go's Entry-step 5 phase gate routes here (phase is `implementing`, `re
 `max_holistic_rounds = cfg.get("roles", {}).get("code-review", {}).get("holistic", {}).get("rounds", 1)`. Loop variable `H` starts at 1. `extra_files = []`.
 
 For each round `H` from 1 to `max_holistic_rounds`:
+
+0. Wiki health-check
+
+   Before launching the implementer / reviewer for this batch, verify the wiki is intact. If the check fails, release the builder lock and halt — the wiki disappeared mid-run and the implementer's downstream "Missing config" error would mask the root cause.
+
+   ```bash
+   PYTHONPATH="${PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
+   import sys
+   import _paths, _wiki
+   wiki_path = _paths.resolve_wiki_path(_paths.resolve_git_root())
+   try:
+       _wiki.health_check(wiki_path)
+   except _wiki.WikiHealthError as e:
+       print(f'[mill-go] wiki health check failed: {e}', file=sys.stderr)
+       raise SystemExit(1)
+   " || {
+       PYTHONPATH="${PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${PLUGIN_ROOT}/scripts/millpy-builder-lock.py" release
+       echo "[mill-go] HALT: wiki appears missing or corrupted — re-run mill-setup to restore it" >&2
+       exit 1
+   }
+   ```
 
 1. **Crash-recovery.** Scan `reviews/` for a file matching `*-code-review-r{H}.md` (holistic code review files have format `{ts}-code-review-r{N}.md` — no batch-name segment, no `-holistic-` substring; per-batch files embed `{batch_name}` so the glob never collides). If found, skip the CLI and use that file's verdict directly.
 

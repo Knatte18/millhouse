@@ -193,6 +193,180 @@ def test_token_scope_filter_with_slug() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Junction idempotency: skip on correct target
+# ---------------------------------------------------------------------------
+
+
+def test_junction_idempotent_skip_on_correct_target() -> None:
+    """Second call with existing correct junctions returns empty junctions list.
+
+    Uses _FULL_CFG with SLUG present so both .wiki and .portals are created on
+    the first call. The second call detects they already point at the correct
+    targets and silently skips them.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        container = Path(tmp) / "container"
+        wiki_path = container / "wiki"
+        target_root = container / "wts" / "my-task"
+
+        _make_minimal_wiki(wiki_path, _FULL_CFG)
+        (wiki_path / "active" / "my-task").mkdir(parents=True)
+        target_root.mkdir(parents=True)
+
+        tokens = {
+            "HUB_PATH": str(target_root),
+            "CWD_PATH": str(target_root),
+            "CONTAINER_PATH": str(container),
+            "WIKI_PATH": str(wiki_path),
+            "REPO": "my-repo",
+            "SLUG": "my-task",
+        }
+
+        result1 = create_hub_links(target_root, wiki_path, tokens)
+        if len(result1["junctions"]) != 2:
+            raise AssertionError(
+                f"first call: expected 2 junctions, got {result1['junctions']}"
+            )
+
+        result2 = create_hub_links(target_root, wiki_path, tokens)
+        if result2["junctions"] != []:
+            raise AssertionError(
+                f"second call: expected [] junctions (idempotent skip), got {result2['junctions']}"
+            )
+
+        # .wiki still traverses to wiki_path.
+        probe_wiki = wiki_path / "wiki-probe-idempotent.txt"
+        probe_wiki.write_text("wiki-ok", encoding="utf-8")
+        via_wiki = target_root / ".wiki" / "wiki-probe-idempotent.txt"
+        if not via_wiki.exists() or via_wiki.read_text(encoding="utf-8") != "wiki-ok":
+            raise AssertionError(".wiki junction no longer traverses to wiki_path after idempotent run")
+        probe_wiki.unlink()
+
+        # .portals still traverses to wiki/active/my-task/.
+        probe_portals = wiki_path / "active" / "my-task" / "portals-probe-idempotent.txt"
+        probe_portals.write_text("portals-ok", encoding="utf-8")
+        via_portals = target_root / ".portals" / "portals-probe-idempotent.txt"
+        if not via_portals.exists() or via_portals.read_text(encoding="utf-8") != "portals-ok":
+            raise AssertionError(".portals junction no longer traverses to wiki/active/my-task/ after idempotent run")
+        probe_portals.unlink()
+
+    print("PASS: junction idempotent skip — second call returns [] junctions, existing junctions preserved")
+
+
+# ---------------------------------------------------------------------------
+# Junction idempotency: recreate on drift
+# ---------------------------------------------------------------------------
+
+
+def test_junction_recreated_on_wrong_target() -> None:
+    """A junction pointing at the wrong target is removed and recreated.
+
+    Pre-creates .wiki pointing at wiki_b/ (wrong). Configures WIKI_PATH = wiki_a/.
+    After create_hub_links, .wiki must point at wiki_a/ and wiki_b/ must survive.
+    result["junctions"] must include .wiki (drift counts as created).
+    """
+    import _junction as junction_mod
+
+    with tempfile.TemporaryDirectory() as tmp:
+        container = Path(tmp) / "container"
+        wiki_a = container / "wiki_a"
+        wiki_b = container / "wiki_b"
+        target_root = container / "wts" / "my-repo"
+
+        _make_minimal_wiki(wiki_a, _FULL_CFG)
+        wiki_b.mkdir(parents=True)
+        (wiki_b / "config.yaml").write_text("junctions: {}\nhardlinks: {}\n", encoding="utf-8")
+        (wiki_b / "sentinel.txt").write_text("wiki-b-content", encoding="utf-8")
+        target_root.mkdir(parents=True)
+
+        junction_mod.create(target=wiki_b, link_path=target_root / ".wiki")
+
+        tokens = {
+            "HUB_PATH": str(target_root),
+            "CWD_PATH": str(target_root),
+            "CONTAINER_PATH": str(container),
+            "WIKI_PATH": str(wiki_a),
+            "REPO": "my-repo",
+        }
+
+        result = create_hub_links(target_root, wiki_a, tokens)
+
+        # .wiki must now resolve to wiki_a.
+        probe_a = wiki_a / "drift-probe.txt"
+        probe_a.write_text("wiki-a-content", encoding="utf-8")
+        via_wiki = target_root / ".wiki" / "drift-probe.txt"
+        if not via_wiki.exists() or via_wiki.read_text(encoding="utf-8") != "wiki-a-content":
+            raise AssertionError(".wiki junction does not point at wiki_a after drift recreate")
+        probe_a.unlink()
+
+        # wiki_b/ must still exist as a real directory.
+        if not wiki_b.is_dir():
+            raise AssertionError(
+                "wiki_b/ should still exist after junction drift recreate (only the junction was removed)"
+            )
+
+        # result["junctions"] must include .wiki (drift recreate appends).
+        wiki_link = target_root / ".wiki"
+        if wiki_link not in result["junctions"]:
+            raise AssertionError(
+                f".wiki should be in result['junctions'] after drift recreate, got {result['junctions']}"
+            )
+
+    print("PASS: junction recreated on wrong target — .wiki redirected to wiki_a, wiki_b/ survives")
+
+
+# ---------------------------------------------------------------------------
+# Junction idempotency: refuse on real directory
+# ---------------------------------------------------------------------------
+
+
+def test_junction_refuses_to_replace_real_directory() -> None:
+    """create_hub_links raises ValueError when a real directory sits at link_path.
+
+    Pre-creates target_root/.wiki as a REAL directory with a sentinel file.
+    create_hub_links must propagate _junction.remove's ValueError rather than
+    silently deleting the directory.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        container = Path(tmp) / "container"
+        wiki_path = container / "wiki"
+        target_root = container / "wts" / "my-repo"
+
+        _make_minimal_wiki(wiki_path, _FULL_CFG)
+        target_root.mkdir(parents=True)
+
+        real_wiki_dir = target_root / ".wiki"
+        real_wiki_dir.mkdir()
+        sentinel = real_wiki_dir / "sentinel.txt"
+        sentinel.write_text("do-not-delete", encoding="utf-8")
+
+        tokens = {
+            "HUB_PATH": str(target_root),
+            "CWD_PATH": str(target_root),
+            "CONTAINER_PATH": str(container),
+            "WIKI_PATH": str(wiki_path),
+            "REPO": "my-repo",
+        }
+
+        try:
+            create_hub_links(target_root, wiki_path, tokens)
+        except ValueError as exc:
+            if "is not a junction or symlink" not in str(exc):
+                raise AssertionError(
+                    f"ValueError message should contain 'is not a junction or symlink', got: {exc!r}"
+                )
+        else:
+            raise AssertionError("expected ValueError when a real directory is at link_path")
+
+        if not real_wiki_dir.is_dir():
+            raise AssertionError("real .wiki directory was deleted — should have been refused")
+        if not sentinel.exists() or sentinel.read_text(encoding="utf-8") != "do-not-delete":
+            raise AssertionError("sentinel file inside real .wiki directory was modified")
+
+    print("PASS: create_hub_links raises ValueError on real directory at link_path; directory preserved")
+
+
+# ---------------------------------------------------------------------------
 # Hardlink inode skip (idempotent re-run)
 # ---------------------------------------------------------------------------
 
@@ -575,6 +749,9 @@ def main() -> int:
     tests = [
         test_token_scope_filter_no_slug,
         test_token_scope_filter_with_slug,
+        test_junction_idempotent_skip_on_correct_target,
+        test_junction_recreated_on_wrong_target,
+        test_junction_refuses_to_replace_real_directory,
         test_hardlink_inode_skip_idempotent,
         test_hardlink_inode_mismatch_backup_and_recreate,
         test_all_entries_filtered_return_empty_lists,

@@ -371,6 +371,53 @@ def main() -> int:
     except Exception as exc:
         fail("clone_or_init: reachability failure from ls-remote", exc)
 
+    # --- (g) health_check passes when config.yaml present ---
+    try:
+        with tempfile.TemporaryDirectory() as tmp_str:
+            wiki = Path(tmp_str)
+            (wiki / "config.yaml").write_text("repo: test\n", encoding="utf-8")
+            result = _wiki.health_check(wiki)
+            assert result is None, f"health_check must return None, got {result!r}"
+        ok("health_check: returns None when config.yaml present")
+    except Exception as exc:
+        fail("health_check: returns None when config.yaml present", exc)
+
+    # --- (h) health_check raises when config.yaml missing ---
+    try:
+        with tempfile.TemporaryDirectory() as tmp_str:
+            wiki = Path(tmp_str)
+            raised = False
+            try:
+                _wiki.health_check(wiki)
+            except _wiki.WikiHealthError as whe:
+                raised = True
+                assert str(wiki / "config.yaml") in str(whe), \
+                    f"config path missing from message: {whe}"
+            if not raised:
+                raise AssertionError("health_check did not raise for missing config.yaml")
+        ok("health_check: raises when config.yaml missing")
+    except Exception as exc:
+        fail("health_check: raises when config.yaml missing", exc)
+
+    # --- (i) health_check raises when wiki dir missing ---
+    try:
+        with tempfile.TemporaryDirectory() as tmp_str:
+            nonexistent = Path(tmp_str) / "nonexistent-wiki"
+            raised = False
+            try:
+                _wiki.health_check(nonexistent)
+            except _wiki.WikiHealthError as whe:
+                raised = True
+                assert str(nonexistent) in str(whe), \
+                    f"wiki path missing from message: {whe}"
+                assert whe.wiki_path == nonexistent, \
+                    f"wiki_path attribute mismatch: {whe.wiki_path!r} != {nonexistent!r}"
+            if not raised:
+                raise AssertionError("health_check did not raise for missing wiki dir")
+        ok("health_check: raises when wiki dir missing")
+    except Exception as exc:
+        fail("health_check: raises when wiki dir missing", exc)
+
     print(f"\n{passed} passed, {failed} failed.")
     return 0 if failed == 0 else 1
 
