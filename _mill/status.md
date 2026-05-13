@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-millpy-bg-start-sentinel
+phase: holistic-reviewing
 slug: subprocess-fixes
 branch: hanf/subprocess-fixes
 plan: _mill/plan
@@ -26,6 +26,7 @@ implementing  '2026-05-13T08:40:20Z'
 approved-subprocess-util-windows-fixes  '2026-05-13T13:28:56Z'
 approved-session-id-propagation  '2026-05-13T13:32:57Z'
 approved-millpy-bg-start-sentinel  '2026-05-13T13:49:33Z'
+holistic-reviewing  '2026-05-13T13:49:49Z'
 ```
 
 ## Batches
