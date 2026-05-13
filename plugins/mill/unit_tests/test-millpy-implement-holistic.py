@@ -128,6 +128,7 @@ class TestMillpyImplementHolistic(unittest.TestCase):
         self.mock_load_config = _p(
             millpy_implement_holistic._review_common, "load_config",
             return_value={
+                "paths": {"status_md": "_mill/status.md"},
                 "roles": {"implementer": {"self_fix_rounds": 2}},
                 "llm": {"implementer_timeout": 1800},
             },
