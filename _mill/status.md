@@ -1,10 +1,10 @@
 # Status
 
 ```yaml
-phase: discussed
+phase: planning
 slug: subprocess-fixes
 branch: hanf/subprocess-fixes
-plan: null
+plan: _mill/plan
 parent: main
 task: '(A) — Subprocess handling: timeout + JSON-exit + Windows detach'
 task_description: |
@@ -17,4 +17,5 @@ task_description: |
 discussing  '2026-05-13T07:56:36Z'
 discussion-fix-r2  '2026-05-13T08:12:35Z'
 discussed  '2026-05-13T08:13:00Z'
+planning  '2026-05-13T08:17:11Z'
 ```
