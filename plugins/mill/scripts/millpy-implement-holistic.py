@@ -74,7 +74,7 @@ def main(argv=None) -> int:
         print(str(e), file=sys.stderr)
         return 1
 
-    status_path = _paths.resolve_task_path(project_root, "_mill/status.md")
+    status_path = _paths.status_path(project_root, cfg)
     full = _status.read_full(status_path)
     task_title = full["yaml"].get("task", slug)
     branch = _status.read_branch(status_path, cfg=cfg, slug=slug)

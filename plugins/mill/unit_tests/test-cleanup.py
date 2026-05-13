@@ -398,7 +398,7 @@ def main() -> int:
                                         to_reset_home=[],
                                         to_report=[],
                                     )
-                                    apply_plan(plan, wiki_path, hub_root, {})
+                                    apply_plan(plan, wiki_path, hub_root, {}, cfg={"paths": {"status_md": "_mill/status.md"}})
 
             worktree_remove_calls = [
                 c for c in run_calls if "worktree" in c and "remove" in c
@@ -467,7 +467,7 @@ def main() -> int:
                                             to_reset_home=[],
                                             to_report=[],
                                         )
-                                        apply_plan(plan, wiki_path, hub_root, {})
+                                        apply_plan(plan, wiki_path, hub_root, {}, cfg={"paths": {"status_md": "_mill/status.md"}})
 
             portal_removal = [p for p in junction_remove_calls if "portals" in str(p) and "my-task" in str(p)]
             assert len(portal_removal) == 1, (
@@ -509,7 +509,7 @@ def main() -> int:
                                             to_reset_home=[],
                                             to_report=[],
                                         )
-                                        apply_plan(plan, wiki_path, hub_root, {})
+                                        apply_plan(plan, wiki_path, hub_root, {}, cfg={"paths": {"status_md": "_mill/status.md"}})
 
             print("PASS apply_plan — fresh layout: apply succeeds, worktree handled by _worktree.remove")
 
@@ -569,7 +569,7 @@ def main() -> int:
                 patch("mill_cleanup._sidebar.regenerate"),
                 patch("mill_cleanup._paths.resolve_container_path", return_value=tmp / "container"),
             ):
-                apply_plan(plan_stale, wiki_path, hub_root, {})
+                apply_plan(plan_stale, wiki_path, hub_root, {}, cfg={"paths": {"status_md": "_mill/status.md"}})
 
             assert mock_prompt.called, (
                 "Expected _inplace.prompt_stale_worktree to be called by "
@@ -642,7 +642,7 @@ def main() -> int:
             junction_remove_calls_a: list = []
             with patch("os.path.lexists", return_value=False):
                 with patch("mill_cleanup._junction.remove", side_effect=junction_remove_calls_a.append):
-                    apply_plan(plan_da, wiki_path_da, hub_root_da, {})
+                    apply_plan(plan_da, wiki_path_da, hub_root_da, {}, cfg={"paths": {"status_md": "_mill/status.md"}})
 
             active_link_a = hub_root_da / ".active"
             assert not any(p == active_link_a for p in junction_remove_calls_a), (
@@ -664,7 +664,7 @@ def main() -> int:
             with patch("os.path.lexists", return_value=True):
                 with patch.object(Path, "is_dir", return_value=False):
                     with patch("mill_cleanup._junction.remove", side_effect=junction_remove_calls_b.append):
-                        apply_plan(plan_db, wiki_path_db, hub_root_db, {})
+                        apply_plan(plan_db, wiki_path_db, hub_root_db, {}, cfg={"paths": {"status_md": "_mill/status.md"}})
 
             active_link_b = hub_root_db / ".active"
             assert any(p == active_link_b for p in junction_remove_calls_b), (
@@ -711,7 +711,7 @@ def main() -> int:
             with patch("mill_cleanup._subprocess_util.run", side_effect=_fake_run_ip):
                 with patch("mill_cleanup._junction.remove"):
                     with patch("mill_cleanup._paths.resolve_container_path", return_value=tmp / "container"):
-                        mod._apply_inplace_record(record_ip, hub_root_ip, task_branch="impl/my-task")
+                        mod._apply_inplace_record(record_ip, hub_root_ip, task_branch="impl/my-task", cfg={"paths": {"status_md": "_mill/status.md"}})
 
             # read_parent_branch must resolve to _mill/status.md (feature-branch, not stale-branch)
             checkout_calls_ip = [args for args in git_calls_ip if "checkout" in args]
@@ -785,7 +785,7 @@ def main() -> int:
                 patch("mill_cleanup._sidebar.regenerate"),
                 patch("mill_cleanup._paths.resolve_container_path", return_value=tmp / "container"),
             ):
-                apply_plan(plan_pr_merged, wiki_path_pr, hub_root_pr, {})
+                apply_plan(plan_pr_merged, wiki_path_pr, hub_root_pr, {}, cfg={"paths": {"status_md": "_mill/status.md"}})
 
             tag_create_calls = [
                 c for c in run_calls_18a
@@ -859,7 +859,7 @@ def main() -> int:
                 patch("mill_cleanup._sidebar.regenerate"),
                 patch("mill_cleanup._paths.resolve_container_path", return_value=tmp / "container"),
             ):
-                apply_plan(plan_pr_open, wiki_path_po, hub_root_po, {})
+                apply_plan(plan_pr_open, wiki_path_po, hub_root_po, {}, cfg={"paths": {"status_md": "_mill/status.md"}})
 
             tag_calls_18b = [c for c in run_calls_18b if "tag" in c]
             assert tag_calls_18b == [], f"Expected no tag calls for OPEN, got: {tag_calls_18b}"
@@ -930,7 +930,7 @@ def main() -> int:
                 patch("mill_cleanup._paths.resolve_container_path", return_value=tmp / "container"),
             ):
                 with contextlib.redirect_stderr(stderr_18c):
-                    apply_plan(plan_pr_closed, wiki_path_pc, hub_root_pc, {})
+                    apply_plan(plan_pr_closed, wiki_path_pc, hub_root_pc, {}, cfg={"paths": {"status_md": "_mill/status.md"}})
 
             tag_calls_18c = [c for c in run_calls_18c if "tag" in c]
             assert tag_calls_18c == [], f"Expected no tag calls for CLOSED, got: {tag_calls_18c}"
@@ -1004,7 +1004,7 @@ def main() -> int:
                 patch("mill_cleanup._paths.resolve_container_path", return_value=tmp / "container"),
             ):
                 with contextlib.redirect_stderr(stderr_18d):
-                    apply_plan(plan_pr_failed, wiki_path_pf, hub_root_pf, {})
+                    apply_plan(plan_pr_failed, wiki_path_pf, hub_root_pf, {}, cfg={"paths": {"status_md": "_mill/status.md"}})
 
             tag_calls_18d = [c for c in run_calls_18d if "tag" in c]
             assert tag_calls_18d == [], f"Expected no tag calls on gh failure, got: {tag_calls_18d}"
