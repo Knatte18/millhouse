@@ -173,7 +173,7 @@ def main(argv=None) -> int:
         print(str(e), file=sys.stderr)
         return 1
 
-    return _forward_output(output, project_root)
+    return _forward_output(output, project_root, session_id=session_id)
 
 
 if __name__ == "__main__":
