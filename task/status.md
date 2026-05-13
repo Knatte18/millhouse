@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-skills-and-docs
+phase: holistic-reviewing
 blocked_reason: 'auto: discussion review gaps unresolved after 2 rounds'
 slug: mill-fold
 branch: hanf/mill-fold
@@ -26,6 +26,7 @@ implementing  '2026-05-13T06:37:47Z'
 approved-helpers  '2026-05-13T06:50:49Z'
 approved-cli-script  '2026-05-13T07:13:03Z'
 approved-skills-and-docs  '2026-05-13T07:17:11Z'
+holistic-reviewing  '2026-05-13T07:17:25Z'
 ```
 
 ## Batches
