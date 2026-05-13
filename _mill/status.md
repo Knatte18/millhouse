@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-approved
+phase: done
 slug: safe-rmtree
 branch: hanf/safe-rmtree
 plan: _mill/plan
@@ -33,6 +33,7 @@ approved-safe-rmtree-helper  '2026-05-13T13:42:41Z'
 approved-migrations-and-gate  '2026-05-13T14:00:04Z'
 holistic-reviewing  '2026-05-13T14:00:18Z'
 holistic-approved  '2026-05-13T14:03:38Z'
+done  '2026-05-13T14:03:48Z'
 ```
 
 ## Batches
