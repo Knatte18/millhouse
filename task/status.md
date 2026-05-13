@@ -38,7 +38,9 @@ batches:
     start_sha: 833344d7a9b633fee61dedb3e999b650aea66732
     commit_sha: cd1d80abe0b5d19c9f07a28f15d8f60106f18c44
   - name: setup-junction-idempotency
-    state: pending
+    state: running
+    implementer_session: 56c5e193-aa26-44c0-bb2b-f1ff6ae7284e
+    start_sha: 6fc7c95652d4f95d7ffe86958fbe54820e4a741d
     blocked_reason: ''
   - name: status-blocked-reason-cleanup
     state: pending
