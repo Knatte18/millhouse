@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-safe-rmtree-helper
 slug: safe-rmtree
 branch: hanf/safe-rmtree
 plan: _mill/plan
@@ -29,6 +29,7 @@ plan-fix-r4  '2026-05-13T08:34:38Z'
 plan-fix-r5  '2026-05-13T13:20:28Z'
 planned  '2026-05-13T13:20:53Z'
 implementing  '2026-05-13T13:26:03Z'
+approved-safe-rmtree-helper  '2026-05-13T13:42:41Z'
 ```
 
 ## Batches
@@ -36,7 +37,7 @@ implementing  '2026-05-13T13:26:03Z'
 ```yaml
 batches:
   - name: safe-rmtree-helper
-    state: running
+    state: approved
     implementer_session: 86c52a51-f855-462d-819f-c535ee7ae31c
     start_sha: 6f7d290fb3325e3ef51d88f8fbdf3e0a3a98812e
   - name: migrations-and-gate
