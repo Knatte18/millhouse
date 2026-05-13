@@ -38,6 +38,7 @@ from typing import Optional
 import yaml
 
 import _junction
+import _paths
 import _setup
 import _spawn_core
 import _tasks_md
@@ -162,7 +163,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"[DryRun] Task:     {picked.title} [{slug}]")
         print(f"[DryRun] Branch:   {branch_name}")
         print(f"[DryRun] Worktree: {worktree_path}")
-        print(f"[DryRun] Status:   {worktree_path / '_mill' / 'status.md'}")
+        print(f"[DryRun] Status:   {_paths.status_path(worktree_path, cfg)}")
         return 0
 
     # Claim the task under the wiki lock. Multi mode already claimed inside
@@ -244,6 +245,7 @@ def main(argv: list[str] | None = None) -> int:
         ts=ts,
         parent_branch=parent_branch,
         branch=branch_name,
+        cfg=cfg,
     )
 
     print(f"Worktree: {worktree_path}")

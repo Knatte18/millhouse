@@ -92,6 +92,7 @@ def _make_trampoline(tmp: Path, slug: str | None = "test-task") -> Path:
         "        if fb.exists(): return fb\n"
         "    return t\n"
         "pm.resolve_task_path = _rtp\n"
+        "pm.status_path = lambda wt, cfg: wt / '_mill' / 'status.md'\n"
         "sys.modules['_paths'] = pm\n"
         "\n"
         + marker_block +

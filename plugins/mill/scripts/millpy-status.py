@@ -46,7 +46,7 @@ def _build_rows(git_root: Path) -> list[dict]:
     # Read status for each active worktree
     status_data: dict[str, dict | None] = {}
     for slug, wt_path in active_worktree_paths.items():
-        sp = wt_path / "status.md"
+        sp = _paths.status_path(wt_path, cfg)
         try:
             status_data[slug] = _status.read_status(sp)
         except ValueError:

@@ -140,6 +140,7 @@ def _make_fixture(tmp_path: Path) -> tuple[Path, Path, Path, dict]:
             "discussion_file": "discussion.md",
             "plan_dir":        "plan/",
             "reviews_dir":     "reviews/",
+            "status_md":       "_mill/status.md",
         },
         "llm": {
             "bulk_timeout":     None,
@@ -821,7 +822,8 @@ def main() -> int:
                 ["git", "-C", str(project_root), "commit", "-m", "small change"],
                 check=True, capture_output=True,
             )
-            (project_root / "status.md").write_text(
+            (project_root / "_mill").mkdir(exist_ok=True)
+            (project_root / "_mill" / "status.md").write_text(
                 "# Status\n\n"
                 "```yaml\n"
                 f"phase: coding\nslug: {SLUG}\nbranch: {SLUG}\n"
