@@ -1,0 +1,18 @@
+# Status
+
+```yaml
+phase: discussing
+slug: bench-gemini-single-reviewers
+branch: hanf/bench-gemini-single-reviewers
+plan: null
+parent: main
+task: (A) — Benchmark Gemini single-reviewers vs sonnetmax baseline
+task_description: |
+  (A) — Benchmark Gemini single-reviewers vs sonnetmax baseline
+```
+
+## Timeline
+
+```text
+discussing  '2026-05-13T14:24:04Z'
+```
