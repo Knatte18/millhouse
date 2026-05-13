@@ -55,6 +55,9 @@ _HEADING_RE = re.compile(
 
 _VALID_PHASES = (None, "s", "active", "ready-to-merge", "pr-pending", "done", "abandoned")
 
+# Phases whose Home.md entries refuse fold operations (plan is frozen post-spawn).
+LOCKED_FOLD_PHASES: tuple[str, ...] = ("active", "ready-to-merge", "pr-pending")
+
 
 @dataclass(frozen=True)
 class Task:
@@ -268,3 +271,66 @@ def remove_entry(text: str, slug: str) -> str:
     result = text[:delete_start] + text[delete_end:]
     stripped = result.rstrip()
     return (stripped + "\n") if stripped else "\n"
+
+
+def append_to_body(text: str, slug: str, line: str) -> str:
+    """
+    Return ``text`` with ``line`` appended to the body of the task entry for ``slug``.
+
+    Uses ``_HEADING_RE`` to locate the heading for ``slug``, then walks forward
+    to either the next ``##`` heading or end-of-file to isolate the body region.
+    Strips trailing blank lines from the existing body, appends ``line`` ensuring
+    exactly one ``\\n`` separates it from the prior body text, and re-emits exactly
+    one trailing blank line before the next ``##`` heading (or a single trailing
+    newline at EOF).
+
+    When the body of the target entry is empty (heading + slug line only, no body
+    text), inserts a blank line between the slug-line and the new bullet so the
+    bullet does not visually attach to the slug.
+
+    Args:
+        text: Full contents of Home.md.
+        slug: Task slug whose body should be extended.
+        line: The line to append to the body (e.g. ``"- Sources: #99 — example"``).
+
+    Returns:
+        The updated text with ``line`` appended to the matching entry's body.
+
+    Raises:
+        ValueError: No heading with that slug exists in ``text`` (same message
+            shape as ``remove_entry``).
+    """
+    matches = list(_HEADING_RE.finditer(text))
+    target_index = None
+    for i, m in enumerate(matches):
+        if m.group("slug") == slug:
+            target_index = i
+            break
+    if target_index is None:
+        raise ValueError(f"Task with slug {slug!r} not found in Home.md")
+
+    target_match = matches[target_index]
+    slug_line_end = target_match.end()
+    if slug_line_end < len(text) and text[slug_line_end] == "\n":
+        slug_line_end += 1
+
+    if target_index + 1 < len(matches):
+        next_start = matches[target_index + 1].start()
+        at_eof = False
+    else:
+        next_start = len(text)
+        at_eof = True
+
+    body_region = text[slug_line_end:next_start]
+    body_stripped = body_region.rstrip("\n")
+    body_is_empty = not body_stripped.strip()
+
+    if body_is_empty:
+        new_body = f"\n{line}\n"
+    else:
+        new_body = f"{body_stripped}\n{line}\n"
+
+    if not at_eof:
+        new_body += "\n"
+
+    return text[:slug_line_end] + new_body + text[next_start:]
