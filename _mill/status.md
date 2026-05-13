@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: subprocess-fixes
 branch: hanf/subprocess-fixes
 plan: _mill/plan
@@ -22,4 +22,17 @@ plan-review-r1  '2026-05-13T08:24:45Z'
 plan-fix-r1  '2026-05-13T08:24:45Z'
 plan-fix-r2  '2026-05-13T08:32:37Z'
 planned  '2026-05-13T08:33:06Z'
+implementing  '2026-05-13T08:40:20Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: subprocess-util-windows-fixes
+    state: pending
+  - name: session-id-propagation
+    state: pending
+  - name: millpy-bg-start-sentinel
+    state: pending
 ```
