@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 blocked_reason: 'auto: discussion review gaps unresolved after 2 rounds'
 slug: mill-fold
 branch: hanf/mill-fold
@@ -22,4 +22,17 @@ discussed  '2026-05-12T17:15:34Z'
 planning  '2026-05-12T17:21:32Z'
 plan-fix-r1  '2026-05-12T17:28:02Z'
 planned  '2026-05-12T17:28:13Z'
+implementing  '2026-05-13T06:37:47Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: helpers
+    state: pending
+  - name: cli-script
+    state: pending
+  - name: skills-and-docs
+    state: pending
 ```
