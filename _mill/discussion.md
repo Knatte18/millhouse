@@ -25,7 +25,7 @@ This task builds a benchmark harness, adds `g25pro` to the registry, and runs it
 - Write results to `.scratch/bench-<timestamp>.md`
 
 **Out:**
-- Flash Preview models (`gemini-2.5-flash-preview-*`) -- all return ModelNotFoundError from the current gemini CLI install; not accessible
+- Flash Preview and Gemini 3 Flash models -- all return ModelNotFoundError from the current gemini CLI install; not accessible. Tested: gemini-2.5-flash-preview-05-20, gemini-2.5-flash-preview-04-17, gemini-3-flash, gemini-3.0-flash, gemini-3.5-flash
 - Gemini cluster reviewer -- blocked on NORCE by firewall; orthogonal to this task
 - Claude / sonnetmax runs in the benchmark script -- baseline is already known from daily use; running it adds cost with no benefit
 - Automated LLM-as-judge scoring -- too expensive and adds a confounding variable
@@ -37,8 +37,8 @@ This task builds a benchmark harness, adds `g25pro` to the registry, and runs it
 ### model-scope
 
 - Decision: Benchmark g25flash (gemini-2.5-flash) and g25pro (gemini-2.5-pro) only.
-- Rationale: The task originally targeted "Flash Preview" models, but all preview variants (gemini-2.5-flash-preview-05-20, gemini-2.5-flash-preview-04-17, etc.) return ModelNotFoundError from the installed gemini CLI. The two GA models that work still answer the core question: is there a viable Gemini single-reviewer fallback for large prompts?
-- Rejected: Waiting for Flash Preview to become available -- unknown timeline; blocks the task.
+- Rationale: The task originally targeted "Flash Preview" models and "Gemini 3 Flash", but all non-GA variants tested (gemini-2.5-flash-preview-05-20, gemini-2.5-flash-preview-04-17, gemini-3-flash, gemini-3.0-flash, gemini-3.5-flash) return ModelNotFoundError from the installed gemini CLI. The two GA models that work still answer the core question: is there a viable Gemini single-reviewer fallback for large prompts?
+- Rejected: Waiting for Flash Preview or Gemini 3 Flash to become available -- unknown timeline; blocks the task.
 
 ### script-location
 
@@ -68,9 +68,9 @@ This task builds a benchmark harness, adds `g25pro` to the registry, and runs it
 
 ### sonnetmax-baseline
 
-- Decision: Do NOT run sonnetmax in the benchmark script. Reference existing review quality from daily use as the baseline.
-- Rationale: User explicitly flagged Gemini per-token cost; Claude API is also billed. The sonnetmax baseline quality is already well-understood; the comparison we need is Gemini vs the known standard, not Gemini vs a same-session Claude run.
-- Rejected: Running sonnetmax in the script -- doubles billing with limited benefit.
+- Decision: Do NOT run sonnetmax in the benchmark script. Reference existing review quality from daily use as the baseline. The relevant baseline is `sonnetmax` (bulk mode), not `sonnetmax_tool`.
+- Rationale: User explicitly flagged Gemini per-token cost; Claude API is also billed. The sonnetmax baseline quality is already well-understood. Critically, the comparison must be apples-to-apples: Gemini reviewers run in bulk mode, so the comparison baseline is `sonnetmax` (bulk), not `sonnetmax_tool` (which has tool-reading capability and would be an unfair advantage). `sonnetmax_tool` is used for discussion-review role in daily config but is not representative for this benchmark's purpose.
+- Rejected: Running sonnetmax_tool in the script -- unfair comparison (extra capability); running sonnetmax in bulk -- doubles billing with limited benefit since the baseline quality is already known.
 
 ### registry-additions
 
@@ -104,7 +104,7 @@ Templates live in `plugins/mill/templates/`. `_render.render(template_path, valu
 ### Verdict and finding parsing
 
 `_review_common.parse_verdict(text)` extracts APPROVE / GAPS_FOUND / REQUEST_CHANGES from a fenced yaml block.
-`_review_common.parse_blocking_count(text)` counts `### [<severity>]` headings.
+`_review_common.parse_blocking_count(raw_output, *, severity)` counts `### [<severity>]` headings for a single severity per call. The bench script calls it once per applicable severity (GAP/BLOCKING/NIT depending on review type) and sums the results to produce a total finding count.
 
 Both are already tested in the review integration tests. The bench script reuses them directly.
 
@@ -179,5 +179,6 @@ from the hub root to confirm the new entries pass validation.
 - **Q:** What test corpus to use? **A:** [auto-pick] Existing fixtures + small new code fixture. **Why:** Zero setup cost, reproducible, realistic inputs.
 - **Q:** How to measure quality? **A:** [auto-pick] Format compliance + finding count. **Why:** Objective, no LLM cost, sufficient to detect role drift.
 - **Q:** What timeout per call? **A:** [auto-pick] 300s. **Why:** Trial showed 120s is too short for g25flash; 300s covers observed worst-case.
-- **Q:** Run sonnetmax in the bench script? **A:** [auto-pick] No -- reference existing data. **Why:** Billing cost, baseline already known.
+- **Q:** Run sonnetmax in the bench script? **A:** [auto-pick] No -- reference existing data. **Why:** Billing cost, baseline already known. Baseline must be sonnetmax (bulk), not sonnetmax_tool -- the benchmark compares bulk-mode Gemini against bulk-mode Claude; tool-use capability is an unfair advantage.
+- **Q:** Is Gemini 3 Flash accessible? **A:** All tested Gemini 3 Flash model IDs (gemini-3-flash, gemini-3.0-flash, gemini-3.5-flash) return ModelNotFoundError. Out of scope along with Flash Preview. **Why:** Not accessible through current CLI install.
 - **Q:** Add both `g25pro` and `g25pro_tool` to registry? **A:** [auto-pick] Yes, both. **Why:** Mirrors the g25flash/g25flash_tool pair; gives operators both modes.
