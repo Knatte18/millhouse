@@ -72,11 +72,15 @@ catches `addCleanup(shutil.rmtree, ...)` deferred references and
 - **Creates:** none
 - **Deletes:** none
 - **Requirements:**
-  - In each of the four files, replace the `addCleanup(shutil.rmtree, self.tmp_path, ignore_errors=True)` calls with `addCleanup(_safe_rmtree.safe_rmtree, self.tmp_path, allowed_root=self.tmp_path, ignore_errors=True)`. Locations as currently present in source (verify line numbers when editing):
-    - `test-millpy-implement-holistic.py:106` (one call inside `setUp` / fixture method).
-    - `test-millpy-implement.py:95` (one call).
-    - `test-millpy-merge-in-subagent.py:36` (one call).
-    - `test-millpy-spawn.py:825, 887, 1002` (three calls in distinct test methods).
+  - The four files contain two different rmtree-call shapes; the migration handles both. For each file, locate every match of `shutil\.rmtree` and apply the appropriate transform:
+    - **Shape A: `addCleanup(shutil.rmtree, self.tmp_path, ignore_errors=True)`** -- function-reference deferred call inside a `setUp` / fixture method. Transform to `addCleanup(_safe_rmtree.safe_rmtree, self.tmp_path, allowed_root=self.tmp_path, ignore_errors=True)`. Files using this shape:
+      - `test-millpy-implement-holistic.py:106` (one call inside the fixture).
+      - `test-millpy-implement.py:95` (one call).
+      - `test-millpy-merge-in-subagent.py:36` (one call).
+    - **Shape B: `shutil.rmtree(str(tmpdir), ignore_errors=True)`** -- direct call inside a `try: ... finally:` block. Transform to `_safe_rmtree.safe_rmtree(tmpdir, allowed_root=tmpdir, ignore_errors=True)` (drop the redundant `str(...)` cast -- `safe_rmtree` accepts `Path` directly and binds its own internal path objects). Files using this shape:
+      - `test-millpy-spawn.py:825` (one call in a `finally` block).
+      - `test-millpy-spawn.py:887` (one call in a `finally` block).
+      - `test-millpy-spawn.py:1002` (one call in a `finally` block).
   - Add `import _safe_rmtree` at the top of each file, immediately after any existing `import shutil` line. Keep `import shutil` if the file uses other `shutil` functions; remove it if `shutil` is no longer referenced (verify with a regex grep after the edit).
   - For each edited file, confirm zero remaining matches of `shutil\.rmtree` in the file after the edit (use `grep -E 'shutil\.rmtree' <file>`). The files will be exempt from the Card 6 whitelist (they should not appear in `ALLOWED_FILES`).
   - Do not add `noqa` comments; the migration is complete, not exempt.
