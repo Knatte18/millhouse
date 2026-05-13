@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-callsite-refactor
+phase: holistic-reviewing
 slug: status-md-in-paths-config
 branch: hanf/status-md-in-paths-config
 plan: _mill/plan
@@ -27,6 +27,7 @@ planned  '2026-05-13T08:07:55Z'
 implementing  '2026-05-13T08:16:18Z'
 approved-helper-foundation  '2026-05-13T08:25:56Z'
 approved-callsite-refactor  '2026-05-13T13:35:08Z'
+holistic-reviewing  '2026-05-13T13:35:28Z'
 ```
 
 ## Batches
