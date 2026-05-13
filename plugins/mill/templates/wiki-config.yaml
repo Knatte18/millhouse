@@ -67,6 +67,7 @@ paths:
   discussion_file: _mill/discussion.md
   plan_dir:        _mill/plan/
   reviews_dir:     _mill/reviews/
+  status_md:       _mill/status.md
 
 # ---------------------------------------------------------------------------
 # LLM-provider timeouts (seconds)
