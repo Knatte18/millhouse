@@ -3,7 +3,7 @@
 ```yaml
 task: (A) -- Add status_md to paths config + refactor 14 callsites
 slug: status-md-in-paths-config
-approved: false
+approved: true
 started: 20260513-074652
 parent: main
 root: ""
