@@ -205,6 +205,63 @@ def main() -> int:
             assert "foo" not in file_text, "old blocked_reason value 'foo' still present"
             print("PASS: set_blocked rewrites blocked_reason in place")
 
+        # Test: append_phase to non-blocked clears blocked_reason
+        with tempfile.TemporaryDirectory() as tmp:
+            sp = Path(tmp) / "status.md"
+            sp.write_text(
+                render_initial("T", "D", "2026-05-12T00:00:00Z", "main", slug="t-slug", branch="hanf/t-slug"),
+                encoding="utf-8",
+            )
+            set_blocked(sp, "auto: discussion review gaps unresolved after 2 rounds", timestamp="2026-05-12T01:00:00Z")
+            append_phase(sp, "planning", "2026-05-12T02:00:00Z")
+            data = read_full(sp)
+            file_text = sp.read_text(encoding="utf-8")
+            assert data["yaml"]["phase"] == "planning", f"expected planning, got {data['yaml']['phase']!r}"
+            assert "blocked_reason" not in data["yaml"], (
+                f"blocked_reason should be absent, got {data['yaml'].get('blocked_reason')!r}"
+            )
+            assert file_text.count("blocked_reason:") == 0, (
+                f"expected 0 blocked_reason: rows, got {file_text.count('blocked_reason:')}"
+            )
+            print("PASS: append_phase to non-blocked clears blocked_reason")
+
+        # Test: append_phase to blocked preserves blocked_reason
+        with tempfile.TemporaryDirectory() as tmp:
+            sp = Path(tmp) / "status.md"
+            sp.write_text(
+                render_initial("T", "D", "2026-05-12T00:00:00Z", "main", slug="t-slug", branch="hanf/t-slug"),
+                encoding="utf-8",
+            )
+            set_blocked(sp, "first reason", timestamp="2026-05-12T01:00:00Z")
+            append_phase(sp, "blocked", "2026-05-12T02:00:00Z")
+            data = read_full(sp)
+            file_text = sp.read_text(encoding="utf-8")
+            assert data["yaml"]["phase"] == "blocked", f"expected blocked, got {data['yaml']['phase']!r}"
+            assert data["yaml"]["blocked_reason"] == "first reason", (
+                f"blocked_reason should be 'first reason', got {data['yaml'].get('blocked_reason')!r}"
+            )
+            assert file_text.count("blocked_reason:") == 1, (
+                f"expected exactly 1 blocked_reason: row, got {file_text.count('blocked_reason:')}"
+            )
+            print("PASS: append_phase to blocked preserves blocked_reason")
+
+        # Test: append_phase on status without blocked_reason is a no-op for that row
+        with tempfile.TemporaryDirectory() as tmp:
+            sp = Path(tmp) / "status.md"
+            sp.write_text(
+                render_initial("T", "D", "2026-05-12T00:00:00Z", "main", slug="t-slug", branch="hanf/t-slug"),
+                encoding="utf-8",
+            )
+            append_phase(sp, "discussed", "2026-05-12T01:00:00Z")
+            data = read_full(sp)
+            file_text = sp.read_text(encoding="utf-8")
+            assert data["yaml"]["phase"] == "discussed", f"expected discussed, got {data['yaml']['phase']!r}"
+            assert "blocked_reason" not in data["yaml"], (
+                f"blocked_reason should be absent, got {data['yaml'].get('blocked_reason')!r}"
+            )
+            assert "blocked_reason:" not in file_text, "blocked_reason: spuriously introduced"
+            print("PASS: append_phase preserves clean status when no blocked_reason present")
+
         # Test 4: append_phase quoting regression.
         with tempfile.TemporaryDirectory() as tmp:
             sp = Path(tmp) / "status.md"
