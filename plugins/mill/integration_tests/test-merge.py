@@ -38,7 +38,6 @@ is preserved on failure for inspection.
 from __future__ import annotations
 
 import os
-import shutil
 import subprocess
 import sys
 import uuid
@@ -53,6 +52,7 @@ sys.path.insert(0, str(SCRIPTS))
 
 import _parent_branch  # noqa: E402
 import _plan_dag  # noqa: E402
+import _safe_rmtree  # noqa: E402
 import _sidebar  # noqa: E402
 import _tasks_md  # noqa: E402
 import _timestamp  # noqa: E402
@@ -358,7 +358,7 @@ def main() -> int:
         if failed:
             print(f"Scratch preserved: {container}", file=sys.stderr)
         else:
-            shutil.rmtree(str(container), ignore_errors=True)
+            _safe_rmtree.safe_rmtree(container, allowed_root=container, ignore_errors=True)
 
 
 if __name__ == "__main__":

@@ -782,7 +782,7 @@ def _run_spawn_real_fs(
 
 def test_spawn_standard_layout_regression() -> None:
     """Standard layout (no hub_relative_path): hub state lands at worktree_path/.millhouse/."""
-    import shutil
+    import _safe_rmtree
     import tempfile
 
     tmpdir = Path(tempfile.mkdtemp())
@@ -824,7 +824,7 @@ def test_spawn_standard_layout_regression() -> None:
                     f"config.local.yaml has unexpected hub_relative_path={hub_rel!r}"
                 )
     finally:
-        shutil.rmtree(str(tmpdir), ignore_errors=True)
+        _safe_rmtree.safe_rmtree(tmpdir, allowed_root=tmpdir, ignore_errors=True)
 
     print("PASS: test_spawn_standard_layout_regression")
 
@@ -836,7 +836,7 @@ def test_spawn_standard_layout_regression() -> None:
 
 def test_spawn_subfolder_install_destination_layout() -> None:
     """Subfolder-install (hub_relative_path: src/Models): hub state lands at dest_hub."""
-    import shutil
+    import _safe_rmtree
     import tempfile
     import yaml
 
@@ -886,7 +886,7 @@ def test_spawn_subfolder_install_destination_layout() -> None:
                 f"create_hub_links first arg should be {dest_hub}, got {first_arg!r}"
             )
     finally:
-        shutil.rmtree(str(tmpdir), ignore_errors=True)
+        _safe_rmtree.safe_rmtree(tmpdir, allowed_root=tmpdir, ignore_errors=True)
 
     print("PASS: test_spawn_subfolder_install_destination_layout")
 
@@ -898,7 +898,7 @@ def test_spawn_subfolder_install_destination_layout() -> None:
 
 def test_spawn_discovery_round_trip_subfolder() -> None:
     """After spawn produces a subfolder layout, discover/load_config/resolve all work."""
-    import shutil
+    import _safe_rmtree
     import tempfile
     import yaml
 
@@ -1001,7 +1001,7 @@ def test_spawn_discovery_round_trip_subfolder() -> None:
                 else:
                     sys.modules[name] = orig
     finally:
-        shutil.rmtree(str(tmpdir), ignore_errors=True)
+        _safe_rmtree.safe_rmtree(tmpdir, allowed_root=tmpdir, ignore_errors=True)
 
     print("PASS: test_spawn_discovery_round_trip_subfolder")
 

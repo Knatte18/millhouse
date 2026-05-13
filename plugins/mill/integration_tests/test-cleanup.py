@@ -14,7 +14,6 @@ Exits 0 on PASS, 1 on any failure (scratch dir preserved for inspection).
 from __future__ import annotations
 
 import os
-import shutil
 import subprocess
 import sys
 import uuid
@@ -24,6 +23,10 @@ HUB = Path(__file__).resolve().parent.parent.parent.parent
 SCRIPTS = HUB / "plugins" / "mill" / "scripts"
 PLUGIN_ROOT = HUB / "plugins" / "mill"
 SCRATCH = HUB / ".scratch"
+
+sys.path.insert(0, str(SCRIPTS))
+
+import _safe_rmtree  # noqa: E402
 
 
 def _run(cmd: list[str], *, cwd: Path, check: bool = True) -> subprocess.CompletedProcess:
@@ -176,8 +179,8 @@ def main() -> int:
         assert "orphan-wt-slug" in result.stdout, "missing orphan-wt-slug in output"
         assert "orphan-active-slug" in result.stdout, "missing orphan-active-slug in output"
         assert "malformed-slug" in result.stdout, "missing malformed-slug in output"
-        remove_lines = [l for l in result.stdout.splitlines() if l.startswith("REMOVE")]
-        assert not any("live-slug" in l for l in remove_lines), "live-slug must not appear in REMOVE lines"
+        remove_lines = [line for line in result.stdout.splitlines() if line.startswith("REMOVE")]
+        assert not any("live-slug" in line for line in remove_lines), "live-slug must not appear in REMOVE lines"
         assert (worktrees_dir / "done-slug").exists(), "dry-run must not remove done-slug worktree"
         assert (worktrees_dir / "abandoned-slug").exists(), "dry-run must not remove abandoned-slug worktree"
         print("PASS dry-run: plan output contains correct REMOVE and REPORT lines")
@@ -217,7 +220,7 @@ def main() -> int:
             "[done]" in home_text.split("done-slug")[1][:20], \
             "done-slug [done] marker should be untouched"
         assert "live-slug" in home_text, "live-slug heading must still be present"
-        live_line = next(l for l in home_text.splitlines() if "live-slug" in l)
+        live_line = next(line for line in home_text.splitlines() if "live-slug" in line)
         assert "[active]" in live_line, f"live-slug [active] must be untouched: {live_line!r}"
 
         # Wiki commit assertion
@@ -232,7 +235,7 @@ def main() -> int:
         failed = True
 
     if not failed:
-        shutil.rmtree(container, ignore_errors=True)
+        _safe_rmtree.safe_rmtree(container, allowed_root=container, ignore_errors=True)
 
     return 1 if failed else 0
 

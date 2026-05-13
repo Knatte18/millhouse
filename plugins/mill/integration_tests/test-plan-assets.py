@@ -30,7 +30,6 @@ Exit 0 = PASS, 1 = any failure.
 from __future__ import annotations
 
 import re
-import shutil
 import sys
 import uuid
 from pathlib import Path
@@ -46,6 +45,7 @@ sys.path.insert(0, str(SCRIPTS))
 import _plan_dag  # noqa: E402
 import _render  # noqa: E402
 import _review_plan  # noqa: E402
+import _safe_rmtree  # noqa: E402
 import _timestamp  # noqa: E402
 
 
@@ -258,7 +258,7 @@ def main() -> int:
         if failed:
             print(f"Scratch preserved: {scratch}", file=sys.stderr)
         else:
-            shutil.rmtree(str(scratch), ignore_errors=True)
+            _safe_rmtree.safe_rmtree(scratch, allowed_root=scratch, ignore_errors=True)
 
 
 if __name__ == "__main__":
