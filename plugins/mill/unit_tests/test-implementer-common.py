@@ -201,6 +201,35 @@ def main() -> int:
             print(f"FAIL: case 4 ({exc}) captured={captured!r}", file=sys.stderr)
             errors += 1
 
+    # Case 5: inferred success — session_id plumbed through
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        base_sha = _setup_fixture(project_root)
+        snapshot_path = project_root / "_mill" / ".cleanliness-snapshot-test.txt"
+        _cleanliness.capture_snapshot(project_root, snapshot_path)
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "--allow-empty", "-m", "second"],
+            check=True, capture_output=True,
+        )
+        rc, captured = _capture_stdout(
+            lambda: _forward_output(
+                "garbage with no json",
+                project_root,
+                start_sha=base_sha,
+                snapshot_path=snapshot_path,
+                session_id="abc-uuid-xyz",
+            )
+        )
+        try:
+            data = json.loads(captured.strip())
+            assert data["status"] == "success", f"expected status=success, got {data}"
+            assert data.get("inferred") is True, f"expected inferred=True, got {data}"
+            assert data["session_id"] == "abc-uuid-xyz", f"expected session_id=abc-uuid-xyz, got {data}"
+            print("PASS: inferred success - session_id plumbed through (not 'unknown')")
+        except Exception as exc:
+            print(f"FAIL: case 5 ({exc}) captured={captured!r}", file=sys.stderr)
+            errors += 1
+
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)
         return 1
