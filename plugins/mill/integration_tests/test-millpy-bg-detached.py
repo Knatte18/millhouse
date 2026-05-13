@@ -36,6 +36,17 @@ HUB = Path(__file__).resolve().parent.parent.parent.parent
 SCRIPTS = HUB / "plugins" / "mill" / "scripts"
 
 kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+# HANDLE is pointer-sized on 64-bit Windows; override the ctypes default (c_int)
+# so handle values are not truncated.
+kernel32.CreateJobObjectW.restype = ctypes.c_void_p
+kernel32.SetInformationJobObject.restype = ctypes.c_int
+kernel32.SetInformationJobObject.argtypes = [
+    ctypes.c_void_p, ctypes.c_int, ctypes.c_void_p, ctypes.c_uint32,
+]
+kernel32.AssignProcessToJobObject.restype = ctypes.c_int
+kernel32.AssignProcessToJobObject.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+kernel32.CloseHandle.restype = ctypes.c_int
+kernel32.CloseHandle.argtypes = [ctypes.c_void_p]
 
 
 class JOBOBJECT_BASIC_LIMIT_INFORMATION(ctypes.Structure):
@@ -52,28 +63,62 @@ class JOBOBJECT_BASIC_LIMIT_INFORMATION(ctypes.Structure):
     ]
 
 
+class IO_COUNTERS(ctypes.Structure):
+    _fields_ = [
+        ("ReadOperationCount", ctypes.c_uint64),
+        ("WriteOperationCount", ctypes.c_uint64),
+        ("OtherOperationCount", ctypes.c_uint64),
+        ("ReadTransferCount", ctypes.c_uint64),
+        ("WriteTransferCount", ctypes.c_uint64),
+        ("OtherTransferCount", ctypes.c_uint64),
+    ]
+
+
+class JOBOBJECT_EXTENDED_LIMIT_INFORMATION(ctypes.Structure):
+    # JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE (0x2000) is an extended flag and
+    # must be set via JobObjectExtendedLimitInformation (info-class 9), not
+    # via JobObjectBasicLimitInformation (info-class 2).
+    _fields_ = [
+        ("BasicLimitInformation", JOBOBJECT_BASIC_LIMIT_INFORMATION),
+        ("IoInfo", IO_COUNTERS),
+        ("ProcessMemoryLimit", ctypes.c_size_t),
+        ("JobMemoryLimit", ctypes.c_size_t),
+        ("PeakProcessMemoryUsed", ctypes.c_size_t),
+        ("PeakJobMemoryUsed", ctypes.c_size_t),
+    ]
+
+
 def _assert(cond: bool, msg: str) -> None:
     if not cond:
         raise AssertionError(msg)
 
 
-def main() -> int:
-    job = None
+def main() -> None:
+    # os._exit(rc) is used for ALL exit paths so that ExitProcess(rc) runs and
+    # records the exit code BEFORE Windows releases the job handle during handle-table
+    # cleanup. If we used sys.exit + finally: CloseHandle(job), the finally block
+    # would fire CloseHandle, which triggers KILL_ON_JOB_CLOSE on this very process
+    # before sys.exit can record exit code 0. os._exit bypasses finally blocks and
+    # calls ExitProcess directly; the job handle is released by the OS after the exit
+    # code is already set, so the subsequent TerminateJobObject call is a no-op.
+    rc = 1
     try:
         job = kernel32.CreateJobObjectW(None, None)
-        _assert(job != 0, f"CreateJobObjectW failed: error={ctypes.get_last_error()}")
+        _assert(job is not None, f"CreateJobObjectW failed: error={ctypes.get_last_error()}")
 
-        info = JOBOBJECT_BASIC_LIMIT_INFORMATION()
-        info.LimitFlags = 0x2000  # JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+        info = JOBOBJECT_EXTENDED_LIMIT_INFORMATION()
+        info.BasicLimitInformation.LimitFlags = 0x2000  # JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
         ok = kernel32.SetInformationJobObject(
             job,
-            2,  # JobObjectBasicLimitInformation
+            9,  # JobObjectExtendedLimitInformation (required for KILL_ON_JOB_CLOSE)
             ctypes.byref(info),
             ctypes.sizeof(info),
         )
         _assert(ok, f"SetInformationJobObject failed: error={ctypes.get_last_error()}")
 
-        ok = kernel32.AssignProcessToJobObject(job, kernel32.GetCurrentProcess())
+        # GetCurrentProcess() pseudo-handle is always (HANDLE)-1 on Windows;
+        # pass as c_void_p to avoid 32-bit truncation on 64-bit processes.
+        ok = kernel32.AssignProcessToJobObject(job, ctypes.c_void_p(-1))
         _assert(ok, f"AssignProcessToJobObject failed: error={ctypes.get_last_error()}")
 
         # Spawn millpy-bg.py from inside the job-bound test process.
@@ -140,19 +185,16 @@ def main() -> int:
             f"tasklist={tasklist.stdout!r}",
         )
 
-        print("PASS -- millpy-bg detached worker survives job-bound parent")
-        return 0
+        print("PASS -- millpy-bg detached worker survives job-bound parent", flush=True)
+        rc = 0
 
     except AssertionError as exc:
-        print(f"FAIL: {exc}", file=sys.stderr)
-        return 1
+        print(f"FAIL: {exc}", file=sys.stderr, flush=True)
     except Exception as exc:
-        print(f"FAIL (unexpected): {type(exc).__name__}: {exc}", file=sys.stderr)
-        return 1
-    finally:
-        if job:
-            kernel32.CloseHandle(job)
+        print(f"FAIL (unexpected): {type(exc).__name__}: {exc}", file=sys.stderr, flush=True)
+
+    os._exit(rc)
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    main()
