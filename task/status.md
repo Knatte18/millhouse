@@ -32,7 +32,9 @@ implementing  '2026-05-13T08:16:18Z'
 ```yaml
 batches:
   - name: helper-foundation
-    state: pending
+    state: running
+    implementer_session: 9539ca61-a30b-4e34-a021-12ac6be2e5f7
+    start_sha: 7fbf3593e6ab080bb522b7229b32e8e0a5b96e34
   - name: callsite-refactor
     state: pending
 ```
