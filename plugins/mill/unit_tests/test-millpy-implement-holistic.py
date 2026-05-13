@@ -9,7 +9,6 @@ import importlib.util
 import io
 import json
 import os
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -20,6 +19,8 @@ from pathlib import Path
 
 HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
+
+import _safe_rmtree  # noqa: E402
 
 _IMPLEMENT_HOLISTIC_PATH = (
     HUB / "plugins" / "mill" / "scripts" / "millpy-implement-holistic.py"
@@ -103,7 +104,7 @@ class TestMillpyImplementHolistic(unittest.TestCase):
 
     def setUp(self):
         self.tmp_path = Path(tempfile.mkdtemp())
-        self.addCleanup(shutil.rmtree, self.tmp_path, ignore_errors=True)
+        self.addCleanup(_safe_rmtree.safe_rmtree, self.tmp_path, allowed_root=self.tmp_path, ignore_errors=True)
 
         self.review_file = _make_fixture(self.tmp_path)
 
