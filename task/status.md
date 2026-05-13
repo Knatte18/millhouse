@@ -45,5 +45,7 @@ batches:
     commit_sha: c28f12876ee99bd76e28fd938224bcbecd80cc3c
     blocked_reason: ''
   - name: status-blocked-reason-cleanup
-    state: pending
+    state: running
+    implementer_session: 51317e12-c5be-4fc1-a614-43b32a124110
+    start_sha: f5d4b2c782bd87ef52ecaac67abc1e0a4e5bafb3
 ```
