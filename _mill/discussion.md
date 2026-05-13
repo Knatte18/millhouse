@@ -439,9 +439,16 @@ handle it as `WorktreeLockedError` upstream).
 Resolve both `path` and the blacklist entries via
 `Path(p).resolve()` before comparing. This handles relative paths
 and the `\\?\` Windows long-path prefix consistently. Comparison
-is `resolved_path == blacklist_entry or blacklist_entry in
-resolved_path.parents` (equality OR ancestor -- protects against
-"trying to delete the wiki" and "trying to delete the container").
+is `resolved_path == blacklist_entry or resolved_path in
+blacklist_entry.parents` (equality OR `resolved_path` is an
+ancestor of `blacklist_entry`). The first clause catches "trying
+to delete the wiki directly"; the second catches "trying to
+delete a directory that contains the wiki" -- e.g. deleting the
+container or any other ancestor of the wiki. Note the direction:
+`Path.parents` returns the *ancestors* of the receiver, so
+`X in Y.parents` is True exactly when `X` is some ancestor of
+`Y`. The reversed `blacklist_entry in resolved_path.parents`
+would test the wrong relation.
 
 ## Constraints
 
