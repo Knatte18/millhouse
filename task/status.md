@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-misc-fixes-7
 branch: hanf/mill-misc-fixes-7
 plan: _mill/plan
@@ -22,4 +22,17 @@ plan-review-r1  '2026-05-12T17:30:45Z'
 plan-fix-r1  '2026-05-12T17:30:45Z'
 plan-fix-r2  '2026-05-12T17:35:25Z'
 planned  '2026-05-12T17:35:58Z'
+implementing  '2026-05-13T06:33:24Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: wiki-health-check
+    state: pending
+  - name: setup-junction-idempotency
+    state: pending
+  - name: status-blocked-reason-cleanup
+    state: pending
 ```
