@@ -16,6 +16,7 @@ Public API:
 """
 from __future__ import annotations
 
+import os
 import re
 import sys
 from pathlib import Path
@@ -96,10 +97,23 @@ def create_hub_links(
         target = Path(_junction.resolve_target(target_template, tokens))
         link_path = target_root / junction_rel
 
-        # Ensure the target directory exists when the template carries <SLUG>
-        # so that mklink /J (Windows) does not fail on a missing target dir.
         if _junction.has_slug_token(target_template):
             target.mkdir(parents=True, exist_ok=True)
+
+        # Idempotency: skip on correct, recreate on drift, refuse on real directory.
+        # Use os.path.lexists (does NOT follow links) so a broken NTFS junction —
+        # whose target was deleted, making Path.exists() return False because it
+        # follows the junction to a missing target, and Path.is_symlink() return
+        # False because junctions are not Python symlinks — is still recognised
+        # as present and routed through the drift branch. Mirrors the
+        # lexists-based guard in _junction._is_junction_or_symlink.
+        if os.path.lexists(str(link_path)):
+            if _junction.points_to(link_path, target):
+                continue
+            # Drift: junction points elsewhere, is broken, or link_path is a
+            # regular file/dir. _junction.remove raises ValueError on a real
+            # directory — propagate unchanged.
+            _junction.remove(link_path)
 
         _junction.create(target, link_path)
         created_junctions.append(link_path)
