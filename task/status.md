@@ -35,7 +35,9 @@ batches:
     implementer_session: 7d2ce154-2592-420b-8178-3b7b196170d3
     start_sha: dbbbf1e18d896d31474c4a0e388c7ffc3f59c789
   - name: cli-script
-    state: pending
+    state: running
+    implementer_session: d647a3d2-c1c0-47e4-a4a6-951c7e7eec8d
+    start_sha: d72406a17f3ac4ed06ffd2e41bace6227f3453df
   - name: skills-and-docs
     state: pending
 ```
