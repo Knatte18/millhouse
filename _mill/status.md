@@ -41,5 +41,7 @@ batches:
     implementer_session: 86c52a51-f855-462d-819f-c535ee7ae31c
     start_sha: 6f7d290fb3325e3ef51d88f8fbdf3e0a3a98812e
   - name: migrations-and-gate
-    state: pending
+    state: running
+    implementer_session: dc891550-f84b-420c-86a7-3084231c8bbe
+    start_sha: bb2c407a7336a7ef8759ea8ee5fc613c22a65ce1
 ```
