@@ -1,10 +1,10 @@
 # Status
 
 ```yaml
-phase: discussed
+phase: planning
 slug: status-md-in-paths-config
 branch: hanf/status-md-in-paths-config
-plan: null
+plan: _mill/plan
 parent: main
 task: (A) — Add status_md to paths config + refactor 14 callsites
 task_description: |
@@ -17,4 +17,5 @@ task_description: |
 discussing  '2026-05-13T07:25:10Z'
 discussion-fix-r1  '2026-05-13T07:44:49Z'
 discussed  '2026-05-13T07:45:00Z'
+planning  '2026-05-13T07:49:19Z'
 ```
