@@ -128,12 +128,18 @@ mill code outside an explicit whitelist.
 
 ### Reparse-point detection
 
-- Decision: Walk `path` with `os.scandir(..., follow_symlinks=False)`
-  before calling `shutil.rmtree`. For every entry: if it is a
-  junction (per `os.path.isjunction` on Py 3.12+ or
-  `st_file_attributes & 0x400` fallback) or symlink, call
-  `_junction.remove` and skip recursion into it. Recurse only into
-  real directories.
+- Decision: Walk `path` with `os.scandir(path)` before calling
+  `shutil.rmtree`. For every `DirEntry`: detect junctions via
+  `os.path.isjunction(entry.path)` (Py 3.12+) or the
+  `st_file_attributes & 0x400` fallback (Py 3.10/3.11), and detect
+  symlinks via `entry.is_symlink()`. If the entry is a junction or
+  symlink, call `_junction.remove(Path(entry.path))` and skip
+  recursion into it (do **not** call `entry.is_dir()` without
+  `follow_symlinks=False`, which would chase the junction). Recurse
+  into the entry only when
+  `entry.is_dir(follow_symlinks=False)` is True. (`os.scandir`
+  itself has no `follow_symlinks` parameter -- the per-entry
+  `is_dir`/`is_file` methods carry that flag.)
 - Rationale: The task description explicitly requires detection
   "uavhengig av `junctions_cfg`" -- i.e. the helper cannot trust
   config; it must discover junctions on the filesystem. This catches
@@ -394,9 +400,20 @@ implementation must handle this gracefully: if
 `resolve_container_path(allowed_root)` raises or returns a path that
 does not match the millhouse container layout, the blacklist
 defaults to "no shared-state paths to protect" -- the
-`allowed_root` containment check still applies. The
-implementation can wrap `resolve_container_path` in a try/except
-and skip blacklist construction when it fails.
+`allowed_root` containment check still applies.
+
+**Exception-type pitfall:** `_paths.resolve_container_path`
+internally calls `_paths.resolve_main_worktree_root`, which raises
+`SystemExit` (not a regular `Exception` subclass) when `git
+rev-parse` fails on a non-git path. A bare
+`try: ... except Exception:` block silently misses `SystemExit`
+and crashes the helper. The implementation **must** guard with
+`except (Exception, SystemExit)` (or equivalently
+`except BaseException` minus `KeyboardInterrupt`-aware logic, but
+the explicit two-class form is clearer). This is load-bearing for
+the `test_handles_non_container_allowed_root` unit test and for
+all migrated `addCleanup` calls whose tempdir lives outside any
+git repository.
 
 **Symlink vs. junction detection:**
 `os.path.isjunction` is Py 3.12+. For Py 3.10/3.11 (the project
