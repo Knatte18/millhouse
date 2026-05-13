@@ -36,7 +36,9 @@ implementing  '2026-05-13T13:26:03Z'
 ```yaml
 batches:
   - name: safe-rmtree-helper
-    state: pending
+    state: running
+    implementer_session: 86c52a51-f855-462d-819f-c535ee7ae31c
+    start_sha: 6f7d290fb3325e3ef51d88f8fbdf3e0a3a98812e
   - name: migrations-and-gate
     state: pending
 ```
