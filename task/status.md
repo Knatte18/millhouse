@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planning
+phase: plan-fix-r1
 slug: status-md-in-paths-config
 branch: hanf/status-md-in-paths-config
 plan: _mill/plan
@@ -18,4 +18,6 @@ discussing  '2026-05-13T07:25:10Z'
 discussion-fix-r1  '2026-05-13T07:44:49Z'
 discussed  '2026-05-13T07:45:00Z'
 planning  '2026-05-13T07:49:19Z'
+plan-review-r1  '2026-05-13T07:55:33Z'
+plan-fix-r1  '2026-05-13T07:55:33Z'
 ```
