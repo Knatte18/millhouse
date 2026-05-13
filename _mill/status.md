@@ -40,5 +40,7 @@ batches:
     implementer_session: f7fb7385-5b01-44cf-ad23-3e6033a5a8a7
     start_sha: e191aa02ee6dc277c39f6512f0e48e2d91285cf4
   - name: millpy-bg-start-sentinel
-    state: pending
+    state: running
+    implementer_session: 0d05df00-ad81-4344-bb7c-ace0df804a76
+    start_sha: d653e8d1f1bd6cbefcec5142708362129fc3093c
 ```
