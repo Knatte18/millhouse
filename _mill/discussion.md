@@ -36,8 +36,8 @@ The fix is to detect oversized prompts and switch to a reviewer with larger cont
 
 ### Helper location: `_review_common.py`
 
-- Decision: `maybe_switch_spec_for_large_prompt(prompt_text, spec, cfg, role, scope, registry) -> tuple[dict, str | None]` lives in `_review_common.py`. Returns `(effective_spec, override_name_or_None)`.
-- Rationale: All three backends already import from `_review_common`. The logic is identical across backends — a single implementation avoids drift. Adding it to `_reviewer_single.run()` would require threading `cfg`, `role`, and `scope` through every call site, which pollutes the LLM-provider layer with config knowledge it shouldn't have.
+- Decision: `maybe_switch_spec_for_large_prompt(prompt_text, spec, reviewer_name, cfg, role, scope, registry) -> tuple[dict, str]` lives in `_review_common.py`. Returns `(effective_spec, effective_reviewer_name)`. The Technical Context section's 7-arg, `-> tuple[dict, str]` signature is authoritative — always returns a name (either original or override), never `None`; the caller does not need a None check.
+- Rationale: All three backends already import from `_review_common`. The logic is identical across backends — a single implementation avoids drift. Adding it to `_reviewer_single.run()` would require threading `cfg`, `role`, and `scope` through every call site, which pollutes the LLM-provider layer with config knowledge it shouldn't have. `reviewer_name` is passed explicitly so the helper can log the original name and return it unchanged when no switch fires.
 - Rejected: Per-backend inline duplication (maintenance burden); `_reviewer_single.run()` hook (wrong abstraction layer).
 
 ### Scope: holistic only
@@ -143,7 +143,8 @@ roles:
 4. `large_prompt.reviewer: null` — no-op.
 5. `tooluse` coercion — original tooluse=True, override has tooluse=False; returned spec has tooluse=True, notice logged.
 6. `tooluse` already matching — no notice logged.
-7. `validate_role_refs` — catches bad `large_prompt.reviewer` name.
+7. `validate_role_refs` — catches bad `large_prompt.reviewer` name (unknown name raises error).
+8. `validate_role_refs` — catches `large_prompt.reviewer` pointing to a valid cluster-type name (cluster resolves fine in `_reviewers.resolve()` but must be rejected since cluster dispatch is not implemented for the switch target).
 
 ## Constraints
 
