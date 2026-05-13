@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-setup-junction-idempotency
 slug: mill-misc-fixes-7
 branch: hanf/mill-misc-fixes-7
 plan: _mill/plan
@@ -26,6 +26,7 @@ implementing  '2026-05-13T06:33:24Z'
 approved-wiki-health-check  '2026-05-13T06:51:10Z'
 blocked  '2026-05-13T06:53:29Z'
 implementing  '2026-05-13T06:58:05Z'
+approved-setup-junction-idempotency  '2026-05-13T07:14:05Z'
 ```
 
 ## Batches
@@ -38,9 +39,10 @@ batches:
     start_sha: 833344d7a9b633fee61dedb3e999b650aea66732
     commit_sha: cd1d80abe0b5d19c9f07a28f15d8f60106f18c44
   - name: setup-junction-idempotency
-    state: running
+    state: approved
     implementer_session: 56c5e193-aa26-44c0-bb2b-f1ff6ae7284e
     start_sha: 6fc7c95652d4f95d7ffe86958fbe54820e4a741d
+    commit_sha: c28f12876ee99bd76e28fd938224bcbecd80cc3c
     blocked_reason: ''
   - name: status-blocked-reason-cleanup
     state: pending
