@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: blocked
+phase: implementing
 slug: mill-misc-fixes-7
 branch: hanf/mill-misc-fixes-7
 plan: _mill/plan
@@ -25,6 +25,7 @@ planned  '2026-05-12T17:35:58Z'
 implementing  '2026-05-13T06:33:24Z'
 approved-wiki-health-check  '2026-05-13T06:51:10Z'
 blocked  '2026-05-13T06:53:29Z'
+implementing  '2026-05-13T06:58:05Z'
 ```
 
 ## Batches
@@ -37,8 +38,8 @@ batches:
     start_sha: 833344d7a9b633fee61dedb3e999b650aea66732
     commit_sha: cd1d80abe0b5d19c9f07a28f15d8f60106f18c44
   - name: setup-junction-idempotency
-    state: blocked
-    blocked_reason: wiki directory wiped during batch 1 verify (test-suite destroyed C:/Code/millhouse/wiki/)
+    state: pending
+    blocked_reason: ''
   - name: status-blocked-reason-cleanup
     state: pending
 ```
