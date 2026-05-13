@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-status-blocked-reason-cleanup
+phase: holistic-reviewing
 slug: mill-misc-fixes-7
 branch: hanf/mill-misc-fixes-7
 plan: _mill/plan
@@ -28,6 +28,7 @@ blocked  '2026-05-13T06:53:29Z'
 implementing  '2026-05-13T06:58:05Z'
 approved-setup-junction-idempotency  '2026-05-13T07:14:05Z'
 approved-status-blocked-reason-cleanup  '2026-05-13T07:37:37Z'
+holistic-reviewing  '2026-05-13T07:37:57Z'
 ```
 
 ## Batches
