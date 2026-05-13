@@ -171,7 +171,7 @@ catches `addCleanup(shutil.rmtree, ...)` deferred references and
     - If any findings: print each as `f"FAIL: {file}:{line}: {pattern_name}: {line_text.strip()}"`, then `print(f"FAIL: {N} direct rmtree callsite(s) outside ALLOWED_FILES")` and `return 1`.
     - If no findings: `print("PASS: no direct rmtree callsites in plugins/mill/ outside ALLOWED_FILES")` and `return 0`.
     - If a whitelist file is missing on disk: `print(f"FAIL: whitelist entry not found on disk: {missing}")` and `return 1` (do not silently skip).
-  - Edge cases the gate must handle: (1) files with CRLF line endings -- read as text with `encoding="utf-8"` and let `splitlines()` normalise; (2) binary files inadvertently named `.py` -- `UnicodeDecodeError` is allowed to propagate (this is a real defect to report); (3) symlinks/junctions encountered during walk -- skip them via `Path.is_symlink()` check inside `_iter_python_files`.
+  - Edge cases the gate must handle: (1) files with CRLF line endings -- Python text-mode (`open(file, encoding="utf-8")`) performs universal-newlines conversion before the caller sees the text, so the `"\n"` split in the main loop is correct without any explicit normalisation step; (2) binary files inadvertently named `.py` -- `UnicodeDecodeError` is allowed to propagate (this is a real defect to report); (3) symlinks/junctions encountered during walk -- skip them via `Path.is_symlink()` check inside `_iter_python_files`.
   - ASCII-only `print()` strings.
 - **Commit:** `test(safe-rmtree): add gate banning direct shutil.rmtree in plugins/mill`
 

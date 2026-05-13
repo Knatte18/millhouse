@@ -42,7 +42,15 @@ decisions are all captured under `## Shared Decisions` in
     (6) Refuse if `resolved_path != resolved_allowed and resolved_allowed not in resolved_path.parents` -- the "path outside allowed_root" containment check.
     (7) Silent no-op return if `not original.exists() and not original.is_symlink()` (the symlink-check handles broken junctions whose targets are missing; `exists()` on a broken junction returns False).
     (8) Walk-and-strip junctions/symlinks via `_walk_strip_reparse_points(original)`.
-    (9) Call `shutil.rmtree(str(original), ignore_errors=ignore_errors)`.
+    (9) Call `shutil.rmtree` wrapped in a try/except so the helper's `ignore_errors` semantic is enforced even when an inner layer raises despite the kwarg being forwarded:
+    ```python
+    try:
+        shutil.rmtree(str(original), ignore_errors=ignore_errors)
+    except OSError:
+        if not ignore_errors:
+            raise
+    ```
+    The forwarded `ignore_errors=ignore_errors` lets real `shutil.rmtree` swallow its own errors internally; the outer try/except adds defense-in-depth for cases where the inner call escapes regardless (e.g. a `PermissionError` from a sub-recursion that real `shutil.rmtree` would have swallowed, or test mocks that raise unconditionally). When `ignore_errors=False` the exception is re-raised verbatim, preserving caller-visible failure semantics (relied on by `_worktree.remove_safe`'s `except PermissionError` catch).
   - Refusal channel: every refusal path raises `SystemExit("[safe-rmtree] <one-line reason>: <path>")`. Reasons by case: "refuses to delete shared-state path" (blacklist match); "path outside allowed_root" (containment); "path is itself a junction -- use _junction.remove instead" (path-is-junction, step 3 above); "path is itself a symlink -- use _junction.remove instead" (path-is-symlink, step 2 above). The path-is-junction and path-is-symlink refusals fire BEFORE `.resolve()` is called -- see step ordering above.
   - Blacklist construction: define a module-private function `_blacklist_for(allowed_root: Path) -> list[Path]` that calls `_paths.resolve_container_path(allowed_root)` inside `try: ... except (Exception, SystemExit):`, returning `[]` on failure. On success, the function returns `[container, container / "wiki", container / "portals", container / "wts" / container.name]` (each `.resolve()`-d). The "main repo worktree" path is derived as `container / "wts" / container.name` per CLAUDE.md `## Project shape` (main worktree directory name equals container name).
   - Blacklist comparison: for each entry, `resolved_path == entry or resolved_path in entry.parents`. The first clause catches the "delete the wiki directly" case (exact match). The second clause catches the "delete a directory that *contains* the wiki" case -- i.e. `resolved_path` is an ancestor of a blacklisted entry. `Path.parents` returns the ancestors of the receiver, so `resolved_path in entry.parents` is True exactly when `resolved_path` is some ancestor of `entry`. The reversed expression `entry in resolved_path.parents` would test whether `entry` is an ancestor of `resolved_path`, which is the wrong direction (we don't want to refuse just because the path lives below the wiki -- we want to refuse when deleting the path would also delete the wiki).
