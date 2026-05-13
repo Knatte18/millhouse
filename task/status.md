@@ -30,7 +30,9 @@ implementing  '2026-05-13T06:37:47Z'
 ```yaml
 batches:
   - name: helpers
-    state: pending
+    state: running
+    implementer_session: 7d2ce154-2592-420b-8178-3b7b196170d3
+    start_sha: dbbbf1e18d896d31474c4a0e388c7ffc3f59c789
   - name: cli-script
     state: pending
   - name: skills-and-docs
