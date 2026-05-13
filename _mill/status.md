@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-fix-r1
+phase: planned
 slug: review-large-prompt-switch
 branch: hanf/review-large-prompt-switch
 plan: _mill/plan
@@ -20,4 +20,5 @@ discussed  '2026-05-13T14:17:00Z'
 planning  '2026-05-13T14:26:12Z'
 plan-review-r1  '2026-05-13T14:30:42Z'
 plan-fix-r1  '2026-05-13T14:30:42Z'
+planned  '2026-05-13T14:31:07Z'
 ```
