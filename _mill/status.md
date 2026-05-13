@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: discussion-fix-r2
 slug: subprocess-fixes
 branch: hanf/subprocess-fixes
 plan: null
@@ -15,4 +15,5 @@ task_description: |
 
 ```text
 discussing  '2026-05-13T07:56:36Z'
+discussion-fix-r2  '2026-05-13T08:12:35Z'
 ```

@@ -170,6 +170,23 @@ mill-start / mill-plan run that goes through CC.
   is supplied, a third thread writes it to `proc.stdin` in a single
   `write` + `close`. All three threads are daemonised so a hung read
   thread does not block interpreter shutdown.
+- **Non-PIPE stdout/stderr override:** Reader threads start
+  conditionally only when the corresponding pipe exists
+  (`proc.stdout is not None`, `proc.stderr is not None`). When a
+  caller passes `stdout=<filehandle>` or `stderr=<filehandle>`
+  (e.g. `subprocess.DEVNULL`, a real file), `Popen` sets the
+  matching `proc.stdout`/`proc.stderr` to `None` and the
+  output flows directly to the override; no reader thread is
+  needed and the corresponding `CompletedProcess.stdout` /
+  `CompletedProcess.stderr` stays `""` (matching the
+  documented behaviour today). The `timeout` argument remains
+  supported in that combination — only the pipe-draining
+  threads are skipped; the deadline poll on `time.monotonic()`
+  + kill path is unaffected. This preserves the existing
+  contract verified by tests (f)/(g)/(h) in
+  `test-subprocess-util.py`, which exercise stdout-override
+  combos but without `timeout=`. The watchdog gives those
+  combos `timeout=` support too, at no cost.
 - **Rationale:** The pipe-deadlock failure mode that motivates the
   watchdog is specifically the case where the kernel pipe buffer
   fills and the child blocks on stdout/stderr; readline-loop threads
@@ -246,11 +263,25 @@ mill-start / mill-plan run that goes through CC.
   first line of the log file before invoking the child subprocess.
   The sentinel goes through the same `open(log_path, "w",
   encoding="utf-8", buffering=1)` handle that captures child output.
-  The flush is implicit via line buffering. The poll loop in the
-  caller (`mill-start`, `mill-plan`, `mill-go`) treats the absence
-  of this sentinel after a small grace period (~3 seconds) as a
-  worker-never-started failure and can surface a clear error to the
-  operator instead of polling forever.
+  The flush is implicit via line buffering.
+- **Scope clarification — sentinel is diagnostic-only in this
+  task.** SKILL.md poll-loops (`mill-start`, `mill-plan`,
+  `mill-go`) are explicitly OUT of scope; this task does not
+  update their poll-for-EXIT loops to add a fail-fast on missing
+  START sentinel. The sentinel's payoff for this task is
+  observability: an empty log unambiguously means "worker
+  never ran"; a START-only log means "worker ran but child
+  produced no output yet"; the existing EXIT sentinel
+  continues to mean "child finished". The fail-fast caller
+  behaviour the bug report alludes to (treating "no START
+  after ~3s" as a worker-never-started failure) is a
+  follow-on task that updates each calling SKILL.md's poll
+  loop and adds a stuck-detection branch; that is a separate,
+  cross-skill change with its own surface area and out of
+  scope here. The diagnostic value alone justifies the
+  sentinel: it is the artefact that lets a follow-on task (or
+  a manual debugging session) discriminate the three states
+  without speculation.
 - **Rationale:** The current failure mode is indistinguishable from
   "worker is still starting up" — the log file exists, the file is
   0 bytes, the EXIT sentinel never appears. The diagnostic sentinel
