@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-subprocess-util-windows-fixes
+phase: approved-session-id-propagation
 slug: subprocess-fixes
 branch: hanf/subprocess-fixes
 plan: _mill/plan
@@ -24,6 +24,7 @@ plan-fix-r2  '2026-05-13T08:32:37Z'
 planned  '2026-05-13T08:33:06Z'
 implementing  '2026-05-13T08:40:20Z'
 approved-subprocess-util-windows-fixes  '2026-05-13T13:28:56Z'
+approved-session-id-propagation  '2026-05-13T13:32:57Z'
 ```
 
 ## Batches
@@ -35,7 +36,7 @@ batches:
     implementer_session: f06eed38-4108-4c60-be60-8b220fb15a66
     start_sha: b7921cf0b5ac70e5a87282ae655d4793dbb768ff
   - name: session-id-propagation
-    state: running
+    state: approved
     implementer_session: f7fb7385-5b01-44cf-ad23-3e6033a5a8a7
     start_sha: e191aa02ee6dc277c39f6512f0e48e2d91285cf4
   - name: millpy-bg-start-sentinel
