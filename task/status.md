@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussion-fix-r1
+phase: discussed
 slug: status-md-in-paths-config
 branch: hanf/status-md-in-paths-config
 plan: null
@@ -16,4 +16,5 @@ task_description: |
 ```text
 discussing  '2026-05-13T07:25:10Z'
 discussion-fix-r1  '2026-05-13T07:44:49Z'
+discussed  '2026-05-13T07:45:00Z'
 ```
