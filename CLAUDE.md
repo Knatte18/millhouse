@@ -48,6 +48,7 @@ Hard rules — violation causes silent bugs or breaks external repos using mill 
 - **Junctions and hardlinks are NEVER used by scripts or skills.** `.wiki`, `.active`, `tasks.md`, and any other junction or hardlink exist solely for operator IDE/terminal navigation. Scripts always resolve real paths programmatically via `_paths.py`. Never pass a junction path to a Python helper or reference one in a SKILL.md instruction.
 - **`${CLAUDE_PLUGIN_ROOT}` for all intra-plugin paths.** Never hardcode `plugins/mill/…` — external repos have no millhouse source checkout.
 - **Working state is never written to the wiki.** `status.md`, `discussion.md`, `plan/`, `reviews/` live on the task branch. The wiki holds only `Home.md` and `config.yaml`.
+- **Folding scope into a Home.md task entry** — via `/mill-fold` or the fold-in branch of `/mill-ghissues-to-tasks` — is forbidden when the target's phase marker is `[active]`, `[ready-to-merge]`, or `[pr-pending]`. The plan was committed at spawn time and scope additions silently invalidate it. Phase tuple lives at `_tasks_md.LOCKED_FOLD_PHASES`; both skills import it. Personal memory is NOT a valid place for this rule — it must travel with the repo.
 
 ---
 
