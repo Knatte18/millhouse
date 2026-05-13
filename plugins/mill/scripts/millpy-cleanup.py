@@ -8,7 +8,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import shutil
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -34,7 +33,6 @@ class SlugRecord:
     slug: str
     worktree_path: Path | None
     branch: str | None
-    wiki_active_dir: Path | None
     home_marker: str | None
 
 
@@ -45,6 +43,7 @@ class CleanupPlan:
     to_reset_home: list[str]
     to_report: list[str]
     to_reap_pr: list[SlugRecord] = field(default_factory=list)
+    orphan_portals: list[Path] = field(default_factory=list)
 
 
 # Returns None if status.md is missing or phase: is unreadable.
@@ -58,6 +57,17 @@ def _read_phase(status_path: Path) -> str | None:
         return cfg.get("phase")
     except Exception:
         return None
+
+
+def _scan_orphan_portals(portals_dir: Path, active_slugs: set[str]) -> list[Path]:
+    if not portals_dir.is_dir():
+        return []
+    stale: list[Path] = []
+    for entry in portals_dir.iterdir():
+        # Two-condition oracle: slug missing from Home.md OR target gone.
+        if entry.name not in active_slugs or not entry.exists():
+            stale.append(entry)
+    return stale
 
 
 def build_plan(
@@ -117,19 +127,14 @@ def build_plan(
             continue
 
         active_slugs.add(slug)
-        _task_status = wt_path / "task" / "status.md"
-        _legacy_status = wt_path / "status.md"
-        phase = _read_phase(_task_status if _task_status.exists() else _legacy_status)
+        phase = _read_phase(_paths.resolve_task_path(wt_path, "_mill/status.md"))
         if phase is None:
             to_report.append(
-                f"{slug} — status.md unreadable, skipping (inspect manually)"
+                f"{slug} -- status.md unreadable, skipping (inspect manually)"
             )
             continue
 
-        wiki_active_dir_candidate = wiki_path / "active" / slug
-        wiki_active_dir = wiki_active_dir_candidate if wiki_active_dir_candidate.is_dir() else None
-
-        record = SlugRecord(slug, wt_path, branch, wiki_active_dir, marker_by_slug.get(slug))
+        record = SlugRecord(slug, wt_path, branch, marker_by_slug.get(slug))
 
         if phase == "done":
             home_marker = marker_by_slug.get(slug)
@@ -141,14 +146,14 @@ def build_plan(
                     to_remove_done.append(record)
                 else:
                     to_report.append(
-                        f"{slug} — Home.md=[done] but archive tag archive/{slug} absent;"
+                        f"{slug} -- Home.md=[done] but archive tag archive/{slug} absent;"
                         f" run mill-merge first"
                     )
             elif home_marker == "ready-to-merge":
                 pass
             else:
                 to_report.append(
-                    f"{slug} — status.md phase=done but Home.md marker is {home_marker!r};"
+                    f"{slug} -- status.md phase=done but Home.md marker is {home_marker!r};"
                     f" inspect manually"
                 )
         elif phase == "abandoned":
@@ -157,7 +162,7 @@ def build_plan(
                 to_reset_home.append(slug)
             else:
                 to_report.append(
-                    f"{slug} — phase=abandoned but Home.md marker is "
+                    f"{slug} -- phase=abandoned but Home.md marker is "
                     f"{record.home_marker!r}, not [active]; skipping (inspect manually)"
                 )
         elif phase == "pr-pending":
@@ -165,7 +170,7 @@ def build_plan(
         elif phase in _LIVE_PHASES:
             pass
         else:
-            to_report.append(f"{slug} — unknown phase {phase!r}, skipping")
+            to_report.append(f"{slug} -- unknown phase {phase!r}, skipping")
 
     # Orphan worktree detection: wts/ dirs without active markers.
     if container_path is not None:
@@ -183,6 +188,12 @@ def build_plan(
                         f" run 'git worktree remove --force {entry}' to clean up)"
                     )
 
+    orphan_portals: list[Path] = []
+    if container_path is not None:
+        orphan_portals = _scan_orphan_portals(
+            container_path / "portals", active_slugs
+        )
+
     # Orphan Home.md marker: [active]/[ready-to-merge]/[pr-pending] slug with no active worktree.
     for task in home_tasks:
         if task.phase in ("active", "ready-to-merge", "pr-pending") and task.slug not in active_slugs:
@@ -198,28 +209,30 @@ def build_plan(
                 f"orphan active worktree: {slug} has active marker but no Home.md entry"
             )
 
-    return CleanupPlan(to_remove_done, to_remove_abandoned, to_reset_home, to_report, to_reap_pr=to_reap_pr)
+    return CleanupPlan(to_remove_done, to_remove_abandoned, to_reset_home, to_report, to_reap_pr=to_reap_pr, orphan_portals=orphan_portals)
 
 
 def _print_plan(plan: CleanupPlan) -> None:
-    if not any([plan.to_remove_done, plan.to_remove_abandoned, plan.to_reap_pr, plan.to_report]):
+    if not any([plan.to_remove_done, plan.to_remove_abandoned, plan.to_reap_pr, plan.to_report, plan.orphan_portals]):
         print("Nothing to do.")
         return
     for r in plan.to_remove_done:
         print(
             f"REMOVE (done):      {r.slug}  "
-            f"[worktree={r.worktree_path}, branch={r.branch}, wiki_active_dir={r.wiki_active_dir}]"
+            f"[worktree={r.worktree_path}, branch={r.branch}]"
         )
     for r in plan.to_remove_abandoned:
         print(
             f"REMOVE (abandoned): {r.slug}  "
-            f"[worktree={r.worktree_path}, branch={r.branch}, wiki_active_dir={r.wiki_active_dir}]"
-            f"  \u2192 Home.md marker reset to unclaimed"
+            f"[worktree={r.worktree_path}, branch={r.branch}]"
+            f"  -> Home.md marker reset to unclaimed"
         )
     for r in plan.to_reap_pr:
         print(f"REAP-PR:           {r.slug}  [worktree={r.worktree_path}, branch={r.branch}]")
     for line in plan.to_report:
         print(f"REPORT: {line}")
+    for p in plan.orphan_portals:
+        print(f"ORPHAN-PORTAL:     {p.name}  [target gone or not in Home.md]")
 
 
 def _resolve_inplace_mode(
@@ -281,6 +294,11 @@ def _resolve_inplace_mode(
     return ("worktree", "")
 
 
+def _apply_orphan_portal(portal_path: Path) -> None:
+    _junction.remove(portal_path)
+    print(f"[cleanup] removed orphan portal: {portal_path}", file=sys.stderr)
+
+
 def _apply_inplace_record(
     record: SlugRecord,
     hub_root: Path,
@@ -304,9 +322,7 @@ def _apply_inplace_record(
     """
     # Read parent branch from status.md so we can check out safely.
     if record.worktree_path is not None:
-        _task_status = record.worktree_path / "task" / "status.md"
-        _legacy_status = record.worktree_path / "status.md"
-        parent_branch = _status.read_parent_branch(_task_status if _task_status.exists() else _legacy_status)
+        parent_branch = _status.read_parent_branch(_paths.resolve_task_path(record.worktree_path, "_mill/status.md"))
     else:
         parent_branch = None
 
@@ -334,9 +350,7 @@ def _apply_inplace_record(
     # Determine deletion flag: done tasks get -d (safe); abandoned get -D (force).
     # Phase is re-read from the worktree's status.md; fall back to -D when absent.
     if record.worktree_path is not None:
-        _task_status_ip = record.worktree_path / "task" / "status.md"
-        _legacy_status_ip = record.worktree_path / "status.md"
-        phase = _read_phase(_task_status_ip if _task_status_ip.exists() else _legacy_status_ip)
+        phase = _read_phase(_paths.resolve_task_path(record.worktree_path, "_mill/status.md"))
         delete_flag = "-d" if phase == "done" else "-D"
     else:
         delete_flag = "-D"
@@ -439,13 +453,13 @@ def _apply_pr_reap_record(
     number = pr_data.get("number")
 
     if state == "OPEN":
-        print(f"[cleanup] PR-reap {record.slug}: PR #{number} still OPEN — skipping")
+        print(f"[cleanup] PR-reap {record.slug}: PR #{number} still OPEN -- skipping")
         return wiki_relative_paths
 
     if state == "CLOSED":
         print(
             f"[cleanup] PR-reap {record.slug}: PR #{number} CLOSED without merge"
-            f" — inspect manually (abandon or reopen)",
+            f" -- inspect manually (abandon or reopen)",
             file=sys.stderr,
         )
         return wiki_relative_paths
@@ -507,10 +521,6 @@ def _apply_pr_reap_record(
     else:
         _apply_worktree_record(record, hub_root, wiki_path, junctions_cfg)
 
-    if record.wiki_active_dir is not None and record.wiki_active_dir.is_dir():
-        shutil.rmtree(record.wiki_active_dir)
-        wiki_relative_paths.append(f"active/{record.slug}")
-
     return wiki_relative_paths
 
 
@@ -530,7 +540,7 @@ def apply_plan(
         mode, task_branch = _resolve_inplace_mode(record, hub_root, wiki_path, cfg)
         if mode == "abort":
             print(
-                f"[cleanup] skipping {record.slug} — user aborted stale-worktree prompt.",
+                f"[cleanup] skipping {record.slug} -- user aborted stale-worktree prompt.",
                 file=sys.stderr,
             )
             continue
@@ -540,14 +550,13 @@ def apply_plan(
         else:
             _apply_worktree_record(record, hub_root, wiki_path, junctions_cfg)
 
-        if record.wiki_active_dir is not None and record.wiki_active_dir.is_dir():
-            shutil.rmtree(record.wiki_active_dir)
-            wiki_relative_paths.append(f"active/{record.slug}")
-
     for record in plan.to_reap_pr:
         wiki_relative_paths.extend(
             _apply_pr_reap_record(record, hub_root, wiki_path, junctions_cfg, cfg)
         )
+
+    for portal_path in plan.orphan_portals:
+        _apply_orphan_portal(portal_path)
 
     active_link = hub_root / ".active"
     if os.path.lexists(str(active_link)) and not active_link.is_dir():
@@ -567,7 +576,7 @@ def apply_plan(
         _wiki.write_commit_push(
             wiki_path,
             wiki_relative_paths,
-            f"chore: cleanup — {len(plan.to_remove_done)} done, "
+            f"chore: cleanup -- {len(plan.to_remove_done)} done, "
             f"{len(plan.to_remove_abandoned)} abandoned, {len(plan.to_reap_pr)} pr-reaped",
             slug="mill-cleanup",
         )

@@ -35,10 +35,10 @@ You are an integration engineer. Your job is to merge a completed task branch ba
 2. `_wiki.sync_pull(<WIKI_PATH>, slug=slug)`.
 3. Slug already resolved in Step 1; reuse `active_data['slug']` — no second read needed.
 4. *(Config already loaded in Step 1.)*
-5. Resolve parent branch via `_parent_branch.resolve(status_path, interactive=<True unless called non-interactively>)`. `status_path` is `git_root / "task" / "status.md"` — state lives in `task/` on the task branch, not in the wiki.
+5. Resolve parent branch via `_parent_branch.resolve(status_path, interactive=<True unless called non-interactively>)`. `status_path` is `git_root / "_mill" / "status.md"` — state lives in `_mill/` on the task branch, not in the wiki.
 6. **Phase gate — also the re-entry point for PR-path recovery.**
 
-   **Try `task/status.md` first.** If `status_path.exists()`, read `phase:` from it and apply the table below. If `task/status.md` is absent (the PR-path cleanup commit already removed `task/`), read `Home.md` instead: call `_wiki.sync_pull(wiki_path, slug=slug)`, read `home_text = (wiki_path / "Home.md").read_text(encoding="utf-8")`, parse with `tasks = _tasks_md.parse(home_text)` (`signature: _tasks_md.parse(text: str) -> list[Task]` — Task has `.slug: str` and `.phase: str | None` attributes), then `task = next((t for t in tasks if t.slug == slug), None)`. Guard: `if task is None: halt("task/status.md absent and slug '<slug>' not found in Home.md; cannot determine merge state.")`. Otherwise: if `task.phase == "pr-pending"` → treat as `pr-pending` below. Otherwise → halt with "task/status.md absent and Home.md does not show pr-pending for '<slug>'; cannot determine merge state."
+   **Try `_mill/status.md` first.** If `status_path.exists()`, read `phase:` from it and apply the table below. If `_mill/status.md` is absent (the PR-path cleanup commit already removed `_mill/`), read `Home.md` instead: call `_wiki.sync_pull(wiki_path, slug=slug)`, read `home_text = (wiki_path / "Home.md").read_text(encoding="utf-8")`, parse with `tasks = _tasks_md.parse(home_text)` (`signature: _tasks_md.parse(text: str) -> list[Task]` — Task has `.slug: str` and `.phase: str | None` attributes), then `task = next((t for t in tasks if t.slug == slug), None)`. Guard: `if task is None: halt("_mill/status.md absent and slug '<slug>' not found in Home.md; cannot determine merge state.")`. Otherwise: if `task.phase == "pr-pending"` → treat as `pr-pending` below. Otherwise → halt with "_mill/status.md absent and Home.md does not show pr-pending for '<slug>'; cannot determine merge state."
 
    | phase | action |
    | --- | --- |
@@ -79,13 +79,13 @@ Steps 4–7 implement the canonical merge sequence; worktree, portal, and wiki a
 On the task branch (current cwd), remove the state directory that belongs to the task lifecycle, not to production code:
 
 ```bash
-git rm -r task/
+git rm -r _mill/
 git commit -m "chore: pre-merge cleanup"
 ```
 
 **Why:** squashing a branch that already has cleanup as its tip means the squash commit on the parent never includes transient task metadata. The cleanup commit is itself preserved under the archive tag created in Step 6.
 
-**Idempotency:** if `task/` is already absent (re-run after partial failure), `git rm -r` will warn "did not match any files" — treat as a no-op. If the resulting working tree has nothing to commit, skip the commit.
+**Idempotency:** if `_mill/` is already absent (re-run after partial failure), `git rm -r` will warn "did not match any files" — treat as a no-op. If the resulting working tree has nothing to commit, skip the commit.
 
 ### 5. Direct squash
 
@@ -139,14 +139,14 @@ PR dispatch lives in mill-finalize. This step is direct path only.
      git push origin "$CHILD_BRANCH"
      ```
 
-  6. Append the `pr-pending` phase and commit+push `task/status.md` on the task branch:
+  6. Append the `pr-pending` phase and commit+push `_mill/status.md` on the task branch:
 
      ```python
      _status.append_phase(status_path, "pr-pending", _timestamp.now_utc_iso())
      ```
 
      ```bash
-     git add task/status.md && git commit -m "chore: pr-pending after branch-protection fallback" && git push
+     git add _mill/status.md && git commit -m "chore: pr-pending after branch-protection fallback" && git push
      ```
 
   7. Flip Home.md to `[pr-pending]`:
@@ -244,6 +244,6 @@ Post-Step-5 failures (archive tag, Home.md, sidebar) are **not** rolled back —
 ## Board discipline
 
 - Home.md writes go through `_wiki.write_commit_push` (which acquires the wiki lock internally). For multi-operation windows use `with _wiki.wiki_lock(wiki_path, slug):`.
-- Task state (`task/status.md`, `task/discussion.md`, `task/plan/`, `task/reviews/`) lives in `task/` on the task branch — never in the wiki. The cleanup commit removes the entire `task/` directory from the branch tip before squash.
-- Phase transitions via `_status.append_phase`; hand-editing `task/status.md` is banned.
+- Task state (`_mill/status.md`, `_mill/discussion.md`, `_mill/plan/`, `_mill/reviews/`) lives in `_mill/` on the task branch — never in the wiki. The cleanup commit removes the entire `_mill/` directory from the branch tip before squash.
+- Phase transitions via `_status.append_phase`; hand-editing `_mill/status.md` is banned.
 - Merge-lock file lives at `<parent-path>/.scratch/merge.lock`. Never placed anywhere else — other skills expect it there.

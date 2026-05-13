@@ -4,7 +4,7 @@ import copy
 
 failures = []
 
-# Scenario 1 — require_pr_to_base: true, parent == base_branch -> PR mode
+# Scenario 1 -- require_pr_to_base: true, parent == base_branch -> PR mode
 try:
     cfg = {"git": {"require_pr_to_base": True, "base_branch": "main"}}
     parent_branch = "main"
@@ -16,7 +16,7 @@ except AssertionError as e:
     print(f"FAIL: {e}", file=sys.stderr)
     failures.append(("scenario_1", str(e)))
 
-# Scenario 2 — require_pr_to_base: true, parent != base_branch -> direct mode
+# Scenario 2 -- require_pr_to_base: true, parent != base_branch -> direct mode
 try:
     cfg = {"git": {"require_pr_to_base": True, "base_branch": "main"}}
     parent_branch = "develop"
@@ -28,7 +28,7 @@ except AssertionError as e:
     print(f"FAIL: {e}", file=sys.stderr)
     failures.append(("scenario_2", str(e)))
 
-# Scenario 3 — require_pr_to_base absent -> direct mode
+# Scenario 3 -- require_pr_to_base absent -> direct mode
 try:
     cfg = {}
     require_pr = bool(cfg.get("git", {}).get("require_pr_to_base", False))

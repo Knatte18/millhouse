@@ -12,6 +12,8 @@ Public API:
         body includes rendered comments appended after the original body.
         When label_filter is a list of label names, only issues carrying at
         least one of those labels are returned.
+    fetch_one(number, repo=None, git_root=None) -> dict
+        Single issue by number; raises GhError if the issue is not OPEN.
     close_with_comment(number, comment, repo=None, git_root=None) -> None
         Close an issue after posting a single comment. Used by mill-revise-
         tasks when an issue has been turned into (or folded into) a task.
@@ -125,6 +127,66 @@ def fetch(
             if any(label["name"] in label_filter for label in i.get("labels", []))
         ]
     return issues
+
+
+def fetch_one(
+    number: int,
+    *,
+    repo: str | None = None,
+    git_root: Path | None = None,
+) -> dict[str, Any]:
+    """Return a single issue dict for ``number``.
+
+    Invokes ``gh issue view`` with the ``state`` field included in the JSON
+    response — this is load-bearing because ``gh issue view`` exits 0 for
+    both OPEN and CLOSED issues. After a successful parse the ``state`` field
+    is inspected; only ``"OPEN"`` issues are returned. Raises ``GhError`` when
+    the issue is closed or otherwise not actionable.
+
+    Args:
+        number: GitHub issue number to look up.
+        repo: ``owner/repo`` string. Detected from ``git remote get-url origin``
+            when ``None``.
+        git_root: Override the git root used for repo detection.
+
+    Returns:
+        The parsed issue dict including ``number``, ``title``, ``body``,
+        ``state``, ``labels``, ``createdAt``. ``body`` includes rendered
+        comments appended after the original body when comments exist.
+
+    Raises:
+        GhError: The ``gh`` CLI returned a non-zero exit code (e.g. 404,
+            auth failure), JSON parsing failed, or the issue state is not
+            ``"OPEN"`` (closed-issue guard).
+    """
+    repo_name = repo or detect_repo(git_root=git_root)
+    if not repo_name:
+        raise GhError(
+            "Could not detect the repository (not in a git repo with a GitHub remote)."
+        )
+
+    result = _subprocess_util.run(
+        [
+            "gh", "issue", "view", str(number),
+            "--repo", repo_name,
+            "--json", "number,title,body,state,labels,createdAt,comments",
+        ]
+    )
+    if result.returncode != 0:
+        raise GhError(
+            f"gh issue view #{number} failed: {(result.stderr or '').strip()}"
+        )
+    try:
+        issue = json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        raise GhError(f"Failed to parse gh output: {exc}") from exc
+
+    state = issue.get("state", "")
+    if state != "OPEN":
+        raise GhError(f"issue #{number} is {state}; only OPEN issues can be folded")
+
+    issue["body"] = _render_body_with_comments(issue["body"], issue.pop("comments", []))
+    return issue
 
 
 def close_with_comment(

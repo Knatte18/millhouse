@@ -33,7 +33,7 @@ If a slug is passed, resume that specific task. If no argument is provided, list
 
 If `.millhouse/config.local.yaml` (or the legacy `.millhouse/config.yaml`) does not exist, stop and tell the user to run `mill-setup` first.
 
-If the `.millhouse/wiki/` junction does not exist at cwd, stop and tell the user to run `mill-setup` first (the wiki junction is required to read task state).
+If the `.wiki` junction does not exist at cwd, stop and tell the user to run `mill-setup` first (the wiki junction is required to read task state).
 
 ### Phase 2: Sync wiki
 
@@ -61,7 +61,7 @@ Resume candidates:
 Pick a number:
 ```
 
-The phase shown is from the remote branch tip's `status.md`. Fetch and read it with `git show origin/<branch_name>:status.md`; parse the `phase:` field from the YAML block. If the file is absent or unreadable, show `(phase: unknown)`.
+The phase shown is from the remote branch tip's `_mill/status.md`. Fetch and read it with `git show origin/<branch_name>:_mill/status.md`; parse the `phase:` field from the YAML block. If the file is absent or unreadable, show `(phase: unknown)`.
 
 If there are no candidates (all active tasks already have a local worktree), print:
 
@@ -97,13 +97,13 @@ No remote branch '<branch_name>' exists. The task is active but the feature bran
 **Check 2 — remote branch has a status.md:**
 
 ```bash
-git show origin/<branch_name>:status.md
+git show origin/<branch_name>:_mill/status.md
 ```
 
 If the file is absent (pre-migration task whose state was in the wiki but was never committed to the branch), halt with:
 
 ```
-Branch '<branch_name>' exists but has no status.md. This task may predate the container-layout migration — resolve manually: commit a status.md to the branch, or run mill-abandon to clean up.
+Branch '<branch_name>' exists but has no _mill/status.md. This task may predate the container-layout migration — resolve manually: commit a status.md to the branch, or run mill-abandon to clean up.
 ```
 
 ### Phase 6: Create worktree
@@ -121,24 +121,24 @@ If the remote-tracking branch is not yet fetched locally, run `git fetch origin 
 
 ### Phase 7: Copy `.millhouse/` from parent
 
-Copy `.millhouse/` (excluding `task/`, `scratch/`, and `children/`) from the parent worktree (cwd) to the new worktree. This gives the new worktree the config and wrapper scripts without inheriting stale task state.
+Copy `.millhouse/` (excluding `scratch/` and `children/`) from the parent worktree (cwd) to the new worktree. This gives the new worktree the config and wrapper scripts. (`_mill/` lives at the worktree root on the task branch and is not under `.millhouse/` — no exclusion needed.)
 
 Also copy `.millhouse/config.local.yaml` from the parent to the new worktree if it exists.
 
 This is the same copy step as `mill-spawn` — see `plugins/mill/scripts/millpy/entrypoints/spawn_task.py` for the canonical implementation.
 
-### Phase 8: Create `.millhouse/wiki/` junction
+### Phase 8: Create `.wiki` junction
 
-Create a `.millhouse/wiki/` junction in the new worktree pointing at the same wiki clone as the parent:
+Create a `.wiki` junction in the new worktree pointing at the same wiki clone as the parent:
 
 ```python
 from _junction import create as junction_create
-junction_create(wiki_clone_path, new_worktree / ".millhouse" / "wiki")
+junction_create(wiki_clone_path, new_worktree / ".wiki")
 ```
 
 ### Phase 9: Read and report phase
 
-Read `<container>/wts/<slug>/status.md` from the newly added worktree. Parse the `phase:` field from the YAML block.
+Read `<container>/wts/<slug>/_mill/status.md` from the newly added worktree. Parse the `phase:` field from the YAML block.
 
 ### Phase 10: Regenerate sidebar
 
@@ -173,7 +173,7 @@ Note: task is mid-review. mill-go will re-enter the current phase from its start
 | Condition | Action |
 |---|---|
 | `.millhouse/config.local.yaml` missing | Stop, tell user to run `mill-setup` |
-| `.millhouse/wiki/` junction missing | Stop, tell user to run `mill-setup` |
+| `.wiki` junction missing | Stop, tell user to run `mill-setup` |
 | `_wiki.sync_pull` raises `WikiPushError` | Report error; do not proceed (stale state risk) |
 | No remote branch for slug | Halt with manual-resolution message |
 | Remote branch has no status.md | Halt with manual-resolution message (pre-migration task) |

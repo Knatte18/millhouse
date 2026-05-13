@@ -67,6 +67,7 @@ If the issue does not overlap with any current Home.md task, present: `1) New ta
 **On selection 2 (Fold into existing):**
 - Prompt for target slug (free text).
 - Validate against the parsed Home.md slug list; re-prompt if not found.
+- Phase check: parse Home.md via `_tasks_md.parse()` and inspect the target Task's phase. When the phase is in `_tasks_md.LOCKED_FOLD_PHASES` (i.e. one of `"active"`, `"ready-to-merge"`, `"pr-pending"`), refuse the fold for this issue: print `"Cannot fold #<N> into <slug>: task is [<phase>]. Plan is frozen — scope additions silently invalidate it. Pick a different action for this issue."` and re-present the decision menu with option 2 omitted (struck-through or disabled). Use `_tasks_md.LOCKED_FOLD_PHASES` as the source of truth — never duplicate the tuple in this SKILL.md or anywhere else.
 - Record the decision.
 
 **On selection 3 (Skip):**
@@ -117,16 +118,25 @@ Print a one-line summary to chat + the path. User replies `approve` or `reject`.
 
 1. Build the updated `Home.md` content:
    - Append new task entries using the mill-add format (`## <Title> [<slug>]` or bracketed-proposal form).
-   - For each fold-in, leave existing task text unchanged unless the user asked to append a note.
+   - For each fold-in, call `_tasks_md.append_to_body(home_text, target_slug, f"- Sources: #{N} — {issue_title}")` to add a Sources: bullet to the target body. The append is unconditional — there is no longer a "leave unchanged" path. Each fold-in produces the same Home.md output as a `/mill-fold #N <slug>` invocation.
 2. Write Home.md + any new `proposal-<slug>.md` files to the wiki and push via `_wiki.write_commit_push`.
 3. Regenerate the sidebar (`_sidebar.regenerate`) and commit if it changed.
-4. For each consumed issue (new or fold-in), call:
-   ```bash
-   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "
-   import _gh_issues, _paths
-   _gh_issues.close_with_comment(<N>, 'Consolidated into wiki task: <slug>', git_root=_paths.resolve_git_root())
-   "
-   ```
+4. For each consumed issue, close it on GitHub with the per-decision comment string:
+   - For each consumed **New-task** issue, call:
+     ```bash
+     PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "
+     import _gh_issues, _paths
+     _gh_issues.close_with_comment(<N>, 'Consolidated into wiki task: <slug>', git_root=_paths.resolve_git_root())
+     "
+     ```
+   - For each consumed **Fold-in** issue, call:
+     ```bash
+     PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "
+     import _gh_issues, _paths
+     _gh_issues.close_with_comment(<N>, 'Folded into wiki task: <slug>', git_root=_paths.resolve_git_root())
+     "
+     ```
+     The Fold-in close-comment string MUST match `/mill-fold`'s exactly — see `plugins/mill/skills/mill-fold/SKILL.md`.
    On any failure, log the issue number + error and continue; report at the end.
 
 ## Step 6 — Report
@@ -146,3 +156,6 @@ Revision applied.
 - **Skipped issues are untouched** — no comment, no label, no close. Forgetting is better than lingering "tracked" state.
 - **Close only on approval + actual write** — never close an issue before the task is committed to Home.md.
 - **Pointer comment is the invariant** — every closed issue gets `Consolidated into wiki task: <slug>` so someone browsing closed issues later can find where it went.
+- Fold targets must be in an unlocked phase. `_tasks_md.LOCKED_FOLD_PHASES` is the source of truth — never duplicate the tuple.
+- Fold-in always appends a `"- Sources: #N — <issue title>"` bullet to the target body via `_tasks_md.append_to_body`. The Home.md output of a fold-in is identical between this skill and `/mill-fold`.
+- Close-comment strings: New-task → `"Consolidated into wiki task: <slug>"`; Fold-in → `"Folded into wiki task: <slug>"`. The Fold-in string matches `/mill-fold`'s comment verbatim.

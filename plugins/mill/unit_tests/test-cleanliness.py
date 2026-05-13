@@ -154,7 +154,7 @@ def main() -> int:
     # 9. capture_snapshot: writes the exact git status --porcelain --untracked-files=no stdout
     try:
         with tempfile.TemporaryDirectory() as tmp:
-            snapshot_path = Path(tmp) / "task" / ".cleanliness-snapshot-foo.txt"
+            snapshot_path = Path(tmp) / "_mill" / ".cleanliness-snapshot-foo.txt"
             with unittest.mock.patch(
                 "_subprocess_util.run", return_value=_mock_run(" M file.txt\n")
             ) as mock:

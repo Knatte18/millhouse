@@ -20,7 +20,6 @@ from _spawn_core import (  # noqa: E402
     prompt_merged_entry,
     recreate_active_junction,
     write_initial_status,
-    write_wiki_active_task_md,
 )
 import _tasks_md  # noqa: E402
 
@@ -366,10 +365,10 @@ def test_write_initial_status() -> None:
             parent_branch="main",
             branch="hanf/task-one",
         )
-        # status.md must be at task/status.md under the worktree root
-        if status_path != repo / "task" / "status.md":
+        # status.md must be at _mill/status.md under the worktree root
+        if status_path != repo / "_mill" / "status.md":
             raise AssertionError(
-                f"status.md must be at task/ subdir; expected {repo / 'task' / 'status.md'}, "
+                f"status.md must be at _mill/ subdir; expected {repo / '_mill' / 'status.md'}, "
                 f"got {status_path}"
             )
         if not status_path.exists():
@@ -384,7 +383,7 @@ def test_write_initial_status() -> None:
 
         # git log for just task/status.md must show one commit with the expected message
         log = subprocess.run(
-            ["git", "-C", str(repo), "log", "--oneline", "task/status.md"],
+            ["git", "-C", str(repo), "log", "--oneline", "_mill/status.md"],
             capture_output=True,
             text=True,
         )
@@ -416,7 +415,7 @@ def test_write_initial_status_forced_failure_raises_runtime_error() -> None:
             )
         except RuntimeError as exc:
             msg = str(exc)
-            if "git add task/status.md failed" not in msg:
+            if "git add _mill/status.md failed" not in msg:
                 raise AssertionError(
                     f"RuntimeError message missing expected prefix; got: {msg!r}"
                 )
@@ -523,43 +522,6 @@ def test_recreate_active_junction_idempotent() -> None:
         if not (link_path.exists() or link_path.is_symlink()):
             raise AssertionError(f"junction not present after two calls at {link_path}")
     print("PASS: recreate_active_junction is idempotent (second call keeps link valid)")
-
-
-# ---------------------------------------------------------------------------
-# write_wiki_active_task_md
-# ---------------------------------------------------------------------------
-
-
-def test_write_wiki_active_task_md() -> None:
-    """write_wiki_active_task_md creates wiki/active/<slug>/task.md and commits."""
-    with tempfile.TemporaryDirectory() as tmp:
-        wiki = _make_wiki(tmp, _HOME_MD_UNMARKED_ONLY)
-        write_wiki_active_task_md(wiki, "task-one", "Task One Title", "20260506-180000")
-
-        active_dir = wiki / "active" / "task-one"
-        if not active_dir.is_dir():
-            raise AssertionError(f"active dir not created at {active_dir}")
-
-        task_md = active_dir / "task.md"
-        if not task_md.exists():
-            raise AssertionError(f"task.md not created at {task_md}")
-
-        content = task_md.read_text(encoding="utf-8")
-        if "task-one" not in content:
-            raise AssertionError(f"slug not in task.md: {content!r}")
-        if "Task One Title" not in content:
-            raise AssertionError(f"title not in task.md: {content!r}")
-
-        log = subprocess.run(
-            ["git", "-C", str(wiki), "log", "--pretty=%s", "-n", "1"],
-            capture_output=True,
-            text=True,
-        )
-        if "task-one" not in log.stdout:
-            raise AssertionError(
-                f"expected commit with task-one in message, got:\n{log.stdout}"
-            )
-    print("PASS: write_wiki_active_task_md creates active dir, writes task.md, commits")
 
 
 # ---------------------------------------------------------------------------
@@ -989,7 +951,6 @@ def main() -> int:
         test_write_initial_status_push_failure_raises_runtime_error,
         test_recreate_active_junction_creates_link,
         test_recreate_active_junction_idempotent,
-        test_write_wiki_active_task_md,
         test_discover_active_worktrees_standard_layout,
         test_discover_active_worktrees_subfolder_install,
     ]

@@ -79,8 +79,8 @@ def prompt_stale_worktree(slug: str, worktree_path: Path) -> str:
         file=sys.stderr,
     )
     print("  1) Abort (Recommended)", file=sys.stderr)
-    print("  2) Treat as in-place — skip worktree remove", file=sys.stderr)
-    print("  3) Treat as worktree — run git worktree remove", file=sys.stderr)
+    print("  2) Treat as in-place -- skip worktree remove", file=sys.stderr)
+    print("  3) Treat as worktree -- run git worktree remove", file=sys.stderr)
 
     try:
         raw = input("Choice [1/2/3]: ").strip()

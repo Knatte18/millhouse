@@ -21,6 +21,16 @@ Does not create a new worktree directory. Exits 0 (not 1) when the backlog is em
 
 mill-claim does NOT create a `<container>/wts/<slug>/` directory. The current worktree (the hub itself) IS the task worktree for this slug. The task branch is checked out in place. The "this is a mill task worktree" signal is the branch+Home.md pair, not a marker file.
 
-Downstream skills (mill-start, mill-plan, mill-go, review scripts) resolve the active worktree via `_paths.resolve_active_worktree(container, slug, *, cfg, git_root)`, which returns the hub path in in-place mode. `task/discussion.md`, `task/plan/`, `task/reviews/`, and `task/status.md` live at `<active_hub>/task/...` — when `hub_relative_path` is set in `.millhouse/config.local.yaml`, that is `<git_root>/<hub_relative_path>/task/...`, NOT `<git_root>/task/...`.
+Downstream skills (mill-start, mill-plan, mill-go, review scripts) resolve the active worktree via `_paths.resolve_active_worktree(container, slug, *, cfg, git_root)`, which returns the hub path in in-place mode. `_mill/discussion.md`, `_mill/plan/`, `_mill/reviews/`, and `_mill/status.md` live at `<active_hub>/_mill/...` — when `hub_relative_path` is set in `.millhouse/config.local.yaml`, that is `<git_root>/<hub_relative_path>/_mill/...`, NOT `<git_root>/_mill/...`.
+
+### Portal + junctions
+
+mill-claim creates a portal entry pointing to `<active_hub>/_mill/` at `<container>/portals/<slug>/`, and three junctions inside the hub:
+
+- `.wiki` → wiki clone path
+- `.active` → `<container>/portals/<slug>/`
+- `.portals` → `<container>/portals/`
+
+These are the same set that mill-spawn creates in separate worktrees. Junction targets are read from `wiki/config.yaml`.
 
 Use mill-spawn instead when you want a separate worktree directory for the task.

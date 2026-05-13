@@ -4,6 +4,8 @@
 """
 from __future__ import annotations
 
+import contextlib
+import io
 import sys
 import tempfile
 from pathlib import Path
@@ -62,6 +64,74 @@ def _write_stub(mill_dir, hub_relative_path):
     (mill_dir / "config.local.yaml").write_text(
         f"hub_relative_path: {hub_relative_path}\n", encoding="utf-8"
     )
+
+
+def test_resolve_task_path() -> None:
+    # Case 1: _mill/discussion.md exists -> returns _mill/ path, no [compat] in stderr
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "_mill").mkdir()
+        (root / "_mill" / "discussion.md").write_text("", encoding="utf-8")
+        buf = io.StringIO()
+        with contextlib.redirect_stderr(buf):
+            got = _paths.resolve_task_path(root, "_mill/discussion.md")
+        assert got == root / "_mill" / "discussion.md", f"case 1: got {got}"
+        assert "[compat]" not in buf.getvalue(), f"case 1: unexpected [compat] in stderr"
+    print("PASS resolve_task_path case 1: _mill/ target exists -> _mill/ path, no stderr")
+
+    # Case 2: _mill/ absent, task/ present -> falls back, [compat] in stderr
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "task").mkdir()
+        (root / "task" / "discussion.md").write_text("", encoding="utf-8")
+        buf = io.StringIO()
+        with contextlib.redirect_stderr(buf):
+            got = _paths.resolve_task_path(root, "_mill/discussion.md")
+        assert got == root / "task" / "discussion.md", f"case 2: got {got}"
+        assert "[compat]" in buf.getvalue(), f"case 2: expected [compat] in stderr"
+    print("PASS resolve_task_path case 2: _mill/ absent, task/ present -> task/ path, [compat] stderr")
+
+    # Case 3: neither exists -> returns _mill/ path, no [compat] in stderr
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        buf = io.StringIO()
+        with contextlib.redirect_stderr(buf):
+            got = _paths.resolve_task_path(root, "_mill/discussion.md")
+        assert got == root / "_mill" / "discussion.md", f"case 3: got {got}"
+        assert "[compat]" not in buf.getvalue(), f"case 3: unexpected [compat] in stderr"
+    print("PASS resolve_task_path case 3: neither exists -> _mill/ path, no stderr")
+
+    # Case 4: _mill/plan/ directory exists -> returns _mill/plan/ path
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "_mill" / "plan").mkdir(parents=True)
+        buf = io.StringIO()
+        with contextlib.redirect_stderr(buf):
+            got = _paths.resolve_task_path(root, "_mill/plan/")
+        assert got == root / "_mill" / "plan", f"case 4: got {got}"
+        assert "[compat]" not in buf.getvalue(), f"case 4: unexpected [compat] in stderr"
+    print("PASS resolve_task_path case 4: _mill/plan/ dir exists -> _mill/plan/ path")
+
+    # Case 5: _mill/plan/ absent, task/plan/ present -> falls back, [compat] in stderr
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "task" / "plan").mkdir(parents=True)
+        buf = io.StringIO()
+        with contextlib.redirect_stderr(buf):
+            got = _paths.resolve_task_path(root, "_mill/plan/")
+        assert got == root / "task" / "plan", f"case 5: got {got}"
+        assert "[compat]" in buf.getvalue(), f"case 5: expected [compat] in stderr"
+    print("PASS resolve_task_path case 5: _mill/plan/ absent, task/plan/ present -> task/plan/, [compat] stderr")
+
+    # Case 6: cfg_relative_path without _mill/ -> direct return, no fallback attempted
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        buf = io.StringIO()
+        with contextlib.redirect_stderr(buf):
+            got = _paths.resolve_task_path(root, "task/status.md")
+        assert got == root / "task" / "status.md", f"case 6: got {got}"
+        assert "[compat]" not in buf.getvalue(), f"case 6: unexpected [compat] in stderr"
+    print("PASS resolve_task_path case 6: no _mill/ in path -> direct return, no fallback")
 
 
 def main() -> int:
@@ -710,6 +780,7 @@ def main() -> int:
             assert isinstance(got, Path), f"expected Path, got {type(got)}"
         print("PASS: resolve_wiki_path falls through (no exception) when git_toplevel.name != 'wiki'")
 
+        test_resolve_task_path()
         print("All _paths unit tests passed.")
         return 0
     except AssertionError as exc:
