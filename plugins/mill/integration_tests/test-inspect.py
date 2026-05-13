@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import json
 import os
-import shutil
 import subprocess
 import sys
 from datetime import datetime
@@ -26,7 +25,8 @@ PLUGIN_ROOT = HUB / "plugins" / "mill"
 SCRATCH = HUB / ".scratch"
 
 sys.path.insert(0, str(SCRIPTS))
-import _status
+import _safe_rmtree  # noqa: E402
+import _status  # noqa: E402
 
 
 def _run(cmd: list[str], *, cwd: Path, check: bool = True) -> subprocess.CompletedProcess:
@@ -161,7 +161,7 @@ def main() -> int:
         print("PASS: --since planned — implementing passes, discussing filtered")
 
         # --- no active tasks ---
-        shutil.rmtree(str(wiki / "active"), ignore_errors=True)
+        _safe_rmtree.safe_rmtree(wiki / "active", allowed_root=wiki / "active", ignore_errors=True)
         (wiki / "active").mkdir()
         r = _run(["uv", "run", "--project", str(PLUGIN_ROOT), str(script)], cwd=hub, check=False)
         assert r.returncode == 0, f"no-active exit={r.returncode}\n{r.stderr}"
@@ -190,7 +190,7 @@ def main() -> int:
         failed = True
 
     if not failed:
-        shutil.rmtree(container, ignore_errors=True)
+        _safe_rmtree.safe_rmtree(container, allowed_root=container, ignore_errors=True)
     else:
         print(f"Fixture preserved at: {container}", file=sys.stderr)
 

@@ -19,10 +19,7 @@ Run from hub root:
 """
 from __future__ import annotations
 
-import re
-import shutil
 import sys
-import textwrap
 import uuid
 from pathlib import Path
 
@@ -36,10 +33,9 @@ sys.path.insert(0, str(SCRIPTS))
 
 import _builder_lock  # noqa: E402
 import _notify  # noqa: E402
-import _plan_dag  # noqa: E402
+import _safe_rmtree  # noqa: E402
 import _render  # noqa: E402
 import _status  # noqa: E402
-import _timestamp  # noqa: E402
 
 
 def _assert(cond: bool, msg: str) -> None:
@@ -198,7 +194,8 @@ def test_review_code_end_to_end(scratch: Path) -> None:
     import _review_code
 
     # Reload sys.path-affected modules to pick up the stub reviewer.
-    import importlib, _review_common
+    import importlib
+    import _review_common
     importlib.reload(_review_common)
     importlib.reload(_review_code)
 
@@ -303,7 +300,7 @@ def main() -> int:
         if failed:
             print(f"Scratch preserved: {scratch}", file=sys.stderr)
         else:
-            shutil.rmtree(str(scratch), ignore_errors=True)
+            _safe_rmtree.safe_rmtree(scratch, allowed_root=scratch, ignore_errors=True)
 
 
 if __name__ == "__main__":

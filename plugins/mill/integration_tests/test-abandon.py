@@ -12,7 +12,6 @@ Exits 0 on PASS, 1 on any failure (scratch dir preserved for inspection).
 from __future__ import annotations
 
 import os
-import shutil
 import subprocess
 import sys
 import uuid
@@ -24,6 +23,7 @@ PLUGIN_ROOT = HUB / "plugins" / "mill"
 SCRATCH = HUB / ".scratch"
 
 sys.path.insert(0, str(SCRIPTS))
+import _safe_rmtree  # noqa: E402
 import _status  # noqa: E402
 
 
@@ -195,7 +195,7 @@ def main() -> int:
         failed = True
 
     if not failed:
-        shutil.rmtree(container, ignore_errors=True)
+        _safe_rmtree.safe_rmtree(container, allowed_root=container, ignore_errors=True)
 
     return 1 if failed else 0
 

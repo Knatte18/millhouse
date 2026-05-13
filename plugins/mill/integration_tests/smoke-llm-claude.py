@@ -7,7 +7,6 @@ Run from hub root:
 """
 from __future__ import annotations
 
-import shutil
 import sys
 import uuid
 from pathlib import Path
@@ -17,7 +16,8 @@ SCRIPTS = HUB / "plugins" / "mill" / "scripts"
 SCRATCH = HUB / ".scratch"
 sys.path.insert(0, str(SCRIPTS))
 
-import _llm_claude
+import _llm_claude  # noqa: E402
+import _safe_rmtree  # noqa: E402
 
 
 PROMPT_BULK = """You are a review assistant. Evaluate the file content below.
@@ -151,7 +151,7 @@ def test_tool_use() -> int:
         if failed:
             print(f"Scratch dir preserved for inspection: {tmp}", file=sys.stderr)
         else:
-            shutil.rmtree(tmp, ignore_errors=True)
+            _safe_rmtree.safe_rmtree(tmp, allowed_root=tmp, ignore_errors=True)
 
 
 def test_session_reuse() -> int:
