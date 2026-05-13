@@ -10,6 +10,7 @@ from unittest.mock import MagicMock, patch
 HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
+import _safe_rmtree  # noqa: E402, F401
 from _worktree import WorktreeError, WorktreeLockedError, copy_millhouse, list_worktrees, remove, remove_safe  # noqa: E402
 
 
@@ -193,11 +194,12 @@ def main() -> int:
             mock_result.stderr = "Filename too long"
             raised_locked = False
             with patch("_worktree._subprocess_util.run", return_value=mock_result):
-                with patch("_worktree.shutil.rmtree", side_effect=PermissionError("locked")):
-                    try:
-                        remove_safe(path, cwd=cwd, junctions_cfg={})
-                    except WorktreeLockedError:
-                        raised_locked = True
+                with patch("_safe_rmtree.shutil.rmtree", side_effect=PermissionError("locked")):
+                    with patch("_safe_rmtree._blacklist_for", return_value=[]):
+                        try:
+                            remove_safe(path, cwd=cwd, junctions_cfg={})
+                        except WorktreeLockedError:
+                            raised_locked = True
             assert raised_locked, "expected WorktreeLockedError when rmtree fallback raises PermissionError"
             print("PASS: remove_safe raises WorktreeLockedError when rmtree fallback raises PermissionError")
 
@@ -237,7 +239,8 @@ def main() -> int:
             mock_prune.returncode = 0
             mock_prune.stderr = ""
             with patch("_worktree._subprocess_util.run", side_effect=[mock_result, mock_prune]):
-                remove_safe(path, cwd=cwd, junctions_cfg={})
+                with patch("_safe_rmtree._blacklist_for", return_value=[]):
+                    remove_safe(path, cwd=cwd, junctions_cfg={})
             assert not path.exists(), f"expected path to be removed by rmtree, but it still exists: {path}"
             print("PASS: remove_safe exits cleanly via rmtree fallback on 'is not a working tree' (path exists)")
 
@@ -252,11 +255,12 @@ def main() -> int:
             mock_result.stderr = "fatal: 'path' is not a working tree"
             raised_locked = False
             with patch("_worktree._subprocess_util.run", return_value=mock_result):
-                with patch("_worktree.shutil.rmtree", side_effect=PermissionError("locked")):
-                    try:
-                        remove_safe(path, cwd=cwd, junctions_cfg={})
-                    except WorktreeLockedError:
-                        raised_locked = True
+                with patch("_safe_rmtree.shutil.rmtree", side_effect=PermissionError("locked")):
+                    with patch("_safe_rmtree._blacklist_for", return_value=[]):
+                        try:
+                            remove_safe(path, cwd=cwd, junctions_cfg={})
+                        except WorktreeLockedError:
+                            raised_locked = True
             assert raised_locked, "expected WorktreeLockedError when rmtree raises PermissionError on 'is not a working tree'"
             print("PASS: remove_safe raises WorktreeLockedError when rmtree raises PermissionError on 'is not a working tree'")
 

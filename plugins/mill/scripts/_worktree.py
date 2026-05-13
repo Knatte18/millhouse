@@ -31,6 +31,7 @@ import shutil
 import sys
 from pathlib import Path
 
+import _safe_rmtree
 import _subprocess_util
 
 
@@ -213,7 +214,7 @@ def remove_safe(
         2. Try ``git worktree remove --force``. Junction-safe by design.
         3. If git fails with a long-path error (Windows, common when
            ``.scratch/`` has deep claude session JSONs), fall back to
-           ``shutil.rmtree`` — safe NOW because junctions are already gone —
+           ``_safe_rmtree.safe_rmtree`` — safe NOW because junctions are already gone —
            then ``git worktree prune`` to clear git's internal registry.
         4. Any other git failure is re-raised; callers handle "in use"
            messages etc.
@@ -226,7 +227,7 @@ def remove_safe(
         junctions_cfg: The ``junctions:`` block from ``wiki/config.yaml``,
             as returned by ``_wiki.read_junctions``.
         force: Forwarded to ``git worktree remove`` and to the fallback's
-            ``shutil.rmtree(ignore_errors=...)`` decision.
+            ``_safe_rmtree.safe_rmtree(ignore_errors=...)`` decision.
 
     Raises:
         WorktreeError: git worktree remove failed for a reason other than long-path or "not a working tree" (e.g., "is in use"), and the fallback was not attempted.
@@ -257,14 +258,14 @@ def remove_safe(
             f"git worktree remove failed (path={path}): {stderr!r}"
         )
 
-    # Long-path / not-a-working-tree fallback. Junctions are stripped, so shutil.rmtree is safe.
+    # Long-path / not-a-working-tree fallback. Junctions are stripped, so _safe_rmtree is safe.
     print(
-        "[worktree] remove_safe: git failed; falling back to shutil.rmtree (junctions already stripped)",
+        "[worktree] remove_safe: git failed; falling back to _safe_rmtree (junctions already stripped)",
         file=sys.stderr,
     )
     if path.exists():
         try:
-            shutil.rmtree(str(path), ignore_errors=False)
+            _safe_rmtree.safe_rmtree(path, allowed_root=path)
         except PermissionError as exc:
             raise WorktreeLockedError(
                 f"worktree is locked via rmtree fallback (path={path}): {exc}"
