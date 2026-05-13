@@ -1,10 +1,10 @@
 # Status
 
 ```yaml
-phase: discussed
+phase: planning
 slug: safe-rmtree
 branch: hanf/safe-rmtree
-plan: null
+plan: _mill/plan
 parent: main
 task: (A) — Central safe-rmtree helper + ban direct rmtree
 task_description: |
@@ -17,4 +17,5 @@ task_description: |
 discussing  '2026-05-13T07:23:42Z'
 discussion-fix-r2  '2026-05-13T07:46:49Z'
 discussed  '2026-05-13T07:47:01Z'
+planning  '2026-05-13T07:56:33Z'
 ```
