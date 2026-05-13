@@ -10,6 +10,10 @@ Launcher mode (default):
     that log file, and prints:
         pid=<N> log=<path>
 
+    (On Windows the pid is the cmd-shim launcher PID, which exits
+    almost immediately after dispatching the worker; the authoritative
+    worker PID is logged inside the file as [mill-bg] WORKER PID=...)
+
 Worker mode (internal — spawned by launcher):
     millpy-bg.py --_worker --log <abs-path> -- <cmd> [args...]
 
@@ -21,7 +25,9 @@ import sys
 
 # ── worker fast-path — stdlib only, no mill imports ──────────────────────────
 if "--_worker" in sys.argv:
+    import os
     import subprocess
+    from datetime import datetime, timezone
 
     def _worker_main(args: list[str]) -> int:
         try:
@@ -45,16 +51,29 @@ if "--_worker" in sys.argv:
         if log_path is None:
             print("mill-bg worker: missing --log", file=sys.stderr)
             return 1
-        with open(log_path, "w", encoding="utf-8", buffering=1) as log_f:
-            result = subprocess.run(
-                cmd,
-                stdout=log_f,
-                stderr=subprocess.STDOUT,
-                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-            )
-            log_f.write(f"\n[mill-bg] EXIT {result.returncode}\n")
-            log_f.flush()
-        return 0
+        try:
+            with open(log_path, "w", encoding="utf-8", buffering=1) as log_f:
+                log_f.write(
+                    f"[mill-bg] WORKER PID={os.getpid()} START "
+                    f"{datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')}\n"
+                )
+                result = subprocess.run(
+                    cmd,
+                    stdout=log_f,
+                    stderr=subprocess.STDOUT,
+                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+                )
+                log_f.write(f"\n[mill-bg] EXIT {result.returncode}\n")
+                log_f.flush()
+            return 0
+        except Exception as exc:
+            try:
+                with open(log_path, "a", encoding="utf-8") as log_f:
+                    log_f.write(f"[mill-bg] WORKER ERROR {exc!r}\n")
+                    log_f.flush()
+            except Exception:
+                print(f"[mill-bg] WORKER ERROR {exc!r}", file=sys.stderr)
+            return 1
 
     def main(argv: list[str] | None = None) -> int:
         args = argv if argv is not None else sys.argv[1:]
@@ -125,6 +144,9 @@ def _launcher_main(args: list[str]) -> int:
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
+    # NOTE: on Windows (after the two-stage cmd /c start /B launch) proc.pid is
+    # the cmd-shim PID, which exits almost immediately. The authoritative worker
+    # PID is inside the log file as [mill-bg] WORKER PID=... sentinel.
     print(f"pid={proc.pid} log={log_path}")
     return 0
 

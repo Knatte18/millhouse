@@ -28,6 +28,7 @@ import os
 import signal
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -83,6 +84,20 @@ def run(
         When stdout/stderr are overridden to non-PIPE values, the returned
         CompletedProcess.stdout/.stderr are empty strings — capture is
         impossible without PIPE.
+
+    Windows watchdog:
+        When ``timeout`` is not None on Windows, a watchdog loop enforces
+        the deadline instead of relying on ``proc.communicate(timeout=)``.
+        Background daemon threads drain ``proc.stdout`` / ``proc.stderr``
+        via ``readline()`` into in-memory buffers; a third daemon thread
+        writes ``input`` to ``proc.stdin`` when supplied. The main thread
+        polls ``proc.poll()`` every 100 ms. On normal exit the threads are
+        joined and output assembled from the buffers. On deadline breach
+        ``taskkill /T /F /PID`` kills the full process tree (including
+        grandchildren), threads are joined with a 1 s grace, and
+        ``subprocess.TimeoutExpired`` is raised with whatever was collected.
+        POSIX uses the existing ``communicate(timeout=)`` + ``os.killpg``
+        path unchanged.
     """
     child_env = env.copy() if env is not None else os.environ.copy()
     child_env["PYTHONIOENCODING"] = "utf-8"
@@ -102,42 +117,48 @@ def run(
     if input is not None:
         popen_kwargs["stdin"] = subprocess.PIPE
     if os.name == "nt":
-        # Suppress the CMD console window that would otherwise flash on-screen
-        # when spawning `cmd /c claude` or `git` on Windows.
-        popen_kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
+        popen_kwargs["creationflags"] = (
+            subprocess.CREATE_NO_WINDOW | subprocess.CREATE_NEW_PROCESS_GROUP
+        )
     else:
         popen_kwargs["start_new_session"] = True
 
     proc = subprocess.Popen(argv, **popen_kwargs)
-    try:
-        stdout_out, stderr_out = proc.communicate(input=input, timeout=timeout)
-        stdout_out = stdout_out or ""
-        stderr_out = stderr_out or ""
-    except subprocess.TimeoutExpired as exc:
-        print(
-            f"[subprocess] exit code=timeout duration={time.monotonic() - start:.3f}s",
-            file=sys.stderr,
+
+    if os.name == "nt" and timeout is not None:
+        stdout_out, stderr_out = _run_windows_watchdog(
+            proc, argv=argv, input=input, timeout=timeout, start=start
         )
-        collected_stdout = exc.stdout
-        collected_stderr = exc.stderr
-        proc.terminate()
+    else:
         try:
-            proc.wait(timeout=_GRACE_SECONDS)
-        except subprocess.TimeoutExpired:
-            if os.name == "nt":
-                subprocess.run(
-                    ["taskkill", "/T", "/F", "/PID", str(proc.pid)],
-                    capture_output=True,
-                )
-            else:
-                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
-            proc.wait()
-        raise subprocess.TimeoutExpired(
-            cmd=argv,
-            timeout=timeout,
-            output=collected_stdout,
-            stderr=collected_stderr,
-        ) from exc
+            stdout_out, stderr_out = proc.communicate(input=input, timeout=timeout)
+            stdout_out = stdout_out or ""
+            stderr_out = stderr_out or ""
+        except subprocess.TimeoutExpired as exc:
+            print(
+                f"[subprocess] exit code=timeout duration={time.monotonic() - start:.3f}s",
+                file=sys.stderr,
+            )
+            collected_stdout = exc.stdout
+            collected_stderr = exc.stderr
+            proc.terminate()
+            try:
+                proc.wait(timeout=_GRACE_SECONDS)
+            except subprocess.TimeoutExpired:
+                if os.name == "nt":
+                    subprocess.run(
+                        ["taskkill", "/T", "/F", "/PID", str(proc.pid)],
+                        capture_output=True,
+                    )
+                else:
+                    os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+                proc.wait()
+            raise subprocess.TimeoutExpired(
+                cmd=argv,
+                timeout=timeout,
+                output=collected_stdout,
+                stderr=collected_stderr,
+            ) from exc
 
     print(
         f"[subprocess] exit code={proc.returncode} duration={time.monotonic() - start:.3f}s",
@@ -152,6 +173,94 @@ def run(
     )
 
 
+def _run_windows_watchdog(
+    proc: subprocess.Popen,
+    *,
+    argv: list[str],
+    input: str | None,
+    timeout: float,
+    start: float,
+) -> tuple[str, str]:
+    """
+    Enforce ``timeout`` on Windows by polling ``proc.poll()`` and killing
+    the full tree with ``taskkill /T /F`` when the deadline trips.
+
+    Returns ``(stdout_out, stderr_out)`` strings on normal completion.
+    Raises ``subprocess.TimeoutExpired`` on deadline breach.
+    """
+    endtime = time.monotonic() + timeout
+    stdout_buf: list[str] = []
+    stderr_buf: list[str] = []
+    stdout_lock = threading.Lock()
+    stderr_lock = threading.Lock()
+    reader_threads: list[threading.Thread] = []
+
+    if proc.stdout is not None:
+        def _drain_stdout() -> None:
+            while True:
+                line = proc.stdout.readline()
+                if not line:
+                    break
+                with stdout_lock:
+                    stdout_buf.append(line)
+
+        t = threading.Thread(target=_drain_stdout, daemon=True)
+        t.start()
+        reader_threads.append(t)
+
+    if proc.stderr is not None:
+        def _drain_stderr() -> None:
+            while True:
+                line = proc.stderr.readline()
+                if not line:
+                    break
+                with stderr_lock:
+                    stderr_buf.append(line)
+
+        t = threading.Thread(target=_drain_stderr, daemon=True)
+        t.start()
+        reader_threads.append(t)
+
+    if input is not None:
+        def _write_stdin() -> None:
+            proc.stdin.write(input)
+            proc.stdin.close()
+
+        threading.Thread(target=_write_stdin, daemon=True).start()
+
+    while proc.poll() is None and time.monotonic() < endtime:
+        time.sleep(0.1)
+
+    if proc.poll() is not None:
+        for t in reader_threads:
+            t.join(timeout=1.0)
+        return "".join(stdout_buf), "".join(stderr_buf)
+
+    # Deadline tripped — kill the full process tree.
+    print(
+        f"[subprocess] exit code=timeout duration={time.monotonic() - start:.3f}s",
+        file=sys.stderr,
+    )
+    subprocess.run(
+        ["taskkill", "/T", "/F", "/PID", str(proc.pid)],
+        capture_output=True,
+    )
+    try:
+        proc.wait(timeout=_GRACE_SECONDS)
+    except subprocess.TimeoutExpired:
+        pass
+    for t in reader_threads:
+        t.join(timeout=1.0)
+    collected_stdout = "".join(stdout_buf)
+    collected_stderr = "".join(stderr_buf)
+    raise subprocess.TimeoutExpired(
+        cmd=argv,
+        timeout=timeout,
+        output=collected_stdout,
+        stderr=collected_stderr,
+    )
+
+
 def popen_detached(
     argv: list[str],
     *,
@@ -161,7 +270,23 @@ def popen_detached(
     cwd: Path | str | None = None,
     env: dict[str, str] | None = None,
 ) -> subprocess.Popen:
-    """Fire-and-forget detached subprocess. Returns the Popen handle."""
+    """Fire-and-forget detached subprocess. Returns the Popen handle.
+
+    Windows: pid shift.
+        On Windows the returned ``Popen.pid`` is the intermediate ``cmd.exe``
+        shim PID, which exits immediately after dispatching ``start /B``.
+        The authoritative worker PID is recorded by the worker itself in the
+        ``[mill-bg] WORKER PID=<pid> START <iso8601>`` log sentinel (written
+        in batch 2). No current caller of ``popen_detached`` consumes the
+        returned pid for process management — all callers poll the log file
+        for the EXIT sentinel instead.
+
+        The two-stage ``cmd /c start "" /B /MIN`` launch escapes the parent's
+        Win32 Job Object so the worker survives launcher exit under VS Code /
+        CC Bash (fix for #271). ``CREATE_BREAKAWAY_FROM_JOB`` is retained as
+        a belt-and-braces fallback for environments where the intermediate
+        ``cmd`` is itself in a non-breakaway job.
+    """
     child_env = (env or os.environ).copy()
     child_env["PYTHONIOENCODING"] = "utf-8"
 
@@ -169,19 +294,21 @@ def popen_detached(
 
     popen_kwargs: dict = dict(stdin=stdin, stdout=stdout, stderr=stderr, cwd=cwd, env=child_env)
     if os.name == "nt":
-        # DETACHED_PROCESS combined with CREATE_NO_WINDOW is known to cause
-        # a brief console window to flash on screen — DETACHED_PROCESS can
-        # trigger console-creation that overrides CREATE_NO_WINDOW for the
-        # child process group. Use CREATE_NO_WINDOW alone (plus the process-
-        # group / breakaway flags needed for true detachment) and skip
-        # DETACHED_PROCESS entirely. CREATE_NO_WINDOW ensures no console is
-        # ever attached, which is what we actually want.
+        # Two-stage launch: cmd.exe shim dispatches via `start /B`, escaping
+        # the parent's Win32 Job Object. The empty "" is the required title
+        # argument for `start` — omitting it causes the first real argument
+        # to be misinterpreted when the path contains spaces.
+        # DETACHED_PROCESS is intentionally omitted — see comment above on
+        # CREATE_NO_WINDOW being sufficient and DETACHED_PROCESS causing a
+        # console flash when combined with CREATE_NO_WINDOW.
         popen_kwargs["creationflags"] = (
             subprocess.CREATE_NO_WINDOW
             | subprocess.CREATE_NEW_PROCESS_GROUP
             | _CREATE_BREAKAWAY_FROM_JOB
         )
+        launch_argv = ["cmd", "/c", "start", "", "/B", "/MIN"] + argv
     else:
         popen_kwargs["start_new_session"] = True
+        launch_argv = argv
 
-    return subprocess.Popen(argv, **popen_kwargs)
+    return subprocess.Popen(launch_argv, **popen_kwargs)
