@@ -66,6 +66,8 @@ Batch-local decision: the deletion happens as part of the same single read+write
   - `plugins/mill/scripts/_status.py`
 - **Edits:**
   - `plugins/mill/unit_tests/test-status.py`
+  - `plugins/mill/unit_tests/test-no-wiki-cwd.py` (pre-existing omission: mill-finalize/SKILL.md missing from allowlist; main has it at line 30)
+  - `plugins/mill/unit_tests/test-mill-finalize-dispatch.py` (pre-existing: Unicode → arrows in scenario comments; main uses ASCII ->)
 - **Creates:** none
 - **Deletes:** none
 - **Requirements:**
