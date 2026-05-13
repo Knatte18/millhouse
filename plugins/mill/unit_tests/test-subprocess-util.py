@@ -233,6 +233,62 @@ def main() -> int:
         except AssertionError as exc:
             failures.append(f"FAIL (l) popen_detached-start-new-session: {exc}")
 
+    # (m) grandchild kill tree — cross-process timeout verification
+    if os.name != "nt":
+        print("SKIP (m): not applicable on POSIX")
+    else:
+        try:
+            grandchild_argv = [sys.executable, "-c", "import time; time.sleep(120)"]
+            grandchild_argv_repr = repr(grandchild_argv)
+            parent_script = (
+                f"import subprocess, sys, time; "
+                f"p = subprocess.Popen({grandchild_argv_repr}); "
+                f"print(p.pid, flush=True); "
+                f"time.sleep(120)"
+            )
+            argv = [sys.executable, "-c", parent_script]
+            deadline = time.monotonic() + 2.0 + _GRACE_SECONDS + _SMALL_DELTA
+            buf = io.StringIO()
+            grandchild_pid = None
+            with contextlib.redirect_stderr(buf):
+                try:
+                    run(argv, timeout=2.0)
+                    failures.append(
+                        "FAIL (m) grandchild-kill-tree: expected TimeoutExpired, got nothing"
+                    )
+                except subprocess.TimeoutExpired as exc:
+                    assert time.monotonic() < deadline, (
+                        f"timeout + kill exceeded wall-time budget of "
+                        f"{2.0 + _GRACE_SECONDS + _SMALL_DELTA}s"
+                    )
+                    if exc.stdout:
+                        for line in exc.stdout.splitlines():
+                            line = line.strip()
+                            if line.isdigit():
+                                grandchild_pid = int(line)
+                                break
+            assert grandchild_pid is not None, (
+                "could not parse grandchild PID from exc.stdout"
+            )
+            time.sleep(1)
+            tasklist_result = subprocess.run(
+                ["tasklist", "/FI", f"PID eq {grandchild_pid}"],
+                capture_output=True,
+                text=True,
+            )
+            assert (
+                "No tasks are running which match the specified criteria."
+                in tasklist_result.stdout
+            ), (
+                f"grandchild PID {grandchild_pid} still alive after kill:\n"
+                f"{tasklist_result.stdout}"
+            )
+            print(
+                f"PASS (m): grandchild kill tree - grandchild PID {grandchild_pid} gone"
+            )
+        except AssertionError as exc:
+            failures.append(f"FAIL (m) grandchild-kill-tree: {exc}")
+
     if failures:
         for msg in failures:
             print(msg, file=sys.stderr)
