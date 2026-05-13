@@ -3,7 +3,7 @@
 ```yaml
 task: '(A) — Subprocess handling: timeout + JSON-exit + Windows detach'
 slug: subprocess-fixes
-approved: false
+approved: true
 started: 20260513-081431
 parent: main
 root: ""
