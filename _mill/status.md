@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: safe-rmtree
 branch: hanf/safe-rmtree
 plan: _mill/plan
@@ -28,4 +28,15 @@ plan-review-r4  '2026-05-13T08:34:38Z'
 plan-fix-r4  '2026-05-13T08:34:38Z'
 plan-fix-r5  '2026-05-13T13:20:28Z'
 planned  '2026-05-13T13:20:53Z'
+implementing  '2026-05-13T13:26:03Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: safe-rmtree-helper
+    state: pending
+  - name: migrations-and-gate
+    state: pending
 ```
