@@ -39,6 +39,7 @@ import sys
 from pathlib import Path
 
 import _junction
+import _paths
 import _spawn_core
 import _subprocess_util
 import _tasks_md
@@ -213,7 +214,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.dry_run:
         print(f"[DryRun] Task:    {picked.title} [{slug}]")
         print(f"[DryRun] Branch:  {branch_name}")
-        print(f"[DryRun] Status:  {resolve_hub_path() / '_mill' / 'status.md'}")
+        print(f"[DryRun] Status:  {_paths.status_path(resolve_hub_path(), cfg)}")
         print("[DryRun] Mode:    in-place")
         return 0
 
@@ -304,6 +305,7 @@ def main(argv: list[str] | None = None) -> int:
         ts=ts,
         parent_branch=parent_branch,
         branch=branch_name,
+        cfg=cfg,
     )
 
     _update_hub_vscode_title(git_root, cfg, slug)

@@ -305,6 +305,35 @@ def main() -> int:
     except Exception as exc:
         failures.append(f"FAIL (l) missing command ({type(exc).__name__}): {exc}")
 
+    # (n) worker writes START sentinel as first log line
+    try:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = Path(tmpdir) / "test-start.log"
+            ret = _worker_main(
+                ["--log", str(log_path), "--", sys.executable, "-c", "print('hello')"]
+            )
+            assert ret == 0, f"expected 0, got {ret}"
+            assert log_path.exists(), "log file not created"
+            log_text = log_path.read_text(encoding="utf-8")
+            lines = log_text.splitlines(keepends=True)
+            assert lines, "log file is empty"
+            start_pattern = re.compile(
+                r"^\[mill-bg\] WORKER PID=\d+ START \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z\n"
+            )
+            assert start_pattern.match(lines[0]), (
+                f"first log line does not match START sentinel pattern: {lines[0]!r}"
+            )
+            assert "hello" in log_text, f"'hello' not in log: {log_text!r}"
+            stripped = log_text.rstrip()
+            assert stripped.endswith("[mill-bg] EXIT 0"), (
+                f"log does not end with '[mill-bg] EXIT 0'; last 60 chars: {stripped[-60:]!r}"
+            )
+        print("PASS (n): worker writes START sentinel as first log line")
+    except AssertionError as exc:
+        failures.append(f"FAIL (n) START sentinel: {exc}")
+    except Exception as exc:
+        failures.append(f"FAIL (n) START sentinel ({type(exc).__name__}): {exc}")
+
     if failures:
         for msg in failures:
             print(msg, file=sys.stderr)

@@ -364,6 +364,7 @@ def test_write_initial_status() -> None:
             ts="2026-04-26T10:00:00Z",
             parent_branch="main",
             branch="hanf/task-one",
+            cfg={"paths": {"status_md": "_mill/status.md"}},
         )
         # status.md must be at _mill/status.md under the worktree root
         if status_path != repo / "_mill" / "status.md":
@@ -412,6 +413,7 @@ def test_write_initial_status_forced_failure_raises_runtime_error() -> None:
                 ts="2026-04-26T10:00:00Z",
                 parent_branch="main",
                 branch="hanf/task-one",
+                cfg={"paths": {"status_md": "_mill/status.md"}},
             )
         except RuntimeError as exc:
             msg = str(exc)
@@ -466,6 +468,7 @@ def test_write_initial_status_push_failure_raises_runtime_error() -> None:
                 ts="2026-04-26T10:00:00Z",
                 parent_branch="main",
                 branch="hanf/task-one",
+                cfg={"paths": {"status_md": "_mill/status.md"}},
             )
         except RuntimeError as exc:
             msg = str(exc)

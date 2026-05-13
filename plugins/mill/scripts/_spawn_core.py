@@ -43,7 +43,7 @@ Public API:
     capture_parent_branch(git_root) -> str
         Return the current HEAD branch name via ``git rev-parse --abbrev-ref HEAD``.
         Raises ``RuntimeError`` on non-zero exit.
-    write_initial_status(worktree_path, slug, title, ts, parent_branch, branch) -> Path
+    write_initial_status(worktree_path, slug, title, ts, parent_branch, branch, *, cfg) -> Path
         Render + write ``status.md`` at worktree root; stage + commit on task branch;
         return the absolute path of the written file.
     recreate_active_junction(slug, hub_root, container_path) -> None
@@ -64,6 +64,7 @@ from pathlib import Path
 from typing import Optional
 
 import _junction
+import _paths
 import _sidebar
 import _status
 import _subprocess_util
@@ -676,6 +677,8 @@ def write_initial_status(
     ts: str,
     parent_branch: str,
     branch: str,
+    *,
+    cfg: dict,
 ) -> Path:
     """
     Render + write ``_mill/status.md`` at worktree root; create ``_mill/`` directory if absent.
@@ -697,6 +700,7 @@ def write_initial_status(
         branch: The task branch the worktree is on; recorded so the status
             file is self-describing without inferring from per-developer
             cfg.branch_prefix.
+        cfg: Loaded mill config dict; supplies cfg["paths"]["status_md"] to _paths.status_path.
 
     Returns:
         Absolute path to the written ``status.md``.
@@ -713,11 +717,11 @@ def write_initial_status(
         slug=slug,
         branch=branch,
     )
-    status_abs = worktree_path / "_mill" / "status.md"
+    status_abs = _paths.status_path(worktree_path, cfg)
     status_abs.parent.mkdir(parents=True, exist_ok=True)
     status_abs.write_text(status_text, encoding="utf-8")
     result = _subprocess_util.run(
-        ["git", "-C", str(worktree_path), "add", "_mill/status.md"],
+        ["git", "-C", str(worktree_path), "add", status_abs.relative_to(worktree_path).as_posix()],
     )
     if result.returncode != 0:
         raise RuntimeError(

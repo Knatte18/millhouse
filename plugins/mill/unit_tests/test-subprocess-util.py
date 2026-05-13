@@ -150,7 +150,9 @@ def main() -> int:
         assert isinstance(proc, subprocess.Popen), f"expected Popen, got {type(proc)}"
         assert proc.pid > 0, f"expected positive pid, got {proc.pid}"
         proc.wait(timeout=5)
-        assert proc.returncode == 0, f"expected returncode 0, got {proc.returncode}"
+        assert proc.returncode is not None, (
+            f"expected returncode set after wait, got {proc.returncode!r}"
+        )
         print(f"PASS (i): popen_detached returns Popen with pid={proc.pid}")
     except AssertionError as exc:
         failures.append(f"FAIL (i) popen_detached-popen-pid: {exc}")
@@ -172,7 +174,15 @@ def main() -> int:
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
+        # On Windows the returned proc is the cmd.exe shim which exits
+        # immediately; the actual Python worker runs asynchronously. Poll the
+        # output file for up to 10 s to let the worker finish before reading.
         proc.wait(timeout=5)
+        file_deadline = time.monotonic() + 10.0
+        while time.monotonic() < file_deadline:
+            if os.path.exists(out_path) and os.path.getsize(out_path) > 0:
+                break
+            time.sleep(0.2)
         with open(out_path, encoding="utf-8") as f:
             result_text = f.read()
         os.unlink(out_path)
@@ -187,15 +197,23 @@ def main() -> int:
         print("SKIP (k): not applicable on POSIX")
     else:
         try:
+            original_argv = [sys.executable, "-c", "pass"]
             with unittest.mock.patch.object(subprocess, "Popen") as mock_popen_cls:
                 mock_popen_cls.return_value = unittest.mock.MagicMock(pid=42)
                 popen_detached(
-                    [sys.executable, "-c", "pass"],
+                    original_argv,
                     stdin=subprocess.DEVNULL,
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
                 )
-            call_kwargs = mock_popen_cls.call_args[1]
+            call_args = mock_popen_cls.call_args
+            call_argv = call_args[0][0]
+            call_kwargs = call_args[1]
+            expected_prefix = ["cmd", "/c", "start", "", "/B", "/MIN"]
+            expected_argv = expected_prefix + original_argv
+            assert call_argv == expected_argv, (
+                f"expected argv={expected_argv!r}, got {call_argv!r}"
+            )
             expected_flags = (
                 subprocess.CREATE_NO_WINDOW
                 | subprocess.CREATE_NEW_PROCESS_GROUP
@@ -232,6 +250,62 @@ def main() -> int:
             print("PASS (l): popen_detached start_new_session on POSIX")
         except AssertionError as exc:
             failures.append(f"FAIL (l) popen_detached-start-new-session: {exc}")
+
+    # (m) grandchild kill tree — cross-process timeout verification
+    if os.name != "nt":
+        print("SKIP (m): not applicable on POSIX")
+    else:
+        try:
+            grandchild_argv = [sys.executable, "-c", "import time; time.sleep(120)"]
+            grandchild_argv_repr = repr(grandchild_argv)
+            parent_script = (
+                f"import subprocess, sys, time; "
+                f"p = subprocess.Popen({grandchild_argv_repr}); "
+                f"print(p.pid, flush=True); "
+                f"time.sleep(120)"
+            )
+            argv = [sys.executable, "-c", parent_script]
+            deadline = time.monotonic() + 2.0 + _GRACE_SECONDS + _SMALL_DELTA
+            buf = io.StringIO()
+            grandchild_pid = None
+            with contextlib.redirect_stderr(buf):
+                try:
+                    run(argv, timeout=2.0)
+                    failures.append(
+                        "FAIL (m) grandchild-kill-tree: expected TimeoutExpired, got nothing"
+                    )
+                except subprocess.TimeoutExpired as exc:
+                    assert time.monotonic() < deadline, (
+                        f"timeout + kill exceeded wall-time budget of "
+                        f"{2.0 + _GRACE_SECONDS + _SMALL_DELTA}s"
+                    )
+                    if exc.stdout:
+                        for line in exc.stdout.splitlines():
+                            line = line.strip()
+                            if line.isdigit():
+                                grandchild_pid = int(line)
+                                break
+            assert grandchild_pid is not None, (
+                "could not parse grandchild PID from exc.stdout"
+            )
+            time.sleep(1)
+            tasklist_result = subprocess.run(
+                ["tasklist", "/FI", f"PID eq {grandchild_pid}"],
+                capture_output=True,
+                text=True,
+            )
+            assert (
+                "No tasks are running which match the specified criteria."
+                in tasklist_result.stdout
+            ), (
+                f"grandchild PID {grandchild_pid} still alive after kill:\n"
+                f"{tasklist_result.stdout}"
+            )
+            print(
+                f"PASS (m): grandchild kill tree - grandchild PID {grandchild_pid} gone"
+            )
+        except AssertionError as exc:
+            failures.append(f"FAIL (m) grandchild-kill-tree: {exc}")
 
     if failures:
         for msg in failures:

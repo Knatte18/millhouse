@@ -40,6 +40,9 @@ Public API:
         git pull --ff-only — refresh wiki before reading Home.md.
         Acquires/releases the wiki lock internally; no-op acquire if
         already held via ``wiki_lock``.
+    health_check(wiki_path)
+        Verify the wiki clone is present and contains config.yaml.
+        Raises WikiHealthError on failure; returns None on success.
     write_commit_push(wiki_path, relative_paths, commit_msg, *, slug)
         Stage, commit and push the named paths with one rebase retry.
         Acquires/releases the wiki lock internally; no-op acquire if
@@ -60,6 +63,9 @@ Exceptions:
                       clone/init/mismatch failures (URL mismatch, branch
                       mismatch, dest-exists-but-not-git, ls-remote
                       failure, clone/init failure).
+    WikiHealthError — raised by ``health_check`` when the wiki directory
+                      does not exist or config.yaml is missing. Carries
+                      the ``wiki_path`` attribute for diagnostics.
 """
 from __future__ import annotations
 
@@ -168,6 +174,18 @@ class LockBusy(RuntimeError):
         super().__init__(
             f"Wiki lock held by {holder!r} (age {age_seconds}s); timed out waiting"
         )
+
+
+class WikiHealthError(Exception):
+    """Raised by ``health_check`` when the wiki clone appears missing or corrupted.
+
+    Instance variables:
+        wiki_path: The ``Path`` that was checked, for use in caller error messages.
+    """
+
+    def __init__(self, wiki_path: Path, message: str) -> None:
+        self.wiki_path = wiki_path
+        super().__init__(message)
 
 
 _held_locks: dict[Path, int] = {}
@@ -285,6 +303,36 @@ def sync_pull(wiki_path: Path, *, slug: str) -> None:
     finally:
         if not held:
             _release(wiki_path)
+
+
+def health_check(wiki_path: Path) -> None:
+    """Verify the wiki clone is present and contains ``config.yaml``.
+
+    A lightweight pre-flight check intended to be called at the start of
+    each mill-go batch iteration and each holistic review round. Raises
+    ``WikiHealthError`` so callers can catch and surface a clean error
+    without parsing stderr or letting downstream code produce a confusing
+    "Missing config" message.
+
+    Args:
+        wiki_path: Directory expected to contain the wiki clone.
+
+    Returns:
+        None on success.
+
+    Raises:
+        WikiHealthError: ``wiki_path`` does not exist, with message
+            ``"wiki directory does not exist at <wiki_path>"``.
+        WikiHealthError: ``wiki_path/config.yaml`` does not exist, with
+            message ``"wiki/config.yaml missing at <wiki_path/config.yaml>"``.
+    """
+    if not wiki_path.exists():
+        raise WikiHealthError(wiki_path, f"wiki directory does not exist at {wiki_path}")
+    if not (wiki_path / "config.yaml").exists():
+        raise WikiHealthError(
+            wiki_path,
+            f"wiki/config.yaml missing at {wiki_path / 'config.yaml'}",
+        )
 
 
 def write_commit_push(

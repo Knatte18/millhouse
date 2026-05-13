@@ -90,7 +90,7 @@ def main(argv=None) -> int:
         return 1
 
     plan_dir = cfg.get("paths", {}).get("plan_dir", "_mill/plan/")
-    status_path = _paths.resolve_task_path(project_root, "_mill/status.md")
+    status_path = _paths.status_path(project_root, cfg)
     full = _status.read_full(status_path)
     task_title = full["yaml"].get("task", slug)
     branch = _status.read_branch(status_path, cfg=cfg, slug=slug)
@@ -184,7 +184,7 @@ def main(argv=None) -> int:
             print(json.dumps({"status": "stuck", "stuck_type": "transient", "reason": str(e)}))
             print(str(e), file=sys.stderr)
             return 1
-        return _forward_output(output, project_root, start_sha=start_sha, snapshot_path=snapshot_path)
+        return _forward_output(output, project_root, start_sha=start_sha, snapshot_path=snapshot_path, session_id=session_id)
 
     else:
         # Fix-cycle resume
@@ -259,7 +259,7 @@ def main(argv=None) -> int:
             return 1
         start_sha_for_forward = batch_state.get("start_sha") if batch_state else None
         snapshot_path_for_forward = project_root / "_mill" / f".cleanliness-snapshot-{args.batch_name}.txt"
-        return _forward_output(output, project_root, start_sha=start_sha_for_forward, snapshot_path=snapshot_path_for_forward)
+        return _forward_output(output, project_root, start_sha=start_sha_for_forward, snapshot_path=snapshot_path_for_forward, session_id=session_id)
 
 
 if __name__ == "__main__":

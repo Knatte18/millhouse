@@ -23,6 +23,10 @@ Public API:
         touch a path that is a regular file or directory to prevent
         accidentally deleting real content.
 
+    points_to(link_path, target) -> bool
+        True iff ``link_path`` is a junction/symlink resolving to ``target``.
+        Returns False for broken junctions (``OSError`` from ``resolve()``).
+
     resolve_target(template, tokens)
         Substitute ``<name>`` tokens in a junction target template. Used by
         mill-setup and mill-spawn to turn entries from the wiki config's
@@ -80,6 +84,30 @@ def resolve_target(template: str, tokens: dict[str, str]) -> str:
 def has_slug_token(template: str) -> bool:
     """True if ``template`` contains the ``<SLUG>`` task-variable token."""
     return "<SLUG>" in template
+
+
+def _is_junction_or_symlink(link_path: Path) -> bool:
+    """Return True iff *link_path* is a junction or symlink (never raises).
+
+    Uses ``lexists`` so a broken junction/symlink whose target was deleted is
+    still recognised as present rather than silently falling through to the
+    "is a regular directory" branch.
+    """
+    if not os.path.lexists(str(link_path)):
+        return False
+    if os.name == "nt":
+        is_junction = False
+        if hasattr(os.path, "isjunction"):
+            is_junction = os.path.isjunction(str(link_path))
+        else:
+            try:
+                attrs = os.lstat(str(link_path)).st_file_attributes
+                is_junction = bool(attrs & 0x400)
+            except (OSError, AttributeError):
+                is_junction = False
+        return is_junction or os.path.islink(str(link_path))
+    else:
+        return os.path.islink(str(link_path))
 
 
 def create(target: Path, link_path: Path) -> None:
@@ -152,52 +180,39 @@ def remove(link_path: Path) -> None:
         ValueError: If ``link_path`` exists but is neither a junction nor
             a symlink.
     """
-    # Absent path is a no-op. We use ``lexists`` (does-not-follow-symlinks)
-    # so a broken junction or broken symlink — which has ``exists() == False``
-    # because its target is gone — is still recognised as present and
-    # removed below. Previously this guard skipped broken junctions,
-    # leaving the reparse-point entry behind; ``git worktree remove --force``
-    # then crashed with exit 255 when it tried to clean the surrounding
-    # directory.
     if not os.path.lexists(str(link_path)):
         return
-
+    if not _is_junction_or_symlink(link_path):
+        raise ValueError(
+            f"{link_path} is not a junction or symlink — refusing to remove"
+        )
     if os.name == "nt":
-        # Determine whether this is actually a junction before touching
-        # it. ``os.path.isjunction`` only exists on Python 3.12+; on 3.10
-        # and 3.11 we inspect FILE_ATTRIBUTE_REPARSE_POINT (0x400) via
-        # ``os.lstat``'s Windows-only ``st_file_attributes`` field.
-        is_junction = False
-        if hasattr(os.path, "isjunction"):
-            is_junction = os.path.isjunction(str(link_path))
-        else:
-            try:
-                attrs = os.lstat(str(link_path)).st_file_attributes
-                is_junction = bool(attrs & 0x400)
-            except (OSError, AttributeError):
-                is_junction = False
-
-        if is_junction:
-            # Junctions are directory entries — remove with rmdir, not unlink.
-            os.rmdir(str(link_path))
-            print(f"[junction] removed junction {link_path}", file=sys.stderr)
-        elif os.path.islink(str(link_path)):
-            # Plain symlink (rare on Windows but possible in dev-mode setups).
-            os.unlink(str(link_path))
-            print(f"[junction] removed symlink {link_path}", file=sys.stderr)
-        else:
-            # Regular file or directory — refuse. See docstring for why.
-            raise ValueError(
-                f"{link_path} is not a junction or symlink — refusing to remove"
-            )
-    else:
         if os.path.islink(str(link_path)):
             os.unlink(str(link_path))
             print(f"[junction] removed symlink {link_path}", file=sys.stderr)
         else:
-            raise ValueError(
-                f"{link_path} is not a symlink — refusing to remove"
-            )
+            os.rmdir(str(link_path))
+            print(f"[junction] removed junction {link_path}", file=sys.stderr)
+    else:
+        os.unlink(str(link_path))
+        print(f"[junction] removed symlink {link_path}", file=sys.stderr)
+
+
+def points_to(link_path: Path, target: Path) -> bool:
+    """Return True iff *link_path* is a junction/symlink that resolves to *target*.
+
+    Returns False if *link_path* is not a junction or symlink, or if either
+    ``Path.resolve()`` call raises ``OSError`` — this covers broken Windows
+    junctions whose target directory was deleted after the junction was created
+    (``Path.resolve()`` raises ``OSError`` on such paths rather than returning
+    the dangling target path).
+    """
+    if not _is_junction_or_symlink(link_path):
+        return False
+    try:
+        return link_path.resolve() == target.resolve()
+    except OSError:
+        return False
 
 
 def strip_all_in_worktree(worktree_path: Path, junctions_cfg: dict[str, str]) -> list[Path]:

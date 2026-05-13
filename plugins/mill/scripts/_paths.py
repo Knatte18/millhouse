@@ -77,6 +77,12 @@ Public API:
     resolve_hub_path(cwd)
         Return the hub directory — assumes CC's cwd equals the hub when mill
         scripts run. Pass an explicit path for testing; omit for production use.
+
+    status_path(worktree_root, cfg)
+        Return the status.md path for ``worktree_root`` driven by
+        ``cfg['paths']['status_md']``, with ``_mill/`` -> ``task/`` compat
+        fallback via ``resolve_task_path``. Raises ``KeyError`` naming
+        ``paths.status_md`` when the key is absent from ``cfg``.
 """
 from __future__ import annotations
 
@@ -101,6 +107,7 @@ __all__ = [
     "ActiveWorktreeNotFound",
     "ActiveWorktreeSlugMismatch",
     "resolve_task_path",
+    "status_path",
 ]
 
 
@@ -451,3 +458,13 @@ def resolve_task_path(worktree_root: Path, cfg_relative_path: str) -> Path:
             print(f"[compat] falling back to task/ for {cfg_relative_path!r}", file=sys.stderr)
             return fallback
     return target
+
+
+def status_path(worktree_root: Path, cfg: dict) -> Path:
+    """Return the status.md path for ``worktree_root`` driven by cfg['paths']['status_md'], with _mill/ -> task/ compat fallback via resolve_task_path."""
+    _msg = "paths.status_md missing from cfg; expected key under cfg['paths']"
+    if "paths" not in cfg:
+        raise KeyError(_msg)
+    if "status_md" not in cfg["paths"]:
+        raise KeyError(_msg)
+    return resolve_task_path(worktree_root, cfg["paths"]["status_md"])

@@ -55,7 +55,7 @@ def main() -> int:
     )
 
     # Step 4: load status.md and check phase
-    status_path = _paths.resolve_task_path(active_hub, "_mill/status.md")
+    status_path = _paths.status_path(active_hub, cfg)
     if not status_path.exists():
         sys.exit(f"Error: status.md not found for slug '{slug}'.")
 

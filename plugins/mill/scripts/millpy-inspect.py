@@ -74,7 +74,7 @@ def _collect(git_root: Path, slug_filter: str | None) -> list[dict]:
     records = []
     for slug in slugs:
         wt_path = worktree_map[slug]
-        sp = wt_path / "status.md"
+        sp = _paths.status_path(wt_path, cfg)
         try:
             full = _status.read_full(sp)
         except ValueError as exc:

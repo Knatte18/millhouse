@@ -303,6 +303,8 @@ def _apply_inplace_record(
     record: SlugRecord,
     hub_root: Path,
     task_branch: str = "",
+    *,
+    cfg: dict,
 ) -> None:
     """Apply cleanup for a single in-place (no separate worktree) record.
 
@@ -322,7 +324,7 @@ def _apply_inplace_record(
     """
     # Read parent branch from status.md so we can check out safely.
     if record.worktree_path is not None:
-        parent_branch = _status.read_parent_branch(_paths.resolve_task_path(record.worktree_path, "_mill/status.md"))
+        parent_branch = _status.read_parent_branch(_paths.status_path(record.worktree_path, cfg))
     else:
         parent_branch = None
 
@@ -350,7 +352,7 @@ def _apply_inplace_record(
     # Determine deletion flag: done tasks get -d (safe); abandoned get -D (force).
     # Phase is re-read from the worktree's status.md; fall back to -D when absent.
     if record.worktree_path is not None:
-        phase = _read_phase(_paths.resolve_task_path(record.worktree_path, "_mill/status.md"))
+        phase = _read_phase(_paths.status_path(record.worktree_path, cfg))
         delete_flag = "-d" if phase == "done" else "-D"
     else:
         delete_flag = "-D"
@@ -517,7 +519,7 @@ def _apply_pr_reap_record(
         )
         return wiki_relative_paths
     if mode == "inplace":
-        _apply_inplace_record(record, hub_root, task_branch)
+        _apply_inplace_record(record, hub_root, task_branch, cfg=cfg)
     else:
         _apply_worktree_record(record, hub_root, wiki_path, junctions_cfg)
 
@@ -546,7 +548,7 @@ def apply_plan(
             continue
 
         if mode == "inplace":
-            _apply_inplace_record(record, hub_root, task_branch)
+            _apply_inplace_record(record, hub_root, task_branch, cfg=cfg)
         else:
             _apply_worktree_record(record, hub_root, wiki_path, junctions_cfg)
 
