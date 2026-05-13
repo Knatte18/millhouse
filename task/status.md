@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-cli-script
+phase: approved-skills-and-docs
 blocked_reason: 'auto: discussion review gaps unresolved after 2 rounds'
 slug: mill-fold
 branch: hanf/mill-fold
@@ -25,6 +25,7 @@ planned  '2026-05-12T17:28:13Z'
 implementing  '2026-05-13T06:37:47Z'
 approved-helpers  '2026-05-13T06:50:49Z'
 approved-cli-script  '2026-05-13T07:13:03Z'
+approved-skills-and-docs  '2026-05-13T07:17:11Z'
 ```
 
 ## Batches
@@ -40,7 +41,7 @@ batches:
     implementer_session: d647a3d2-c1c0-47e4-a4a6-951c7e7eec8d
     start_sha: d72406a17f3ac4ed06ffd2e41bace6227f3453df
   - name: skills-and-docs
-    state: running
+    state: approved
     implementer_session: e5312a8d-9710-4fba-a919-27dd0c448494
     start_sha: e239a9a3e6cabe9a924242f58fc56d105d8ad386
 ```
