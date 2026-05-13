@@ -102,7 +102,7 @@ Batch-local decision: the switch call is placed after `prompt_text = render_prom
 
   For `code-review.holistic` (currently ends with `reviewer: sonnetmedium`), add the same three lines.
 
-  The comment block uses 4-space indentation (matching the `reviewer:` line it follows). The comment explains that `reviewer: null` disables the switch (the default). Operators enable it by setting a non-null reviewer name from `reviewers.yaml`.
+  The comment block uses the same indentation as the `reviewer:` line it follows. The comment explains that `reviewer: null` disables the switch (the default). Operators enable it by setting a non-null reviewer name from `reviewers.yaml`.
 
   Do NOT add `large_prompt:` blocks under `batch:` scopes — the switch is holistic-only and no batch-level config key exists.
 

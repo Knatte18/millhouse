@@ -64,7 +64,7 @@ This batch can run in parallel with batch 2 (both depend only on batch 1).
 
   `test_below_threshold_no_switch()`: Build registry with `override-reviewer` using `_override_spec()`. Use `_make_cfg_with_large_prompt(threshold_ktok=1)`. Prompt = `"x" * 3999` (gives `3999 // 4000 = 0 < 1` → no switch). Capture stderr with `contextlib.redirect_stderr(io.StringIO())`. Assert returned spec is the same object as original (identity check), name unchanged, stderr is empty string.
 
-  `test_above_threshold_switches()`: Same registry and cfg. Prompt = `"x" * 4000` (gives `4000 // 4000 = 1 >= 1` → switch). Assert returned name is `"override-reviewer"`, returned spec model is `"claude-opus-4-7"`, stderr contains `"large-prompt switch"`, `"sonnetmax"`, and `"override-reviewer"`.
+  `test_above_threshold_switches()`: Same registry and cfg (`_make_cfg_with_large_prompt(threshold_ktok=1)`). Prompt = `"x" * 4000` (gives `4000 // 4000 = 1 >= 1` → switch). Pass `reviewer_name="sonnetmax"` as the third positional argument to `maybe_switch_spec_for_large_prompt` — this is the original reviewer name that the helper logs and the assertion checks. Assert returned name is `"override-reviewer"`, returned spec model is `"claude-opus-4-7"`, stderr contains `"large-prompt switch"`, `"sonnetmax"`, and `"override-reviewer"`.
 
   `test_no_large_prompt_config_noop()`: Use plain `make_minimal_cfg()` (no `large_prompt` key). Prompt = `"x" * 100_000`. Assert returned spec is same object as original (identity), name unchanged. No stderr capture needed.
 

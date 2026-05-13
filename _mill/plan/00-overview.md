@@ -3,7 +3,7 @@
 ```yaml
 task: "(B) — Size-based reviewer switch (mechanism + configurable target)"
 slug: review-large-prompt-switch
-approved: false
+approved: true
 started: 20260513-142213
 parent: main
 root: ""
