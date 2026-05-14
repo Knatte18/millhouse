@@ -24,7 +24,7 @@ This batch runs the completed bench-reviewers.py with all three real Gemini revi
   - `_mill/bench-results.md`
 - **Deletes:** none
 - **Requirements:**
-  - Run `python plugins/mill/integration_tests/bench-reviewers.py` from the worktree root using the defaults (reviewers: g25flash g3flash_preview g25pro; types: discussion plan code; timeout: 300s). Do not set `PYTHONPATH` — the script sets its own sys.path.
+  - Run `uv run --project plugins/mill python plugins/mill/integration_tests/bench-reviewers.py` from the worktree root using the defaults (reviewers: g25flash g3flash_preview g25pro; types: discussion plan code; timeout: 300s). The `uv run --project plugins/mill` form ensures the mill venv's dependencies (PyYAML etc.) are available. Do not set `PYTHONPATH` — the script sets its own sys.path.
   - Confirm `.scratch/bench-<timestamp>.md` is written with 9 rows (3 reviewers × 3 types). If any row shows `ERROR`, re-run that combination once with `--reviewers <name> --types <type>` to distinguish transient from stable failure.
   - Write `_mill/bench-results.md` containing: (1) the full 9-row results table from the bench output, (2) a brief interpretation paragraph (2-4 sentences) noting which reviewers are format-compliant, finding counts, and a recommendation for which model(s) are viable NORCE-fallback candidates.
   - Expected pattern based on preliminary trials: g3flash_preview is fast and format-compliant across all types; g25pro is reliable but slower; g25flash is unstable and may fail format compliance for plan reviews.

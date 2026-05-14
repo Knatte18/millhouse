@@ -5,7 +5,7 @@ task: "(A) -- Benchmark Gemini single-reviewers vs sonnetmax baseline"
 batch: setup
 number: 1
 cards: 2
-verify: "PYTHONPATH=plugins/mill/scripts python -c \"from _reviewers import load; from pathlib import Path; load(Path('.wiki'))\""
+verify: "PYTHONPATH=plugins/mill/scripts python -c \"from _paths import resolve_git_root, resolve_wiki_path; from _reviewers import load; load(resolve_wiki_path(resolve_git_root()))\""
 depends-on: []
 ```
 
@@ -19,6 +19,8 @@ This batch adds four new reviewer registry entries to `wiki/reviewers.yaml` and 
 
 - **Context:**
   - `plugins/mill/scripts/_reviewers.py`
+  - `plugins/mill/scripts/_paths.py`
+  - `plugins/mill/scripts/_wiki.py`
 - **Edits:**
   - `.wiki/reviewers.yaml`
 - **Creates:** none

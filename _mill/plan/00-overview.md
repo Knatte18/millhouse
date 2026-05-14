@@ -18,7 +18,7 @@ batches:
     name: setup
     file: 01-setup.md
     depends-on: []
-    verify: "PYTHONPATH=plugins/mill/scripts python -c \"from _reviewers import load; from pathlib import Path; load(Path('.wiki'))\""
+    verify: "PYTHONPATH=plugins/mill/scripts python -c \"from _paths import resolve_git_root, resolve_wiki_path; from _reviewers import load; load(resolve_wiki_path(resolve_git_root()))\""
   - number: 2
     name: bench-script
     file: 02-bench-script.md
