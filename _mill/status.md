@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-approved
+phase: done
 slug: review-large-prompt-switch
 branch: hanf/review-large-prompt-switch
 plan: _mill/plan
@@ -27,6 +27,7 @@ approved-backend-wiring  '2026-05-14T08:37:20Z'
 approved-unit-tests  '2026-05-14T08:45:07Z'
 holistic-reviewing  '2026-05-14T08:45:28Z'
 holistic-approved  '2026-05-14T08:47:00Z'
+done  '2026-05-14T08:47:11Z'
 ```
 
 ## Batches
