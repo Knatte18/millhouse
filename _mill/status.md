@@ -29,7 +29,9 @@ implementing  '2026-05-14T08:30:50Z'
 ```yaml
 batches:
   - name: core-helper
-    state: pending
+    state: running
+    implementer_session: 911cdc14-8dec-40f0-92e8-025c125239f4
+    start_sha: 2e1f105f04a9983d5d3d246d61e41696dbed6cd6
   - name: backend-wiring
     state: pending
   - name: unit-tests
