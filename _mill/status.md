@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: bench-gemini-single-reviewers
 branch: hanf/bench-gemini-single-reviewers
 plan: _mill/plan
@@ -25,4 +25,17 @@ plan-fix-r2  '2026-05-14T09:23:06Z'
 plan-review-r3  '2026-05-14T09:29:17Z'
 plan-fix-r3  '2026-05-14T09:29:17Z'
 planned  '2026-05-14T09:30:48Z'
+implementing  '2026-05-14T09:37:47Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: setup
+    state: pending
+  - name: bench-script
+    state: pending
+  - name: run-bench
+    state: pending
 ```
