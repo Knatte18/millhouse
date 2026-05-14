@@ -13,19 +13,19 @@ Issue #278 surfaced a failure mode in the current review setup: on a 169 KTok bu
 
 The natural fallback would be Gemini cluster, but the NORCE laptop cannot use it -- cache servers are behind a firewall. That leaves Gemini single-reviewers as the candidate fallback. The existing `g25flash` reviewer is already in the registry but is documented as "proven uforutsigbar" (unpredictable). We need empirical data: are Gemini GA single-reviewers actually usable, and if so, which one?
 
-This task builds a benchmark harness, adds `g25pro` to the registry, and runs it against the existing `g25flash` to determine whether either is a viable fallback for large-prompt reviews.
+This task builds a benchmark harness, adds `g3flash_preview` and `g25pro` to the registry, and runs both against the existing `g25flash` to determine whether either is a viable fallback for large-prompt reviews. `gemini-3-flash-preview` ("3 Flash Preview") is the primary Flash-tier candidate; `gemini-2.5-pro` is the Pro-tier candidate.
 
 ## Scope
 
 **In:**
-- Add `g25pro` and `g25pro_tool` reviewer entries to `wiki/reviewers.yaml`
+- Add `g3flash_preview`, `g3flash_preview_tool`, `g25pro`, and `g25pro_tool` reviewer entries to `wiki/reviewers.yaml`
 - Build `plugins/mill/integration_tests/bench-reviewers.py` -- a benchmark runner script
 - Create a small code-review fixture at `plugins/mill/integration_tests/fixtures/sample-code.py`
-- Run the full benchmark (g25flash + g25pro across discussion/plan/code review types)
+- Run the full benchmark (g25flash + g3flash_preview + g25pro across discussion/plan/code review types)
 - Write results to `.scratch/bench-<timestamp>.md`
 
 **Out:**
-- Flash Preview and Gemini 3 Flash models -- all return ModelNotFoundError from the current gemini CLI install; not accessible. Tested: gemini-2.5-flash-preview-05-20, gemini-2.5-flash-preview-04-17, gemini-3-flash, gemini-3.0-flash, gemini-3.5-flash
+- Gemini 3.1-pro-preview, gemini-3.1-flash-lite-preview, gemini-2.5-flash-lite -- all accessible but not mentioned in the task; keeping scope tight to the two named candidates
 - Gemini cluster reviewer -- blocked on NORCE by firewall; orthogonal to this task
 - Claude / sonnetmax runs in the benchmark script -- baseline is already known from daily use; running it adds cost with no benefit
 - Automated LLM-as-judge scoring -- too expensive and adds a confounding variable
@@ -36,9 +36,10 @@ This task builds a benchmark harness, adds `g25pro` to the registry, and runs it
 
 ### model-scope
 
-- Decision: Benchmark g25flash (gemini-2.5-flash) and g25pro (gemini-2.5-pro) only.
-- Rationale: The task originally targeted "Flash Preview" models and "Gemini 3 Flash", but all non-GA variants tested (gemini-2.5-flash-preview-05-20, gemini-2.5-flash-preview-04-17, gemini-3-flash, gemini-3.0-flash, gemini-3.5-flash) return ModelNotFoundError from the installed gemini CLI. The two GA models that work still answer the core question: is there a viable Gemini single-reviewer fallback for large prompts?
-- Rejected: Waiting for Flash Preview or Gemini 3 Flash to become available -- unknown timeline; blocks the task.
+- Decision: Benchmark g25flash (gemini-2.5-flash), g3flash_preview (gemini-3-flash-preview), and g25pro (gemini-2.5-pro).
+- Rationale: `gemini-3-flash-preview` is the "3 Flash Preview" model from the task description; it is accessible through the current gemini CLI (model ID confirmed by testing). `gemini-2.5-pro` is the Pro-tier candidate. `gemini-2.5-flash` (g25flash) serves as the existing Flash-tier baseline that is known to be unstable, giving a comparison point for g3flash_preview. Note: initial exploration guessed wrong model IDs (gemini-3-flash, gemini-3.0-flash) which failed; the correct ID gemini-3-flash-preview was found from the CLI interactive model menu.
+- Additional models discovered but excluded to keep scope tight: gemini-3.1-pro-preview, gemini-3.1-flash-lite-preview, gemini-2.5-flash-lite. Accessible but not in the task description.
+- Rejected: Including all 6 available models -- too expensive; benchmark would lose focus.
 
 ### script-location
 
@@ -74,9 +75,9 @@ This task builds a benchmark harness, adds `g25pro` to the registry, and runs it
 
 ### registry-additions
 
-- Decision: Add `g25pro` (bulk) and `g25pro_tool` (tool-use) to `wiki/reviewers.yaml`. No effort field -- gemini CLI ignores it.
-- Rationale: Mirrors the existing `g25flash` / `g25flash_tool` pair. Gives the operator both modes to assign to review roles.
-- Rejected: Only `g25pro` without `_tool` variant -- asymmetric with the existing Flash pair; reviewers.yaml already has the pattern.
+- Decision: Add `g3flash_preview` (bulk), `g3flash_preview_tool` (tool-use), `g25pro` (bulk), and `g25pro_tool` (tool-use) to `wiki/reviewers.yaml`. No effort field -- gemini CLI ignores it.
+- Rationale: Mirrors the existing `g25flash` / `g25flash_tool` pair. Bulk variants are the benchmark targets; tool-use variants are added for completeness so operators can assign them to review roles.
+- Rejected: Only bulk variants without `_tool` -- asymmetric with the existing Flash pair; reviewers.yaml already has the pattern.
 
 ## Technical context
 
@@ -123,16 +124,29 @@ Trial runs conducted during mill-start (sample-discussion.md, ~1910 tokens, bulk
 | g25flash | gemini-2.5-flash | 1 | TIMEOUT >120s | - | - | - |
 | g25flash | gemini-2.5-flash | 2 | 61s | GAPS_FOUND | 1 | Yes |
 | g25pro | gemini-2.5-pro | 1 | 37s | GAPS_FOUND | 1 | Yes |
+| g3flash_preview | gemini-3-flash-preview | 1 | 17s | GAPS_FOUND | 1 | Yes |
 
 Observations:
 - g25flash is unstable: timed out on the first call to a 1900-token prompt, then succeeded in 61s on retry. This confirms the "proven uforutsigbar" characterisation.
 - g25pro is stable: returned correctly in 37s. Format compliant, sensible finding.
-- Both produced format-compliant output when they returned.
+- g3flash_preview is the fastest: returned in 17s. Format compliant, GAPS_FOUND with a specific finding. More stable than g25flash in this trial.
+- All produce format-compliant output when they return.
 - The 120s default timeout in `_llm_gemini.run_bulk` is insufficient for g25flash; the bench script uses 300s.
 
 ### New `reviewers.yaml` entries
 
 ```yaml
+g3flash_preview:
+  type: single
+  provider: gemini
+  model: gemini-3-flash-preview
+
+g3flash_preview_tool:
+  type: single
+  provider: gemini
+  model: gemini-3-flash-preview
+  tooluse: true
+
 g25pro:
   type: single
   provider: gemini
@@ -148,7 +162,7 @@ g25pro_tool:
 ## Constraints
 
 - **Gemini is per-token billed** -- keep the test corpus small; avoid running multiple rounds. 1 run per reviewer per prompt type.
-- **No Flash Preview** -- gemini-2.5-flash-preview-* variants all return ModelNotFoundError from the current CLI. Out of scope.
+- **Correct model IDs matter** -- gemini-3-flash-preview is the correct ID for "Flash Preview". Earlier guesses (gemini-3-flash, gemini-3.0-flash) were wrong and failed. Always verify model IDs from the CLI interactive menu before concluding a model is unavailable.
 - **Windows paths** -- the bench script runs on Windows; use `Path` throughout; no POSIX path assumptions.
 - **No registry write** -- `wiki/reviewers.yaml` is a wiki file. Additions go through `_wiki.write_commit_push` or `git -C <wiki_path>`. The bench script reads the registry but does not modify it.
 
@@ -166,7 +180,7 @@ No unit test needed (it is an integration runner, not a library). Validation app
 
 ### Registry entries
 
-The existing `_reviewers.load()` validator catches schema errors. After adding `g25pro` / `g25pro_tool`, run:
+The existing `_reviewers.load()` validator catches schema errors. After adding `g3flash_preview` / `g3flash_preview_tool` / `g25pro` / `g25pro_tool`, run:
 ```
 python -c "from _reviewers import load; from pathlib import Path; load(Path('c:/Code/millhouse/wiki'))"
 ```
@@ -174,11 +188,10 @@ from the hub root to confirm the new entries pass validation.
 
 ## Q&A log
 
-- **Q:** Flash Preview models (gemini-2.5-flash-preview-*) all return ModelNotFoundError -- should scope adjust? **A:** [auto-pick] Yes, scope to g25flash + g25pro only. **Why:** Both are GA; they still answer the core viability question.
+- **Q:** Which models are in scope? **A:** g25flash (existing, unstable baseline), g3flash_preview (gemini-3-flash-preview, the "3 Flash Preview" target), g25pro (gemini-2.5-pro). **Why:** These are the two models named in the task description. Earlier scope was wrong -- gemini-3-flash-preview IS accessible; wrong model IDs were guessed. Correct ID confirmed from gemini CLI interactive menu.
 - **Q:** Where should the benchmark script live? **A:** [auto-pick] `plugins/mill/integration_tests/bench-reviewers.py`. **Why:** Alongside existing integration tests, shares fixtures directory.
 - **Q:** What test corpus to use? **A:** [auto-pick] Existing fixtures + small new code fixture. **Why:** Zero setup cost, reproducible, realistic inputs.
 - **Q:** How to measure quality? **A:** [auto-pick] Format compliance + finding count. **Why:** Objective, no LLM cost, sufficient to detect role drift.
 - **Q:** What timeout per call? **A:** [auto-pick] 300s. **Why:** Trial showed 120s is too short for g25flash; 300s covers observed worst-case.
 - **Q:** Run sonnetmax in the bench script? **A:** [auto-pick] No -- reference existing data. **Why:** Billing cost, baseline already known. Baseline must be sonnetmax (bulk), not sonnetmax_tool -- the benchmark compares bulk-mode Gemini against bulk-mode Claude; tool-use capability is an unfair advantage.
-- **Q:** Is Gemini 3 Flash accessible? **A:** All tested Gemini 3 Flash model IDs (gemini-3-flash, gemini-3.0-flash, gemini-3.5-flash) return ModelNotFoundError. Out of scope along with Flash Preview. **Why:** Not accessible through current CLI install.
-- **Q:** Add both `g25pro` and `g25pro_tool` to registry? **A:** [auto-pick] Yes, both. **Why:** Mirrors the g25flash/g25flash_tool pair; gives operators both modes.
+- **Q:** Add both bulk and tool-use registry entries? **A:** [auto-pick] Yes, both for each new model (g3flash_preview + g3flash_preview_tool, g25pro + g25pro_tool). **Why:** Mirrors the g25flash/g25flash_tool pair; gives operators both modes.
