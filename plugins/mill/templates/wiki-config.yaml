@@ -97,6 +97,9 @@ roles:
     holistic:
       rounds: 2
       reviewer: sonnetmax_tool
+      # large_prompt:            # optional: override reviewer for large prompts
+      #   threshold_ktok: 100    # switch when estimated tok count >= this (char/4000)
+      #   reviewer: null         # override reviewer from reviewers.yaml; null = disabled
 
   plan-review:
     batch:
@@ -105,6 +108,9 @@ roles:
     holistic:
       rounds: 3
       reviewer: sonnetmax
+      # large_prompt:            # optional: override reviewer for large prompts
+      #   threshold_ktok: 100    # switch when estimated tok count >= this (char/4000)
+      #   reviewer: null         # override reviewer from reviewers.yaml; null = disabled
 
   code-review:
     batch:
@@ -113,6 +119,9 @@ roles:
     holistic:
       rounds: 1
       reviewer: sonnetmedium
+      # large_prompt:            # optional: override reviewer for large prompts
+      #   threshold_ktok: 100    # switch when estimated tok count >= this (char/4000)
+      #   reviewer: null         # override reviewer from reviewers.yaml; null = disabled
     diff_scope_threshold: 0.25
 
   implementer:
