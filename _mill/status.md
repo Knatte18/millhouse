@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-approved
+phase: done
 slug: bench-gemini-single-reviewers
 branch: hanf/bench-gemini-single-reviewers
 plan: _mill/plan
@@ -31,6 +31,7 @@ approved-bench-script  '2026-05-14T09:45:42Z'
 approved-run-bench  '2026-05-14T09:52:40Z'
 holistic-reviewing  '2026-05-14T09:52:56Z'
 holistic-approved  '2026-05-14T09:54:55Z'
+done  '2026-05-14T09:55:03Z'
 ```
 
 ## Batches
