@@ -68,3 +68,4 @@ batches:
 - `.wiki/reviewers.yaml`
 - `plugins/mill/integration_tests/bench-reviewers.py`
 - `plugins/mill/integration_tests/fixtures/sample-code.py`
+- `_mill/bench-results.md`
