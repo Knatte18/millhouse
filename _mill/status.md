@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-setup
 slug: bench-gemini-single-reviewers
 branch: hanf/bench-gemini-single-reviewers
 plan: _mill/plan
@@ -26,6 +26,7 @@ plan-review-r3  '2026-05-14T09:29:17Z'
 plan-fix-r3  '2026-05-14T09:29:17Z'
 planned  '2026-05-14T09:30:48Z'
 implementing  '2026-05-14T09:37:47Z'
+approved-setup  '2026-05-14T09:41:36Z'
 ```
 
 ## Batches
@@ -33,7 +34,7 @@ implementing  '2026-05-14T09:37:47Z'
 ```yaml
 batches:
   - name: setup
-    state: running
+    state: approved
     implementer_session: ac2c3377-580f-4dc0-9f29-65f321364eb3
     start_sha: 57aa89eec74cb491b5a17e85b6509f94ccff30f8
   - name: bench-script
