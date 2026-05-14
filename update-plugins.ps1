@@ -25,6 +25,16 @@ foreach ($p in $manifest.plugins) {
     # deleted by /MIR's purge step.
     robocopy $sourceDir $targetDir /MIR /XD ".venv" /NFL /NDL /NJH /NJS | Out-Null
     Write-Host "Force-synced: $name@$marketplace ($version)"
+
+    # Create/update the venv if the plugin has a pyproject.toml.
+    $pyproject = Join-Path $targetDir "pyproject.toml"
+    if (Test-Path $pyproject) {
+        Write-Host "  -> Running uv sync for $name..."
+        uv sync --project $targetDir --quiet
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "  WARNING: uv sync failed for $name (exit $LASTEXITCODE)"
+        }
+    }
 }
 
 # Set env vars so mill scripts resolve to the installed version.
