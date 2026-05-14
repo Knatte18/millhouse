@@ -23,6 +23,7 @@ from _review_common import (
     build_tool_rule,
     discover_round,
     load_task_title,
+    maybe_switch_spec_for_large_prompt,
     parse_blocking_count,
     parse_verdict,
     read_constraints_md,
@@ -100,6 +101,10 @@ def run(
         constraints=read_constraints_md(project_root),
         round=round_n,
         reviewer_model=reviewer_name,
+    )
+
+    spec, reviewer_name = maybe_switch_spec_for_large_prompt(
+        prompt_text, spec, reviewer_name, cfg, "discussion-review", "holistic", registry
     )
 
     # 5. Invoke reviewer — for discussion a single sub-review, so any LLMError
