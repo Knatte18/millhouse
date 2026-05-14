@@ -25,7 +25,7 @@ This batch adds four new reviewer registry entries to `wiki/reviewers.yaml` and 
   - `.wiki/reviewers.yaml`
 - **Creates:** none
 - **Deletes:** none
-- **Requirements:** Add four entries to `wiki/reviewers.yaml`, immediately after the existing `g25flash_tool:` block. Use `_paths.resolve_wiki_path(git_root)` to obtain the real wiki path; commit via `_wiki.write_commit_push`. Do NOT write to `.wiki/reviewers.yaml` (junction path) from Python. Entries to add verbatim:
+- **Requirements:** Add four entries to `wiki/reviewers.yaml`, immediately after the existing `g25flash_tool:` block. Use `_paths.resolve_wiki_path(git_root)` to obtain the real wiki path; commit via `_wiki.write_commit_push(wiki_path, slug="bench-gemini-single-reviewers")`. Do NOT write to `.wiki/reviewers.yaml` (junction path) from Python. Entries to add verbatim:
 
   ```yaml
   g3flash_preview:
