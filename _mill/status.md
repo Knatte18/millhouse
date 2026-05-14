@@ -38,7 +38,9 @@ batches:
     implementer_session: ac2c3377-580f-4dc0-9f29-65f321364eb3
     start_sha: 57aa89eec74cb491b5a17e85b6509f94ccff30f8
   - name: bench-script
-    state: pending
+    state: running
+    implementer_session: 5755acef-9f9b-403b-97b4-d7bdd5f852be
+    start_sha: 87efa23802bf284b168cc0fa7c7cd54b983db109
   - name: run-bench
     state: pending
 ```
