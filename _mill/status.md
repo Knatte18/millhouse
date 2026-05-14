@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-core-helper
+phase: approved-backend-wiring
 slug: review-large-prompt-switch
 branch: hanf/review-large-prompt-switch
 plan: _mill/plan
@@ -23,6 +23,7 @@ plan-fix-r1  '2026-05-13T14:30:42Z'
 planned  '2026-05-13T14:31:07Z'
 implementing  '2026-05-14T08:30:50Z'
 approved-core-helper  '2026-05-14T08:33:52Z'
+approved-backend-wiring  '2026-05-14T08:37:20Z'
 ```
 
 ## Batches
@@ -34,7 +35,7 @@ batches:
     implementer_session: 911cdc14-8dec-40f0-92e8-025c125239f4
     start_sha: 2e1f105f04a9983d5d3d246d61e41696dbed6cd6
   - name: backend-wiring
-    state: running
+    state: approved
     implementer_session: a6880419-3911-451d-8e56-1dda232ae07b
     start_sha: 88a5883462abf4dabe2470c19cdba1ae23e18ca5
   - name: unit-tests
