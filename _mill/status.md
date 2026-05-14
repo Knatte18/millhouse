@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-backend-wiring
+phase: approved-unit-tests
 slug: review-large-prompt-switch
 branch: hanf/review-large-prompt-switch
 plan: _mill/plan
@@ -24,6 +24,7 @@ planned  '2026-05-13T14:31:07Z'
 implementing  '2026-05-14T08:30:50Z'
 approved-core-helper  '2026-05-14T08:33:52Z'
 approved-backend-wiring  '2026-05-14T08:37:20Z'
+approved-unit-tests  '2026-05-14T08:45:07Z'
 ```
 
 ## Batches
@@ -39,7 +40,7 @@ batches:
     implementer_session: a6880419-3911-451d-8e56-1dda232ae07b
     start_sha: 88a5883462abf4dabe2470c19cdba1ae23e18ca5
   - name: unit-tests
-    state: running
+    state: approved
     implementer_session: 7ab9f0db-c01a-4701-bb90-9c11af262531
     start_sha: 4ba92866ad9a9cc16e7b77ef4bf7dbf5c9056583
 ```
