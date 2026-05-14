@@ -44,6 +44,7 @@ _SCRATCH = _HUB / ".scratch"
 sys.path.insert(0, str(_SCRIPTS))
 import _junction  # noqa: E402  (after sys.path manipulation)
 import _review_common  # noqa: E402
+import _safe_rmtree  # noqa: E402
 
 import subprocess  # noqa: E402
 
@@ -83,7 +84,7 @@ def _remove_tree(root: Path) -> None:
     junction = root / ".millhouse" / "wiki"
     if junction.exists() or junction.is_symlink():
         _junction.remove(junction)
-    shutil.rmtree(root, ignore_errors=True)
+    _safe_rmtree.safe_rmtree(root, allowed_root=root, ignore_errors=True)
 
 
 def _run_script(script: Path, cwd: Path) -> tuple[int, str, str]:

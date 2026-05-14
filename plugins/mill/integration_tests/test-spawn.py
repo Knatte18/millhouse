@@ -25,7 +25,6 @@ from __future__ import annotations
 
 import json
 import os
-import shutil
 import subprocess
 import sys
 import uuid
@@ -38,6 +37,7 @@ SCRATCH = HUB / ".scratch"
 
 sys.path.insert(0, str(SCRIPTS))
 
+import _safe_rmtree  # noqa: E402
 import _spawn_core  # noqa: E402
 import _tasks_md  # noqa: E402
 
@@ -136,7 +136,7 @@ def _cleanup_worktree_sibling(wt: Path) -> None:
     if wt.exists():
         # On Windows some junction/readonly files resist shutil. Use git's
         # worktree remove when available, then fall back to shutil.
-        shutil.rmtree(str(wt), ignore_errors=True)
+        _safe_rmtree.safe_rmtree(wt, allowed_root=wt, ignore_errors=True)
 
 
 def _assert(cond: bool, msg: str) -> None:
@@ -261,7 +261,7 @@ def main() -> int:
                 )
             except Exception:
                 pass
-            shutil.rmtree(str(container), ignore_errors=True)
+            _safe_rmtree.safe_rmtree(container, allowed_root=container, ignore_errors=True)
 
 
 if __name__ == "__main__":

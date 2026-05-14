@@ -27,6 +27,10 @@ HUB = Path(__file__).resolve().parent.parent.parent.parent
 SCRIPTS = HUB / "plugins" / "mill" / "scripts"
 SCRATCH = HUB / ".scratch"
 
+sys.path.insert(0, str(SCRIPTS))
+
+import _safe_rmtree  # noqa: E402
+
 
 def _git(args: list[str], *, cwd: Path) -> subprocess.CompletedProcess:
     return subprocess.run(
@@ -124,8 +128,7 @@ def main() -> int:
         print(f"Wall time: {elapsed:.2f}s")
 
         if ok:
-            import shutil
-            shutil.rmtree(container, ignore_errors=True)
+            _safe_rmtree.safe_rmtree(container, allowed_root=container, ignore_errors=True)
             print("\n1 scenario passed.")
             return 0
 

@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import json
 import os
-import shutil
 import subprocess
 import sys
 from datetime import datetime
@@ -25,7 +24,8 @@ PLUGIN_ROOT = HUB / "plugins" / "mill"
 SCRATCH = HUB / ".scratch"
 
 sys.path.insert(0, str(SCRIPTS))
-import _status
+import _safe_rmtree  # noqa: E402
+import _status  # noqa: E402
 
 
 def _run(cmd: list[str], *, cwd: Path, check: bool = True) -> subprocess.CompletedProcess:
@@ -156,10 +156,10 @@ def main() -> int:
         assert "HM?" in r.stdout, "expected HM? flag in plain output"
         # slug-alpha should show worktree path (not "-")
         lines = r.stdout.splitlines()
-        alpha_line = next((l for l in lines if "slug-alpha" in l), None)
+        alpha_line = next((line for line in lines if "slug-alpha" in line), None)
         assert alpha_line is not None, "slug-alpha row missing"
         # slug-echo phase column should show —
-        echo_line = next((l for l in lines if "slug-echo" in l), None)
+        echo_line = next((line for line in lines if "slug-echo" in line), None)
         assert echo_line is not None, "slug-echo row missing"
         assert "\u2014" in echo_line, f"expected — in slug-echo row: {echo_line!r}"
         print("PASS: plain run — all slugs present, WT?/HM? flags, slug-echo shows —")
@@ -212,7 +212,7 @@ def main() -> int:
         failed = True
 
     if not failed:
-        shutil.rmtree(container, ignore_errors=True)
+        _safe_rmtree.safe_rmtree(container, allowed_root=container, ignore_errors=True)
     else:
         print(f"Fixture preserved at: {container}", file=sys.stderr)
 

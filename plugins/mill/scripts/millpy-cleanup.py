@@ -404,7 +404,7 @@ def _apply_worktree_record(
     """
     if record.worktree_path is not None:
         # remove_safe strips all junctions before removal and falls back
-        # to shutil.rmtree on long-path failures (junctions-stripped state
+        # to `_safe_rmtree.safe_rmtree` on long-path failures (junctions-stripped state
         # makes that fallback safe). See GitHub issue #100.
         _worktree.remove_safe(record.worktree_path, cwd=hub_root, junctions_cfg=junctions_cfg)
         if record.branch is not None:

@@ -31,7 +31,6 @@ from __future__ import annotations
 
 import json
 import os
-import shutil
 import subprocess
 import sys
 import uuid
@@ -51,6 +50,7 @@ _SCRATCH = _HUB / ".scratch"
 sys.path.insert(0, str(_SCRIPTS))
 import _junction  # noqa: E402  (after sys.path manipulation)
 import _review_common  # noqa: E402
+import _safe_rmtree  # noqa: E402
 
 
 _CONFIG_YAML = """\
@@ -162,25 +162,6 @@ def main() -> None:
 if __name__ == "__main__":
     main()
 '''
-
-
-def _remove_tree(root: Path) -> None:
-    """Remove a scratch tree, detaching NTFS junctions and clearing read-only flags."""
-    import stat
-
-    junction = root / "project" / ".millhouse" / "wiki"
-    if junction.exists() or junction.is_symlink():
-        _junction.remove(junction)
-
-    def _on_error(func, path, exc_info):  # noqa: ANN001
-        # Clear read-only bit and retry (common for .git object files on Windows)
-        try:
-            os.chmod(path, stat.S_IWRITE)
-            func(path)
-        except Exception:
-            pass
-
-    shutil.rmtree(root, onerror=_on_error)
 
 
 def _git(project_root: Path, *args: str) -> None:
@@ -368,7 +349,7 @@ def main() -> int:
         if failed:
             print(f"Scratch dir preserved for inspection: {tmp}", file=sys.stderr)
         else:
-            _remove_tree(tmp)
+            _safe_rmtree.safe_rmtree(tmp, allowed_root=tmp, ignore_errors=True)
 
     print("PASS — all code review tests passed")
     return 0
