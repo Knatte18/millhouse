@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-fix-r3
+phase: planned
 slug: bench-gemini-single-reviewers
 branch: hanf/bench-gemini-single-reviewers
 plan: _mill/plan
@@ -24,4 +24,5 @@ plan-review-r2  '2026-05-14T09:23:06Z'
 plan-fix-r2  '2026-05-14T09:23:06Z'
 plan-review-r3  '2026-05-14T09:29:17Z'
 plan-fix-r3  '2026-05-14T09:29:17Z'
+planned  '2026-05-14T09:30:48Z'
 ```

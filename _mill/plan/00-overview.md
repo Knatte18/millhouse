@@ -3,7 +3,7 @@
 ```yaml
 task: "(A) -- Benchmark Gemini single-reviewers vs sonnetmax baseline"
 slug: bench-gemini-single-reviewers
-approved: false
+approved: true
 started: "20260514-083609"
 parent: main
 root: ""
