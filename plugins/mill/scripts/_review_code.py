@@ -50,6 +50,7 @@ from _review_common import (
     compute_deletes_union,
     discover_round,
     load_task_title,
+    maybe_switch_spec_for_large_prompt,
     parse_batch_refs,
     parse_blocking_count,
     parse_missing_context,
@@ -304,6 +305,11 @@ def run(
         prompt_kwargs["batch_name"] = batch_name
 
     prompt_text = render_prompt(template_name, **prompt_kwargs)
+
+    if batch_name is None:
+        spec, reviewer_name = maybe_switch_spec_for_large_prompt(
+            prompt_text, spec, reviewer_name, cfg, "code-review", "holistic", registry
+        )
 
     # 5. Dispatch + record
     try:
