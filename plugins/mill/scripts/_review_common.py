@@ -36,6 +36,7 @@ Public API:
     resolve_ref_paths()  — resolve raw ref strings against project_root; hard-fails on missing paths not in creates_union or deletes_union
     resolve_existing_paths() — resolve raw paths and return only those that already exist on disk (silent drop, no creates_union check)
     _load_root_from_overview() — read root: field from overview's fenced-yaml block
+    maybe_switch_spec_for_large_prompt() — check prompt size; return (spec, reviewer_name), possibly overridden for large prompts
 """
 from __future__ import annotations
 
@@ -52,6 +53,7 @@ import _machine
 import _marker
 import _paths
 import _render
+import _reviewers
 
 # ---------------------------------------------------------------------------
 # Module-level regex constants
@@ -756,6 +758,49 @@ def build_tool_rule(mode: str) -> str:
     if mode == "tool-use":
         return _TOOL_RULE_TOOL_USE
     raise ValueError(f"Unknown reviewer mode: {mode!r} (expected 'bulk' or 'tool-use')")
+
+
+def maybe_switch_spec_for_large_prompt(
+    prompt_text: str,
+    spec: dict,
+    reviewer_name: str,
+    cfg: dict,
+    role: str,
+    scope: str,
+    registry: dict,
+) -> tuple[dict, str]:
+    """Check prompt size; return (spec, reviewer_name), possibly overridden for large prompts."""
+    large_prompt_cfg = cfg.get("roles", {}).get(role, {}).get(scope, {}).get("large_prompt")
+    if not large_prompt_cfg:
+        return (spec, reviewer_name)
+    override_name = large_prompt_cfg.get("reviewer")
+    if override_name is None:
+        return (spec, reviewer_name)
+    threshold_ktok = large_prompt_cfg.get("threshold_ktok", 100)
+    estimated_ktok = len(prompt_text) // 4000
+    if estimated_ktok < threshold_ktok:
+        return (spec, reviewer_name)
+    override_spec = _reviewers.resolve(registry, override_name)
+    if override_spec.get("type") == "cluster":
+        raise ReviewError(
+            f"large_prompt.reviewer {override_name!r} is cluster type; "
+            "only single reviewers are supported for large-prompt switch"
+        )
+    effective_spec = dict(override_spec)
+    original_tooluse = spec.get("tooluse", False)
+    if effective_spec.get("tooluse", False) != original_tooluse:
+        print(
+            f"[_review_common] large-prompt switch: override {override_name!r} tooluse differs; "
+            f"preserving original tooluse={original_tooluse}",
+            file=sys.stderr,
+        )
+        effective_spec["tooluse"] = original_tooluse
+    print(
+        f"[_review_common] large-prompt switch: estimated ~{estimated_ktok}k tok, "
+        f"switching reviewer {reviewer_name!r} -> {override_name!r}",
+        file=sys.stderr,
+    )
+    return (effective_spec, override_name)
 
 
 def render_prompt(template_name: str, **tokens) -> str:
