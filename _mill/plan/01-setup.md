@@ -130,4 +130,4 @@ This batch adds four new reviewer registry entries to `wiki/reviewers.yaml` and 
 
 ## Batch Tests
 
-`verify:` runs `_reviewers.load(Path('.wiki'))` — passes if the four new entries parse without error. Card 2 has no runnable test; `sample-code.py` is a static fixture; visual inspection of the planted bug suffices.
+`verify:` runs `_reviewers.load(resolve_wiki_path(resolve_git_root()))` — passes if the four new entries parse without YAML or schema error. Card 2 has no runnable test; `sample-code.py` is a static fixture; visual inspection of the planted bug suffices.

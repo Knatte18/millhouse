@@ -23,7 +23,7 @@ batches:
     name: bench-script
     file: 02-bench-script.md
     depends-on: [1]
-    verify: "python plugins/mill/integration_tests/bench-reviewers.py --reviewers test_stub --types discussion"
+    verify: "uv run --project plugins/mill python plugins/mill/integration_tests/bench-reviewers.py --reviewers test_stub --types discussion"
   - number: 3
     name: run-bench
     file: 03-run-bench.md
