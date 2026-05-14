@@ -269,6 +269,19 @@ def validate_role_refs(cfg: dict, registry: dict) -> None:
                 resolve(registry, reviewer)
             except ReviewerError as exc:
                 errors.append(f"roles.{role}.{scope}.reviewer={reviewer!r}: {exc}")
+            lp_reviewer = (scope_cfg.get("large_prompt") or {}).get("reviewer")
+            if lp_reviewer is not None:
+                try:
+                    lp_spec = resolve(registry, lp_reviewer)
+                    if lp_spec.get("type") == "cluster":
+                        errors.append(
+                            f"roles.{role}.{scope}.large_prompt.reviewer={lp_reviewer!r}: "
+                            "cluster type not supported for large-prompt override"
+                        )
+                except ReviewerError as exc:
+                    errors.append(
+                        f"roles.{role}.{scope}.large_prompt.reviewer={lp_reviewer!r}: {exc}"
+                    )
 
     if errors:
         raise ReviewerError("\n".join(errors))
