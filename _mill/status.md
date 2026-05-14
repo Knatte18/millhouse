@@ -43,5 +43,7 @@ batches:
     implementer_session: 5755acef-9f9b-403b-97b4-d7bdd5f852be
     start_sha: 87efa23802bf284b168cc0fa7c7cd54b983db109
   - name: run-bench
-    state: pending
+    state: running
+    implementer_session: 45035f7c-d547-4455-b3f3-f1263c631bdf
+    start_sha: 80b99f4082911f5fdbdc0aa4c93fd48f390f44d9
 ```
