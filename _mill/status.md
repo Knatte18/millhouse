@@ -34,7 +34,9 @@ batches:
     implementer_session: 911cdc14-8dec-40f0-92e8-025c125239f4
     start_sha: 2e1f105f04a9983d5d3d246d61e41696dbed6cd6
   - name: backend-wiring
-    state: pending
+    state: running
+    implementer_session: a6880419-3911-451d-8e56-1dda232ae07b
+    start_sha: 88a5883462abf4dabe2470c19cdba1ae23e18ca5
   - name: unit-tests
     state: pending
 ```
