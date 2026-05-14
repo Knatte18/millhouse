@@ -38,6 +38,7 @@ from _review_common import (
     detect_resume_round,
     discover_round,
     load_task_title,
+    maybe_switch_spec_for_large_prompt,
     parse_batch_refs,
     parse_blocking_count,
     parse_missing_context,
@@ -492,6 +493,10 @@ def run(
             constraints=constraints,
             round=round_n,
             reviewer_model=holistic_name,
+        )
+
+        holistic_spec, holistic_name = maybe_switch_spec_for_large_prompt(
+            prompt_text, holistic_spec, holistic_name, cfg, "plan-review", "holistic", registry
         )
 
         try:
