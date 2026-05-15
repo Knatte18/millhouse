@@ -63,8 +63,12 @@ the `PsmuxError` exception class. No other public symbols.
   - `def kill_session(name: str) -> None`
   - `def list_sessions() -> list[str]`
   Use `from pathlib import Path` and the standard `from __future__ import
-  annotations` import. ASCII-only in print/error strings. Module imports
-  cleanly with no side effects.
+  annotations` import. Also `import sys` and `import _subprocess_util`
+  at module top -- the `_subprocess_util` import must be present in the
+  stub so card 6's `mock.patch("_psmux._subprocess_util.run", ...)`
+  resolves against an existing attribute on the `_psmux` module rather
+  than failing at patch-application time. ASCII-only in print/error
+  strings. Module imports cleanly with no side effects.
 - **Commit:** `feat(mill): add _psmux driver skeleton`
 
 ### Card 6: driver tests with subprocess mocks

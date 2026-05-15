@@ -6,7 +6,7 @@ batch: wrapper
 number: 3
 cards: 2
 verify: python plugins/mill/unit_tests/run-all.py && python -m py_compile plugins/mill/scripts/millpy-claude-sub.py
-depends-on: []
+depends-on: [1, 2]
 ```
 
 ## Batch Scope
@@ -111,8 +111,11 @@ psmux failure).
      `prompt_path.unlink(missing_ok=True)` -- both run unconditionally.
      All work below sits inside the try.
   6. `_psmux.new_session(session_name, shell_argv=["pwsh", "-NoLogo",
-     "-NoProfile"])`. Wait briefly (sleep `POLL_INTERVAL_S`) for the
-     pane to stabilise.
+     "-NoProfile"])`. Then call `_psmux.set_history_limit(session_name,
+     50000)` to size scrollback for long responses (the driver swallows
+     `PsmuxError` and logs a fallback line if `set-option` is not
+     supported -- see `_psmux.py` `set_history_limit`). Wait briefly
+     (sleep `POLL_INTERVAL_S`) for the pane to stabilise.
   7. STARTUP CHECK: `_psmux.send_keys(session_name, "Get-Command claude
      -ErrorAction Stop; Write-Host CLAUDE_READY", enter=True)`. Call
      helper `_wait_for_marker_in_pane(session_name, "CLAUDE_READY",
@@ -136,19 +139,21 @@ psmux failure).
       `_psmux.send_keys(session_name, "Enter", enter=False)` to submit.
       (Note: passing `keys="Enter"` triggers the Enter token; the
       `enter=False` flag avoids appending a duplicate Enter.)
-  11. Record `start = time.monotonic()`. Loop: capture =
+  11. Record `start = time.monotonic()`. Loop: bind `elapsed =
+      time.monotonic() - start` at the top of each iteration; capture =
       `_psmux.capture_pane(session_name)`; try
       `_psmux_capture.extract_response(capture, begin_marker,
       end_marker)`. On success: `print(response)` to stdout (no
-      trailing newline beyond what the slice contains); compute
-      `duration = round(time.monotonic() - start, 2)`; print
+      trailing newline beyond what the slice contains); print
       `json.dumps({"session_id": args.session_id, "duration_s":
-      duration, "mode": args.mode})` to stderr followed by newline;
-      `return 0`. On `MarkerNotFoundError`: if
-      `time.monotonic() - start > RESPONSE_POLL_TIMEOUT_S[args.mode]`,
-      raise `RuntimeError(f"response-poll timeout: mode={args.mode}
-      elapsed={duration:.1f}s")`. Else `time.sleep(POLL_INTERVAL_S)`
-      and continue.
+      round(elapsed, 2), "mode": args.mode})` to stderr followed by
+      newline; `return 0`. On `MarkerNotFoundError`: if `elapsed >
+      RESPONSE_POLL_TIMEOUT_S[args.mode]`, raise
+      `RuntimeError(f"response-poll timeout: mode={args.mode}
+      elapsed={elapsed:.1f}s")`. Else `time.sleep(POLL_INTERVAL_S)`
+      and continue. (`elapsed` is bound BEFORE the try so the timeout
+      message has a value regardless of whether `extract_response`
+      raises.)
   12. Top-level: wrap the whole try/finally in an outer try/except
       that catches `Exception`, prints `[millpy-claude-sub] {type}:
       {msg}` to stderr, and returns 1. The finally still runs.

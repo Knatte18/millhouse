@@ -6,7 +6,7 @@ batch: integration-and-report
 number: 4
 cards: 2
 verify: python -m py_compile plugins/mill/integration_tests/test-claude-psmux.py
-depends-on: []
+depends-on: [3]
 ```
 
 ## Batch Scope

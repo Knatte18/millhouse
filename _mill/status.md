@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planning
+phase: plan-fix-r1
 slug: claude-p-wrapper
 branch: hanf/claude-p-wrapper
 plan: _mill/plan
@@ -18,4 +18,6 @@ discussing  '2026-05-15T09:45:04Z'
 discussion-fix-r3  '2026-05-15T11:10:04Z'
 discussed  '2026-05-15T11:10:14Z'
 planning  '2026-05-15T11:23:06Z'
+plan-review-r1  '2026-05-15T11:30:43Z'
+plan-fix-r1  '2026-05-15T11:30:43Z'
 ```
