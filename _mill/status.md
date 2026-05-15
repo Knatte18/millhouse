@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-wrapper
+phase: approved-integration-and-report
 slug: claude-p-wrapper
 branch: hanf/claude-p-wrapper
 plan: _mill/plan
@@ -26,6 +26,7 @@ implementing  '2026-05-15T12:08:01Z'
 approved-parser  '2026-05-15T12:11:09Z'
 approved-driver  '2026-05-15T12:14:35Z'
 approved-wrapper  '2026-05-15T12:19:39Z'
+approved-integration-and-report  '2026-05-15T12:22:07Z'
 ```
 
 ## Batches
@@ -45,7 +46,7 @@ batches:
     implementer_session: e27cee85-80ed-4cd5-a282-f8c91d37cba4
     start_sha: 5f4e515f0361efbe27146011081d11484bc586af
   - name: integration-and-report
-    state: running
+    state: approved
     implementer_session: 8ad25dd6-4a0d-42cb-b420-9b2483a34803
     start_sha: 83f07aefd73fe4251b9ab5e00cf4668af922a87b
 ```
