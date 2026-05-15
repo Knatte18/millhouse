@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: discussion-fix-r1
 slug: run-all-wiki-wipe-fix
 branch: hanf/run-all-wiki-wipe-fix
 plan: null
@@ -15,4 +15,5 @@ task_description: |
 
 ```text
 discussing  '2026-05-15T07:14:40Z'
+discussion-fix-r1  '2026-05-15T07:51:59Z'
 ```

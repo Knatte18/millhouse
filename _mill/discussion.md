@@ -18,7 +18,7 @@ Two root causes combine: (1) `run-all.py` does not set `cwd` for subprocess test
 **In:**
 - `plugins/mill/unit_tests/run-all.py` — add `cwd=HERE` to subprocess call so test processes start from the `unit_tests/` directory (no `.wiki` junction present there)
 - `plugins/mill/unit_tests/_test_helpers.py` — add `safe_temp_dir()` context manager that creates a temp dir via `mkdtemp()` and cleans up via `safe_rmtree(ignore_errors=True)` instead of bare `shutil.rmtree`
-- `plugins/mill/unit_tests/test-setup-hub-links.py` — replace all `tempfile.TemporaryDirectory` usages with `safe_temp_dir()` (every test in this file calls `create_hub_links` which unconditionally creates `.wiki` and `.portals` NTFS junctions)
+- `plugins/mill/unit_tests/test-setup-hub-links.py` — replace all `tempfile.TemporaryDirectory` usages with `safe_temp_dir()`; uniform migration avoids case-by-case analysis of which tests create junctions and simplifies maintenance (most tests create junctions via `create_hub_links`, but a minority use hardlink-only or empty junction configs)
 - `plugins/mill/unit_tests/test-spawn-core.py` — replace `TemporaryDirectory` with `safe_temp_dir()` in the 2 tests that create real junctions: `test_recreate_active_junction_creates_link` and `test_recreate_active_junction_idempotent`
 
 **Out:**
@@ -77,7 +77,7 @@ Two root causes combine: (1) `run-all.py` does not set `cwd` for subprocess test
 
 ### How `create_hub_links` creates junctions
 
-`create_hub_links` in `test-setup-hub-links.py` creates `.wiki` and `.portals` NTFS junctions inside the test's temp dir container via `_junction.create`. These junctions point to sibling directories inside the same temp tree (not outside it). However, `TemporaryDirectory.__exit__` calls `shutil.rmtree` which on Windows follows junctions as directories — even intra-temp junctions can cause recursive re-entry into already-partially-deleted trees, and if the test cwd is a task worktree (due to run-all.py's missing `cwd=`), the junction target could resolve to the real wiki.
+`create_hub_links` in `test-setup-hub-links.py` creates `.wiki` and `.portals` NTFS junctions inside the test's temp dir container via `_junction.create` when the test config includes a non-empty `junctions` mapping. Most tests do this, but a minority use hardlink-only or empty junction configs and create zero junctions. In either case, `TemporaryDirectory.__exit__` calls bare `shutil.rmtree` — for tests that do create junctions, this risks recursive re-entry and, when the cwd is a task worktree, can follow `.wiki` into the real wiki. The uniform migration to `safe_temp_dir()` avoids case-by-case analysis and removes the risk for all tests regardless of config.
 
 ### Why `_blacklist_for` does not protect task worktrees
 
@@ -117,4 +117,4 @@ The 2 modified tests in `test-spawn-core.py` and all modified tests in `test-set
 - **Q:** Should `run-all.py`'s `cwd=HERE` also force `PYTHONPATH`? **A:** [auto-pick] No. **Why:** `PYTHONPATH` already propagated via `child_env`; each test file sets `sys.path` via `__file__`-relative logic.
 - **Q:** What if cleanup inside `safe_temp_dir()` raises? **A:** [auto-pick] `ignore_errors=True`. **Why:** test cleanup failures must not mask test results.
 - **Q:** Use `mkdtemp()` or wrap `TemporaryDirectory` in `safe_temp_dir()`? **A:** [auto-pick] `mkdtemp()`. **Why:** entire point is to avoid `TemporaryDirectory.__exit__`'s bare `shutil.rmtree`.
-- **Q:** Migrate all tests in `test-setup-hub-links.py` or only known-failing ones? **A:** [auto-pick] Migrate all. **Why:** `create_hub_links` unconditionally creates NTFS junctions; every test is at risk.
+- **Q:** Migrate all tests in `test-setup-hub-links.py` or only known-failing ones? **A:** [auto-pick] Migrate all. **Why:** uniform migration avoids case-by-case audit of which configs create junctions and simplifies maintenance; a minority of tests use hardlink-only or empty junction configs but auditing them individually is error-prone.
