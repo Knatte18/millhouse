@@ -130,7 +130,7 @@ class TestMillpyImplementHolistic(unittest.TestCase):
             millpy_implement_holistic._review_common, "load_config",
             return_value={
                 "paths": {"status_md": "_mill/status.md"},
-                "roles": {"implementer": {"self_fix_rounds": 2}},
+                "roles": {"implementer": {"self_fix_rounds": 2, "model": "sonnethigh"}},
                 "llm": {"implementer_timeout": 1800},
             },
         )
@@ -152,6 +152,26 @@ class TestMillpyImplementHolistic(unittest.TestCase):
             millpy_implement_holistic.uuid, "uuid4",
             return_value=uuid.UUID("00000000-0000-0000-0000-000000000001"),
         )
+        self.mock_reviewers_load = _p(
+            millpy_implement_holistic._reviewers, "load",
+            return_value={
+                "sonnethigh": {
+                    "type": "single",
+                    "provider": "claude",
+                    "model": "claude-sonnet-4-6",
+                    "effort": "high",
+                }
+            },
+        )
+        self.mock_reviewers_resolve = _p(
+            millpy_implement_holistic._reviewers, "resolve",
+            return_value={
+                "type": "single",
+                "provider": "claude",
+                "model": "claude-sonnet-4-6",
+                "effort": "high",
+            },
+        )
 
     def _run_main(self, argv):
         """Run main(argv) with stdout captured. Returns (rc, captured_stdout)."""
@@ -165,7 +185,7 @@ class TestMillpyImplementHolistic(unittest.TestCase):
         status_path = self.tmp_path / "task" / "status.md"
 
         with unittest.mock.patch.object(
-            millpy_implement_holistic._implementer_sonnet, "run",
+            millpy_implement_holistic._implementer_claude, "run",
             return_value=(
                 '{"status":"success","commit_sha":"abc","session_id":"fake"}\n',
                 "fake-session",
@@ -186,7 +206,7 @@ class TestMillpyImplementHolistic(unittest.TestCase):
     def test_2_llm_error(self):
         """LLMError from implementer -> stuck/transient JSON on stdout, exit 1."""
         with unittest.mock.patch.object(
-            millpy_implement_holistic._implementer_sonnet, "run",
+            millpy_implement_holistic._implementer_claude, "run",
             side_effect=millpy_implement_holistic._llm_claude.LLMError("timeout"),
         ):
             rc, out = self._run_main(["--review-file", str(self.review_file)])
@@ -199,7 +219,7 @@ class TestMillpyImplementHolistic(unittest.TestCase):
     def test_3_no_json_from_implementer(self):
         """Implementer output with no valid JSON -> stuck/logic JSON, exit 0."""
         with unittest.mock.patch.object(
-            millpy_implement_holistic._implementer_sonnet, "run",
+            millpy_implement_holistic._implementer_claude, "run",
             return_value=("no json here\n", "sess"),
         ):
             rc, out = self._run_main(["--review-file", str(self.review_file)])
@@ -225,12 +245,12 @@ class TestMillpyImplementHolistic(unittest.TestCase):
         """prompt_text contains absolute batch file path and test-batch: (none)."""
         captured = {}
 
-        def mock_run(prompt_text, *, session_id, resume, cwd, timeout):
+        def mock_run(prompt_text, *, model, effort, session_id, resume, cwd, timeout):
             captured["prompt_text"] = prompt_text
             return ('{"status":"success","commit_sha":"abc","session_id":"fake"}\n', "fake")
 
         with unittest.mock.patch.object(
-            millpy_implement_holistic._implementer_sonnet, "run",
+            millpy_implement_holistic._implementer_claude, "run",
             side_effect=mock_run,
         ):
             rc, _ = self._run_main(["--review-file", str(self.review_file)])
