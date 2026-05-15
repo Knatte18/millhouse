@@ -23,6 +23,22 @@ fi
 MILL_PYTHON="${PLUGIN_ROOT}/.venv/Scripts/python.exe"
 ```
 
+After setting `PLUGIN_ROOT`, check whether the task worktree contains a local copy of the mill plugin with an initialised venv:
+
+```bash
+WORKTREE_PLUGIN_ROOT="$(git rev-parse --show-toplevel)/plugins/mill"
+WORKTREE_VENV="${WORKTREE_PLUGIN_ROOT}/.venv/Scripts/python.exe"
+if [ -d "$WORKTREE_PLUGIN_ROOT" ] && [ -f "$WORKTREE_VENV" ]; then
+    PLUGIN_ROOT="$WORKTREE_PLUGIN_ROOT"
+    MILL_PYTHON="$WORKTREE_VENV"
+    echo "[mill-go] NOTE: self-modifying repo detected; PLUGIN_ROOT overridden to $PLUGIN_ROOT"
+elif [ -d "$WORKTREE_PLUGIN_ROOT" ]; then
+    echo "[mill-go] SKIP: self-modifying repo but worktree venv absent -- using cache. Run 'uv sync --project ${WORKTREE_PLUGIN_ROOT}' to enable."
+fi
+```
+
+Both `PLUGIN_ROOT` and `MILL_PYTHON` are updated together only when the worktree venv exists. If `plugins/mill/` is present but `.venv` is absent (common in fresh task worktrees where `.venv` is gitignored), the cache path is used and a skip message is logged. For non-millhouse repos the entire block is a no-op.
+
 Use `$PLUGIN_ROOT` in place of `$CLAUDE_PLUGIN_ROOT` for all subsequent `uv run` commands in this skill.
 
 1. Read the task slug: `slug = _marker.slug_from_branch(git_root, wiki_path, cfg)`. On `MarkerError` → halt with "this worktree was not created by mill-spawn".
@@ -239,9 +255,9 @@ When mill-go's Entry-step 5 phase gate routes here (phase is `implementing`, `re
      ```bash
      PYTHONPATH="${PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${PLUGIN_ROOT}/scripts/millpy-bg.py" \
          --slug implement-<batch_name>-resume -- \
-         "$MILL_PYTHON" "${PLUGIN_ROOT}/scripts/millpy-implement.py" <batch_name> --resume
+         "$MILL_PYTHON" "${PLUGIN_ROOT}/scripts/millpy-implement.py" <batch_name>
      ```
-     The CLI re-attaches the warm session via the stored `implementer_session`. If `LLMSessionError` propagates (visible as `stuck_type: transient` in the JSON), apply the standard one-retry-fresh policy from Stuck escalation. After parsing the report, continue at Execute step 2b (cleanliness gate).
+     The interrupted implementer session is dead and cannot be re-attached. A fresh batch start is the correct recovery: the CLI re-initialises state -> running, captures a new snapshot, and spawns a fresh implementer session. After parsing the report, continue at Execute step 2b (cleanliness gate).
    - **`reviewing`** — the implementer report was already consumed; the reviewer was running. Re-invoke the per-batch code-review CLI from the start of round `review_round` (read this field from the batch entry):
      ```bash
      PYTHONPATH="${PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${PLUGIN_ROOT}/scripts/millpy-bg.py" \
@@ -339,7 +355,14 @@ For each round `H` from 1 to `max_holistic_rounds`:
 
 ## Handoff
 
+**Terminal cleanliness gate.** Run `git -C <worktree> status --porcelain --untracked-files=no`. If the output is non-empty (any tracked files have uncommitted modifications), halt with:
+`BLOCKED: dirty working tree at task completion -- <N> file(s) uncommitted: <file-list>. Commit or discard before proceeding.`
+where `<N>` is the count of dirty lines and `<file-list>` is the filenames extracted from the porcelain output. Do NOT set `phase: done` when the gate fires; the task remains in its current phase so the operator can inspect and fix.
+
+If the output is empty, proceed normally.
+
 1. `_status.append_phase(status_path, "done", _timestamp.now_utc_iso())`. Commit on the task branch: `git -C <worktree> add <status_path> && git -C <worktree> commit -m "mill-go: done {slug}"`.
+
 2. Flip Home.md's task line to `[ready-to-merge]` — the new intermediate state signalling 'mill-go done, mill-merge pending':
    ```python
    home_path = wiki_path / "Home.md"

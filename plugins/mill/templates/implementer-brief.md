@@ -95,3 +95,11 @@ If mill-go resumes this session with a new message pointing you at a code-review
 ## Tools
 
 Available: Read, Edit, Write, Bash, Grep, Glob. Banned: TodoWrite, WebFetch, WebSearch. Use `git -C <PROJECT_ROOT>` for commits; do not `cd`.
+
+## Cross-worktree isolation
+
+You run inside a task worktree. The parent worktree (the repo's main branch checkout) is a sibling directory — do NOT change directory into it.
+
+- **Banned:** `cd <parent-worktree-path>` or any command that changes the process working directory to the parent. A single stray `cd` to the parent corrupts the shell cwd for every subsequent command in this session — the rest of the batch runs in the wrong directory with no error indicator.
+- **Allowed:** `git -C <parent-path> log/status/show/diff/ls-files` for read-only queries. Never `git -C <parent-path> commit/push/add` — those would mutate the parent's state.
+- **If you need a file from the parent:** use `git -C <PROJECT_ROOT> show <parent-branch>:<path>` to read it without changing cwd.

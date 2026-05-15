@@ -48,6 +48,12 @@ You are an integration engineer. Your job is to merge a completed task branch ba
    | `pr-pending` | see *PR-path re-entry* below |
    | `complete` / missing / other | halt with "status.md phase is `<value>`; mill-merge expects `done`. If the task is not finished, run mill-go first." |
 
+   After the phase gate confirms `phase: done`, cache the task fields from `_mill/status.md` before the Teardown Steps run:
+   - `cached_task = _status.read_full(status_path)["yaml"].get("task", slug)` — the task title used in Step 5's squash commit message and Step 6's PR title.
+   - `cached_task_description = _status.read_full(status_path)["yaml"].get("task_description", cached_task)` — the task description used in Step 6's PR body.
+
+   Use `cached_task` and `cached_task_description` in all subsequent references to "task: field from status.md" and "task_description field from status.md". Step 4's `git rm -r _mill/` deletes status.md before Step 5 runs; reading from a cached variable avoids the read-after-delete failure.
+
 ## Steps
 
 ### 1. Acquire merge lock on parent
@@ -97,7 +103,7 @@ PR dispatch lives in mill-finalize. This step is direct path only.
 
   ```bash
   git -C <parent-path> merge --squash "$CHILD_BRANCH"
-  git -C <parent-path> commit -m "<task: field from status.md>"
+  git -C <parent-path> commit -m "<cached_task>"
   git -C <parent-path> push
   ```
 
@@ -127,10 +133,10 @@ PR dispatch lives in mill-finalize. This step is direct path only.
      gh pr create \
          --base "<parent_branch>" \
          --head "$CHILD_BRANCH" \
-         --title "<task: field from status.md>" \
+         --title "<cached_task>" \
          --body "Auto-created: direct push was rejected by branch protection.
 
-     <task_description field from status.md>"
+     <cached_task_description>"
      ```
 
      Capture the PR URL printed by `gh pr create`.

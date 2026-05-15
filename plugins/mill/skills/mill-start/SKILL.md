@@ -30,11 +30,12 @@ Operator-driven entries keep the existing bare format (`- **Q:** … **A:** …`
 
 **Phase: Discussion Review — `--auto` changes:**
 
+- Before the loop, initialise: `prev_gap_titles: set[str] = set()` and `extension_used: bool = False`.
 - Review still runs up to `max_review_rounds` (no skip).
 - The `mill-receiving-review` skill is still loaded before reading any review file (the existing non-negotiable rule applies). Under `--auto` the PUSH BACK path of the decision tree is unavailable: there is no operator to escalate to. Every gap AND every NOTE returned by the reviewer is treated as FIX regardless of the decision-tree outcome (factually-wrong findings included). PUSH BACK is unavailable because no operator is present.
 - On `GAPS_FOUND`, the assistant auto-resolves each gap by adding the missing information to discussion.md using best judgment, commits, **pushes**, and re-runs the review.
 - On APPROVE, read the review file. If zero `[NOTE]` findings: break the loop and proceed to Handoff (auto-path identical to interactive 4a). If one or more `[NOTE]` findings: take the interactive 4b path verbatim — auto-resolve each NOTE by editing `<discussion_path>` using best judgment (per the `mill-receiving-review` decision tree, with PUSH BACK unavailable), write the same fixer report at `<reviews_dir>/<YYYYMMDD-HHMMSS>-discussion-fix-r<N>.md` with `## Fixed` / `## Pushed Back` sections, append `discussion-fix-r{N}` to the status timeline, single commit covering `<discussion_path>` + `<reviews_dir>/` + `<status_path>` with message `mill-start: discussion-fix round {N} for {slug}`, push, break loop → Handoff. The Q&A log is NOT touched for NOTEs — the fixer report is the audit trail.
-- If gaps remain after `max_review_rounds`: call `_status.set_blocked(status_path, f"auto: discussion review gaps unresolved after {N} rounds", timestamp=_timestamp.now_utc_iso())`, then `git -C <worktree> add <status_path> && git commit -m "mill-start: blocked (auto: discussion review gaps unresolved) for <slug>" && git push`, then halt with that message. Do NOT proceed to Handoff.
+- At the end of each GAPS_FOUND round (after committing and pushing gap fixes): (1) parse the current round's gap titles from the review file (heading text of each `### [GAP]` finding) into `current_gap_titles`; (2) if `round >= max_review_rounds` — non-progress check: if `current_gap_titles.isdisjoint(prev_gap_titles)` AND `not extension_used`: set `extension_used = True`, allow one more round (do NOT block), and continue the loop (`round += 1`); otherwise (overlap exists, or `extension_used` is already `True`): call `_status.set_blocked(status_path, f"auto: discussion review gaps unresolved after {N} rounds", timestamp=_timestamp.now_utc_iso())`, then `git -C <worktree> add <status_path> && git commit -m "mill-start: blocked (auto: discussion review gaps unresolved) for <slug>" && git push`, then halt — do NOT proceed to Handoff; (3) update `prev_gap_titles = current_gap_titles` (every round, including the extension round).
 
 `--auto` is independent from `pipeline.autonomous_mode`: `--auto` is a per-invocation flag controlling Phase: Discuss / Discussion Review behaviour in mill-start; `pipeline.autonomous_mode` is a config key controlling mill-go's stuck-handling. The Auto mode subsection neither reads nor writes `pipeline.autonomous_mode`. Operators opt into each separately.
 
@@ -96,6 +97,8 @@ Render `plugins/mill/templates/discussion.md` into `discussion_path`, substituti
 Commit on the task branch: `git -C <worktree> add <discussion_path> && git commit -m "mill-start: write discussion.md for {slug}"`.
 
 ### Phase: Discussion Review
+
+**Status safeguard (applies to all `_status.append_phase` calls in this phase):** Before any `_status.append_phase` call, run `git -C <worktree> status --short -- _mill/status.md`. If the output contains `D` (a line beginning with ` D` for working-tree deleted, or `D ` for staged deletion), restore the file via `git -C <worktree> checkout HEAD -- _mill/status.md` before proceeding. Blank output means the file is present and unchanged — blank is NOT the deletion signal.
 
 The new schema has two skip conditions: `rounds: 0` OR `reviewer: null` means "skip discussion review". If `max_review_rounds == 0` OR `roles.discussion-review.holistic.reviewer` is `None`: skip straight to Handoff.
 
