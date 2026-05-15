@@ -28,7 +28,9 @@ implementing  '2026-05-15T08:06:47Z'
 ```yaml
 batches:
   - name: unit-test
-    state: pending
+    state: running
+    implementer_session: 94f9609c-6e46-48c0-9055-32b499c31caf
+    start_sha: 9ffcb8f26e55641c8864834de6be20d286df2772
   - name: mill-go-paths
     state: pending
   - name: finalize-merge-paths
