@@ -43,7 +43,9 @@ batches:
     implementer_session: bad2c486-71e1-4a3f-8081-cf055ba2ed6d
     start_sha: cc4e3dce3f332a171575c19f705d7b9c91b0149c
   - name: start-plan-paths
-    state: pending
+    state: running
+    implementer_session: f27599ab-de43-4d7c-bf88-4fe81e4b96d5
+    start_sha: 6f03e25c6c6c42920eaa46f3f0c71f660c877d8f
   - name: mill-setup-fixes
     state: pending
 ```
