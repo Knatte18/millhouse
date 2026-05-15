@@ -177,29 +177,34 @@ Updates all affected unit test files to reflect the production changes from batc
 
   2. **Update the "missing registry" test**: the existing test named something like `test_load_raises_when_file_absent` currently expects `ReviewerError` when `reviewers.yaml` is absent. After the fallback logic, the error fires only when *both* files are absent. Verify the test creates an empty wiki dir (no YAML files) — if so, it still passes without change. If the test wrote `reviewers.yaml` and then renamed/removed it, update accordingly.
 
-  3. **Add backward-compat fallback test** (new test in the `TestLoad` class or equivalent):
+  3. **Add backward-compat fallback test** — `test-reviewers.py` uses standalone functions (not `unittest.TestCase`), so write this as a standalone function following the exact pattern of the existing tests:
      ```python
-     def test_load_falls_back_to_reviewers_yaml(self):
+     def test_load_falls_back_to_reviewers_yaml() -> None:
          """load() succeeds when only reviewers.yaml exists (backward compat)."""
-         wiki = Path(tempfile.mkdtemp())
-         self.addCleanup(shutil.rmtree, wiki, True)
-         # write_to() now writes agents.yaml; rename it to reviewers.yaml to simulate old hub
-         write_to(wiki)
-         (wiki / "agents.yaml").rename(wiki / "reviewers.yaml")
-         registry = _reviewers.load(wiki)
-         self.assertIn("sonnetmax", registry)
+         with tempfile.TemporaryDirectory() as tmp:
+             wiki = Path(tmp) / "wiki"
+             write_to(wiki)  # writes agents.yaml
+             (wiki / "agents.yaml").rename(wiki / "reviewers.yaml")
+             registry = _reviewers.load(wiki)
+             assert "sonnetmax" in registry
+         print("PASS: load falls back to reviewers.yaml")
      ```
-     (Import `shutil` at the top of the file if not already imported.)
+     Then add `test_load_falls_back_to_reviewers_yaml` to the `tests = [...]` list inside `main()`.
 
-  4. **Add `validate_role_refs` implementer model test** (new test):
+  4. **Add `validate_role_refs` implementer model test** — also a standalone function:
      ```python
-     def test_validate_role_refs_catches_bad_implementer_model(self):
+     def test_validate_role_refs_catches_bad_implementer_model() -> None:
          """validate_role_refs raises ReviewerError for bad roles.implementer.model."""
          registry = make_minimal_registry()
          cfg = {"roles": {"implementer": {"self_fix_rounds": 2, "model": "nonexistent_entry"}}}
-         with self.assertRaises(ReviewerError):
-             validate_role_refs(cfg, registry)
+         try:
+             _reviewers.validate_role_refs(cfg, registry)
+             raise AssertionError("Expected ReviewerError")
+         except ReviewerError:
+             pass
+         print("PASS: validate_role_refs catches bad implementer model ref")
      ```
+     Then add `test_validate_role_refs_catches_bad_implementer_model` to the `tests = [...]` list inside `main()`. Use `_reviewers.validate_role_refs(cfg, registry)` (module-qualified, matching existing style) — do not add a bare `from _reviewers import validate_role_refs` import.
 - **Commit:** `test(test-reviewers): update paths to agents.yaml; add fallback + implementer-model tests`
 
 ---
