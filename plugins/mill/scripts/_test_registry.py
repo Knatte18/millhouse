@@ -55,13 +55,13 @@ def make_minimal_registry(**overrides) -> dict:
 
 
 def write_to(wiki_root: Path, **overrides) -> Path:
-    """Write the registry to wiki_root/reviewers.yaml and return the path.
+    """Write the registry to wiki_root/agents.yaml and return the path.
 
     Creates wiki_root (and parents) if absent — fixture code typically assigns
     wiki_root = tmp_path / "wiki" without creating the directory first.
     """
     wiki_root.mkdir(parents=True, exist_ok=True)
     registry = make_minimal_registry(**overrides)
-    out_path = wiki_root / "reviewers.yaml"
+    out_path = wiki_root / "agents.yaml"
     out_path.write_text(yaml.safe_dump(registry, default_flow_style=False), encoding="utf-8")
     return out_path

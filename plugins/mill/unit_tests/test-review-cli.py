@@ -85,7 +85,7 @@ def main() -> int:
             "  reviews_dir: reviews/\n",
             encoding="utf-8",
         )
-        (_wiki / "reviewers.yaml").write_text(
+        (_wiki / "agents.yaml").write_text(
             "sonnetmax:\n"
             "  type: single\n"
             "  provider: claude\n"

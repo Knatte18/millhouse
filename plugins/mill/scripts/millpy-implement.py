@@ -28,13 +28,14 @@ import uuid
 from pathlib import Path
 
 import _cleanliness
-import _implementer_sonnet
+import _implementer_claude
 import _llm_claude
 import _marker
 import _paths
 import _plan_dag
 import _render
 import _review_common
+import _reviewers
 import _status
 import _timestamp
 from _implementer_common import _forward_output
@@ -96,6 +97,16 @@ def main(argv=None) -> int:
     branch = _status.read_branch(status_path, cfg=cfg, slug=slug)
     self_fix_rounds = cfg.get("roles", {}).get("implementer", {}).get("self_fix_rounds", 2)
     timeout = cfg.get("llm", {}).get("implementer_timeout", 1800)
+    implementer_cfg = cfg.get("roles", {}).get("implementer", {})
+    model_name = implementer_cfg.get("model", "sonnethigh")
+    try:
+        registry = _reviewers.load(wiki_path)
+        impl_spec = _reviewers.resolve(registry, model_name)
+    except _reviewers.ReviewerError as e:
+        print(str(e), file=sys.stderr)
+        return 1
+    impl_model = impl_spec["model"]
+    impl_effort = impl_spec.get("effort")
 
     plan_base = _paths.resolve_task_path(project_root, plan_dir)
     overview_path = plan_base / "00-overview.md"
@@ -173,8 +184,10 @@ def main(argv=None) -> int:
         })
 
         try:
-            output, _ = _implementer_sonnet.run(
+            output, _ = _implementer_claude.run(
                 prompt_text,
+                model=impl_model,
+                effort=impl_effort,
                 session_id=session_id,
                 resume=False,
                 cwd=project_root,
@@ -246,8 +259,10 @@ def main(argv=None) -> int:
         })
 
         try:
-            output, _ = _implementer_sonnet.run(
+            output, _ = _implementer_claude.run(
                 prompt_text,
+                model=impl_model,
+                effort=impl_effort,
                 session_id=session_id,
                 resume=True,
                 cwd=project_root,

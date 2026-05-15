@@ -29,12 +29,13 @@ import _subprocess_util
 import sys
 from pathlib import Path
 
-import _implementer_sonnet
+import _implementer_claude
 import _llm_claude
 import _marker
 import _paths
 import _render
 import _review_common
+import _reviewers
 from _implementer_common import _forward_output
 
 
@@ -87,14 +88,24 @@ def main(argv=None) -> int:
         return 1
 
     timeout = cfg.get("llm", {}).get("implementer_timeout", 1800)
+    implementer_cfg = cfg.get("roles", {}).get("implementer", {})
+    model_name = implementer_cfg.get("model", "sonnethigh")
+    try:
+        registry = _reviewers.load(wiki_path)
+        impl_spec = _reviewers.resolve(registry, model_name)
+    except _reviewers.ReviewerError as e:
+        print(str(e), file=sys.stderr)
+        return 1
+    impl_model = impl_spec["model"]
+    impl_effort = impl_spec.get("effort")
 
     if args.mode == "conflicts":
-        return _run_conflicts(args, project_root, plugin_root, cfg, timeout)
+        return _run_conflicts(args, project_root, plugin_root, cfg, timeout, impl_model, impl_effort)
     else:
-        return _run_verify_fix(args, project_root, plugin_root, cfg, timeout)
+        return _run_verify_fix(args, project_root, plugin_root, cfg, timeout, impl_model, impl_effort)
 
 
-def _run_conflicts(args, project_root: Path, plugin_root: Path, cfg: dict, timeout: int) -> int:
+def _run_conflicts(args, project_root: Path, plugin_root: Path, cfg: dict, timeout: int, impl_model: str, impl_effort: str | None) -> int:
     if not args.files:
         print("--files is required for conflicts mode", file=sys.stderr)
         return 1
@@ -108,8 +119,10 @@ def _run_conflicts(args, project_root: Path, plugin_root: Path, cfg: dict, timeo
     })
 
     try:
-        output, _ = _implementer_sonnet.run(
+        output, _ = _implementer_claude.run(
             prompt_text,
+            model=impl_model,
+            effort=impl_effort,
             session_id=None,
             resume=False,
             cwd=project_root,
@@ -123,7 +136,7 @@ def _run_conflicts(args, project_root: Path, plugin_root: Path, cfg: dict, timeo
     return _forward_output(output, project_root)
 
 
-def _run_verify_fix(args, project_root: Path, plugin_root: Path, cfg: dict, timeout: int) -> int:
+def _run_verify_fix(args, project_root: Path, plugin_root: Path, cfg: dict, timeout: int, impl_model: str, impl_effort: str | None) -> int:
     if args.cmd is None:
         print("--cmd is required for verify-fix mode", file=sys.stderr)
         return 1
@@ -169,8 +182,10 @@ def _run_verify_fix(args, project_root: Path, plugin_root: Path, cfg: dict, time
     })
 
     try:
-        output, _ = _implementer_sonnet.run(
+        output, _ = _implementer_claude.run(
             prompt_text,
+            model=impl_model,
+            effort=impl_effort,
             session_id=None,
             resume=False,
             cwd=project_root,
