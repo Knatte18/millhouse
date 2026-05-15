@@ -245,9 +245,9 @@ When mill-go's Entry-step 5 phase gate routes here (phase is `implementing`, `re
      ```bash
      PYTHONPATH="${PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${PLUGIN_ROOT}/scripts/millpy-bg.py" \
          --slug implement-<batch_name>-resume -- \
-         "$MILL_PYTHON" "${PLUGIN_ROOT}/scripts/millpy-implement.py" <batch_name> --resume
+         "$MILL_PYTHON" "${PLUGIN_ROOT}/scripts/millpy-implement.py" <batch_name>
      ```
-     The CLI re-attaches the warm session via the stored `implementer_session`. If `LLMSessionError` propagates (visible as `stuck_type: transient` in the JSON), apply the standard one-retry-fresh policy from Stuck escalation. After parsing the report, continue at Execute step 2b (cleanliness gate).
+     The interrupted implementer session is dead and cannot be re-attached. A fresh batch start is the correct recovery: the CLI re-initialises state -> running, captures a new snapshot, and spawns a fresh implementer session. After parsing the report, continue at Execute step 2b (cleanliness gate).
    - **`reviewing`** — the implementer report was already consumed; the reviewer was running. Re-invoke the per-batch code-review CLI from the start of round `review_round` (read this field from the batch entry):
      ```bash
      PYTHONPATH="${PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${PLUGIN_ROOT}/scripts/millpy-bg.py" \
