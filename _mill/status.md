@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-core-modules
+phase: approved-wiki-and-template
 slug: implementer-model-config
 branch: hanf/implementer-model-config
 plan: _mill/plan
@@ -24,6 +24,7 @@ plan-fix-r2  '2026-05-15T09:26:15Z'
 planned  '2026-05-15T09:26:33Z'
 implementing  '2026-05-15T09:35:15Z'
 approved-core-modules  '2026-05-15T09:40:10Z'
+approved-wiki-and-template  '2026-05-15T09:42:41Z'
 ```
 
 ## Batches
@@ -35,7 +36,7 @@ batches:
     implementer_session: e12438d2-52f4-44dd-811f-8147f0a2d68a
     start_sha: d6556df522c1749b5b211d0f998234b247daed5b
   - name: wiki-and-template
-    state: running
+    state: approved
     implementer_session: 23ce5385-05f5-439b-9d6b-864db2174cf5
     start_sha: f3589146b08d2284f97b2434322857a52bd8efaa
   - name: cli-scripts
