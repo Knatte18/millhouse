@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-mill-setup-fixes
+phase: holistic-reviewing
 slug: mill-path-hardcodes
 branch: hanf/mill-path-hardcodes
 plan: _mill/plan
@@ -26,6 +26,7 @@ approved-mill-go-paths  '2026-05-15T08:18:46Z'
 approved-finalize-merge-paths  '2026-05-15T08:26:00Z'
 approved-start-plan-paths  '2026-05-15T08:35:07Z'
 approved-mill-setup-fixes  '2026-05-15T08:38:35Z'
+holistic-reviewing  '2026-05-15T08:38:59Z'
 ```
 
 ## Batches
