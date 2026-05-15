@@ -30,7 +30,9 @@ implementing  '2026-05-15T08:15:31Z'
 ```yaml
 batches:
   - name: python-fixes
-    state: pending
+    state: running
+    implementer_session: f7132421-1872-4254-9cf2-86d458461701
+    start_sha: 5dab143803e3353136621c75c58b61f0f0f7c5fb
   - name: templates
     state: pending
   - name: mill-go-skill
