@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-core-modules
 slug: implementer-model-config
 branch: hanf/implementer-model-config
 plan: _mill/plan
@@ -23,6 +23,7 @@ plan-fix-r1  '2026-05-15T09:20:06Z'
 plan-fix-r2  '2026-05-15T09:26:15Z'
 planned  '2026-05-15T09:26:33Z'
 implementing  '2026-05-15T09:35:15Z'
+approved-core-modules  '2026-05-15T09:40:10Z'
 ```
 
 ## Batches
@@ -30,7 +31,7 @@ implementing  '2026-05-15T09:35:15Z'
 ```yaml
 batches:
   - name: core-modules
-    state: running
+    state: approved
     implementer_session: e12438d2-52f4-44dd-811f-8147f0a2d68a
     start_sha: d6556df522c1749b5b211d0f998234b247daed5b
   - name: wiki-and-template
