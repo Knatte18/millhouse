@@ -225,10 +225,10 @@ PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/
 from pathlib import Path
 import json, _setup
 result = _setup.create_hub_links(
-    target_root=Path(r'<hub-path>').resolve(),
+    target_root=Path(r'<cwd>').resolve(),
     wiki_path=Path(r'<wiki-dir>').resolve(),
     tokens={
-        'HUB_PATH':       r'<hub-path>',
+        'HUB_PATH':       r'<cwd>',
         'CWD_PATH':       r'<cwd>',
         'CONTAINER_PATH': r'<container>',
         'WIKI_PATH':      r'<wiki-dir>',
@@ -240,8 +240,7 @@ print(json.dumps({k: [str(p) for p in v] for k, v in result.items()}, indent=2))
 ```
 
 Token reference:
-- `<hub-path>` — absolute path to the hub (`git rev-parse --show-toplevel`)
-- `<cwd>` — current working directory absolute path
+- `<cwd>` — the hub directory. mill-setup is invoked from the hub; `cwd` is the hub by construction. In subdirectory-hub mode, this differs from `git rev-parse --show-toplevel` (the repo root). Use `cwd`, not `git rev-parse --show-toplevel`, for `target_root`.
 - `<container>` — parent of `wts/` (container-form) or parent of hub (prefix-form)
 - `<wiki-dir>` — wiki clone path from Phase 3
 - `<repo>` — repository directory name (e.g. `millhouse`)
