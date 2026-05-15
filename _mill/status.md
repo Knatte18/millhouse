@@ -33,5 +33,7 @@ batches:
     implementer_session: 073af324-3fec-4d34-80c8-e0315c1cd27f
     start_sha: ea19982f8994af7225994957cdca37789a5c37b8
   - name: test-migration
-    state: pending
+    state: running
+    implementer_session: 8e5d0753-5a04-4d3c-be47-beb1139a0288
+    start_sha: 4639f5bc4b1b22ad02a4ca7936f79d78488de511
 ```
