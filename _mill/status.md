@@ -1,10 +1,10 @@
 # Status
 
 ```yaml
-phase: discussed
+phase: planning
 slug: claude-p-wrapper
 branch: hanf/claude-p-wrapper
-plan: null
+plan: _mill/plan
 parent: main
 task: Wrap claude -p via psmux to use subscription instead of API credits
 task_description: |
@@ -17,4 +17,5 @@ task_description: |
 discussing  '2026-05-15T09:45:04Z'
 discussion-fix-r3  '2026-05-15T11:10:04Z'
 discussed  '2026-05-15T11:10:14Z'
+planning  '2026-05-15T11:23:06Z'
 ```
