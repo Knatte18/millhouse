@@ -96,6 +96,8 @@ Commit on the task branch: `git -C <worktree> add _mill/discussion.md && git com
 
 ### Phase: Discussion Review
 
+**Status safeguard (applies to all `_status.append_phase` calls in this phase):** Before any `_status.append_phase` call, run `git -C <worktree> status --short -- _mill/status.md`. If the output contains `D` (a line beginning with ` D` for working-tree deleted, or `D ` for staged deletion), restore the file via `git -C <worktree> checkout HEAD -- _mill/status.md` before proceeding. Blank output means the file is present and unchanged — blank is NOT the deletion signal.
+
 The new schema has two skip conditions: `rounds: 0` OR `reviewer: null` means "skip discussion review". If `max_review_rounds == 0` OR `roles.discussion-review.holistic.reviewer` is `None`: skip straight to Handoff.
 
 Loop up to `max_review_rounds` rounds. Each round:
