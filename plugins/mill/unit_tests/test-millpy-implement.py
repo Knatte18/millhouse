@@ -118,7 +118,7 @@ class TestMillpyImplement(unittest.TestCase):
             millpy_implement._review_common, "load_config",
             return_value={
                 "paths": {"status_md": "_mill/status.md"},
-                "roles": {"implementer": {"self_fix_rounds": 2}},
+                "roles": {"implementer": {"self_fix_rounds": 2, "model": "sonnethigh"}},
                 "llm": {"implementer_timeout": 1800},
             },
         )
@@ -143,6 +143,26 @@ class TestMillpyImplement(unittest.TestCase):
         self.mock_capture_snapshot = _p(
             millpy_implement._cleanliness, "capture_snapshot",
         )
+        self.mock_reviewers_load = _p(
+            millpy_implement._reviewers, "load",
+            return_value={
+                "sonnethigh": {
+                    "type": "single",
+                    "provider": "claude",
+                    "model": "claude-sonnet-4-6",
+                    "effort": "high",
+                }
+            },
+        )
+        self.mock_reviewers_resolve = _p(
+            millpy_implement._reviewers, "resolve",
+            return_value={
+                "type": "single",
+                "provider": "claude",
+                "model": "claude-sonnet-4-6",
+                "effort": "high",
+            },
+        )
 
     def _run_main(self, argv):
         """Run main(argv) with stdout captured. Returns (rc, captured_stdout)."""
@@ -156,7 +176,7 @@ class TestMillpyImplement(unittest.TestCase):
         status_path = self.tmp_path / "task" / "status.md"
 
         with unittest.mock.patch.object(
-            millpy_implement._implementer_sonnet, "run",
+            millpy_implement._implementer_claude, "run",
             return_value=(
                 '{"status":"success","commit_sha":"abc","session_id":"fake"}\n',
                 "fake-session",
@@ -178,7 +198,7 @@ class TestMillpyImplement(unittest.TestCase):
         millpy_implement._status.set_batch_field(status_path, "test-batch", "state", "running")
 
         with unittest.mock.patch.object(
-            millpy_implement._implementer_sonnet, "run",
+            millpy_implement._implementer_claude, "run",
             return_value=(
                 '{"status":"success","commit_sha":"abc","session_id":"fake"}\n',
                 "fake-session",
@@ -194,7 +214,7 @@ class TestMillpyImplement(unittest.TestCase):
     def test_3_initial_dispatch_stuck(self):
         """Initial dispatch: implementer returns stuck -> exit 0, stuck JSON."""
         with unittest.mock.patch.object(
-            millpy_implement._implementer_sonnet, "run",
+            millpy_implement._implementer_claude, "run",
             return_value=(
                 '{"status":"stuck","stuck_type":"verify","reason":"tests failed"}\n',
                 "fake-session",
@@ -218,7 +238,7 @@ class TestMillpyImplement(unittest.TestCase):
         review_file.write_text("some review content", encoding="utf-8")
 
         with unittest.mock.patch.object(
-            millpy_implement._implementer_sonnet, "run",
+            millpy_implement._implementer_claude, "run",
             return_value=(
                 '{"status":"success","commit_sha":"abc","session_id":"fake"}\n',
                 "fake-session",
@@ -273,7 +293,7 @@ class TestMillpyImplement(unittest.TestCase):
         review_file.write_text("content", encoding="utf-8")
 
         with unittest.mock.patch.object(
-            millpy_implement._implementer_sonnet, "run",
+            millpy_implement._implementer_claude, "run",
             side_effect=millpy_implement._llm_claude.LLMSessionError("session expired"),
         ):
             rc, out = self._run_main([
@@ -297,7 +317,7 @@ class TestMillpyImplement(unittest.TestCase):
         review_file.write_text("content", encoding="utf-8")
 
         with unittest.mock.patch.object(
-            millpy_implement._implementer_sonnet, "run",
+            millpy_implement._implementer_claude, "run",
             side_effect=millpy_implement._llm_claude.LLMError("timeout"),
         ):
             rc, out = self._run_main([
@@ -319,7 +339,7 @@ class TestMillpyImplement(unittest.TestCase):
     def test_7_malformed_json_from_implementer(self):
         """Implementer output with no valid JSON -> exit 0, stuck/logic JSON."""
         with unittest.mock.patch.object(
-            millpy_implement._implementer_sonnet, "run",
+            millpy_implement._implementer_claude, "run",
             return_value=("implementer output with no json\n", "sess"),
         ):
             rc, out = self._run_main(["test-batch"])
@@ -334,6 +354,44 @@ class TestMillpyImplement(unittest.TestCase):
         rc, out = self._run_main(["test-batch", "--resume"])
         self.assertEqual(rc, 1)
         self.assertEqual(out.strip(), "")
+
+    def test_9_model_and_effort_from_config(self):
+        """Initial dispatch: model and effort read from config and passed to implementer."""
+        with unittest.mock.patch.object(
+            millpy_implement._implementer_claude, "run",
+            return_value=(
+                '{"status":"success","commit_sha":"abc","session_id":"fake"}\n',
+                "fake-session",
+            ),
+        ) as mock_run:
+            rc, out = self._run_main(["test-batch"])
+
+        self.assertEqual(rc, 0)
+        call_kwargs = mock_run.call_args.kwargs
+        self.assertEqual(call_kwargs.get("model"), "claude-sonnet-4-6")
+        self.assertEqual(call_kwargs.get("effort"), "high")
+
+    def test_10_model_default_fallback(self):
+        """When roles.implementer.model is absent, defaults to 'sonnethigh'."""
+        self.mock_load_config.return_value = {
+            "paths": {"status_md": "_mill/status.md"},
+            "roles": {"implementer": {"self_fix_rounds": 2}},
+            "llm": {"implementer_timeout": 1800},
+        }
+        with unittest.mock.patch.object(
+            millpy_implement._implementer_claude, "run",
+            return_value=(
+                '{"status":"success","commit_sha":"abc","session_id":"fake"}\n',
+                "fake-session",
+            ),
+        ):
+            rc, out = self._run_main(["test-batch"])
+
+        self.assertEqual(rc, 0)
+        # _reviewers.resolve was called with 'sonnethigh' (the default)
+        self.mock_reviewers_resolve.assert_called_with(
+            self.mock_reviewers_load.return_value, "sonnethigh"
+        )
 
 
 class TestForwardOutput(unittest.TestCase):

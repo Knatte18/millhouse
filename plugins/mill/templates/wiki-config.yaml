@@ -4,7 +4,7 @@
 # Local (non-secret) overrides go in .millhouse/config.local.yaml (gitignored).
 # Secrets belong in .env at the repo root, not here.
 #
-# Review roles live under `roles:`. Reviewer names reference wiki/reviewers.yaml.
+# Review roles live under `roles:`. Reviewer names reference wiki/agents.yaml.
 # Skip semantics: rounds: 0 OR reviewer: null → skip the scope.
 #
 # Path tokens (substituted by mill scripts at run time, always UPPERCASE):
@@ -90,7 +90,7 @@ pipeline:
 # ---------------------------------------------------------------------------
 # Reviewer roles
 # ---------------------------------------------------------------------------
-# Reviewer names reference wiki/reviewers.yaml entries.
+# Reviewer names reference wiki/agents.yaml entries.
 
 roles:
   discussion-review:
@@ -99,7 +99,7 @@ roles:
       reviewer: sonnetmax_tool
       # large_prompt:            # optional: override reviewer for large prompts
       #   threshold_ktok: 100    # switch when estimated tok count >= this (char/4000)
-      #   reviewer: null         # override reviewer from reviewers.yaml; null = disabled
+      #   reviewer: null         # override reviewer from agents.yaml; null = disabled
 
   plan-review:
     batch:
@@ -110,7 +110,7 @@ roles:
       reviewer: sonnetmax
       # large_prompt:            # optional: override reviewer for large prompts
       #   threshold_ktok: 100    # switch when estimated tok count >= this (char/4000)
-      #   reviewer: null         # override reviewer from reviewers.yaml; null = disabled
+      #   reviewer: null         # override reviewer from agents.yaml; null = disabled
 
   code-review:
     batch:
@@ -121,11 +121,12 @@ roles:
       reviewer: sonnetmedium
       # large_prompt:            # optional: override reviewer for large prompts
       #   threshold_ktok: 100    # switch when estimated tok count >= this (char/4000)
-      #   reviewer: null         # override reviewer from reviewers.yaml; null = disabled
+      #   reviewer: null         # override reviewer from agents.yaml; null = disabled
     diff_scope_threshold: 0.25
 
   implementer:
     self_fix_rounds: 2
+    model: sonnethigh
 
 # ---------------------------------------------------------------------------
 # Notifications

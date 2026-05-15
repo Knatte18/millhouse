@@ -60,7 +60,7 @@ def test_load_raises_single_missing_provider() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         wiki = Path(tmp) / "wiki"
         _write_yaml(
-            wiki / "reviewers.yaml",
+            wiki / "agents.yaml",
             "bad:\n  type: single\n  model: claude-sonnet-4-6\n",
         )
         try:
@@ -76,7 +76,7 @@ def test_load_raises_cluster_missing_workers() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         wiki = Path(tmp) / "wiki"
         _write_yaml(
-            wiki / "reviewers.yaml",
+            wiki / "agents.yaml",
             "myworker:\n  type: single\n  provider: claude\n  model: claude-sonnet-4-6\n"
             "mycluster:\n  type: cluster\n  handler:\n    use: myworker\n",
         )
@@ -93,7 +93,7 @@ def test_load_raises_cluster_missing_handler() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         wiki = Path(tmp) / "wiki"
         _write_yaml(
-            wiki / "reviewers.yaml",
+            wiki / "agents.yaml",
             "myworker:\n  type: single\n  provider: claude\n  model: claude-sonnet-4-6\n"
             "mycluster:\n  type: cluster\n  workers:\n    use: myworker\n    count: 2\n",
         )
@@ -110,7 +110,7 @@ def test_load_raises_cluster_workers_count_non_positive() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         wiki = Path(tmp) / "wiki"
         _write_yaml(
-            wiki / "reviewers.yaml",
+            wiki / "agents.yaml",
             "myworker:\n  type: single\n  provider: claude\n  model: claude-sonnet-4-6\n"
             "mycluster:\n  type: cluster\n"
             "  workers:\n    use: myworker\n    count: 0\n"
@@ -129,7 +129,7 @@ def test_load_raises_unknown_type() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         wiki = Path(tmp) / "wiki"
         _write_yaml(
-            wiki / "reviewers.yaml",
+            wiki / "agents.yaml",
             "bad:\n  type: unknown\n  provider: claude\n  model: x\n",
         )
         try:
@@ -145,7 +145,7 @@ def test_load_raises_invalid_name_uppercase() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         wiki = Path(tmp) / "wiki"
         _write_yaml(
-            wiki / "reviewers.yaml",
+            wiki / "agents.yaml",
             "BadName:\n  type: single\n  provider: claude\n  model: x\n",
         )
         try:
@@ -161,7 +161,7 @@ def test_load_raises_invalid_name_dot() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         wiki = Path(tmp) / "wiki"
         _write_yaml(
-            wiki / "reviewers.yaml",
+            wiki / "agents.yaml",
             "bad.name:\n  type: single\n  provider: claude\n  model: x\n",
         )
         try:
@@ -177,7 +177,7 @@ def test_load_raises_duplicate_name() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         wiki = Path(tmp) / "wiki"
         _write_yaml(
-            wiki / "reviewers.yaml",
+            wiki / "agents.yaml",
             "sonnetmax:\n  type: single\n  provider: claude\n  model: x\n"
             "sonnetmax:\n  type: single\n  provider: claude\n  model: y\n",
         )
@@ -194,7 +194,7 @@ def test_load_raises_cluster_use_nonexistent() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         wiki = Path(tmp) / "wiki"
         _write_yaml(
-            wiki / "reviewers.yaml",
+            wiki / "agents.yaml",
             "myworker:\n  type: single\n  provider: claude\n  model: x\n"
             "mycluster:\n  type: cluster\n"
             "  workers:\n    use: nonexistent\n    count: 2\n"
@@ -213,7 +213,7 @@ def test_load_raises_cluster_use_referencing_cluster() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         wiki = Path(tmp) / "wiki"
         _write_yaml(
-            wiki / "reviewers.yaml",
+            wiki / "agents.yaml",
             "myworker:\n  type: single\n  provider: claude\n  model: x\n"
             "clusterb:\n  type: cluster\n"
             "  workers:\n    use: myworker\n    count: 2\n"
@@ -342,6 +342,29 @@ def test_validate_role_refs_missing_raises() -> None:
     print("PASS: validate_role_refs lists all missing names")
 
 
+def test_load_falls_back_to_reviewers_yaml() -> None:
+    """load() succeeds when only reviewers.yaml exists (backward compat)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        wiki = Path(tmp) / "wiki"
+        write_to(wiki)  # writes agents.yaml
+        (wiki / "agents.yaml").rename(wiki / "reviewers.yaml")
+        registry = _reviewers.load(wiki)
+        assert "sonnetmax" in registry
+    print("PASS: load falls back to reviewers.yaml")
+
+
+def test_validate_role_refs_catches_bad_implementer_model() -> None:
+    """validate_role_refs raises ReviewerError for bad roles.implementer.model."""
+    registry = make_minimal_registry()
+    cfg = {"roles": {"implementer": {"self_fix_rounds": 2, "model": "nonexistent_entry"}}}
+    try:
+        _reviewers.validate_role_refs(cfg, registry)
+        raise AssertionError("Expected ReviewerError")
+    except ReviewerError:
+        pass
+    print("PASS: validate_role_refs catches bad implementer model ref")
+
+
 def main() -> int:
     tests = [
         test_load_happy_path,
@@ -365,6 +388,8 @@ def main() -> int:
         test_resolve_role_valid_name_returns_spec,
         test_validate_role_refs_happy_path,
         test_validate_role_refs_missing_raises,
+        test_load_falls_back_to_reviewers_yaml,
+        test_validate_role_refs_catches_bad_implementer_model,
     ]
     failures = 0
     for test in tests:
