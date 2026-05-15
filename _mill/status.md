@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-unit-test
 slug: mill-path-hardcodes
 branch: hanf/mill-path-hardcodes
 plan: _mill/plan
@@ -21,6 +21,7 @@ planning  '2026-05-15T07:39:22Z'
 plan-fix-r1  '2026-05-15T07:48:38Z'
 planned  '2026-05-15T07:48:52Z'
 implementing  '2026-05-15T08:06:47Z'
+approved-unit-test  '2026-05-15T08:13:26Z'
 ```
 
 ## Batches
@@ -28,7 +29,7 @@ implementing  '2026-05-15T08:06:47Z'
 ```yaml
 batches:
   - name: unit-test
-    state: running
+    state: approved
     implementer_session: 94f9609c-6e46-48c0-9055-32b499c31caf
     start_sha: 9ffcb8f26e55641c8864834de6be20d286df2772
   - name: mill-go-paths
