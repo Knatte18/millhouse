@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-approved
+phase: done
 slug: mill-go-runtime-bugs
 branch: hanf/mill-go-runtime-bugs
 plan: _mill/plan
@@ -29,6 +29,7 @@ approved-mill-go-skill  '2026-05-15T08:37:25Z'
 approved-other-skills  '2026-05-15T08:46:29Z'
 holistic-reviewing  '2026-05-15T08:46:52Z'
 holistic-approved  '2026-05-15T08:51:17Z'
+done  '2026-05-15T08:51:26Z'
 ```
 
 ## Batches
