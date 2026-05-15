@@ -54,7 +54,7 @@ def main() -> int:
         call_args = mock_run.call_args
         assert call_args is not None
         argv = call_args[0][0]
-        assert argv[:8] == [
+        assert argv[:9] == [
             "psmux",
             "new-session",
             "-d",
@@ -65,7 +65,7 @@ def main() -> int:
             "-y",
             "50",
         ]
-        assert argv[8:] == ["--", "pwsh", "-NoLogo"]
+        assert argv[9:] == ["--", "pwsh", "-NoLogo"]
         assert call_args[1]["timeout"] == PSMUX_COMMAND_TIMEOUT_S
     print("PASS: new_session constructs correct argv")
 
