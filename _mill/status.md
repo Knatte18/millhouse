@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-other-skills
+phase: holistic-reviewing
 slug: mill-go-runtime-bugs
 branch: hanf/mill-go-runtime-bugs
 plan: _mill/plan
@@ -27,6 +27,7 @@ approved-python-fixes  '2026-05-15T08:24:04Z'
 approved-templates  '2026-05-15T08:30:53Z'
 approved-mill-go-skill  '2026-05-15T08:37:25Z'
 approved-other-skills  '2026-05-15T08:46:29Z'
+holistic-reviewing  '2026-05-15T08:46:52Z'
 ```
 
 ## Batches
