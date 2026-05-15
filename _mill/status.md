@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-fix-r2
+phase: planned
 slug: mill-go-runtime-bugs
 branch: hanf/mill-go-runtime-bugs
 plan: _mill/plan
@@ -21,4 +21,5 @@ planning  '2026-05-15T07:50:21Z'
 plan-review-r1  '2026-05-15T07:59:21Z'
 plan-fix-r1  '2026-05-15T07:59:24Z'
 plan-fix-r2  '2026-05-15T08:10:22Z'
+planned  '2026-05-15T08:10:53Z'
 ```
