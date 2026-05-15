@@ -45,5 +45,7 @@ batches:
     implementer_session: e27cee85-80ed-4cd5-a282-f8c91d37cba4
     start_sha: 5f4e515f0361efbe27146011081d11484bc586af
   - name: integration-and-report
-    state: pending
+    state: running
+    implementer_session: 8ad25dd6-4a0d-42cb-b420-9b2483a34803
+    start_sha: 83f07aefd73fe4251b9ab5e00cf4668af922a87b
 ```
