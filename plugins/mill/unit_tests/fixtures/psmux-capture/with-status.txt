@@ -1,0 +1,7 @@
+PS C:\Code\millhouse\wts\claude-p-wrapper>
+MILL_BEGIN_AAA
+First response line
+Second response line
+MILL_END_BBB
+*Crunched for 3s
+PS C:\Code\millhouse\wts\claude-p-wrapper>
