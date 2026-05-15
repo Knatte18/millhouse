@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-fix-r1
+phase: planned
 slug: mill-path-hardcodes
 branch: hanf/mill-path-hardcodes
 plan: _mill/plan
@@ -19,4 +19,5 @@ discussion-fix-r1  '2026-05-15T07:33:25Z'
 discussed  '2026-05-15T07:33:35Z'
 planning  '2026-05-15T07:39:22Z'
 plan-fix-r1  '2026-05-15T07:48:38Z'
+planned  '2026-05-15T07:48:52Z'
 ```
