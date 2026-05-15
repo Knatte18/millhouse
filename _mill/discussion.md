@@ -21,7 +21,7 @@ These are all in-repo SKILL.md / template edits — no Python helper changes exc
 ## Scope
 
 **In:**
-- mill-go/SKILL.md: add Path Setup block, replace all hardcoded `_mill/` path strings with config-derived variables using `resolve_task_path` for reads and config-canonical for writes.
+- mill-go/SKILL.md: add Path Setup block, replace hardcoded `_mill/` path strings with config-derived variables using `resolve_task_path` for reads and config-canonical for writes. **Exception:** the cleanliness snapshot path (`<worktree>/_mill/.cleanliness-snapshot-<batch_name>.txt`, SKILL.md line 136) must keep its `_mill/` literal and NOT be replaced with `task_dir`. `millpy-implement.py` writes this file unconditionally to `_mill/` and is out of scope — replacing only the SKILL.md read reference would cause a path mismatch on legacy `task/` worktrees, making `compute_new_dirt` silently treat pre-batch state as empty.
 - mill-finalize/SKILL.md: same pattern; fix `git rm -r _mill/` to use resolved `task_dir`.
 - mill-merge/SKILL.md: same pattern; fix `git rm -r _mill/` to use resolved `task_dir`.
 - mill-start/SKILL.md: add Path Setup block, replace all `_mill/` references with config-derived paths; reads use `resolve_task_path`, new file creation uses config-canonical.
@@ -50,7 +50,8 @@ These are all in-repo SKILL.md / template edits — no Python helper changes exc
      - `plan_dir = _paths.resolve_task_path(worktree_root, cfg['paths']['plan_dir'])` (mill-go, mill-plan)
      - `reviews_dir = _paths.resolve_task_path(worktree_root, cfg['paths']['reviews_dir'])` (mill-go, mill-plan, mill-start)
      - `task_dir = status_path.parent` (mill-go, mill-finalize, mill-merge — for `git rm -r`)
-  3. All subsequent path references in the skill use these variables.
+     - `overview_path = plan_dir / "00-overview.md"` (mill-go, mill-plan — derived from plan_dir, not resolved separately)
+  3. All subsequent path references in the skill use these variables. The cleanliness snapshot (`_mill/.cleanliness-snapshot-*`) in mill-go is the sole exception — keep its `_mill/` literal (see Scope).
 - **Rationale:** Single config-load per skill; explicit variable names; compat shim applied consistently. Mirrors how other skills already handle config at entry.
 - **Rejected:** Inline `resolve_task_path` at each use site — verbose, easy to miss one site. Minimal fix (Python-only, leave git strings) — leaves `git add _mill/status.md` broken on `task/` worktrees.
 
