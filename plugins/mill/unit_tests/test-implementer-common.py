@@ -138,7 +138,7 @@ def main() -> int:
             print(f"FAIL: case 3 ({exc}) captured={captured!r}", file=sys.stderr)
             errors += 1
 
-    # Case 3b: snapshot has pre-existing dirt; no new dirt added -> inference succeeds
+    # Case 3b: pre-existing dirt survives in full-tree check -> stuck/logic
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         base_sha = _setup_fixture(project_root)
@@ -166,10 +166,9 @@ def main() -> int:
         )
         try:
             data = json.loads(captured.strip())
-            assert data["status"] == "success", f"expected status=success, got {data}"
-            assert data.get("inferred") is True, f"expected inferred=True, got {data}"
-            assert data["commit_sha"] == new_head, f"expected commit_sha={new_head}, got {data}"
-            print("PASS: pre-existing dirt in snapshot, no new dirt -> inferred success")
+            assert data["status"] == "stuck", f"expected status=stuck, got {data}"
+            assert data["stuck_type"] == "logic", f"expected stuck_type=logic, got {data}"
+            print("PASS: pre-existing dirt in snapshot, no new dirt -> stuck/logic (inferred-success requires clean tree)")
         except Exception as exc:
             print(f"FAIL: case 3b ({exc}) captured={captured!r}", file=sys.stderr)
             errors += 1
