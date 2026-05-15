@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-path-hardcodes
 branch: hanf/mill-path-hardcodes
 plan: _mill/plan
@@ -20,4 +20,21 @@ discussed  '2026-05-15T07:33:35Z'
 planning  '2026-05-15T07:39:22Z'
 plan-fix-r1  '2026-05-15T07:48:38Z'
 planned  '2026-05-15T07:48:52Z'
+implementing  '2026-05-15T08:06:47Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: unit-test
+    state: pending
+  - name: mill-go-paths
+    state: pending
+  - name: finalize-merge-paths
+    state: pending
+  - name: start-plan-paths
+    state: pending
+  - name: mill-setup-fixes
+    state: pending
 ```
