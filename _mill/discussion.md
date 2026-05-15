@@ -256,7 +256,7 @@ the spike says go.
 | psmux command                                 | Purpose                                          |
 |-----------------------------------------------|--------------------------------------------------|
 | `new-session -d -s <name> -x 200 -y 50 -- pwsh -NoLogo -NoProfile` | Create detached session with 200x50 pane running pwsh 7. |
-| `set-option -t <name> -g history-limit 50000` | Increase pane scrollback so long responses fit. (NOTE: syntax to be verified during implementation; psmux options page may differ from tmux.) |
+| `set-option -t <name> -g history-limit 50000` | Increase pane scrollback so long responses fit. **Syntax-verification + fallback policy:** the implementation must run `set-option ...` once at startup and check the exit code. If `set-option` is unsupported, or `history-limit` is not a recognised option key in this psmux build, the wrapper falls back to psmux's default scrollback (empirically: a 30-row pane retained at least 70 lines of scrollback in this session's PoC -- sufficient headroom for typical mill review and implementer responses). On fallback, the wrapper logs a single stderr line `[psmux] history-limit unsupported, using default` and proceeds. The spike report records the actual ceiling observed against the largest test prompt. |
 | `send-keys -t <name> "<text>" Enter`          | Send a short literal command to the pane (used to launch `claude`, not for prompt body). |
 | `load-buffer -b <buf> <file>`                 | Load file contents into a named paste buffer.    |
 | `paste-buffer -t <name> -b <buf>`             | Paste buffer contents into the active pane (lossless). |
@@ -270,6 +270,50 @@ the spike says go.
 `--session-id <uuid>`, `--system-prompt <string>`. Flags `--print` (`-p`),
 `--output-format`, `--input-format`, `--max-budget-usd` are documented as
 "-p only" -- do NOT pass them to interactive sessions.
+
+**Implementer-mode permission semantics: `--allowedTools` pre-grants in
+interactive mode.** Verified live in this session: `claude --allowedTools
+"Read,Edit,Write,Bash,Grep,Glob,Skill"` launched in psmux, asked to run
+`Bash(echo IMPLEMENTER_OK_TEST)`, executed the Bash call with **zero
+permission prompts** and returned the sentinel. `--allowedTools` therefore
+behaves the same in interactive mode as in `-p` mode -- the listed tools
+are pre-granted and per-operation prompts are suppressed. This is
+load-bearing: a stalled permission prompt inside the pane would silently
+block the wrapper until the timeout fires. The integration test's
+`implementer` sub-test (see `## Testing`) re-verifies this on every spike
+run so a future Claude CLI version that changes the semantic is caught
+immediately. Side observation: when launched with the operator's CLAUDE.md
+in scope, `claude` auto-loads startup skills (e.g. `mill:conversation`,
+`mill:workflow`) via the Skill tool before processing the first prompt --
+this adds a few seconds per call but does not block. Out of spike scope to
+optimise; flag in the spike report so the follow-up integration task can
+decide whether to suppress auto-skills via prompt instruction.
+
+**Windows PATH and the `claude` binary inside the psmux pane.** This
+hub's main `_llm_claude.py:39-57` documents that
+`%LOCALAPPDATA%\Microsoft\WindowsApps` (where the npm-installed
+`claude.cmd` lives) is stripped from the PATH that Python inherits inside
+CC's Bash subprocess environments, and works around it with a `cmd /c
+claude` argv prefix. **Neither problem nor workaround applies to this
+wrapper.** Verified live in this session against a psmux pane started from
+inside CC's Bash tool: `$env:PATH` inside the pane contains both
+`C:\Users\henri\AppData\Local\Microsoft\WindowsApps` and PowerShell 7's
+install dir -- the truncation observed by `_llm_claude.py` does not
+propagate into the pane (psmux launches the pane shell from the psmux
+server's environment, not from the truncated CC-Bash environment).
+**More importantly:** the operator's `claude` command resolves to
+`C:\Users\henri\.local\bin\claude.exe` -- a real Windows `.exe`, not the
+npm `claude.cmd` shim. Even if PATH were truncated, the `.local\bin` entry
+would resolve `claude.exe` first. The wrapper therefore launches Claude
+inside the pane with the bare command `claude <flags>` via `send-keys`
+(short, control-only -- prompt body still uses `paste-buffer`). No `cmd
+/c` prefix, no explicit absolute path. The wrapper MUST run a startup
+check inside the pane (e.g. send `Get-Command claude -ErrorAction Stop;
+Write-Host CLAUDE_READY` and poll capture-pane for `CLAUDE_READY` /
+`CommandNotFound`); on failure, fail fast with a clear stderr error
+naming the missing binary, do NOT proceed to the Claude launch and risk
+silent timeout. The integration test asserts this startup check fires
+correctly.
 
 **Pane size: 200 cols x 50 rows.** The TUI's wrapping behaviour depends on
 column count. Wider columns mean fewer wrapped lines mean cleaner parsing.
@@ -431,3 +475,28 @@ argv before implementation).
 - **Q:** What's the spike's pass criterion? **A:** All three integration
   sub-tests pass on operator's machine, AND the operator confirms
   subscription billing in the Anthropic dashboard for those calls.
+- **Q:** Does CC-Bash's WindowsApps PATH truncation (the issue
+  `_llm_claude.py:39-57` works around with `cmd /c claude`) propagate into
+  a psmux pane started from CC's Bash? **A:** No -- verified live this
+  session: `$env:PATH` inside the pane contains both
+  `C:\Users\henri\AppData\Local\Microsoft\WindowsApps` and PowerShell 7's
+  install dir. psmux launches its panes from the psmux server's
+  environment, which is unaffected by CC-Bash's truncation. Independently,
+  `claude` in the pane resolves to `C:\Users\henri\.local\bin\claude.exe`
+  -- a real exe, not the npm `claude.cmd` shim -- so even a truncated
+  PATH would not break command resolution. Wrapper launches `claude` as a
+  bare command via `send-keys`; no `cmd /c` prefix needed.
+- **Q:** Does `--allowedTools` in interactive mode actually pre-grant tool
+  permissions, or does Claude still prompt per Bash/Edit/Write call inside
+  the TUI (where a stalled prompt would deadlock the wrapper)? **A:**
+  Pre-grants. Verified live: `claude --allowedTools "Read,Edit,Write,Bash,
+  Grep,Glob,Skill"` in psmux executed `Bash(echo ...)` with zero
+  permission prompts and returned the sentinel cleanly. Same semantic as
+  `-p` mode. Integration test re-verifies on every run.
+- **Q:** What is the `set-option -g history-limit ...` fallback if the
+  command is unsupported in this psmux build? **A:** The wrapper falls
+  back to psmux's default scrollback. PoC observed at least 70 lines of
+  scrollback retained in a 30-row pane after a 100-line emission, which
+  is sufficient headroom for typical mill responses. The actual ceiling
+  observed against the largest spike test prompt is recorded in the
+  go/no-go report so the integration follow-up can size response budgets.
