@@ -22,6 +22,7 @@ from _spawn_core import (  # noqa: E402
     write_initial_status,
 )
 import _tasks_md  # noqa: E402
+from _test_helpers import safe_temp_dir  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -492,8 +493,8 @@ def test_write_initial_status_push_failure_raises_runtime_error() -> None:
 def test_recreate_active_junction_creates_link() -> None:
     """New signature: recreate_active_junction(slug, hub_root, container_path).
     Target is container_path / "portals" / slug; link is hub_root / ".active"."""
-    with tempfile.TemporaryDirectory() as tmp:
-        container_path = Path(tmp) / "container"
+    with safe_temp_dir() as tmp:
+        container_path = tmp / "container"
         portals = container_path / "portals"
         portals.mkdir(parents=True)
         mill_dir = Path(tmp) / "worktree" / ".millhouse"
@@ -512,8 +513,8 @@ def test_recreate_active_junction_creates_link() -> None:
 
 def test_recreate_active_junction_idempotent() -> None:
     """Calling twice must result in a valid junction pointing at the right target."""
-    with tempfile.TemporaryDirectory() as tmp:
-        container_path = Path(tmp) / "container"
+    with safe_temp_dir() as tmp:
+        container_path = tmp / "container"
         (container_path / "portals").mkdir(parents=True)
         mill_dir = Path(tmp) / "worktree" / ".millhouse"
         mill_dir.mkdir(parents=True)
