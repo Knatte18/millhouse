@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-python-fixes
 slug: mill-go-runtime-bugs
 branch: hanf/mill-go-runtime-bugs
 plan: _mill/plan
@@ -23,6 +23,7 @@ plan-fix-r1  '2026-05-15T07:59:24Z'
 plan-fix-r2  '2026-05-15T08:10:22Z'
 planned  '2026-05-15T08:10:53Z'
 implementing  '2026-05-15T08:15:31Z'
+approved-python-fixes  '2026-05-15T08:24:04Z'
 ```
 
 ## Batches
@@ -30,7 +31,7 @@ implementing  '2026-05-15T08:15:31Z'
 ```yaml
 batches:
   - name: python-fixes
-    state: running
+    state: approved
     implementer_session: f7132421-1872-4254-9cf2-86d458461701
     start_sha: 5dab143803e3353136621c75c58b61f0f0f7c5fb
   - name: templates
