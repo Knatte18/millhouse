@@ -50,8 +50,9 @@ operator with dashboard access.
   Constants `HUB`, `SCRIPTS`, `SCRATCH` resolved via
   `Path(__file__).resolve().parent.parent.parent.parent` per the
   existing pattern. `sys.path.insert(0, str(SCRIPTS))`. Imports:
-  `import shutil`, `import subprocess`, `import json`, `import sys`,
-  `import _psmux`. SKIP guards (call before any test runs): if
+  `import os`, `import shutil`, `import subprocess`, `import json`,
+  `import sys`, `import _psmux`. SKIP guards (call before any test
+  runs): if
   `shutil.which("psmux")` is None, print `[skip] psmux not on PATH` to
   stderr, return 0. Same for `claude` and `pwsh`. Three test functions:
   - `test_bulk()`: spawn

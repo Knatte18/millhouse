@@ -165,7 +165,7 @@ psmux failure).
     `PsmuxError` and returns False on persistent failure.
   - `def _wait_for_idle_prompt(session_name: str, timeout_s: float) ->
     bool`: poll `_psmux.capture_pane` every `POLL_INTERVAL_S` looking
-    for ANY line in the most recent 10 lines whose stripped value is
+    for ANY line in `capture_text.splitlines()[-10:]` whose stripped value is
     exactly the box-prompt prefix character (use the literal Unicode
     character claude renders for the input prompt, observed during PoC
     -- the implementer should grep for it in

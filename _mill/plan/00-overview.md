@@ -3,7 +3,7 @@
 ```yaml
 task: Wrap claude -p via psmux to use subscription instead of API credits
 slug: claude-p-wrapper
-approved: false
+approved: true
 started: 20260515-112247
 parent: main
 root: ""

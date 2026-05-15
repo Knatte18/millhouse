@@ -106,8 +106,11 @@ the `PsmuxError` exception class. No other public symbols.
     `[..., "send-keys", "-t", "s1", "claude", "Enter"]`.
   - `send_keys("s1", "Enter", enter=False)` -> argv ends with
     `[..., "send-keys", "-t", "s1", "Enter"]` (no extra Enter token).
+  - `send_keys("s1", "", enter=False)` -> raises `ValueError` (covers
+    the programming-bug guard added in card 7).
   - `load_buffer("s1", "buf1", Path("p.txt"))` -> argv equals
-    `["psmux", "load-buffer", "-b", "buf1", "p.txt"]` (path stringified).
+    `["psmux", "load-buffer", "-b", "buf1", "p.txt"]` (path stringified;
+    note `name` is unused in the argv -- see card 7 requirements).
   - `paste_buffer("s1", "buf1")` -> argv equals
     `["psmux", "paste-buffer", "-t", "s1", "-b", "buf1"]`.
   - `capture_pane("s1")` with mock stdout `"hello"` returns the literal
@@ -154,7 +157,10 @@ the `PsmuxError` exception class. No other public symbols.
     `ValueError("send_keys called with no keys and enter=False")` (not a
     PsmuxError -- this is a programming bug).
   - `load_buffer`: argv `["psmux", "load-buffer", "-b", buffer_name,
-    str(file_path)]`.
+    str(file_path)]`. Note: psmux `load-buffer` has no `-t` flag (paste
+    buffers are server-wide, not pane-scoped); the `name` parameter is
+    accepted for API symmetry with the other helpers and is intentionally
+    unused inside this function -- callers may pass any value.
   - `paste_buffer`: argv `["psmux", "paste-buffer", "-t", name, "-b",
     buffer_name]`.
   - `capture_pane`: argv `["psmux", "capture-pane", "-t", name, "-S",
