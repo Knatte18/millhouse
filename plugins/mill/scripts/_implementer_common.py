@@ -45,6 +45,13 @@ def _forward_output(
                 result = _subprocess_util.run(["git", "rev-parse", "HEAD"], cwd=project_root)
                 if result.returncode == 0 and result.stdout.strip() != start_sha:
                     head = result.stdout.strip()
+                    result_full = _subprocess_util.run(
+                        ["git", "-C", str(project_root), "status", "--porcelain", "--untracked-files=no"],
+                        check=True,
+                    )
+                    if result_full.stdout.strip():
+                        print(json.dumps({"status": "stuck", "stuck_type": "logic", "reason": "inferred success but working tree dirty -- implementer likely skipped git-commit on modified files"}))
+                        return 0
                     print(json.dumps({"status": "success", "commit_sha": head, "session_id": session_id or "unknown", "inferred": True}))
                     return 0
     except Exception:

@@ -156,15 +156,51 @@ If the helper raises `WikiPushError` (from the pull path — `git pull --ff-only
 
 ### Phase 3.1 — Seed `wiki/config.yaml` from template
 
-1. If `<wiki-dir>/config.yaml` exists: skip.
-2. Otherwise: copy `${CLAUDE_PLUGIN_ROOT}/templates/wiki-config.yaml` → `<wiki-dir>/config.yaml` verbatim (no substitution — tokens are resolved at runtime by scripts, not at seed time).
-3. Commit and push via `_wiki.write_commit_push`:
+1. If `<wiki-dir>/config.yaml` does not exist: copy `${CLAUDE_PLUGIN_ROOT}/templates/wiki-config.yaml` → `<wiki-dir>/config.yaml` verbatim (no substitution — tokens are resolved at runtime by scripts, not at seed time). Then commit and push via `_wiki.write_commit_push`:
 
    ```bash
    PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "from pathlib import Path; import _wiki; _wiki.write_commit_push(Path(r'<wiki-dir>').resolve(), ['config.yaml'], 'chore: init wiki/config.yaml')"
    ```
 
-**Why verbatim copy:** the token placeholders (`<WIKI_PATH>` etc.) are resolved by `_junction.resolve_target` and `_wiki.read_hardlinks` at runtime. Substituting at seed time would bake in machine-specific paths.
+2. If `<wiki-dir>/config.yaml` exists: run a block-level upsert:
+
+   ```bash
+   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "
+   from pathlib import Path
+   import yaml, _wiki
+
+   wiki_dir = Path(r'<wiki-dir>').resolve()
+   config_path = wiki_dir / 'config.yaml'
+   template_path = Path(r'${CLAUDE_PLUGIN_ROOT}/templates/wiki-config.yaml').resolve()
+
+   existing = yaml.safe_load(config_path.read_text(encoding='utf-8')) or {}
+   template  = yaml.safe_load(template_path.read_text(encoding='utf-8')) or {}
+
+   required_keys = ['junctions', 'paths', 'llm', 'pipeline', 'roles', 'notify', 'spawn', 'groom']
+   missing = [k for k in required_keys if k not in existing]
+   if missing:
+       for k in missing:
+           existing[k] = template[k]
+       config_path.write_text(yaml.dump(existing, allow_unicode=True, sort_keys=False), encoding='utf-8')
+       print('upserted blocks:', missing)
+   else:
+       print('config.yaml validation OK -- all required blocks present')
+   "
+   ```
+
+   After running: if any blocks were upserted (i.e., `missing` was non-empty), commit and push via `_wiki.write_commit_push`:
+
+   ```bash
+   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "
+   from pathlib import Path
+   import _wiki
+   _wiki.write_commit_push(Path(r'<wiki-dir>').resolve(), ['config.yaml'], 'chore: upsert missing config.yaml blocks from template')
+   "
+   ```
+
+   Log which blocks were added (from the `print('upserted blocks:', ...)` output) so the operator can see the diff.
+
+**Why verbatim copy:** the token placeholders (`<WIKI_PATH>` etc.) are resolved by `_junction.resolve_target` and `_wiki.read_hardlinks` at runtime. Substituting at seed time would bake in machine-specific paths. If `config.yaml` already exists, the upsert step validates and fills any required top-level blocks that are missing (`paths`, `llm`, `pipeline`, `roles`, `notify`, `spawn`, `groom`). This prevents downstream `KeyError` in mill-spawn when an older config.yaml predates a required schema block.
 
 ### Phase 3.2 — Persist wiki overrides to `config.local.yaml`
 
@@ -225,10 +261,10 @@ PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/
 from pathlib import Path
 import json, _setup
 result = _setup.create_hub_links(
-    target_root=Path(r'<hub-path>').resolve(),
+    target_root=Path(r'<cwd>').resolve(),
     wiki_path=Path(r'<wiki-dir>').resolve(),
     tokens={
-        'HUB_PATH':       r'<hub-path>',
+        'HUB_PATH':       r'<cwd>',
         'CWD_PATH':       r'<cwd>',
         'CONTAINER_PATH': r'<container>',
         'WIKI_PATH':      r'<wiki-dir>',
@@ -240,8 +276,7 @@ print(json.dumps({k: [str(p) for p in v] for k, v in result.items()}, indent=2))
 ```
 
 Token reference:
-- `<hub-path>` — absolute path to the hub (`git rev-parse --show-toplevel`)
-- `<cwd>` — current working directory absolute path
+- `<cwd>` — the hub directory. mill-setup is invoked from the hub; `cwd` is the hub by construction. In subdirectory-hub mode, this differs from `git rev-parse --show-toplevel` (the repo root). Use `cwd`, not `git rev-parse --show-toplevel`, for `target_root`.
 - `<container>` — parent of `wts/` (container-form) or parent of hub (prefix-form)
 - `<wiki-dir>` — wiki clone path from Phase 3
 - `<repo>` — repository directory name (e.g. `millhouse`)
@@ -535,7 +570,7 @@ Next: /mill-add <slug> --title "..." [--summary "..."] [--proposal-body "..."] t
 Every phase checks current state before acting. Re-running after a partial or complete setup is always safe:
 
 - Wiki already cloned → pulls latest.
-- `wiki/config.yaml` present → skipped (Phase 3.1).
+- `wiki/config.yaml` present → block-level upsert run; commit only if missing blocks were added (Phase 3.1).
 - `portals/` dir present → created by Phase 4 via `_setup.create_hub_links` (idempotent via `exist_ok=True` on the junction target).
 - `create_hub_links` re-checks each junction and hardlink — skips already-correct ones (Phase 4).
 - `.gitignore` marker block already up-to-date → not rewritten (Phase 4.5b).

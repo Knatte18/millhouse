@@ -133,6 +133,19 @@ def test_resolve_task_path() -> None:
         assert "[compat]" not in buf.getvalue(), f"case 6: unexpected [compat] in stderr"
     print("PASS resolve_task_path case 6: no _mill/ in path -> direct return, no fallback")
 
+    # Case 7: empty _mill/plan/ dir + task/plan/ present -> task/plan/, [compat] stderr
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "_mill" / "plan").mkdir(parents=True)
+        (root / "task" / "plan").mkdir(parents=True)
+        (root / "task" / "plan" / "01-batch.md").write_text("", encoding="utf-8")
+        buf = io.StringIO()
+        with contextlib.redirect_stderr(buf):
+            got = _paths.resolve_task_path(root, "_mill/plan/")
+        assert got == root / "task" / "plan", f"case 7: got {got}"
+        assert "[compat]" in buf.getvalue(), f"case 7: expected [compat] in stderr"
+    print("PASS resolve_task_path case 7: empty _mill/plan/ dir + task/plan/ present -> task/plan/, [compat] stderr")
+
 
 def main() -> int:
     try:

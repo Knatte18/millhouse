@@ -449,7 +449,8 @@ def resolve_task_path(worktree_root: Path, cfg_relative_path: str) -> Path:
     """Resolve config-relative path with _mill/->task/ fallback for in-flight worktrees."""
     target = worktree_root / cfg_relative_path
     if target.exists():
-        return target
+        if not (target.is_dir() and not any(target.iterdir())):
+            return target
     if "_mill/" in cfg_relative_path:
         fallback_rel = cfg_relative_path.replace("_mill/", "task/", 1)
         fallback = worktree_root / fallback_rel

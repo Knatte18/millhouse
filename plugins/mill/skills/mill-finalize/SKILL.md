@@ -15,9 +15,10 @@ You are the end-of-task finalization orchestrator. Your job is to choose the cor
 2. `_wiki.sync_pull(wiki_path, slug="mill-finalize")`.
 3. Load config: `cfg = _config.load_config(wiki_path, git_root)`.
    `signature: _config.load_config(wiki_path: Path, worktree_root: Path) -> dict` — deep-merges `<wiki_path>/config.yaml` with `<worktree_root>/.millhouse/config.local.yaml`.
+3.5. **Path Setup.** `cfg` was loaded in step 3; `worktree_root = git_root` from step 1. Derive `status_path = _paths.resolve_task_path(worktree_root, cfg['paths']['status_md'])` and `task_dir = status_path.parent`. Use these variables for all subsequent path references.
 4. Resolve task data: `active_data = _marker.task_data(git_root, wiki_path, cfg)`. On `MarkerError` → halt: "This worktree has no registered task branch — mill-finalize needs a tracked branch. Run mill-claim to register it, or merge manually."
 5. `slug = active_data['slug']`.
-6. `status_path = git_root / "_mill" / "status.md"`. Call `data = _status.read_status(status_path)`. Verify `data["phase"] == "done"`. If not: halt "status.md phase is `<value>`; mill-finalize expects `done`. Run mill-go first to bring the task to done."
+6. `status_path` is set in Path Setup (step 3.5). Call `data = _status.read_status(status_path)`. Verify `data["phase"] == "done"`. If not: halt "status.md phase is `<value>`; mill-finalize expects `done`. Run mill-go first to bring the task to done."
    `signature: _status.read_status(status_path: Path) -> dict` — returns flat dict with keys `phase`, `task`, `current_batch`, `last_timeline_entry`, `blocked_reason`. Access phase via `data["phase"]` (not `data["yaml"]["phase"]` — that is `read_full`'s shape).
 
 ## Dispatch
@@ -46,7 +47,7 @@ _status.append_phase(status_path, "pr-pending", _timestamp.now_utc_iso())
 ```
 
 ```bash
-git add _mill/status.md
+git add <status_path>
 git commit -m "mill-finalize: pr-pending for <slug>"
 ```
 
@@ -55,11 +56,11 @@ git commit -m "mill-finalize: pr-pending for <slug>"
 Remove the task state directory so it does not appear in the PR diff:
 
 ```bash
-git rm -r _mill/
+git -C <worktree> rm -r <task_dir>
 git commit -m "chore: pre-merge cleanup"
 ```
 
-Idempotency: if `_mill/` is already absent (re-run after partial failure), `git rm -r _mill/` prints "did not match any files" — treat as a no-op. If the working tree has nothing to commit, skip the commit.
+Idempotency: if `<task_dir>` is already absent (re-run after partial failure), `git rm -r <task_dir>` prints "did not match any files" — treat as a no-op. If the working tree has nothing to commit, skip the commit.
 
 ### Step 4: Push task branch
 
@@ -70,7 +71,7 @@ git push origin "$CHILD_BRANCH"
 
 ### Step 5: Create PR
 
-Invoke `/git-pr <base_branch>` (the base branch as argument). The skill generates title and body from commit history. It will not halt on its step 1.5 guard because `_mill/status.md` is absent (cleanup already ran). If `/git-pr` fails → halt and surface the error; do not roll back status.md or the cleanup commit (push already happened; operator can create the PR manually via GitHub UI or `gh pr create`).
+Invoke `/git-pr <base_branch>` (the base branch as argument). The skill generates title and body from commit history. It will not halt on its step 1.5 guard because `<task_dir>` is absent (cleanup already ran). If `/git-pr` fails → halt and surface the error; do not roll back status.md or the cleanup commit (push already happened; operator can create the PR manually via GitHub UI or `gh pr create`).
 
 ### Step 6: Home.md → [pr-pending]
 
@@ -92,7 +93,7 @@ Report to the user:
 
 ## Board discipline
 
-- `_mill/status.md` writes are committed on the task branch via `git add` + `git commit`. Never written to the wiki.
+- `status_path` writes are committed on the task branch via `git add` + `git commit`. Never written to the wiki.
 - Home.md writes go through `_wiki.write_commit_push` (acquires the wiki lock internally). For the read-modify-write in Step 6, wrap in `with _wiki.wiki_lock(wiki_path, slug):`.
 - No `cd` to wiki or parent worktree. All parent-branch git operations use `git -C <parent-path>` if ever needed.
 - `${CLAUDE_PLUGIN_ROOT}` for all intra-plugin path references.
