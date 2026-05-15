@@ -35,7 +35,9 @@ batches:
     implementer_session: f7132421-1872-4254-9cf2-86d458461701
     start_sha: 5dab143803e3353136621c75c58b61f0f0f7c5fb
   - name: templates
-    state: pending
+    state: running
+    implementer_session: f401f832-802d-4bec-b1ba-b219adf64235
+    start_sha: 60cc14281210318059125342d8484bf12e2fce26
   - name: mill-go-skill
     state: pending
   - name: other-skills
