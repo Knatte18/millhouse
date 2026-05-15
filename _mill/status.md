@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-approved
+phase: done
 slug: mill-path-hardcodes
 branch: hanf/mill-path-hardcodes
 plan: _mill/plan
@@ -28,6 +28,7 @@ approved-start-plan-paths  '2026-05-15T08:35:07Z'
 approved-mill-setup-fixes  '2026-05-15T08:38:35Z'
 holistic-reviewing  '2026-05-15T08:38:59Z'
 holistic-approved  '2026-05-15T08:43:46Z'
+done  '2026-05-15T08:43:51Z'
 ```
 
 ## Batches
