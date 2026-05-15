@@ -131,7 +131,7 @@ impl_model = impl_spec["model"]
 impl_effort = impl_spec.get("effort")
 ```
 
-Then replace the `_implementer_sonnet.run(...)` call with `_implementer_claude.run(..., model=impl_model, effort=impl_effort)`.
+Then replace **every** `_implementer_sonnet.run(...)` call with `_implementer_claude.run(..., model=impl_model, effort=impl_effort)`. Note that `millpy-implement.py` has **two** call sites (initial dispatch and fix-cycle resume), `millpy-merge-in-subagent.py` has **two** call sites (conflicts mode and verify-fix mode), and `millpy-implement-holistic.py` has **one** call site. All must be updated.
 
 ### `_reviewers.load()` fallback logic
 
@@ -180,17 +180,18 @@ The `wiki/reviewers.yaml` → `wiki/agents.yaml` rename must happen inside a wik
 ### `test-millpy-implement.py`
 
 - Update all mock targets: `millpy_implement._implementer_sonnet` → `millpy_implement._implementer_claude`
-- Update `_test_registry.write_to()` calls to create `agents.yaml` (or rely on the updated helper)
-- Add: mock config returns `roles.implementer.model: sonnethigh`; verify that `_implementer_claude.run` receives the correct `model` and `effort` from the resolved spec
-- Add: config missing `roles.implementer.model` → falls back to `sonnethigh` default
+- Add mocks for `_reviewers.load` (returns a registry dict) and `_reviewers.resolve` (returns a resolved spec with `model` and `effort`) — consistent with how all other external I/O is mocked in these tests. Do NOT call `_test_registry.write_to()` here; the implement test files never set up a file-based wiki fixture.
+- Update the mock config (returned by `mock_load_config`) to include `roles.implementer.model: sonnethigh` alongside the existing keys
+- Add: verify that `_implementer_claude.run` receives the correct `model` and `effort` values from the resolved spec
+- Add: config missing `roles.implementer.model` → falls back to `sonnethigh` default (test with a config that omits the key)
 
 ### `test-millpy-implement-holistic.py`
 
-- Same mock target update and model-from-config assertion as above
+- Same mock target update, same `_reviewers.load` + `_reviewers.resolve` mock pattern, same model-from-config assertion
 
 ### `test-millpy-merge-in-subagent.py`
 
-- Same mock target update
+- Same mock target update, same `_reviewers.load` + `_reviewers.resolve` mock pattern
 
 ### `test-reviewers.py`
 
