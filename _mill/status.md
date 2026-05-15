@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: discussion-fix-r2
 slug: mill-go-runtime-bugs
 branch: hanf/mill-go-runtime-bugs
 plan: null
@@ -15,4 +15,5 @@ task_description: |
 
 ```text
 discussing  '2026-05-15T07:20:47Z'
+discussion-fix-r2  '2026-05-15T07:45:24Z'
 ```

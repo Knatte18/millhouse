@@ -50,7 +50,7 @@ A cluster of ten behavioral bugs accumulated across mill-go, mill-start, mill-pl
 ### #281 — fix resolve_task_path to handle empty directories
 
 - Decision: In `resolve_task_path`, after `target.exists()` returns True, additionally check that the target is non-empty (for directories). If the directory exists but is empty, skip the early-return and attempt the `task/` fallback.
-- Rationale: An in-flight task that had `_mill/plan/` created (e.g. from a failed mill-plan run that wrote the directory but not the files) causes `resolve_task_path` to return the empty `_mill/plan/` path. The validator then fails with `missing-overview` even though `task/plan/00-overview.md` exists. The existing test suite (case 4) documents the current behavior but does not cover the empty-dir case. The fix is one conditional in `_paths.py` and covers all callers.
+- Rationale: An in-flight task that had `_mill/plan/` created (e.g. from a failed mill-plan run that wrote the directory but not the files) causes `resolve_task_path` to return the empty `_mill/plan/` path. The validator then fails with `missing-overview` even though `task/plan/00-overview.md` exists. Case 4 already tests empty `_mill/plan/` with no `task/plan/` fallback (no change in outcome post-fix); Case 7 (new) tests empty `_mill/plan/` with `task/plan/` present, which previously returned the wrong path and now correctly returns the fallback. The fix is one conditional in `_paths.py` and covers all callers.
 - Rejected: Fixing each CLI caller individually -- duplicates logic; misses future callers.
 
 ### #282 Gap 1 — absolute cleanliness required for inferred success
@@ -107,7 +107,7 @@ A cluster of ten behavioral bugs accumulated across mill-go, mill-start, mill-pl
 - `plugins/mill/scripts/_paths.py` -- `resolve_task_path` (line 448): directory-existence check that needs empty-dir guard.
 - `plugins/mill/scripts/_implementer_common.py` -- `_forward_output` (line 9): inferred-success fallback; add absolute-cleanliness check before emitting.
 - `plugins/mill/scripts/_review_common.py` -- `parse_verdict` (line 828): unchanged; the #278 fix is template-only.
-- `plugins/mill/unit_tests/test-paths.py` -- existing cases 1-6 for `resolve_task_path`; add case 7 (empty `_mill/plan/` dir -> fallback to `task/plan/`).
+- `plugins/mill/unit_tests/test-paths.py` -- existing cases 1-6 for `resolve_task_path`. Case 4 already tests empty `_mill/plan/` with no `task/plan/` fallback (expected: returns `_mill/plan/`; this behavior is unchanged post-fix since the fallback simply doesn't exist). Add case 7: empty `_mill/plan/` WITH `task/plan/` present -> returns `task/plan/` (new behavior after fix).
 - `plugins/mill/unit_tests/test-implementer-common.py` -- existing cases 1-5; Case 3b changes expected outcome; add case 6 (pre-existing dirt, no new dirt, new commit -> stuck/logic).
 - `plugins/mill/templates/review-code-holistic.md` -- lines 35-66: the nested-fence block that causes reviewer drift.
 - `plugins/mill/templates/implementer-brief.md` -- add isolation section after `## Tools`.
@@ -139,9 +139,8 @@ fi
 
 **Python code changes (Batch 1) — unit tests required:**
 
-- `test-paths.py` case 7: create `_mill/plan/` as an empty directory (no files inside), call `resolve_task_path(root, "_mill/plan/")`, assert it returns `root / "task" / "plan"` and `[compat]` appears in stderr. Also create `task/plan/` for the fallback to succeed.
-- `test-implementer-common.py` Case 3b update: change expected outcome from `status=success/inferred=True` to `status=stuck/stuck_type=logic`. The scenario (pre-existing dirt, no new dirt, new commit) must now yield stuck.
-- `test-implementer-common.py` Case 6 (new): pre-existing dirt captured in snapshot, implementer makes an empty commit (new HEAD), working tree is dirty. Expected: `stuck/logic`.
+- `test-paths.py` case 7: create `_mill/plan/` as an empty directory AND `task/plan/` as a non-empty fallback, call `resolve_task_path(root, "_mill/plan/")`, assert it returns `root / "task" / "plan"` and `[compat]` appears in stderr. Note: Case 4 already tests empty `_mill/plan/` with NO `task/plan/` fallback present (expects original target returned, unchanged behavior post-fix because no fallback exists). Case 7 is the complementary scenario: empty `_mill/plan/` WITH a `task/plan/` fallback present (expects fallback path returned).
+- `test-implementer-common.py` Case 3b update: change expected outcome from `status=success/inferred=True` to `status=stuck/stuck_type=logic`. The scenario (pre-existing dirt captured in snapshot, empty commit, working tree still dirty) must now yield stuck. This case covers the entire #282 Gap 1 scenario; no separate Case 6 is needed.
 - Run `uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py` as the batch verify command.
 
 **Template changes (Batch 2) — no automated test:** Visual inspection of the rendered template; the reviewer must no longer see nested fence ambiguity.
