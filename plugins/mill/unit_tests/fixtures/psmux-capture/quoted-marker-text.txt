@@ -1,0 +1,7 @@
+PS C:\Code\millhouse\wts\claude-p-wrapper>
+MILL_BEGIN_AAA
+This response mentions `MILL_BEGIN_AAA` inside backticks.
+It also has `MILL_END_BBB` quoted here.
+But these are not on their own lines.
+MILL_END_BBB
+PS C:\Code\millhouse\wts\claude-p-wrapper>
