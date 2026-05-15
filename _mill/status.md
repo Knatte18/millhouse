@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-test-infra
+phase: approved-test-migration
 slug: run-all-wiki-wipe-fix
 branch: hanf/run-all-wiki-wipe-fix
 plan: _mill/plan
@@ -22,6 +22,7 @@ plan-fix-r1  '2026-05-15T08:00:45Z'
 planned  '2026-05-15T08:00:58Z'
 implementing  '2026-05-15T08:07:42Z'
 approved-test-infra  '2026-05-15T08:13:41Z'
+approved-test-migration  '2026-05-15T08:21:20Z'
 ```
 
 ## Batches
@@ -33,7 +34,7 @@ batches:
     implementer_session: 073af324-3fec-4d34-80c8-e0315c1cd27f
     start_sha: ea19982f8994af7225994957cdca37789a5c37b8
   - name: test-migration
-    state: running
+    state: approved
     implementer_session: 8e5d0753-5a04-4d3c-be47-beb1139a0288
     start_sha: 4639f5bc4b1b22ad02a4ca7936f79d78488de511
 ```
