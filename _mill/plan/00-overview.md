@@ -3,7 +3,7 @@
 ```yaml
 task: 52 (A) -- Fix unit_tests/run-all destroying wiki during batch verify
 slug: run-all-wiki-wipe-fix
-approved: false
+approved: true
 started: 20260515-075450
 parent: main
 root: ""

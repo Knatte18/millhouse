@@ -28,7 +28,8 @@ This batch migrates the two test files that use `tempfile.TemporaryDirectory` in
   - Replace all 12 occurrences of `with tempfile.TemporaryDirectory() as tmp:` with `with safe_temp_dir() as tmp:`. These appear on lines 97, 149, 207, 270, 330, 381, 429, 491, 524, 586, 669, 707.
   - In each block that previously did `container = Path(tmp) / "container"`, change to `container = tmp / "container"` — `safe_temp_dir()` yields `Path`, so the `Path(tmp)` wrapper is unnecessary. Any other `Path(tmp)` construction in those blocks must also drop the `Path()` wrapper.
   - Verify there are no other uses of `Path(tmp)` in those blocks by checking every block after replacement.
-  - Remove `import tempfile` from the stdlib imports block at the top of the file — after the replacements, `tempfile` is no longer referenced in code (only in the module docstring, which is fine).
+  - Remove `import tempfile` from the stdlib imports block at the top of the file — after the replacements, `tempfile` is no longer referenced in code.
+  - Update the module docstring's opening sentence from "Uses tempfile.TemporaryDirectory() and real disk operations for all happy-path cases." to "Uses safe_temp_dir() (junction-aware temp dir) and real disk operations for all happy-path cases."
   - All test logic and assertions remain unchanged. The only changes are the context manager type and the removal of the `Path(tmp)` wrapper.
 - **Commit:** `fix(unit-tests): migrate test-setup-hub-links to safe_temp_dir`
 
