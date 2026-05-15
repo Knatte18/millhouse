@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: discussion-fix-r3
 slug: claude-p-wrapper
 branch: hanf/claude-p-wrapper
 plan: null
@@ -15,4 +15,5 @@ task_description: |
 
 ```text
 discussing  '2026-05-15T09:45:04Z'
+discussion-fix-r3  '2026-05-15T11:10:04Z'
 ```

@@ -227,10 +227,17 @@ the spike says go.
 
   The output parser extracts the response as everything strictly between
   the line equal to `MILL_BEGIN_<rand1>` (after whitespace strip) and the
-  line equal to `MILL_END_<rand2>` (after strip). Idle-prompt-empty AND
-  end-marker-on-own-line is the dual idle signal (replaces the earlier
-  "sentinel + idle prompt" formulation, which kept the prompt-echo start
-  boundary undefined).
+  line equal to `MILL_END_<rand2>` (after strip). **Poll-loop termination
+  rule:** the wrapper calls `extract_response(capture, begin_marker,
+  end_marker)` on every poll cycle; success returns the slice and ends
+  the loop, `MarkerNotFoundError` means "keep polling" (sleep
+  `POLL_INTERVAL_S` and retry), wall-clock exhaustion of
+  `RESPONSE_POLL_TIMEOUT_S[mode]` means "fail with timeout error". The
+  idle-prompt-empty signal is NOT a load-bearing gate -- a status line
+  ("Cogitated for Ns") may legitimately render after the end marker
+  before the input prompt clears, and the slice is already complete by
+  the time the end marker appears. The wrapper does NOT block on the
+  idle prompt; the markers are sufficient.
 - Rationale: Eliminates the prompt-echo / TUI-status / `●`-prefix start
   boundary problem entirely. The parser does not need to identify where
   the prompt echo ends or skip TUI artifacts ("Cogitated for Ns",
