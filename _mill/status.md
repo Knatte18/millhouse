@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-integration-and-report
+phase: holistic-reviewing
 slug: claude-p-wrapper
 branch: hanf/claude-p-wrapper
 plan: _mill/plan
@@ -27,6 +27,7 @@ approved-parser  '2026-05-15T12:11:09Z'
 approved-driver  '2026-05-15T12:14:35Z'
 approved-wrapper  '2026-05-15T12:19:39Z'
 approved-integration-and-report  '2026-05-15T12:22:07Z'
+holistic-reviewing  '2026-05-15T12:22:23Z'
 ```
 
 ## Batches
