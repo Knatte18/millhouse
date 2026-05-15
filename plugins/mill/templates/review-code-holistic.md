@@ -32,7 +32,7 @@ Your output begins with `# Review: ...` on line 1. **No preamble.** Per finding:
 
 Target length: ~400 tokens for APPROVE, ~800–1500 tokens for REQUEST_CHANGES across multiple batches. If you produce more than ~1800 tokens, compress.
 
-```
+~~~markdown
 # Review: <TASK_TITLE> — holistic
 
 ```yaml
@@ -63,7 +63,7 @@ date: <UTC YYYY-MM-DD>
 
 <APPROVE | REQUEST_CHANGES | NEED_CONTEXT>
 <one sentence — max 20 words>
-```
+~~~
 
 Severity / verdict rules match review-code-batch.md.
 
