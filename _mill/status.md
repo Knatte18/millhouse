@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-go-runtime-bugs
 branch: hanf/mill-go-runtime-bugs
 plan: _mill/plan
@@ -22,4 +22,19 @@ plan-review-r1  '2026-05-15T07:59:21Z'
 plan-fix-r1  '2026-05-15T07:59:24Z'
 plan-fix-r2  '2026-05-15T08:10:22Z'
 planned  '2026-05-15T08:10:53Z'
+implementing  '2026-05-15T08:15:31Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: python-fixes
+    state: pending
+  - name: templates
+    state: pending
+  - name: mill-go-skill
+    state: pending
+  - name: other-skills
+    state: pending
 ```
