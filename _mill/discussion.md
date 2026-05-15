@@ -45,23 +45,25 @@ the spike says go.
 - Pass-through CLI flags that map to the corresponding `_llm_claude._build_argv`
   flags: `--model <name>`, `--effort <low|medium|high|xhigh|max>` (optional),
   `--session-id <uuid>` (optional; if omitted the wrapper generates one and
-  passes it to `claude --session-id` at launch so the returned id is real),
-  `--system-prompt <path>` (optional; reads the system prompt from the file).
-  `--resume <id>` is OUT (see `## Out`).
-- A pure-Python output parser in `plugins/mill/scripts/_psmux_capture.py` that
-  takes a capture-pane text blob plus the sentinel string and returns the
-  extracted response. Fully unit-testable against fixtures, no psmux needed.
+  passes it to `claude --session-id` at launch so the returned id is real).
+  `--resume <id>` is OUT (see `## Out`). `--system-prompt` is NOT exposed by
+  the wrapper -- the caller assembles system + user prompt into the single
+  body delivered via stdin. See decision below.
+- A pure-Python output parser in `plugins/mill/scripts/_psmux_capture.py`
+  with signature `extract_response(capture_text: str, begin_marker: str,
+  end_marker: str) -> str`. Returns the text strictly between the line
+  equal to `begin_marker` (whitespace-stripped) and the line equal to
+  `end_marker` (whitespace-stripped). Raises `MarkerNotFoundError` when
+  either marker is absent or the end marker precedes the begin marker.
+  Fully unit-testable against fixtures, no psmux needed.
 - A `psmux`-driver module `plugins/mill/scripts/_psmux.py` that wraps the small
   set of psmux commands the wrapper uses (`new-session`, `load-buffer`,
   `paste-buffer`, `send-keys`, `capture-pane`, `kill-session`). Thin shim over
   `subprocess.run`; isolates the subprocess calls from the main script for
   testability.
 - Unit tests for the parser (`plugins/mill/unit_tests/test-psmux-capture.py`)
-  with fixtures covering the cases observed in the PoC (clean response,
-  whitespace-compressed line, "Cogitated for Ns" status text between prompt
-  echo and response, sentinel mid-response in a quoted block, sentinel never
-  appears -- must time out, response longer than the visible pane requiring
-  scrollback retrieval).
+  with fixtures covering the cases observed in the PoC (full enumeration
+  in `## Testing`).
 - An integration test `plugins/mill/integration_tests/test-claude-psmux.py`
   that actually drives psmux + claude end-to-end with a tiny prompt in each of
   the three modes. Skipped automatically when `psmux` or `claude` is not on
@@ -155,35 +157,6 @@ the spike says go.
 - Rejected: send-keys with `-l` (literal) or per-character pacing. Too
   fragile; paste-buffer is the standard tmux/psmux idiom for multi-line content.
 
-### Sentinel = `MILL_DONE_<rand>`; per-call randomised suffix
-
-- Decision: Each invocation generates a sentinel of the form
-  `MILL_DONE_<8-hex-chars>` (e.g. `MILL_DONE_ba509639`) and appends an
-  instruction to the prompt: `End your final reply with the literal text
-  MILL_DONE_xxxxxxxx on its own line.` The wrapper polls capture-pane for
-  the sentinel on its own line.
-- Rationale: A fixed `<<<MILL_DONE>>>` could collide if a prompt contains
-  source code or transcripts that quote it; a per-call random suffix
-  eliminates collision risk for the lifetime of the session. Verified in PoC
-  -- random suffix appears verbatim in the response.
-- Rejected: Fixed sentinel (collision risk); no sentinel and rely solely on
-  the empty `❯` prompt line returning to idle (less reliable: TUI may briefly
-  redraw to idle between Claude's output chunks).
-
-### Dual idle signal: sentinel-on-own-line AND idle prompt
-
-- Decision: The wrapper considers Claude "done" only when BOTH conditions
-  hold in a `capture-pane` snapshot: (a) the sentinel string appears on a
-  line by itself (after stripping leading/trailing whitespace), AND (b) the
-  most recent `❯ ` input-prompt line is empty (no in-progress text).
-- Rationale: Sentinel-only could fire before Claude has fully finalised its
-  output (rare, but the TUI can render the sentinel and then a follow-up
-  status line). Idle-prompt-only is unreliable because the TUI briefly
-  re-renders the empty prompt between streamed output chunks. Both together
-  is a strong signal.
-- Rejected: Sentinel-only (fragile under streaming); file-existence (would
-  require the file-IO design we explicitly rejected above).
-
 ### Per-call psmux session, UUID-suffixed name, torn down after each call
 
 - Decision: Each wrapper invocation generates `session_name = f"mill-{uuid4().hex[:8]}"`,
@@ -212,16 +185,94 @@ the spike says go.
 - Rejected: Land as `_claude_psmux.py` module called in-process by
   `_llm_claude.py`. Tighter coupling and harder to grade as a spike artifact.
 
-### `--system-prompt` accepts a FILE PATH, not a literal string
+### Wrapper does NOT expose `--system-prompt`; caller concatenates into stdin body
 
-- Decision: `--system-prompt <path>` takes a path to a file containing the
-  system prompt; the wrapper passes the file's contents to `claude --system-prompt`
-  via the `claude` flag of the same name (which itself takes a string).
-- Rationale: Mill prompts are kilobytes. A literal-string CLI argument hits
-  Windows's command-line length cap (~8K) and shell-quoting hell. A file
-  path is robust and matches the prompt-stdin pattern.
-- Rejected: Accept the system prompt as a literal string argument. Breaks
-  on long prompts.
+- Decision: The wrapper has no `--system-prompt` flag. The caller is
+  responsible for composing the full prompt -- system instructions and user
+  prompt concatenated with whatever separator/markdown the prompt template
+  prescribes -- and delivering it as one body via stdin. The wrapper passes
+  the body verbatim through `paste-buffer` into the Claude TUI.
+- Rationale: Two converging reasons. (1) Symmetry with `_llm_claude.py`,
+  whose `_build_argv` does NOT include `--system-prompt` either -- mill's
+  current production path puts the system prompt inside `prompt_text` on
+  stdin. The wrapper preserves that contract. (2) Routing the system prompt
+  through `claude --system-prompt <string>` at launch time would force the
+  wrapper to bake kilobytes of text into the `send-keys`-delivered launch
+  command -- hitting both the Windows command-line length cap (~8 KB
+  effective for cmd.exe / pwsh) AND the same send-keys character-drop
+  failure mode that motivated the paste-buffer decision for the prompt
+  body. Both issues vanish when the system prompt rides the same
+  paste-buffer channel as the user prompt.
+- Rejected: Expose `--system-prompt <path>` and run the file's content
+  through the launch argv (breaks on >~8 KB; lossy via send-keys); use
+  `claude` slash commands like `/system` after launch (no such command
+  documented; would also need its own delivery channel and parsing); cap
+  the supported system-prompt size to a few KB and accept the limitation
+  (artificial; mill's templates already exceed that).
+
+### Dual marker protocol: `MILL_BEGIN_<rand>` + `MILL_END_<rand>`
+
+- Decision: For each invocation the wrapper generates two random tokens of
+  the form `MILL_BEGIN_<8-hex-chars>` and `MILL_END_<8-hex-chars>` (the
+  hex suffixes are independent random values, not the same one).
+  Immediately before passing the prompt to `paste-buffer`, the wrapper
+  appends to the prompt body a fixed instruction block:
+
+  ```
+  Reply protocol (mandatory): begin your reply with the literal text
+  MILL_BEGIN_<rand1> on its own line, end your reply with the literal
+  text MILL_END_<rand2> on its own line. Do not include either token
+  anywhere else in your reply.
+  ```
+
+  The output parser extracts the response as everything strictly between
+  the line equal to `MILL_BEGIN_<rand1>` (after whitespace strip) and the
+  line equal to `MILL_END_<rand2>` (after strip). Idle-prompt-empty AND
+  end-marker-on-own-line is the dual idle signal (replaces the earlier
+  "sentinel + idle prompt" formulation, which kept the prompt-echo start
+  boundary undefined).
+- Rationale: Eliminates the prompt-echo / TUI-status / `●`-prefix start
+  boundary problem entirely. The parser does not need to identify where
+  the prompt echo ends or skip TUI artifacts ("Cogitated for Ns",
+  `●`-bullets, `⎿` tool-output rendering); it just locates two unique
+  tokens and slices between them. Both tokens are per-call random so they
+  cannot collide with content quoted from the user prompt or referenced
+  source code. The parser's contract becomes signature
+  `extract_response(capture_text, begin_marker, end_marker) -> str`,
+  trivially testable from fixtures.
+- Rejected: Single end-sentinel + heuristic start anchor (e.g. "first `●`
+  line after last prompt-echo line") -- works in the common case but the
+  prompt-echo identification heuristic was the entire content of GAP 2
+  in discussion-review round 2; a dual marker removes the heuristic;
+  passing the original prompt as a third parser arg to find the echo
+  boundary -- works but couples the parser to prompt-marker substring
+  matching that can fail when the TUI wraps long prompt lines.
+
+### Named timeout constants (boot, per-psmux-command, response-poll)
+
+- Decision: The wrapper exposes four named constants (defined at module
+  top, NOT a config knob in this spike):
+
+  | Constant                       | Value | Meaning                                                  |
+  |--------------------------------|-------|----------------------------------------------------------|
+  | `BOOT_READY_TIMEOUT_S`         | 20    | From `claude` keystroke send to first idle `❯ ` line.    |
+  | `PSMUX_COMMAND_TIMEOUT_S`      | 30    | Per individual psmux subprocess call.                    |
+  | `POLL_INTERVAL_S`              | 1.0   | Capture-pane poll cadence during response wait.          |
+  | `RESPONSE_POLL_TIMEOUT_S[mode]`| see   | Wall-clock cap on the response-wait loop, per mode.      |
+
+  with `RESPONSE_POLL_TIMEOUT_S = {"bulk": 300, "tool-use": 600, "implementer": 1800}`
+  -- bulk gets 5 min (no tool round-trips), tool-use gets 10 min
+  (Read/Grep/Glob exploration), implementer gets 30 min (matches the
+  default in `_llm_claude.run_implementer`). On timeout the wrapper kills
+  the psmux session, deletes the temp prompt file, and exits non-zero
+  with a stderr line naming the mode and the elapsed time.
+- Rationale: Without a named overall poll cap, an implementer-mode call
+  could hang indefinitely. Per-mode values reflect the real cost
+  difference between modes; a single global cap either over-budgets bulk
+  or under-budgets implementer. Constants over config to keep the spike
+  small; the integration follow-up wires them to wiki/config.
+- Rejected: Single global timeout (mode-blind); config-driven values
+  (premature; spike is one operator's box).
 
 ## Technical context
 
@@ -362,35 +413,49 @@ e.g. ask Claude to wrap responses in fenced code blocks for fidelity.
 ## Testing
 
 **Parser unit tests** (`plugins/mill/unit_tests/test-psmux-capture.py`) --
-pure-function tests on `_psmux_capture.extract_response(capture_text, sentinel)`.
-Each test loads a static fixture from a sibling `fixtures/` directory and
-asserts the extracted response. Fixture cases:
+pure-function tests on `_psmux_capture.extract_response(capture_text,
+begin_marker, end_marker)`. Each test loads a static fixture from a
+sibling `fixtures/` directory and asserts the extracted response. Fixture
+cases:
 
-1. `clean.txt` -- a simple PoC-style capture with prompt echo, single `●`
-   response line, sentinel on its own line, idle prompt at bottom. Expected
-   output: just the response line.
-2. `multiline.txt` -- a multi-line response (e.g. the haiku PoC). Expected
-   output: the full multi-line block, sentinel and idle prompt stripped.
-3. `with-status.txt` -- response followed by a `✻ Cogitated for 3s` status
-   line before the sentinel. Status line must be stripped.
-4. `with-scrollback.txt` -- response longer than 50 lines (simulates
-   scrollback retrieval); confirms parser does not truncate.
-5. `whitespace-compressed.txt` -- a response line missing a space between
-   words (the TUI artifact). Parser passes it through unchanged; the test
-   asserts the wrapper does NOT try to "fix" whitespace (operator decision
-   in spike report).
-6. `quoted-sentinel.txt` -- the sentinel string appears mid-response inside
-   a quoted code block, but also at the end on its own line. Parser must
-   ignore the mid-block occurrence (because it is not on its own line) and
-   detect the trailing one.
-7. `no-sentinel.txt` -- sentinel never appears. Parser raises a documented
-   exception (`SentinelNotFound`); wrapper translates this to non-zero exit
-   with stderr explanation.
-8. `empty-prompt-during-output.txt` -- the input `❯ ` line briefly empties
-   between output chunks. Parser only fires when both conditions hold;
-   regression test for the dual-idle-signal decision. (For unit-test
-   purposes this captures the snapshot at the wrong moment; assert that the
-   parser reports "not yet done", not a false positive.)
+1. `clean.txt` -- a simple PoC-style capture with prompt echo, both
+   markers present on their own lines, single response line between them,
+   idle prompt at bottom. Expected output: just the response line.
+2. `multiline.txt` -- a multi-line response (e.g. the haiku PoC) between
+   the markers. Expected output: the full multi-line block as it appeared
+   between begin and end markers, with TUI artifacts (`●` prefixes,
+   `⎿` continuation glyphs, `✻ Cogitated for Ns` status lines) NOT
+   stripped -- the markers define the slice; the parser does not edit the
+   slice contents. (Implementation note: TUI artifacts ARE acceptable in
+   the returned text; downstream code that displays the response can
+   strip them if needed. Out of scope to clean inside the parser.)
+3. `with-status.txt` -- a `✻ Crunched for 3s` status line appears AFTER
+   the end marker. Parser stops at the end marker; status line is not
+   included in the output.
+4. `with-scrollback.txt` -- the begin marker is far above the visible
+   pane (past the scrollback boundary). Parser handles the full
+   capture-pane scrollback retrieval blob without truncation.
+5. `whitespace-compressed.txt` -- a response line between the markers is
+   missing a space between words (the TUI artifact). Parser passes it
+   through unchanged; the test asserts the wrapper does NOT try to "fix"
+   whitespace (operator decision recorded in spike report).
+6. `quoted-marker-text.txt` -- the begin/end marker SUBSTRINGS appear
+   inside the response (e.g. quoted in a discussion of the wrapper
+   itself), but only on lines that also contain other text. Parser
+   matches markers ONLY when they appear on a line by themselves
+   (whitespace strip), so the in-line occurrences are ignored. Asserts
+   the dual-marker design is collision-safe against quoted content.
+7. `no-end-marker.txt` -- begin marker present, end marker absent.
+   Parser raises `MarkerNotFoundError`; wrapper translates this to a
+   non-zero exit with stderr explaining which marker was missing.
+8. `markers-reversed.txt` -- both markers present but the end marker
+   precedes the begin marker (sanity-check pathological case). Parser
+   raises `MarkerNotFoundError`.
+9. `polling-not-ready.txt` -- snapshot taken mid-response: begin marker
+   present, end marker absent, response in progress. Parser raises
+   `MarkerNotFoundError`; the wrapper's polling loop interprets this as
+   "keep polling" (not a final error). The wrapper-level test for poll
+   semantics lives in the integration test.
 
 **Driver unit tests** (`plugins/mill/unit_tests/test-psmux-driver.py`) --
 mock `_subprocess_util.run` and verify `_psmux.py` builds the right argv
@@ -399,17 +464,25 @@ TDD-friendly; write tests first.
 
 **Integration test** (`plugins/mill/integration_tests/test-claude-psmux.py`)
 -- manually invoked, skips with a clear message when `psmux` or `claude` is
-not on PATH. Three sub-tests:
+not on PATH. The wrapper internally generates per-call `MILL_BEGIN_<rand>`
+and `MILL_END_<rand>` markers and appends the dual-marker reply-protocol
+instruction to the body before delivery -- the test prompts below are the
+caller's body only, not the protocol footer. Three sub-tests:
 
-1. `bulk` mode: prompt = "Reply with the single word PONG and nothing else.
-   End your final reply with the literal text <sentinel> on its own line."
-   Assert response contains `PONG` and does NOT contain the sentinel.
-2. `tool-use` mode: prompt = "List the names of the files in the current
-   directory using the Glob tool, then end your reply with <sentinel>."
-   Assert response is non-empty and the wrapper exited cleanly.
-3. `implementer` mode: prompt = "Use the Bash tool to run `echo
-   __INTEGRATION_OK__`, then end with <sentinel>." Assert response contains
-   `__INTEGRATION_OK__`.
+1. `bulk` mode: caller body = `"Reply with the single word PONG and
+   nothing else."` Assert the wrapper-returned response contains `PONG`
+   and does NOT contain either marker token.
+2. `tool-use` mode: caller body = `"List the names of the files in the
+   current directory using the Glob tool, then briefly summarise."`
+   Assert the wrapper-returned response is non-empty, mentions at least
+   one file present in the cwd, and the wrapper exited 0.
+3. `implementer` mode: caller body = `"Use the Bash tool to run exactly:
+   echo __INTEGRATION_OK__"`. Assert the wrapper-returned response
+   contains `__INTEGRATION_OK__`. **This sub-test is also the regression
+   guard for `--allowedTools` pre-grant semantics** (see Technical
+   context); a future Claude CLI version that re-introduces per-Bash
+   prompts in interactive mode would fail this test by timing out at
+   `RESPONSE_POLL_TIMEOUT_S["implementer"]`.
 
 For each sub-test, also assert: psmux session was killed after the call
 (verify via `psmux ls` should not list the session name); the temp prompt
@@ -500,3 +573,35 @@ argv before implementation).
   is sufficient headroom for typical mill responses. The actual ceiling
   observed against the largest spike test prompt is recorded in the
   go/no-go report so the integration follow-up can size response budgets.
+- **Q:** What bounds the wrapper's response-wait loop? **A:** Per-mode
+  named constants `RESPONSE_POLL_TIMEOUT_S = {"bulk": 300, "tool-use":
+  600, "implementer": 1800}` (seconds), defined at the top of
+  `millpy-claude-sub.py`. Plus `BOOT_READY_TIMEOUT_S = 20`,
+  `PSMUX_COMMAND_TIMEOUT_S = 30`, `POLL_INTERVAL_S = 1.0`. On timeout the
+  wrapper kills the psmux session, deletes the temp prompt file, and
+  exits non-zero with stderr naming the mode and elapsed time. Constants
+  not config-driven for the spike; integration follow-up wires them to
+  wiki/config.
+- **Q:** How does the parser identify where Claude's response begins
+  inside the capture-pane blob, given that the prompt echo, TUI status
+  lines, and `●` bullets all appear above the response? **A:** It does
+  not need to. The wrapper appends a dual-marker reply-protocol footer
+  to the prompt (`MILL_BEGIN_<rand>` + `MILL_END_<rand>`, both
+  per-call random); the parser slices everything strictly between
+  the line equal to begin_marker and the line equal to end_marker. No
+  prompt-echo identification, no TUI-status skipping. The
+  `extract_response(capture_text, begin_marker, end_marker)` signature
+  reflects this; missing or out-of-order markers raise
+  `MarkerNotFoundError`.
+- **Q:** Why drop `--system-prompt` from the wrapper, when it's a
+  legitimate Claude CLI flag? **A:** Two reasons converge. (1) Symmetry
+  with `_llm_claude.py`, whose `_build_argv` already routes the system
+  prompt inside `prompt_text` on stdin, not via `--system-prompt`. The
+  wrapper preserves that contract. (2) Routing kilobytes through
+  `claude --system-prompt <string>` at launch time would force the
+  wrapper to bake the system prompt into the `send-keys`-delivered
+  launch command -- hitting both the Windows command-line length cap
+  AND the same send-keys character-drop failure mode that motivated
+  paste-buffer for the prompt body. Caller assembles system + user
+  prompt into one body delivered via stdin; both ride the same
+  paste-buffer channel.
