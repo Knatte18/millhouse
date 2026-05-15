@@ -38,7 +38,9 @@ batches:
     implementer_session: 00338b21-7535-48bc-9fc7-7b0547c28478
     start_sha: d1fef40db6735b402c2fb2ca568e85ec386b2995
   - name: finalize-merge-paths
-    state: pending
+    state: running
+    implementer_session: bad2c486-71e1-4a3f-8081-cf055ba2ed6d
+    start_sha: cc4e3dce3f332a171575c19f705d7b9c91b0149c
   - name: start-plan-paths
     state: pending
   - name: mill-setup-fixes
