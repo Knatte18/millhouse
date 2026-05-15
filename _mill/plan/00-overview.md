@@ -3,7 +3,7 @@
 ```yaml
 task: Make implementer model configurable via config.yaml
 slug: implementer-model-config
-approved: false
+approved: true
 started: 20260515-090924
 parent: main
 root: ""

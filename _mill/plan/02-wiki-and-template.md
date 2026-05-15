@@ -69,6 +69,11 @@ Renames `wiki/reviewers.yaml` to `wiki/agents.yaml` (adding the `haiku` entry), 
           "    self_fix_rounds: 2\n    model: sonnethigh\n",
           1,  # replace only the first occurrence (under roles.implementer)
       )
+      if "model: sonnethigh" not in cfg_text:
+          raise RuntimeError(
+              "wiki/config.yaml edit failed: 'model: sonnethigh' not found after "
+              "replacement — check indentation of 'self_fix_rounds' line"
+          )
       cfg_path.write_text(cfg_text, encoding="utf-8")
 
       # Step 6: stage and commit
