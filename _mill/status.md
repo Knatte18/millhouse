@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-approved
+phase: done
 slug: claude-p-wrapper
 branch: hanf/claude-p-wrapper
 plan: _mill/plan
@@ -29,6 +29,7 @@ approved-wrapper  '2026-05-15T12:19:39Z'
 approved-integration-and-report  '2026-05-15T12:22:07Z'
 holistic-reviewing  '2026-05-15T12:22:23Z'
 holistic-approved  '2026-05-15T12:25:42Z'
+done  '2026-05-15T12:25:53Z'
 ```
 
 ## Batches
