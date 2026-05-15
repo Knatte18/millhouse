@@ -30,7 +30,9 @@ implementing  '2026-05-15T12:08:01Z'
 ```yaml
 batches:
   - name: parser
-    state: pending
+    state: running
+    implementer_session: a6bc52c5-3478-43bb-a5f5-b52c0b8e5ed5
+    start_sha: ff09357a662e0e09989c9258168b360680062314
   - name: driver
     state: pending
   - name: wrapper
