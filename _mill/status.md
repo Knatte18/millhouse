@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-templates
+phase: approved-mill-go-skill
 slug: mill-go-runtime-bugs
 branch: hanf/mill-go-runtime-bugs
 plan: _mill/plan
@@ -25,6 +25,7 @@ planned  '2026-05-15T08:10:53Z'
 implementing  '2026-05-15T08:15:31Z'
 approved-python-fixes  '2026-05-15T08:24:04Z'
 approved-templates  '2026-05-15T08:30:53Z'
+approved-mill-go-skill  '2026-05-15T08:37:25Z'
 ```
 
 ## Batches
@@ -40,7 +41,7 @@ batches:
     implementer_session: f401f832-802d-4bec-b1ba-b219adf64235
     start_sha: 60cc14281210318059125342d8484bf12e2fce26
   - name: mill-go-skill
-    state: running
+    state: approved
     implementer_session: 7fe0bdb0-bfa8-4538-84bb-6fb8915a4736
     start_sha: f97376764abea0bdffa9da7a493a00788ed8a0b7
   - name: other-skills
