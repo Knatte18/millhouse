@@ -3,7 +3,7 @@
 ```yaml
 task: 56 (A) -- Fix mill-go/start/plan/merge runtime behavioral bugs
 slug: mill-go-runtime-bugs
-approved: false
+approved: true
 started: 20260515-074657
 parent: main
 root: ""

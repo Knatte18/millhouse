@@ -64,7 +64,7 @@ Four targeted SKILL.md edits across three skills. Cards 8 and 9 both edit `mill-
 
   Note: blank output from `git status --short` means the file is present and unchanged (clean) — blank is NOT the deletion signal. Only a line beginning with ` D` (working-tree deleted) or `D ` (staged deletion) triggers a restore.
 
-  This safeguard covers: the `discussed` Handoff append (Phase: Handoff), the `discussion-fix-r{N}` append (step 4b), and any GAPS_FOUND round append (step 5). In auto-mode, the set_blocked path also appends to status — add the safeguard there too.
+  The safeguard is placed at the top of `### Phase: Discussion Review`, making it transitive: any `_status.append_phase` call that runs after this guard (within the Discussion Review loop, including the final Handoff `discussed` append) is protected. No additional guard is needed in the `### Phase: Handoff` section itself — the loop-top guard already ensures the file is present before Handoff runs. In auto-mode, the set_blocked path also appends to status — the guard at the top of the section covers it.
 
   The exact prose can be condensed into a single note if the skill is long: "Before any `_status.append_phase` call in this phase, run `git -C <worktree> status --short -- _mill/status.md`; if the output contains `D`, restore with `git -C <worktree> checkout HEAD -- _mill/status.md` before proceeding." Place this note at the top of the `### Phase: Discussion Review` section, before the loop description, so it applies to all appends in the phase without repetition.
 - **Commit:** `fix(mill-start): add status.md working-tree safeguard in Discussion Review loop (#289)`

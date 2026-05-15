@@ -57,7 +57,7 @@ Fix two Python functions and update their unit tests. Card 1 fixes `resolve_task
   ```
   instead of the inferred-success JSON. If stdout is empty, emit the inferred-success JSON as before (unchanged). The `check=True` in the `_subprocess_util.run` call means a non-zero git exit code raises, which is caught by the outer `except Exception` and falls through to the final `stuck/logic` sentinel — acceptable behavior.
 
-  In `test-implementer-common.py`, **update Case 3b**: change the `assert data["status"] == "success"` and `assert data.get("inferred") is True` assertions to `assert data["status"] == "stuck"` and `assert data["stuck_type"] == "logic"`. Update the print message to `"PASS: pre-existing dirt in snapshot, no new dirt -> stuck/logic (inferred-success requires clean tree)"`. Case 3b's setup (pre-existing dirty README.md captured in snapshot, empty commit, README.md remains dirty, no JSON in output) is unchanged.
+  In `test-implementer-common.py`, **update Case 3b**: (a) change the setup comment from `# Case 3b: snapshot has pre-existing dirt; no new dirt added -> inference succeeds` to `# Case 3b: pre-existing dirt survives in full-tree check -> stuck/logic`; (b) change the `assert data["status"] == "success"` and `assert data.get("inferred") is True` assertions to `assert data["status"] == "stuck"` and `assert data["stuck_type"] == "logic"`; (c) update the print message to `"PASS: pre-existing dirt in snapshot, no new dirt -> stuck/logic (inferred-success requires clean tree)"`. Case 3b's setup block (pre-existing dirty README.md captured in snapshot, empty commit, README.md remains dirty, no JSON in output) is unchanged.
 - **Commit:** `fix(_implementer_common): require clean worktree for inferred success (#282-gap1)`
 
 ## Batch Tests
