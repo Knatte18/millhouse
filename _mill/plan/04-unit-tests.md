@@ -166,8 +166,10 @@ Updates all affected unit test files to reflect the production changes from batc
 - **Context:**
   - `plugins/mill/scripts/_reviewers.py`
   - `plugins/mill/scripts/_test_registry.py`
+  - `plugins/mill/unit_tests/_test_registry.py`
 - **Edits:**
   - `plugins/mill/unit_tests/test-reviewers.py`
+  - `plugins/mill/unit_tests/_test_registry.py`
 - **Creates:** none
 - **Deletes:** none
 - **Requirements:**
