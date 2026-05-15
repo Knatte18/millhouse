@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-wiki-and-template
+phase: approved-cli-scripts
 slug: implementer-model-config
 branch: hanf/implementer-model-config
 plan: _mill/plan
@@ -25,6 +25,7 @@ planned  '2026-05-15T09:26:33Z'
 implementing  '2026-05-15T09:35:15Z'
 approved-core-modules  '2026-05-15T09:40:10Z'
 approved-wiki-and-template  '2026-05-15T09:42:41Z'
+approved-cli-scripts  '2026-05-15T09:46:19Z'
 ```
 
 ## Batches
@@ -40,7 +41,7 @@ batches:
     implementer_session: 23ce5385-05f5-439b-9d6b-864db2174cf5
     start_sha: f3589146b08d2284f97b2434322857a52bd8efaa
   - name: cli-scripts
-    state: running
+    state: approved
     implementer_session: b3f1612c-a848-4b8d-b2fa-179ea785948b
     start_sha: 27a4a157dd4ead2580f8e1a1e3b6fe8423080440
   - name: unit-tests
