@@ -345,6 +345,12 @@ For each round `H` from 1 to `max_holistic_rounds`:
 
 ## Handoff
 
+**Terminal cleanliness gate.** Run `git -C <worktree> status --porcelain --untracked-files=no`. If the output is non-empty (any tracked files have uncommitted modifications), halt with:
+`BLOCKED: dirty working tree at task completion -- <N> file(s) uncommitted: <file-list>. Commit or discard before proceeding.`
+where `<N>` is the count of dirty lines and `<file-list>` is the filenames extracted from the porcelain output. Do NOT set `phase: done` when the gate fires; the task remains in its current phase so the operator can inspect and fix.
+
+If the output is empty, proceed normally.
+
 1. `_status.append_phase(status_path, "done", _timestamp.now_utc_iso())`. Commit on the task branch: `git -C <worktree> add _mill/status.md && git -C <worktree> commit -m "mill-go: done {slug}"`.
 2. Flip Home.md's task line to `[ready-to-merge]` — the new intermediate state signalling 'mill-go done, mill-merge pending':
    ```python
