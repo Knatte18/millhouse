@@ -42,9 +42,11 @@ def load(wiki_root: Path) -> dict[str, dict]:
 
     Raises ReviewerError listing every problem in a single message.
     """
-    path = wiki_root / "reviewers.yaml"
+    path = wiki_root / "agents.yaml"
     if not path.exists():
-        raise ReviewerError(f"Missing registry at {path}")
+        path = wiki_root / "reviewers.yaml"
+    if not path.exists():
+        raise ReviewerError(f"Missing registry at {wiki_root / 'agents.yaml'}")
 
     text = path.read_text(encoding="utf-8")
 
@@ -282,6 +284,13 @@ def validate_role_refs(cfg: dict, registry: dict) -> None:
                     errors.append(
                         f"roles.{role}.{scope}.large_prompt.reviewer={lp_reviewer!r}: {exc}"
                     )
+
+    impl_model = cfg.get("roles", {}).get("implementer", {}).get("model")
+    if impl_model is not None:
+        try:
+            resolve(registry, impl_model)
+        except ReviewerError as exc:
+            errors.append(f"roles.implementer.model={impl_model!r}: {exc}")
 
     if errors:
         raise ReviewerError("\n".join(errors))
