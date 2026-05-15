@@ -5,11 +5,14 @@ Public API:
     _make_task_worktree(tmp, slug, title, *, branch_prefix="", phase="active")
         Create a minimal git repo on a task branch plus a wiki stub.
         Returns (worktree_path, wiki_path).
+    safe_temp_dir() -> ContextManager[Path]
 """
 from __future__ import annotations
 
+import contextlib
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 _HERE = Path(__file__).resolve().parent
@@ -17,6 +20,7 @@ _SCRIPTS = _HERE.parent / "scripts"
 if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 
+import _safe_rmtree  # noqa: E402
 import _tasks_md  # noqa: E402
 
 
@@ -143,3 +147,12 @@ def seed_wiki_config(wiki_root: Path, *, include_roles: bool = False) -> None:
             "    holistic: {rounds: 1, reviewer: test_stub}\n"
         )
     (wiki_root / "config.yaml").write_text(content, encoding="utf-8")
+
+
+@contextlib.contextmanager
+def safe_temp_dir():
+    tmp = Path(tempfile.mkdtemp())
+    try:
+        yield tmp
+    finally:
+        _safe_rmtree.safe_rmtree(tmp, allowed_root=tmp, ignore_errors=True)
