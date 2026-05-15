@@ -30,7 +30,9 @@ implementing  '2026-05-15T09:35:15Z'
 ```yaml
 batches:
   - name: core-modules
-    state: pending
+    state: running
+    implementer_session: e12438d2-52f4-44dd-811f-8147f0a2d68a
+    start_sha: d6556df522c1749b5b211d0f998234b247daed5b
   - name: wiki-and-template
     state: pending
   - name: cli-scripts
