@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-fix-r1
+phase: planned
 slug: run-all-wiki-wipe-fix
 branch: hanf/run-all-wiki-wipe-fix
 plan: _mill/plan
@@ -19,4 +19,5 @@ discussion-fix-r1  '2026-05-15T07:51:59Z'
 discussed  '2026-05-15T07:52:16Z'
 planning  '2026-05-15T07:56:05Z'
 plan-fix-r1  '2026-05-15T08:00:45Z'
+planned  '2026-05-15T08:00:58Z'
 ```
