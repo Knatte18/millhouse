@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: implementer-model-config
 branch: hanf/implementer-model-config
 plan: _mill/plan
@@ -22,4 +22,19 @@ plan-review-r1  '2026-05-15T09:20:06Z'
 plan-fix-r1  '2026-05-15T09:20:06Z'
 plan-fix-r2  '2026-05-15T09:26:15Z'
 planned  '2026-05-15T09:26:33Z'
+implementing  '2026-05-15T09:35:15Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: core-modules
+    state: pending
+  - name: wiki-and-template
+    state: pending
+  - name: cli-scripts
+    state: pending
+  - name: unit-tests
+    state: pending
 ```
