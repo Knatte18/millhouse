@@ -54,7 +54,7 @@ Fix hardcoded `_mill/` path strings in `mill-finalize/SKILL.md` and `mill-merge/
   4. **Cleanup commit block** (`git rm -r _mill/` on line 82): replace with `git -C <worktree> rm -r <task_dir>`.
   5. **Idempotency note** (line 88): update to reference `<task_dir>`.
   6. **PR-pending branch-protection fallback** (lines 142, 149, both `git add _mill/status.md`): replace `_mill/status.md` with `<status_path>`.
-  7. **Board Discipline section** (lines 247–248): update prose "Task state (`_mill/status.md`, `_mill/discussion.md`, `_mill/plan/`, `_mill/reviews/`) lives in `_mill/` on the task branch" → "Task state (`status_path`, `discussion_path`, `plan_dir`, `reviews_dir`) lives in the task directory (`_mill/` or `task/` for legacy worktrees) on the task branch." Update "cleanup commit removes the entire `_mill/` directory" → "cleanup commit removes the entire `task_dir` directory."
+  7. **Board Discipline section** (lines 247–248): mill-merge's Path Setup only defines `status_path` and `task_dir`. Update the prose to: "Task state (status file, discussion file, plan dir, reviews dir) lives in the task directory (`_mill/` for current worktrees, `task/` for legacy) on the task branch. The cleanup commit removes the entire `task_dir` directory." Do NOT introduce variable names (`discussion_path`, `plan_dir`, `reviews_dir`) that mill-merge's Path Setup does not define — only `status_path` and `task_dir` are available.
 - **Commit:** `fix(mill-merge): replace hardcoded _mill/ paths with config-derived variables`
 
 ## Batch Tests

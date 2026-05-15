@@ -61,7 +61,7 @@ Fix hardcoded `_mill/` path strings in `mill-start/SKILL.md` and `mill-plan/SKIL
   3. **Phase: Plan — "Update `_mill/status.md`" block** (lines 63–69):
      - Remove `status_path = Path("_mill/status.md").resolve()` (now in Path Setup at entry).
      - In the same block, add before the `_status.update_field` line: `plan_dir = worktree_root / cfg['paths']['plan_dir']` (config-canonical; write path).
-     - Change `_status.update_field(status_path, "plan", "_mill/plan")` → `_status.update_field(status_path, "plan", cfg['paths']['plan_dir'])`.
+     - Change `_status.update_field(status_path, "plan", "_mill/plan")` → `_status.update_field(status_path, "plan", cfg['paths']['plan_dir'].rstrip('/'))`. The `.rstrip('/')` is required because `cfg['paths']['plan_dir']` is `"_mill/plan/"` (trailing slash) while the existing field value is `"_mill/plan"` (no slash); changing the stored value would silently break any downstream code that does string-equality on this field.
      - Change the commit command `git -C <worktree> add _mill/plan/ _mill/status.md` → `git -C <worktree> add <plan_dir> <status_path>`.
   4. **Phase: Plan — DAG self-validate block** (line 61, `plan_dir = Path("_mill/plan/").resolve()`): remove this inline assignment — `plan_dir` is now set in the "Update `_mill/status.md`" block above (or move that assignment earlier if needed to satisfy the validate call ordering). Replace the `plan_dir.glob` call with the `plan_dir` variable.
   5. **Phase: Plan Review — skip block** (line 73, `git -C <worktree> add _mill/plan/`): replace `_mill/plan/` with `<plan_dir>`.

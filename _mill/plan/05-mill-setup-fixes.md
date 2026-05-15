@@ -57,7 +57,7 @@ Both fixes are in the same file (`mill-setup/SKILL.md`). No Python helper change
      existing = yaml.safe_load(config_path.read_text(encoding='utf-8')) or {}
      template  = yaml.safe_load(template_path.read_text(encoding='utf-8')) or {}
 
-     required_keys = ['paths', 'llm', 'pipeline', 'roles', 'notify', 'spawn', 'groom']
+     required_keys = ['junctions', 'paths', 'llm', 'pipeline', 'roles', 'notify', 'spawn', 'groom']
      missing = [k for k in required_keys if k not in existing]
      if missing:
          for k in missing:

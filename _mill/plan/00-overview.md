@@ -3,7 +3,7 @@
 ```yaml
 task: 55 (A) -- Fix hardcoded _mill/ paths and mill-setup junction/config bugs
 slug: mill-path-hardcodes
-approved: false
+approved: true
 started: 20260515-073621
 parent: main
 root: ""

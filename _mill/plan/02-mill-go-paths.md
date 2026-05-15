@@ -25,14 +25,18 @@ Fix all hardcoded `_mill/` path strings in `plugins/mill/skills/mill-go/SKILL.md
 - **Creates:** none
 - **Deletes:** none
 - **Requirements:**
-  1. **Add step 4.5 "Path Setup"** after step 4 (acquire builder lock) and before step 5 (entry phase gate) in the Entry section. The new step must contain this Python block exactly:
+  1. **Add step 4.5 "Path Setup"** after step 4 (acquire builder lock) and before step 5 (entry phase gate) in the Entry section. First read mill-go/SKILL.md steps 1–4 to confirm whether `worktree_root` and `cfg` are already assigned. If mill-go's entry steps already load config via any call (e.g., `_review_common.load_config` or `_config.load_config`), reuse that `cfg` and do not reload. If `worktree_root` is not already assigned, set `worktree_root = _paths.resolve_git_root()`. Then derive the path variables:
      ```python
+     # If worktree_root not already set in prior steps:
+     worktree_root = _paths.resolve_git_root()
+     # If cfg not already set in prior steps:
      cfg = _config.load_config(wiki_path, worktree_root)
-     status_path = _paths.resolve_task_path(worktree_root, cfg['paths']['status_md'])
-     plan_dir    = _paths.resolve_task_path(worktree_root, cfg['paths']['plan_dir'])
+     # Path derivations (always add these):
+     status_path   = _paths.resolve_task_path(worktree_root, cfg['paths']['status_md'])
+     plan_dir      = _paths.resolve_task_path(worktree_root, cfg['paths']['plan_dir'])
      overview_path = plan_dir / "00-overview.md"
-     reviews_dir = _paths.resolve_task_path(worktree_root, cfg['paths']['reviews_dir'])
-     task_dir    = status_path.parent
+     reviews_dir   = _paths.resolve_task_path(worktree_root, cfg['paths']['reviews_dir'])
+     task_dir      = status_path.parent
      ```
      Follow the block with the note: "Use these variables for all subsequent path references. Exception: the cleanliness snapshot path `_mill/.cleanliness-snapshot-<batch_name>.txt` keeps its `_mill/` literal — `millpy-implement.py` writes it unconditionally to `_mill/` and is out of scope."
   2. **Step 5 (entry phase gate):** Remove the line `status_path = Path("_mill/status.md").resolve()` — it is now set in step 4.5.
