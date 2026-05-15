@@ -28,7 +28,9 @@ implementing  '2026-05-15T08:07:42Z'
 ```yaml
 batches:
   - name: test-infra
-    state: pending
+    state: running
+    implementer_session: 073af324-3fec-4d34-80c8-e0315c1cd27f
+    start_sha: ea19982f8994af7225994957cdca37789a5c37b8
   - name: test-migration
     state: pending
 ```
