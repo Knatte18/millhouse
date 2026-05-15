@@ -69,6 +69,26 @@ class TestMillpyMergeInSubagent(unittest.TestCase):
             millpy_merge_in_subagent._marker, "slug_from_branch",
             return_value="test-slug",
         )
+        self.mock_reviewers_load = _p(
+            millpy_merge_in_subagent._reviewers, "load",
+            return_value={
+                "sonnethigh": {
+                    "type": "single",
+                    "provider": "claude",
+                    "model": "claude-sonnet-4-6",
+                    "effort": "high",
+                }
+            },
+        )
+        self.mock_reviewers_resolve = _p(
+            millpy_merge_in_subagent._reviewers, "resolve",
+            return_value={
+                "type": "single",
+                "provider": "claude",
+                "model": "claude-sonnet-4-6",
+                "effort": "high",
+            },
+        )
 
     def _run_main(self, argv):
         """Run main(argv) with stdout captured. Returns (rc, captured_stdout)."""
@@ -86,7 +106,7 @@ class TestMillpyMergeInSubagent(unittest.TestCase):
             return_value="rendered",
         ) as mock_render, \
         unittest.mock.patch.object(
-            millpy_merge_in_subagent._implementer_sonnet, "run",
+            millpy_merge_in_subagent._implementer_claude, "run",
             return_value=('{"status":"success","commit_sha":"abc"}\n', "fake-session"),
         ), \
         unittest.mock.patch.object(
@@ -111,7 +131,7 @@ class TestMillpyMergeInSubagent(unittest.TestCase):
     def test_2_conflicts_stuck(self):
         """conflicts mode: sub-agent returns stuck -> exit 0, stuck JSON."""
         with unittest.mock.patch.object(
-            millpy_merge_in_subagent._implementer_sonnet, "run",
+            millpy_merge_in_subagent._implementer_claude, "run",
             return_value=('{"status":"stuck","stuck_type":"logic","reason":"ambiguous"}\n', "fake"),
         ), \
         unittest.mock.patch.object(
@@ -136,7 +156,7 @@ class TestMillpyMergeInSubagent(unittest.TestCase):
     def test_4_conflicts_llm_error(self):
         """conflicts mode: LLMError from sub-agent -> exit 1, transient stuck JSON."""
         with unittest.mock.patch.object(
-            millpy_merge_in_subagent._implementer_sonnet, "run",
+            millpy_merge_in_subagent._implementer_claude, "run",
             side_effect=millpy_merge_in_subagent._llm_claude.LLMError("quota"),
         ):
             rc, out = self._run_main(["--mode", "conflicts", "--files", "a.py"])
@@ -159,7 +179,7 @@ class TestMillpyMergeInSubagent(unittest.TestCase):
             return_value=subprocess.CompletedProcess(args=[], returncode=0, stdout="abc1234\n", stderr=""),
         ), \
         unittest.mock.patch.object(
-            millpy_merge_in_subagent._implementer_sonnet, "run",
+            millpy_merge_in_subagent._implementer_claude, "run",
         ) as mock_subagent:
             rc, out = self._run_main([
                 "--mode", "verify-fix",
@@ -197,7 +217,7 @@ class TestMillpyMergeInSubagent(unittest.TestCase):
             ],
         ), \
         unittest.mock.patch.object(
-            millpy_merge_in_subagent._implementer_sonnet, "run",
+            millpy_merge_in_subagent._implementer_claude, "run",
             return_value=('{"status":"success","commit_sha":"abc"}\n', "fake"),
         ):
             rc, out = self._run_main([
@@ -238,7 +258,7 @@ class TestMillpyMergeInSubagent(unittest.TestCase):
             ],
         ), \
         unittest.mock.patch.object(
-            millpy_merge_in_subagent._implementer_sonnet, "run",
+            millpy_merge_in_subagent._implementer_claude, "run",
             return_value=(
                 '{"status":"stuck","stuck_type":"verify","reason":"still failing"}\n',
                 "fake",
