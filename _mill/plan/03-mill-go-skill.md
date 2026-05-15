@@ -26,21 +26,21 @@ Three targeted edits to `plugins/mill/skills/mill-go/SKILL.md`. Card 5 fixes PLU
   In `mill-go/SKILL.md`, Section `## Entry`, subsection `**Step 0: Resolve PLUGIN_ROOT.**`: after the existing code block that sets `PLUGIN_ROOT` and `MILL_PYTHON`, add the following text and code block:
 
   ```
-  After setting `PLUGIN_ROOT`, check whether the task worktree contains a local copy of the mill plugin:
+  After setting `PLUGIN_ROOT`, check whether the task worktree contains a local copy of the mill plugin with an initialised venv:
 
   ```bash
   WORKTREE_PLUGIN_ROOT="$(git rev-parse --show-toplevel)/plugins/mill"
-  if [ -d "$WORKTREE_PLUGIN_ROOT" ]; then
+  WORKTREE_VENV="${WORKTREE_PLUGIN_ROOT}/.venv/Scripts/python.exe"
+  if [ -d "$WORKTREE_PLUGIN_ROOT" ] && [ -f "$WORKTREE_VENV" ]; then
       PLUGIN_ROOT="$WORKTREE_PLUGIN_ROOT"
-      MILL_PYTHON="${PLUGIN_ROOT}/.venv/Scripts/python.exe"
+      MILL_PYTHON="$WORKTREE_VENV"
       echo "[mill-go] NOTE: self-modifying repo detected; PLUGIN_ROOT overridden to $PLUGIN_ROOT"
+  elif [ -d "$WORKTREE_PLUGIN_ROOT" ]; then
+      echo "[mill-go] SKIP: self-modifying repo but worktree venv absent -- using cache. Run 'uv sync --project ${WORKTREE_PLUGIN_ROOT}' to enable."
   fi
   ```
 
-  This check fires for any millhouse repo task (where `plugins/mill/` exists in the worktree) and ensures the task's modified scripts are used instead of the cache. For all other repos this block is a no-op (the directory does not exist). The log message makes the override visible to operators.
-  ```
-
-  The override must update both `PLUGIN_ROOT` and `MILL_PYTHON` (since `MILL_PYTHON` is derived from `PLUGIN_ROOT` and the override directory has its own `.venv`). The existing `Use $PLUGIN_ROOT in place of $CLAUDE_PLUGIN_ROOT for all subsequent uv run commands in this skill.` note below the Step 0 block remains unchanged.
+  Both `PLUGIN_ROOT` and `MILL_PYTHON` are updated together only when the worktree venv exists. If `plugins/mill/` is present but `.venv` is absent (common in fresh task worktrees where `.venv` is gitignored), the cache path is used and a skip message is logged. For non-millhouse repos the entire block is a no-op. The existing `Use $PLUGIN_ROOT in place of $CLAUDE_PLUGIN_ROOT for all subsequent uv run commands in this skill.` note below the Step 0 block remains unchanged.
 - **Commit:** `fix(mill-go): override PLUGIN_ROOT to worktree-local scripts for self-modifying repos (#283)`
 
 ### Card 6: mill-go Handoff -- terminal cleanliness gate

@@ -57,14 +57,16 @@ Four targeted SKILL.md edits across three skills. Cards 8 and 9 both edit `mill-
   ```
   Before calling `_status.append_phase`, verify `status_path` exists in the working tree:
   `git -C <worktree> status --short -- _mill/status.md`
-  If the output shows `D` (deleted) or is blank when the file should exist, restore via:
+  If the output contains `D` (deleted from working tree), restore via:
   `git -C <worktree> checkout HEAD -- _mill/status.md`
   Then proceed with `_status.append_phase`.
   ```
 
+  Note: blank output from `git status --short` means the file is present and unchanged (clean) — blank is NOT the deletion signal. Only a line beginning with ` D` (working-tree deleted) or `D ` (staged deletion) triggers a restore.
+
   This safeguard covers: the `discussed` Handoff append (Phase: Handoff), the `discussion-fix-r{N}` append (step 4b), and any GAPS_FOUND round append (step 5). In auto-mode, the set_blocked path also appends to status — add the safeguard there too.
 
-  The exact prose can be condensed into a single note if the skill is long: "Before any `_status.append_phase` call in this phase, verify `_mill/status.md` exists in the working tree (`git -C <worktree> status --short -- _mill/status.md`); if it shows deleted, restore with `git -C <worktree> checkout HEAD -- _mill/status.md` before proceeding." Place this note at the top of the `### Phase: Discussion Review` section, before the loop description, so it applies to all appends in the phase without repetition.
+  The exact prose can be condensed into a single note if the skill is long: "Before any `_status.append_phase` call in this phase, run `git -C <worktree> status --short -- _mill/status.md`; if the output contains `D`, restore with `git -C <worktree> checkout HEAD -- _mill/status.md` before proceeding." Place this note at the top of the `### Phase: Discussion Review` section, before the loop description, so it applies to all appends in the phase without repetition.
 - **Commit:** `fix(mill-start): add status.md working-tree safeguard in Discussion Review loop (#289)`
 
 ### Card 10: mill-merge Entry -- cache task: fields before cleanup commit
