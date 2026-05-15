@@ -48,5 +48,7 @@ batches:
     implementer_session: f27599ab-de43-4d7c-bf88-4fe81e4b96d5
     start_sha: 6f03e25c6c6c42920eaa46f3f0c71f660c877d8f
   - name: mill-setup-fixes
-    state: pending
+    state: running
+    implementer_session: 7c3d0f3e-a3ed-486c-9b06-024bc6d697c4
+    start_sha: 8f7c7948a0eaa3bc9fa41c9cf90fb13cafe1c88f
 ```
