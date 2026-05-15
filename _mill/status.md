@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-test-migration
+phase: holistic-reviewing
 slug: run-all-wiki-wipe-fix
 branch: hanf/run-all-wiki-wipe-fix
 plan: _mill/plan
@@ -23,6 +23,7 @@ planned  '2026-05-15T08:00:58Z'
 implementing  '2026-05-15T08:07:42Z'
 approved-test-infra  '2026-05-15T08:13:41Z'
 approved-test-migration  '2026-05-15T08:21:20Z'
+holistic-reviewing  '2026-05-15T08:21:43Z'
 ```
 
 ## Batches
