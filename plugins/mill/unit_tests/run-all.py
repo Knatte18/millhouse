@@ -35,6 +35,7 @@ def main() -> int:
             capture_output=False,
             text=True,
             env=child_env,
+            cwd=HERE,
         )
         if result.returncode != 0:
             failures.append(test.name)
