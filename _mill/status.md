@@ -45,5 +45,7 @@ batches:
     implementer_session: 7fe0bdb0-bfa8-4538-84bb-6fb8915a4736
     start_sha: f97376764abea0bdffa9da7a493a00788ed8a0b7
   - name: other-skills
-    state: pending
+    state: running
+    implementer_session: fa604339-59a3-4519-8977-d812ad1f35db
+    start_sha: 0022948a5659b6c57689ddb528809ea133a52666
 ```
