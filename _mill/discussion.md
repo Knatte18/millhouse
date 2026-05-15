@@ -43,9 +43,9 @@ A cluster of ten behavioral bugs accumulated across mill-go, mill-start, mill-pl
 
 ### #279 — progress-vs-non-progress check in mill-start auto-mode
 
-- Decision: Before applying the round-cap block in mill-start auto-mode Discussion Review, compare the current round's gap titles against the previous round's. If the title set is entirely disjoint (no overlap), allow one extra round. If there is any overlap with the previous round (partial or full), apply the cap.
-- Rationale: Mirrors mill-plan Phase: Plan Review step 5 semantics. A disjoint title set means the previous fix-pass worked and exposed a new surface; halting here is a false positive. Partial overlap is treated conservatively (block) to avoid infinite extension.
-- Rejected: Allowing any number of extra rounds when progress is detected -- too permissive; partial overlap could still be non-convergent.
+- Decision: Before applying the round-cap block in mill-start auto-mode Discussion Review, compare the current round's gap titles against the previous round's. If the title set is entirely disjoint (no overlap), allow one extra round -- but this extension is one-time-ever per session (a boolean flag `extension_used` prevents re-triggering). If there is any overlap with the previous round (partial or full), apply the cap immediately. After the extension round fires, the cap applies unconditionally regardless of future disjointness.
+- Rationale: Mirrors mill-plan Phase: Plan Review step 5 semantics. A disjoint title set means the previous fix-pass worked and exposed a new surface; halting here is a false positive. The one-time-ever limit prevents unbounded extension even if every successive round is disjoint from the previous one.
+- Rejected: Allowing any number of extra rounds when progress is detected -- too permissive; partial overlap could still be non-convergent. Rejected: re-triggering the extension every round on disjoint titles -- produces unlimited rounds, which the decision explicitly rejected.
 
 ### #281 — fix resolve_task_path to handle empty directories
 
@@ -133,7 +133,7 @@ fi
 
 **mill-merge-in verify PLUGIN_ROOT substitution:** In the verify loop (after calling `_plan_dag.iter_batch_verifies`), for each `(batch_name, verify_cmd)` pair, replace `${PLUGIN_ROOT}` with `str(git_root / "plugins" / "mill")` when that local directory exists, before running the command.
 
-**#279 progress tracking in mill-start:** Add a variable `prev_gap_titles: set[str] = set()` before the loop. After each GAPS_FOUND round's gap titles are parsed, compare with `prev_gap_titles`. If `current_titles.isdisjoint(prev_gap_titles)` and round >= 2, allow one extra round. Update `prev_gap_titles = current_titles` at end of each round. On overlap (not disjoint) at or past `max_review_rounds`: block. This mirrors mill-plan's step 5 semantics.
+**#279 progress tracking in mill-start:** Add two variables before the loop: `prev_gap_titles: set[str] = set()` and `extension_used: bool = False`. After each GAPS_FOUND round's gap titles are parsed, compare with `prev_gap_titles`. If `current_titles.isdisjoint(prev_gap_titles)` and round >= `max_review_rounds` and `not extension_used`: set `extension_used = True` and allow one extra round (do not block). Once `extension_used` is `True`, apply the cap regardless of disjointness on subsequent rounds -- even if the next round's titles are again disjoint. Update `prev_gap_titles = current_titles` at end of each round. On any overlap (not disjoint) at or past `max_review_rounds`: block immediately. This means the extension is one-time-ever per session, not one-per-disjoint-transition.
 
 ## Testing
 
