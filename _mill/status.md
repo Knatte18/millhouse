@@ -40,7 +40,9 @@ batches:
     implementer_session: 9ff0674f-c5c5-44e2-add4-fcb51e9db9ea
     start_sha: 2c208079b0556b0359bca39b8338c4c920a0ecee
   - name: wrapper
-    state: pending
+    state: running
+    implementer_session: e27cee85-80ed-4cd5-a282-f8c91d37cba4
+    start_sha: 5f4e515f0361efbe27146011081d11484bc586af
   - name: integration-and-report
     state: pending
 ```
