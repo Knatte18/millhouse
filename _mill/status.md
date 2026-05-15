@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-driver
+phase: approved-wrapper
 slug: claude-p-wrapper
 branch: hanf/claude-p-wrapper
 plan: _mill/plan
@@ -25,6 +25,7 @@ planned  '2026-05-15T11:36:30Z'
 implementing  '2026-05-15T12:08:01Z'
 approved-parser  '2026-05-15T12:11:09Z'
 approved-driver  '2026-05-15T12:14:35Z'
+approved-wrapper  '2026-05-15T12:19:39Z'
 ```
 
 ## Batches
@@ -40,7 +41,7 @@ batches:
     implementer_session: 9ff0674f-c5c5-44e2-add4-fcb51e9db9ea
     start_sha: 2c208079b0556b0359bca39b8338c4c920a0ecee
   - name: wrapper
-    state: running
+    state: approved
     implementer_session: e27cee85-80ed-4cd5-a282-f8c91d37cba4
     start_sha: 5f4e515f0361efbe27146011081d11484bc586af
   - name: integration-and-report
