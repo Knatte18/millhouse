@@ -35,7 +35,9 @@ batches:
     implementer_session: a6bc52c5-3478-43bb-a5f5-b52c0b8e5ed5
     start_sha: ff09357a662e0e09989c9258168b360680062314
   - name: driver
-    state: pending
+    state: running
+    implementer_session: 9ff0674f-c5c5-44e2-add4-fcb51e9db9ea
+    start_sha: 2c208079b0556b0359bca39b8338c4c920a0ecee
   - name: wrapper
     state: pending
   - name: integration-and-report
