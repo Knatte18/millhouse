@@ -27,4 +27,28 @@ def extract_response(
     Raises:
         MarkerNotFoundError: If either marker is missing or end precedes begin.
     """
-    raise NotImplementedError("implemented in card 4")
+    lines = capture_text.split("\n")
+
+    begin_idx = None
+    for i, line in enumerate(lines):
+        if line.strip() == begin_marker:
+            begin_idx = i
+            break
+
+    if begin_idx is None:
+        raise MarkerNotFoundError(
+            f"begin marker {begin_marker!r} not found in capture"
+        )
+
+    end_idx = None
+    for j in range(begin_idx + 1, len(lines)):
+        if lines[j].strip() == end_marker:
+            end_idx = j
+            break
+
+    if end_idx is None:
+        raise MarkerNotFoundError(
+            f"end marker {end_marker!r} not found after begin marker in capture"
+        )
+
+    return "\n".join(lines[begin_idx + 1 : end_idx])
