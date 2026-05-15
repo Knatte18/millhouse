@@ -1,6 +1,6 @@
 """Unit tests for plugins/mill/scripts/_setup.py.
 
-Uses tempfile.TemporaryDirectory() and real disk operations for all
+Uses safe_temp_dir() (junction-aware temp dir) and real disk operations for all
 happy-path cases. A single selective mock covers the cross-volume hardlink
 error path which cannot be triggered without multiple filesystem volumes.
 
@@ -21,7 +21,6 @@ Covers:
 from __future__ import annotations
 
 import sys
-import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
@@ -31,6 +30,7 @@ HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
 from _setup import create_hub_links  # noqa: E402
+from _test_helpers import safe_temp_dir  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -94,8 +94,8 @@ _HARDLINK_ONLY_CFG = {
 
 def test_token_scope_filter_no_slug() -> None:
     """When SLUG is absent from tokens, .portals entry is skipped; .wiki is created."""
-    with tempfile.TemporaryDirectory() as tmp:
-        container = Path(tmp) / "container"
+    with safe_temp_dir() as tmp:
+        container = tmp / "container"
         wiki_path = container / "wiki"
         target_root = container / "wts" / "my-repo"
 
@@ -146,8 +146,8 @@ def test_token_scope_filter_no_slug() -> None:
 
 def test_token_scope_filter_with_slug() -> None:
     """When SLUG is present, both .wiki and .portals junctions and the hardlink are created."""
-    with tempfile.TemporaryDirectory() as tmp:
-        container = Path(tmp) / "container"
+    with safe_temp_dir() as tmp:
+        container = tmp / "container"
         wiki_path = container / "wiki"
         target_root = container / "wts" / "my-task"
 
@@ -204,8 +204,8 @@ def test_junction_idempotent_skip_on_correct_target() -> None:
     the first call. The second call detects they already point at the correct
     targets and silently skips them.
     """
-    with tempfile.TemporaryDirectory() as tmp:
-        container = Path(tmp) / "container"
+    with safe_temp_dir() as tmp:
+        container = tmp / "container"
         wiki_path = container / "wiki"
         target_root = container / "wts" / "my-task"
 
@@ -267,8 +267,8 @@ def test_junction_recreated_on_wrong_target() -> None:
     """
     import _junction as junction_mod
 
-    with tempfile.TemporaryDirectory() as tmp:
-        container = Path(tmp) / "container"
+    with safe_temp_dir() as tmp:
+        container = tmp / "container"
         wiki_a = container / "wiki_a"
         wiki_b = container / "wiki_b"
         target_root = container / "wts" / "my-repo"
@@ -327,8 +327,8 @@ def test_junction_refuses_to_replace_real_directory() -> None:
     create_hub_links must propagate _junction.remove's ValueError rather than
     silently deleting the directory.
     """
-    with tempfile.TemporaryDirectory() as tmp:
-        container = Path(tmp) / "container"
+    with safe_temp_dir() as tmp:
+        container = tmp / "container"
         wiki_path = container / "wiki"
         target_root = container / "wts" / "my-repo"
 
@@ -378,8 +378,8 @@ def test_hardlink_inode_skip_idempotent() -> None:
     filtered when SLUG absent). Only the hardlink is created on the first call.
     The second call finds matching inodes and skips.
     """
-    with tempfile.TemporaryDirectory() as tmp:
-        container = Path(tmp) / "container"
+    with safe_temp_dir() as tmp:
+        container = tmp / "container"
         wiki_path = container / "wiki"
         target_root = container / "wts" / "my-repo"
 
@@ -426,8 +426,8 @@ def test_hardlink_inode_skip_idempotent() -> None:
 
 def test_hardlink_inode_mismatch_backup_and_recreate() -> None:
     """Pre-existing file at link_path with wrong inode is backed up and recreated."""
-    with tempfile.TemporaryDirectory() as tmp:
-        container = Path(tmp) / "container"
+    with safe_temp_dir() as tmp:
+        container = tmp / "container"
         wiki_path = container / "wiki"
         target_root = container / "wts" / "my-repo"
 
@@ -488,9 +488,9 @@ def test_all_entries_filtered_return_empty_lists() -> None:
     Note: read_junctions falls back to _JUNCTION_DEFAULTS for a truly empty
     junctions block; _ALL_SLUG_CFG avoids that by providing an explicit entry.
     """
-    with tempfile.TemporaryDirectory() as tmp:
-        wiki_path = Path(tmp) / "wiki"
-        target_root = Path(tmp) / "worktree"
+    with safe_temp_dir() as tmp:
+        wiki_path = tmp / "wiki"
+        target_root = tmp / "worktree"
 
         _make_minimal_wiki(wiki_path, _ALL_SLUG_CFG)
         target_root.mkdir()
@@ -498,7 +498,7 @@ def test_all_entries_filtered_return_empty_lists() -> None:
         tokens = {
             "HUB_PATH": str(target_root),
             "CWD_PATH": str(target_root),
-            "CONTAINER_PATH": str(Path(tmp)),
+            "CONTAINER_PATH": str(tmp),
             "WIKI_PATH": str(wiki_path),
             "REPO": "repo",
             # no SLUG -> every entry is filtered
@@ -521,16 +521,16 @@ def test_all_entries_filtered_return_empty_lists() -> None:
 
 def test_cross_volume_hardlink_raises_clear_error() -> None:
     """OSError from hardlink_to (cross-volume) is re-raised as ValueError naming paths."""
-    with tempfile.TemporaryDirectory() as tmp:
-        wiki_path = Path(tmp) / "wiki"
-        target_root = Path(tmp) / "worktree"
+    with safe_temp_dir() as tmp:
+        wiki_path = tmp / "wiki"
+        target_root = tmp / "worktree"
         _make_minimal_wiki(wiki_path, {"junctions": {}, "hardlinks": {"tasks.md": "<WIKI_PATH>/Home.md"}})
         target_root.mkdir()
 
         tokens = {
             "HUB_PATH": str(target_root),
             "CWD_PATH": str(target_root),
-            "CONTAINER_PATH": str(Path(tmp)),
+            "CONTAINER_PATH": str(tmp),
             "WIKI_PATH": str(wiki_path),
             "REPO": "repo",
         }
@@ -583,8 +583,8 @@ def test_portal_flow_integration() -> None:
     """
     import _junction as junction_mod  # real junction helper
 
-    with tempfile.TemporaryDirectory() as tmp:
-        container = Path(tmp) / "container"
+    with safe_temp_dir() as tmp:
+        container = tmp / "container"
         wiki_path = container / "wiki"
         portals = container / "portals"
         target_root = container / "wts" / "my-task"
@@ -666,8 +666,8 @@ def test_portal_flow_integration() -> None:
 
 def test_create_hub_links_handles_missing_hardlinks_block() -> None:
     """No hardlinks: block in config -> hardlinks result is empty, junctions created."""
-    with tempfile.TemporaryDirectory() as tmp:
-        container = Path(tmp) / "container"
+    with safe_temp_dir() as tmp:
+        container = tmp / "container"
         wiki_path = container / "wiki"
         target_root = container / "wts" / "my-repo"
 
@@ -704,8 +704,8 @@ def test_create_hub_links_handles_missing_hardlinks_block() -> None:
 
 def test_create_hub_links_handles_null_hardlinks_block() -> None:
     """hardlinks: null in config -> hardlinks result is empty, junctions created."""
-    with tempfile.TemporaryDirectory() as tmp:
-        container = Path(tmp) / "container"
+    with safe_temp_dir() as tmp:
+        container = tmp / "container"
         wiki_path = container / "wiki"
         target_root = container / "wts" / "my-repo"
 
