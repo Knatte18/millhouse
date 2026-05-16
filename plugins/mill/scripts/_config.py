@@ -23,10 +23,55 @@ set_local_wiki_overrides(cfg_path, repo_url, branch) -> bool
 """
 from __future__ import annotations
 
+import copy
+import os
+import sys
 from pathlib import Path
 
 import yaml
 import _machine
+
+__all__ = [
+    "load_config",
+    "deep_merge",
+    "set_local_wiki_overrides",
+    "ENV_REGISTRY",
+    "apply_env_overrides",
+]
+
+ENV_REGISTRY = {
+    "MILL_DISCUSSION_REVIEWER": ("roles", "discussion-review", "holistic", "reviewer"),
+    "MILL_PLAN_REVIEWER":       ("roles", "plan-review",       "holistic", "reviewer"),
+    "MILL_PLAN_BATCH_REVIEWER": ("roles", "plan-review",       "batch",    "reviewer"),
+    "MILL_CODE_REVIEWER":       ("roles", "code-review",       "holistic", "reviewer"),
+    "MILL_CODE_BATCH_REVIEWER": ("roles", "code-review",       "batch",    "reviewer"),
+    "MILL_IMPLEMENTER":         ("roles", "implementer",       "model"),
+}
+
+
+def apply_env_overrides(cfg: dict) -> dict:
+    """Apply environment variable overrides to a config dict.
+
+    For each entry in ENV_REGISTRY, reads the corresponding environment variable.
+    If the value is non-empty, walks the key tuple in the config and sets the final
+    segment to the env value. Empty-string env values are treated as unset.
+
+    Args:
+        cfg: Base configuration dict.
+
+    Returns:
+        New dict with env overrides applied.
+    """
+    result = copy.deepcopy(cfg)
+    for env_var, key_tuple in ENV_REGISTRY.items():
+        env_val = os.environ.get(env_var, "")
+        if not env_val:
+            continue
+        current = result
+        for seg in key_tuple[:-1]:
+            current = current.setdefault(seg, {})
+        current[key_tuple[-1]] = env_val
+    return result
 
 
 def load_config(wiki_path: Path, worktree_root: Path) -> dict:
