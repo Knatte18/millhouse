@@ -34,7 +34,9 @@ implementing  '2026-05-16T17:14:35Z'
 ```yaml
 batches:
   - name: foundation
-    state: pending
+    state: running
+    implementer_session: dbed5794-ddad-44c2-8689-82ae1610426c
+    start_sha: 76f213e3936d54a4e8912dc04fbf79a9af3e40fb
   - name: loaders-refactor
     state: pending
   - name: setup-migration
