@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-foundation
 slug: config-move-to-hub
 branch: hanf/config-move-to-hub
 plan: _mill/plan
@@ -27,6 +27,7 @@ plan-review-r4  '2026-05-16T17:12:40Z'
 plan-review-r5  '2026-05-16T17:12:40Z'
 planned  '2026-05-16T17:12:40Z'
 implementing  '2026-05-16T17:14:35Z'
+approved-foundation  '2026-05-16T17:17:37Z'
 ```
 
 ## Batches
@@ -34,7 +35,7 @@ implementing  '2026-05-16T17:14:35Z'
 ```yaml
 batches:
   - name: foundation
-    state: running
+    state: approved
     implementer_session: dbed5794-ddad-44c2-8689-82ae1610426c
     start_sha: 76f213e3936d54a4e8912dc04fbf79a9af3e40fb
   - name: loaders-refactor
