@@ -54,8 +54,10 @@ silent-schema-rot problem.
 
 - New tracked file `mill-config.yaml` at the hub repo root, committed to the
   main branch.
-- Three-layer overlay in `_config.load_config` and `_review_common.load_config`:
-  plugin template → `mill-config.yaml` → `.millhouse/config.local.yaml`.
+- Four-layer overlay in `_config.load_config` and `_review_common.load_config`:
+  plugin template → `mill-config.yaml` → `~/.millhouse/config.machine.yaml` →
+  `.millhouse/config.local.yaml`. The machine layer is **preserved** from
+  the current implementation (see Decision: Overlay precedence below).
 - Two-layer overlay in `_reviewers.load`: plugin template
   (`${CLAUDE_PLUGIN_ROOT}/templates/mill-agents.yaml`) → `.millhouse/agents.local.yaml`.
 - Unknown-key validation against the plugin template; warns on stderr, does
@@ -160,17 +162,29 @@ silent-schema-rot problem.
 - **Rejected:** State YAML file (overkill for a single boolean); env var
   (doesn't survive between subprocess invocations).
 
-### Overlay precedence: plugin → repo → local
+### Overlay precedence: plugin -> repo -> machine -> local
 
-- **Decision:** Last wins. For config: plugin template → `mill-config.yaml`
-  → `.millhouse/config.local.yaml`. For agents: plugin template →
-  `.millhouse/agents.local.yaml`.
-- **Rationale:** Local-machine should always be able to override repo
-  defaults. Plugin defaults must be the floor so new plugin keys appear
-  automatically.
-- **Rejected:** Repo-wins-over-local (would make per-machine experimentation
-  impossible without committing); template-wins-over-repo (defeats the
-  whole point of a tracked repo override).
+- **Decision:** Four layers, last wins. For config: plugin template
+  (`${CLAUDE_PLUGIN_ROOT}/templates/mill-config.yaml`) ->
+  `mill-config.yaml` at the hub repo root -> `~/.millhouse/config.machine.yaml`
+  (per-user, exists today) -> `.millhouse/config.local.yaml` (per-worktree).
+  For agents: plugin template (`${CLAUDE_PLUGIN_ROOT}/templates/mill-agents.yaml`)
+  -> `.millhouse/agents.local.yaml`. No machine layer for agents -- the
+  catalogue is shared across all hubs on the machine via the plugin
+  template, and per-hub variations belong in the local file.
+- **Rationale:** The current implementation already has a per-user
+  machine layer between wiki and local (`_config.py:66`,
+  `_review_common.py:1036`); the migration preserves it. The semantic
+  meaning is "operator-wide defaults that apply across every hub on this
+  machine" -- e.g. an operator who always wants longer LLM timeouts.
+  Plugin defaults must be the floor so new plugin keys appear
+  automatically. Per-worktree local must win so an in-flight task can
+  override anything without committing.
+- **Rejected:** Drop the machine layer (would silently remove a feature
+  the current code supports and the `plugins/mill/templates/config.machine.yaml`
+  template ships); repo-wins-over-local (would make per-machine
+  experimentation impossible without committing); template-wins-over-repo
+  (defeats the whole point of a tracked repo override).
 
 ### Overlay merge: deep for dicts, replace for lists
 
@@ -341,11 +355,16 @@ silent-schema-rot problem.
 ### Current config load path
 
 `plugins/mill/scripts/_config.py:32-80` defines `load_config(wiki_path,
-worktree_root) -> dict`, which deep-merges three layers:
+worktree_root) -> dict`, which deep-merges three layers today:
 
 1. `wiki_path / "config.yaml"` (lenient; returns `{}` if missing)
-2. `~/.millhouse/config.machine.yaml`
+2. `~/.millhouse/config.machine.yaml` (per-user, via `_machine.load_layer()`)
 3. `worktree_root / ".millhouse/config.local.yaml"`
+
+After this task, the wiki layer is replaced by two new layers (plugin
+template + repo-root `mill-config.yaml`), giving four layers in total:
+plugin -> repo -> machine -> local. The machine layer is preserved
+unchanged.
 
 `plugins/mill/scripts/_review_common.py:1017-1052` defines a parallel
 `load_config(wiki_root, mill_dir) -> dict` with the same shape but
@@ -375,12 +394,39 @@ haven't yet run mill-setup); the fallback target becomes
 template is absent (which should not happen in normal installs but does
 in tests).
 
-### `autonomous_mode` is unread
+### `autonomous_mode` callsites and intermediate state
 
-The exploration report confirms `cfg["pipeline"]["autonomous_mode"]` is
-referenced only in SKILL.md prose, never in Python. Removing it from
-the schema is safe — no production code-path changes. The `.flag`
-file API will be wired up by mill-autofix in a separate task.
+`cfg["pipeline"]["autonomous_mode"]` has two live callsites today, both
+in skill markdown that runs inline Python:
+
+- `plugins/mill/skills/mill-autofix/SKILL.md:124` -- inline Python that
+  writes `cfg.setdefault("pipeline", {})["autonomous_mode"] = True` into
+  `.millhouse/config.local.yaml` before launching an autonomous run, and
+  restores it on every exit path (cleanup phase).
+- `plugins/mill/skills/mill-go/SKILL.md:232` -- reads the deep-merged
+  config to gate the "stuck" escalation prompt under autonomous mode.
+
+Neither is Python source under `plugins/mill/scripts/`, but both are
+active callsites the moment the skills run. Removing the key from the
+plugin template / wiki template means:
+
+1. mill-autofix continues to write the key into
+   `.millhouse/config.local.yaml`. Unknown-key validation (warn-only)
+   emits a stderr warning on subsequent loads but does not fail.
+2. mill-go's read returns the value mill-autofix wrote, so autonomous
+   mode keeps working through the intermediate state.
+3. A follow-up task migrates mill-autofix to set
+   `.millhouse/autonomous.flag` and mill-go to read it via the new
+   `_autonomous.is_autonomous(hub_dir)` helper, after which the
+   `pipeline.autonomous_mode` key becomes silent dead state in old
+   local files (and the unknown-key warning prompts cleanup).
+
+This intermediate state is intentional and functionally
+non-breaking *because* unknown-key validation is warn-only, not
+fail. The `.flag` file API ships in this task; the skill-side
+migration ships in a follow-up so that this PR stays focused on
+config plumbing and doesn't drag mill-autofix's exit-path logic
+into scope.
 
 ### `_paths.py` surface
 
