@@ -44,7 +44,7 @@ Batch-local decisions:
 
   1. Resolve `git_root = _paths.resolve_git_root()`. (The helper itself refuses to run when cwd is inside the wiki.) Print `[migrate] hub root: <git_root>` (ASCII).
   2. Resolve `wiki_path = _paths.resolve_wiki_path(git_root)`. If the resolution raises (no wiki configured), print `[migrate] no wiki configured -- nothing to migrate` and return 0.
-  3. Resolve plugin-template paths: `plugin_root = os.environ.get("CLAUDE_PLUGIN_ROOT") or (Path(__file__).resolve().parent.parent)`. `plugin_config_template = Path(plugin_root) / "templates" / "mill-config.yaml"`. `plugin_agents_template = Path(plugin_root) / "templates" / "mill-agents.yaml"`. (Match the helper logic from `_config._resolve_plugin_template_path` -- prefer importing that helper from `_config` if available; otherwise inline the two-line resolution. Do NOT depend on import order subtleties.)
+  3. Resolve plugin-template paths: `plugin_root = os.environ.get("CLAUDE_PLUGIN_ROOT") or (Path(__file__).resolve().parent.parent)`. `plugin_config_template = Path(plugin_root) / "templates" / "mill-config.yaml"`. `plugin_agents_template = Path(plugin_root) / "templates" / "mill-agents.yaml"`. (Match the helper logic from `_config.resolve_plugin_template_path` -- prefer importing that helper from `_config` if available; otherwise inline the two-line resolution. Do NOT depend on import order subtleties.)
   4. **Config migration:**
      - `wiki_config = wiki_path / "config.yaml"`. `hub_config = git_root / "mill-config.yaml"`.
      - If `wiki_config` does NOT exist: print `[migrate] no wiki/config.yaml -- config migration skipped` and proceed to agents migration.

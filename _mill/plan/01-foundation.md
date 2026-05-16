@@ -17,7 +17,7 @@ External interface for next batches: `_paths.resolve_mill_config_path(repo_root)
 
 Batch-local decisions:
 
-- The new `mill-agents.yaml` plugin template's content is a verbatim copy of production `C:/Code/millhouse/wiki/agents.yaml` (12 entries). No edits to entries themselves -- only the header comment is new.
+- The new `mill-agents.yaml` plugin template's content is a verbatim copy of production `C:/Code/millhouse/wiki/agents.yaml` (14 entries). No edits to entries themselves -- only the header comment is new.
 - The new `mill-config.yaml` plugin template's content is a verbatim copy of the existing plugin template `plugins/mill/templates/wiki-config.yaml`, modulo the header comment block which is rewritten to document overlay precedence + env-var registry. The existing template does NOT contain `pipeline.autonomous_mode`, so no key-removal is needed in this batch.
 
 ## Cards

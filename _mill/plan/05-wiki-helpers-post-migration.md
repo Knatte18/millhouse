@@ -77,7 +77,17 @@ Batch-local decisions:
 
   After all edits, re-grep `_wiki.health_check(` across `plugins/` -- the only references MUST be the function definition and the two mill-go SKILL.md call sites.
 
-  **IMPORTANT -- existing file:** `plugins/mill/unit_tests/test-wiki.py` already exists with ~426 lines covering `wiki_lock`, re-entrancy, stale-self-lock, `sync_pull`, `write_commit_push`, `clone_or_init` (8 scenarios), and `health_check`. Do NOT create a new file or overwrite it. Read the existing file first to understand the test framework and runner pattern, then APPEND the following new test functions to the existing file (add them to the `main()` test list too):
+  **IMPORTANT -- existing file:** `plugins/mill/unit_tests/test-wiki.py` already exists with ~426 lines covering `wiki_lock`, re-entrancy, stale-self-lock, `sync_pull`, `write_commit_push`, `clone_or_init` (8 scenarios), and `health_check`. Do NOT create a new file or overwrite it. Read the existing file first to understand the test framework and runner pattern.
+
+  **UPDATE two existing `health_check` tests BEFORE appending the new ones.** The file currently contains two tests that exercise the old `health_check(wiki_path: Path)` signature and will fail under the new implementation:
+
+  - Test (g) -- the "happy path" test that creates `config.yaml` at a wiki path and asserts `health_check` returns `None`. After the signature change, the call becomes `health_check(hub_root)` and the new code looks for `hub_root / "mill-config.yaml"`, not `wiki/config.yaml`. Update this test: pass a `tmp_hub` dir as `hub_root`, create `tmp_hub / "mill-config.yaml"` (touch -- no content needed), call `_wiki.health_check(tmp_hub)`, assert the result is `None`.
+
+  - Test (h) -- the "raises on missing config" test that asserts `WikiHealthError` is raised and checks `assert str(wiki / "config.yaml") in str(whe)`. After the change, the error message names `mill-config.yaml` and `None` (the `wiki_cfg` value when `resolve_wiki_path` raises `SystemExit`). Update this test: create `tmp_hub` with NO `mill-config.yaml`; monkeypatch `_paths.resolve_wiki_path` to raise `SystemExit` (so the wiki fallback also fails); call `_wiki.health_check(tmp_hub)`; assert `WikiHealthError` is raised; assert the exception message contains `"mill-config.yaml"`. Use the same monkeypatching mechanism already used elsewhere in the file (`unittest.mock.patch`).
+
+  Test (i) -- if one exists that checks "hub directory does not exist → raise with `hub_root` in message" -- passes unchanged; do not touch it.
+
+  After updating (g) and (h), APPEND the following new test functions to the existing file (add them to the `main()` test list too):
 
   - `test_read_junctions_from_mill_config` -- create `tmp_hub / "mill-config.yaml"` with a `junctions:` block (e.g. `{".wiki": "<WIKI_PATH>", ".portals": "../portals"}`); call `_wiki.read_junctions(tmp_hub)`; assert the returned dict contains both junction entries.
   - `test_read_junctions_falls_back_to_wiki` -- monkeypatch `_paths.resolve_wiki_path` to return a sibling tmp dir; write `<wiki>/config.yaml` with a `junctions:` block; ensure no `mill-config.yaml` at hub root; call `_wiki.read_junctions(tmp_hub)`; assert the wiki-sourced block is returned.
