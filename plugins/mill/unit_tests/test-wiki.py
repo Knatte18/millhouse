@@ -16,6 +16,7 @@ from unittest.mock import MagicMock, patch
 HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
+import _paths  # noqa: E402
 import _wiki  # noqa: E402
 
 
@@ -371,52 +372,127 @@ def main() -> int:
     except Exception as exc:
         fail("clone_or_init: reachability failure from ls-remote", exc)
 
-    # --- (g) health_check passes when config.yaml present ---
+    # --- (g) health_check passes when mill-config.yaml present ---
     try:
         with tempfile.TemporaryDirectory() as tmp_str:
-            wiki = Path(tmp_str)
-            (wiki / "config.yaml").write_text("repo: test\n", encoding="utf-8")
-            result = _wiki.health_check(wiki)
+            tmp_hub = Path(tmp_str)
+            (tmp_hub / "mill-config.yaml").write_text("repo: test\n", encoding="utf-8")
+            result = _wiki.health_check(tmp_hub)
             assert result is None, f"health_check must return None, got {result!r}"
-        ok("health_check: returns None when config.yaml present")
+        ok("health_check: returns None when mill-config.yaml present")
     except Exception as exc:
-        fail("health_check: returns None when config.yaml present", exc)
+        fail("health_check: returns None when mill-config.yaml present", exc)
 
-    # --- (h) health_check raises when config.yaml missing ---
+    # --- (h) health_check raises when neither mill-config.yaml nor wiki config exists ---
     try:
         with tempfile.TemporaryDirectory() as tmp_str:
-            wiki = Path(tmp_str)
+            tmp_hub = Path(tmp_str)
             raised = False
-            try:
-                _wiki.health_check(wiki)
-            except _wiki.WikiHealthError as whe:
-                raised = True
-                assert str(wiki / "config.yaml") in str(whe), \
-                    f"config path missing from message: {whe}"
+            # Mock _paths.resolve_wiki_path to raise SystemExit (wiki lookup fails)
+            import _paths
+            with patch.object(_paths, "resolve_wiki_path", side_effect=SystemExit("wiki not found")):
+                try:
+                    _wiki.health_check(tmp_hub)
+                except _wiki.WikiHealthError as whe:
+                    raised = True
+                    assert "mill-config.yaml" in str(whe), \
+                        f"mill-config.yaml missing from message: {whe}"
             if not raised:
-                raise AssertionError("health_check did not raise for missing config.yaml")
-        ok("health_check: raises when config.yaml missing")
+                raise AssertionError("health_check did not raise for missing configs")
+        ok("health_check: raises when neither mill-config.yaml nor wiki config exists")
     except Exception as exc:
-        fail("health_check: raises when config.yaml missing", exc)
+        fail("health_check: raises when neither mill-config.yaml nor wiki config exists", exc)
 
-    # --- (i) health_check raises when wiki dir missing ---
+    # --- (i) health_check raises when hub dir missing ---
     try:
         with tempfile.TemporaryDirectory() as tmp_str:
-            nonexistent = Path(tmp_str) / "nonexistent-wiki"
+            nonexistent = Path(tmp_str) / "nonexistent-hub"
             raised = False
             try:
                 _wiki.health_check(nonexistent)
             except _wiki.WikiHealthError as whe:
                 raised = True
                 assert str(nonexistent) in str(whe), \
-                    f"wiki path missing from message: {whe}"
+                    f"hub path missing from message: {whe}"
                 assert whe.wiki_path == nonexistent, \
                     f"wiki_path attribute mismatch: {whe.wiki_path!r} != {nonexistent!r}"
             if not raised:
-                raise AssertionError("health_check did not raise for missing wiki dir")
-        ok("health_check: raises when wiki dir missing")
+                raise AssertionError("health_check did not raise for missing hub dir")
+        ok("health_check: raises when hub dir missing")
     except Exception as exc:
-        fail("health_check: raises when wiki dir missing", exc)
+        fail("health_check: raises when hub dir missing", exc)
+
+    # --- (j) read_junctions from mill-config.yaml ---
+    try:
+        with tempfile.TemporaryDirectory() as tmp_str:
+            tmp_hub = Path(tmp_str)
+            mill_cfg = {
+                "junctions": {
+                    ".wiki": "<WIKI_PATH>",
+                    ".portals": "../portals"
+                }
+            }
+            import yaml as yaml_module
+            (tmp_hub / "mill-config.yaml").write_text(yaml_module.dump(mill_cfg), encoding="utf-8")
+            result = _wiki.read_junctions(tmp_hub)
+            assert ".wiki" in result and ".portals" in result, \
+                f"expected junctions missing from result: {result}"
+            assert result[".wiki"] == "<WIKI_PATH>", \
+                f"junction value mismatch: {result['.wiki']}"
+        ok("read_junctions: reads from mill-config.yaml")
+    except Exception as exc:
+        fail("read_junctions: reads from mill-config.yaml", exc)
+
+    # --- (k) read_junctions falls back to wiki config ---
+    try:
+        with tempfile.TemporaryDirectory() as tmp_str:
+            tmp_hub = Path(tmp_str)
+            # No mill-config.yaml at hub; mock wiki path resolution
+            wiki_cfg = {
+                "junctions": {
+                    ".wiki": "<WIKI_PATH>"
+                }
+            }
+            import yaml as yaml_module
+            with tempfile.TemporaryDirectory() as wiki_str:
+                wiki_dir = Path(wiki_str)
+                (wiki_dir / "config.yaml").write_text(yaml_module.dump(wiki_cfg), encoding="utf-8")
+                with patch.object(_paths, "resolve_wiki_path", return_value=wiki_dir):
+                    result = _wiki.read_junctions(tmp_hub)
+                    assert ".wiki" in result, f"junction missing from fallback: {result}"
+        ok("read_junctions: falls back to wiki config.yaml")
+    except Exception as exc:
+        fail("read_junctions: falls back to wiki config.yaml", exc)
+
+    # --- (l) health_check passes when wiki config present (legacy) ---
+    try:
+        with tempfile.TemporaryDirectory() as tmp_str:
+            tmp_hub = Path(tmp_str)
+            # No mill-config.yaml; legacy wiki config exists
+            with tempfile.TemporaryDirectory() as wiki_str:
+                wiki_dir = Path(wiki_str)
+                (wiki_dir / "config.yaml").write_text("repo: test\n", encoding="utf-8")
+                with patch.object(_paths, "resolve_wiki_path", return_value=wiki_dir):
+                    result = _wiki.health_check(tmp_hub)
+                    assert result is None, f"health_check must return None, got {result!r}"
+        ok("health_check: passes when wiki config.yaml present (legacy)")
+    except Exception as exc:
+        fail("health_check: passes when wiki config.yaml present (legacy)", exc)
+
+    # --- (m) health_check raises when both sources missing ---
+    try:
+        with tempfile.TemporaryDirectory() as tmp_str:
+            tmp_hub = Path(tmp_str)
+            raised = False
+            with patch.object(_paths, "resolve_wiki_path", side_effect=SystemExit("wiki not found")):
+                try:
+                    _wiki.health_check(tmp_hub)
+                except _wiki.WikiHealthError:
+                    raised = True
+            assert raised, "health_check must raise when both configs missing"
+        ok("health_check: raises when both mill-config.yaml and wiki config missing")
+    except Exception as exc:
+        fail("health_check: raises when both configs missing", exc)
 
     print(f"\n{passed} passed, {failed} failed.")
     return 0 if failed == 0 else 1
