@@ -1,0 +1,81 @@
+# mill-agents.yaml -- the mill agent catalogue.
+#
+# This file is the plugin template for the mill agent catalogue.
+#
+# Overlay precedence (first source wins):
+#   plugin template -> .millhouse/agents.local.yaml
+#
+# Per-machine model swaps belong in `.millhouse/agents.local.yaml`, not here
+# -- this file ships with the plugin.
+#
+# Schema: each entry is keyed by reviewer name and has `type: single|cluster`
+# plus type-specific fields (provider + model for single; workers + handler
+# for cluster).
+
+g25flash:
+  model: gemini-2.5-flash
+  provider: gemini
+  type: single
+g25flash_tool:
+  model: gemini-2.5-flash
+  provider: gemini
+  tooluse: true
+  type: single
+g25pro:
+  model: gemini-2.5-pro
+  provider: gemini
+  type: single
+g25pro_tool:
+  model: gemini-2.5-pro
+  provider: gemini
+  tooluse: true
+  type: single
+g3flash_preview:
+  model: gemini-3-flash-preview
+  provider: gemini
+  type: single
+g3flash_preview_tool:
+  model: gemini-3-flash-preview
+  provider: gemini
+  tooluse: true
+  type: single
+haiku:
+  model: claude-haiku-4-5-20251001
+  provider: claude
+  type: single
+opushigh:
+  effort: high
+  model: claude-opus-4-7
+  provider: claude
+  type: single
+opusmax:
+  effort: max
+  model: claude-opus-4-7
+  provider: claude
+  type: single
+opusmedium:
+  effort: medium
+  model: claude-opus-4-7
+  provider: claude
+  type: single
+sonnethigh:
+  effort: high
+  model: claude-sonnet-4-6
+  provider: claude
+  type: single
+sonnetmax:
+  effort: max
+  model: claude-sonnet-4-6
+  provider: claude
+  type: single
+sonnetmax_tool:
+  effort: max
+  model: claude-sonnet-4-6
+  provider: claude
+  tooluse: true
+  type: single
+sonnetmedium:
+  effort: medium
+  model: claude-sonnet-4-6
+  provider: claude
+  type: single
