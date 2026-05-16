@@ -29,7 +29,7 @@ Bootstrap the mill infrastructure from nothing. Produces a working `.millhouse/`
 - `git remote get-url origin` returns a valid URL
 - `uv` is installed (`uv --version` exits 0); install via `irm https://astral.sh/uv/install.ps1 | iex`
 - `${CLAUDE_PLUGIN_ROOT}/scripts/` contains `_junction.py`, `_wiki.py`, `_subprocess_util.py`, `_render.py`, `_setup.py`
-- `${CLAUDE_PLUGIN_ROOT}/templates/config.local.yaml`, `${CLAUDE_PLUGIN_ROOT}/templates/wiki-config.yaml`, and `${CLAUDE_PLUGIN_ROOT}/templates/Home.md` exist
+- `${CLAUDE_PLUGIN_ROOT}/templates/config.local.yaml`, `${CLAUDE_PLUGIN_ROOT}/templates/mill-config.yaml`, `${CLAUDE_PLUGIN_ROOT}/templates/mill-agents.yaml`, and `${CLAUDE_PLUGIN_ROOT}/templates/Home.md` exist
 
 ## Layout assumed
 
