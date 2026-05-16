@@ -54,22 +54,28 @@ def _git_init(repo: Path) -> None:
 
 
 def _make_hub_with_wiki(slug: str) -> tuple[Path, Path, Path]:
-    """Create a test fixture with hub, wiki clone, and bare remote.
+    """Create a test fixture with hub and wiki repos.
 
-    Returns (hub_path, wiki_path, bare_remote_path).
+    Returns (hub_path, wiki_path, wiki_bare_path).
     """
     fixture_base = SCRATCH / "test-migration" / slug
+    if fixture_base.exists():
+        import shutil
+        shutil.rmtree(fixture_base, ignore_errors=True)
     fixture_base.mkdir(parents=True, exist_ok=True)
 
-    # Create bare remote
-    bare_remote = fixture_base / "wiki.bare"
-    _run(["git", "init", "--bare", str(bare_remote)], cwd=fixture_base, check=True)
-
-    # Create wiki clone
+    # Create wiki repo (will serve as the wiki clone)
     wiki_path = fixture_base / "wiki"
-    _run(["git", "clone", str(bare_remote), str(wiki_path)], cwd=fixture_base, check=True)
-    _run(["git", "-C", str(wiki_path), "config", "user.email", "test@example.com"], cwd=wiki_path, check=True)
-    _run(["git", "-C", str(wiki_path), "config", "user.name", "Test"], cwd=wiki_path, check=True)
+    _git_init(wiki_path)
+
+    # Create bare remote for wiki (for push/pull testing)
+    wiki_bare = fixture_base / "wiki.bare"
+    _run(["git", "init", "--bare", str(wiki_bare)], cwd=fixture_base, check=True)
+    (wiki_bare / "HEAD").write_text("ref: refs/heads/main\n", encoding="utf-8")
+
+    # Add remote to wiki and push
+    _run(["git", "-C", str(wiki_path), "remote", "add", "origin", str(wiki_bare)], cwd=fixture_base, check=True)
+    _run(["git", "-C", str(wiki_path), "push", "-u", "origin", "main"], cwd=fixture_base, check=True)
 
     # Create hub
     hub_path = fixture_base / "hub"
@@ -81,19 +87,20 @@ def _make_hub_with_wiki(slug: str) -> tuple[Path, Path, Path]:
         f"paths:\n  wiki: {wiki_path.as_posix()}\n", encoding="utf-8"
     )
 
-    return hub_path, wiki_path, bare_remote
+    return hub_path, wiki_path, wiki_bare
 
 
 def test_config_migration_plain_copy() -> None:
     """Hub has no mill-config.yaml, wiki has config.yaml. Expect copy and wiki deletion."""
     hub, wiki, _ = _make_hub_with_wiki("plain-copy")
+    fixture_base = wiki.parent
 
     # Create wiki/config.yaml with test content
     wiki_config = wiki / "config.yaml"
     wiki_config.write_text("key: from_wiki_yaml\n", encoding="utf-8")
     _run(["git", "-C", str(wiki), "add", "config.yaml"], cwd=wiki, check=True)
     _run(["git", "-C", str(wiki), "commit", "-m", "add config"], cwd=wiki, check=True)
-    _run(["git", "-C", str(wiki), "push", "-u", "origin", "main"], cwd=wiki, check=True)
+    _run(["git", "-C", str(wiki), "push", "-u", "origin", "main"], cwd=fixture_base, check=True)
 
     # Run migration
     env = {"CLAUDE_PLUGIN_ROOT": str(PLUGIN_ROOT), "PYTHONPATH": str(SCRIPTS)}
@@ -126,6 +133,7 @@ def test_config_migration_plain_copy() -> None:
 def test_config_migration_skip_copy_when_hub_already_has() -> None:
     """Hub already has mill-config.yaml. Expect wiki deletion but no copy."""
     hub, wiki, _ = _make_hub_with_wiki("skip-copy")
+    fixture_base = wiki.parent
 
     # Create existing hub/mill-config.yaml with distinct content
     hub_config = hub / "mill-config.yaml"
@@ -138,7 +146,7 @@ def test_config_migration_skip_copy_when_hub_already_has() -> None:
     wiki_config.write_text("key: from_wiki_yaml\n", encoding="utf-8")
     _run(["git", "-C", str(wiki), "add", "config.yaml"], cwd=wiki, check=True)
     _run(["git", "-C", str(wiki), "commit", "-m", "add config"], cwd=wiki, check=True)
-    _run(["git", "-C", str(wiki), "push", "-u", "origin", "main"], cwd=wiki, check=True)
+    _run(["git", "-C", str(wiki), "push", "-u", "origin", "main"], cwd=fixture_base, check=True)
 
     # Run migration
     env = {"CLAUDE_PLUGIN_ROOT": str(PLUGIN_ROOT), "PYTHONPATH": str(SCRIPTS)}
@@ -161,6 +169,7 @@ def test_config_migration_skip_copy_when_hub_already_has() -> None:
 def test_agents_migration_identical_deletes() -> None:
     """wiki/agents.yaml identical to plugin template. Expect deletion."""
     hub, wiki, _ = _make_hub_with_wiki("agents-identical")
+    fixture_base = wiki.parent
 
     # Create wiki/agents.yaml with content identical to plugin template
     template_path = PLUGIN_ROOT / "templates" / "mill-agents.yaml"
@@ -169,7 +178,7 @@ def test_agents_migration_identical_deletes() -> None:
     wiki_agents.write_text(template_content, encoding="utf-8")
     _run(["git", "-C", str(wiki), "add", "agents.yaml"], cwd=wiki, check=True)
     _run(["git", "-C", str(wiki), "commit", "-m", "add agents"], cwd=wiki, check=True)
-    _run(["git", "-C", str(wiki), "push", "-u", "origin", "main"], cwd=wiki, check=True)
+    _run(["git", "-C", str(wiki), "push", "-u", "origin", "main"], cwd=fixture_base, check=True)
 
     # Run migration
     env = {"CLAUDE_PLUGIN_ROOT": str(PLUGIN_ROOT), "PYTHONPATH": str(SCRIPTS)}
@@ -192,13 +201,14 @@ def test_agents_migration_identical_deletes() -> None:
 def test_agents_migration_different_warns_and_skips() -> None:
     """wiki/agents.yaml has extra entry. Expect warning and skip."""
     hub, wiki, _ = _make_hub_with_wiki("agents-different")
+    fixture_base = wiki.parent
 
     # Create wiki/agents.yaml with extra entry
     wiki_agents = wiki / "agents.yaml"
     wiki_agents.write_text("custom_agent:\n  model: custom\n  provider: custom\n  type: single\n", encoding="utf-8")
     _run(["git", "-C", str(wiki), "add", "agents.yaml"], cwd=wiki, check=True)
     _run(["git", "-C", str(wiki), "commit", "-m", "add agents"], cwd=wiki, check=True)
-    _run(["git", "-C", str(wiki), "push", "-u", "origin", "main"], cwd=wiki, check=True)
+    _run(["git", "-C", str(wiki), "push", "-u", "origin", "main"], cwd=fixture_base, check=True)
 
     # Run migration
     env = {"CLAUDE_PLUGIN_ROOT": str(PLUGIN_ROOT), "PYTHONPATH": str(SCRIPTS)}
@@ -222,6 +232,7 @@ def test_agents_migration_different_warns_and_skips() -> None:
 def test_idempotency() -> None:
     """Run migration twice. Second run should be a no-op."""
     hub, wiki, _ = _make_hub_with_wiki("idempotency")
+    fixture_base = wiki.parent
 
     # Create wiki/config.yaml and agents.yaml (identical to template)
     wiki_config = wiki / "config.yaml"
@@ -232,7 +243,7 @@ def test_idempotency() -> None:
     wiki_agents.write_text(template_content, encoding="utf-8")
     _run(["git", "-C", str(wiki), "add", "."], cwd=wiki, check=True)
     _run(["git", "-C", str(wiki), "commit", "-m", "init"], cwd=wiki, check=True)
-    _run(["git", "-C", str(wiki), "push", "-u", "origin", "main"], cwd=wiki, check=True)
+    _run(["git", "-C", str(wiki), "push", "-u", "origin", "main"], cwd=fixture_base, check=True)
 
     # First run
     env = {"CLAUDE_PLUGIN_ROOT": str(PLUGIN_ROOT), "PYTHONPATH": str(SCRIPTS)}
