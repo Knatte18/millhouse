@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-wiki-helpers-post-migration
+phase: approved-cleanup-deletions
 slug: config-move-to-hub
 branch: hanf/config-move-to-hub
 plan: _mill/plan
@@ -31,6 +31,7 @@ approved-foundation  '2026-05-16T17:17:37Z'
 approved-loaders-refactor  '2026-05-16T17:27:52Z'
 approved-setup-migration  '2026-05-16T17:32:51Z'
 approved-wiki-helpers-post-migration  '2026-05-16T17:36:10Z'
+approved-cleanup-deletions  '2026-05-16T17:43:35Z'
 ```
 
 ## Batches
@@ -54,7 +55,7 @@ batches:
     implementer_session: df163020-2f43-404e-bf68-120edf12d80c
     start_sha: 8004a8e4d2aa91a0e917e1a6207edb504d0e0092
   - name: cleanup-deletions
-    state: running
+    state: approved
     implementer_session: ab4dd4b5-5427-41fd-a2d6-b5c9cb2723a2
     start_sha: 3c7dbe9aa5e55497107f67118a465e4fa4c5dce9
 ```
