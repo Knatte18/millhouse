@@ -62,7 +62,7 @@ Batch-local decisions:
 
   Idempotency: a second invocation after a successful migration finds `wiki/config.yaml` absent (step 4 exits early) and `wiki/agents.yaml` absent (step 5 exits early). The machine-config notice still prints; that is acceptable. Exit code stays 0.
 
-  Error handling: wrap step 4's git operations in a try/except that catches `_subprocess_util.SubprocessError` (or whatever the local convention is); on failure, print `[migrate] ERROR: <message>` to stderr and return 1. Do NOT swallow git failures silently. All exceptions bubble up to a top-level catch in `main()` that converts to exit code 1.
+  Error handling: `_subprocess_util.run()` always returns a `CompletedProcess` -- it does NOT raise a `SubprocessError` class (no such class exists in `_subprocess_util`). After each `_subprocess_util.run(...)` call in the git operation sequences, check `result.returncode != 0` immediately; on failure, print `[migrate] ERROR: <message>` to stderr (ASCII) and return 1. Do NOT pass `check=True` to `_subprocess_util.run` -- that raises `subprocess.CalledProcessError`, which would bypass the "nothing to commit" tolerance needed for the idempotent delete-if-already-deleted branch. A top-level `try/except Exception as exc: print(f"[migrate] ERROR: {exc}", file=sys.stderr); return 1` in `main()` covers unexpected I/O errors (`OSError`, `FileNotFoundError`, etc.). Do NOT swallow git failures silently.
 
   All print statements ASCII only. Use only `_paths`, `_wiki`, `_subprocess_util` for filesystem/git helpers -- do NOT call `subprocess.run` directly (consistency with the rest of `scripts/`).
 

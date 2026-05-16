@@ -59,7 +59,7 @@ Batch-local decisions:
 - **Edits:**
   - `plugins/mill/scripts/_wiki.py`
   - `plugins/mill/skills/mill-go/SKILL.md`
-- **Creates:**
+- **Edits:**
   - `plugins/mill/unit_tests/test-wiki.py`
 - **Deletes:** none
 - **Requirements:** In `_wiki.py`, change `health_check`'s signature from `(wiki_path: Path)` to `(hub_root: Path)`. Rewrite the body to verify that at least one config source exists:
@@ -77,7 +77,15 @@ Batch-local decisions:
 
   After all edits, re-grep `_wiki.health_check(` across `plugins/` -- the only references MUST be the function definition and the two mill-go SKILL.md call sites.
 
-  Create a new unit-test file `plugins/mill/unit_tests/test-wiki.py` (under 100 lines). Match the test framework used by adjacent test files (stdlib unittest or pytest -- whichever `test-paths.py` uses). Cover three cases: (a) `test_read_junctions_from_mill_config` -- create a `tmp_path / "mill-config.yaml"` with a `junctions:` block; call `_wiki.read_junctions(tmp_path)`; assert the block is returned. (b) `test_read_junctions_falls_back_to_wiki` -- monkeypatch `_paths.resolve_wiki_path` to return a sibling tmp dir with `config.yaml` containing a `junctions:` block; no `mill-config.yaml` at hub root; assert the wiki block is returned. (c) `test_health_check_passes_when_mill_config_present` and `test_health_check_passes_when_wiki_config_present` and `test_health_check_raises_when_neither_present` -- corresponding three states for `health_check`. All tests use `tmp_path` and monkeypatching; no real git, no real wiki.
+  **IMPORTANT -- existing file:** `plugins/mill/unit_tests/test-wiki.py` already exists with ~426 lines covering `wiki_lock`, re-entrancy, stale-self-lock, `sync_pull`, `write_commit_push`, `clone_or_init` (8 scenarios), and `health_check`. Do NOT create a new file or overwrite it. Read the existing file first to understand the test framework and runner pattern, then APPEND the following new test functions to the existing file (add them to the `main()` test list too):
+
+  - `test_read_junctions_from_mill_config` -- create `tmp_hub / "mill-config.yaml"` with a `junctions:` block (e.g. `{".wiki": "<WIKI_PATH>", ".portals": "../portals"}`); call `_wiki.read_junctions(tmp_hub)`; assert the returned dict contains both junction entries.
+  - `test_read_junctions_falls_back_to_wiki` -- monkeypatch `_paths.resolve_wiki_path` to return a sibling tmp dir; write `<wiki>/config.yaml` with a `junctions:` block; ensure no `mill-config.yaml` at hub root; call `_wiki.read_junctions(tmp_hub)`; assert the wiki-sourced block is returned.
+  - `test_health_check_passes_when_mill_config_present` -- create `tmp_hub / "mill-config.yaml"` (touch, no content needed); call `_wiki.health_check(tmp_hub)`; assert no exception.
+  - `test_health_check_passes_when_wiki_config_present` -- no `mill-config.yaml` at hub root; monkeypatch `_paths.resolve_wiki_path` to return a sibling tmp dir; write `<wiki>/config.yaml` (touch); call `_wiki.health_check(tmp_hub)`; assert no exception.
+  - `test_health_check_raises_when_neither_present` -- no `mill-config.yaml`, monkeypatch `_paths.resolve_wiki_path` to raise `SystemExit`; call `_wiki.health_check(tmp_hub)`; assert `WikiHealthError` is raised.
+
+  Match the monkeypatching style already used in the existing file (the existing tests patch `_subprocess_util.run` via `unittest.mock.patch`; use the same mechanism to patch `_paths.resolve_wiki_path`). All five appended tests use `tempfile.TemporaryDirectory` for fixtures; no real git, no real wiki. Keep the appended section under 100 lines.
 - **Commit:** `refactor(wiki): health_check accepts hub_root with mill-config.yaml or wiki fallback`
 
 ## Batch Tests
