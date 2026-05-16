@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-fixing
+phase: holistic-reviewing
 slug: config-move-to-hub
 branch: hanf/config-move-to-hub
 plan: _mill/plan
@@ -34,6 +34,7 @@ approved-wiki-helpers-post-migration  '2026-05-16T17:36:10Z'
 approved-cleanup-deletions  '2026-05-16T17:43:35Z'
 holistic-reviewing  '2026-05-16T17:43:52Z'
 holistic-fixing  '2026-05-16T17:53:39Z'
+holistic-reviewing  '2026-05-16T18:01:55Z'
 ```
 
 ## Batches
