@@ -22,6 +22,7 @@ import sys
 from pathlib import Path
 
 import _junction
+import _paths
 import _wiki
 
 _TOKEN_RE = re.compile(r"<([A-Za-z][A-Za-z0-9_]*)>")
@@ -80,8 +81,9 @@ def create_hub_links(
             source and target paths named); or ``_junction.resolve_target``
             finding an unknown token after filtering (logic error in caller).
     """
-    junctions_cfg = _wiki.read_junctions(wiki_path)
-    hardlinks_cfg = _wiki.read_hardlinks(wiki_path)
+    hub_root = _paths.resolve_git_root()
+    junctions_cfg = _wiki.read_junctions(hub_root)
+    hardlinks_cfg = _wiki.read_hardlinks(hub_root)
 
     created_junctions: list[Path] = []
     created_hardlinks: list[Path] = []
