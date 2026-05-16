@@ -38,6 +38,11 @@ batches:
     file: 04-cleanup-deletions.md
     depends-on: [2, 3]
     verify: python plugins/mill/unit_tests/run-all.py
+  - number: 5
+    name: wiki-helpers-post-migration
+    file: 05-wiki-helpers-post-migration.md
+    depends-on: [1, 2]
+    verify: python plugins/mill/unit_tests/run-all.py
 ```
 
 ## Shared Decisions
@@ -99,6 +104,8 @@ touch the same file -- a sign of a misplaced dependency._
 - `plugins/mill/scripts/_review_discussion.py`
 - `plugins/mill/scripts/_review_plan.py`
 - `plugins/mill/scripts/_reviewers.py`
+- `plugins/mill/scripts/_setup.py`
+- `plugins/mill/scripts/_wiki.py`
 - `plugins/mill/scripts/millpy-abandon.py`
 - `plugins/mill/scripts/millpy-claim.py`
 - `plugins/mill/scripts/millpy-cleanup.py`
@@ -117,6 +124,7 @@ touch the same file -- a sign of a misplaced dependency._
 - `plugins/mill/scripts/millpy-terminal.py`
 - `plugins/mill/scripts/millpy-validate-plan.py`
 - `plugins/mill/scripts/millpy-vscode.py`
+- `plugins/mill/skills/mill-go/SKILL.md`
 - `plugins/mill/skills/mill-setup/SKILL.md`
 - `plugins/mill/templates/config.machine.yaml`
 - `plugins/mill/templates/mill-agents.yaml`
@@ -129,3 +137,4 @@ touch the same file -- a sign of a misplaced dependency._
 - `plugins/mill/unit_tests/test-paths.py`
 - `plugins/mill/unit_tests/test-review-common.py`
 - `plugins/mill/unit_tests/test-reviewers.py`
+- `plugins/mill/unit_tests/test-wiki.py`
