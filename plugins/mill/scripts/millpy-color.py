@@ -4,8 +4,8 @@ mill-color — override the current worktree's VS Code title-bar color.
 Rewrites ``.vscode/settings.json`` in the current working directory with
 the selected palette color. The window title is preserved from any existing
 settings.json; if settings.json is absent the title is derived from the repo
-short name (via ``_paths.resolve_short_name``) and the slug found in
-``.millhouse/active.slug.md``.
+short name (via ``_paths.resolve_short_name``) and the slug derived from the
+current git branch (via ``_marker.slug_from_branch``).
 
 Usage:
     python mill-color.py <color-name>

@@ -30,7 +30,6 @@ c:/Code/millhouse/wts/<slug>/
   plugins/                        ← (only meaningful in main worktree)
   ... (rest of repo files)
   .millhouse/
-    active.slug.md
     config.local.yaml
   .wiki    -> ../../wiki/              ← junction to wiki clone
   .active  -> ../../portals/<slug>/    ← junction to portal entry for this task
