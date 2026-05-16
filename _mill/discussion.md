@@ -463,11 +463,20 @@ review pipeline.
 strict semantics: raises `ReviewError` if `wiki_root / "config.yaml"` is
 missing. This is the reviewer-side variant.
 
-Nine lenient callsites and eight strict callsites. Every callsite first
-resolves the wiki path via `_paths.resolve_wiki_path(git_root)`. The
-migration changes this: callsites will need `repo_root` (i.e. the git
-toplevel), not `wiki_path`. `_paths.resolve_git_root()` already returns
-`repo_root`; `wiki_path` is no longer needed as a load-config input.
+The earlier exploration estimated 17 callsites total (9 lenient + 8
+strict). That figure was conservative -- a fresh `grep -rn
+'load_config(' plugins/mill/scripts/` is the authoritative source. The
+implementer should run that grep at the start of the migration batch
+and treat the resulting list (minus function definitions, docstrings,
+and self-references inside `_config.py` / `_review_common.py`) as the
+work-item. The expected order of magnitude is twenty-plus callsites;
+do not trust the historical "17" number.
+
+Every callsite first resolves the wiki path via
+`_paths.resolve_wiki_path(git_root)`. The migration changes this:
+callsites will need `repo_root` (i.e. the git toplevel), not
+`wiki_path`. `_paths.resolve_git_root()` already returns `repo_root`;
+`wiki_path` is no longer needed as a load-config input.
 
 ### Current agents load path
 
@@ -488,8 +497,8 @@ in tests).
 
 ### `autonomous_mode` callsites and intermediate state
 
-`cfg["pipeline"]["autonomous_mode"]` has two live callsites today, both
-in skill markdown that runs inline Python:
+`cfg["pipeline"]["autonomous_mode"]` has live callsites today, all in
+skill markdown that runs inline Python:
 
 - `plugins/mill/skills/mill-autofix/SKILL.md:124` -- inline Python that
   writes `cfg.setdefault("pipeline", {})["autonomous_mode"] = True` into
@@ -497,21 +506,32 @@ in skill markdown that runs inline Python:
   restores it on every exit path (cleanup phase).
 - `plugins/mill/skills/mill-go/SKILL.md:232` -- reads the deep-merged
   config to gate the "stuck" escalation prompt under autonomous mode.
+- `plugins/mill/skills/mill-plan/SKILL.md:153` and `:155` -- reads the
+  deep-merged config to gate non-progress and max-rounds blocked
+  behaviour during plan generation.
 
-Neither is Python source under `plugins/mill/scripts/`, but both are
-active callsites the moment the skills run. Removing the key from the
-plugin template / wiki template means:
+None are Python source under `plugins/mill/scripts/`, but all are
+active callsites the moment the skills run. The implementer should
+re-grep `pipeline.autonomous_mode` and `autonomous_mode` across
+`plugins/mill/` before starting the follow-up task to confirm no
+additional callsites exist.
+
+Removing the key from the plugin template / wiki template means:
 
 1. mill-autofix continues to write the key into
    `.millhouse/config.local.yaml`. Unknown-key validation (warn-only)
    emits a stderr warning on subsequent loads but does not fail.
-2. mill-go's read returns the value mill-autofix wrote, so autonomous
-   mode keeps working through the intermediate state.
+2. mill-go and mill-plan's reads return the value mill-autofix wrote,
+   so autonomous mode keeps working through the intermediate state.
 3. A follow-up task migrates mill-autofix to set
-   `.millhouse/autonomous.flag` and mill-go to read it via the new
-   `_autonomous.is_autonomous(hub_dir)` helper, after which the
-   `pipeline.autonomous_mode` key becomes silent dead state in old
-   local files (and the unknown-key warning prompts cleanup).
+   `.millhouse/autonomous.flag` and mill-go **and mill-plan** to read
+   it via the new `_autonomous.is_autonomous(hub_dir)` helper, after
+   which the `pipeline.autonomous_mode` key becomes silent dead state
+   in old local files (and the unknown-key warning prompts cleanup).
+   The follow-up task scope MUST include all three skills (autofix +
+   go + plan) so the migration cuts over atomically; missing any one
+   produces a silent regression where the omitted skill stops
+   honouring autonomous mode.
 
 This intermediate state is intentional and functionally
 non-breaking *because* unknown-key validation is warn-only, not
