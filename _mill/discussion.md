@@ -132,10 +132,16 @@ silent-schema-rot problem.
   generated `mill-config.yaml` themselves.
 - No deletion of the in-process `wiki/agents.yaml` if it differs from the
   template — operator decides.
-- No new behaviour around `autonomous_mode` itself. The flag-file API is
-  added, the schema key is removed, but no production code currently reads
-  `cfg["pipeline"]["autonomous_mode"]` (per the exploration report), so no
-  call sites change behaviour.
+- No new behaviour around `autonomous_mode` from the consuming side.
+  The `.flag` file API is added and the schema key is removed from
+  templates in this task, but the existing SKILL.md callers
+  (mill-autofix writes the key; mill-go and mill-plan read it) keep
+  working through the intermediate state because mill-autofix
+  continues to write the key into `.millhouse/config.local.yaml` and
+  unknown-key validation is warn-only. The follow-up task (see
+  Technical Context) migrates the three skills to the flag-file API.
+  This task does NOT touch the three SKILL.md files; their migration
+  is explicitly out of scope here.
 - No changes to `.scratch/` semantics, junction layout, or wiki-lock logic.
 - No changes to how `Home.md` is written or where it lives.
 - No removal of the `_reviewers.load` agents.yaml → reviewers.yaml fallback
@@ -261,8 +267,16 @@ silent-schema-rot problem.
 - **Scope effects of the removal:**
     - Delete `_machine.load_layer()` callsites in `_config.py` and
       `_review_common.py`.
-    - Delete `plugins/mill/scripts/_machine.py` if no other callers
-      remain.
+    - Delete `plugins/mill/skills/mill-setup/SKILL.md` Phase 4.95
+      ("Probe machine-level config") entirely -- it imports `_machine`
+      and prints a message referencing the to-be-deleted template; with
+      no machine layer there is nothing to probe.
+    - Update mill-setup's "Final summary" section to drop the
+      machine-config bullet (currently at SKILL.md:516) and drop the
+      "Machine config:" format block (currently at SKILL.md:553).
+    - Delete `plugins/mill/scripts/_machine.py` (after the three
+      removals above, no callers remain).
+    - Delete `plugins/mill/unit_tests/test-machine.py`.
     - Delete `plugins/mill/templates/config.machine.yaml`.
     - Existing `~/.millhouse/config.machine.yaml` files on operator
       machines are **silently ignored** after the migration; mill
@@ -272,6 +286,10 @@ silent-schema-rot problem.
       Phase 3.2b: "machine config layer removed -- if you previously
       kept overrides in ~/.millhouse/config.machine.yaml, move them
       into this hub's .millhouse/config.local.yaml".
+    - The implementer should re-grep `_machine`, `machine.yaml`, and
+      `machine_config` across the whole repo at the start of this
+      batch to confirm no additional callers exist beyond the ones
+      listed above. Any new caller is added to the deletion scope.
 - **Rejected:** Keep the machine layer (drops a clean opportunity to
   simplify; the layer's value-per-complexity is low); repo-wins-over-local
   (would make per-machine experimentation impossible without committing);
