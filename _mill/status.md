@@ -39,7 +39,9 @@ batches:
     implementer_session: dbed5794-ddad-44c2-8689-82ae1610426c
     start_sha: 76f213e3936d54a4e8912dc04fbf79a9af3e40fb
   - name: loaders-refactor
-    state: pending
+    state: running
+    implementer_session: cdd955f3-363a-4a12-9c7c-7aaec1a2aa6c
+    start_sha: 9b2734e16fde13597d35a5a69111dc20c03c1508
   - name: setup-migration
     state: pending
   - name: wiki-helpers-post-migration
