@@ -9,10 +9,12 @@ HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "unit_tests"))
 
+import _paths  # noqa: E402
 import _reviewers  # noqa: E402
 from _reviewers import ReviewerError  # noqa: E402
 from _test_cfg import make_minimal_cfg  # noqa: E402
 from _test_registry import make_minimal_registry, write_to  # noqa: E402
+from unittest.mock import patch  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -29,11 +31,25 @@ def _write_yaml(path: Path, text: str) -> None:
 # ---------------------------------------------------------------------------
 
 def test_load_happy_path() -> None:
-    """load() round-trips a valid reviewers.yaml."""
+    """load() round-trips a valid agents.yaml via local overlay."""
     with tempfile.TemporaryDirectory() as tmp:
-        wiki = Path(tmp) / "wiki"
-        write_to(wiki)
-        registry = _reviewers.load(wiki)
+        tmp_path = Path(tmp)
+        hub_dir = tmp_path / "hub"
+        hub_dir.mkdir()
+        # Write registry to local overlay
+        (hub_dir / ".millhouse").mkdir()
+        (hub_dir / ".millhouse" / "agents.local.yaml").write_text(
+            "sonnetmax:\n  type: single\n  provider: claude\n  model: claude-sonnet-4-6\n"
+            "sonnetmax_tool:\n  type: single\n  provider: claude\n  model: claude-sonnet-4-6\n  tooluse: true\n"
+        )
+        with patch.object(
+            _reviewers,
+            "resolve_plugin_template_path",
+            return_value=tmp_path / "nonexistent" / "mill-agents.yaml"
+        ):
+            with patch.object(_paths, "resolve_wiki_path", side_effect=SystemExit):
+                registry = _reviewers.load(hub_dir)
+
         assert "sonnetmax" in registry
         assert registry["sonnetmax"]["type"] == "single"
         assert registry["sonnetmax"]["provider"] == "claude"
@@ -43,84 +59,123 @@ def test_load_happy_path() -> None:
 
 
 def test_load_raises_on_missing_file() -> None:
-    """load() raises ReviewerError when reviewers.yaml is absent."""
+    """load() raises ReviewerError when no source is available."""
     with tempfile.TemporaryDirectory() as tmp:
-        wiki = Path(tmp) / "wiki"
-        wiki.mkdir()
-        try:
-            _reviewers.load(wiki)
-            raise AssertionError("Expected ReviewerError")
-        except ReviewerError as exc:
-            assert "Missing registry" in str(exc)
+        tmp_path = Path(tmp)
+        hub_dir = tmp_path / "hub"
+        hub_dir.mkdir()
+        with patch.object(
+            _reviewers,
+            "resolve_plugin_template_path",
+            return_value=tmp_path / "nonexistent" / "mill-agents.yaml"
+        ):
+            with patch.object(_paths, "resolve_wiki_path", side_effect=SystemExit):
+                try:
+                    _reviewers.load(hub_dir)
+                    raise AssertionError("Expected ReviewerError")
+                except ReviewerError as exc:
+                    assert "Missing registry" in str(exc)
     print("PASS: load raises on missing file")
 
 
 def test_load_raises_single_missing_provider() -> None:
     """load() raises when a single entry is missing 'provider'."""
     with tempfile.TemporaryDirectory() as tmp:
-        wiki = Path(tmp) / "wiki"
-        _write_yaml(
-            wiki / "agents.yaml",
-            "bad:\n  type: single\n  model: claude-sonnet-4-6\n",
+        tmp_path = Path(tmp)
+        hub_dir = tmp_path / "hub"
+        hub_dir.mkdir()
+        (hub_dir / ".millhouse").mkdir()
+        (hub_dir / ".millhouse" / "agents.local.yaml").write_text(
+            "bad:\n  type: single\n  model: claude-sonnet-4-6\n"
         )
-        try:
-            _reviewers.load(wiki)
-            raise AssertionError("Expected ReviewerError")
-        except ReviewerError as exc:
-            assert "provider" in str(exc)
+        with patch.object(
+            _reviewers,
+            "resolve_plugin_template_path",
+            return_value=tmp_path / "nonexistent" / "mill-agents.yaml"
+        ):
+            with patch.object(_paths, "resolve_wiki_path", side_effect=SystemExit):
+                try:
+                    _reviewers.load(hub_dir)
+                    raise AssertionError("Expected ReviewerError")
+                except ReviewerError as exc:
+                    assert "provider" in str(exc)
     print("PASS: load raises single missing provider")
 
 
 def test_load_raises_cluster_missing_workers() -> None:
     """load() raises when a cluster entry is missing 'workers'."""
     with tempfile.TemporaryDirectory() as tmp:
-        wiki = Path(tmp) / "wiki"
-        _write_yaml(
-            wiki / "agents.yaml",
+        tmp_path = Path(tmp)
+        hub_dir = tmp_path / "hub"
+        hub_dir.mkdir()
+        (hub_dir / ".millhouse").mkdir()
+        (hub_dir / ".millhouse" / "agents.local.yaml").write_text(
             "myworker:\n  type: single\n  provider: claude\n  model: claude-sonnet-4-6\n"
-            "mycluster:\n  type: cluster\n  handler:\n    use: myworker\n",
+            "mycluster:\n  type: cluster\n  handler:\n    use: myworker\n"
         )
-        try:
-            _reviewers.load(wiki)
-            raise AssertionError("Expected ReviewerError")
-        except ReviewerError as exc:
-            assert "workers" in str(exc)
+        with patch.object(
+            _reviewers,
+            "resolve_plugin_template_path",
+            return_value=tmp_path / "nonexistent" / "mill-agents.yaml"
+        ):
+            with patch.object(_paths, "resolve_wiki_path", side_effect=SystemExit):
+                try:
+                    _reviewers.load(hub_dir)
+                    raise AssertionError("Expected ReviewerError")
+                except ReviewerError as exc:
+                    assert "workers" in str(exc)
     print("PASS: load raises cluster missing workers")
 
 
 def test_load_raises_cluster_missing_handler() -> None:
     """load() raises when a cluster entry is missing 'handler'."""
     with tempfile.TemporaryDirectory() as tmp:
-        wiki = Path(tmp) / "wiki"
-        _write_yaml(
-            wiki / "agents.yaml",
+        tmp_path = Path(tmp)
+        hub_dir = tmp_path / "hub"
+        hub_dir.mkdir()
+        (hub_dir / ".millhouse").mkdir()
+        (hub_dir / ".millhouse" / "agents.local.yaml").write_text(
             "myworker:\n  type: single\n  provider: claude\n  model: claude-sonnet-4-6\n"
-            "mycluster:\n  type: cluster\n  workers:\n    use: myworker\n    count: 2\n",
+            "mycluster:\n  type: cluster\n  workers:\n    use: myworker\n    count: 2\n"
         )
-        try:
-            _reviewers.load(wiki)
-            raise AssertionError("Expected ReviewerError")
-        except ReviewerError as exc:
-            assert "handler" in str(exc)
+        with patch.object(
+            _reviewers,
+            "resolve_plugin_template_path",
+            return_value=tmp_path / "nonexistent" / "mill-agents.yaml"
+        ):
+            with patch.object(_paths, "resolve_wiki_path", side_effect=SystemExit):
+                try:
+                    _reviewers.load(hub_dir)
+                    raise AssertionError("Expected ReviewerError")
+                except ReviewerError as exc:
+                    assert "handler" in str(exc)
     print("PASS: load raises cluster missing handler")
 
 
 def test_load_raises_cluster_workers_count_non_positive() -> None:
     """load() raises when cluster workers.count is not a positive integer."""
     with tempfile.TemporaryDirectory() as tmp:
-        wiki = Path(tmp) / "wiki"
-        _write_yaml(
-            wiki / "agents.yaml",
+        tmp_path = Path(tmp)
+        hub_dir = tmp_path / "hub"
+        hub_dir.mkdir()
+        (hub_dir / ".millhouse").mkdir()
+        (hub_dir / ".millhouse" / "agents.local.yaml").write_text(
             "myworker:\n  type: single\n  provider: claude\n  model: claude-sonnet-4-6\n"
             "mycluster:\n  type: cluster\n"
             "  workers:\n    use: myworker\n    count: 0\n"
-            "  handler:\n    use: myworker\n",
+            "  handler:\n    use: myworker\n"
         )
-        try:
-            _reviewers.load(wiki)
-            raise AssertionError("Expected ReviewerError")
-        except ReviewerError as exc:
-            assert "count" in str(exc)
+        with patch.object(
+            _reviewers,
+            "resolve_plugin_template_path",
+            return_value=tmp_path / "nonexistent" / "mill-agents.yaml"
+        ):
+            with patch.object(_paths, "resolve_wiki_path", side_effect=SystemExit):
+                try:
+                    _reviewers.load(hub_dir)
+                    raise AssertionError("Expected ReviewerError")
+                except ReviewerError as exc:
+                    assert "count" in str(exc)
     print("PASS: load raises cluster workers.count non-positive")
 
 
@@ -343,12 +398,25 @@ def test_validate_role_refs_missing_raises() -> None:
 
 
 def test_load_falls_back_to_reviewers_yaml() -> None:
-    """load() succeeds when only reviewers.yaml exists (backward compat)."""
+    """load() succeeds when only legacy wiki/reviewers.yaml exists."""
     with tempfile.TemporaryDirectory() as tmp:
-        wiki = Path(tmp) / "wiki"
-        write_to(wiki)  # writes agents.yaml
-        (wiki / "agents.yaml").rename(wiki / "reviewers.yaml")
-        registry = _reviewers.load(wiki)
+        tmp_path = Path(tmp)
+        hub_dir = tmp_path / "hub"
+        hub_dir.mkdir()
+        wiki_path = tmp_path / "wiki"
+        wiki_path.mkdir()
+        # Write legacy reviewers.yaml
+        (wiki_path / "reviewers.yaml").write_text(
+            "sonnetmax:\n  type: single\n  provider: claude\n  model: claude-sonnet-4-6\n"
+        )
+        with patch.object(
+            _reviewers,
+            "resolve_plugin_template_path",
+            return_value=tmp_path / "nonexistent" / "mill-agents.yaml"
+        ):
+            with patch.object(_paths, "resolve_wiki_path", return_value=wiki_path):
+                registry = _reviewers.load(hub_dir)
+
         assert "sonnetmax" in registry
     print("PASS: load falls back to reviewers.yaml")
 
@@ -363,6 +431,111 @@ def test_validate_role_refs_catches_bad_implementer_model() -> None:
     except ReviewerError:
         pass
     print("PASS: validate_role_refs catches bad implementer model ref")
+
+
+def test_load_plugin_template_only() -> None:
+    """load() uses plugin template when no local override present."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        hub_dir = tmp_path / "hub"
+        hub_dir.mkdir()
+        # Mock plugin template with 2 entries
+        template_content = (
+            "sonnetmax:\n  type: single\n  provider: claude\n  model: claude-sonnet-4-6\n"
+            "sonnetmedium:\n  type: single\n  provider: claude\n  model: claude-sonnet-4-6\n"
+        )
+        with patch.object(
+            _reviewers,
+            "resolve_plugin_template_path",
+            return_value=tmp_path / "templates" / "mill-agents.yaml"
+        ):
+            (tmp_path / "templates").mkdir(exist_ok=True)
+            (tmp_path / "templates" / "mill-agents.yaml").write_text(template_content)
+            with patch.object(_paths, "resolve_wiki_path", side_effect=SystemExit):
+                registry = _reviewers.load(hub_dir)
+
+        assert "sonnetmax" in registry
+        assert "sonnetmedium" in registry
+    print("PASS: load plugin template only")
+
+
+def test_local_overlay_adds_new_agent() -> None:
+    """load() merges plugin template and local overlay."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        hub_dir = tmp_path / "hub"
+        hub_dir.mkdir()
+        # Mock plugin template
+        template_content = "agentA:\n  type: single\n  provider: claude\n  model: claude-sonnet-4-6\n"
+        # Mock local overlay
+        (hub_dir / ".millhouse").mkdir()
+        (hub_dir / ".millhouse" / "agents.local.yaml").write_text(
+            "agentB:\n  type: single\n  provider: claude\n  model: claude-opus-4-1\n"
+        )
+        with patch.object(
+            _reviewers,
+            "resolve_plugin_template_path",
+            return_value=tmp_path / "templates" / "mill-agents.yaml"
+        ):
+            (tmp_path / "templates").mkdir(exist_ok=True)
+            (tmp_path / "templates" / "mill-agents.yaml").write_text(template_content)
+            with patch.object(_paths, "resolve_wiki_path", side_effect=SystemExit):
+                registry = _reviewers.load(hub_dir)
+
+        assert "agentA" in registry
+        assert "agentB" in registry
+    print("PASS: load local overlay adds new agent")
+
+
+def test_local_overlay_overrides_model() -> None:
+    """load() deep-merges local overrides into plugin template."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        hub_dir = tmp_path / "hub"
+        hub_dir.mkdir()
+        # Mock plugin template
+        template_content = (
+            "agentA:\n  type: single\n  provider: claude\n  model: model-x\n"
+        )
+        # Mock local override that only changes the model
+        (hub_dir / ".millhouse").mkdir()
+        (hub_dir / ".millhouse" / "agents.local.yaml").write_text(
+            "agentA:\n  model: model-y\n"
+        )
+        with patch.object(
+            _reviewers,
+            "resolve_plugin_template_path",
+            return_value=tmp_path / "templates" / "mill-agents.yaml"
+        ):
+            (tmp_path / "templates").mkdir(exist_ok=True)
+            (tmp_path / "templates" / "mill-agents.yaml").write_text(template_content)
+            with patch.object(_paths, "resolve_wiki_path", side_effect=SystemExit):
+                registry = _reviewers.load(hub_dir)
+
+        assert registry["agentA"]["model"] == "model-y"
+        assert registry["agentA"]["provider"] == "claude"
+    print("PASS: load local overlay overrides model")
+
+
+def test_raises_when_nothing_found() -> None:
+    """load() raises ReviewerError when no source is found."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        hub_dir = tmp_path / "hub"
+        hub_dir.mkdir()
+        # No template, no local, no wiki
+        with patch.object(
+            _reviewers,
+            "resolve_plugin_template_path",
+            return_value=tmp_path / "nonexistent" / "mill-agents.yaml"
+        ):
+            with patch.object(_paths, "resolve_wiki_path", side_effect=SystemExit):
+                try:
+                    _reviewers.load(hub_dir)
+                    raise AssertionError("Expected ReviewerError")
+                except ReviewerError as exc:
+                    assert "Missing registry" in str(exc)
+    print("PASS: load raises when nothing found")
 
 
 def main() -> int:
