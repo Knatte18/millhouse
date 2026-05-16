@@ -52,14 +52,15 @@ Batch-local decisions:
   - `_setup.py:83-84` -- inside `create_hub_links`, replace the two helper calls `_wiki.read_junctions(wiki_path)` and `_wiki.read_hardlinks(wiki_path)` with calls that pass the hub repo root. Derive it inside the function body: add `import _paths` to the file's imports if not present, then add `hub_root = _paths.resolve_git_root()` at the top of the `create_hub_links` body and pass `hub_root` to both helpers. This is correct in mill-setup's call context: Phase 4 invokes `create_hub_links` with cwd = hub_path, and `_paths.resolve_git_root()` returns the git toplevel of the cwd (the repo root, which is where `mill-config.yaml` lives). The existing `wiki_path` parameter on `create_hub_links` stays -- it is still used by callers and other internals. Do NOT edit `plugins/mill/skills/mill-setup/SKILL.md` in this card: the `create_hub_links` signature is unchanged from the caller's perspective. Re-grep `_wiki.read_junctions(` and `_wiki.read_hardlinks(` at the end -- the only references MUST be the function definitions plus the two updated call sites.
 - **Commit:** `refactor(wiki): read junctions/hardlinks from hub mill-config.yaml`
 
-### Card 24: Retarget `_wiki.health_check` to accept either config source
+### Card 24: Retarget `_wiki.health_check` to accept either config source; add `test-wiki.py`
 
 - **Context:**
   - `plugins/mill/scripts/_paths.py`
 - **Edits:**
   - `plugins/mill/scripts/_wiki.py`
   - `plugins/mill/skills/mill-go/SKILL.md`
-- **Creates:** none
+- **Creates:**
+  - `plugins/mill/unit_tests/test-wiki.py`
 - **Deletes:** none
 - **Requirements:** In `_wiki.py`, change `health_check`'s signature from `(wiki_path: Path)` to `(hub_root: Path)`. Rewrite the body to verify that at least one config source exists:
 
@@ -75,6 +76,8 @@ Batch-local decisions:
   Update mill-go SKILL.md at the two call sites (approximately lines 115-124 and 290-300 in the current file). Each call site currently does `wiki_path = _paths.resolve_wiki_path(_paths.resolve_git_root())` then `_wiki.health_check(wiki_path)`. Replace with `hub_root = _paths.resolve_git_root()` then `_wiki.health_check(hub_root)`. The `_wiki.WikiHealthError` exception handling stays unchanged. The error message printed by the script handler ("wiki health check failed") may stay -- the operator-facing string is informational. The HALT recovery message at line ~302 ("re-run mill-setup to restore it") still applies; no change required.
 
   After all edits, re-grep `_wiki.health_check(` across `plugins/` -- the only references MUST be the function definition and the two mill-go SKILL.md call sites.
+
+  Create a new unit-test file `plugins/mill/unit_tests/test-wiki.py` (under 100 lines). Match the test framework used by adjacent test files (stdlib unittest or pytest -- whichever `test-paths.py` uses). Cover three cases: (a) `test_read_junctions_from_mill_config` -- create a `tmp_path / "mill-config.yaml"` with a `junctions:` block; call `_wiki.read_junctions(tmp_path)`; assert the block is returned. (b) `test_read_junctions_falls_back_to_wiki` -- monkeypatch `_paths.resolve_wiki_path` to return a sibling tmp dir with `config.yaml` containing a `junctions:` block; no `mill-config.yaml` at hub root; assert the wiki block is returned. (c) `test_health_check_passes_when_mill_config_present` and `test_health_check_passes_when_wiki_config_present` and `test_health_check_raises_when_neither_present` -- corresponding three states for `health_check`. All tests use `tmp_path` and monkeypatching; no real git, no real wiki.
 - **Commit:** `refactor(wiki): health_check accepts hub_root with mill-config.yaml or wiki fallback`
 
 ## Batch Tests
