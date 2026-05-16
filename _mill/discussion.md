@@ -54,10 +54,19 @@ silent-schema-rot problem.
 
 - New tracked file `mill-config.yaml` at the hub repo root, committed to the
   main branch.
-- Four-layer overlay in `_config.load_config` and `_review_common.load_config`:
-  plugin template → `mill-config.yaml` → `~/.millhouse/config.machine.yaml` →
-  `.millhouse/config.local.yaml`. The machine layer is **preserved** from
-  the current implementation (see Decision: Overlay precedence below).
+- Three-layer overlay in `_config.load_config` and `_review_common.load_config`:
+  plugin template -> `mill-config.yaml` -> `.millhouse/config.local.yaml`.
+  The current per-user machine layer (`~/.millhouse/config.machine.yaml`)
+  is **removed** as part of this task (see Decision: Overlay precedence
+  below). The `_machine.load_layer()` call sites are deleted; the
+  `plugins/mill/templates/config.machine.yaml` template is deleted; the
+  `_machine.py` helper is deleted if it has no remaining callers.
+- Final env-var override pass applied on top of the three-layer overlay,
+  scoped to a small named registry of reviewer/implementer selection
+  keys (see Decision: Env-var overrides). Only the keys in the registry
+  are env-overridable; arbitrary config keys are not. The env layer is
+  applied inside both `_config.load_config` and
+  `_review_common.load_config` after the deep merge completes.
 - Two-layer overlay in `_reviewers.load`: plugin template
   (`${CLAUDE_PLUGIN_ROOT}/templates/mill-agents.yaml`) → `.millhouse/agents.local.yaml`.
 - Unknown-key validation against the plugin template; warns on stderr, does
@@ -162,29 +171,101 @@ silent-schema-rot problem.
 - **Rejected:** State YAML file (overkill for a single boolean); env var
   (doesn't survive between subprocess invocations).
 
-### Overlay precedence: plugin -> repo -> machine -> local
+### Env-var overrides for reviewer/implementer selection
 
-- **Decision:** Four layers, last wins. For config: plugin template
+- **Decision:** Support a small, named registry of environment variables
+  that override specific reviewer/implementer-selection keys. The env
+  layer is the highest-precedence layer in the config overlay (applied
+  after plugin/repo/local merge). The registry is hard-coded in a new
+  helper `_config.apply_env_overrides(cfg) -> cfg`:
+    - `MILL_DISCUSSION_REVIEWER` -> `roles.discussion-review.holistic.reviewer`
+    - `MILL_PLAN_REVIEWER`       -> `roles.plan-review.holistic.reviewer`
+    - `MILL_PLAN_BATCH_REVIEWER` -> `roles.plan-review.batch.reviewer`
+    - `MILL_CODE_REVIEWER`       -> `roles.code-review.holistic.reviewer`
+    - `MILL_CODE_BATCH_REVIEWER` -> `roles.code-review.batch.reviewer`
+    - `MILL_IMPLEMENTER`         -> `roles.implementer.model`
+  Empty-string or unset env var = no override. Any value is passed
+  through verbatim as the reviewer/implementer name; if the name
+  doesn't resolve in `_reviewers.load()` the existing strict-resolve
+  error fires at use-time (no extra validation here -- the existing
+  call path catches it).
+- **Rationale:** Operators frequently want to swap a reviewer for one
+  run without editing files ("try the new sonnet model on this PR's
+  plan review"). Editing `.millhouse/config.local.yaml`, running, then
+  reverting is friction operators today work around with one-off git
+  stashes. A targeted env-var registry covers the realistic use cases
+  with zero risk of typo'd keys landing in committed config, and the
+  small fixed registry keeps the contract obvious. Arbitrary-key env
+  overlay (e.g. `MILL_CONFIG__roles__plan__holistic__reviewer=...`) is
+  more powerful but the path-encoding is unmemorable and the surface
+  area is larger than the actual operator need.
+- **Scope effects:**
+    - New helper `_config.apply_env_overrides(cfg: dict) -> dict` --
+      pure function, returns a new dict with the overrides applied.
+    - Called as the final step of both `_config.load_config` and
+      `_review_common.load_config`.
+    - The env registry lives as a module-level constant in `_config.py`
+      (single source of truth; `_review_common.load_config` imports it).
+    - Document the registry in the header comment of
+      `plugins/mill/templates/mill-config.yaml` so operators can
+      discover the env vars from the same place they edit reviewer
+      assignments.
+    - Unit-tested in `plugins/mill/unit_tests/test-config.py`: each
+      registry entry has a test that sets the env var via
+      `monkeypatch.setenv`, calls `load_config`, asserts the override
+      took effect, and asserts no other keys changed.
+- **Out of scope:**
+    - Env-var override of non-reviewer keys (timeouts, rounds, etc.).
+      Not on the registry. If a use case appears, it can be added in
+      a follow-up by extending the registry.
+    - Generic `MILL_CONFIG__a__b__c=value` parsing. Rejected for
+      legibility.
+    - Env-var override of agents.yaml entries (model swaps inside the
+      catalogue). Covered by `.millhouse/agents.local.yaml`.
+- **Rejected:** Generic dotted-path env-var overlay (poor ergonomics);
+  no env support at all (loses the realistic one-off-run use case);
+  env-var pointing to a YAML override file (extra indirection without
+  benefit when the targeted set of keys is small).
+
+### Overlay precedence: plugin -> repo -> local (machine layer removed)
+
+- **Decision:** Three layers, last wins. For config: plugin template
   (`${CLAUDE_PLUGIN_ROOT}/templates/mill-config.yaml`) ->
-  `mill-config.yaml` at the hub repo root -> `~/.millhouse/config.machine.yaml`
-  (per-user, exists today) -> `.millhouse/config.local.yaml` (per-worktree).
-  For agents: plugin template (`${CLAUDE_PLUGIN_ROOT}/templates/mill-agents.yaml`)
-  -> `.millhouse/agents.local.yaml`. No machine layer for agents -- the
-  catalogue is shared across all hubs on the machine via the plugin
-  template, and per-hub variations belong in the local file.
-- **Rationale:** The current implementation already has a per-user
-  machine layer between wiki and local (`_config.py:66`,
-  `_review_common.py:1036`); the migration preserves it. The semantic
-  meaning is "operator-wide defaults that apply across every hub on this
-  machine" -- e.g. an operator who always wants longer LLM timeouts.
-  Plugin defaults must be the floor so new plugin keys appear
-  automatically. Per-worktree local must win so an in-flight task can
-  override anything without committing.
-- **Rejected:** Drop the machine layer (would silently remove a feature
-  the current code supports and the `plugins/mill/templates/config.machine.yaml`
-  template ships); repo-wins-over-local (would make per-machine
-  experimentation impossible without committing); template-wins-over-repo
-  (defeats the whole point of a tracked repo override).
+  `mill-config.yaml` at the hub repo root ->
+  `.millhouse/config.local.yaml` (per-worktree). For agents: plugin
+  template (`${CLAUDE_PLUGIN_ROOT}/templates/mill-agents.yaml`) ->
+  `.millhouse/agents.local.yaml`. The current per-user machine layer
+  (`~/.millhouse/config.machine.yaml`, loaded via `_machine.load_layer()`
+  in `_config.py:66` and `_review_common.py:1036`) is **removed**.
+- **Rationale:** Operator-wide-on-this-machine settings are an
+  underused abstraction with no current consumers in production. The
+  same settings that were valid candidates for the machine layer
+  (e.g. longer LLM timeouts) are equally well-expressed as a
+  per-worktree override in `.millhouse/config.local.yaml`, and that
+  file is already where operators set their preferences in practice.
+  Removing the layer simplifies the overlay model (one fewer place
+  to look when a config value behaves unexpectedly) and reduces the
+  surface area of the migration. Agents already have no machine
+  layer; this brings config to parity.
+- **Scope effects of the removal:**
+    - Delete `_machine.load_layer()` callsites in `_config.py` and
+      `_review_common.py`.
+    - Delete `plugins/mill/scripts/_machine.py` if no other callers
+      remain.
+    - Delete `plugins/mill/templates/config.machine.yaml`.
+    - Existing `~/.millhouse/config.machine.yaml` files on operator
+      machines are **silently ignored** after the migration; mill
+      does not delete them. An operator who relied on them must move
+      the relevant keys into each hub's `.millhouse/config.local.yaml`.
+      Document this in the migration log line emitted by mill-setup
+      Phase 3.2b: "machine config layer removed -- if you previously
+      kept overrides in ~/.millhouse/config.machine.yaml, move them
+      into this hub's .millhouse/config.local.yaml".
+- **Rejected:** Keep the machine layer (drops a clean opportunity to
+  simplify; the layer's value-per-complexity is low); repo-wins-over-local
+  (would make per-machine experimentation impossible without committing);
+  template-wins-over-repo (defeats the whole point of a tracked repo
+  override).
 
 ### Overlay merge: deep for dicts, replace for lists
 
@@ -362,9 +443,20 @@ worktree_root) -> dict`, which deep-merges three layers today:
 3. `worktree_root / ".millhouse/config.local.yaml"`
 
 After this task, the wiki layer is replaced by two new layers (plugin
-template + repo-root `mill-config.yaml`), giving four layers in total:
-plugin -> repo -> machine -> local. The machine layer is preserved
-unchanged.
+template + repo-root `mill-config.yaml`) and the machine layer is
+removed, giving three layers in total: plugin -> repo -> local. The
+`_machine.load_layer()` calls in `_config.py` and `_review_common.py`
+go away; `_machine.py` itself is deleted if it has no remaining
+callers; the `plugins/mill/templates/config.machine.yaml` template is
+deleted.
+
+A final env-var override pass runs after the three-layer merge. The
+registry of env-var-to-key-path mappings is a module-level constant
+in `_config.py` and lists six entries (one per reviewer-selection
+key + implementer model). The pass is a pure function applied at the
+end of `load_config`. Both load implementations import the same
+registry so the env behaviour is identical for admin scripts and the
+review pipeline.
 
 `plugins/mill/scripts/_review_common.py:1017-1052` defines a parallel
 `load_config(wiki_root, mill_dir) -> dict` with the same shape but
@@ -524,7 +616,15 @@ against each layer independently and dedupe; either is fine.
 
 - **`plugins/mill/unit_tests/test-config.py`** — extend with cases for
   the new overlay:
-    - Three-layer merge with deep dicts (plugin → repo → local).
+    - Three-layer merge with deep dicts (plugin -> repo -> local).
+    - Machine layer is no longer consulted: existing
+      `~/.millhouse/config.machine.yaml` files are ignored even if
+      present.
+    - Env-var override pass: each registry entry has a unit test that
+      `monkeypatch.setenv`s the var, calls `load_config`, asserts the
+      target key took the env value, asserts no other config keys
+      changed. Plus a negative test: empty-string env value is treated
+      as "no override".
     - List-replace semantics (`verify.skip_known_broken` overlay).
     - Unknown-key warning emitted to stderr; load still succeeds.
     - Removed-key (`pipeline.autonomous_mode`) in a local file → warning.
@@ -610,3 +710,5 @@ rather than strictly before.
 - **Q:** Test file locations? **A:** [auto-pick] Extend existing `test-config.py`/`test-paths.py`; new `test-migration.py` in integration_tests. **Why:** Matches existing test layout.
 - **Q:** Rollout sequence for in-flight hubs? **A:** [auto-pick] Opt-in via `/mill-setup` re-run; load-time fallback keeps live tasks working. **Why:** Minimises disruption; hard-cut is operator-hostile.
 - **Q:** PR strategy? **A:** [auto-pick] One PR, atomic landing. **Why:** Overlay and migration are interlocked; intermediate states are broken.
+- **Q:** Should the per-user machine layer (`~/.millhouse/config.machine.yaml`) be preserved or removed? **A:** Operator override -- remove. **Why:** The machine layer has no production consumers; the same use-cases are served by `.millhouse/config.local.yaml`. Removing it simplifies the overlay (one fewer layer to reason about) and shrinks the surface of this migration. Operators who relied on it move their keys into per-hub `.millhouse/config.local.yaml`; mill-setup logs a one-line notice on first run.
+- **Q:** Should env vars be able to override reviewer selection at run time? **A:** Operator addition -- yes, via a small named registry. **Why:** Operators frequently want to swap a reviewer for one run (`MILL_PLAN_REVIEWER=opushigh /mill-plan`) without editing files or committing. The registry is hard-coded and narrow (six entries covering each reviewer scope plus implementer model) so the contract is obvious and there is no risk of typo'd keys silently doing nothing. Empty/unset = no override. Applied as the highest-precedence layer after the three-layer overlay merge.
