@@ -3,7 +3,7 @@
 ```yaml
 task: 57 (A) -- Move config.yaml and agents.yaml from wiki to hub worktree
 slug: config-move-to-hub
-approved: false
+approved: true
 started: 20260516-161442
 parent: main
 root: ""
