@@ -76,7 +76,7 @@ def _filter_open_worktrees(
         hub_subpath = hub_subpath_default
         if wiki_path is not None:
             try:
-                entry_cfg = _load_config(wiki_path, entry_path)
+                entry_cfg = _load_config(entry_path, entry_path)
                 hub_subpath = entry_cfg.get("hub_relative_path", hub_subpath_default)
             except SystemExit:
                 hub_subpath = hub_subpath_default
@@ -115,7 +115,7 @@ def _spawn_and_open(
     new_path, new_slug, _ = new_entries[0]
     if wiki_path is not None:
         try:
-            worktree_cfg = _load_config(wiki_path, new_path)
+            worktree_cfg = _load_config(new_path, new_path)
         except SystemExit:
             worktree_cfg = {}
     else:
@@ -174,7 +174,7 @@ def main(argv: list[str] | None = None) -> int:
     home_tasks: list = []
     try:
         wiki_path = resolve_wiki_path(git_root)
-        cfg = _load_config(wiki_path, git_root)
+        cfg = _load_config(git_root, git_root)
         home_md = wiki_path / "Home.md"
         if home_md.exists():
             home_tasks = _tasks_md.parse(home_md.read_text(encoding="utf-8"))
@@ -255,7 +255,7 @@ def main(argv: list[str] | None = None) -> int:
     # Load per-worktree config to honour hub_relative_path.
     if wiki_path is not None:
         try:
-            worktree_cfg = _load_config(wiki_path, selected_path)
+            worktree_cfg = _load_config(selected_path, selected_path)
         except SystemExit:
             worktree_cfg = {}
     else:

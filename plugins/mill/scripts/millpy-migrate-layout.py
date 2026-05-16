@@ -196,7 +196,7 @@ def _step_rename_junctions(args: argparse.Namespace) -> None:
     container = resolve_container_path(git_root)
     hub_root = resolve_main_worktree_root(git_root)
 
-    cfg = _config.load_config(wiki_path, hub_root)
+    cfg = _config.load_config(hub_root, hub_root)
 
     log_fh = None
     if not dry_run:
