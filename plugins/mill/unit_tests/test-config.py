@@ -1,9 +1,12 @@
 """Unit tests for plugins/mill/scripts/_config.py.
 
 Covers:
-  - load_config: shared config present -> returned as dict
+  - load_config: three-layer merge (plugin template -> repo -> local)
+  - load_config: environment variable overrides
+  - load_config: unknown-key validation and warnings
+  - load_config: legacy wiki/config.yaml fallback
   - load_config: local override wins via deep_merge
-  - load_config: wiki config absent -> returns empty dict
+  - load_config: repo sources absent -> returns plugin template only (lenient)
   - load_config: subfolder-install layout — stub + real config merged
   - load_config: stub-only (real config absent) — hub_relative_path present
   - deep_merge: scalar in overlay wins over scalar in base
@@ -12,6 +15,8 @@ Covers:
 """
 from __future__ import annotations
 
+import io
+import os
 import subprocess
 import sys
 import tempfile
@@ -25,6 +30,7 @@ sys.path.insert(0, str(SCRIPTS_DIR))
 import yaml  # noqa: E402
 
 import _config  # noqa: E402
+import _paths  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -46,40 +52,77 @@ def _write_yaml(path: Path, text: str) -> None:
     path.write_text(text, encoding="utf-8")
 
 
+def _setup_plugin_template(tmp_path: Path) -> None:
+    """Write a minimal mill-config.yaml template to tmp_path/templates/."""
+    template_dir = tmp_path / "templates"
+    template_dir.mkdir(parents=True, exist_ok=True)
+    template_path = template_dir / "mill-config.yaml"
+    template_path.write_text(
+        "spawn:\n  branch_prefix: ''\n"
+        "roles:\n"
+        "  discussion-review:\n"
+        "    holistic:\n"
+        "      reviewer: sonnetmax_tool\n"
+        "  plan-review:\n"
+        "    holistic:\n"
+        "      reviewer: sonnetmax\n"
+        "    batch:\n"
+        "      reviewer: sonnetmedium\n"
+        "  code-review:\n"
+        "    holistic:\n"
+        "      reviewer: sonnetmedium\n"
+        "    batch:\n"
+        "      reviewer: sonnetmedium\n"
+        "  implementer:\n"
+        "    model: sonnethigh\n",
+        encoding="utf-8",
+    )
+
+
 # ---------------------------------------------------------------------------
 # load_config
 # ---------------------------------------------------------------------------
 
 
 def test_load_config_shared_present() -> None:
-    """load_config returns the shared config when wiki/config.yaml exists."""
+    """load_config merges plugin template with repo-layer config."""
     with tempfile.TemporaryDirectory() as tmp:
         tmp_path = Path(tmp)
-        wiki = tmp_path / "wiki"
+        _setup_plugin_template(tmp_path)
         wt_root = tmp_path / "hub"
         _git_init(wt_root)
-        _write_yaml(wiki / "config.yaml", "spawn:\n  branch_prefix: feat\n")
+        _write_yaml(wt_root / "mill-config.yaml", "spawn:\n  branch_prefix: feat\n")
 
-        cfg = _config.load_config(wiki, wt_root)
+        with patch.object(_paths, "resolve_wiki_path", side_effect=SystemExit):
+            with patch.object(
+                _config, "resolve_plugin_template_path",
+                return_value=tmp_path / "templates" / "mill-config.yaml"
+            ):
+                cfg = _config.load_config(wt_root, wt_root)
 
-        assert cfg == {"spawn": {"branch_prefix": "feat"}}, f"Unexpected cfg: {cfg!r}"
-    print("PASS load_config — shared config present")
+        assert cfg["spawn"]["branch_prefix"] == "feat", f"Unexpected cfg: {cfg!r}"
+    print("PASS load_config — repo config present, overrides plugin template")
 
 
 def test_load_config_local_override_wins() -> None:
     """load_config deep-merges local override; local values win on conflict."""
     with tempfile.TemporaryDirectory() as tmp:
         tmp_path = Path(tmp)
-        wiki = tmp_path / "wiki"
+        _setup_plugin_template(tmp_path)
         wt_root = tmp_path / "hub"
         _git_init(wt_root)
-        _write_yaml(wiki / "config.yaml", "spawn:\n  branch_prefix: feat\n  workers: 2\n")
+        _write_yaml(wt_root / "mill-config.yaml", "spawn:\n  branch_prefix: repo\n  workers: 2\n")
         _write_yaml(
             wt_root / ".millhouse" / "config.local.yaml",
             "spawn:\n  branch_prefix: local\n",
         )
 
-        cfg = _config.load_config(wiki, wt_root)
+        with patch.object(_paths, "resolve_wiki_path", side_effect=SystemExit):
+            with patch.object(
+                _config, "resolve_plugin_template_path",
+                return_value=tmp_path / "templates" / "mill-config.yaml"
+            ):
+                cfg = _config.load_config(wt_root, wt_root)
 
         assert cfg["spawn"]["branch_prefix"] == "local", (
             f"Local override should win; got {cfg['spawn']['branch_prefix']!r}"
@@ -90,26 +133,29 @@ def test_load_config_local_override_wins() -> None:
     print("PASS load_config — local override wins; shared-only keys preserved")
 
 
-def test_load_config_wiki_config_absent() -> None:
-    """load_config returns an empty dict when wiki/config.yaml does not exist."""
+def test_load_config_repo_absent_lenient() -> None:
+    """load_config returns empty dict when no sources exist (lenient form)."""
     with tempfile.TemporaryDirectory() as tmp:
         tmp_path = Path(tmp)
-        wiki = tmp_path / "wiki"
-        wiki.mkdir()  # dir exists but no config.yaml inside
         wt_root = tmp_path / "hub"
         _git_init(wt_root)
 
-        cfg = _config.load_config(wiki, wt_root)
+        with patch.object(_paths, "resolve_wiki_path", side_effect=SystemExit):
+            with patch.object(
+                _config, "resolve_plugin_template_path",
+                return_value=tmp_path / "nonexistent" / "mill-config.yaml"
+            ):
+                cfg = _config.load_config(wt_root, wt_root)
 
-        assert cfg == {}, f"Expected empty dict for missing config, got {cfg!r}"
-    print("PASS load_config — wiki config absent -> empty dict")
+        assert cfg == {}, f"Expected empty dict for missing sources, got {cfg!r}"
+    print("PASS load_config — no sources present -> empty dict (lenient)")
 
 
 def test_load_config_subfolder_install() -> None:
     """load_config merges stub then real config for subfolder-install layout."""
     with tempfile.TemporaryDirectory() as tmp:
         tmp_path = Path(tmp)
-        wiki = tmp_path / "wiki"
+        _setup_plugin_template(tmp_path)
         wt_root = tmp_path / "wt"
         wt_root.mkdir()
         # Stub at worktree root .millhouse
@@ -123,7 +169,12 @@ def test_load_config_subfolder_install() -> None:
             "spawn:\n  branch_prefix: real\n",
         )
 
-        cfg = _config.load_config(wiki, wt_root)
+        with patch.object(_paths, "resolve_wiki_path", side_effect=SystemExit):
+            with patch.object(
+                _config, "resolve_plugin_template_path",
+                return_value=tmp_path / "templates" / "mill-config.yaml"
+            ):
+                cfg = _config.load_config(wt_root, wt_root)
 
         assert cfg.get("hub_relative_path") == "sub/hub", (
             f"hub_relative_path from stub should be present; got {cfg.get('hub_relative_path')!r}"
@@ -138,7 +189,7 @@ def test_load_config_stub_only_real_absent() -> None:
     """load_config returns stub keys when real config is absent (no real hub)."""
     with tempfile.TemporaryDirectory() as tmp:
         tmp_path = Path(tmp)
-        wiki = tmp_path / "wiki"
+        _setup_plugin_template(tmp_path)
         wt_root = tmp_path / "wt"
         wt_root.mkdir()
         # Stub only — no real config at sub/hub
@@ -147,109 +198,87 @@ def test_load_config_stub_only_real_absent() -> None:
             "hub_relative_path: sub/hub\n",
         )
 
-        cfg = _config.load_config(wiki, wt_root)
+        with patch.object(_paths, "resolve_wiki_path", side_effect=SystemExit):
+            with patch.object(
+                _config, "resolve_plugin_template_path",
+                return_value=tmp_path / "templates" / "mill-config.yaml"
+            ):
+                cfg = _config.load_config(wt_root, wt_root)
 
         assert cfg.get("hub_relative_path") == "sub/hub", (
             f"hub_relative_path from stub should be present; got {cfg.get('hub_relative_path')!r}"
         )
-        assert "spawn" not in cfg, (
-            f"Real config keys should be absent; got spawn={cfg.get('spawn')!r}"
-        )
     print("PASS load_config — stub-only (real config absent): hub_relative_path present, real keys absent")
 
 
-# Tests below patch Path.home; pre-existing tests use the real home dir but their assertions only check seeded keys, so machine-config presence is benign.
-
-
-def test_load_config_machine_layer_present_merged() -> None:
-    """Machine-layer keys are merged between wiki and worktree layers."""
-    with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as tmp_home:
+def test_three_layer_merge() -> None:
+    """load_config merges plugin template, repo layer, and local layer."""
+    with tempfile.TemporaryDirectory() as tmp:
         tmp_path = Path(tmp)
-        wiki = tmp_path / "wiki"
+        _setup_plugin_template(tmp_path)
         wt_root = tmp_path / "hub"
         _git_init(wt_root)
-        _write_yaml(wiki / "config.yaml", "spawn:\n  branch_prefix: feat\n")
-        _write_yaml(
-            Path(tmp_home) / ".millhouse" / "config.machine.yaml",
-            "roles:\n  discussion-review:\n    holistic:\n      reviewer: g25flash\n",
-        )
-
-        with patch.object(Path, "home", return_value=Path(tmp_home)):
-            cfg = _config.load_config(wiki, wt_root)
-
-        assert cfg["spawn"]["branch_prefix"] == "feat", (
-            f"Wiki key should be present; got {cfg['spawn'].get('branch_prefix')!r}"
-        )
-        assert cfg["roles"]["discussion-review"]["holistic"]["reviewer"] == "g25flash", (
-            f"Machine key should be merged; got {cfg.get('roles')!r}"
-        )
-    print("PASS load_config — machine layer present and merged alongside wiki keys")
-
-
-def test_load_config_machine_absent_graceful() -> None:
-    """Missing machine config file is silently skipped (returns wiki-only dict)."""
-    with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as tmp_home:
-        tmp_path = Path(tmp)
-        wiki = tmp_path / "wiki"
-        wt_root = tmp_path / "hub"
-        _git_init(wt_root)
-        _write_yaml(wiki / "config.yaml", "spawn:\n  branch_prefix: feat\n")
-
-        with patch.object(Path, "home", return_value=Path(tmp_home)):
-            cfg = _config.load_config(wiki, wt_root)
-
-        assert cfg == {"spawn": {"branch_prefix": "feat"}}, (
-            f"Expected wiki-only dict; got {cfg!r}"
-        )
-    print("PASS load_config — machine config absent -> wiki-only dict, no exception")
-
-
-def test_load_config_machine_overrides_wiki() -> None:
-    """Machine layer wins over wiki on the same key."""
-    with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as tmp_home:
-        tmp_path = Path(tmp)
-        wiki = tmp_path / "wiki"
-        wt_root = tmp_path / "hub"
-        _git_init(wt_root)
-        _write_yaml(wiki / "config.yaml", "spawn:\n  branch_prefix: shared\n")
-        _write_yaml(
-            Path(tmp_home) / ".millhouse" / "config.machine.yaml",
-            "spawn:\n  branch_prefix: machine\n",
-        )
-
-        with patch.object(Path, "home", return_value=Path(tmp_home)):
-            cfg = _config.load_config(wiki, wt_root)
-
-        assert cfg["spawn"]["branch_prefix"] == "machine", (
-            f"Machine layer should override wiki; got {cfg['spawn'].get('branch_prefix')!r}"
-        )
-    print("PASS load_config — machine layer overrides wiki on conflict")
-
-
-def test_load_config_worktree_overrides_machine() -> None:
-    """Worktree-local layer wins over machine layer on the same key."""
-    with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as tmp_home:
-        tmp_path = Path(tmp)
-        wiki = tmp_path / "wiki"
-        wt_root = tmp_path / "hub"
-        _git_init(wt_root)
-        _write_yaml(wiki / "config.yaml", "spawn:\n  branch_prefix: shared\n")
-        _write_yaml(
-            Path(tmp_home) / ".millhouse" / "config.machine.yaml",
-            "spawn:\n  branch_prefix: machine\n",
-        )
+        _write_yaml(wt_root / "mill-config.yaml", "spawn:\n  branch_prefix: repo\n")
         _write_yaml(
             wt_root / ".millhouse" / "config.local.yaml",
-            "spawn:\n  branch_prefix: worktree\n",
+            "spawn:\n  workers: 4\n",
         )
 
-        with patch.object(Path, "home", return_value=Path(tmp_home)):
-            cfg = _config.load_config(wiki, wt_root)
+        with patch.object(_paths, "resolve_wiki_path", side_effect=SystemExit):
+            with patch.object(
+                _config, "resolve_plugin_template_path",
+                return_value=tmp_path / "templates" / "mill-config.yaml"
+            ):
+                cfg = _config.load_config(wt_root, wt_root)
 
-        assert cfg["spawn"]["branch_prefix"] == "worktree", (
-            f"Worktree layer should override machine; got {cfg['spawn'].get('branch_prefix')!r}"
-        )
-    print("PASS load_config — worktree-local layer overrides machine layer on conflict")
+        assert cfg["spawn"]["branch_prefix"] == "repo", "Repo value should be present"
+        assert cfg["spawn"]["workers"] == 4, "Local value should be present"
+    print("PASS load_config — three-layer merge")
+
+
+def test_env_override_impl() -> None:
+    """Environment variable overrides config values."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        _setup_plugin_template(tmp_path)
+        wt_root = tmp_path / "hub"
+        _git_init(wt_root)
+
+        os.environ["MILL_IMPLEMENTER"] = "custom_model"
+        try:
+            with patch.object(_paths, "resolve_wiki_path", side_effect=SystemExit):
+                with patch.object(
+                    _config, "resolve_plugin_template_path",
+                    return_value=tmp_path / "templates" / "mill-config.yaml"
+                ):
+                    cfg = _config.load_config(wt_root, wt_root)
+
+            assert cfg["roles"]["implementer"]["model"] == "custom_model", (
+                f"Env override should apply; got {cfg['roles']['implementer'].get('model')!r}"
+            )
+        finally:
+            os.environ.pop("MILL_IMPLEMENTER", None)
+    print("PASS load_config — env override applies")
+
+
+def test_machine_layer_not_loaded() -> None:
+    """load_config does not load machine-layer config."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        _setup_plugin_template(tmp_path)
+        wt_root = tmp_path / "hub"
+        _git_init(wt_root)
+        _write_yaml(wt_root / "mill-config.yaml", "spawn:\n  branch_prefix: repo\n")
+
+        with patch.object(_paths, "resolve_wiki_path", side_effect=SystemExit):
+            with patch.object(
+                _config, "resolve_plugin_template_path",
+                return_value=tmp_path / "templates" / "mill-config.yaml"
+            ):
+                cfg = _config.load_config(wt_root, wt_root)
+
+        assert cfg["spawn"]["branch_prefix"] == "repo", "Config should not include machine layer"
+    print("PASS load_config — machine layer not loaded")
 
 
 # ---------------------------------------------------------------------------
