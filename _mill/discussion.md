@@ -68,7 +68,18 @@ silent-schema-rot problem.
   applied inside both `_config.load_config` and
   `_review_common.load_config` after the deep merge completes.
 - Two-layer overlay in `_reviewers.load`: plugin template
-  (`${CLAUDE_PLUGIN_ROOT}/templates/mill-agents.yaml`) → `.millhouse/agents.local.yaml`.
+  (`${CLAUDE_PLUGIN_ROOT}/templates/mill-agents.yaml`) ->
+  `.millhouse/agents.local.yaml`. New signature
+  `_reviewers.load(hub_dir: Path) -> dict[str, dict]` -- replaces
+  `_reviewers.load(wiki_root: Path)`. The 9 existing callers
+  (`millpy-implement.py`, `millpy-implement-holistic.py`,
+  `millpy-review-discussion.py`, `millpy-review-plan.py`,
+  `millpy-review-code.py`, `_review_discussion.py`, `_review_code.py`,
+  `_review_plan.py`, `millpy-merge-in-subagent.py`) are updated to pass
+  `hub_dir` instead of `wiki_root` -- parallel to the `load_config`
+  callsite migration. The implementer should re-grep
+  `_reviewers.load(` at the start of the migration batch to get the
+  authoritative call list.
 - Unknown-key validation against the plugin template; warns on stderr, does
   not fail.
 - New helper `_paths.resolve_mill_config_path(repo_root) -> Path`.
@@ -564,9 +575,20 @@ Proposed new phase 3.2b sits between 3.1 (seed wiki) and 4.x (worktree
 setup): it inspects the wiki for `config.yaml` and `agents.yaml`,
 migrates if present, is a no-op otherwise. Phase 3.1 also changes:
 "seed wiki/config.yaml from template" becomes "seed mill-config.yaml
-in repo root from template, if missing". (After migration, Phase 3.1
-also halts on operator-error if `wiki/config.yaml` still exists — that
-means mill-setup was interrupted between copy and operator commit.)
+in repo root from template, if missing".
+
+Phase 3.1 also halts with an operator-error message if BOTH
+`mill-config.yaml` already exists at the hub root AND
+`wiki/config.yaml` still exists in the wiki. This is the
+interrupted-migration state: Phase 3.2b previously copied the wiki
+file into `mill-config.yaml` but the subsequent wiki-delete-and-push
+did not complete (network failure, lock contention, etc.). The
+operator-error message names both paths and tells the operator to
+either rerun mill-setup (so Phase 3.2b retries the wiki delete) or
+delete `wiki/config.yaml` manually if they have already verified
+the contents match. Pre-migration hubs (where `mill-config.yaml`
+does NOT yet exist) pass through Phase 3.1 unchanged and reach
+Phase 3.2b normally; the halt only fires when both files coexist.
 
 ### `.millhouse/` directory contents
 
