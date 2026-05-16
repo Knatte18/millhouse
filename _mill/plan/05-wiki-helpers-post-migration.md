@@ -59,8 +59,8 @@ Batch-local decisions:
 - **Edits:**
   - `plugins/mill/scripts/_wiki.py`
   - `plugins/mill/skills/mill-go/SKILL.md`
-- **Edits:**
   - `plugins/mill/unit_tests/test-wiki.py`
+- **Creates:** none
 - **Deletes:** none
 - **Requirements:** In `_wiki.py`, change `health_check`'s signature from `(wiki_path: Path)` to `(hub_root: Path)`. Rewrite the body to verify that at least one config source exists:
 
