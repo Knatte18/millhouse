@@ -76,7 +76,7 @@ def main(argv: list[str] | None = None) -> int:
     project_root = Path.cwd()
     mill_dir = project_root / ".millhouse"
     wiki_root = resolve_wiki_path(project_root)
-    cfg = load_config(wiki_root, mill_dir)
+    cfg = load_config(project_root, mill_dir)
 
     try:
         registry = _reviewers.load(wiki_root)

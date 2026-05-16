@@ -180,7 +180,7 @@ def resolve_path(path_tmpl: str, slug: str) -> Path:
     container_path = _paths.resolve_container_path(git_root)
     wiki_root = _paths.resolve_wiki_path(git_root)
     hub_dir = _paths.resolve_hub_path()
-    cfg = load_config(wiki_root, hub_dir / ".millhouse")
+    cfg = load_config(git_root, hub_dir / ".millhouse")
     active_hub = _paths.resolve_active_hub(
         container_path, slug, cfg=cfg, git_root=git_root,
     )
