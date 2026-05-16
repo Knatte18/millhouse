@@ -577,18 +577,14 @@ migrates if present, is a no-op otherwise. Phase 3.1 also changes:
 "seed wiki/config.yaml from template" becomes "seed mill-config.yaml
 in repo root from template, if missing".
 
-Phase 3.1 also halts with an operator-error message if BOTH
-`mill-config.yaml` already exists at the hub root AND
-`wiki/config.yaml` still exists in the wiki. This is the
-interrupted-migration state: Phase 3.2b previously copied the wiki
-file into `mill-config.yaml` but the subsequent wiki-delete-and-push
-did not complete (network failure, lock contention, etc.). The
-operator-error message names both paths and tells the operator to
-either rerun mill-setup (so Phase 3.2b retries the wiki delete) or
-delete `wiki/config.yaml` manually if they have already verified
-the contents match. Pre-migration hubs (where `mill-config.yaml`
-does NOT yet exist) pass through Phase 3.1 unchanged and reach
-Phase 3.2b normally; the halt only fires when both files coexist.
+Phase 3.1 does NOT halt when `wiki/config.yaml` still exists. The
+both-files-exist case (interrupted-migration state: `mill-config.yaml`
+already at the hub root AND `wiki/config.yaml` still present in the
+wiki) is handled entirely by Phase 3.2b Case 2: skip the copy, retry
+the wiki delete + push, idempotent on re-run. Phase 3.1 is purely a
+seeder; it never inspects the wiki for legacy `config.yaml`. This
+keeps Phase 3.1 single-purpose and avoids the unbreakable-halt cycle
+that an early-phase halt would create on re-run.
 
 ### `.millhouse/` directory contents
 
