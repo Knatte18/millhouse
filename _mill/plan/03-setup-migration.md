@@ -11,7 +11,7 @@ depends-on: [1]
 
 ## Batch Scope
 
-This batch ships the mill-setup-side migration of existing hubs: a new dedicated script `millpy-migrate-config.py` that the mill-setup skill invokes from a new Phase 3.2b, the SKILL.md edits (Phase 3.1 retargeting, Phase 3.2b insertion, Phase 4.95 deletion, summary cleanup), and a new integration test that exercises the migration end-to-end with a real git wiki fixture.
+This batch ships the mill-setup-side migration of existing hubs: a new dedicated script `millpy-migrate-config.py` that the mill-setup skill invokes from a new Phase 3.0b, the SKILL.md edits (Phase 3.1 retargeting, Phase 3.0b insertion, Phase 4.95 deletion, summary cleanup), and a new integration test that exercises the migration end-to-end with a real git wiki fixture.
 
 This batch is independent of batch 2 (loaders refactor): the migration script does NOT call any of the rewritten loaders -- it operates purely at the filesystem + git layer (read YAML, compare, copy bytes, `git rm`, `git add`, push wiki). The batch consumes batch 1's new `mill-config.yaml` template (for Phase 3.1's seed step) and `mill-agents.yaml` template (for the agents-diff branch).
 
@@ -19,7 +19,7 @@ External interface for downstream batches: the new script `millpy-migrate-config
 
 Batch-local decisions:
 
-- The migration script is invoked from mill-setup Phase 3.2b via the standard cache-form Python venv invocation per CLAUDE.md. The script must run cleanly from a non-hub cwd too (e.g. when invoked from a fresh shell) -- it derives `git_root` via `_paths.resolve_git_root()` and refuses to run if cwd is inside the wiki (the helper enforces this).
+- The migration script is invoked from mill-setup Phase 3.0b via the standard cache-form Python venv invocation per CLAUDE.md. The script must run cleanly from a non-hub cwd too (e.g. when invoked from a fresh shell) -- it derives `git_root` via `_paths.resolve_git_root()` and refuses to run if cwd is inside the wiki (the helper enforces this).
 - The wiki-side commits are tagged `chore(migrate): remove wiki/config.yaml (moved to hub/mill-config.yaml)` and `chore(migrate): remove wiki/agents.yaml (moved to plugin template)` so the wiki history records the move.
 - The script's exit code is 0 for success, 0 for warn-and-skip (agents differ), non-zero only for I/O or git failures. The mill-setup phase narrative explicitly tells the operator to inspect stderr for warn lines and to act on them.
 - The integration test uses `.scratch/test-migration/` for fixtures (matches the existing `test-inspect.py` style at `plugins/mill/integration_tests/test-inspect.py`). It creates a bare-remote git wiki via `git init --bare` and clones from it so the push step is verifiable.
@@ -69,7 +69,7 @@ Batch-local decisions:
   Module docstring must mention: (a) what the script does in one sentence, (b) idempotency guarantee, (c) the standard cache-form invocation line per CLAUDE.md conventions (i.e. `PYTHONPATH=... .venv/Scripts/python.exe scripts/millpy-migrate-config.py`).
 - **Commit:** `feat(migrate): add millpy-migrate-config.py script`
 
-### Card 20: mill-setup SKILL.md -- retarget Phase 3.1, add Phase 3.2b, remove Phase 4.95, fix summary
+### Card 20: mill-setup SKILL.md -- retarget Phase 3.1, add Phase 3.0b, remove Phase 4.95, fix summary
 
 - **Context:**
   - `plugins/mill/scripts/millpy-migrate-config.py`
@@ -82,7 +82,9 @@ Batch-local decisions:
 
   **(a) Phase 3.1 retarget (current lines 157-203, heading `### Phase 3.1 -- Seed wiki/config.yaml from template`):** Rename the heading to `### Phase 3.1 -- Seed mill-config.yaml at hub repo root from template`. Rewrite the body so the target file is `<repo_root>/mill-config.yaml` (NOT `<wiki-dir>/config.yaml`) and the source template is `${CLAUDE_PLUGIN_ROOT}/templates/mill-config.yaml`. The phase still has two cases (case 1: dest missing -- copy + `git add` only; case 2: dest present -- run the block-level upsert that fills any required top-level blocks). For case 1, replace the `_wiki.write_commit_push` call with a `git -C <repo_root> add mill-config.yaml` + a printed reminder to the operator: `mill-config.yaml staged at <repo_root>/mill-config.yaml -- commit it on the main branch to land the migration` (CLAUDE.md hard rule: never auto-commit on the main branch). For case 2, the upsert still uses `yaml.safe_load`/`yaml.dump` on the dest file but the dest is now `<repo_root>/mill-config.yaml`. After upserting, `git add mill-config.yaml` (no commit). The "Why verbatim copy" paragraph at the end of Phase 3.1 stays applicable -- update its file references accordingly. ASCII only.
 
-  **(b) Phase 3.2b insertion (new phase, place immediately after Phase 3.2):** New heading `### Phase 3.2b -- Migrate wiki config and agents to hub/plugin`. Body: One-paragraph summary explaining this phase invokes `millpy-migrate-config.py` to (a) copy `wiki/config.yaml` to the hub root if not yet present, (b) delete the wiki copy and push, (c) diff `wiki/agents.yaml` against the plugin template and either delete (identical) or warn-and-skip (different). Then the invocation block in the standard cache-form pattern:
+  **(b) Phase 3.0b insertion (new phase, place IMMEDIATELY BEFORE Phase 3.1 -- not after Phase 3.2).** New heading `### Phase 3.0b -- Migrate wiki config and agents to hub/plugin`. The phase is numbered 3.0b (not 3.2b) to make execution order match SKILL.md reading order: migration MUST run before the new Phase 3.1 (which seeds `mill-config.yaml` from the plugin template). If 3.1 ran first against an existing hub with a custom `wiki/config.yaml`, Phase 3.1 case-1 (dest missing) would seed template defaults to `<repo_root>/mill-config.yaml`, then the migration script would detect both files exist, skip the copy, and delete `wiki/config.yaml` -- silently throwing away the operator's customisations. By running migration first, the script copies `wiki/config.yaml` content to `mill-config.yaml` (user content preserved); then Phase 3.1 case-2 (dest present) runs the block-level upsert against the now-populated hub file, filling only the blocks that were missing from the user's config.
+
+  Body: open with a one-paragraph summary explaining this phase invokes `millpy-migrate-config.py` to (a) copy `wiki/config.yaml` to the hub root if not yet present, (b) delete the wiki copy and push, (c) diff `wiki/agents.yaml` against the plugin template and either delete (identical) or warn-and-skip (different). Then a callout box (or short paragraph) titled "**Ordering constraint:**" stating verbatim: "Phase 3.0b MUST execute before Phase 3.1. If Phase 3.1 ran first against a hub with an existing `wiki/config.yaml`, the operator's custom config would be overwritten by the plugin template's defaults and then silently deleted from the wiki. Do NOT reorder these phases." Then the invocation block in the standard cache-form pattern:
 
   ```bash
   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-migrate-config.py"
@@ -95,7 +97,7 @@ Batch-local decisions:
   **(d) Final summary cleanup (Phase 8 -- current lines 504-553):** Remove the bullet at line 516 ("Machine-level config at `~/.millhouse/config.machine.yaml`..." -- the whole bullet about `_machine.probe()`). Remove the `Machine config:` line from the summary block (currently line 536, inside the triple-backtick block). Remove the explanatory paragraph at line 553 ("`Machine config:` format: when `_machine.probe()` returns..."). The remaining bullets and summary lines are preserved with their relative order. ASCII only.
 
   At the end of all four edits, grep `_machine` and `config.machine.yaml` in `plugins/mill/skills/mill-setup/SKILL.md` to confirm zero hits.
-- **Commit:** `feat(mill-setup): add Phase 3.2b config migration; remove Phase 4.95`
+- **Commit:** `feat(mill-setup): add Phase 3.0b config migration; remove Phase 4.95`
 
 ### Card 21: New integration test `test-migration.py`
 

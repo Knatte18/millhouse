@@ -60,7 +60,7 @@ subsection per decision. Batch-local decisions live in each batch file._
 
 ### Decision: ASCII-only stdout/stderr in all warning/error text
 
-- **Decision:** Every `print()` / `_log()` / stderr string emitted by new code uses ASCII. Em-dash -> ` -- `; right-arrow -> ` -> `. Applies to unknown-key warnings, fallback warnings, migration script output, mill-setup Phase 3.2b log lines.
+- **Decision:** Every `print()` / `_log()` / stderr string emitted by new code uses ASCII. Em-dash -> ` -- `; right-arrow -> ` -> `. Applies to unknown-key warnings, fallback warnings, migration script output, mill-setup Phase 3.0b log lines.
 - **Rationale:** CLAUDE.md hard rule. Windows cp1252 terminals crash on non-ASCII stdout/stderr.
 - **Applies to:** all batches.
 

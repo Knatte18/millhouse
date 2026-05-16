@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-fix-r1
+phase: plan-fix-r2
 slug: config-move-to-hub
 branch: hanf/config-move-to-hub
 plan: _mill/plan
@@ -19,4 +19,6 @@ discussed  '2026-05-16T16:04:29Z'
 planning  '2026-05-16T16:21:31Z'
 plan-review-r1  '2026-05-16T16:30:06Z'
 plan-fix-r1  '2026-05-16T16:30:06Z'
+plan-review-r2  '2026-05-16T16:39:14Z'
+plan-fix-r2  '2026-05-16T16:39:14Z'
 ```

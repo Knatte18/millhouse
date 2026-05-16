@@ -115,6 +115,21 @@ Batch-local decisions:
 
   For every local `_load_config(wiki_path, ...)` wrapper updated above: rename the first parameter to `repo_root` and update every reference inside the wrapper body accordingly. If the wrapper previously discarded the `wiki_path` argument (e.g. only used `worktree_root`), drop the unused parameter at the wrapper level too. Any caller in the same file that imports `wiki_path = _paths.resolve_wiki_path(...)` ONLY to feed it into `_load_config` and not for anything else should remove that import too. Run `grep -n 'wiki' <each-file>` after edits to confirm no orphan `wiki_path` variables remain.
 
+  **Strict-check disposition for wrappers that previously raised on missing wiki config.** Two scripts have a strict pre-check before delegating to the lenient loader: `millpy-claim.py` lines 57-67 (`_load_config` raises `SystemExit("Missing config at <wiki>/config.yaml")` when `wiki/config.yaml` is absent) and `millpy-spawn.py` lines 58-67 (same pattern). After the rename, the existence check must reflect the new schema: change the body to check both the new and legacy sources. Concretely, replace the existing `shared_path = wiki_path / "config.yaml"; if not shared_path.exists(): raise SystemExit(...)` block with:
+
+  ```python
+  mill_cfg = repo_root / "mill-config.yaml"
+  wiki_cfg = None
+  try:
+      wiki_cfg = _paths.resolve_wiki_path(repo_root) / "config.yaml"
+  except SystemExit:
+      wiki_cfg = None
+  if not mill_cfg.exists() and (wiki_cfg is None or not wiki_cfg.exists()):
+      raise SystemExit(f"Missing config: searched {mill_cfg} and {wiki_cfg}")
+  ```
+
+  This preserves the strict semantics (mill-claim and mill-spawn still refuse to run on a hub with no config source at all) while accommodating both the migrated state (mill-config.yaml present) and the in-flight legacy state (wiki/config.yaml only). Update the wrapper's docstring to reflect the new search order.
+
   After this card the only `_config.load_config(...)` callsites in the repo MUST be the function definition itself (inside `_config.py`) and the updated callers listed above. Re-run `grep -rn 'load_config(' plugins/mill/scripts/` at the end to verify. Tests in `unit_tests/` may still reference the old signature -- card 14 updates `test-config.py`; do not touch test files in this card.
 - **Commit:** `refactor: migrate _config.load_config callers to repo_root signature`
 
@@ -230,9 +245,9 @@ Batch-local decisions:
 
   - `millpy-implement-holistic.py:87`, `millpy-implement.py:103`, `millpy-merge-in-subagent.py:94` -- `_reviewers.load(wiki_path)` -> `_reviewers.load(hub_dir)`. `hub_dir` is typically `git_root` (worktree root). If the script computes a separate hub path via `resolve_active_hub` or `resolve_hub_path`, use that; otherwise use `git_root`. Inspect each script's existing variable scope and pick the appropriate one.
   - `millpy-review-code.py:72`, `millpy-review-discussion.py:46`, `millpy-review-plan.py:82` -- `_reviewers.load(wiki_root)` -> `_reviewers.load(hub_dir)`. Same hub_dir resolution rule.
-  - `_review_code.py:281`, `_review_discussion.py:76`, `_review_plan.py:319` -- each accepts `wiki_root` from a caller; rename the parameter to `hub_dir` in the calling function signature AND update the call. Then trace up the call chain in each `_review_*.py` to confirm callers pass the right value (the millpy-review-*.py callers updated above should already be passing the hub_dir variable).
+  - `_review_code.py:281`, `_review_discussion.py:76`, `_review_plan.py:319` -- DO NOT rename the `wiki_root` parameter on the surrounding `run()` signatures. `wiki_root` is also passed to `resolve_ref_paths`, `resolve_existing_paths`, and `load_task_title` in each backend (see `_review_code.py:245, 267, 297, 338`; `_review_discussion.py:98`; `_review_plan.py:135, 142, 203, 339, 417, 450, 457, 521`), where it must remain the wiki clone path for `wiki/`-prefixed ref resolution to work. Instead, inside each of the three backend `run()` bodies, add a single local assignment `hub_dir = project_root` (the existing `project_root` parameter IS the worktree root in the current call shape) and change ONLY the `_reviewers.load(wiki_root)` call to `_reviewers.load(hub_dir)`. Leave every other `wiki_root` reference unchanged. No upstream `run()` callers need updating for this card.
 
-  For every script touched: if `wiki_path` / `wiki_root` was computed only to feed into `_reviewers.load` and isn't used elsewhere in the function, remove the unused assignment. Re-grep `_reviewers.load(` AND `reviewers.load(` at the end -- the only references MUST be the function definition (in `_reviewers.py`) and the updated callers.
+  For the millpy-* scripts touched above (where the call is in the script's own body, not a shared backend): if `wiki_path` / `wiki_root` was computed only to feed into `_reviewers.load` and isn't used elsewhere in the function, remove the unused assignment. Re-grep `_reviewers.load(` AND `reviewers.load(` at the end -- the only references MUST be the function definition (in `_reviewers.py`) and the updated callers.
 - **Commit:** `refactor: migrate _reviewers.load callers to hub_dir signature`
 
 ### Card 18: Extend `test-reviewers.py` for two-layer overlay
