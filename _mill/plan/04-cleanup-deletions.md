@@ -24,10 +24,11 @@ Batch-local decisions:
 
 ## Cards
 
-### Card 22: Delete `_machine.py`, `test-machine.py`, and superseded templates
+### Card 22: Delete `_machine.py`, `test-machine.py`, and superseded templates; finalise CLAUDE.md
 
 - **Context:** none
-- **Edits:** none
+- **Edits:**
+  - `CLAUDE.md`
 - **Creates:** none
 - **Deletes:**
   - `plugins/mill/scripts/_machine.py`
@@ -41,6 +42,8 @@ Batch-local decisions:
   - `grep -rn "config.machine.yaml" plugins/` -- expected hits ONLY in the template file being deleted and possibly in docstrings of `_machine.py` (also being deleted). Any other hit is a halt.
   - `grep -rn "wiki-config.yaml" plugins/` -- after batch 1 and 3, expected hits ONLY in the file being deleted and possibly in `mill-config.yaml` template's header comment (if the header references the old name for migration purposes, that's intentional documentation and must be kept). Verify each hit before deleting.
   - `grep -rn "reviewers.yaml" plugins/` -- after batch 1 and 2, expected hits ONLY in the file being deleted plus the legacy-fallback line inside `_reviewers.py` (which references `wiki_root / "reviewers.yaml"` for the wiki-legacy fallback -- that's intentional and must be kept). Any other hit (especially in templates or skills) is a halt.
+
+  **CLAUDE.md update (must happen in the same commit as the deletions).** Open `CLAUDE.md` at the hub root and locate the bullet at approximately line 109 starting with "**Template `wiki-config.yaml` mirrors production `wiki/config.yaml`.**". Replace the entire bullet with: "**Template `mill-config.yaml` is the canonical config schema.** When changing a config key in `mill-config.yaml` at the hub repo root, mirror the change in `plugins/mill/templates/mill-config.yaml` -- the template ships with the plugin and seeds new hubs via mill-setup. Drift means new hubs are seeded with a stale schema. The hub-root file is the source of truth for valid schema; the template is the source of truth for the documentation comments inside the file (overlay precedence, env-var registry)." Locate the parenthetical "(The same invariant is documented in `wiki/config.yaml`'s header comment.)" inside the "**Junctions are IDE/terminal convenience only.**" bullet at approximately line 116 and replace `wiki/config.yaml` with `mill-config.yaml`. After the edit, grep `wiki/config.yaml` and `wiki-config.yaml` in `CLAUDE.md` -- only references that are clearly historical (e.g. inside a "before/after migration" explanatory passage) should remain; treat unexpected hits as a planning miss and update them in this card.
 
   Once each grep is clean (only the listed deletion targets or intentional legacy references), perform the deletions via `git rm` for each file individually:
 
