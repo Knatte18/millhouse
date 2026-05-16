@@ -418,6 +418,273 @@ def test_preserves_other_top_level_keys() -> None:
     print("PASS set_local_wiki_overrides — other top-level keys preserved")
 
 
+def test_env_override_discussion_reviewer() -> None:
+    """MILL_DISCUSSION_REVIEWER env var overrides config."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        _setup_plugin_template(tmp_path)
+        wt_root = tmp_path / "hub"
+        _git_init(wt_root)
+
+        os.environ["MILL_DISCUSSION_REVIEWER"] = "custom_reviewer"
+        try:
+            with patch.object(_paths, "resolve_wiki_path", side_effect=SystemExit):
+                with patch.object(
+                    _config, "resolve_plugin_template_path",
+                    return_value=tmp_path / "templates" / "mill-config.yaml"
+                ):
+                    cfg = _config.load_config(wt_root, wt_root)
+
+            assert cfg["roles"]["discussion-review"]["holistic"]["reviewer"] == "custom_reviewer"
+        finally:
+            os.environ.pop("MILL_DISCUSSION_REVIEWER", None)
+    print("PASS load_config — MILL_DISCUSSION_REVIEWER env override")
+
+
+def test_env_override_plan_reviewer() -> None:
+    """MILL_PLAN_REVIEWER env var overrides config."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        _setup_plugin_template(tmp_path)
+        wt_root = tmp_path / "hub"
+        _git_init(wt_root)
+
+        os.environ["MILL_PLAN_REVIEWER"] = "custom_holistic"
+        try:
+            with patch.object(_paths, "resolve_wiki_path", side_effect=SystemExit):
+                with patch.object(
+                    _config, "resolve_plugin_template_path",
+                    return_value=tmp_path / "templates" / "mill-config.yaml"
+                ):
+                    cfg = _config.load_config(wt_root, wt_root)
+
+            assert cfg["roles"]["plan-review"]["holistic"]["reviewer"] == "custom_holistic"
+        finally:
+            os.environ.pop("MILL_PLAN_REVIEWER", None)
+    print("PASS load_config — MILL_PLAN_REVIEWER env override")
+
+
+def test_env_override_plan_batch_reviewer() -> None:
+    """MILL_PLAN_BATCH_REVIEWER env var overrides config."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        _setup_plugin_template(tmp_path)
+        wt_root = tmp_path / "hub"
+        _git_init(wt_root)
+
+        os.environ["MILL_PLAN_BATCH_REVIEWER"] = "custom_batch"
+        try:
+            with patch.object(_paths, "resolve_wiki_path", side_effect=SystemExit):
+                with patch.object(
+                    _config, "resolve_plugin_template_path",
+                    return_value=tmp_path / "templates" / "mill-config.yaml"
+                ):
+                    cfg = _config.load_config(wt_root, wt_root)
+
+            assert cfg["roles"]["plan-review"]["batch"]["reviewer"] == "custom_batch"
+        finally:
+            os.environ.pop("MILL_PLAN_BATCH_REVIEWER", None)
+    print("PASS load_config — MILL_PLAN_BATCH_REVIEWER env override")
+
+
+def test_env_override_code_reviewer() -> None:
+    """MILL_CODE_REVIEWER env var overrides config."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        _setup_plugin_template(tmp_path)
+        wt_root = tmp_path / "hub"
+        _git_init(wt_root)
+
+        os.environ["MILL_CODE_REVIEWER"] = "custom_code_holistic"
+        try:
+            with patch.object(_paths, "resolve_wiki_path", side_effect=SystemExit):
+                with patch.object(
+                    _config, "resolve_plugin_template_path",
+                    return_value=tmp_path / "templates" / "mill-config.yaml"
+                ):
+                    cfg = _config.load_config(wt_root, wt_root)
+
+            assert cfg["roles"]["code-review"]["holistic"]["reviewer"] == "custom_code_holistic"
+        finally:
+            os.environ.pop("MILL_CODE_REVIEWER", None)
+    print("PASS load_config — MILL_CODE_REVIEWER env override")
+
+
+def test_env_override_code_batch_reviewer() -> None:
+    """MILL_CODE_BATCH_REVIEWER env var overrides config."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        _setup_plugin_template(tmp_path)
+        wt_root = tmp_path / "hub"
+        _git_init(wt_root)
+
+        os.environ["MILL_CODE_BATCH_REVIEWER"] = "custom_code_batch"
+        try:
+            with patch.object(_paths, "resolve_wiki_path", side_effect=SystemExit):
+                with patch.object(
+                    _config, "resolve_plugin_template_path",
+                    return_value=tmp_path / "templates" / "mill-config.yaml"
+                ):
+                    cfg = _config.load_config(wt_root, wt_root)
+
+            assert cfg["roles"]["code-review"]["batch"]["reviewer"] == "custom_code_batch"
+        finally:
+            os.environ.pop("MILL_CODE_BATCH_REVIEWER", None)
+    print("PASS load_config — MILL_CODE_BATCH_REVIEWER env override")
+
+
+def test_env_override_empty_string_is_noop() -> None:
+    """Empty-string env value is treated as unset."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        _setup_plugin_template(tmp_path)
+        wt_root = tmp_path / "hub"
+        _git_init(wt_root)
+
+        os.environ["MILL_PLAN_REVIEWER"] = ""
+        try:
+            with patch.object(_paths, "resolve_wiki_path", side_effect=SystemExit):
+                with patch.object(
+                    _config, "resolve_plugin_template_path",
+                    return_value=tmp_path / "templates" / "mill-config.yaml"
+                ):
+                    cfg = _config.load_config(wt_root, wt_root)
+
+            # Should use the template value, not empty string
+            assert cfg["roles"]["plan-review"]["holistic"]["reviewer"] == "sonnetmax"
+        finally:
+            os.environ.pop("MILL_PLAN_REVIEWER", None)
+    print("PASS load_config — empty-string env value is noop")
+
+
+def test_list_replace_semantics() -> None:
+    """Lists are replaced wholesale, not merged."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        _setup_plugin_template(tmp_path)
+        wt_root = tmp_path / "hub"
+        _git_init(wt_root)
+        _write_yaml(
+            wt_root / "mill-config.yaml",
+            "verify:\n  skip_known_broken:\n    - a.py\n    - b.py\n",
+        )
+        _write_yaml(
+            wt_root / ".millhouse" / "config.local.yaml",
+            "verify:\n  skip_known_broken:\n    - c.py\n",
+        )
+
+        with patch.object(_paths, "resolve_wiki_path", side_effect=SystemExit):
+            with patch.object(
+                _config, "resolve_plugin_template_path",
+                return_value=tmp_path / "templates" / "mill-config.yaml"
+            ):
+                cfg = _config.load_config(wt_root, wt_root)
+
+        assert cfg.get("verify", {}).get("skip_known_broken") == ["c.py"], (
+            f"List should be replaced, not merged; got {cfg.get('verify', {}).get('skip_known_broken')!r}"
+        )
+    print("PASS load_config — list replace semantics")
+
+
+def test_unknown_key_warning_emitted() -> None:
+    """Unknown keys in local config emit warnings to stderr."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        _setup_plugin_template(tmp_path)
+        wt_root = tmp_path / "hub"
+        _git_init(wt_root)
+        _write_yaml(
+            wt_root / ".millhouse" / "config.local.yaml",
+            "pipeline:\n  autonomous_mode: true\n",
+        )
+
+        with patch.object(_paths, "resolve_wiki_path", side_effect=SystemExit):
+            with patch.object(
+                _config, "resolve_plugin_template_path",
+                return_value=tmp_path / "templates" / "mill-config.yaml"
+            ):
+                with patch("sys.stderr", new=io.StringIO()) as mock_stderr:
+                    cfg = _config.load_config(wt_root, wt_root)
+                    stderr_output = mock_stderr.getvalue()
+
+        assert "pipeline" in stderr_output, (
+            f"Unknown key warning should be in stderr; got {stderr_output!r}"
+        )
+    print("PASS load_config — unknown-key warning emitted")
+
+
+def test_fallback_to_wiki_config_yaml() -> None:
+    """Falls back to wiki/config.yaml when mill-config.yaml absent."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        wt_root = tmp_path / "hub"
+        _git_init(wt_root)
+        wiki_path = tmp_path / "wiki"
+        wiki_path.mkdir()
+        _write_yaml(
+            wiki_path / "config.yaml",
+            "spawn:\n  branch_prefix: wiki_value\n",
+        )
+
+        with patch.object(
+            _paths, "resolve_wiki_path",
+            return_value=wiki_path
+        ):
+            with patch.object(
+                _config, "resolve_plugin_template_path",
+                return_value=tmp_path / "nonexistent" / "mill-config.yaml"
+            ):
+                with patch("sys.stderr", new=io.StringIO()) as mock_stderr:
+                    cfg = _config.load_config(wt_root, wt_root)
+                    stderr_output = mock_stderr.getvalue()
+
+        assert cfg.get("spawn", {}).get("branch_prefix") == "wiki_value", (
+            f"Should use wiki/config.yaml fallback; got {cfg!r}"
+        )
+        assert "legacy" in stderr_output.lower(), (
+            f"Should emit fallback warning; got {stderr_output!r}"
+        )
+    print("PASS load_config — fallback to wiki/config.yaml")
+
+
+def test_both_files_present_mill_wins() -> None:
+    """When both mill-config.yaml and wiki/config.yaml exist, mill-config.yaml wins."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        wt_root = tmp_path / "hub"
+        _git_init(wt_root)
+        _write_yaml(
+            wt_root / "mill-config.yaml",
+            "spawn:\n  branch_prefix: mill_value\n",
+        )
+        wiki_path = tmp_path / "wiki"
+        wiki_path.mkdir()
+        _write_yaml(
+            wiki_path / "config.yaml",
+            "spawn:\n  branch_prefix: wiki_value\n",
+        )
+
+        with patch.object(
+            _paths, "resolve_wiki_path",
+            return_value=wiki_path
+        ):
+            with patch.object(
+                _config, "resolve_plugin_template_path",
+                return_value=tmp_path / "nonexistent" / "mill-config.yaml"
+            ):
+                with patch("sys.stderr", new=io.StringIO()) as mock_stderr:
+                    cfg = _config.load_config(wt_root, wt_root)
+                    stderr_output = mock_stderr.getvalue()
+
+        assert cfg.get("spawn", {}).get("branch_prefix") == "mill_value", (
+            f"mill-config.yaml should win; got {cfg!r}"
+        )
+        assert "stale" in stderr_output.lower(), (
+            f"Should emit stale wiki warning; got {stderr_output!r}"
+        )
+    print("PASS load_config — both files present, mill-config wins + warning")
+
+
 def main() -> int:
     tests = [
         test_load_config_shared_present,
@@ -427,6 +694,16 @@ def main() -> int:
         test_load_config_stub_only_real_absent,
         test_three_layer_merge,
         test_env_override_impl,
+        test_env_override_discussion_reviewer,
+        test_env_override_plan_reviewer,
+        test_env_override_plan_batch_reviewer,
+        test_env_override_code_reviewer,
+        test_env_override_code_batch_reviewer,
+        test_env_override_empty_string_is_noop,
+        test_list_replace_semantics,
+        test_unknown_key_warning_emitted,
+        test_fallback_to_wiki_config_yaml,
+        test_both_files_present_mill_wins,
         test_machine_layer_not_loaded,
         test_deep_merge_scalar_wins,
         test_deep_merge_nested_merge,
