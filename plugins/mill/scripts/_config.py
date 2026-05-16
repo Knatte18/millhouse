@@ -37,6 +37,8 @@ __all__ = [
     "set_local_wiki_overrides",
     "ENV_REGISTRY",
     "apply_env_overrides",
+    "walk_unknown_keys",
+    "warn_unknown_keys",
 ]
 
 ENV_REGISTRY = {
@@ -72,6 +74,43 @@ def apply_env_overrides(cfg: dict) -> dict:
             current = current.setdefault(seg, {})
         current[key_tuple[-1]] = env_val
     return result
+
+
+def walk_unknown_keys(actual: dict, template: dict, prefix: str = "") -> list[str]:
+    """Find keys present in actual but not in template.
+
+    Recurses into nested dicts only when both actual[key] and template[key] are
+    dicts. Lists are treated as leaves (not descended).
+
+    Args:
+        actual:  The actual configuration dict.
+        template: The template configuration dict.
+        prefix:  Current key path prefix (for recursion).
+
+    Returns:
+        List of dotted key paths (e.g., ["a.b.c", "x.y"]).
+    """
+    unknown = []
+    for key, actual_val in actual.items():
+        current_path = f"{prefix}.{key}" if prefix else key
+        if key not in template:
+            unknown.append(current_path)
+        elif isinstance(actual_val, dict) and isinstance(template.get(key), dict):
+            unknown.extend(walk_unknown_keys(actual_val, template[key], current_path))
+    return unknown
+
+
+def warn_unknown_keys(actual: dict, template: dict, source_label: str) -> None:
+    """Emit warnings to stderr for unknown keys in actual config.
+
+    Args:
+        actual: The actual configuration dict.
+        template: The template configuration dict.
+        source_label: Label for the source (e.g., "mill-config.yaml").
+    """
+    unknown = walk_unknown_keys(actual, template)
+    for path in unknown:
+        print(f"[config] unknown key: {path} (in {source_label})", file=sys.stderr)
 
 
 def load_config(wiki_path: Path, worktree_root: Path) -> dict:
