@@ -49,7 +49,9 @@ batches:
     implementer_session: 23cbe5f5-9552-46af-b1bb-924cc0fa9741
     start_sha: d44e583730278d3650c8ad183f5aa3457e6249fa
   - name: wiki-helpers-post-migration
-    state: pending
+    state: running
+    implementer_session: df163020-2f43-404e-bf68-120edf12d80c
+    start_sha: 8004a8e4d2aa91a0e917e1a6207edb504d0e0092
   - name: cleanup-deletions
     state: pending
 ```
