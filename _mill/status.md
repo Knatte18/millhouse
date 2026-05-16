@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: config-move-to-hub
 branch: hanf/config-move-to-hub
 plan: _mill/plan
@@ -26,4 +26,21 @@ plan-fix-r3  '2026-05-16T16:51:24Z'
 plan-review-r4  '2026-05-16T17:12:40Z'
 plan-review-r5  '2026-05-16T17:12:40Z'
 planned  '2026-05-16T17:12:40Z'
+implementing  '2026-05-16T17:14:35Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: foundation
+    state: pending
+  - name: loaders-refactor
+    state: pending
+  - name: setup-migration
+    state: pending
+  - name: wiki-helpers-post-migration
+    state: pending
+  - name: cleanup-deletions
+    state: pending
 ```
