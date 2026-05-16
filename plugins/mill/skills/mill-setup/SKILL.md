@@ -497,7 +497,7 @@ The hub is always coloured `#2d7d46` so the operator can spot it instantly. mill
 Render and write via `_vscode.write_settings`:
 
 ```bash
-PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "from pathlib import Path; import yaml; import _vscode; from _paths import resolve_short_name; cfg = yaml.safe_load(Path('<wiki-dir>/config.yaml').read_text(encoding='utf-8')); _vscode.write_settings(color_hex='#2d7d46', target=Path('.vscode/settings.json'), short_name=resolve_short_name(cfg, '<repo-name>'))"
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "from pathlib import Path; import yaml; import _vscode; from _paths import resolve_short_name; cfg = yaml.safe_load(Path('<repo-dir>/mill-config.yaml').read_text(encoding='utf-8')); _vscode.write_settings(color_hex='#2d7d46', target=Path('.vscode/settings.json'), short_name=resolve_short_name(cfg, '<repo-name>'))"
 ```
 
 ### Phase 8 — Verify + report
@@ -505,7 +505,7 @@ PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/
 Check every invariant; halt with a specific error if any fails:
 
 - `<WIKI_PATH>` is a git repo (the cloned wiki)
-- `<WIKI_PATH>/config.yaml` exists
+- `<repo-root>/mill-config.yaml` exists
 - `<container>/wts/` exists (container-form) or `<container>/` exists (prefix-form)
 - `<container>/portals/` exists (container-form)
 - `hub/.portals` exists and resolves to `<container>/portals/`
@@ -538,7 +538,7 @@ mill-setup complete.
   PYTHONPATH (User): <scripts>
   Profile activation: $PROFILE — mill-venv-start block present
 
-Junctions (from wiki config.yaml):
+Junctions (from mill-config.yaml):
   Hub-scope (created now):
     <path-a> -> <resolved-target-a>
   Per-worktree (created by mill-spawn):

@@ -278,7 +278,8 @@ def run(
             f"code-review {'batch' if batch_name else 'holistic'} reviewer is null; "
             f"the orchestrator should not have invoked this scope"
         )
-    registry = _reviewers.load(wiki_root)
+    hub_dir = project_root
+    registry = _reviewers.load(hub_dir)
     spec = _reviewers.resolve(registry, reviewer_name)
     timeout = cfg["llm"]["holistic_timeout"] if batch_name is None else cfg["llm"]["bulk_timeout"]
 

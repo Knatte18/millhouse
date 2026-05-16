@@ -1,13 +1,15 @@
 """
 Registry loader, name resolver, and role-aware lookup for named reviewer definitions.
 
-Provides the bridge between wiki/reviewers.yaml (the registry of named reviewer
-specs) and wiki/config.yaml (the role configuration that references those specs).
+Provides the bridge between plugin template mill-agents.yaml (the base registry),
+.millhouse/agents.local.yaml (per-hub overrides), and legacy wiki/agents.yaml or
+wiki/reviewers.yaml (for in-flight branches before migration).
 
 Public API:
     ReviewerError  — raised on every validation/resolution failure.
-    load(wiki_root: Path) -> dict[str, dict]
-        Load and validate wiki_root/reviewers.yaml. Returns name → raw spec dict.
+    load(hub_dir: Path) -> dict[str, dict]
+        Load and validate plugin template + local overlay + legacy wiki fallback.
+        Returns name → raw spec dict.
     resolve(registry: dict, name: str) -> dict
         Resolve a reviewer name to a fully-flattened spec dict.
         Special case: "test_stub" returns a synthetic spec without consulting the registry.
@@ -21,10 +23,14 @@ Public API:
 from __future__ import annotations
 
 import re
+import sys
 from copy import deepcopy
 from pathlib import Path
 
 import yaml
+
+import _paths
+from _config import deep_merge, resolve_plugin_template_path
 
 _NAME_REGEX = re.compile(r"^[a-z0-9_-]+$")
 
@@ -33,33 +39,95 @@ class ReviewerError(Exception):
     """Raised on every validation/resolution failure in the reviewer registry."""
 
 
-def load(wiki_root: Path) -> dict[str, dict]:
-    """Load wiki_root/reviewers.yaml, validate structure, return name → raw spec.
+def load(hub_dir: Path) -> dict[str, dict]:
+    """Load and validate plugin template + local overlay + legacy wiki fallback.
 
-    Validates: all names match [a-z0-9_-]+, no duplicate names, every entry has
-    a known type, required fields per type, cluster use: references resolve to
-    type=single only, and no cycles in the use: graph.
+    Returns name → raw spec dict after merging all available layers and validating.
+
+    Validates: all names match [a-z0-9_-]+, no duplicate names in each source file,
+    every entry has a known type, required fields per type, cluster use: references
+    resolve to type=single only, and no cycles in the use: graph.
 
     Raises ReviewerError listing every problem in a single message.
     """
-    path = wiki_root / "agents.yaml"
-    if not path.exists():
-        path = wiki_root / "reviewers.yaml"
-    if not path.exists():
-        raise ReviewerError(f"Missing registry at {wiki_root / 'agents.yaml'}")
+    # Load plugin template.
+    template_path = resolve_plugin_template_path("mill-agents.yaml")
+    template_registry = {}
+    if template_path.exists():
+        template_text = template_path.read_text(encoding="utf-8")
+        _validate_source_for_duplicates(template_text, template_path)
+        template_registry = yaml.safe_load(template_text) or {}
 
-    text = path.read_text(encoding="utf-8")
+    # Load local overlay.
+    local_path = hub_dir / ".millhouse" / "agents.local.yaml"
+    local_registry = {}
+    if local_path.exists():
+        local_text = local_path.read_text(encoding="utf-8")
+        _validate_source_for_duplicates(local_text, local_path)
+        local_registry = yaml.safe_load(local_text) or {}
 
-    # Use yaml.compose to detect duplicate top-level keys before construction.
+    # Legacy wiki fallback if both layers are empty.
+    if not template_registry and not local_registry:
+        wiki_path = None
+        try:
+            wiki_path = _paths.resolve_wiki_path(hub_dir)
+            agents_path = wiki_path / "agents.yaml"
+            if agents_path.exists():
+                sys.stderr.write(
+                    f"[reviewers] using legacy wiki agents file at {agents_path}; "
+                    "run mill-setup to migrate to plugin template + .millhouse/agents.local.yaml\n"
+                )
+                wiki_text = agents_path.read_text(encoding="utf-8")
+                _validate_source_for_duplicates(wiki_text, agents_path)
+                return _validate_and_return(
+                    yaml.safe_load(wiki_text) or {}, template_registry
+                )
+            reviewers_path = wiki_path / "reviewers.yaml"
+            if reviewers_path.exists():
+                sys.stderr.write(
+                    f"[reviewers] using legacy wiki agents file at {reviewers_path}; "
+                    "run mill-setup to migrate to plugin template + .millhouse/agents.local.yaml\n"
+                )
+                wiki_text = reviewers_path.read_text(encoding="utf-8")
+                _validate_source_for_duplicates(wiki_text, reviewers_path)
+                return _validate_and_return(
+                    yaml.safe_load(wiki_text) or {}, template_registry
+                )
+        except (Exception, SystemExit):
+            pass
+
+        # No source found.
+        raise ReviewerError(
+            f"Missing registry: no plugin template at {template_path}, "
+            f"no .millhouse/agents.local.yaml at {local_path}, "
+            f"no legacy wiki/agents.yaml or wiki/reviewers.yaml"
+        )
+
+    # Merge layers: local overlays template.
+    raw = deep_merge(template_registry, local_registry)
+
+    # Per-agent unknown-key validation: local-only agents are allowed.
+    for agent_name in local_registry:
+        if agent_name in template_registry:
+            unknown = _walk_unknown_agent_keys(
+                local_registry[agent_name], template_registry[agent_name]
+            )
+            for key in unknown:
+                sys.stderr.write(
+                    f"[reviewers] unknown key in {agent_name}: {key} "
+                    "(in .millhouse/agents.local.yaml)\n"
+                )
+
+    # Run full validation on merged registry.
+    return _validate_and_return(raw, template_registry)
+
+
+def _validate_source_for_duplicates(text: str, source_path: Path) -> None:
+    """Check a YAML source for duplicate top-level keys via compose."""
     doc = yaml.compose(text)
-    if doc is None:
-        return {}
-    if not isinstance(doc, yaml.MappingNode):
-        raise ReviewerError(f"Registry at {path} must be a YAML mapping")
+    if doc is None or not isinstance(doc, yaml.MappingNode):
+        return
 
-    errors: list[str] = []
-
-    # Duplicate key detection via AST node pairs.
     seen_keys: set[str] = set()
     dup_keys: list[str] = []
     for key_node, _ in doc.value:
@@ -68,11 +136,26 @@ def load(wiki_root: Path) -> dict[str, dict]:
             dup_keys.append(k)
         seen_keys.add(k)
     if dup_keys:
-        errors.append(f"Duplicate reviewer names: {sorted(set(dup_keys))!r}")
+        raise ReviewerError(
+            f"Duplicate reviewer names in {source_path}: {sorted(set(dup_keys))!r}"
+        )
 
-    raw = yaml.safe_load(text) or {}
+
+def _walk_unknown_agent_keys(actual_entry: dict, template_entry: dict) -> list[str]:
+    """Walk actual agent entry and return keys not in template_entry."""
+    unknown = []
+    for key in actual_entry:
+        if key not in template_entry:
+            unknown.append(key)
+    return unknown
+
+
+def _validate_and_return(raw: dict, template_registry: dict) -> dict[str, dict]:
+    """Validate merged registry and return it; raise ReviewerError on any problems."""
     if not isinstance(raw, dict):
-        raise ReviewerError(f"Registry at {path} must be a YAML mapping")
+        raise ReviewerError("Registry must be a YAML mapping")
+
+    errors: list[str] = []
 
     # Per-entry validation; track valid types for cross-ref checks.
     valid_types: dict[str, str] = {}

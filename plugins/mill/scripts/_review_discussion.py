@@ -73,7 +73,8 @@ def run(
     reviewer_name = cfg["roles"]["discussion-review"]["holistic"]["reviewer"]
     if reviewer_name is None:
         raise ReviewError("discussion-review holistic reviewer is null; nothing to do")
-    registry = _reviewers.load(wiki_root)
+    hub_dir = project_root
+    registry = _reviewers.load(hub_dir)
     spec = _reviewers.resolve(registry, reviewer_name)
     mode = "tool-use" if spec.get("tooluse") else "bulk"
     tool_rule = build_tool_rule(mode)

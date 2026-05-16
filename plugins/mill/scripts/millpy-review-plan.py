@@ -79,7 +79,7 @@ def main(argv: list[str] | None = None) -> int:
     cfg = load_config(project_root, mill_dir)
 
     try:
-        registry = _reviewers.load(wiki_root)
+        registry = _reviewers.load(project_root)
         _reviewers.validate_role_refs(cfg, registry)
     except _reviewers.ReviewerError as exc:
         print(str(exc), file=sys.stderr)

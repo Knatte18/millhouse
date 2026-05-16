@@ -91,7 +91,7 @@ def main(argv=None) -> int:
     implementer_cfg = cfg.get("roles", {}).get("implementer", {})
     model_name = implementer_cfg.get("model", "sonnethigh")
     try:
-        registry = _reviewers.load(wiki_path)
+        registry = _reviewers.load(git_root)
         impl_spec = _reviewers.resolve(registry, model_name)
     except _reviewers.ReviewerError as e:
         print(str(e), file=sys.stderr)
