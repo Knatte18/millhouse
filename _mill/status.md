@@ -54,5 +54,7 @@ batches:
     implementer_session: df163020-2f43-404e-bf68-120edf12d80c
     start_sha: 8004a8e4d2aa91a0e917e1a6207edb504d0e0092
   - name: cleanup-deletions
-    state: pending
+    state: running
+    implementer_session: ab4dd4b5-5427-41fd-a2d6-b5c9cb2723a2
+    start_sha: 3c7dbe9aa5e55497107f67118a465e4fa4c5dce9
 ```
