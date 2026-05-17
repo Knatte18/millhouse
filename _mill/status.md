@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: review-sandbox-guard
 branch: hanf/review-sandbox-guard
 plan: _mill/plan
@@ -25,4 +25,19 @@ plan-fix-r2  '2026-05-17T11:37:17Z'
 plan-review-r3  '2026-05-17T11:51:44Z'
 plan-fix-r3  '2026-05-17T11:51:44Z'
 planned  '2026-05-17T11:51:44Z'
+implementing  '2026-05-17T11:58:16Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: guard-helper
+    state: pending
+  - name: fix-allowed-tools-argv
+    state: pending
+  - name: template-identity-header
+    state: pending
+  - name: wire-guard-backends
+    state: pending
 ```
