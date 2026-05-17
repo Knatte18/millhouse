@@ -124,8 +124,9 @@ def test_review_cli_emits_envelope_on_config_failure() -> int:
             stdout_buf = io.StringIO()
             try:
                 with contextlib.redirect_stdout(stdout_buf):
-                    with _mock.patch("_paths.resolve_wiki_path", side_effect=ValueError("no sibling wiki")):
-                        _rc = _mod.main([])
+                    with _mock.patch("_paths.resolve_git_root", return_value=_tmp):
+                        with _mock.patch("_paths.resolve_wiki_path", side_effect=ValueError("no sibling wiki")):
+                            _rc = _mod.main([])
             finally:
                 _os.chdir(_orig_cwd)
 
@@ -300,9 +301,10 @@ def test_review_cli_emits_envelope_on_slug_failure() -> int:
             stdout_buf = io.StringIO()
             try:
                 with contextlib.redirect_stdout(stdout_buf):
-                    with _mock.patch("_paths.resolve_wiki_path", return_value=_wiki):
-                        with _mock.patch("_review_common.find_active_slug", side_effect=ReviewError("branch not present in Home.md")):
-                            _rc = _mod.main([])
+                    with _mock.patch("_paths.resolve_git_root", return_value=_tmp):
+                        with _mock.patch("_paths.resolve_wiki_path", return_value=_wiki):
+                            with _mock.patch("_review_common.find_active_slug", side_effect=ReviewError("branch not present in Home.md")):
+                                _rc = _mod.main([])
             finally:
                 _os.chdir(_orig_cwd)
 
@@ -421,8 +423,10 @@ def main() -> int:
         _err_buf = io.StringIO()
         try:
             with contextlib.redirect_stderr(_err_buf):
-                with _mock.patch("_paths.resolve_wiki_path", return_value=_wiki):
-                    _rc = _mod.main([])
+                with _mock.patch("_paths.resolve_git_root", return_value=_tmp):
+                    with _mock.patch("_paths.resolve_hub_path", return_value=_tmp):
+                        with _mock.patch("_paths.resolve_wiki_path", return_value=_wiki):
+                            _rc = _mod.main([])
         finally:
             _os.chdir(_orig_cwd)
 

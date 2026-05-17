@@ -60,7 +60,8 @@ repo:
 junctions:
   .wiki: <WIKI_PATH>
   .portals: <CONTAINER_PATH>/portals/
-  .active: <CONTAINER_PATH>/portals/<SLUG>/
+  # .active is created explicitly by mill-spawn/mill-claim (points to <hub>/_mill/);
+  # not declared here so it is not auto-created in non-task worktrees.
 
 # ---------------------------------------------------------------------------
 # mill-spawn
@@ -140,6 +141,9 @@ roles:
     holistic:
       rounds: 3
       reviewer: sonnethigh
+      fallback_reviewer: null     # reviewer name from agents.yaml to swap in on consecutive rate-limit ERRORs; null = no fallback
+      fallback_on:                 # list of substrings (lowercased match) in reviews[].error that trigger fallback
+        - "rate-limit"
       # large_prompt:            # optional: override reviewer for large prompts
       #   threshold_ktok: 100    # switch when estimated tok count >= this (char/4000)
       #   reviewer: null         # override reviewer from agents.yaml; null = disabled

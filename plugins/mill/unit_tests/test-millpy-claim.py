@@ -273,16 +273,11 @@ def test_main_happy_path_calls_spawn_core_helpers() -> None:
     sc.write_initial_status.assert_called_once()
     sc.recreate_active_junction.assert_called_once()
 
-    # Verify new signature: (slug, hub_root, container_path)
+    # Verify new signature: (hub_root,)
     rac_call = sc.recreate_active_junction.call_args
     expected_hub_root = Path("/fake/repo/subdir")
-    expected_container = Path("/fake/container")
-    if rac_call.args[0] != "my-task":
-        raise AssertionError(f"recreate_active_junction slug mismatch: {rac_call}")
-    if rac_call.args[1] != expected_hub_root:
+    if rac_call.args[0] != expected_hub_root:
         raise AssertionError(f"recreate_active_junction hub_root mismatch: {rac_call}")
-    if rac_call.args[2] != expected_container:
-        raise AssertionError(f"recreate_active_junction container_path mismatch: {rac_call}")
 
     status_call = sc.write_initial_status.call_args
     if status_call.kwargs.get("slug") != "my-task":

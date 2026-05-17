@@ -277,7 +277,9 @@ def main(argv: list[str] | None = None) -> int:
             )
             raise SystemExit(1)
 
-    # Create the portal entry for this worktree and recreate .active.
+    # Create the per-task portal entry pointing at hub/_mill/, and the .active
+    # junction pointing at the same _mill/ working dir. All portal/junction
+    # targets terminate at _mill/, never at the worktree root.
     container_path = resolve_container_path(git_root)
     (container_path / "portals").mkdir(parents=True, exist_ok=True)
 
@@ -286,22 +288,15 @@ def main(argv: list[str] | None = None) -> int:
 
     portal_link = container_path / "portals" / slug
     if not portal_link.exists() and not portal_link.is_symlink():
-        # First claim: create portal entry pointing at hub/_mill/.
         _junction.create(target=resolve_hub_path() / "_mill", link_path=portal_link)
     else:
-        # Portal entry exists: check if it points at the correct target.
         existing_target = os.path.realpath(str(portal_link))
         current_target = os.path.realpath(str(resolve_hub_path() / "_mill"))
         if existing_target != current_target:
-            # Points elsewhere — remove and recreate.
             _junction.remove(portal_link)
             _junction.create(target=resolve_hub_path() / "_mill", link_path=portal_link)
-        # else: already correct, skip.
 
-    if not (resolve_hub_path() / ".portals").exists():
-        _junction.create(target=container_path / "portals", link_path=resolve_hub_path() / ".portals")
-
-    _spawn_core.recreate_active_junction(slug, resolve_hub_path(), container_path)
+    _spawn_core.recreate_active_junction(resolve_hub_path())
 
     # Render and write the initial status.md; commit on task branch.
     status_abs = _spawn_core.write_initial_status(

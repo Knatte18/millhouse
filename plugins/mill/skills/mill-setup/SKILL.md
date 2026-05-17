@@ -250,26 +250,17 @@ Idempotency: re-running mill-setup with the same flags (or no flags after a prio
 
 ### Phase 3.7 — Create container scaffolding
 
-Create the `<container>/portals/` directory (if missing) and the main-worktree portal entry pointing at the hub:
+Create the `<container>/portals/` directory (if missing). Task portals are added per-task by `mill-spawn`/`mill-claim`; main worktree gets NO portal entry — adding one creates a deletion-cycle through `<container>/portals/<repo>` back to the hub when any task worktree is removed.
 
 ```bash
 PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "
 from pathlib import Path
-import _junction
 container = Path(r'<container>').resolve()
 portals = container / 'portals'
 portals.mkdir(parents=True, exist_ok=True)
-hub = Path(r'<hub-path>').resolve()
-portal_entry = portals / hub.name
-if not portal_entry.exists():
-    _junction.create(hub, portal_entry)
-    print(f'created portal entry: {portal_entry} -> {hub}')
-else:
-    print('portal entry already exists, skipping')
+print(f'ensured portals dir: {portals}')
 "
 ```
-
-`<hub.name>` is the repository directory name (last component of `<hub-path>`). This portal entry is the canonical "hub in portals" that `.portals/<repo>` resolves through.
 
 **Idempotency:** `portals.mkdir(exist_ok=True)` is a no-op if the directory already exists. The portal junction check prevents double-creation.
 

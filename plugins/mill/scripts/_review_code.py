@@ -359,92 +359,115 @@ def run(
             )
 
         if verdict == "NEED_CONTEXT":
-            missing_raw = parse_missing_context(raw)
-            missing_paths = resolve_existing_paths(
-                missing_raw, project_root, root, wiki_root=wiki_root
+                missing_raw = parse_missing_context(raw)
+                missing_paths = resolve_existing_paths(
+                    missing_raw, project_root, root, wiki_root=wiki_root
+                )
+                if missing_paths:
+                    retry_prompt = (
+                        build_reattached_section(missing_paths)
+                        + "\n\n"
+                        + "Please continue your review using the re-attached files above. "
+                        + "The original prompt is already in your session context."
+                    )
+                    print(
+                        f"[_review_code] NEED_CONTEXT round-1; retrying with resume "
+                        f"({len(missing_paths)} re-attached file(s)) session={(session_id or '?')[:8]}",
+                        file=sys.stderr,
+                    )
+                    try:
+                        raw, session_id = _reviewer_single.run(
+                            spec, retry_prompt, session_id=session_id, resume=True, timeout=timeout
+                        )
+                    except LLMError as exc:
+                        _reviews = [{
+                            "scope": scope_label,
+                            "verdict": "ERROR",
+                            "file": None,
+                            "error": f"resume retry failed: {exc}",
+                            "session_id": None,
+                        }]
+                        return ReviewResult(
+                            type="code",
+                            round=round_n,
+                            verdict=_aggregate_top_verdict(_reviews, "REQUEST_CHANGES"),
+                            blocking_count=0,
+                            reviews=_reviews,
+                        )
+                    try:
+                        verdict = parse_verdict(raw)
+                    except ReviewError as exc:
+                        write_review_file(
+                            reviews_dir,
+                            "code",
+                            round_n,
+                            raw,
+                            scope=batch_name,
+                        )
+                        _reviews = [{
+                            "scope": scope_label,
+                            "verdict": "ERROR",
+                            "file": None,
+                            "error": str(exc),
+                            "session_id": session_id,
+                        }]
+                        return ReviewResult(
+                            type="code",
+                            round=round_n,
+                            verdict=_aggregate_top_verdict(_reviews, "REQUEST_CHANGES"),
+                            blocking_count=0,
+                            reviews=_reviews,
+                        )
+                    # Second NEED_CONTEXT propagates to caller untouched.
+
+            blocking_count = parse_blocking_count(raw, severity="BLOCKING")
+            path = write_review_file(
+                reviews_dir,
+                "code",
+                round_n,
+                raw,
+                scope=batch_name,  # None for holistic → no batch segment in filename
             )
-            if missing_paths:
-                retry_prompt = (
-                    build_reattached_section(missing_paths)
-                    + "\n\n"
-                    + "Please continue your review using the re-attached files above. "
-                    + "The original prompt is already in your session context."
-                )
-                print(
-                    f"[_review_code] NEED_CONTEXT round-1; retrying with resume "
-                    f"({len(missing_paths)} re-attached file(s)) session={(session_id or '?')[:8]}",
-                    file=sys.stderr,
-                )
-                try:
-                    raw, session_id = _reviewer_single.run(
-                        spec, retry_prompt, session_id=session_id, resume=True, timeout=timeout
-                    )
-                except LLMError as exc:
-                    _reviews = [{
-                        "scope": scope_label,
-                        "verdict": "ERROR",
-                        "file": None,
-                        "error": f"resume retry failed: {exc}",
-                        "session_id": None,
-                    }]
-                    return ReviewResult(
-                        type="code",
-                        round=round_n,
-                        verdict=_aggregate_top_verdict(_reviews, "REQUEST_CHANGES"),
-                        blocking_count=0,
-                        reviews=_reviews,
-                    )
-                try:
-                    verdict = parse_verdict(raw)
-                except ReviewError as exc:
-                    write_review_file(
-                        reviews_dir,
-                        "code",
-                        round_n,
-                        raw,
-                        scope=batch_name,
-                    )
-                    _reviews = [{
-                        "scope": scope_label,
-                        "verdict": "ERROR",
-                        "file": None,
-                        "error": str(exc),
-                        "session_id": session_id,
-                    }]
-                    return ReviewResult(
-                        type="code",
-                        round=round_n,
-                        verdict=_aggregate_top_verdict(_reviews, "REQUEST_CHANGES"),
-                        blocking_count=0,
-                        reviews=_reviews,
-                    )
-                # Second NEED_CONTEXT propagates to caller untouched.
+            print(
+                f"[_review_code] wrote {path.name} verdict={verdict}",
+                file=sys.stderr,
+            )
 
-        blocking_count = parse_blocking_count(raw, severity="BLOCKING")
-        path = write_review_file(
-            reviews_dir,
-            "code",
-            round_n,
-            raw,
-            scope=batch_name,  # None for holistic → no batch segment in filename
-        )
-        print(
-            f"[_review_code] wrote {path.name} verdict={verdict}",
-            file=sys.stderr,
-        )
-
-        _reviews = [
-            {
+            _reviews = [
+                {
+                    "scope": scope_label,
+                    "verdict": verdict,
+                    "file": str(path),
+                    "session_id": session_id,
+                }
+            ]
+            return ReviewResult(
+                type="code",
+                round=round_n,
+                verdict=_aggregate_top_verdict(_reviews, verdict),
+                blocking_count=blocking_count,
+                reviews=_reviews,
+            )
+        except ReviewError as exc:
+            print(f"[_review_code] parse_verdict failed for {scope_label}: {exc}", file=sys.stderr)
+            path = write_review_file(
+                reviews_dir,
+                "code",
+                round_n,
+                raw,
+                scope=batch_name,
+            )
+            _reviews = [{
                 "scope": scope_label,
-                "verdict": verdict,
+                "verdict": "ERROR",
                 "file": str(path),
+                "error": f"parse_verdict failed: {exc}",
                 "session_id": session_id,
-            }
-        ]
-        return ReviewResult(
-            type="code",
-            round=round_n,
-            verdict=_aggregate_top_verdict(_reviews, verdict),
-            blocking_count=blocking_count,
-            reviews=_reviews,
-        )
+            }]
+            return ReviewResult(
+                type="code",
+                round=round_n,
+                verdict=_aggregate_top_verdict(_reviews, "REQUEST_CHANGES"),
+                blocking_count=0,
+                reviews=_reviews,
+            )

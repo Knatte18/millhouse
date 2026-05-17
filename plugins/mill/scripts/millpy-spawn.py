@@ -209,20 +209,21 @@ def main(argv: list[str] | None = None) -> int:
 
     container_path = resolve_container_path(git_root)
     (container_path / "portals").mkdir(parents=True, exist_ok=True)
-    # Portal entry points to wts/<slug>/_mill/ directly; .portals junction gives the worktree a view of the shared portals dir.
     (worktree_path / "_mill").mkdir(parents=True, exist_ok=True)
+    # Portal entry: <container>/portals/<slug> -> <wts>/<slug>/_mill/.
     _junction.create(target=worktree_path / "_mill", link_path=container_path / "portals" / slug)
-    _junction.create(target=container_path / "portals", link_path=dest_hub / ".portals")
 
-    # Create all junctions and hardlinks from wiki/config.yaml for the new
-    # worktree.  _setup.create_hub_links uses the token-scope filter so that
-    # entries requiring <SLUG> are only created in slug-bearing (task) worktrees.
+    # Create remaining junctions/hardlinks from junctions config for the new
+    # worktree (.wiki, .portals). _setup.create_hub_links uses the token-scope
+    # filter so that entries requiring <SLUG> are only created in slug-bearing
+    # (task) worktrees.
     dest_tokens = _build_tokens(dest_hub, wiki_path, slug=slug)
     _setup.create_hub_links(dest_hub, wiki_path, dest_tokens)
 
-    # Update the hub's .active junction to point at container/portals/<slug>
-    # which in turn points to wiki/active/<slug>/.
-    _spawn_core.recreate_active_junction(slug, resolve_hub_path(), container_path)
+    # .active is task-scoped and points to <hub>/_mill/ -- created explicitly
+    # rather than via mill-config.yaml junctions block so it is not auto-created
+    # in non-task worktrees.
+    _spawn_core.recreate_active_junction(dest_hub)
 
     # Pick a colour + write .vscode/settings.json. The palette scans the
     # *existing* sibling worktrees in the shared worktrees dir; the newly
