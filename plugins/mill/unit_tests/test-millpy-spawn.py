@@ -586,7 +586,9 @@ def test_create_hub_links_called_after_portal_creation() -> None:
             f"portal target should be {expected_portal_target!r}, got {portal_target!r}"
         )
 
-    # Verify .portals junction is created inside the task worktree
+    # .portals junction is NOT created by millpy-spawn directly; it is
+    # created (when configured) by _setup.create_hub_links via the
+    # mill-config.yaml junctions section.
     expected_portals_link = Path("/fake/worktrees") / "my-task" / ".portals"
     portals_create_call = next(
         (c for c in all_create_calls
@@ -594,8 +596,11 @@ def test_create_hub_links_called_after_portal_creation() -> None:
          == expected_portals_link),
         None,
     )
-    if portals_create_call is None:
-        raise AssertionError(f".portals junction not created at {expected_portals_link}")
+    if portals_create_call is not None:
+        raise AssertionError(
+            f".portals junction should NOT be created directly by millpy-spawn; "
+            f"create_hub_links owns it. Got: {portals_create_call}"
+        )
 
     print("PASS: _setup.create_hub_links called after portal _junction.create")
 
