@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-review-cli-error-envelope
+phase: approved-millpy-implement-push-branch
 slug: mill-branch-slug-fixes
 branch: hanf/mill-branch-slug-fixes
 plan: _mill/plan
@@ -27,6 +27,7 @@ planned  '2026-05-17T12:30:26Z'
 implementing  '2026-05-17T12:34:38Z'
 approved-branch-slug-helpers  '2026-05-17T12:42:04Z'
 approved-review-cli-error-envelope  '2026-05-17T12:51:57Z'
+approved-millpy-implement-push-branch  '2026-05-17T12:54:01Z'
 ```
 
 ## Batches
@@ -42,7 +43,7 @@ batches:
     implementer_session: 072fcb58-eec8-42ad-9cc4-aa30f62e09b0
     start_sha: 4c7420fbd449f266a57143ee642e99df9d19ec88
   - name: millpy-implement-push-branch
-    state: running
+    state: approved
     implementer_session: cd6f0504-8f23-42d7-bcd2-ab5525129eb1
     start_sha: 34cf137faa3b0904eefe1349c1ec1b75bbda2f28
   - name: millpy-bg-cwd-validation
