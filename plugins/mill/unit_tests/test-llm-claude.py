@@ -149,17 +149,14 @@ def main() -> int:
     # _build_argv: bulk (no effort, no session)
     argv = _build_argv("claude-sonnet-4-5", None, "")
     assert "--allowedTools" not in argv, f"empty allowed_tools must omit --allowedTools; got {argv}"
-    dt_idx = argv.index("--disallowedTools")
-    assert argv[dt_idx + 1] == "Edit,Write,Bash,NotebookEdit"
+    assert argv[-2:] == ["--disallowedTools", "Edit,Write,Bash,NotebookEdit"]
     print("PASS: _build_argv bulk (empty allowed_tools) omits --allowedTools, adds --disallowedTools")
 
     # _build_argv: tool-use with effort
     argv = _build_argv("claude-sonnet-4-5", "max", "Read,Grep,Glob")
     assert "--effort" in argv and "max" in argv
     assert "--allowedTools" in argv and "Read,Grep,Glob" in argv
-    assert "--disallowedTools" in argv
-    dt_idx = argv.index("--disallowedTools")
-    assert argv[dt_idx + 1] == "Edit,Write,Bash,NotebookEdit"
+    assert argv[-2:] == ["--disallowedTools", "Edit,Write,Bash,NotebookEdit"]
     print("PASS: _build_argv tool-use with effort + --disallowedTools deny-list")
 
     # _build_argv: --session-id when session given, resume=False
@@ -306,11 +303,8 @@ def main() -> int:
 
     assert "--allowedTools" not in captured_argv_bulk, \
         f"run_bulk must omit --allowedTools for empty allowed_tools; got {captured_argv_bulk}"
-    assert "--disallowedTools" in captured_argv_bulk, \
-        f"run_bulk must include --disallowedTools; got {captured_argv_bulk}"
-    dt_idx_bulk = captured_argv_bulk.index("--disallowedTools")
-    assert captured_argv_bulk[dt_idx_bulk + 1] == "Edit,Write,Bash,NotebookEdit", \
-        f"run_bulk --disallowedTools value mismatch; got {captured_argv_bulk[dt_idx_bulk + 1]}"
+    assert captured_argv_bulk[-2:] == ["--disallowedTools", "Edit,Write,Bash,NotebookEdit"], \
+        f"run_bulk --disallowedTools mismatch; got {captured_argv_bulk[-2:]}"
     print("PASS: run_bulk (empty allowed_tools) omits --allowedTools, adds --disallowedTools")
 
     # run_tool_use: "Read,Grep,Glob" -> yes --allowedTools, yes --disallowedTools
@@ -335,11 +329,8 @@ def main() -> int:
 
     assert "--allowedTools" in captured_argv_tooluse and "Read,Grep,Glob" in captured_argv_tooluse, \
         f"run_tool_use must include --allowedTools Read,Grep,Glob; got {captured_argv_tooluse}"
-    assert "--disallowedTools" in captured_argv_tooluse, \
-        f"run_tool_use must include --disallowedTools; got {captured_argv_tooluse}"
-    dt_idx_tooluse = captured_argv_tooluse.index("--disallowedTools")
-    assert captured_argv_tooluse[dt_idx_tooluse + 1] == "Edit,Write,Bash,NotebookEdit", \
-        f"run_tool_use --disallowedTools value mismatch; got {captured_argv_tooluse[dt_idx_tooluse + 1]}"
+    assert captured_argv_tooluse[-2:] == ["--disallowedTools", "Edit,Write,Bash,NotebookEdit"], \
+        f"run_tool_use --disallowedTools mismatch; got {captured_argv_tooluse[-2:]}"
     print("PASS: run_tool_use (Read,Grep,Glob) includes --allowedTools and --disallowedTools deny-list")
 
     # rate-limit error message includes stdout fallback content

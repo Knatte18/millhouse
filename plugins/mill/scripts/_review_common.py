@@ -8,11 +8,13 @@ scripts.
 
 Public API:
     ReviewError          — raised by the backend on config/slug/round errors
+    ReviewerOverstepError — raised by worktree_snapshot_guard when a reviewer mutates HEAD or working tree
     ReviewResult         — dataclass; serialised to the CLI's stdout JSON
     RE_SIMPLE            — regex matching simple review filenames
     RE_BATCH             — regex matching plan-batch review filenames
     find_active_slug()   — delegate to _marker.slug_from_branch for slug derivation
     load_task_title()    — delegate to _marker.task_data for task_title; fall back to slug on MarkerError
+    worktree_snapshot_guard() — context manager; snapshot guard wrapping each backend run()
     read_constraints_md()— read CONSTRAINTS.md, empty string if absent
     resolve_path()       — locate a path inside the active hub (where task/ lives) from a config template
     discover_round()     — determine next review round number per (review_type, scope)
@@ -56,9 +58,7 @@ import _paths
 import _render
 import _reviewers
 from _config import (
-    ENV_REGISTRY,
     apply_env_overrides,
-    walk_unknown_keys,
     warn_unknown_keys,
     resolve_plugin_template_path,
 )
@@ -298,7 +298,6 @@ def resolve_path(path_tmpl: str, slug: str) -> Path:
     """
     git_root = _paths.resolve_git_root()
     container_path = _paths.resolve_container_path(git_root)
-    wiki_root = _paths.resolve_wiki_path(git_root)
     hub_dir = _paths.resolve_hub_path()
     cfg = load_config(git_root, hub_dir / ".millhouse")
     active_hub = _paths.resolve_active_hub(
