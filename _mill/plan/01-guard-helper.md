@@ -216,7 +216,7 @@ Batch-local decisions: porcelain comparison uses **substring match on the path f
 
      - **Case D — modified tracked file raises (porcelain M, HEAD same):** Inside the with-block, append to `seed.txt` without committing. Raises; `e.before_sha == e.after_sha`; the diff string contains `seed.txt`.
 
-     - **Case E — expected_paths filters allowed write:** Pass `expected_paths=["allowed/"]`. Inside the with-block create `allowed/output.md` (without committing). Guard MUST NOT raise.
+     - **Case E — expected_paths filters allowed write:** Pass `expected_paths=["allowed/"]`. Inside the with-block, first `(tmp / "allowed").mkdir(parents=True, exist_ok=True)`, then `Path(tmp / "allowed" / "output.md").write_text("x")` (without committing). Guard MUST NOT raise. (The `mkdir` is required — `_init_repo` only seeds `seed.txt` at repo root; the `allowed/` directory does not pre-exist.)
 
      - **Case F — commit inside expected_paths directory still raises (HEAD changed):** Pass `expected_paths=["allowed/"]`. Inside the with-block, create `allowed/output.md`, `git add` + `git commit`. Guard MUST raise (HEAD-SHA filter is never applied). Verify `e.before_sha != e.after_sha`.
 
@@ -239,3 +239,5 @@ Batch-local decisions: porcelain comparison uses **substring match on the path f
 The unit test covers the helper's eight states (clean, HEAD-change, porcelain-change, expected_paths filtering, error-class hierarchy, message shape) against a real `tempfile`-backed git repo per case. No real LLM, no network. Run-time under 5 seconds on a typical workstation.
 
 Additionally, `test-review-common.py` (existing) imports `_review_common` — verifying the new symbols do not break its import is a free side-check; a green `python plugins/mill/unit_tests/test-review-common.py` confirms no import-time regression.
+
+`run-all.py` (the global test runner used by `overview.verify`) auto-discovers tests via `HERE.glob("test-*.py")` (see [`plugins/mill/unit_tests/run-all.py:19`](plugins/mill/unit_tests/run-all.py)), so the new `test-review-guard.py` is automatically picked up. No registration step is needed.

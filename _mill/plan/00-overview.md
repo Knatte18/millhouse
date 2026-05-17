@@ -105,4 +105,7 @@ batches:
 - `plugins/mill/templates/review-plan-batch.md`
 - `plugins/mill/templates/review-plan-holistic.md`
 - `plugins/mill/unit_tests/test-llm-claude.py`
+- `plugins/mill/unit_tests/test-review-code-flow.py`
+- `plugins/mill/unit_tests/test-review-discussion-flow.py`
 - `plugins/mill/unit_tests/test-review-guard.py`
+- `plugins/mill/unit_tests/test-review-plan-flow.py`

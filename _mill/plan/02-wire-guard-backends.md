@@ -13,18 +13,19 @@ depends-on: [1]
 
 Wire each of the three review-backend `run()` functions to enter `worktree_snapshot_guard(project_root, expected_paths=[cfg["paths"]["reviews_dir"]])` around the existing body. The guard catches any HEAD or working-tree change introduced by a reviewer LLM call. The reviews_dir entry in `expected_paths` lets `write_review_file`'s legitimate untracked output pass through. Existing per-backend control flow (parallel `ThreadPoolExecutor` fan-out, holistic call, NEED_CONTEXT resume retries, error-tail handling) is preserved unchanged.
 
-Depends on batch 1's `worktree_snapshot_guard` and `ReviewerOverstepError`. The existing flow tests (`test-review-plan-flow.py`, `test-review-code-flow.py`, `test-review-discussion-flow.py`) run the backends end-to-end via `_reviewer_test_stub`, which never mutates git — they must remain green with the guard wired in.
+Depends on batch 1's `worktree_snapshot_guard` and `ReviewerOverstepError`. The existing flow tests (`test-review-plan-flow.py`, `test-review-code-flow.py`, `test-review-discussion-flow.py`) run the backends end-to-end via `_reviewer_test_stub`, which never mutates git — but the existing fixtures `git init` without committing, so `git rev-parse HEAD` would return exit 128 inside the new guard. Each card in this batch also seeds an initial commit at every `git init` call site in the corresponding flow-test file so the guard can capture a valid HEAD before the wrapped body runs.
 
 External interface: no public-API change. `run()` continues to return `ReviewResult` or raise `ReviewError`; `ReviewerOverstepError` propagates as a `ReviewError` to the API-layer catch sites in `millpy-review-*.py`.
 
 ## Cards
 
-### Card 3: Wrap _review_plan.run() body in worktree_snapshot_guard
+### Card 3: Wrap _review_plan.run() body in worktree_snapshot_guard + seed flow-test fixture
 
 - **Context:**
   - `plugins/mill/scripts/_review_common.py`
 - **Edits:**
   - `plugins/mill/scripts/_review_plan.py`
+  - `plugins/mill/unit_tests/test-review-plan-flow.py`
 - **Creates:** none
 - **Deletes:** none
 - **Requirements:**
@@ -48,14 +49,29 @@ External interface: no public-API change. `run()` continues to return `ReviewRes
 
   5. ASCII rule: no new `print()` strings are added in this card. The guard helper raises with an already-ASCII message.
 
-- **Commit:** `feat(_review_plan): wrap run() in worktree_snapshot_guard`
+  6. **Seed an initial commit in the flow-test fixture.** In `test-review-plan-flow.py`, locate `_make_plan_fixture` (around line 90). Currently it runs `git init` and `git checkout -b hanf/<SLUG>` but never commits — `git rev-parse HEAD` therefore returns exit 128 on the fresh worktree, which the new guard's `_capture_head_sha` would surface as a `ReviewError` before the wrapped body runs. After the existing `git checkout -b` line, add a seed commit:
 
-### Card 4: Wrap _review_code.run() body in worktree_snapshot_guard
+     ```python
+     subprocess.run(["git", "-C", str(worktree), "config", "user.email", "test@example.com"], check=True, capture_output=True)
+     subprocess.run(["git", "-C", str(worktree), "config", "user.name", "test"], check=True, capture_output=True)
+     (worktree / ".gitignore").write_text("\n", encoding="utf-8")
+     subprocess.run(["git", "-C", str(worktree), "add", ".gitignore"], check=True, capture_output=True)
+     subprocess.run(["git", "-C", str(worktree), "commit", "-m", "seed"], check=True, capture_output=True)
+     ```
+
+     Place the block immediately after the `git checkout -b` call and before any later fixture work (mill_dir creation, wiki seeding, etc.). The `.gitignore` choice is intentional — it's a real file the seed commit needs and matches how live worktrees behave. If a `.gitignore` is later written by other fixture code, the second write+add+commit overwrites/extends harmlessly.
+
+     If the file contains additional `git init` call sites not routed through `_make_plan_fixture`, apply the same seed-commit pattern to each before any review-backend `run()` is invoked. (Per the current code, only `_make_plan_fixture` does git init in this file; verify by grep.)
+
+- **Commit:** `feat(_review_plan): wrap run() in worktree_snapshot_guard + seed flow-test fixture`
+
+### Card 4: Wrap _review_code.run() body in worktree_snapshot_guard + seed flow-test fixtures
 
 - **Context:**
   - `plugins/mill/scripts/_review_common.py`
 - **Edits:**
   - `plugins/mill/scripts/_review_code.py`
+  - `plugins/mill/unit_tests/test-review-code-flow.py`
 - **Creates:** none
 - **Deletes:** none
 - **Requirements:**
@@ -68,14 +84,29 @@ External interface: no public-API change. `run()` continues to return `ReviewRes
 
   4. Same propagation rule as card 3: do not catch `ReviewerOverstepError` locally.
 
-- **Commit:** `feat(_review_code): wrap run() in worktree_snapshot_guard`
+  5. **Seed initial commits in every `git init` call site in `test-review-code-flow.py`.** This file has multiple call sites — the shared `_make_fixture` helper around line 90 plus inline `git init` calls inside individual tests (around lines 265, 331, 466, 685). For EACH `git init` invocation in the file, add a seed-commit block immediately after (and after any subsequent `git checkout -b` call, if present):
 
-### Card 5: Wrap _review_discussion.run() body in worktree_snapshot_guard
+     ```python
+     subprocess.run(["git", "-C", str(worktree_or_project_root), "config", "user.email", "test@example.com"], check=True, capture_output=True)
+     subprocess.run(["git", "-C", str(worktree_or_project_root), "config", "user.name", "test"], check=True, capture_output=True)
+     (worktree_or_project_root / ".gitignore").write_text("\n", encoding="utf-8")
+     subprocess.run(["git", "-C", str(worktree_or_project_root), "add", ".gitignore"], check=True, capture_output=True)
+     subprocess.run(["git", "-C", str(worktree_or_project_root), "commit", "-m", "seed"], check=True, capture_output=True)
+     ```
+
+     Substitute `worktree_or_project_root` with whichever local variable each site uses (`worktree`, `project_root`, etc.). For inline-test sites that already write a `.gitignore` or another initial file before committing, reuse that file in the seed-commit (do not add a duplicate `.gitignore`). For inline-test sites that already perform `git add` + `git commit` later in the test setup (e.g. the existing `["git", "-C", str(project_root), "commit", "-m", "initial a.py"]` around line 808), no separate seed commit is needed at that site — the existing commit IS the seed; just ensure the commit happens BEFORE the `code_run(...)` invocation. Verify by grep across the file: every `git init` either has a subsequent `git commit` before any `code_run` / `run` call, or gets the seed block above.
+
+     This pattern is repeated rather than factored into a helper because the inline tests have site-specific needs (different file names, different commit messages) and factoring would obscure them. If three or more sites end up byte-identical, hoist them to a `_seed_repo(path)` helper at the top of the file.
+
+- **Commit:** `feat(_review_code): wrap run() in worktree_snapshot_guard + seed flow-test fixtures`
+
+### Card 5: Wrap _review_discussion.run() body in worktree_snapshot_guard + seed flow-test fixture
 
 - **Context:**
   - `plugins/mill/scripts/_review_common.py`
 - **Edits:**
   - `plugins/mill/scripts/_review_discussion.py`
+  - `plugins/mill/unit_tests/test-review-discussion-flow.py`
 - **Creates:** none
 - **Deletes:** none
 - **Requirements:**
@@ -88,12 +119,24 @@ External interface: no public-API change. `run()` continues to return `ReviewRes
 
   4. The existing `try: raw, session_id = _reviewer_single.run(spec, prompt_text)` / `except LLMError as exc: raise ReviewError(f"All sub-reviews failed: {exc}") from exc` block is inside the guard — when `LLMError` is caught and re-raised as `ReviewError`, propagation past the guard's `__exit__` will still cause the guard to re-raise the original exception (the `except Exception: raise` branch in the helper). On normal return, the guard then performs the after-snapshot check. Both behaviours are correct.
 
-- **Commit:** `feat(_review_discussion): wrap run() in worktree_snapshot_guard`
+  5. **Seed an initial commit in the flow-test fixture.** In `test-review-discussion-flow.py`, locate `_make_fixture` (around line 31). Currently it runs `git init` (around line 39) but never commits. After the existing `git init` call (and any subsequent `git checkout -b` call, if present), insert:
+
+     ```python
+     subprocess.run(["git", "-C", str(worktree), "config", "user.email", "test@example.com"], check=True, capture_output=True)
+     subprocess.run(["git", "-C", str(worktree), "config", "user.name", "test"], check=True, capture_output=True)
+     (worktree / ".gitignore").write_text("\n", encoding="utf-8")
+     subprocess.run(["git", "-C", str(worktree), "add", ".gitignore"], check=True, capture_output=True)
+     subprocess.run(["git", "-C", str(worktree), "commit", "-m", "seed"], check=True, capture_output=True)
+     ```
+
+     Apply the same pattern to any additional `git init` call sites in the file (verify by grep). The seed commit must land before any `_review_discussion.run` invocation so `git rev-parse HEAD` succeeds inside the guard.
+
+- **Commit:** `feat(_review_discussion): wrap run() in worktree_snapshot_guard + seed flow-test fixture`
 
 ## Batch Tests
 
 `verify: python plugins/mill/unit_tests/test-review-plan-flow.py && python plugins/mill/unit_tests/test-review-code-flow.py && python plugins/mill/unit_tests/test-review-discussion-flow.py`
 
-The three flow tests run each backend end-to-end against `_reviewer_test_stub`, which never mutates git. Adding the guard must not change any test outcome — same PASS lines as before this batch. Any new FAIL means either an import error, a parameter mismatch (especially the `_review_discussion.run` positional-arg ordering), or a stub fixture that accidentally writes outside `_mill/reviews/`. None of those should occur if the wrap is purely additive.
+The three flow tests run each backend end-to-end against `_reviewer_test_stub`, which never mutates git. Adding the guard plus the fixture seed-commit must not change any test outcome — same PASS lines as before this batch. Any new FAIL means either: an import error; a parameter mismatch (especially the `_review_discussion.run` positional-arg ordering); a stub fixture that accidentally writes outside `_mill/reviews/`; or a missed `git init` site whose seed commit was not added (`ReviewError: git rev-parse HEAD failed`). The seed-commit edit is intentionally per-site rather than mocked because the guard's HEAD check is a real subprocess call and must observe a real commit.
 
-No new unit test is needed in this batch — the guard helper itself is covered by `test-review-guard.py` (batch 1). The flow tests verify the wiring does not regress existing behaviour.
+No new unit test file is needed in this batch — the guard helper itself is covered by `test-review-guard.py` (batch 1). The flow tests verify the wiring does not regress existing behaviour.
