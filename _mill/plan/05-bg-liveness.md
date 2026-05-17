@@ -86,7 +86,7 @@ External interface: a single new module with one function. Stdlib only -- no new
 - **Creates:**
   - `plugins/mill/unit_tests/test-bg-liveness.py`
 - **Deletes:** none
-- **Requirements:** Create a `unittest.TestCase` test file with four cases, each writing a synthetic log file into a `tempfile.TemporaryDirectory()` and calling `_bg.is_bg_worker_alive(log_path)`:
+- **Requirements:** Create a `unittest.TestCase` test file with six cases, each writing a synthetic log file into a `tempfile.TemporaryDirectory()` and calling `_bg.is_bg_worker_alive(log_path)`:
 
   1. `test_log_missing` -- log_path points to a file that does not exist. Expect `(False, None)`.
   2. `test_log_no_pid_line` -- write a log file containing only `some unrelated text\n` (no WORKER PID line). Expect `(False, None)`.

@@ -3,7 +3,7 @@
 ```yaml
 task: '66 (A) -- Review sandbox follow-up: guard exceptions + bare-exit + sandbox argv'
 slug: review-sandbox-followup
-approved: false
+approved: true
 started: '20260517-151748'
 parent: main
 root: ""

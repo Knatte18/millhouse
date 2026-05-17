@@ -44,7 +44,7 @@ External interface: no signature change. `ReviewerOverstepError` and the inner h
       raise inner_exc
   ```
 
-  Update the function's docstring so the "Exceptions raised inside the with-block propagate unchanged" sentence is replaced with: "If the wrapped block raises AND state was mutated, ``ReviewerOverstepError`` takes priority and chains the inner exception via ``__cause__``; if state was unchanged the inner exception is re-raised unchanged."
+  Update the function's docstring so the "Exceptions raised inside the with-block propagate unchanged" sentence is replaced with two sentences: (1) "If the wrapped block raises AND state was mutated, ``ReviewerOverstepError`` takes priority and chains the inner exception via ``__cause__``; if state was unchanged the inner exception is re-raised unchanged." (2) "If the post-snapshot capture itself raises (e.g. ``_capture_head_sha`` propagating a ``ReviewError`` from a broken git invocation), that error propagates and the inner exception is NOT chained -- the capture failure indicates the snapshot is untrustworthy, so the typed `ReviewerOverstepError` cannot be raised safely. This is an intentional trade-off; the inner exception, if any, is visible in the traceback frames above the capture call."
 - **Commit:** `fix(review-common): always run worktree_snapshot_guard after-snapshot, prefer overstep error`
 
 ### Card 4: unit test covering the four (inner-raise x state-mutated) cells
