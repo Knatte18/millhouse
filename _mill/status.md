@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-reviewing
+phase: holistic-approved
 slug: mill-branch-slug-fixes
 branch: hanf/mill-branch-slug-fixes
 plan: _mill/plan
@@ -31,6 +31,7 @@ approved-millpy-implement-push-branch  '2026-05-17T12:54:01Z'
 approved-millpy-bg-cwd-validation  '2026-05-17T13:06:43Z'
 approved-skill-error-retry-and-cwd-preludes  '2026-05-17T13:10:15Z'
 holistic-reviewing  '2026-05-17T13:10:36Z'
+holistic-approved  '2026-05-17T13:16:25Z'
 ```
 
 ## Batches
