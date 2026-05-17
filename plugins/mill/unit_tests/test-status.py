@@ -561,7 +561,7 @@ def main() -> int:
             )
             buf = io.StringIO()
             with contextlib.redirect_stderr(buf):
-                result = read_branch(sp, cfg={"spawn": {"branch_prefix": "hanf"}}, slug="foo")
+                result = read_branch(sp, cfg={"spawn": {"branch_prefix": "hanf/"}}, slug="foo")
             assert result == "hanf/foo", f"expected 'hanf/foo', got {result!r}"
             stderr_out = buf.getvalue()
             assert "[_status] warning" in stderr_out, f"expected warning in stderr, got {stderr_out!r}"
@@ -581,6 +581,17 @@ def main() -> int:
             assert result == "foo", f"expected 'foo', got {result!r}"
             assert "[_status] warning" in buf.getvalue(), "expected warning for empty prefix fallback"
             print("PASS: read_branch with empty prefix returns bare slug with warning")
+
+        # Case D: fallback path, no extra slash
+        with tempfile.TemporaryDirectory() as tmp:
+            sp = Path(tmp) / "nonexistent-status.md"
+            buf = io.StringIO()
+            with contextlib.redirect_stderr(buf):
+                result = read_branch(sp, cfg={"spawn": {"branch_prefix": "hanf/"}}, slug="foo")
+            assert result == "hanf/foo", f"expected 'hanf/foo', got {result!r}"
+            assert "hanf//foo" not in result, f"should not have double slash, got {result!r}"
+            assert "[_status] warning" in buf.getvalue(), "expected warning on fallback"
+            print("PASS: read_branch fallback path has no extra slash (hanf/foo, not hanf//foo)")
 
         # --- set_batch_fields tests ---
         ts_sbf = "2026-04-22T14:32:05Z"

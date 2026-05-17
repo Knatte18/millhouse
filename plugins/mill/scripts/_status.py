@@ -677,7 +677,7 @@ def read_slug(status_path: Path) -> str:
 def read_branch(status_path: Path, *, cfg: dict, slug: str) -> str:
     """Return the ``branch:`` value from the top yaml block, or derive it.
 
-    Falls back to ``f"{cfg['spawn']['branch_prefix']}/{slug}"`` when the prefix
+    Falls back to ``f"{cfg['spawn']['branch_prefix']}{slug}"`` when the prefix
     is non-empty, or bare ``slug`` when the prefix is empty. Emits a one-line
     warning to stderr on the fallback path.
 
@@ -700,7 +700,7 @@ def read_branch(status_path: Path, *, cfg: dict, slug: str) -> str:
         pass
 
     prefix = cfg.get("spawn", {}).get("branch_prefix", "")
-    derived = f"{prefix}/{slug}" if prefix else slug
+    derived = f"{prefix}{slug}" if prefix else slug
     print(
         f"[_status] warning: deriving branch from cfg.spawn.branch_prefix for slug={slug}",
         file=_sys.stderr,
