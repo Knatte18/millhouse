@@ -19,8 +19,7 @@ Depends on Batches 1 and 2 because Card 9 cites the helper signatures those batc
 
 ### Card 7: mill-start GAPS_FOUND branch commits review files (#309)
 
-- **Context:**
-  - none
+- **Context:** none
 - **Edits:**
   - `plugins/mill/skills/mill-start/SKILL.md`
 - **Creates:** none

@@ -75,7 +75,6 @@ batches:
 
 ## All Files Touched
 
-- `.claude-plugin/marketplace.json`
 - `CLAUDE.md`
 - `plugins/mill/scripts/_paths.py`
 - `plugins/mill/scripts/_plan_validate.py`
