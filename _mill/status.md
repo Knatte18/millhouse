@@ -1,10 +1,10 @@
 # Status
 
 ```yaml
-phase: discussed
+phase: planning
 slug: review-sandbox-followup
 branch: hanf/review-sandbox-followup
-plan: null
+plan: _mill/plan
 parent: main
 task: '66 (A) — Review sandbox follow-up: guard exceptions + bare-exit + sandbox argv'
 task_description: |
@@ -17,4 +17,5 @@ task_description: |
 discussing  '2026-05-17T14:35:46Z'
 discussion-fix-r1  '2026-05-17T15:15:52Z'
 discussed  '2026-05-17T15:16:04Z'
+planning  '2026-05-17T15:22:55Z'
 ```
