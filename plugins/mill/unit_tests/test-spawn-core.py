@@ -491,38 +491,33 @@ def test_write_initial_status_push_failure_raises_runtime_error() -> None:
 
 
 def test_recreate_active_junction_creates_link() -> None:
-    """New signature: recreate_active_junction(slug, hub_root, container_path).
-    Target is container_path / "portals" / slug; link is hub_root / ".active"."""
+    """New signature: recreate_active_junction(hub_root).
+    Target is hub_root / "_mill"; link is hub_root / ".active"."""
     with safe_temp_dir() as tmp:
-        container_path = tmp / "container"
-        portals = container_path / "portals"
-        portals.mkdir(parents=True)
-        mill_dir = Path(tmp) / "worktree" / ".millhouse"
-        mill_dir.mkdir(parents=True)
+        hub_root = Path(tmp) / "worktree"
+        hub_root.mkdir(parents=True)
 
-        recreate_active_junction("my-task", mill_dir.parent, container_path)
+        recreate_active_junction(hub_root)
 
-        link_path = mill_dir.parent / ".active"
-        target = container_path / "portals" / "my-task"
+        link_path = hub_root / ".active"
+        target = hub_root / "_mill"
         if not target.exists():
             raise AssertionError(f"target dir should have been created at {target}")
         if not (link_path.exists() or link_path.is_symlink()):
             raise AssertionError(f"junction not created at {link_path}")
-    print("PASS: recreate_active_junction creates junction pointing to portals/<slug>")
+    print("PASS: recreate_active_junction creates junction pointing to <hub>/_mill")
 
 
 def test_recreate_active_junction_idempotent() -> None:
     """Calling twice must result in a valid junction pointing at the right target."""
     with safe_temp_dir() as tmp:
-        container_path = tmp / "container"
-        (container_path / "portals").mkdir(parents=True)
-        mill_dir = Path(tmp) / "worktree" / ".millhouse"
-        mill_dir.mkdir(parents=True)
+        hub_root = Path(tmp) / "worktree"
+        hub_root.mkdir(parents=True)
 
-        recreate_active_junction("my-task", mill_dir.parent, container_path)
-        recreate_active_junction("my-task", mill_dir.parent, container_path)
+        recreate_active_junction(hub_root)
+        recreate_active_junction(hub_root)
 
-        link_path = mill_dir.parent / ".active"
+        link_path = hub_root / ".active"
         if not (link_path.exists() or link_path.is_symlink()):
             raise AssertionError(f"junction not present after two calls at {link_path}")
     print("PASS: recreate_active_junction is idempotent (second call keeps link valid)")
