@@ -242,7 +242,7 @@ def main() -> int:
     # Unparseable output -> ERROR verdict, ERROR entry with file path.
     # ------------------------------------------------------------------
     with tempfile.TemporaryDirectory() as tmpdir:
-        mill_dir, wiki_root, project_root, cfg = _make_discussion_fixture(Path(tmpdir))
+        mill_dir, wiki_root, project_root, cfg = _make_fixture(Path(tmpdir))
 
         orig_dir = os.getcwd()
         os.chdir(project_root)
