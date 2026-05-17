@@ -26,18 +26,24 @@ MILL_PYTHON="${PLUGIN_ROOT}/.venv/Scripts/python.exe"
 After setting `PLUGIN_ROOT`, check whether the task worktree contains a local copy of the mill plugin with an initialised venv:
 
 ```bash
-WORKTREE_PLUGIN_ROOT="$(git rev-parse --show-toplevel)/plugins/mill"
+WORKTREE_ROOT="$(git rev-parse --show-toplevel)"
+WORKTREE_PLUGIN_ROOT="${WORKTREE_ROOT}/plugins/mill"
 WORKTREE_VENV="${WORKTREE_PLUGIN_ROOT}/.venv/Scripts/python.exe"
-if [ -d "$WORKTREE_PLUGIN_ROOT" ] && [ -f "$WORKTREE_VENV" ]; then
+if [ -d "$WORKTREE_PLUGIN_ROOT" ]; then
+    if [ ! -f "$WORKTREE_VENV" ]; then
+        echo "[mill-go] self-modifying repo: worktree venv absent at ${WORKTREE_PLUGIN_ROOT}/.venv -- running 'uv sync --project plugins/mill'"
+        (cd "$WORKTREE_ROOT" && uv sync --project plugins/mill) || {
+            echo "[mill-go] HALT: uv sync failed in worktree ${WORKTREE_ROOT} -- cannot run self-modifying task with stale cache scripts. Run 'uv sync --project plugins/mill' manually and re-run /mill-go." >&2
+            exit 1
+        }
+    fi
     PLUGIN_ROOT="$WORKTREE_PLUGIN_ROOT"
     MILL_PYTHON="$WORKTREE_VENV"
     echo "[mill-go] NOTE: self-modifying repo detected; PLUGIN_ROOT overridden to $PLUGIN_ROOT"
-elif [ -d "$WORKTREE_PLUGIN_ROOT" ]; then
-    echo "[mill-go] SKIP: self-modifying repo but worktree venv absent -- using cache. Run 'uv sync --project ${WORKTREE_PLUGIN_ROOT}' to enable."
 fi
 ```
 
-Both `PLUGIN_ROOT` and `MILL_PYTHON` are updated together only when the worktree venv exists. If `plugins/mill/` is present but `.venv` is absent (common in fresh task worktrees where `.venv` is gitignored), the cache path is used and a skip message is logged. For non-millhouse repos the entire block is a no-op.
+When `plugins/mill/` is present in the worktree, the venv is guaranteed to be synced -- `uv sync --project plugins/mill` runs automatically on first detection of a missing `.venv/Scripts/python.exe`, and both `PLUGIN_ROOT` and `MILL_PYTHON` are then unconditionally overridden to worktree paths. On `uv sync` failure mill-go halts with `exit 1`; there is no fallback to the cache. For non-millhouse repos (no `plugins/mill/` directory in the worktree), the block is a no-op.
 
 Use `$PLUGIN_ROOT` in place of `$CLAUDE_PLUGIN_ROOT` for all subsequent `uv run` commands in this skill.
 
