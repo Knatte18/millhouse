@@ -9,6 +9,7 @@ from __future__ import annotations
 import subprocess
 import sys
 import tempfile
+import unittest
 from pathlib import Path
 
 HUB = Path(__file__).resolve().parent.parent.parent.parent
@@ -45,26 +46,11 @@ def _get_head_sha(wiki_path: Path) -> str:
     return result.stdout.strip()
 
 
-def main() -> int:
-    passed = 0
-    failed = 0
+class TestWikiNoop(unittest.TestCase):
+    """Test the no-op commit detection in _wiki.write_commit_push."""
 
-    def ok(name: str) -> None:
-        nonlocal passed
-        passed += 1
-        msg = f"PASS: {name}\n"
-        sys.stdout.buffer.write(msg.encode("utf-8", errors="backslashreplace"))
-        sys.stdout.buffer.flush()
-
-    def fail(name: str, exc: Exception) -> None:
-        nonlocal failed
-        failed += 1
-        msg = f"FAIL: {name}: {exc}\n"
-        sys.stderr.buffer.write(msg.encode("utf-8", errors="backslashreplace"))
-        sys.stderr.buffer.flush()
-
-    # --- (1) test_noop_unchanged_file ---
-    try:
+    def test_noop_unchanged_file(self) -> None:
+        """Test that unchanged files do not trigger a commit."""
         with tempfile.TemporaryDirectory() as tmp_str:
             wiki = Path(tmp_str)
             _setup_wiki(wiki)
@@ -74,15 +60,14 @@ def main() -> int:
             _wiki.write_commit_push(wiki, ["Home.md"], "no-op commit", slug="test")
 
             final_sha = _get_head_sha(wiki)
-            assert initial_sha == final_sha, \
-                f"HEAD must not advance for unchanged file: {initial_sha} != {final_sha}"
+            self.assertEqual(
+                initial_sha,
+                final_sha,
+                f"HEAD must not advance for unchanged file: {initial_sha} != {final_sha}",
+            )
 
-        ok("test_noop_unchanged_file: no commit when file unchanged")
-    except Exception as exc:
-        fail("test_noop_unchanged_file", exc)
-
-    # --- (2) test_noop_rewrite_identical_content ---
-    try:
+    def test_noop_rewrite_identical_content(self) -> None:
+        """Test that rewriting with identical content does not trigger a commit."""
         with tempfile.TemporaryDirectory() as tmp_str:
             wiki = Path(tmp_str)
             _setup_wiki(wiki)
@@ -99,15 +84,14 @@ def main() -> int:
             _wiki.write_commit_push(wiki, ["Home.md"], "rewrite identical", slug="test")
 
             final_sha = _get_head_sha(wiki)
-            assert initial_sha == final_sha, \
-                f"HEAD must not advance for identical-content rewrite: {initial_sha} != {final_sha}"
+            self.assertEqual(
+                initial_sha,
+                final_sha,
+                f"HEAD must not advance for identical-content rewrite: {initial_sha} != {final_sha}",
+            )
 
-        ok("test_noop_rewrite_identical_content: no commit for identical-content rewrite")
-    except Exception as exc:
-        fail("test_noop_rewrite_identical_content", exc)
-
-    # --- (3) test_real_change_commits_normally ---
-    try:
+    def test_real_change_commits_normally(self) -> None:
+        """Test that real changes are committed and pushed normally."""
         with tempfile.TemporaryDirectory() as tmp_str:
             tmp = Path(tmp_str)
             wiki = tmp / "wiki"
@@ -132,22 +116,21 @@ def main() -> int:
             _wiki.write_commit_push(wiki, ["Home.md"], "real change", slug="test")
 
             final_sha = _get_head_sha(wiki)
-            assert initial_sha != final_sha, \
-                f"HEAD must advance for real change: {initial_sha} == {final_sha}"
+            self.assertNotEqual(
+                initial_sha,
+                final_sha,
+                f"HEAD must advance for real change: {initial_sha} == {final_sha}",
+            )
 
             # Verify the commit message
             result = _git(["log", "-1", "--format=%B"], wiki)
             commit_msg = result.stdout.strip()
-            assert commit_msg == "real change", \
-                f"Commit message mismatch: {commit_msg!r} != 'real change'"
-
-        ok("test_real_change_commits_normally: HEAD advances for real change")
-    except Exception as exc:
-        fail("test_real_change_commits_normally", exc)
-
-    print(f"\n{passed} passed, {failed} failed.")
-    return 0 if failed == 0 else 1
+            self.assertEqual(
+                commit_msg,
+                "real change",
+                f"Commit message mismatch: {commit_msg!r} != 'real change'",
+            )
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    unittest.main()
