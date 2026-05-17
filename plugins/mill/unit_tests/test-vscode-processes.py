@@ -92,51 +92,57 @@ def main() -> int:
     # ------------------------------------------------------------------
     # Test: posix_parser_basic — code lines kept, firefox dropped.
     # ------------------------------------------------------------------
-    posix_stdout = (
-        "/usr/bin/code /home/u/wts/foo\n"
-        "firefox --headless\n"
-        "/opt/visual-studio-code/code /home/u/wts/bar\n"
-    )
-    with (
-        patch("_vscode_processes.os.name", "posix"),
-        patch(
-            "_vscode_processes._subprocess_util.run",
-            return_value=subprocess.CompletedProcess(
-                args=[], returncode=0, stdout=posix_stdout, stderr=""
+    if os.name != "nt":
+        posix_stdout = (
+            "/usr/bin/code /home/u/wts/foo\n"
+            "firefox --headless\n"
+            "/opt/visual-studio-code/code /home/u/wts/bar\n"
+        )
+        with (
+            patch("_vscode_processes.os.name", "posix"),
+            patch(
+                "_vscode_processes._subprocess_util.run",
+                return_value=subprocess.CompletedProcess(
+                    args=[], returncode=0, stdout=posix_stdout, stderr=""
+                ),
             ),
-        ),
-    ):
-        result = find_open_vscode_paths()
-    if len(result) != 2:
-        print(f"FAIL: posix_parser_basic: expected 2 elements, got {len(result)}", file=sys.stderr)
-        errors += 1
-    elif any("firefox" in str(p) for p in result):
-        print(f"FAIL: posix_parser_basic: firefox not excluded from {result}", file=sys.stderr)
-        errors += 1
+        ):
+            result = find_open_vscode_paths()
+        if len(result) != 2:
+            print(f"FAIL: posix_parser_basic: expected 2 elements, got {len(result)}", file=sys.stderr)
+            errors += 1
+        elif any("firefox" in str(p) for p in result):
+            print(f"FAIL: posix_parser_basic: firefox not excluded from {result}", file=sys.stderr)
+            errors += 1
+        else:
+            print("PASS: posix_parser_basic")
     else:
-        print("PASS: posix_parser_basic")
+        print("SKIP: posix_parser_basic (Windows)")
 
     # ------------------------------------------------------------------
     # Test: posix_parser_no_code_processes — no code basename -> empty set.
     # ------------------------------------------------------------------
-    with (
-        patch("_vscode_processes.os.name", "posix"),
-        patch(
-            "_vscode_processes._subprocess_util.run",
-            return_value=subprocess.CompletedProcess(
-                args=[],
-                returncode=0,
-                stdout="firefox --headless\n/usr/bin/python script.py\n",
-                stderr="",
+    if os.name != "nt":
+        with (
+            patch("_vscode_processes.os.name", "posix"),
+            patch(
+                "_vscode_processes._subprocess_util.run",
+                return_value=subprocess.CompletedProcess(
+                    args=[],
+                    returncode=0,
+                    stdout="firefox --headless\n/usr/bin/python script.py\n",
+                    stderr="",
+                ),
             ),
-        ),
-    ):
-        result = find_open_vscode_paths()
-    if result != set():
-        print(f"FAIL: posix_parser_no_code_processes: expected empty set, got {result}", file=sys.stderr)
-        errors += 1
+        ):
+            result = find_open_vscode_paths()
+        if result != set():
+            print(f"FAIL: posix_parser_no_code_processes: expected empty set, got {result}", file=sys.stderr)
+            errors += 1
+        else:
+            print("PASS: posix_parser_no_code_processes")
     else:
-        print("PASS: posix_parser_no_code_processes")
+        print("SKIP: posix_parser_no_code_processes (Windows)")
 
     # ------------------------------------------------------------------
     # Test: probe_subprocess_nonzero_exit — rc=1 returns empty set.
