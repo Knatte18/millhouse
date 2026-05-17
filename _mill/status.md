@@ -28,5 +28,7 @@ implementing  '2026-05-17T11:22:03Z'
 ```yaml
 batches:
   - name: mill-go-self-modifying-venv
-    state: pending
+    state: running
+    implementer_session: e4a8a047-c007-4e82-9dfb-3f2ee627fbc0
+    start_sha: 9e7ea31f173329c1f683a9d2108d9f26fa654f7f
 ```
