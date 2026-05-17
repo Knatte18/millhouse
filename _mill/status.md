@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-branch-slug-helpers
 slug: mill-branch-slug-fixes
 branch: hanf/mill-branch-slug-fixes
 plan: _mill/plan
@@ -25,6 +25,7 @@ plan-fix-r2  '2026-05-17T12:22:17Z'
 plan-fix-r3  '2026-05-17T12:30:13Z'
 planned  '2026-05-17T12:30:26Z'
 implementing  '2026-05-17T12:34:38Z'
+approved-branch-slug-helpers  '2026-05-17T12:42:04Z'
 ```
 
 ## Batches
@@ -32,7 +33,7 @@ implementing  '2026-05-17T12:34:38Z'
 ```yaml
 batches:
   - name: branch-slug-helpers
-    state: running
+    state: approved
     implementer_session: 5e1d6c3f-c948-4436-9f7d-d560fe36c138
     start_sha: 8173a900992dce128dc1dd18a4f6f0e443108578
   - name: review-cli-error-envelope
