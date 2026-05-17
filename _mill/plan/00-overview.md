@@ -3,7 +3,7 @@
 ```yaml
 task: 'mill-go: self-modifying repo + absent worktree venv silently uses stale scripts'
 slug: self-modifying-repo-venv
-approved: false
+approved: true
 started: 20260517-111018
 parent: main
 root: ""

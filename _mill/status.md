@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planning
+phase: plan-review-r1
 slug: self-modifying-repo-venv
 branch: hanf/self-modifying-repo-venv
 plan: _mill/plan
@@ -18,4 +18,5 @@ discussing  '2026-05-17T11:03:08Z'
 discussion-fix-r1  '2026-05-17T11:09:20Z'
 discussed  '2026-05-17T11:09:33Z'
 planning  '2026-05-17T11:11:46Z'
+plan-review-r1  '2026-05-17T11:13:54Z'
 ```
