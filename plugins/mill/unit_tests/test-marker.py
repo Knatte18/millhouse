@@ -177,7 +177,7 @@ def test_slug_from_branch_prefix_mismatch_bare_branch_known() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         tmp = Path(tmp)
         worktree_path, wiki_path = _test_helpers._make_task_worktree(
-            tmp, "foo", "Foo Title", branch_prefix="foo", phase="active"
+            tmp, "foo", "Foo Title", branch_prefix="", phase="active"
         )
         cfg = {"spawn": {"branch_prefix": "hanf/"}}
         stderr_capture = io.StringIO()
@@ -195,7 +195,7 @@ def test_slug_from_branch_prefix_mismatch_bare_branch_unknown() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         tmp = Path(tmp)
         worktree_path, wiki_path = _test_helpers._make_task_worktree(
-            tmp, "foo", "Foo Title", branch_prefix="foo", phase="active"
+            tmp, "foo", "Foo Title", branch_prefix="", phase="active"
         )
         (wiki_path / "Home.md").write_text(
             "## Baz Title\n[[baz]] [active]\n\n_body_\n", encoding="utf-8"
