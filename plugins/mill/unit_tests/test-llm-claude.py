@@ -25,7 +25,6 @@ from _llm_claude import (  # noqa: E402
     LLMRateLimitError,
     LLMSessionError,
     _build_argv,
-    _claude_argv_prefix,
     _parse_stream_json,
     _scan_rate_limit,
     run_bulk,
@@ -148,17 +147,20 @@ def main() -> int:
     print("PASS: _scan_rate_limit bad line + generic error -> False")
 
     # _build_argv: bulk (no effort, no session)
-    prefix = _claude_argv_prefix()
     argv = _build_argv("claude-sonnet-4-5", None, "")
-    assert argv == [*prefix, "-p", "--output-format", "stream-json", "--verbose",
-                    "--model", "claude-sonnet-4-5", "--allowedTools", ""]
-    print("PASS: _build_argv bulk without effort / without session")
+    assert "--allowedTools" not in argv, f"empty allowed_tools must omit --allowedTools; got {argv}"
+    assert argv[-2:] == ["--disallowedTools", "Edit,Write,Bash,NotebookEdit"], \
+        f"empty allowed_tools must end with --disallowedTools deny-list; got {argv}"
+    print("PASS: _build_argv bulk (empty allowed_tools) omits --allowedTools, adds --disallowedTools")
 
     # _build_argv: tool-use with effort
     argv = _build_argv("claude-sonnet-4-5", "max", "Read,Grep,Glob")
     assert "--effort" in argv and "max" in argv
-    assert "Read,Grep,Glob" in argv
-    print("PASS: _build_argv tool-use with effort")
+    assert "--allowedTools" in argv and "Read,Grep,Glob" in argv
+    assert "--disallowedTools" in argv
+    dt_idx = argv.index("--disallowedTools")
+    assert argv[dt_idx + 1] == "Edit,Write,Bash,NotebookEdit"
+    print("PASS: _build_argv tool-use with effort + --disallowedTools deny-list")
 
     # _build_argv: --session-id when session given, resume=False
     argv = _build_argv("claude-sonnet-4-5", None, "", session_id="my-uuid", resume=False)
@@ -278,7 +280,64 @@ def main() -> int:
     assert tools_value == "Read,Edit,Write,Bash,Grep,Glob,Skill", (
         f"unexpected tools: {tools_value!r}"
     )
-    print(f"PASS: run_implementer uses --allowedTools {tools_value}")
+    assert "--disallowedTools" not in captured_argv, \
+        f"run_implementer must NOT carry --disallowedTools; got {captured_argv}"
+    print(f"PASS: run_implementer uses --allowedTools {tools_value} + no --disallowedTools")
+
+    # run_bulk: empty allowed_tools -> no --allowedTools, yes --disallowedTools
+    _FAKE_STDOUT_BULK = (
+        '{"type":"system","session_id":"fake-sid-456"}\n'
+        '{"type":"result","result":"bulk done","session_id":"fake-sid-456"}\n'
+    )
+
+    class _FakeResultBulk:
+        returncode = 0
+        stdout = _FAKE_STDOUT_BULK
+        stderr = ""
+
+    captured_argv_bulk: list[str] = []
+
+    def _fake_run_bulk(argv: list[str], **_kwargs: object) -> _FakeResultBulk:
+        captured_argv_bulk.extend(argv)
+        return _FakeResultBulk()
+
+    with mock.patch.object(_subprocess_util_mod, "run", _fake_run_bulk):
+        run_bulk("hello", model="claude-sonnet-4-5", session_id="fake-sid-456")
+
+    assert "--allowedTools" not in captured_argv_bulk, \
+        f"run_bulk must omit --allowedTools for empty allowed_tools; got {captured_argv_bulk}"
+    assert captured_argv_bulk[-2:] == ["--disallowedTools", "Edit,Write,Bash,NotebookEdit"], \
+        f"run_bulk must end with --disallowedTools deny-list; got {captured_argv_bulk}"
+    print("PASS: run_bulk (empty allowed_tools) omits --allowedTools, adds --disallowedTools")
+
+    # run_tool_use: "Read,Grep,Glob" -> yes --allowedTools, yes --disallowedTools
+    _FAKE_STDOUT_TOOLUSE = (
+        '{"type":"system","session_id":"fake-sid-789"}\n'
+        '{"type":"result","result":"tool use done","session_id":"fake-sid-789"}\n'
+    )
+
+    class _FakeResultToolUse:
+        returncode = 0
+        stdout = _FAKE_STDOUT_TOOLUSE
+        stderr = ""
+
+    captured_argv_tooluse: list[str] = []
+
+    def _fake_run_tooluse(argv: list[str], **_kwargs: object) -> _FakeResultToolUse:
+        captured_argv_tooluse.extend(argv)
+        return _FakeResultToolUse()
+
+    with mock.patch.object(_subprocess_util_mod, "run", _fake_run_tooluse):
+        run_tool_use("hello", model="claude-sonnet-4-5", session_id="fake-sid-789")
+
+    assert "--allowedTools" in captured_argv_tooluse and "Read,Grep,Glob" in captured_argv_tooluse, \
+        f"run_tool_use must include --allowedTools Read,Grep,Glob; got {captured_argv_tooluse}"
+    assert "--disallowedTools" in captured_argv_tooluse, \
+        f"run_tool_use must include --disallowedTools; got {captured_argv_tooluse}"
+    dt_idx_tooluse = captured_argv_tooluse.index("--disallowedTools")
+    assert captured_argv_tooluse[dt_idx_tooluse + 1] == "Edit,Write,Bash,NotebookEdit", \
+        f"run_tool_use --disallowedTools value mismatch; got {captured_argv_tooluse[dt_idx_tooluse + 1]}"
+    print("PASS: run_tool_use (Read,Grep,Glob) includes --allowedTools and --disallowedTools deny-list")
 
     # rate-limit error message includes stdout fallback content
     with mock.patch.object(
