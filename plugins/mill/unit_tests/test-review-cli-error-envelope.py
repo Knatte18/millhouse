@@ -14,6 +14,7 @@ from __future__ import annotations
 import importlib.util
 import io
 import json
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -21,6 +22,7 @@ from unittest.mock import patch
 
 # Add scripts dir to path for imports
 scripts_dir = Path(__file__).parent.parent / "scripts"
+sys.path.insert(0, str(scripts_dir))
 
 
 def _load_cli_module(cli_name: str):
