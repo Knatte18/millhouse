@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-review-error-envelope
+phase: approved-wiki-noop-commit
 slug: review-sandbox-followup
 branch: hanf/review-sandbox-followup
 plan: _mill/plan
@@ -28,6 +28,7 @@ implementing  '2026-05-17T16:03:04Z'
 approved-sandbox-argv  '2026-05-17T16:05:21Z'
 approved-snapshot-guard  '2026-05-17T16:07:51Z'
 approved-review-error-envelope  '2026-05-17T16:11:51Z'
+approved-wiki-noop-commit  '2026-05-17T16:14:22Z'
 ```
 
 ## Batches
@@ -47,7 +48,7 @@ batches:
     implementer_session: 3ff22eb0-9bd9-4183-8be9-a2e618697188
     start_sha: 26091e7a9c49e78b791d9dafca28a836e92e496b
   - name: wiki-noop-commit
-    state: running
+    state: approved
     implementer_session: 8ffe2361-d755-4f60-b69b-9b5dcf10c074
     start_sha: 232ac450ad785bc285e9b9d0a448300eb3d400c1
   - name: bg-liveness
