@@ -249,6 +249,7 @@ def _review_one_batch(
             "session_id": session_id,
         }
     except ReviewError as exc:
+        # ERROR shape verified 20250517 to match Shared Decisions (#338)
         return {
             "scope": batch_path.stem,
             "round": round_n,
