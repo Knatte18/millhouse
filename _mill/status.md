@@ -38,7 +38,9 @@ batches:
     implementer_session: c409bff4-4785-49fb-ae4a-b8cfe10dd5c8
     start_sha: 0c994fec5df1a40551df9750b90e8da30efb8e2c
   - name: review-discussion-cli
-    state: pending
+    state: running
+    implementer_session: 5be03502-a1d8-4395-aedc-dab7d7c4bfca
+    start_sha: 3ed565dcd82ccf3fa28abaab798fa3b0fedd9b9e
   - name: mill-go-config
     state: pending
 ```
