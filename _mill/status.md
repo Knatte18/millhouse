@@ -28,7 +28,9 @@ implementing  '2026-05-17T14:13:23Z'
 ```yaml
 batches:
   - name: review-common
-    state: pending
+    state: running
+    implementer_session: e04e1588-76c9-40ad-b168-88fec65b9e09
+    start_sha: 75fc9f697e192183602b60e0f2f77845364c2d20
   - name: backend-error-envelope
     state: pending
   - name: review-discussion-cli
