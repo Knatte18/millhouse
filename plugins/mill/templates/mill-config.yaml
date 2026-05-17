@@ -116,7 +116,7 @@ pipeline:
 roles:
   discussion-review:
     holistic:
-      rounds: 2
+      rounds: 3
       reviewer: sonnetmax_tool
       # large_prompt:            # optional: override reviewer for large prompts
       #   threshold_ktok: 100    # switch when estimated tok count >= this (char/4000)
@@ -124,8 +124,8 @@ roles:
 
   plan-review:
     batch:
-      rounds: 3
-      reviewer: sonnetmedium
+      rounds: 0
+      reviewer: null
     holistic:
       rounds: 3
       reviewer: sonnetmax
@@ -135,13 +135,11 @@ roles:
 
   code-review:
     batch:
-      rounds: 3
-      # Override per machine without committing a wiki change:
-      # reviewer: "${CODE_REVIEWER:-sonnetmedium}"
-      reviewer: sonnetmedium
+      rounds: 0
+      reviewer: null
     holistic:
-      rounds: 1
-      reviewer: sonnetmedium
+      rounds: 2
+      reviewer: sonnethigh
       # large_prompt:            # optional: override reviewer for large prompts
       #   threshold_ktok: 100    # switch when estimated tok count >= this (char/4000)
       #   reviewer: null         # override reviewer from agents.yaml; null = disabled
@@ -149,7 +147,7 @@ roles:
 
   implementer:
     self_fix_rounds: 2
-    model: sonnethigh
+    model: haiku
 
 # ---------------------------------------------------------------------------
 # Notifications
