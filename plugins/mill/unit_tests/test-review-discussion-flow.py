@@ -242,7 +242,25 @@ def main() -> int:
     # Unparseable output -> ERROR verdict, ERROR entry with file path.
     # ------------------------------------------------------------------
     with tempfile.TemporaryDirectory() as tmpdir:
-        mill_dir, wiki_root, project_root, cfg = _make_fixture(Path(tmpdir))
+        mill_dir, project_root, wiki_root = _make_fixture(Path(tmpdir))
+
+        # Create discussion file
+        (project_root / "discussion.md").write_text(
+            "# Discussion\n\nThis is a test discussion.\n", encoding="utf-8"
+        )
+
+        cfg = {
+            "paths": {
+                "discussion_file": "discussion.md",
+                "plan_dir":        "plan/",
+                "reviews_dir":     "reviews/",
+            },
+            "roles": {
+                "discussion-review": {
+                    "holistic": {"rounds": 5, "reviewer": "test_stub"},
+                },
+            },
+        }
 
         orig_dir = os.getcwd()
         os.chdir(project_root)
