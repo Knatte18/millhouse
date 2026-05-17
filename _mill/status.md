@@ -1,10 +1,10 @@
 # Status
 
 ```yaml
-phase: discussed
+phase: planning
 slug: review-sandbox-guard
 branch: hanf/review-sandbox-guard
-plan: null
+plan: _mill/plan
 parent: main
 task: '63 (A) — Reviewer tool-sandbox: git snapshot guard + fix --allowedTools'
 task_description: |
@@ -17,4 +17,5 @@ task_description: |
 discussing  '2026-05-17T11:02:19Z'
 discussion-fix-r1  '2026-05-17T11:13:19Z'
 discussed  '2026-05-17T11:13:31Z'
+planning  '2026-05-17T11:18:41Z'
 ```
