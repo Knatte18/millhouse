@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
 
 _HERE = Path(__file__).resolve().parent
@@ -106,8 +105,7 @@ def _make_container_form_worktree(
 
 def test_launcher_rejects_non_task_worktree() -> None:
     """Test that launcher rejects a non-task worktree (main branch, no slug in Home.md)."""
-    with tempfile.TemporaryDirectory() as tmpdir:
-        tmp = Path(tmpdir)
+    with _test_helpers.safe_temp_dir() as tmp:
         worktree_path, wiki_path = _make_container_form_worktree(
             tmp, "test-task", "Test Task", branch_prefix="hanf/"
         )
@@ -151,8 +149,7 @@ def test_launcher_rejects_non_task_worktree() -> None:
 
 def test_launcher_rejects_invalid_cwd_with_clean_error() -> None:
     """Test that launcher rejects cwd with invalid config path (no wiki)."""
-    with tempfile.TemporaryDirectory() as tmpdir:
-        tmp = Path(tmpdir)
+    with _test_helpers.safe_temp_dir() as tmp:
 
         isolated_git = tmp / "isolated"
         isolated_git.mkdir(parents=True, exist_ok=True)
@@ -228,8 +225,7 @@ def test_launcher_rejects_invalid_cwd_with_clean_error() -> None:
 
 def test_launcher_accepts_valid_task_worktree() -> None:
     """Test that launcher accepts valid task worktree and executes command."""
-    with tempfile.TemporaryDirectory() as tmpdir:
-        tmp = Path(tmpdir)
+    with _test_helpers.safe_temp_dir() as tmp:
         worktree_path, wiki_path = _make_container_form_worktree(
             tmp, "test-task", "Test Task", branch_prefix="hanf/"
         )
