@@ -217,7 +217,10 @@ def main() -> int:
         print(f"FAIL: Case H -- unexpected error: {e}")
         errors += 1
 
-    return errors
+    if errors:
+        return 1
+    print("All review-guard tests passed.")
+    return 0
 
 
 if __name__ == "__main__":
