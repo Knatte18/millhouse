@@ -103,6 +103,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         print(json.dumps(result.to_dict()))
         return 0
+    # Pre-launch errors only -- engine-internal failures return verdict:ERROR via run() (#338).
     except ReviewError as exc:
         print_error_envelope("code", str(exc))
         return 1

@@ -101,7 +101,7 @@ def _build_argv(
         "--output-format", "stream-json",
         "--verbose",  # required by claude CLI when combining -p with stream-json
         "--model", model,
-        *(["--allowedTools", allowed_tools] if allowed_tools else []),
+        *(["--allowedTools", allowed_tools] if allowed_tools is not None else []),
     ]
     if not _has_mutating_tool(allowed_tools):
         argv += ["--disallowedTools", "Edit,Write,Bash,NotebookEdit"]

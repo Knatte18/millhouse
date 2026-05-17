@@ -111,53 +111,64 @@ def run(
         )
 
         # 5. Invoke reviewer — for discussion a single sub-review, so any LLMError
-        #    means zero successes → total failure → raise ReviewError so the API
-        #    exits 1 with empty stdout.
+        #    means zero successes → engine-internal failure → return ERROR ReviewResult.
         try:
             raw, session_id = _reviewer_single.run(spec, prompt_text)
         except LLMError as exc:
-            raise ReviewError(f"All sub-reviews failed: {exc}") from exc
-
-        # 6. Parse, write, return
-        try:
-            verdict = parse_verdict(raw)
-            blocking_count = parse_blocking_count(raw, severity="GAP")
-            review_file = write_review_file(reviews_dir, "discussion", round_n, raw)
-
-            print(
-                f"[_review_discussion] wrote {review_file.name} verdict={verdict}",
-                file=sys.stderr,
-            )
-
-            return ReviewResult(
-                type="discussion",
-                round=round_n,
-                verdict=verdict,
-                blocking_count=blocking_count,
-                reviews=[
-                    {
-                        "scope": "holistic",
-                        "verdict": verdict,
-                        "file": str(review_file),
-                        "session_id": session_id,
-                    }
-                ],
-            )
-        except ReviewError as exc:
-            print(f"[_review_discussion] parse_verdict failed: {exc}", file=sys.stderr)
-            review_file = write_review_file(reviews_dir, "discussion", round_n, raw)
+            _reviews = [{
+                "scope": "holistic",
+                "verdict": "ERROR",
+                "file": None,
+                "error": str(exc),
+                "session_id": None,
+            }]
             return ReviewResult(
                 type="discussion",
                 round=round_n,
                 verdict="ERROR",
                 blocking_count=0,
-                reviews=[
-                    {
-                        "scope": "holistic",
-                        "verdict": "ERROR",
-                        "file": str(review_file),
-                        "error": f"parse_verdict failed: {exc}",
-                        "session_id": session_id,
-                    }
-                ],
+                reviews=_reviews,
             )
+
+        # 6. Parse, write, return
+        try:
+            verdict = parse_verdict(raw)
+        except ReviewError as exc:
+            write_review_file(reviews_dir, "discussion", round_n, raw)
+            _reviews = [{
+                "scope": "holistic",
+                "verdict": "ERROR",
+                "file": None,
+                "error": str(exc),
+                "session_id": session_id,
+            }]
+            return ReviewResult(
+                type="discussion",
+                round=round_n,
+                verdict="ERROR",
+                blocking_count=0,
+                reviews=_reviews,
+            )
+
+        blocking_count = parse_blocking_count(raw, severity="GAP")
+        review_file = write_review_file(reviews_dir, "discussion", round_n, raw)
+
+        print(
+            f"[_review_discussion] wrote {review_file.name} verdict={verdict}",
+            file=sys.stderr,
+        )
+
+        return ReviewResult(
+            type="discussion",
+            round=round_n,
+            verdict=verdict,
+            blocking_count=blocking_count,
+            reviews=[
+                {
+                    "scope": "holistic",
+                    "verdict": verdict,
+                    "file": str(review_file),
+                    "session_id": session_id,
+                }
+            ],
+        )
