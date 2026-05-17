@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: config-env-interpolation
 branch: hanf/config-env-interpolation
 plan: _mill/plan
@@ -22,4 +22,15 @@ plan-review-r1  '2026-05-17T05:28:54Z'
 plan-fix-r1  '2026-05-17T05:28:54Z'
 plan-fix-r2  '2026-05-17T05:34:23Z'
 planned  '2026-05-17T05:34:33Z'
+implementing  '2026-05-17T05:35:38Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: strand-a-env-interp
+    state: pending
+  - name: strand-b-extends
+    state: pending
 ```
