@@ -49,6 +49,8 @@ Verify runs the full `test-reviewers.py` suite plus a one-shot script that loads
 
   **Change B -- new step 3 (extends-cycle detection).** Use a tri-colour DFS over the extends-graph (each node has at most one outgoing edge: the value of its `extends:` field if present, else none). On detection of a back-edge, append `f"Cycle detected in extends chain: {' -> '.join(chain)}"` where `chain` is the list of node names visited from the entry node up to and including the back-edge target. Implement in a new private helper `def _detect_extends_cycles(raw: dict) -> list[str]` that returns an error list (empty when no cycles). Caller extends `errors` with the return value. Self-loops (`a: {extends: a}`) are reported as `Cycle detected in extends chain: a -> a`.
 
+  Defensive guard: if a neighbor name is not in the color dict (i.e. the `extends:` value points at an unknown base — already reported by step 2 but not yet raised at this point), skip it with `continue` instead of dereferencing. This mirrors the existing `_detect_cycles` helper at the bottom of `_reviewers.py` and prevents the DFS from crashing with `KeyError` on a known-bad graph.
+
   After step 3, if `errors` is non-empty for either step 2 or step 3, raise `ReviewerError("\n".join(errors))` immediately. Cycle detection that would dereference an unknown base would crash; failing fast here keeps the next step's pre-conditions clean. (This matches the existing convention of raising at the end of validation -- but here we raise before resolution because resolution requires a valid graph.)
 
   **Change C -- new step 4 (extends-resolution).** Implement in a new private helper:

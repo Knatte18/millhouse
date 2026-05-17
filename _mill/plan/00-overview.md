@@ -3,7 +3,7 @@
 ```yaml
 task: '51 (D) -- Config infra: env interpolation + agents.yaml inheritance'
 slug: config-env-interpolation
-approved: false
+approved: true
 started: 20260517-051920
 parent: main
 root: ""
