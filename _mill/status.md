@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-wire-guard-backends
+phase: holistic-reviewing
 slug: review-sandbox-guard
 branch: hanf/review-sandbox-guard
 plan: _mill/plan
@@ -30,6 +30,7 @@ approved-guard-helper  '2026-05-17T12:02:01Z'
 approved-fix-allowed-tools-argv  '2026-05-17T12:04:41Z'
 approved-template-identity-header  '2026-05-17T12:06:38Z'
 approved-wire-guard-backends  '2026-05-17T12:12:35Z'
+holistic-reviewing  '2026-05-17T12:12:50Z'
 ```
 
 ## Batches
