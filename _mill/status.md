@@ -28,7 +28,9 @@ implementing  '2026-05-17T13:29:17Z'
 ```yaml
 batches:
   - name: helper-api-additions
-    state: pending
+    state: running
+    implementer_session: 0ae76918-b6d8-4302-90ad-39e1cef78449
+    start_sha: b50ce161a5fb2b1fb22a2003a2626b7f9cf3e8ef
   - name: validator-depends-on-cross-check
     state: pending
   - name: merge-in-intent-aware
