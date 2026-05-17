@@ -47,7 +47,7 @@ Independent of batches 1, 2, 3 — no shared files, no shared symbols. `verify: 
 
   3. Each template file's existing content is preserved verbatim — no deletion, no reordering, no edit beyond the prepend. The `<TOOL_RULE>` block, `<ARTEFACT_SECTION>`, `## Criteria`, `## Source-grounding rule`, and `## Output` sections remain untouched and in the same relative order.
 
-  4. After the edit, the five files share an identical first-five-lines block. Verify by reading the top 5 lines of each post-edit; they must be byte-identical.
+  4. After the edit, the five files share an identical first-five-lines block. **Verification gate before commit:** run `head -5 plugins/mill/templates/review-plan-batch.md plugins/mill/templates/review-plan-holistic.md plugins/mill/templates/review-code-batch.md plugins/mill/templates/review-code-holistic.md plugins/mill/templates/review-discussion.md` and visually confirm that the first five lines are byte-identical across all five files (only the file-header banner each `head` invocation emits between files should differ). If any file diverges, the prepend was mis-applied — fix and re-run. Do not commit until this gate passes.
 
   5. The 5-file pattern is intentional: the proposal calls for ALL review templates to carry the same identity header, including templates that fire from `bulk` and `tool-use` mode reviewers and the discussion reviewer. Skipping any template re-opens the soft-constraint failure mode in that scope.
 

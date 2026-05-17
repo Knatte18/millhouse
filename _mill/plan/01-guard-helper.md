@@ -115,7 +115,6 @@ Batch-local decisions: porcelain comparison uses **substring match on the path f
          """Return the current HEAD SHA as a hex string. Raises ReviewError on git failure."""
          result = _subprocess_util.run(
              ["git", "-C", str(project_root), "rev-parse", "HEAD"],
-             check=False,
          )
          if result.returncode != 0:
              raise ReviewError(
@@ -129,7 +128,6 @@ Batch-local decisions: porcelain comparison uses **substring match on the path f
          """Return git status --porcelain as a list of lines (one per entry). Raises ReviewError on failure."""
          result = _subprocess_util.run(
              ["git", "-C", str(project_root), "status", "--porcelain"],
-             check=False,
          )
          if result.returncode != 0:
              raise ReviewError(
