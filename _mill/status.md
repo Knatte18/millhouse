@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: review-sandbox-followup
 branch: hanf/review-sandbox-followup
 plan: _mill/plan
@@ -24,4 +24,23 @@ plan-review-r2  '2026-05-17T15:41:26Z'
 plan-fix-r2  '2026-05-17T15:41:26Z'
 plan-fix-r3  '2026-05-17T15:48:01Z'
 planned  '2026-05-17T15:48:09Z'
+implementing  '2026-05-17T16:03:04Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: sandbox-argv
+    state: pending
+  - name: snapshot-guard
+    state: pending
+  - name: review-error-envelope
+    state: pending
+  - name: wiki-noop-commit
+    state: pending
+  - name: bg-liveness
+    state: pending
+  - name: millgo-holistic-recovery
+    state: pending
 ```
