@@ -149,8 +149,8 @@ def main() -> int:
     # _build_argv: bulk (no effort, no session)
     argv = _build_argv("claude-sonnet-4-5", None, "")
     assert "--allowedTools" not in argv, f"empty allowed_tools must omit --allowedTools; got {argv}"
-    assert "--disallowedTools" in argv and "Edit,Write,Bash,NotebookEdit" in argv, \
-        f"empty allowed_tools must include --disallowedTools deny-list; got {argv}"
+    dt_idx = argv.index("--disallowedTools")
+    assert argv[dt_idx + 1] == "Edit,Write,Bash,NotebookEdit"
     print("PASS: _build_argv bulk (empty allowed_tools) omits --allowedTools, adds --disallowedTools")
 
     # _build_argv: tool-use with effort
