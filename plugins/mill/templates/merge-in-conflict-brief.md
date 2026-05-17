@@ -2,10 +2,17 @@
 Template tokens used by this file:
   <CONFLICTING_FILES> — markdown bullet list of files with conflict markers
   <PROJECT_ROOT>      — absolute path to the worktree root (cwd of sub-agent)
+  <TASK_INTENT>       — excerpts from this branch's _mill/discussion.md and _mill/plan/*.md so the resolver can recognize an intentional delete or rewrite. Empty string when neither is present.
 -->
 # Conflict Resolution Brief
 
 Your sole job is to resolve git conflict markers in the listed files, stage each resolved file, and report success. Do NOT commit. Do NOT run `git merge --continue` — the SKILL does that after receiving `{"status":"success"}`.
+
+## Task intent
+
+These excerpts describe what THIS branch is trying to accomplish. When the merge introduces a parent-side change that conflicts with this branch's intent, the resolution preserves THIS branch's intent. In particular: if a file appears under a batch's `Deletes:` list and the merge introduces a modified version of that file from the parent, the resolution is to delete the file (your branch's intent overrides). Stage the deletion with `git -C <PROJECT_ROOT> rm <file>`.
+
+<TASK_INTENT>
 
 ## Conflicting files
 
@@ -19,6 +26,7 @@ For each file listed above:
 2. Understand both sides of the conflict — what each branch intended.
 3. Write a resolution that preserves the intent of both sides.
 4. Run `git -C <PROJECT_ROOT> add <file>` to stage the resolved file.
+5. For modify/delete (DU) conflicts: if Task intent above lists this file under a batch's `Deletes:`, run `git -C <PROJECT_ROOT> rm <file>` instead of editing; that stages the intentional deletion.
 
 Never use `git checkout --ours` or `git checkout --theirs` — they silently discard one side of the conflict.
 
