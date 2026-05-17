@@ -37,7 +37,9 @@ batches:
     implementer_session: 5e1d6c3f-c948-4436-9f7d-d560fe36c138
     start_sha: 8173a900992dce128dc1dd18a4f6f0e443108578
   - name: review-cli-error-envelope
-    state: pending
+    state: running
+    implementer_session: 072fcb58-eec8-42ad-9cc4-aa30f62e09b0
+    start_sha: 4c7420fbd449f266a57143ee642e99df9d19ec88
   - name: millpy-implement-push-branch
     state: pending
   - name: millpy-bg-cwd-validation
