@@ -19,6 +19,7 @@ from unittest.mock import MagicMock, patch  # noqa: E402
 import _marker  # noqa: E402
 import _paths  # noqa: E402
 import _sibling  # noqa: E402
+import _subprocess_util  # noqa: E402
 
 _UNIT_TESTS = Path(__file__).resolve().parent
 sys.path.insert(0, str(_UNIT_TESTS))
@@ -801,6 +802,33 @@ def main() -> int:
         print("PASS: resolve_wiki_path falls through (no exception) when git_toplevel.name != 'wiki'")
 
         test_resolve_task_path()
+
+        # Test resolve_git_root with start argument
+        # Test 1: resolve_git_root(start) on a real git repo
+        with tempfile.TemporaryDirectory() as tmp:
+            tmpdir = Path(tmp)
+            # Initialize a real git repo
+            _subprocess_util.run(["git", "init", "--quiet"], cwd=tmpdir)
+            result = _paths.resolve_git_root(tmpdir)
+            assert isinstance(result, Path), f"expected Path, got {type(result)}"
+            assert result == tmpdir.resolve(), f"expected {tmpdir.resolve()}, got {result}"
+        print("PASS: resolve_git_root(start) returns correct path for real git repo")
+
+        # Test 2: resolve_git_root with no args uses cwd
+        with patch("_subprocess_util.run") as mock_run:
+            mock_run.return_value = _make_run_result(stdout="/some/path\n", returncode=0)
+            try:
+                _paths.resolve_git_root()
+            except SystemExit:
+                pass  # We expect this might fail due to wiki check, that's ok
+            # Check that git was called without -C flag
+            calls = mock_run.call_args_list
+            assert len(calls) >= 1, "git should have been called"
+            first_call_args = calls[0][0][0]
+            assert "-C" not in first_call_args, f"unexpected -C in argv: {first_call_args!r}"
+            assert "rev-parse" in first_call_args, f"expected rev-parse in argv: {first_call_args!r}"
+        print("PASS: resolve_git_root() with no args does not use -C flag")
+
         print("All _paths unit tests passed.")
         return 0
     except AssertionError as exc:
