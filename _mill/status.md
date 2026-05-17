@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-bg-liveness
+phase: approved-millgo-holistic-recovery
 slug: review-sandbox-followup
 branch: hanf/review-sandbox-followup
 plan: _mill/plan
@@ -30,6 +30,7 @@ approved-snapshot-guard  '2026-05-17T16:07:51Z'
 approved-review-error-envelope  '2026-05-17T16:11:51Z'
 approved-wiki-noop-commit  '2026-05-17T16:14:22Z'
 approved-bg-liveness  '2026-05-17T16:18:20Z'
+approved-millgo-holistic-recovery  '2026-05-17T16:20:19Z'
 ```
 
 ## Batches
@@ -57,7 +58,7 @@ batches:
     implementer_session: 3a0fc20b-7f0d-44a1-801c-1b0d16b504ef
     start_sha: 5a4d8a2e47a8b2409689d7cad1ac390b668fda60
   - name: millgo-holistic-recovery
-    state: running
+    state: approved
     implementer_session: 6061b7ee-93a5-4fd1-a588-0a78800bca27
     start_sha: 8e369ac2c93b9b1c2bfdf377dc95b2739a8245f6
 ```
