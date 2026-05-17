@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-fix-r2
+phase: planned
 slug: config-env-interpolation
 branch: hanf/config-env-interpolation
 plan: _mill/plan
@@ -21,4 +21,5 @@ planning  '2026-05-17T05:23:04Z'
 plan-review-r1  '2026-05-17T05:28:54Z'
 plan-fix-r1  '2026-05-17T05:28:54Z'
 plan-fix-r2  '2026-05-17T05:34:23Z'
+planned  '2026-05-17T05:34:33Z'
 ```
