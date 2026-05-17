@@ -67,9 +67,9 @@ To uavhengige config-forbedringer bundlet i én task:
 
 ### Unset var without default: hard error
 
-- Decision: `${VAR}` der `VAR` ikke er satt, og det ikke er en `:-default`, kaster en `ConfigError` (eller eksisterende exception-klasse i `_config`) med variabelnavn + dotted key-path i meldingen.
-- Rationale: Silent expansion til tom streng er bug-magnet — typos i variabelnavn ville lekke som tomme reviewer-navn, tom timeout, etc. Proposal eksplisitt: "feiler hardt hvis usatt".
-- Rejected: Default til tom streng (silent), default til selve `${VAR}`-strengen (forvirrer downstream-validering).
+- Decision: Lag en ny exception-klasse i `_config.py`: `class ConfigError(ValueError): pass`. `${VAR}` der `VAR` ikke er satt, og det ikke er en `:-default`, kaster `ConfigError` med variabelnavn + dotted key-path i meldingen. `_config.py` har ingen eksisterende exception-klasser i dag, så denne lages fra grunnen.
+- Rationale: Silent expansion til tom streng er bug-magnet — typos i variabelnavn ville lekke som tomme reviewer-navn, tom timeout, etc. Proposal eksplisitt: "feiler hardt hvis usatt". `ValueError`-arving gjør den naturlig fangbar med `except ValueError` i callers som ønsker generisk konfig-feilhåndtering, men den klare type-navnet gjør stack-traces lesbare.
+- Rejected: Default til tom streng (silent), default til selve `${VAR}`-strengen (forvirrer downstream-validering), gjenbruke `yaml.YAMLError` (semantisk feil — det er ikke en YAML-feil, det er en post-load env-substitusjons-feil).
 
 ### `extends:` resolution timing: at load time
 
@@ -126,6 +126,7 @@ To uavhengige config-forbedringer bundlet i én task:
 - Iterer over alle matches: hvis `:-` finnes, default-streng brukes når env-var er unset; ellers raise.
 - Ingen recursion på substituert resultat.
 - For ikke-string (int/bool/None): return as-is. Funksjonen kalles bare på str.
+- **Intentional: lowercase names pass through as literal.** Regex aksepterer kun uppercase + underscore + digits (POSIX-konvensjon for env-vars). `${my_var}` matcher ikke regexen og forblir som literal-tegn i string-output — det er ingen "unset var"-feil og ingen substitusjon. Dette er bevisst: lowercase-form er ikke en gyldig env-var-konvensjon på Unix/Windows. Hvis en bruker skriver `${my_var}` med mening "interpoler", får de en literal `${my_var}` i resultatet, som er en synlig debug-signal heller enn silent expansion. Regexen får en kort kommentar (`# POSIX env-var convention: uppercase only; lowercase patterns are literal`). En unit-test (`test_interp_lowercase_name_passthrough`) dokumenterer grensen.
 
 **`_reviewers.py` (today).**
 
@@ -137,12 +138,14 @@ To uavhengige config-forbedringer bundlet i én task:
 **Modification plan for `_reviewers.load()`.**
 
 1. Parse raw dict (eksisterende).
-2. **Ny:** validere `extends:`-felt — må være string hvis tilstede, må peke på existing entry, target må være type=single.
-3. **Ny:** detect extends-cycles (separat graf fra cluster-use-graf).
-4. **Ny:** topologisk-sortert resolusjon: for hver entry med `extends:`, deep-merge fra base mot leaf, fjern `extends:`-felt fra output.
-5. Per-entry struktur-validering (eksisterende) kjører på **resolved** entries — required-after-merge check faller naturlig ut.
+2. **Ny — raw-form syntax-validering av `extends:`:** felt må være string hvis tilstede; må peke på existing entry-navn; target-entry må ikke ha `type: cluster` deklarert på sin egen raw-form. Vi kan IKKE kreve `type: single` på target på dette stadiet — intermediate noder i en multi-level kjede (`c → b → a`) får sin `type:` fra base, ikke fra raw. Sjekken her er kun "target er ikke et raw-deklarert cluster"; den fulle `type: single`-invarianten verifiseres etter resolusjon i steg 5.
+3. **Ny:** detect extends-cycles (separat graf fra cluster-use-graf). Kjede `a → a` (selv-loop) eller `a → b → a` → ReviewerError som lister nodene.
+4. **Ny — topologisk-sortert resolusjon:** for hver entry med `extends:`, walk kjeden til base (entry uten `extends:`), deep-merge fra base mot leaf (child-felter overrider parent-felter); fjern `extends:`-felt fra output.
+5. Per-entry struktur-validering (eksisterende) kjører på **resolved** entries. Her faller required-after-merge-check naturlig ut: hver resolved entry må ha `type: single` (cluster-entries er allerede ekskludert fra extends-grafen i steg 2/4) + `provider` + `model`. En entry som mister type/provider/model gjennom kjeden (f.eks. base mangler dem) feiler her med klar melding.
 6. Cluster cross-refs + cluster-cycle (eksisterende) kjører på resolved.
 7. Returner resolved registry.
+
+**Validering-ordering kommentar.** Det er fristende å spørre "kan vi ikke kreve `type:` på alle raw-entries opp front?" — men det betyr at intermediate `b: {extends: a}` må skrive `type: single` redundant. Det går på tvers av punktet med inheritance (reduce duplikasjon). Raw-stadiet sjekker bare "ingen raw cluster i extends-grafen"; resolved-stadiet er der `type: single` blir håndhevet.
 
 **Filer som leser config / registry i dag (for kontekst, ikke endringer i denne tasken):**
 
@@ -180,6 +183,7 @@ Nye test-funksjoner:
 - `test_interp_applied_after_all_overlays` — wiki har `key: "${A:-wiki}"`, worktree-local har `key: "${B:-local}"`. Local skal vinne i merge, deretter interpoleres `"${B:-local}"` → `"local"` (eller env-verdi hvis satt).
 - `test_interp_multiple_in_one_string` — config har `key: "${A:-x}-${B:-y}"` → resultat `"x-y"` (eller env-substituert).
 - `test_interp_empty_default` — config har `key: "${UNSET:-}"` → resultat `""` (empty string allowed).
+- `test_interp_lowercase_name_passthrough` — config har `key: "${my_var}"`, env `my_var=foo` satt → resultat `"${my_var}"` (literal, ikke substituert). Dokumenterer POSIX-konvensjon: bare uppercase env-var-navn matcher regexen.
 
 **`plugins/mill/unit_tests/test-reviewers.py` (utvidelse).**
 
@@ -222,3 +226,6 @@ Nye test-funksjoner:
 - **Q:** Skal Strand A flippe `wiki/config.yaml` til `${VAR:-default}`-form i samme task? **A:** [auto-pick] Nei. Bare templaten (`plugins/mill/templates/wiki-config.yaml`) får kommentar-eksempel; produksjons-`wiki/config.yaml` rører vi ikke. **Why:** Per-machine override er use-casen; konfig-eieren flipper selv når en maskin trenger det.
 - **Q:** Skal Strand A og Strand B være én PR eller to? **A:** [auto-pick] Én PR, men plan-batchene holder dem adskilt (uavhengig kode, uavhengige tester). **Why:** Proposal bundler dem; review-overhead er lavt; rollback av én strand er triviell.
 - **Q:** Env-interp i `wiki/agents.yaml` eller `wiki/reviewers.yaml`? **A:** [auto-pick] Nei — bare i `_config.load_config()`-output. **Why:** Proposal scope; ingen aktuell use-case for env-driven reviewer-entries (de er en lukket katalog).
+- **Q:** Reviewer-finding r1 [GAP]: Multi-level `extends:`-kjede (`c → b → a`) har intermediate `b` uten raw `type:`. Step 2's "target must be type=single" er uresolverbart fra raw. Hvordan splitte validering? **A:** [auto-pick] Steg 2 sjekker kun "target er ikke et raw-deklarert cluster"; full `type: single`-invariant verifiseres etter resolusjon i steg 5 (per-entry struktur-validering). Intermediate-noder trenger ikke å re-deklarere `type:`. **Why:** Inheritance handler om å redusere duplikasjon — å kreve `type: single` på hver intermediate raw-entry går imot poenget. Resolved-stadiet er det naturlige stedet for full type-håndhevelse.
+- **Q:** Reviewer-finding r1 [NOTE]: `ConfigError` eksisterer ikke i `_config.py`. **A:** [auto-pick] Lag en ny `class ConfigError(ValueError): pass` i `_config.py` som del av Strand A commit-1. **Why:** `ValueError`-base gir caller-fleksibilitet for generisk håndtering; eget type-navn gir lesbar stack-trace.
+- **Q:** Reviewer-finding r1 [NOTE]: Regex `[A-Z_][A-Z0-9_]*` matcher kun uppercase — `${my_var}` passerer gjennom som literal-tekst uten feil. Asymmetri med uppercase unset → hard error. **A:** [auto-pick] Behold uppercase-only-regex (POSIX-konvensjon). Dokumenter eksplisitt at lowercase-form er literal-passthrough. Legg til `test_interp_lowercase_name_passthrough` og en regex-kommentar. **Why:** Lowercase env-var-navn er ikke konvensjon på Unix/Windows. Literal-passthrough gjør debug-feil synlig i output heller enn silent expansion til feilverdier.
