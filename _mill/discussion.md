@@ -169,9 +169,9 @@ Note: the new path needs `tasks` parsed before the prefix check. Move the Home.m
 ```python
 # After git_root resolution, before scratch_dir creation:
 import _paths, _config, _marker  # lazy
-wiki_path = _paths.resolve_wiki_path(Path(git_root))
-cfg = _config.load_config(wiki_path, Path(git_root))
 try:
+    wiki_path = _paths.resolve_wiki_path(Path(git_root))
+    cfg = _config.load_config(wiki_path, Path(git_root))
     _marker.slug_from_branch(Path(git_root), wiki_path, cfg)
 except _marker.MarkerError as exc:
     branch_result = _subprocess_util.run(["git", "-C", git_root, "branch", "--show-current"])
@@ -182,9 +182,18 @@ except _marker.MarkerError as exc:
         file=sys.stderr,
     )
     return 1
+except (ValueError, SystemExit) as exc:
+    # resolve_wiki_path / resolve_git_root raise ValueError on cwd-inside-wiki;
+    # load_config also raises on schema problems. Surface a one-line error so
+    # the operator does not see a raw traceback.
+    print(
+        f"mill-bg: cannot validate cwd ({exc}). Verify cwd is a task worktree and config is loadable.",
+        file=sys.stderr,
+    )
+    return 1
 ```
 
-The validation runs in the launcher process — adds two file reads and one git invocation per launch; negligible.
+The validation runs in the launcher process — adds two file reads and one git invocation per launch; negligible. The outer `try` wraps `resolve_wiki_path` + `load_config` + `slug_from_branch` so that any of their startup-time exceptions (wiki-cwd `ValueError` / `SystemExit`, config schema `ReviewError`, slug `MarkerError`) all produce a clean one-line error instead of a raw traceback.
 
 ## Constraints
 
@@ -215,7 +224,7 @@ No `CONSTRAINTS.md` at the hub root.
 ### Direct-assertion tests (no TDD ceremony needed)
 
 - **D2 — review CLI ERROR envelope shape (`test-review-cli-errors.py`).** For each of the three CLIs, run with a config-load failure (e.g., missing required key) and assert: exit code 1, stdout contains exactly one JSON line, `json.loads(line)` returns the expected shape with `verdict == "ERROR"` and `reviews[0].verdict == "ERROR"`.
-- **D5 — `millpy-claim.py` branch construction.** Existing claim tests probably already assert the branch name; update assertions from `f"{prefix}/{slug}"` to `f"{prefix}{slug}"`. If no test covers this, add one.
+- **D5 — `millpy-claim.py` branch construction (`test-millpy-claim.py`).** The existing `plugins/mill/unit_tests/test-millpy-claim.py` may not assert the exact branch-name string today. Plan writer should treat "add a new test for the corrected branch-name construction" as the default action: add a test function that drives the claim path (or imports the branch-name construction directly) and asserts the produced branch is `f"{prefix}{slug}"`, not `f"{prefix}/{slug}"`. If an existing test happens to assert the branch string, update its assertion in the same patch.
 - **D7 — `millpy-bg.py` launcher cwd rejection (`test-bg-launcher.py`).** Create a temp dir, `git init`, `git checkout -b main`, write a minimal wiki at the sibling location, run `_launcher_main(["--slug", "test", "--", "/bin/true"])` via subprocess or in-process import; assert exit code 1 and the parent-worktree-rejection string in stderr.
 
 ### Manual / integration
