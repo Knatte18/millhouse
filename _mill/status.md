@@ -47,7 +47,9 @@ batches:
     implementer_session: cd6f0504-8f23-42d7-bcd2-ab5525129eb1
     start_sha: 34cf137faa3b0904eefe1349c1ec1b75bbda2f28
   - name: millpy-bg-cwd-validation
-    state: pending
+    state: running
+    implementer_session: 8fbf1351-414f-4454-a1a8-abd3544b7438
+    start_sha: e36284133062c56cd703c088a1fb5f75e49ac739
   - name: skill-error-retry-and-cwd-preludes
     state: pending
 ```
