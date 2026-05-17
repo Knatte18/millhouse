@@ -89,7 +89,7 @@ _JUNCTION_DEFAULTS: dict[str, str] = {
 _HARDLINK_DEFAULTS: dict[str, str] = {}  # no hardlinks unless configured
 
 
-def read_junctions(hub_root: Path) -> dict[str, str]:
+def read_junctions(hub_root: Path, wiki_path: Path | None = None) -> dict[str, str]:
     """Read the ``junctions:`` block from ``<hub_root>/mill-config.yaml`` or legacy wiki ``config.yaml``.
 
     Returns an ordered dict mapping junction-path → unresolved target
@@ -100,8 +100,12 @@ def read_junctions(hub_root: Path) -> dict[str, str]:
 
     Precedence (first source wins):
     1. ``<hub_root>/mill-config.yaml`` if it exists.
-    2. Legacy ``<wiki_root>/config.yaml`` (resolved via _paths.resolve_wiki_path).
+    2. Legacy ``<wiki_path>/config.yaml`` if *wiki_path* is supplied; otherwise
+       ``<wiki_root>/config.yaml`` resolved via ``_paths.resolve_wiki_path``.
     3. ``_JUNCTION_DEFAULTS`` fallback.
+
+    Pass *wiki_path* when the caller already has the wiki location and the
+    hub_root is not a git repository (e.g. unit-test fixtures).
     """
     import _paths
 
@@ -115,10 +119,12 @@ def read_junctions(hub_root: Path) -> dict[str, str]:
         return dict(_JUNCTION_DEFAULTS)
 
     # Fall back to legacy wiki config.yaml
-    try:
-        wiki_root = _paths.resolve_wiki_path(hub_root)
-    except SystemExit:
-        wiki_root = None
+    wiki_root = wiki_path
+    if wiki_root is None:
+        try:
+            wiki_root = _paths.resolve_wiki_path(hub_root)
+        except SystemExit:
+            wiki_root = None
 
     if wiki_root is not None:
         wiki_cfg_path = wiki_root / "config.yaml"
@@ -131,7 +137,7 @@ def read_junctions(hub_root: Path) -> dict[str, str]:
     return dict(_JUNCTION_DEFAULTS)
 
 
-def read_hardlinks(hub_root: Path) -> dict[str, str]:
+def read_hardlinks(hub_root: Path, wiki_path: Path | None = None) -> dict[str, str]:
     """Read the ``hardlinks:`` block from ``<hub_root>/mill-config.yaml`` or legacy wiki ``config.yaml``.
 
     Returns an ordered dict mapping link-path → unresolved target template.
@@ -141,8 +147,12 @@ def read_hardlinks(hub_root: Path) -> dict[str, str]:
 
     Precedence (first source wins):
     1. ``<hub_root>/mill-config.yaml`` if it exists.
-    2. Legacy ``<wiki_root>/config.yaml`` (resolved via _paths.resolve_wiki_path).
+    2. Legacy ``<wiki_path>/config.yaml`` if *wiki_path* is supplied; otherwise
+       ``<wiki_root>/config.yaml`` resolved via ``_paths.resolve_wiki_path``.
     3. Empty dict (no hardlinks configured).
+
+    Pass *wiki_path* when the caller already has the wiki location and the
+    hub_root is not a git repository (e.g. unit-test fixtures).
 
     Also returns an empty dict when the block is explicitly null (hardlinks: null),
     since yaml.safe_load yields None for an explicit-null and the falsy check
@@ -161,10 +171,12 @@ def read_hardlinks(hub_root: Path) -> dict[str, str]:
         return dict(_HARDLINK_DEFAULTS)
 
     # Fall back to legacy wiki config.yaml
-    try:
-        wiki_root = _paths.resolve_wiki_path(hub_root)
-    except SystemExit:
-        wiki_root = None
+    wiki_root = wiki_path
+    if wiki_root is None:
+        try:
+            wiki_root = _paths.resolve_wiki_path(hub_root)
+        except SystemExit:
+            wiki_root = None
 
     if wiki_root is not None:
         wiki_cfg_path = wiki_root / "config.yaml"

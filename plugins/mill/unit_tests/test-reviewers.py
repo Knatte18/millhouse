@@ -26,6 +26,26 @@ def _write_yaml(path: Path, text: str) -> None:
     path.write_text(text, encoding="utf-8")
 
 
+def _load_with_overlay(yaml_text: str) -> dict:
+    """Load reviewers from a fresh hub with yaml_text as its local overlay.
+
+    Used by the extends/cluster test block. Patches the plugin template path
+    to a nonexistent location so the local overlay is the only source.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        hub = tmp_path / "hub"
+        hub.mkdir()
+        (hub / ".millhouse").mkdir()
+        (hub / ".millhouse" / "agents.local.yaml").write_text(yaml_text, encoding="utf-8")
+        with patch.object(
+            _reviewers,
+            "resolve_plugin_template_path",
+            return_value=tmp_path / "nonexistent" / "mill-agents.yaml",
+        ):
+            return _reviewers.load(hub)
+
+
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
@@ -564,102 +584,84 @@ def test_raises_when_nothing_found() -> None:
 
 def test_extends_single_level() -> None:
     """Single-level extends: child inherits from base."""
-    with tempfile.TemporaryDirectory() as tmp:
-        wiki = Path(tmp) / "wiki"
-        _write_yaml(
-            wiki / "agents.yaml",
-            "base:\n"
-            "  type: single\n"
-            "  provider: claude\n"
-            "  model: claude-sonnet-4-6\n"
-            "child:\n"
-            "  extends: base\n"
-            "  tooluse: true\n",
-        )
-        registry = _reviewers.load(wiki)
-        assert registry["child"] == {
-            "type": "single",
-            "provider": "claude",
-            "model": "claude-sonnet-4-6",
-            "tooluse": True,
-        }
-        assert registry["base"] == {
-            "type": "single",
-            "provider": "claude",
-            "model": "claude-sonnet-4-6",
-        }
+    registry = _load_with_overlay(
+        "base:\n"
+        "  type: single\n"
+        "  provider: claude\n"
+        "  model: claude-sonnet-4-6\n"
+        "child:\n"
+        "  extends: base\n"
+        "  tooluse: true\n",
+    )
+    assert registry["child"] == {
+        "type": "single",
+        "provider": "claude",
+        "model": "claude-sonnet-4-6",
+        "tooluse": True,
+    }
+    assert registry["base"] == {
+        "type": "single",
+        "provider": "claude",
+        "model": "claude-sonnet-4-6",
+    }
     print("PASS: extends single level")
 
 
 def test_extends_multi_level() -> None:
     """Multi-level chain c -> b -> a resolves correctly."""
-    with tempfile.TemporaryDirectory() as tmp:
-        wiki = Path(tmp) / "wiki"
-        _write_yaml(
-            wiki / "agents.yaml",
-            "a:\n"
-            "  type: single\n"
-            "  provider: claude\n"
-            "  model: claude-sonnet-4-6\n"
-            "b:\n"
-            "  extends: a\n"
-            "c:\n"
-            "  extends: b\n"
-            "  tooluse: true\n",
-        )
-        registry = _reviewers.load(wiki)
-        assert registry["c"]["type"] == "single"
-        assert registry["c"]["provider"] == "claude"
-        assert registry["c"]["model"] == "claude-sonnet-4-6"
-        assert registry["c"]["tooluse"] is True
+    registry = _load_with_overlay(
+        "a:\n"
+        "  type: single\n"
+        "  provider: claude\n"
+        "  model: claude-sonnet-4-6\n"
+        "b:\n"
+        "  extends: a\n"
+        "c:\n"
+        "  extends: b\n"
+        "  tooluse: true\n",
+    )
+    assert registry["c"]["type"] == "single"
+    assert registry["c"]["provider"] == "claude"
+    assert registry["c"]["model"] == "claude-sonnet-4-6"
+    assert registry["c"]["tooluse"] is True
     print("PASS: extends multi-level")
 
 
 def test_extends_child_overrides_parent_scalar() -> None:
     """Child overrides parent scalar value."""
-    with tempfile.TemporaryDirectory() as tmp:
-        wiki = Path(tmp) / "wiki"
-        _write_yaml(
-            wiki / "agents.yaml",
-            "base:\n"
-            "  type: single\n"
-            "  provider: claude\n"
-            "  model: foo\n"
-            "child:\n"
-            "  extends: base\n"
-            "  model: bar\n",
-        )
-        registry = _reviewers.load(wiki)
-        assert registry["child"]["model"] == "bar"
+    registry = _load_with_overlay(
+        "base:\n"
+        "  type: single\n"
+        "  provider: claude\n"
+        "  model: foo\n"
+        "child:\n"
+        "  extends: base\n"
+        "  model: bar\n",
+    )
+    assert registry["child"]["model"] == "bar"
     print("PASS: extends child overrides parent scalar")
 
 
 def test_extends_unknown_base_raises() -> None:
     """Extends referencing unknown base raises ReviewerError."""
-    with tempfile.TemporaryDirectory() as tmp:
-        wiki = Path(tmp) / "wiki"
-        _write_yaml(
-            wiki / "agents.yaml",
+    try:
+        _load_with_overlay(
             "child:\n"
             "  extends: nonexistent\n"
             "  type: single\n"
             "  provider: claude\n"
             "  model: x\n",
         )
-        try:
-            _reviewers.load(wiki)
-            raise AssertionError("Expected ReviewerError")
-        except ReviewerError as exc:
-            assert "nonexistent" in str(exc)
+        raise AssertionError("Expected ReviewerError")
+    except ReviewerError as exc:
+        assert "nonexistent" in str(exc)
     print("PASS: extends unknown base raises")
 
 
 def test_extends_cycle_raises() -> None:
     """Cycle in extends chain raises ReviewerError."""
-    with tempfile.TemporaryDirectory() as tmp:
-        wiki = Path(tmp) / "wiki"
-        _write_yaml(
-            wiki / "agents.yaml",
+    try:
+        _load_with_overlay(
             "a:\n"
             "  extends: b\n"
             "  type: single\n"
@@ -671,45 +673,37 @@ def test_extends_cycle_raises() -> None:
             "  provider: claude\n"
             "  model: y\n",
         )
-        try:
-            _reviewers.load(wiki)
-            raise AssertionError("Expected ReviewerError")
-        except ReviewerError as exc:
-            exc_str = str(exc)
-            assert "Cycle detected" in exc_str
-            assert "a" in exc_str
-            assert "b" in exc_str
+        raise AssertionError("Expected ReviewerError")
+    except ReviewerError as exc:
+        exc_str = str(exc)
+        assert "Cycle detected" in exc_str
+        assert "a" in exc_str
+        assert "b" in exc_str
     print("PASS: extends cycle raises")
 
 
 def test_extends_self_cycle_raises() -> None:
     """Self-loop in extends raises ReviewerError."""
-    with tempfile.TemporaryDirectory() as tmp:
-        wiki = Path(tmp) / "wiki"
-        _write_yaml(
-            wiki / "agents.yaml",
+    try:
+        _load_with_overlay(
             "a:\n"
             "  extends: a\n"
             "  type: single\n"
             "  provider: claude\n"
             "  model: x\n",
         )
-        try:
-            _reviewers.load(wiki)
-            raise AssertionError("Expected ReviewerError")
-        except ReviewerError as exc:
-            exc_str = str(exc)
-            assert "Cycle detected" in exc_str
-            assert "a -> a" in exc_str
+        raise AssertionError("Expected ReviewerError")
+    except ReviewerError as exc:
+        exc_str = str(exc)
+        assert "Cycle detected" in exc_str
+        assert "a -> a" in exc_str
     print("PASS: extends self-cycle raises")
 
 
 def test_extends_target_must_not_be_cluster() -> None:
     """Extends cannot target a cluster entry."""
-    with tempfile.TemporaryDirectory() as tmp:
-        wiki = Path(tmp) / "wiki"
-        _write_yaml(
-            wiki / "agents.yaml",
+    try:
+        _load_with_overlay(
             "x:\n"
             "  type: single\n"
             "  provider: claude\n"
@@ -725,22 +719,18 @@ def test_extends_target_must_not_be_cluster() -> None:
             "  extends: my_cluster\n"
             "  tooluse: true\n",
         )
-        try:
-            _reviewers.load(wiki)
-            raise AssertionError("Expected ReviewerError")
-        except ReviewerError as exc:
-            exc_str = str(exc)
-            assert "my_cluster" in exc_str
-            assert "cluster" in exc_str
+        raise AssertionError("Expected ReviewerError")
+    except ReviewerError as exc:
+        exc_str = str(exc)
+        assert "my_cluster" in exc_str
+        assert "cluster" in exc_str
     print("PASS: extends target must not be cluster")
 
 
 def test_cluster_cannot_extend() -> None:
     """Cluster entries cannot use extends."""
-    with tempfile.TemporaryDirectory() as tmp:
-        wiki = Path(tmp) / "wiki"
-        _write_yaml(
-            wiki / "agents.yaml",
+    try:
+        _load_with_overlay(
             "a:\n"
             "  type: single\n"
             "  provider: claude\n"
@@ -754,51 +744,41 @@ def test_cluster_cannot_extend() -> None:
             "  handler:\n"
             "    use: a\n",
         )
-        try:
-            _reviewers.load(wiki)
-            raise AssertionError("Expected ReviewerError")
-        except ReviewerError as exc:
-            exc_str = str(exc)
-            assert "my_cluster" in exc_str
-            assert "cluster" in exc_str
+        raise AssertionError("Expected ReviewerError")
+    except ReviewerError as exc:
+        exc_str = str(exc)
+        assert "my_cluster" in exc_str
+        assert "cluster" in exc_str
     print("PASS: cluster cannot extend")
 
 
 def test_required_field_missing_after_merge_raises() -> None:
     """Missing required field after merge is caught by validation."""
-    with tempfile.TemporaryDirectory() as tmp:
-        wiki = Path(tmp) / "wiki"
-        _write_yaml(
-            wiki / "agents.yaml",
+    try:
+        _load_with_overlay(
             "base:\n"
             "  type: single\n"
             "  model: foo\n"
             "child:\n"
             "  extends: base\n",
         )
-        try:
-            _reviewers.load(wiki)
-            raise AssertionError("Expected ReviewerError")
-        except ReviewerError as exc:
-            assert "provider" in str(exc)
+        raise AssertionError("Expected ReviewerError")
+    except ReviewerError as exc:
+        assert "provider" in str(exc)
     print("PASS: required field missing after merge raises")
 
 
 def test_extends_field_removed_from_output() -> None:
     """The extends: field is removed from resolved output."""
-    with tempfile.TemporaryDirectory() as tmp:
-        wiki = Path(tmp) / "wiki"
-        _write_yaml(
-            wiki / "agents.yaml",
-            "a:\n"
-            "  type: single\n"
-            "  provider: claude\n"
-            "  model: x\n"
-            "b:\n"
-            "  extends: a\n",
-        )
-        registry = _reviewers.load(wiki)
-        assert "extends" not in registry["b"]
+    registry = _load_with_overlay(
+        "a:\n"
+        "  type: single\n"
+        "  provider: claude\n"
+        "  model: x\n"
+        "b:\n"
+        "  extends: a\n",
+    )
+    assert "extends" not in registry["b"]
     print("PASS: extends field removed from output")
 
 

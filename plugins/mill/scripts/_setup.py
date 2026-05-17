@@ -81,9 +81,9 @@ def create_hub_links(
             source and target paths named); or ``_junction.resolve_target``
             finding an unknown token after filtering (logic error in caller).
     """
-    hub_root = _paths.resolve_git_root()
-    junctions_cfg = _wiki.read_junctions(hub_root)
-    hardlinks_cfg = _wiki.read_hardlinks(hub_root)
+    hub_root = target_root
+    junctions_cfg = _wiki.read_junctions(hub_root, wiki_path=wiki_path)
+    hardlinks_cfg = _wiki.read_hardlinks(hub_root, wiki_path=wiki_path)
 
     created_junctions: list[Path] = []
     created_hardlinks: list[Path] = []

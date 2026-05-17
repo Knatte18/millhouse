@@ -60,8 +60,7 @@ def _make_hub_with_wiki(slug: str) -> tuple[Path, Path, Path]:
     """
     fixture_base = SCRATCH / "test-migration" / slug
     if fixture_base.exists():
-        import shutil
-        shutil.rmtree(fixture_base, ignore_errors=True)
+        _safe_rmtree.safe_rmtree(fixture_base, allowed_root=SCRATCH, ignore_errors=True)
     fixture_base.mkdir(parents=True, exist_ok=True)
 
     # Create wiki repo (will serve as the wiki clone)
