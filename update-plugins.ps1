@@ -3,6 +3,9 @@
 # version is unchanged, so it cannot deploy in-place file edits without a
 # version bump. We use robocopy directly to mirror the current source into the
 # cache regardless of version. Run from the millhouse repo root.
+# NOTE: This script sets User-level environment variables. When CC uses directory-source
+# mode (marketplace.json relative source paths), CC sets Process-level CLAUDE_PLUGIN_ROOT
+# that overrides this User-level setting; see ## Conventions worth carrying in CLAUDE.md.
 
 $ManifestPath = Join-Path $PSScriptRoot ".claude-plugin\marketplace.json"
 $manifest = Get-Content $ManifestPath -Raw | ConvertFrom-Json

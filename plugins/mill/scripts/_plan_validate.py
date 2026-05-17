@@ -19,6 +19,8 @@ Checks performed (check keys):
                                card numbers
     depends-on-unknown       — (#10 check 4) depends-on entries referencing unknown
                                batch names
+    depends-on-batch-mismatch — per-batch file's depends-on disagrees with overview
+                               Batch Index depends-on for the same batch
     parallel-modifies-overlap — (#10 check 5) Parallel-eligible batches both
                                modifying the same file
     reads-not-backtick-path  — (#10 check 6) Context:/Edits:/Creates: entries not
@@ -30,6 +32,7 @@ Checks performed (check keys):
 from __future__ import annotations
 
 import re
+import yaml
 from pathlib import Path
 
 from _plan_dag import PlanDAGError, extract_batch_index, resolve_deps_as_names
@@ -498,6 +501,93 @@ def _check_parallel_modifies_overlap(
 
 
 # ---------------------------------------------------------------------------
+# Check 5b — depends-on-batch-mismatch
+# ---------------------------------------------------------------------------
+
+def _check_depends_on_batch_mismatch(
+    batch_files: list[Path],
+    overview_text: str,
+) -> list[dict]:
+    try:
+        batches = extract_batch_index(overview_text)
+    except PlanDAGError:
+        # Check 4 has already recorded the parse error; don't double-report.
+        return []
+
+    number_to_name = {
+        entry["number"]: entry["name"]
+        for entry in batches
+        if "number" in entry
+    }
+
+    # Map batch name -> batch file path via the index's `file:` field.
+    stem_to_path: dict[str, Path] = {bf.stem: bf for bf in batch_files}
+    batch_name_to_path: dict[str, Path] = {}
+    for entry in batches:
+        file_ref = entry.get("file", "")
+        stem = Path(file_ref).stem
+        if stem in stem_to_path:
+            batch_name_to_path[entry["name"]] = stem_to_path[stem]
+
+    # Parse per-batch depends-on from batch files.
+    batch_side_deps: dict[str, list[str]] = {}
+    for name, path in batch_name_to_path.items():
+        try:
+            text = path.read_text(encoding="utf-8")
+            # Extract YAML block between ``` ```yaml ``` and the next ``` ```.
+            lines = text.splitlines()
+            start_idx = None
+            end_idx = None
+            for i, line in enumerate(lines):
+                if line.strip() == "```yaml":
+                    start_idx = i
+                elif start_idx is not None and line.strip() == "```":
+                    end_idx = i
+                    break
+            if start_idx is not None and end_idx is not None:
+                yaml_text = "\n".join(lines[start_idx + 1:end_idx])
+                parsed = yaml.safe_load(yaml_text) or {}
+            else:
+                parsed = {}
+            deps = parsed.get("depends-on", [])
+            # Normalize: translate ints to names, pass strings through.
+            normalized: list[str] = []
+            for dep in deps:
+                if isinstance(dep, int):
+                    resolved = number_to_name.get(dep)
+                    if resolved is not None:
+                        normalized.append(resolved)
+                else:
+                    normalized.append(dep)
+            batch_side_deps[name] = normalized
+        except Exception:
+            # If batch file parsing fails, skip (other checks will catch it).
+            batch_side_deps[name] = []
+
+    # Get overview-side normalized depends-on.
+    overview_side_deps = resolve_deps_as_names(batches)
+
+    errors: list[dict] = []
+    for name in batch_name_to_path.keys():
+        batch_deps = set(batch_side_deps.get(name, []))
+        overview_deps = set(overview_side_deps.get(name, []))
+        if batch_deps != overview_deps:
+            errors.append({
+                "check": "depends-on-batch-mismatch",
+                "batch": name,
+                "card": None,
+                "path": None,
+                "message": (
+                    f"per-batch file depends-on={sorted(batch_deps)} "
+                    f"disagrees with overview Batch Index "
+                    f"depends-on={sorted(overview_deps)}"
+                ),
+            })
+
+    return errors
+
+
+# ---------------------------------------------------------------------------
 # Check 6 — reads-not-backtick-path
 # ---------------------------------------------------------------------------
 
@@ -756,6 +846,7 @@ def run(
     errors.extend(_check_card_missing_field(batch_files))
     errors.extend(_check_card_numbering(batch_files))
     errors.extend(_check_depends_on_unknown(overview_text, overview_path))
+    errors.extend(_check_depends_on_batch_mismatch(batch_files, overview_text))
     errors.extend(_check_parallel_modifies_overlap(batch_files, overview_text))
     errors.extend(_check_ref_not_backtick_path(batch_files))
     errors.extend(_check_wiki_config_mutation(batch_files))

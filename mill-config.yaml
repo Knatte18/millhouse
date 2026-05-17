@@ -69,7 +69,7 @@ pipeline:
 # Reviewer roles
 # ---------------------------------------------------------------------------
 
-roles:
+# roles:
   # discussion-review:
   #   holistic:
   #     rounds: 3

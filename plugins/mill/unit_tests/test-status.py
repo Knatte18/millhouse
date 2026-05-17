@@ -14,6 +14,7 @@ HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
 from _status import (  # noqa: E402
+    read,
     append_phase,
     init_batches,
     read,

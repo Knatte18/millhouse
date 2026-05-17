@@ -13,6 +13,8 @@ You are an autonomous planner running on Opus. Your job is to turn `discussion.m
 
 1. Resolve the wiki path via `_paths.resolve_wiki_path(_paths.resolve_git_root())` and call `_wiki.sync_pull(wiki_path, slug="mill-plan")`.
    `signature: _wiki.sync_pull(wiki_path: Path, *, slug: str) -> None`
+   `signature: _paths.resolve_git_root(start: Path | None = None) -> Path`
+   `signature: _paths.resolve_wiki_path(git_toplevel: Path) -> Path`
 2. Read the slug via `_marker.slug_from_branch(git_root, wiki_path, cfg)`. On `MarkerError` → halt with "this worktree was not created by mill-spawn".
 3. Load config — deep-merge `<WIKI_PATH>/config.yaml` with `.millhouse/config.local.yaml`. Read `roles.plan-review.holistic.rounds` as `max_review_rounds`.
    `signature: _config.load_config(wiki_path: Path, worktree_root: Path) -> dict`
@@ -62,6 +64,8 @@ Apply the same rule when rendering `plan-batch.md` for each batch (`<BATCH_NAME>
 **Card numbering is global across batches**: card 1 lives in batch 01, card 7 might live in batch 02, etc. Never restart at 1 inside each batch — the reviewer and implementer cite cards by number and need uniqueness.
 
 **Self-validate the DAG** before committing: call `_plan_dag.extract_batch_index(overview_text)` then `_plan_dag.validate(batches, sorted(p.name for p in plan_dir.glob("??-*.md") if p.name != "00-overview.md"))`. Any `PlanDAGError` → fix the plan files, then re-validate. Do not commit a plan that fails this check.
+
+`signature: _status.read(status_path: Path) -> dict`
 
 **Update `_mill/status.md`.**
 
