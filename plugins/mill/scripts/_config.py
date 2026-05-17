@@ -23,10 +23,20 @@ set_local_wiki_overrides(cfg_path, repo_url, branch) -> bool
 """
 from __future__ import annotations
 
+import os
+import re
 from pathlib import Path
 
 import yaml
 import _machine
+
+
+class ConfigError(ValueError):
+    pass
+
+
+# POSIX env-var convention: uppercase only; lowercase patterns are literal.
+_ENV_INTERP_RE = re.compile(r"\$\{([A-Z_][A-Z0-9_]*)(:-(.*?))?\}")
 
 
 def load_config(wiki_path: Path, worktree_root: Path) -> dict:
@@ -77,6 +87,7 @@ def load_config(wiki_path: Path, worktree_root: Path) -> dict:
         if real_path.exists():
             real_cfg = yaml.safe_load(real_path.read_text(encoding="utf-8")) or {}
             cfg = deep_merge(cfg, real_cfg)
+    cfg = _interpolate_env(cfg)
     return cfg
 
 
@@ -152,3 +163,65 @@ def deep_merge(base: dict, overlay: dict) -> dict:
         else:
             out[key] = val
     return out
+
+
+def _substitute_string(value: str, key_path: str) -> str:
+    """Substitute ${VAR} and ${VAR:-default} patterns in a string.
+
+    Args:
+        value:    The string to process.
+        key_path: Dotted key path for error messages.
+
+    Returns:
+        String with all env-var patterns substituted.
+
+    Raises:
+        ConfigError: If an unset variable has no default.
+    """
+
+    def replace_match(match):
+        var_name = match.group(1)
+        has_default = match.group(2) is not None
+        default_value = match.group(3) if has_default else None
+
+        if var_name in os.environ:
+            return os.environ[var_name]
+        elif has_default:
+            return default_value
+        else:
+            raise ConfigError(
+                f"Unset env var '{var_name}' at config key '{key_path}'"
+            )
+
+    return _ENV_INTERP_RE.sub(replace_match, value)
+
+
+def _interpolate_env(cfg, key_path: str = ""):
+    """Recursively interpolate env-var patterns in configuration values.
+
+    Args:
+        cfg:      Configuration (dict, list, str, or scalar).
+        key_path: Current dotted/bracketed key path.
+
+    Returns:
+        Configuration with all string values interpolated.
+
+    Raises:
+        ConfigError: If an unset variable has no default.
+    """
+    if isinstance(cfg, dict):
+        return {
+            k: _interpolate_env(
+                v, f"{key_path}.{k}" if key_path else k
+            )
+            for k, v in cfg.items()
+        }
+    elif isinstance(cfg, list):
+        return [
+            _interpolate_env(v, f"{key_path}[{i}]")
+            for i, v in enumerate(cfg)
+        ]
+    elif isinstance(cfg, str):
+        return _substitute_string(cfg, key_path)
+    else:
+        return cfg
