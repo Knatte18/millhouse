@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-reviewing
+phase: holistic-approved
 slug: mill-misc-fixes-8
 branch: hanf/mill-misc-fixes-8
 plan: _mill/plan
@@ -27,6 +27,7 @@ approved-merge-in-intent-aware  '2026-05-17T13:42:50Z'
 approved-test-vscode-processes-skip  '2026-05-17T13:44:46Z'
 approved-skill-and-docs-prose  '2026-05-17T13:48:35Z'
 holistic-reviewing  '2026-05-17T13:48:49Z'
+holistic-approved  '2026-05-17T14:05:33Z'
 ```
 
 ## Batches
