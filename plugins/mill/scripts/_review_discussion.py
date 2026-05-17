@@ -29,6 +29,7 @@ from _review_common import (
     read_constraints_md,
     render_prompt,
     resolve_path,
+    worktree_snapshot_guard,
     write_review_file,
 )
 
@@ -52,91 +53,92 @@ def run(
     5. Call reviewer (catch LLMError → total-fail → raise ReviewError).
     6. Parse verdict, write review file, return ReviewResult.
     """
-    # 1. Resolve paths
-    discussion_path = resolve_path(cfg["paths"]["discussion_file"], slug)
-    reviews_dir = resolve_path(cfg["paths"]["reviews_dir"], slug)
+    with worktree_snapshot_guard(project_root, expected_paths=[cfg["paths"]["reviews_dir"]]):
+        # 1. Resolve paths
+        discussion_path = resolve_path(cfg["paths"]["discussion_file"], slug)
+        reviews_dir = resolve_path(cfg["paths"]["reviews_dir"], slug)
 
-    # 2. Round discovery and cap check
-    round_n = discover_round(reviews_dir, "discussion", "holistic")
-    max_rounds = max_rounds if max_rounds is not None else cfg["roles"]["discussion-review"]["holistic"]["rounds"]
-    if round_n > max_rounds:
-        raise ReviewError(
-            f"Round {round_n} exceeds max {max_rounds} for discussion review"
+        # 2. Round discovery and cap check
+        round_n = discover_round(reviews_dir, "discussion", "holistic")
+        max_rounds = max_rounds if max_rounds is not None else cfg["roles"]["discussion-review"]["holistic"]["rounds"]
+        if round_n > max_rounds:
+            raise ReviewError(
+                f"Round {round_n} exceeds max {max_rounds} for discussion review"
+            )
+
+        print(
+            f"[_review_discussion] slug={slug!r} round={round_n}",
+            file=sys.stderr,
         )
 
-    print(
-        f"[_review_discussion] slug={slug!r} round={round_n}",
-        file=sys.stderr,
-    )
+        # 3. Resolve reviewer spec via registry
+        reviewer_name = cfg["roles"]["discussion-review"]["holistic"]["reviewer"]
+        if reviewer_name is None:
+            raise ReviewError("discussion-review holistic reviewer is null; nothing to do")
+        hub_dir = project_root
+        registry = _reviewers.load(hub_dir)
+        spec = _reviewers.resolve(registry, reviewer_name)
+        mode = "tool-use" if spec.get("tooluse") else "bulk"
+        tool_rule = build_tool_rule(mode)
 
-    # 3. Resolve reviewer spec via registry
-    reviewer_name = cfg["roles"]["discussion-review"]["holistic"]["reviewer"]
-    if reviewer_name is None:
-        raise ReviewError("discussion-review holistic reviewer is null; nothing to do")
-    hub_dir = project_root
-    registry = _reviewers.load(hub_dir)
-    spec = _reviewers.resolve(registry, reviewer_name)
-    mode = "tool-use" if spec.get("tooluse") else "bulk"
-    tool_rule = build_tool_rule(mode)
+        # 4. Build mode-specific artefact section + render prompt
+        if mode == "tool-use":
+            artefact_section = (
+                f"Read the discussion at `{discussion_path}`. The discussion "
+                f"file is the authoritative scope. Read files referenced in "
+                f"`## Technical Context` to verify claims."
+            )
+        else:
+            discussion_text = discussion_path.read_text(encoding="utf-8")
+            artefact_section = (
+                "Evaluate the discussion below. The inlined content is the "
+                "authoritative scope.\n\n## Discussion\n"
+                f"{discussion_text}"
+            )
 
-    # 4. Build mode-specific artefact section + render prompt
-    if mode == "tool-use":
-        artefact_section = (
-            f"Read the discussion at `{discussion_path}`. The discussion "
-            f"file is the authoritative scope. Read files referenced in "
-            f"`## Technical Context` to verify claims."
+        prompt_text = render_prompt(
+            "review-discussion",
+            task_title=load_task_title(project_root, wiki_root, cfg, slug),
+            tool_rule=tool_rule,
+            artefact_section=artefact_section,
+            constraints=read_constraints_md(project_root),
+            round=round_n,
+            reviewer_model=reviewer_name,
         )
-    else:
-        discussion_text = discussion_path.read_text(encoding="utf-8")
-        artefact_section = (
-            "Evaluate the discussion below. The inlined content is the "
-            "authoritative scope.\n\n## Discussion\n"
-            f"{discussion_text}"
+
+        spec, reviewer_name = maybe_switch_spec_for_large_prompt(
+            prompt_text, spec, reviewer_name, cfg, "discussion-review", "holistic", registry
         )
 
-    prompt_text = render_prompt(
-        "review-discussion",
-        task_title=load_task_title(project_root, wiki_root, cfg, slug),
-        tool_rule=tool_rule,
-        artefact_section=artefact_section,
-        constraints=read_constraints_md(project_root),
-        round=round_n,
-        reviewer_model=reviewer_name,
-    )
+        # 5. Invoke reviewer — for discussion a single sub-review, so any LLMError
+        #    means zero successes → total failure → raise ReviewError so the API
+        #    exits 1 with empty stdout.
+        try:
+            raw, session_id = _reviewer_single.run(spec, prompt_text)
+        except LLMError as exc:
+            raise ReviewError(f"All sub-reviews failed: {exc}") from exc
 
-    spec, reviewer_name = maybe_switch_spec_for_large_prompt(
-        prompt_text, spec, reviewer_name, cfg, "discussion-review", "holistic", registry
-    )
+        # 6. Parse, write, return
+        verdict = parse_verdict(raw)
+        blocking_count = parse_blocking_count(raw, severity="GAP")
+        review_file = write_review_file(reviews_dir, "discussion", round_n, raw)
 
-    # 5. Invoke reviewer — for discussion a single sub-review, so any LLMError
-    #    means zero successes → total failure → raise ReviewError so the API
-    #    exits 1 with empty stdout.
-    try:
-        raw, session_id = _reviewer_single.run(spec, prompt_text)
-    except LLMError as exc:
-        raise ReviewError(f"All sub-reviews failed: {exc}") from exc
+        print(
+            f"[_review_discussion] wrote {review_file.name} verdict={verdict}",
+            file=sys.stderr,
+        )
 
-    # 6. Parse, write, return
-    verdict = parse_verdict(raw)
-    blocking_count = parse_blocking_count(raw, severity="GAP")
-    review_file = write_review_file(reviews_dir, "discussion", round_n, raw)
-
-    print(
-        f"[_review_discussion] wrote {review_file.name} verdict={verdict}",
-        file=sys.stderr,
-    )
-
-    return ReviewResult(
-        type="discussion",
-        round=round_n,
-        verdict=verdict,
-        blocking_count=blocking_count,
-        reviews=[
-            {
-                "scope": "holistic",
-                "verdict": verdict,
-                "file": str(review_file),
-                "session_id": session_id,
-            }
-        ],
-    )
+        return ReviewResult(
+            type="discussion",
+            round=round_n,
+            verdict=verdict,
+            blocking_count=blocking_count,
+            reviews=[
+                {
+                    "scope": "holistic",
+                    "verdict": verdict,
+                    "file": str(review_file),
+                    "session_id": session_id,
+                }
+            ],
+        )

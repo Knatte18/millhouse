@@ -8,11 +8,13 @@ scripts.
 
 Public API:
     ReviewError          — raised by the backend on config/slug/round errors
+    ReviewerOverstepError — raised by worktree_snapshot_guard when a reviewer mutates HEAD or working tree
     ReviewResult         — dataclass; serialised to the CLI's stdout JSON
     RE_SIMPLE            — regex matching simple review filenames
     RE_BATCH             — regex matching plan-batch review filenames
     find_active_slug()   — delegate to _marker.slug_from_branch for slug derivation
     load_task_title()    — delegate to _marker.task_data for task_title; fall back to slug on MarkerError
+    worktree_snapshot_guard() — context manager; snapshot guard wrapping each backend run()
     read_constraints_md()— read CONSTRAINTS.md, empty string if absent
     resolve_path()       — locate a path inside the active hub (where task/ lives) from a config template
     discover_round()     — determine next review round number per (review_type, scope)
@@ -44,10 +46,11 @@ import copy
 import re
 import _subprocess_util
 import sys
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 import yaml
 import _marker
@@ -55,9 +58,7 @@ import _paths
 import _render
 import _reviewers
 from _config import (
-    ENV_REGISTRY,
     apply_env_overrides,
-    walk_unknown_keys,
     warn_unknown_keys,
     resolve_plugin_template_path,
 )
@@ -93,6 +94,125 @@ class ReviewError(Exception):
 
     Caught by the API scripts, which print str(exc) to stderr and exit 1.
     """
+
+
+class ReviewerOverstepError(ReviewError):
+    """Raised when a reviewer mutated git state (HEAD or working tree) during a review pass.
+
+    Carries the before/after HEAD SHA and the unfiltered git status --porcelain
+    diff for operator inspection. The guard does not auto-rollback; the operator
+    resets manually after investigating.
+    """
+
+    def __init__(self, before_sha: str, after_sha: str, porcelain_diff: str) -> None:
+        self.before_sha = before_sha
+        self.after_sha = after_sha
+        self.porcelain_diff = porcelain_diff
+        msg = (
+            f"reviewer overstep detected: HEAD {before_sha[:8]} -> {after_sha[:8]}; "
+            f"porcelain diff:\n{porcelain_diff}"
+        )
+        super().__init__(msg)
+
+
+@contextmanager
+def worktree_snapshot_guard(
+    project_root: Path,
+    *,
+    expected_paths: list[str] | None = None,
+) -> Iterator[None]:
+    """Snapshot git state before/after the with-block; raise on any change.
+
+    Captures `git rev-parse HEAD` and `git status --porcelain` on entry,
+    re-captures on exit, and raises ``ReviewerOverstepError`` if either the
+    HEAD SHA or the porcelain diff (filtered by ``expected_paths``) differs.
+
+    ``expected_paths`` is a list of substring patterns that filter the
+    porcelain diff before comparison. A porcelain line is filtered when its
+    path field (with backslashes normalised to forward slashes) contains
+    ANY entry in ``expected_paths`` as a substring. HEAD-SHA changes are
+    NEVER filtered.
+
+    Exceptions raised inside the with-block propagate unchanged -- the guard
+    only raises if the block exits cleanly but state was mutated.
+    """
+    before_sha = _capture_head_sha(project_root)
+    before_porcelain = _capture_porcelain(project_root)
+    try:
+        yield
+    except Exception:
+        raise  # do not swallow LLMError / ReviewError / etc.
+    after_sha = _capture_head_sha(project_root)
+    after_porcelain = _capture_porcelain(project_root)
+
+    before_filtered = _filter_porcelain(before_porcelain, expected_paths)
+    after_filtered = _filter_porcelain(after_porcelain, expected_paths)
+
+    if before_sha != after_sha or set(before_filtered) != set(after_filtered):
+        diff = _porcelain_diff(before_filtered, after_filtered)
+        raise ReviewerOverstepError(before_sha, after_sha, diff)
+
+
+def _capture_head_sha(project_root: Path) -> str:
+    """Return the current HEAD SHA as a hex string. Raises ReviewError on git failure."""
+    result = _subprocess_util.run(
+        ["git", "-C", str(project_root), "rev-parse", "HEAD"],
+    )
+    if result.returncode != 0:
+        raise ReviewError(
+            f"worktree_snapshot_guard: git rev-parse HEAD failed in {project_root}: "
+            f"{(result.stderr or '').strip()}"
+        )
+    return result.stdout.strip()
+
+
+def _capture_porcelain(project_root: Path) -> list[str]:
+    """Return git status --porcelain as a list of lines (one per entry). Raises ReviewError on failure."""
+    result = _subprocess_util.run(
+        ["git", "-C", str(project_root), "status", "--porcelain"],
+    )
+    if result.returncode != 0:
+        raise ReviewError(
+            f"worktree_snapshot_guard: git status --porcelain failed in {project_root}: "
+            f"{(result.stderr or '').strip()}"
+        )
+    return [line for line in result.stdout.splitlines() if line.strip()]
+
+
+def _filter_porcelain(lines: list[str], expected_paths: list[str] | None) -> list[str]:
+    """Drop porcelain lines whose path field matches any expected_paths substring.
+
+    Each porcelain line has a 2-character status code, a space, then the path.
+    Renames have ' -> ' between old and new path; both are checked against expected_paths.
+    Path comparison normalises backslashes to forward slashes.
+    """
+    if not expected_paths:
+        return list(lines)
+    kept: list[str] = []
+    for line in lines:
+        # Porcelain format: "XY path" or "XY old -> new" for renames
+        path_field = line[3:] if len(line) > 3 else line
+        normalised = path_field.replace("\\", "/")
+        # Split rename arrows so both sides are checked
+        candidates = [s.strip() for s in normalised.split(" -> ")]
+        if any(pat in cand for cand in candidates for pat in expected_paths):
+            continue
+        kept.append(line)
+    return kept
+
+
+def _porcelain_diff(before: list[str], after: list[str]) -> str:
+    """Return a human-readable diff string of before vs after porcelain line sets."""
+    before_set = set(before)
+    after_set = set(after)
+    added = sorted(after_set - before_set)
+    removed = sorted(before_set - after_set)
+    parts: list[str] = []
+    for line in added:
+        parts.append(f"  + {line}")
+    for line in removed:
+        parts.append(f"  - {line}")
+    return "\n".join(parts) if parts else "  (no porcelain line diff; HEAD changed)"
 
 
 # ---------------------------------------------------------------------------
@@ -178,7 +298,6 @@ def resolve_path(path_tmpl: str, slug: str) -> Path:
     """
     git_root = _paths.resolve_git_root()
     container_path = _paths.resolve_container_path(git_root)
-    wiki_root = _paths.resolve_wiki_path(git_root)
     hub_dir = _paths.resolve_hub_path()
     cfg = load_config(git_root, hub_dir / ".millhouse")
     active_hub = _paths.resolve_active_hub(

@@ -23,6 +23,10 @@ simply ignore the returned session_id.
 The prompt is sent on stdin; stream-json output is parsed to extract the
 final assistant text and the session_id. Stderr receives one-line progress
 messages on entry and exit.
+
+When allowed_tools does not include mutating tools (Edit, Write, Bash,
+NotebookEdit), _build_argv automatically appends --disallowedTools to deny
+those tools at the CLI layer.
 """
 from __future__ import annotations
 
@@ -68,6 +72,15 @@ def _claude_argv_prefix() -> list[str]:
 # Internal helpers
 # ---------------------------------------------------------------------------
 
+_MUTATING_TOOLS = {"Edit", "Write", "Bash", "NotebookEdit"}
+
+
+def _has_mutating_tool(allowed_tools: str) -> bool:
+    """Return True if allowed_tools (comma/whitespace-delimited) contains any mutating tool name."""
+    tokens = {t.strip() for t in allowed_tools.replace(",", " ").split() if t.strip()}
+    return bool(tokens & _MUTATING_TOOLS)
+
+
 def _build_argv(
     model: str,
     effort: str | None,
@@ -88,8 +101,10 @@ def _build_argv(
         "--output-format", "stream-json",
         "--verbose",  # required by claude CLI when combining -p with stream-json
         "--model", model,
-        "--allowedTools", allowed_tools,
+        *(["--allowedTools", allowed_tools] if allowed_tools else []),
     ]
+    if not _has_mutating_tool(allowed_tools):
+        argv += ["--disallowedTools", "Edit,Write,Bash,NotebookEdit"]
     if effort is not None:
         argv += ["--effort", effort]
     if resume:

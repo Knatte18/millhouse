@@ -105,6 +105,11 @@ def _make_plan_fixture(
     worktree.mkdir(parents=True)
     subprocess.run(["git", "-C", str(worktree), "init"], check=True, capture_output=True)
     subprocess.run(["git", "-C", str(worktree), "checkout", "-b", f"hanf/{SLUG}"], capture_output=True)
+    subprocess.run(["git", "-C", str(worktree), "config", "user.email", "test@example.com"], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(worktree), "config", "user.name", "test"], check=True, capture_output=True)
+    (worktree / ".gitignore").write_text("\n", encoding="utf-8")
+    subprocess.run(["git", "-C", str(worktree), "add", ".gitignore"], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(worktree), "commit", "-m", "seed"], check=True, capture_output=True)
     mill_dir = worktree / ".millhouse"
     mill_dir.mkdir(parents=True, exist_ok=True)
     wiki_root = tmp_path / "wiki"
