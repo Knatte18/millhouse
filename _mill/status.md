@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-reviewing
+phase: holistic-fixing
 slug: review-sandbox-followup
 branch: hanf/review-sandbox-followup
 plan: _mill/plan
@@ -32,6 +32,7 @@ approved-wiki-noop-commit  '2026-05-17T16:14:22Z'
 approved-bg-liveness  '2026-05-17T16:18:20Z'
 approved-millgo-holistic-recovery  '2026-05-17T16:20:19Z'
 holistic-reviewing  '2026-05-17T16:20:54Z'
+holistic-fixing  '2026-05-17T16:26:07Z'
 ```
 
 ## Batches
