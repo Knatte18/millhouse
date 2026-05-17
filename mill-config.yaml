@@ -90,6 +90,9 @@ pipeline:
   #   holistic:
   #     rounds: 3
   #     reviewer: sonnethigh
+  #     fallback_reviewer: null
+  #     fallback_on:
+  #       - "rate-limit"
   #   diff_scope_threshold: 0.25
 
   # implementer:

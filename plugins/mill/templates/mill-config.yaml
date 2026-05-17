@@ -141,6 +141,9 @@ roles:
     holistic:
       rounds: 3
       reviewer: sonnethigh
+      fallback_reviewer: null     # reviewer name from agents.yaml to swap in on consecutive rate-limit ERRORs; null = no fallback
+      fallback_on:                 # list of substrings (lowercased match) in reviews[].error that trigger fallback
+        - "rate-limit"
       # large_prompt:            # optional: override reviewer for large prompts
       #   threshold_ktok: 100    # switch when estimated tok count >= this (char/4000)
       #   reviewer: null         # override reviewer from agents.yaml; null = disabled

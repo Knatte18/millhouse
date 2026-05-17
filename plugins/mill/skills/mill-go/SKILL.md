@@ -344,6 +344,8 @@ For each round `H` from 1 to `max_holistic_rounds`:
    ```
    Include any accumulated `extra_files` from prior `NEED_CONTEXT` rounds via `--extra-file <p>` (one flag per path). Poll and extract JSON as per the per-batch pattern.
 
+   **Exit handling.** If `[mill-bg] EXIT` reports a non-zero exit AND no JSON summary line is present in the log, halt with "BLOCKED: holistic review pre-launch failure" and surface the last stderr line from the log to the user. If a JSON envelope IS present (even with `verdict: ERROR`), drop through to sub-step 3.5 ERROR-only retry as normal. Matches the per-batch section's "only treat exit 1 as unrecoverable when JSON line is absent" branch.
+
 3.5. **Step 3.5: ERROR-only-aggregate retry (no round consumed)**
 
    When the JSON envelope from step 3 has top-level `verdict: "ERROR"` (or, equivalently, every entry in `reviews[]` has `verdict: "ERROR"`), skip steps 4 and 5 entirely and immediately re-run:
@@ -359,7 +361,19 @@ For each round `H` from 1 to `max_holistic_rounds`:
 
    Returns immediately with `pid=<N> log=<abs-path>`. Poll `cat <log-path>` until `[mill-bg] EXIT` appears, then extract the JSON summary line from the log.
 
-   The round counter `H` is **not** consumed — the round produced no reviewable output. On the **second** consecutive run that still has top-level `verdict: "ERROR"`, halt with `BLOCKED: holistic code review ERROR-only round {H}` and surface each entry's `error` string from `reviews[]` to the user. Do NOT auto-retry beyond the second pass. The two-pass cap mirrors mill-plan's existing step 4.5.
+   The round counter `H` is **not** consumed — the round produced no reviewable output. On the **second** consecutive run that still has top-level `verdict: "ERROR"`, **first check rate-limit fallback** (see sub-step 3.6 below). If sub-step 3.6 does NOT apply, halt with `BLOCKED: holistic code review ERROR-only round {H}` and surface each entry's `error` string from `reviews[]` to the user. Do NOT auto-retry beyond the second pass.
+
+3.6. **Rate-limit fallback (no round consumed)**
+
+   When sub-step 3.5's second pass returns `verdict: ERROR` AND `roles.code-review.holistic.fallback_reviewer` is not null AND any `reviews[*].error` string contains (case-insensitive) a substring listed in `roles.code-review.holistic.fallback_on` (default `["rate-limit"]`):
+
+   1. Emit `_notify.notify("mill-go.holistic-fallback", f"swap reviewer -> {fallback_name}", slug=slug, round=H)`.
+   2. In-memory mutation: `cfg["roles"]["code-review"]["holistic"]["reviewer"] = cfg["roles"]["code-review"]["holistic"]["fallback_reviewer"]`. Do NOT write back to disk -- the swap lasts only for the current mill-go invocation.
+   3. Re-run sub-step 3 (the holistic review CLI) with the swapped reviewer. The round counter `H` is **not** consumed.
+   4. If the fallback reviewer ALSO returns `verdict: ERROR` on its first pass: halt with `BLOCKED: holistic code review fallback also failed at round {H}` and surface every `reviews[*].error` from BOTH the original and fallback attempts. Do NOT cascade to a second fallback.
+   5. If `pipeline.autonomous_mode: true` AND `fallback_reviewer is None` AND a rate-limit was detected on both 3.5 passes: halt with `BLOCKED: holistic rate-limited, no fallback_reviewer configured`. The operator-visible message is intentional -- silent infinite fallback is wrong.
+
+   Operator interactive path (no `autonomous_mode`, no `fallback_reviewer`): user prompt remains identical to today (the existing step 5 ROUND-EXHAUSTION sub-section handles this case).
 
 4. On `APPROVE`: `_status.append_phase(status_path, "holistic-approved", _timestamp.now_utc_iso())`. Commit status. Proceed to Handoff.
 

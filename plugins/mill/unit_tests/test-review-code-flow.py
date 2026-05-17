@@ -977,6 +977,64 @@ def main() -> int:
         finally:
             os.chdir(orig_dir)
 
+    # ------------------------------------------------------------------
+    # Test 15 — code review parse_verdict failure returns ERROR envelope (#315)
+    # Tests both holistic (batch_name=None) and per-batch (batch_name="alpha").
+    # Unparseable output -> ERROR entry with file path.
+    # ------------------------------------------------------------------
+    with tempfile.TemporaryDirectory() as tmpdir:
+        mill_dir, wiki_root, project_root, cfg = _make_fixture(Path(tmpdir))
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            # Test holistic mode (batch_name=None)
+            stub.seed([
+                ("# Raw prose without yaml block\n\nCode looks good.", "sid-hol"),
+            ])
+            r_hol = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, batch_name=None)
+            assert r_hol.verdict in ("ERROR", "REQUEST_CHANGES"), (
+                f"expected ERROR or REQUEST_CHANGES, got {r_hol.verdict}"
+            )
+            assert len(r_hol.reviews) >= 1, f"expected at least 1 review, got {len(r_hol.reviews)}"
+            assert r_hol.reviews[0]["verdict"] == "ERROR", (
+                f"expected ERROR verdict, got {r_hol.reviews[0]['verdict']}"
+            )
+            assert "parse_verdict failed" in r_hol.reviews[0].get("error", ""), (
+                f"error message missing 'parse_verdict failed': {r_hol.reviews[0].get('error')}"
+            )
+            assert r_hol.reviews[0]["file"] is not None, "ERROR entry should have a file path"
+            file_path_hol = Path(r_hol.reviews[0]["file"])
+            assert file_path_hol.exists(), f"review file should exist on disk: {file_path_hol}"
+
+            # Test per-batch mode (batch_name="alpha")
+            stub.seed([
+                ("# Raw prose\n\nBatch code OK.", "sid-batch"),
+            ])
+            r_batch = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, batch_name="alpha")
+            assert r_batch.verdict in ("ERROR", "REQUEST_CHANGES"), (
+                f"expected ERROR or REQUEST_CHANGES for per-batch, got {r_batch.verdict}"
+            )
+            assert len(r_batch.reviews) >= 1, f"expected at least 1 review, got {len(r_batch.reviews)}"
+            assert r_batch.reviews[0]["verdict"] == "ERROR", (
+                f"expected ERROR verdict for per-batch, got {r_batch.reviews[0]['verdict']}"
+            )
+            assert "parse_verdict failed" in r_batch.reviews[0].get("error", ""), (
+                f"error message missing 'parse_verdict failed': {r_batch.reviews[0].get('error')}"
+            )
+            assert r_batch.reviews[0]["file"] is not None, "per-batch ERROR entry should have a file path"
+            file_path_batch = Path(r_batch.reviews[0]["file"])
+            assert file_path_batch.exists(), f"review file should exist on disk: {file_path_batch}"
+
+            print("PASS test15: code review parse_verdict failure emits ERROR envelope (#315)")
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test15: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test15 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
+
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)
         return 1
