@@ -133,24 +133,25 @@ def worktree_snapshot_guard(
     ANY entry in ``expected_paths`` as a substring. HEAD-SHA changes are
     NEVER filtered.
 
-    Exceptions raised inside the with-block propagate unchanged -- the guard
-    only raises if the block exits cleanly but state was mutated.
+    If the wrapped block raises AND state was mutated, ``ReviewerOverstepError`` takes priority and chains the inner exception via ``__cause__``; if state was unchanged the inner exception is re-raised unchanged.
+    If the post-snapshot capture itself raises (e.g. ``_capture_head_sha`` propagating a ``ReviewError`` from a broken git invocation), that error propagates and the inner exception is NOT chained -- the capture failure indicates the snapshot is untrustworthy, so the typed ``ReviewerOverstepError`` cannot be raised safely. This is an intentional trade-off; the inner exception, if any, is visible in the traceback frames above the capture call.
     """
     before_sha = _capture_head_sha(project_root)
     before_porcelain = _capture_porcelain(project_root)
+    inner_exc: Exception | None = None
     try:
         yield
-    except Exception:
-        raise  # do not swallow LLMError / ReviewError / etc.
+    except Exception as exc:
+        inner_exc = exc
     after_sha = _capture_head_sha(project_root)
     after_porcelain = _capture_porcelain(project_root)
-
     before_filtered = _filter_porcelain(before_porcelain, expected_paths)
     after_filtered = _filter_porcelain(after_porcelain, expected_paths)
-
     if before_sha != after_sha or set(before_filtered) != set(after_filtered):
         diff = _porcelain_diff(before_filtered, after_filtered)
-        raise ReviewerOverstepError(before_sha, after_sha, diff)
+        raise ReviewerOverstepError(before_sha, after_sha, diff) from inner_exc
+    if inner_exc is not None:
+        raise inner_exc
 
 
 def _capture_head_sha(project_root: Path) -> str:
