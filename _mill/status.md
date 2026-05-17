@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-strand-b-extends
+phase: holistic-reviewing
 slug: config-env-interpolation
 branch: hanf/config-env-interpolation
 plan: _mill/plan
@@ -25,6 +25,7 @@ planned  '2026-05-17T05:34:33Z'
 implementing  '2026-05-17T05:35:38Z'
 approved-strand-a-env-interp  '2026-05-17T05:38:14Z'
 approved-strand-b-extends  '2026-05-17T05:41:40Z'
+holistic-reviewing  '2026-05-17T05:41:54Z'
 ```
 
 ## Batches
