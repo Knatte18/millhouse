@@ -174,22 +174,22 @@ The operator should expect to see in the output:
 
 Idempotency: re-running mill-setup after a successful migration is a no-op for this phase. If the agents migration warned with diffs, copy the unique entries from the printed list into `.millhouse/agents.local.yaml` and re-run mill-setup to retry the agents step.
 
-### Phase 3.1 — Seed mill-config.yaml at hub repo root from template
+### Phase 3.1 — Seed mill-config.yaml at hub directory from template
 
-1. If `<repo_root>/mill-config.yaml` does not exist: copy `${CLAUDE_PLUGIN_ROOT}/templates/mill-config.yaml` → `<repo_root>/mill-config.yaml` verbatim (no substitution — tokens are resolved at runtime by scripts, not at seed time). Then stage via `git add`:
+1. If `<cwd>/mill-config.yaml` does not exist: copy `${CLAUDE_PLUGIN_ROOT}/templates/mill-config.yaml` → `<cwd>/mill-config.yaml` verbatim (no substitution — tokens are resolved at runtime by scripts, not at seed time). Then stage via `git add`:
 
    ```bash
-   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "from pathlib import Path; import shutil, _subprocess_util; shutil.copyfile(Path(r'${CLAUDE_PLUGIN_ROOT}/templates/mill-config.yaml').resolve(), Path(r'<repo_root>/mill-config.yaml').resolve()); _subprocess_util.run(['git', '-C', r'<repo_root>', 'add', 'mill-config.yaml']); print('mill-config.yaml staged at <repo_root>/mill-config.yaml -- commit it on the main branch to land the migration')"
+   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "from pathlib import Path; import shutil, _subprocess_util; shutil.copyfile(Path(r'${CLAUDE_PLUGIN_ROOT}/templates/mill-config.yaml').resolve(), Path(r'<cwd>/mill-config.yaml').resolve()); _subprocess_util.run(['git', '-C', r'<cwd>', 'add', 'mill-config.yaml']); print('mill-config.yaml staged at <cwd>/mill-config.yaml -- commit it on the main branch to land the migration')"
    ```
 
-2. If `<repo_root>/mill-config.yaml` exists: run a block-level upsert:
+2. If `<cwd>/mill-config.yaml` exists: run a block-level upsert:
 
    ```bash
    PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "
    from pathlib import Path
    import yaml
 
-   config_path = Path(r'<repo_root>/mill-config.yaml').resolve()
+   config_path = Path(r'<cwd>/mill-config.yaml').resolve()
    template_path = Path(r'${CLAUDE_PLUGIN_ROOT}/templates/mill-config.yaml').resolve()
 
    existing = yaml.safe_load(config_path.read_text(encoding='utf-8')) or {}
@@ -213,9 +213,9 @@ Idempotency: re-running mill-setup after a successful migration is a no-op for t
    PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "
    from pathlib import Path
    import _subprocess_util
-   git_root = Path(r'<repo_root>').resolve()
-   _subprocess_util.run(['git', '-C', str(git_root), 'add', 'mill-config.yaml'])
-   _subprocess_util.run(['git', '-C', str(git_root), 'commit', '-m', 'chore: upsert missing mill-config.yaml blocks from template'])
+   hub_root = Path(r'<cwd>').resolve()
+   _subprocess_util.run(['git', '-C', str(hub_root), 'add', 'mill-config.yaml'])
+   _subprocess_util.run(['git', '-C', str(hub_root), 'commit', '-m', 'chore: upsert missing mill-config.yaml blocks from template'])
    "
    ```
 
@@ -497,7 +497,7 @@ The hub is always coloured `#2d7d46` so the operator can spot it instantly. mill
 Render and write via `_vscode.write_settings`:
 
 ```bash
-PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "from pathlib import Path; import yaml; import _vscode; from _paths import resolve_short_name; cfg = yaml.safe_load(Path('<repo-dir>/mill-config.yaml').read_text(encoding='utf-8')); _vscode.write_settings(color_hex='#2d7d46', target=Path('.vscode/settings.json'), short_name=resolve_short_name(cfg, '<repo-name>'))"
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "from pathlib import Path; import yaml; import _vscode; from _paths import resolve_short_name; cfg = yaml.safe_load(Path(r'<cwd>/mill-config.yaml').read_text(encoding='utf-8')); _vscode.write_settings(color_hex='#2d7d46', target=Path('.vscode/settings.json'), short_name=resolve_short_name(cfg, '<repo-name>'))"
 ```
 
 ### Phase 8 — Verify + report
@@ -505,7 +505,7 @@ PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/
 Check every invariant; halt with a specific error if any fails:
 
 - `<WIKI_PATH>` is a git repo (the cloned wiki)
-- `<repo-root>/mill-config.yaml` exists
+- `<cwd>/mill-config.yaml` exists
 - `<container>/wts/` exists (container-form) or `<container>/` exists (prefix-form)
 - `<container>/portals/` exists (container-form)
 - `hub/.portals` exists and resolves to `<container>/portals/`

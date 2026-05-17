@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import shutil
 import sys
+from pathlib import Path
 
 import yaml
 
@@ -26,9 +27,13 @@ import _wiki
 
 def main() -> int:
     try:
-        # Step 1: Resolve git_root (helper refuses if cwd inside wiki)
+        # Step 1: Resolve paths. hub_root = CWD (where mill-setup was invoked).
+        # git_root = git toplevel — used only for wiki-path resolution and git -C operations
+        # on the wiki. mill-config.yaml belongs at hub_root, not git_root, so that
+        # subdirectory-hub setups (hub_relative_path != ".") place it correctly.
+        hub_root = Path.cwd().resolve()
         git_root = _paths.resolve_git_root()
-        print(f"[migrate] hub root: {git_root}")
+        print(f"[migrate] hub root: {hub_root}")
 
         # Step 2: Resolve wiki_path
         try:
@@ -42,7 +47,11 @@ def main() -> int:
 
         # Step 4: Config migration
         wiki_config = wiki_path / "config.yaml"
-        hub_config = git_root / "mill-config.yaml"
+        hub_config = hub_root / "mill-config.yaml"
+        try:
+            config_rel = str(hub_config.relative_to(git_root))
+        except ValueError:
+            config_rel = "mill-config.yaml"
 
         if not wiki_config.exists():
             print("[migrate] no wiki/config.yaml -- config migration skipped")
@@ -51,7 +60,7 @@ def main() -> int:
         else:
             # Copy wiki/config.yaml to hub/mill-config.yaml
             shutil.copyfile(wiki_config, hub_config)
-            _subprocess_util.run(["git", "-C", str(git_root), "add", "mill-config.yaml"])
+            _subprocess_util.run(["git", "-C", str(git_root), "add", config_rel])
             print(
                 f"[migrate] mill-config.yaml staged at {hub_config}; commit it on the main branch to land the migration"
             )
