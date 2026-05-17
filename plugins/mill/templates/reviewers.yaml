@@ -1,6 +1,9 @@
-# plugins/mill/templates/reviewers.yaml — fresh-setup default reviewer registry.
+# plugins/mill/templates/reviewers.yaml -- fresh-setup default reviewer registry.
 # Copied to wiki/reviewers.yaml by mill-setup. Consumed by _reviewers.py.
 # Names match [a-z0-9_-]+. type: single or cluster.
+#
+# `extends: <name>` lets a leaf entry inherit from another single entry.
+# The child may override any field; resolution happens at load time.
 
 sonnetmax:
   type: single
@@ -9,14 +12,9 @@ sonnetmax:
   effort: max
 
 sonnetmax_tool:
-  type: single
-  provider: claude
-  model: claude-sonnet-4-6
-  effort: max
+  extends: sonnetmax
   tooluse: true
 
 sonnetmedium:
-  type: single
-  provider: claude
-  model: claude-sonnet-4-6
+  extends: sonnetmax
   effort: medium
