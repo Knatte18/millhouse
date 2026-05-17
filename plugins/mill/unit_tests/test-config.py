@@ -327,7 +327,12 @@ def test_interp_default_when_var_unset() -> None:
         _write_yaml(wiki / "config.yaml", 'key: "${UNSET_ENV_INTERP_VAR:-mydefault}"\n')
 
         os.environ.pop("UNSET_ENV_INTERP_VAR", None)
-        cfg = _config.load_config(wiki, wt_root)
+        with patch.object(_paths, "resolve_wiki_path", return_value=wiki):
+            with patch.object(
+                _config, "resolve_plugin_template_path",
+                return_value=tmp_path / "nonexistent" / "mill-config.yaml"
+            ):
+                cfg = _config.load_config(wt_root, wt_root)
 
         assert cfg["key"] == "mydefault", f"Expected 'mydefault', got {cfg['key']!r}"
     print("PASS env-interp — default when var unset")
@@ -345,7 +350,12 @@ def test_interp_env_value_when_var_set() -> None:
         saved = os.environ.pop("TEST_ENV_INTERP_SET", None)
         try:
             os.environ["TEST_ENV_INTERP_SET"] = "actual"
-            cfg = _config.load_config(wiki, wt_root)
+            with patch.object(_paths, "resolve_wiki_path", return_value=wiki):
+                with patch.object(
+                    _config, "resolve_plugin_template_path",
+                    return_value=tmp_path / "nonexistent" / "mill-config.yaml"
+                ):
+                    cfg = _config.load_config(wt_root, wt_root)
             assert cfg["key"] == "actual", f"Expected 'actual', got {cfg['key']!r}"
         finally:
             if saved is None:
@@ -366,7 +376,12 @@ def test_interp_unset_no_default_raises() -> None:
 
         os.environ.pop("REQUIRED_UNSET_VAR", None)
         try:
-            cfg = _config.load_config(wiki, wt_root)
+            with patch.object(_paths, "resolve_wiki_path", return_value=wiki):
+                with patch.object(
+                    _config, "resolve_plugin_template_path",
+                    return_value=tmp_path / "nonexistent" / "mill-config.yaml"
+                ):
+                    cfg = _config.load_config(wt_root, wt_root)
             assert False, "Expected ConfigError to be raised"
         except _config.ConfigError as exc:
             exc_str = str(exc)
@@ -384,7 +399,12 @@ def test_interp_no_pattern_unchanged() -> None:
         _git_init(wt_root)
         _write_yaml(wiki / "config.yaml", 'key: "plain string"\n')
 
-        cfg = _config.load_config(wiki, wt_root)
+        with patch.object(_paths, "resolve_wiki_path", return_value=wiki):
+            with patch.object(
+                _config, "resolve_plugin_template_path",
+                return_value=tmp_path / "nonexistent" / "mill-config.yaml"
+            ):
+                cfg = _config.load_config(wt_root, wt_root)
 
         assert cfg["key"] == "plain string", f"Expected plain string, got {cfg['key']!r}"
     print("PASS env-interp — no pattern unchanged")
@@ -403,7 +423,12 @@ def test_interp_nested_walk() -> None:
         )
 
         os.environ.pop("INTERP_DEEP", None)
-        cfg = _config.load_config(wiki, wt_root)
+        with patch.object(_paths, "resolve_wiki_path", return_value=wiki):
+            with patch.object(
+                _config, "resolve_plugin_template_path",
+                return_value=tmp_path / "nonexistent" / "mill-config.yaml"
+            ):
+                cfg = _config.load_config(wt_root, wt_root)
 
         assert cfg["a"]["b"]["c"] == "deep", (
             f"Expected 'deep' in nested value, got {cfg['a']['b']['c']!r}"
@@ -425,7 +450,12 @@ def test_interp_list_walk() -> None:
 
         os.environ.pop("LIST_A", None)
         os.environ.pop("LIST_B", None)
-        cfg = _config.load_config(wiki, wt_root)
+        with patch.object(_paths, "resolve_wiki_path", return_value=wiki):
+            with patch.object(
+                _config, "resolve_plugin_template_path",
+                return_value=tmp_path / "nonexistent" / "mill-config.yaml"
+            ):
+                cfg = _config.load_config(wt_root, wt_root)
 
         assert cfg["xs"] == ["a", "b"], f"Expected ['a', 'b'], got {cfg['xs']!r}"
     print("PASS env-interp — list walk")
@@ -443,7 +473,12 @@ def test_interp_non_string_values_untouched() -> None:
             "count: 5\nflag: true\nnothing: null\n",
         )
 
-        cfg = _config.load_config(wiki, wt_root)
+        with patch.object(_paths, "resolve_wiki_path", return_value=wiki):
+            with patch.object(
+                _config, "resolve_plugin_template_path",
+                return_value=tmp_path / "nonexistent" / "mill-config.yaml"
+            ):
+                cfg = _config.load_config(wt_root, wt_root)
 
         assert cfg["count"] == 5 and isinstance(cfg["count"], int), (
             f"Expected int 5, got {cfg['count']!r}"
@@ -487,7 +522,12 @@ def test_interp_multiple_in_one_string() -> None:
 
         os.environ.pop("INTERP_X", None)
         os.environ.pop("INTERP_Y", None)
-        cfg = _config.load_config(wiki, wt_root)
+        with patch.object(_paths, "resolve_wiki_path", return_value=wiki):
+            with patch.object(
+                _config, "resolve_plugin_template_path",
+                return_value=tmp_path / "nonexistent" / "mill-config.yaml"
+            ):
+                cfg = _config.load_config(wt_root, wt_root)
 
         assert cfg["key"] == "x-y", f"Expected 'x-y', got {cfg['key']!r}"
     print("PASS env-interp — multiple patterns in one string")
@@ -503,7 +543,12 @@ def test_interp_empty_default() -> None:
         _write_yaml(wiki / "config.yaml", 'key: "${INTERP_EMPTY:-}"\n')
 
         os.environ.pop("INTERP_EMPTY", None)
-        cfg = _config.load_config(wiki, wt_root)
+        with patch.object(_paths, "resolve_wiki_path", return_value=wiki):
+            with patch.object(
+                _config, "resolve_plugin_template_path",
+                return_value=tmp_path / "nonexistent" / "mill-config.yaml"
+            ):
+                cfg = _config.load_config(wt_root, wt_root)
 
         assert cfg["key"] == "", f"Expected empty string, got {cfg['key']!r}"
     print("PASS env-interp — empty default allowed")
@@ -521,7 +566,12 @@ def test_interp_lowercase_name_passthrough() -> None:
         saved = os.environ.pop("my_var", None)
         try:
             os.environ["my_var"] = "foo"
-            cfg = _config.load_config(wiki, wt_root)
+            with patch.object(_paths, "resolve_wiki_path", return_value=wiki):
+                with patch.object(
+                    _config, "resolve_plugin_template_path",
+                    return_value=tmp_path / "nonexistent" / "mill-config.yaml"
+                ):
+                    cfg = _config.load_config(wt_root, wt_root)
             assert cfg["key"] == "${my_var}", (
                 f"Lowercase pattern should pass through literally, got {cfg['key']!r}"
             )
