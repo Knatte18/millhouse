@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import subprocess
 import _subprocess_util
 import sys
@@ -37,6 +38,68 @@ import _render
 import _review_common
 import _reviewers
 from _implementer_common import _forward_output
+
+
+# DU-conflict resolution needs branch intent; the resolver had no signal before #314.
+def _collect_task_intent(project_root: Path) -> str:
+    """
+    Gather task-intent excerpts from discussion.md and plan/*.md files.
+
+    Returns a string containing excerpts from this branch's _mill/discussion.md
+    and _mill/plan/*.md that describe the branch's intent. Extracts the top
+    YAML block and the Edits/Creates/Deletes bullets from each plan file.
+    Returns empty string if _mill directory does not exist.
+    """
+    mill_dir = project_root / "_mill"
+    if not mill_dir.is_dir():
+        return ""
+
+    output: list[str] = []
+
+    # Add discussion.md if present
+    discussion_file = mill_dir / "discussion.md"
+    if discussion_file.is_file():
+        discussion_content = discussion_file.read_text(encoding="utf-8")
+        output.append(f"### From discussion.md\n\n{discussion_content}")
+
+    # Add plan files
+    plan_dir = mill_dir / "plan"
+    if plan_dir.is_dir():
+        for plan_file in sorted(plan_dir.glob("*.md")):
+            plan_content = plan_file.read_text(encoding="utf-8")
+
+            # Extract top YAML block (between ``` ```yaml ``` ``` and the next ``` ```)
+            yaml_match = re.search(r"(```yaml.*?```)", plan_content, re.DOTALL)
+            yaml_block = yaml_match.group(1) if yaml_match else ""
+
+            # Extract Edits/Creates/Deletes bullets
+            header_lines: list[str] = []
+            lines = plan_content.splitlines()
+            for i, line in enumerate(lines):
+                if re.match(r"^-\s*\*\*(Edits|Creates|Deletes):\*\*", line):
+                    header_lines.append(line)
+                    # Check for sub-bullets
+                    j = i + 1
+                    while j < len(lines):
+                        if re.match(r"^\s+-\s*(.+)$", lines[j]):
+                            header_lines.append(lines[j])
+                            j += 1
+                        else:
+                            break
+
+            bullets_text = "\n".join(header_lines)
+
+            if yaml_block or bullets_text:
+                filename = plan_file.name
+                output.append(f"### From _mill/plan/{filename}\n")
+                if yaml_block:
+                    output.append(yaml_block)
+                if bullets_text:
+                    if yaml_block:
+                        output.append("")
+                    output.append(bullets_text)
+
+    return "\n\n".join(output)
 
 
 def main(argv=None) -> int:
@@ -111,11 +174,13 @@ def _run_conflicts(args, project_root: Path, plugin_root: Path, cfg: dict, timeo
         return 1
 
     conflicting_files = "\n".join(f"- `{f}`" for f in args.files)
+    task_intent = _collect_task_intent(project_root)
 
     template_path = plugin_root / "templates" / "merge-in-conflict-brief.md"
     prompt_text = _render.render(template_path, {
         "CONFLICTING_FILES": conflicting_files,
         "PROJECT_ROOT": str(project_root),
+        "TASK_INTENT": task_intent,
     })
 
     try:
