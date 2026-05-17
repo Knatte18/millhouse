@@ -192,6 +192,44 @@ def test_main_dry_run_exits_zero() -> None:
     print("PASS: main() dry-run with --slug exits 0 and prints expected lines")
 
 
+def test_branch_name_uses_no_extra_slash() -> None:
+    """Branch name with prefix should not have double slash (hanf/my-task, not hanf//my-task)."""
+    task = _make_fake_task(slug="my-task", title="My Task")
+
+    sc = MagicMock()
+    sc.BacklogEmpty = type("BacklogEmpty", (Exception,), {})
+    sc.pick_task_single_or_multi.return_value = ("single", task, [])
+
+    stub_map = _make_stub_map(spawn_core_mock=sc)
+    mod, saved = _load_claim_module(stub_map)
+    try:
+        fake_cfg = {"spawn": {"branch_prefix": "hanf/"}}
+        captured: list[str] = []
+        with (
+            patch.object(mod, "_load_config", return_value=fake_cfg),
+            patch.object(Path, "exists", return_value=True),
+            patch.object(Path, "read_text", return_value="# Home\n"),
+            patch("builtins.print", side_effect=lambda *a, **kw: captured.append(str(a[0]) if a else "")),
+        ):
+            exit_code = mod.main(["--slug", "my-task", "--dry-run"])
+    finally:
+        _restore_modules(saved)
+
+    if exit_code != 0:
+        raise AssertionError(f"expected exit 0 for dry-run, got {exit_code}")
+
+    branch_lines = [line for line in captured if "[DryRun] Branch:" in line]
+    if not branch_lines:
+        raise AssertionError(f"expected [DryRun] Branch: line in output, got: {captured}")
+
+    branch_line = branch_lines[0]
+    if "hanf/my-task" not in branch_line:
+        raise AssertionError(f"branch name should be 'hanf/my-task', got: {branch_line}")
+    if "hanf//my-task" in branch_line:
+        raise AssertionError(f"branch name should not have double slash, got: {branch_line}")
+    print("PASS: branch name uses no extra slash (hanf/my-task, not hanf//my-task)")
+
+
 # ---------------------------------------------------------------------------
 # Happy path: claim_in_wiki, write_initial_status, recreate_active_junction all called
 # ---------------------------------------------------------------------------
@@ -707,6 +745,7 @@ def main() -> int:
     tests = [
         test_smoke_import,
         test_main_dry_run_exits_zero,
+        test_branch_name_uses_no_extra_slash,
         test_main_happy_path_calls_spawn_core_helpers,
         test_main_dirty_tree_abort_exits_one,
         test_main_dirty_tree_stash_invokes_git_stash,

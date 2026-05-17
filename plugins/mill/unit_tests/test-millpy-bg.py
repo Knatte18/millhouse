@@ -50,6 +50,26 @@ def _mock_popen_instance(pid: int = 12345) -> unittest.mock.MagicMock:
     return m
 
 
+def _mock_validation_success() -> tuple:
+    """Return context managers that mock validation to always succeed."""
+    try:
+        import _marker
+        import _paths
+        import _config
+
+        mock_resolve_wiki = unittest.mock.MagicMock(return_value=Path("/fake/wiki"))
+        mock_load_config = unittest.mock.MagicMock(return_value={"spawn": {"branch_prefix": ""}})
+        mock_slug_from_branch = unittest.mock.MagicMock(return_value="test")
+
+        return (
+            unittest.mock.patch("_marker.slug_from_branch", mock_slug_from_branch),
+            unittest.mock.patch("_paths.resolve_wiki_path", mock_resolve_wiki),
+            unittest.mock.patch("_config.load_config", mock_load_config),
+        )
+    except ImportError:
+        return (unittest.mock.nullcontext(), unittest.mock.nullcontext(), unittest.mock.nullcontext())
+
+
 def main() -> int:
     failures: list[str] = []
 
@@ -58,13 +78,14 @@ def main() -> int:
     # (a) log path format
     try:
         with tempfile.TemporaryDirectory() as tmpdir:
+            mocks = _mock_validation_success()
             with unittest.mock.patch.object(
                 _launcher_mod._subprocess_util, "run",
                 return_value=_mock_git_run_result(tmpdir),
             ), unittest.mock.patch.object(
                 _launcher_mod._subprocess_util, "popen_detached",
                 return_value=_mock_popen_instance(),
-            ):
+            ), mocks[0], mocks[1], mocks[2]:
                 buf = io.StringIO()
                 with unittest.mock.patch("sys.stdout", buf):
                     ret = _launcher_main(["--slug", "myslug", "--", "echo", "hi"])
@@ -89,13 +110,14 @@ def main() -> int:
         with tempfile.TemporaryDirectory() as tmpdir:
             scratch = Path(tmpdir) / ".scratch"
             assert not scratch.exists(), ".scratch/ should not exist before call"
+            mocks = _mock_validation_success()
             with unittest.mock.patch.object(
                 _launcher_mod._subprocess_util, "run",
                 return_value=_mock_git_run_result(tmpdir),
             ), unittest.mock.patch.object(
                 _launcher_mod._subprocess_util, "popen_detached",
                 return_value=_mock_popen_instance(),
-            ):
+            ), mocks[0], mocks[1], mocks[2]:
                 with unittest.mock.patch("sys.stdout", io.StringIO()):
                     _launcher_main(["--slug", "myslug", "--", "echo", "hi"])
 
@@ -109,13 +131,14 @@ def main() -> int:
     # (c) stdout is exactly one non-empty line
     try:
         with tempfile.TemporaryDirectory() as tmpdir:
+            mocks = _mock_validation_success()
             with unittest.mock.patch.object(
                 _launcher_mod._subprocess_util, "run",
                 return_value=_mock_git_run_result(tmpdir),
             ), unittest.mock.patch.object(
                 _launcher_mod._subprocess_util, "popen_detached",
                 return_value=_mock_popen_instance(pid=42),
-            ):
+            ), mocks[0], mocks[1], mocks[2]:
                 buf = io.StringIO()
                 with unittest.mock.patch("sys.stdout", buf):
                     _launcher_main(["--slug", "myslug", "--", "echo", "hi"])
@@ -133,6 +156,7 @@ def main() -> int:
     # (d) Windows path forwards pid via popen_detached
     try:
         with tempfile.TemporaryDirectory() as tmpdir:
+            mocks = _mock_validation_success()
             with unittest.mock.patch.object(_launcher_mod._subprocess_util.os, "name", "nt"), \
                  unittest.mock.patch.object(
                      _launcher_mod._subprocess_util, "run",
@@ -140,7 +164,8 @@ def main() -> int:
                  ), unittest.mock.patch.object(
                      _launcher_mod._subprocess_util.subprocess, "Popen",
                      return_value=_mock_popen_instance(pid=1),
-                 ) as mock_popen_cls:
+                 ) as mock_popen_cls, \
+                 mocks[0], mocks[1], mocks[2]:
                 buf = io.StringIO()
                 with unittest.mock.patch("sys.stdout", buf):
                     _launcher_main(["--slug", "win-test", "--", "echo", "hi"])
@@ -161,6 +186,7 @@ def main() -> int:
     try:
         # Keep WindowsPath on Windows when os.name is mocked to "posix".
         _concrete_path_cls = type(_launcher_mod.Path("."))
+        mocks = _mock_validation_success()
         with tempfile.TemporaryDirectory() as tmpdir:
             with unittest.mock.patch.object(_launcher_mod._subprocess_util.os, "name", "posix"), \
                  unittest.mock.patch.object(_launcher_mod, "Path", _concrete_path_cls), \
@@ -170,7 +196,8 @@ def main() -> int:
                  ), unittest.mock.patch.object(
                      _launcher_mod._subprocess_util.subprocess, "Popen",
                      return_value=_mock_popen_instance(pid=2),
-                 ) as mock_popen_cls:
+                 ) as mock_popen_cls, \
+                 mocks[0], mocks[1], mocks[2]:
                 buf = io.StringIO()
                 with unittest.mock.patch("sys.stdout", buf):
                     _launcher_main(["--slug", "posix-test", "--", "echo", "hi"])
@@ -212,13 +239,14 @@ def main() -> int:
     # (m) no DeprecationWarning from utcnow
     try:
         with tempfile.TemporaryDirectory() as tmpdir:
+            mocks = _mock_validation_success()
             with unittest.mock.patch.object(
                 _launcher_mod._subprocess_util, "run",
                 return_value=_mock_git_run_result(tmpdir),
             ), unittest.mock.patch.object(
                 _launcher_mod._subprocess_util, "popen_detached",
                 return_value=_mock_popen_instance(),
-            ):
+            ), mocks[0], mocks[1], mocks[2]:
                 with warnings.catch_warnings(record=True) as w:
                     warnings.simplefilter("always")
                     with unittest.mock.patch("sys.stdout", io.StringIO()):

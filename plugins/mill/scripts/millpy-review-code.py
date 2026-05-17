@@ -59,20 +59,24 @@ def main(argv: list[str] | None = None) -> int:
 
     import _reviewers
     from _paths import resolve_wiki_path
-    from _review_cli import print_error
+    from _review_cli import print_error_envelope
     from _review_common import ReviewError, find_active_slug, load_config
     from _review_code import run
 
-    project_root = Path.cwd()
-    mill_dir = project_root / ".millhouse"
-    wiki_root = resolve_wiki_path(project_root)
-    cfg = load_config(project_root, mill_dir)
+    try:
+        project_root = Path.cwd()
+        mill_dir = project_root / ".millhouse"
+        wiki_root = resolve_wiki_path(project_root)
+        cfg = load_config(project_root, mill_dir)
+    except (ReviewError, ValueError, SystemExit) as exc:
+        print_error_envelope("code", str(exc))
+        return 1
 
     try:
         registry = _reviewers.load(project_root)
         _reviewers.validate_role_refs(cfg, registry)
     except _reviewers.ReviewerError as exc:
-        print(str(exc), file=sys.stderr)
+        print_error_envelope("code", str(exc))
         return 1
 
     extra_files: list[Path] = []
@@ -81,7 +85,7 @@ def main(argv: list[str] | None = None) -> int:
         if not p.is_absolute():
             p = (project_root / p).resolve()
         if not p.exists():
-            print(f"--extra-file not found: {p}", file=sys.stderr)
+            print_error_envelope("code", f"--extra-file not found: {p}")
             return 1
         extra_files.append(p)
 
@@ -100,7 +104,7 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(result.to_dict()))
         return 0
     except ReviewError as exc:
-        print_error(exc)
+        print_error_envelope("code", str(exc))
         return 1
 
 

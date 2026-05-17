@@ -94,7 +94,19 @@ def main(argv=None) -> int:
     status_path = _paths.status_path(project_root, cfg)
     full = _status.read_full(status_path)
     task_title = full["yaml"].get("task", slug)
-    branch = _status.read_branch(status_path, cfg=cfg, slug=slug)
+
+    branch_result = _subprocess_util.run(
+        ["git", "-C", str(project_root), "branch", "--show-current"]
+    )
+    if branch_result.returncode != 0:
+        print(json.dumps({"status": "stuck", "stuck_type": "transient", "reason": f"git branch --show-current failed: {branch_result.stderr.strip()}"}))
+        print(branch_result.stderr, file=sys.stderr)
+        return 1
+    branch = branch_result.stdout.strip()
+    if not branch:
+        print(json.dumps({"status": "stuck", "stuck_type": "transient", "reason": "detached HEAD: no current branch"}))
+        print("detached HEAD: no current branch", file=sys.stderr)
+        return 1
     self_fix_rounds = cfg.get("roles", {}).get("implementer", {}).get("self_fix_rounds", 2)
     timeout = cfg.get("llm", {}).get("implementer_timeout", 1800)
     implementer_cfg = cfg.get("roles", {}).get("implementer", {})

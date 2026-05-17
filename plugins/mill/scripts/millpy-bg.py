@@ -124,6 +124,34 @@ def _launcher_main(args: list[str]) -> int:
         return 1
     git_root = git_result.stdout.strip()
 
+    try:
+        import _paths
+        import _config
+        import _marker
+
+        wiki_path = _paths.resolve_wiki_path(Path(git_root))
+        cfg = _config.load_config(Path(git_root), Path(git_root))
+        _marker.slug_from_branch(Path(git_root), wiki_path, cfg)
+    except _marker.MarkerError as exc:
+        git_branch_result = _subprocess_util.run(
+            ["git", "-C", git_root, "branch", "--show-current"]
+        )
+        branch = git_branch_result.stdout.strip() or "<detached>"
+        print(
+            f"mill-bg: cwd appears to be a non-task worktree "
+            f"(branch={branch!r}, error: {exc}). Switch to the task-worktree "
+            f"terminal before launching reviews.",
+            file=sys.stderr,
+        )
+        return 1
+    except (ValueError, SystemExit, OSError) as exc:
+        print(
+            f"mill-bg: cannot validate cwd ({exc}). Verify cwd is a task "
+            f"worktree and config is loadable.",
+            file=sys.stderr,
+        )
+        return 1
+
     scratch_dir = Path(git_root) / ".scratch"
     scratch_dir.mkdir(exist_ok=True)
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
