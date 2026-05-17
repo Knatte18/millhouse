@@ -106,7 +106,7 @@ Batch-local decisions: porcelain comparison uses **substring match on the path f
          before_filtered = _filter_porcelain(before_porcelain, expected_paths)
          after_filtered = _filter_porcelain(after_porcelain, expected_paths)
 
-         if before_sha != after_sha or before_filtered != after_filtered:
+         if before_sha != after_sha or set(before_filtered) != set(after_filtered):
              diff = _porcelain_diff(before_filtered, after_filtered)
              raise ReviewerOverstepError(before_sha, after_sha, diff)
 

@@ -47,6 +47,17 @@ Independent of batches 1, 2, 3 — no shared files, no shared symbols. `verify: 
 
   3. Each template file's existing content is preserved verbatim — no deletion, no reordering, no edit beyond the prepend. The `<TOOL_RULE>` block, `<ARTEFACT_SECTION>`, `## Criteria`, `## Source-grounding rule`, and `## Output` sections remain untouched and in the same relative order.
 
+  3a. **Pre-prepend defensive check for `review-discussion.md` (BLOCKING-fix in plan-fix r3):** before prepending the identity header to `review-discussion.md`, verify that the file's last non-empty line is `"Omit the \`## Findings\` section entirely if there are zero findings. Never invent findings to pad the review."` and that NO content exists past that line. Concrete check:
+
+     ```bash
+     wc -l plugins/mill/templates/review-discussion.md   # expect 75 lines, 2937 bytes
+     tail -3 plugins/mill/templates/review-discussion.md  # expect the "Omit `## Findings`..." line as the last
+     ```
+
+     If the file does NOT match (e.g., it has been corrupted by an out-of-band edit: a second `## Source-grounding rule` block, a `## Criteria (apply to the plan as a whole)` block, a hardcoded review-output example, plan-holistic criteria, or any content after the legitimate closing line), STRIP that content first — truncate the file at the closing `"Omit \`## Findings\`..."` line and ensure the file ends with a single trailing newline. Only then proceed with the identity-header prepend. This defensive step is cheap when the file is already clean (a no-op) and load-bearing when it is not.
+
+     The check is mandated because the plan-review reviewer flagged this as a BLOCKING in rounds 2 and 3 with detailed claimed-corruption text. On-disk verification at plan-fix-r2 and plan-fix-r3 time showed the file was NOT corrupted (75 lines / 2937 bytes, ending at the legitimate close), but the implementer's environment may differ — the defensive check costs nothing and forecloses the failure mode entirely.
+
   4. After the edit, the five files share an identical first-five-lines block. **Verification gate before commit:** run `head -5 plugins/mill/templates/review-plan-batch.md plugins/mill/templates/review-plan-holistic.md plugins/mill/templates/review-code-batch.md plugins/mill/templates/review-code-holistic.md plugins/mill/templates/review-discussion.md` and visually confirm that the first five lines are byte-identical across all five files (only the file-header banner each `head` invocation emits between files should differ). If any file diverges, the prepend was mis-applied — fix and re-run. Do not commit until this gate passes.
 
   5. The 5-file pattern is intentional: the proposal calls for ALL review templates to carry the same identity header, including templates that fire from `bulk` and `tool-use` mode reviewers and the discussion reviewer. Skipping any template re-opens the soft-constraint failure mode in that scope.

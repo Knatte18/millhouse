@@ -3,7 +3,7 @@
 ```yaml
 task: '63 (A) — Reviewer tool-sandbox: git snapshot guard + fix --allowedTools'
 slug: review-sandbox-guard
-approved: false
+approved: true
 started: '20260517-111503'
 parent: main
 root: ""

@@ -141,13 +141,12 @@ Independent of batches 1, 2, 4 — no shared files.
 
   4. **Add** two NEW argv-shape tests for `run_bulk` and `run_tool_use` mirroring the existing `run_implementer` pattern (mock-capture of argv via `mock.patch.object(_subprocess_util_mod, "run", _fake_run)`). Each new test:
 
-     - Resets `captured_argv = []`.
+     - Define a FRESH `_fake_run` closure per test that closes over its own local `captured_argv: list[str] = []` — DO NOT rebind a module-level `captured_argv = []` while reusing the existing `_fake_run` closure. Python closures capture by name binding: the existing `_fake_run` extends the original list object, so re-assigning the name `captured_argv` in an outer scope produces a new list that the closure never writes to, making any assertions on it pass vacuously. The correct shape is exactly the existing `run_implementer` block (`captured_argv: list[str] = []` then `def _fake_run(argv, **_kwargs): captured_argv.extend(argv); return _FakeResult()`) duplicated, not mutated. The alternative — `captured_argv.clear()` between tests when reusing a single closure — is also acceptable, but the closure-per-test pattern matches what already exists in the file.
+     - Reuse `_FAKE_STDOUT` / `_FakeResult` from the existing `run_implementer` test block — those are correctly module-level and safe to share.
      - Calls `run_bulk("hello", model="claude-sonnet-4-5", session_id="fake-sid-456")` / `run_tool_use("hello", model="claude-sonnet-4-5", session_id="fake-sid-789")` inside `with mock.patch.object(_subprocess_util_mod, "run", _fake_run):`.
      - For `run_bulk`: asserts `"--allowedTools" not in captured_argv` AND `argv` contains the pair `["--disallowedTools", "Edit,Write,Bash,NotebookEdit"]`.
      - For `run_tool_use`: asserts `captured_argv` contains both `["--allowedTools", "Read,Grep,Glob"]` AND `["--disallowedTools", "Edit,Write,Bash,NotebookEdit"]`.
      - Each prints one `PASS:` line.
-
-     Note: the existing `_fake_run` defined for `run_implementer` returns a fake stream-json result. Reuse the existing `_FAKE_STDOUT` / `_FakeResult` definitions; declare a fresh `captured_argv` list per new test or reset the existing one between tests so cross-pollination of argv between tests does not occur.
 
   5. No removal of existing PASS lines beyond the one explicitly replaced in step (1). All other existing tests continue to pass unchanged.
 
