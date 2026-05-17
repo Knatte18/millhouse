@@ -48,5 +48,7 @@ batches:
     implementer_session: 831289a1-a53f-435d-a39f-238c06b164fa
     start_sha: 31be81f29d2629e0e4fab1a3b2a9710e0b0bc1e8
   - name: skill-and-docs-prose
-    state: pending
+    state: running
+    implementer_session: 656400db-b634-49af-8541-fc35a86f3dcb
+    start_sha: 84c06f18ce454a66e011013d71dcd322b452edce
 ```
