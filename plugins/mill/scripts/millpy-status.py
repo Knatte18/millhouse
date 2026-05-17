@@ -23,7 +23,7 @@ import _tasks_md
 def _build_rows(git_root: Path) -> list[dict]:
     wiki = _paths.resolve_wiki_path(git_root)
     container_path = _paths.resolve_container_path(git_root)
-    cfg = _config.load_config(wiki, git_root)
+    cfg = _config.load_config(git_root, git_root)
     branch_prefix = cfg.get("spawn", {}).get("branch_prefix", "")
 
     # Home.md tasks

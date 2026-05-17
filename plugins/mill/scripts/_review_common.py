@@ -40,6 +40,7 @@ Public API:
 """
 from __future__ import annotations
 
+import copy
 import re
 import _subprocess_util
 import sys
@@ -49,11 +50,17 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-import _machine
 import _marker
 import _paths
 import _render
 import _reviewers
+from _config import (
+    ENV_REGISTRY,
+    apply_env_overrides,
+    walk_unknown_keys,
+    warn_unknown_keys,
+    resolve_plugin_template_path,
+)
 
 # ---------------------------------------------------------------------------
 # Module-level regex constants
@@ -173,7 +180,7 @@ def resolve_path(path_tmpl: str, slug: str) -> Path:
     container_path = _paths.resolve_container_path(git_root)
     wiki_root = _paths.resolve_wiki_path(git_root)
     hub_dir = _paths.resolve_hub_path()
-    cfg = load_config(wiki_root, hub_dir / ".millhouse")
+    cfg = load_config(git_root, hub_dir / ".millhouse")
     active_hub = _paths.resolve_active_hub(
         container_path, slug, cfg=cfg, git_root=git_root,
     )
@@ -1014,27 +1021,73 @@ def _deep_merge(base: dict, override: dict) -> dict:
     return result
 
 
-def load_config(wiki_root: Path, mill_dir: Path) -> dict:
-    """Load config.yaml from wiki_root, deep-merged with ~/.millhouse/config.machine.yaml (via _machine.load_layer) and optionally with mill_dir/config.local.yaml.
+def load_config(repo_root: Path, mill_dir: Path) -> dict:
+    """Load mill config with overlay from plugin template, repo layer, and local layer.
 
-    Merge order, lowest to highest precedence: wiki → machine → worktree-local.
+    Merge order (lowest to highest precedence):
+    1. Plugin template (mill-config.yaml)
+    2. Repo layer (mill-config.yaml at repo root, or fallback to wiki/config.yaml)
+    3. Local layer (mill_dir / config.local.yaml)
+    4. Environment variable overrides
 
-    Uses PyYAML (yaml.safe_load). The shared config must exist; the machine
-    and local layers are optional. When multiple layers exist, later layers
-    win on conflict (deep merge).
+    Raises ReviewError if no sources are found (strict form for reviews).
 
-    Raises ReviewError if the shared config file is absent.
-    Returns a plain dict.
+    Args:
+        repo_root: Absolute path to the hub repository root.
+        mill_dir:  Absolute path to the .millhouse directory.
+
+    Returns:
+        Merged configuration dict.
     """
-    shared_path = wiki_root / "config.yaml"
-    if not shared_path.exists():
-        raise ReviewError(f"Missing config at {shared_path}")
+    # 1. Load plugin template
+    template_path = resolve_plugin_template_path("mill-config.yaml")
+    if template_path.exists():
+        with template_path.open(encoding="utf-8") as fh:
+            cfg = yaml.safe_load(fh) or {}
+    else:
+        cfg = {}
+    template_cfg = copy.deepcopy(cfg)
 
-    with shared_path.open(encoding="utf-8") as fh:
-        cfg = yaml.safe_load(fh) or {}
+    # 2. Resolve repo-layer sources
+    mill_cfg_path = _paths.resolve_mill_config_path(repo_root)
+    wiki_cfg_path = None
+    try:
+        wiki_cfg_path = _paths.resolve_wiki_path(repo_root) / "config.yaml"
+    except (Exception, SystemExit):
+        wiki_cfg_path = None
 
-    cfg = _deep_merge(cfg, _machine.load_layer())
+    # 3. Apply repo-layer merge logic (both-files-present and fallback rules)
+    found_repo_layer = False
+    if mill_cfg_path.exists():
+        with mill_cfg_path.open(encoding="utf-8") as fh:
+            repo_cfg = yaml.safe_load(fh) or {}
+        cfg = _deep_merge(cfg, repo_cfg)
+        found_repo_layer = True
+        if wiki_cfg_path and wiki_cfg_path.exists():
+            print(
+                f"[config] stale wiki/config.yaml detected at {wiki_cfg_path}; "
+                f"mill-config.yaml wins -- remove the wiki file via mill-setup",
+                file=sys.stderr,
+            )
+    elif wiki_cfg_path and wiki_cfg_path.exists():
+        with wiki_cfg_path.open(encoding="utf-8") as fh:
+            wiki_cfg = yaml.safe_load(fh) or {}
+        cfg = _deep_merge(cfg, wiki_cfg)
+        found_repo_layer = True
+        print(
+            f"[config] using legacy wiki/config.yaml at {wiki_cfg_path}; "
+            f"rebase onto main to pick up mill-config.yaml",
+            file=sys.stderr,
+        )
 
+    # 4. Strict-missing semantics: require at least one source
+    if not template_path.exists() and not found_repo_layer:
+        raise ReviewError(
+            f"Missing config: searched plugin template at {template_path}, "
+            f"mill-config.yaml at {mill_cfg_path}, and wiki/config.yaml at {wiki_cfg_path}"
+        )
+
+    # 5. Deep-merge the local layer
     local_path = mill_dir / "config.local.yaml"
     if local_path.exists():
         with local_path.open(encoding="utf-8") as fh:
@@ -1048,6 +1101,12 @@ def load_config(wiki_root: Path, mill_dir: Path) -> dict:
                 file=sys.stderr,
             )
         cfg = _deep_merge(cfg, local_cfg)
+
+    # 6. Validate unknown keys
+    warn_unknown_keys(cfg, template_cfg, "merged config")
+
+    # 7. Apply environment overrides
+    cfg = apply_env_overrides(cfg)
 
     return cfg
 

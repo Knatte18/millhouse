@@ -323,6 +323,13 @@ def main() -> int:
             assert got == tmp_path / "wiki", f"subfolder stub no real config: got {got}"
         print("PASS: resolve_wiki_path subfolder-install: no real config falls back to sibling default")
 
+        # resolve_mill_config_path
+
+        test_repo_root = Path("/some/repo")
+        got = _paths.resolve_mill_config_path(test_repo_root)
+        assert got == test_repo_root / "mill-config.yaml", f"got {got}"
+        print("PASS: resolve_mill_config_path returns repo_root / 'mill-config.yaml'")
+
         # resolve_worktrees_dir walk-up composition
 
         with tempfile.TemporaryDirectory() as tmp:

@@ -9,10 +9,12 @@ HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "unit_tests"))
 
+import _paths  # noqa: E402
 import _reviewers  # noqa: E402
 from _reviewers import ReviewerError  # noqa: E402
 from _test_cfg import make_minimal_cfg  # noqa: E402
 from _test_registry import make_minimal_registry, write_to  # noqa: E402
+from unittest.mock import patch  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -24,16 +26,50 @@ def _write_yaml(path: Path, text: str) -> None:
     path.write_text(text, encoding="utf-8")
 
 
+def _load_with_overlay(yaml_text: str) -> dict:
+    """Load reviewers from a fresh hub with yaml_text as its local overlay.
+
+    Used by the extends/cluster test block. Patches the plugin template path
+    to a nonexistent location so the local overlay is the only source.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        hub = tmp_path / "hub"
+        hub.mkdir()
+        (hub / ".millhouse").mkdir()
+        (hub / ".millhouse" / "agents.local.yaml").write_text(yaml_text, encoding="utf-8")
+        with patch.object(
+            _reviewers,
+            "resolve_plugin_template_path",
+            return_value=tmp_path / "nonexistent" / "mill-agents.yaml",
+        ):
+            return _reviewers.load(hub)
+
+
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
 
 def test_load_happy_path() -> None:
-    """load() round-trips a valid reviewers.yaml."""
+    """load() round-trips a valid agents.yaml via local overlay."""
     with tempfile.TemporaryDirectory() as tmp:
-        wiki = Path(tmp) / "wiki"
-        write_to(wiki)
-        registry = _reviewers.load(wiki)
+        tmp_path = Path(tmp)
+        hub_dir = tmp_path / "hub"
+        hub_dir.mkdir()
+        # Write registry to local overlay
+        (hub_dir / ".millhouse").mkdir()
+        (hub_dir / ".millhouse" / "agents.local.yaml").write_text(
+            "sonnetmax:\n  type: single\n  provider: claude\n  model: claude-sonnet-4-6\n"
+            "sonnetmax_tool:\n  type: single\n  provider: claude\n  model: claude-sonnet-4-6\n  tooluse: true\n"
+        )
+        with patch.object(
+            _reviewers,
+            "resolve_plugin_template_path",
+            return_value=tmp_path / "nonexistent" / "mill-agents.yaml"
+        ):
+            with patch.object(_paths, "resolve_wiki_path", side_effect=SystemExit):
+                registry = _reviewers.load(hub_dir)
+
         assert "sonnetmax" in registry
         assert registry["sonnetmax"]["type"] == "single"
         assert registry["sonnetmax"]["provider"] == "claude"
@@ -43,190 +79,253 @@ def test_load_happy_path() -> None:
 
 
 def test_load_raises_on_missing_file() -> None:
-    """load() raises ReviewerError when reviewers.yaml is absent."""
+    """load() raises ReviewerError when no source is available."""
     with tempfile.TemporaryDirectory() as tmp:
-        wiki = Path(tmp) / "wiki"
-        wiki.mkdir()
-        try:
-            _reviewers.load(wiki)
-            raise AssertionError("Expected ReviewerError")
-        except ReviewerError as exc:
-            assert "Missing registry" in str(exc)
+        tmp_path = Path(tmp)
+        hub_dir = tmp_path / "hub"
+        hub_dir.mkdir()
+        with patch.object(
+            _reviewers,
+            "resolve_plugin_template_path",
+            return_value=tmp_path / "nonexistent" / "mill-agents.yaml"
+        ):
+            with patch.object(_paths, "resolve_wiki_path", side_effect=SystemExit):
+                try:
+                    _reviewers.load(hub_dir)
+                    raise AssertionError("Expected ReviewerError")
+                except ReviewerError as exc:
+                    assert "Missing registry" in str(exc)
     print("PASS: load raises on missing file")
 
 
 def test_load_raises_single_missing_provider() -> None:
     """load() raises when a single entry is missing 'provider'."""
     with tempfile.TemporaryDirectory() as tmp:
-        wiki = Path(tmp) / "wiki"
-        _write_yaml(
-            wiki / "agents.yaml",
-            "bad:\n  type: single\n  model: claude-sonnet-4-6\n",
+        tmp_path = Path(tmp)
+        hub_dir = tmp_path / "hub"
+        hub_dir.mkdir()
+        (hub_dir / ".millhouse").mkdir()
+        (hub_dir / ".millhouse" / "agents.local.yaml").write_text(
+            "bad:\n  type: single\n  model: claude-sonnet-4-6\n"
         )
-        try:
-            _reviewers.load(wiki)
-            raise AssertionError("Expected ReviewerError")
-        except ReviewerError as exc:
-            assert "provider" in str(exc)
+        with patch.object(
+            _reviewers,
+            "resolve_plugin_template_path",
+            return_value=tmp_path / "nonexistent" / "mill-agents.yaml"
+        ):
+            with patch.object(_paths, "resolve_wiki_path", side_effect=SystemExit):
+                try:
+                    _reviewers.load(hub_dir)
+                    raise AssertionError("Expected ReviewerError")
+                except ReviewerError as exc:
+                    assert "provider" in str(exc)
     print("PASS: load raises single missing provider")
 
 
 def test_load_raises_cluster_missing_workers() -> None:
     """load() raises when a cluster entry is missing 'workers'."""
     with tempfile.TemporaryDirectory() as tmp:
-        wiki = Path(tmp) / "wiki"
-        _write_yaml(
-            wiki / "agents.yaml",
+        tmp_path = Path(tmp)
+        hub_dir = tmp_path / "hub"
+        hub_dir.mkdir()
+        (hub_dir / ".millhouse").mkdir()
+        (hub_dir / ".millhouse" / "agents.local.yaml").write_text(
             "myworker:\n  type: single\n  provider: claude\n  model: claude-sonnet-4-6\n"
-            "mycluster:\n  type: cluster\n  handler:\n    use: myworker\n",
+            "mycluster:\n  type: cluster\n  handler:\n    use: myworker\n"
         )
-        try:
-            _reviewers.load(wiki)
-            raise AssertionError("Expected ReviewerError")
-        except ReviewerError as exc:
-            assert "workers" in str(exc)
+        with patch.object(
+            _reviewers,
+            "resolve_plugin_template_path",
+            return_value=tmp_path / "nonexistent" / "mill-agents.yaml"
+        ):
+            with patch.object(_paths, "resolve_wiki_path", side_effect=SystemExit):
+                try:
+                    _reviewers.load(hub_dir)
+                    raise AssertionError("Expected ReviewerError")
+                except ReviewerError as exc:
+                    assert "workers" in str(exc)
     print("PASS: load raises cluster missing workers")
 
 
 def test_load_raises_cluster_missing_handler() -> None:
     """load() raises when a cluster entry is missing 'handler'."""
     with tempfile.TemporaryDirectory() as tmp:
-        wiki = Path(tmp) / "wiki"
-        _write_yaml(
-            wiki / "agents.yaml",
+        tmp_path = Path(tmp)
+        hub_dir = tmp_path / "hub"
+        hub_dir.mkdir()
+        (hub_dir / ".millhouse").mkdir()
+        (hub_dir / ".millhouse" / "agents.local.yaml").write_text(
             "myworker:\n  type: single\n  provider: claude\n  model: claude-sonnet-4-6\n"
-            "mycluster:\n  type: cluster\n  workers:\n    use: myworker\n    count: 2\n",
+            "mycluster:\n  type: cluster\n  workers:\n    use: myworker\n    count: 2\n"
         )
-        try:
-            _reviewers.load(wiki)
-            raise AssertionError("Expected ReviewerError")
-        except ReviewerError as exc:
-            assert "handler" in str(exc)
+        with patch.object(
+            _reviewers,
+            "resolve_plugin_template_path",
+            return_value=tmp_path / "nonexistent" / "mill-agents.yaml"
+        ):
+            with patch.object(_paths, "resolve_wiki_path", side_effect=SystemExit):
+                try:
+                    _reviewers.load(hub_dir)
+                    raise AssertionError("Expected ReviewerError")
+                except ReviewerError as exc:
+                    assert "handler" in str(exc)
     print("PASS: load raises cluster missing handler")
 
 
 def test_load_raises_cluster_workers_count_non_positive() -> None:
     """load() raises when cluster workers.count is not a positive integer."""
     with tempfile.TemporaryDirectory() as tmp:
-        wiki = Path(tmp) / "wiki"
-        _write_yaml(
-            wiki / "agents.yaml",
+        tmp_path = Path(tmp)
+        hub_dir = tmp_path / "hub"
+        hub_dir.mkdir()
+        (hub_dir / ".millhouse").mkdir()
+        (hub_dir / ".millhouse" / "agents.local.yaml").write_text(
             "myworker:\n  type: single\n  provider: claude\n  model: claude-sonnet-4-6\n"
             "mycluster:\n  type: cluster\n"
             "  workers:\n    use: myworker\n    count: 0\n"
-            "  handler:\n    use: myworker\n",
+            "  handler:\n    use: myworker\n"
         )
-        try:
-            _reviewers.load(wiki)
-            raise AssertionError("Expected ReviewerError")
-        except ReviewerError as exc:
-            assert "count" in str(exc)
+        with patch.object(
+            _reviewers,
+            "resolve_plugin_template_path",
+            return_value=tmp_path / "nonexistent" / "mill-agents.yaml"
+        ):
+            with patch.object(_paths, "resolve_wiki_path", side_effect=SystemExit):
+                try:
+                    _reviewers.load(hub_dir)
+                    raise AssertionError("Expected ReviewerError")
+                except ReviewerError as exc:
+                    assert "count" in str(exc)
     print("PASS: load raises cluster workers.count non-positive")
 
 
 def test_load_raises_unknown_type() -> None:
-    """load() raises on unknown reviewer type."""
+    """load() raises on unknown type."""
     with tempfile.TemporaryDirectory() as tmp:
-        wiki = Path(tmp) / "wiki"
-        _write_yaml(
-            wiki / "agents.yaml",
-            "bad:\n  type: unknown\n  provider: claude\n  model: x\n",
+        tmp_path = Path(tmp)
+        hub_dir = tmp_path / "hub"
+        hub_dir.mkdir()
+        (hub_dir / ".millhouse").mkdir()
+        (hub_dir / ".millhouse" / "agents.local.yaml").write_text(
+            "bad:\n  type: unknown\n  provider: claude\n  model: x\n"
         )
-        try:
-            _reviewers.load(wiki)
-            raise AssertionError("Expected ReviewerError")
-        except ReviewerError as exc:
-            assert "unknown" in str(exc).lower() or "type" in str(exc)
+        with patch.object(_reviewers, "resolve_plugin_template_path", return_value=tmp_path / "nonexistent" / "mill-agents.yaml"):
+            with patch.object(_paths, "resolve_wiki_path", side_effect=SystemExit):
+                try:
+                    _reviewers.load(hub_dir)
+                    raise AssertionError("Expected ReviewerError")
+                except ReviewerError as exc:
+                    assert "unknown" in str(exc).lower() or "type" in str(exc)
     print("PASS: load raises unknown type")
 
 
 def test_load_raises_invalid_name_uppercase() -> None:
     """load() raises on names with uppercase letters."""
     with tempfile.TemporaryDirectory() as tmp:
-        wiki = Path(tmp) / "wiki"
-        _write_yaml(
-            wiki / "agents.yaml",
-            "BadName:\n  type: single\n  provider: claude\n  model: x\n",
+        tmp_path = Path(tmp)
+        hub_dir = tmp_path / "hub"
+        hub_dir.mkdir()
+        (hub_dir / ".millhouse").mkdir()
+        (hub_dir / ".millhouse" / "agents.local.yaml").write_text(
+            "BadName:\n  type: single\n  provider: claude\n  model: x\n"
         )
-        try:
-            _reviewers.load(wiki)
-            raise AssertionError("Expected ReviewerError")
-        except ReviewerError as exc:
-            assert "BadName" in str(exc) or "Invalid" in str(exc)
+        with patch.object(_reviewers, "resolve_plugin_template_path", return_value=tmp_path / "nonexistent" / "mill-agents.yaml"):
+            with patch.object(_paths, "resolve_wiki_path", side_effect=SystemExit):
+                try:
+                    _reviewers.load(hub_dir)
+                    raise AssertionError("Expected ReviewerError")
+                except ReviewerError as exc:
+                    assert "BadName" in str(exc) or "Invalid" in str(exc)
     print("PASS: load raises invalid name (uppercase)")
 
 
 def test_load_raises_invalid_name_dot() -> None:
     """load() raises on names containing a dot."""
     with tempfile.TemporaryDirectory() as tmp:
-        wiki = Path(tmp) / "wiki"
-        _write_yaml(
-            wiki / "agents.yaml",
-            "bad.name:\n  type: single\n  provider: claude\n  model: x\n",
+        tmp_path = Path(tmp)
+        hub_dir = tmp_path / "hub"
+        hub_dir.mkdir()
+        (hub_dir / ".millhouse").mkdir()
+        (hub_dir / ".millhouse" / "agents.local.yaml").write_text(
+            "bad.name:\n  type: single\n  provider: claude\n  model: x\n"
         )
-        try:
-            _reviewers.load(wiki)
-            raise AssertionError("Expected ReviewerError")
-        except ReviewerError as exc:
-            assert "bad.name" in str(exc) or "Invalid" in str(exc)
+        with patch.object(_reviewers, "resolve_plugin_template_path", return_value=tmp_path / "nonexistent" / "mill-agents.yaml"):
+            with patch.object(_paths, "resolve_wiki_path", side_effect=SystemExit):
+                try:
+                    _reviewers.load(hub_dir)
+                    raise AssertionError("Expected ReviewerError")
+                except ReviewerError as exc:
+                    assert "bad.name" in str(exc) or "Invalid" in str(exc)
     print("PASS: load raises invalid name (dot)")
 
 
 def test_load_raises_duplicate_name() -> None:
     """load() raises when the same name appears twice in the file."""
     with tempfile.TemporaryDirectory() as tmp:
-        wiki = Path(tmp) / "wiki"
-        _write_yaml(
-            wiki / "agents.yaml",
+        tmp_path = Path(tmp)
+        hub_dir = tmp_path / "hub"
+        hub_dir.mkdir()
+        (hub_dir / ".millhouse").mkdir()
+        (hub_dir / ".millhouse" / "agents.local.yaml").write_text(
             "sonnetmax:\n  type: single\n  provider: claude\n  model: x\n"
-            "sonnetmax:\n  type: single\n  provider: claude\n  model: y\n",
+            "sonnetmax:\n  type: single\n  provider: claude\n  model: y\n"
         )
-        try:
-            _reviewers.load(wiki)
-            raise AssertionError("Expected ReviewerError")
-        except ReviewerError as exc:
-            assert "sonnetmax" in str(exc) or "Duplicate" in str(exc)
+        with patch.object(_reviewers, "resolve_plugin_template_path", return_value=tmp_path / "nonexistent" / "mill-agents.yaml"):
+            with patch.object(_paths, "resolve_wiki_path", side_effect=SystemExit):
+                try:
+                    _reviewers.load(hub_dir)
+                    raise AssertionError("Expected ReviewerError")
+                except ReviewerError as exc:
+                    assert "sonnetmax" in str(exc) or "Duplicate" in str(exc)
     print("PASS: load raises duplicate name")
 
 
 def test_load_raises_cluster_use_nonexistent() -> None:
     """load() raises when a cluster use: references a non-existent name."""
     with tempfile.TemporaryDirectory() as tmp:
-        wiki = Path(tmp) / "wiki"
-        _write_yaml(
-            wiki / "agents.yaml",
+        tmp_path = Path(tmp)
+        hub_dir = tmp_path / "hub"
+        hub_dir.mkdir()
+        (hub_dir / ".millhouse").mkdir()
+        (hub_dir / ".millhouse" / "agents.local.yaml").write_text(
             "myworker:\n  type: single\n  provider: claude\n  model: x\n"
             "mycluster:\n  type: cluster\n"
             "  workers:\n    use: nonexistent\n    count: 2\n"
-            "  handler:\n    use: myworker\n",
+            "  handler:\n    use: myworker\n"
         )
-        try:
-            _reviewers.load(wiki)
-            raise AssertionError("Expected ReviewerError")
-        except ReviewerError as exc:
-            assert "nonexistent" in str(exc)
+        with patch.object(_reviewers, "resolve_plugin_template_path", return_value=tmp_path / "nonexistent" / "mill-agents.yaml"):
+            with patch.object(_paths, "resolve_wiki_path", side_effect=SystemExit):
+                try:
+                    _reviewers.load(hub_dir)
+                    raise AssertionError("Expected ReviewerError")
+                except ReviewerError as exc:
+                    assert "nonexistent" in str(exc)
     print("PASS: load raises cluster use referencing nonexistent name")
 
 
 def test_load_raises_cluster_use_referencing_cluster() -> None:
     """load() raises when a cluster use: references another cluster."""
     with tempfile.TemporaryDirectory() as tmp:
-        wiki = Path(tmp) / "wiki"
-        _write_yaml(
-            wiki / "agents.yaml",
+        tmp_path = Path(tmp)
+        hub_dir = tmp_path / "hub"
+        hub_dir.mkdir()
+        (hub_dir / ".millhouse").mkdir()
+        (hub_dir / ".millhouse" / "agents.local.yaml").write_text(
             "myworker:\n  type: single\n  provider: claude\n  model: x\n"
             "clusterb:\n  type: cluster\n"
             "  workers:\n    use: myworker\n    count: 2\n"
             "  handler:\n    use: myworker\n"
             "clustera:\n  type: cluster\n"
             "  workers:\n    use: clusterb\n    count: 3\n"
-            "  handler:\n    use: myworker\n",
+            "  handler:\n    use: myworker\n"
         )
-        try:
-            _reviewers.load(wiki)
-            raise AssertionError("Expected ReviewerError")
-        except ReviewerError as exc:
-            assert "single" in str(exc) or "cluster" in str(exc).lower()
+        with patch.object(_reviewers, "resolve_plugin_template_path", return_value=tmp_path / "nonexistent" / "mill-agents.yaml"):
+            with patch.object(_paths, "resolve_wiki_path", side_effect=SystemExit):
+                try:
+                    _reviewers.load(hub_dir)
+                    raise AssertionError("Expected ReviewerError")
+                except ReviewerError as exc:
+                    assert "single" in str(exc) or "cluster" in str(exc).lower()
     print("PASS: load raises cluster use referencing another cluster")
 
 
@@ -343,12 +442,25 @@ def test_validate_role_refs_missing_raises() -> None:
 
 
 def test_load_falls_back_to_reviewers_yaml() -> None:
-    """load() succeeds when only reviewers.yaml exists (backward compat)."""
+    """load() succeeds when only legacy wiki/reviewers.yaml exists."""
     with tempfile.TemporaryDirectory() as tmp:
-        wiki = Path(tmp) / "wiki"
-        write_to(wiki)  # writes agents.yaml
-        (wiki / "agents.yaml").rename(wiki / "reviewers.yaml")
-        registry = _reviewers.load(wiki)
+        tmp_path = Path(tmp)
+        hub_dir = tmp_path / "hub"
+        hub_dir.mkdir()
+        wiki_path = tmp_path / "wiki"
+        wiki_path.mkdir()
+        # Write legacy reviewers.yaml
+        (wiki_path / "reviewers.yaml").write_text(
+            "sonnetmax:\n  type: single\n  provider: claude\n  model: claude-sonnet-4-6\n"
+        )
+        with patch.object(
+            _reviewers,
+            "resolve_plugin_template_path",
+            return_value=tmp_path / "nonexistent" / "mill-agents.yaml"
+        ):
+            with patch.object(_paths, "resolve_wiki_path", return_value=wiki_path):
+                registry = _reviewers.load(hub_dir)
+
         assert "sonnetmax" in registry
     print("PASS: load falls back to reviewers.yaml")
 
@@ -365,104 +477,191 @@ def test_validate_role_refs_catches_bad_implementer_model() -> None:
     print("PASS: validate_role_refs catches bad implementer model ref")
 
 
+def test_load_plugin_template_only() -> None:
+    """load() uses plugin template when no local override present."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        hub_dir = tmp_path / "hub"
+        hub_dir.mkdir()
+        # Mock plugin template with 2 entries
+        template_content = (
+            "sonnetmax:\n  type: single\n  provider: claude\n  model: claude-sonnet-4-6\n"
+            "sonnetmedium:\n  type: single\n  provider: claude\n  model: claude-sonnet-4-6\n"
+        )
+        with patch.object(
+            _reviewers,
+            "resolve_plugin_template_path",
+            return_value=tmp_path / "templates" / "mill-agents.yaml"
+        ):
+            (tmp_path / "templates").mkdir(exist_ok=True)
+            (tmp_path / "templates" / "mill-agents.yaml").write_text(template_content)
+            with patch.object(_paths, "resolve_wiki_path", side_effect=SystemExit):
+                registry = _reviewers.load(hub_dir)
+
+        assert "sonnetmax" in registry
+        assert "sonnetmedium" in registry
+    print("PASS: load plugin template only")
+
+
+def test_local_overlay_adds_new_agent() -> None:
+    """load() merges plugin template and local overlay."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        hub_dir = tmp_path / "hub"
+        hub_dir.mkdir()
+        # Mock plugin template
+        template_content = "agentA:\n  type: single\n  provider: claude\n  model: claude-sonnet-4-6\n"
+        # Mock local overlay
+        (hub_dir / ".millhouse").mkdir()
+        (hub_dir / ".millhouse" / "agents.local.yaml").write_text(
+            "agentB:\n  type: single\n  provider: claude\n  model: claude-opus-4-1\n"
+        )
+        with patch.object(
+            _reviewers,
+            "resolve_plugin_template_path",
+            return_value=tmp_path / "templates" / "mill-agents.yaml"
+        ):
+            (tmp_path / "templates").mkdir(exist_ok=True)
+            (tmp_path / "templates" / "mill-agents.yaml").write_text(template_content)
+            with patch.object(_paths, "resolve_wiki_path", side_effect=SystemExit):
+                registry = _reviewers.load(hub_dir)
+
+        assert "agentA" in registry
+        assert "agentB" in registry
+    print("PASS: load local overlay adds new agent")
+
+
+def test_local_overlay_overrides_model() -> None:
+    """load() deep-merges local overrides into plugin template."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        hub_dir = tmp_path / "hub"
+        hub_dir.mkdir()
+        # Mock plugin template
+        template_content = (
+            "agentA:\n  type: single\n  provider: claude\n  model: model-x\n"
+        )
+        # Mock local override that only changes the model
+        (hub_dir / ".millhouse").mkdir()
+        (hub_dir / ".millhouse" / "agents.local.yaml").write_text(
+            "agentA:\n  model: model-y\n"
+        )
+        with patch.object(
+            _reviewers,
+            "resolve_plugin_template_path",
+            return_value=tmp_path / "templates" / "mill-agents.yaml"
+        ):
+            (tmp_path / "templates").mkdir(exist_ok=True)
+            (tmp_path / "templates" / "mill-agents.yaml").write_text(template_content)
+            with patch.object(_paths, "resolve_wiki_path", side_effect=SystemExit):
+                registry = _reviewers.load(hub_dir)
+
+        assert registry["agentA"]["model"] == "model-y"
+        assert registry["agentA"]["provider"] == "claude"
+    print("PASS: load local overlay overrides model")
+
+
+def test_raises_when_nothing_found() -> None:
+    """load() raises ReviewerError when no source is found."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        hub_dir = tmp_path / "hub"
+        hub_dir.mkdir()
+        # No template, no local, no wiki
+        with patch.object(
+            _reviewers,
+            "resolve_plugin_template_path",
+            return_value=tmp_path / "nonexistent" / "mill-agents.yaml"
+        ):
+            with patch.object(_paths, "resolve_wiki_path", side_effect=SystemExit):
+                try:
+                    _reviewers.load(hub_dir)
+                    raise AssertionError("Expected ReviewerError")
+                except ReviewerError as exc:
+                    assert "Missing registry" in str(exc)
+    print("PASS: load raises when nothing found")
+
+
 def test_extends_single_level() -> None:
     """Single-level extends: child inherits from base."""
-    with tempfile.TemporaryDirectory() as tmp:
-        wiki = Path(tmp) / "wiki"
-        _write_yaml(
-            wiki / "agents.yaml",
-            "base:\n"
-            "  type: single\n"
-            "  provider: claude\n"
-            "  model: claude-sonnet-4-6\n"
-            "child:\n"
-            "  extends: base\n"
-            "  tooluse: true\n",
-        )
-        registry = _reviewers.load(wiki)
-        assert registry["child"] == {
-            "type": "single",
-            "provider": "claude",
-            "model": "claude-sonnet-4-6",
-            "tooluse": True,
-        }
-        assert registry["base"] == {
-            "type": "single",
-            "provider": "claude",
-            "model": "claude-sonnet-4-6",
-        }
+    registry = _load_with_overlay(
+        "base:\n"
+        "  type: single\n"
+        "  provider: claude\n"
+        "  model: claude-sonnet-4-6\n"
+        "child:\n"
+        "  extends: base\n"
+        "  tooluse: true\n",
+    )
+    assert registry["child"] == {
+        "type": "single",
+        "provider": "claude",
+        "model": "claude-sonnet-4-6",
+        "tooluse": True,
+    }
+    assert registry["base"] == {
+        "type": "single",
+        "provider": "claude",
+        "model": "claude-sonnet-4-6",
+    }
     print("PASS: extends single level")
 
 
 def test_extends_multi_level() -> None:
     """Multi-level chain c -> b -> a resolves correctly."""
-    with tempfile.TemporaryDirectory() as tmp:
-        wiki = Path(tmp) / "wiki"
-        _write_yaml(
-            wiki / "agents.yaml",
-            "a:\n"
-            "  type: single\n"
-            "  provider: claude\n"
-            "  model: claude-sonnet-4-6\n"
-            "b:\n"
-            "  extends: a\n"
-            "c:\n"
-            "  extends: b\n"
-            "  tooluse: true\n",
-        )
-        registry = _reviewers.load(wiki)
-        assert registry["c"]["type"] == "single"
-        assert registry["c"]["provider"] == "claude"
-        assert registry["c"]["model"] == "claude-sonnet-4-6"
-        assert registry["c"]["tooluse"] is True
+    registry = _load_with_overlay(
+        "a:\n"
+        "  type: single\n"
+        "  provider: claude\n"
+        "  model: claude-sonnet-4-6\n"
+        "b:\n"
+        "  extends: a\n"
+        "c:\n"
+        "  extends: b\n"
+        "  tooluse: true\n",
+    )
+    assert registry["c"]["type"] == "single"
+    assert registry["c"]["provider"] == "claude"
+    assert registry["c"]["model"] == "claude-sonnet-4-6"
+    assert registry["c"]["tooluse"] is True
     print("PASS: extends multi-level")
 
 
 def test_extends_child_overrides_parent_scalar() -> None:
     """Child overrides parent scalar value."""
-    with tempfile.TemporaryDirectory() as tmp:
-        wiki = Path(tmp) / "wiki"
-        _write_yaml(
-            wiki / "agents.yaml",
-            "base:\n"
-            "  type: single\n"
-            "  provider: claude\n"
-            "  model: foo\n"
-            "child:\n"
-            "  extends: base\n"
-            "  model: bar\n",
-        )
-        registry = _reviewers.load(wiki)
-        assert registry["child"]["model"] == "bar"
+    registry = _load_with_overlay(
+        "base:\n"
+        "  type: single\n"
+        "  provider: claude\n"
+        "  model: foo\n"
+        "child:\n"
+        "  extends: base\n"
+        "  model: bar\n",
+    )
+    assert registry["child"]["model"] == "bar"
     print("PASS: extends child overrides parent scalar")
 
 
 def test_extends_unknown_base_raises() -> None:
     """Extends referencing unknown base raises ReviewerError."""
-    with tempfile.TemporaryDirectory() as tmp:
-        wiki = Path(tmp) / "wiki"
-        _write_yaml(
-            wiki / "agents.yaml",
+    try:
+        _load_with_overlay(
             "child:\n"
             "  extends: nonexistent\n"
             "  type: single\n"
             "  provider: claude\n"
             "  model: x\n",
         )
-        try:
-            _reviewers.load(wiki)
-            raise AssertionError("Expected ReviewerError")
-        except ReviewerError as exc:
-            assert "nonexistent" in str(exc)
+        raise AssertionError("Expected ReviewerError")
+    except ReviewerError as exc:
+        assert "nonexistent" in str(exc)
     print("PASS: extends unknown base raises")
 
 
 def test_extends_cycle_raises() -> None:
     """Cycle in extends chain raises ReviewerError."""
-    with tempfile.TemporaryDirectory() as tmp:
-        wiki = Path(tmp) / "wiki"
-        _write_yaml(
-            wiki / "agents.yaml",
+    try:
+        _load_with_overlay(
             "a:\n"
             "  extends: b\n"
             "  type: single\n"
@@ -474,45 +673,37 @@ def test_extends_cycle_raises() -> None:
             "  provider: claude\n"
             "  model: y\n",
         )
-        try:
-            _reviewers.load(wiki)
-            raise AssertionError("Expected ReviewerError")
-        except ReviewerError as exc:
-            exc_str = str(exc)
-            assert "Cycle detected" in exc_str
-            assert "a" in exc_str
-            assert "b" in exc_str
+        raise AssertionError("Expected ReviewerError")
+    except ReviewerError as exc:
+        exc_str = str(exc)
+        assert "Cycle detected" in exc_str
+        assert "a" in exc_str
+        assert "b" in exc_str
     print("PASS: extends cycle raises")
 
 
 def test_extends_self_cycle_raises() -> None:
     """Self-loop in extends raises ReviewerError."""
-    with tempfile.TemporaryDirectory() as tmp:
-        wiki = Path(tmp) / "wiki"
-        _write_yaml(
-            wiki / "agents.yaml",
+    try:
+        _load_with_overlay(
             "a:\n"
             "  extends: a\n"
             "  type: single\n"
             "  provider: claude\n"
             "  model: x\n",
         )
-        try:
-            _reviewers.load(wiki)
-            raise AssertionError("Expected ReviewerError")
-        except ReviewerError as exc:
-            exc_str = str(exc)
-            assert "Cycle detected" in exc_str
-            assert "a -> a" in exc_str
+        raise AssertionError("Expected ReviewerError")
+    except ReviewerError as exc:
+        exc_str = str(exc)
+        assert "Cycle detected" in exc_str
+        assert "a -> a" in exc_str
     print("PASS: extends self-cycle raises")
 
 
 def test_extends_target_must_not_be_cluster() -> None:
     """Extends cannot target a cluster entry."""
-    with tempfile.TemporaryDirectory() as tmp:
-        wiki = Path(tmp) / "wiki"
-        _write_yaml(
-            wiki / "agents.yaml",
+    try:
+        _load_with_overlay(
             "x:\n"
             "  type: single\n"
             "  provider: claude\n"
@@ -528,22 +719,18 @@ def test_extends_target_must_not_be_cluster() -> None:
             "  extends: my_cluster\n"
             "  tooluse: true\n",
         )
-        try:
-            _reviewers.load(wiki)
-            raise AssertionError("Expected ReviewerError")
-        except ReviewerError as exc:
-            exc_str = str(exc)
-            assert "my_cluster" in exc_str
-            assert "cluster" in exc_str
+        raise AssertionError("Expected ReviewerError")
+    except ReviewerError as exc:
+        exc_str = str(exc)
+        assert "my_cluster" in exc_str
+        assert "cluster" in exc_str
     print("PASS: extends target must not be cluster")
 
 
 def test_cluster_cannot_extend() -> None:
     """Cluster entries cannot use extends."""
-    with tempfile.TemporaryDirectory() as tmp:
-        wiki = Path(tmp) / "wiki"
-        _write_yaml(
-            wiki / "agents.yaml",
+    try:
+        _load_with_overlay(
             "a:\n"
             "  type: single\n"
             "  provider: claude\n"
@@ -557,51 +744,41 @@ def test_cluster_cannot_extend() -> None:
             "  handler:\n"
             "    use: a\n",
         )
-        try:
-            _reviewers.load(wiki)
-            raise AssertionError("Expected ReviewerError")
-        except ReviewerError as exc:
-            exc_str = str(exc)
-            assert "my_cluster" in exc_str
-            assert "cluster" in exc_str
+        raise AssertionError("Expected ReviewerError")
+    except ReviewerError as exc:
+        exc_str = str(exc)
+        assert "my_cluster" in exc_str
+        assert "cluster" in exc_str
     print("PASS: cluster cannot extend")
 
 
 def test_required_field_missing_after_merge_raises() -> None:
     """Missing required field after merge is caught by validation."""
-    with tempfile.TemporaryDirectory() as tmp:
-        wiki = Path(tmp) / "wiki"
-        _write_yaml(
-            wiki / "agents.yaml",
+    try:
+        _load_with_overlay(
             "base:\n"
             "  type: single\n"
             "  model: foo\n"
             "child:\n"
             "  extends: base\n",
         )
-        try:
-            _reviewers.load(wiki)
-            raise AssertionError("Expected ReviewerError")
-        except ReviewerError as exc:
-            assert "provider" in str(exc)
+        raise AssertionError("Expected ReviewerError")
+    except ReviewerError as exc:
+        assert "provider" in str(exc)
     print("PASS: required field missing after merge raises")
 
 
 def test_extends_field_removed_from_output() -> None:
     """The extends: field is removed from resolved output."""
-    with tempfile.TemporaryDirectory() as tmp:
-        wiki = Path(tmp) / "wiki"
-        _write_yaml(
-            wiki / "agents.yaml",
-            "a:\n"
-            "  type: single\n"
-            "  provider: claude\n"
-            "  model: x\n"
-            "b:\n"
-            "  extends: a\n",
-        )
-        registry = _reviewers.load(wiki)
-        assert "extends" not in registry["b"]
+    registry = _load_with_overlay(
+        "a:\n"
+        "  type: single\n"
+        "  provider: claude\n"
+        "  model: x\n"
+        "b:\n"
+        "  extends: a\n",
+    )
+    assert "extends" not in registry["b"]
     print("PASS: extends field removed from output")
 
 

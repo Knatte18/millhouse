@@ -89,8 +89,8 @@ _JUNCTION_DEFAULTS: dict[str, str] = {
 _HARDLINK_DEFAULTS: dict[str, str] = {}  # no hardlinks unless configured
 
 
-def read_junctions(wiki_root: Path) -> dict[str, str]:
-    """Read the ``junctions:`` block from ``<wiki_root>/config.yaml``.
+def read_junctions(hub_root: Path, wiki_path: Path | None = None) -> dict[str, str]:
+    """Read the ``junctions:`` block from ``<hub_root>/mill-config.yaml`` or legacy wiki ``config.yaml``.
 
     Returns an ordered dict mapping junction-path → unresolved target
     template. Tokens in the target are NOT substituted here — callers pass
@@ -98,39 +98,95 @@ def read_junctions(wiki_root: Path) -> dict[str, str]:
     map appropriate to their scope (mill-setup lacks ``<SLUG>``, mill-spawn
     has it).
 
-    Missing config file or missing ``junctions:`` block falls back to
-    ``_JUNCTION_DEFAULTS``.
+    Precedence (first source wins):
+    1. ``<hub_root>/mill-config.yaml`` if it exists.
+    2. Legacy ``<wiki_path>/config.yaml`` if *wiki_path* is supplied; otherwise
+       ``<wiki_root>/config.yaml`` resolved via ``_paths.resolve_wiki_path``.
+    3. ``_JUNCTION_DEFAULTS`` fallback.
+
+    Pass *wiki_path* when the caller already has the wiki location and the
+    hub_root is not a git repository (e.g. unit-test fixtures).
     """
-    cfg_path = wiki_root / "config.yaml"
-    if not cfg_path.exists():
+    import _paths
+
+    # Try hub mill-config.yaml first
+    mill_cfg_path = hub_root / "mill-config.yaml"
+    if mill_cfg_path.exists():
+        cfg = yaml.safe_load(mill_cfg_path.read_text(encoding="utf-8")) or {}
+        raw = cfg.get("junctions")
+        if raw:
+            return {str(k): str(v) for k, v in raw.items()}
         return dict(_JUNCTION_DEFAULTS)
-    cfg = yaml.safe_load(cfg_path.read_text(encoding="utf-8")) or {}
-    raw = cfg.get("junctions")
-    if not raw:
-        return dict(_JUNCTION_DEFAULTS)
-    return {str(k): str(v) for k, v in raw.items()}
+
+    # Fall back to legacy wiki config.yaml
+    wiki_root = wiki_path
+    if wiki_root is None:
+        try:
+            wiki_root = _paths.resolve_wiki_path(hub_root)
+        except SystemExit:
+            wiki_root = None
+
+    if wiki_root is not None:
+        wiki_cfg_path = wiki_root / "config.yaml"
+        if wiki_cfg_path.exists():
+            cfg = yaml.safe_load(wiki_cfg_path.read_text(encoding="utf-8")) or {}
+            raw = cfg.get("junctions")
+            if raw:
+                return {str(k): str(v) for k, v in raw.items()}
+
+    return dict(_JUNCTION_DEFAULTS)
 
 
-def read_hardlinks(wiki_root: Path) -> dict[str, str]:
-    """Read the ``hardlinks:`` block from ``<wiki_root>/config.yaml``.
+def read_hardlinks(hub_root: Path, wiki_path: Path | None = None) -> dict[str, str]:
+    """Read the ``hardlinks:`` block from ``<hub_root>/mill-config.yaml`` or legacy wiki ``config.yaml``.
 
     Returns an ordered dict mapping link-path → unresolved target template.
     Tokens in the target are NOT substituted here — callers pass the raw
     template through ``_junction.resolve_target`` with the appropriate token
-    map. Missing config file or missing ``hardlinks:`` block returns an empty
-    dict (no hardlinks configured). Also returns an empty dict when the block
-    is explicitly null (hardlinks: null), since yaml.safe_load yields None for
-    an explicit-null and the falsy check collapses both cases. Callers (e.g.
-    _setup.create_hub_links) must tolerate an empty result.
+    map.
+
+    Precedence (first source wins):
+    1. ``<hub_root>/mill-config.yaml`` if it exists.
+    2. Legacy ``<wiki_path>/config.yaml`` if *wiki_path* is supplied; otherwise
+       ``<wiki_root>/config.yaml`` resolved via ``_paths.resolve_wiki_path``.
+    3. Empty dict (no hardlinks configured).
+
+    Pass *wiki_path* when the caller already has the wiki location and the
+    hub_root is not a git repository (e.g. unit-test fixtures).
+
+    Also returns an empty dict when the block is explicitly null (hardlinks: null),
+    since yaml.safe_load yields None for an explicit-null and the falsy check
+    collapses both cases. Callers (e.g. _setup.create_hub_links) must tolerate
+    an empty result.
     """
-    cfg_path = wiki_root / "config.yaml"
-    if not cfg_path.exists():
+    import _paths
+
+    # Try hub mill-config.yaml first
+    mill_cfg_path = hub_root / "mill-config.yaml"
+    if mill_cfg_path.exists():
+        cfg = yaml.safe_load(mill_cfg_path.read_text(encoding="utf-8")) or {}
+        raw = cfg.get("hardlinks")
+        if raw:
+            return {str(k): str(v) for k, v in raw.items()}
         return dict(_HARDLINK_DEFAULTS)
-    cfg = yaml.safe_load(cfg_path.read_text(encoding="utf-8")) or {}
-    raw = cfg.get("hardlinks")
-    if not raw:
-        return dict(_HARDLINK_DEFAULTS)
-    return {str(k): str(v) for k, v in raw.items()}
+
+    # Fall back to legacy wiki config.yaml
+    wiki_root = wiki_path
+    if wiki_root is None:
+        try:
+            wiki_root = _paths.resolve_wiki_path(hub_root)
+        except SystemExit:
+            wiki_root = None
+
+    if wiki_root is not None:
+        wiki_cfg_path = wiki_root / "config.yaml"
+        if wiki_cfg_path.exists():
+            cfg = yaml.safe_load(wiki_cfg_path.read_text(encoding="utf-8")) or {}
+            raw = cfg.get("hardlinks")
+            if raw:
+                return {str(k): str(v) for k, v in raw.items()}
+
+    return dict(_HARDLINK_DEFAULTS)
 
 
 class WikiSetupError(Exception):
@@ -305,8 +361,8 @@ def sync_pull(wiki_path: Path, *, slug: str) -> None:
             _release(wiki_path)
 
 
-def health_check(wiki_path: Path) -> None:
-    """Verify the wiki clone is present and contains ``config.yaml``.
+def health_check(hub_root: Path) -> None:
+    """Verify at least one valid config source exists for the hub.
 
     A lightweight pre-flight check intended to be called at the start of
     each mill-go batch iteration and each holistic review round. Raises
@@ -314,25 +370,49 @@ def health_check(wiki_path: Path) -> None:
     without parsing stderr or letting downstream code produce a confusing
     "Missing config" message.
 
+    Precedence (first source wins):
+    1. ``<hub_root>/mill-config.yaml``
+    2. Legacy ``<wiki_root>/config.yaml`` (resolved via _paths.resolve_wiki_path)
+    3. No valid source found -- raise error
+
     Args:
-        wiki_path: Directory expected to contain the wiki clone.
+        hub_root: Directory expected to contain mill-config.yaml or .millhouse/config.local.yaml.
 
     Returns:
         None on success.
 
     Raises:
-        WikiHealthError: ``wiki_path`` does not exist, with message
-            ``"wiki directory does not exist at <wiki_path>"``.
-        WikiHealthError: ``wiki_path/config.yaml`` does not exist, with
-            message ``"wiki/config.yaml missing at <wiki_path/config.yaml>"``.
+        WikiHealthError: ``hub_root`` does not exist.
+        WikiHealthError: Neither mill-config.yaml nor legacy wiki/config.yaml exists.
     """
-    if not wiki_path.exists():
-        raise WikiHealthError(wiki_path, f"wiki directory does not exist at {wiki_path}")
-    if not (wiki_path / "config.yaml").exists():
-        raise WikiHealthError(
-            wiki_path,
-            f"wiki/config.yaml missing at {wiki_path / 'config.yaml'}",
-        )
+    import _paths
+
+    if not hub_root.exists():
+        raise WikiHealthError(hub_root, f"hub directory does not exist at {hub_root}")
+
+    # Check for mill-config.yaml first
+    mill_cfg = hub_root / "mill-config.yaml"
+    if mill_cfg.exists():
+        return
+
+    # Fall back to legacy wiki config.yaml
+    try:
+        wiki_root = _paths.resolve_wiki_path(hub_root)
+    except SystemExit:
+        wiki_root = None
+
+    if wiki_root is not None:
+        wiki_cfg = wiki_root / "config.yaml"
+        if wiki_cfg.exists():
+            return
+    else:
+        wiki_cfg = None
+
+    # No valid config source found
+    raise WikiHealthError(
+        hub_root,
+        f"no config source found: searched {mill_cfg} and {wiki_cfg}",
+    )
 
 
 def write_commit_push(

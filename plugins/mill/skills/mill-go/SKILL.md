@@ -115,9 +115,9 @@ Before launching the implementer / reviewer for this batch, verify the wiki is i
 PYTHONPATH="${PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
 import sys
 import _paths, _wiki
-wiki_path = _paths.resolve_wiki_path(_paths.resolve_git_root())
+hub_root = _paths.resolve_git_root()
 try:
-    _wiki.health_check(wiki_path)
+    _wiki.health_check(hub_root)
 except _wiki.WikiHealthError as e:
     print(f'[mill-go] wiki health check failed: {e}', file=sys.stderr)
     raise SystemExit(1)
@@ -291,9 +291,9 @@ For each round `H` from 1 to `max_holistic_rounds`:
    PYTHONPATH="${PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
    import sys
    import _paths, _wiki
-   wiki_path = _paths.resolve_wiki_path(_paths.resolve_git_root())
+   hub_root = _paths.resolve_git_root()
    try:
-       _wiki.health_check(wiki_path)
+       _wiki.health_check(hub_root)
    except _wiki.WikiHealthError as e:
        print(f'[mill-go] wiki health check failed: {e}', file=sys.stderr)
        raise SystemExit(1)

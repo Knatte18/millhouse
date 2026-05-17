@@ -1,18 +1,32 @@
-# wiki/config.yaml — shared configuration for mill.
+# mill-config.yaml — shared configuration for mill.
 #
-# Owned by the wiki repo. Applies to every clone of this hub.
+# This file is the plugin template for `mill-config.yaml` at the hub repo root.
+#
+# Overlay precedence (first source wins):
+#   plugin template -> mill-config.yaml at hub repo root -> .millhouse/config.local.yaml
+#
 # Local (non-secret) overrides go in .millhouse/config.local.yaml (gitignored).
 # Secrets belong in .env at the repo root, not here.
 #
-# Review roles live under `roles:`. Reviewer names reference wiki/agents.yaml.
-# Skip semantics: rounds: 0 OR reviewer: null → skip the scope.
+# Environment-variable overrides (when set, takes precedence over config file values):
+#   MILL_DISCUSSION_REVIEWER        -> roles.discussion-review.holistic.reviewer
+#   MILL_PLAN_REVIEWER              -> roles.plan-review.holistic.reviewer
+#   MILL_PLAN_BATCH_REVIEWER        -> roles.plan-review.batch.reviewer
+#   MILL_CODE_REVIEWER              -> roles.code-review.holistic.reviewer
+#   MILL_CODE_BATCH_REVIEWER        -> roles.code-review.batch.reviewer
+#   MILL_IMPLEMENTER                -> roles.implementer.model
+#
+# Unknown keys emit a stderr warning at load time; load proceeds.
+#
+# Review roles live under `roles:`. Reviewer names reference agents.yaml.
+# Skip semantics: rounds: 0 OR reviewer: null -> skip the scope.
 #
 # Path tokens (substituted by mill scripts at run time, always UPPERCASE):
-#   <HUB_PATH>        — primary clone root
-#   <CONTAINER_PATH>  — parent of HUB_PATH (holds hub/, wiki/, worktrees/)
-#   <WIKI_PATH>       — wiki clone root
-#   <REPO>            — short repo name from origin URL
-#   <SLUG>            — task slug (valid only in mill-spawn-created entries)
+#   <HUB_PATH>        -- primary clone root
+#   <CONTAINER_PATH>  -- parent of HUB_PATH (holds hub/, wiki/, worktrees/)
+#   <WIKI_PATH>       -- wiki clone root
+#   <REPO>            -- short repo name from origin URL
+#   <SLUG>            -- task slug (valid only in mill-spawn-created entries)
 #
 # Env-var interpolation (substituted by mill scripts at run time):
 #   ${VAR}          -- replaced with the value of env var VAR; unset raises ConfigError
@@ -29,13 +43,13 @@
 # ---------------------------------------------------------------------------
 # Each entry: `<junction-path>: <target-template>`.
 # Scope inferred from token presence:
-#   * Target contains <SLUG>   → per-worktree; created by mill-spawn.
-#   * Target has no <SLUG>     → hub-scope; created by mill-setup.
+#   * Target contains <SLUG>   -> per-worktree; created by mill-spawn.
+#   * Target has no <SLUG>     -> hub-scope; created by mill-setup.
 
 # ---------------------------------------------------------------------------
 # Repo identity
 # ---------------------------------------------------------------------------
-# short_name — 2-4 character prefix used in VS Code window titles.
+# short_name -- 2-4 character prefix used in VS Code window titles.
 #   Hub form:      "<short_name>"
 #   Worktree form: "<short_name>: <slug>"
 #   Default when absent or empty: <repo>[:2].upper() (e.g. "millhouse" -> "MI").
@@ -51,9 +65,9 @@ junctions:
 # ---------------------------------------------------------------------------
 # mill-spawn
 # ---------------------------------------------------------------------------
-# branch_prefix — prepended directly to the slug (no separator added).
-#   Include any separator in the prefix itself, e.g. "hanf/" → "hanf/<slug>".
-#   Empty string → branch == slug.
+# branch_prefix -- prepended directly to the slug (no separator added).
+#   Include any separator in the prefix itself, e.g. "hanf/" -> "hanf/<slug>".
+#   Empty string -> branch == slug.
 
 spawn:
   branch_prefix: ""
@@ -97,7 +111,7 @@ pipeline:
 # ---------------------------------------------------------------------------
 # Reviewer roles
 # ---------------------------------------------------------------------------
-# Reviewer names reference wiki/agents.yaml entries.
+# Reviewer names reference agents.yaml entries.
 
 roles:
   discussion-review:
@@ -157,7 +171,7 @@ groom:
 # ---------------------------------------------------------------------------
 # verify_fix_rounds: how many self-fix attempts the verify-fix sub-agent makes
 # before reporting stuck. The CLI defaults to 3 if this key is absent, so
-# existing hubs do not need to add this key — only new hubs set up from this
+# existing hubs do not need to add this key -- only new hubs set up from this
 # template will have it pre-populated.
 
 merge:
@@ -170,6 +184,6 @@ merge:
 # as a substring of a plan batch's verify: command, mill-merge-in skips that
 # command and logs: [verify] skipped <path> (allowlisted as known-broken).
 # Values are per-machine and belong in .millhouse/config.local.yaml, not here
-# in the shared wiki config — this block is for schema documentation only.
+# in the shared wiki config -- this block is for schema documentation only.
 # verify:
 #   skip_known_broken: []  # e.g. ["tests/foo/test_flaky.py"]

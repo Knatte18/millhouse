@@ -98,6 +98,7 @@ __all__ = [
     "resolve_hub_path",
     "resolve_main_worktree_root",
     "resolve_wiki_path",
+    "resolve_mill_config_path",
     "resolve_worktrees_dir",
     "resolve_short_name",
     "resolve_hub_relative_path",
@@ -443,6 +444,18 @@ def resolve_wiki_path(git_toplevel: Path) -> Path:
             return override_path
         return (main_root / override_path).resolve()
     return resolve_path("wiki", main_root)
+
+
+def resolve_mill_config_path(repo_root: Path) -> Path:
+    """Return the hub-root mill-config.yaml path.
+
+    Args:
+        repo_root: Absolute path to the hub directory (worktree root or repo root).
+
+    Returns:
+        Absolute ``Path`` of the mill-config.yaml file.
+    """
+    return repo_root / "mill-config.yaml"
 
 
 def resolve_task_path(worktree_root: Path, cfg_relative_path: str) -> Path:

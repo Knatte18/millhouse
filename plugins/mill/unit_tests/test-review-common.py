@@ -480,35 +480,36 @@ def main() -> int:
 
     # load_config: valid YAML + local override
     with tempfile.TemporaryDirectory() as tmpdir:
-        wiki = Path(tmpdir) / "wiki"
+        tmpdir_path = Path(tmpdir)
+        wiki = tmpdir_path / "wiki"
         wiki.mkdir()
-        mill = Path(tmpdir) / ".millhouse"
+        mill = tmpdir_path / ".millhouse"
         mill.mkdir()
-        (wiki / "config.yaml").write_text(
+        _write_mill_config_yaml = tmpdir_path / "mill-config.yaml"
+        _write_mill_config_yaml.write_text(
             "roles:\n  plan-review:\n    batch:\n      rounds: 3\n      reviewer: sonnetmax\n",
             encoding="utf-8",
         )
-        cfg = load_config(wiki, mill)
+        cfg = load_config(tmpdir_path, mill)
         assert cfg["roles"]["plan-review"]["batch"]["rounds"] == 3
-        print("PASS: load_config loads shared config")
+        print("PASS: load_config loads repo config")
 
         (mill / "config.local.yaml").write_text(
             "roles:\n  plan-review:\n    batch:\n      rounds: 1\n",
             encoding="utf-8",
         )
-        cfg = load_config(wiki, mill)
+        cfg = load_config(tmpdir_path, mill)
         assert cfg["roles"]["plan-review"]["batch"]["rounds"] == 1
         assert cfg["roles"]["plan-review"]["batch"]["reviewer"] == "sonnetmax"
         print("PASS: load_config local override wins; other keys preserved")
 
     # load_config: missing config -> ReviewError
     with tempfile.TemporaryDirectory() as tmpdir:
-        wiki = Path(tmpdir) / "wiki"
-        wiki.mkdir()
-        mill = Path(tmpdir) / ".millhouse"
+        tmpdir_path = Path(tmpdir)
+        mill = tmpdir_path / ".millhouse"
         mill.mkdir()
         try:
-            load_config(wiki, mill)
+            load_config(tmpdir_path, mill)
             errors += 1
         except ReviewError as e:
             assert "Missing config" in str(e)
@@ -518,11 +519,10 @@ def main() -> int:
     with tempfile.TemporaryDirectory() as tmpdir:
         import io as _io
         import contextlib as _cl
-        wiki = Path(tmpdir) / "wiki"
-        wiki.mkdir()
-        mill = Path(tmpdir) / ".millhouse"
+        tmpdir_path = Path(tmpdir)
+        mill = tmpdir_path / ".millhouse"
         mill.mkdir()
-        (wiki / "config.yaml").write_text(
+        (tmpdir_path / "mill-config.yaml").write_text(
             "roles:\n  plan-review:\n    batch:\n      rounds: 3\n      reviewer: sonnetmax\n",
             encoding="utf-8",
         )
@@ -532,7 +532,7 @@ def main() -> int:
         )
         _err_buf = _io.StringIO()
         with _cl.redirect_stderr(_err_buf):
-            cfg = load_config(wiki, mill)
+            cfg = load_config(tmpdir_path, mill)
         _warning = _err_buf.getvalue()
         assert _warning, "expected a stderr warning, got empty string"
         assert "review" in _warning, f"warning should mention 'review': {_warning!r}"

@@ -53,7 +53,7 @@ def main(argv: list[str] | None = None) -> int:
     home_tasks: list = []
     try:
         wiki_path = resolve_wiki_path(git_root)
-        cfg = _load_config(wiki_path, git_root)
+        cfg = _load_config(git_root, git_root)
         home_md = wiki_path / "Home.md"
         if home_md.exists():
             home_tasks = _tasks_md.parse(home_md.read_text(encoding="utf-8"))
@@ -104,7 +104,7 @@ def main(argv: list[str] | None = None) -> int:
     # Load per-worktree config to honour hub_relative_path.
     if wiki_path is not None:
         try:
-            worktree_cfg = _load_config(wiki_path, selected_path)
+            worktree_cfg = _load_config(selected_path, selected_path)
         except SystemExit:
             worktree_cfg = {}
     else:

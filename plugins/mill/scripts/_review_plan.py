@@ -316,7 +316,8 @@ def run(
     deletes_union = compute_deletes_union(plan_dir)
 
     # 3. Load reviewers via registry
-    registry = _reviewers.load(wiki_root)
+    hub_dir = project_root
+    registry = _reviewers.load(hub_dir)
 
     batch_reviewer_name = cfg["roles"]["plan-review"]["batch"]["reviewer"]
     if batch_reviewer_name is None or cfg["roles"]["plan-review"]["batch"]["rounds"] == 0:

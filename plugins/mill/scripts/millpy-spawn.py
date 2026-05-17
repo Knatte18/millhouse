@@ -55,16 +55,22 @@ from _spawn_core import pick_worktree_color
 # --------------------------------------------------------------------------- #
 
 
-def _load_config(wiki_path: Path, worktree_root: Path) -> dict:
-    """Load ``wiki/config.yaml`` deep-merged with ``.millhouse/config.local.yaml``.
+def _load_config(repo_root: Path, worktree_root: Path) -> dict:
+    """Load config; raises SystemExit when no config source is found.
 
-    Raises ``SystemExit`` when ``wiki/config.yaml`` does not exist — mill-spawn
-    cannot run without a shared config.
+    Strict-mode wrapper around ``_config.load_config``: mill-spawn requires
+    a properly initialised config to resolve branch prefixes and other
+    spawn settings, so a missing source is always a fatal user error here.
     """
-    shared_path = wiki_path / "config.yaml"
-    if not shared_path.exists():
-        raise SystemExit(f"Missing config at {shared_path}")
-    return _load_config_lenient(wiki_path, worktree_root)
+    mill_cfg = repo_root / "mill-config.yaml"
+    wiki_cfg = None
+    try:
+        wiki_cfg = resolve_wiki_path(repo_root) / "config.yaml"
+    except SystemExit:
+        wiki_cfg = None
+    if not mill_cfg.exists() and (wiki_cfg is None or not wiki_cfg.exists()):
+        raise SystemExit(f"Missing config: searched {mill_cfg} and {wiki_cfg}")
+    return _load_config_lenient(repo_root, worktree_root)
 
 
 def _build_tokens(
@@ -108,7 +114,7 @@ def main(argv: list[str] | None = None) -> int:
 
     git_root = resolve_git_root()
     wiki_path = resolve_wiki_path(git_root)
-    cfg = _load_config(wiki_path, resolve_hub_path())
+    cfg = _load_config(git_root, resolve_hub_path())
     hub_subpath = cfg.get("hub_relative_path", ".")
     spawn_cfg = cfg.get("spawn", {})
 

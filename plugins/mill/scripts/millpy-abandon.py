@@ -39,7 +39,7 @@ def main() -> int:
     wiki_path = _paths.resolve_wiki_path(git_root)
     hub_dir = _paths.resolve_hub_path()
     mill_dir = hub_dir / ".millhouse"
-    cfg = _review_common.load_config(wiki_path, mill_dir)
+    cfg = _review_common.load_config(git_root, mill_dir)
     try:
         slug = _marker.slug_from_branch(git_root, wiki_path, cfg)
     except _marker.MarkerError as exc:

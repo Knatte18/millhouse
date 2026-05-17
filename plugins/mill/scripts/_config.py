@@ -23,12 +23,34 @@ set_local_wiki_overrides(cfg_path, repo_url, branch) -> bool
 """
 from __future__ import annotations
 
+import copy
 import os
 import re
+import sys
 from pathlib import Path
 
 import yaml
-import _machine
+import _paths
+
+__all__ = [
+    "load_config",
+    "deep_merge",
+    "set_local_wiki_overrides",
+    "ENV_REGISTRY",
+    "apply_env_overrides",
+    "walk_unknown_keys",
+    "warn_unknown_keys",
+    "resolve_plugin_template_path",
+]
+
+ENV_REGISTRY = {
+    "MILL_DISCUSSION_REVIEWER": ("roles", "discussion-review", "holistic", "reviewer"),
+    "MILL_PLAN_REVIEWER":       ("roles", "plan-review",       "holistic", "reviewer"),
+    "MILL_PLAN_BATCH_REVIEWER": ("roles", "plan-review",       "batch",    "reviewer"),
+    "MILL_CODE_REVIEWER":       ("roles", "code-review",       "holistic", "reviewer"),
+    "MILL_CODE_BATCH_REVIEWER": ("roles", "code-review",       "batch",    "reviewer"),
+    "MILL_IMPLEMENTER":         ("roles", "implementer",       "model"),
+}
 
 
 class ConfigError(ValueError):
@@ -39,47 +61,150 @@ class ConfigError(ValueError):
 _ENV_INTERP_RE = re.compile(r"\$\{([A-Z_][A-Z0-9_]*)(:-(.*?))?\}")
 
 
-def load_config(wiki_path: Path, worktree_root: Path) -> dict:
-    """Load ``wiki/config.yaml`` deep-merged with ``.millhouse/config.local.yaml``.
+def apply_env_overrides(cfg: dict) -> dict:
+    """Apply environment variable overrides to a config dict.
 
-    Uses a two-step stub-aware read: first reads the stub at
-    ``worktree_root / .millhouse / config.local.yaml`` (which may contain
-    only ``hub_relative_path:``); if the stub declares a non-root
-    ``hub_relative_path``, reads the real config from
-    ``worktree_root / hub_subpath / .millhouse / config.local.yaml`` and
-    deep-merges it on top.  Both layers are merged into the wiki config so
-    ``hub_relative_path`` from the stub is available alongside all
-    operational keys from the real config.
-
-    The machine layer at ``~/.millhouse/config.machine.yaml`` is read
-    between the wiki and worktree-stub layers via ``_machine.load_layer()``.
-    Missing machine file → ``_machine.load_layer`` returns ``{}`` and the
-    merge is a no-op.
-
-    Returns an empty dict when ``wiki/config.yaml`` does not exist.
-    Callers that require the file to be present should add their own
-    guard after calling this function.
+    For each entry in ENV_REGISTRY, reads the corresponding environment variable.
+    If the value is non-empty, walks the key tuple in the config and sets the final
+    segment to the env value. Empty-string env values are treated as unset.
 
     Args:
-        wiki_path:     Absolute path to the wiki repository root.
+        cfg: Base configuration dict.
+
+    Returns:
+        New dict with env overrides applied.
+    """
+    result = copy.deepcopy(cfg)
+    for env_var, key_tuple in ENV_REGISTRY.items():
+        env_val = os.environ.get(env_var, "")
+        if not env_val:
+            continue
+        current = result
+        for seg in key_tuple[:-1]:
+            current = current.setdefault(seg, {})
+        current[key_tuple[-1]] = env_val
+    return result
+
+
+def walk_unknown_keys(actual: dict, template: dict, prefix: str = "") -> list[str]:
+    """Find keys present in actual but not in template.
+
+    Recurses into nested dicts only when both actual[key] and template[key] are
+    dicts. Lists are treated as leaves (not descended).
+
+    Args:
+        actual:  The actual configuration dict.
+        template: The template configuration dict.
+        prefix:  Current key path prefix (for recursion).
+
+    Returns:
+        List of dotted key paths (e.g., ["a.b.c", "x.y"]).
+    """
+    unknown = []
+    for key, actual_val in actual.items():
+        current_path = f"{prefix}.{key}" if prefix else key
+        if key not in template:
+            unknown.append(current_path)
+        elif isinstance(actual_val, dict) and isinstance(template.get(key), dict):
+            unknown.extend(walk_unknown_keys(actual_val, template[key], current_path))
+    return unknown
+
+
+def warn_unknown_keys(actual: dict, template: dict, source_label: str) -> None:
+    """Emit warnings to stderr for unknown keys in actual config.
+
+    Args:
+        actual: The actual configuration dict.
+        template: The template configuration dict.
+        source_label: Label for the source (e.g., "mill-config.yaml").
+    """
+    unknown = walk_unknown_keys(actual, template)
+    for path in unknown:
+        print(f"[config] unknown key: {path} (in {source_label})", file=sys.stderr)
+
+
+def resolve_plugin_template_path(filename: str) -> Path:
+    """Resolve a plugin template path.
+
+    Uses ${CLAUDE_PLUGIN_ROOT}/templates/<filename> when the env var is set,
+    otherwise falls back to the source-tree path relative to this file.
+
+    Args:
+        filename: The template filename (e.g., "mill-config.yaml").
+
+    Returns:
+        Absolute Path to the template file.
+    """
+    plugin_root_env = os.environ.get("CLAUDE_PLUGIN_ROOT", "")
+    if plugin_root_env:
+        return Path(plugin_root_env).resolve() / "templates" / filename
+    return Path(__file__).resolve().parent.parent / "templates" / filename
+
+
+def load_config(repo_root: Path, worktree_root: Path) -> dict:
+    """Load mill config with overlay from plugin template, repo layer, and local layer.
+
+    Merge order (lowest to highest precedence):
+    1. Plugin template (mill-config.yaml)
+    2. Repo layer (mill-config.yaml at repo root, or fallback to wiki/config.yaml)
+    3. Local stub (worktree_root / .millhouse / config.local.yaml)
+    4. Local real (when hub_relative_path is set)
+    5. Environment variable overrides
+
+    Returns an empty dict when no sources are found.
+
+    Args:
+        repo_root:     Absolute path to the hub repository root.
         worktree_root: Absolute path to the worktree git repository root.
 
     Returns:
-        Merged configuration dict (may be empty). Merge order, lowest to
-        highest precedence: wiki → machine → worktree-stub → worktree-real.
+        Merged configuration dict (may be empty).
     """
-    shared_path = wiki_path / "config.yaml"
-    cfg: dict = {}
-    if shared_path.exists():
-        cfg = yaml.safe_load(shared_path.read_text(encoding="utf-8")) or {}
+    # 1. Load plugin template
+    template_path = resolve_plugin_template_path("mill-config.yaml")
+    if template_path.exists():
+        cfg = yaml.safe_load(template_path.read_text(encoding="utf-8")) or {}
+    else:
+        cfg = {}
+    template_cfg = copy.deepcopy(cfg)
 
-    cfg = deep_merge(cfg, _machine.load_layer())
+    # 2. Resolve repo-layer sources
+    mill_cfg_path = _paths.resolve_mill_config_path(repo_root)
+    wiki_cfg_path = None
+    try:
+        wiki_cfg_path = _paths.resolve_wiki_path(repo_root) / "config.yaml"
+    except (Exception, SystemExit):
+        wiki_cfg_path = None
 
+    # 3. Apply repo-layer merge logic (both-files-present and fallback rules)
+    source_label = ""
+    if mill_cfg_path.exists():
+        repo_cfg = yaml.safe_load(mill_cfg_path.read_text(encoding="utf-8")) or {}
+        cfg = deep_merge(cfg, repo_cfg)
+        source_label = "mill-config.yaml"
+        if wiki_cfg_path and wiki_cfg_path.exists():
+            print(
+                f"[config] stale wiki/config.yaml detected at {wiki_cfg_path}; "
+                f"mill-config.yaml wins -- remove the wiki file via mill-setup",
+                file=sys.stderr,
+            )
+    elif wiki_cfg_path and wiki_cfg_path.exists():
+        wiki_cfg = yaml.safe_load(wiki_cfg_path.read_text(encoding="utf-8")) or {}
+        cfg = deep_merge(cfg, wiki_cfg)
+        source_label = "wiki/config.yaml"
+        print(
+            f"[config] using legacy wiki/config.yaml at {wiki_cfg_path}; "
+            f"rebase onto main to pick up mill-config.yaml",
+            file=sys.stderr,
+        )
+
+    # 4. Apply stub-aware local config logic (preserved from existing code)
     stub_path = worktree_root / ".millhouse" / "config.local.yaml"
     hub_subpath = "."
     if stub_path.exists():
         stub_data = yaml.safe_load(stub_path.read_text(encoding="utf-8")) or {}
         cfg = deep_merge(cfg, stub_data)
+        source_label = "config.local.yaml"
         hub_subpath = stub_data.get("hub_relative_path", ".")
 
     if hub_subpath != ".":
@@ -87,7 +212,16 @@ def load_config(wiki_path: Path, worktree_root: Path) -> dict:
         if real_path.exists():
             real_cfg = yaml.safe_load(real_path.read_text(encoding="utf-8")) or {}
             cfg = deep_merge(cfg, real_cfg)
+
+    # 5. Validate unknown keys
+    warn_unknown_keys(cfg, template_cfg, source_label or "merged config")
+
+    # 6. Apply environment variable overrides
+    cfg = apply_env_overrides(cfg)
+
+    # 7. Apply environment variable interpolation
     cfg = _interpolate_env(cfg)
+
     return cfg
 
 

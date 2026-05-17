@@ -29,7 +29,7 @@ Bootstrap the mill infrastructure from nothing. Produces a working `.millhouse/`
 - `git remote get-url origin` returns a valid URL
 - `uv` is installed (`uv --version` exits 0); install via `irm https://astral.sh/uv/install.ps1 | iex`
 - `${CLAUDE_PLUGIN_ROOT}/scripts/` contains `_junction.py`, `_wiki.py`, `_subprocess_util.py`, `_render.py`, `_setup.py`
-- `${CLAUDE_PLUGIN_ROOT}/templates/config.local.yaml`, `${CLAUDE_PLUGIN_ROOT}/templates/wiki-config.yaml`, and `${CLAUDE_PLUGIN_ROOT}/templates/Home.md` exist
+- `${CLAUDE_PLUGIN_ROOT}/templates/config.local.yaml`, `${CLAUDE_PLUGIN_ROOT}/templates/mill-config.yaml`, `${CLAUDE_PLUGIN_ROOT}/templates/mill-agents.yaml`, and `${CLAUDE_PLUGIN_ROOT}/templates/Home.md` exist
 
 ## Layout assumed
 
@@ -154,29 +154,48 @@ If the helper raises `WikiSetupError` (dest is not a git repo, URL mismatch, bra
 
 If the helper raises `WikiPushError` (from the pull path — `git pull --ff-only` failed due to network failure, credentials, or non-fast-forward / local divergence): halt and instruct the user to inspect and fix the wiki dir manually.
 
-### Phase 3.1 — Seed `wiki/config.yaml` from template
+### Phase 3.0b — Migrate wiki config and agents to hub/plugin
 
-1. If `<wiki-dir>/config.yaml` does not exist: copy `${CLAUDE_PLUGIN_ROOT}/templates/wiki-config.yaml` → `<wiki-dir>/config.yaml` verbatim (no substitution — tokens are resolved at runtime by scripts, not at seed time). Then commit and push via `_wiki.write_commit_push`:
+This phase invokes `millpy-migrate-config.py` to migrate existing wiki-based config to the hub worktree and plugin templates. The script handles three concerns: (a) copy `wiki/config.yaml` to the hub root if not yet present, (b) delete the wiki copy and push the change, (c) diff `wiki/agents.yaml` against the plugin template and either delete (identical) or warn-and-skip (different).
+
+**Ordering constraint:** Phase 3.0b MUST execute before Phase 3.1. If Phase 3.1 ran first against a hub with an existing `wiki/config.yaml`, the operator's custom config would be overwritten by the plugin template's defaults and then silently deleted from the wiki. Do NOT reorder these phases.
+
+Run the migration script:
+
+```bash
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-migrate-config.py"
+```
+
+The operator should expect to see in the output:
+- One of: `[migrate] mill-config.yaml staged` (copy happened), `[migrate] mill-config.yaml already exists` (skipped), or `[migrate] no wiki/config.yaml` (nothing to migrate).
+- Wiki-side cleanup: `[migrate] wiki/config.yaml deleted and pushed` (after copying) or `[migrate] no wiki/config.yaml` (nothing to delete).
+- One of: `[migrate] wiki/agents.yaml identical to plugin template -- deleted and pushed`, `[migrate] wiki/agents.yaml NOT deleted` (warn case with diffs listed), or `[migrate] no wiki/agents.yaml` (nothing to migrate).
+- A notice about the removed machine-config layer.
+
+Idempotency: re-running mill-setup after a successful migration is a no-op for this phase. If the agents migration warned with diffs, copy the unique entries from the printed list into `.millhouse/agents.local.yaml` and re-run mill-setup to retry the agents step.
+
+### Phase 3.1 — Seed mill-config.yaml at hub repo root from template
+
+1. If `<repo_root>/mill-config.yaml` does not exist: copy `${CLAUDE_PLUGIN_ROOT}/templates/mill-config.yaml` → `<repo_root>/mill-config.yaml` verbatim (no substitution — tokens are resolved at runtime by scripts, not at seed time). Then stage via `git add`:
 
    ```bash
-   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "from pathlib import Path; import _wiki; _wiki.write_commit_push(Path(r'<wiki-dir>').resolve(), ['config.yaml'], 'chore: init wiki/config.yaml')"
+   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "from pathlib import Path; import shutil, _subprocess_util; shutil.copyfile(Path(r'${CLAUDE_PLUGIN_ROOT}/templates/mill-config.yaml').resolve(), Path(r'<repo_root>/mill-config.yaml').resolve()); _subprocess_util.run(['git', '-C', r'<repo_root>', 'add', 'mill-config.yaml']); print('mill-config.yaml staged at <repo_root>/mill-config.yaml -- commit it on the main branch to land the migration')"
    ```
 
-2. If `<wiki-dir>/config.yaml` exists: run a block-level upsert:
+2. If `<repo_root>/mill-config.yaml` exists: run a block-level upsert:
 
    ```bash
    PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "
    from pathlib import Path
-   import yaml, _wiki
+   import yaml
 
-   wiki_dir = Path(r'<wiki-dir>').resolve()
-   config_path = wiki_dir / 'config.yaml'
-   template_path = Path(r'${CLAUDE_PLUGIN_ROOT}/templates/wiki-config.yaml').resolve()
+   config_path = Path(r'<repo_root>/mill-config.yaml').resolve()
+   template_path = Path(r'${CLAUDE_PLUGIN_ROOT}/templates/mill-config.yaml').resolve()
 
    existing = yaml.safe_load(config_path.read_text(encoding='utf-8')) or {}
    template  = yaml.safe_load(template_path.read_text(encoding='utf-8')) or {}
 
-   required_keys = ['junctions', 'paths', 'llm', 'pipeline', 'roles', 'notify', 'spawn', 'groom']
+   required_keys = ['junctions', 'paths', 'llm', 'pipeline', 'roles', 'notify', 'spawn', 'groom', 'merge']
    missing = [k for k in required_keys if k not in existing]
    if missing:
        for k in missing:
@@ -184,23 +203,25 @@ If the helper raises `WikiPushError` (from the pull path — `git pull --ff-only
        config_path.write_text(yaml.dump(existing, allow_unicode=True, sort_keys=False), encoding='utf-8')
        print('upserted blocks:', missing)
    else:
-       print('config.yaml validation OK -- all required blocks present')
+       print('mill-config.yaml validation OK -- all required blocks present')
    "
    ```
 
-   After running: if any blocks were upserted (i.e., `missing` was non-empty), commit and push via `_wiki.write_commit_push`:
+   After running: if any blocks were upserted (i.e., `missing` was non-empty), stage and commit:
 
    ```bash
    PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "
    from pathlib import Path
-   import _wiki
-   _wiki.write_commit_push(Path(r'<wiki-dir>').resolve(), ['config.yaml'], 'chore: upsert missing config.yaml blocks from template')
+   import _subprocess_util
+   git_root = Path(r'<repo_root>').resolve()
+   _subprocess_util.run(['git', '-C', str(git_root), 'add', 'mill-config.yaml'])
+   _subprocess_util.run(['git', '-C', str(git_root), 'commit', '-m', 'chore: upsert missing mill-config.yaml blocks from template'])
    "
    ```
 
    Log which blocks were added (from the `print('upserted blocks:', ...)` output) so the operator can see the diff.
 
-**Why verbatim copy:** the token placeholders (`<WIKI_PATH>` etc.) are resolved by `_junction.resolve_target` and `_wiki.read_hardlinks` at runtime. Substituting at seed time would bake in machine-specific paths. If `config.yaml` already exists, the upsert step validates and fills any required top-level blocks that are missing (`paths`, `llm`, `pipeline`, `roles`, `notify`, `spawn`, `groom`). This prevents downstream `KeyError` in mill-spawn when an older config.yaml predates a required schema block.
+**Why verbatim copy:** the token placeholders (`<WIKI_PATH>` etc.) are resolved by `_junction.resolve_target` and `_wiki.read_hardlinks` at runtime. Substituting at seed time would bake in machine-specific paths. If `mill-config.yaml` already exists, the upsert step validates and fills any required top-level blocks that are missing (`paths`, `llm`, `pipeline`, `roles`, `notify`, `spawn`, `groom`, `merge`). This prevents downstream `KeyError` in mill-spawn when an older mill-config.yaml predates a required schema block.
 
 ### Phase 3.2 — Persist wiki overrides to `config.local.yaml`
 
@@ -417,28 +438,6 @@ else:
 "
 ```
 
-### Phase 4.95 — Probe machine-level config (read-only)
-
-Read-only check that `~/.millhouse/config.machine.yaml` is present and parseable. Never creates, prompts, or halts.
-
-```bash
-PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "
-import _machine
-status, detail = _machine.probe()
-path = _machine.machine_config_path()
-if status == _machine.MISSING:
-    print(f'{path}: not present (optional - copy plugins/mill/templates/config.machine.yaml here to set machine-wide overrides)')
-elif status == _machine.PRESENT:
-    keys = sorted(detail.keys()) if isinstance(detail, dict) else []
-    summary = ', '.join(keys) if keys else '(empty)'
-    print(f'{path}: loaded ({len(keys)} top-level keys: {summary})')
-else:
-    print(f'{path}: present but parse failed ({detail}); fix or remove the file')
-"
-```
-
-MALFORMED status is reported but does NOT halt the phase — the operator is responsible for fixing the file; subsequent mill commands will still hit the YAML parse error when they load config, so this phase is purely an early warning.
-
 ### Phase 5 — Seed `.millhouse/config.local.yaml`
 
 1. If `.millhouse/config.local.yaml` exists: skip.
@@ -498,7 +497,7 @@ The hub is always coloured `#2d7d46` so the operator can spot it instantly. mill
 Render and write via `_vscode.write_settings`:
 
 ```bash
-PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "from pathlib import Path; import yaml; import _vscode; from _paths import resolve_short_name; cfg = yaml.safe_load(Path('<wiki-dir>/config.yaml').read_text(encoding='utf-8')); _vscode.write_settings(color_hex='#2d7d46', target=Path('.vscode/settings.json'), short_name=resolve_short_name(cfg, '<repo-name>'))"
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "from pathlib import Path; import yaml; import _vscode; from _paths import resolve_short_name; cfg = yaml.safe_load(Path('<repo-dir>/mill-config.yaml').read_text(encoding='utf-8')); _vscode.write_settings(color_hex='#2d7d46', target=Path('.vscode/settings.json'), short_name=resolve_short_name(cfg, '<repo-name>'))"
 ```
 
 ### Phase 8 — Verify + report
@@ -506,14 +505,13 @@ PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/
 Check every invariant; halt with a specific error if any fails:
 
 - `<WIKI_PATH>` is a git repo (the cloned wiki)
-- `<WIKI_PATH>/config.yaml` exists
+- `<repo-root>/mill-config.yaml` exists
 - `<container>/wts/` exists (container-form) or `<container>/` exists (prefix-form)
 - `<container>/portals/` exists (container-form)
 - `hub/.portals` exists and resolves to `<container>/portals/`
 - Every hub junction (entries without `<SLUG>` from `wiki/config.yaml`) exists and resolves to its expected target
 - `.gitignore` contains the mill-managed marker block with glob entries
 - `hub_relative_path:` is set in `.millhouse/config.local.yaml`
-- Machine-level config at `~/.millhouse/config.machine.yaml` (if present) parses as valid YAML — verify via `_machine.probe()` returning `MISSING` or `PRESENT`, not `MALFORMED`.
 - Every script in `_shortcuts.SHORTCUT_SCRIPTS` has a wrapper at `.millhouse/<script>.ps1` (and no legacy `.millhouse/<script>.py` exists)
 - `PYTHONPATH` user env var contains `<CLAUDE_PLUGIN_ROOT>/scripts` (verify via `[System.Environment]::GetEnvironmentVariable('PYTHONPATH', 'User')`)
 - `$PROFILE` contains the `# mill-venv-start` / `# mill-venv-end` block (verify via `Select-String -Path $PROFILE -Pattern "mill-venv-start" -Quiet`)
@@ -533,7 +531,6 @@ mill-setup complete.
   Wiki clone:        <WIKI_PATH>
   Local config:      .millhouse/config.local.yaml
   hub_relative_path: <hub_subpath>
-  Machine config:    <path-or-"(none)">
   Tasks (Home):      <WIKI_PATH>/Home.md  (hardlinked as tasks.md)
   Sidebar:           <WIKI_PATH>/_Sidebar.md
   VS Code:           .vscode/settings.json (titleBar = #2d7d46 green)
@@ -541,7 +538,7 @@ mill-setup complete.
   PYTHONPATH (User): <scripts>
   Profile activation: $PROFILE — mill-venv-start block present
 
-Junctions (from wiki config.yaml):
+Junctions (from mill-config.yaml):
   Hub-scope (created now):
     <path-a> -> <resolved-target-a>
   Per-worktree (created by mill-spawn):
@@ -549,8 +546,6 @@ Junctions (from wiki config.yaml):
 
 Next: /mill-add <slug> --title "..." [--summary "..."] [--proposal-body "..."] to add tasks, /mill-status to list them.
 ```
-
-`Machine config:` format: when `_machine.probe()` returns `MISSING`, print `(none)`; on `PRESENT`, print the absolute path; on `MALFORMED`, print `<path> (MALFORMED — fix manually)`.
 
 ## Error conditions
 
