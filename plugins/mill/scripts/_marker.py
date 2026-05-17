@@ -15,6 +15,7 @@ Public API:
 """
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import _subprocess_util
@@ -47,14 +48,17 @@ def slug_from_branch(git_root: Path, wiki_path: Path, cfg: dict) -> str:
         raise MarkerError("detached HEAD or non-branch state")
 
     prefix = cfg.get("spawn", {}).get("branch_prefix", "")
-    if prefix and not branch.startswith(prefix):
-        raise MarkerError(
-            f"branch {branch!r} does not start with configured prefix {prefix!r}"
-        )
-    slug = branch.removeprefix(prefix)
 
     home_text = (wiki_path / "Home.md").read_text(encoding="utf-8")
     tasks = _tasks_md.parse(home_text)
+
+    if prefix and not branch.startswith(prefix):
+        task = next((t for t in tasks if t.slug == branch), None)
+        if task is not None:
+            print(f"[_marker] warning: branch {branch!r} does not match prefix {prefix!r} but slug exists in Home.md; accepting", file=sys.stderr)
+            return branch
+        raise MarkerError(f"branch {branch!r} does not start with configured prefix {prefix!r} and is not a known slug")
+    slug = branch.removeprefix(prefix)
 
     task = next((t for t in tasks if t.slug == slug), None)
     if task is None:

@@ -1,6 +1,8 @@
 """Unit tests for plugins/mill/scripts/_marker.py."""
 from __future__ import annotations
 
+import contextlib
+import io
 import subprocess
 import sys
 import tempfile
@@ -171,6 +173,43 @@ def test_slug_from_branch_prefix_mismatch() -> None:
     print("PASS: test_slug_from_branch_prefix_mismatch")
 
 
+def test_slug_from_branch_prefix_mismatch_bare_branch_known() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = Path(tmp)
+        worktree_path, wiki_path = _test_helpers._make_task_worktree(
+            tmp, "foo", "Foo Title", branch_prefix="foo", phase="active"
+        )
+        cfg = {"spawn": {"branch_prefix": "hanf/"}}
+        stderr_capture = io.StringIO()
+        with contextlib.redirect_stderr(stderr_capture):
+            slug = _marker.slug_from_branch(worktree_path, wiki_path, cfg)
+        if slug != "foo":
+            raise AssertionError(f"expected 'foo', got {slug!r}")
+        stderr_output = stderr_capture.getvalue()
+        if "warning: branch 'foo' does not match prefix" not in stderr_output:
+            raise AssertionError(f"expected warning in stderr, got: {stderr_output!r}")
+    print("PASS: test_slug_from_branch_prefix_mismatch_bare_branch_known")
+
+
+def test_slug_from_branch_prefix_mismatch_bare_branch_unknown() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = Path(tmp)
+        worktree_path, wiki_path = _test_helpers._make_task_worktree(
+            tmp, "foo", "Foo Title", branch_prefix="foo", phase="active"
+        )
+        (wiki_path / "Home.md").write_text(
+            "## Baz Title\n[[baz]] [active]\n\n_body_\n", encoding="utf-8"
+        )
+        cfg = {"spawn": {"branch_prefix": "hanf/"}}
+        try:
+            _marker.slug_from_branch(worktree_path, wiki_path, cfg)
+        except _marker.MarkerError:
+            pass
+        else:
+            raise AssertionError("expected MarkerError for unknown slug")
+    print("PASS: test_slug_from_branch_prefix_mismatch_bare_branch_unknown")
+
+
 def test_slug_from_branch_user_prefix_no_config_prefix() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         tmp = Path(tmp)
@@ -227,6 +266,8 @@ def main() -> int:
         test_slug_from_branch_abandoned,
         test_slug_from_branch_none,
         test_slug_from_branch_prefix_mismatch,
+        test_slug_from_branch_prefix_mismatch_bare_branch_known,
+        test_slug_from_branch_prefix_mismatch_bare_branch_unknown,
         test_slug_from_branch_user_prefix_no_config_prefix,
         test_slug_from_branch_user_prefix_slug_not_found,
         test_task_data_happy_path,
