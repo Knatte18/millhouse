@@ -28,6 +28,7 @@ External interface: the CLI's argv (`--max-rounds`) and stdout JSON shape are un
   - `plugins/mill/skills/mill-start/SKILL.md`
 - **Edits:**
   - `plugins/mill/scripts/millpy-review-discussion.py`
+  - `plugins/mill/unit_tests/test-review-cli.py`
 - **Creates:** none
 - **Deletes:** none
 - **Requirements:**
