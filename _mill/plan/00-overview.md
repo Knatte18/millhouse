@@ -70,15 +70,14 @@ batches:
 
 ## All Files Touched
 
-- `_mill/discussion.md`
 - `mill-config.yaml`
 - `plugins/mill/scripts/_review_code.py`
 - `plugins/mill/scripts/_review_common.py`
 - `plugins/mill/scripts/_review_discussion.py`
-- `plugins/mill/scripts/_review_plan.py`
 - `plugins/mill/scripts/millpy-review-discussion.py`
 - `plugins/mill/skills/mill-go/SKILL.md`
 - `plugins/mill/templates/mill-config.yaml`
 - `plugins/mill/unit_tests/test-review-code-flow.py`
 - `plugins/mill/unit_tests/test-review-common.py`
 - `plugins/mill/unit_tests/test-review-discussion-flow.py`
+- `plugins/mill/unit_tests/test-review-plan-flow.py`
