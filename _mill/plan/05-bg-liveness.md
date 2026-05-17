@@ -62,17 +62,16 @@ External interface: a single new module with one function. Stdlib only -- no new
           return (False, pid)
       except PermissionError:
           return (True, pid)
-      except OSError as exc:
-          if exc.errno == errno.EPERM:
-              return (True, pid)
-          if exc.errno == errno.ESRCH:
-              return (False, pid)
-          # Inconclusive (Windows specific or transient). Fall through to mtime fallback.
+      except OSError:
+          # Unknown errno from os.kill (Windows-specific or transient) -- fall through to mtime fallback.
+          pass
       mtime = log_path.stat().st_mtime
       if (time.time() - mtime) > _STALE_LOG_SECONDS:
           return (False, pid)
       return (True, pid)
   ```
+
+  The `except OSError` block intentionally contains no errno-specific branches: Python 3.3+ promotes `OSError(errno=ESRCH)` to `ProcessLookupError` and `OSError(errno=EPERM/EACCES)` to `PermissionError`, so the typed `except` clauses above already exhaust those cases. The remaining `except OSError` catches the residual Windows-specific errnos (e.g. `EINVAL=22` for out-of-range PIDs returned by `OpenProcess(ERROR_INVALID_PARAMETER=87)`) and routes them to the mtime fallback. The `errno` import in the module is retained for the `_STALE_LOG_SECONDS` neighbourhood comment-only docstring use; if the implementer prefers to drop it now that no branch references `errno.E*`, remove `import errno` from the module header. Either choice is acceptable.
 
   Constants `_PID_RE`, `_EXIT_RE`, `_STALE_LOG_SECONDS` are module-private (underscore prefix). The function's docstring documents the full behaviour matrix exactly as the table above (use a tab-aligned text representation, not a literal markdown table). Do NOT add any other public functions or constants to this module -- one function, one purpose.
 - **Commit:** `feat(bg): add _bg.is_bg_worker_alive PID-liveness helper`
@@ -93,13 +92,15 @@ External interface: a single new module with one function. Stdlib only -- no new
   2. `test_log_no_pid_line` -- write a log file containing only `some unrelated text\n` (no WORKER PID line). Expect `(False, None)`.
   3. `test_log_with_exit` -- write a log containing `[mill-bg] WORKER PID=12345 START 2026-05-17T15:00:00Z\nsome output\n[mill-bg] EXIT 0\n`. Expect `(False, 12345)`. The PID need not be valid because the EXIT line short-circuits the probe.
   4. `test_log_live_pid` -- write a log containing `[mill-bg] WORKER PID={os.getpid()} START 2026-05-17T15:00:00Z\nsome output\n` (no EXIT line). Use `os.getpid()` -- the test's own PID is guaranteed live. Expect `(True, os.getpid())`.
-  5. `test_log_dead_pid_no_exit` -- write a log containing `[mill-bg] WORKER PID=99999999 START 2026-05-17T15:00:00Z\nsome output\n` (no EXIT line). PID 99999999 is almost certainly invalid on any modern OS. Expect `(False, 99999999)`. (If the test machine happens to have that PID assigned the test would false-fail; this is acceptable since the probability is negligible. Document the caveat in a one-line comment above the test method.)
+  5. `test_log_dead_pid_no_exit` -- write a log containing `[mill-bg] WORKER PID=99999999 START 2026-05-17T15:00:00Z\nsome output\n` (no EXIT line). PID 99999999 is almost certainly invalid on any modern OS. **Backdate the log mtime via `os.utime(log_path, (old_ts, old_ts))` where `old_ts = time.time() - (_STALE_LOG_SECONDS + 60)`** so the function exercises the mtime fallback consistently on every platform. On Linux/macOS the `os.kill(99999999, 0)` probe raises `ProcessLookupError` and the test returns `(False, 99999999)` via the typed-except path -- the backdated mtime is irrelevant on that platform. On Windows the probe raises `OSError(errno=EINVAL=22)` (`OpenProcess(ERROR_INVALID_PARAMETER=87)` for out-of-range PIDs); the bare `except OSError` falls through to the mtime check, the backdated mtime triggers the staleness branch, and the test returns `(False, 99999999)`. Expect `(False, 99999999)` on both platforms. (Document in a one-line comment above the test method that PID 99999999 is assumed invalid; on the unlikely chance the test machine has it allocated the test would false-fail.)
 
-  Do NOT test the mtime-fallback Windows path -- exercising it requires either a real Windows-only condition or backdating a file's mtime, which is platform-specific and brittle. The Card 14 implementation guarantees the fallback is defensive (returns `(True, pid)` for fresh logs even if the kill probe is inconclusive); manual operator observation will catch regressions there.
+  Add a sixth case `test_log_live_pid_with_stale_mtime` -- write a log with `[mill-bg] WORKER PID={os.getpid()} START ...`, no EXIT, and backdate the mtime by `_STALE_LOG_SECONDS + 60` seconds. Expect `(True, os.getpid())`: the kill probe succeeds (PID is live), so the function returns from the `try` block BEFORE reaching the mtime fallback. This guards against a regression where the mtime check is mistakenly placed inside the try-block instead of after it.
+
+  Do not write a separate Windows-only test for the EINVAL → mtime path; case 5 above already covers that platform-specific branch via the backdated mtime, and case 6 verifies the live-PID path is not mtime-gated.
 
   Standalone-runnable (`python plugins/mill/unit_tests/test-bg-liveness.py`) and via `run-all.py`.
 - **Commit:** `test(bg): cover is_bg_worker_alive across five log/probe cases`
 
 ## Batch Tests
 
-`verify:` runs `test-bg-liveness.py`. The five cases cover the entire decision matrix except the Windows-only mtime fallback (intentionally excluded -- see Card 15 Requirements). No other test file is affected.
+`verify:` runs `test-bg-liveness.py`. The six cases cover the entire decision matrix: missing log, missing PID line, log with EXIT, live PID via the typed-except path, dead PID via the mtime fallback (case 5 -- portable across Linux/macOS/Windows by backdating mtime so the EINVAL-fall-through on Windows still resolves to `(False, pid)`), and live PID with stale mtime (regression guard that the mtime check is not inside the try-block). No other test file is affected.

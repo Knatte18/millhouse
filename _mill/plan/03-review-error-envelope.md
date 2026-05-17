@@ -146,14 +146,25 @@ External interface: the three CLI scripts (`millpy-review-{discussion,plan,code}
 - **Creates:**
   - `plugins/mill/unit_tests/test-review-cli-error-envelope.py`
 - **Deletes:** none
-- **Requirements:** Create a `unittest.TestCase` test file that exercises the exit-code contract for all three reviewer CLIs without invoking a real LLM. Use `unittest.mock.patch` to stub the backend's `run` function (e.g. patch `_review_discussion.run` to return `ReviewResult(type="discussion", round=1, verdict="ERROR", blocking_count=0, reviews=[{"scope": "holistic", "verdict": "ERROR", "file": None, "error": "synthetic", "session_id": None}])`) and assert:
-  1. **Engine-internal failure path**: when `<backend>.run` returns a ReviewResult with `verdict: "ERROR"`, the CLI's `main(argv)` MUST return 0 AND stdout MUST parse as JSON whose top-level `verdict` field equals `"ERROR"`.
-  2. **Pre-launch failure path**: when `find_active_slug` is patched to raise `ReviewError("pre-launch test")`, the CLI's `main(argv)` MUST return 1 AND stdout MUST parse as JSON whose top-level `verdict` field equals `"ERROR"` (via `print_error_envelope`) AND stderr MUST contain `ERROR: pre-launch test`.
-  3. **Success path**: when `<backend>.run` returns a ReviewResult with `verdict: "APPROVE"`, the CLI's `main(argv)` MUST return 0 AND stdout MUST parse as JSON whose top-level `verdict` field equals `"APPROVE"`.
+- **Requirements:** Create a `unittest.TestCase` test file that exercises the exit-code contract for all three reviewer CLIs without invoking a real LLM. Use `unittest.mock.patch` to stub every pre-launch dependency AND the backend's `run` function, then assert the contract for three paths:
+  1. **Engine-internal failure path**: when `<backend>.run` is patched to return `ReviewResult(type="discussion", round=1, verdict="ERROR", blocking_count=0, reviews=[{"scope": "holistic", "verdict": "ERROR", "file": None, "error": "synthetic", "session_id": None}])`, the CLI's `main(argv)` MUST return 0 AND stdout MUST parse as JSON whose top-level `verdict` field equals `"ERROR"`.
+  2. **Pre-launch failure path**: when `find_active_slug` (imported INTO the CLI module) is patched to raise `ReviewError("pre-launch test")`, the CLI's `main(argv)` MUST return 1 AND stdout MUST parse as JSON whose top-level `verdict` field equals `"ERROR"` (via `print_error_envelope`) AND stderr MUST contain `ERROR: pre-launch test`.
+  3. **Success path**: when `<backend>.run` is patched to return `ReviewResult(type="discussion", round=1, verdict="APPROVE", blocking_count=0, reviews=[{"scope": "holistic", "verdict": "APPROVE", "file": "/tmp/x.md", "session_id": "abc"}])`, the CLI's `main(argv)` MUST return 0 AND stdout MUST parse as JSON whose top-level `verdict` field equals `"APPROVE"`.
 
-  Parameterise across the three CLIs via a helper method `_run_cli(self, cli_module_name)` or by subclassing -- minimise duplication. The test captures stdout/stderr via `io.StringIO` patched into `sys.stdout`/`sys.stderr`; do NOT spawn subprocesses.
+  **Pre-launch dependency patches (applied for every test case):** the three CLI `main()` functions all call several module-level helpers BEFORE reaching `find_active_slug` or the backend `run()`. In a bare temp/test directory these calls fail and the CLI would short-circuit to a pre-launch envelope, masking the assertions. Patch each of the following with a no-op or canned return so execution reaches the backend dispatch:
+  - `_paths.resolve_wiki_path` -> returns a dummy `Path` (e.g. `Path(tempdir)`).
+  - `_review_common.load_config` -> returns a minimal cfg dict containing at least `{"paths": {...}, "roles": {...}}` (the patched value need not satisfy schema; the engine call is patched too).
+  - `_reviewers.load` -> returns `{}` (empty registry).
+  - `_reviewers.validate_role_refs` -> no-op (`MagicMock(return_value=None)`).
+  - `Path.cwd` -> returns the tempdir so `project_root` resolves to a writable location.
 
-  Note for the implementer: the three CLIs differ in their backend imports (`_review_discussion.run` vs `_review_code.run` vs `_review_plan.run`) and in the second pre-launch path (`millpy-review-plan.py` has the plan-validator gate at lines 95-103 that emits a non-ERROR-envelope JSON shape -- exclude the validator from this test; it is covered separately by `_plan_validate`'s own tests).
+  Each CLI imports these names locally inside `main()` (e.g. `from _paths import resolve_wiki_path`). The patches must target the binding in the CLI module's namespace AFTER the import line executes -- the conventional `unittest.mock.patch("millpy_review_discussion._paths.resolve_wiki_path")` style does not work because the CLIs use bare-name imports. Instead, patch the source module directly: `unittest.mock.patch("_paths.resolve_wiki_path", return_value=Path(tempdir))`. This works because Python's import system caches the lookup at the module table, and the CLI's local-import in `main()` re-binds to the patched value on each call.
+
+  If a particular CLI fails to reach `find_active_slug` despite the patches above, debug by adding `print(f"reached {checkpoint}", file=sys.stderr)` lines in the test to identify which pre-launch step is short-circuiting, and add the missing patch. Do not paper over failures with broad `unittest.mock.patch.object` blanket patches.
+
+  Parameterise across the three CLIs via a helper method `_run_cli(self, cli_module_name, backend_module_name, backend_run_return, *, raise_find_slug=False)` or by subclassing -- minimise duplication. The test captures stdout/stderr via `io.StringIO` patched into `sys.stdout`/`sys.stderr`; do NOT spawn subprocesses.
+
+  Note for the implementer: the three CLIs differ in their backend imports (`_review_discussion.run` vs `_review_code.run` vs `_review_plan.run`) and in the second pre-launch path (`millpy-review-plan.py` has the plan-validator gate at lines 95-103 that emits a non-ERROR-envelope JSON shape -- exclude the validator from this test by patching `_plan_validate.run` to return `[]` (empty errors list); the validator's own tests cover it separately).
 
   Standalone-runnable (`python plugins/mill/unit_tests/test-review-cli-error-envelope.py`) and via `run-all.py`.
 - **Commit:** `test(review-cli): cover exit-0-with-envelope contract for engine-internal failures`
