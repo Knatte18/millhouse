@@ -24,9 +24,11 @@ External interface: the launcher's exit-code-1 plus stderr message becomes the c
   - `plugins/mill/scripts/_config.py`
   - `plugins/mill/scripts/_marker.py`
   - `plugins/mill/scripts/_subprocess_util.py`
+  - `plugins/mill/unit_tests/test-millpy-bg.py`
   - `_mill/discussion.md`
 - **Edits:**
   - `plugins/mill/scripts/millpy-bg.py`
+  - `plugins/mill/unit_tests/test-millpy-bg.py`
 - **Creates:** none
 - **Deletes:** none
 - **Requirements:** In `millpy-bg.py`, modify `_launcher_main` (lines 94-151) to validate cwd between the `git_root` resolution (line 125) and the `scratch_dir` creation (line 127). Insert a `try` block that lazily imports `_paths`, `_config`, `_marker` and calls `_paths.resolve_wiki_path(Path(git_root))`, then `_config.load_config(Path(git_root), Path(git_root))`, then `_marker.slug_from_branch(Path(git_root), wiki_path, cfg)`. **Argument-order note:** `_config.load_config(repo_root, worktree_root)` takes the hub repo root as its first arg, NOT the wiki path. The discussion's post-D7 sketch incorrectly passed `wiki_path` as the first arg; the plan corrects this to `Path(git_root), Path(git_root)` (matching every other call site of `load_config`, e.g. `millpy-claim.py:175`, `millpy-spawn.py:117`). Passing `wiki_path` as `repo_root` would (a) fail to locate `mill-config.yaml`, (b) internally retry `resolve_wiki_path(wiki_path)` which raises `SystemExit` (silently swallowed), and (c) leave `branch_prefix` unset (empty string), which then weakens D1's slug-fallback to accept the wrong terminal — the opposite of D7's intent.
