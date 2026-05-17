@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: discussion-fix-r1
 slug: self-modifying-repo-venv
 branch: hanf/self-modifying-repo-venv
 plan: null
@@ -15,4 +15,5 @@ task_description: |
 
 ```text
 discussing  '2026-05-17T11:03:08Z'
+discussion-fix-r1  '2026-05-17T11:09:20Z'
 ```

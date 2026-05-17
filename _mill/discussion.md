@@ -79,14 +79,20 @@ scripts and wiki schema is a candidate.
 
 ### uv-sync-invocation
 
-- Decision: `uv sync --project plugins/mill` invoked from the worktree
-  root (`$(git rev-parse --show-toplevel)`). No `cd`.
-- Rationale: Matches the CLAUDE.md convention for `uv` invocations from
-  source-tree paths. Worktree-isolation rules forbid `cd` into
-  subdirectories that change shell cwd for downstream commands.
-- Rejected: `cd plugins/mill && uv sync`. Forbidden by the worktree
-  conversation rules and by mill-go's own subsequent `git rev-parse`
-  calls.
+- Decision: `uv sync --project plugins/mill` invoked inside a subshell
+  that changes cwd to the worktree root:
+  `(cd "$WORKTREE_ROOT" && uv sync --project plugins/mill)`. The
+  subshell pattern is the **required** form — bare-shell `cd` is
+  rejected, but a subshell `cd` is allowed because the parent shell's
+  cwd is preserved.
+- Rationale: Matches the CLAUDE.md convention for `uv` invocations
+  from source-tree paths. Worktree-isolation rules forbid the
+  **outer** shell from changing cwd (downstream `git rev-parse` and
+  Python invocations rely on the worktree cwd). The subshell isolates
+  the `cd` to the `uv sync` process only.
+- Rejected: Outer-shell `cd plugins/mill && uv sync`. Forbidden by the
+  worktree conversation rules and by mill-go's own subsequent
+  `git rev-parse` calls.
 
 ### branch-restructure
 
