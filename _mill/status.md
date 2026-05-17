@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-validator-depends-on-cross-check
+phase: approved-merge-in-intent-aware
 slug: mill-misc-fixes-8
 branch: hanf/mill-misc-fixes-8
 plan: _mill/plan
@@ -23,6 +23,7 @@ planned  '2026-05-17T13:26:45Z'
 implementing  '2026-05-17T13:29:17Z'
 approved-helper-api-additions  '2026-05-17T13:37:35Z'
 approved-validator-depends-on-cross-check  '2026-05-17T13:40:34Z'
+approved-merge-in-intent-aware  '2026-05-17T13:42:50Z'
 ```
 
 ## Batches
@@ -38,7 +39,7 @@ batches:
     implementer_session: d18373f8-7211-49e9-b686-f043261adb6c
     start_sha: 124572e1148efdecac712a9764fbd596529b2c50
   - name: merge-in-intent-aware
-    state: running
+    state: approved
     implementer_session: a01209e6-a722-4c80-af6c-5b07d6bd9dcd
     start_sha: 753eaf5e7342122fa7b227eca2ea2817614d5cd2
   - name: test-vscode-processes-skip
