@@ -57,5 +57,7 @@ batches:
     implementer_session: 3a0fc20b-7f0d-44a1-801c-1b0d16b504ef
     start_sha: 5a4d8a2e47a8b2409689d7cad1ac390b668fda60
   - name: millgo-holistic-recovery
-    state: pending
+    state: running
+    implementer_session: 6061b7ee-93a5-4fd1-a588-0a78800bca27
+    start_sha: 8e369ac2c93b9b1c2bfdf377dc95b2739a8245f6
 ```
