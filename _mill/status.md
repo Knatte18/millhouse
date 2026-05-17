@@ -38,7 +38,9 @@ batches:
     implementer_session: d18373f8-7211-49e9-b686-f043261adb6c
     start_sha: 124572e1148efdecac712a9764fbd596529b2c50
   - name: merge-in-intent-aware
-    state: pending
+    state: running
+    implementer_session: a01209e6-a722-4c80-af6c-5b07d6bd9dcd
+    start_sha: 753eaf5e7342122fa7b227eca2ea2817614d5cd2
   - name: test-vscode-processes-skip
     state: pending
   - name: skill-and-docs-prose
