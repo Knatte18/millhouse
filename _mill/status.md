@@ -37,7 +37,9 @@ batches:
     implementer_session: 27ad7769-7a6c-497d-9082-6fe385bd2739
     start_sha: 3054a47d254f23e6f77604345a28c28ad8354065
   - name: snapshot-guard
-    state: pending
+    state: running
+    implementer_session: e3d44ed5-6583-4715-a5d8-52e6b2d6955f
+    start_sha: 8fe51ff3b31673c4317fd7cb64d00bd18531718d
   - name: review-error-envelope
     state: pending
   - name: wiki-noop-commit
