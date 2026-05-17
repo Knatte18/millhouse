@@ -34,8 +34,8 @@ batches:
     start_sha: 75fc9f697e192183602b60e0f2f77845364c2d20
   - name: backend-error-envelope
     state: running
-    implementer_session: df0c215b-cf33-4238-98db-aef932194369
-    start_sha: 5c6b3f52e106e611c826ee94b20811eb07a13743
+    implementer_session: 8038e8c1-d7be-41cc-a75b-470a6afa3e12
+    start_sha: bdb1c0041b858bacf7359ef8fd49d65a1a8b3978
   - name: review-discussion-cli
     state: pending
   - name: mill-go-config
