@@ -43,5 +43,7 @@ batches:
     implementer_session: 5be03502-a1d8-4395-aedc-dab7d7c4bfca
     start_sha: 3ed565dcd82ccf3fa28abaab798fa3b0fedd9b9e
   - name: mill-go-config
-    state: pending
+    state: running
+    implementer_session: 1fdf8927-a0b1-4ea4-946d-c0a146ca9d33
+    start_sha: c9c06a6934086a12ac51b7486b00f2dc9d4fe7cb
 ```
