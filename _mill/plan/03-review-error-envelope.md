@@ -162,9 +162,13 @@ External interface: the three CLI scripts (`millpy-review-{discussion,plan,code}
 
   If a particular CLI fails to reach `find_active_slug` despite the patches above, debug by adding `print(f"reached {checkpoint}", file=sys.stderr)` lines in the test to identify which pre-launch step is short-circuiting, and add the missing patch. Do not paper over failures with broad `unittest.mock.patch.object` blanket patches.
 
-  Parameterise across the three CLIs via a helper method `_run_cli(self, cli_module_name, backend_module_name, backend_run_return, *, raise_find_slug=False)` or by subclassing -- minimise duplication. The test captures stdout/stderr via `io.StringIO` patched into `sys.stdout`/`sys.stderr`; do NOT spawn subprocesses.
+  Parameterise across the three CLIs via a helper method `_run_cli(self, cli_module_name, backend_module_name, backend_run_return, *, raise_find_slug=False, extra_argv=None)` or by subclassing -- minimise duplication. The test captures stdout/stderr via `io.StringIO` patched into `sys.stdout`/`sys.stderr`; do NOT spawn subprocesses.
 
-  Note for the implementer: the three CLIs differ in their backend imports (`_review_discussion.run` vs `_review_code.run` vs `_review_plan.run`) and in the second pre-launch path (`millpy-review-plan.py` has the plan-validator gate at lines 95-103 that emits a non-ERROR-envelope JSON shape -- exclude the validator from this test by patching `_plan_validate.run` to return `[]` (empty errors list); the validator's own tests cover it separately).
+  **`millpy-review-plan.py`-specific argv:** the plan CLI's `main()` calls `resolve_path(cfg["paths"]["plan_dir"], slug)` BEFORE reaching the backend `run()` when `args.skip_validate` is false; `resolve_path` calls `_paths.resolve_git_root()` which fails outside a real mill container-layout git repo. For every plan CLI test case (engine-internal failure, pre-launch failure, success), invoke `main(["--skip-validate"])` -- this bypasses the entire `if not args.skip_validate:` block (validator gate + the offending `resolve_path` call). Do NOT patch `_plan_validate.run`; the `--skip-validate` argv flag is the canonical way to skip the validator gate AND its companion path-resolution, and it does not require any helper-module patching.
+
+  For the discussion CLI and code CLI tests, pass `argv=None` (or `[]`) -- those CLIs do not invoke `resolve_path` before reaching the backend.
+
+  Note for the implementer: the three CLIs differ in their backend imports (`_review_discussion.run` vs `_review_code.run` vs `_review_plan.run`). The validator gate and its `resolve_path` companion live only in `millpy-review-plan.py`; the `--skip-validate` argv flag is the supported escape, not a mock.
 
   Standalone-runnable (`python plugins/mill/unit_tests/test-review-cli-error-envelope.py`) and via `run-all.py`.
 - **Commit:** `test(review-cli): cover exit-0-with-envelope contract for engine-internal failures`

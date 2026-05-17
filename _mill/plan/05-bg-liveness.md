@@ -25,7 +25,7 @@ External interface: a single new module with one function. Stdlib only -- no new
 - **Creates:**
   - `plugins/mill/scripts/_bg.py`
 - **Deletes:** none
-- **Requirements:** Create `plugins/mill/scripts/_bg.py` exposing one public function `is_bg_worker_alive(log_path: Path) -> tuple[bool, int | None]`. The module's top-level docstring states the purpose ("Liveness probe for millpy-bg worker subprocesses; used by orchestrators after resume to decide whether to wait or re-fire."). Imports: `os`, `re`, `errno`, `time`, `pathlib.Path` -- stdlib only.
+- **Requirements:** Create `plugins/mill/scripts/_bg.py` exposing one public function `is_bg_worker_alive(log_path: Path) -> tuple[bool, int | None]`. The module's top-level docstring states the purpose ("Liveness probe for millpy-bg worker subprocesses; used by orchestrators after resume to decide whether to wait or re-fire."). Imports: `os`, `re`, `time`, `pathlib.Path` -- stdlib only.
 
   Behaviour matrix:
 
@@ -71,7 +71,7 @@ External interface: a single new module with one function. Stdlib only -- no new
       return (True, pid)
   ```
 
-  The `except OSError` block intentionally contains no errno-specific branches: Python 3.3+ promotes `OSError(errno=ESRCH)` to `ProcessLookupError` and `OSError(errno=EPERM/EACCES)` to `PermissionError`, so the typed `except` clauses above already exhaust those cases. The remaining `except OSError` catches the residual Windows-specific errnos (e.g. `EINVAL=22` for out-of-range PIDs returned by `OpenProcess(ERROR_INVALID_PARAMETER=87)`) and routes them to the mtime fallback. The `errno` import in the module is retained for the `_STALE_LOG_SECONDS` neighbourhood comment-only docstring use; if the implementer prefers to drop it now that no branch references `errno.E*`, remove `import errno` from the module header. Either choice is acceptable.
+  The `except OSError` block intentionally contains no errno-specific branches: Python 3.3+ promotes `OSError(errno=ESRCH)` to `ProcessLookupError` and `OSError(errno=EPERM/EACCES)` to `PermissionError`, so the typed `except` clauses above already exhaust those cases. The remaining `except OSError` catches the residual Windows-specific errnos (e.g. `EINVAL=22` for out-of-range PIDs returned by `OpenProcess(ERROR_INVALID_PARAMETER=87)`) and routes them to the mtime fallback. Since no branch references `errno.E*`, do NOT import `errno` in the module.
 
   Constants `_PID_RE`, `_EXIT_RE`, `_STALE_LOG_SECONDS` are module-private (underscore prefix). The function's docstring documents the full behaviour matrix exactly as the table above (use a tab-aligned text representation, not a literal markdown table). Do NOT add any other public functions or constants to this module -- one function, one purpose.
 - **Commit:** `feat(bg): add _bg.is_bg_worker_alive PID-liveness helper`

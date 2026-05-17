@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-fix-r1
+phase: plan-fix-r2
 slug: review-sandbox-followup
 branch: hanf/review-sandbox-followup
 plan: _mill/plan
@@ -20,4 +20,6 @@ discussed  '2026-05-17T15:16:04Z'
 planning  '2026-05-17T15:22:55Z'
 plan-review-r1  '2026-05-17T15:32:58Z'
 plan-fix-r1  '2026-05-17T15:32:58Z'
+plan-review-r2  '2026-05-17T15:41:26Z'
+plan-fix-r2  '2026-05-17T15:41:26Z'
 ```
