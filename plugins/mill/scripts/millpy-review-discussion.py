@@ -16,7 +16,6 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from pathlib import Path
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -32,15 +31,17 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     import _reviewers
-    from _paths import resolve_wiki_path
+    from _paths import resolve_git_root, resolve_hub_path, resolve_wiki_path
     from _review_cli import print_error
     from _review_common import ReviewError, find_active_slug, load_config
     from _review_discussion import run
 
-    project_root = Path.cwd()
-    mill_dir = project_root / ".millhouse"
-    wiki_root = resolve_wiki_path(project_root)
-    cfg = load_config(project_root, mill_dir)
+    git_root = resolve_git_root()
+    hub_dir = resolve_hub_path()
+    mill_dir = hub_dir / ".millhouse"
+    wiki_root = resolve_wiki_path(git_root)
+    cfg = load_config(hub_dir, mill_dir)
+    project_root = hub_dir
 
     try:
         registry = _reviewers.load(project_root)
