@@ -1121,6 +1121,45 @@ def main() -> int:
         finally:
             os.chdir(orig_dir)
 
+    # ------------------------------------------------------------------
+    # Test 21 — holistic parse_verdict failure (holistic-only) returns ERROR envelope (#315)
+    # No per-batch reviews; holistic-only mode. Unparseable output -> ERROR entry
+    # with file path. Aggregate verdict is ERROR (all reviews are ERROR).
+    # ------------------------------------------------------------------
+    with tempfile.TemporaryDirectory() as tmpdir:
+        batch_specs = [("alpha", "01-alpha.md", ["src/a.py"], [])]
+        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(Path(tmpdir), batch_specs)
+        cfg["roles"]["plan-review"]["batch"]["reviewer"] = None  # holistic only
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            stub.seed([
+                ("# Raw prose without yaml block\n\nPlan looks good.", "sid-hol"),
+            ])
+            r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root)
+            assert r.verdict == "ERROR", (
+                f"expected ERROR for all-ERROR run, got {r.verdict}"
+            )
+            assert len(r.reviews) >= 1, f"expected at least 1 review, got {len(r.reviews)}"
+            assert r.reviews[0]["verdict"] == "ERROR", (
+                f"expected first review ERROR, got {r.reviews[0]['verdict']}"
+            )
+            assert "parse_verdict failed" in r.reviews[0].get("error", ""), (
+                f"error message missing 'parse_verdict failed': {r.reviews[0].get('error')}"
+            )
+            assert r.reviews[0]["file"] is not None, "ERROR entry should have a file path"
+            file_path = Path(r.reviews[0]["file"])
+            assert file_path.exists(), f"review file should exist on disk: {file_path}"
+            print("PASS test21: holistic parse_verdict failure emits ERROR envelope (#315)")
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test21: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test21 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
+
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)
         return 1
