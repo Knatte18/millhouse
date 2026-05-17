@@ -37,7 +37,7 @@ No external interface introduced; the next batches consume `_marker.slug_from_br
 
 - **Context:**
   - `plugins/mill/scripts/millpy-spawn.py`
-  - `mill-config.yaml`
+  - `plugins/mill/templates/mill-config.yaml`
   - `_mill/discussion.md`
 - **Edits:**
   - `plugins/mill/scripts/millpy-claim.py`
@@ -50,7 +50,7 @@ No external interface introduced; the next batches consume `_marker.slug_from_br
 ### Card 3: `_status.read_branch` fallback drops the same `/` + docstring fix (D6)
 
 - **Context:**
-  - `mill-config.yaml`
+  - `plugins/mill/templates/mill-config.yaml`
   - `_mill/discussion.md`
 - **Edits:**
   - `plugins/mill/scripts/_status.py`
