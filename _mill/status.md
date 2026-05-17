@@ -43,7 +43,9 @@ batches:
     implementer_session: a01209e6-a722-4c80-af6c-5b07d6bd9dcd
     start_sha: 753eaf5e7342122fa7b227eca2ea2817614d5cd2
   - name: test-vscode-processes-skip
-    state: pending
+    state: running
+    implementer_session: 831289a1-a53f-435d-a39f-238c06b164fa
+    start_sha: 31be81f29d2629e0e4fab1a3b2a9710e0b0bc1e8
   - name: skill-and-docs-prose
     state: pending
 ```
