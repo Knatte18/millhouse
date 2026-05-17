@@ -984,7 +984,7 @@ def main() -> int:
     # ------------------------------------------------------------------
     with tempfile.TemporaryDirectory() as tmpdir:
         batch_specs = [("alpha", "01-alpha.md", ["src/a.py"], [])]
-        mill_dir, wiki_root, project_root, cfg = _make_code_fixture(Path(tmpdir), batch_specs)
+        mill_dir, wiki_root, project_root, cfg = _make_fixture(Path(tmpdir))
         orig_dir = os.getcwd()
         os.chdir(project_root)
         try:
