@@ -1226,6 +1226,105 @@ def test_all_files_touched_deletes_counted() -> int:
             return 1
 
 
+def test_depends_on_batch_mismatch_no_finding_on_match() -> int:
+    """Clean: per-batch file's depends-on matches overview's -> no mismatch error."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        overview = _make_overview([
+            {"name": "alpha", "file": "01-alpha.md", "number": 1, "depends-on": []},
+            {"name": "beta",  "file": "02-beta.md",  "number": 2, "depends-on": [1]},
+        ])
+        # Batch file with depends-on matching overview: [1] -> ["alpha"]
+        batch_a = _make_batch_file("alpha")
+        batch_b_text = (
+            "# Batch: beta\n\n"
+            "```yaml\n"
+            "task: test\n"
+            "batch: beta\n"
+            "cards: 1\n"
+            "verify: null\n"
+            "depends-on: [1]\n"
+            "```\n\n"
+            "## Cards\n\n"
+            "### Card 1: card 1\n\n"
+            "- **Context:** none\n"
+            "- **Edits:** none\n"
+            "- **Creates:** none\n"
+            "- **Deletes:** none\n"
+            "- **Requirements:**\n  See scope.\n"
+            "- **Commit:** feat(beta): card 1\n"
+        )
+        _write_plan(plan_dir, overview, [
+            ("01-alpha.md", batch_a),
+            ("02-beta.md", batch_b_text),
+        ])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        mismatch_errs = [e for e in result if e["check"] == "depends-on-batch-mismatch"]
+        if mismatch_errs:
+            print(f"FAIL test_depends_on_batch_mismatch_no_finding_on_match: unexpected errors: {mismatch_errs}",
+                  file=sys.stderr)
+            return 1
+        print("PASS test_depends_on_batch_mismatch_no_finding_on_match")
+        return 0
+
+
+def test_depends_on_batch_mismatch_emits_finding() -> int:
+    """Dirty: per-batch file's depends-on disagrees with overview's -> one mismatch error."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        overview = _make_overview([
+            {"name": "alpha", "file": "01-alpha.md", "number": 1, "depends-on": []},
+            {"name": "beta",  "file": "02-beta.md",  "number": 2, "depends-on": [1]},
+        ])
+        # Batch file with depends-on NOT matching overview: [] instead of [1]
+        batch_a = _make_batch_file("alpha")
+        batch_b_text = (
+            "# Batch: beta\n\n"
+            "```yaml\n"
+            "task: test\n"
+            "batch: beta\n"
+            "cards: 1\n"
+            "verify: null\n"
+            "depends-on: []\n"
+            "```\n\n"
+            "## Cards\n\n"
+            "### Card 1: card 1\n\n"
+            "- **Context:** none\n"
+            "- **Edits:** none\n"
+            "- **Creates:** none\n"
+            "- **Deletes:** none\n"
+            "- **Requirements:**\n  See scope.\n"
+            "- **Commit:** feat(beta): card 1\n"
+        )
+        _write_plan(plan_dir, overview, [
+            ("01-alpha.md", batch_a),
+            ("02-beta.md", batch_b_text),
+        ])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        mismatch_errs = [e for e in result if e["check"] == "depends-on-batch-mismatch"]
+        try:
+            assert len(mismatch_errs) == 1, f"expected 1 error, got {len(mismatch_errs)}: {mismatch_errs}"
+            assert mismatch_errs[0]["batch"] == "beta", f"wrong batch: {mismatch_errs[0]['batch']!r}"
+            assert "depends-on" in mismatch_errs[0]["message"], (
+                f"message should mention 'depends-on': {mismatch_errs[0]['message']!r}"
+            )
+            print("PASS test_depends_on_batch_mismatch_emits_finding")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_depends_on_batch_mismatch_emits_finding: {exc}", file=sys.stderr)
+            return 1
+
+
 # ---------------------------------------------------------------------------
 # Runner
 # ---------------------------------------------------------------------------
@@ -1242,6 +1341,8 @@ def main() -> int:
         test_check_depends_on_unknown_clean,
         test_check_depends_on_unknown_dirty,
         test_check_depends_on_unknown_dirty_legacy_string,
+        test_depends_on_batch_mismatch_no_finding_on_match,
+        test_depends_on_batch_mismatch_emits_finding,
         test_check_parallel_modifies_overlap_clean,
         test_check_parallel_modifies_overlap_dirty,
         test_check_reads_not_backtick_path_clean,
