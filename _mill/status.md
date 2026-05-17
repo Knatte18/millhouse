@@ -52,7 +52,9 @@ batches:
     implementer_session: 8ffe2361-d755-4f60-b69b-9b5dcf10c074
     start_sha: 232ac450ad785bc285e9b9d0a448300eb3d400c1
   - name: bg-liveness
-    state: pending
+    state: running
+    implementer_session: 3a0fc20b-7f0d-44a1-801c-1b0d16b504ef
+    start_sha: 5a4d8a2e47a8b2409689d7cad1ac390b668fda60
   - name: millgo-holistic-recovery
     state: pending
 ```
