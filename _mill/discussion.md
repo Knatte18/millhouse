@@ -20,7 +20,7 @@ Why now: these defects keep surfacing in concurrent task runs. #295 / #296 make 
 - `_status.py` -- add `read(status_path) -> dict` returning the parsed top YAML block as a plain dict (#295).
 - `_paths.py` -- give `resolve_git_root` an optional `start: Path | None = None` argument (#296).
 - `_plan_validate.py` -- add a `depends-on-batch-mismatch` cross-check verifying per-batch frontmatter `depends-on:` matches the overview Batch Index `depends-on:` for the same batch (#303).
-- `plugins/mill/unit_tests/test-vscode-processes.py` -- guard the posix-only assertions with `sys.platform != "win32"` and print `SKIP` on Windows (#305).
+- `plugins/mill/unit_tests/test-vscode-processes.py` -- guard the posix-only assertions with `os.name != "nt"` and print `SKIP` on Windows (#305).
 - `plugins/mill/templates/marketplace.json` / `update-plugins.ps1` / `mill-setup` and supporting docs -- investigate how `CLAUDE_PLUGIN_ROOT` resolves with `source: directory` marketplaces and apply or document the fix (#307).
 - `plugins/mill/skills/mill-start/SKILL.md` -- in Phase: Discussion Review step 5 (GAPS_FOUND), change `git -C <worktree> add <discussion_path>` to `git -C <worktree> add <discussion_path> <reviews_dir>/` so review files are committed (#309).
 - `plugins/mill/skills/mill-go/SKILL.md` -- remove `mill-receiving-review` load instructions from the Builder flow (Execute step 3, Holistic step 5, Resume step 4 cross-references); reaffirm in Principles that only the dispatched implementer loads it (#311).
@@ -58,8 +58,9 @@ Why now: these defects keep surfacing in concurrent task runs. #295 / #296 make 
 
 - Decision: Add `_check_depends_on_batch_mismatch(batch_files, overview_text)` in `_plan_validate.py`, called from `run()`. Behaviour:
   - Parse overview batch index via `extract_batch_index`.
+  - Build a `number_to_name` map from the overview entries (same construction `resolve_deps_as_names` does internally).
   - For each batch entry whose `file:` resolves to a file in `batch_files`, read that file's top fenced-YAML block and parse the `depends-on:` field.
-  - Normalise both sides to a set of batch-name strings using `resolve_deps_as_names` (which already accepts int-or-string lists).
+  - Normalise both sides to a set of batch-name strings: for each `depends-on` list (overview side and per-batch side), translate `int` entries through `number_to_name` and pass `str` entries through unchanged. `resolve_deps_as_names` itself takes the full overview batch-dict list and returns the overview-side normalisation in one call; the per-batch-file side is a list of raw ints/strs that needs the inline translation (we cannot pass it to `resolve_deps_as_names` because that function expects `[{"name": ..., "depends-on": [...]}, ...]` dicts).
   - Emit a `depends-on-batch-mismatch` finding per mismatched batch with a `message` naming both sets (sorted, comma-joined).
 - Severity: BLOCKING (consistent with the other structural checks).
 - Rationale: Mirrors the proposal exactly; matches the existing per-check shape (one function, registered in `run()`).
@@ -70,7 +71,7 @@ Why now: these defects keep surfacing in concurrent task runs. #295 / #296 make 
 
 ### test-vscode-processes posix mocks on Windows (#305)
 
-- Decision: Guard the two posix-mocked tests (`posix_parser_basic`, `posix_parser_no_code_processes`) with `if sys.platform != "win32":`; otherwise emit `print("SKIP: posix_parser_basic (Windows)")` and `print("SKIP: posix_parser_no_code_processes (Windows)")`. The Windows-mocked tests still run on Linux/macOS CI.
+- Decision: Guard the two posix-mocked tests (`posix_parser_basic`, `posix_parser_no_code_processes`) with `if os.name != "nt":`; otherwise emit `print("SKIP: posix_parser_basic (Windows)")` and `print("SKIP: posix_parser_no_code_processes (Windows)")`. Uses the same `os.name` idiom the file already uses at line 273 (`path_match_helper_windows_case_insensitive`), inverted. The Windows-mocked tests still run on Linux/macOS CI.
 - Rationale: The root cause is that `os.path` on Windows is `ntpath`, and patching `os.name = "posix"` does not switch path semantics. Re-engineering the mock to also swap `os.path` would require touching `_vscode_processes` to import `ntpath`/`posixpath` indirectly -- out of scope. The SKIP path matches the existing inline-test convention (`SKIP: path_match_helper_windows_case_insensitive (not Windows)` is already in the file).
 - Rejected:
   - Patching `os.path.basename` etc. -- pulls test setup into product code (or fragile monkey-patching).
@@ -134,7 +135,7 @@ Why now: these defects keep surfacing in concurrent task runs. #295 / #296 make 
 
 - `_paths.resolve_git_root` (line 115): currently no argument. The change is one parameter and one `git -C` extension. The wiki-cwd safety guards (lines 121-141) already operate on the resolved `repo_root` and need no change.
 
-- `_plan_validate.run()` (line 715): registers checks in linear order. The new `_check_depends_on_batch_mismatch` slots in after `_check_depends_on_unknown` and before `_check_parallel_modifies_overlap`. The helper imports `extract_batch_index` and `resolve_deps_as_names` from `_plan_dag`, already used by `_check_depends_on_unknown` and `_compute_transitive_ancestors`.
+- `_plan_validate.run()` (line 715): registers checks in linear order. The new `_check_depends_on_batch_mismatch` slots in after `_check_depends_on_unknown` and before `_check_parallel_modifies_overlap`. The helper imports `extract_batch_index` from `_plan_dag` (already used by `_check_depends_on_unknown` and `_compute_transitive_ancestors`). The number-to-name translation is built inline from the overview's batch list (`{entry["number"]: entry["name"] for entry in batches if "number" in entry}`) — mirrors the construction inside `resolve_deps_as_names` (`_plan_dag.py:158`). `resolve_deps_as_names` itself is called on the overview-side dict list to get its normalised view in one step; the per-batch-file side reads the raw `depends-on:` ints/strs from the file's YAML block and applies the same `number_to_name` lookup inline.
 
 - `test-vscode-processes.py` -- the existing `path_match_helper_windows_case_insensitive` test already uses the `if os.name != "nt": SKIP` pattern (lines 273-274). The same shape applies to the two posix tests, inverted.
 
