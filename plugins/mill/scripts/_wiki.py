@@ -475,15 +475,20 @@ def _write_commit_push_body(
     if add.returncode != 0:
         raise WikiPushError(f"git add failed: {add.stderr.strip()!r}")
 
+    diff = _subprocess_util.run(
+        ["git", "-C", str(wiki_path), "diff", "--cached", "--quiet"]
+    )
+    if diff.returncode == 0:
+        print("[wiki] write_commit_push: no changes staged, skipping commit", file=sys.stderr)
+        return
+    elif diff.returncode != 1:
+        raise WikiPushError(f"git diff --cached --quiet failed: {diff.stderr.strip()!r}")
+
     commit = _subprocess_util.run(
         ["git", "-C", str(wiki_path), "commit", "-m", commit_msg]
     )
     if commit.returncode != 0:
-        combined = (commit.stdout or "") + (commit.stderr or "")
-        if "nothing to commit" in combined:
-            print("[wiki] write_commit_push: nothing to commit, skip push", file=sys.stderr)
-            return
-        raise WikiPushError(f"git commit failed: {commit.stderr.strip()!r}")
+        raise WikiPushError(f"git commit failed: stderr={commit.stderr.strip()!r} stdout={commit.stdout.strip()!r}")
 
     for attempt in range(2):
         push = _subprocess_util.run(["git", "-C", str(wiki_path), "push"])
