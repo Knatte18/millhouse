@@ -333,7 +333,30 @@ def run(
                 reviews=_reviews,
             )
 
-        verdict = parse_verdict(raw)
+        try:
+            verdict = parse_verdict(raw)
+        except ReviewError as exc:
+            write_review_file(
+                reviews_dir,
+                "code",
+                round_n,
+                raw,
+                scope=batch_name,
+            )
+            _reviews = [{
+                "scope": scope_label,
+                "verdict": "ERROR",
+                "file": None,
+                "error": str(exc),
+                "session_id": session_id,
+            }]
+            return ReviewResult(
+                type="code",
+                round=round_n,
+                verdict=_aggregate_top_verdict(_reviews, "REQUEST_CHANGES"),
+                blocking_count=0,
+                reviews=_reviews,
+            )
 
         if verdict == "NEED_CONTEXT":
             missing_raw = parse_missing_context(raw)
@@ -371,7 +394,30 @@ def run(
                         blocking_count=0,
                         reviews=_reviews,
                     )
-                verdict = parse_verdict(raw)
+                try:
+                    verdict = parse_verdict(raw)
+                except ReviewError as exc:
+                    write_review_file(
+                        reviews_dir,
+                        "code",
+                        round_n,
+                        raw,
+                        scope=batch_name,
+                    )
+                    _reviews = [{
+                        "scope": scope_label,
+                        "verdict": "ERROR",
+                        "file": None,
+                        "error": str(exc),
+                        "session_id": session_id,
+                    }]
+                    return ReviewResult(
+                        type="code",
+                        round=round_n,
+                        verdict=_aggregate_top_verdict(_reviews, "REQUEST_CHANGES"),
+                        blocking_count=0,
+                        reviews=_reviews,
+                    )
                 # Second NEED_CONTEXT propagates to caller untouched.
 
         blocking_count = parse_blocking_count(raw, severity="BLOCKING")
