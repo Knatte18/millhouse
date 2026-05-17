@@ -103,8 +103,10 @@ def main() -> int:
         _err_buf = io.StringIO()
         try:
             with contextlib.redirect_stderr(_err_buf):
-                with _mock.patch("_paths.resolve_wiki_path", return_value=_wiki):
-                    _rc = _mod.main([])
+                with _mock.patch("_paths.resolve_git_root", return_value=_tmp):
+                    with _mock.patch("_paths.resolve_hub_path", return_value=_tmp):
+                        with _mock.patch("_paths.resolve_wiki_path", return_value=_wiki):
+                            _rc = _mod.main([])
         finally:
             _os.chdir(_orig_cwd)
 
