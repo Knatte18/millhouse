@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-misc-fixes-8
 branch: hanf/mill-misc-fixes-8
 plan: _mill/plan
@@ -20,4 +20,21 @@ discussed  '2026-05-17T13:11:22Z'
 planning  '2026-05-17T13:17:45Z'
 plan-fix-r1  '2026-05-17T13:26:32Z'
 planned  '2026-05-17T13:26:45Z'
+implementing  '2026-05-17T13:29:17Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: helper-api-additions
+    state: pending
+  - name: validator-depends-on-cross-check
+    state: pending
+  - name: merge-in-intent-aware
+    state: pending
+  - name: test-vscode-processes-skip
+    state: pending
+  - name: skill-and-docs-prose
+    state: pending
 ```
