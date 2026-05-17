@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-sandbox-argv
 slug: review-sandbox-followup
 branch: hanf/review-sandbox-followup
 plan: _mill/plan
@@ -25,6 +25,7 @@ plan-fix-r2  '2026-05-17T15:41:26Z'
 plan-fix-r3  '2026-05-17T15:48:01Z'
 planned  '2026-05-17T15:48:09Z'
 implementing  '2026-05-17T16:03:04Z'
+approved-sandbox-argv  '2026-05-17T16:05:21Z'
 ```
 
 ## Batches
@@ -32,7 +33,7 @@ implementing  '2026-05-17T16:03:04Z'
 ```yaml
 batches:
   - name: sandbox-argv
-    state: running
+    state: approved
     implementer_session: 27ad7769-7a6c-497d-9082-6fe385bd2739
     start_sha: 3054a47d254f23e6f77604345a28c28ad8354065
   - name: snapshot-guard
