@@ -109,8 +109,19 @@ def main() -> int:
     # --- (3) test_real_change_commits_normally ---
     try:
         with tempfile.TemporaryDirectory() as tmp_str:
-            wiki = Path(tmp_str)
+            tmp = Path(tmp_str)
+            wiki = tmp / "wiki"
+            remote = tmp / "remote.git"
+
+            # Set up a bare remote
+            remote.mkdir(parents=True, exist_ok=True)
+            _git(["init", "--bare", str(remote)], tmp)
+
+            # Set up the wiki with the remote
             _setup_wiki(wiki)
+            _git(["remote", "add", "origin", str(remote)], wiki)
+            _git(["push", "-u", "origin", "main"], wiki)
+
             initial_sha = _get_head_sha(wiki)
 
             # Modify the file with different content
