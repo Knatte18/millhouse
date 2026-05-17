@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-fix-allowed-tools-argv
+phase: approved-template-identity-header
 slug: review-sandbox-guard
 branch: hanf/review-sandbox-guard
 plan: _mill/plan
@@ -28,6 +28,7 @@ planned  '2026-05-17T11:51:44Z'
 implementing  '2026-05-17T11:58:16Z'
 approved-guard-helper  '2026-05-17T12:02:01Z'
 approved-fix-allowed-tools-argv  '2026-05-17T12:04:41Z'
+approved-template-identity-header  '2026-05-17T12:06:38Z'
 ```
 
 ## Batches
@@ -43,7 +44,7 @@ batches:
     implementer_session: b5fed113-a277-40f6-b365-ed234a057977
     start_sha: 16561a5f2ebccf3df2e3062e43a8d2d30bc8516b
   - name: template-identity-header
-    state: running
+    state: approved
     implementer_session: 4aa836f7-49ad-4c6d-909b-be77c1c7c77a
     start_sha: e5465fc20001fa1565807edd7ff40daea8aeac77
   - name: wire-guard-backends
