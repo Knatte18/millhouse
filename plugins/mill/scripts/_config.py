@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import copy
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -50,6 +51,14 @@ ENV_REGISTRY = {
     "MILL_CODE_BATCH_REVIEWER": ("roles", "code-review",       "batch",    "reviewer"),
     "MILL_IMPLEMENTER":         ("roles", "implementer",       "model"),
 }
+
+
+class ConfigError(ValueError):
+    pass
+
+
+# POSIX env-var convention: uppercase only; lowercase patterns are literal.
+_ENV_INTERP_RE = re.compile(r"\$\{([A-Z_][A-Z0-9_]*)(:-(.*?))?\}")
 
 
 def apply_env_overrides(cfg: dict) -> dict:
@@ -207,8 +216,8 @@ def load_config(repo_root: Path, worktree_root: Path) -> dict:
     # 5. Validate unknown keys
     warn_unknown_keys(cfg, template_cfg, source_label or "merged config")
 
-    # 6. Apply environment overrides
-    cfg = apply_env_overrides(cfg)
+    # 6. Apply environment variable interpolation
+    cfg = _interpolate_env(cfg)
 
     return cfg
 
@@ -285,3 +294,65 @@ def deep_merge(base: dict, overlay: dict) -> dict:
         else:
             out[key] = val
     return out
+
+
+def _substitute_string(value: str, key_path: str) -> str:
+    """Substitute ${VAR} and ${VAR:-default} patterns in a string.
+
+    Args:
+        value:    The string to process.
+        key_path: Dotted key path for error messages.
+
+    Returns:
+        String with all env-var patterns substituted.
+
+    Raises:
+        ConfigError: If an unset variable has no default.
+    """
+
+    def replace_match(match):
+        var_name = match.group(1)
+        has_default = match.group(2) is not None
+        default_value = match.group(3) if has_default else None
+
+        if var_name in os.environ:
+            return os.environ[var_name]
+        elif has_default:
+            return default_value
+        else:
+            raise ConfigError(
+                f"Unset env var '{var_name}' at config key '{key_path}'"
+            )
+
+    return _ENV_INTERP_RE.sub(replace_match, value)
+
+
+def _interpolate_env(cfg, key_path: str = ""):
+    """Recursively interpolate env-var patterns in configuration values.
+
+    Args:
+        cfg:      Configuration (dict, list, str, or scalar).
+        key_path: Current dotted/bracketed key path.
+
+    Returns:
+        Configuration with all string values interpolated.
+
+    Raises:
+        ConfigError: If an unset variable has no default.
+    """
+    if isinstance(cfg, dict):
+        return {
+            k: _interpolate_env(
+                v, f"{key_path}.{k}" if key_path else k
+            )
+            for k, v in cfg.items()
+        }
+    elif isinstance(cfg, list):
+        return [
+            _interpolate_env(v, f"{key_path}[{i}]")
+            for i, v in enumerate(cfg)
+        ]
+    elif isinstance(cfg, str):
+        return _substitute_string(cfg, key_path)
+    else:
+        return cfg

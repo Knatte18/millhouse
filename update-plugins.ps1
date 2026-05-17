@@ -45,5 +45,12 @@ $target = Join-Path $cacheBase "mill\$($mill.version)"
 Write-Host "  -> CLAUDE_PLUGIN_ROOT=$target"
 Write-Host "  -> PYTHONPATH=$target\scripts"
 
+$codeguide = $manifest.plugins | Where-Object { $_.name -eq "codeguide" }
+if ($codeguide) {
+    $cgTarget = Join-Path $cacheBase "codeguide\$($codeguide.version)"
+    [System.Environment]::SetEnvironmentVariable('CODEGUIDE_PLUGIN_ROOT', $cgTarget, 'User')
+    Write-Host "  -> CODEGUIDE_PLUGIN_ROOT=$cgTarget"
+}
+
 Write-Host ""
 Write-Host "Done."

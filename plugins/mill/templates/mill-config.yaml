@@ -28,7 +28,14 @@
 #   <REPO>            -- short repo name from origin URL
 #   <SLUG>            -- task slug (valid only in mill-spawn-created entries)
 #
-# Junctions and hardlinks are IDE/terminal convenience -- scripts always
+# Env-var interpolation (substituted by mill scripts at run time):
+#   ${VAR}          -- replaced with the value of env var VAR; unset raises ConfigError
+#   ${VAR:-default} -- replaced with VAR if set; otherwise the literal "default"
+# Variable names must be uppercase (POSIX convention); lowercase forms pass through
+# as literal text. Interpolation applies to string values everywhere in this file,
+# including inside lists and nested maps.
+#
+# Junctions and hardlinks are IDE/terminal convenience — scripts always
 # resolve paths via _paths.py, never via the link paths themselves.
 
 # ---------------------------------------------------------------------------
@@ -129,6 +136,8 @@ roles:
   code-review:
     batch:
       rounds: 3
+      # Override per machine without committing a wiki change:
+      # reviewer: "${CODE_REVIEWER:-sonnetmedium}"
       reviewer: sonnetmedium
     holistic:
       rounds: 1

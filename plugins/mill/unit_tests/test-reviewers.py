@@ -562,6 +562,246 @@ def test_raises_when_nothing_found() -> None:
     print("PASS: load raises when nothing found")
 
 
+def test_extends_single_level() -> None:
+    """Single-level extends: child inherits from base."""
+    with tempfile.TemporaryDirectory() as tmp:
+        wiki = Path(tmp) / "wiki"
+        _write_yaml(
+            wiki / "agents.yaml",
+            "base:\n"
+            "  type: single\n"
+            "  provider: claude\n"
+            "  model: claude-sonnet-4-6\n"
+            "child:\n"
+            "  extends: base\n"
+            "  tooluse: true\n",
+        )
+        registry = _reviewers.load(wiki)
+        assert registry["child"] == {
+            "type": "single",
+            "provider": "claude",
+            "model": "claude-sonnet-4-6",
+            "tooluse": True,
+        }
+        assert registry["base"] == {
+            "type": "single",
+            "provider": "claude",
+            "model": "claude-sonnet-4-6",
+        }
+    print("PASS: extends single level")
+
+
+def test_extends_multi_level() -> None:
+    """Multi-level chain c -> b -> a resolves correctly."""
+    with tempfile.TemporaryDirectory() as tmp:
+        wiki = Path(tmp) / "wiki"
+        _write_yaml(
+            wiki / "agents.yaml",
+            "a:\n"
+            "  type: single\n"
+            "  provider: claude\n"
+            "  model: claude-sonnet-4-6\n"
+            "b:\n"
+            "  extends: a\n"
+            "c:\n"
+            "  extends: b\n"
+            "  tooluse: true\n",
+        )
+        registry = _reviewers.load(wiki)
+        assert registry["c"]["type"] == "single"
+        assert registry["c"]["provider"] == "claude"
+        assert registry["c"]["model"] == "claude-sonnet-4-6"
+        assert registry["c"]["tooluse"] is True
+    print("PASS: extends multi-level")
+
+
+def test_extends_child_overrides_parent_scalar() -> None:
+    """Child overrides parent scalar value."""
+    with tempfile.TemporaryDirectory() as tmp:
+        wiki = Path(tmp) / "wiki"
+        _write_yaml(
+            wiki / "agents.yaml",
+            "base:\n"
+            "  type: single\n"
+            "  provider: claude\n"
+            "  model: foo\n"
+            "child:\n"
+            "  extends: base\n"
+            "  model: bar\n",
+        )
+        registry = _reviewers.load(wiki)
+        assert registry["child"]["model"] == "bar"
+    print("PASS: extends child overrides parent scalar")
+
+
+def test_extends_unknown_base_raises() -> None:
+    """Extends referencing unknown base raises ReviewerError."""
+    with tempfile.TemporaryDirectory() as tmp:
+        wiki = Path(tmp) / "wiki"
+        _write_yaml(
+            wiki / "agents.yaml",
+            "child:\n"
+            "  extends: nonexistent\n"
+            "  type: single\n"
+            "  provider: claude\n"
+            "  model: x\n",
+        )
+        try:
+            _reviewers.load(wiki)
+            raise AssertionError("Expected ReviewerError")
+        except ReviewerError as exc:
+            assert "nonexistent" in str(exc)
+    print("PASS: extends unknown base raises")
+
+
+def test_extends_cycle_raises() -> None:
+    """Cycle in extends chain raises ReviewerError."""
+    with tempfile.TemporaryDirectory() as tmp:
+        wiki = Path(tmp) / "wiki"
+        _write_yaml(
+            wiki / "agents.yaml",
+            "a:\n"
+            "  extends: b\n"
+            "  type: single\n"
+            "  provider: claude\n"
+            "  model: x\n"
+            "b:\n"
+            "  extends: a\n"
+            "  type: single\n"
+            "  provider: claude\n"
+            "  model: y\n",
+        )
+        try:
+            _reviewers.load(wiki)
+            raise AssertionError("Expected ReviewerError")
+        except ReviewerError as exc:
+            exc_str = str(exc)
+            assert "Cycle detected" in exc_str
+            assert "a" in exc_str
+            assert "b" in exc_str
+    print("PASS: extends cycle raises")
+
+
+def test_extends_self_cycle_raises() -> None:
+    """Self-loop in extends raises ReviewerError."""
+    with tempfile.TemporaryDirectory() as tmp:
+        wiki = Path(tmp) / "wiki"
+        _write_yaml(
+            wiki / "agents.yaml",
+            "a:\n"
+            "  extends: a\n"
+            "  type: single\n"
+            "  provider: claude\n"
+            "  model: x\n",
+        )
+        try:
+            _reviewers.load(wiki)
+            raise AssertionError("Expected ReviewerError")
+        except ReviewerError as exc:
+            exc_str = str(exc)
+            assert "Cycle detected" in exc_str
+            assert "a -> a" in exc_str
+    print("PASS: extends self-cycle raises")
+
+
+def test_extends_target_must_not_be_cluster() -> None:
+    """Extends cannot target a cluster entry."""
+    with tempfile.TemporaryDirectory() as tmp:
+        wiki = Path(tmp) / "wiki"
+        _write_yaml(
+            wiki / "agents.yaml",
+            "x:\n"
+            "  type: single\n"
+            "  provider: claude\n"
+            "  model: y\n"
+            "my_cluster:\n"
+            "  type: cluster\n"
+            "  workers:\n"
+            "    use: x\n"
+            "    count: 1\n"
+            "  handler:\n"
+            "    use: x\n"
+            "child:\n"
+            "  extends: my_cluster\n"
+            "  tooluse: true\n",
+        )
+        try:
+            _reviewers.load(wiki)
+            raise AssertionError("Expected ReviewerError")
+        except ReviewerError as exc:
+            exc_str = str(exc)
+            assert "my_cluster" in exc_str
+            assert "cluster" in exc_str
+    print("PASS: extends target must not be cluster")
+
+
+def test_cluster_cannot_extend() -> None:
+    """Cluster entries cannot use extends."""
+    with tempfile.TemporaryDirectory() as tmp:
+        wiki = Path(tmp) / "wiki"
+        _write_yaml(
+            wiki / "agents.yaml",
+            "a:\n"
+            "  type: single\n"
+            "  provider: claude\n"
+            "  model: x\n"
+            "my_cluster:\n"
+            "  type: cluster\n"
+            "  extends: a\n"
+            "  workers:\n"
+            "    use: a\n"
+            "    count: 1\n"
+            "  handler:\n"
+            "    use: a\n",
+        )
+        try:
+            _reviewers.load(wiki)
+            raise AssertionError("Expected ReviewerError")
+        except ReviewerError as exc:
+            exc_str = str(exc)
+            assert "my_cluster" in exc_str
+            assert "cluster" in exc_str
+    print("PASS: cluster cannot extend")
+
+
+def test_required_field_missing_after_merge_raises() -> None:
+    """Missing required field after merge is caught by validation."""
+    with tempfile.TemporaryDirectory() as tmp:
+        wiki = Path(tmp) / "wiki"
+        _write_yaml(
+            wiki / "agents.yaml",
+            "base:\n"
+            "  type: single\n"
+            "  model: foo\n"
+            "child:\n"
+            "  extends: base\n",
+        )
+        try:
+            _reviewers.load(wiki)
+            raise AssertionError("Expected ReviewerError")
+        except ReviewerError as exc:
+            assert "provider" in str(exc)
+    print("PASS: required field missing after merge raises")
+
+
+def test_extends_field_removed_from_output() -> None:
+    """The extends: field is removed from resolved output."""
+    with tempfile.TemporaryDirectory() as tmp:
+        wiki = Path(tmp) / "wiki"
+        _write_yaml(
+            wiki / "agents.yaml",
+            "a:\n"
+            "  type: single\n"
+            "  provider: claude\n"
+            "  model: x\n"
+            "b:\n"
+            "  extends: a\n",
+        )
+        registry = _reviewers.load(wiki)
+        assert "extends" not in registry["b"]
+    print("PASS: extends field removed from output")
+
+
 def main() -> int:
     tests = [
         test_load_happy_path,
@@ -587,6 +827,16 @@ def main() -> int:
         test_validate_role_refs_missing_raises,
         test_load_falls_back_to_reviewers_yaml,
         test_validate_role_refs_catches_bad_implementer_model,
+        test_extends_single_level,
+        test_extends_multi_level,
+        test_extends_child_overrides_parent_scalar,
+        test_extends_unknown_base_raises,
+        test_extends_cycle_raises,
+        test_extends_self_cycle_raises,
+        test_extends_target_must_not_be_cluster,
+        test_cluster_cannot_extend,
+        test_required_field_missing_after_merge_raises,
+        test_extends_field_removed_from_output,
     ]
     failures = 0
     for test in tests:

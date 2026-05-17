@@ -39,6 +39,83 @@ class ReviewerError(Exception):
     """Raised on every validation/resolution failure in the reviewer registry."""
 
 
+def _validate_extends_syntax(raw: dict) -> list[str]:
+    """Validate raw-form extends syntax. Returns list of error messages."""
+    errors: list[str] = []
+    for name, entry in raw.items():
+        if not isinstance(entry, dict):
+            continue
+        if "extends" not in entry:
+            continue
+        extends_value = entry["extends"]
+        if not isinstance(extends_value, str):
+            errors.append(f"Reviewer {name!r}: 'extends' must be a string")
+            continue
+        if extends_value not in raw:
+            errors.append(f"Reviewer {name!r}: extends references unknown name {extends_value!r}")
+            continue
+        target_entry = raw[extends_value]
+        if isinstance(target_entry, dict) and target_entry.get("type") == "cluster":
+            errors.append(
+                f"Reviewer {name!r}: extends references {extends_value!r} which declares"
+                " type 'cluster' (clusters cannot be extended)"
+            )
+        if entry.get("type") == "cluster":
+            errors.append(f"Reviewer {name!r}: cluster entries cannot use 'extends'")
+    return errors
+
+
+def _detect_extends_cycles(raw: dict) -> list[str]:
+    """DFS cycle detection over extends edges. Returns list of cycle error messages."""
+    errors: list[str] = []
+    WHITE, GRAY, BLACK = 0, 1, 2
+    color: dict[str, int] = {name: WHITE for name in raw}
+
+    def dfs(node: str, path: list[str]) -> None:
+        color[node] = GRAY
+        entry = raw.get(node, {})
+        if isinstance(entry, dict) and "extends" in entry:
+            neighbor = entry["extends"]
+            if neighbor not in color:
+                pass
+            elif color[neighbor] == GRAY:
+                cycle_chain = path + [neighbor]
+                errors.append(f"Cycle detected in extends chain: {' -> '.join(cycle_chain)}")
+            elif color[neighbor] == WHITE:
+                dfs(neighbor, path + [neighbor])
+        color[node] = BLACK
+
+    for name in list(raw.keys()):
+        if color[name] == WHITE:
+            dfs(name, [name])
+    return errors
+
+
+def _resolve_extends(raw: dict) -> dict:
+    """Top-down extends-chain merge; returns flat dict with no 'extends:' fields."""
+    resolved: dict[str, dict] = {}
+
+    def _walk(name: str) -> dict:
+        if name in resolved:
+            return resolved[name]
+        entry = raw[name]
+        if "extends" not in entry:
+            flat = dict(entry)
+        else:
+            base = _walk(entry["extends"])
+            flat = dict(base)
+            for k, v in entry.items():
+                if k == "extends":
+                    continue
+                flat[k] = v
+        resolved[name] = flat
+        return flat
+
+    for name in raw:
+        _walk(name)
+    return resolved
+
+
 def load(hub_dir: Path) -> dict[str, dict]:
     """Load and validate plugin template + local overlay + legacy wiki fallback.
 
@@ -46,7 +123,10 @@ def load(hub_dir: Path) -> dict[str, dict]:
 
     Validates: all names match [a-z0-9_-]+, no duplicate names in each source file,
     every entry has a known type, required fields per type, cluster use: references
-    resolve to type=single only, and no cycles in the use: graph.
+    resolve to type=single only, no cycles in the use: graph, and entries with
+    `extends: <name>` are resolved top-down at load time (single-string form only;
+    cluster entries may neither extend nor be extended; cycle detection raises
+    with the chain).
 
     Raises ReviewerError listing every problem in a single message.
     """
@@ -156,6 +236,13 @@ def _validate_and_return(raw: dict, template_registry: dict) -> dict[str, dict]:
         raise ReviewerError("Registry must be a YAML mapping")
 
     errors: list[str] = []
+
+    errors.extend(_validate_extends_syntax(raw))
+    errors.extend(_detect_extends_cycles(raw))
+    if errors:
+        raise ReviewerError("\n".join(errors))
+
+    raw = _resolve_extends(raw)
 
     # Per-entry validation; track valid types for cross-ref checks.
     valid_types: dict[str, str] = {}
