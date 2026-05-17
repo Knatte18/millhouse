@@ -60,6 +60,7 @@ from _review_common import (
     resolve_existing_paths,
     resolve_path,
     resolve_ref_paths,
+    worktree_snapshot_guard,
     write_review_file,
 )
 
@@ -187,216 +188,217 @@ def run(
     this round — typically supplied by the orchestrator after a prior
     round returned ``NEED_CONTEXT``.
     """
-    # 1. Paths + round counter
-    plan_dir = resolve_path(cfg["paths"]["plan_dir"], slug)
-    reviews_dir = resolve_path(cfg["paths"]["reviews_dir"], slug)
-    scope_label = batch_name or "holistic"
-    round_n = discover_round(reviews_dir, "code", scope_label)
-    if batch_name is not None:
-        effective_max = max_rounds if max_rounds is not None else cfg["roles"]["code-review"]["batch"]["rounds"]
-    else:
-        effective_max = max_rounds if max_rounds is not None else cfg["roles"]["code-review"]["holistic"]["rounds"]
-    if round_n > effective_max:
-        raise ReviewError(
-            f"Round {round_n} exceeds max {effective_max} for code review"
-        )
-    print(
-        f"[_review_code] slug={slug!r} round={round_n} scope={scope_label}",
-        file=sys.stderr,
-    )
-
-    # 2. Overview (required)
-    overview_path = plan_dir / "00-overview.md"
-    if not overview_path.exists():
-        raise ReviewError(f"Plan overview not found: {overview_path}")
-    root = _load_root_from_overview(overview_path)
-
-    # 3. Target batch files + referenced source files
-    batch_files = _collect_batch_files(plan_dir, batch_name, overview_path)
-
-    # Per-batch diff-scoping: read start_sha from status.md if batch_name is set.
-    start_sha: str | None = None
-    diff_threshold: float = cfg["roles"]["code-review"].get("diff_scope_threshold", 0.25)
-    if batch_name is not None:
-        try:
-            status_path = _paths.status_path(project_root, cfg)
-            batches_list = _status.read_batches(status_path)
-            entry = next((b for b in batches_list if b.get("name") == batch_name), None)
-            start_sha = entry.get("start_sha") if entry else None
-            if start_sha is None:
-                print(
-                    f"[_review_code] no start_sha for batch {batch_name!r}; using full file content",
-                    file=sys.stderr,
-                )
-        except Exception as exc:
-            print(
-                f"[_review_code] warning: could not read start_sha for batch {batch_name!r}: {exc}; using full file content",
-                file=sys.stderr,
+    with worktree_snapshot_guard(project_root, expected_paths=[cfg["paths"]["reviews_dir"]]):
+        # 1. Paths + round counter
+        plan_dir = resolve_path(cfg["paths"]["plan_dir"], slug)
+        reviews_dir = resolve_path(cfg["paths"]["reviews_dir"], slug)
+        scope_label = batch_name or "holistic"
+        round_n = discover_round(reviews_dir, "code", scope_label)
+        if batch_name is not None:
+            effective_max = max_rounds if max_rounds is not None else cfg["roles"]["code-review"]["batch"]["rounds"]
+        else:
+            effective_max = max_rounds if max_rounds is not None else cfg["roles"]["code-review"]["holistic"]["rounds"]
+        if round_n > effective_max:
+            raise ReviewError(
+                f"Round {round_n} exceeds max {effective_max} for code review"
             )
-
-    all_raw_refs: dict[str, None] = {}
-    for bp in batch_files:
-        for ref in parse_batch_refs(bp):
-            all_raw_refs[ref] = None
-    creates_union = compute_creates_union(plan_dir)
-    deletes_union = compute_deletes_union(plan_dir)
-    referenced = resolve_ref_paths(
-        list(all_raw_refs.keys()), project_root, root,
-        creates_union=creates_union, deletes_union=deletes_union, wiki_root=wiki_root,
-    )
-
-    # Deduplicate while preserving order across the two lists.
-    seen: dict[Path, None] = {}
-    source_files: list[Path] = []
-    for p in (*referenced, *(extra_files or [])):
-        if p not in seen:
-            seen[p] = None
-            source_files.append(p)
-
-    if not source_files and not (extra_files or []):
         print(
-            f"[_review_code] warning: no source files resolved for scope={scope_label}; "
-            f"reviewer will only see plan content",
+            f"[_review_code] slug={slug!r} round={round_n} scope={scope_label}",
             file=sys.stderr,
         )
 
-    ancestors_on_disk = resolve_existing_paths(
-        [raw for raw in creates_union if raw not in all_raw_refs],
-        project_root,
-        root,
-        wiki_root=wiki_root,
-    )
-    ancestors_on_disk = [p for p in ancestors_on_disk if p not in source_files]
+        # 2. Overview (required)
+        overview_path = plan_dir / "00-overview.md"
+        if not overview_path.exists():
+            raise ReviewError(f"Plan overview not found: {overview_path}")
+        root = _load_root_from_overview(overview_path)
 
-    # 4. Reviewer + prompt
-    if batch_name is not None:
-        reviewer_name = cfg["roles"]["code-review"]["batch"]["reviewer"]
-    else:
-        reviewer_name = cfg["roles"]["code-review"]["holistic"]["reviewer"]
-    if reviewer_name is None:
-        raise ReviewError(
-            f"code-review {'batch' if batch_name else 'holistic'} reviewer is null; "
-            f"the orchestrator should not have invoked this scope"
-        )
-    hub_dir = project_root
-    registry = _reviewers.load(hub_dir)
-    spec = _reviewers.resolve(registry, reviewer_name)
-    timeout = cfg["llm"]["holistic_timeout"] if batch_name is None else cfg["llm"]["bulk_timeout"]
+        # 3. Target batch files + referenced source files
+        batch_files = _collect_batch_files(plan_dir, batch_name, overview_path)
 
-    template_name = "review-code-batch" if batch_name else "review-code-holistic"
-    mode = "tool-use" if spec.get("tooluse") else "bulk"
-    tool_rule = build_tool_rule(mode)
-    artefact_section = _build_artefact_section(
-        mode, overview_path, batch_files, source_files, ancestors_on_disk,
-        deletes_union,
-        start_sha=start_sha,
-        diff_threshold=diff_threshold,
-        project_root=project_root,
-    )
+        # Per-batch diff-scoping: read start_sha from status.md if batch_name is set.
+        start_sha: str | None = None
+        diff_threshold: float = cfg["roles"]["code-review"].get("diff_scope_threshold", 0.25)
+        if batch_name is not None:
+            try:
+                status_path = _paths.status_path(project_root, cfg)
+                batches_list = _status.read_batches(status_path)
+                entry = next((b for b in batches_list if b.get("name") == batch_name), None)
+                start_sha = entry.get("start_sha") if entry else None
+                if start_sha is None:
+                    print(
+                        f"[_review_code] no start_sha for batch {batch_name!r}; using full file content",
+                        file=sys.stderr,
+                    )
+            except Exception as exc:
+                print(
+                    f"[_review_code] warning: could not read start_sha for batch {batch_name!r}: {exc}; using full file content",
+                    file=sys.stderr,
+                )
 
-    prompt_kwargs = {
-        "task_title": load_task_title(project_root, wiki_root, cfg, slug),
-        "tool_rule": tool_rule,
-        "artefact_section": artefact_section,
-        "constraints": read_constraints_md(project_root),
-        "round": round_n,
-        "reviewer_model": reviewer_name,
-    }
-    if batch_name:
-        prompt_kwargs["batch_name"] = batch_name
-
-    prompt_text = render_prompt(template_name, **prompt_kwargs)
-
-    if batch_name is None:
-        spec, reviewer_name = maybe_switch_spec_for_large_prompt(
-            prompt_text, spec, reviewer_name, cfg, "code-review", "holistic", registry
+        all_raw_refs: dict[str, None] = {}
+        for bp in batch_files:
+            for ref in parse_batch_refs(bp):
+                all_raw_refs[ref] = None
+        creates_union = compute_creates_union(plan_dir)
+        deletes_union = compute_deletes_union(plan_dir)
+        referenced = resolve_ref_paths(
+            list(all_raw_refs.keys()), project_root, root,
+            creates_union=creates_union, deletes_union=deletes_union, wiki_root=wiki_root,
         )
 
-    # 5. Dispatch + record
-    try:
-        raw, session_id = _reviewer_single.run(spec, prompt_text, timeout=timeout)
-    except LLMError as exc:
-        _reviews = [{
-            "scope": scope_label,
-            "verdict": "ERROR",
-            "file": None,
-            "error": str(exc),
-            "session_id": None,
-        }]
+        # Deduplicate while preserving order across the two lists.
+        seen: dict[Path, None] = {}
+        source_files: list[Path] = []
+        for p in (*referenced, *(extra_files or [])):
+            if p not in seen:
+                seen[p] = None
+                source_files.append(p)
+
+        if not source_files and not (extra_files or []):
+            print(
+                f"[_review_code] warning: no source files resolved for scope={scope_label}; "
+                f"reviewer will only see plan content",
+                file=sys.stderr,
+            )
+
+        ancestors_on_disk = resolve_existing_paths(
+            [raw for raw in creates_union if raw not in all_raw_refs],
+            project_root,
+            root,
+            wiki_root=wiki_root,
+        )
+        ancestors_on_disk = [p for p in ancestors_on_disk if p not in source_files]
+
+        # 4. Reviewer + prompt
+        if batch_name is not None:
+            reviewer_name = cfg["roles"]["code-review"]["batch"]["reviewer"]
+        else:
+            reviewer_name = cfg["roles"]["code-review"]["holistic"]["reviewer"]
+        if reviewer_name is None:
+            raise ReviewError(
+                f"code-review {'batch' if batch_name else 'holistic'} reviewer is null; "
+                f"the orchestrator should not have invoked this scope"
+            )
+        hub_dir = project_root
+        registry = _reviewers.load(hub_dir)
+        spec = _reviewers.resolve(registry, reviewer_name)
+        timeout = cfg["llm"]["holistic_timeout"] if batch_name is None else cfg["llm"]["bulk_timeout"]
+
+        template_name = "review-code-batch" if batch_name else "review-code-holistic"
+        mode = "tool-use" if spec.get("tooluse") else "bulk"
+        tool_rule = build_tool_rule(mode)
+        artefact_section = _build_artefact_section(
+            mode, overview_path, batch_files, source_files, ancestors_on_disk,
+            deletes_union,
+            start_sha=start_sha,
+            diff_threshold=diff_threshold,
+            project_root=project_root,
+        )
+
+        prompt_kwargs = {
+            "task_title": load_task_title(project_root, wiki_root, cfg, slug),
+            "tool_rule": tool_rule,
+            "artefact_section": artefact_section,
+            "constraints": read_constraints_md(project_root),
+            "round": round_n,
+            "reviewer_model": reviewer_name,
+        }
+        if batch_name:
+            prompt_kwargs["batch_name"] = batch_name
+
+        prompt_text = render_prompt(template_name, **prompt_kwargs)
+
+        if batch_name is None:
+            spec, reviewer_name = maybe_switch_spec_for_large_prompt(
+                prompt_text, spec, reviewer_name, cfg, "code-review", "holistic", registry
+            )
+
+        # 5. Dispatch + record
+        try:
+            raw, session_id = _reviewer_single.run(spec, prompt_text, timeout=timeout)
+        except LLMError as exc:
+            _reviews = [{
+                "scope": scope_label,
+                "verdict": "ERROR",
+                "file": None,
+                "error": str(exc),
+                "session_id": None,
+            }]
+            return ReviewResult(
+                type="code",
+                round=round_n,
+                verdict=_aggregate_top_verdict(_reviews, "REQUEST_CHANGES"),
+                blocking_count=0,
+                reviews=_reviews,
+            )
+
+        verdict = parse_verdict(raw)
+
+        if verdict == "NEED_CONTEXT":
+            missing_raw = parse_missing_context(raw)
+            missing_paths = resolve_existing_paths(
+                missing_raw, project_root, root, wiki_root=wiki_root
+            )
+            if missing_paths:
+                retry_prompt = (
+                    build_reattached_section(missing_paths)
+                    + "\n\n"
+                    + "Please continue your review using the re-attached files above. "
+                    + "The original prompt is already in your session context."
+                )
+                print(
+                    f"[_review_code] NEED_CONTEXT round-1; retrying with resume "
+                    f"({len(missing_paths)} re-attached file(s)) session={(session_id or '?')[:8]}",
+                    file=sys.stderr,
+                )
+                try:
+                    raw, session_id = _reviewer_single.run(
+                        spec, retry_prompt, session_id=session_id, resume=True, timeout=timeout
+                    )
+                except LLMError as exc:
+                    _reviews = [{
+                        "scope": scope_label,
+                        "verdict": "ERROR",
+                        "file": None,
+                        "error": f"resume retry failed: {exc}",
+                        "session_id": None,
+                    }]
+                    return ReviewResult(
+                        type="code",
+                        round=round_n,
+                        verdict=_aggregate_top_verdict(_reviews, "REQUEST_CHANGES"),
+                        blocking_count=0,
+                        reviews=_reviews,
+                    )
+                verdict = parse_verdict(raw)
+                # Second NEED_CONTEXT propagates to caller untouched.
+
+        blocking_count = parse_blocking_count(raw, severity="BLOCKING")
+        path = write_review_file(
+            reviews_dir,
+            "code",
+            round_n,
+            raw,
+            scope=batch_name,  # None for holistic → no batch segment in filename
+        )
+        print(
+            f"[_review_code] wrote {path.name} verdict={verdict}",
+            file=sys.stderr,
+        )
+
+        _reviews = [
+            {
+                "scope": scope_label,
+                "verdict": verdict,
+                "file": str(path),
+                "session_id": session_id,
+            }
+        ]
         return ReviewResult(
             type="code",
             round=round_n,
-            verdict=_aggregate_top_verdict(_reviews, "REQUEST_CHANGES"),
-            blocking_count=0,
+            verdict=_aggregate_top_verdict(_reviews, verdict),
+            blocking_count=blocking_count,
             reviews=_reviews,
         )
-
-    verdict = parse_verdict(raw)
-
-    if verdict == "NEED_CONTEXT":
-        missing_raw = parse_missing_context(raw)
-        missing_paths = resolve_existing_paths(
-            missing_raw, project_root, root, wiki_root=wiki_root
-        )
-        if missing_paths:
-            retry_prompt = (
-                build_reattached_section(missing_paths)
-                + "\n\n"
-                + "Please continue your review using the re-attached files above. "
-                + "The original prompt is already in your session context."
-            )
-            print(
-                f"[_review_code] NEED_CONTEXT round-1; retrying with resume "
-                f"({len(missing_paths)} re-attached file(s)) session={(session_id or '?')[:8]}",
-                file=sys.stderr,
-            )
-            try:
-                raw, session_id = _reviewer_single.run(
-                    spec, retry_prompt, session_id=session_id, resume=True, timeout=timeout
-                )
-            except LLMError as exc:
-                _reviews = [{
-                    "scope": scope_label,
-                    "verdict": "ERROR",
-                    "file": None,
-                    "error": f"resume retry failed: {exc}",
-                    "session_id": None,
-                }]
-                return ReviewResult(
-                    type="code",
-                    round=round_n,
-                    verdict=_aggregate_top_verdict(_reviews, "REQUEST_CHANGES"),
-                    blocking_count=0,
-                    reviews=_reviews,
-                )
-            verdict = parse_verdict(raw)
-            # Second NEED_CONTEXT propagates to caller untouched.
-
-    blocking_count = parse_blocking_count(raw, severity="BLOCKING")
-    path = write_review_file(
-        reviews_dir,
-        "code",
-        round_n,
-        raw,
-        scope=batch_name,  # None for holistic → no batch segment in filename
-    )
-    print(
-        f"[_review_code] wrote {path.name} verdict={verdict}",
-        file=sys.stderr,
-    )
-
-    _reviews = [
-        {
-            "scope": scope_label,
-            "verdict": verdict,
-            "file": str(path),
-            "session_id": session_id,
-        }
-    ]
-    return ReviewResult(
-        type="code",
-        round=round_n,
-        verdict=_aggregate_top_verdict(_reviews, verdict),
-        blocking_count=blocking_count,
-        reviews=_reviews,
-    )
