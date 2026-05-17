@@ -33,7 +33,9 @@ implementing  '2026-05-17T11:58:16Z'
 ```yaml
 batches:
   - name: guard-helper
-    state: pending
+    state: running
+    implementer_session: 9f6dcd45-4782-4505-866c-35adec2e58b0
+    start_sha: 773ff2bec9fd6f9e285253c46e1b050ba8842816
   - name: fix-allowed-tools-argv
     state: pending
   - name: template-identity-header
