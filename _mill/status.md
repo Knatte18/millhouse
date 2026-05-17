@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-reviewing
+phase: holistic-approved
 slug: self-modifying-repo-venv
 branch: hanf/self-modifying-repo-venv
 plan: _mill/plan
@@ -23,6 +23,7 @@ planned  '2026-05-17T11:14:08Z'
 implementing  '2026-05-17T11:22:03Z'
 approved-mill-go-self-modifying-venv  '2026-05-17T11:25:18Z'
 holistic-reviewing  '2026-05-17T11:25:36Z'
+holistic-approved  '2026-05-17T11:26:58Z'
 ```
 
 ## Batches
