@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-review-pipeline-fixes
 branch: hanf/mill-review-pipeline-fixes
 plan: _mill/plan
@@ -20,4 +20,19 @@ discussed  '2026-05-17T13:59:38Z'
 planning  '2026-05-17T14:04:08Z'
 plan-fix-r1  '2026-05-17T14:12:37Z'
 planned  '2026-05-17T14:12:47Z'
+implementing  '2026-05-17T14:13:23Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: review-common
+    state: pending
+  - name: backend-error-envelope
+    state: pending
+  - name: review-discussion-cli
+    state: pending
+  - name: mill-go-config
+    state: pending
 ```
