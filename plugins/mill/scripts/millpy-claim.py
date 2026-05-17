@@ -215,7 +215,7 @@ def main(argv: list[str] | None = None) -> int:
     slug = picked.slug
 
     branch_prefix = spawn_cfg.get("branch_prefix", "")
-    branch_name = f"{branch_prefix}/{slug}" if branch_prefix else slug
+    branch_name = f"{branch_prefix}{slug}" if branch_prefix else slug
 
     if args.dry_run:
         print(f"[DryRun] Task:    {picked.title} [{slug}]")
