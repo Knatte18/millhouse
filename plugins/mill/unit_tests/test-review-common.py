@@ -1701,6 +1701,48 @@ def main() -> int:
             assert "plan-review-01-foundation-r1" in path.name
             print("PASS: write_review_file UTC timestamp (plan, scope=batch)")
 
+    # Test: write_review_file holistic naming (#316)
+    # Regression: ensure "-holistic-review-" substring never appears in filenames.
+    # scope=None, scope="holistic", and scope="01-foo" should produce the correct patterns.
+    try:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            reviews_dir = Path(tmpdir)
+
+            # Case 1: scope=None (holistic)
+            path1 = write_review_file(reviews_dir, "code", 1, "content", scope=None)
+            assert "-holistic-review-" not in path1.name, (
+                f"scope=None should not contain '-holistic-review-': {path1.name}"
+            )
+            assert "code-review-r1" in path1.name, (
+                f"scope=None should have code-review-r1 pattern: {path1.name}"
+            )
+
+            # Case 2: scope="holistic" (explicit holistic)
+            path2 = write_review_file(reviews_dir, "code", 1, "content", scope="holistic")
+            assert "-holistic-review-" not in path2.name, (
+                f"scope='holistic' should not contain '-holistic-review-': {path2.name}"
+            )
+            assert "code-review-r1" in path2.name, (
+                f"scope='holistic' should have code-review-r1 pattern: {path2.name}"
+            )
+
+            # Case 3: scope="01-foo" (per-batch)
+            path3 = write_review_file(reviews_dir, "code", 1, "content", scope="01-foo")
+            assert "-holistic-review-" not in path3.name, (
+                f"scope='01-foo' should not contain '-holistic-review-': {path3.name}"
+            )
+            assert "code-review-01-foo-r1" in path3.name, (
+                f"scope='01-foo' should have code-review-01-foo-r1 pattern: {path3.name}"
+            )
+
+            print("PASS: write_review_file holistic naming regression (#316)")
+    except AssertionError as exc:
+        errors += 1
+        print(f"FAIL: write_review_file holistic naming: {exc}", file=sys.stderr)
+    except Exception as exc:
+        errors += 1
+        print(f"FAIL: write_review_file holistic naming (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)
         return 1

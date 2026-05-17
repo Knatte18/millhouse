@@ -237,6 +237,44 @@ def main() -> int:
         finally:
             os.chdir(orig_dir)
 
+    # ------------------------------------------------------------------
+    # Test parse_verdict failure — returns ERROR envelope (#315)
+    # Unparseable output -> ERROR verdict, ERROR entry with file path.
+    # ------------------------------------------------------------------
+    with tempfile.TemporaryDirectory() as tmpdir:
+        mill_dir, wiki_root, project_root, cfg = _make_discussion_fixture(Path(tmpdir))
+
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            stub.seed([
+                ("# Raw prose without yaml block\n\nDiscussion looks fine.", "sid-unparseable"),
+            ])
+            r = discussion_run(cfg, SLUG, mill_dir, project_root, wiki_root)
+            assert r.verdict == "ERROR", (
+                f"expected ERROR, got {r.verdict}"
+            )
+            assert len(r.reviews) >= 1, f"expected at least 1 review, got {len(r.reviews)}"
+            assert r.reviews[0]["verdict"] == "ERROR", (
+                f"expected ERROR verdict, got {r.reviews[0]['verdict']}"
+            )
+            assert "parse_verdict failed" in r.reviews[0].get("error", ""), (
+                f"error message missing 'parse_verdict failed': {r.reviews[0].get('error')}"
+            )
+            assert r.reviews[0]["file"] is not None, "ERROR entry should have a file path"
+            file_path = Path(r.reviews[0]["file"])
+            assert file_path.exists(), f"review file should exist on disk: {file_path}"
+            print("PASS parse_verdict failure: discussion parse_verdict failure emits ERROR envelope (#315)")
+
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL parse_verdict failure: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL parse_verdict failure (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
+
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)
         return 1
