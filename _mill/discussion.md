@@ -49,14 +49,18 @@ Why now: these were tripped successively over the past three weeks of mill self-
 
 ### D2: Review CLIs emit structured `verdict: ERROR` JSON on every startup-failure path (#298)
 
-- Decision: In `millpy-review-discussion.py`, `millpy-review-plan.py`, and `millpy-review-code.py`, replace every `print(str(exc), file=sys.stderr); return 1` startup path (config load, reviewers load/validate, slug resolution) with a helper call that (a) prints the error to stderr for humans AND (b) prints one JSON line on stdout matching the existing ERROR envelope shape, then exits 1:
+- Decision: In `millpy-review-discussion.py`, `millpy-review-plan.py`, and `millpy-review-code.py`, every startup-failure path must emit one JSON line on stdout matching the ERROR envelope shape, in addition to its existing stderr message, before exiting 1. Two kinds of call site exist and BOTH must be covered:
+  - **Existing `try/except` handlers** (reviewers load, slug resolution, plan-validator failure in plan-CLI): replace `print(str(exc), file=sys.stderr); return 1` with a helper call that prints to stderr AND emits the JSON envelope on stdout, then returns 1.
+  - **Currently un-protected calls** (`resolve_wiki_path(...)`, `load_config(...)`, and any other top-level call that can raise — `load_config` raises `ReviewError` per its docstring; `resolve_wiki_path` and `_paths.resolve_git_root` raise `ValueError` / `SystemExit` on wiki-cwd detection): wrap each in a NEW `try/except (ReviewError, ValueError, SystemExit)` block around the call site and route the exception through the same helper. Do NOT rely on the "replace existing handler" language — there is no existing handler around `load_config` or `resolve_wiki_path`; new wrapping is required.
+
+  ERROR envelope shape:
 
   ```json
   {"type": "<plan|discussion|code>", "round": 0, "verdict": "ERROR", "blocking_count": 0,
    "reviews": [{"scope": "holistic", "verdict": "ERROR", "error": "<msg>"}]}
   ```
 
-  Place the helper in `_review_cli.py` (`print_error_envelope(type_, msg)`); each CLI's `if type_ == ...` literal stays the call-site responsibility.
+  Place the helper in `_review_cli.py` as `print_error_envelope(review_type: str, msg: str) -> None`; the `review_type` literal (`"plan"` / `"discussion"` / `"code"`) is the call-site's responsibility.
 - Rationale: Today's contract — "JSON on success, stderr on failure" — is fragile. Every consumer (mill-plan step 4.5 already, mill-start and mill-go after this change) wants a uniform machine-readable envelope so the `[mill-bg] EXIT` poll-loop can dispatch by verdict instead of by exit-code-plus-log-grep.
 - Rejected:
   - "Emit JSON only on slug-resolution failure" — inconsistent surface area; the bug-on-the-day will be config load, not slug.
@@ -87,8 +91,8 @@ Why now: these were tripped successively over the past three weeks of mill self-
 
 ### D6: `_status.read_branch` fallback drops the same extra `/` (Q6)
 
-- Decision: In `_status.py` line 703, change `derived = f"{prefix}/{slug}" if prefix else slug` to `derived = f"{prefix}{slug}" if prefix else slug`.
-- Rationale: Same root cause as D5. The fallback path fires when `status.md` is missing or unparseable; in conjunction with D4 (push uses git-show-current) this fallback fires less, but when it does fire it must produce a usable branch name. Fixing it together prevents D4 from masking D6.
+- Decision: In `_status.py` line 703, change `derived = f"{prefix}/{slug}" if prefix else slug` to `derived = f"{prefix}{slug}" if prefix else slug`. Also update the `read_branch` docstring at line 681 — currently `Falls back to ``f"{cfg['spawn']['branch_prefix']}/{slug}"``` — to drop the spurious `/`, matching the corrected code.
+- Rationale: Same root cause as D5. The fallback path fires when `status.md` is missing or unparseable; in conjunction with D4 (push uses git-show-current) this fallback fires less, but when it does fire it must produce a usable branch name. Fixing it together prevents D4 from masking D6. Docstring fix keeps the documented contract aligned with the code.
 
 ### D7: `millpy-bg.py` launcher validates cwd's current branch resolves to a task slug (#312, part 2)
 
@@ -111,7 +115,7 @@ Why now: these were tripped successively over the past three weeks of mill self-
 - Decision: Add unit-test coverage:
   - `plugins/mill/unit_tests/test-marker.py` — extend existing tests (or add if absent) for the D1 prefix-mismatch-fallback path: branch with no prefix that matches a Home.md slug → returns slug + warning; branch with no prefix that doesn't match → MarkerError.
   - `plugins/mill/unit_tests/test-status.py` — extend `read_branch` tests for the D6 fix: with non-empty prefix `"hanf/"` and slug `"foo"` and missing `status.md`, return `"hanf/foo"` not `"hanf//foo"`.
-  - `plugins/mill/unit_tests/test-review-cli-errors.py` — new file: for each of the three review CLIs, drive a startup-failure (missing config, unresolvable slug, missing reviewer registry entry) and assert the stdout JSON envelope matches D2's shape with `verdict: "ERROR"` and the error message field populated.
+  - `plugins/mill/unit_tests/test-review-cli.py` — extend the existing file (which already covers `print_error`). Add new test functions covering: `print_error_envelope` shape; for each of the three review CLIs, drive a startup-failure (missing config, unresolvable slug, missing reviewer registry entry) and assert the stdout JSON envelope matches D2's shape with `verdict: "ERROR"` and the error message field populated.
   - `plugins/mill/unit_tests/test-bg-launcher.py` (new) — drive `_launcher_main` with cwd pointing at a fake parent-worktree-shaped fixture (branch returns "main"); assert exit 1 and the parent-worktree-rejection error on stderr. Use `tempfile` + `git init` fixtures already established by other unit tests; no real claude calls.
 - Rationale: Each fix has a single concrete behavior that must be exercised; no integration test required.
 - Rejected:
