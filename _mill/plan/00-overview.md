@@ -3,7 +3,7 @@
 ```yaml
 task: "61 (A) -- Review pipeline fixes"
 slug: mill-review-pipeline-fixes
-approved: false
+approved: true
 started: "20260517-140037"
 parent: main
 root: ""

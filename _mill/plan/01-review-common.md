@@ -63,7 +63,7 @@ Batch tests run via `python plugins/mill/unit_tests/run-all.py`. The bulker chan
     - Repeat with `review_type="discussion"` (scope ignored for discussion) -> `"20260102-030405-discussion-review-r1.md"`.
     - Repeat with `review_type="plan"` and `scope="01-foundation"` -> `"20260102-030405-plan-review-01-foundation-r1.md"`.
   - Use `tempfile.TemporaryDirectory()` for `reviews_dir`. Assert each file exists on disk after writing.
-  - Add an explicit guard test `def _test_write_review_file_uses_utc_not_local()`: import `_review_common`; call `_review_common.datetime.now(timezone.utc)` directly inside the test once to confirm the module imports the timezone-aware path, then patch `_review_common.datetime.now` to raise `AssertionError` when called WITHOUT `tz=timezone.utc` (assert call kwargs include `tz`). Call `write_review_file(...)` once; assert it did not raise (means it used `tz`).
+  - Drop the previously-described guard test; the frozen-clock test above is sufficient to lock UTC behaviour. (A `mock.assert_called_with(timezone.utc)` guard is not added because `datetime.now(timezone.utc)` passes the timezone positionally, making the assertion brittle and redundant with the frozen-clock assertion.)
 - **Commit:** `test(review-common): regression for utc timestamps in write_review_file (#317)`
 
 ### Card 3: extend parse_verdict test coverage

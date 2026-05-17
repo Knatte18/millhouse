@@ -36,7 +36,7 @@ External interface: the JSON envelope shape (`verdict: "ERROR"`, `reviews=[{...}
     - Return `ReviewResult(type="code", round=round_n, verdict=_aggregate_top_verdict(_reviews, "REQUEST_CHANGES"), blocking_count=0, reviews=_reviews)`. Match the existing aggregation pattern in the function -- do NOT introduce a new shape.
   - Add one ASCII-only stderr print: `print(f"[_review_code] parse_verdict failed for {scope_label}: {exc}", file=sys.stderr)` before the `write_review_file` call. No em-dash.
   - The success path (verdict parsed cleanly) is unchanged.
-  - The NEED_CONTEXT retry branch (lines 340-373) ends with a second `parse_verdict(raw)` at line 374; that single call site is the one to wrap. There is exactly one `parse_verdict` invocation per code-review flow; one try/except suffices.
+  - `_review_code.run` has TWO `parse_verdict(raw)` invocations: the initial parse at `_review_code.py:336` and the post-NEED_CONTEXT-retry parse at `_review_code.py:374`. Both calls live in the same execution path; a single outer `try` / `except ReviewError` enclosing BOTH is sufficient. Verify by `grep -n "parse_verdict" plugins/mill/scripts/_review_code.py` after editing -- only the two existing call sites should be wrapped; do not introduce a new one.
 - **Commit:** `fix(review-code): emit ERROR envelope on parse_verdict failure (#315)`
 
 ### Card 5: parse_verdict error envelope in _review_discussion

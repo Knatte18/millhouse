@@ -46,13 +46,13 @@ There is no production code to run for this batch, so `verify: null`. The new sc
 - **Creates:** none
 - **Deletes:** none
 - **Requirements:**
-  - In `plugins/mill/templates/mill-config.yaml`, locate the `code-review:` block (currently lines 136-146). Inside the existing `holistic:` sub-block, add two new keys after `reviewer: sonnethigh` (and before the commented-out `large_prompt:` block):
+  - In `plugins/mill/templates/mill-config.yaml`, locate the `code-review:` block (currently lines 136-146). Inside the existing `holistic:` sub-block, add two new keys after `reviewer: sonnethigh` (and before the commented-out `large_prompt:` block). Use 6-space indentation -- `code-review:` is at column 2, `holistic:` is at column 4, and child keys of `holistic:` (including the existing `reviewer:` and `rounds:`) sit at column 6. The literal text to insert (preserving exact column-6 indent):
     ```yaml
-        fallback_reviewer: null     # reviewer name from agents.yaml to swap in on consecutive rate-limit ERRORs; null = no fallback
-        fallback_on:                 # list of substrings (lowercased match) in reviews[].error that trigger fallback
-          - "rate-limit"
+          fallback_reviewer: null     # reviewer name from agents.yaml to swap in on consecutive rate-limit ERRORs; null = no fallback
+          fallback_on:                 # list of substrings (lowercased match) in reviews[].error that trigger fallback
+            - "rate-limit"
     ```
-  - Keep yaml indentation consistent with surrounding keys (4 spaces under `holistic:` -- match the existing template).
+  - Sanity-check before committing: open the edited file and confirm `fallback_reviewer:` lines up vertically with the existing `reviewer: sonnethigh` line. If they don't line up, indentation is wrong.
   - In the hub-root `mill-config.yaml`, add the commented-out version of the same keys, following the file's convention of commented overrides. Concretely, inside the existing `# code-review:` commented block (currently around lines 86-93), add the two keys also commented out so an operator can uncomment to enable. Use the same indentation depth as the surrounding commented lines.
   - Validate by running `python plugins/mill/unit_tests/run-all.py` -- the merged-config tests must NOT emit a `[config] unknown key` warning for `fallback_reviewer` or `fallback_on`. If they do, the registry of known keys in `_config.warn_unknown_keys` (or wherever the known-key set is defined) needs the two new keys added; check `_config.py` and update if needed. (Search for `KNOWN_KEYS`, `warn_unknown_keys`, or `unknown key` to locate.)
   - If `_config.py` does NOT have an explicit key registry (i.e. the warn function compares against the template keys structurally), the schema addition in the template is sufficient -- no `_config.py` change needed. The unit-test run will confirm.
