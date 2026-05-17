@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-test-vscode-processes-skip
+phase: approved-skill-and-docs-prose
 slug: mill-misc-fixes-8
 branch: hanf/mill-misc-fixes-8
 plan: _mill/plan
@@ -25,6 +25,7 @@ approved-helper-api-additions  '2026-05-17T13:37:35Z'
 approved-validator-depends-on-cross-check  '2026-05-17T13:40:34Z'
 approved-merge-in-intent-aware  '2026-05-17T13:42:50Z'
 approved-test-vscode-processes-skip  '2026-05-17T13:44:46Z'
+approved-skill-and-docs-prose  '2026-05-17T13:48:35Z'
 ```
 
 ## Batches
@@ -48,7 +49,7 @@ batches:
     implementer_session: 831289a1-a53f-435d-a39f-238c06b164fa
     start_sha: 31be81f29d2629e0e4fab1a3b2a9710e0b0bc1e8
   - name: skill-and-docs-prose
-    state: running
+    state: approved
     implementer_session: 656400db-b634-49af-8541-fc35a86f3dcb
     start_sha: 84c06f18ce454a66e011013d71dcd322b452edce
 ```
