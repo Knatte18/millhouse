@@ -57,7 +57,7 @@ The batch's `verify:` runs the unit-test suite. No external interface other than
 
   are wrapped in a single try block; the except catches `ReviewError`, `ValueError`, `SystemExit` and calls `print_error_envelope("<discussion|plan|code>", str(exc)); return 1`. The existing `try` blocks below (for reviewers/slug) stay separate. Do NOT widen the existing `try` blocks to swallow the new exceptions — that would conflate handler scopes.
 
-  ASCII-only message strings. `import` lines stay grouped at the top of each CLI's `main()` body as today.
+  ASCII-only message strings. `import` lines stay grouped at the top of each CLI's `main()` body as today. **Drop the `print_error` import.** After replacing every handler body with `print_error_envelope`, the `from _review_cli import print_error` line in each of the three CLIs is no longer referenced. Remove `print_error` from each CLI's `from _review_cli import ...` line (it currently appears in `millpy-review-discussion.py`, `millpy-review-plan.py`, and `millpy-review-code.py`). `print_error` itself stays defined in `_review_cli.py` — only the imports drop.
 - **Commit:** `fix(review-cli): emit ERROR envelope on startup failure (#298)`
 
 ### Card 6: Extend `test-review-cli.py` with envelope-shape and startup-failure tests (D9 part for D2)
@@ -82,7 +82,7 @@ The batch's `verify:` runs the unit-test suite. No external interface other than
 
   4. `test_review_cli_emits_envelope_on_slug_failure()` — patch `find_active_slug` to raise `ReviewError("branch not present in Home.md")`. Assert stdout JSON envelope shape.
 
-  Register all four new tests in the `main()` runner at the bottom. Use `subprocess.run([sys.executable, "<script-path>"], ...)` if in-process patching is impractical (the existing fixtures pattern from `test-millpy-claim.py` may be reused — its `_load_claim_module` shows how to stub modules before import). For the validator-failure path (plan-CLI line 95-99) — explicitly add a comment in the test asserting that path is NOT covered here (it has its own `{"errors": ...}` envelope, not the `print_error_envelope` shape). One narrow test guarding that the validator path still emits `{"errors": [...]}` and not the error envelope is welcome but optional.
+  Call all four new test functions from `main()` at the bottom of `test-review-cli.py` (note: `test-review-cli.py` uses a monolithic inline `main()` — add direct calls, not list entries). Use `subprocess.run([sys.executable, "<script-path>"], ...)` if in-process patching is impractical (the existing fixtures pattern from `test-millpy-claim.py` may be reused — its `_load_claim_module` shows how to stub modules before import). For the validator-failure path (plan-CLI line 95-99) — explicitly add a comment in the test asserting that path is NOT covered here (it has its own `{"errors": ...}` envelope, not the `print_error_envelope` shape). One narrow test guarding that the validator path still emits `{"errors": [...]}` and not the error envelope is welcome but optional.
 
   All test strings ASCII-only.
 - **Commit:** `test(review-cli): cover print_error_envelope + per-CLI startup failures`

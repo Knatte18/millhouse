@@ -3,7 +3,7 @@
 ```yaml
 task: 60 (A) — Branch/slug/claim fixes
 slug: mill-branch-slug-fixes
-approved: false
+approved: true
 started: 20260517-115821
 parent: main
 root: ""
