@@ -125,6 +125,8 @@ The batch is verified by running `test-config.py` directly, which exercises the 
 
   Add `import _config` to existing imports if not present (it already is). Add `from _config import ConfigError` only if you prefer the short form in test 3; otherwise `_config.ConfigError` is fine.
 
+  **Tests-list registration (mandatory).** Append each of the eleven new test functions to the `tests = [...]` list in `main()` (around line 393 of `test-config.py`). The list is the authoritative registry the runner walks; functions that are defined but not appended here are silently skipped and produce a false-green verify. Add them in declaration order, grouped under a `# env-interpolation` comment line inside the list for readability.
+
 - **Commit:** `test(_config): cover env-interpolation -- defaults, env wins, unset raises, nested, lists, multi-match, lowercase passthrough`
 
 ---

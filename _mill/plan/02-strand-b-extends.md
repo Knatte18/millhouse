@@ -158,10 +158,12 @@ Verify runs the full `test-reviewers.py` suite plus a one-shot script that loads
      Expect `ReviewerError`; assert `"Cycle detected"` and `"a -> a"` (or equivalent representation including the name twice) appear in `str(exc)`.
   7. `test_extends_target_must_not_be_cluster` -- yaml has a cluster entry `my_cluster: {type: cluster, workers: {use: x, count: 1}, handler: {use: x}}` plus a single `x: {type: single, provider: claude, model: y}` to keep the cluster valid, plus `child: {extends: my_cluster, tooluse: true}`. Expect `ReviewerError`; assert `"my_cluster"` and `"cluster"` appear in `str(exc)`.
   8. `test_cluster_cannot_extend` -- yaml has `a: {type: single, provider: claude, model: x}` and `my_cluster: {type: cluster, extends: a, workers: {use: a, count: 1}, handler: {use: a}}`. Expect `ReviewerError`; assert the error names `my_cluster` and mentions `cluster` (the "cluster entries cannot use 'extends'" message).
-  9. `test_required_field_missing_after_merge_raises` -- yaml has `a: {type: single, model: foo}` (no provider). Expect `ReviewerError`; the existing single-entry validation should fire with `"missing or invalid 'provider'"`. This test documents that the existing required-field checks still cover the post-extends path (no new error message needed).
+  9. `test_required_field_missing_after_merge_raises` -- yaml has `base: {type: single, model: foo}` (no provider) and `child: {extends: base}`. After resolution, `child` inherits `type` and `model` but `provider` is still missing on both `base` and `child`. Expect `ReviewerError`; the existing single-entry validation should fire with `"missing or invalid 'provider'"` for at least one entry. The two-entry shape ensures `_resolve_extends` actually runs the merge path (a single flat entry would be a no-op for the resolver and would not document the post-extends contract).
   10. `test_extends_field_removed_from_output` -- yaml has `a: {type: single, provider: claude, model: x}` and `b: {extends: a}`. Assert `"extends" not in registry["b"]` (the field is stripped from the returned dict).
 
   `_write_yaml` is already defined at the top of `test-reviewers.py`; reuse it.
+
+  **Tests-list registration (mandatory).** Append each of the ten new test functions to the `tests = [...]` list in `main()` (around line 369 of `test-reviewers.py`) in declaration order. The list is the authoritative registry the runner walks; functions defined but not appended are silently skipped and produce a false-green verify.
 
 - **Commit:** `test(_reviewers): cover extends resolution -- single/multi-level, override, cycle, cluster-rejection, required-after-merge`
 
@@ -209,7 +211,9 @@ Verify runs the full `test-reviewers.py` suite plus a one-shot script that loads
 
   Edit via the standard `Edit` tool on the worktree file. The change lands as part of the task-branch commit (same commit as the wiki/agents.yaml change in this card).
 
-  **Change B -- `wiki/agents.yaml` (wiki repo edit).** Replace the file's content with the extends-form below. Because this file lives in the wiki repo (a sibling clone, NOT the task worktree), mutation must go through the wiki helpers. Implementation pattern:
+  **Change B -- `wiki/agents.yaml` (wiki repo edit).** Replace the file's content with the extends-form below. Because this file lives in the wiki repo (a sibling clone, NOT the task worktree), mutation must go through the wiki helpers. `_wiki.write_commit_push` only stages, commits, and pushes -- it does NOT write file content. The caller writes the file first, then passes the relative path (as `list[str]`) to the helper. Signature: `write_commit_push(wiki_path: Path, relative_paths: list[str], commit_msg: str, *, slug: str) -> None`.
+
+  Implementation pattern:
 
   ```python
   from pathlib import Path
@@ -285,10 +289,12 @@ Verify runs the full `test-reviewers.py` suite plus a one-shot script that loads
       "  extends: sonnetmax\n"
       "  effort: medium\n"
   )
+  # Write the file first; the helper only stages/commits/pushes.
+  (wiki_path / "agents.yaml").write_text(new_text, encoding="utf-8")
   _wiki.write_commit_push(
       wiki_path,
-      {"agents.yaml": new_text},
-      msg="refactor(agents.yaml): collapse tool/effort variants via extends:",
+      ["agents.yaml"],
+      "refactor(agents.yaml): collapse tool/effort variants via extends:",
       slug="config-env-interpolation",
   )
   ```
