@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-strand-a-env-interp
+phase: approved-strand-b-extends
 slug: config-env-interpolation
 branch: hanf/config-env-interpolation
 plan: _mill/plan
@@ -24,6 +24,7 @@ plan-fix-r2  '2026-05-17T05:34:23Z'
 planned  '2026-05-17T05:34:33Z'
 implementing  '2026-05-17T05:35:38Z'
 approved-strand-a-env-interp  '2026-05-17T05:38:14Z'
+approved-strand-b-extends  '2026-05-17T05:41:40Z'
 ```
 
 ## Batches
@@ -35,7 +36,7 @@ batches:
     implementer_session: 3c3b184e-1615-4558-a72f-743187d5ad3e
     start_sha: 65b28443f204be5765c98cc8c4db0df36b4095e4
   - name: strand-b-extends
-    state: running
+    state: approved
     implementer_session: b80b79a5-6784-485d-b2f2-348292b9dd41
     start_sha: f9adce8bdce5255e7a6eeda6ce41a40fe7f2cc08
 ```
