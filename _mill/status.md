@@ -42,7 +42,9 @@ batches:
     implementer_session: e3d44ed5-6583-4715-a5d8-52e6b2d6955f
     start_sha: 8fe51ff3b31673c4317fd7cb64d00bd18531718d
   - name: review-error-envelope
-    state: pending
+    state: running
+    implementer_session: 3ff22eb0-9bd9-4183-8be9-a2e618697188
+    start_sha: 26091e7a9c49e78b791d9dafca28a836e92e496b
   - name: wiki-noop-commit
     state: pending
   - name: bg-liveness
