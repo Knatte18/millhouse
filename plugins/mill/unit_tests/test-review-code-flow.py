@@ -99,6 +99,11 @@ def _make_fixture(tmp_path: Path) -> tuple[Path, Path, Path, dict]:
     worktree.mkdir(parents=True)
     subprocess.run(["git", "-C", str(worktree), "init"], check=True, capture_output=True)
     subprocess.run(["git", "-C", str(worktree), "checkout", "-b", f"hanf/{SLUG}"], capture_output=True)
+    subprocess.run(["git", "-C", str(worktree), "config", "user.email", "test@example.com"], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(worktree), "config", "user.name", "test"], check=True, capture_output=True)
+    (worktree / ".gitignore").write_text("\n", encoding="utf-8")
+    subprocess.run(["git", "-C", str(worktree), "add", ".gitignore"], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(worktree), "commit", "-m", "seed"], check=True, capture_output=True)
     mill_dir = worktree / ".millhouse"
     mill_dir.mkdir(parents=True, exist_ok=True)
     wiki_root = tmp_path / "wiki"
@@ -264,6 +269,11 @@ def main() -> int:
         worktree.mkdir(parents=True)
         subprocess.run(["git", "-C", str(worktree), "init"], check=True, capture_output=True)
         subprocess.run(["git", "-C", str(worktree), "checkout", "-b", f"hanf/{SLUG}"], capture_output=True)
+        subprocess.run(["git", "-C", str(worktree), "config", "user.email", "test@example.com"], check=True, capture_output=True)
+        subprocess.run(["git", "-C", str(worktree), "config", "user.name", "test"], check=True, capture_output=True)
+        (worktree / ".gitignore").write_text("\n", encoding="utf-8")
+        subprocess.run(["git", "-C", str(worktree), "add", ".gitignore"], check=True, capture_output=True)
+        subprocess.run(["git", "-C", str(worktree), "commit", "-m", "seed"], check=True, capture_output=True)
         mill_dir = worktree / ".millhouse"
         mill_dir.mkdir(parents=True, exist_ok=True)
         wiki_root = Path(tmpdir) / "wiki"
@@ -330,6 +340,11 @@ def main() -> int:
         worktree.mkdir(parents=True)
         subprocess.run(["git", "-C", str(worktree), "init"], check=True, capture_output=True)
         subprocess.run(["git", "-C", str(worktree), "checkout", "-b", f"hanf/{SLUG}"], capture_output=True)
+        subprocess.run(["git", "-C", str(worktree), "config", "user.email", "test@example.com"], check=True, capture_output=True)
+        subprocess.run(["git", "-C", str(worktree), "config", "user.name", "test"], check=True, capture_output=True)
+        (worktree / ".gitignore").write_text("\n", encoding="utf-8")
+        subprocess.run(["git", "-C", str(worktree), "add", ".gitignore"], check=True, capture_output=True)
+        subprocess.run(["git", "-C", str(worktree), "commit", "-m", "seed"], check=True, capture_output=True)
         mill_dir = worktree / ".millhouse"
         mill_dir.mkdir(parents=True, exist_ok=True)
         wiki_root = Path(tmpdir) / "wiki"
@@ -465,6 +480,11 @@ def main() -> int:
         project_root.mkdir(parents=True)
         subprocess.run(["git", "-C", str(project_root), "init"], check=True, capture_output=True)
         subprocess.run(["git", "-C", str(project_root), "checkout", "-b", f"hanf/{SLUG}"], capture_output=True)
+        subprocess.run(["git", "-C", str(project_root), "config", "user.email", "test@example.com"], check=True, capture_output=True)
+        subprocess.run(["git", "-C", str(project_root), "config", "user.name", "test"], check=True, capture_output=True)
+        (project_root / ".gitignore").write_text("\n", encoding="utf-8")
+        subprocess.run(["git", "-C", str(project_root), "add", ".gitignore"], check=True, capture_output=True)
+        subprocess.run(["git", "-C", str(project_root), "commit", "-m", "seed"], check=True, capture_output=True)
         wiki_root = Path(tmpdir) / "wiki"
         wiki_root.mkdir(parents=True, exist_ok=True)
         seed_wiki_config(wiki_root)
@@ -684,6 +704,11 @@ def main() -> int:
         worktree.mkdir(parents=True)
         subprocess.run(["git", "-C", str(worktree), "init"], check=True, capture_output=True)
         subprocess.run(["git", "-C", str(worktree), "checkout", "-b", f"hanf/{SLUG}"], capture_output=True)
+        subprocess.run(["git", "-C", str(worktree), "config", "user.email", "test@example.com"], check=True, capture_output=True)
+        subprocess.run(["git", "-C", str(worktree), "config", "user.name", "test"], check=True, capture_output=True)
+        (worktree / ".gitignore").write_text("\n", encoding="utf-8")
+        subprocess.run(["git", "-C", str(worktree), "add", ".gitignore"], check=True, capture_output=True)
+        subprocess.run(["git", "-C", str(worktree), "commit", "-m", "seed"], check=True, capture_output=True)
         mill_dir = worktree / ".millhouse"
         mill_dir.mkdir(parents=True, exist_ok=True)
         wiki_root = Path(tmpdir) / "wiki"
