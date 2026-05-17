@@ -200,11 +200,11 @@ For each round `N` from 1 to `roles.code-review.batch.rounds`:
 
    Returns immediately with `pid=<N> log=<abs-path>`. Do **not** use `run_in_background: true`. Poll `cat <log-path>` until `[mill-bg] EXIT` appears, then extract the JSON summary line (last non-empty, non-sentinel line). The CLI prints one JSON line `{"type":"code","round":N,"verdict":"...","reviews":[...]}`.
 
-3. **Before reading any review file, load the `mill-receiving-review` skill.** Non-negotiable.
+3. **Builder reads only the JSON envelope verdict, never the findings.** Loading `mill-receiving-review` is the dispatched implementer's job (see Principles below). Builder does not load the skill.
 
 4. Branch on verdict:
    - `APPROVE` — batch state → `approved`, `review_file: <path>`. `_status.append_phase(status_path, f"approved-{batch_name}", _timestamp.now_utc_iso())`. Use the `file` field from `reviews[0]` in the JSON summary (or the crash-recovery scan path) as `<review_file_path>`. Commit on the task branch: `git -C <worktree> add <status_path> <review_file_path> && git -C <worktree> commit -m "mill-go: approve batch {batch_name}"`. Break out of the loop → next batch.
-   - `NEED_CONTEXT` — read the `## Missing context` bullets from the review file. For each listed path, if it exists under the worktree, append to `extra_files` for the NEXT round. `_notify.notify("mill-go.review-need-context", f"batch {batch_name} round {N}", slug=slug, files=len(missing))`. Record this gap for mill-self-report (see Handoff). Increment round and continue the loop. If ALL the missing files are paths already in `extra_files` from a prior round (no new info), treat as a stuck-logic failure and break.
+   - `NEED_CONTEXT` — read the `## Missing context` bullets from the review file. For each listed path, if it exists under the worktree, append to `extra_files` for the NEXT round. `_notify.notify("mill-go.review-need-context", f"batch {batch_name} round {N}", slug=slug, files=len(missing))`. Record this gap for mill-self-report (see Handoff). Increment round and continue the loop. If ALL the missing files are paths already in `extra_files` from a prior round (no new info), treat as a stuck-logic failure and break. Reading the structured `## Missing context` bullet list does not require `mill-receiving-review` -- only finding-handling does.
      `signature: _notify.notify(event: str, detail: str, **context) -> None`
    - `REQUEST_CHANGES` — Background via millpy-bg:
      ```bash
@@ -279,7 +279,7 @@ When mill-go's Entry-step 5 phase gate routes here (phase is `implementing`, `re
      ```
      The `<review-file-abs-path>` is the most recent `_mill/reviews/*-code-review-<batch_name>-r<review_round>.md` file. After parsing the report, continue at Execute step 3 sub-step 5 (max-rounds check) or back to step 3 round N+1 if the fix produced an APPROVE-eligible state on next review.
 3. **No state mutation before resume.** Do NOT pre-emptively flip `state` or call `_status.append_phase` before re-invoking the CLI. The CLI handles state transitions atomically; double-writes corrupt the timeline.
-4. **`mill-receiving-review` is still mandatory.** When resume lands you at any point that reads a review file, load the skill first (per the existing rule at Execute step 3 sub-step 3 and Holistic step 5).
+4. **`mill-receiving-review` remains the implementer's responsibility.** When resume re-dispatches the implementer (`millpy-implement.py --resume ...`), the fix-prompt itself instructs the implementer to load the skill before reading findings. Builder still does not load it.
 
 ## Holistic code review
 
@@ -340,7 +340,7 @@ For each round `H` from 1 to `max_holistic_rounds`:
 
 4. On `APPROVE`: `_status.append_phase(status_path, "holistic-approved", _timestamp.now_utc_iso())`. Commit status. Proceed to Handoff.
 
-5. On `REQUEST_CHANGES`: **Load `mill-receiving-review` before reading any finding.** Dispatch:
+5. On `REQUEST_CHANGES`: the holistic-fix CLI dispatches a fresh implementer; the implementer loads `mill-receiving-review` (see Principles below). Builder does not load the skill. Dispatch:
    ```bash
    PYTHONPATH="${PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${PLUGIN_ROOT}/scripts/millpy-implement-holistic.py" \
      --review-file <abs-path-to-holistic-review-file> --round {H}
