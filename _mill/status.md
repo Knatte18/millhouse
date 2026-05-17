@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-review-common
 slug: mill-review-pipeline-fixes
 branch: hanf/mill-review-pipeline-fixes
 plan: _mill/plan
@@ -21,6 +21,7 @@ planning  '2026-05-17T14:04:08Z'
 plan-fix-r1  '2026-05-17T14:12:37Z'
 planned  '2026-05-17T14:12:47Z'
 implementing  '2026-05-17T14:13:23Z'
+approved-review-common  '2026-05-17T14:32:20Z'
 ```
 
 ## Batches
@@ -28,7 +29,7 @@ implementing  '2026-05-17T14:13:23Z'
 ```yaml
 batches:
   - name: review-common
-    state: running
+    state: approved
     implementer_session: e04e1588-76c9-40ad-b168-88fec65b9e09
     start_sha: 75fc9f697e192183602b60e0f2f77845364c2d20
   - name: backend-error-envelope
