@@ -48,5 +48,7 @@ batches:
     implementer_session: 4aa836f7-49ad-4c6d-909b-be77c1c7c77a
     start_sha: e5465fc20001fa1565807edd7ff40daea8aeac77
   - name: wire-guard-backends
-    state: pending
+    state: running
+    implementer_session: f79db13e-182a-4cfb-b52c-64f9da7b5062
+    start_sha: 656a4216f57a6a4bdf3f010fd08e0c78e0b0fe38
 ```
