@@ -33,7 +33,9 @@ batches:
     implementer_session: 0ae76918-b6d8-4302-90ad-39e1cef78449
     start_sha: b50ce161a5fb2b1fb22a2003a2626b7f9cf3e8ef
   - name: validator-depends-on-cross-check
-    state: pending
+    state: running
+    implementer_session: d18373f8-7211-49e9-b686-f043261adb6c
+    start_sha: 124572e1148efdecac712a9764fbd596529b2c50
   - name: merge-in-intent-aware
     state: pending
   - name: test-vscode-processes-skip
