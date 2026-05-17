@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-fixing
+phase: holistic-reviewing
 slug: review-sandbox-followup
 branch: hanf/review-sandbox-followup
 plan: _mill/plan
@@ -35,6 +35,7 @@ holistic-reviewing  '2026-05-17T16:20:54Z'
 holistic-fixing  '2026-05-17T16:26:07Z'
 holistic-reviewing  '2026-05-17T16:29:02Z'
 holistic-fixing  '2026-05-17T16:34:13Z'
+holistic-reviewing  '2026-05-17T16:36:08Z'
 ```
 
 ## Batches
