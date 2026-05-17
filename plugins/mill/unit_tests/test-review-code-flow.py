@@ -979,11 +979,10 @@ def main() -> int:
 
     # ------------------------------------------------------------------
     # Test 15 — code review parse_verdict failure returns ERROR envelope (#315)
-    # Tests both holistic (batch_name=None) and per-batch (batch_name="01-alpha").
+    # Tests both holistic (batch_name=None) and per-batch (batch_name="alpha").
     # Unparseable output -> ERROR entry with file path.
     # ------------------------------------------------------------------
     with tempfile.TemporaryDirectory() as tmpdir:
-        batch_specs = [("alpha", "01-alpha.md", ["src/a.py"], [])]
         mill_dir, wiki_root, project_root, cfg = _make_fixture(Path(tmpdir))
         orig_dir = os.getcwd()
         os.chdir(project_root)
@@ -1007,11 +1006,11 @@ def main() -> int:
             file_path_hol = Path(r_hol.reviews[0]["file"])
             assert file_path_hol.exists(), f"review file should exist on disk: {file_path_hol}"
 
-            # Test per-batch mode (batch_name="01-alpha")
+            # Test per-batch mode (batch_name="alpha")
             stub.seed([
                 ("# Raw prose\n\nBatch code OK.", "sid-batch"),
             ])
-            r_batch = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, batch_name="01-alpha")
+            r_batch = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, batch_name="alpha")
             assert r_batch.verdict in ("ERROR", "REQUEST_CHANGES"), (
                 f"expected ERROR or REQUEST_CHANGES for per-batch, got {r_batch.verdict}"
             )
