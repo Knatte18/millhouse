@@ -35,5 +35,7 @@ batches:
     implementer_session: 3c3b184e-1615-4558-a72f-743187d5ad3e
     start_sha: 65b28443f204be5765c98cc8c4db0df36b4095e4
   - name: strand-b-extends
-    state: pending
+    state: running
+    implementer_session: b80b79a5-6784-485d-b2f2-348292b9dd41
+    start_sha: f9adce8bdce5255e7a6eeda6ce41a40fe7f2cc08
 ```
