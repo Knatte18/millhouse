@@ -43,7 +43,9 @@ batches:
     implementer_session: b5fed113-a277-40f6-b365-ed234a057977
     start_sha: 16561a5f2ebccf3df2e3062e43a8d2d30bc8516b
   - name: template-identity-header
-    state: pending
+    state: running
+    implementer_session: 4aa836f7-49ad-4c6d-909b-be77c1c7c77a
+    start_sha: e5465fc20001fa1565807edd7ff40daea8aeac77
   - name: wire-guard-backends
     state: pending
 ```
