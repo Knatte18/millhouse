@@ -1,6 +1,7 @@
 """Unit tests for plugins/mill/scripts/_review_common.py."""
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
@@ -85,6 +86,7 @@ from _review_common import (  # noqa: E402
     RE_SIMPLE,
     ReviewError,
     _load_root_from_overview,
+    _read_for_bulk,
     aggregate_verdict,
     build_deletes_section,
     build_manifest_section,
@@ -422,6 +424,31 @@ def main() -> int:
     except ReviewError as e:
         assert "MAYBE" in str(e)
         print("PASS: parse_verdict invalid verdict -> ReviewError")
+
+    # parse_verdict: multiple yaml blocks; first wins
+    raw = "# Header\n\n```yaml\nverdict: APPROVE\n```\n\nMore text\n\n```yaml\nverdict: REQUEST_CHANGES\n```\n"
+    assert parse_verdict(raw) == "APPROVE"
+    print("PASS: parse_verdict multiple yaml blocks (first wins)")
+
+    # parse_verdict: trailing prose after yaml
+    raw = "```yaml\nverdict: APPROVE\n```\n\nThanks, this looks great.\n"
+    assert parse_verdict(raw) == "APPROVE"
+    print("PASS: parse_verdict trailing prose after yaml")
+
+    # parse_verdict: yaml fence with trailing whitespace
+    raw = "```yaml   \nverdict: APPROVE\n```   \n"
+    assert parse_verdict(raw) == "APPROVE"
+    print("PASS: parse_verdict yaml fence with trailing whitespace")
+
+    # parse_verdict: prose preamble + yaml block
+    raw = "Review written to file.md. Verdict is APPROVE.\n\n# Review: X\n\n```yaml\nverdict: APPROVE\n```\n"
+    assert parse_verdict(raw) == "APPROVE"
+    print("PASS: parse_verdict prose preamble + yaml block")
+
+    # parse_verdict: verdict with extra whitespace
+    raw = "```yaml\n  verdict:   APPROVE   \n```\n"
+    assert parse_verdict(raw) == "APPROVE"
+    print("PASS: parse_verdict verdict with extra whitespace")
 
     # write_review_file: creates file
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -1514,6 +1541,165 @@ def main() -> int:
         assert "--- FILE: " in result, f"expected FILE delimiter fallback, got: {result[:200]!r}"
         assert "--- DIFF:" not in result, f"expected no DIFF delimiter, got: {result[:200]!r}"
         print("PASS: bulk_files_with_diff git diff failure -> FILE delimiter fallback")
+
+    # _read_for_bulk: code-cell-only notebook -> source concatenated with \n\n
+    with tempfile.TemporaryDirectory() as tmpdir:
+        notebook_path = Path(tmpdir) / "code_only.ipynb"
+        notebook_path.write_text(
+            json.dumps({
+                "cells": [
+                    {"cell_type": "code", "source": "print('hello')"},
+                    {"cell_type": "code", "source": "x = 42"},
+                ]
+            }),
+            encoding="utf-8",
+        )
+        result = _read_for_bulk(notebook_path)
+        assert result == "print('hello')\n\nx = 42", f"Got: {result!r}"
+        print("PASS: _read_for_bulk code-cell-only notebook")
+
+    # _read_for_bulk: markdown-cell-only notebook
+    with tempfile.TemporaryDirectory() as tmpdir:
+        notebook_path = Path(tmpdir) / "md_only.ipynb"
+        notebook_path.write_text(
+            json.dumps({
+                "cells": [
+                    {"cell_type": "markdown", "source": "# Title"},
+                    {"cell_type": "markdown", "source": "Some text"},
+                ]
+            }),
+            encoding="utf-8",
+        )
+        result = _read_for_bulk(notebook_path)
+        assert result == "# Title\n\nSome text", f"Got: {result!r}"
+        print("PASS: _read_for_bulk markdown-cell-only notebook")
+
+    # _read_for_bulk: mixed code + markdown
+    with tempfile.TemporaryDirectory() as tmpdir:
+        notebook_path = Path(tmpdir) / "mixed.ipynb"
+        notebook_path.write_text(
+            json.dumps({
+                "cells": [
+                    {"cell_type": "markdown", "source": "# Section"},
+                    {"cell_type": "code", "source": "x = 1"},
+                    {"cell_type": "markdown", "source": "## Subsection"},
+                ]
+            }),
+            encoding="utf-8",
+        )
+        result = _read_for_bulk(notebook_path)
+        assert result == "# Section\n\nx = 1\n\n## Subsection", f"Got: {result!r}"
+        print("PASS: _read_for_bulk mixed code + markdown")
+
+    # _read_for_bulk: cell with source as list of strings
+    with tempfile.TemporaryDirectory() as tmpdir:
+        notebook_path = Path(tmpdir) / "list_source.ipynb"
+        notebook_path.write_text(
+            json.dumps({
+                "cells": [
+                    {"cell_type": "code", "source": ["line1", "line2", "line3"]},
+                ]
+            }),
+            encoding="utf-8",
+        )
+        result = _read_for_bulk(notebook_path)
+        assert result == "line1line2line3", f"Got: {result!r}"
+        print("PASS: _read_for_bulk cell with list-form source")
+
+    # _read_for_bulk: cell with source as single string
+    with tempfile.TemporaryDirectory() as tmpdir:
+        notebook_path = Path(tmpdir) / "str_source.ipynb"
+        notebook_path.write_text(
+            json.dumps({
+                "cells": [
+                    {"cell_type": "code", "source": "x = 42\ny = 43"},
+                ]
+            }),
+            encoding="utf-8",
+        )
+        result = _read_for_bulk(notebook_path)
+        assert result == "x = 42\ny = 43", f"Got: {result!r}"
+        print("PASS: _read_for_bulk cell with string-form source")
+
+    # _read_for_bulk: raw cell present -> skipped
+    with tempfile.TemporaryDirectory() as tmpdir:
+        notebook_path = Path(tmpdir) / "with_raw.ipynb"
+        notebook_path.write_text(
+            json.dumps({
+                "cells": [
+                    {"cell_type": "code", "source": "x = 1"},
+                    {"cell_type": "raw", "source": "ignore this"},
+                    {"cell_type": "markdown", "source": "y"},
+                ]
+            }),
+            encoding="utf-8",
+        )
+        result = _read_for_bulk(notebook_path)
+        assert result == "x = 1\n\ny", f"Got: {result!r}"
+        assert "ignore this" not in result
+        print("PASS: _read_for_bulk raw cell skipped")
+
+    # _read_for_bulk: non-.ipynb file (e.g. .py)
+    with tempfile.TemporaryDirectory() as tmpdir:
+        py_path = Path(tmpdir) / "code.py"
+        py_path.write_text("def hello():\n    return 42", encoding="utf-8")
+        result = _read_for_bulk(py_path)
+        assert result == "def hello():\n    return 42", f"Got: {result!r}"
+        print("PASS: _read_for_bulk .py file returns text as-is")
+
+    # _read_for_bulk: malformed JSON .ipynb -> returns "" with stderr warning
+    with tempfile.TemporaryDirectory() as tmpdir:
+        import io as _io
+        import contextlib as _cl
+        notebook_path = Path(tmpdir) / "bad.ipynb"
+        notebook_path.write_text("{bad json", encoding="utf-8")
+        _err_buf = _io.StringIO()
+        with _cl.redirect_stderr(_err_buf):
+            result = _read_for_bulk(notebook_path)
+        assert result == "", f"Expected empty string, got: {result!r}"
+        stderr_out = _err_buf.getvalue()
+        assert "[_read_for_bulk]" in stderr_out, f"Warning should contain [_read_for_bulk]: {stderr_out!r}"
+        assert "warning" in stderr_out.lower(), f"Warning should contain 'warning': {stderr_out!r}"
+        print("PASS: _read_for_bulk malformed JSON -> empty string + stderr warning")
+
+    # write_review_file: UTC-timestamp regression test (frozen clock)
+    import datetime as _dt
+    with tempfile.TemporaryDirectory() as tmpdir:
+        reviews_dir = Path(tmpdir)
+        frozen_dt = _dt.datetime(2026, 1, 2, 3, 4, 5, tzinfo=_dt.timezone.utc)
+        with patch("_review_common.datetime") as mock_dt_module:
+            mock_dt_module.now.return_value = frozen_dt
+            mock_dt_module.timezone = _dt.timezone
+            # Test case 1: code review, no scope
+            path = write_review_file(reviews_dir, "code", 1, "content")
+            assert "20260102-030405" in path.name, f"Expected UTC timestamp 20260102-030405, got: {path.name}"
+            assert "code-review-r1" in path.name
+            print("PASS: write_review_file UTC timestamp (code, no scope)")
+
+            # Test case 2: code review with scope="holistic"
+            path = write_review_file(reviews_dir, "code", 1, "content", scope="holistic")
+            assert "20260102-030405" in path.name
+            assert "code-review-r1" in path.name
+            assert "holistic" not in path.name
+            print("PASS: write_review_file UTC timestamp (code, scope=holistic)")
+
+            # Test case 3: code review with batch scope
+            path = write_review_file(reviews_dir, "code", 1, "content", scope="01-foundation")
+            assert "20260102-030405" in path.name
+            assert "code-review-01-foundation-r1" in path.name
+            print("PASS: write_review_file UTC timestamp (code, scope=batch)")
+
+            # Test case 4: discussion review (scope ignored)
+            path = write_review_file(reviews_dir, "discussion", 1, "content")
+            assert "20260102-030405" in path.name
+            assert "discussion-review-r1" in path.name
+            print("PASS: write_review_file UTC timestamp (discussion)")
+
+            # Test case 5: plan review with batch scope
+            path = write_review_file(reviews_dir, "plan", 1, "content", scope="01-foundation")
+            assert "20260102-030405" in path.name
+            assert "plan-review-01-foundation-r1" in path.name
+            print("PASS: write_review_file UTC timestamp (plan, scope=batch)")
 
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)

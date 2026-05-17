@@ -43,6 +43,7 @@ Public API:
 from __future__ import annotations
 
 import copy
+import json
 import re
 import _subprocess_util
 import sys
@@ -688,6 +689,40 @@ def _load_root_from_overview(overview_path: Path) -> str | None:
     return data.get("root") or None
 
 
+def _read_for_bulk(p: Path) -> str:
+    """Read file content, handling .ipynb notebooks specially.
+
+    For .ipynb files: reads as JSON, extracts cell source for 'code' and
+    'markdown' cell types, joins sources with blank lines between cells.
+    For other extensions: returns standard UTF-8 text read.
+
+    On JSON parse error for .ipynb: prints warning to stderr and returns
+    empty string so the file still appears in bulk output as an empty section.
+    """
+    if p.suffix == ".ipynb":
+        try:
+            content = p.read_text(encoding="utf-8")
+            notebook = json.loads(content)
+        except json.JSONDecodeError as exc:
+            print(f"[_read_for_bulk] warning: {p} JSON parse error: {exc}", file=sys.stderr)
+            return ""
+
+        cells = notebook.get("cells", [])
+        sources: list[str] = []
+        for cell in cells:
+            cell_type = cell.get("cell_type")
+            if cell_type not in ("code", "markdown"):
+                continue
+            source = cell.get("source", "")
+            if isinstance(source, list):
+                sources.append("".join(source))
+            else:
+                sources.append(str(source))
+        return "\n\n".join(sources)
+    else:
+        return p.read_text(encoding="utf-8", errors="replace")
+
+
 def bulk_files(file_paths: list[Path]) -> str:
     """Concatenate file contents with '--- FILE: <path> ---' delimiters.
 
@@ -696,7 +731,7 @@ def bulk_files(file_paths: list[Path]) -> str:
     parts: list[str] = []
     for p in file_paths:
         try:
-            contents = p.read_text(encoding="utf-8")
+            contents = _read_for_bulk(p)
         except FileNotFoundError:
             print(f"[bulk_files] warning: {p} not found, skipping", file=sys.stderr)
             continue
@@ -720,7 +755,7 @@ def bulk_files_with_diff(
     parts: list[str] = []
     for p in file_paths:
         try:
-            file_content = p.read_text(encoding="utf-8", errors="replace")
+            file_content = _read_for_bulk(p)
         except FileNotFoundError:
             print(f"[bulk_files_with_diff] warning: {p} not found, skipping", file=sys.stderr)
             continue
