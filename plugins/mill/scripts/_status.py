@@ -18,6 +18,7 @@ and rewrite just that block, never touching the top block.
 Public API:
     render_initial(task_title, task_description, timestamp,
                    parent_branch, slug, branch) -> str
+    read(status_path) -> dict
     read_full(status_path) -> dict
     read_parent_branch(status_path) -> str | None
     read_slug(status_path) -> str
@@ -149,6 +150,34 @@ def _split_fences(text: str, fence_open: str) -> tuple[int, int]:
         if lines[j].strip() == "```":
             return (start, j)
     raise ValueError(f"Unterminated {fence_open} block in status file")
+
+
+def read(status_path: Path) -> dict:
+    """Return the parsed top fenced-YAML block as a plain dict.
+
+    Args:
+        status_path: Absolute path to the status.md file.
+
+    Returns:
+        The contents of the top YAML block as a dict.
+
+    Raises:
+        ValueError: the file is missing, the yaml block is
+            unterminated, or yaml parsing fails.
+    """
+    if not status_path.exists():
+        raise ValueError(f"status file not found: {status_path}")
+    text = status_path.read_text(encoding="utf-8")
+    try:
+        y_start, y_end = _split_fences(text, _YAML_FENCE)
+    except ValueError:
+        raise
+    y_body = "\n".join(text.splitlines()[y_start:y_end])
+    try:
+        data = yaml.safe_load(y_body) or {}
+    except yaml.YAMLError as exc:
+        raise ValueError(f"Malformed yaml block in {status_path}: {exc}") from exc
+    return data
 
 
 def update_field(status_path: Path, key: str, value: str) -> None:
@@ -677,7 +706,7 @@ def read_slug(status_path: Path) -> str:
 def read_branch(status_path: Path, *, cfg: dict, slug: str) -> str:
     """Return the ``branch:`` value from the top yaml block, or derive it.
 
-    Falls back to ``f"{cfg['spawn']['branch_prefix']}/{slug}"`` when the prefix
+    Falls back to ``f"{cfg['spawn']['branch_prefix']}{slug}"`` when the prefix
     is non-empty, or bare ``slug`` when the prefix is empty. Emits a one-line
     warning to stderr on the fallback path.
 
@@ -700,7 +729,7 @@ def read_branch(status_path: Path, *, cfg: dict, slug: str) -> str:
         pass
 
     prefix = cfg.get("spawn", {}).get("branch_prefix", "")
-    derived = f"{prefix}/{slug}" if prefix else slug
+    derived = f"{prefix}{slug}" if prefix else slug
     print(
         f"[_status] warning: deriving branch from cfg.spawn.branch_prefix for slug={slug}",
         file=_sys.stderr,

@@ -112,9 +112,12 @@ __all__ = [
 ]
 
 
-def resolve_git_root() -> Path:
-    """Return the git toplevel of the current working directory."""
-    result = _subprocess_util.run(["git", "rev-parse", "--show-toplevel"])
+def resolve_git_root(start: Path | None = None) -> Path:
+    """Return the git toplevel for ``start`` (default: current working directory)."""
+    if start is None:
+        result = _subprocess_util.run(["git", "rev-parse", "--show-toplevel"])
+    else:
+        result = _subprocess_util.run(["git", "-C", str(start), "rev-parse", "--show-toplevel"])
     if result.returncode != 0:
         raise SystemExit(f"Not in a git repository: {result.stderr.strip()!r}")
     repo_root = Path(result.stdout.strip())

@@ -13,6 +13,8 @@ You are an autonomous planner running on Opus. Your job is to turn `discussion.m
 
 1. Resolve the wiki path via `_paths.resolve_wiki_path(_paths.resolve_git_root())` and call `_wiki.sync_pull(wiki_path, slug="mill-plan")`.
    `signature: _wiki.sync_pull(wiki_path: Path, *, slug: str) -> None`
+   `signature: _paths.resolve_git_root(start: Path | None = None) -> Path`
+   `signature: _paths.resolve_wiki_path(git_toplevel: Path) -> Path`
 2. Read the slug via `_marker.slug_from_branch(git_root, wiki_path, cfg)`. On `MarkerError` → halt with "this worktree was not created by mill-spawn".
 3. Load config — deep-merge `<WIKI_PATH>/config.yaml` with `.millhouse/config.local.yaml`. Read `roles.plan-review.holistic.rounds` as `max_review_rounds`.
    `signature: _config.load_config(wiki_path: Path, worktree_root: Path) -> dict`
@@ -63,6 +65,8 @@ Apply the same rule when rendering `plan-batch.md` for each batch (`<BATCH_NAME>
 
 **Self-validate the DAG** before committing: call `_plan_dag.extract_batch_index(overview_text)` then `_plan_dag.validate(batches, sorted(p.name for p in plan_dir.glob("??-*.md") if p.name != "00-overview.md"))`. Any `PlanDAGError` → fix the plan files, then re-validate. Do not commit a plan that fails this check.
 
+`signature: _status.read(status_path: Path) -> dict`
+
 **Update `_mill/status.md`.**
 
 - `plan_dir = worktree_root / cfg['paths']['plan_dir']` (config-canonical; write path).
@@ -105,7 +109,11 @@ Loop up to `max_review_rounds` rounds. Each round:
 
    After applying mechanical fixes for every error in the JSON, mill-plan commits the fix(es) on the task branch: `git -C <worktree> add <plan_dir> && git -C <worktree> commit -m "mill-plan: validator-fix pass for {slug}"` and re-runs the CLI. The commit message uses `validator-fix` to distinguish it from `plan-fix-r{N}` commits (which are LLM-fix-pass commits).
 
+   Before re-running via millpy-bg for the `plan-validator-fix` slug, verify `pwd` in the Bash terminal matches the task worktree. If `millpy-bg` rejects cwd with the parent-worktree error (`mill-bg: cwd appears to be a non-task worktree`), halt and instruct the operator to switch to the task-worktree terminal.
+
 2. Invoke the CLI as a subprocess:
+
+   > **Before invoking `millpy-bg`**: verify `pwd` in the Bash terminal matches the task worktree. If `millpy-bg` rejects cwd with the parent-worktree error (`mill-bg: cwd appears to be a non-task worktree`), halt and instruct the operator to switch to the task-worktree terminal.
 
    ```bash
    PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-bg.py" \
@@ -128,6 +136,8 @@ Loop up to `max_review_rounds` rounds. Each round:
 4.5. **Step 4.5: ERROR-only-aggregate retry (no round consumed)**
 
    When the JSON envelope from step 2 has a non-empty `reviews[]` array AND at least one entry's `verdict` is `"ERROR"`, skip steps 4a/4b/4c/4d entirely and immediately re-run:
+
+   > **Before invoking `millpy-bg`**: verify `pwd` in the Bash terminal matches the task worktree. If `millpy-bg` rejects cwd with the parent-worktree error (`mill-bg: cwd appears to be a non-task worktree`), halt and instruct the operator to switch to the task-worktree terminal.
 
    ```bash
    PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-bg.py" \

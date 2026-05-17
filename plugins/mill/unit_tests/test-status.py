@@ -14,8 +14,10 @@ HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
 from _status import (  # noqa: E402
+    read,
     append_phase,
     init_batches,
+    read,
     read_batches,
     read_branch,
     read_full,
@@ -561,7 +563,7 @@ def main() -> int:
             )
             buf = io.StringIO()
             with contextlib.redirect_stderr(buf):
-                result = read_branch(sp, cfg={"spawn": {"branch_prefix": "hanf"}}, slug="foo")
+                result = read_branch(sp, cfg={"spawn": {"branch_prefix": "hanf/"}}, slug="foo")
             assert result == "hanf/foo", f"expected 'hanf/foo', got {result!r}"
             stderr_out = buf.getvalue()
             assert "[_status] warning" in stderr_out, f"expected warning in stderr, got {stderr_out!r}"
@@ -581,6 +583,17 @@ def main() -> int:
             assert result == "foo", f"expected 'foo', got {result!r}"
             assert "[_status] warning" in buf.getvalue(), "expected warning for empty prefix fallback"
             print("PASS: read_branch with empty prefix returns bare slug with warning")
+
+        # Case D: fallback path, no extra slash
+        with tempfile.TemporaryDirectory() as tmp:
+            sp = Path(tmp) / "nonexistent-status.md"
+            buf = io.StringIO()
+            with contextlib.redirect_stderr(buf):
+                result = read_branch(sp, cfg={"spawn": {"branch_prefix": "hanf/"}}, slug="foo")
+            assert result == "hanf/foo", f"expected 'hanf/foo', got {result!r}"
+            assert "hanf//foo" not in result, f"should not have double slash, got {result!r}"
+            assert "[_status] warning" in buf.getvalue(), "expected warning on fallback"
+            print("PASS: read_branch fallback path has no extra slash (hanf/foo, not hanf//foo)")
 
         # --- set_batch_fields tests ---
         ts_sbf = "2026-04-22T14:32:05Z"
@@ -633,6 +646,40 @@ def main() -> int:
             except ValueError:
                 pass
         print("PASS: set_batch_fields rejects unknown batch name")
+
+        # --- read() tests ---
+        # Test 1: read returns yaml block dict with expected keys
+        with tempfile.TemporaryDirectory() as tmp:
+            sp = Path(tmp) / "status.md"
+            initial = render_initial(
+                task_title="Test Task",
+                task_description="Test Description",
+                timestamp="2026-05-17T10:00:00Z",
+                parent_branch="main",
+                slug="test-slug",
+                branch="hanf/test-slug",
+            )
+            sp.write_text(initial, encoding="utf-8")
+            result = read(sp)
+            assert isinstance(result, dict), f"expected dict, got {type(result)}"
+            assert result["phase"] == "discussing", f"phase mismatch: {result.get('phase')!r}"
+            assert result["slug"] == "test-slug", f"slug mismatch: {result.get('slug')!r}"
+            assert result["branch"] == "hanf/test-slug", f"branch mismatch: {result.get('branch')!r}"
+            assert result["parent"] == "main", f"parent mismatch: {result.get('parent')!r}"
+            assert result["task"] == "Test Task", f"task mismatch: {result.get('task')!r}"
+            assert "task_description" in result, "task_description key missing"
+            assert "plan" in result, "plan key missing"
+            print("PASS: read() returns yaml block dict with expected keys")
+
+        # Test 2: read raises ValueError on missing file
+        with tempfile.TemporaryDirectory() as tmp:
+            sp = Path(tmp) / "absent.md"
+            try:
+                read(sp)
+                assert False, "expected ValueError"
+            except ValueError as exc:
+                assert "status file not found" in str(exc), f"unexpected error message: {str(exc)!r}"
+        print("PASS: read() raises ValueError on missing file")
 
         print("All _status unit tests passed.")
         return 0

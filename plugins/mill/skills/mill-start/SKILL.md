@@ -43,6 +43,8 @@ Operator-driven entries keep the existing bare format (`- **Q:** … **A:** …`
 
 1. Resolve the wiki path via `_paths.resolve_wiki_path(_paths.resolve_git_root())` and call `_wiki.sync_pull(wiki_path, slug="mill-start")`.
    `signature: _wiki.sync_pull(wiki_path: Path, *, slug: str) -> None`
+   `signature: _paths.resolve_git_root(start: Path | None = None) -> Path`
+   `signature: _paths.resolve_wiki_path(git_toplevel: Path) -> Path`
 2. Read the slug via `_marker.slug_from_branch(git_root, wiki_path, cfg)`. On `MarkerError`, halt and tell the user this worktree was not created by `mill-spawn`.
 3. Load config — deep-merge `<WIKI_PATH>/config.yaml` (shared) with `.millhouse/config.local.yaml` (gitignored overlay). Read `roles.discussion-review.holistic.rounds` as `max_review_rounds`.
    `signature: _config.load_config(wiki_path: Path, worktree_root: Path) -> dict`
@@ -107,6 +109,8 @@ Loop up to `max_review_rounds` rounds. Each round:
 1. Report: **"Discussion Review — round N/max_review_rounds"**.
 2. Background the CLI via `millpy-bg`:
 
+   > **Before invoking `millpy-bg`**: verify `pwd` in the Bash terminal matches the task worktree. If `millpy-bg` rejects cwd with the parent-worktree error (`mill-bg: cwd appears to be a non-task worktree`), halt and instruct the operator to switch to the task-worktree terminal.
+
    ```bash
    PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-bg.py" \
        --slug review-discussion-r<N> -- \
@@ -117,11 +121,27 @@ Loop up to `max_review_rounds` rounds. Each round:
 
 3. **BEFORE reading the review file, load the `mill-receiving-review` skill** (see `plugins/mill/skills/mill-receiving-review/SKILL.md`). This is non-negotiable — the decision tree it encodes is what keeps review loops useful instead of adversarial.
 
+3.5. **Step 3.5: ERROR-only-aggregate retry (no round consumed)**
+
+   When the JSON envelope from step 2 has top-level `verdict: "ERROR"` (or, equivalently, every entry in `reviews[]` has `verdict: "ERROR"`), skip steps 4a / 4b / 5 entirely and immediately re-run:
+
+   > **Before invoking `millpy-bg`**: verify `pwd` in the Bash terminal matches the task worktree. If `millpy-bg` rejects cwd with the parent-worktree error (`mill-bg: cwd appears to be a non-task worktree`), halt and instruct the operator to switch to the task-worktree terminal.
+
+   ```bash
+   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-bg.py" \
+       --slug review-discussion-retry-r<N> -- \
+       "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-review-discussion.py"
+   ```
+
+   Returns immediately with `pid=<N> log=<abs-path>`. Poll `cat <log-path>` until `[mill-bg] EXIT` appears, then extract the JSON summary line.
+
+   The round counter `N` is **not** consumed -- the round produced no reviewable output. On the **second** consecutive run that still has top-level `verdict: "ERROR"`, halt with `BLOCKED: discussion review ERROR-only round {N}` and surface each entry's `error` string from `reviews[]` to the user. Under `--auto` mode, halt by calling `_status.set_blocked(status_path, f"auto: discussion review ERROR-only round {N}", timestamp=_timestamp.now_utc_iso())`, then `git -C <worktree> add <status_path> && git commit -m "mill-start: blocked (auto: discussion review ERROR) for <slug>" && git push`. Do NOT auto-retry beyond the second pass. The two-pass cap mirrors mill-go's Step 4.5.
+
 4a. On APPROVE (verdict from JSON) with no NOTE findings: read the review file at the absolute path supplied by `reviews[0].file` in the JSON envelope from step 2 and confirm zero `[NOTE]`-prefixed findings. Break the loop and proceed to Handoff.
 
 4b. On APPROVE with one or more `[NOTE]` findings: apply each NOTE fix per the `mill-receiving-review` decision tree by editing `<discussion_path>` directly. Write a fixer report at `<reviews_dir>/<YYYYMMDD-HHMMSS>-discussion-fix-r<N>.md` (timestamp from `_timestamp.now_utc_compact()`) with two sections — `## Fixed` (one line per fixed NOTE: short reference to the source review file + quoted finding title) and `## Pushed Back` (one line per rejected NOTE: short reference + reason citing code, doc, or scope per `mill-receiving-review`'s legitimate-pushback rules). Call `_status.append_phase(status_path, f"discussion-fix-r{N}", _timestamp.now_utc_iso())`. Single git commit covering exactly three pathspecs — `<discussion_path>`, `<reviews_dir>/`, `<status_path>` — with message `mill-start: discussion-fix round {N} for {slug}`. Push. Break loop → Handoff. Do NOT run round N+1. Do NOT advance the round counter; the fixer report's `discussion-fix-r<N>` reuses the just-completed review round's `N` value.
 
-5. On GAPS_FOUND: read the review file and enumerate each `[GAP]` finding. Present gaps to the user in **sequential batches of at most 5 gaps per batch**. Each gap is formatted as a numbered question whose resolution options follow the `mill:conversation` rule — numbered text list, the recommended option is option 1 (the SKILL must use its judgment + context to propose a recommended resolution and 1–3 distinct alternatives). Free-text gap prompts are forbidden; the SKILL must coerce every gap into options form, just as the auto-mode rule does for interview questions in Phase: Discuss. Wait for the user to answer every gap in the current batch before presenting the next batch. As each batch's answers arrive, apply them to an in-memory copy of `<discussion_path>` (do NOT write the file mid-round). When the final batch in this round is answered, write `<discussion_path>`, commit on the task branch (`git -C <worktree> add <discussion_path> && git commit -m "mill-start: discussion-gap-fix round {N} for {slug}"`), push, and start round N+1. If a gap is genuinely impossible to answer (operator does not know yet), the operator may pick the recommended option and add a follow-up note inline — that is the same fallback as Phase: Discuss.
+5. On GAPS_FOUND: read the review file and enumerate each `[GAP]` finding. Present gaps to the user in **sequential batches of at most 5 gaps per batch**. Each gap is formatted as a numbered question whose resolution options follow the `mill:conversation` rule — numbered text list, the recommended option is option 1 (the SKILL must use its judgment + context to propose a recommended resolution and 1–3 distinct alternatives). Free-text gap prompts are forbidden; the SKILL must coerce every gap into options form, just as the auto-mode rule does for interview questions in Phase: Discuss. Wait for the user to answer every gap in the current batch before presenting the next batch. As each batch's answers arrive, apply them to an in-memory copy of `<discussion_path>` (do NOT write the file mid-round). When the final batch in this round is answered, write `<discussion_path>`, commit on the task branch (`git -C <worktree> add <discussion_path> <reviews_dir>/ && git commit -m "mill-start: discussion-gap-fix round {N} for {slug}"`), push, and start round N+1. If a gap is genuinely impossible to answer (operator does not know yet), the operator may pick the recommended option and add a follow-up note inline — that is the same fallback as Phase: Discuss.
 
 If unresolved gaps remain after `max_review_rounds`: present them to the user for an explicit override ("ignore gap X for now") or more-info decision.
 
