@@ -160,6 +160,9 @@ def test_review_cli_emits_envelope_on_reviewer_load_failure() -> int:
     import unittest.mock as _mock
     import os as _os
 
+    # Import _reviewers to get ReviewerError class
+    _reviewers = __import__("_reviewers")
+
     for cli_name, review_type in [
         ("millpy-review-discussion.py", "discussion"),
         ("millpy-review-plan.py", "plan"),
@@ -209,7 +212,7 @@ def test_review_cli_emits_envelope_on_reviewer_load_failure() -> int:
             try:
                 with contextlib.redirect_stdout(stdout_buf):
                     with _mock.patch("_paths.resolve_wiki_path", return_value=_wiki):
-                        with _mock.patch("_reviewers.load", side_effect=Exception("registry missing")):
+                        with _mock.patch("_reviewers.load", side_effect=_reviewers.ReviewerError("registry missing")):
                             _rc = _mod.main([])
             finally:
                 _os.chdir(_orig_cwd)
