@@ -358,7 +358,7 @@ def run(
                 reviews=_reviews,
             )
 
-        if verdict == "NEED_CONTEXT":
+            if verdict == "NEED_CONTEXT":
                 missing_raw = parse_missing_context(raw)
                 missing_paths = resolve_existing_paths(
                     missing_raw, project_root, root, wiki_root=wiki_root
