@@ -32,7 +32,9 @@ implementing  '2026-05-17T12:34:38Z'
 ```yaml
 batches:
   - name: branch-slug-helpers
-    state: pending
+    state: running
+    implementer_session: 5e1d6c3f-c948-4436-9f7d-d560fe36c138
+    start_sha: 8173a900992dce128dc1dd18a4f6f0e443108578
   - name: review-cli-error-envelope
     state: pending
   - name: millpy-implement-push-branch
