@@ -90,13 +90,6 @@ batches:
 
 ## All Files Touched
 
-- `_mill/plan/00-overview.md`
-- `_mill/plan/01-sandbox-argv.md`
-- `_mill/plan/02-snapshot-guard.md`
-- `_mill/plan/03-review-error-envelope.md`
-- `_mill/plan/04-wiki-noop-commit.md`
-- `_mill/plan/05-bg-liveness.md`
-- `_mill/plan/06-millgo-holistic-recovery.md`
 - `plugins/mill/scripts/_bg.py`
 - `plugins/mill/scripts/_llm_claude.py`
 - `plugins/mill/scripts/_review_code.py`
