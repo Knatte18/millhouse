@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-branch-slug-fixes
 branch: hanf/mill-branch-slug-fixes
 plan: _mill/plan
@@ -24,4 +24,21 @@ plan-review-r2  '2026-05-17T12:22:17Z'
 plan-fix-r2  '2026-05-17T12:22:17Z'
 plan-fix-r3  '2026-05-17T12:30:13Z'
 planned  '2026-05-17T12:30:26Z'
+implementing  '2026-05-17T12:34:38Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: branch-slug-helpers
+    state: pending
+  - name: review-cli-error-envelope
+    state: pending
+  - name: millpy-implement-push-branch
+    state: pending
+  - name: millpy-bg-cwd-validation
+    state: pending
+  - name: skill-error-retry-and-cwd-preludes
+    state: pending
 ```
