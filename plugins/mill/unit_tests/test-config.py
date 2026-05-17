@@ -12,6 +12,7 @@ Covers:
 """
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 import tempfile
@@ -284,6 +285,227 @@ def test_deep_merge_empty_overlay() -> None:
 
 
 # ---------------------------------------------------------------------------
+# env-interpolation
+# ---------------------------------------------------------------------------
+
+
+def test_interp_default_when_var_unset() -> None:
+    """Interpolation uses default when env var is unset."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        wiki = tmp_path / "wiki"
+        wt_root = tmp_path / "hub"
+        _git_init(wt_root)
+        _write_yaml(wiki / "config.yaml", 'key: "${UNSET_ENV_INTERP_VAR:-mydefault}"\n')
+
+        os.environ.pop("UNSET_ENV_INTERP_VAR", None)
+        cfg = _config.load_config(wiki, wt_root)
+
+        assert cfg["key"] == "mydefault", f"Expected 'mydefault', got {cfg['key']!r}"
+    print("PASS env-interp — default when var unset")
+
+
+def test_interp_env_value_when_var_set() -> None:
+    """Interpolation uses env value when var is set, ignoring default."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        wiki = tmp_path / "wiki"
+        wt_root = tmp_path / "hub"
+        _git_init(wt_root)
+        _write_yaml(wiki / "config.yaml", 'key: "${TEST_ENV_INTERP_SET:-default}"\n')
+
+        saved = os.environ.pop("TEST_ENV_INTERP_SET", None)
+        try:
+            os.environ["TEST_ENV_INTERP_SET"] = "actual"
+            cfg = _config.load_config(wiki, wt_root)
+            assert cfg["key"] == "actual", f"Expected 'actual', got {cfg['key']!r}"
+        finally:
+            if saved is None:
+                os.environ.pop("TEST_ENV_INTERP_SET", None)
+            else:
+                os.environ["TEST_ENV_INTERP_SET"] = saved
+    print("PASS env-interp — env value when var set")
+
+
+def test_interp_unset_no_default_raises() -> None:
+    """Interpolation raises ConfigError when var unset and no default given."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        wiki = tmp_path / "wiki"
+        wt_root = tmp_path / "hub"
+        _git_init(wt_root)
+        _write_yaml(wiki / "config.yaml", 'key: "${REQUIRED_UNSET_VAR}"\n')
+
+        os.environ.pop("REQUIRED_UNSET_VAR", None)
+        try:
+            cfg = _config.load_config(wiki, wt_root)
+            assert False, "Expected ConfigError to be raised"
+        except _config.ConfigError as exc:
+            exc_str = str(exc)
+            assert "REQUIRED_UNSET_VAR" in exc_str, f"Var name not in error: {exc_str!r}"
+            assert "key" in exc_str, f"Key path not in error: {exc_str!r}"
+    print("PASS env-interp — unset no default raises ConfigError with var and key")
+
+
+def test_interp_no_pattern_unchanged() -> None:
+    """Strings without env-var patterns pass through unchanged."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        wiki = tmp_path / "wiki"
+        wt_root = tmp_path / "hub"
+        _git_init(wt_root)
+        _write_yaml(wiki / "config.yaml", 'key: "plain string"\n')
+
+        cfg = _config.load_config(wiki, wt_root)
+
+        assert cfg["key"] == "plain string", f"Expected plain string, got {cfg['key']!r}"
+    print("PASS env-interp — no pattern unchanged")
+
+
+def test_interp_nested_walk() -> None:
+    """Interpolation recursively walks nested dicts."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        wiki = tmp_path / "wiki"
+        wt_root = tmp_path / "hub"
+        _git_init(wt_root)
+        _write_yaml(
+            wiki / "config.yaml",
+            'a:\n  b:\n    c: "${INTERP_DEEP:-deep}"\n',
+        )
+
+        os.environ.pop("INTERP_DEEP", None)
+        cfg = _config.load_config(wiki, wt_root)
+
+        assert cfg["a"]["b"]["c"] == "deep", (
+            f"Expected 'deep' in nested value, got {cfg['a']['b']['c']!r}"
+        )
+    print("PASS env-interp — nested walk")
+
+
+def test_interp_list_walk() -> None:
+    """Interpolation walks list elements."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        wiki = tmp_path / "wiki"
+        wt_root = tmp_path / "hub"
+        _git_init(wt_root)
+        _write_yaml(
+            wiki / "config.yaml",
+            'xs:\n  - "${LIST_A:-a}"\n  - "${LIST_B:-b}"\n',
+        )
+
+        os.environ.pop("LIST_A", None)
+        os.environ.pop("LIST_B", None)
+        cfg = _config.load_config(wiki, wt_root)
+
+        assert cfg["xs"] == ["a", "b"], f"Expected ['a', 'b'], got {cfg['xs']!r}"
+    print("PASS env-interp — list walk")
+
+
+def test_interp_non_string_values_untouched() -> None:
+    """Non-string values (int, bool, None) pass through unchanged."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        wiki = tmp_path / "wiki"
+        wt_root = tmp_path / "hub"
+        _git_init(wt_root)
+        _write_yaml(
+            wiki / "config.yaml",
+            "count: 5\nflag: true\nnothing: null\n",
+        )
+
+        cfg = _config.load_config(wiki, wt_root)
+
+        assert cfg["count"] == 5 and isinstance(cfg["count"], int), (
+            f"Expected int 5, got {cfg['count']!r}"
+        )
+        assert cfg["flag"] is True, f"Expected True, got {cfg['flag']!r}"
+        assert cfg["nothing"] is None, f"Expected None, got {cfg['nothing']!r}"
+    print("PASS env-interp — non-string values untouched")
+
+
+def test_interp_applied_after_all_overlays() -> None:
+    """Interpolation runs after all overlays are merged."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        wiki = tmp_path / "wiki"
+        wt_root = tmp_path / "hub"
+        _git_init(wt_root)
+        _write_yaml(wiki / "config.yaml", 'key: "${INTERP_A:-wiki}"\n')
+        _write_yaml(
+            wt_root / ".millhouse" / "config.local.yaml",
+            'key: "${INTERP_B:-local}"\n',
+        )
+
+        os.environ.pop("INTERP_A", None)
+        os.environ.pop("INTERP_B", None)
+        cfg = _config.load_config(wiki, wt_root)
+
+        assert cfg["key"] == "local", (
+            f"Expected 'local' (overlay merged first, then interpolated), got {cfg['key']!r}"
+        )
+    print("PASS env-interp — applied after all overlays merged")
+
+
+def test_interp_multiple_in_one_string() -> None:
+    """Multiple patterns in one string are all substituted in single pass."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        wiki = tmp_path / "wiki"
+        wt_root = tmp_path / "hub"
+        _git_init(wt_root)
+        _write_yaml(wiki / "config.yaml", 'key: "${INTERP_X:-x}-${INTERP_Y:-y}"\n')
+
+        os.environ.pop("INTERP_X", None)
+        os.environ.pop("INTERP_Y", None)
+        cfg = _config.load_config(wiki, wt_root)
+
+        assert cfg["key"] == "x-y", f"Expected 'x-y', got {cfg['key']!r}"
+    print("PASS env-interp — multiple patterns in one string")
+
+
+def test_interp_empty_default() -> None:
+    """Empty default (${VAR:-}) is allowed and produces empty string."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        wiki = tmp_path / "wiki"
+        wt_root = tmp_path / "hub"
+        _git_init(wt_root)
+        _write_yaml(wiki / "config.yaml", 'key: "${INTERP_EMPTY:-}"\n')
+
+        os.environ.pop("INTERP_EMPTY", None)
+        cfg = _config.load_config(wiki, wt_root)
+
+        assert cfg["key"] == "", f"Expected empty string, got {cfg['key']!r}"
+    print("PASS env-interp — empty default allowed")
+
+
+def test_interp_lowercase_name_passthrough() -> None:
+    """Lowercase variable names are not matched (literal passthrough)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        wiki = tmp_path / "wiki"
+        wt_root = tmp_path / "hub"
+        _git_init(wt_root)
+        _write_yaml(wiki / "config.yaml", 'key: "${my_var}"\n')
+
+        saved = os.environ.pop("my_var", None)
+        try:
+            os.environ["my_var"] = "foo"
+            cfg = _config.load_config(wiki, wt_root)
+            assert cfg["key"] == "${my_var}", (
+                f"Lowercase pattern should pass through literally, got {cfg['key']!r}"
+            )
+        finally:
+            if saved is None:
+                os.environ.pop("my_var", None)
+            else:
+                os.environ["my_var"] = saved
+    print("PASS env-interp — lowercase name passthrough (POSIX convention)")
+
+
+# ---------------------------------------------------------------------------
 # Main runner
 # ---------------------------------------------------------------------------
 
@@ -403,6 +625,18 @@ def main() -> int:
         test_deep_merge_scalar_wins,
         test_deep_merge_nested_merge,
         test_deep_merge_empty_overlay,
+        # env-interpolation
+        test_interp_default_when_var_unset,
+        test_interp_env_value_when_var_set,
+        test_interp_unset_no_default_raises,
+        test_interp_no_pattern_unchanged,
+        test_interp_nested_walk,
+        test_interp_list_walk,
+        test_interp_non_string_values_untouched,
+        test_interp_applied_after_all_overlays,
+        test_interp_multiple_in_one_string,
+        test_interp_empty_default,
+        test_interp_lowercase_name_passthrough,
         test_no_op_when_both_args_none,
         test_creates_file_when_missing,
         test_updates_existing_value,
