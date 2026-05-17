@@ -32,7 +32,9 @@ implementing  '2026-05-17T16:03:04Z'
 ```yaml
 batches:
   - name: sandbox-argv
-    state: pending
+    state: running
+    implementer_session: 27ad7769-7a6c-497d-9082-6fe385bd2739
+    start_sha: 3054a47d254f23e6f77604345a28c28ad8354065
   - name: snapshot-guard
     state: pending
   - name: review-error-envelope
