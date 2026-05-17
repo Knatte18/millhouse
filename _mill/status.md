@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-millpy-bg-cwd-validation
+phase: approved-skill-error-retry-and-cwd-preludes
 slug: mill-branch-slug-fixes
 branch: hanf/mill-branch-slug-fixes
 plan: _mill/plan
@@ -29,6 +29,7 @@ approved-branch-slug-helpers  '2026-05-17T12:42:04Z'
 approved-review-cli-error-envelope  '2026-05-17T12:51:57Z'
 approved-millpy-implement-push-branch  '2026-05-17T12:54:01Z'
 approved-millpy-bg-cwd-validation  '2026-05-17T13:06:43Z'
+approved-skill-error-retry-and-cwd-preludes  '2026-05-17T13:10:15Z'
 ```
 
 ## Batches
@@ -52,7 +53,7 @@ batches:
     implementer_session: 8fbf1351-414f-4454-a1a8-abd3544b7438
     start_sha: e36284133062c56cd703c088a1fb5f75e49ac739
   - name: skill-error-retry-and-cwd-preludes
-    state: running
+    state: approved
     implementer_session: 746487f6-fb80-4382-9056-2113b64581de
     start_sha: 39b18b769b64b946b7de65bdd4c0e3399c93c71c
 ```
