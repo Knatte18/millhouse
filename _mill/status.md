@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-reviewing
+phase: holistic-approved
 slug: mill-review-pipeline-fixes
 branch: hanf/mill-review-pipeline-fixes
 plan: _mill/plan
@@ -26,6 +26,7 @@ approved-backend-error-envelope  '2026-05-17T15:28:23Z'
 approved-review-discussion-cli  '2026-05-17T15:41:11Z'
 approved-mill-go-config  '2026-05-17T15:45:48Z'
 holistic-reviewing  '2026-05-17T15:46:09Z'
+holistic-approved  '2026-05-17T15:51:32Z'
 ```
 
 ## Batches
