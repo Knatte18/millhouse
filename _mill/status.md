@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-reviewing
+phase: done
 slug: config-move-to-hub
 branch: hanf/config-move-to-hub
 plan: _mill/plan
@@ -35,6 +35,8 @@ approved-cleanup-deletions  '2026-05-16T17:43:35Z'
 holistic-reviewing  '2026-05-16T17:43:52Z'
 holistic-fixing  '2026-05-16T17:53:39Z'
 holistic-reviewing  '2026-05-16T18:01:55Z'
+holistic-approved  '2026-05-17T06:28:29Z'
+done  '2026-05-17T06:28:29Z'
 ```
 
 ## Batches
