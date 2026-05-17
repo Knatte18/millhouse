@@ -1,11 +1,10 @@
-# wiki/config.yaml — shared configuration for the millhouse hub.
+# mill-config.yaml — millhouse hub overrides.
 #
-# Owned by the wiki repo. Applies to every clone of this hub.
-# Local non-secret overrides go in .millhouse/config.local.yaml (gitignored).
-# Secrets belong in .env at the repo root, not here.
+# Template defaults live in the plugin. Uncomment + change only what you need.
+# Local per-machine overrides go in .millhouse/config.local.yaml (gitignored).
 #
-# Review roles live under `roles:`. Reviewer names reference wiki/reviewers.yaml.
-# Skip semantics: rounds: 0 OR reviewer: null → skip the scope.
+# Overlay precedence (first source wins):
+#   plugin template -> this file -> .millhouse/config.local.yaml
 
 # ---------------------------------------------------------------------------
 # Repo identity
@@ -17,24 +16,15 @@ repo:
 # ---------------------------------------------------------------------------
 # Junctions
 # ---------------------------------------------------------------------------
-# Each entry: `<junction-path>: <target-template>`.
-# Scope inferred from token presence:
-#   * Target contains <SLUG>   → per-worktree; created by mill-spawn.
-#   * Target has no <SLUG>     → hub-scope; created by mill-setup.
-# Tokens: <WIKI_PATH>, <CONTAINER_PATH>, <HUB_PATH>, <REPO>, <SLUG>.
-# Junctions are IDE/terminal convenience — scripts always resolve paths
-# via _paths.py, never via the link paths themselves.
 
-junctions:
-  .wiki: <WIKI_PATH>
-  .portals: <CONTAINER_PATH>/portals/
-  .active: <CONTAINER_PATH>/portals/<SLUG>/
+# junctions:
+#   .wiki: <WIKI_PATH>
+#   .portals: <CONTAINER_PATH>/portals/
+#   .active: <CONTAINER_PATH>/portals/<SLUG>/
 
 # ---------------------------------------------------------------------------
 # mill-spawn
 # ---------------------------------------------------------------------------
-# branch_prefix — prepended directly to the slug (no separator added).
-#   Include any separator in the prefix itself, e.g. "hanf/" → "hanf/<slug>".
 
 spawn:
   branch_prefix: "hanf/"
@@ -42,102 +32,91 @@ spawn:
 # ---------------------------------------------------------------------------
 # Git integration
 # ---------------------------------------------------------------------------
-# Uncomment if your remote enforces PRs to the base branch (branch protection).
+
 # git:
-#   require-pr-to-base: true   # create a PR instead of pushing directly
-#   base-branch: main          # branch to target; defaults to main if absent
+#   require_pr_to_base: true
+#   base_branch: main
 
 # ---------------------------------------------------------------------------
-# File-path templates (relative to active worktree root)
+# File-path templates
 # ---------------------------------------------------------------------------
 
-paths:
-  discussion_file: _mill/discussion.md
-  plan_dir:        _mill/plan/
-  reviews_dir:     _mill/reviews/
-  status_md:       _mill/status.md
+# paths:
+#   discussion_file: _mill/discussion.md
+#   plan_dir:        _mill/plan/
+#   reviews_dir:     _mill/reviews/
+#   status_md:       _mill/status.md
 
 # ---------------------------------------------------------------------------
 # LLM-provider timeouts (seconds)
 # ---------------------------------------------------------------------------
-# Model selection and effort live inside the named reviewer modules (e.g.
-# sonnetmax, sonnetmedium) declared in wiki/reviewers.yaml. This section
-# controls only timeout budgets.
 
 llm:
-  bulk_timeout: 900          # per-batch reviews; covers effort max with cold cache (#83)
-  holistic_timeout: 1800     # holistic plan/code review (5–10× per-batch prompt size, #80)
-  tool_use_timeout: 900      # reviews with Read/Grep/Glob
-  implementer_timeout: 1800  # mill-go per-batch worker
+  bulk_timeout: 900
+  # holistic_timeout: 1800
+  # tool_use_timeout: 900
+  implementer_timeout: 1800
 
 # ---------------------------------------------------------------------------
 # mill-go pipeline
 # ---------------------------------------------------------------------------
-# auto_merge — if true, mill-go invokes /mill-merge automatically after
-#   every batch approves and self-report completes.
-# auto_report — if true, mill-plan + mill-go auto-fire /mill-self-report
-#   at end-of-work. The skill's manual invocation path always works.
 
 pipeline:
   auto_merge: true
-  auto_report: true
-  autonomous_mode: false  # set to true by mill-autofix during autonomous runs; restored on cleanup
+  # auto_report: true
 
 # ---------------------------------------------------------------------------
 # Reviewer roles
 # ---------------------------------------------------------------------------
-# Reviewer names reference wiki/reviewers.yaml entries.
-# Skip semantics: rounds: 0 OR reviewer: null → skip that scope.
 
 roles:
-  discussion-review:
-    holistic:
-      rounds: 2
-      reviewer: sonnetmax_tool
+  # discussion-review:
+  #   holistic:
+  #     rounds: 3
+  #     reviewer: sonnetmax_tool
 
-  plan-review:
-    batch:
-      rounds: 0
-      reviewer: null
-    holistic:
-      rounds: 3
-      reviewer: sonnetmax
+  # plan-review:
+  #   batch:
+  #     rounds: 0
+  #     reviewer: null
+  #   holistic:
+  #     rounds: 3
+  #     reviewer: sonnetmax
 
-  code-review:
-    batch:
-      rounds: 0
-      reviewer: null
-    holistic:
-      rounds: 3
-      reviewer: sonnethigh
-    diff_scope_threshold: 0.25
+  # code-review:
+  #   batch:
+  #     rounds: 0
+  #     reviewer: null
+  #   holistic:
+  #     rounds: 3
+  #     reviewer: sonnethigh
+  #   diff_scope_threshold: 0.25
 
-  implementer:
-    self_fix_rounds: 2
-    model: haiku
+  # implementer:
+  #   self_fix_rounds: 2
+  #   model: haiku
 
 # ---------------------------------------------------------------------------
 # Notifications
 # ---------------------------------------------------------------------------
 
-notify:
-  backend: stdout
+# notify:
+#   backend: stdout
 
 # ---------------------------------------------------------------------------
-# mill-groom: backlog cleanup thresholds
+# mill-groom
 # ---------------------------------------------------------------------------
 
-groom:
-  brevity-threshold-lines: 5
-  brevity-threshold-chars: 500
+# groom:
+#   brevity-threshold-lines: 5
+#   brevity-threshold-chars: 500
 
 # ---------------------------------------------------------------------------
-# mill-merge-in: verify allowlist
+# mill-merge-in
 # ---------------------------------------------------------------------------
-# verify.skip_known_broken is a list of path substrings. If any entry appears
-# as a substring of a plan batch's verify: command, mill-merge-in skips that
-# command and logs: [verify] skipped <path> (allowlisted as known-broken).
-# Values are per-machine and belong in .millhouse/config.local.yaml, not here
-# in the shared wiki config — this block is for schema documentation only.
+
+# merge:
+#   verify_fix_rounds: 3
+
 # verify:
-#   skip_known_broken: []  # e.g. ["tests/foo/test_flaky.py"]
+#   skip_known_broken: []
