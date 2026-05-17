@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-backend-error-envelope
+phase: approved-review-discussion-cli
 slug: mill-review-pipeline-fixes
 branch: hanf/mill-review-pipeline-fixes
 plan: _mill/plan
@@ -23,6 +23,7 @@ planned  '2026-05-17T14:12:47Z'
 implementing  '2026-05-17T14:13:23Z'
 approved-review-common  '2026-05-17T14:32:20Z'
 approved-backend-error-envelope  '2026-05-17T15:28:23Z'
+approved-review-discussion-cli  '2026-05-17T15:41:11Z'
 ```
 
 ## Batches
@@ -38,7 +39,7 @@ batches:
     implementer_session: c409bff4-4785-49fb-ae4a-b8cfe10dd5c8
     start_sha: 0c994fec5df1a40551df9750b90e8da30efb8e2c
   - name: review-discussion-cli
-    state: running
+    state: approved
     implementer_session: 5be03502-a1d8-4395-aedc-dab7d7c4bfca
     start_sha: 3ed565dcd82ccf3fa28abaab798fa3b0fedd9b9e
   - name: mill-go-config
