@@ -60,7 +60,8 @@ repo:
 junctions:
   .wiki: <WIKI_PATH>
   .portals: <CONTAINER_PATH>/portals/
-  .active: <CONTAINER_PATH>/portals/<SLUG>/
+  # .active is created explicitly by mill-spawn/mill-claim (points to <hub>/_mill/);
+  # not declared here so it is not auto-created in non-task worktrees.
 
 # ---------------------------------------------------------------------------
 # mill-spawn
