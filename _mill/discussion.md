@@ -304,10 +304,14 @@ when it returns to its idle `❯` prompt.
   derives `mill-{id[:12]}` so there is exactly one production caller
   pattern; the wrapper itself does no sanitisation. Tests pass synthetic
   names directly.
-- `_psmux.list_sessions()` raises `PsmuxError` if the psmux server is
-  not running. Treat that as "session does not exist" for the reuse
-  check — i.e. catch and proceed to create. The existing `_wait_for_*`
-  helpers already swallow `PsmuxError`.
+- `_psmux.list_sessions()` returns `[]` when no psmux server is
+  running (the "no server running" branch is handled internally at
+  `_psmux.py:127-130`); it re-raises `PsmuxError` for any other
+  failure. The reuse check therefore needs no special "no server"
+  handling — an empty list naturally falls through to the
+  `new_session` branch — but it should still propagate unexpected
+  `PsmuxError` instances so the wrapper exits non-zero rather than
+  silently creating a session under a broken psmux install.
 - `cleanup_session` must not raise. It does
   `try: ... except _psmux.PsmuxError: pass`. Document this contract
   in the docstring so mill-go callers do not wrap it in their own
@@ -402,9 +406,13 @@ No `CONSTRAINTS.md` is present at the hub root.
      (regression guard).
    - Test S7: `--psmux-session new-name`, `list_sessions()` returns
      `[]` → wrapper creates the session with that exact name.
-   - Test S8: `_psmux.list_sessions()` raises `PsmuxError` (server
-     not running) → wrapper proceeds to `new_session` (treats as
-     "session not present").
+   - Test S8: `_psmux.list_sessions()` raises `PsmuxError` (an
+     unexpected failure — not the "no server running" branch, which
+     `_psmux.py:127-130` swallows and converts to `[]`). Assert the
+     wrapper exits non-zero with stderr containing the `PsmuxError`
+     detail; do NOT proceed to `new_session`. The "empty list →
+     proceed to `new_session`" path is exercised separately by
+     Test S7's `list_sessions()` returning `[]`.
    - Test S9: `REUSE_IDLE_TIMEOUT_S` is read from config when
      present; falls back to the module default when absent. (Use a
      `_config` mock; only validates the value-plumbing, not the
