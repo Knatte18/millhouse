@@ -17,12 +17,10 @@ import shlex
 import sys
 import time
 import uuid
-from pathlib import Path
 
 import _paths
 import _psmux
 import _psmux_capture
-import _subprocess_util
 
 # Boot and polling constants
 BOOT_READY_TIMEOUT_S = 20
@@ -66,6 +64,16 @@ def _make_parser() -> argparse.ArgumentParser:
         "--session-id",
         default=str(uuid.uuid4()),
         help="Session ID (default: generated UUID)",
+    )
+    parser.add_argument(
+        "--psmux-session",
+        default=None,
+        help="Reuse the named psmux session if it exists; create it under this name if not. Default: auto-generated 'mill-<uuid8>'.",
+    )
+    parser.add_argument(
+        "--keep-alive",
+        action="store_true",
+        help="On success, leave the psmux session running for reuse by a later call.",
     )
     return parser
 
@@ -120,7 +128,7 @@ def main() -> int:
         return 2
 
     # Step 2: Generate session name and markers
-    session_name = f"mill-{uuid.uuid4().hex[:8]}"
+    session_name = args.psmux_session if args.psmux_session is not None else f"mill-{uuid.uuid4().hex[:8]}"
     begin_marker = f"MILL_BEGIN_{secrets.token_hex(4)}"
     end_marker = f"MILL_END_{secrets.token_hex(4)}"
 
