@@ -11,7 +11,6 @@ import contextlib
 import inspect
 import io
 import os
-import re
 import subprocess as _subprocess_mod
 import sys
 import unittest.mock as mock
@@ -31,10 +30,12 @@ from _llm_claude import (  # noqa: E402
     _build_argv,
     _parse_stream_json,
     _scan_rate_limit,
+    cleanup_session,
     run_bulk,
     run_implementer,
     run_tool_use,
 )
+import _psmux as _psmux_mod  # noqa: E402
 
 
 def main() -> int:
@@ -550,7 +551,7 @@ def main() -> int:
             uuid.UUID(sid_token)  # Will raise if not valid UUID format
             # Check that returned_sid matches the generated one
             if returned_sid == sid_token:
-                print(f"PASS: via_psmux=True run_bulk(session_id=None) generates UUID in argv and returns it")
+                print("PASS: via_psmux=True run_bulk(session_id=None) generates UUID in argv and returns it")
             else:
                 errors += 1
                 print(f"FAIL: returned_sid {returned_sid} does not match argv sid {sid_token}", file=sys.stderr)
@@ -607,31 +608,164 @@ def main() -> int:
         errors += 1
         print(f"FAIL: explicit session_id not preserved; argv={_psmux_captured_argv}, returned={returned_sid}", file=sys.stderr)
 
-    # Test 6: via_psmux=True, resume=True raises LLMError before subprocess call
+    # K1: keepalive argv when caller passes session_id
+    _psmux_captured_argv.clear()
+    with mock.patch.object(_llm_claude_mod, "_get_via_psmux_flag", return_value=True):
+        with mock.patch.object(_llm_claude_mod.shutil, "which", return_value="/usr/bin/psmux"):
+            with mock.patch.object(_subprocess_util_mod, "run", _fake_psmux_run):
+                run_bulk("prompt", model="m", session_id="abc-123-de-fghij-rest")
+
+    # Extract session-id for validation
+    try:
+        sid_idx = _psmux_captured_argv.index("--session-id")
+        sid_value = _psmux_captured_argv[sid_idx + 1]
+        assert sid_value == "abc-123-de-fghij-rest", f"session-id mismatch: {sid_value}"
+
+        # Check for --psmux-session
+        if "--psmux-session" in _psmux_captured_argv:
+            ps_idx = _psmux_captured_argv.index("--psmux-session")
+            ps_value = _psmux_captured_argv[ps_idx + 1]
+            # First 12 chars of "abc-123-de-fghij-rest" are "abc-123-de-f"
+            assert ps_value == "mill-abc-123-de-f", f"psmux-session mismatch: {ps_value}"
+        else:
+            errors += 1
+            print("FAIL: K1 --psmux-session not in argv", file=sys.stderr)
+
+        # Check for --keep-alive
+        if "--keep-alive" in _psmux_captured_argv:
+            print("PASS: K1 keepalive argv when caller passes session_id")
+        else:
+            errors += 1
+            print("FAIL: K1 --keep-alive not in argv", file=sys.stderr)
+    except (ValueError, AssertionError, IndexError) as e:
+        errors += 1
+        print(f"FAIL: K1 validation error: {e}; argv={_psmux_captured_argv}", file=sys.stderr)
+
+    # K2: no keepalive when session_id=None
+    _psmux_captured_argv.clear()
+    with mock.patch.object(_llm_claude_mod, "_get_via_psmux_flag", return_value=True):
+        with mock.patch.object(_llm_claude_mod.shutil, "which", return_value="/usr/bin/psmux"):
+            with mock.patch.object(_subprocess_util_mod, "run", _fake_psmux_run):
+                run_bulk("prompt", model="m", session_id=None)
+
+    # Check that --psmux-session and --keep-alive are NOT in argv when session_id=None
+    if "--psmux-session" not in _psmux_captured_argv and "--keep-alive" not in _psmux_captured_argv:
+        # Verify a UUID was still generated and is present
+        try:
+            sid_idx = _psmux_captured_argv.index("--session-id")
+            sid_value = _psmux_captured_argv[sid_idx + 1]
+            uuid.UUID(sid_value)  # Validate UUID format
+            print("PASS: K2 no keepalive when session_id=None (uuid generated)")
+        except (ValueError, IndexError):
+            errors += 1
+            print(f"FAIL: K2 uuid not found or invalid in argv={_psmux_captured_argv}", file=sys.stderr)
+    else:
+        errors += 1
+        print(f"FAIL: K2 --psmux-session or --keep-alive should not be in argv; got {_psmux_captured_argv}", file=sys.stderr)
+
+    # K3: resume=True now exercises subprocess and maps LLMSessionError (rewritten from Test 6)
     _psmux_run_call_count = [0]
+    def _psmux_resume_fail(argv, **kwargs):
+        _psmux_run_call_count[0] += 1
+        return _FakePsmuxResult(returncode=1, stdout="", stderr="boom")
+
+    _psmux_run_call_count[0] = 0
+    with mock.patch.object(_llm_claude_mod, "_get_via_psmux_flag", return_value=True):
+        with mock.patch.object(_llm_claude_mod.shutil, "which", return_value="/usr/bin/psmux"):
+            with mock.patch.object(_subprocess_util_mod, "run", _psmux_resume_fail):
+                try:
+                    run_bulk("prompt", model="m", session_id="resume-sid", resume=True)
+                    errors += 1
+                    print("FAIL: K3 via_psmux=True resume=True should raise LLMSessionError", file=sys.stderr)
+                except LLMSessionError:
+                    if _psmux_run_call_count[0] == 1:
+                        print("PASS: K3 resume=True exercises subprocess and maps LLMSessionError (rewritten from Test 6)")
+                    else:
+                        errors += 1
+                        print(f"FAIL: K3 expected 1 subprocess call, got {_psmux_run_call_count[0]}", file=sys.stderr)
+                except LLMError as e:
+                    if not isinstance(e, LLMSessionError):
+                        errors += 1
+                        print(f"FAIL: K3 expected LLMSessionError, got plain LLMError: {e}", file=sys.stderr)
+                    else:
+                        errors += 1
+                        print("FAIL: K3 got LLMSessionError but wrong call count", file=sys.stderr)
+                except Exception as e:
+                    errors += 1
+                    print(f"FAIL: K3 expected LLMSessionError, got {type(e).__name__}: {e}", file=sys.stderr)
+
+    # K4: non-resume failure maps plain LLMError
+    _psmux_run_call_count[0] = 0
+    with mock.patch.object(_llm_claude_mod, "_get_via_psmux_flag", return_value=True):
+        with mock.patch.object(_llm_claude_mod.shutil, "which", return_value="/usr/bin/psmux"):
+            with mock.patch.object(_subprocess_util_mod, "run", _psmux_resume_fail):
+                try:
+                    run_bulk("prompt", model="m", session_id="abc-explicit", resume=False)
+                    errors += 1
+                    print("FAIL: K4 should raise LLMError on non-zero exit", file=sys.stderr)
+                except LLMSessionError:
+                    errors += 1
+                    print("FAIL: K4 raised LLMSessionError but resume=False (should be plain LLMError)", file=sys.stderr)
+                except LLMError:
+                    print("PASS: K4 non-resume failure maps plain LLMError (not LLMSessionError)")
+                except Exception as e:
+                    errors += 1
+                    print(f"FAIL: K4 expected LLMError, got {type(e).__name__}: {e}", file=sys.stderr)
+
+    # K5: cleanup_session behavior
+    # K5(i): session exists and is killed
+    with mock.patch.object(_psmux_mod, "list_sessions", return_value=["mill-abc-123-de-f", "mill-other"]):
+        with mock.patch.object(_psmux_mod, "kill_session", return_value=None) as mock_kill:
+            cleanup_session("abc-123-de-fghij-rest")
+            if mock_kill.called and mock_kill.call_args[0][0] == "mill-abc-123-de-f":
+                print("PASS: K5(i) cleanup_session kills existing psmux session")
+            else:
+                errors += 1
+                print(f"FAIL: K5(i) kill_session not called or wrong arg; got {mock_kill.call_args}", file=sys.stderr)
+
+    # K5(ii): session not present, no kill attempted
+    with mock.patch.object(_psmux_mod, "list_sessions", return_value=[]):
+        with mock.patch.object(_psmux_mod, "kill_session", return_value=None) as mock_kill:
+            cleanup_session("not-present-id")
+            if not mock_kill.called:
+                print("PASS: K5(ii) cleanup_session handles missing session gracefully")
+            else:
+                errors += 1
+                print("FAIL: K5(ii) kill_session should not be called", file=sys.stderr)
+
+    # K5(iii): PsmuxError is swallowed
+    with mock.patch.object(_psmux_mod, "list_sessions", return_value=["mill-id-xx-rest-y"]):
+        with mock.patch.object(_psmux_mod, "kill_session", side_effect=_psmux_mod.PsmuxError("boom")):
+            try:
+                cleanup_session("id-xx-rest-yy")
+                print("PASS: K5(iii) cleanup_session swallows PsmuxError")
+            except _psmux_mod.PsmuxError:
+                errors += 1
+                print("FAIL: K5(iii) PsmuxError should be swallowed", file=sys.stderr)
+
+    # K5(iv): no-op on None/empty session_id
+    with mock.patch.object(_psmux_mod, "list_sessions", return_value=[]) as mock_list:
+        cleanup_session(None)
+        if not mock_list.called:
+            print("PASS: K5(iv) cleanup_session(None) is no-op")
+        else:
+            errors += 1
+            print("FAIL: K5(iv) cleanup_session(None) should not call list_sessions", file=sys.stderr)
+
+    with mock.patch.object(_psmux_mod, "list_sessions", return_value=[]) as mock_list:
+        cleanup_session("")
+        if not mock_list.called:
+            print("PASS: K5(iv) cleanup_session(\"\") is no-op")
+        else:
+            errors += 1
+            print("FAIL: K5(iv) cleanup_session(\"\") should not call list_sessions", file=sys.stderr)
+
+    # Test 7: via_psmux=True, shutil.which("psmux") is None raises before subprocess
+    _psmux_run_call_count[0] = 0
     def _should_not_be_called(argv, **kwargs):
         _psmux_run_call_count[0] += 1
         return _FakePsmuxResult(returncode=0)
 
-    _psmux_run_call_count[0] = 0
-    with mock.patch.object(_llm_claude_mod, "_get_via_psmux_flag", return_value=True):
-        with mock.patch.object(_subprocess_util_mod, "run", _should_not_be_called):
-            try:
-                run_bulk("prompt", model="m", session_id="resume-sid", resume=True)
-                errors += 1
-                print("FAIL: via_psmux=True resume=True should raise LLMError", file=sys.stderr)
-            except LLMError:
-                if _psmux_run_call_count[0] == 0:
-                    print("PASS: via_psmux=True resume=True raises LLMError without calling subprocess")
-                else:
-                    errors += 1
-                    print(f"FAIL: subprocess was called {_psmux_run_call_count[0]} times; expected 0", file=sys.stderr)
-            except Exception as e:
-                errors += 1
-                print(f"FAIL: expected LLMError, got {type(e).__name__}: {e}", file=sys.stderr)
-
-    # Test 7: via_psmux=True, shutil.which("psmux") is None raises before subprocess
-    _psmux_run_call_count[0] = 0
     with mock.patch.object(_llm_claude_mod, "_get_via_psmux_flag", return_value=True):
         with mock.patch.object(_llm_claude_mod.shutil, "which", return_value=None):
             with mock.patch.object(_subprocess_util_mod, "run", _should_not_be_called):
@@ -716,7 +850,7 @@ def main() -> int:
         print(f"FAIL: expected 'hello world', got {text!r}", file=sys.stderr)
     else:
         errors += 1
-        print(f"FAIL: _parse_stream_json was called; psmux should skip parsing", file=sys.stderr)
+        print("FAIL: _parse_stream_json was called; psmux should skip parsing", file=sys.stderr)
 
     # Test 11: _get_via_psmux_flag() catches SystemExit and returns False
     import _paths
