@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-llm-claude-keepalive-integration
+phase: approved-mill-go-cleanup-integration
 slug: psmux-session-keepalive
 branch: hanf/psmux-session-keepalive
 plan: _mill/plan
@@ -26,6 +26,7 @@ implementing  '2026-05-18T12:21:33Z'
 approved-config-schema-move  '2026-05-18T12:28:01Z'
 approved-wrapper-flags-and-cleanup  '2026-05-18T12:35:25Z'
 approved-llm-claude-keepalive-integration  '2026-05-18T12:40:24Z'
+approved-mill-go-cleanup-integration  '2026-05-18T12:47:21Z'
 ```
 
 ## Batches
@@ -45,7 +46,7 @@ batches:
     implementer_session: ffaf2951-0acc-4627-89e7-90bb243e03a7
     start_sha: be974bc48d75145a2c3fce5eac61ebcf33cb3cf4
   - name: mill-go-cleanup-integration
-    state: running
+    state: approved
     implementer_session: 465d80f2-fef7-4c25-b0ce-b87a86386fa3
     start_sha: cba5f880db8112d0c149edaf9fd95f0920275eba
 ```
