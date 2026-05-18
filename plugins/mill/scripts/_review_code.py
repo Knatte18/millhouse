@@ -348,7 +348,7 @@ def run(
         try:
             verdict = parse_verdict(raw)
         except ReviewError as exc:
-            write_review_file(
+            path = write_review_file(
                 reviews_dir,
                 "code",
                 round_n,
@@ -358,8 +358,8 @@ def run(
             _reviews = [{
                 "scope": scope_label,
                 "verdict": "ERROR",
-                "file": None,
-                "error": str(exc),
+                "file": str(path),
+                "error": f"parse_verdict failed: {exc}",
                 "session_id": session_id,
             }]
             return ReviewResult(
@@ -410,7 +410,7 @@ def run(
                     try:
                         verdict = parse_verdict(raw)
                     except ReviewError as exc:
-                        write_review_file(
+                        path = write_review_file(
                             reviews_dir,
                             "code",
                             round_n,
@@ -420,8 +420,8 @@ def run(
                         _reviews = [{
                             "scope": scope_label,
                             "verdict": "ERROR",
-                            "file": None,
-                            "error": str(exc),
+                            "file": str(path),
+                            "error": f"parse_verdict failed: {exc}",
                             "session_id": session_id,
                         }]
                         return ReviewResult(
