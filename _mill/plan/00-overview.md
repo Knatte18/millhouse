@@ -25,8 +25,8 @@ batches:
 
 ### Decision: psmux-flag-lookup
 
-- **Decision:** `_get_via_psmux_flag()` is the single read site for `llm.claude.via_psmux`. Lives in `_llm_claude.py` next to the existing helpers. Resolves `git_root` via `_paths.resolve_git_root(Path.cwd())`, calls `_config.load_config(git_root, git_root)`, returns `cfg.get("llm", {}).get("claude", {}).get("via_psmux", False)`. Wraps the whole body in a broad `try/except Exception` returning `False` so any failure (cwd outside a git worktree, missing/malformed config, import error) silently picks the direct path.
-- **Rationale:** Discussion `### config-loading-in-invoke`. Per-call config load is cheap and avoids module-level mutable state. Defaulting to `False` on any error preserves the existing direct-path behaviour for machines that never opted in.
+- **Decision:** `_get_via_psmux_flag()` is the single read site for `llm.claude.via_psmux`. Lives in `_llm_claude.py` next to the existing helpers. Resolves `git_root` via `_paths.resolve_git_root(Path.cwd())`, calls `_config.load_config(git_root, git_root)`, returns `cfg.get("llm", {}).get("claude", {}).get("via_psmux", False)`. Wraps the whole body in `try / except (Exception, SystemExit)` returning `False` so any failure (cwd outside a git worktree -- which raises `SystemExit` from `resolve_git_root`, missing/malformed config, import error) silently picks the direct path. The dual-class clause mirrors the existing pattern in `_paths.py:132` for exactly this reason.
+- **Rationale:** Discussion `### config-loading-in-invoke`. Per-call config load is cheap and avoids module-level mutable state. Defaulting to `False` on any error preserves the existing direct-path behaviour for machines that never opted in. `SystemExit` is a `BaseException` subclass (not `Exception`), so `except Exception` alone would let `resolve_git_root`'s "Not in a git repository" exit escape -- hence the explicit dual-class clause.
 - **Applies to:** all cards in this batch.
 
 ### Decision: argv-construction-strategy
