@@ -32,7 +32,9 @@ implementing  '2026-05-18T07:18:22Z'
 ```yaml
 batches:
   - name: _config.py fixes and template schema
-    state: pending
+    state: running
+    implementer_session: 77f359be-4435-4016-816b-0da7512d5c2e
+    start_sha: 57a6f7aad4532b5d9f5565aeebcb0f9a842fdb40
   - name: _review_common.py fixes
     state: pending
   - name: _wiki health-check and mill-go SKILL.md
