@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-_config.py fixes and template schema
 slug: mill-config-load-fixes
 branch: hanf/mill-config-load-fixes
 plan: _mill/plan
@@ -25,6 +25,7 @@ plan-review-r3  '2026-05-18T07:09:45Z'
 plan-fix-r3  '2026-05-18T07:09:45Z'
 planned  '2026-05-18T07:17:39Z'
 implementing  '2026-05-18T07:18:22Z'
+approved-_config.py fixes and template schema  '2026-05-18T07:20:29Z'
 ```
 
 ## Batches
@@ -32,7 +33,7 @@ implementing  '2026-05-18T07:18:22Z'
 ```yaml
 batches:
   - name: _config.py fixes and template schema
-    state: running
+    state: approved
     implementer_session: 77f359be-4435-4016-816b-0da7512d5c2e
     start_sha: 57a6f7aad4532b5d9f5565aeebcb0f9a842fdb40
   - name: _review_common.py fixes
