@@ -1171,6 +1171,8 @@ def _deep_merge(base: dict, override: dict) -> dict:
     for key, val in override.items():
         if key in result and isinstance(result[key], dict) and isinstance(val, dict):
             result[key] = _deep_merge(result[key], val)
+        elif val is None and isinstance(result.get(key), dict):
+            continue
         else:
             result[key] = val
     return result
