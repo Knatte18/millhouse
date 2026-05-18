@@ -736,7 +736,7 @@ def bulk_files(file_paths: list[Path]) -> str:
         except FileNotFoundError:
             print(f"[bulk_files] warning: {p} not found, skipping", file=sys.stderr)
             continue
-        parts.append(f"--- FILE: {p} ---\n{contents}")
+        parts.append(f"--- FILE: {p} ---\n{contents}\n--- END FILE: {p} ---")
     return "\n\n".join(parts)
 
 
@@ -775,20 +775,20 @@ def bulk_files_with_diff(
                 f"[bulk_files_with_diff] warning: git diff failed for {p} (returncode={result.returncode}), using full file",
                 file=sys.stderr,
             )
-            parts.append(f"--- FILE: {p} ---\n{file_content}")
+            parts.append(f"--- FILE: {p} ---\n{file_content}\n--- END FILE: {p} ---")
             continue
 
         diff_text = result.stdout
 
         if not diff_text:
-            parts.append(f"--- FILE: {p} ---\n{file_content}")
+            parts.append(f"--- FILE: {p} ---\n{file_content}\n--- END FILE: {p} ---")
             continue
 
         if len(diff_text) < threshold * len(file_content):
-            parts.append(f"--- DIFF: {p} (from {start_sha[:8]}) ---\n{diff_text}")
+            parts.append(f"--- DIFF: {p} (from {start_sha[:8]}) ---\n{diff_text}\n--- END DIFF: {p} ---")
             continue
 
-        parts.append(f"--- FILE: {p} ---\n{file_content}")
+        parts.append(f"--- FILE: {p} ---\n{file_content}\n--- END FILE: {p} ---")
 
     return "\n\n".join(parts)
 
