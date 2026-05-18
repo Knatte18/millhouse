@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussion-fix-r1
+phase: discussed
 slug: psmux-session-keepalive
 branch: hanf/psmux-session-keepalive
 plan: null
@@ -16,4 +16,5 @@ task_description: |
 ```text
 discussing  '2026-05-18T11:18:29Z'
 discussion-fix-r1  '2026-05-18T11:39:08Z'
+discussed  '2026-05-18T11:39:26Z'
 ```
