@@ -51,8 +51,8 @@ f424c90 (task 66). The remaining twelve issues are the scope of this task.
 
 ### subprocess verbosity (#339)
 
-- Decision: Suppress both `[subprocess] spawn argv=...` and `[subprocess] exit code=... duration=...s` lines when the process exits with code 0. Emit both lines on non-zero exit. The `popen_detached` one-line log is not touched (single line per call, not double).
-- Rationale: Orchestrators read bg logs after agent completion; ~2 lines per git/python call multiplies to hundreds of noise lines. On success the breadcrumbs have no value. On failure the pair gives context.
+- Decision: Buffer the spawn message in a local variable before `Popen`; emit the buffered spawn line AND the exit line only when `proc.returncode != 0`. On success both lines are suppressed. If `Popen` itself raises (before `proc` exists), emit the buffered spawn message followed by the exception, since the operator needs to know what was attempted. The `popen_detached` one-line log is not touched (single line per call, not double).
+- Rationale: Orchestrators read bg logs after agent completion; ~2 lines per git/python call multiplies to hundreds of noise lines. On success the breadcrumbs have no value. On failure the pair gives context. The spawn line must be buffered (not wrapped in `if proc.returncode != 0:`) because `proc` does not exist at the point the message is assembled.
 - Rejected: `verbose: bool` param (adds call-site complexity); always logging spawn but not exit (partial info worse than none).
 
 ### millpy-bg EXIT guarantee (#341)
@@ -63,7 +63,7 @@ f424c90 (task 66). The remaining twelve issues are the scope of this task.
 
 ### bulk_files END FILE delimiters (#323/#326)
 
-- Decision: In `_review_common.bulk_files()` and `bulk_files_with_diff()`, add a `--- END FILE: {p} ---\n` line after each file's content. The openers `--- FILE: {p} ---` are kept as-is; the new closer gives the LLM an explicit boundary marker so content from one file cannot bleed into the next.
+- Decision: In `_review_common.bulk_files()` and `bulk_files_with_diff()`, add an explicit close delimiter after each file's content. For FILE branches: `--- END FILE: {p} ---\n`. For the DIFF branch in `bulk_files_with_diff`: `--- END DIFF: {p} ---\n`. The openers (`--- FILE: {p} ---`, `--- DIFF: {p} ---`) are kept as-is; the new closers give the LLM unambiguous boundaries so content from one entry cannot bleed into the next. Both FILE and DIFF entries get closers because the same attribution risk applies to diff content.
 - Rationale: #323 and #326 are both traced to cross-file content attribution: the reviewer conflates adjacent similarly-structured files in the bulk (plan templates, SKILL.md files). Adding an unambiguous close delimiter is the cheapest structural fix. This does NOT prevent all hallucination but removes the main structural ambiguity that enables it.
 - Rejected: Fanning out per-template reviews (high effort, touches scheduling); prompt-level warning injection (soft constraint; not reliable across rounds); full solution deferred to reviewer prompt audit.
 
@@ -111,11 +111,11 @@ f424c90 (task 66). The remaining twelve issues are the scope of this task.
 
 ## Technical context
 
-**`_subprocess_util.run()`** (`plugins/mill/scripts/_subprocess_util.py`): Two `print(..., file=sys.stderr)` calls, lines ~86 and ~153, emit unconditionally. Wrap both in `if proc.returncode != 0:`. The timeout exit-code-logged paths already handle their own print; those do not fire on a successful run.
+**`_subprocess_util.run()`** (`plugins/mill/scripts/_subprocess_util.py`): The spawn print at line ~86 fires BEFORE `proc = subprocess.Popen(...)` at line ~126, so `proc.returncode` is not yet available. Pattern: assign `_spawn_msg = f"[subprocess] spawn argv={argv!r} timeout={timeout}"` before `Popen`; after exit code is known emit `_spawn_msg` + exit line only when `proc.returncode != 0`. If `Popen` itself raises (before `proc` exists), emit `_spawn_msg` + the exception info. On success: suppress both lines. The timeout exit-code paths and the Windows watchdog branch each need the same conditional treatment.
 
 **`millpy-bg.py` worker mode** (`plugins/mill/scripts/millpy-bg.py`): `subprocess.run(cmd, ...)` at line ~50. Introduce flag `exit_written = False`. In try: write EXIT and set flag. In except: write WORKER ERROR, then write EXIT -1 if not exit_written.
 
-**`_review_common.bulk_files()`** (line ~728) and **`bulk_files_with_diff()`** (line ~770): Currently each file section ends immediately with its content. Add `\n--- END FILE: {p} ---\n` after each content block. Also update the module docstring of `bulk_files_with_diff` to note the new delimiter.
+**`_review_common.bulk_files()`** (line ~728): Currently each file section ends immediately with its content. Add `\n--- END FILE: {p} ---\n` after each content block. **`bulk_files_with_diff()`** (line ~770): Has four `parts.append(...)` branches. The three FILE branches (lines ~778, 784, 791) each get `\n--- END FILE: {p} ---\n`. The DIFF branch (line ~788) gets `\n--- END DIFF: {p} ---\n`. Both closer styles match their opener naming convention.
 
 **`_review_code.py` rounds:0** (line ~198-204): Current code: `if round_n > effective_max: raise ReviewError(...)`. Prepend: `if effective_max == 0: print(..., file=sys.stderr); return ReviewResult(type="code", round=0, verdict="APPROVE", blocking_count=0, reviews=[{"scope": scope_label, "verdict": "APPROVE", "file": None, "skipped": True}])`. Same pattern in `_review_discussion.py` (line ~63-66) and `_review_plan.py`.
 
