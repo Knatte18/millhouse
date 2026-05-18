@@ -164,7 +164,7 @@ anywhere else in your reply."""
 
     # Step 5-12: Try/finally block for cleanup
     try:
-        session_owned_by_us: bool = False  # noqa: F841
+        session_owned_by_us: bool = False
 
         # Reuse short-circuit: check if named session already exists
         if args.psmux_session is not None:
@@ -191,7 +191,7 @@ anywhere else in your reply."""
                     _psmux.set_history_limit(session_name, 50000)
                 except _psmux.PsmuxError as exc:
                     raise RuntimeError(f"failed to create psmux session: {exc}") from exc
-                session_owned_by_us = True  # noqa: F841
+                session_owned_by_us = True
 
                 # Step 7: Startup check for claude binary
                 _psmux.send_keys(
@@ -266,6 +266,17 @@ anywhere else in your reply."""
                     }),
                     file=sys.stderr
                 )
+                # Success-path cleanup: kill session only if not keeping alive
+                if not args.keep_alive:
+                    try:
+                        _psmux.kill_session(session_name)
+                    except _psmux.PsmuxError:
+                        pass
+                else:
+                    print(
+                        f"[millpy-claude-sub] keepalive: leaving psmux session {session_name} running",
+                        file=sys.stderr
+                    )
                 return 0
             except _psmux_capture.MarkerNotFoundError:
                 if elapsed > RESPONSE_POLL_TIMEOUT_S[args.mode]:
@@ -276,9 +287,18 @@ anywhere else in your reply."""
 
     except Exception as exc:
         print(f"[millpy-claude-sub] {type(exc).__name__}: {exc}", file=sys.stderr)
+        # Error-path cleanup: kill session only if we owned it
+        if session_owned_by_us:
+            try:
+                _psmux.kill_session(session_name)
+                print(
+                    f"[millpy-claude-sub] error cleanup: killed psmux session {session_name}",
+                    file=sys.stderr
+                )
+            except _psmux.PsmuxError:
+                pass
         return 1
     finally:
-        _psmux.kill_session(session_name)
         prompt_path.unlink(missing_ok=True)
 
 
