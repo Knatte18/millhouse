@@ -293,6 +293,45 @@ def main() -> int:
         finally:
             os.chdir(orig_dir)
 
+    # ------------------------------------------------------------------
+    # rounds=0 early return (APPROVE stub)
+    # ------------------------------------------------------------------
+    with tempfile.TemporaryDirectory() as tmpdir:
+        mill_dir, project_root, wiki_root = _make_fixture(Path(tmpdir))
+        (project_root / "discussion.md").write_text(
+            "# Discussion\n\nTest discussion.\n", encoding="utf-8"
+        )
+
+        cfg = {
+            "paths": {
+                "discussion_file": "discussion.md",
+                "plan_dir":        "plan/",
+                "reviews_dir":     "reviews/",
+            },
+            "roles": {
+                "discussion-review": {
+                    "holistic": {"rounds": 0, "reviewer": "test_stub"},
+                },
+            },
+        }
+
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            r = discussion_run(cfg, SLUG, mill_dir, project_root, wiki_root)
+            assert r.verdict == "APPROVE", f"expected APPROVE for rounds=0, got {r.verdict}"
+            assert r.round == 0, f"expected round=0, got {r.round}"
+            assert r.blocking_count == 0, f"expected blocking_count=0, got {r.blocking_count}"
+            print("PASS rounds=0: discussion rounds=0 -> APPROVE stub with round=0, blocking_count=0")
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL rounds=0: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL rounds=0 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
+
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)
         return 1

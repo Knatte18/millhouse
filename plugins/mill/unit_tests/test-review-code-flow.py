@@ -1035,6 +1035,29 @@ def main() -> int:
         finally:
             os.chdir(orig_dir)
 
+    # ------------------------------------------------------------------
+    # Test 16 — rounds=0 holistic early return (APPROVE stub)
+    # ------------------------------------------------------------------
+    with tempfile.TemporaryDirectory() as tmpdir:
+        mill_dir, wiki_root, project_root, cfg = _make_fixture(Path(tmpdir))
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        cfg["roles"]["code-review"]["holistic"]["rounds"] = 0
+        try:
+            r = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, batch_name=None)
+            assert r.verdict == "APPROVE", f"expected APPROVE for rounds=0, got {r.verdict}"
+            assert r.round == 0, f"expected round=0, got {r.round}"
+            assert r.blocking_count == 0, f"expected blocking_count=0, got {r.blocking_count}"
+            print("PASS test16: rounds=0 holistic -> APPROVE stub with round=0, blocking_count=0")
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test16: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test16 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
+
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)
         return 1
