@@ -48,9 +48,9 @@ subsection per decision. Batch-local decisions live in each batch file._
 
 ### Decision: psmux-session-name derivation
 
-- **Decision:** Always derive `psmux_name = f"mill-{session_id[:12]}"` verbatim, no normalisation. `_llm_claude` is the only producer of this name; the wrapper itself accepts whatever string is passed under `--psmux-session`.
-- **Rationale:** `session_id` is a UUID4 in every existing caller (`[0-9a-f-]`), all legal in psmux session names. Deterministic mapping aids debugging (operator can `psmux ls` and recognise the session). Per discussion.md "session-name derivation".
-- **Applies to:** batches 2, 3 (wrapper accepts name; LLM layer derives name).
+- **Decision:** When `_llm_claude` is the caller AND `caller_provided_session_id` is true, derive `psmux_name = f"mill-{session_id[:12]}"` verbatim, no normalisation, and pass it under `--psmux-session`. When `caller_provided_session_id` is false (auto-generated session id inside `_invoke`), pass `psmux_session_name=None` so the wrapper falls back to its existing `mill-<uuid8>` auto-name. The wrapper itself accepts whatever string is passed under `--psmux-session` (or any when omitted, where it picks its own).
+- **Rationale:** `session_id` is a UUID4 in every existing caller (`[0-9a-f-]`), all legal in psmux session names. Deterministic mapping aids debugging via `psmux ls` — but only on the keepalive path, because the auto-gen path always tears down on success and never appears in `psmux ls`. Refines discussion.md "session-name derivation": the discussion text said "always pass" but the operator-visibility rationale only holds when `--keep-alive` is set, and `--keep-alive` is itself gated on `caller_provided_session_id`. Conditioning both flags on the same boolean keeps the one-shot path bit-for-bit identical to today.
+- **Applies to:** batches 2, 3 (wrapper accepts name; LLM layer derives name iff caller-provided session_id).
 
 ### Decision: keep-alive gating rule
 
