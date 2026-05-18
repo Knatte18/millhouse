@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-activate-via-psmux
+phase: holistic-reviewing
 slug: claude-psmux-activate
 branch: hanf/claude-psmux-activate
 plan: _mill/plan
@@ -24,6 +24,7 @@ plan-fix-r2  '2026-05-18T10:46:58Z'
 planned  '2026-05-18T10:47:13Z'
 implementing  '2026-05-18T10:48:49Z'
 approved-activate-via-psmux  '2026-05-18T10:54:58Z'
+holistic-reviewing  '2026-05-18T10:55:10Z'
 ```
 
 ## Batches
