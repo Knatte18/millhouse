@@ -283,6 +283,40 @@ def _invoke(
         f"[_llm_claude] claude {model} ({mode_label}{mode_suffix}){sess_label} starting...",
         file=sys.stderr,
     )
+
+    if _get_via_psmux_flag():
+        if resume:
+            raise LLMError("psmux path does not support session resume; turn off via_psmux for resume flows")
+        if shutil.which("psmux") is None:
+            raise LLMError("psmux not on PATH; required when llm.claude.via_psmux=true")
+        if session_id is None:
+            session_id = str(uuid.uuid4())
+        start = time.monotonic()
+        argv = _build_psmux_argv(model, effort, allowed_tools, session_id)
+        try:
+            result = _subprocess_util.run(
+                argv,
+                input=prompt_text,
+                timeout=float(timeout),
+                cwd=cwd,
+            )
+        except Exception as exc:
+            if "TimeoutExpired" in type(exc).__name__ or "Timeout" in type(exc).__name__:
+                raise LLMError(f"psmux-claude timed out after {timeout}s") from exc
+            raise LLMError(f"Failed to spawn psmux-claude: {exc}") from exc
+        dt = time.monotonic() - start
+        if result.returncode != 0:
+            error_detail = (result.stderr or result.stdout or "")[:500]
+            raise LLMError(f"psmux-claude exited {result.returncode}: {error_detail}")
+        text = result.stdout.rstrip()
+        sid_log = session_id[:8] if len(session_id) >= 8 else session_id
+        print(
+            f"[_llm_claude] claude {model} returned {len(text)} chars in {dt:.1f}s"
+            f" session={sid_log}",
+            file=sys.stderr,
+        )
+        return text, session_id
+
     start = time.monotonic()
     argv = _build_argv(model, effort, allowed_tools, session_id, resume)
 
