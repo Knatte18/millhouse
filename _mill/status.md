@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-config-schema-move
+phase: approved-wrapper-flags-and-cleanup
 slug: psmux-session-keepalive
 branch: hanf/psmux-session-keepalive
 plan: _mill/plan
@@ -24,6 +24,7 @@ plan-fix-r2  '2026-05-18T12:19:08Z'
 planned  '2026-05-18T12:20:17Z'
 implementing  '2026-05-18T12:21:33Z'
 approved-config-schema-move  '2026-05-18T12:28:01Z'
+approved-wrapper-flags-and-cleanup  '2026-05-18T12:35:25Z'
 ```
 
 ## Batches
@@ -35,7 +36,7 @@ batches:
     implementer_session: ed2167a4-d65c-4782-a94a-89d3a0b0e2be
     start_sha: 4cd1158040e440a50ef61d03405f62023362f249
   - name: wrapper-flags-and-cleanup
-    state: running
+    state: approved
     implementer_session: b7177f5a-4277-4f97-8b5d-468203679407
     start_sha: a4bd0a0ad01ea6fb1b5cea0319b8ef56b8f4620d
   - name: llm-claude-keepalive-integration
