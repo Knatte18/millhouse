@@ -3,7 +3,7 @@
 ```yaml
 task: '65 (A) -- Config-load og mill-go helse-sjekk etter config-migrasjon'
 slug: 'mill-config-load-fixes'
-approved: false
+approved: true
 started: '20260518-064044'
 parent: 'main'
 root: ""
