@@ -158,7 +158,7 @@ constraint. `resume=True` therefore raises `LLMError` on the psmux path.
 (`run_bulk`, `run_tool_use`, `run_implementer`) funnel into. The psmux branch only diverges in
 `_invoke()`, not in the public functions themselves. Callers have no API change.
 
-Config loading: `_config.load_config(wiki_path, worktree_root)` already handles the full
+Config loading: `_config.load_config(repo_root, worktree_root)` already handles the full
 overlay chain (plugin template → hub `mill-config.yaml` → `.millhouse/config.local.yaml`).
 The new `llm.claude.via_psmux` key is added to both the hub file and the plugin template so
 new hubs get the schema doc comment.
@@ -201,14 +201,15 @@ pattern.
 - `via_psmux=true`, `session_id="abc"`: `--session-id abc` present in argv.
 - `via_psmux=true`, `resume=True`: `LLMError` raised before `_subprocess_util.run` is called.
 - `via_psmux=true`, psmux not on PATH (mock `shutil.which` → `None`): `LLMError` raised.
-- `via_psmux=true`, wrapper exits 0: `result.stdout.rstrip()` returned as text; session_id
-  is the value passed in (or `None`).
+- `via_psmux=true`, wrapper exits 0: `result.stdout.rstrip()` returned as text; when
+  `session_id` was provided it is returned unchanged; when `session_id=None` was passed, a
+  UUID was generated and passed via `--session-id` before the call, and that UUID is returned.
 - `via_psmux=true`, wrapper exits non-zero: `LLMError` raised (not `LLMSessionError`).
 - Fast-fail retry not triggered on psmux path (mock `monotonic` to return dt < 2s; verify only
   1 subprocess call).
 
-**Integration test (`integration_tests/test-claude-psmux.py`):** already exists; must continue
-to pass with `via_psmux=true` in the test config.
+**Integration test (`plugins/mill/integration_tests/test-claude-psmux.py`):** already exists;
+must continue to pass with `via_psmux=true` in the test config.
 
 **Manual smoke test (operator, post-deploy):**
 1. Set `via_psmux: true` in `.millhouse/config.local.yaml` under `llm: claude:`.
