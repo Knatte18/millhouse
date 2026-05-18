@@ -32,8 +32,10 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import sys
 import time
+import uuid
 from pathlib import Path
 
 import _subprocess_util
@@ -73,12 +75,30 @@ def _claude_argv_prefix() -> list[str]:
 # ---------------------------------------------------------------------------
 
 _MUTATING_TOOLS = {"Edit", "Write", "Bash", "NotebookEdit"}
+_MODE_BY_ALLOWED_TOOLS: dict[str, str] = {"": "bulk", "Read,Grep,Glob": "tool-use", "Read,Edit,Write,Bash,Grep,Glob,Skill": "implementer"}
 
 
 def _has_mutating_tool(allowed_tools: str) -> bool:
     """Return True if allowed_tools (comma/whitespace-delimited) contains any mutating tool name."""
     tokens = {t.strip() for t in allowed_tools.replace(",", " ").split() if t.strip()}
     return bool(tokens & _MUTATING_TOOLS)
+
+
+def _get_via_psmux_flag() -> bool:
+    """Check if psmux-based routing is enabled in the mill config.
+
+    Returns False on any error (missing config, parse error, or cwd outside a
+    git worktree), so the default direct path is silently used.
+    """
+    try:
+        import _paths
+        import _config
+
+        git_root = _paths.resolve_git_root(Path.cwd())
+        cfg = _config.load_config(git_root, git_root)
+        return bool(cfg.get("llm", {}).get("claude", {}).get("via_psmux", False))
+    except (Exception, SystemExit):
+        return False
 
 
 def _build_argv(
@@ -113,6 +133,31 @@ def _build_argv(
         argv += ["--resume", session_id]
     elif session_id is not None:
         argv += ["--session-id", session_id]
+    return argv
+
+
+def _build_psmux_argv(model: str, effort: str | None, allowed_tools: str, session_id: str) -> list[str]:
+    """Build argv for a psmux subprocess call.
+
+    Args:
+        model: Claude model name
+        effort: Optional effort level
+        allowed_tools: Comma-delimited tool list (used to determine mode)
+        session_id: Session ID (always non-None at call site)
+
+    Returns:
+        argv list starting with [sys.executable, wrapper_script, ...]
+
+    Raises LLMError if allowed_tools does not map to a known mode.
+    """
+    mode = _MODE_BY_ALLOWED_TOOLS.get(allowed_tools)
+    if mode is None:
+        raise LLMError(f"via_psmux: unsupported allowed_tools {allowed_tools!r}")
+    wrapper = str(Path(__file__).resolve().parent / "millpy-claude-sub.py")
+    argv = [sys.executable, wrapper, "--mode", mode, "--model", model]
+    if effort is not None:
+        argv += ["--effort", effort]
+    argv += ["--session-id", session_id]
     return argv
 
 
@@ -238,6 +283,40 @@ def _invoke(
         f"[_llm_claude] claude {model} ({mode_label}{mode_suffix}){sess_label} starting...",
         file=sys.stderr,
     )
+
+    if _get_via_psmux_flag():
+        if resume:
+            raise LLMError("psmux path does not support session resume; turn off via_psmux for resume flows")
+        if shutil.which("psmux") is None:
+            raise LLMError("psmux not on PATH; required when llm.claude.via_psmux=true")
+        if session_id is None:
+            session_id = str(uuid.uuid4())
+        start = time.monotonic()
+        argv = _build_psmux_argv(model, effort, allowed_tools, session_id)
+        try:
+            result = _subprocess_util.run(
+                argv,
+                input=prompt_text,
+                timeout=float(timeout),
+                cwd=cwd,
+            )
+        except Exception as exc:
+            if "TimeoutExpired" in type(exc).__name__ or "Timeout" in type(exc).__name__:
+                raise LLMError(f"psmux-claude timed out after {timeout}s") from exc
+            raise LLMError(f"Failed to spawn psmux-claude: {exc}") from exc
+        dt = time.monotonic() - start
+        if result.returncode != 0:
+            error_detail = (result.stderr or result.stdout or "")[:500]
+            raise LLMError(f"psmux-claude exited {result.returncode}: {error_detail}")
+        text = result.stdout.rstrip()
+        sid_log = session_id[:8] if len(session_id) >= 8 else session_id
+        print(
+            f"[_llm_claude] claude {model} returned {len(text)} chars in {dt:.1f}s"
+            f" session={sid_log}",
+            file=sys.stderr,
+        )
+        return text, session_id
+
     start = time.monotonic()
     argv = _build_argv(model, effort, allowed_tools, session_id, resume)
 
