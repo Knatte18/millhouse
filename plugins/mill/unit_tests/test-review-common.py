@@ -499,7 +499,7 @@ def main() -> int:
         p2 = Path(tmpdir) / "b.py"
         p1.write_text("content-a", encoding="utf-8")
         p2.write_text("content-b", encoding="utf-8")
-        result = bulk_files_with_diff([p1, p2], start_sha=None, repo=Path(tmpdir), ratio_threshold=0.25)
+        result = bulk_files_with_diff([p1, p2], None, Path(tmpdir), 0.25)
         assert f"--- END FILE: {p1} ---" in result, f"END FILE missing for p1: {result!r}"
         assert f"--- END FILE: {p2} ---" in result, f"END FILE missing for p2: {result!r}"
         assert result.index(f"--- FILE: {p1}") < result.index(f"--- END FILE: {p1}"), \
