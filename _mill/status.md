@@ -37,7 +37,9 @@ batches:
     start_sha: d2bb8aa8e71bc9a6668847395c242b737f2c4233
     commit_sha: a6a14aff6f7c4818975be8b89a6be7cd9e733191
   - name: review-backend-fixes
-    state: pending
+    state: running
+    implementer_session: 90784ccc-64ea-4aab-a44f-02bb3efb6f4b
+    start_sha: a174c6f5eaf0277be34d7367bd6d29d2618df3d1
   - name: templates-config-skills
     state: pending
   - name: test-infra-fixes
