@@ -137,7 +137,11 @@ def resolve_plugin_template_path(filename: str) -> Path:
     """
     plugin_root_env = os.environ.get("CLAUDE_PLUGIN_ROOT", "")
     if plugin_root_env:
-        return Path(plugin_root_env).resolve() / "templates" / filename
+        candidate = Path(plugin_root_env).resolve() / "templates" / filename
+        if not candidate.exists():
+            print(f"[config] CLAUDE_PLUGIN_ROOT={plugin_root_env!r}: {candidate} not found, falling back to source tree", file=sys.stderr)
+            return Path(__file__).resolve().parent.parent / "templates" / filename
+        return candidate
     return Path(__file__).resolve().parent.parent / "templates" / filename
 
 
