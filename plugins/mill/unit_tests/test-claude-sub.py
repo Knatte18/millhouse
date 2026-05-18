@@ -65,14 +65,14 @@ def main() -> int:
                 with mock.patch("_psmux.new_session") as m_new_session, \
                      mock.patch("_psmux.set_history_limit"), \
                      mock.patch("_psmux.list_sessions", side_effect=mock_list_sessions), \
-                     mock.patch("_psmux.send_keys"), \
+                     mock.patch("_psmux.send_keys") as m_send_keys, \
                      mock.patch("_psmux.load_buffer"), \
                      mock.patch("_psmux.paste_buffer"), \
                      mock.patch("_psmux.capture_pane", side_effect=mock_capture_pane), \
                      mock.patch("_psmux.kill_session"), \
                      mock.patch("_psmux_capture.extract_response", side_effect=mock_extract_response), \
                      mock.patch.object(mod, "_wait_for_marker_in_pane", return_value=True), \
-                     mock.patch.object(mod, "_wait_for_idle_prompt", side_effect=mock_wait_for_idle), \
+                     mock.patch.object(mod, "_wait_for_idle_prompt", side_effect=mock_wait_for_idle) as m_wait_for_idle, \
                      mock.patch("_paths.resolve_git_root", return_value=tmpdir_path), \
                      mock.patch("_config.load_config", return_value={}), \
                      mock.patch("sys.stdout", new_callable=io.StringIO):
@@ -83,6 +83,13 @@ def main() -> int:
                     assert m_new_session.call_count == 0, "new_session should not be called on reuse"
                     # Should return 0 on success
                     assert ret == 0, f"S1: expected 0, got {ret}"
+                    # Should not call send_keys with the claude command on reuse path
+                    for call in m_send_keys.call_args_list:
+                        assert not str(call).startswith("call(") or "claude" not in str(call), \
+                            "send_keys should not be called with claude command on reuse path"
+                    # Should call _wait_for_idle_prompt exactly once (reuse check only)
+                    assert m_wait_for_idle.call_count == 1, \
+                        f"_wait_for_idle_prompt should be called exactly once on reuse, got {m_wait_for_idle.call_count}"
                     print("PASS: S1 (existing-idle short-circuit)")
             finally:
                 sys.argv = saved_argv
@@ -386,6 +393,8 @@ def main() -> int:
 
                     # Check that new_session was called with the chosen name
                     m_new_session.assert_called_once()
+                    assert m_new_session.call_args[0][0] == "new-name", \
+                        f"new_session should be called with 'new-name' as positional arg, got {m_new_session.call_args[0][0]}"
                     call_kwargs = m_new_session.call_args[1]
                     assert call_kwargs.get("shell_argv") is not None, "shell_argv not provided to new_session"
                     print("PASS: S7 (named-but-missing creates with chosen name)")

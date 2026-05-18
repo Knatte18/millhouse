@@ -165,6 +165,7 @@ anywhere else in your reply."""
     # Step 5-12: Try/finally block for cleanup
     try:
         session_owned_by_us: bool = False
+        session_reused: bool = False
 
         # Reuse short-circuit: check if named session already exists
         if args.psmux_session is not None:
@@ -180,7 +181,7 @@ anywhere else in your reply."""
                     f"[millpy-claude-sub] reusing psmux session {session_name}",
                     file=sys.stderr
                 )
-                # Skip to step 10 (paste prompt)
+                session_reused = True
             else:
                 # Session doesn't exist; create it
                 try:
@@ -214,7 +215,7 @@ anywhere else in your reply."""
                 _psmux.set_history_limit(session_name, 50000)
             except _psmux.PsmuxError as exc:
                 raise RuntimeError(f"failed to create psmux session: {exc}") from exc
-            session_owned_by_us = True  # noqa: F841
+            session_owned_by_us = True
 
             # Step 7: Startup check for claude binary
             _psmux.send_keys(
@@ -229,20 +230,21 @@ anywhere else in your reply."""
                 )
 
         # Step 8: Build claude launch command
-        claude_cmd_parts = [
-            "claude",
-            "--model", args.model,
-            *MODE_TOOL_FLAGS[args.mode],
-            "--session-id", args.session_id,
-        ]
-        if args.effort:
-            claude_cmd_parts += ["--effort", args.effort]
-        claude_cmd_str = shlex.join(claude_cmd_parts)
+        if not session_reused:
+            claude_cmd_parts = [
+                "claude",
+                "--model", args.model,
+                *MODE_TOOL_FLAGS[args.mode],
+                "--session-id", args.session_id,
+            ]
+            if args.effort:
+                claude_cmd_parts += ["--effort", args.effort]
+            claude_cmd_str = shlex.join(claude_cmd_parts)
 
-        # Step 9: Launch claude and wait for idle prompt
-        _psmux.send_keys(session_name, claude_cmd_str, enter=True)
-        if not _wait_for_idle_prompt(session_name, BOOT_READY_TIMEOUT_S):
-            raise RuntimeError("claude TUI did not reach idle prompt within boot timeout")
+            # Step 9: Launch claude and wait for idle prompt
+            _psmux.send_keys(session_name, claude_cmd_str, enter=True)
+            if not _wait_for_idle_prompt(session_name, BOOT_READY_TIMEOUT_S):
+                raise RuntimeError("claude TUI did not reach idle prompt within boot timeout")
 
         # Step 10: Paste prompt and submit
         _psmux.load_buffer(session_name, "p", prompt_path)
