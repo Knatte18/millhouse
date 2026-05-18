@@ -307,6 +307,30 @@ def main() -> int:
         except AssertionError as exc:
             failures.append(f"FAIL (m) grandchild-kill-tree: {exc}")
 
+    # (n) success -- no breadcrumbs
+    try:
+        buf = io.StringIO()
+        with contextlib.redirect_stderr(buf):
+            run([sys.executable, "-c", "pass"])
+        stderr_out = buf.getvalue()
+        assert "[subprocess] spawn" not in stderr_out, f"spawn breadcrumb should be suppressed on success: {stderr_out!r}"
+        assert "[subprocess] exit code=0" not in stderr_out, f"exit breadcrumb should be suppressed on success: {stderr_out!r}"
+        print("PASS (n): success suppresses both spawn and exit breadcrumbs")
+    except AssertionError as exc:
+        failures.append(f"FAIL (n) success-silence: {exc}")
+
+    # (o) non-zero exit -- both breadcrumbs present
+    try:
+        buf = io.StringIO()
+        with contextlib.redirect_stderr(buf):
+            run([sys.executable, "-c", "import sys; sys.exit(7)"], check=False)
+        stderr_out = buf.getvalue()
+        assert "[subprocess] spawn argv=" in stderr_out, f"spawn breadcrumb missing on failure: {stderr_out!r}"
+        assert "[subprocess] exit code=7" in stderr_out, f"exit breadcrumb missing on failure: {stderr_out!r}"
+        print("PASS (o): non-zero exit emits both spawn and exit breadcrumbs")
+    except AssertionError as exc:
+        failures.append(f"FAIL (o) failure-emit: {exc}")
+
     if failures:
         for msg in failures:
             print(msg, file=sys.stderr)
