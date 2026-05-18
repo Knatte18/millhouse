@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-config-load-fixes
 branch: hanf/mill-config-load-fixes
 plan: _mill/plan
@@ -24,4 +24,19 @@ plan-fix-r2  '2026-05-18T07:02:27Z'
 plan-review-r3  '2026-05-18T07:09:45Z'
 plan-fix-r3  '2026-05-18T07:09:45Z'
 planned  '2026-05-18T07:17:39Z'
+implementing  '2026-05-18T07:18:22Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: _config.py fixes and template schema
+    state: pending
+  - name: _review_common.py fixes
+    state: pending
+  - name: _wiki health-check and mill-go SKILL.md
+    state: pending
+  - name: Tests
+    state: pending
 ```
