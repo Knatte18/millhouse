@@ -49,5 +49,7 @@ batches:
     start_sha: 8b2b1484abd29e17f3baae2875747e65a4b8982c
     commit_sha: 38a1bb3949fde74398b33890209780a9781d68c2
   - name: test-infra-fixes
-    state: pending
+    state: running
+    implementer_session: 84259ff7-086b-4935-8295-d51ed7631988
+    start_sha: 8f25314b3c2dec54a9734af0de0f4489b6a2063f
 ```
