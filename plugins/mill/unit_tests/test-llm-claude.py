@@ -391,9 +391,10 @@ def main() -> int:
 
     _retry_call_count[0] = 0
     _stderr_buf = io.StringIO()
-    with mock.patch.object(_subprocess_util_mod, "run", _fast_fail_then_ok):
-        with contextlib.redirect_stderr(_stderr_buf):
-            _retry_result = run_bulk("prompt", model="m")
+    with mock.patch.object(_llm_claude_mod, "_get_via_psmux_flag", return_value=False):
+        with mock.patch.object(_subprocess_util_mod, "run", _fast_fail_then_ok):
+            with contextlib.redirect_stderr(_stderr_buf):
+                _retry_result = run_bulk("prompt", model="m")
     if _retry_call_count[0] != 2:
         errors += 1
         print(f"FAIL: expected 2 calls, got {_retry_call_count[0]}", file=sys.stderr)
@@ -414,21 +415,22 @@ def main() -> int:
         return _subprocess_mod.CompletedProcess(args=argv, returncode=1, stdout="", stderr="slow fail")
 
     _slow_call_count[0] = 0
-    with mock.patch.object(_subprocess_util_mod, "run", _slow_fail):
-        with mock.patch.object(_llm_claude_mod.time, "monotonic", side_effect=[0.0, 3.0]):
-            try:
-                run_bulk("prompt", model="m")
-                errors += 1
-                print("FAIL: expected LLMError on slow fail, no exception raised", file=sys.stderr)
-            except LLMError:
-                if _slow_call_count[0] != 1:
+    with mock.patch.object(_llm_claude_mod, "_get_via_psmux_flag", return_value=False):
+        with mock.patch.object(_subprocess_util_mod, "run", _slow_fail):
+            with mock.patch.object(_llm_claude_mod.time, "monotonic", side_effect=[0.0, 3.0]):
+                try:
+                    run_bulk("prompt", model="m")
                     errors += 1
-                    print(f"FAIL: expected 1 call on slow fail, got {_slow_call_count[0]}", file=sys.stderr)
-                else:
-                    print("PASS: _invoke does not retry on slow fail (dt >= 2.0s)")
-            except Exception as exc:
-                errors += 1
-                print(f"FAIL: expected LLMError on slow fail, got {type(exc).__name__}: {exc}", file=sys.stderr)
+                    print("FAIL: expected LLMError on slow fail, no exception raised", file=sys.stderr)
+                except LLMError:
+                    if _slow_call_count[0] != 1:
+                        errors += 1
+                        print(f"FAIL: expected 1 call on slow fail, got {_slow_call_count[0]}", file=sys.stderr)
+                    else:
+                        print("PASS: _invoke does not retry on slow fail (dt >= 2.0s)")
+                except Exception as exc:
+                    errors += 1
+                    print(f"FAIL: expected LLMError on slow fail, got {type(exc).__name__}: {exc}", file=sys.stderr)
 
     # test_invoke_does_not_retry_when_resume_true
     _resume_call_count = [0]
@@ -438,20 +440,21 @@ def main() -> int:
         return _subprocess_mod.CompletedProcess(args=argv, returncode=1, stdout="", stderr="shim fail")
 
     _resume_call_count[0] = 0
-    with mock.patch.object(_subprocess_util_mod, "run", _fast_fail_resume):
-        try:
-            run_bulk("prompt", model="m", session_id="abc", resume=True)
-            errors += 1
-            print("FAIL: expected LLMSessionError with resume=True, no exception raised", file=sys.stderr)
-        except LLMSessionError:
-            if _resume_call_count[0] != 1:
+    with mock.patch.object(_llm_claude_mod, "_get_via_psmux_flag", return_value=False):
+        with mock.patch.object(_subprocess_util_mod, "run", _fast_fail_resume):
+            try:
+                run_bulk("prompt", model="m", session_id="abc", resume=True)
                 errors += 1
-                print(f"FAIL: expected 1 call with resume=True, got {_resume_call_count[0]}", file=sys.stderr)
-            else:
-                print("PASS: _invoke does not retry when resume=True (raises LLMSessionError, 1 call)")
-        except Exception as exc:
-            errors += 1
-            print(f"FAIL: expected LLMSessionError, got {type(exc).__name__}: {exc}", file=sys.stderr)
+                print("FAIL: expected LLMSessionError with resume=True, no exception raised", file=sys.stderr)
+            except LLMSessionError:
+                if _resume_call_count[0] != 1:
+                    errors += 1
+                    print(f"FAIL: expected 1 call with resume=True, got {_resume_call_count[0]}", file=sys.stderr)
+                else:
+                    print("PASS: _invoke does not retry when resume=True (raises LLMSessionError, 1 call)")
+            except Exception as exc:
+                errors += 1
+                print(f"FAIL: expected LLMSessionError, got {type(exc).__name__}: {exc}", file=sys.stderr)
 
     # test_invoke_does_not_retry_on_rate_limit
     _rl_fast_call_count = [0]
@@ -465,20 +468,21 @@ def main() -> int:
         )
 
     _rl_fast_call_count[0] = 0
-    with mock.patch.object(_subprocess_util_mod, "run", _rate_limit_fast):
-        try:
-            run_bulk("prompt", model="m")
-            errors += 1
-            print("FAIL: expected LLMRateLimitError, no exception raised", file=sys.stderr)
-        except LLMRateLimitError:
-            if _rl_fast_call_count[0] != 1:
+    with mock.patch.object(_llm_claude_mod, "_get_via_psmux_flag", return_value=False):
+        with mock.patch.object(_subprocess_util_mod, "run", _rate_limit_fast):
+            try:
+                run_bulk("prompt", model="m")
                 errors += 1
-                print(f"FAIL: expected 1 call on rate-limit, got {_rl_fast_call_count[0]}", file=sys.stderr)
-            else:
-                print("PASS: _invoke does not retry on rate-limit (raises LLMRateLimitError, 1 call)")
-        except Exception as exc:
-            errors += 1
-            print(f"FAIL: expected LLMRateLimitError, got {type(exc).__name__}: {exc}", file=sys.stderr)
+                print("FAIL: expected LLMRateLimitError, no exception raised", file=sys.stderr)
+            except LLMRateLimitError:
+                if _rl_fast_call_count[0] != 1:
+                    errors += 1
+                    print(f"FAIL: expected 1 call on rate-limit, got {_rl_fast_call_count[0]}", file=sys.stderr)
+                else:
+                    print("PASS: _invoke does not retry on rate-limit (raises LLMRateLimitError, 1 call)")
+            except Exception as exc:
+                errors += 1
+                print(f"FAIL: expected LLMRateLimitError, got {type(exc).__name__}: {exc}", file=sys.stderr)
 
     # --- psmux branch tests ---
     # Helper for capturing psmux argv
