@@ -3,7 +3,7 @@
 ```yaml
 task: 58 (D) -- Activate psmux-based claude subprocess routing
 slug: claude-psmux-activate
-approved: false
+approved: true
 started: 20260518-103615
 parent: main
 root: ""
