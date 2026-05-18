@@ -42,20 +42,27 @@ Read `_mill/discussion.md` in full. Read `CONSTRAINTS.md` at the hub root if pre
 
 **Write the files.**
 
-**Pre-quote YAML-bound tokens.** Every token whose substituted value lands in a fenced yaml block of a rendered file MUST be passed through `_yaml_writer.quote_scalar` before being supplied to `_render.render`. The render engine substitutes tokens verbatim; quoting is the caller's responsibility. Tokens affected: `<TASK_TITLE>`, `<SLUG>`, `<STARTED>`, `<PARENT_BRANCH>`, `<BATCH_NAME>`, `<BATCH_SLUG>`. Concretely:
+**YAML-quoted tokens for fenced blocks.** Tokens destined for YAML blocks must be pre-quoted; heading tokens remain raw. Heading tokens (`<TASK_TITLE>`, `<BATCH_NAME>`) substitute directly into H1 lines (raw form). YAML-block tokens (`<TASK_TITLE_YAML>`, `<BATCH_NAME_YAML>`) substitute into fenced yaml blocks (quoted form via `_yaml_writer.quote_scalar`). This separation lets templates use both forms without repeating quote logic. Concretely:
 
 ```python
 from _yaml_writer import quote_scalar
 tokens = {
-    "TASK_TITLE":    quote_scalar(task_title),
-    "SLUG":          quote_scalar(slug),
-    "STARTED":       quote_scalar(_timestamp.now_utc_compact()),
-    "PARENT_BRANCH": quote_scalar(parent_branch),
+    "TASK_TITLE":      task_title,
+    "TASK_TITLE_YAML": quote_scalar(task_title),
+    "SLUG":            quote_scalar(slug),
+    "STARTED":         quote_scalar(_timestamp.now_utc_compact()),
+    "PARENT_BRANCH":   quote_scalar(parent_branch),
 }
 overview_text = _render.render(template_path, tokens)
 ```
 
-Apply the same rule when rendering `plan-batch.md` for each batch (`<BATCH_NAME>`, `<BATCH_SLUG>` go through `quote_scalar` too).
+Apply the same pattern when rendering `plan-batch.md` for each batch:
+
+```python
+tokens["BATCH_NAME"]      = batch_name
+tokens["BATCH_NAME_YAML"] = quote_scalar(batch_name)
+tokens["BATCH_SLUG"]      = batch_slug
+```
 
 1. Render `plugins/mill/templates/plan-overview.md` into `<plan_dir>/00-overview.md` using the pre-quoted tokens dict.
 2. Fill the Batch Index DAG, Shared Decisions, and All Files Touched sections in place. Set `number:` for each entry to the NN integer from the batch filename. Write `depends-on:` as a list of integers (e.g., `depends-on: [1]` meaning this batch depends on batch number 1). Leave `depends-on: []` for root batches.
