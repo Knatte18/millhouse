@@ -301,14 +301,21 @@ def _invoke(
     )
 
     if _get_via_psmux_flag():
-        if resume:
-            raise LLMError("psmux path does not support session resume; turn off via_psmux for resume flows")
         if shutil.which("psmux") is None:
             raise LLMError("psmux not on PATH; required when llm.claude.via_psmux=true")
+        caller_provided_session_id = session_id is not None
         if session_id is None:
             session_id = str(uuid.uuid4())
+        psmux_name = f"mill-{session_id[:12]}" if caller_provided_session_id else None
         start = time.monotonic()
-        argv = _build_psmux_argv(model, effort, allowed_tools, session_id)
+        argv = _build_psmux_argv(
+            model,
+            effort,
+            allowed_tools,
+            session_id,
+            psmux_session_name=psmux_name,
+            keep_alive=caller_provided_session_id,
+        )
         try:
             result = _subprocess_util.run(
                 argv,
@@ -323,7 +330,10 @@ def _invoke(
         dt = time.monotonic() - start
         if result.returncode != 0:
             error_detail = (result.stderr or result.stdout or "")[:500]
-            raise LLMError(f"psmux-claude exited {result.returncode}: {error_detail}")
+            if resume:
+                raise LLMSessionError(f"psmux-claude (session {session_id[:8]}...) exited {result.returncode}: {error_detail}")
+            else:
+                raise LLMError(f"psmux-claude (session {session_id[:8]}...) exited {result.returncode}: {error_detail}")
         text = result.stdout.rstrip()
         sid_log = session_id[:8] if len(session_id) >= 8 else session_id
         print(
