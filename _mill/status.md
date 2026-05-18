@@ -1,10 +1,10 @@
 # Status
 
 ```yaml
-phase: discussed
+phase: planning
 slug: mill-misc-fixes-9
 branch: hanf/mill-misc-fixes-9
-plan: null
+plan: _mill/plan
 parent: main
 task: 64 (A) — Small infra fixes batch 9
 task_description: |
@@ -17,4 +17,5 @@ task_description: |
 discussing  '2026-05-18T06:15:07Z'
 discussion-gap-fix-r2  '2026-05-18T06:47:04Z'
 discussed  '2026-05-18T06:48:27Z'
+planning  '2026-05-18T06:59:26Z'
 ```
