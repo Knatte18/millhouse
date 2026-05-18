@@ -1,125 +1,50 @@
-# mill-config.yaml — millhouse hub overrides.
-#
-# Template defaults live in the plugin. Uncomment + change only what you need.
-# Local per-machine overrides go in .millhouse/config.local.yaml (gitignored).
-#
-# Overlay precedence (first source wins):
-#   plugin template -> this file -> .millhouse/config.local.yaml
-
-# ---------------------------------------------------------------------------
-# Repo identity
-# ---------------------------------------------------------------------------
-
 repo:
   short_name: MH
-
-# ---------------------------------------------------------------------------
-# Junctions
-# ---------------------------------------------------------------------------
-
-# junctions:
-#   .wiki: <WIKI_PATH>
-#   .portals: <CONTAINER_PATH>/portals/
-#   .active: <CONTAINER_PATH>/portals/<SLUG>/
-
-# ---------------------------------------------------------------------------
-# mill-spawn
-# ---------------------------------------------------------------------------
-
 spawn:
-  branch_prefix: "hanf/"
-
-# ---------------------------------------------------------------------------
-# Git integration
-# ---------------------------------------------------------------------------
-
-# git:
-#   require_pr_to_base: true
-#   base_branch: main
-
-# ---------------------------------------------------------------------------
-# File-path templates
-# ---------------------------------------------------------------------------
-
-# paths:
-#   discussion_file: _mill/discussion.md
-#   plan_dir:        _mill/plan/
-#   reviews_dir:     _mill/reviews/
-#   status_md:       _mill/status.md
-
-# ---------------------------------------------------------------------------
-# LLM-provider timeouts (seconds)
-# ---------------------------------------------------------------------------
-
+  branch_prefix: hanf/
 llm:
   bulk_timeout: 900
-  # holistic_timeout: 1800
-  # tool_use_timeout: 900
   implementer_timeout: 1800
-
-# ---------------------------------------------------------------------------
-# mill-go pipeline
-# ---------------------------------------------------------------------------
-
 pipeline:
   auto_merge: true
-  # auto_report: true
-
-# ---------------------------------------------------------------------------
-# Reviewer roles
-# ---------------------------------------------------------------------------
-
-# roles:
-  # discussion-review:
-  #   holistic:
-  #     rounds: 3
-  #     reviewer: sonnetmax_tool
-
-  # plan-review:
-  #   batch:
-  #     rounds: 0
-  #     reviewer: null
-  #   holistic:
-  #     rounds: 3
-  #     reviewer: sonnetmax
-
-  # code-review:
-  #   batch:
-  #     rounds: 0
-  #     reviewer: null
-  #   holistic:
-  #     rounds: 3
-  #     reviewer: sonnethigh
-  #     fallback_reviewer: null
-  #     fallback_on:
-  #       - "rate-limit"
-  #   diff_scope_threshold: 0.25
-
-  # implementer:
-  #   self_fix_rounds: 2
-  #   model: haiku
-
-# ---------------------------------------------------------------------------
-# Notifications
-# ---------------------------------------------------------------------------
-
-# notify:
-#   backend: stdout
-
-# ---------------------------------------------------------------------------
-# mill-groom
-# ---------------------------------------------------------------------------
-
-# groom:
-#   brevity-threshold-lines: 5
-#   brevity-threshold-chars: 500
-
-# ---------------------------------------------------------------------------
-# mill-merge-in
-# ---------------------------------------------------------------------------
-
-# merge:
-#   verify_fix_rounds: 3
-
-# verify:
-#   skip_known_broken: []
+junctions:
+  .wiki: <WIKI_PATH>
+  .portals: <CONTAINER_PATH>/portals/
+paths:
+  discussion_file: _mill/discussion.md
+  plan_dir: _mill/plan/
+  reviews_dir: _mill/reviews/
+  status_md: _mill/status.md
+roles:
+  discussion-review:
+    holistic:
+      rounds: 3
+      reviewer: sonnetmax_tool
+  plan-review:
+    batch:
+      rounds: 0
+      reviewer: null
+    holistic:
+      rounds: 3
+      reviewer: sonnetmax
+  code-review:
+    batch:
+      rounds: 0
+      reviewer: null
+    holistic:
+      rounds: 3
+      reviewer: sonnethigh
+      fallback_reviewer: null
+      fallback_on:
+      - rate-limit
+    diff_scope_threshold: 0.25
+  implementer:
+    self_fix_rounds: 2
+    model: haiku
+notify:
+  backend: stdout
+groom:
+  brevity-threshold-lines: 5
+  brevity-threshold-chars: 500
+merge:
+  verify_fix_rounds: 3
