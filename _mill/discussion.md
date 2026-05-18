@@ -56,16 +56,18 @@ constraint. `resume=True` therefore raises `LLMError` on the psmux path.
 ### config-loading-in-invoke
 
 - Decision: Load config inside `_invoke()` on every call via a small `_get_via_psmux_flag()`
-  helper. Helper calls `_paths.resolve_git_root(Path.cwd())` → `_paths.resolve_wiki_path(...)` →
-  `_config.load_config(wiki_path, worktree_root)`. Returns `bool`, defaults to `False` on any
+  helper. Helper calls `git_root = _paths.resolve_git_root(Path.cwd())` then
+  `_config.load_config(git_root, git_root)`. Returns `bool`, defaults to `False` on any
   error (missing key, config load failure, import error). No caller-API change.
-- Rationale: `_llm_claude`'s callers (`_reviewer_single`, `_implementer_claude`) don't thread
-  `cfg` today. Adding it would touch every caller, every reviewer module, and every test.
-  Config load is a cheap YAML parse; per-call is fine. Per-process the config is effectively
-  stable, so the repeated load is harmless.
-- Rejected: module-level lazy cache — adds mutable module state with unclear invalidation;
-  same per-process behaviour but more complex. Rejected: add `cfg` kwarg to `run_*` functions —
-  large caller-API diff with no benefit.
+- Rationale: `_config.load_config(repo_root, worktree_root)` takes the hub/repo root as its
+  first argument (not a wiki path). Using `git_root` for both args matches the standard
+  single-worktree pattern used by `millpy-bg.py`, `millpy-inspect.py`, and others. The wiki
+  is resolved internally by `load_config` from the repo root. Config load is a cheap YAML
+  parse; per-call is fine.
+- Rejected: pass `wiki_path` as first arg — wrong type; `load_config` signature is
+  `(repo_root, worktree_root)`. Rejected: module-level lazy cache — adds mutable module state
+  with unclear invalidation. Rejected: add `cfg` kwarg to `run_*` functions — large
+  caller-API diff with no benefit.
 
 ### psmux-argv-construction
 
@@ -114,10 +116,12 @@ constraint. `resume=True` therefore raises `LLMError` on the psmux path.
 ### response-extraction-psmux
 
 - Decision: Skip `_parse_stream_json` entirely on the psmux path. The wrapper writes the raw
-  assistant text to stdout. Response text = `result.stdout.rstrip()`. Session_id = the value we
-  passed (or `None` if none passed, but the caller should always pass one to get consistent IDs).
-  The `[_llm_claude] starting...` and `[_llm_claude] returned N chars` log lines are emitted
-  identically to the direct path. No additional logging.
+  assistant text to stdout. Response text = `result.stdout.rstrip()`. When `session_id` is
+  provided, it is returned unchanged. When `session_id is None`, `_invoke()` generates a
+  `uuid.uuid4()` string before the subprocess call, passes it via `--session-id`, and returns it
+  — this guarantees `_invoke` always returns `tuple[str, str]`, consistent with the direct
+  path's non-null guarantee. The `[_llm_claude] starting...` and `[_llm_claude] returned N chars`
+  log lines are emitted identically to the direct path. No additional logging.
 - Rationale: Wrapper output is already plain text (per its design). `_parse_stream_json` would
   fail on it. Verbosity rule from tasks 65/66: `_subprocess_util` only logs on failure; we must
   not regress this.
@@ -190,7 +194,8 @@ pattern.
   Existing tests already cover this indirectly; add explicit assertion that argv prefix is the
   direct-claude form.
 - `via_psmux=true`, `run_bulk`: argv starts with `[sys.executable, ".../millpy-claude-sub.py",
-  "--mode", "bulk", "--model", ...]`. No `--session-id` when `session_id=None`.
+  "--mode", "bulk", "--model", ...]`. When `session_id=None`, a UUID is generated and passed
+  via `--session-id`; returned session_id is that UUID.
 - `via_psmux=true`, `run_tool_use`: `--mode tool-use` in argv.
 - `via_psmux=true`, `run_implementer`: `--mode implementer` in argv.
 - `via_psmux=true`, `session_id="abc"`: `--session-id abc` present in argv.
@@ -213,7 +218,8 @@ to pass with `via_psmux=true` in the test config.
 ## Q&A log
 
 - **Q:** Where should `_llm_claude` read the `via_psmux` flag from? **A:** Load config per-call
-  inside `_invoke()` via a small helper; no caller-API change.
+  inside `_invoke()` via a small helper; `_config.load_config(git_root, git_root)` where
+  `git_root = _paths.resolve_git_root(Path.cwd())`; no caller-API change.
 - **Q:** Should `via_psmux` be per-provider or flat? **A:** Per-provider (`llm.claude.via_psmux`)
   to match the existing `llm.<provider>.*` shape and allow future `llm.gemini.via_psmux` without
   a schema refactor.
