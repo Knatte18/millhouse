@@ -218,7 +218,8 @@ def load_config(repo_root: Path, worktree_root: Path) -> dict:
             cfg = deep_merge(cfg, real_cfg)
 
     # 5. Validate unknown keys
-    warn_unknown_keys(cfg, template_cfg, source_label or "merged config")
+    check_cfg = {k: v for k, v in cfg.items() if k != "hub_relative_path"}
+    warn_unknown_keys(check_cfg, template_cfg, source_label or "merged config")
 
     # 6. Apply environment variable overrides
     cfg = apply_env_overrides(cfg)
