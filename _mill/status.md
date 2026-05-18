@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-reviewing
+phase: holistic-fixing
 slug: psmux-session-keepalive
 branch: hanf/psmux-session-keepalive
 plan: _mill/plan
@@ -28,6 +28,7 @@ approved-wrapper-flags-and-cleanup  '2026-05-18T12:35:25Z'
 approved-llm-claude-keepalive-integration  '2026-05-18T12:40:24Z'
 approved-mill-go-cleanup-integration  '2026-05-18T12:47:21Z'
 holistic-reviewing  '2026-05-18T12:48:09Z'
+holistic-fixing  '2026-05-18T12:53:33Z'
 ```
 
 ## Batches
