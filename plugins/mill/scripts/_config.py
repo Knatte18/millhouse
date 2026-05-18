@@ -137,7 +137,11 @@ def resolve_plugin_template_path(filename: str) -> Path:
     """
     plugin_root_env = os.environ.get("CLAUDE_PLUGIN_ROOT", "")
     if plugin_root_env:
-        return Path(plugin_root_env).resolve() / "templates" / filename
+        candidate = Path(plugin_root_env).resolve() / "templates" / filename
+        if not candidate.exists():
+            print(f"[config] CLAUDE_PLUGIN_ROOT={plugin_root_env!r}: {candidate} not found, falling back to source tree", file=sys.stderr)
+            return Path(__file__).resolve().parent.parent / "templates" / filename
+        return candidate
     return Path(__file__).resolve().parent.parent / "templates" / filename
 
 
@@ -214,7 +218,8 @@ def load_config(repo_root: Path, worktree_root: Path) -> dict:
             cfg = deep_merge(cfg, real_cfg)
 
     # 5. Validate unknown keys
-    warn_unknown_keys(cfg, template_cfg, source_label or "merged config")
+    check_cfg = {k: v for k, v in cfg.items() if k != "hub_relative_path"}
+    warn_unknown_keys(check_cfg, template_cfg, source_label or "merged config")
 
     # 6. Apply environment variable overrides
     cfg = apply_env_overrides(cfg)
@@ -294,6 +299,8 @@ def deep_merge(base: dict, overlay: dict) -> dict:
     for key, val in overlay.items():
         if isinstance(val, dict) and isinstance(out.get(key), dict):
             out[key] = deep_merge(out[key], val)
+        elif val is None and isinstance(out.get(key), dict):
+            continue
         else:
             out[key] = val
     return out

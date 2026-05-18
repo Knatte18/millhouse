@@ -603,6 +603,52 @@ def main() -> int:
         assert local_path_str in _warning, f"warning should mention overlay path: {_warning!r}"
         print("PASS: load_config stale review: overlay emits stderr warning with overlay path")
 
+    # load_config bare roles: key does not crash
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir_path = Path(tmpdir)
+        mill = tmpdir_path / ".millhouse"
+        mill.mkdir()
+        (tmpdir_path / "mill-config.yaml").write_text(
+            "roles:\n",
+            encoding="utf-8",
+        )
+        # Create a test template with a full roles: dict
+        template_dir = tmpdir_path / "templates"
+        template_dir.mkdir(parents=True, exist_ok=True)
+        template_path = template_dir / "mill-config.yaml"
+        template_path.write_text(
+            "roles:\n"
+            "  plan-review:\n"
+            "    batch:\n"
+            "      reviewer: sonnetmax\n",
+            encoding="utf-8",
+        )
+        with patch("_review_common.resolve_plugin_template_path", return_value=template_path):
+            cfg = load_config(tmpdir_path, mill)
+        assert isinstance(cfg.get("roles"), dict), f"Expected roles to be dict; got {cfg.get('roles')!r}"
+        print("PASS: load_config bare roles: does not crash; template roles: preserved")
+
+    # load_config hub_relative_path does not emit unknown-key warning
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir_path = Path(tmpdir)
+        mill = tmpdir_path / ".millhouse"
+        mill.mkdir()
+        (tmpdir_path / "mill-config.yaml").write_text(
+            "roles:\n  plan-review:\n    batch:\n      reviewer: sonnetmax\n",
+            encoding="utf-8",
+        )
+        (mill / "config.local.yaml").write_text(
+            "hub_relative_path: subdir\n",
+            encoding="utf-8",
+        )
+        _err_buf = _io.StringIO()
+        with _cl.redirect_stderr(_err_buf):
+            with patch("_review_common.resolve_plugin_template_path", return_value=tmpdir_path / "mill-config.yaml"):
+                cfg = load_config(tmpdir_path, mill)
+        _warning = _err_buf.getvalue()
+        assert "hub_relative_path" not in _warning, f"hub_relative_path should not appear in warning; got {_warning!r}"
+        print("PASS: load_config hub_relative_path in config.local.yaml does not emit unknown-key warning")
+
     # parse_batch_refs: multi-line bullet form returns all sub-bullet paths
     with tempfile.TemporaryDirectory() as tmpdir:
         batch = Path(tmpdir) / "batch.md"

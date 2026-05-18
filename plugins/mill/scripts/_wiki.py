@@ -373,7 +373,8 @@ def health_check(hub_root: Path) -> None:
     Precedence (first source wins):
     1. ``<hub_root>/mill-config.yaml``
     2. Legacy ``<wiki_root>/config.yaml`` (resolved via _paths.resolve_wiki_path)
-    3. No valid source found -- raise error
+    3. Plugin template (mill-config.yaml) resolved via resolve_plugin_template_path
+    4. No valid source found -- raise error
 
     Args:
         hub_root: Directory expected to contain mill-config.yaml or .millhouse/config.local.yaml.
@@ -383,9 +384,10 @@ def health_check(hub_root: Path) -> None:
 
     Raises:
         WikiHealthError: ``hub_root`` does not exist.
-        WikiHealthError: Neither mill-config.yaml nor legacy wiki/config.yaml exists.
+        WikiHealthError: No valid config source found.
     """
     import _paths
+    from _config import resolve_plugin_template_path
 
     if not hub_root.exists():
         raise WikiHealthError(hub_root, f"hub directory does not exist at {hub_root}")
@@ -408,10 +410,15 @@ def health_check(hub_root: Path) -> None:
     else:
         wiki_cfg = None
 
+    # Check plugin template as last valid source
+    plugin_tmpl = resolve_plugin_template_path("mill-config.yaml")
+    if plugin_tmpl.exists():
+        return
+
     # No valid config source found
     raise WikiHealthError(
         hub_root,
-        f"no config source found: searched {mill_cfg} and {wiki_cfg}",
+        f"no config source found: searched {mill_cfg}, {wiki_cfg if wiki_cfg is not None else '<wiki unavailable>'}, and {plugin_tmpl}",
     )
 
 

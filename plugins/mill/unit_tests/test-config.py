@@ -381,7 +381,7 @@ def test_interp_unset_no_default_raises() -> None:
                     _config, "resolve_plugin_template_path",
                     return_value=tmp_path / "nonexistent" / "mill-config.yaml"
                 ):
-                    cfg = _config.load_config(wt_root, wt_root)
+                    _config.load_config(wt_root, wt_root)
             assert False, "Expected ConfigError to be raised"
         except _config.ConfigError as exc:
             exc_str = str(exc)
@@ -875,7 +875,7 @@ def test_unknown_key_warning_emitted() -> None:
                 return_value=tmp_path / "templates" / "mill-config.yaml"
             ):
                 with patch("sys.stderr", new=io.StringIO()) as mock_stderr:
-                    cfg = _config.load_config(wt_root, wt_root)
+                    _config.load_config(wt_root, wt_root)
                     stderr_output = mock_stderr.getvalue()
 
         assert "pipeline" in stderr_output, (
@@ -956,6 +956,88 @@ def test_both_files_present_mill_wins() -> None:
     print("PASS load_config — both files present, mill-config wins + warning")
 
 
+def test_deep_merge_none_overlay_dict_base() -> None:
+    """None overlay on dict base skips override, preserves base dict."""
+    result = _config.deep_merge({"roles": {"k": "v"}}, {"roles": None})
+    assert result == {"roles": {"k": "v"}}, f"None overlay must not clobber base dict; got {result!r}"
+    print("PASS deep_merge -- None overlay on dict base is skipped, base dict preserved")
+
+
+def test_deep_merge_none_overlay_scalar_base() -> None:
+    """None overlay on scalar base is allowed (reviewer: null semantics)."""
+    result = _config.deep_merge({"reviewer": "foo"}, {"reviewer": None})
+    assert result == {"reviewer": None}, f"None overlay should override scalar; got {result!r}"
+    print("PASS deep_merge -- None overlay on scalar base allowed (reviewer: null semantics)")
+
+
+def test_resolve_plugin_template_path_stale_root() -> None:
+    """resolve_plugin_template_path with stale CLAUDE_PLUGIN_ROOT falls back with warning."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        nonexistent_root = tmp_path / "nonexistent_plugin_root"
+        _saved_root = os.environ.get("CLAUDE_PLUGIN_ROOT")
+        try:
+            os.environ["CLAUDE_PLUGIN_ROOT"] = str(nonexistent_root)
+            with patch("sys.stderr", new=io.StringIO()) as mock_stderr:
+                result = _config.resolve_plugin_template_path("mill-config.yaml")
+                stderr_output = mock_stderr.getvalue()
+            fallback_path = Path(_config.__file__).resolve().parent.parent / "templates" / "mill-config.yaml"
+            assert result == fallback_path, (
+                f"Expected fallback path {fallback_path}, got {result}"
+            )
+            assert "CLAUDE_PLUGIN_ROOT" in stderr_output or str(nonexistent_root) in stderr_output, (
+                f"Expected warning about CLAUDE_PLUGIN_ROOT or path in stderr; got {stderr_output!r}"
+            )
+        finally:
+            if _saved_root is not None:
+                os.environ["CLAUDE_PLUGIN_ROOT"] = _saved_root
+            else:
+                os.environ.pop("CLAUDE_PLUGIN_ROOT", None)
+    print("PASS resolve_plugin_template_path -- stale CLAUDE_PLUGIN_ROOT falls back to source tree with warning")
+
+
+def test_load_config_bare_roles_key() -> None:
+    """load_config with bare roles: key does not crash; template roles: dict preserved."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        _setup_plugin_template(tmp_path)
+        wt_root = tmp_path / "hub"
+        wt_root.mkdir(parents=True)
+        _write_yaml(wt_root / "mill-config.yaml", "roles:\n")
+        with patch.object(_paths, "resolve_wiki_path", side_effect=SystemExit):
+            with patch.object(
+                _config, "resolve_plugin_template_path",
+                return_value=tmp_path / "templates" / "mill-config.yaml"
+            ):
+                result = _config.load_config(wt_root, wt_root)
+        assert isinstance(result.get("roles"), dict), (
+            f"Expected roles to be a dict; got {result.get('roles')!r}"
+        )
+    print("PASS load_config -- bare roles: key does not crash; template roles: dict preserved")
+
+
+def test_load_config_hub_relative_path_no_warning() -> None:
+    """load_config with hub_relative_path in config.local.yaml does not emit unknown-key warning."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        _setup_plugin_template(tmp_path)
+        wt_root = tmp_path / "hub"
+        wt_root.mkdir(parents=True)
+        _write_yaml(wt_root / ".millhouse" / "config.local.yaml", "hub_relative_path: subdir\n")
+        with patch.object(_paths, "resolve_wiki_path", side_effect=SystemExit):
+            with patch.object(
+                _config, "resolve_plugin_template_path",
+                return_value=tmp_path / "templates" / "mill-config.yaml"
+            ):
+                with patch("sys.stderr", new=io.StringIO()) as mock_stderr:
+                    _config.load_config(wt_root, wt_root)
+                    stderr_output = mock_stderr.getvalue()
+        assert "hub_relative_path" not in stderr_output, (
+            f"hub_relative_path should not appear in warning; got {stderr_output!r}"
+        )
+    print("PASS load_config -- hub_relative_path in config.local.yaml does not emit unknown-key warning")
+
+
 def main() -> int:
     tests = [
         test_load_config_shared_present,
@@ -979,6 +1061,11 @@ def main() -> int:
         test_deep_merge_scalar_wins,
         test_deep_merge_nested_merge,
         test_deep_merge_empty_overlay,
+        test_deep_merge_none_overlay_dict_base,
+        test_deep_merge_none_overlay_scalar_base,
+        test_resolve_plugin_template_path_stale_root,
+        test_load_config_bare_roles_key,
+        test_load_config_hub_relative_path_no_warning,
         # env-interpolation
         test_interp_default_when_var_unset,
         test_interp_env_value_when_var_set,

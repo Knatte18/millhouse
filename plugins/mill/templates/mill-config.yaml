@@ -108,6 +108,7 @@ llm:
 pipeline:
   auto_merge: false
   auto_report: true
+  autonomous_mode: false  # Set true by mill-autofix; read by mill-go and mill-plan for autonomous stuck-handling
 
 # ---------------------------------------------------------------------------
 # Reviewer roles
