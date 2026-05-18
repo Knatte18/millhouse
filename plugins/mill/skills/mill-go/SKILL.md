@@ -113,6 +113,23 @@ On a fresh run only (no `## Batches` section in status.md):
 
 For each batch in `order`:
 
+**Per-batch session cleanup.** Every time the per-batch implement-review-fix loop terminates (APPROVE, max-rounds blocked, cleanliness-blocked, stuck-blocked) OR the Builder is about to re-dispatch the implementer with a fresh session (transient-retry-once), invoke the *per-batch cleanup block* defined below — it reaps the psmux TUI session associated with the batch's `implementer_session`, idempotent and failure-swallowing.
+
+The per-batch cleanup block:
+
+```bash
+PYTHONPATH="${PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
+import sys
+sys.path.insert(0, r'${PLUGIN_ROOT}/scripts')
+from pathlib import Path
+import _paths, _status, _llm_claude
+status_path = _paths.resolve_task_path(_paths.resolve_git_root(), '_mill/status.md')
+batches = _status.read_batches(status_path)
+sid = next((b.get('implementer_session') for b in batches if b['name'] == '<batch_name>'), None)
+_llm_claude.cleanup_session(sid)
+" || true
+```
+
 ### 0. Wiki health-check
 
 Before launching the implementer / reviewer for this batch, verify a config source is reachable. If the check fails, release the builder lock and halt — a config source became unavailable mid-run and the implementer's downstream error would mask the root cause.
@@ -172,7 +189,7 @@ The implementer's last output line must be JSON:
 ```
 
 - `status: success` → continue to Code Review.
-- `status: stuck, stuck_type: transient` → auto-retry ONCE by re-invoking `millpy-implement.py <batch_name>` (no `--resume` flag — a fresh batch start). Record `review_round: 0`, do not change batch state. If the second invocation also reports `stuck_type: transient` → escalate per *Stuck escalation* below.
+- `status: stuck, stuck_type: transient` → auto-retry ONCE: invoke the per-batch cleanup block, then re-invoke `millpy-implement.py <batch_name>` (no `--resume` flag — a fresh batch start). Record `review_round: 0`, do not change batch state. If the second invocation also reports `stuck_type: transient` → escalate per *Stuck escalation* below.
 - `status: stuck, stuck_type: verify | logic` → **ask user** per *Stuck escalation*.
 - Malformed / missing JSON line → treat as `stuck_type: logic` reason "no structured report".
 
@@ -185,6 +202,7 @@ After a `success` report: compute new dirt via `_cleanliness.compute_new_dirt(<w
 - `_status.set_batch_field(status_path, batch_name, "blocked_reason", "uncommitted working tree after implementer report")`
 - `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`
 - Commit on the task branch: `git -C <worktree> add <status_path> && git -C <worktree> commit -m "mill-go: blocked on <batch_name> — dirty tree"`
+- Invoke the per-batch cleanup block.
 - Go to *Blocked*.
 
 `signature: _cleanliness.compute_new_dirt(worktree: Path, snapshot_path: Path) -> list[str]`
@@ -220,7 +238,7 @@ For each round `N` from 1 to `roles.code-review.batch.rounds`:
 3. **Builder reads only the JSON envelope verdict, never the findings.** Loading `mill-receiving-review` is the dispatched implementer's job (see Principles below). Builder does not load the skill.
 
 4. Branch on verdict:
-   - `APPROVE` — batch state → `approved`, `review_file: <path>`. `_status.append_phase(status_path, f"approved-{batch_name}", _timestamp.now_utc_iso())`. Use the `file` field from `reviews[0]` in the JSON summary (or the crash-recovery scan path) as `<review_file_path>`. Commit on the task branch: `git -C <worktree> add <status_path> <review_file_path> && git -C <worktree> commit -m "mill-go: approve batch {batch_name}"`. Break out of the loop → next batch.
+   - `APPROVE` — batch state → `approved`, `review_file: <path>`. `_status.append_phase(status_path, f"approved-{batch_name}", _timestamp.now_utc_iso())`. Use the `file` field from `reviews[0]` in the JSON summary (or the crash-recovery scan path) as `<review_file_path>`. Commit on the task branch: `git -C <worktree> add <status_path> <review_file_path> && git -C <worktree> commit -m "mill-go: approve batch {batch_name}"`. Invoke the per-batch cleanup block. Break out of the loop → next batch.
    - `NEED_CONTEXT` — read the `## Missing context` bullets from the review file. For each listed path, if it exists under the worktree, append to `extra_files` for the NEXT round. `_notify.notify("mill-go.review-need-context", f"batch {batch_name} round {N}", slug=slug, files=len(missing))`. Record this gap for mill-self-report (see Handoff). Increment round and continue the loop. If ALL the missing files are paths already in `extra_files` from a prior round (no new info), treat as a stuck-logic failure and break. Reading the structured `## Missing context` bullet list does not require `mill-receiving-review` -- only finding-handling does.
      `signature: _notify.notify(event: str, detail: str, **context) -> None`
    - `REQUEST_CHANGES` — Background via millpy-bg:
@@ -253,16 +271,16 @@ For each round `N` from 1 to `roles.code-review.batch.rounds`:
 
    The round counter `N` is **not** consumed — the round produced no reviewable output. On the **second** consecutive run that still has top-level `verdict: "ERROR"`, halt with `BLOCKED: code review ERROR-only round {N}` and surface each entry's `error` string from `reviews[]` to the user. Do NOT auto-retry beyond the second pass. The two-pass cap mirrors mill-plan's existing step 4.5. *(Closes #228 — rate-limit errors no longer mis-dispatch the implementer with a null review file.)*
 
-5. **Max-rounds exhaustion.** After `roles.code-review.batch.rounds` rounds without APPROVE: `_notify.notify("mill-go.review-exhausted", f"batch {batch_name}", slug=slug, rounds=N)`, set batch state → `blocked`, `blocked_reason: "review rounds exhausted"`, `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`, commit on the task branch: `git -C <worktree> add <status_path> && git -C <worktree> commit -m "mill-go: blocked on {batch_name} after {N} rounds"`. Go to *Blocked* below.
+5. **Max-rounds exhaustion.** After `roles.code-review.batch.rounds` rounds without APPROVE: `_notify.notify("mill-go.review-exhausted", f"batch {batch_name}", slug=slug, rounds=N)`, set batch state → `blocked`, `blocked_reason: "review rounds exhausted"`, `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`, commit on the task branch: `git -C <worktree> add <status_path> && git -C <worktree> commit -m "mill-go: blocked on {batch_name} after {N} rounds"`. Invoke the per-batch cleanup block. Go to *Blocked* below.
 
 ### Stuck escalation
 
-If the deep-merged config has `pipeline.autonomous_mode: true`: for any `stuck_type` (`transient` already-retried, `verify`, `logic`): skip the user prompt; set batch state → `blocked`, `blocked_reason: "autonomous-mode stuck: {stuck_type}"`, `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`; commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "mill-go: blocked on {batch_name} (autonomous-mode)"` and push; go to *Blocked*.
+If the deep-merged config has `pipeline.autonomous_mode: true`: for any `stuck_type` (`transient` already-retried, `verify`, `logic`): skip the user prompt; set batch state → `blocked`, `blocked_reason: "autonomous-mode stuck: {stuck_type}"`, `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`; commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "mill-go: blocked on {batch_name} (autonomous-mode)"` and push; invoke the per-batch cleanup block; go to *Blocked*.
 
 - **CLI emits `stuck_type: transient`** (LLM-layer failure surfaced as the synthetic stuck JSON described in Implement step 2; the CLI exits 1 in that case but stdout carries the JSON) → apply the one-retry policy: re-invoke `millpy-implement.py <batch_name>` once with no `--resume` flag (a fresh session). If the second invocation also reports `stuck_type: transient`, escalate to user with the regular `transient` three-option prompt (retry fresh, edit plan and retry, block).
 - `transient` (already retried once) → surface to user with three options: retry fresh, edit plan and retry, block. User picks.
 - `verify` / `logic` → surface to user with three options: edit plan to clarify then retry fresh, skip this batch (block the task), block the task. User picks.
-- On user-chosen block: set batch state → `blocked`, `blocked_reason: <reason>`, `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`, commit on the task branch: `git -C <worktree> add <status_path> && git -C <worktree> commit -m "mill-go: blocked on {batch_name}"`. Go to *Blocked*.
+- On user-chosen block: set batch state → `blocked`, `blocked_reason: <reason>`, `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`, commit on the task branch: `git -C <worktree> add <status_path> && git -C <worktree> commit -m "mill-go: blocked on {batch_name}"`. Invoke the per-batch cleanup block. Go to *Blocked*.
 
 ### Blocked
 
@@ -313,6 +331,21 @@ When mill-go's Entry-step 5 phase gate routes here (phase is `implementing`, `re
 4. **`mill-receiving-review` remains the implementer's responsibility.** When resume re-dispatches the implementer (`millpy-implement.py --resume ...`), the fix-prompt itself instructs the implementer to load the skill before reading findings. Builder still does not load it.
 
 ## Holistic code review
+
+**Holistic session cleanup.** Whenever a `millpy-implement-holistic.py` invocation completes (success, stuck, or any error path), capture the `session_id` field from the parsed JSON envelope into a local Bash variable `holistic_sid`. At any point where the holistic loop is about to dispatch a NEW `millpy-implement-holistic.py` round, AND at every loop terminus (APPROVE, autonomous-mode block, user-block, max-rounds), invoke the *holistic cleanup block* defined below.
+
+The holistic cleanup block:
+
+```bash
+PYTHONPATH="${PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
+import sys
+sys.path.insert(0, r'${PLUGIN_ROOT}/scripts')
+import _llm_claude
+_llm_claude.cleanup_session('${holistic_sid}')
+" || true
+```
+
+If the captured `holistic_sid` is empty or the literal `unknown`, cleanup is a documented no-op — the implementer brief contract guarantees the id is emitted on the happy path.
 
 **Guard:** The skip semantics have two conditions: `reviewer: null` OR `rounds: 0` means "skip holistic". Only execute this section if `cfg.get("roles", {}).get("code-review", {}).get("holistic", {}).get("reviewer") is not None`.
 
@@ -434,26 +467,26 @@ For each round `H` from 1 to `max_holistic_rounds`:
 
    Operator interactive path (no `autonomous_mode`, no `fallback_reviewer`): user prompt remains identical to today (the existing step 5 ROUND-EXHAUSTION sub-section handles this case).
 
-4. On `APPROVE`: `_status.append_phase(status_path, "holistic-approved", _timestamp.now_utc_iso())`. Commit status. Proceed to Handoff.
+4. On `APPROVE`: `_status.append_phase(status_path, "holistic-approved", _timestamp.now_utc_iso())`. Commit status. Invoke the holistic cleanup block. Proceed to Handoff.
 
-5. On `REQUEST_CHANGES`: the holistic-fix CLI dispatches a fresh implementer; the implementer loads `mill-receiving-review` (see Principles below). Builder does not load the skill. Dispatch:
+5. On `REQUEST_CHANGES`: the holistic-fix CLI dispatches a fresh implementer; the implementer loads `mill-receiving-review` (see Principles below). Builder does not load the skill. Invoke the holistic cleanup block (reaps the previous round's session before the next one starts). Dispatch:
    ```bash
    PYTHONPATH="${PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${PLUGIN_ROOT}/scripts/millpy-implement-holistic.py" \
      --review-file <abs-path-to-holistic-review-file> --round {H}
    ```
    Parse stdout JSON (same last-`{"status":...}`-line pattern as per-batch). The CLI handles `holistic-fixing` phase + commit + push itself.
-   - `stuck_type: transient`: one-retry policy (re-invoke once). If still transient: surface to user — retry fresh / skip holistic / block task.
-   - `stuck_type: verify` or `logic`: surface to user — edit plan and retry / skip holistic and proceed to Handoff / block task.
+   - `stuck_type: transient`: one-retry policy (re-invoke once). If still transient: surface to user — retry fresh / skip holistic / block task. On user-chosen block: invoke the holistic cleanup block, then go to *Blocked*.
+   - `stuck_type: verify` or `logic`: surface to user — edit plan and retry / skip holistic and proceed to Handoff / block task. On user-chosen block: invoke the holistic cleanup block, then go to *Blocked*.
    - On success: increment H and loop.
 
 6. On `NEED_CONTEXT`: apply the same extra-files / notify path as per-batch.
 
-7. **Rounds exhausted** (`H > max_holistic_rounds`, `REQUEST_CHANGES` still returned): If the deep-merged config has `pipeline.autonomous_mode: true`: `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`; `_status.update_field(status_path, "blocked_reason", f"holistic review exhausted {max_holistic_rounds} round(s) (autonomous-mode)")`; commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "mill-go: blocked on holistic review (autonomous-mode)"` and push; halt with "Autonomous mode: holistic review exhausted. Task left as [active]." surface to user with a **blocked-task halt** (not blocked-batch):
+7. **Rounds exhausted** (`H > max_holistic_rounds`, `REQUEST_CHANGES` still returned): If the deep-merged config has `pipeline.autonomous_mode: true`: `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`; `_status.update_field(status_path, "blocked_reason", f"holistic review exhausted {max_holistic_rounds} round(s) (autonomous-mode)")`; commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "mill-go: blocked on holistic review (autonomous-mode)"` and push; invoke the holistic cleanup block; halt with "Autonomous mode: holistic review exhausted. Task left as [active]." Otherwise surface to user with a **blocked-task halt** (not blocked-batch):
    > Holistic review exhausted {max_holistic_rounds} round(s). Task is blocked.
    > 1) Rethink — revise discussion and re-run mill-plan.
    > 2) Skip holistic — accept remaining findings and proceed to Handoff.
    > 3) Block — halt and leave for manual resolution.
-   Wait for user choice before proceeding.
+   On user choice of "3) Block": invoke the holistic cleanup block, then halt and leave for manual resolution. Wait for user choice before proceeding.
 
 ## Handoff
 
