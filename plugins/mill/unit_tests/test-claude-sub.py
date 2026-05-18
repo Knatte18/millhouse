@@ -83,13 +83,15 @@ def main() -> int:
                     assert m_new_session.call_count == 0, "new_session should not be called on reuse"
                     # Should return 0 on success
                     assert ret == 0, f"S1: expected 0, got {ret}"
-                    # Should not call send_keys with the claude command on reuse path
-                    for call in m_send_keys.call_args_list:
-                        assert not str(call).startswith("call(") or "claude" not in str(call), \
-                            "send_keys should not be called with claude command on reuse path"
-                    # Should call _wait_for_idle_prompt exactly once (reuse check only)
+                    # Should call _wait_for_idle_prompt exactly once (reuse check only, not Step 9 boot wait)
                     assert m_wait_for_idle.call_count == 1, \
                         f"_wait_for_idle_prompt should be called exactly once on reuse, got {m_wait_for_idle.call_count}"
+                    # send_keys should be called exactly once (Step 10: Enter key), not with claude command
+                    assert m_send_keys.call_count == 1, \
+                        f"send_keys should be called exactly once (Step 10), got {m_send_keys.call_count}"
+                    # Verify the single call is the Enter key, not the claude command
+                    assert m_send_keys.call_args[0][1] == "Enter", \
+                        f"send_keys should be called with 'Enter', got {m_send_keys.call_args[0][1]}"
                     print("PASS: S1 (existing-idle short-circuit)")
             finally:
                 sys.argv = saved_argv
