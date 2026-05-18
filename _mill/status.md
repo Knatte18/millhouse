@@ -30,5 +30,7 @@ implementing  '2026-05-18T10:48:49Z'
 ```yaml
 batches:
   - name: activate-via-psmux
-    state: pending
+    state: running
+    implementer_session: cc4a847a-728f-4b08-879c-4af424a91e4d
+    start_sha: cc50a66657626bd680900f45fa2aabdaea8927e4
 ```
