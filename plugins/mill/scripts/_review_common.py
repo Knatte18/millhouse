@@ -1260,7 +1260,8 @@ def load_config(repo_root: Path, mill_dir: Path) -> dict:
         cfg = _deep_merge(cfg, local_cfg)
 
     # 6. Validate unknown keys
-    warn_unknown_keys(cfg, template_cfg, "merged config")
+    check_cfg = {k: v for k, v in cfg.items() if k != "hub_relative_path"}
+    warn_unknown_keys(check_cfg, template_cfg, "merged config")
 
     # 7. Apply environment overrides
     cfg = apply_env_overrides(cfg)
