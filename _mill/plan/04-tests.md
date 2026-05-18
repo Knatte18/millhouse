@@ -24,7 +24,7 @@ This batch adds regression tests for every fix delivered in batches 1-3. All new
   - `plugins/mill/unit_tests/test-config.py`
 - **Creates:** none
 - **Deletes:** none
-- **Requirements:** Append the following five new test functions to the end of `test-config.py`, each following the existing style (uses `tempfile.TemporaryDirectory`, `print("PASS ...")` on success, `patch.object(_config, "resolve_plugin_template_path", ...)` where needed). Insert them BEFORE the `if __name__ == "__main__":` block and BEFORE the final `return 0` of `main()` -- each test is an inline call within `main()`, not a separate function, matching the existing file structure. Add `import io` at the top of the file if not already present.
+- **Requirements:** Define five new named test functions following the existing `test_deep_merge_…` / `test_load_config_…` naming style (uses `tempfile.TemporaryDirectory`, `print("PASS ...")` on success, `patch.object(_config, "resolve_plugin_template_path", ...)` where needed). Place the function definitions BEFORE the `if __name__ == "__main__":` block. Append the five new names to the `tests = [...]` list inside `main()`. Add `import io` at the top of the file if not already present.
 
   **Test A -- deep_merge None overlay preserves base dict:**
   ```python
@@ -71,7 +71,7 @@ This batch adds regression tests for every fix delivered in batches 1-3. All new
 - **Requirements:** Append the following tests to the load_config test block in `test-review-common.py` (after line 567, after the existing "load_config stale review: overlay emits stderr warning" test). Follow the existing inline-within-main() style.
 
   **Test A -- _review_common.load_config bare roles: key does not crash:**
-  Write a `mill-config.yaml` with `roles:\n` (bare key, value is None). Create a `.millhouse/` dir with no `config.local.yaml`. Use `patch.object(_config, "resolve_plugin_template_path", ...)` to point to a test template that HAS a full `roles:` dict (write one inline). Call `load_config(tmpdir_path, mill)`. Assert no exception; assert `cfg.get("roles")` is a dict. If `resolve_plugin_template_path` is imported from `_config` in `_review_common`, patch it via `_config` or directly via the `_review_common` module's reference. Import `_config` at the top of the test block.
+  Write a `mill-config.yaml` with `roles:\n` (bare key, value is None). Create a `.millhouse/` dir with no `config.local.yaml`. Use `patch("_review_common.resolve_plugin_template_path", ...)` (or equivalently `patch.object(sys.modules["_review_common"], "resolve_plugin_template_path", ...)`) to point to a test template that HAS a full `roles:` dict (write one inline). Call `load_config(tmpdir_path, mill)`. Assert no exception; assert `cfg.get("roles")` is a dict. Note: `_review_common` imports `resolve_plugin_template_path` via `from _config import ...`, creating a local binding -- the patch MUST target the `_review_common` module's name, not `_config` directly.
   ```python
   print("PASS: load_config bare roles: does not crash; template roles: preserved")
   ```
