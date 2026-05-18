@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-approved
+phase: done
 slug: mill-config-load-fixes
 branch: hanf/mill-config-load-fixes
 plan: _mill/plan
@@ -31,6 +31,7 @@ approved-_wiki health-check and mill-go SKILL.md  '2026-05-18T07:24:24Z'
 approved-Tests  '2026-05-18T07:27:51Z'
 holistic-reviewing  '2026-05-18T07:28:25Z'
 holistic-approved  '2026-05-18T07:44:30Z'
+done  '2026-05-18T07:44:56Z'
 ```
 
 ## Batches
