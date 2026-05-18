@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-config-schema-move
 slug: psmux-session-keepalive
 branch: hanf/psmux-session-keepalive
 plan: _mill/plan
@@ -23,6 +23,7 @@ plan-fix-r1  '2026-05-18T12:08:29Z'
 plan-fix-r2  '2026-05-18T12:19:08Z'
 planned  '2026-05-18T12:20:17Z'
 implementing  '2026-05-18T12:21:33Z'
+approved-config-schema-move  '2026-05-18T12:28:01Z'
 ```
 
 ## Batches
@@ -30,7 +31,7 @@ implementing  '2026-05-18T12:21:33Z'
 ```yaml
 batches:
   - name: config-schema-move
-    state: running
+    state: approved
     implementer_session: ed2167a4-d65c-4782-a94a-89d3a0b0e2be
     start_sha: 4cd1158040e440a50ef61d03405f62023362f249
   - name: wrapper-flags-and-cleanup
