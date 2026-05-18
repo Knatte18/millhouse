@@ -146,11 +146,15 @@ def main() -> int:
     assert _scan_rate_limit(mixed_generic) is False
     print("PASS: _scan_rate_limit bad line + generic error -> False")
 
-    # _build_argv: bulk (no effort, no session)
+    # _build_argv: bulk (no effort, no session) -- empty allowed_tools emits --allowedTools "" explicitly
     argv = _build_argv("claude-sonnet-4-5", None, "")
-    assert "--allowedTools" not in argv, f"empty allowed_tools must omit --allowedTools; got {argv}"
-    assert argv[-2:] == ["--disallowedTools", "Edit,Write,Bash,NotebookEdit"]
-    print("PASS: _build_argv bulk (empty allowed_tools) omits --allowedTools, adds --disallowedTools")
+    assert "--allowedTools" in argv, f"empty allowed_tools must emit --allowedTools explicitly; got {argv}"
+    tools_idx = argv.index("--allowedTools")
+    assert argv[tools_idx + 1] == "", f"--allowedTools must be followed by '' for empty; got {argv[tools_idx + 1]!r}"
+    assert "--disallowedTools" in argv
+    deny_idx = argv.index("--disallowedTools")
+    assert argv[deny_idx + 1] == "Edit,Write,Bash,NotebookEdit"
+    print("PASS: _build_argv bulk (empty allowed_tools) emits --allowedTools '' and --disallowedTools")
 
     # _build_argv: tool-use with effort
     argv = _build_argv("claude-sonnet-4-5", "max", "Read,Grep,Glob")
@@ -283,7 +287,8 @@ def main() -> int:
         f"run_implementer must NOT carry --disallowedTools; got {captured_argv}"
     print(f"PASS: run_implementer uses --allowedTools {tools_value} + no --disallowedTools")
 
-    # run_bulk: empty allowed_tools -> no --allowedTools, yes --disallowedTools
+    # run_bulk: empty allowed_tools -> --allowedTools '' explicitly, yes --disallowedTools
+    # (regression guard for issue #335: empty allow-list must be emitted explicitly)
     _FAKE_STDOUT_BULK = (
         '{"type":"system","session_id":"fake-sid-456"}\n'
         '{"type":"result","result":"bulk done","session_id":"fake-sid-456"}\n'
@@ -303,14 +308,17 @@ def main() -> int:
     with mock.patch.object(_subprocess_util_mod, "run", _fake_run_bulk):
         run_bulk("hello", model="claude-sonnet-4-5", session_id="fake-sid-456")
 
-    assert "--allowedTools" not in captured_argv_bulk, \
-        f"run_bulk must omit --allowedTools for empty allowed_tools; got {captured_argv_bulk}"
+    assert "--allowedTools" in captured_argv_bulk, \
+        f"run_bulk must emit --allowedTools '' for empty allowed_tools; got {captured_argv_bulk}"
+    at_idx_bulk = captured_argv_bulk.index("--allowedTools")
+    assert captured_argv_bulk[at_idx_bulk + 1] == "", \
+        f"run_bulk --allowedTools must be followed by '' for empty; got {captured_argv_bulk[at_idx_bulk + 1]!r}"
     assert "--disallowedTools" in captured_argv_bulk, \
         f"run_bulk must include --disallowedTools; got {captured_argv_bulk}"
     dt_idx_bulk = captured_argv_bulk.index("--disallowedTools")
     assert captured_argv_bulk[dt_idx_bulk + 1] == "Edit,Write,Bash,NotebookEdit", \
         f"run_bulk --disallowedTools value mismatch; got {captured_argv_bulk[dt_idx_bulk + 1]}"
-    print("PASS: run_bulk (empty allowed_tools) omits --allowedTools, adds --disallowedTools")
+    print("PASS: run_bulk (empty allowed_tools) emits --allowedTools '' and --disallowedTools")
 
     # run_tool_use: "Read,Grep,Glob" -> yes --allowedTools, yes --disallowedTools
     _FAKE_STDOUT_TOOLUSE = (
