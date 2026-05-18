@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: psmux-session-keepalive
 branch: hanf/psmux-session-keepalive
 plan: _mill/plan
@@ -22,4 +22,19 @@ plan-review-r1  '2026-05-18T12:08:29Z'
 plan-fix-r1  '2026-05-18T12:08:29Z'
 plan-fix-r2  '2026-05-18T12:19:08Z'
 planned  '2026-05-18T12:20:17Z'
+implementing  '2026-05-18T12:21:33Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: config-schema-move
+    state: pending
+  - name: wrapper-flags-and-cleanup
+    state: pending
+  - name: llm-claude-keepalive-integration
+    state: pending
+  - name: mill-go-cleanup-integration
+    state: pending
 ```
