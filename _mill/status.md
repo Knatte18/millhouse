@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-subprocess-bg-fixes
 slug: mill-misc-fixes-9
 branch: hanf/mill-misc-fixes-9
 plan: _mill/plan
@@ -24,6 +24,7 @@ plan-review-r2  '2026-05-18T07:21:51Z'
 plan-fix-r2  '2026-05-18T07:21:51Z'
 planned  '2026-05-18T07:22:25Z'
 implementing  '2026-05-18T07:28:59Z'
+approved-subprocess-bg-fixes  '2026-05-18T07:33:09Z'
 ```
 
 ## Batches
@@ -31,9 +32,10 @@ implementing  '2026-05-18T07:28:59Z'
 ```yaml
 batches:
   - name: subprocess-bg-fixes
-    state: running
+    state: approved
     implementer_session: 8c50d5fd-d903-471d-8b50-6980e1f468a3
     start_sha: d2bb8aa8e71bc9a6668847395c242b737f2c4233
+    commit_sha: a6a14aff6f7c4818975be8b89a6be7cd9e733191
   - name: review-backend-fixes
     state: pending
   - name: templates-config-skills
