@@ -526,8 +526,9 @@ def main() -> int:
     # Test 2: via_psmux=True, run_bulk(session_id=None) -- auto-generate UUID
     _psmux_captured_argv.clear()
     with mock.patch.object(_llm_claude_mod, "_get_via_psmux_flag", return_value=True):
-        with mock.patch.object(_subprocess_util_mod, "run", _fake_psmux_run):
-            text, returned_sid = run_bulk("prompt", model="m", session_id=None)
+        with mock.patch.object(_llm_claude_mod.shutil, "which", return_value="/usr/bin/psmux"):
+            with mock.patch.object(_subprocess_util_mod, "run", _fake_psmux_run):
+                text, returned_sid = run_bulk("prompt", model="m", session_id=None)
 
     # Verify argv structure
     if len(_psmux_captured_argv) < 5 or _psmux_captured_argv[0] != sys.executable:
@@ -555,8 +556,9 @@ def main() -> int:
     # Test 3: via_psmux=True, run_tool_use
     _psmux_captured_argv.clear()
     with mock.patch.object(_llm_claude_mod, "_get_via_psmux_flag", return_value=True):
-        with mock.patch.object(_subprocess_util_mod, "run", _fake_psmux_run):
-            run_tool_use("prompt", model="m", session_id="tool-use-sid")
+        with mock.patch.object(_llm_claude_mod.shutil, "which", return_value="/usr/bin/psmux"):
+            with mock.patch.object(_subprocess_util_mod, "run", _fake_psmux_run):
+                run_tool_use("prompt", model="m", session_id="tool-use-sid")
 
     try:
         mode_idx = _psmux_captured_argv.index("--mode")
@@ -572,8 +574,9 @@ def main() -> int:
     # Test 4: via_psmux=True, run_implementer
     _psmux_captured_argv.clear()
     with mock.patch.object(_llm_claude_mod, "_get_via_psmux_flag", return_value=True):
-        with mock.patch.object(_subprocess_util_mod, "run", _fake_psmux_run):
-            run_implementer("prompt", model="m", session_id="impl-sid")
+        with mock.patch.object(_llm_claude_mod.shutil, "which", return_value="/usr/bin/psmux"):
+            with mock.patch.object(_subprocess_util_mod, "run", _fake_psmux_run):
+                run_implementer("prompt", model="m", session_id="impl-sid")
 
     try:
         mode_idx = _psmux_captured_argv.index("--mode")
@@ -589,8 +592,9 @@ def main() -> int:
     # Test 5: via_psmux=True, explicit session_id passed through unchanged
     _psmux_captured_argv.clear()
     with mock.patch.object(_llm_claude_mod, "_get_via_psmux_flag", return_value=True):
-        with mock.patch.object(_subprocess_util_mod, "run", _fake_psmux_run):
-            text, returned_sid = run_bulk("prompt", model="m", session_id="abc-explicit")
+        with mock.patch.object(_llm_claude_mod.shutil, "which", return_value="/usr/bin/psmux"):
+            with mock.patch.object(_subprocess_util_mod, "run", _fake_psmux_run):
+                text, returned_sid = run_bulk("prompt", model="m", session_id="abc-explicit")
 
     if "abc-explicit" in _psmux_captured_argv and returned_sid == "abc-explicit":
         print("PASS: via_psmux=True preserves explicit session_id in argv and return value")
@@ -645,22 +649,23 @@ def main() -> int:
         return _FakePsmuxResult(returncode=1, stdout="", stderr="boom")
 
     with mock.patch.object(_llm_claude_mod, "_get_via_psmux_flag", return_value=True):
-        with mock.patch.object(_subprocess_util_mod, "run", _psmux_fail):
-            try:
-                run_bulk("prompt", model="m")
-                errors += 1
-                print("FAIL: psmux non-zero exit should raise LLMError", file=sys.stderr)
-            except LLMSessionError:
-                errors += 1
-                print("FAIL: psmux path raised LLMSessionError (should be plain LLMError)", file=sys.stderr)
-            except LLMRateLimitError:
-                errors += 1
-                print("FAIL: psmux path raised LLMRateLimitError (should be plain LLMError)", file=sys.stderr)
-            except LLMError:
-                print("PASS: via_psmux=True non-zero exit raises plain LLMError (not subclass)")
-            except Exception as e:
-                errors += 1
-                print(f"FAIL: expected LLMError, got {type(e).__name__}: {e}", file=sys.stderr)
+        with mock.patch.object(_llm_claude_mod.shutil, "which", return_value="/usr/bin/psmux"):
+            with mock.patch.object(_subprocess_util_mod, "run", _psmux_fail):
+                try:
+                    run_bulk("prompt", model="m")
+                    errors += 1
+                    print("FAIL: psmux non-zero exit should raise LLMError", file=sys.stderr)
+                except LLMSessionError:
+                    errors += 1
+                    print("FAIL: psmux path raised LLMSessionError (should be plain LLMError)", file=sys.stderr)
+                except LLMRateLimitError:
+                    errors += 1
+                    print("FAIL: psmux path raised LLMRateLimitError (should be plain LLMError)", file=sys.stderr)
+                except LLMError:
+                    print("PASS: via_psmux=True non-zero exit raises plain LLMError (not subclass)")
+                except Exception as e:
+                    errors += 1
+                    print(f"FAIL: expected LLMError, got {type(e).__name__}: {e}", file=sys.stderr)
 
     # Test 9: via_psmux=True, no retry on failed subprocess (call_count=1)
     _psmux_retry_count = [0]
@@ -670,32 +675,34 @@ def main() -> int:
 
     _psmux_retry_count[0] = 0
     with mock.patch.object(_llm_claude_mod, "_get_via_psmux_flag", return_value=True):
-        with mock.patch.object(_subprocess_util_mod, "run", _psmux_fail_always):
-            with mock.patch.object(_llm_claude_mod.time, "monotonic", side_effect=[0.0, 1.0]):
-                try:
-                    run_bulk("prompt", model="m")
-                    errors += 1
-                except LLMError:
-                    if _psmux_retry_count[0] == 1:
-                        print("PASS: via_psmux=True does not retry on failure (call_count=1)")
-                    else:
+        with mock.patch.object(_llm_claude_mod.shutil, "which", return_value="/usr/bin/psmux"):
+            with mock.patch.object(_subprocess_util_mod, "run", _psmux_fail_always):
+                with mock.patch.object(_llm_claude_mod.time, "monotonic", side_effect=[0.0, 1.0]):
+                    try:
+                        run_bulk("prompt", model="m")
                         errors += 1
-                        print(f"FAIL: expected 1 call, got {_psmux_retry_count[0]}", file=sys.stderr)
+                    except LLMError:
+                        if _psmux_retry_count[0] == 1:
+                            print("PASS: via_psmux=True does not retry on failure (call_count=1)")
+                        else:
+                            errors += 1
+                            print(f"FAIL: expected 1 call, got {_psmux_retry_count[0]}", file=sys.stderr)
 
     # Test 10: via_psmux=True, zero exit with plain text (no JSON parsing)
     def _psmux_plain_text(argv, **kwargs):
         return _FakePsmuxResult(returncode=0, stdout="hello world\n", stderr="")
 
     with mock.patch.object(_llm_claude_mod, "_get_via_psmux_flag", return_value=True):
-        with mock.patch.object(_subprocess_util_mod, "run", _psmux_plain_text):
-            # Monkey-patch _parse_stream_json to track if it's called
-            _parse_called = [False]
-            _orig_parse = _llm_claude_mod._parse_stream_json
-            def _parse_track(*args, **kwargs):
-                _parse_called[0] = True
-                return _orig_parse(*args, **kwargs)
-            with mock.patch.object(_llm_claude_mod, "_parse_stream_json", _parse_track):
-                text, sid = run_bulk("prompt", model="m", session_id="plain-text-sid")
+        with mock.patch.object(_llm_claude_mod.shutil, "which", return_value="/usr/bin/psmux"):
+            with mock.patch.object(_subprocess_util_mod, "run", _psmux_plain_text):
+                # Monkey-patch _parse_stream_json to track if it's called
+                _parse_called = [False]
+                _orig_parse = _llm_claude_mod._parse_stream_json
+                def _parse_track(*args, **kwargs):
+                    _parse_called[0] = True
+                    return _orig_parse(*args, **kwargs)
+                with mock.patch.object(_llm_claude_mod, "_parse_stream_json", _parse_track):
+                    text, sid = run_bulk("prompt", model="m", session_id="plain-text-sid")
 
     if text == "hello world" and not _parse_called[0]:
         print("PASS: via_psmux=True plain text uses rstrip, does not call _parse_stream_json")
