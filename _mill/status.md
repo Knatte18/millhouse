@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: claude-psmux-activate
 branch: hanf/claude-psmux-activate
 plan: _mill/plan
@@ -22,4 +22,13 @@ plan-review-r1  '2026-05-18T10:42:10Z'
 plan-fix-r1  '2026-05-18T10:43:39Z'
 plan-fix-r2  '2026-05-18T10:46:58Z'
 planned  '2026-05-18T10:47:13Z'
+implementing  '2026-05-18T10:48:49Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: activate-via-psmux
+    state: pending
 ```
