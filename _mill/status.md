@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-approved
+phase: done
 slug: psmux-session-keepalive
 branch: hanf/psmux-session-keepalive
 plan: _mill/plan
@@ -31,6 +31,7 @@ holistic-reviewing  '2026-05-18T12:48:09Z'
 holistic-fixing  '2026-05-18T12:53:33Z'
 holistic-reviewing  '2026-05-18T12:58:27Z'
 holistic-approved  '2026-05-18T13:03:52Z'
+done  '2026-05-18T13:04:15Z'
 ```
 
 ## Batches
