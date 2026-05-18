@@ -136,7 +136,15 @@ def _build_argv(
     return argv
 
 
-def _build_psmux_argv(model: str, effort: str | None, allowed_tools: str, session_id: str) -> list[str]:
+def _build_psmux_argv(
+    model: str,
+    effort: str | None,
+    allowed_tools: str,
+    session_id: str,
+    *,
+    psmux_session_name: str | None = None,
+    keep_alive: bool = False,
+) -> list[str]:
     """Build argv for a psmux subprocess call.
 
     Args:
@@ -144,6 +152,10 @@ def _build_psmux_argv(model: str, effort: str | None, allowed_tools: str, sessio
         effort: Optional effort level
         allowed_tools: Comma-delimited tool list (used to determine mode)
         session_id: Session ID (always non-None at call site)
+        psmux_session_name: Optional psmux session name to use; if None, wrapper
+                            falls back to auto-generated 'mill-<uuid8>' name
+        keep_alive: If True, pass --keep-alive to wrapper to leave session running
+                    on success
 
     Returns:
         argv list starting with [sys.executable, wrapper_script, ...]
@@ -158,6 +170,10 @@ def _build_psmux_argv(model: str, effort: str | None, allowed_tools: str, sessio
     if effort is not None:
         argv += ["--effort", effort]
     argv += ["--session-id", session_id]
+    if psmux_session_name is not None:
+        argv += ["--psmux-session", psmux_session_name]
+    if keep_alive:
+        argv += ["--keep-alive"]
     return argv
 
 
