@@ -198,6 +198,18 @@ def run(
             effective_max = max_rounds if max_rounds is not None else cfg["roles"]["code-review"]["batch"]["rounds"]
         else:
             effective_max = max_rounds if max_rounds is not None else cfg["roles"]["code-review"]["holistic"]["rounds"]
+        if effective_max == 0:
+            print(
+                "[_review_code] rounds=0 -- review disabled, returning APPROVE",
+                file=sys.stderr,
+            )
+            return ReviewResult(
+                type="code",
+                round=0,
+                verdict="APPROVE",
+                blocking_count=0,
+                reviews=[{"scope": scope_label, "verdict": "APPROVE", "file": None, "skipped": True}],
+            )
         if round_n > effective_max:
             raise ReviewError(
                 f"Round {round_n} exceeds max {effective_max} for code review"
