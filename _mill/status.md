@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-fix-r1
+phase: plan-fix-r2
 slug: psmux-session-keepalive
 branch: hanf/psmux-session-keepalive
 plan: _mill/plan
@@ -20,4 +20,5 @@ discussed  '2026-05-18T11:39:26Z'
 planning  '2026-05-18T11:58:52Z'
 plan-review-r1  '2026-05-18T12:08:29Z'
 plan-fix-r1  '2026-05-18T12:08:29Z'
+plan-fix-r2  '2026-05-18T12:19:08Z'
 ```

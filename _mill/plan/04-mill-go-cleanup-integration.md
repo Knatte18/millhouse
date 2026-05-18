@@ -61,11 +61,13 @@ External interface: none — SKILL.md changes only. Batch-local decision: every 
 - **Context:**
   - `plugins/mill/scripts/_llm_claude.py`
   - `plugins/mill/scripts/millpy-implement-holistic.py`
+  - `plugins/mill/scripts/_implementer_common.py`
+  - `plugins/mill/templates/implementer-holistic-brief.md`
 - **Edits:**
   - `plugins/mill/skills/mill-go/SKILL.md`
 - **Creates:** none
 - **Deletes:** none
-- **Requirements:** The holistic implementer (`millpy-implement-holistic.py`) generates a fresh `session_id` per invocation and emits it on the final JSON line of stdout. Mill-go must capture that id into a Bash variable when each holistic-fix invocation completes (the variable is local to the Holistic section's loop iteration) and reuse it for cleanup. Add at the top of the Holistic section (immediately before "**Guard:**" on line 317), a paragraph:
+- **Requirements:** The holistic implementer (`millpy-implement-holistic.py`) generates a fresh `session_id` per invocation and emits it on the final JSON line of stdout. The id reaches stdout via two paths: (i) the implementer follows `implementer-holistic-brief.md` which instructs it to emit `"session_id":"<SESSION_ID>"` verbatim in its terminal JSON, and `_implementer_common._forward_output` then propagates that JSON unchanged; (ii) the inferred-success fallback in `_forward_output` emits `"session_id": session_id or "unknown"`. Both paths yield a present `session_id` field, so the Bash capture is reliable. Edge case: if a misbehaving implementer omits `session_id` from its JSON, `holistic_sid` will be empty in the Bash variable expansion — `cleanup_session("")` (or `cleanup_session("unknown")`) is a documented no-op (batch 3 card 10), so the cleanup degrades silently to leak rather than crash. Document this contract in the holistic-cleanup paragraph card 13 adds to the SKILL.md (one sentence: "If the captured `holistic_sid` is empty or the literal `unknown`, cleanup is a documented no-op — the implementer brief contract guarantees the id is emitted on the happy path."). Mill-go must capture that id into a Bash variable when each holistic-fix invocation completes (the variable is local to the Holistic section's loop iteration) and reuse it for cleanup. Add at the top of the Holistic section (immediately before "**Guard:**" on line 317), a paragraph:
   > **Holistic session cleanup.** Whenever a `millpy-implement-holistic.py` invocation completes (success, stuck, or any error path), capture the `session_id` field from the parsed JSON envelope into a local Bash variable `holistic_sid`. At any point where the holistic loop is about to dispatch a NEW `millpy-implement-holistic.py` round, AND at every loop terminus (APPROVE, autonomous-mode block, user-block, max-rounds), invoke the *holistic cleanup block* defined below.
 
   Define the block in that paragraph (sibling to card 12's per-batch block):

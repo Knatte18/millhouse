@@ -3,7 +3,7 @@
 ```yaml
 task: Keep psmux TUI alive across calls for session continuity
 slug: psmux-session-keepalive
-approved: false
+approved: true
 started: 20260518-115215
 parent: main
 root: ""

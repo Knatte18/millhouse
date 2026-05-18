@@ -39,18 +39,20 @@ External interface for batch 2: the nested config path `cfg["llm"]["claude"]["ps
 - **Requirements:** Apply the identical change from card 1 to `plugins/mill/templates/mill-config.yaml` so the template ships with the new schema (CLAUDE.md "template must mirror wiki/config.yaml schema" rule — same rule applies to `mill-config.yaml`). The template's `llm.claude:` block currently has only `via_psmux: false`; after the change it has the nested `psmux:` sub-block with the same two keys and the same inline comments as card 1.
 - **Commit:** `template: mirror llm.claude.psmux schema change`
 
-### Card 3: read nested key in `_get_via_psmux_flag()`
+### Card 3: read nested key in `_get_via_psmux_flag()` + micro-test
 
 - **Context:**
   - `mill-config.yaml`
   - `plugins/mill/templates/mill-config.yaml`
+  - `plugins/mill/scripts/_config.py`
 - **Edits:**
   - `plugins/mill/scripts/_llm_claude.py`
+  - `plugins/mill/unit_tests/test-llm-claude.py`
 - **Creates:** none
 - **Deletes:** none
-- **Requirements:** In `plugins/mill/scripts/_llm_claude.py`, change the body of `_get_via_psmux_flag()` to read the nested path: replace the current line `return bool(cfg.get("llm", {}).get("claude", {}).get("via_psmux", False))` with `return bool(cfg.get("llm", {}).get("claude", {}).get("psmux", {}).get("via_psmux", False))`. Leave the docstring and the `except (Exception, SystemExit)` fallback unchanged. Do not introduce a `reuse_idle_timeout_s` reader in `_llm_claude.py` — that key is consumed inside the wrapper (batch 2).
-- **Commit:** `_llm_claude: read nested llm.claude.psmux.via_psmux`
+- **Requirements:** Two changes in this card. **(a)** In `plugins/mill/scripts/_llm_claude.py`, change the body of `_get_via_psmux_flag()` to read the nested path: replace the current line `return bool(cfg.get("llm", {}).get("claude", {}).get("via_psmux", False))` with `return bool(cfg.get("llm", {}).get("claude", {}).get("psmux", {}).get("via_psmux", False))`. Leave the docstring and the `except (Exception, SystemExit)` fallback unchanged. Do not introduce a `reuse_idle_timeout_s` reader in `_llm_claude.py` — that key is consumed inside the wrapper (batch 2). **(b)** Add a regression-guard test block at the end of `test-llm-claude.py`'s `main()` (after the existing Test 11). Name it `Test 12 — _get_via_psmux_flag reads nested path`. Three sub-cases driven by patching `_config.load_config` (the function is imported lazily inside `_get_via_psmux_flag`; import `_config` at the top of the test file and use `mock.patch.object(_config, "load_config", ...)`). Also patch `_paths.resolve_git_root` to return any `Path` (its return value is passed to `load_config` but the mock ignores it). Sub-cases: (i) `load_config` returns `{"llm": {"claude": {"psmux": {"via_psmux": True}}}}` -> assert `_llm_claude_mod._get_via_psmux_flag()` returns `True`. (ii) `load_config` returns `{"llm": {"claude": {"via_psmux": True}}}` (the OLD flat layout, simulating a stale `config.local.yaml` overlay surviving the hard cutover) -> assert returns `False`. This is the regression guard for the schema move. (iii) `load_config` returns `{}` -> assert returns `False`. Follow the existing PASS/FAIL print pattern; increment the outer `errors` counter on failure.
+- **Commit:** `_llm_claude: read nested llm.claude.psmux.via_psmux + regression test`
 
 ## Batch Tests
 
-`verify:` re-runs `test-llm-claude.py`. The existing eleven psmux-branch tests in that file all mock `_get_via_psmux_flag` directly (return_value=True/False), so the rename of the read path is invisible to them — they should pass unchanged. Test 11 (`_get_via_psmux_flag` catches SystemExit and returns False) does NOT mock the function; it actually calls it with `_paths.resolve_git_root` patched to raise. The new nested-read path still returns False on any exception, so Test 11 also passes unchanged. No new test is added in this batch — the regression coverage for "reads from nested path correctly" is exercised indirectly by batch 3's tests (which set up a real config dict and assert the wrapper receives the correct timeout) and by manual smoke (the operator runs mill-go after the schema move; if `_get_via_psmux_flag` returned False incorrectly, the direct-CLI path would activate and the operator would notice immediately).
+`verify:` re-runs `test-llm-claude.py`. The existing eleven psmux-branch tests in that file all mock `_get_via_psmux_flag` directly (return_value=True/False), so the rename of the read path is invisible to them — they should pass unchanged. Test 11 (`_get_via_psmux_flag` catches SystemExit and returns False) does NOT mock the function; it actually calls it with `_paths.resolve_git_root` patched to raise. The new nested-read path still returns False on any exception, so Test 11 also passes unchanged. New Test 12 (added in card 3) is the direct regression guard for the nested-read path and the hard-cutover semantics — it asserts the old flat key is NOT silently honoured.
