@@ -53,9 +53,9 @@ def _mock_popen_instance(pid: int = 12345) -> unittest.mock.MagicMock:
 def _mock_validation_success() -> tuple:
     """Return context managers that mock validation to always succeed."""
     try:
-        import _marker
-        import _paths
-        import _config
+        import _marker  # noqa: F401
+        import _paths  # noqa: F401
+        import _config  # noqa: F401
 
         mock_resolve_wiki = unittest.mock.MagicMock(return_value=Path("/fake/wiki"))
         mock_load_config = unittest.mock.MagicMock(return_value={"spawn": {"branch_prefix": ""}})
@@ -361,6 +361,22 @@ def main() -> int:
         failures.append(f"FAIL (n) START sentinel: {exc}")
     except Exception as exc:
         failures.append(f"FAIL (n) START sentinel ({type(exc).__name__}): {exc}")
+
+    # (o) worker FileNotFoundError writes EXIT -1
+    try:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = Path(tmpdir) / "test-raise.log"
+            with unittest.mock.patch("subprocess.run", side_effect=FileNotFoundError("fake: no such file")):
+                ret = _worker_main(["--log", str(log_path), "--", "fake-cmd"])
+            assert ret == 1, f"expected 1, got {ret}"
+            assert log_path.exists(), "log file not created"
+            log_text = log_path.read_text(encoding="utf-8")
+            assert "[mill-bg] EXIT -1" in log_text, f"'[mill-bg] EXIT -1' not in log: {log_text!r}"
+        print("PASS (o): worker FileNotFoundError -> EXIT -1 written in log")
+    except AssertionError as exc:
+        failures.append(f"FAIL (o) worker-FileNotFoundError: {exc}")
+    except Exception as exc:
+        failures.append(f"FAIL (o) worker-FileNotFoundError ({type(exc).__name__}): {exc}")
 
     if failures:
         for msg in failures:
