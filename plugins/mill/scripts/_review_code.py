@@ -370,6 +370,7 @@ def run(
                 reviews=_reviews,
             )
 
+        try:
             if verdict == "NEED_CONTEXT":
                 missing_raw = parse_missing_context(raw)
                 missing_paths = resolve_existing_paths(
