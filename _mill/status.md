@@ -31,7 +31,9 @@ implementing  '2026-05-18T07:28:59Z'
 ```yaml
 batches:
   - name: subprocess-bg-fixes
-    state: pending
+    state: running
+    implementer_session: 8c50d5fd-d903-471d-8b50-6980e1f468a3
+    start_sha: d2bb8aa8e71bc9a6668847395c242b737f2c4233
   - name: review-backend-fixes
     state: pending
   - name: templates-config-skills
