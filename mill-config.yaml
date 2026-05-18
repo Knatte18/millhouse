@@ -39,14 +39,6 @@
 # resolve paths via _paths.py, never via the link paths themselves.
 
 # ---------------------------------------------------------------------------
-# Junctions
-# ---------------------------------------------------------------------------
-# Each entry: `<junction-path>: <target-template>`.
-# Scope inferred from token presence:
-#   * Target contains <SLUG>   -> per-worktree; created by mill-spawn.
-#   * Target has no <SLUG>     -> hub-scope; created by mill-setup.
-
-# ---------------------------------------------------------------------------
 # Repo identity
 # ---------------------------------------------------------------------------
 # short_name -- 2-4 character prefix used in VS Code window titles.
@@ -57,11 +49,19 @@
 repo:
   short_name: MH
 
-junctions:
-  .wiki: <WIKI_PATH>
-  .portals: <CONTAINER_PATH>/portals/
-  # .active is created explicitly by mill-spawn/mill-claim (points to <hub>/_mill/);
-  # not declared here so it is not auto-created in non-task worktrees.
+# ---------------------------------------------------------------------------
+# Junctions
+# ---------------------------------------------------------------------------
+# Each entry: `<junction-path>: <target-template>`.
+# Scope inferred from token presence:
+#   * Target contains <SLUG>   -> per-worktree; created by mill-spawn.
+#   * Target has no <SLUG>     -> hub-scope; created by mill-setup.
+
+# junctions:
+#   .wiki: <WIKI_PATH>
+#   .portals: <CONTAINER_PATH>/portals/
+#   # .active is created explicitly by mill-spawn/mill-claim (points to <hub>/_mill/);
+#   # not declared here so it is not auto-created in non-task worktrees.
 
 # ---------------------------------------------------------------------------
 # mill-spawn
@@ -85,11 +85,11 @@ spawn:
 # File-path templates (relative to active worktree root)
 # ---------------------------------------------------------------------------
 
-paths:
-  discussion_file: _mill/discussion.md
-  plan_dir:        _mill/plan/
-  reviews_dir:     _mill/reviews/
-  status_md:       _mill/status.md
+# paths:
+#   discussion_file: _mill/discussion.md
+#   plan_dir:        _mill/plan/
+#   reviews_dir:     _mill/reviews/
+#   status_md:       _mill/status.md
 
 # ---------------------------------------------------------------------------
 # LLM-provider timeouts (seconds)
@@ -97,8 +97,8 @@ paths:
 
 llm:
   bulk_timeout: 900
-  holistic_timeout: 1800
-  tool_use_timeout: 900
+  # holistic_timeout: 1800
+  # tool_use_timeout: 900
   implementer_timeout: 1800
   claude:
     via_psmux: false  # Route claude calls through psmux for subscription billing (requires psmux on PATH; resume flows unsupported)
@@ -110,66 +110,66 @@ llm:
 pipeline:
   auto_merge: true
   auto_report: true
-  autonomous_mode: false  # Set true by mill-autofix; read by mill-go and mill-plan for autonomous stuck-handling
+  # autonomous_mode: false  # Set true by mill-autofix; read by mill-go and mill-plan for autonomous stuck-handling
 
 # ---------------------------------------------------------------------------
 # Reviewer roles
 # ---------------------------------------------------------------------------
 # Reviewer names reference agents.yaml entries.
 
-roles:
-  discussion-review:
-    holistic:
-      rounds: 3
-      reviewer: sonnetmax_tool
-      # large_prompt:            # optional: override reviewer for large prompts
-      #   threshold_ktok: 100    # switch when estimated tok count >= this (char/4000)
-      #   reviewer: null         # override reviewer from agents.yaml; null = disabled
-
-  plan-review:
-    batch:
-      rounds: 0
-      reviewer: null
-    holistic:
-      rounds: 3
-      reviewer: sonnetmax
-      # large_prompt:            # optional: override reviewer for large prompts
-      #   threshold_ktok: 100    # switch when estimated tok count >= this (char/4000)
-      #   reviewer: null         # override reviewer from agents.yaml; null = disabled
-
-  code-review:
-    batch:
-      rounds: 0
-      reviewer: null
-    holistic:
-      rounds: 3
-      reviewer: sonnethigh
-      fallback_reviewer: null     # reviewer name from agents.yaml to swap in on consecutive rate-limit ERRORs; null = no fallback
-      fallback_on:                 # list of substrings (lowercased match) in reviews[].error that trigger fallback
-        - "rate-limit"
-      # large_prompt:            # optional: override reviewer for large prompts
-      #   threshold_ktok: 100    # switch when estimated tok count >= this (char/4000)
-      #   reviewer: null         # override reviewer from agents.yaml; null = disabled
-    diff_scope_threshold: 0.25
-
-  implementer:
-    self_fix_rounds: 2
-    model: haiku
+# roles:
+#   discussion-review:
+#     holistic:
+#       rounds: 3
+#       reviewer: sonnetmax_tool
+#       # large_prompt:            # optional: override reviewer for large prompts
+#       #   threshold_ktok: 100    # switch when estimated tok count >= this (char/4000)
+#       #   reviewer: null         # override reviewer from agents.yaml; null = disabled
+#
+#   plan-review:
+#     batch:
+#       rounds: 0
+#       reviewer: null
+#     holistic:
+#       rounds: 3
+#       reviewer: sonnetmax
+#       # large_prompt:            # optional: override reviewer for large prompts
+#       #   threshold_ktok: 100    # switch when estimated tok count >= this (char/4000)
+#       #   reviewer: null         # override reviewer from agents.yaml; null = disabled
+#
+#   code-review:
+#     batch:
+#       rounds: 0
+#       reviewer: null
+#     holistic:
+#       rounds: 3
+#       reviewer: sonnethigh
+#       fallback_reviewer: null     # reviewer name from agents.yaml to swap in on consecutive rate-limit ERRORs; null = no fallback
+#       fallback_on:                 # list of substrings (lowercased match) in reviews[].error that trigger fallback
+#         - "rate-limit"
+#       # large_prompt:            # optional: override reviewer for large prompts
+#       #   threshold_ktok: 100    # switch when estimated tok count >= this (char/4000)
+#       #   reviewer: null         # override reviewer from agents.yaml; null = disabled
+#     diff_scope_threshold: 0.25
+#
+#   implementer:
+#     self_fix_rounds: 2
+#     model: haiku
 
 # ---------------------------------------------------------------------------
 # Notifications
 # ---------------------------------------------------------------------------
 
-notify:
-  backend: stdout
+# notify:
+#   backend: stdout
 
 # ---------------------------------------------------------------------------
 # mill-groom: backlog cleanup thresholds
 # ---------------------------------------------------------------------------
 
-groom:
-  brevity-threshold-lines: 5
-  brevity-threshold-chars: 500
+# groom:
+#   brevity-threshold-lines: 5
+#   brevity-threshold-chars: 500
 
 # ---------------------------------------------------------------------------
 # mill-merge-in
@@ -180,8 +180,9 @@ groom:
 # template will have it pre-populated.
 
 merge:
+  # model: LLM alias for the merge-in sub-agent (haiku is sufficient for conflict resolution)
   model: sonnethigh
-  verify_fix_rounds: 3
+  # verify_fix_rounds: 3
 
 # ---------------------------------------------------------------------------
 # mill-merge-in: verify allowlist
