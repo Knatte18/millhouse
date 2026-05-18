@@ -5,7 +5,7 @@ task: '65 (A) -- Config-load og mill-go helse-sjekk etter config-migrasjon'
 batch: 'Tests'
 number: 4
 cards: 4
-verify: "python plugins/mill/unit_tests/test-config.py && python plugins/mill/unit_tests/test-review-common.py"
+verify: "python plugins/mill/unit_tests/test-config.py"
 depends-on: [1, 2, 3]
 ```
 
@@ -41,7 +41,7 @@ This batch adds regression tests for every fix delivered in batches 1-3. All new
   ```
 
   **Test C -- resolve_plugin_template_path stale CLAUDE_PLUGIN_ROOT falls back with warning:**
-  Use `tempfile.TemporaryDirectory` for a nonexistent root. Set `os.environ["CLAUDE_PLUGIN_ROOT"]` to the nonexistent path inside the test, call `_config.resolve_plugin_template_path("mill-config.yaml")`, capture stderr with `io.StringIO` + `unittest.mock.patch("sys.stderr", new=<buf>)`, then restore `os.environ` and assert: (1) the returned path equals `Path(_config.__file__).resolve().parent.parent / "templates" / "mill-config.yaml"` (source-tree path); (2) stderr contains the word "CLAUDE_PLUGIN_ROOT" or the nonexistent path string (confirming a warning was emitted). Clean up env with `os.environ.pop("CLAUDE_PLUGIN_ROOT", None)` in a try/finally.
+  Use `tempfile.TemporaryDirectory` for a nonexistent root. Save the original env var first: `_saved_root = os.environ.get("CLAUDE_PLUGIN_ROOT")`. Set `os.environ["CLAUDE_PLUGIN_ROOT"]` to the nonexistent path inside the test, call `_config.resolve_plugin_template_path("mill-config.yaml")`, capture stderr with `io.StringIO` + `unittest.mock.patch("sys.stderr", new=<buf>)`, then restore `os.environ` and assert: (1) the returned path equals `Path(_config.__file__).resolve().parent.parent / "templates" / "mill-config.yaml"` (source-tree path); (2) stderr contains the word "CLAUDE_PLUGIN_ROOT" or the nonexistent path string (confirming a warning was emitted). In the `finally` block, restore the original value: `if _saved_root is not None: os.environ["CLAUDE_PLUGIN_ROOT"] = _saved_root` else `os.environ.pop("CLAUDE_PLUGIN_ROOT", None)`. Matches the save/restore pattern used in `test_interp_env_value_when_var_set`.
   ```python
   print("PASS resolve_plugin_template_path -- stale CLAUDE_PLUGIN_ROOT falls back to source tree with warning")
   ```
@@ -106,4 +106,4 @@ This batch adds regression tests for every fix delivered in batches 1-3. All new
 
 ## Batch Tests
 
-`verify: "python plugins/mill/unit_tests/test-config.py && python plugins/mill/unit_tests/test-review-common.py"` -- both test runners must pass (test-config.py: 0 failures; test-review-common.py: exactly 1 pre-existing failure, no new failures). If either exits non-zero due to a new failure, the batch is not done.
+`verify: "python plugins/mill/unit_tests/test-config.py"` -- test-config.py must exit 0 (35 tests, 0 failures). `test-review-common.py` exits 1 by design due to the pre-existing "missing config -> ReviewError" failure; it cannot be included in the automated verify field without causing false stuck-detection. Run it manually via Card 12: `python plugins/mill/unit_tests/test-review-common.py` and inspect output -- the count of failures must be exactly 1 (no new failures). If any new failure appears, investigate the batch 2 changes.

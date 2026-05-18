@@ -7,7 +7,7 @@ approved: false
 started: '20260518-064044'
 parent: 'main'
 root: ""
-verify: "python plugins/mill/unit_tests/test-config.py && python plugins/mill/unit_tests/test-review-common.py"
+verify: "python plugins/mill/unit_tests/test-config.py"
 ```
 
 ## Batch Index
@@ -36,7 +36,7 @@ batches:
     name: Tests
     file: 04-tests.md
     depends-on: [1, 2, 3]
-    verify: "python plugins/mill/unit_tests/test-config.py && python plugins/mill/unit_tests/test-review-common.py"
+    verify: "python plugins/mill/unit_tests/test-config.py"
 ```
 
 ## Shared Decisions
