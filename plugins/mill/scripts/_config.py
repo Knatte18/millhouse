@@ -294,6 +294,8 @@ def deep_merge(base: dict, overlay: dict) -> dict:
     for key, val in overlay.items():
         if isinstance(val, dict) and isinstance(out.get(key), dict):
             out[key] = deep_merge(out[key], val)
+        elif val is None and isinstance(out.get(key), dict):
+            continue
         else:
             out[key] = val
     return out
