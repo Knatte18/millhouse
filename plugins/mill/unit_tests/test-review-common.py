@@ -200,8 +200,8 @@ def main() -> int:
         cfg = {"spawn": {"branch_prefix": "hanf/"}}
         try:
             find_active_slug(wt, wiki, cfg)
+            print("FAIL: find_active_slug: expected ReviewError on non-task branch", file=sys.stderr)
             errors += 1
-            print("FAIL: expected ReviewError for non-task branch", file=sys.stderr)
         except ReviewError:
             print("PASS: find_active_slug non-task branch -> ReviewError (MarkerError translation)")
 
@@ -303,8 +303,8 @@ def main() -> int:
         try:
             try:
                 resolve_path("discussion.md", wrong_slug)
+                print("FAIL: resolve_path: expected ActiveWorktreeSlugMismatch for wrong slug", file=sys.stderr)
                 errors += 1
-                print("FAIL: expected ActiveWorktreeSlugMismatch for wrong slug", file=sys.stderr)
             except ActiveWorktreeSlugMismatch:
                 print("PASS: resolve_path raises ActiveWorktreeSlugMismatch on branch mismatch")
         finally:
@@ -405,6 +405,7 @@ def main() -> int:
     # parse_verdict: no yaml block -> ReviewError
     try:
         parse_verdict("No yaml block here.")
+        print("FAIL: parse_verdict: expected ReviewError for no yaml block", file=sys.stderr)
         errors += 1
     except ReviewError:
         print("PASS: parse_verdict no yaml block -> ReviewError")
@@ -412,6 +413,7 @@ def main() -> int:
     # parse_verdict: unclosed yaml block -> ReviewError
     try:
         parse_verdict("# Review: X\n\n```yaml\nverdict: APPROVE\n")
+        print("FAIL: parse_verdict: expected ReviewError for unclosed yaml block", file=sys.stderr)
         errors += 1
     except ReviewError as e:
         assert "not closed" in str(e)
@@ -420,6 +422,7 @@ def main() -> int:
     # parse_verdict: invalid verdict value -> ReviewError
     try:
         parse_verdict("# Review: X\n\n```yaml\nverdict: MAYBE\n```\n")
+        print("FAIL: parse_verdict: expected ReviewError for invalid verdict", file=sys.stderr)
         errors += 1
     except ReviewError as e:
         assert "MAYBE" in str(e)
@@ -477,9 +480,36 @@ def main() -> int:
         assert "hello" in result and "FILE:" in result
         print("PASS: bulk_files skips missing files")
 
+    # bulk_files: END FILE delimiter present
+    with tempfile.TemporaryDirectory() as tmpdir:
+        p1 = Path(tmpdir) / "a.py"
+        p2 = Path(tmpdir) / "b.py"
+        p1.write_text("content-a", encoding="utf-8")
+        p2.write_text("content-b", encoding="utf-8")
+        result = bulk_files([p1, p2])
+        assert f"--- END FILE: {p1} ---" in result, f"END FILE missing for p1: {result!r}"
+        assert f"--- END FILE: {p2} ---" in result, f"END FILE missing for p2: {result!r}"
+        assert result.index(f"--- FILE: {p1}") < result.index(f"--- END FILE: {p1}"), \
+            "opener must precede closer for p1"
+        print("PASS: bulk_files END FILE delimiters present and ordered")
+
+    # bulk_files_with_diff: END FILE delimiter present
+    with tempfile.TemporaryDirectory() as tmpdir:
+        p1 = Path(tmpdir) / "a.py"
+        p2 = Path(tmpdir) / "b.py"
+        p1.write_text("content-a", encoding="utf-8")
+        p2.write_text("content-b", encoding="utf-8")
+        result = bulk_files_with_diff([p1, p2], start_sha=None, repo=Path(tmpdir), ratio_threshold=0.25)
+        assert f"--- END FILE: {p1} ---" in result, f"END FILE missing for p1: {result!r}"
+        assert f"--- END FILE: {p2} ---" in result, f"END FILE missing for p2: {result!r}"
+        assert result.index(f"--- FILE: {p1}") < result.index(f"--- END FILE: {p1}"), \
+            "opener must precede closer for p1"
+        print("PASS: bulk_files_with_diff END FILE delimiters present and ordered (start_sha=None)")
+
     # render_prompt: missing template -> FileNotFoundError
     try:
         render_prompt("nonexistent-template-xyz")
+        print("FAIL: render_prompt: expected FileNotFoundError for missing template", file=sys.stderr)
         errors += 1
     except FileNotFoundError:
         print("PASS: render_prompt missing template -> FileNotFoundError")
@@ -500,6 +530,7 @@ def main() -> int:
 
     try:
         build_tool_rule("weird")
+        print("FAIL: build_tool_rule: expected ValueError for unknown mode", file=sys.stderr)
         errors += 1
     except ValueError as e:
         assert "weird" in str(e)
@@ -536,7 +567,12 @@ def main() -> int:
         mill = tmpdir_path / ".millhouse"
         mill.mkdir()
         try:
-            load_config(tmpdir_path, mill)
+            with patch(
+                "_review_common.resolve_plugin_template_path",
+                return_value=Path("/nonexistent/mill-config.yaml"),
+            ):
+                load_config(tmpdir_path, mill)
+            print("FAIL: load_config: expected ReviewError for missing config", file=sys.stderr)
             errors += 1
         except ReviewError as e:
             assert "Missing config" in str(e)
@@ -691,8 +727,8 @@ def main() -> int:
         tmp_dir = Path(tmpdir)
         try:
             resolve_ref_paths(["nonexistent.py"], tmp_dir, root=None)
+            print("FAIL: resolve_ref_paths: expected ReviewError for missing path", file=sys.stderr)
             errors += 1
-            print("FAIL: expected ReviewError for missing path", file=sys.stderr)
         except ReviewError as e:
             assert "referenced path not found" in str(e), f"Unexpected message: {e}"
             assert "nonexistent.py" in str(e), f"Path not in message: {e}"
@@ -717,8 +753,8 @@ def main() -> int:
         tmp_dir = Path(tmpdir)
         try:
             resolve_ref_paths(["wiki/foo"], tmp_dir, root=None)
+            print("FAIL: resolve_ref_paths: expected ReviewError for wiki/ without wiki_root", file=sys.stderr)
             errors += 1
-            print("FAIL: expected ReviewError for wiki/ without wiki_root", file=sys.stderr)
         except ReviewError as e:
             assert "no wiki_root provided" in str(e), f"Unexpected message: {e}"
             print("PASS: resolve_ref_paths wiki/ without wiki_root raises ReviewError")
@@ -734,8 +770,8 @@ def main() -> int:
                 ["wiki/active/missing.md"], tmp_project, root=None,
                 wiki_root=tmp_wiki,
             )
+            print("FAIL: resolve_ref_paths: expected ReviewError for missing wiki path", file=sys.stderr)
             errors += 1
-            print("FAIL: expected ReviewError for missing wiki path", file=sys.stderr)
         except ReviewError as e:
             assert "referenced path not found" in str(e), f"Unexpected message: {e}"
             print("PASS: resolve_ref_paths wiki path missing on disk hard-fails")
@@ -748,8 +784,8 @@ def main() -> int:
                 ["missing.py"], tmp_dir, root=None,
                 caller_label="_review_plan",
             )
+            print("FAIL: resolve_ref_paths: expected ReviewError", file=sys.stderr)
             errors += 1
-            print("FAIL: expected ReviewError", file=sys.stderr)
         except ReviewError as e:
             assert str(e).startswith("[_review_plan]"), f"Unexpected message: {e}"
             print("PASS: resolve_ref_paths caller_label appears in error message")
@@ -822,8 +858,8 @@ def main() -> int:
                 ["nonexistent.py"], tmp_dir, root=None,
                 deletes_union={"other.py"},
             )
+            print("FAIL: resolve_ref_paths: expected ReviewError for missing path not in deletes_union", file=sys.stderr)
             errors += 1
-            print("FAIL: expected ReviewError for missing path not in deletes_union", file=sys.stderr)
         except ReviewError as e:
             assert "referenced path not found" in str(e), f"Unexpected message: {e}"
             print("PASS: resolve_ref_paths missing + not in deletes_union -> ReviewError")
@@ -837,8 +873,8 @@ def main() -> int:
                 deletes_union={"other.py"},
                 caller_label="test_caller",
             )
+            print("FAIL: resolve_ref_paths: expected ReviewError", file=sys.stderr)
             errors += 1
-            print("FAIL: expected ReviewError", file=sys.stderr)
         except ReviewError as e:
             assert str(e).startswith("[test_caller]"), f"Unexpected message: {e}"
             print("PASS: resolve_ref_paths caller_label in error with deletes_union present")
@@ -1737,11 +1773,11 @@ def main() -> int:
 
             print("PASS: write_review_file holistic naming regression (#316)")
     except AssertionError as exc:
-        errors += 1
         print(f"FAIL: write_review_file holistic naming: {exc}", file=sys.stderr)
-    except Exception as exc:
         errors += 1
+    except Exception as exc:
         print(f"FAIL: write_review_file holistic naming (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        errors += 1
 
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)
