@@ -40,7 +40,9 @@ batches:
     implementer_session: b7177f5a-4277-4f97-8b5d-468203679407
     start_sha: a4bd0a0ad01ea6fb1b5cea0319b8ef56b8f4620d
   - name: llm-claude-keepalive-integration
-    state: pending
+    state: running
+    implementer_session: ffaf2951-0acc-4627-89e7-90bb243e03a7
+    start_sha: be974bc48d75145a2c3fce5eac61ebcf33cb3cf4
   - name: mill-go-cleanup-integration
     state: pending
 ```
