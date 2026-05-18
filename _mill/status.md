@@ -43,7 +43,9 @@ batches:
     start_sha: a174c6f5eaf0277be34d7367bd6d29d2618df3d1
     commit_sha: 658b54da75746bc0daa6995cca9965a07bf7d90a
   - name: templates-config-skills
-    state: pending
+    state: running
+    implementer_session: a5ba89ed-a9ef-48ae-b22f-91b3367cc7c6
+    start_sha: 8b2b1484abd29e17f3baae2875747e65a4b8982c
   - name: test-infra-fixes
     state: pending
 ```
