@@ -177,6 +177,8 @@ groom:
 # template will have it pre-populated.
 
 merge:
+  # model: LLM alias for the merge-in sub-agent (haiku is sufficient for conflict resolution)
+  model: haiku
   verify_fix_rounds: 3
 
 # ---------------------------------------------------------------------------
