@@ -88,7 +88,7 @@ migration `mill-config.yaml` lives at the hub root, not the wiki, so passing
 
 - Decision: Strip `hub_relative_path` from the merged `cfg` dict before calling `warn_unknown_keys` in `_config.load_config`. In `_review_common.load_config`, strip it from `local_cfg` before merging (since it's only in the local layer), OR alternatively strip from `cfg` before the `warn_unknown_keys` call. The cleanest is to strip from the cfg copy passed to `warn_unknown_keys` in both functions.
 - Rationale: We don't want to strip it from the returned cfg (callers may need it), but we do want to suppress the warning. Create a temporary copy for the unknown-key check that excludes `hub_relative_path`.
-- Rejected: Keeping `hub_relative_path` in the returned cfg unchanged and only suppressing the warning — this is exactly what we want. No caller currently uses `cfg["hub_relative_path"]` post-load, but removing it from the returned value would be a silent behavior change.
+- Rejected: Also removing `hub_relative_path` from the returned cfg — no caller currently uses `cfg["hub_relative_path"]` post-load, but the behavior change is unnecessary; the minimum fix is to suppress the warning only.
 
 ## Technical context
 
@@ -103,9 +103,9 @@ migration `mill-config.yaml` lives at the hub root, not the wiki, so passing
 
 ### Key locations
 
-- `_config.deep_merge` at [plugins/mill/scripts/_config.py:240](plugins/mill/scripts/_config.py#L240) — the `else: out[key] = val` branch is where `None` clobbers the dict.
+- `_config.deep_merge` at [plugins/mill/scripts/_config.py:283](plugins/mill/scripts/_config.py#L283) — the `else: out[key] = val` branch is where `None` clobbers the dict.
 - `_config.resolve_plugin_template_path` at [plugins/mill/scripts/_config.py:126](plugins/mill/scripts/_config.py#L126) — no existence check before returning.
-- `_config.load_config` warn call at [plugins/mill/scripts/_config.py:212](plugins/mill/scripts/_config.py#L212) — passes full `cfg` (which includes `hub_relative_path`) to `warn_unknown_keys`.
+- `_config.load_config` warn call at [plugins/mill/scripts/_config.py:217](plugins/mill/scripts/_config.py#L217) — passes full `cfg` (which includes `hub_relative_path`) to `warn_unknown_keys`.
 - `_review_common._deep_merge` at [plugins/mill/scripts/_review_common.py:1168](plugins/mill/scripts/_review_common.py#L1168) — same `None`-clobber bug.
 - `_review_common.load_config` warn call at [plugins/mill/scripts/_review_common.py:1261](plugins/mill/scripts/_review_common.py#L1261) — passes full `cfg` (includes `hub_relative_path` from local layer).
 - `mill-config.yaml` pipeline section at [plugins/mill/templates/mill-config.yaml:108](plugins/mill/templates/mill-config.yaml#L108) — `auto_merge` and `auto_report` but no `autonomous_mode`.
@@ -132,11 +132,13 @@ Add to the existing test file (at the end of the deep_merge section and load_con
 2. **`test_deep_merge_none_overlay_allowed_for_scalar`** — `deep_merge({"reviewer": "foo"}, {"reviewer": None})` must return `{"reviewer": None}` (None is allowed to override scalar).
 3. **`test_resolve_plugin_template_path_stale_root_fallback`** — Set `CLAUDE_PLUGIN_ROOT` to a non-existent path; call `resolve_plugin_template_path("mill-config.yaml")`; result must be the source-tree path; stderr must contain a warning.
 4. **`test_load_config_bare_roles_no_crash`** — Write a `mill-config.yaml` with just `roles:\n` (bare key); call `load_config`; must not crash; `cfg.get("roles")` must be a dict (from template layer, since `None` overlay is skipped).
+5. **`test_load_config_hub_relative_path_no_warning`** — Write a `config.local.yaml` containing `hub_relative_path: subdir`; call `load_config`; assert stderr contains no `[config] unknown key: hub_relative_path` warning.
 
 ### test-review-common.py (new tests)
 
 1. **`test_deep_merge_none_overlay_preserves_dict`** — same as above for `_review_common._deep_merge`.
 2. **`test_load_config_bare_roles_no_crash`** — Write a `mill-config.yaml` with `roles:\n`; call `_review_common.load_config`; must not crash; `cfg.get("roles")` must be a dict.
+3. **`test_load_config_hub_relative_path_no_warning`** — Write a `config.local.yaml` containing `hub_relative_path: subdir`; call `_review_common.load_config`; assert stderr contains no `[config] unknown key: hub_relative_path` warning.
 
 ### Existing tests that must still pass
 
