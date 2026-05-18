@@ -37,7 +37,9 @@ batches:
     implementer_session: 77f359be-4435-4016-816b-0da7512d5c2e
     start_sha: 57a6f7aad4532b5d9f5565aeebcb0f9a842fdb40
   - name: _review_common.py fixes
-    state: pending
+    state: running
+    implementer_session: 0db30ce8-645c-41de-a9c5-7fff2d6b799a
+    start_sha: c00da0496266a73485acc983058029fbefda9f41
   - name: _wiki health-check and mill-go SKILL.md
     state: pending
   - name: Tests
