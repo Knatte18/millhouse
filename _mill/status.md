@@ -35,7 +35,9 @@ batches:
     implementer_session: ed2167a4-d65c-4782-a94a-89d3a0b0e2be
     start_sha: 4cd1158040e440a50ef61d03405f62023362f249
   - name: wrapper-flags-and-cleanup
-    state: pending
+    state: running
+    implementer_session: b7177f5a-4277-4f97-8b5d-468203679407
+    start_sha: a4bd0a0ad01ea6fb1b5cea0319b8ef56b8f4620d
   - name: llm-claude-keepalive-integration
     state: pending
   - name: mill-go-cleanup-integration
