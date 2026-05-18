@@ -140,6 +140,19 @@ Background via millpy-bg:
 
 > **Before invoking `millpy-bg`**: verify `pwd` in the Bash terminal matches the task worktree. If `millpy-bg` rejects cwd with the parent-worktree error (`mill-bg: cwd appears to be a non-task worktree`), halt and instruct the operator to switch to the task-worktree terminal.
 
+Venv-check before per-batch invocation:
+
+```bash
+if [ ! -f "$MILL_PYTHON" ]; then
+    echo "[mill-go] venv missing at $MILL_PYTHON -- attempting uv sync"
+    uv sync --project "${PLUGIN_ROOT}" || { echo "HALT: uv sync failed"; exit 1; }
+    if [ ! -f "$MILL_PYTHON" ]; then
+        echo "HALT: MILL_PYTHON not found at $MILL_PYTHON -- venv lost mid-session. Run 'uv sync --project ${PLUGIN_ROOT}' manually."
+        exit 1
+    fi
+fi
+```
+
 ```bash
 PYTHONPATH="${PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${PLUGIN_ROOT}/scripts/millpy-bg.py" \
     --slug implement-<batch_name> -- \
@@ -368,6 +381,19 @@ For each round `H` from 1 to `max_holistic_rounds`:
 3. Background via `millpy-bg`:
 
    > **Before invoking `millpy-bg`**: verify `pwd` in the Bash terminal matches the task worktree. If `millpy-bg` rejects cwd with the parent-worktree error (`mill-bg: cwd appears to be a non-task worktree`), halt and instruct the operator to switch to the task-worktree terminal.
+
+   Venv-check before holistic review invocation:
+
+   ```bash
+   if [ ! -f "$MILL_PYTHON" ]; then
+       echo "[mill-go] venv missing at $MILL_PYTHON -- attempting uv sync"
+       uv sync --project "${PLUGIN_ROOT}" || { echo "HALT: uv sync failed"; exit 1; }
+       if [ ! -f "$MILL_PYTHON" ]; then
+           echo "HALT: MILL_PYTHON not found at $MILL_PYTHON -- venv lost mid-session. Run 'uv sync --project ${PLUGIN_ROOT}' manually."
+           exit 1
+       fi
+   fi
+   ```
 
    ```bash
    PYTHONPATH="${PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${PLUGIN_ROOT}/scripts/millpy-bg.py" \

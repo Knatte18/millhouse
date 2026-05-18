@@ -1160,6 +1160,31 @@ def main() -> int:
         finally:
             os.chdir(orig_dir)
 
+    # ------------------------------------------------------------------
+    # Test 22 — rounds=0 holistic via kwarg (early return APPROVE stub)
+    # ------------------------------------------------------------------
+    with tempfile.TemporaryDirectory() as tmpdir:
+        batch_specs = [("core", "01-core.md", ["src/a.py"], [])]
+        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(Path(tmpdir), batch_specs)
+        cfg["roles"]["plan-review"]["holistic"]["reviewer"] = "test_stub"
+        cfg["roles"]["plan-review"]["holistic"]["rounds"] = 3
+        cfg["roles"]["plan-review"]["batch"]["reviewer"] = None
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root, max_rounds=0)
+            assert r.verdict == "APPROVE", f"expected APPROVE for max_rounds=0, got {r.verdict}"
+            assert r.blocking_count == 0, f"expected blocking_count=0, got {r.blocking_count}"
+            print("PASS test22: max_rounds=0 kwarg -> holistic APPROVE stub")
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test22: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test22 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
+
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)
         return 1

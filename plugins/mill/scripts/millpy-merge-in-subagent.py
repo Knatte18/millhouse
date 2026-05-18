@@ -152,7 +152,7 @@ def main(argv=None) -> int:
 
     timeout = cfg.get("llm", {}).get("implementer_timeout", 1800)
     implementer_cfg = cfg.get("roles", {}).get("implementer", {})
-    model_name = implementer_cfg.get("model", "sonnethigh")
+    model_name = cfg.get("merge", {}).get("model") or implementer_cfg.get("model", "haiku")
     try:
         registry = _reviewers.load(git_root)
         impl_spec = _reviewers.resolve(registry, model_name)

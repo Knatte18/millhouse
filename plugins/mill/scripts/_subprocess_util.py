@@ -102,7 +102,7 @@ def run(
     child_env = env.copy() if env is not None else os.environ.copy()
     child_env["PYTHONIOENCODING"] = "utf-8"
 
-    print(f"[subprocess] spawn argv={argv!r} timeout={timeout}", file=sys.stderr)
+    _spawn_msg = f"[subprocess] spawn argv={argv!r} timeout={timeout}"
     start = time.monotonic()
 
     popen_kwargs: dict = dict(
@@ -123,18 +123,28 @@ def run(
     else:
         popen_kwargs["start_new_session"] = True
 
-    proc = subprocess.Popen(argv, **popen_kwargs)
+    try:
+        proc = subprocess.Popen(argv, **popen_kwargs)
+    except Exception as exc:
+        print(_spawn_msg, file=sys.stderr)
+        print(f"[subprocess] Popen raised: {exc!r}", file=sys.stderr)
+        raise
 
     if os.name == "nt" and timeout is not None:
-        stdout_out, stderr_out = _run_windows_watchdog(
-            proc, argv=argv, input=input, timeout=timeout, start=start
-        )
+        try:
+            stdout_out, stderr_out = _run_windows_watchdog(
+                proc, argv=argv, input=input, timeout=timeout, start=start
+            )
+        except subprocess.TimeoutExpired:
+            print(_spawn_msg, file=sys.stderr)
+            raise
     else:
         try:
             stdout_out, stderr_out = proc.communicate(input=input, timeout=timeout)
             stdout_out = stdout_out or ""
             stderr_out = stderr_out or ""
         except subprocess.TimeoutExpired as exc:
+            print(_spawn_msg, file=sys.stderr)
             print(
                 f"[subprocess] exit code=timeout duration={time.monotonic() - start:.3f}s",
                 file=sys.stderr,
@@ -160,10 +170,12 @@ def run(
                 stderr=collected_stderr,
             ) from exc
 
-    print(
-        f"[subprocess] exit code={proc.returncode} duration={time.monotonic() - start:.3f}s",
-        file=sys.stderr,
-    )
+    if proc.returncode != 0:
+        print(_spawn_msg, file=sys.stderr)
+        print(
+            f"[subprocess] exit code={proc.returncode} duration={time.monotonic() - start:.3f}s",
+            file=sys.stderr,
+        )
     if check and proc.returncode != 0:
         raise subprocess.CalledProcessError(
             proc.returncode, argv, output=stdout_out, stderr=stderr_out

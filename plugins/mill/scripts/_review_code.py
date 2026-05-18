@@ -198,6 +198,18 @@ def run(
             effective_max = max_rounds if max_rounds is not None else cfg["roles"]["code-review"]["batch"]["rounds"]
         else:
             effective_max = max_rounds if max_rounds is not None else cfg["roles"]["code-review"]["holistic"]["rounds"]
+        if effective_max == 0:
+            print(
+                "[_review_code] rounds=0 -- review disabled, returning APPROVE",
+                file=sys.stderr,
+            )
+            return ReviewResult(
+                type="code",
+                round=0,
+                verdict="APPROVE",
+                blocking_count=0,
+                reviews=[{"scope": scope_label, "verdict": "APPROVE", "file": None, "skipped": True}],
+            )
         if round_n > effective_max:
             raise ReviewError(
                 f"Round {round_n} exceeds max {effective_max} for code review"
@@ -336,7 +348,7 @@ def run(
         try:
             verdict = parse_verdict(raw)
         except ReviewError as exc:
-            write_review_file(
+            path = write_review_file(
                 reviews_dir,
                 "code",
                 round_n,
@@ -346,8 +358,8 @@ def run(
             _reviews = [{
                 "scope": scope_label,
                 "verdict": "ERROR",
-                "file": None,
-                "error": str(exc),
+                "file": str(path),
+                "error": f"parse_verdict failed: {exc}",
                 "session_id": session_id,
             }]
             return ReviewResult(
@@ -398,7 +410,7 @@ def run(
                     try:
                         verdict = parse_verdict(raw)
                     except ReviewError as exc:
-                        write_review_file(
+                        path = write_review_file(
                             reviews_dir,
                             "code",
                             round_n,
@@ -408,8 +420,8 @@ def run(
                         _reviews = [{
                             "scope": scope_label,
                             "verdict": "ERROR",
-                            "file": None,
-                            "error": str(exc),
+                            "file": str(path),
+                            "error": f"parse_verdict failed: {exc}",
                             "session_id": session_id,
                         }]
                         return ReviewResult(

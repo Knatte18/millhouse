@@ -2,7 +2,7 @@
 Template: `<WIKI_PATH>/active/<slug>/plan/00-overview.md` — written by
 mill-plan at the start of Phase: Plan.
 
-Tokens: <TASK_TITLE>, <SLUG>, <STARTED>, <PARENT_BRANCH>.
+Tokens: <TASK_TITLE>, <TASK_TITLE_YAML>, <SLUG>, <STARTED>, <PARENT_BRANCH>.
 
 The rendered file is the entry point for the whole plan. Every batch
 file refers back to the Batch Index here, and mill-go reads the DAG
@@ -24,7 +24,7 @@ Strip this HTML comment before writing.
 # Plan: <TASK_TITLE>
 
 ```yaml
-task: <TASK_TITLE>
+task: <TASK_TITLE_YAML>
 slug: <SLUG>
 approved: false
 started: <STARTED>

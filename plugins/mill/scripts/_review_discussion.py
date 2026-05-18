@@ -61,6 +61,18 @@ def run(
         # 2. Round discovery and cap check
         round_n = discover_round(reviews_dir, "discussion", "holistic")
         max_rounds = max_rounds if max_rounds is not None else cfg["roles"]["discussion-review"]["holistic"]["rounds"]
+        if max_rounds == 0:
+            print(
+                "[_review_discussion] rounds=0 -- review disabled, returning APPROVE",
+                file=sys.stderr,
+            )
+            return ReviewResult(
+                type="discussion",
+                round=0,
+                verdict="APPROVE",
+                blocking_count=0,
+                reviews=[{"scope": "holistic", "verdict": "APPROVE", "file": None, "skipped": True}],
+            )
         if round_n > max_rounds:
             raise ReviewError(
                 f"Round {round_n} exceeds max {max_rounds} for discussion review"
@@ -134,12 +146,12 @@ def run(
         try:
             verdict = parse_verdict(raw)
         except ReviewError as exc:
-            write_review_file(reviews_dir, "discussion", round_n, raw)
+            path = write_review_file(reviews_dir, "discussion", round_n, raw)
             _reviews = [{
                 "scope": "holistic",
                 "verdict": "ERROR",
-                "file": None,
-                "error": str(exc),
+                "file": str(path),
+                "error": f"parse_verdict failed: {exc}",
                 "session_id": session_id,
             }]
             return ReviewResult(

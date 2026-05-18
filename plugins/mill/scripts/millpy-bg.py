@@ -51,6 +51,7 @@ if "--_worker" in sys.argv:
         if log_path is None:
             print("mill-bg worker: missing --log", file=sys.stderr)
             return 1
+        exit_written = False
         try:
             with open(log_path, "w", encoding="utf-8", buffering=1) as log_f:
                 log_f.write(
@@ -65,6 +66,7 @@ if "--_worker" in sys.argv:
                 )
                 log_f.write(f"\n[mill-bg] EXIT {result.returncode}\n")
                 log_f.flush()
+                exit_written = True
             return 0
         except Exception as exc:
             try:
@@ -73,6 +75,13 @@ if "--_worker" in sys.argv:
                     log_f.flush()
             except Exception:
                 print(f"[mill-bg] WORKER ERROR {exc!r}", file=sys.stderr)
+            if not exit_written:
+                try:
+                    with open(log_path, "a", encoding="utf-8") as _lf:
+                        _lf.write("[mill-bg] EXIT -1\n")
+                        _lf.flush()
+                except Exception:
+                    pass
             return 1
 
     def main(argv: list[str] | None = None) -> int:

@@ -47,4 +47,5 @@ groom:
   brevity-threshold-lines: 5
   brevity-threshold-chars: 500
 merge:
+  model: sonnethigh
   verify_fix_rounds: 3

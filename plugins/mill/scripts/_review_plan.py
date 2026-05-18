@@ -349,6 +349,16 @@ def run(
 
         # 4. Per-batch parallel section (skipped when holistic_only=True)
         if not holistic_only:
+            if batch_max_rounds == 0:
+                print("[_review_plan] batch rounds=0 -- review disabled, returning APPROVE stub", file=sys.stderr)
+                batch_entries = [
+                    {"scope": b.stem, "verdict": "APPROVE", "file": None, "skipped": True}
+                    for b in batch_files
+                ]
+                return ReviewResult(
+                    type="plan", round=0, verdict="APPROVE", blocking_count=0,
+                    reviews=batch_entries if batch_entries else [{"scope": "batch", "verdict": "APPROVE", "file": None, "skipped": True}],
+                )
             if resume_round is not None:
                 # Mid-round resume: per-batch files for this round already exist on disk;
                 # load them directly and fall through to the holistic.
@@ -436,6 +446,12 @@ def run(
 
         # 5. Holistic (if not skipped by config or no_holistic flag)
         if holistic_spec is not None and not no_holistic:
+            if holistic_max_rounds == 0:
+                print("[_review_plan] holistic rounds=0 -- review disabled, returning APPROVE stub", file=sys.stderr)
+                return ReviewResult(
+                    type="plan", round=0, verdict="APPROVE", blocking_count=0,
+                    reviews=[{"scope": "holistic", "verdict": "APPROVE", "file": None, "skipped": True}],
+                )
             round_n = discover_round(reviews_dir, "plan", "holistic")
             if round_n > holistic_max_rounds:
                 raise ReviewError(
