@@ -14,6 +14,7 @@ Public API:
     run_tool_use()    — invoke claude with Read/Grep/Glob; return (text, session_id)
     run_implementer() — invoke claude with Read/Edit/Write/Bash/Grep/Glob;
                         return (text, session_id). For mill-go's per-batch worker.
+    cleanup_session() — clean up a psmux session by name after a logical session ends.
 
 All three accept optional `session_id` and `resume` parameters so callers can
 reuse a warm Claude session across turns (implement → review → fix) without
@@ -515,6 +516,37 @@ def run_implementer(
         resume=resume,
         cwd=cwd,
     )
+
+
+def cleanup_session(session_id: str | None) -> None:
+    """Clean up a psmux session when a logical session ends.
+
+    Derives the psmux session name from session_id using the same
+    mill-{id[:12]} rule used by _invoke(). Idempotent: swallows
+    PsmuxError so callers do not need their own try-wrap. No-op
+    when session_id is None or empty.
+
+    Args:
+        session_id: Session ID to clean up, or None/empty string.
+
+    Returns:
+        None.
+    """
+    if not session_id:
+        return None
+    try:
+        import _psmux
+
+        psmux_name = f"mill-{session_id[:12]}"
+        existing = _psmux.list_sessions()
+        if psmux_name in existing:
+            _psmux.kill_session(psmux_name)
+            print(
+                f"[_llm_claude] cleanup_session: killed psmux session {psmux_name}",
+                file=sys.stderr,
+            )
+    except _psmux.PsmuxError:
+        pass
 
 
 # ---------------------------------------------------------------------------
