@@ -2,7 +2,7 @@
 Template: `<WIKI_PATH>/active/<slug>/plan/NN-<batch-slug>.md` — written
 by mill-plan once per batch during Phase: Plan.
 
-Tokens: <TASK_TITLE>, <BATCH_NAME>, <BATCH_SLUG>.
+Tokens: <TASK_TITLE>, <TASK_TITLE_YAML>, <BATCH_NAME>, <BATCH_NAME_YAML>, <BATCH_SLUG>.
 
 Each batch is a Sonnet-sized unit of implementation. A batch groups
 cards that logically hang together and that a single Sonnet session
@@ -18,8 +18,8 @@ Strip this HTML comment before writing.
 # Batch: <BATCH_NAME>
 
 ```yaml
-task: <TASK_TITLE>
-batch: <BATCH_NAME>
+task: <TASK_TITLE_YAML>
+batch: <BATCH_NAME_YAML>
 number: NN
 cards: 0
 verify: null
