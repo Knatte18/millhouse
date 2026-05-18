@@ -2,7 +2,7 @@
 Shared test fixtures for mill unit tests.
 
 Public API:
-    _make_task_worktree(tmp, slug, title, *, branch_prefix="", phase="active")
+    _make_task_worktree(tmp, slug, title, *, branch_prefix="", phase="active", layout="prefix")
         Create a minimal git repo on a task branch plus a wiki stub.
         Returns (worktree_path, wiki_path).
     safe_temp_dir() -> ContextManager[Path]
@@ -14,6 +14,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from typing import Literal
 
 _HERE = Path(__file__).resolve().parent
 _SCRIPTS = _HERE.parent / "scripts"
@@ -31,6 +32,7 @@ def _make_task_worktree(
     *,
     branch_prefix: str = "",
     phase: str = "active",
+    layout: Literal["prefix", "container"] = "prefix",
 ) -> tuple[Path, Path]:
     """Create a minimal git repo on a task branch and a wiki stub.
 
@@ -41,11 +43,16 @@ def _make_task_worktree(
         branch_prefix: Optional branch prefix prepended to slug.
         phase: Phase marker written in Home.md. Pass "none" to write the
             slug line without any phase marker (task.phase will be None).
+        layout: Path layout mode: "prefix" (default, worktree at tmp/worktree)
+            or "container" (worktree at tmp/wts/slug).
 
     Returns:
         (worktree_path, wiki_path) — absolute Paths.
     """
-    worktree_path = tmp / "worktree"
+    if layout == "container":
+        worktree_path = tmp / "wts" / slug
+    else:
+        worktree_path = tmp / "worktree"
     wiki_path = tmp / "wiki"
 
     worktree_path.mkdir(parents=True, exist_ok=True)
