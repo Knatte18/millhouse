@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-activate-via-psmux
 slug: claude-psmux-activate
 branch: hanf/claude-psmux-activate
 plan: _mill/plan
@@ -23,6 +23,7 @@ plan-fix-r1  '2026-05-18T10:43:39Z'
 plan-fix-r2  '2026-05-18T10:46:58Z'
 planned  '2026-05-18T10:47:13Z'
 implementing  '2026-05-18T10:48:49Z'
+approved-activate-via-psmux  '2026-05-18T10:54:58Z'
 ```
 
 ## Batches
@@ -30,7 +31,7 @@ implementing  '2026-05-18T10:48:49Z'
 ```yaml
 batches:
   - name: activate-via-psmux
-    state: running
+    state: approved
     implementer_session: cc4a847a-728f-4b08-879c-4af424a91e4d
     start_sha: cc50a66657626bd680900f45fa2aabdaea8927e4
 ```
