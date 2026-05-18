@@ -83,6 +83,12 @@ No test files are modified in this batch; the new test coverage lives in batch 3
   ```
   `scope_label` is already defined at line 195 (`scope_label = batch_name or "holistic"`).
   `ReviewResult` is already imported at the top of the file.
+
+  Note: `_review_code.py` has a pre-existing dead-code block starting around line 361
+  (`if verdict == "NEED_CONTEXT":` inside the `except ReviewError:` handler, after an
+  unconditional `return`). The rounds=0 guard above fires before that region and is
+  unaffected. The structural fix for the dead code is out of scope for this card; open
+  a follow-on task if needed.
 - **Commit:** `fix(review-code): return APPROVE stub when rounds=0 instead of raising`
 
 ### Card 7: Return APPROVE stub when `rounds=0` in `_review_discussion.py`
@@ -152,11 +158,13 @@ No test files are modified in this batch; the new test coverage lives in batch 3
       )
   ```
 
-  Note: both guards return a partial `ReviewResult` from within the plan's aggregation
-  loop. The implementer must confirm that returning early from within the batch or holistic
-  sub-section produces a well-formed outer ReviewResult (i.e., the outer aggregation still
-  assembles correctly). If the structure requires returning from the outer `run()`, adjust
-  accordingly — the requirement is that `ReviewError` is NOT raised when `max_rounds=0`.
+  The guards must be placed BEFORE the aggregation loop, at the outermost level of the
+  respective sub-section, and must return a synthesized APPROVE ReviewResult directly
+  from `run()` — mirroring the pattern used in Cards 6 and 7. Do NOT return from inside
+  a batch aggregation loop (which would leave reviews partially populated). The synthesized
+  result uses the same shape as the Cards 6-7 stubs: `type="plan"`, `round=0`,
+  `verdict="APPROVE"`, `blocking_count=0`, `reviews=[{"scope": ..., "verdict": "APPROVE",
+  "file": None, "skipped": True}]`.
 
   `ReviewResult` is already imported at the top of the file.
 - **Commit:** `fix(review-plan): return APPROVE stub when rounds=0 kwarg instead of raising`

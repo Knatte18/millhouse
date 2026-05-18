@@ -3,7 +3,7 @@
 ```yaml
 task: '64 (A) -- Small infra fixes batch 9'
 slug: mill-misc-fixes-9
-approved: false
+approved: true
 started: 2026-05-18T06:54:40Z
 parent: main
 root: ""
