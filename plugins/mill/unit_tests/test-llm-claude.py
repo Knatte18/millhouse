@@ -21,6 +21,7 @@ from pathlib import Path
 HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
+import _config as _config_mod  # noqa: E402
 import _llm_claude as _llm_claude_mod  # noqa: E402
 import _subprocess_util as _subprocess_util_mod  # noqa: E402
 from _llm_claude import (  # noqa: E402
@@ -728,6 +729,37 @@ def main() -> int:
     else:
         errors += 1
         print(f"FAIL: _get_via_psmux_flag() returned {_get_via_psmux_result}, expected False", file=sys.stderr)
+
+    # Test 12: _get_via_psmux_flag reads nested path
+    # Sub-case (i): nested path exists and is True -> returns True
+    with mock.patch.object(_config_mod, "load_config", return_value={"llm": {"claude": {"psmux": {"via_psmux": True}}}}):
+        with mock.patch.object(_paths, "resolve_git_root", return_value=Path(".")):
+            result = _llm_claude_mod._get_via_psmux_flag()
+    if result is True:
+        print("PASS: _get_via_psmux_flag reads nested llm.claude.psmux.via_psmux=True -> True")
+    else:
+        errors += 1
+        print(f"FAIL: nested path True case expected True, got {result}", file=sys.stderr)
+
+    # Sub-case (ii): old flat layout (legacy key) -> returns False (hard cutover)
+    with mock.patch.object(_config_mod, "load_config", return_value={"llm": {"claude": {"via_psmux": True}}}):
+        with mock.patch.object(_paths, "resolve_git_root", return_value=Path(".")):
+            result = _llm_claude_mod._get_via_psmux_flag()
+    if result is False:
+        print("PASS: _get_via_psmux_flag rejects legacy flat key via_psmux=True (hard cutover)")
+    else:
+        errors += 1
+        print(f"FAIL: legacy flat key case expected False, got {result}", file=sys.stderr)
+
+    # Sub-case (iii): empty config -> returns False
+    with mock.patch.object(_config_mod, "load_config", return_value={}):
+        with mock.patch.object(_paths, "resolve_git_root", return_value=Path(".")):
+            result = _llm_claude_mod._get_via_psmux_flag()
+    if result is False:
+        print("PASS: _get_via_psmux_flag empty config -> False")
+    else:
+        errors += 1
+        print(f"FAIL: empty config case expected False, got {result}", file=sys.stderr)
 
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)

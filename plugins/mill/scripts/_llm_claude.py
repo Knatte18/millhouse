@@ -96,7 +96,7 @@ def _get_via_psmux_flag() -> bool:
 
         git_root = _paths.resolve_git_root(Path.cwd())
         cfg = _config.load_config(git_root, git_root)
-        return bool(cfg.get("llm", {}).get("claude", {}).get("via_psmux", False))
+        return bool(cfg.get("llm", {}).get("claude", {}).get("psmux", {}).get("via_psmux", False))
     except (Exception, SystemExit):
         return False
 
