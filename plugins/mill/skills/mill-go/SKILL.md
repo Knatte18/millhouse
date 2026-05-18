@@ -51,7 +51,7 @@ Use `$PLUGIN_ROOT` in place of `$CLAUDE_PLUGIN_ROOT` for all subsequent `uv run`
    `signature: _marker.slug_from_branch(git_root: Path, wiki_path: Path, cfg: dict) -> str`
 2. Resolve the wiki path: `wiki_path = _paths.resolve_wiki_path(_paths.resolve_git_root())`. Sync the wiki clone: `_wiki.sync_pull(wiki_path, slug=slug)`.
    `signature: _wiki.sync_pull(wiki_path: Path, *, slug: str) -> None`
-3. Load config — deep-merge `<wiki_path>/config.yaml` with `.millhouse/config.local.yaml` via `_review_common.load_config(wiki_path, Path(".millhouse"))`. Read these keys:
+3. Load config — deep-merge `<wiki_path>/config.yaml` with `.millhouse/config.local.yaml` via `_config.load_config(worktree_root, worktree_root)` where `worktree_root = _paths.resolve_git_root()` (already established in Step 2). Read these keys:
    - `pipeline.auto_merge` — whether to invoke mill-finalize after success.
    - `pipeline.auto_report` — whether to auto-fire mill-self-report at end-of-work. mill-go fires it at Handoff step 6, AFTER any `/mill-merge` invocation in step 5 — including after PR-pending halts. See step 6 for the explicit "do not treat PR-pending as termination" rule.
    - `roles.code-review.batch.rounds` — max review rounds per batch.
@@ -139,6 +139,19 @@ except _wiki.WikiHealthError as e:
 Background via millpy-bg:
 
 > **Before invoking `millpy-bg`**: verify `pwd` in the Bash terminal matches the task worktree. If `millpy-bg` rejects cwd with the parent-worktree error (`mill-bg: cwd appears to be a non-task worktree`), halt and instruct the operator to switch to the task-worktree terminal.
+
+Venv-check before per-batch invocation:
+
+```bash
+if [ ! -f "$MILL_PYTHON" ]; then
+    echo "[mill-go] venv missing at $MILL_PYTHON -- attempting uv sync"
+    uv sync --project "${PLUGIN_ROOT}" || { echo "HALT: uv sync failed"; exit 1; }
+    if [ ! -f "$MILL_PYTHON" ]; then
+        echo "HALT: MILL_PYTHON not found at $MILL_PYTHON -- venv lost mid-session. Run 'uv sync --project ${PLUGIN_ROOT}' manually."
+        exit 1
+    fi
+fi
+```
 
 ```bash
 PYTHONPATH="${PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${PLUGIN_ROOT}/scripts/millpy-bg.py" \
@@ -368,6 +381,19 @@ For each round `H` from 1 to `max_holistic_rounds`:
 3. Background via `millpy-bg`:
 
    > **Before invoking `millpy-bg`**: verify `pwd` in the Bash terminal matches the task worktree. If `millpy-bg` rejects cwd with the parent-worktree error (`mill-bg: cwd appears to be a non-task worktree`), halt and instruct the operator to switch to the task-worktree terminal.
+
+   Venv-check before holistic review invocation:
+
+   ```bash
+   if [ ! -f "$MILL_PYTHON" ]; then
+       echo "[mill-go] venv missing at $MILL_PYTHON -- attempting uv sync"
+       uv sync --project "${PLUGIN_ROOT}" || { echo "HALT: uv sync failed"; exit 1; }
+       if [ ! -f "$MILL_PYTHON" ]; then
+           echo "HALT: MILL_PYTHON not found at $MILL_PYTHON -- venv lost mid-session. Run 'uv sync --project ${PLUGIN_ROOT}' manually."
+           exit 1
+       fi
+   fi
+   ```
 
    ```bash
    PYTHONPATH="${PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${PLUGIN_ROOT}/scripts/millpy-bg.py" \
