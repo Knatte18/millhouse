@@ -18,6 +18,7 @@ import sys
 import time
 import uuid
 
+import _config
 import _paths
 import _psmux
 import _psmux_capture
@@ -26,6 +27,7 @@ import _psmux_capture
 BOOT_READY_TIMEOUT_S = 20
 PSMUX_COMMAND_TIMEOUT_S = 30  # Synchronized with _psmux.py; keep in sync
 POLL_INTERVAL_S = 1.0
+REUSE_IDLE_TIMEOUT_S_DEFAULT = 10
 RESPONSE_POLL_TIMEOUT_S: dict[str, int] = {
     "bulk": 300,
     "tool-use": 600,
@@ -117,6 +119,21 @@ def _wait_for_idle_prompt(session_name: str, timeout_s: float) -> bool:
         time.sleep(POLL_INTERVAL_S)
 
 
+def _resolve_reuse_idle_timeout_s() -> float:
+    """Load reuse_idle_timeout_s from config, defaulting to REUSE_IDLE_TIMEOUT_S_DEFAULT."""
+    try:
+        git_root = _paths.resolve_git_root()
+        cfg = _config.load_config(git_root, git_root)
+        return float(
+            cfg.get("llm", {})
+            .get("claude", {})
+            .get("psmux", {})
+            .get("reuse_idle_timeout_s", REUSE_IDLE_TIMEOUT_S_DEFAULT)
+        )
+    except (Exception, SystemExit):
+        return float(REUSE_IDLE_TIMEOUT_S_DEFAULT)
+
+
 def main() -> int:
     parser = _make_parser()
     args = parser.parse_args()
@@ -147,25 +164,69 @@ anywhere else in your reply."""
 
     # Step 5-12: Try/finally block for cleanup
     try:
-        # Step 6: Create psmux session and set history limit
-        try:
-            _psmux.new_session(session_name, shell_argv=["pwsh", "-NoLogo", "-NoProfile"])
-            time.sleep(POLL_INTERVAL_S)
-            _psmux.set_history_limit(session_name, 50000)
-        except _psmux.PsmuxError as exc:
-            raise RuntimeError(f"failed to create psmux session: {exc}") from exc
+        session_owned_by_us: bool = False  # noqa: F841
 
-        # Step 7: Startup check for claude binary
-        _psmux.send_keys(
-            session_name,
-            "Get-Command claude -ErrorAction Stop; Write-Host CLAUDE_READY",
-            enter=True
-        )
-        if not _wait_for_marker_in_pane(session_name, "CLAUDE_READY", BOOT_READY_TIMEOUT_S):
-            tail = _psmux.capture_pane(session_name)
-            raise RuntimeError(
-                f"claude not found in psmux pane PATH (expected at ~/.local/bin/claude.exe). Pane tail: {tail}"
+        # Reuse short-circuit: check if named session already exists
+        if args.psmux_session is not None:
+            existing = _psmux.list_sessions()
+            if args.psmux_session in existing:
+                # Session exists; check if it's idle
+                timeout = _resolve_reuse_idle_timeout_s()
+                if not _wait_for_idle_prompt(session_name, timeout):
+                    raise RuntimeError(
+                        f"cannot reuse psmux session {session_name}: not idle within {int(timeout)}s"
+                    )
+                print(
+                    f"[millpy-claude-sub] reusing psmux session {session_name}",
+                    file=sys.stderr
+                )
+                # Skip to step 10 (paste prompt)
+            else:
+                # Session doesn't exist; create it
+                try:
+                    _psmux.new_session(
+                        session_name, shell_argv=["pwsh", "-NoLogo", "-NoProfile"]
+                    )
+                    time.sleep(POLL_INTERVAL_S)
+                    _psmux.set_history_limit(session_name, 50000)
+                except _psmux.PsmuxError as exc:
+                    raise RuntimeError(f"failed to create psmux session: {exc}") from exc
+                session_owned_by_us = True  # noqa: F841
+
+                # Step 7: Startup check for claude binary
+                _psmux.send_keys(
+                    session_name,
+                    "Get-Command claude -ErrorAction Stop; Write-Host CLAUDE_READY",
+                    enter=True
+                )
+                if not _wait_for_marker_in_pane(
+                    session_name, "CLAUDE_READY", BOOT_READY_TIMEOUT_S
+                ):
+                    tail = _psmux.capture_pane(session_name)
+                    raise RuntimeError(
+                        f"claude not found in psmux pane PATH (expected at ~/.local/bin/claude.exe). Pane tail: {tail}"
+                    )
+        else:
+            # Auto-generated session name; always create
+            try:
+                _psmux.new_session(session_name, shell_argv=["pwsh", "-NoLogo", "-NoProfile"])
+                time.sleep(POLL_INTERVAL_S)
+                _psmux.set_history_limit(session_name, 50000)
+            except _psmux.PsmuxError as exc:
+                raise RuntimeError(f"failed to create psmux session: {exc}") from exc
+            session_owned_by_us = True  # noqa: F841
+
+            # Step 7: Startup check for claude binary
+            _psmux.send_keys(
+                session_name,
+                "Get-Command claude -ErrorAction Stop; Write-Host CLAUDE_READY",
+                enter=True
             )
+            if not _wait_for_marker_in_pane(session_name, "CLAUDE_READY", BOOT_READY_TIMEOUT_S):
+                tail = _psmux.capture_pane(session_name)
+                raise RuntimeError(
+                    f"claude not found in psmux pane PATH (expected at ~/.local/bin/claude.exe). Pane tail: {tail}"
+                )
 
         # Step 8: Build claude launch command
         claude_cmd_parts = [
