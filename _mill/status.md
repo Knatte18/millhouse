@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-review-backend-fixes
+phase: approved-templates-config-skills
 slug: mill-misc-fixes-9
 branch: hanf/mill-misc-fixes-9
 plan: _mill/plan
@@ -26,6 +26,7 @@ planned  '2026-05-18T07:22:25Z'
 implementing  '2026-05-18T07:28:59Z'
 approved-subprocess-bg-fixes  '2026-05-18T07:33:09Z'
 approved-review-backend-fixes  '2026-05-18T07:52:05Z'
+approved-templates-config-skills  '2026-05-18T07:54:19Z'
 ```
 
 ## Batches
@@ -43,9 +44,10 @@ batches:
     start_sha: a174c6f5eaf0277be34d7367bd6d29d2618df3d1
     commit_sha: 658b54da75746bc0daa6995cca9965a07bf7d90a
   - name: templates-config-skills
-    state: running
+    state: approved
     implementer_session: a5ba89ed-a9ef-48ae-b22f-91b3367cc7c6
     start_sha: 8b2b1484abd29e17f3baae2875747e65a4b8982c
+    commit_sha: 38a1bb3949fde74398b33890209780a9781d68c2
   - name: test-infra-fixes
     state: pending
 ```
