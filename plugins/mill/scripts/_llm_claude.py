@@ -14,6 +14,7 @@ Public API:
     run_tool_use()    — invoke claude with Read/Grep/Glob; return (text, session_id)
     run_implementer() — invoke claude with Read/Edit/Write/Bash/Grep/Glob;
                         return (text, session_id). For mill-go's per-batch worker.
+    cleanup_session() — clean up a psmux session by name after a logical session ends.
 
 All three accept optional `session_id` and `resume` parameters so callers can
 reuse a warm Claude session across turns (implement → review → fix) without
@@ -96,7 +97,7 @@ def _get_via_psmux_flag() -> bool:
 
         git_root = _paths.resolve_git_root(Path.cwd())
         cfg = _config.load_config(git_root, git_root)
-        return bool(cfg.get("llm", {}).get("claude", {}).get("via_psmux", False))
+        return bool(cfg.get("llm", {}).get("claude", {}).get("psmux", {}).get("via_psmux", False))
     except (Exception, SystemExit):
         return False
 
@@ -136,7 +137,15 @@ def _build_argv(
     return argv
 
 
-def _build_psmux_argv(model: str, effort: str | None, allowed_tools: str, session_id: str) -> list[str]:
+def _build_psmux_argv(
+    model: str,
+    effort: str | None,
+    allowed_tools: str,
+    session_id: str,
+    *,
+    psmux_session_name: str | None = None,
+    keep_alive: bool = False,
+) -> list[str]:
     """Build argv for a psmux subprocess call.
 
     Args:
@@ -144,6 +153,10 @@ def _build_psmux_argv(model: str, effort: str | None, allowed_tools: str, sessio
         effort: Optional effort level
         allowed_tools: Comma-delimited tool list (used to determine mode)
         session_id: Session ID (always non-None at call site)
+        psmux_session_name: Optional psmux session name to use; if None, wrapper
+                            falls back to auto-generated 'mill-<uuid8>' name
+        keep_alive: If True, pass --keep-alive to wrapper to leave session running
+                    on success
 
     Returns:
         argv list starting with [sys.executable, wrapper_script, ...]
@@ -158,6 +171,10 @@ def _build_psmux_argv(model: str, effort: str | None, allowed_tools: str, sessio
     if effort is not None:
         argv += ["--effort", effort]
     argv += ["--session-id", session_id]
+    if psmux_session_name is not None:
+        argv += ["--psmux-session", psmux_session_name]
+    if keep_alive:
+        argv += ["--keep-alive"]
     return argv
 
 
@@ -285,14 +302,21 @@ def _invoke(
     )
 
     if _get_via_psmux_flag():
-        if resume:
-            raise LLMError("psmux path does not support session resume; turn off via_psmux for resume flows")
         if shutil.which("psmux") is None:
             raise LLMError("psmux not on PATH; required when llm.claude.via_psmux=true")
+        caller_provided_session_id = session_id is not None
         if session_id is None:
             session_id = str(uuid.uuid4())
+        psmux_name = f"mill-{session_id[:12]}" if caller_provided_session_id else None
         start = time.monotonic()
-        argv = _build_psmux_argv(model, effort, allowed_tools, session_id)
+        argv = _build_psmux_argv(
+            model,
+            effort,
+            allowed_tools,
+            session_id,
+            psmux_session_name=psmux_name,
+            keep_alive=caller_provided_session_id,
+        )
         try:
             result = _subprocess_util.run(
                 argv,
@@ -307,7 +331,10 @@ def _invoke(
         dt = time.monotonic() - start
         if result.returncode != 0:
             error_detail = (result.stderr or result.stdout or "")[:500]
-            raise LLMError(f"psmux-claude exited {result.returncode}: {error_detail}")
+            if resume:
+                raise LLMSessionError(f"psmux-claude (session {session_id[:8]}...) exited {result.returncode}: {error_detail}")
+            else:
+                raise LLMError(f"psmux-claude (session {session_id[:8]}...) exited {result.returncode}: {error_detail}")
         text = result.stdout.rstrip()
         sid_log = session_id[:8] if len(session_id) >= 8 else session_id
         print(
@@ -489,6 +516,37 @@ def run_implementer(
         resume=resume,
         cwd=cwd,
     )
+
+
+def cleanup_session(session_id: str | None) -> None:
+    """Clean up a psmux session when a logical session ends.
+
+    Derives the psmux session name from session_id using the same
+    mill-{id[:12]} rule used by _invoke(). Idempotent: swallows
+    PsmuxError so callers do not need their own try-wrap. No-op
+    when session_id is None or empty.
+
+    Args:
+        session_id: Session ID to clean up, or None/empty string.
+
+    Returns:
+        None.
+    """
+    if not session_id:
+        return None
+    try:
+        import _psmux
+
+        psmux_name = f"mill-{session_id[:12]}"
+        existing = _psmux.list_sessions()
+        if psmux_name in existing:
+            _psmux.kill_session(psmux_name)
+            print(
+                f"[_llm_claude] cleanup_session: killed psmux session {psmux_name}",
+                file=sys.stderr,
+            )
+    except _psmux.PsmuxError:
+        pass
 
 
 # ---------------------------------------------------------------------------

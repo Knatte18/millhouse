@@ -101,7 +101,9 @@ llm:
   # tool_use_timeout: 900
   implementer_timeout: 1800
   claude:
-    via_psmux: false  # Route claude calls through psmux for subscription billing (requires psmux on PATH; resume flows unsupported)
+    psmux:
+      via_psmux: false  # Route claude calls through psmux for subscription billing (requires psmux on PATH; mill-go reaps sessions automatically after each implement-review-fix loop)
+      reuse_idle_timeout_s: 10  # Seconds to wait for an existing psmux session to return to its idle prompt before reuse fails
 
 # ---------------------------------------------------------------------------
 # mill-go pipeline
