@@ -37,7 +37,7 @@ unit tests to the existing test files for each module.
 
   2. POSIX timeout branch (`except subprocess.TimeoutExpired`): before the existing `print(f"[subprocess] exit code=timeout duration=...")`, prepend `print(_spawn_msg, file=sys.stderr)`.
 
-  3. Windows watchdog branch (`if os.name == "nt" and timeout is not None`): wrap the `_run_windows_watchdog(...)` call in a try/except for `subprocess.TimeoutExpired`; on catch, emit `print(_spawn_msg, file=sys.stderr)` then `print(f"[subprocess] exit code=timeout duration={time.monotonic() - start:.3f}s", file=sys.stderr)`, then re-raise.
+  3. Windows watchdog branch (`if os.name == "nt" and timeout is not None`): wrap the `_run_windows_watchdog(...)` call in a try/except for `subprocess.TimeoutExpired`; on catch, emit only `print(_spawn_msg, file=sys.stderr)` then re-raise. Do NOT emit the `exit code=timeout duration=...` line here — `_run_windows_watchdog` already emits it before raising, so adding it again would produce a duplicate on Windows timeout paths.
 
   4. Replace the unconditional `print(f"[subprocess] exit code={proc.returncode} duration=...", file=sys.stderr)` (line ~163) with a conditional block: if `proc.returncode != 0`, emit both `_spawn_msg` and the exit line; if `proc.returncode == 0`, suppress both.
 

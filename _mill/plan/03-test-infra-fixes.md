@@ -139,10 +139,15 @@ covering the `_review_code`, `_review_discussion`, and `_review_plan` changes fr
   `_review_discussion.run(cfg, slug=..., mill_dir=..., project_root=..., wiki_root=...)`.
   Assert `r.verdict == "APPROVE"`, `r.round == 0`, `r.blocking_count == 0`.
 
-  **`test-review-plan-flow.py`** — add a test labeled `(rounds=0 holistic)`:
-  Build a cfg with `cfg["roles"]["plan-review"]["holistic"]["rounds"] = 0`. Call
-  `_review_plan.run(cfg, slug=..., mill_dir=..., wiki_root=..., project_root=...)`.
-  Assert `r.verdict == "APPROVE"`, `r.round == 0`, `r.blocking_count == 0`.
+  **`test-review-plan-flow.py`** — add a test labeled `(rounds=0 holistic via kwarg)`:
+  Build a cfg with `cfg["roles"]["plan-review"]["holistic"]["reviewer"] = "test_stub"`,
+  `cfg["roles"]["plan-review"]["holistic"]["rounds"] = 3` (non-zero so holistic_spec is
+  NOT nulled out by the existing config guard), and
+  `cfg["roles"]["plan-review"]["batch"]["reviewer"] = None` (so batch_spec = None, batch
+  path is skipped). Call `_review_plan.run(cfg, slug=..., mill_dir=..., wiki_root=...,
+  project_root=..., max_rounds=0)`. The kwarg sets `holistic_max_rounds=0`; the guard
+  added in Card 8 fires, returns an APPROVE stub without calling the LLM.
+  Assert `r.verdict == "APPROVE"` and `r.blocking_count == 0`.
 
   Follow the existing fixture setup in each test file (worktree + wiki + plan scaffold
   as appropriate). Use the existing stub-reviewer mock pattern so no real LLM is called.

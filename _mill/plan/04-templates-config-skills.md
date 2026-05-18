@@ -158,9 +158,13 @@ runnable test surface.
   ```
   Change it to:
   ```
-  _config.load_config(worktree_root, worktree_root / ".millhouse")
+  _config.load_config(worktree_root, worktree_root)
   ```
   where `worktree_root = _paths.resolve_git_root()` (already established in Step 2).
+  `_config.load_config(repo_root, worktree_root)` takes the git root as BOTH arguments
+  when hub and worktree are the same directory; the function internally appends
+  `.millhouse/config.local.yaml` to the second argument, so passing
+  `worktree_root / ".millhouse"` would double-nest it.
   Update any surrounding prose that refers to `_review_common.load_config` to use
   `_config.load_config`.
 
@@ -172,7 +176,7 @@ runnable test surface.
       echo "[mill-go] venv missing at $MILL_PYTHON -- attempting uv sync"
       uv sync --project "${PLUGIN_ROOT}" || { echo "HALT: uv sync failed"; exit 1; }
       if [ ! -f "$MILL_PYTHON" ]; then
-          echo "HALT: MILL_PYTHON not found at $MILL_PYTHON -- venv lost mid-session. Run 'uv sync --project plugins/mill' manually."
+          echo "HALT: MILL_PYTHON not found at $MILL_PYTHON -- venv lost mid-session. Run 'uv sync --project ${PLUGIN_ROOT}' manually."
           exit 1
       fi
   fi
@@ -180,7 +184,8 @@ runnable test surface.
 
   **Fix 3 — venv-check before holistic review millpy-bg call:** Locate the holistic
   review section where `millpy-bg.py` is invoked. Add the same venv-check block
-  immediately before that invocation.
+  (with `${PLUGIN_ROOT}` in the message, not the literal `plugins/mill`) immediately
+  before that invocation.
 
   The venv-check block is identical in both locations. Do NOT add it elsewhere (step 0
   already performs the initial check; only the per-invocation sites need it).

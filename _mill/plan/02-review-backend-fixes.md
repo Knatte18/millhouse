@@ -112,7 +112,7 @@ No test files are modified in this batch; the new test coverage lives in batch 3
   `ReviewResult` is already imported at the top of the file.
 - **Commit:** `fix(review-discussion): return APPROVE stub when rounds=0 instead of raising`
 
-### Card 8: Return APPROVE stub when `rounds=0` in `_review_plan.py`
+### Card 8: Return APPROVE stub when `rounds=0` in `_review_plan.py` (kwarg path)
 
 - **Context:**
   - `plugins/mill/scripts/_review_common.py`
@@ -121,32 +121,45 @@ No test files are modified in this batch; the new test coverage lives in batch 3
 - **Creates:** none
 - **Deletes:** none
 - **Requirements:**
-  `_review_plan.py` has two round-cap checks: one for per-batch review (around line 127-129) and one for holistic review (within the holistic runner, around line 294-298). Apply the same pattern to both:
+  `_review_plan.py` already skips the batch and holistic paths when `cfg rounds == 0`
+  (lines 326 and 333: `if reviewer_name is None or cfg[...]["rounds"] == 0: spec = None`).
+  That existing logic handles the config-based skip. What is NOT handled is the `max_rounds`
+  kwarg-override path: when `max_rounds=0` is passed to `run()` while config rounds > 0,
+  `batch_max_rounds` and `holistic_max_rounds` are both set to 0, but the spec is non-null,
+  so the review blocks are entered — and `if round_n > 0: raise ReviewError("Round 1 exceeds max 0")` fires.
 
-  For the **batch path** (`_run_batch_review` inner function or equivalent): after `batch_max_rounds` is set (line ~293) and before `if round_n > batch_max_rounds: raise ReviewError(...)`, insert:
+  Fix: add a guard immediately before each `if round_n > <max_rounds>: raise ReviewError(...)` check:
+
+  **Per-batch path** (within the batch review block, after `batch_max_rounds` is computed,
+  before the `if round_n > batch_max_rounds` check at line ~127):
   ```python
   if batch_max_rounds == 0:
-      print("[_review_plan] batch rounds=0 -- review disabled, returning APPROVE", file=sys.stderr)
+      print("[_review_plan] batch rounds=0 -- review disabled, returning APPROVE stub", file=sys.stderr)
       return ReviewResult(
           type="plan", round=0, verdict="APPROVE", blocking_count=0,
           reviews=[{"scope": batch_path.stem, "verdict": "APPROVE", "file": None, "skipped": True}],
       )
   ```
 
-  For the **holistic path**: after `holistic_max_rounds` is set (line ~294) and before `if round_n > holistic_max_rounds: raise ReviewError(...)`, insert:
+  **Holistic path** (within the holistic review block, after `holistic_max_rounds` is
+  computed, before the `if round_n > holistic_max_rounds` check at line ~440):
   ```python
   if holistic_max_rounds == 0:
-      print("[_review_plan] holistic rounds=0 -- review disabled, returning APPROVE", file=sys.stderr)
+      print("[_review_plan] holistic rounds=0 -- review disabled, returning APPROVE stub", file=sys.stderr)
       return ReviewResult(
           type="plan", round=0, verdict="APPROVE", blocking_count=0,
           reviews=[{"scope": "holistic", "verdict": "APPROVE", "file": None, "skipped": True}],
       )
   ```
 
-  In the outer `run()` function (around line 271-300), the batch and holistic round-cap checks are both present. Apply the rounds=0 guard to each independently. If the entire outer `run()` aggregates both, ensure the guard fires at the point where each `effective_max` / `max_rounds` value is first known for that scope.
+  Note: both guards return a partial `ReviewResult` from within the plan's aggregation
+  loop. The implementer must confirm that returning early from within the batch or holistic
+  sub-section produces a well-formed outer ReviewResult (i.e., the outer aggregation still
+  assembles correctly). If the structure requires returning from the outer `run()`, adjust
+  accordingly — the requirement is that `ReviewError` is NOT raised when `max_rounds=0`.
 
   `ReviewResult` is already imported at the top of the file.
-- **Commit:** `fix(review-plan): return APPROVE stub when rounds=0 instead of raising`
+- **Commit:** `fix(review-plan): return APPROVE stub when rounds=0 kwarg instead of raising`
 
 ## Batch Tests
 
