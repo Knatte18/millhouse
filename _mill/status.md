@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-cutover
+phase: holistic-reviewing
 slug: holistic-fix-agent
 branch: hanf/holistic-fix-agent
 plan: _mill/plan
@@ -26,6 +26,7 @@ implementing  '2026-05-19T12:35:40Z'
 approved-fixer-config  '2026-05-19T12:38:53Z'
 approved-fixer-script  '2026-05-19T12:42:56Z'
 approved-cutover  '2026-05-19T12:54:22Z'
+holistic-reviewing  '2026-05-19T12:54:46Z'
 ```
 
 ## Batches
