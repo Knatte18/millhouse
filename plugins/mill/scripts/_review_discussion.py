@@ -78,11 +78,6 @@ def run(
                 f"Round {round_n} exceeds max {max_rounds} for discussion review"
             )
 
-        print(
-            f"[_review_discussion] slug={slug!r} round={round_n}",
-            file=sys.stderr,
-        )
-
         # 3. Resolve reviewer spec via registry
         reviewer_name = cfg["roles"]["discussion-review"]["holistic"]["reviewer"]
         if reviewer_name is None:
@@ -164,11 +159,6 @@ def run(
 
         blocking_count = parse_blocking_count(raw, severity="GAP")
         review_file = write_review_file(reviews_dir, "discussion", round_n, raw)
-
-        print(
-            f"[_review_discussion] wrote {review_file.name} verdict={verdict}",
-            file=sys.stderr,
-        )
 
         return ReviewResult(
             type="discussion",
