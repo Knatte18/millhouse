@@ -47,6 +47,8 @@ When `plugins/mill/` is present in the worktree, the venv is guaranteed to be sy
 
 Use `$PLUGIN_ROOT` in place of `$CLAUDE_PLUGIN_ROOT` for all subsequent `uv run` commands in this skill.
 
+**Path variable rule:** Every Bash tool call in this skill that invokes Python scripts MUST write `$MILL_PYTHON` and `${PLUGIN_ROOT}` literally. Never substitute the resolved path values — the full absolute path must not appear in the command string.
+
 1. Read the task slug: `slug = _marker.slug_from_branch(git_root, wiki_path, cfg)`. On `MarkerError` → halt with "this worktree was not created by mill-spawn".
    `signature: _marker.slug_from_branch(git_root: Path, wiki_path: Path, cfg: dict) -> str`
 2. Resolve the wiki path: `wiki_path = _paths.resolve_wiki_path(_paths.resolve_git_root())`. Sync the wiki clone: `_wiki.sync_pull(wiki_path, slug=slug)`.

@@ -36,7 +36,7 @@ _mill/   ← status.md, discussion.md, plan/, reviews/
 ## Hard constraints
 
 - **Junctions are IDE/terminal only.** Scripts always resolve real paths via `_paths.py`. Never pass `.wiki`, `.active`, or any junction to a Python helper or SKILL.md command.
-- **`${CLAUDE_PLUGIN_ROOT}` for all intra-plugin paths.** Never `plugins/mill/…` — external repos have no millhouse checkout.
+- **`${CLAUDE_PLUGIN_ROOT}` for all intra-plugin paths.** Never `plugins/mill/…` — external repos have no millhouse checkout. Write `${CLAUDE_PLUGIN_ROOT}` literally in Bash tool calls — never substitute the resolved path value.
 - **Working state never goes to wiki.** `_mill/` lives on the task branch. Wiki holds only `Home.md`.
 - **No fold into `[active]`/`[ready-to-merge]`/`[pr-pending]` tasks.** Phase tuple at `_tasks_md.LOCKED_FOLD_PHASES`.
 
