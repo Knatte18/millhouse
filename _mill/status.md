@@ -32,5 +32,7 @@ batches:
     implementer_session: 749e0941-88d9-4b82-a3b9-677581aba5cd
     start_sha: e62de1e89619baedd51fbc81a26cd86483d2697b
   - name: SKILL.md extraction commands
-    state: pending
+    state: running
+    implementer_session: 53f01495-d8f9-4991-8fe7-55d3cbbbedc0
+    start_sha: d9529e25b428881d9c7dc50111f25ff168fd5b36
 ```
