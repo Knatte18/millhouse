@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-fix-r2
+phase: planned
 slug: holistic-fix-agent
 branch: hanf/holistic-fix-agent
 plan: _mill/plan
@@ -21,4 +21,5 @@ planning  '2026-05-19T12:17:08Z'
 plan-review-r1  '2026-05-19T12:26:47Z'
 plan-fix-r1  '2026-05-19T12:26:47Z'
 plan-fix-r2  '2026-05-19T12:31:49Z'
+planned  '2026-05-19T12:32:04Z'
 ```
