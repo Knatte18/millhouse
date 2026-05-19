@@ -477,6 +477,18 @@ def test_validate_role_refs_catches_bad_implementer_model() -> None:
     print("PASS: validate_role_refs catches bad implementer model ref")
 
 
+def test_validate_role_refs_catches_bad_fixer_model() -> None:
+    """validate_role_refs raises ReviewerError for bad roles.fixer.model."""
+    registry = make_minimal_registry()
+    cfg = {"roles": {"fixer": {"model": "nonexistent_entry"}}}
+    try:
+        _reviewers.validate_role_refs(cfg, registry)
+        raise AssertionError("Expected ReviewerError")
+    except ReviewerError:
+        pass
+    print("PASS: validate_role_refs catches bad fixer model ref")
+
+
 def test_load_plugin_template_only() -> None:
     """load() uses plugin template when no local override present."""
     with tempfile.TemporaryDirectory() as tmp:
@@ -807,6 +819,7 @@ def main() -> int:
         test_validate_role_refs_missing_raises,
         test_load_falls_back_to_reviewers_yaml,
         test_validate_role_refs_catches_bad_implementer_model,
+        test_validate_role_refs_catches_bad_fixer_model,
         test_extends_single_level,
         test_extends_multi_level,
         test_extends_child_overrides_parent_scalar,

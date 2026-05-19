@@ -1,17 +1,12 @@
 """millpy-implement.py — per-batch implementer dispatch CLI.
 
-Dispatches a per-batch implementer Sonnet session or resumes one for a
-fix cycle after a code review. Encapsulates the full 10-step dispatch
-sequence (status update, commit, push, render, spawn) in a single call.
+Dispatches a per-batch implementer Sonnet session. Encapsulates the full
+10-step dispatch sequence (status update, commit, push, render, spawn)
+in a single call.
 
 Flags:
     batch_name          (positional, required) batch name from the plan
                         overview's Batch Index
-    --resume            resume an existing implementer session for fix cycle
-    --round N           fix-cycle round number (int, default 1; only
-                        meaningful with --resume)
-    --review-file PATH  path to the code-review output file (required when
-                        --resume is set)
 
 Exit codes:
     0 — implementer ran; JSON report on stdout (success or stuck)
@@ -37,7 +32,6 @@ import _render
 import _review_common
 import _reviewers
 import _status
-import _timestamp
 from _implementer_common import _forward_output
 
 
@@ -49,27 +43,7 @@ def main(argv=None) -> int:
         "batch_name",
         help="Batch name from the plan overview's Batch Index.",
     )
-    parser.add_argument(
-        "--resume",
-        action="store_true",
-        help="Resume an existing implementer session for a fix cycle.",
-    )
-    parser.add_argument(
-        "--round",
-        type=int,
-        default=1,
-        help="Fix-cycle round number (default 1; only meaningful with --resume).",
-    )
-    parser.add_argument(
-        "--review-file",
-        default=None,
-        help="Path to the code-review output file (required with --resume).",
-    )
     args = parser.parse_args(argv)
-
-    if args.resume and not args.review_file:
-        print("--resume requires --review-file", file=sys.stderr)
-        return 1
 
     # Common setup
     project_root = Path.cwd()
@@ -140,153 +114,74 @@ def main(argv=None) -> int:
     batch_file = plan_base / batch_entry["file"]
     plugin_root = Path(__file__).resolve().parent.parent
 
-    if not args.resume:
-        # Initial dispatch
-        result = _subprocess_util.run(
-            ["git", "rev-parse", "HEAD"],
+    result = _subprocess_util.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=project_root,
+    )
+    if result.returncode != 0:
+        print(result.stderr, file=sys.stderr)
+        return 1
+    start_sha = result.stdout.strip()
+
+    snapshot_path = project_root / "_mill" / f".cleanliness-snapshot-{args.batch_name}.txt"
+    _cleanliness.capture_snapshot(project_root, snapshot_path)
+
+    session_id = str(uuid.uuid4())
+
+    _status.set_batch_fields(status_path, args.batch_name, {"state": "running", "start_sha": start_sha, "implementer_session": session_id})
+
+    result = _subprocess_util.run(
+        ["git", "add", status_path.relative_to(project_root).as_posix(), str(snapshot_path.relative_to(project_root))],
+        cwd=project_root,
+    )
+    if result.returncode != 0:
+        print(result.stderr, file=sys.stderr)
+        return 1
+    result = _subprocess_util.run(
+        ["git", "commit", "-m", f"mill-go: start batch {args.batch_name}"],
+        cwd=project_root,
+    )
+    if result.returncode != 0:
+        print(result.stderr, file=sys.stderr)
+        return 1
+
+    result = _subprocess_util.run(
+        ["git", "push", "origin", branch],
+        cwd=project_root,
+    )
+    if result.returncode != 0:
+        print(result.stderr, file=sys.stderr)
+        return 1
+
+    template_path = plugin_root / "templates" / "implementer-brief.md"
+    prompt_text = _render.render(template_path, {
+        "TASK_TITLE": task_title,
+        "SLUG": slug,
+        "BATCH_NAME": args.batch_name,
+        "BATCH_FILE": str(batch_file),
+        "OVERVIEW_FILE": str(overview_path),
+        "PROJECT_ROOT": str(project_root),
+        "WIKI_PATH": str(wiki_path),
+        "SELF_FIX_ROUNDS": str(self_fix_rounds),
+        "ROUND": "1",
+        "SESSION_ID": session_id,
+    })
+
+    try:
+        output, _ = _implementer_claude.run(
+            prompt_text,
+            model=impl_model,
+            effort=impl_effort,
+            session_id=session_id,
+            resume=False,
             cwd=project_root,
+            timeout=timeout,
         )
-        if result.returncode != 0:
-            print(result.stderr, file=sys.stderr)
-            return 1
-        start_sha = result.stdout.strip()
-
-        snapshot_path = project_root / "_mill" / f".cleanliness-snapshot-{args.batch_name}.txt"
-        _cleanliness.capture_snapshot(project_root, snapshot_path)
-
-        session_id = str(uuid.uuid4())
-
-        _status.set_batch_fields(status_path, args.batch_name, {"state": "running", "start_sha": start_sha, "implementer_session": session_id})
-
-        result = _subprocess_util.run(
-            ["git", "add", status_path.relative_to(project_root).as_posix(), str(snapshot_path.relative_to(project_root))],
-            cwd=project_root,
-        )
-        if result.returncode != 0:
-            print(result.stderr, file=sys.stderr)
-            return 1
-        result = _subprocess_util.run(
-            ["git", "commit", "-m", f"mill-go: start batch {args.batch_name}"],
-            cwd=project_root,
-        )
-        if result.returncode != 0:
-            print(result.stderr, file=sys.stderr)
-            return 1
-
-        result = _subprocess_util.run(
-            ["git", "push", "origin", branch],
-            cwd=project_root,
-        )
-        if result.returncode != 0:
-            print(result.stderr, file=sys.stderr)
-            return 1
-
-        template_path = plugin_root / "templates" / "implementer-brief.md"
-        prompt_text = _render.render(template_path, {
-            "TASK_TITLE": task_title,
-            "SLUG": slug,
-            "BATCH_NAME": args.batch_name,
-            "BATCH_FILE": str(batch_file),
-            "OVERVIEW_FILE": str(overview_path),
-            "PROJECT_ROOT": str(project_root),
-            "WIKI_PATH": str(wiki_path),
-            "SELF_FIX_ROUNDS": str(self_fix_rounds),
-            "ROUND": "1",
-            "SESSION_ID": session_id,
-        })
-
-        try:
-            output, _ = _implementer_claude.run(
-                prompt_text,
-                model=impl_model,
-                effort=impl_effort,
-                session_id=session_id,
-                resume=False,
-                cwd=project_root,
-                timeout=timeout,
-            )
-        except _llm_claude.LLMError as e:
-            print(json.dumps({"status": "stuck", "stuck_type": "transient", "reason": str(e)}))
-            print(str(e), file=sys.stderr)
-            return 1
-        return _forward_output(output, project_root, start_sha=start_sha, snapshot_path=snapshot_path, session_id=session_id)
-
-    else:
-        # Fix-cycle resume
-        review_file = Path(args.review_file)
-        if not review_file.is_absolute():
-            review_file = (project_root / review_file).resolve()
-        if not review_file.exists():
-            print(f"review file not found: {review_file}", file=sys.stderr)
-            return 1
-
-        existing = _status.read_batches(status_path)
-        batch_state = next((b for b in existing if b["name"] == args.batch_name), None)
-        session_id = batch_state.get("implementer_session") if batch_state else None
-        if not session_id:
-            print(f"no implementer_session for batch {args.batch_name!r}", file=sys.stderr)
-            return 1
-
-        _status.set_batch_fields(status_path, args.batch_name, {"state": "fixing", "review_round": args.round, "review_file": str(review_file)})
-        _status.append_phase(
-            status_path,
-            f"fixing-{args.batch_name}-r{args.round}",
-            _timestamp.now_utc_iso(),
-        )
-
-        review_file_arg = (
-            str(review_file.relative_to(project_root))
-            if review_file.is_relative_to(project_root)
-            else str(review_file)
-        )
-        result = _subprocess_util.run(
-            ["git", "add", status_path.relative_to(project_root).as_posix(), review_file_arg],
-            cwd=project_root,
-        )
-        if result.returncode != 0:
-            print(result.stderr, file=sys.stderr)
-            return 1
-        result = _subprocess_util.run(
-            ["git", "commit", "-m", f"mill-go: fixing batch {args.batch_name} round {args.round}"],
-            cwd=project_root,
-        )
-        if result.returncode != 0:
-            print(result.stderr, file=sys.stderr)
-            return 1
-
-        result = _subprocess_util.run(
-            ["git", "push", "origin", branch],
-            cwd=project_root,
-        )
-        if result.returncode != 0:
-            print(result.stderr, file=sys.stderr)
-            return 1
-
-        template_path = plugin_root / "templates" / "implementer-fix.md"
-        prompt_text = _render.render(template_path, {
-            "REVIEW_FILE": str(review_file),
-            "BATCH_FILE": str(batch_file),
-            "SELF_FIX_ROUNDS": str(self_fix_rounds),
-            "ROUND": str(args.round),
-        })
-
-        try:
-            output, _ = _implementer_claude.run(
-                prompt_text,
-                model=impl_model,
-                effort=impl_effort,
-                session_id=session_id,
-                resume=True,
-                cwd=project_root,
-                timeout=timeout,
-            )
-        except _llm_claude.LLMError as e:
-            print(json.dumps({"status": "stuck", "stuck_type": "transient", "reason": str(e)}))
-            print(str(e), file=sys.stderr)
-            return 1
-        start_sha_for_forward = batch_state.get("start_sha") if batch_state else None
-        snapshot_path_for_forward = project_root / "_mill" / f".cleanliness-snapshot-{args.batch_name}.txt"
-        return _forward_output(output, project_root, start_sha=start_sha_for_forward, snapshot_path=snapshot_path_for_forward, session_id=session_id)
+    except _llm_claude.LLMError as e:
+        print(json.dumps({"status": "stuck", "stuck_type": "transient", "reason": str(e)}))
+        print(str(e), file=sys.stderr)
+        return 1
+    return _forward_output(output, project_root, start_sha=start_sha, snapshot_path=snapshot_path, session_id=session_id)
 
 
 if __name__ == "__main__":

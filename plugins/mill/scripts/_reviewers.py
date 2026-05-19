@@ -462,5 +462,12 @@ def validate_role_refs(cfg: dict, registry: dict) -> None:
         except ReviewerError as exc:
             errors.append(f"roles.implementer.model={impl_model!r}: {exc}")
 
+    fixer_model = cfg.get("roles", {}).get("fixer", {}).get("model")
+    if fixer_model is not None:
+        try:
+            resolve(registry, fixer_model)
+        except ReviewerError as exc:
+            errors.append(f"roles.fixer.model={fixer_model!r}: {exc}")
+
     if errors:
         raise ReviewerError("\n".join(errors))
