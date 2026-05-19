@@ -40,5 +40,7 @@ batches:
     implementer_session: 2a00b871-d415-4940-a891-a04e685aa274
     start_sha: a60a796a60a0b4d38067b5d1c2bc9ea157f5fafa
   - name: cutover
-    state: pending
+    state: running
+    implementer_session: 8fd5fb87-cb9d-464c-a6b3-810de448b4a7
+    start_sha: af1ddbb523ac76db6675d1c9ae9dce0f64833252
 ```
