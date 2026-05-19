@@ -30,7 +30,9 @@ implementing  '2026-05-19T12:35:40Z'
 ```yaml
 batches:
   - name: fixer-config
-    state: pending
+    state: running
+    implementer_session: 3eca1c1c-21c6-4fdb-9e86-981f7db63859
+    start_sha: 56eebdf675197c7c2175d5846349c8d3f6060ebb
   - name: fixer-script
     state: pending
   - name: cutover
