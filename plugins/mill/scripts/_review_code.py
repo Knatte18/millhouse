@@ -49,6 +49,7 @@ from _review_common import (
     compute_creates_union,
     compute_deletes_union,
     discover_round,
+    extract_review_content,
     load_task_title,
     maybe_switch_spec_for_large_prompt,
     parse_batch_refs,
@@ -325,6 +326,7 @@ def run(
         # 5. Dispatch + record
         try:
             raw, session_id = _reviewer_single.run(spec, prompt_text, timeout=timeout)
+            raw = extract_review_content(raw)
         except LLMError as exc:
             _reviews = [{
                 "scope": scope_label,
@@ -388,6 +390,7 @@ def run(
                         raw, session_id = _reviewer_single.run(
                             spec, retry_prompt, session_id=session_id, resume=True, timeout=timeout
                         )
+                        raw = extract_review_content(raw)
                     except LLMError as exc:
                         _reviews = [{
                             "scope": scope_label,

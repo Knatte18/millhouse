@@ -41,6 +41,7 @@ from _review_common import (
     maybe_switch_spec_for_large_prompt,
     parse_batch_refs,
     parse_blocking_count,
+    extract_review_content,
     parse_missing_context,
     parse_verdict,
     read_constraints_md,
@@ -185,6 +186,7 @@ def _review_one_batch(
 
         try:
             raw, session_id = _reviewer_single.run(batch_spec, prompt_text, timeout=bulk_timeout)
+            raw = extract_review_content(raw)
         except LLMError as exc:
             return {
                 "scope": batch_path.stem,
@@ -219,6 +221,7 @@ def _review_one_batch(
                     raw, session_id = _reviewer_single.run(
                         batch_spec, retry_prompt, session_id=session_id, resume=True, timeout=bulk_timeout
                     )
+                    raw = extract_review_content(raw)
                 except LLMError as exc:
                     return {
                         "scope": batch_path.stem,
@@ -521,6 +524,7 @@ def run(
 
             try:
                 raw, session_id = _reviewer_single.run(holistic_spec, prompt_text, timeout=holistic_timeout)
+                raw = extract_review_content(raw)
             except LLMError as exc:
                 reviews.append({
                     "scope": "holistic",
@@ -556,6 +560,7 @@ def run(
                                 raw, session_id = _reviewer_single.run(
                                     holistic_spec, retry_prompt, session_id=session_id, resume=True, timeout=holistic_timeout
                                 )
+                                raw = extract_review_content(raw)
                             except LLMError as exc:
                                 reviews.append({
                                     "scope": "holistic",

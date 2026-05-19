@@ -34,11 +34,12 @@ Reviewer model: **<REVIEWER_MODEL>**. Batch: **<BATCH_NAME>**. Round **<ROUND>**
 
 ## Output format — STRICT
 
-Your output begins with `# Review: ...` on line 1. **No preamble.** Per finding: 3–5 lines, short and factual. Cite file and line, state the issue, propose the fix.
+Wrap your entire output in `MILL_REVIEW_BEGIN` / `MILL_REVIEW_END` markers, each on its own line. Everything outside these markers is ignored by the backend. **No preamble inside the markers.** Per finding: 3–5 lines, short and factual. Cite file and line, state the issue, propose the fix.
 
 Target length: ~300 tokens for APPROVE, ~600–1200 tokens for REQUEST_CHANGES. If you produce more than ~1500 tokens, compress.
 
 ```
+MILL_REVIEW_BEGIN
 # Review: <TASK_TITLE> — <BATCH_NAME>
 
 ```yaml
@@ -69,6 +70,7 @@ date: <UTC YYYY-MM-DD>
 
 <APPROVE | REQUEST_CHANGES | NEED_CONTEXT>
 <one sentence — max 20 words>
+MILL_REVIEW_END
 ```
 
 Severity:

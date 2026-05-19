@@ -302,8 +302,6 @@ def popen_detached(
     child_env = (env or os.environ).copy()
     child_env["PYTHONIOENCODING"] = "utf-8"
 
-    print(f"[subprocess] popen_detached argv={argv!r}", file=sys.stderr)
-
     popen_kwargs: dict = dict(stdin=stdin, stdout=stdout, stderr=stderr, cwd=cwd, env=child_env)
     if os.name == "nt":
         # Two-stage launch: cmd.exe shim dispatches via `start /B`, escaping

@@ -4,6 +4,7 @@ Resolves project roots, loads config, finds the active task slug, calls
 the code review backend, and prints JSON to stdout.
 
 Flags:
+    --slug <slug>      Override active-slug detection (run from hub/main).
     --batch <name>     run a per-batch review against the named batch in
                        the plan's Batch Index. Omit for a holistic review
                        covering every batch in one reviewer call.
@@ -30,6 +31,11 @@ from pathlib import Path
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Run a code review for the active task."
+    )
+    parser.add_argument(
+        "--slug",
+        default=None,
+        help="Override active-slug detection. Allows running from hub/main branch.",
     )
     parser.add_argument(
         "--batch",
@@ -90,7 +96,7 @@ def main(argv: list[str] | None = None) -> int:
         extra_files.append(p)
 
     try:
-        slug = find_active_slug(project_root, wiki_root, cfg)
+        slug = args.slug or find_active_slug(project_root, wiki_root, cfg)
         result = run(
             cfg,
             slug,
