@@ -42,11 +42,12 @@ Reviewer model: **<REVIEWER_MODEL>**. Round **<ROUND>**.
 
 ## Output format — STRICT
 
-Your output begins with `# Review: ...` on line 1. **No preamble.** Per finding: 3–5 lines, short and factual. The consumer has full context of the plan; do NOT explain background. Cite the batch/card, state what's wrong, propose the fix.
+Wrap your entire output in `MILL_REVIEW_BEGIN` / `MILL_REVIEW_END` markers, each on its own line. Everything outside these markers is ignored by the backend. **No preamble inside the markers.** Per finding: 3–5 lines, short and factual. The consumer has full context of the plan; do NOT explain background. Cite the batch/card, state what's wrong, propose the fix.
 
 Target length: ~300 tokens for APPROVE, ~600–1200 tokens for REQUEST_CHANGES across multiple batches. If you produce more than ~1500 tokens, compress.
 
 ```
+MILL_REVIEW_BEGIN
 # Review: <TASK_TITLE> — holistic
 
 ```yaml
@@ -77,6 +78,7 @@ date: <UTC YYYY-MM-DD>
 
 <APPROVE | REQUEST_CHANGES | NEED_CONTEXT>
 <one sentence — max 20 words>
+MILL_REVIEW_END
 ```
 
 Severity / verdict rules match review-plan-batch.md.

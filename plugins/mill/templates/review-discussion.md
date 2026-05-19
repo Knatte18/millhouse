@@ -33,13 +33,14 @@ Never fabricate file contents or code behaviour you have not actually read. You 
 
 ## Output format — STRICT
 
-Your output begins with `# Review: ...` on line 1. **No preamble.** No "I reviewed..." sentences. No narrative intro.
+Wrap your entire output in `MILL_REVIEW_BEGIN` / `MILL_REVIEW_END` markers, each on its own line. Everything outside these markers is ignored by the backend. **No preamble inside the markers.** No "I reviewed..." sentences. No narrative intro.
 
 Per finding: 3–5 lines total, short and factual. The consumer has full context of the discussion; do NOT explain background. Cite the section, state what's wrong, propose the fix.
 
 Target length: ~300 tokens for APPROVE (just verdict + brief summary), ~600–900 tokens for GAPS_FOUND (one finding block per issue). If you produce more than ~1200 tokens, you are being verbose — compress.
 
 ```
+MILL_REVIEW_BEGIN
 # Review: <TASK_TITLE>
 
 ```yaml
@@ -65,6 +66,7 @@ date: <UTC YYYY-MM-DD>
 
 <APPROVE | GAPS_FOUND>
 <one sentence — max 20 words>
+MILL_REVIEW_END
 ```
 
 Severity rules (discussion-specific, per v1 convention):
