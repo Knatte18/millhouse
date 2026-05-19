@@ -1,10 +1,10 @@
 # Status
 
 ```yaml
-phase: discussed
+phase: planning
 slug: review-log-noise
 branch: hanf/review-log-noise
-plan: null
+plan: _mill/plan
 parent: main
 task: Silence verbose review log lines cluttering orchestrator output
 task_description: |
@@ -16,4 +16,5 @@ task_description: |
 ```text
 discussing  '2026-05-19T06:08:09Z'
 discussed  '2026-05-19T06:20:18Z'
+planning  '2026-05-19T06:40:17Z'
 ```
