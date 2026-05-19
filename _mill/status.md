@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-reviewing
+phase: holistic-approved
 slug: review-log-noise
 branch: hanf/review-log-noise
 plan: _mill/plan
@@ -23,6 +23,7 @@ implementing  '2026-05-19T06:52:33Z'
 approved-Python noise removal  '2026-05-19T07:31:28Z'
 approved-SKILL.md extraction commands  '2026-05-19T07:34:20Z'
 holistic-reviewing  '2026-05-19T07:34:50Z'
+holistic-approved  '2026-05-19T07:36:51Z'
 ```
 
 ## Batches
