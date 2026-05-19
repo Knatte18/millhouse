@@ -294,13 +294,6 @@ def _invoke(
     immediately after a prior session interrupt). The retry's outcome
     propagates as the final result.
     """
-    sess_label = f" session={session_id[:8]}..." if session_id else ""
-    mode_suffix = "/resume" if resume else ""
-    print(
-        f"[_llm_claude] claude {model} ({mode_label}{mode_suffix}){sess_label} starting...",
-        file=sys.stderr,
-    )
-
     if _get_via_psmux_flag():
         if shutil.which("psmux") is None:
             raise LLMError("psmux not on PATH; required when llm.claude.via_psmux=true")
@@ -336,12 +329,6 @@ def _invoke(
             else:
                 raise LLMError(f"psmux-claude (session {session_id[:8]}...) exited {result.returncode}: {error_detail}")
         text = result.stdout.rstrip()
-        sid_log = session_id[:8] if len(session_id) >= 8 else session_id
-        print(
-            f"[_llm_claude] claude {model} returned {len(text)} chars in {dt:.1f}s"
-            f" session={sid_log}",
-            file=sys.stderr,
-        )
         return text, session_id
 
     start = time.monotonic()
@@ -391,12 +378,6 @@ def _invoke(
     effective_sid = observed_sid or session_id
     if not effective_sid:
         raise LLMError("claude CLI did not emit a session_id in stream-json output")
-    sid_log = effective_sid[:8] if len(effective_sid) >= 8 else effective_sid
-    print(
-        f"[_llm_claude] claude {model} returned {len(text)} chars in {dt:.1f}s"
-        f" session={sid_log}",
-        file=sys.stderr,
-    )
     return text, effective_sid
 
 
