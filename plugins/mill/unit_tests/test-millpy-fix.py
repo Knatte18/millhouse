@@ -364,22 +364,15 @@ class TestMillpyFix(unittest.TestCase):
             ])
             self.assertEqual(rc, 0)
 
-        # Reset for holistic test
-        resume_values.clear()
-
-        with unittest.mock.patch.object(
-            millpy_fix._implementer_claude, "run",
-            side_effect=capture_resume,
-        ):
-            # Test holistic scope
+            # Test holistic scope in same patch context
             rc, _ = self._run_main([
                 "--scope", "holistic",
                 "--review-file", str(self.review_file),
             ])
             self.assertEqual(rc, 0)
 
-        # Verify both passed resume=False
-        self.assertEqual(resume_values, [False, False])
+            # Verify both passed resume=False
+            self.assertEqual(resume_values, [False, False])
 
 
 if __name__ == "__main__":
