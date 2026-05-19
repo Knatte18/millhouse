@@ -3,7 +3,7 @@
 ```yaml
 task: Silence verbose review log lines cluttering orchestrator output
 slug: review-log-noise
-approved: false
+approved: true
 started: 20260519-063410
 parent: main
 root: ""

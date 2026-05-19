@@ -25,8 +25,10 @@ Remove unconditional informational `print(..., file=sys.stderr)` calls from thre
 - **Deletes:** none
 - **Requirements:** Remove three `print(..., file=sys.stderr)` blocks from `_llm_claude.py`. Do not alter any surrounding logic, variable assignments, or blank lines beyond removing the `print(...)` statement itself (which may span multiple lines).
 
-  Block 1 — the shared "starting..." print just before the psmux/non-psmux branch (currently lines 299–302):
+  Block 1 — the shared "starting..." print just before the psmux/non-psmux branch (currently lines 299–302), along with the two preceding variable assignments that exist solely to feed it (currently lines 297–298):
   ```python
+  sess_label = f" session={session_id[:8]}..." if session_id else ""
+  mode_suffix = "/resume" if resume else ""
   print(
       f"[_llm_claude] claude {model} ({mode_label}{mode_suffix}){sess_label} starting...",
       file=sys.stderr,
