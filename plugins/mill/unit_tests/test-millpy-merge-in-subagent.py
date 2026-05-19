@@ -194,16 +194,23 @@ class TestMillpyMergeInSubagent(unittest.TestCase):
 
     def test_6_verify_fix_failure_subagent_success(self):
         """verify-fix mode: verify fails -> sub-agent dispatched, returns success."""
-        # call 1 (verify cmd, shell=True): subprocess.run; calls 2+3 (git diff, git rev-parse): _subprocess_util.run
+        # call 1 (initial verify, shell=True): subprocess.run
+        # call 2 (post-verify, shell=True): subprocess.run
+        # call 3 (git diff): _subprocess_util.run; call 4 (git rev-parse for post-verify success): _subprocess_util.run
         with unittest.mock.patch.object(
             millpy_merge_in_subagent._render, "render",
             return_value="rendered",
         ) as mock_render, \
         unittest.mock.patch.object(
             millpy_merge_in_subagent.subprocess, "run",
-            return_value=subprocess.CompletedProcess(
-                args=[], returncode=1, stdout="FAILED test_foo", stderr=""
-            ),
+            side_effect=[
+                subprocess.CompletedProcess(
+                    args=[], returncode=1, stdout="FAILED test_foo", stderr=""
+                ),
+                subprocess.CompletedProcess(
+                    args=[], returncode=0, stdout="", stderr=""
+                ),
+            ],
         ), \
         unittest.mock.patch.object(
             millpy_merge_in_subagent._subprocess_util, "run",
@@ -218,7 +225,7 @@ class TestMillpyMergeInSubagent(unittest.TestCase):
         ), \
         unittest.mock.patch.object(
             millpy_merge_in_subagent._implementer_claude, "run",
-            return_value=('{"status":"success","commit_sha":"abc"}\n', "fake"),
+            return_value=("", "fake-session"),
         ):
             rc, out = self._run_main([
                 "--mode", "verify-fix",
@@ -239,12 +246,19 @@ class TestMillpyMergeInSubagent(unittest.TestCase):
 
     def test_7_verify_fix_subagent_stuck(self):
         """verify-fix mode: verify fails, sub-agent returns stuck -> exit 0, stuck JSON."""
-        # call 1 (verify cmd, shell=True): subprocess.run; calls 2+3 (git diff, git rev-parse): _subprocess_util.run
+        # call 1 (initial verify, shell=True): subprocess.run
+        # call 2 (post-verify, shell=True): subprocess.run
+        # call 3 (git diff): _subprocess_util.run; call 4 (git rev-parse for _forward_output): _subprocess_util.run
         with unittest.mock.patch.object(
             millpy_merge_in_subagent.subprocess, "run",
-            return_value=subprocess.CompletedProcess(
-                args=[], returncode=1, stdout="FAILED test_foo", stderr=""
-            ),
+            side_effect=[
+                subprocess.CompletedProcess(
+                    args=[], returncode=1, stdout="FAILED test_foo", stderr=""
+                ),
+                subprocess.CompletedProcess(
+                    args=[], returncode=1, stdout="FAILED test_foo", stderr=""
+                ),
+            ],
         ), \
         unittest.mock.patch.object(
             millpy_merge_in_subagent._subprocess_util, "run",
@@ -280,6 +294,43 @@ class TestMillpyMergeInSubagent(unittest.TestCase):
         rc, out = self._run_main(["--mode", "verify-fix", "--checkpoint", "chk"])
         self.assertEqual(rc, 1)
         self.assertEqual(out.strip(), "")
+
+    def test_11_verify_fix_failure_subagent_no_json_post_verify_success(self):
+        """verify-fix mode: verify fails, sub-agent emits no JSON, post-verify passes -> success."""
+        with unittest.mock.patch.object(
+            millpy_merge_in_subagent.subprocess, "run",
+            side_effect=[
+                subprocess.CompletedProcess(
+                    args=[], returncode=1, stdout="FAILED test_foo", stderr=""
+                ),
+                subprocess.CompletedProcess(
+                    args=[], returncode=0, stdout="", stderr=""
+                ),
+            ],
+        ), \
+        unittest.mock.patch.object(
+            millpy_merge_in_subagent._subprocess_util, "run",
+            side_effect=[
+                subprocess.CompletedProcess(
+                    args=[], returncode=0, stdout="diff --git a/f.py...", stderr=""
+                ),
+                subprocess.CompletedProcess(
+                    args=[], returncode=0, stdout="abc1234\n", stderr=""
+                ),
+            ],
+        ), \
+        unittest.mock.patch.object(
+            millpy_merge_in_subagent._implementer_claude, "run",
+            return_value=("", "fake"),
+        ), \
+        unittest.mock.patch.object(
+            millpy_merge_in_subagent._render, "render",
+            return_value="rendered",
+        ):
+            rc, out = self._run_main(["--mode", "verify-fix", "--cmd", "pytest tests/", "--checkpoint", "chk"])
+
+        self.assertEqual(rc, 0)
+        self.assertEqual(json.loads(out.strip())["status"], "success")
 
     # ---- shared ----
 
