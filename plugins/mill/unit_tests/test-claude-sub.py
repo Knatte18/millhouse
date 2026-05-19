@@ -86,12 +86,12 @@ def main() -> int:
                     # Should call _wait_for_idle_prompt exactly once (reuse check only, not Step 9 boot wait)
                     assert m_wait_for_idle.call_count == 1, \
                         f"_wait_for_idle_prompt should be called exactly once on reuse, got {m_wait_for_idle.call_count}"
-                    # send_keys should be called exactly once (Step 10: Enter key), not with claude command
-                    assert m_send_keys.call_count == 1, \
-                        f"send_keys should be called exactly once (Step 10), got {m_send_keys.call_count}"
-                    # Verify the single call is the Enter key, not the claude command
+                    # send_keys called 3 times: bracketed-paste start, end, then Enter
+                    assert m_send_keys.call_count == 3, \
+                        f"send_keys should be called 3 times (Step 10 bracketed paste + Enter), got {m_send_keys.call_count}"
+                    # Verify the last call is the Enter key
                     assert m_send_keys.call_args[0][1] == "Enter", \
-                        f"send_keys should be called with 'Enter', got {m_send_keys.call_args[0][1]}"
+                        f"send_keys last call should be with 'Enter', got {m_send_keys.call_args[0][1]}"
                     print("PASS: S1 (existing-idle short-circuit)")
             finally:
                 sys.argv = saved_argv
