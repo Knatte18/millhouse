@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-verify-fix-post-verify
+phase: approved-mill-plan-handoff-guard
 slug: mill-bug-fixes
 branch: hanf/mill-bug-fixes
 plan: _mill/plan
@@ -22,6 +22,7 @@ plan-fix-r1  '2026-05-19T12:11:51Z'
 planned  '2026-05-19T12:12:10Z'
 implementing  '2026-05-19T12:20:34Z'
 approved-verify-fix-post-verify  '2026-05-19T12:24:24Z'
+approved-mill-plan-handoff-guard  '2026-05-19T12:26:47Z'
 ```
 
 ## Batches
@@ -33,7 +34,7 @@ batches:
     implementer_session: 1471b96a-a728-4057-a9cd-d778b5100eb6
     start_sha: d4133dcf37af164d6e5429f96752b1a176a2a3d9
   - name: mill-plan-handoff-guard
-    state: running
+    state: approved
     implementer_session: b16b8057-8ab6-406b-a882-4f74e900360c
     start_sha: 1575116e8e633619788aa8ff22ebdf7e410b705e
 ```
