@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: discussed
 slug: review-log-noise
 branch: hanf/review-log-noise
 plan: null
@@ -15,4 +15,5 @@ task_description: |
 
 ```text
 discussing  '2026-05-19T06:08:09Z'
+discussed  '2026-05-19T06:20:18Z'
 ```
