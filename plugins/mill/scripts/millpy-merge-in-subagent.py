@@ -261,6 +261,24 @@ def _run_verify_fix(args, project_root: Path, plugin_root: Path, cfg: dict, time
         print(str(e), file=sys.stderr)
         return 1
 
+    # Post-sub-agent re-verification
+    post_verify_result = subprocess.run(
+        args.cmd,
+        shell=True,
+        capture_output=True,
+        text=True,
+        cwd=project_root,
+    )
+
+    if post_verify_result.returncode == 0:
+        sha_result = _subprocess_util.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=project_root,
+        )
+        sha = sha_result.stdout.strip() if sha_result.returncode == 0 else ""
+        print(json.dumps({"status": "success", "commit_sha": sha}))
+        return 0
+
     return _forward_output(output, project_root)
 
 
