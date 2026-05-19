@@ -73,6 +73,9 @@ Batch-local decisions (override Shared Decisions only if listed):
   - `plugins/mill/scripts/_render.py`
   - `plugins/mill/scripts/_reviewers.py`
   - `plugins/mill/scripts/_timestamp.py`
+  - `plugins/mill/scripts/_implementer_claude.py`
+  - `plugins/mill/scripts/_llm_claude.py`
+  - `plugins/mill/scripts/_subprocess_util.py`
 - **Edits:** none
 - **Creates:**
   - `plugins/mill/scripts/millpy-fix.py`
