@@ -4,6 +4,7 @@ Resolves project roots, loads config, finds the active task slug, calls
 the plan review backend, and prints JSON to stdout.
 
 Flags:
+    --slug <slug>      Override active-slug detection (run from hub/main).
     --holistic-only    Skip per-batch reviews; run only the holistic plan review.
     --max-rounds <N>   Override roles.plan-review.batch.rounds and roles.plan-review.holistic.rounds
                        (overrides both scopes) for this invocation. Default: use config values.
@@ -28,6 +29,11 @@ from pathlib import Path
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Run a plan review for the active task."
+    )
+    parser.add_argument(
+        "--slug",
+        default=None,
+        help="Override active-slug detection. Allows running from hub/main branch.",
     )
     parser.add_argument(
         "--max-rounds",
@@ -90,7 +96,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     try:
-        slug = find_active_slug(project_root, wiki_root, cfg)
+        slug = args.slug or find_active_slug(project_root, wiki_root, cfg)
         if not args.skip_validate:
             from _plan_validate import run as validate_run
             plan_dir = resolve_path(cfg["paths"]["plan_dir"], slug)
