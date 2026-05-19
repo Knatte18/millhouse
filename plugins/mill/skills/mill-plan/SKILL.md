@@ -181,6 +181,8 @@ Loop up to `max_review_rounds` rounds. Each round:
 
 ### Phase: Handoff
 
+**Guard.** Read `plan_dir / "00-overview.md"` and parse the `approved:` field from the top fenced yaml block. If it is not the literal boolean `true`, halt with: `BLOCKED: mill-plan Handoff guard -- plan/00-overview.md has approved: false. Plan review did not complete. Re-run /mill-plan to enter Phase: Plan Review.` To parse: extract the YAML block via the existing pattern (`re.search(r"```yaml(.*?)```", overview_text, re.DOTALL)`), then read `approved:` with `yaml.safe_load(yaml_text)["approved"]`. Reject string `"true"` — the value must be the YAML boolean (overview template writes `approved: false`, the flip in step 4a/4b/4c writes `approved: true` as bare YAML). The guard runs *before* any `_status` mutation, so a guard failure leaves status.md untouched and the operator can re-enter cleanly.
+
 `_status.append_phase(status_path, "planned", _timestamp.now_utc_iso())`. Commit+push.
 
 If the deep-merged config has `pipeline.auto_report: true`, invoke `/mill-self-report --auto` and let it finish before reporting to the user. The skill checks `gh auth` itself and bails cleanly if absent, so this is always safe to call.
