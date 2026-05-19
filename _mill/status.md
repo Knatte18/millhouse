@@ -1,10 +1,10 @@
 # Status
 
 ```yaml
-phase: discussed
+phase: planning
 slug: mill-bug-fixes
 branch: hanf/mill-bug-fixes
-plan: null
+plan: _mill/plan
 parent: main
 task: Accumulated bug fixes
 task_description: |
@@ -17,4 +17,5 @@ task_description: |
 discussing  '2026-05-19T09:15:06Z'
 discussion-fix-r2  '2026-05-19T12:00:16Z'
 discussed  '2026-05-19T12:00:52Z'
+planning  '2026-05-19T12:06:43Z'
 ```
