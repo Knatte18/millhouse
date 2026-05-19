@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussion-fix-r1
+phase: discussed
 slug: holistic-fix-agent
 branch: hanf/holistic-fix-agent
 plan: null
@@ -16,4 +16,5 @@ task_description: |
 ```text
 discussing  '2026-05-19T09:14:42Z'
 discussion-fix-r1  '2026-05-19T12:07:24Z'
+discussed  '2026-05-19T12:07:30Z'
 ```
