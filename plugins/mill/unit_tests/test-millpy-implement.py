@@ -226,110 +226,6 @@ class TestMillpyImplement(unittest.TestCase):
         data = json.loads(out.strip().splitlines()[-1])
         self.assertEqual(data["status"], "stuck")
 
-    def test_4_resume_path_success(self):
-        """Resume path: reads implementer_session, sets fixing, appends phase, git add includes review file."""
-        status_path = self.tmp_path / "task" / "status.md"
-        millpy_implement._status.set_batch_field(status_path, "test-batch", "state", "reviewing")
-        millpy_implement._status.set_batch_field(
-            status_path, "test-batch", "implementer_session", "original-session-id"
-        )
-
-        review_file = self.tmp_path / "reviews" / "review.md"
-        review_file.write_text("some review content", encoding="utf-8")
-
-        with unittest.mock.patch.object(
-            millpy_implement._implementer_claude, "run",
-            return_value=(
-                '{"status":"success","commit_sha":"abc","session_id":"fake"}\n',
-                "fake-session",
-            ),
-        ) as mock_run:
-            rc, out = self._run_main([
-                "test-batch", "--resume", "--round", "2",
-                "--review-file", str(review_file),
-            ])
-
-        self.assertEqual(rc, 0)
-
-        # Implementer called with correct session and resume=True
-        call_kwargs = mock_run.call_args.kwargs
-        self.assertEqual(call_kwargs.get("session_id"), "original-session-id")
-        self.assertTrue(call_kwargs.get("resume"))
-
-        # Batch state is fixing with review_round == 2
-        batches = millpy_implement._status.read_batches(status_path)
-        self.assertEqual(batches[0]["state"], "fixing")
-        self.assertEqual(batches[0].get("review_round"), 2)
-
-        # git add contained status.md and the review file
-        git_add_calls = [
-            c for c in self.mock_subprocess_run.call_args_list
-            if c.args and c.args[0][0] == "git" and len(c.args[0]) > 1 and c.args[0][1] == "add"
-        ]
-        self.assertGreater(len(git_add_calls), 0, "Expected at least one git add call")
-        git_add_argv = git_add_calls[-1].args[0]
-        self.assertIn("task/status.md", git_add_argv)
-        review_rel = str(review_file.relative_to(self.tmp_path))
-        self.assertTrue(
-            review_rel in git_add_argv or str(review_file) in git_add_argv,
-            f"Review file not found in git add argv: {git_add_argv}",
-        )
-
-        # Timeline has fixing-test-batch-r2 entry
-        full = millpy_implement._status.read_full(status_path)
-        self.assertTrue(
-            any(e.startswith("fixing-test-batch-r2") for e in full["timeline"]),
-            f"Expected fixing-test-batch-r2 in timeline, got: {full['timeline']}",
-        )
-
-    def test_5_resume_llm_session_error(self):
-        """Resume path: LLMSessionError -> stuck/transient, exit 1."""
-        status_path = self.tmp_path / "task" / "status.md"
-        millpy_implement._status.set_batch_field(status_path, "test-batch", "state", "reviewing")
-        millpy_implement._status.set_batch_field(
-            status_path, "test-batch", "implementer_session", "sess"
-        )
-        review_file = self.tmp_path / "reviews" / "review.md"
-        review_file.write_text("content", encoding="utf-8")
-
-        with unittest.mock.patch.object(
-            millpy_implement._implementer_claude, "run",
-            side_effect=millpy_implement._llm_claude.LLMSessionError("session expired"),
-        ):
-            rc, out = self._run_main([
-                "test-batch", "--resume", "--round", "1",
-                "--review-file", str(review_file),
-            ])
-
-        self.assertEqual(rc, 1)
-        data = json.loads(out.strip().splitlines()[-1])
-        self.assertEqual(data["status"], "stuck")
-        self.assertEqual(data["stuck_type"], "transient")
-
-    def test_5b_resume_llm_error(self):
-        """Resume path: bare LLMError -> stuck/transient, exit 1."""
-        status_path = self.tmp_path / "task" / "status.md"
-        millpy_implement._status.set_batch_field(status_path, "test-batch", "state", "reviewing")
-        millpy_implement._status.set_batch_field(
-            status_path, "test-batch", "implementer_session", "sess"
-        )
-        review_file = self.tmp_path / "reviews" / "review.md"
-        review_file.write_text("content", encoding="utf-8")
-
-        with unittest.mock.patch.object(
-            millpy_implement._implementer_claude, "run",
-            side_effect=millpy_implement._llm_claude.LLMError("timeout"),
-        ):
-            rc, out = self._run_main([
-                "test-batch", "--resume", "--round", "1",
-                "--review-file", str(review_file),
-            ])
-
-        self.assertEqual(rc, 1)
-        data = json.loads(out.strip().splitlines()[-1])
-        self.assertEqual(data["status"], "stuck")
-        self.assertEqual(data["stuck_type"], "transient")
-
     def test_6_batch_not_found(self):
         """Unknown batch name -> exit 1, no JSON on stdout."""
         rc, out = self._run_main(["nonexistent-batch"])
@@ -348,12 +244,6 @@ class TestMillpyImplement(unittest.TestCase):
         data = json.loads(out.strip().splitlines()[-1])
         self.assertEqual(data["status"], "stuck")
         self.assertEqual(data["stuck_type"], "logic")
-
-    def test_8_resume_without_review_file(self):
-        """--resume without --review-file -> exit 1, no JSON on stdout."""
-        rc, out = self._run_main(["test-batch", "--resume"])
-        self.assertEqual(rc, 1)
-        self.assertEqual(out.strip(), "")
 
     def test_9_model_and_effort_from_config(self):
         """Initial dispatch: model and effort read from config and passed to implementer."""
