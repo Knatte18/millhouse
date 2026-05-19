@@ -15,6 +15,7 @@ from pathlib import Path
 import _subprocess_util  # noqa: F401
 
 PSMUX_COMMAND_TIMEOUT_S = 30
+_PSMUX_PREFIX: list[str] = []
 
 
 class PsmuxError(Exception):
@@ -28,7 +29,7 @@ def new_session(
 ) -> None:
     """Create a detached psmux session with the given name and dimensions."""
     argv = [
-        "psmux",
+        *_PSMUX_PREFIX, "psmux",
         "new-session",
         "-d",
         "-s",
@@ -48,7 +49,7 @@ def new_session(
 
 def set_history_limit(name: str, limit: int) -> None:
     """Set the pane scrollback history limit."""
-    argv = ["psmux", "set-option", "-t", name, "-g", "history-limit", str(limit)]
+    argv = [*_PSMUX_PREFIX, "psmux", "set-option", "-t", name, "-g", "history-limit", str(limit)]
     try:
         result = _subprocess_util.run(argv, timeout=PSMUX_COMMAND_TIMEOUT_S)
         if result.returncode != 0:
@@ -65,7 +66,7 @@ def send_keys(name: str, keys: str, *, enter: bool = False) -> None:
     """Send keys to the pane."""
     if keys == "" and not enter:
         raise ValueError("send_keys called with no keys and enter=False")
-    argv = ["psmux", "send-keys", "-t", name, keys]
+    argv = [*_PSMUX_PREFIX, "psmux", "send-keys", "-t", name, keys]
     if enter:
         argv.append("Enter")
     result = _subprocess_util.run(argv, timeout=PSMUX_COMMAND_TIMEOUT_S)
@@ -76,7 +77,7 @@ def send_keys(name: str, keys: str, *, enter: bool = False) -> None:
 
 def load_buffer(name: str, buffer_name: str, file_path: Path) -> None:
     """Load file contents into a named paste buffer."""
-    argv = ["psmux", "load-buffer", "-b", buffer_name, str(file_path)]
+    argv = [*_PSMUX_PREFIX, "psmux", "load-buffer", "-b", buffer_name, str(file_path)]
     result = _subprocess_util.run(argv, timeout=PSMUX_COMMAND_TIMEOUT_S)
     if result.returncode != 0:
         excerpt = (result.stderr or result.stdout)[:200]
@@ -85,7 +86,7 @@ def load_buffer(name: str, buffer_name: str, file_path: Path) -> None:
 
 def paste_buffer(name: str, buffer_name: str) -> None:
     """Paste buffer contents into the pane."""
-    argv = ["psmux", "paste-buffer", "-t", name, "-b", buffer_name]
+    argv = [*_PSMUX_PREFIX, "psmux", "paste-buffer", "-t", name, "-b", buffer_name]
     result = _subprocess_util.run(argv, timeout=PSMUX_COMMAND_TIMEOUT_S)
     if result.returncode != 0:
         excerpt = (result.stderr or result.stdout)[:200]
@@ -94,7 +95,7 @@ def paste_buffer(name: str, buffer_name: str) -> None:
 
 def capture_pane(name: str, *, scrollback: int = 50000) -> str:
     """Capture pane output from scrollback."""
-    argv = ["psmux", "capture-pane", "-t", name, "-S", f"-{scrollback}", "-p"]
+    argv = [*_PSMUX_PREFIX, "psmux", "capture-pane", "-t", name, "-S", f"-{scrollback}", "-p"]
     result = _subprocess_util.run(argv, timeout=PSMUX_COMMAND_TIMEOUT_S)
     if result.returncode != 0:
         excerpt = (result.stderr or result.stdout)[:200]
@@ -104,7 +105,7 @@ def capture_pane(name: str, *, scrollback: int = 50000) -> str:
 
 def kill_session(name: str) -> None:
     """Kill a psmux session."""
-    argv = ["psmux", "kill-session", "-t", name]
+    argv = [*_PSMUX_PREFIX, "psmux", "kill-session", "-t", name]
     try:
         result = _subprocess_util.run(argv, timeout=PSMUX_COMMAND_TIMEOUT_S)
         if result.returncode != 0:
@@ -118,7 +119,7 @@ def kill_session(name: str) -> None:
 
 def list_sessions() -> list[str]:
     """List all active psmux sessions."""
-    argv = ["psmux", "ls"]
+    argv = [*_PSMUX_PREFIX, "psmux", "ls"]
     try:
         result = _subprocess_util.run(argv, timeout=PSMUX_COMMAND_TIMEOUT_S)
         if result.returncode != 0:
