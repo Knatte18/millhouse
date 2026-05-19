@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: review-log-noise
 branch: hanf/review-log-noise
 plan: _mill/plan
@@ -19,4 +19,15 @@ discussed  '2026-05-19T06:20:18Z'
 planning  '2026-05-19T06:40:17Z'
 plan-fix-r1  '2026-05-19T06:45:07Z'
 planned  '2026-05-19T06:45:28Z'
+implementing  '2026-05-19T06:52:33Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: Python noise removal
+    state: pending
+  - name: SKILL.md extraction commands
+    state: pending
 ```
