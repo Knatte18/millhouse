@@ -28,7 +28,9 @@ implementing  '2026-05-19T12:20:34Z'
 ```yaml
 batches:
   - name: verify-fix-post-verify
-    state: pending
+    state: running
+    implementer_session: 1471b96a-a728-4057-a9cd-d778b5100eb6
+    start_sha: d4133dcf37af164d6e5429f96752b1a176a2a3d9
   - name: mill-plan-handoff-guard
     state: pending
 ```
