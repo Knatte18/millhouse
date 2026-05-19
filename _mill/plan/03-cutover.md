@@ -4,7 +4,7 @@
 task: "Dedicated fixer agent for post-holistic-review fix cycles"
 batch: "cutover"
 number: 3
-cards: 5
+cards: 3
 verify: "uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py"
 depends-on: [2]
 ```
@@ -73,7 +73,7 @@ Batch-local decisions:
   - `plugins/mill/unit_tests/test-millpy-implement.py`
 - **Creates:** none
 - **Deletes:** none
-- **Requirements:** Delete the `--resume`, `--round`, and `--review-file` argparse declarations from `millpy-implement.py`. Delete the `if args.resume and not args.review_file` check. Delete the entire `else: # Fix-cycle resume` branch (the block starting around line 214 in current head, ending at the function return at the end of `main`). The remaining structure of `main` is: parse args (only positional `batch_name`), the common setup block, the "if not args.resume" body (now unconditional -- remove that conditional and the corresponding indentation; the function ends after the `return _forward_output(...)` line). Update the module docstring -- remove the lines mentioning `--resume`, `--round`, `--review-file`, and the "resumes one for a fix cycle" sentence; the docstring now describes only the fresh per-batch dispatch.
+- **Requirements:** Delete the `--resume`, `--round`, and `--review-file` argparse declarations from `millpy-implement.py`. Delete the `if args.resume and not args.review_file` check. Delete the entire `else: # Fix-cycle resume` branch (the block starting around line 214 in current head, ending at the function return at the end of `main`). The remaining structure of `main` is: parse args (only positional `batch_name`), the common setup block, the "if not args.resume" body (now unconditional -- remove that conditional and the corresponding indentation; the function ends after the `return _forward_output(...)` line). Remove the `import _timestamp` line at the top of the file -- after the resume branch is gone, `_timestamp` is no longer referenced (its sole use was `_timestamp.now_utc_iso()` inside the deleted branch). Update the module docstring -- remove the lines mentioning `--resume`, `--round`, `--review-file`, and the "resumes one for a fix cycle" sentence; the docstring now describes only the fresh per-batch dispatch.
 
   In `test-millpy-implement.py`, delete every test function that exercises the `--resume` path (any test whose argv to `_run_main` includes `--resume`) and remove those names from the `tests = [...]` registration list at the bottom (if one exists) or from `unittest`'s auto-discovery (no change needed for the `unittest.main()` style). Keep every test that exercises the fresh dispatch path. If the file uses `unittest.TestCase`, deleting the method definitions is sufficient.
 - **Commit:** `implement: remove --resume branch; fix dispatch lives in millpy-fix.py`

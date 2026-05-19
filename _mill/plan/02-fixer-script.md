@@ -68,6 +68,11 @@ Batch-local decisions (override Shared Decisions only if listed):
   - `plugins/mill/scripts/_status.py`
   - `plugins/mill/scripts/_paths.py`
   - `plugins/mill/scripts/_review_common.py`
+  - `plugins/mill/scripts/_plan_dag.py`
+  - `plugins/mill/scripts/_marker.py`
+  - `plugins/mill/scripts/_render.py`
+  - `plugins/mill/scripts/_reviewers.py`
+  - `plugins/mill/scripts/_timestamp.py`
 - **Edits:** none
 - **Creates:**
   - `plugins/mill/scripts/millpy-fix.py`
