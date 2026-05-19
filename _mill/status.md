@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: holistic-fix-agent
 branch: hanf/holistic-fix-agent
 plan: _mill/plan
@@ -22,4 +22,17 @@ plan-review-r1  '2026-05-19T12:26:47Z'
 plan-fix-r1  '2026-05-19T12:26:47Z'
 plan-fix-r2  '2026-05-19T12:31:49Z'
 planned  '2026-05-19T12:32:04Z'
+implementing  '2026-05-19T12:35:40Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: fixer-config
+    state: pending
+  - name: fixer-script
+    state: pending
+  - name: cutover
+    state: pending
 ```
