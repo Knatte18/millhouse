@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-fixer-script
+phase: approved-cutover
 slug: holistic-fix-agent
 branch: hanf/holistic-fix-agent
 plan: _mill/plan
@@ -25,6 +25,7 @@ planned  '2026-05-19T12:32:04Z'
 implementing  '2026-05-19T12:35:40Z'
 approved-fixer-config  '2026-05-19T12:38:53Z'
 approved-fixer-script  '2026-05-19T12:42:56Z'
+approved-cutover  '2026-05-19T12:54:22Z'
 ```
 
 ## Batches
@@ -40,7 +41,7 @@ batches:
     implementer_session: 2a00b871-d415-4940-a891-a04e685aa274
     start_sha: a60a796a60a0b4d38067b5d1c2bc9ea157f5fafa
   - name: cutover
-    state: running
+    state: approved
     implementer_session: 8fd5fb87-cb9d-464c-a6b3-810de448b4a7
     start_sha: af1ddbb523ac76db6675d1c9ae9dce0f64833252
 ```
