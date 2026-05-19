@@ -57,8 +57,8 @@ Fix bug 1 (verify-fix-no-report) by re-running the verify command inside `_run_v
 - **Creates:** none
 - **Deletes:** none
 - **Requirements:** Modify `test_7_verify_fix_subagent_stuck` (currently at lines 240-276):
-  - Replace the `subprocess.run` patch from `return_value=<single fail>` to `side_effect=[<fail>, <fail>]` (two identical `CompletedProcess(returncode=1, ...)` entries — first is the initial verify, second is the post-verify which still fails so the code falls through to `_forward_output`).
-  - Keep `_subprocess_util.run` side_effect = `[<git diff>, <git rev-parse>]` unchanged — when the post-verify fails, `_forward_output` is reached and (because the sub-agent emitted a stuck JSON sentinel) it calls `_subprocess_util.run` for `git rev-parse HEAD` to attach `commit_sha` to the stuck verdict.
+  - Replace the `subprocess.run` patch from `return_value=<single fail>` to `side_effect=[<fail>, <fail>]` (two identical `CompletedProcess(returncode=1, ...)` entries — first is the initial verify, second is the post-verify which still fails so the code falls through to `_forward_output`). The `subprocess.run` patch is the one being upgraded from a `return_value` (length-1 implicit) to a `side_effect` list of length 2.
+  - Keep `_subprocess_util.run` side_effect = `[<git diff>, <git rev-parse>]` unchanged at its existing 2-entry list — this patch already uses `side_effect`; only its semantics shift, not its size. When the post-verify fails, `_forward_output` is reached and (because the sub-agent emitted a stuck JSON sentinel) it calls `_subprocess_util.run` for `git rev-parse HEAD` to attach `commit_sha` to the stuck verdict.
   - Update the inline `# call ...` comment above the patches to describe the new call ordering (initial verify, post-verify, git diff, git rev-parse for `_forward_output`).
   - Keep the existing assertions (`rc == 0`, `data["status"] == "stuck"`, `data["stuck_type"] == "verify"`) unchanged.
 - **Commit:** `test(merge-in-subagent): update test_7 for post-verify still-failing`

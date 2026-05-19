@@ -3,7 +3,7 @@
 ```yaml
 task: Accumulated bug fixes
 slug: mill-bug-fixes
-approved: false
+approved: true
 started: 20260519-120358
 parent: main
 root: ""
