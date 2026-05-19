@@ -22,6 +22,7 @@ from _review_common import (
     ReviewResult,
     build_tool_rule,
     discover_round,
+    extract_review_content,
     load_task_title,
     maybe_switch_spec_for_large_prompt,
     parse_blocking_count,
@@ -121,6 +122,7 @@ def run(
         #    means zero successes → engine-internal failure → return ERROR ReviewResult.
         try:
             raw, session_id = _reviewer_single.run(spec, prompt_text)
+            raw = extract_review_content(raw)
         except LLMError as exc:
             _reviews = [{
                 "scope": "holistic",

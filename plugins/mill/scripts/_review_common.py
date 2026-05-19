@@ -840,6 +840,23 @@ def build_deletes_section(deletes_tokens: list[str]) -> str:
 
 _RE_MISSING_CONTEXT_BULLET = re.compile(r"^\s*-\s+`([^`]+)`")
 
+_REVIEW_BEGIN = "MILL_REVIEW_BEGIN"
+_REVIEW_END = "MILL_REVIEW_END"
+
+
+def extract_review_content(raw: str) -> str:
+    """Strip everything outside MILL_REVIEW_BEGIN / MILL_REVIEW_END markers.
+
+    Falls back to raw unchanged when markers are absent (e.g. test stubs).
+    """
+    begin = raw.find(_REVIEW_BEGIN)
+    if begin == -1:
+        return raw
+    end = raw.find(_REVIEW_END, begin + len(_REVIEW_BEGIN))
+    if end == -1:
+        return raw
+    return raw[begin + len(_REVIEW_BEGIN):end].strip()
+
 
 def parse_missing_context(review_text: str) -> list[str]:
     """Extract path strings from a `## Missing context` section.
