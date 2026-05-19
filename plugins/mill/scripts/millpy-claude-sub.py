@@ -12,8 +12,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import secrets
-import shlex
 import sys
 import time
 import uuid
@@ -24,7 +24,7 @@ import _psmux
 import _psmux_capture
 
 # Boot and polling constants
-BOOT_READY_TIMEOUT_S = 20
+BOOT_READY_TIMEOUT_S = 60
 PSMUX_COMMAND_TIMEOUT_S = 30  # Synchronized with _psmux.py; keep in sync
 POLL_INTERVAL_S = 1.0
 REUSE_IDLE_TIMEOUT_S_DEFAULT = 10
@@ -40,6 +40,20 @@ MODE_TOOL_FLAGS: dict[str, list[str]] = {
     "tool-use": ["--allowedTools", "Read,Grep,Glob"],
     "implementer": ["--allowedTools", "Read,Edit,Write,Bash,Grep,Glob,Skill"],
 }
+
+
+def _ps_join(args: list[str]) -> str:
+    """Build a PowerShell-compatible command string. Differs from shlex.join for empty strings:
+    shlex emits '' (POSIX) but cmd.exe drops empty-string args when expanding %*; use "" instead."""
+    result = []
+    for arg in args:
+        if arg == "":
+            result.append('""')
+        elif re.search(r'[\s"\'`]', arg):
+            result.append('"' + arg.replace('"', '`"') + '"')
+        else:
+            result.append(arg)
+    return " ".join(result)
 
 
 def _make_parser() -> argparse.ArgumentParser:
@@ -105,11 +119,9 @@ def _wait_for_idle_prompt(session_name: str, timeout_s: float) -> bool:
     start = time.monotonic()
     while True:
         try:
-            capture = _psmux.capture_pane(session_name)
-            lines = capture.splitlines()
-            last_lines = lines[-10:] if lines else []
-            for line in last_lines:
-                if line.strip() == idle_prompt:
+            capture = _psmux.capture_pane(session_name, alternate=True)
+            for line in capture.splitlines():
+                if line.strip().startswith(idle_prompt):
                     return True
         except _psmux.PsmuxError:
             return False
@@ -239,16 +251,26 @@ anywhere else in your reply."""
             ]
             if args.effort:
                 claude_cmd_parts += ["--effort", args.effort]
-            claude_cmd_str = shlex.join(claude_cmd_parts)
+            claude_cmd_str = _ps_join(claude_cmd_parts)
 
             # Step 9: Launch claude and wait for idle prompt
+            print(f"[millpy-claude-sub] launching: {claude_cmd_str!r}", file=sys.stderr)
             _psmux.send_keys(session_name, claude_cmd_str, enter=True)
             if not _wait_for_idle_prompt(session_name, BOOT_READY_TIMEOUT_S):
+                tail = _psmux.capture_pane(session_name, alternate=True)
+                tail_lines = [ln for ln in tail.splitlines() if ln.strip()]
+                print(f"[millpy-claude-sub] boot-debug: {len(tail_lines)} nonempty lines in alt screen", file=sys.stderr)
+                for ln in tail_lines[:20]:
+                    print(f"[millpy-claude-sub] boot-debug line: {ln.encode('ascii','replace').decode()!r}", file=sys.stderr)
                 raise RuntimeError("claude TUI did not reach idle prompt within boot timeout")
 
-        # Step 10: Paste prompt and submit
+        # Step 10: Submit prompt via bracketed paste (preserves multi-line text).
+        # paste-buffer converts \n to \r, but within \e[200~...\e[201~] the TUI
+        # buffers all content without treating \r as Enter. Enter submits after.
         _psmux.load_buffer(session_name, "p", prompt_path)
+        _psmux.send_keys(session_name, "\x1b[200~", literal=True)
         _psmux.paste_buffer(session_name, "p")
+        _psmux.send_keys(session_name, "\x1b[201~", literal=True)
         time.sleep(POLL_INTERVAL_S)
         _psmux.send_keys(session_name, "Enter", enter=False)
 
@@ -256,7 +278,7 @@ anywhere else in your reply."""
         start = time.monotonic()
         while True:
             elapsed = time.monotonic() - start
-            capture = _psmux.capture_pane(session_name)
+            capture = _psmux.capture_pane(session_name, alternate=True)
             try:
                 response = _psmux_capture.extract_response(capture, begin_marker, end_marker)
                 print(response, end="")

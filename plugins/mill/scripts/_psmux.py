@@ -62,11 +62,14 @@ def set_history_limit(name: str, limit: int) -> None:
         return
 
 
-def send_keys(name: str, keys: str, *, enter: bool = False) -> None:
-    """Send keys to the pane."""
+def send_keys(name: str, keys: str, *, enter: bool = False, literal: bool = False) -> None:
+    """Send keys to the pane. literal=True uses -l (no special-key parsing)."""
     if keys == "" and not enter:
         raise ValueError("send_keys called with no keys and enter=False")
-    argv = [*_PSMUX_PREFIX, "psmux", "send-keys", "-t", name, keys]
+    argv = [*_PSMUX_PREFIX, "psmux", "send-keys"]
+    if literal:
+        argv.append("-l")
+    argv.extend(["-t", name, keys])
     if enter:
         argv.append("Enter")
     result = _subprocess_util.run(argv, timeout=PSMUX_COMMAND_TIMEOUT_S)
@@ -93,9 +96,12 @@ def paste_buffer(name: str, buffer_name: str) -> None:
         raise PsmuxError(f"psmux paste-buffer failed: {excerpt}")
 
 
-def capture_pane(name: str, *, scrollback: int = 50000) -> str:
-    """Capture pane output from scrollback."""
-    argv = [*_PSMUX_PREFIX, "psmux", "capture-pane", "-t", name, "-S", f"-{scrollback}", "-p"]
+def capture_pane(name: str, *, scrollback: int = 50000, alternate: bool = False) -> str:
+    """Capture pane output. alternate=True captures the TUI alternate screen buffer."""
+    argv = [*_PSMUX_PREFIX, "psmux", "capture-pane", "-t", name]
+    if alternate:
+        argv.append("-a")
+    argv.extend(["-S", f"-{scrollback}", "-p"])
     result = _subprocess_util.run(argv, timeout=PSMUX_COMMAND_TIMEOUT_S)
     if result.returncode != 0:
         excerpt = (result.stderr or result.stdout)[:200]
