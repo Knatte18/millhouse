@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-fixer-config
 slug: holistic-fix-agent
 branch: hanf/holistic-fix-agent
 plan: _mill/plan
@@ -23,6 +23,7 @@ plan-fix-r1  '2026-05-19T12:26:47Z'
 plan-fix-r2  '2026-05-19T12:31:49Z'
 planned  '2026-05-19T12:32:04Z'
 implementing  '2026-05-19T12:35:40Z'
+approved-fixer-config  '2026-05-19T12:38:53Z'
 ```
 
 ## Batches
@@ -30,7 +31,7 @@ implementing  '2026-05-19T12:35:40Z'
 ```yaml
 batches:
   - name: fixer-config
-    state: running
+    state: approved
     implementer_session: 3eca1c1c-21c6-4fdb-9e86-981f7db63859
     start_sha: 56eebdf675197c7c2175d5846349c8d3f6060ebb
   - name: fixer-script
