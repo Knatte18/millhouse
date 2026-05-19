@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-verify-fix-post-verify
 slug: mill-bug-fixes
 branch: hanf/mill-bug-fixes
 plan: _mill/plan
@@ -21,6 +21,7 @@ planning  '2026-05-19T12:06:43Z'
 plan-fix-r1  '2026-05-19T12:11:51Z'
 planned  '2026-05-19T12:12:10Z'
 implementing  '2026-05-19T12:20:34Z'
+approved-verify-fix-post-verify  '2026-05-19T12:24:24Z'
 ```
 
 ## Batches
@@ -28,7 +29,7 @@ implementing  '2026-05-19T12:20:34Z'
 ```yaml
 batches:
   - name: verify-fix-post-verify
-    state: running
+    state: approved
     implementer_session: 1471b96a-a728-4057-a9cd-d778b5100eb6
     start_sha: d4133dcf37af164d6e5429f96752b1a176a2a3d9
   - name: mill-plan-handoff-guard
