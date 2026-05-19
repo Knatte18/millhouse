@@ -214,10 +214,6 @@ def run(
             raise ReviewError(
                 f"Round {round_n} exceeds max {effective_max} for code review"
             )
-        print(
-            f"[_review_code] slug={slug!r} round={round_n} scope={scope_label}",
-            file=sys.stderr,
-        )
 
         # 2. Overview (required)
         overview_path = plan_dir / "00-overview.md"
@@ -440,10 +436,6 @@ def run(
                 round_n,
                 raw,
                 scope=batch_name,  # None for holistic → no batch segment in filename
-            )
-            print(
-                f"[_review_code] wrote {path.name} verdict={verdict}",
-                file=sys.stderr,
             )
 
             _reviews = [
