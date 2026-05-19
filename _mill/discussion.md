@@ -17,6 +17,7 @@ Task 30 (autonomous orchestrator) needs fix flows that are simple, uniform, and 
 
 **In:**
 - New `millpy-fix.py` CLI with `--scope batch|holistic` flag — unified fixer for both fix cycles
+- Extend `_reviewers.validate_role_refs` to check `roles.fixer.model` (same pattern as the existing `roles.implementer.model` check)
 - New `plugins/mill/templates/fixer-batch-brief.md` — prompt for batch fixer
 - New `plugins/mill/templates/fixer-holistic-brief.md` — prompt for holistic fixer
 - New `roles.fixer.model` config key in `mill-config.yaml` (hub template) and `wiki/config.yaml`, defaulting to `haiku`
@@ -176,6 +177,8 @@ roles:
 ```
 
 Add to both `plugins/mill/templates/mill-config.yaml` (hub template) and `wiki/config.yaml`.
+
+`SELF_FIX_ROUNDS` is read from `roles.implementer.self_fix_rounds` (same key as `millpy-implement-holistic.py` uses today). No new `roles.fixer.self_fix_rounds` key — cross-role reuse is intentional.
 
 ### Reviewers registry
 
