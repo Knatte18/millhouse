@@ -35,7 +35,9 @@ batches:
     implementer_session: 3eca1c1c-21c6-4fdb-9e86-981f7db63859
     start_sha: 56eebdf675197c7c2175d5846349c8d3f6060ebb
   - name: fixer-script
-    state: pending
+    state: running
+    implementer_session: 2a00b871-d415-4940-a891-a04e685aa274
+    start_sha: a60a796a60a0b4d38067b5d1c2bc9ea157f5fafa
   - name: cutover
     state: pending
 ```
