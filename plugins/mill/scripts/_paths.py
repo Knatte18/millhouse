@@ -151,10 +151,10 @@ def resolve_hub_path(cwd: Path | None = None) -> Path:
 def resolve_main_worktree_root(git_root: Path) -> Path:
     """Return the main worktree root from any worktree (including main itself).
 
-    Invokes ``git rev-parse --git-common-dir``. From the main worktree
-    this emits ``".git"`` (relative); from a child worktree it emits the
-    absolute path to the main worktree's ``.git`` directory. Both cases
-    collapse to the main worktree root after ``.parent``.
+    Uses pygit2 to resolve the git common directory. From the main worktree
+    this is the ``.git`` directory; from a child worktree it is the main
+    worktree's ``.git`` directory. Both cases collapse to the main worktree
+    root after ``.parent``.
 
     Args:
         git_root: Absolute path to any worktree's git checkout root.
@@ -163,20 +163,12 @@ def resolve_main_worktree_root(git_root: Path) -> Path:
         Absolute ``Path`` of the main worktree root.
 
     Raises:
-        SystemExit: When ``git rev-parse --git-common-dir`` returns non-zero.
+        SystemExit: When unable to resolve the main worktree root.
     """
-    result = _subprocess_util.run(
-        ["git", "-C", str(git_root), "rev-parse", "--git-common-dir"]
-    )
-    if result.returncode != 0:
-        raise SystemExit(
-            f"git rev-parse --git-common-dir failed for {git_root}: "
-            f"{result.stderr.strip()!r}"
-        )
-    common_dir = Path(result.stdout.strip())
-    if not common_dir.is_absolute():
-        common_dir = (git_root / common_dir).resolve()
-    return common_dir.parent
+    try:
+        return _pygit2_util.resolve_common_dir_parent(git_root)
+    except _pygit2_util.GitOpsError as e:
+        raise SystemExit(f"git rev-parse --git-common-dir failed for {git_root}: {e}")
 
 
 def resolve_worktrees_dir(cfg: dict, git_root: Path) -> Path:
