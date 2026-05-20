@@ -1,8 +1,8 @@
 # Status
 
 ```yaml
-phase: blocked
-blocked_reason: 'auto: discussion review ERROR-only round 1'
+phase: discussing
+blocked_reason: null
 slug: pygit2-git-ops
 branch: hanf/pygit2-git-ops
 plan: null
