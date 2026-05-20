@@ -53,5 +53,7 @@ batches:
     implementer_session: 47e18dd3-9a72-48f6-8cb3-896003000ccf
     start_sha: 0f52a5d3474d99fa9d3bf8117330113a16eef388
   - name: migrate _cleanliness.py and _review_common.py
-    state: pending
+    state: running
+    implementer_session: 0bb03111-88f3-4804-8791-28fb5f594741
+    start_sha: 66db834988cd4d78233085b2a8dd82d732436d12
 ```
