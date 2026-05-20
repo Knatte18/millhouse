@@ -48,7 +48,9 @@ batches:
     implementer_session: d2688d68-a39e-466b-a602-eef2d0730c17
     start_sha: 6a90fd0beaac77e31fbe50292becfe2f4acbf2f4
   - name: migrate _marker.py and _worktree.list_worktrees
-    state: pending
+    state: running
+    implementer_session: 47e18dd3-9a72-48f6-8cb3-896003000ccf
+    start_sha: 0f52a5d3474d99fa9d3bf8117330113a16eef388
   - name: migrate _cleanliness.py and _review_common.py
     state: pending
 ```
