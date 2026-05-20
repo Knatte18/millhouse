@@ -131,7 +131,10 @@ Untracked-only entries: `x == ' '` and `y == '?'` → formatted as `?? path` (po
 
 ### `resolve_git_root()` wiki guard
 
-`resolve_git_root()` has a safety check: if the resolved working directory is the wiki clone, it raises `SystemExit`. This guard must be preserved verbatim when rewriting with pygit2. The check compares `repo.workdir` against `resolve_wiki_path(repo_root)` the same way the existing code does.
+`resolve_git_root()` has two safety checks that must both be preserved verbatim when rewriting with pygit2:
+
+1. **Fast name check (fires first):** `if Path(repo.workdir).name == "wiki": raise SystemExit(...)` — short-circuits before `resolve_wiki_path` is called.
+2. **Samefile check:** compares `repo.workdir` against `resolve_wiki_path(repo_root)` via `samefile` / resolved equality, in case the wiki clone is named something other than "wiki".
 
 ### `resolve_active_worktree()` branch call
 
@@ -148,6 +151,10 @@ Untracked-only entries: `x == ' '` and `y == '?'` → formatted as `?? path` (po
 ### `_cleanliness.py` `--untracked-files=no` flag
 
 Both `capture_snapshot()` and `compute_new_dirt()` use `--untracked-files=no`. Map to `status_porcelain(path, include_untracked=False)`.
+
+### Exception type contract for `_capture_head_sha` and `_capture_porcelain`
+
+`_pygit2_util.head_sha()` and `status_porcelain()` raise `SystemExit` on failure (the general `_pygit2_util` contract, matching how callers of `_paths.py` behave). However, `_capture_head_sha()` and `_capture_porcelain()` in `_review_common.py` document raising `ReviewError`, and `worktree_snapshot_guard` explicitly relies on this type to distinguish capture failures from inner-block exceptions (see its docstring). **Decision:** `_review_common.py` wraps any exception from `_pygit2_util` calls into `ReviewError` at the call site — i.e., `_capture_head_sha` catches `Exception` from `head_sha()` and re-raises as `ReviewError(...)`. `_pygit2_util` itself does not accept an `exc_type` parameter.
 
 ### `_review_common._capture_porcelain()` uses plain `--porcelain`
 
