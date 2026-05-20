@@ -1,10 +1,10 @@
 # Status
 
 ```yaml
-phase: discussed
+phase: planning
 slug: pygit2-git-ops
 branch: hanf/pygit2-git-ops
-plan: null
+plan: _mill/plan
 parent: main
 task: Replace git subprocess calls with pygit2
 task_description: |
@@ -17,4 +17,5 @@ task_description: |
 discussing  '2026-05-20T09:01:42Z'
 blocked  '2026-05-20T10:04:42Z'
 discussed  '2026-05-20T10:26:10Z'
+planning  '2026-05-20T10:31:54Z'
 ```
