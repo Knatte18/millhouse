@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-migrate _paths.py
+phase: approved-migrate _marker.py and _worktree.list_worktrees
 slug: pygit2-git-ops
 branch: hanf/pygit2-git-ops
 plan: _mill/plan
@@ -29,6 +29,7 @@ implementing  '2026-05-20T11:13:13Z'
 approved-_pygit2_util foundation  '2026-05-20T11:16:01Z'
 approved-unit tests  '2026-05-20T11:18:14Z'
 approved-migrate _paths.py  '2026-05-20T11:22:50Z'
+approved-migrate _marker.py and _worktree.list_worktrees  '2026-05-20T11:25:57Z'
 ```
 
 ## Batches
@@ -48,7 +49,7 @@ batches:
     implementer_session: d2688d68-a39e-466b-a602-eef2d0730c17
     start_sha: 6a90fd0beaac77e31fbe50292becfe2f4acbf2f4
   - name: migrate _marker.py and _worktree.list_worktrees
-    state: running
+    state: approved
     implementer_session: 47e18dd3-9a72-48f6-8cb3-896003000ccf
     start_sha: 0f52a5d3474d99fa9d3bf8117330113a16eef388
   - name: migrate _cleanliness.py and _review_common.py
