@@ -21,7 +21,7 @@ Standalone document store for task state. All mutations go through this module â
 Responsibilities:
 - Read/write Home.md, proposal files, sidebar
 - Mutex / wiki lock
-- Layers: A (read), B (write + commit), C (push)
+- Operations: `read-only` (no side effects), `commit` (write + local commit), `push` (commit + remote sync)
 - Internal cache with **event-based invalidation** â€” cache is valid until `write_commit_push` or `sync_pull` is called. No TTL. The module knows when data is stale because all mutations go through it.
 
 API shape (language-agnostic over stdin/stdout JSON, or Python import):
