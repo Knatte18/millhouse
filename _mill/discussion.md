@@ -142,7 +142,7 @@ Untracked-only entries: `x == ' '` and `y == '?'` → formatted as `?? path` (po
 
 ### `_marker.task_data()` double call
 
-`task_data()` calls `slug_from_branch()` (which calls `branch --show-current` internally) and then calls `branch --show-current` again redundantly. After the migration, `slug_from_branch()` will use pygit2; `task_data()` should call `_pygit2_util.current_branch(git_root)` directly for the second call, eliminating the double open (or just call `open_repo(git_root)` once and pass the repo in).
+`task_data()` calls `slug_from_branch()` (which calls `branch --show-current` internally) and then calls `branch --show-current` again redundantly. After the migration, `slug_from_branch()` will use pygit2; `task_data()` calls `_pygit2_util.current_branch(git_root)` directly for the second call — no shared repo object, no API change, simplest fix.
 
 ### `pyproject.toml` location
 
@@ -184,7 +184,7 @@ pygit2 ships Windows wheels via PyPI. `pygit2.discover_repository()` handles Win
 
 Unit tests using `tempfile.TemporaryDirectory` + real git repos (setup via subprocess `git init`, `git commit` — tests are allowed to use subprocess for fixture creation). Cover:
 
-- `discover_workdir(start)` — happy path from working dir; raises SystemExit on non-repo path.
+- `discover_workdir(start)` — happy path from working dir; raises GitOpsError on non-repo path.
 - `resolve_common_dir_parent(git_root)` — called from main worktree (returns itself); called from a linked worktree (returns main). Test with a real `git worktree add` to create a linked fixture.
 - `head_sha(path)` — returns a 40-char hex string; matches `git rev-parse HEAD` output.
 - `current_branch(path)` — returns branch name on named branch; returns `None` on detached HEAD.
