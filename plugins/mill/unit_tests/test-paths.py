@@ -14,23 +14,15 @@ HUB = Path(__file__).resolve().parent.parent.parent.parent
 SCRIPTS_DIR = HUB / "plugins" / "mill" / "scripts"
 sys.path.insert(0, str(SCRIPTS_DIR))
 
-from unittest.mock import MagicMock, patch  # noqa: E402
+from unittest.mock import patch  # noqa: E402
+import subprocess  # noqa: E402
 
 import _marker  # noqa: E402
 import _paths  # noqa: E402
 import _sibling  # noqa: E402
-import _subprocess_util  # noqa: E402
 
 _UNIT_TESTS = Path(__file__).resolve().parent
 sys.path.insert(0, str(_UNIT_TESTS))
-
-
-def _make_run_result(stdout: str = "", returncode: int = 0, stderr: str = "") -> MagicMock:
-    result = MagicMock()
-    result.stdout = stdout
-    result.returncode = returncode
-    result.stderr = stderr
-    return result
 
 
 def _write_config(repo_root: Path, yaml_text: str) -> None:
@@ -77,7 +69,7 @@ def test_resolve_task_path() -> None:
         with contextlib.redirect_stderr(buf):
             got = _paths.resolve_task_path(root, "_mill/discussion.md")
         assert got == root / "_mill" / "discussion.md", f"case 1: got {got}"
-        assert "[compat]" not in buf.getvalue(), f"case 1: unexpected [compat] in stderr"
+        assert "[compat]" not in buf.getvalue(), "case 1: unexpected [compat] in stderr"
     print("PASS resolve_task_path case 1: _mill/ target exists -> _mill/ path, no stderr")
 
     # Case 2: _mill/ absent, task/ present -> falls back, [compat] in stderr
@@ -89,7 +81,7 @@ def test_resolve_task_path() -> None:
         with contextlib.redirect_stderr(buf):
             got = _paths.resolve_task_path(root, "_mill/discussion.md")
         assert got == root / "task" / "discussion.md", f"case 2: got {got}"
-        assert "[compat]" in buf.getvalue(), f"case 2: expected [compat] in stderr"
+        assert "[compat]" in buf.getvalue(), "case 2: expected [compat] in stderr"
     print("PASS resolve_task_path case 2: _mill/ absent, task/ present -> task/ path, [compat] stderr")
 
     # Case 3: neither exists -> returns _mill/ path, no [compat] in stderr
@@ -99,7 +91,7 @@ def test_resolve_task_path() -> None:
         with contextlib.redirect_stderr(buf):
             got = _paths.resolve_task_path(root, "_mill/discussion.md")
         assert got == root / "_mill" / "discussion.md", f"case 3: got {got}"
-        assert "[compat]" not in buf.getvalue(), f"case 3: unexpected [compat] in stderr"
+        assert "[compat]" not in buf.getvalue(), "case 3: unexpected [compat] in stderr"
     print("PASS resolve_task_path case 3: neither exists -> _mill/ path, no stderr")
 
     # Case 4: _mill/plan/ directory exists -> returns _mill/plan/ path
@@ -110,7 +102,7 @@ def test_resolve_task_path() -> None:
         with contextlib.redirect_stderr(buf):
             got = _paths.resolve_task_path(root, "_mill/plan/")
         assert got == root / "_mill" / "plan", f"case 4: got {got}"
-        assert "[compat]" not in buf.getvalue(), f"case 4: unexpected [compat] in stderr"
+        assert "[compat]" not in buf.getvalue(), "case 4: unexpected [compat] in stderr"
     print("PASS resolve_task_path case 4: _mill/plan/ dir exists -> _mill/plan/ path")
 
     # Case 5: _mill/plan/ absent, task/plan/ present -> falls back, [compat] in stderr
@@ -121,7 +113,7 @@ def test_resolve_task_path() -> None:
         with contextlib.redirect_stderr(buf):
             got = _paths.resolve_task_path(root, "_mill/plan/")
         assert got == root / "task" / "plan", f"case 5: got {got}"
-        assert "[compat]" in buf.getvalue(), f"case 5: expected [compat] in stderr"
+        assert "[compat]" in buf.getvalue(), "case 5: expected [compat] in stderr"
     print("PASS resolve_task_path case 5: _mill/plan/ absent, task/plan/ present -> task/plan/, [compat] stderr")
 
     # Case 6: cfg_relative_path without _mill/ -> direct return, no fallback attempted
@@ -131,7 +123,7 @@ def test_resolve_task_path() -> None:
         with contextlib.redirect_stderr(buf):
             got = _paths.resolve_task_path(root, "task/status.md")
         assert got == root / "task" / "status.md", f"case 6: got {got}"
-        assert "[compat]" not in buf.getvalue(), f"case 6: unexpected [compat] in stderr"
+        assert "[compat]" not in buf.getvalue(), "case 6: unexpected [compat] in stderr"
     print("PASS resolve_task_path case 6: no _mill/ in path -> direct return, no fallback")
 
     # Case 7: empty _mill/plan/ dir + task/plan/ present -> task/plan/, [compat] stderr
@@ -144,7 +136,7 @@ def test_resolve_task_path() -> None:
         with contextlib.redirect_stderr(buf):
             got = _paths.resolve_task_path(root, "_mill/plan/")
         assert got == root / "task" / "plan", f"case 7: got {got}"
-        assert "[compat]" in buf.getvalue(), f"case 7: expected [compat] in stderr"
+        assert "[compat]" in buf.getvalue(), "case 7: expected [compat] in stderr"
     print("PASS resolve_task_path case 7: empty _mill/plan/ dir + task/plan/ present -> task/plan/, [compat] stderr")
 
 
@@ -372,52 +364,55 @@ def main() -> int:
 
         # resolve_main_worktree_root
 
+        # Container-form: call on a real git repo
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
             main_root = _container_form(tmp_path).resolve()
-            mock_result = _make_run_result(stdout=".git\n")
-            with patch("_subprocess_util.run", return_value=mock_result):
-                got = _paths.resolve_main_worktree_root(main_root)
+            subprocess.run(["git", "init", "--quiet", str(main_root)], check=True)
+            got = _paths.resolve_main_worktree_root(main_root)
             assert got == main_root, f"container-form: got {got}"
-        print("PASS: resolve_main_worktree_root container-form (.git relative) -> git_root")
+        print("PASS: resolve_main_worktree_root container-form (real repo) -> git_root")
 
+        # Worktree-form: create a real linked worktree via subprocess
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
             wts_dir = tmp_path / "wts"
             wts_dir.mkdir()
             main_root = wts_dir / "millhouse"
-            git_root = wts_dir / "feat"
-            git_root.mkdir()
-            mock_stdout = str(main_root / ".git") + "\n"
-            mock_result = _make_run_result(stdout=mock_stdout)
-            with patch("_subprocess_util.run", return_value=mock_result):
-                got = _paths.resolve_main_worktree_root(git_root)
+            main_root.mkdir()
+            subprocess.run(["git", "init", "--quiet", str(main_root)], check=True)
+            linked_worktree = wts_dir / "feat"
+            subprocess.run(
+                ["git", "-C", str(main_root), "worktree", "add", str(linked_worktree)],
+                capture_output=True,
+            )
+            got = _paths.resolve_main_worktree_root(linked_worktree)
             assert got == main_root, f"worktree-form: got {got}"
-        print("PASS: resolve_main_worktree_root worktree-form (absolute stdout) -> main hub")
+        print("PASS: resolve_main_worktree_root worktree-form (real linked worktree) -> main hub")
 
+        # Error test: pass non-repo directory
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
-            main_root = _container_form(tmp_path)
-            mock_result = _make_run_result(returncode=1, stderr="not a git repository")
-            with patch("_subprocess_util.run", return_value=mock_result):
-                try:
-                    _paths.resolve_main_worktree_root(main_root)
-                    raise AssertionError("expected SystemExit, got none")
-                except SystemExit as exc:
-                    msg = str(exc)
-                    assert str(main_root) in msg, f"error msg missing git_root: {msg!r}"
-                    assert "not a git repository" in msg, f"error msg missing stderr: {msg!r}"
-        print("PASS: resolve_main_worktree_root returncode=1 -> SystemExit with git_root and stderr")
+            not_repo = tmp_path / "not-repo"
+            not_repo.mkdir()
+            try:
+                _paths.resolve_main_worktree_root(not_repo)
+                raise AssertionError("expected SystemExit, got none")
+            except SystemExit as exc:
+                msg = str(exc)
+                assert str(not_repo) in msg, f"error msg missing git_root: {msg!r}"
+                assert "git" in msg.lower(), f"error msg should mention git: {msg!r}"
+        print("PASS: resolve_main_worktree_root non-repo directory -> SystemExit with git_root")
 
+        # Idempotency: call twice on real repo, same result
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
             main_root = _container_form(tmp_path).resolve()
-            for stdout_val in [".git\r\n", "  .git  \n"]:
-                mock_result = _make_run_result(stdout=stdout_val)
-                with patch("_subprocess_util.run", return_value=mock_result):
-                    got = _paths.resolve_main_worktree_root(main_root)
-                assert got == main_root, f"whitespace/CRLF tolerance: stdout={stdout_val!r} got {got}"
-        print("PASS: resolve_main_worktree_root tolerates CRLF and surrounding whitespace")
+            subprocess.run(["git", "init", "--quiet", str(main_root)], check=True)
+            got1 = _paths.resolve_main_worktree_root(main_root)
+            got2 = _paths.resolve_main_worktree_root(main_root)
+            assert got1 == got2, f"idempotency: got {got1} then {got2}"
+        print("PASS: resolve_main_worktree_root idempotency (call twice, same result)")
 
         # resolve_short_name
         got = _paths.resolve_short_name({"repo": {"short_name": "MH"}}, "millhouse")
@@ -729,20 +724,23 @@ def main() -> int:
         # resolve_git_root wiki-cwd guards
 
         # Case 1: name check fires when resolved root name == "wiki"
-        with patch("_subprocess_util.run", return_value=_make_run_result(stdout="C:/Code/millhouse/wiki\n")):
-            try:
-                _paths.resolve_git_root()
-                raise AssertionError("expected SystemExit from name check, got none")
-            except SystemExit as exc:
-                msg = str(exc)
-                assert "cwd is inside wiki" in msg, f"missing 'cwd is inside wiki': {msg!r}"
-                assert str(Path("C:/Code/millhouse/wiki")) in msg, f"missing path: {msg!r}"
-        print("PASS: resolve_git_root raises SystemExit when cwd name == 'wiki'")
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            wiki_dir = tmp_path / "wiki"
+            wiki_dir.mkdir()
+            with patch("_pygit2_util.discover_workdir", return_value=wiki_dir):
+                try:
+                    _paths.resolve_git_root()
+                    raise AssertionError("expected SystemExit from name check, got none")
+                except SystemExit as exc:
+                    msg = str(exc)
+                    assert "cwd is inside wiki" in msg, f"missing 'cwd is inside wiki': {msg!r}"
+        print("PASS: resolve_git_root raises SystemExit when discovered path name == 'wiki'")
 
         # Case 2: path-equality guard fires when cwd equals wiki path (non-wiki name)
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp).resolve()
-            with patch("_subprocess_util.run", return_value=_make_run_result(stdout=str(tmp_path) + "\n")), \
+            with patch("_pygit2_util.discover_workdir", return_value=tmp_path), \
                  patch("_paths.resolve_wiki_path", return_value=tmp_path):
                 try:
                     _paths.resolve_git_root()
@@ -755,7 +753,7 @@ def main() -> int:
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp).resolve()
             other_path = tmp_path.parent / ("other_" + tmp_path.name)
-            with patch("_subprocess_util.run", return_value=_make_run_result(stdout=str(tmp_path) + "\n")), \
+            with patch("_pygit2_util.discover_workdir", return_value=tmp_path), \
                  patch("_paths.resolve_wiki_path", return_value=other_path):
                 got = _paths.resolve_git_root()
             assert got == tmp_path, f"expected {tmp_path}, got {got}"
@@ -764,19 +762,22 @@ def main() -> int:
         # Case 4: name check fires before nested-halt from resolve_wiki_path can propagate
         with patch("_paths.resolve_wiki_path", side_effect=SystemExit("nested-halt")):
             # Non-wiki sub-case: (Exception, SystemExit) swallow absorbs the inner halt
-            with patch("_subprocess_util.run", return_value=_make_run_result(stdout="/tmp/not-wiki\n")):
+            with patch("_pygit2_util.discover_workdir", return_value=Path("/tmp/not-wiki")):
                 got = _paths.resolve_git_root()
             assert got == Path("/tmp/not-wiki"), f"non-wiki sub-case: got {got}"
             # Wiki sub-case: name check fires first, nested halt cannot propagate
-            with patch("_subprocess_util.run", return_value=_make_run_result(stdout="C:/Code/millhouse/wiki\n")):
-                try:
-                    _paths.resolve_git_root()
-                    raise AssertionError("expected SystemExit from name check, got none")
-                except SystemExit as exc:
-                    msg = str(exc)
-                    assert "cwd is inside wiki" in msg, f"wrong message: {msg!r}"
-                    assert str(Path("C:/Code/millhouse/wiki")) in msg, f"path missing: {msg!r}"
-                    assert "nested-halt" not in msg, f"inner halt leaked: {msg!r}"
+            with tempfile.TemporaryDirectory() as tmp:
+                tmp_path = Path(tmp)
+                wiki_dir = tmp_path / "wiki"
+                wiki_dir.mkdir()
+                with patch("_pygit2_util.discover_workdir", return_value=wiki_dir):
+                    try:
+                        _paths.resolve_git_root()
+                        raise AssertionError("expected SystemExit from name check, got none")
+                    except SystemExit as exc:
+                        msg = str(exc)
+                        assert "cwd is inside wiki" in msg, f"wrong message: {msg!r}"
+                        assert "nested-halt" not in msg, f"inner halt leaked: {msg!r}"
         print("PASS: resolve_git_root name-check fires before nested-halt from resolve_wiki_path can propagate")
 
         # resolve_wiki_path wiki-cwd guards
@@ -808,26 +809,26 @@ def main() -> int:
         with tempfile.TemporaryDirectory() as tmp:
             tmpdir = Path(tmp)
             # Initialize a real git repo
-            _subprocess_util.run(["git", "init", "--quiet"], cwd=tmpdir)
+            subprocess.run(["git", "init", "--quiet", str(tmpdir)], check=True)
             result = _paths.resolve_git_root(tmpdir)
             assert isinstance(result, Path), f"expected Path, got {type(result)}"
             assert result == tmpdir.resolve(), f"expected {tmpdir.resolve()}, got {result}"
         print("PASS: resolve_git_root(start) returns correct path for real git repo")
 
-        # Test 2: resolve_git_root with no args uses cwd
-        with patch("_subprocess_util.run") as mock_run:
-            mock_run.return_value = _make_run_result(stdout="/some/path\n", returncode=0)
-            try:
-                _paths.resolve_git_root()
-            except SystemExit:
-                pass  # We expect this might fail due to wiki check, that's ok
-            # Check that git was called without -C flag
-            calls = mock_run.call_args_list
-            assert len(calls) >= 1, "git should have been called"
-            first_call_args = calls[0][0][0]
-            assert "-C" not in first_call_args, f"unexpected -C in argv: {first_call_args!r}"
-            assert "rev-parse" in first_call_args, f"expected rev-parse in argv: {first_call_args!r}"
-        print("PASS: resolve_git_root() with no args does not use -C flag")
+        # Test 2: resolve_git_root with no args calls discover_workdir with None
+        with patch("_pygit2_util.discover_workdir") as mock_discover:
+            mock_discover.return_value = Path("/some/path").resolve()
+            with patch("_paths.resolve_wiki_path", return_value=Path("/wiki")):
+                try:
+                    _paths.resolve_git_root()
+                except SystemExit:
+                    pass  # We expect this might fail due to wiki check, that's ok
+                # Check that discover_workdir was called with None (no explicit start path)
+                assert mock_discover.called, "discover_workdir should have been called"
+                call_args = mock_discover.call_args_list[0][0]
+                assert len(call_args) == 1, f"expected one arg, got {len(call_args)}"
+                assert call_args[0] is None, f"expected None, got {call_args[0]}"
+        print("PASS: resolve_git_root() with no args calls discover_workdir(None)")
 
         print("All _paths unit tests passed.")
         return 0
