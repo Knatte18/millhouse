@@ -13,10 +13,6 @@ sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 from _cleanliness import capture_snapshot, compute_new_dirt  # noqa: E402
 
 
-def _mock_run(stdout: str) -> unittest.mock.MagicMock:
-    return unittest.mock.MagicMock(returncode=0, stdout=stdout, stderr="")
-
-
 def main() -> int:
     failures: list[str] = []
 
@@ -25,7 +21,7 @@ def main() -> int:
         with tempfile.TemporaryDirectory() as tmp:
             snapshot_path = Path(tmp) / "snapshot.txt"
             snapshot_path.write_text("", encoding="utf-8")
-            with unittest.mock.patch("_subprocess_util.run", return_value=_mock_run("")):
+            with unittest.mock.patch("_cleanliness._pygit2_util.status_porcelain", return_value=[]):
                 result = compute_new_dirt(Path(tmp), snapshot_path)
             assert result == [], f"expected [], got {result!r}"
         print("PASS: empty pre + empty post -> []")
@@ -40,7 +36,7 @@ def main() -> int:
             snapshot_path = Path(tmp) / "snapshot.txt"
             snapshot_path.write_text("", encoding="utf-8")
             with unittest.mock.patch(
-                "_subprocess_util.run", return_value=_mock_run(" M b.txt\n M a.txt\n")
+                "_cleanliness._pygit2_util.status_porcelain", return_value=[" M a.txt", " M b.txt"]
             ):
                 result = compute_new_dirt(Path(tmp), snapshot_path)
             assert result == [" M a.txt", " M b.txt"], (
@@ -58,7 +54,7 @@ def main() -> int:
             snapshot_path = Path(tmp) / "snapshot.txt"
             snapshot_path.write_text(" M file.txt\n", encoding="utf-8")
             with unittest.mock.patch(
-                "_subprocess_util.run", return_value=_mock_run(" M file.txt\n")
+                "_cleanliness._pygit2_util.status_porcelain", return_value=[" M file.txt"]
             ):
                 result = compute_new_dirt(Path(tmp), snapshot_path)
             assert result == [], f"expected [], got {result!r}"
@@ -74,7 +70,7 @@ def main() -> int:
             snapshot_path = Path(tmp) / "snapshot.txt"
             snapshot_path.write_text(" M a.txt\n", encoding="utf-8")
             with unittest.mock.patch(
-                "_subprocess_util.run", return_value=_mock_run(" M a.txt\n M b.txt\n")
+                "_cleanliness._pygit2_util.status_porcelain", return_value=[" M a.txt", " M b.txt"]
             ):
                 result = compute_new_dirt(Path(tmp), snapshot_path)
             assert result == [" M b.txt"], f"expected [' M b.txt'], got {result!r}"
@@ -90,7 +86,7 @@ def main() -> int:
             snapshot_path = Path(tmp) / "snapshot.txt"
             snapshot_path.write_text(" M a.txt\n M b.txt\n", encoding="utf-8")
             with unittest.mock.patch(
-                "_subprocess_util.run", return_value=_mock_run(" M a.txt\n")
+                "_cleanliness._pygit2_util.status_porcelain", return_value=[" M a.txt"]
             ):
                 result = compute_new_dirt(Path(tmp), snapshot_path)
             assert result == [], f"expected [], got {result!r}"
@@ -106,7 +102,7 @@ def main() -> int:
             snapshot_path = Path(tmp) / "snapshot.txt"
             snapshot_path.write_text(" M file.txt\n", encoding="utf-8")
             with unittest.mock.patch(
-                "_subprocess_util.run", return_value=_mock_run("MM file.txt\n")
+                "_cleanliness._pygit2_util.status_porcelain", return_value=["MM file.txt"]
             ):
                 result = compute_new_dirt(Path(tmp), snapshot_path)
             assert result == ["MM file.txt"], f"expected ['MM file.txt'], got {result!r}"
@@ -121,7 +117,7 @@ def main() -> int:
         with tempfile.TemporaryDirectory() as tmp:
             snapshot_path = Path(tmp) / "missing.txt"
             with unittest.mock.patch(
-                "_subprocess_util.run", return_value=_mock_run(" M a.txt\n")
+                "_cleanliness._pygit2_util.status_porcelain", return_value=[" M a.txt"]
             ):
                 with unittest.mock.patch("sys.stderr", new=io.StringIO()) as fake_err:
                     result = compute_new_dirt(Path(tmp), snapshot_path)
@@ -141,7 +137,7 @@ def main() -> int:
             snapshot_path = Path(tmp) / "snapshot.txt"
             snapshot_path.write_bytes(b" M file.txt\r\n")
             with unittest.mock.patch(
-                "_subprocess_util.run", return_value=_mock_run(" M file.txt\n")
+                "_cleanliness._pygit2_util.status_porcelain", return_value=[" M file.txt"]
             ):
                 result = compute_new_dirt(Path(tmp), snapshot_path)
             assert result == [], f"expected [], got {result!r}"
@@ -155,14 +151,8 @@ def main() -> int:
     try:
         with tempfile.TemporaryDirectory() as tmp:
             snapshot_path = Path(tmp) / "_mill" / ".cleanliness-snapshot-foo.txt"
-            with unittest.mock.patch(
-                "_subprocess_util.run", return_value=_mock_run(" M file.txt\n")
-            ) as mock:
+            with unittest.mock.patch("_cleanliness._pygit2_util.status_porcelain", return_value=[" M file.txt"]):
                 capture_snapshot(Path(tmp), snapshot_path)
-            called_argv = mock.call_args.args[0]
-            assert called_argv[:3] == ["git", "-C", str(Path(tmp))], (
-                f"argv[:3] wrong: {called_argv[:3]!r}"
-            )
             assert snapshot_path.exists(), "snapshot file not created"
             content = snapshot_path.read_text(encoding="utf-8")
             assert content == " M file.txt\n", f"content wrong: {content!r}"
