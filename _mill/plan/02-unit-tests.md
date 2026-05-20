@@ -55,9 +55,9 @@ Creates `test-pygit2-util.py` with unit tests for every public function in `_pyg
 
   **`test_status_porcelain_untracked()`:** init a real git repo, make a commit, write a new untracked file (do NOT `git add`), call `_pygit2_util.status_porcelain(repo_path, include_untracked=True)`, assert one line starting with `"??"`. Call again with `include_untracked=False`, assert result is `[]`.
 
-  **`test_list_worktrees_single()`:** init a real git repo, make a commit, call `_pygit2_util.list_worktrees(repo_path)`, assert exactly one entry with `"path"` equal to `str(repo_path)` and `"branch"` equal to the current branch name.
+  **`test_list_worktrees_single()`:** init a real git repo, make a commit, call `_pygit2_util.list_worktrees(repo_path)`, assert exactly one entry with `"path"` equal to `repo_path.as_posix()` and `"branch"` equal to the current branch name. (Use `.as_posix()` — not `str()` — because `list_worktrees` returns forward-slash paths on all platforms.)
 
-  **`test_list_worktrees_with_linked()`:** init a real git repo, make a commit, run `git worktree add <linked_path> -b wt-branch` via subprocess, call `_pygit2_util.list_worktrees(repo_path)`, assert two entries: main worktree first, linked worktree second with `"branch"` == `"wt-branch"` and `"path"` == `str(linked_path)`.
+  **`test_list_worktrees_with_linked()`:** init a real git repo, make a commit, run `git worktree add <linked_path> -b wt-branch` via subprocess, call `_pygit2_util.list_worktrees(repo_path)`, assert two entries: main worktree first, linked worktree second with `"branch"` == `"wt-branch"` and `"path"` == `linked_path.as_posix()`. (Use `.as_posix()` — not `str()` — for the same reason.)
 
 - **Commit:** `test(scripts): add test-pygit2-util.py — unit tests for _pygit2_util`
 

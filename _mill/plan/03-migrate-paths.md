@@ -105,7 +105,7 @@ Replaces the three subprocess git calls in `_paths.py` with `_pygit2_util` helpe
 
   **`resolve_git_root` no-args test (lines ~817–829):** The test checks that git was called without `-C`. After migration, subprocess is not called at all. Replace with: mock `_pygit2_util.discover_workdir` and assert it is called with `None` (the no-args path); verify no `-C` check is needed since it's now an API parameter, not an argv flag.
 
-  **Imports:** add `from unittest.mock import patch` import for mocking `_pygit2_util.discover_workdir` where needed. Remove usage of `_make_run_result` for the rewritten tests (keep the helper if other tests still use it). Remove `import _subprocess_util` from `test-paths.py` if no longer used after these rewrites.
+  **Imports:** add `from unittest.mock import patch` import for mocking `_pygit2_util.discover_workdir` where needed. Remove usage of `_make_run_result` for the rewritten tests (keep the helper if other tests still use it). Any `_subprocess_util.run(["git", "init", ...])` fixture calls in the rewritten tests must be replaced with stdlib `subprocess.run(["git", "init", ...], check=True)` — do not use `_subprocess_util` in test fixture setup. After all rewrites, `import _subprocess_util` can be removed unconditionally if no remaining test call sites reference it.
 
 - **Commit:** `test(_paths): update test-paths.py mock tests for pygit2 migration`
 
