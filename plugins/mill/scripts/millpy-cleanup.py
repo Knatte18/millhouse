@@ -129,10 +129,15 @@ def build_plan(
         active_slugs.add(slug)
         phase = _read_phase(_paths.resolve_task_path(wt_path, "_mill/status.md"))
         if phase is None:
-            to_report.append(
-                f"{slug} -- status.md unreadable, skipping (inspect manually)"
-            )
-            continue
+            # status.md absent -- mill-merge deletes _mill/ before squash merge.
+            # Fall back to Home.md marker: if [done], proceed to archive-tag check.
+            if marker_by_slug.get(slug) == "done":
+                phase = "done"
+            else:
+                to_report.append(
+                    f"{slug} -- status.md unreadable, skipping (inspect manually)"
+                )
+                continue
 
         record = SlugRecord(slug, wt_path, branch, marker_by_slug.get(slug))
 
