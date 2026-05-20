@@ -56,6 +56,7 @@ from typing import Any, Iterator
 import yaml
 import _marker
 import _paths
+import _pygit2_util
 import _render
 import _reviewers
 from _config import (
@@ -157,28 +158,22 @@ def worktree_snapshot_guard(
 
 def _capture_head_sha(project_root: Path) -> str:
     """Return the current HEAD SHA as a hex string. Raises ReviewError on git failure."""
-    result = _subprocess_util.run(
-        ["git", "-C", str(project_root), "rev-parse", "HEAD"],
-    )
-    if result.returncode != 0:
+    try:
+        return _pygit2_util.head_sha(project_root)
+    except _pygit2_util.GitOpsError as e:
         raise ReviewError(
-            f"worktree_snapshot_guard: git rev-parse HEAD failed in {project_root}: "
-            f"{(result.stderr or '').strip()}"
-        )
-    return result.stdout.strip()
+            f"worktree_snapshot_guard: HEAD SHA read failed in {project_root}: {e}"
+        ) from e
 
 
 def _capture_porcelain(project_root: Path) -> list[str]:
     """Return git status --porcelain as a list of lines (one per entry). Raises ReviewError on failure."""
-    result = _subprocess_util.run(
-        ["git", "-C", str(project_root), "status", "--porcelain"],
-    )
-    if result.returncode != 0:
+    try:
+        return _pygit2_util.status_porcelain(project_root, include_untracked=True)
+    except _pygit2_util.GitOpsError as e:
         raise ReviewError(
-            f"worktree_snapshot_guard: git status --porcelain failed in {project_root}: "
-            f"{(result.stderr or '').strip()}"
-        )
-    return [line for line in result.stdout.splitlines() if line.strip()]
+            f"worktree_snapshot_guard: status read failed in {project_root}: {e}"
+        ) from e
 
 
 def _filter_porcelain(lines: list[str], expected_paths: list[str] | None) -> list[str]:

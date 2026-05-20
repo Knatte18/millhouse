@@ -31,6 +31,7 @@ import shutil
 import sys
 from pathlib import Path
 
+import _pygit2_util
 import _safe_rmtree
 import _subprocess_util
 
@@ -134,32 +135,10 @@ def list_worktrees(cwd: Path) -> list[dict[str, str | None]]:
     Raises:
         WorktreeError: git returned non-zero.
     """
-    result = _subprocess_util.run(
-        ["git", "-C", str(cwd), "worktree", "list", "--porcelain"],
-    )
-    if result.returncode != 0:
-        raise WorktreeError(
-            f"git worktree list failed (cwd={cwd}): {result.stderr.strip()!r}"
-        )
-    output = result.stdout.strip()
-    if not output:
-        return []
-
-    worktrees: list[dict[str, str | None]] = []
-    for block in output.split("\n\n"):
-        entry: dict[str, str | None] = {"path": None, "branch": None}
-        for line in block.splitlines():
-            if line.startswith("worktree "):
-                entry["path"] = line[len("worktree "):]
-            elif line.startswith("branch "):
-                ref = line[len("branch "):]
-                prefix = "refs/heads/"
-                entry["branch"] = ref[len(prefix):] if ref.startswith(prefix) else ref
-            elif line == "detached":
-                entry["branch"] = None
-        if entry["path"] is not None:
-            worktrees.append(entry)
-    return worktrees
+    try:
+        return _pygit2_util.list_worktrees(cwd)
+    except _pygit2_util.GitOpsError as e:
+        raise WorktreeError(f"git worktree list failed (cwd={cwd}): {e}") from e
 
 
 def remove(path: Path, cwd: Path, force: bool = True) -> None:

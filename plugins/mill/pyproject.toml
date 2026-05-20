@@ -2,7 +2,7 @@
 name = "mill"
 version = "0.1.0"
 requires-python = ">=3.10"
-dependencies = ["pyyaml>=6.0"]
+dependencies = ["pyyaml>=6.0", "pygit2>=1.14.0"]
 
 [tool.pytest.ini_options]
 pythonpath = ["scripts"]
