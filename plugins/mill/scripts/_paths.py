@@ -88,7 +88,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import _subprocess_util
 import _pygit2_util
 from _sibling import resolve_path
 
@@ -328,10 +327,10 @@ def resolve_active_worktree(
         raise ActiveWorktreeNotFound(
             f"No worktree directory at {worktree} for slug {slug!r}"
         )
-    branch_result = _subprocess_util.run(
-        ["git", "-C", str(worktree), "branch", "--show-current"]
-    )
-    branch = branch_result.stdout.strip()
+    try:
+        branch = _pygit2_util.current_branch(worktree) or ""
+    except _pygit2_util.GitOpsError:
+        branch = ""
     dir_slug = branch.removeprefix(cfg.get("spawn", {}).get("branch_prefix", ""))
     if dir_slug != slug:
         raise ActiveWorktreeSlugMismatch(
