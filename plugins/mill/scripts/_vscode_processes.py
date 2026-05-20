@@ -16,7 +16,6 @@ Public API:
 from __future__ import annotations
 
 import os
-import subprocess
 from pathlib import Path
 
 import _subprocess_util
@@ -37,23 +36,43 @@ def _probe_windows() -> set[Path]:
     # only renderer/extension args appear there. Workspace info lives in MainWindowTitle,
     # which our .vscode/settings.json sets to "<short_name>: <slug>" for worktrees.
     # Returned as Path objects for return-type compatibility; treat as opaque strings.
-    argv = [
-        "powershell",
-        "-NoProfile",
-        "-Command",
-        "Get-Process Code -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowTitle -ne '' } | Select-Object -ExpandProperty MainWindowTitle",
-    ]
-    try:
-        result = _subprocess_util.run(argv, timeout=5, check=False)
-    except (subprocess.TimeoutExpired, OSError, FileNotFoundError):
-        return set()
-    if result.returncode != 0:
-        return set()
+    # Uses ctypes Win32 API directly — avoids spawning powershell.exe (~1s startup cost).
+    import ctypes
+    import ctypes.wintypes
+
+    user32 = ctypes.windll.user32
+    kernel32 = ctypes.windll.kernel32
+
+    PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+
     titles: set[Path] = set()
-    for line in result.stdout.split("\n"):
-        line = line.rstrip("\r")
-        if line.strip():
-            titles.add(Path(line))
+
+    def _enum_callback(hwnd: int, _: int) -> bool:
+        if not user32.IsWindowVisible(hwnd):
+            return True
+        title_buf = ctypes.create_unicode_buffer(256)
+        if user32.GetWindowTextW(hwnd, title_buf, 256) == 0:
+            return True
+        title = title_buf.value
+        if not title:
+            return True
+        pid = ctypes.wintypes.DWORD()
+        user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+        hproc = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid.value)
+        if not hproc:
+            return True
+        try:
+            name_buf = ctypes.create_unicode_buffer(260)
+            size = ctypes.wintypes.DWORD(260)
+            if kernel32.QueryFullProcessImageNameW(hproc, 0, name_buf, ctypes.byref(size)):
+                if "code" in name_buf.value.lower():
+                    titles.add(Path(title))
+        finally:
+            kernel32.CloseHandle(hproc)
+        return True
+
+    WNDENUMPROC = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.wintypes.HWND, ctypes.wintypes.LPARAM)
+    user32.EnumWindows(WNDENUMPROC(_enum_callback), 0)
     return titles
 
 
