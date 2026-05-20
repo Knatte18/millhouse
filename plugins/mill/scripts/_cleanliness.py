@@ -4,7 +4,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-import _subprocess_util
+import _pygit2_util
 
 
 def capture_snapshot(worktree: Path, snapshot_path: Path) -> None:
@@ -15,12 +15,9 @@ def capture_snapshot(worktree: Path, snapshot_path: Path) -> None:
     The on-disk file is committed on the task branch by mill-go's batch-start
     commit so it survives crash/resume.
     """
-    result = _subprocess_util.run(
-        ["git", "-C", str(worktree), "status", "--porcelain", "--untracked-files=no"],
-        check=True,
-    )
+    lines = _pygit2_util.status_porcelain(worktree, include_untracked=False)
     snapshot_path.parent.mkdir(parents=True, exist_ok=True)
-    snapshot_path.write_text(result.stdout, encoding="utf-8")
+    snapshot_path.write_text("\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
 
 
 def compute_new_dirt(worktree: Path, snapshot_path: Path) -> list[str]:
@@ -42,11 +39,8 @@ def compute_new_dirt(worktree: Path, snapshot_path: Path) -> list[str]:
         )
         pre_text = ""
 
-    result = _subprocess_util.run(
-        ["git", "-C", str(worktree), "status", "--porcelain", "--untracked-files=no"],
-        check=True,
-    )
-    post_text = result.stdout
+    lines = _pygit2_util.status_porcelain(worktree, include_untracked=False)
+    post_text = "\n".join(lines) + ("\n" if lines else "")
 
     pre_set = {line for line in pre_text.splitlines() if line}
     post_set = {line for line in post_text.splitlines() if line}
