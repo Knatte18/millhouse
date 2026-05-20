@@ -257,11 +257,7 @@ def list_worktrees(cwd: Path) -> list[dict[str, str | None]]:
                     gitdir_file = wt_dir / "gitdir"
                     try:
                         gitdir_content = gitdir_file.read_text(encoding="utf-8").strip()
-                        wt_git_path = Path(gitdir_content).resolve()
-                        if wt_git_path.is_file():
-                            wt_root = wt_git_path.parent
-                        else:
-                            wt_root = wt_git_path.parent
+                        wt_root = (wt_dir / Path(gitdir_content)).resolve().parent
                     except (OSError, UnicodeDecodeError):
                         continue
 
