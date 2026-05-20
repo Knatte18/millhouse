@@ -21,7 +21,7 @@ Creates the `_pygit2_util.py` helper module and adds `pygit2` as a project depen
   - `plugins/mill/pyproject.toml`
 - **Edits:**
   - `plugins/mill/pyproject.toml`
-  - `uv.lock`
+  - `plugins/mill/uv.lock`
 - **Creates:** none
 - **Deletes:** none
 - **Requirements:**

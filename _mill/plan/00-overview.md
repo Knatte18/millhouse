@@ -77,4 +77,4 @@ batches:
 - `plugins/mill/scripts/_review_common.py`
 - `plugins/mill/scripts/_worktree.py`
 - `plugins/mill/unit_tests/test-pygit2-util.py`
-- `uv.lock`
+- `plugins/mill/uv.lock`
