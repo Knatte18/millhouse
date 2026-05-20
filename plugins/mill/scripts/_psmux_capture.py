@@ -31,7 +31,11 @@ def extract_response(
 
     begin_idx = None
     for i, line in enumerate(lines):
-        if line.strip() == begin_marker:
+        cleaned = line.strip()
+        # Claude TUI prepends "● " to the first line of each response.
+        if cleaned.startswith("● "):
+            cleaned = cleaned[2:]
+        if cleaned == begin_marker:
             begin_idx = i
             break
 
