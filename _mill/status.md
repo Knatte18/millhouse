@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-_pygit2_util foundation
+phase: approved-unit tests
 slug: pygit2-git-ops
 branch: hanf/pygit2-git-ops
 plan: _mill/plan
@@ -27,6 +27,7 @@ plan-fix-r3  '2026-05-20T11:07:01Z'
 planned  '2026-05-20T11:10:27Z'
 implementing  '2026-05-20T11:13:13Z'
 approved-_pygit2_util foundation  '2026-05-20T11:16:01Z'
+approved-unit tests  '2026-05-20T11:18:14Z'
 ```
 
 ## Batches
@@ -38,7 +39,7 @@ batches:
     implementer_session: da3bccd7-3198-40e3-b036-c248c7b2e0b5
     start_sha: 4822f4e02ccf718a962da8565661bb4a8eb99d41
   - name: unit tests
-    state: running
+    state: approved
     implementer_session: daea89bc-cdde-4a4d-8233-a5a8b69d9f1b
     start_sha: 3cfdeb015253912d4799efe55c8ee7cd69c6be24
   - name: migrate _paths.py
