@@ -89,6 +89,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import _subprocess_util
+import _pygit2_util
 from _sibling import resolve_path
 
 
@@ -114,13 +115,10 @@ __all__ = [
 
 def resolve_git_root(start: Path | None = None) -> Path:
     """Return the git toplevel for ``start`` (default: current working directory)."""
-    if start is None:
-        result = _subprocess_util.run(["git", "rev-parse", "--show-toplevel"])
-    else:
-        result = _subprocess_util.run(["git", "-C", str(start), "rev-parse", "--show-toplevel"])
-    if result.returncode != 0:
-        raise SystemExit(f"Not in a git repository: {result.stderr.strip()!r}")
-    repo_root = Path(result.stdout.strip())
+    try:
+        repo_root = _pygit2_util.discover_workdir(start)
+    except _pygit2_util.GitOpsError as e:
+        raise SystemExit(f"Not in a git repository: {e}")
     if repo_root.name == "wiki":
         raise SystemExit(
             f"cwd is inside wiki ({repo_root}) — scripts must run from a task worktree"
