@@ -38,7 +38,9 @@ batches:
     implementer_session: da3bccd7-3198-40e3-b036-c248c7b2e0b5
     start_sha: 4822f4e02ccf718a962da8565661bb4a8eb99d41
   - name: unit tests
-    state: pending
+    state: running
+    implementer_session: daea89bc-cdde-4a4d-8233-a5a8b69d9f1b
+    start_sha: 3cfdeb015253912d4799efe55c8ee7cd69c6be24
   - name: migrate _paths.py
     state: pending
   - name: migrate _marker.py and _worktree.list_worktrees
