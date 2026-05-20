@@ -40,14 +40,16 @@ Protocol: JSON over stdin/stdout.
 
 ```json
 // Commands (orchestrator → worker)
-{"cmd": "prompt",  "text": "...", "model": "haiku", "tools": [...], "session_id": "abc"}
+{"cmd": "start",   "provider": "ollama", "model": "llama3", "orchestrator_pid": 12345}
+{"cmd": "prompt",  "session_id": "abc", "text": "...", "tools": [...]}
 {"cmd": "resume",  "session_id": "abc", "input": "..."}
 {"cmd": "kill",    "session_id": "abc"}
 
 // Responses (worker → orchestrator)
-{"status": "success",   "response": "...", "session_id": "abc"}
-{"status": "escalate",  "question": "...", "context": "...", "session_id": "abc"}
-{"status": "stuck",     "reason": "...",   "session_id": "abc"}
+{"status": "ready",     "session_id": "abc"}
+{"status": "success",   "session_id": "abc", "response": "..."}
+{"status": "escalate",  "session_id": "abc", "question": "...", "context": "..."}
+{"status": "stuck",     "session_id": "abc", "reason": "..."}
 ```
 
 Key design decisions:
@@ -86,16 +88,17 @@ Responsibilities:
 
 All state mutations go through this module so it can maintain an in-process cache.
 
-### 5. Review pipeline
+### 5. Prompt rendering
 
-Template rendering and verdict parsing. Decoupled from the LLM layer — takes a rendered prompt string, returns a structured verdict.
+Template rendering and structured output parsing. Decoupled from the LLM layer — takes a template + tokens + files, returns a rendered prompt string; takes an LLM response, returns a parsed result. Applies to every LLM role: reviewer, implementer, planner, discussion handler.
 
 Responsibilities:
-- Render review prompt from template + tokens + file content
-- Parse verdict from fenced yaml block (`APPROVE` / `REQUEST_CHANGES` / `NEED_CONTEXT`)
-- Bulk/tool-use mode selection per reviewer strategy
+- Render prompt from template + tokens + file content (via `_render.py`)
+- Parse structured output from fenced blocks (verdict yaml, JSON result, etc.)
+- Role-specific parser per output schema (e.g. `APPROVE`/`REQUEST_CHANGES` for reviews, `status`/`commit_sha` for implementer)
+- Bulk/tool-use mode selection per role strategy
 
-No knowledge of how the LLM is called — that is module 2's job.
+No knowledge of how the LLM is called — that is module 2's job. The difference between roles is only which template and which output parser is used.
 
 ### 6. Codeguide
 
