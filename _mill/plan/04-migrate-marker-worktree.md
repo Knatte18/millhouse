@@ -87,4 +87,4 @@ Replaces the two subprocess calls in `_marker.py` (`slug_from_branch` and `task_
 
 ## Batch Tests
 
-Batch verify runs `test-marker.py` and `test-worktree.py`. `test-marker.py` covers `slug_from_branch` with real git repos (happy path, empty prefix, detached HEAD, prefix mismatch). `test-worktree.py` covers `list_worktrees` and the write operations that remain subprocess.
+Batch verify runs `test-marker.py` and `test-worktree.py`. `test-marker.py` covers `slug_from_branch` with real git repos (happy path, empty prefix, detached HEAD, prefix mismatch). `test-worktree.py` covers `list_worktrees` and the write operations that remain subprocess. The subprocess mock patches in `test-worktree.py` (at lines ~139–275) all target `_worktree._subprocess_util.run` for `remove_safe` write operations only — no mock patches exist for `list_worktrees`, which already uses real git repos in its test cases. No test update card is needed for `test-worktree.py`.

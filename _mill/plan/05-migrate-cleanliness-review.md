@@ -4,7 +4,7 @@
 task: Replace git subprocess calls with pygit2
 batch: migrate _cleanliness.py and _review_common.py
 number: 5
-cards: 2
+cards: 3
 verify: "uv run --project plugins/mill python plugins/mill/unit_tests/test-cleanliness.py && uv run --project plugins/mill python plugins/mill/unit_tests/test-review-common-guard.py"
 depends-on: [1]
 ```
@@ -99,6 +99,50 @@ Replaces the two subprocess calls in `_cleanliness.py` (`capture_snapshot` and `
   - Keep `import _subprocess_util` in `_review_common.py` — `bulk_files_with_diff` at line ~769 still uses `_subprocess_util.run(["git", "diff", ...])`.
 - **Commit:** `refactor(_review_common): replace subprocess HEAD/status calls with _pygit2_util`
 
+### Card 12: Update test-cleanliness.py mock tests for pygit2 migration
+
+- **Context:**
+  - `plugins/mill/scripts/_pygit2_util.py`
+- **Edits:**
+  - `plugins/mill/unit_tests/test-cleanliness.py`
+- **Creates:** none
+- **Deletes:** none
+- **Requirements:**
+  After migration, `_cleanliness.py` calls `_pygit2_util.status_porcelain` instead of `_subprocess_util.run`. All nine tests in `test-cleanliness.py` patch `_subprocess_util.run` and pass a plain `tempfile.TemporaryDirectory()` (not a git repo) as the worktree — after migration they will raise `GitOpsError` because pygit2 requires a real repository.
+
+  **Tests 1–8 (`compute_new_dirt`, lines ~24–152):** For each test, replace:
+  ```python
+  with unittest.mock.patch("_subprocess_util.run", return_value=_mock_run("<stdout>")):
+      result = compute_new_dirt(Path(tmp), snapshot_path)
+  ```
+  with:
+  ```python
+  with unittest.mock.patch("_cleanliness._pygit2_util.status_porcelain", return_value=[<list>]):
+      result = compute_new_dirt(Path(tmp), snapshot_path)
+  ```
+  The mock `return_value` must be `list[str]` — each element is a porcelain line without a trailing `\n`. Translate each `_mock_run(stdout)` to the equivalent list: e.g. `_mock_run(" M b.txt\n M a.txt\n")` → `[" M a.txt", " M b.txt"]` (already sorted, no trailing newlines). For CRLF test 8, the mock returns `[" M file.txt"]` — no CRLF handling is needed since pygit2 returns clean strings; the test still verifies that a CRLF snapshot file produces no false-positive new dirt.
+
+  **Test 9 (`capture_snapshot`, lines ~154–173):** Replace:
+  ```python
+  with unittest.mock.patch("_subprocess_util.run", return_value=_mock_run(" M file.txt\n")) as mock:
+      capture_snapshot(Path(tmp), snapshot_path)
+  called_argv = mock.call_args.args[0]
+  assert called_argv[:3] == ["git", "-C", str(Path(tmp))], ...
+  assert snapshot_path.exists(), ...
+  assert content == " M file.txt\n", ...
+  ```
+  with:
+  ```python
+  with unittest.mock.patch("_cleanliness._pygit2_util.status_porcelain", return_value=[" M file.txt"]):
+      capture_snapshot(Path(tmp), snapshot_path)
+  assert snapshot_path.exists(), ...
+  assert content == " M file.txt\n", ...
+  ```
+  Remove the `called_argv` variable and its assertion — they tested subprocess argument format which is no longer applicable. Keep the file existence and content assertions: the output file format (`" M file.txt\n"` with trailing newline) is preserved by the new implementation's `"\n".join(lines) + "\n"` logic.
+
+  **Cleanup:** Remove the `_mock_run` helper function if no tests reference it after the replacements. Add `import _pygit2_util` at the top of the test file only if a test directly calls `_pygit2_util` API (the string-based patch `"_cleanliness._pygit2_util.status_porcelain"` does not require it). Remove `import _subprocess_util` if it is no longer used.
+- **Commit:** `test(_cleanliness): update mock patches for pygit2 migration`
+
 ## Batch Tests
 
-Batch verify runs `test-cleanliness.py` (covers `capture_snapshot`, `compute_new_dirt`, and the line-set diff arithmetic) and `test-review-common-guard.py` (covers `worktree_snapshot_guard` — the context manager that calls `_capture_head_sha` and `_capture_porcelain`).
+Batch verify runs `test-cleanliness.py` (covers `capture_snapshot`, `compute_new_dirt`, and the line-set diff arithmetic) and `test-review-common-guard.py` (covers `worktree_snapshot_guard` — the context manager that calls `_capture_head_sha` and `_capture_porcelain`). `test-review-common-guard.py` uses `subprocess.run` (stdlib) for real git fixture setup only — it has no mock patches on `_capture_head_sha` or `_capture_porcelain`, so it requires no update card.

@@ -54,7 +54,7 @@ Creates the `_pygit2_util.py` helper module and adds `pygit2` as a project depen
 
   **`discover_workdir(start: Path | None = None) -> Path`:** calls `open_repo(start or Path.cwd())`, returns `Path(repo.workdir).resolve()`. On `GitOpsError`, re-raises. If `repo.workdir` is `None` (bare repo), raises `GitOpsError(f"bare repository has no working directory: {start or Path.cwd()}")`.
 
-  **`resolve_common_dir_parent(git_root: Path) -> Path`:** calls `open_repo(git_root)`. Computes `git_dir = Path(repo.path).resolve()`. If `git_dir.parent.name == "worktrees"` (i.e., we are in a linked worktree whose git dir is at `<main>/.git/worktrees/<name>/`), return `git_dir.parent.parent.parent` (the main worktree root). Otherwise return `git_dir.parent` (the main worktree root when we are in the main worktree, where `repo.path` ends in `.git/`). On `GitOpsError`, re-raises.
+  **`resolve_common_dir_parent(git_root: Path) -> Path`:** calls `open_repo(git_root)`. Computes `git_dir = Path(repo.path).resolve()`. If `git_dir.parent.name == "worktrees" and git_dir.parent.parent.name == ".git"` (i.e., we are in a linked worktree whose git dir is at `<main>/.git/worktrees/<name>/`), return `git_dir.parent.parent.parent` (the main worktree root). Otherwise return `git_dir.parent` (the main worktree root when we are in the main worktree, where `repo.path` ends in `.git/`). On `GitOpsError`, re-raises.
 
   **`head_sha(path: Path) -> str`:** calls `open_repo(path)`. Returns `str(repo.head.target)`. On `pygit2.GitError` (e.g., unborn HEAD) or `GitOpsError`, raises `GitOpsError(f"could not read HEAD SHA in {path}: ...")` with the original error stringified (ASCII-only: replace any non-ASCII chars with `?`).
 
@@ -74,13 +74,13 @@ Creates the `_pygit2_util.py` helper module and adds `pygit2` as a project depen
   - Otherwise: append `f"{x}{y} {filepath}"`.
   - Return `sorted(lines)`. On `pygit2.GitError` or `GitOpsError`, raises `GitOpsError(f"could not get status in {path}: ...")`.
 
-  **`list_worktrees(cwd: Path) -> list[dict[str, str | None]]`:** calls `open_repo(cwd)`. Computes `git_dir = Path(repo.path).resolve()`. If `git_dir.parent.name == "worktrees"`: the common git dir is `git_dir.parent.parent`. Otherwise the common git dir is `git_dir`. Reads all worktrees as follows:
+  **`list_worktrees(cwd: Path) -> list[dict[str, str | None]]`:** calls `open_repo(cwd)`. Computes `git_dir = Path(repo.path).resolve()`. If `git_dir.parent.name == "worktrees" and git_dir.parent.parent.name == ".git"`: the common git dir is `git_dir.parent.parent`. Otherwise the common git dir is `git_dir`. Reads all worktrees as follows:
 
   1. Main worktree: path = `common_git_dir.parent`. HEAD file = `common_git_dir / "HEAD"`. Read it; if it starts with `"ref: refs/heads/"`, branch = text after that prefix (stripped). Otherwise branch = `None` (detached).
 
   2. Linked worktrees: iterate `(common_git_dir / "worktrees").iterdir()` if that directory exists. For each subdirectory `wt_dir`: read `wt_dir / "gitdir"` — it contains the path to the worktree's `.git` file (may use forward or back slashes, may be relative). Compute the worktree root as `(wt_dir / Path(content.strip())).resolve().parent` — this handles both slash conventions and relative paths correctly on Windows. Read `wt_dir / "HEAD"` for the branch (same `ref: refs/heads/` parsing as above).
 
-  3. Return a list of `{"path": str(resolved_path), "branch": branch_or_None}` dicts, main worktree first, linked worktrees in iteration order.
+  3. Return a list of `{"path": resolved_path.as_posix(), "branch": branch_or_None}` dicts, main worktree first, linked worktrees in iteration order. Use `.as_posix()` for both the main worktree path (`common_git_dir.parent.as_posix()`) and each linked worktree path, producing forward-slash paths on all platforms (matching the format of the existing subprocess-based implementation).
 
   On any `OSError` or `GitOpsError`, raises `GitOpsError(f"could not list worktrees for {cwd}: ...")`.
 
