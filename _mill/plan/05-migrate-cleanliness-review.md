@@ -15,7 +15,7 @@ Replaces the two subprocess calls in `_cleanliness.py` (`capture_snapshot` and `
 
 ## Cards
 
-### Card 9: Replace subprocess calls in _cleanliness.py
+### Card 10: Replace subprocess calls in _cleanliness.py
 
 - **Context:**
   - `plugins/mill/scripts/_pygit2_util.py`
@@ -61,7 +61,7 @@ Replaces the two subprocess calls in `_cleanliness.py` (`capture_snapshot` and `
   - Remove `import _subprocess_util` from `_cleanliness.py` (no remaining subprocess calls).
 - **Commit:** `refactor(_cleanliness): replace subprocess status calls with _pygit2_util; remove _subprocess_util import`
 
-### Card 10: Replace subprocess calls in _review_common.py
+### Card 11: Replace subprocess calls in _review_common.py
 
 - **Context:**
   - `plugins/mill/scripts/_pygit2_util.py`

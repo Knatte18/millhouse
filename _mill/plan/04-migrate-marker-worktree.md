@@ -15,7 +15,7 @@ Replaces the two subprocess calls in `_marker.py` (`slug_from_branch` and `task_
 
 ## Cards
 
-### Card 7: Replace subprocess calls in _marker.py
+### Card 8: Replace subprocess calls in _marker.py
 
 - **Context:**
   - `plugins/mill/scripts/_pygit2_util.py`
@@ -62,7 +62,7 @@ Replaces the two subprocess calls in `_marker.py` (`slug_from_branch` and `task_
   - Remove `import _subprocess_util` from `_marker.py` (no remaining subprocess calls after these replacements).
 - **Commit:** `refactor(_marker): replace subprocess branch calls with _pygit2_util; remove _subprocess_util import`
 
-### Card 8: Replace list_worktrees() subprocess call in _worktree.py
+### Card 9: Replace list_worktrees() subprocess call in _worktree.py
 
 - **Context:**
   - `plugins/mill/scripts/_pygit2_util.py`

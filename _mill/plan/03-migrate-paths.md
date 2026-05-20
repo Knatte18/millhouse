@@ -79,7 +79,7 @@ Replaces the three subprocess git calls in `_paths.py` with `_pygit2_util` helpe
   - After this replacement, `_subprocess_util` is no longer used anywhere in `_paths.py`. Remove the `import _subprocess_util` line from `_paths.py`.
 - **Commit:** `refactor(_paths): replace resolve_active_worktree branch call with _pygit2_util; remove _subprocess_util import`
 
-### Card 11: Update test-paths.py mock tests to work without _subprocess_util
+### Card 7: Update test-paths.py mock tests to work without _subprocess_util
 
 - **Context:**
   - `plugins/mill/scripts/_pygit2_util.py`
