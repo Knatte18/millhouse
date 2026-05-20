@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: pygit2-git-ops
 branch: hanf/pygit2-git-ops
 plan: _mill/plan
@@ -25,4 +25,21 @@ plan-fix-r2  '2026-05-20T11:00:19Z'
 plan-review-r3  '2026-05-20T11:07:01Z'
 plan-fix-r3  '2026-05-20T11:07:01Z'
 planned  '2026-05-20T11:10:27Z'
+implementing  '2026-05-20T11:13:13Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: _pygit2_util foundation
+    state: pending
+  - name: unit tests
+    state: pending
+  - name: migrate _paths.py
+    state: pending
+  - name: migrate _marker.py and _worktree.list_worktrees
+    state: pending
+  - name: migrate _cleanliness.py and _review_common.py
+    state: pending
 ```
