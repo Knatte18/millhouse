@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-fix-r3
+phase: planned
 slug: pygit2-git-ops
 branch: hanf/pygit2-git-ops
 plan: _mill/plan
@@ -24,4 +24,5 @@ plan-review-r2  '2026-05-20T11:00:19Z'
 plan-fix-r2  '2026-05-20T11:00:19Z'
 plan-review-r3  '2026-05-20T11:07:01Z'
 plan-fix-r3  '2026-05-20T11:07:01Z'
+planned  '2026-05-20T11:10:27Z'
 ```

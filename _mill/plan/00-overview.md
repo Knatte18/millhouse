@@ -3,7 +3,7 @@
 ```yaml
 task: Replace git subprocess calls with pygit2
 slug: pygit2-git-ops
-approved: false
+approved: true
 started: 20260520-102836
 parent: main
 root: ""
