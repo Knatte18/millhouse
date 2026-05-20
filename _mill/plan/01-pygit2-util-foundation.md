@@ -67,7 +67,7 @@ Creates the `_pygit2_util.py` helper module and adds `pygit2` as a project depen
   - Y char (worktree axis, highest priority first): check in order — bit 128 → `"?"`, bit 256 → `"M"`, bit 512 → `"D"`, bit 1024 → `"T"`, bit 2048 → `"R"`. Default `" "`.
   - Return `(x, y)`.
 
-  **`status_porcelain(path: Path, *, include_untracked: bool = True) -> list[str]`:** calls `open_repo(path)`. Calls `repo.status()` which returns `dict[str, int]` (path → flags). For each `(filepath, flags)` pair:
+  **`status_porcelain(path: Path, *, include_untracked: bool = True) -> list[str]`:** calls `open_repo(path)`. Calls `repo.status()` which returns `dict[str, int]` (path → flags). Note: for index-renamed files, `repo.status()` returns only the new path (bit 8 set, no `oldpath -> newpath` format). Callers that do line-set arithmetic (e.g. `_cleanliness.compute_new_dirt`, `_review_common._filter_porcelain`) are unaffected because they compare sets of opaque strings; within-session comparisons are self-consistent. Document this in the `status_porcelain` docstring. For each `(filepath, flags)` pair:
   - Call `_flags_to_xy(flags)` to get `(x, y)`.
   - If `x == "!" and y == "!"`: skip (ignored entry, never included).
   - If `x == " " and y == "?"` (untracked): if `not include_untracked`, skip; otherwise append `f"?? {filepath}"`.
@@ -78,7 +78,7 @@ Creates the `_pygit2_util.py` helper module and adds `pygit2` as a project depen
 
   1. Main worktree: path = `common_git_dir.parent`. HEAD file = `common_git_dir / "HEAD"`. Read it; if it starts with `"ref: refs/heads/"`, branch = text after that prefix (stripped). Otherwise branch = `None` (detached).
 
-  2. Linked worktrees: iterate `(common_git_dir / "worktrees").iterdir()` if that directory exists. For each subdirectory `wt_dir`: read `wt_dir / "gitdir"` to get the worktree path (it contains the path to the worktree's `.git` file; strip `"/.git"` suffix and resolve). Read `wt_dir / "HEAD"` for the branch (same `ref: refs/heads/` parsing as above).
+  2. Linked worktrees: iterate `(common_git_dir / "worktrees").iterdir()` if that directory exists. For each subdirectory `wt_dir`: read `wt_dir / "gitdir"` — it contains the path to the worktree's `.git` file (may use forward or back slashes, may be relative). Compute the worktree root as `(wt_dir / Path(content.strip())).resolve().parent` — this handles both slash conventions and relative paths correctly on Windows. Read `wt_dir / "HEAD"` for the branch (same `ref: refs/heads/` parsing as above).
 
   3. Return a list of `{"path": str(resolved_path), "branch": branch_or_None}` dicts, main worktree first, linked worktrees in iteration order.
 
