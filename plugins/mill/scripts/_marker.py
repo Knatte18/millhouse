@@ -18,7 +18,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-import _subprocess_util
+import _pygit2_util
 import _tasks_md
 
 
@@ -40,11 +40,11 @@ def slug_from_branch(git_root: Path, wiki_path: Path, cfg: dict) -> str:
     Raises:
         MarkerError: On detached HEAD, prefix mismatch, or missing slug.
     """
-    result = _subprocess_util.run(
-        ["git", "-C", str(git_root), "branch", "--show-current"]
-    )
-    branch = result.stdout.strip()
-    if not branch:
+    try:
+        branch = _pygit2_util.current_branch(git_root)
+    except _pygit2_util.GitOpsError as e:
+        raise MarkerError(f"could not read branch in {git_root}: {e}") from e
+    if branch is None:
         raise MarkerError("detached HEAD or non-branch state")
 
     prefix = cfg.get("spawn", {}).get("branch_prefix", "")
@@ -88,9 +88,10 @@ def task_data(git_root: Path, wiki_path: Path, cfg: dict) -> dict:
     """
     slug = slug_from_branch(git_root, wiki_path, cfg)
 
-    branch = _subprocess_util.run(
-        ["git", "-C", str(git_root), "branch", "--show-current"]
-    ).stdout.strip()
+    try:
+        branch = _pygit2_util.current_branch(git_root) or ""
+    except _pygit2_util.GitOpsError as e:
+        raise MarkerError(f"could not read branch in {git_root}: {e}") from e
 
     home_text = (wiki_path / "Home.md").read_text(encoding="utf-8")
     tasks = _tasks_md.parse(home_text)
