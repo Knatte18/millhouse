@@ -73,36 +73,36 @@ Mill scripts spawn a new git process per operation, costing ~150ms on Windows pe
 ### `_pygit2_util.py` public API
 
 ```python
-# All helpers raise SystemExit or specific errors on failure (matching
-# the existing _subprocess_util pattern so callers behave identically).
+class GitOpsError(RuntimeError):
+    """Raised by all _pygit2_util helpers on failure.
+    Subclass of RuntimeError (-> Exception) so callers can use except Exception:."""
 
 def open_repo(path: Path) -> pygit2.Repository:
     """Open the repo whose working tree contains `path`. Handles both
-    main worktrees and linked worktrees. Raises SystemExit if not a git repo."""
+    main worktrees and linked worktrees. Raises GitOpsError if not a git repo."""
 
 def discover_workdir(start: Path | None = None) -> Path:
     """Return the working-tree root (replaces `git rev-parse --show-toplevel`).
-    Uses pygit2.discover_repository() then repo.workdir."""
+    Uses pygit2.discover_repository() then repo.workdir. Raises GitOpsError."""
 
 def resolve_common_dir_parent(git_root: Path) -> Path:
     """Return the main worktree root (replaces `git rev-parse --git-common-dir`).
-    Uses repo.path to determine whether git_root is a linked worktree:
-    if Path(repo.path).parent.name == 'worktrees' -> linked -> go up 3 levels.
-    Otherwise -> main -> go up 1 level from repo.path."""
+    Uses repo.path: if Path(repo.path).parent.name == 'worktrees' -> linked -> up 3.
+    Otherwise -> main -> up 1. Raises GitOpsError."""
 
 def head_sha(path: Path) -> str:
-    """Return HEAD commit SHA as hex string. Raises SystemExit on detached or error."""
+    """Return HEAD commit SHA as hex string. Raises GitOpsError on detached or error."""
 
 def current_branch(path: Path) -> str | None:
-    """Return current branch shortname, or None on detached HEAD."""
+    """Return current branch shortname, or None on detached HEAD. Raises GitOpsError."""
 
 def status_porcelain(path: Path, *, include_untracked: bool = True) -> list[str]:
     """Return git status as porcelain v1 lines (XY path), sorted.
-    include_untracked=False excludes entries where the only flag is WT_NEW."""
+    include_untracked=False excludes WT_NEW-only entries. Raises GitOpsError."""
 
 def list_worktrees(cwd: Path) -> list[dict[str, str | None]]:
     """Return list of {path, branch} dicts for all worktrees (main + linked).
-    Reads HEAD files from the git object database; no subprocess."""
+    Reads HEAD files from the git object database; no subprocess. Raises GitOpsError."""
 ```
 
 ### pygit2 flag-to-XY mapping
@@ -154,7 +154,14 @@ Both `capture_snapshot()` and `compute_new_dirt()` use `--untracked-files=no`. M
 
 ### Exception type contract for `_capture_head_sha` and `_capture_porcelain`
 
-`_pygit2_util.head_sha()` and `status_porcelain()` raise `SystemExit` on failure (the general `_pygit2_util` contract, matching how callers of `_paths.py` behave). However, `_capture_head_sha()` and `_capture_porcelain()` in `_review_common.py` document raising `ReviewError`, and `worktree_snapshot_guard` explicitly relies on this type to distinguish capture failures from inner-block exceptions (see its docstring). **Decision:** `_review_common.py` wraps any exception from `_pygit2_util` calls into `ReviewError` at the call site — i.e., `_capture_head_sha` catches `Exception` from `head_sha()` and re-raises as `ReviewError(...)`. `_pygit2_util` itself does not accept an `exc_type` parameter.
+`_pygit2_util.py` defines a module-level `GitOpsError(RuntimeError)` exception class. All public helpers (`head_sha`, `status_porcelain`, `current_branch`, `discover_workdir`, etc.) raise `GitOpsError` on failure — never `SystemExit`. `GitOpsError` is a subclass of `RuntimeError` → `Exception` → `BaseException`, so `except Exception:` catches it.
+
+Callers map `GitOpsError` to the error type their layer expects:
+- **`_paths.py`** wrappers catch `GitOpsError` and re-raise as `SystemExit(message)` — preserving the existing `_paths` error surface.
+- **`_review_common._capture_head_sha` and `_capture_porcelain`** catch `GitOpsError` and re-raise as `ReviewError(message)` — preserving the contract that `worktree_snapshot_guard` relies on.
+- **`_marker.py`** and **`_cleanliness.py`** callers catch `GitOpsError` and re-raise as `SystemExit` or `MarkerError` as appropriate.
+
+`_pygit2_util` itself does not accept an `exc_type` parameter — exception mapping is the caller's responsibility.
 
 ### `_review_common._capture_porcelain()` uses plain `--porcelain`
 
