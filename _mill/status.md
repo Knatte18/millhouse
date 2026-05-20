@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-migrate _cleanliness.py and _review_common.py
+phase: holistic-reviewing
 slug: pygit2-git-ops
 branch: hanf/pygit2-git-ops
 plan: _mill/plan
@@ -31,6 +31,7 @@ approved-unit tests  '2026-05-20T11:18:14Z'
 approved-migrate _paths.py  '2026-05-20T11:22:50Z'
 approved-migrate _marker.py and _worktree.list_worktrees  '2026-05-20T11:25:57Z'
 approved-migrate _cleanliness.py and _review_common.py  '2026-05-20T11:31:28Z'
+holistic-reviewing  '2026-05-20T11:32:06Z'
 ```
 
 ## Batches
