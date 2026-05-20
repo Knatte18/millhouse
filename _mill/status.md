@@ -33,7 +33,9 @@ implementing  '2026-05-20T11:13:13Z'
 ```yaml
 batches:
   - name: _pygit2_util foundation
-    state: pending
+    state: running
+    implementer_session: da3bccd7-3198-40e3-b036-c248c7b2e0b5
+    start_sha: 4822f4e02ccf718a962da8565661bb4a8eb99d41
   - name: unit tests
     state: pending
   - name: migrate _paths.py
