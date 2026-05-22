@@ -3,7 +3,7 @@
 ```yaml
 task: V3 wiki module with daemon and in-process cache
 slug: v3-wiki-module
-approved: false
+approved: true
 started: 20260522-111104
 parent: main
 root: ""

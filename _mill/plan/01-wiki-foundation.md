@@ -37,7 +37,7 @@ Batch-local decision: `_store.py` exposes a stateful `Store` class rather than m
   - `plugins/mill/scripts/wiki/_store.py`
 - **Deletes:** none
 - **Requirements:**
-  Import `hashlib` from stdlib only. Define `class Store`: instance var `_cache: dict[str, tuple[str, str]]` (maps `rel_path -> (content, hash)`). Method `content_hash(content: str) -> str` — returns `hashlib.sha256(content.encode("utf-8")).hexdigest()`. Method `set(rel_path: str, content: str) -> None` — computes hash via `content_hash`, stores `(content, hash)`. Method `get(rel_path: str) -> tuple[str, str] | None` — returns `(content, hash)` or `None` on miss. Method `invalidate(rel_path: str) -> None` — removes the entry (no-op if absent). Method `invalidate_all() -> None` — clears the entire cache. No TTL, no size limit. No mill imports.
+  Import `hashlib` from stdlib only. Define `class Store`: instance var `_cache: dict[str, tuple[str, str]]` (maps `rel_path -> (content, hash)`). `@staticmethod content_hash(content: str) -> str` — returns `hashlib.sha256(content.encode("utf-8")).hexdigest()`; decorated `@staticmethod` so callers can invoke it as `Store.content_hash(content)` without an instance. Method `set(rel_path: str, content: str) -> None` — computes hash via `Store.content_hash(content)`, stores `(content, hash)`. Method `get(rel_path: str) -> tuple[str, str] | None` — returns `(content, hash)` or `None` on miss. Method `invalidate(rel_path: str) -> None` — removes the entry (no-op if absent). Method `invalidate_all() -> None` — clears the entire cache. No TTL, no size limit. No mill imports.
 - **Commit:** `feat(wiki): add _store.py in-process content cache`
 
 ## Batch Tests

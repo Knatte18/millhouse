@@ -85,7 +85,7 @@ Batch-local decision: `run-all.py` — `test-wiki-store.py`, `test-wiki-protocol
 - **Creates:** none
 - **Deletes:** none
 - **Requirements:**
-  Add `test-wiki-store.py`, `test-wiki-protocol.py`, and `test-wiki-daemon.py` to the test registry in `run-all.py` (whichever mechanism it uses to enumerate tests — inspect the file and follow the existing pattern). Do NOT add `test-wiki-sync.py`: it uses real git subprocess calls and violates the no-real-git constraint for `run-all.py`.
+  `run-all.py` currently discovers tests via `HERE.glob("test-*.py")` with no exclusion mechanism. Adding `test-wiki-sync.py` to the directory would auto-include it, violating the no-real-git constraint. Fix: add a `SKIP: frozenset[str] = frozenset({"test-wiki-sync.py"})` constant near the top of `run-all.py`, and change the discovery line from `sorted(HERE.glob("test-*.py"))` to `sorted(p for p in HERE.glob("test-*.py") if p.name not in SKIP)`. `test-wiki-store.py`, `test-wiki-protocol.py`, and `test-wiki-daemon.py` are NOT listed in `SKIP` — they are automatically discovered and run. No other changes to `run-all.py`.
 - **Commit:** `test(wiki): register wiki unit tests in run-all.py (excluding test-wiki-sync)`
 
 ## Batch Tests
