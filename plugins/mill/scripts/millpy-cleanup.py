@@ -565,10 +565,14 @@ def apply_plan(
         else:
             try:
                 _apply_worktree_record(record, hub_root, wiki_path, junctions_cfg)
-            except _worktree.WorktreeLockedError as exc:
+            except _worktree.WorktreeError as exc:
+                hint = (
+                    "file handle held by VS Code or terminal? Close it and retry"
+                    if "Permission denied" in str(exc)
+                    else "try 'git worktree remove --force' manually"
+                )
                 print(
-                    f"REPORT: {record.slug} -- worktree locked (file handle held by VS Code or "
-                    f"terminal?); skipped. Run cleanup again after closing it. Detail: {exc}",
+                    f"REPORT: {record.slug} -- worktree removal failed ({hint}): {exc}",
                     file=sys.stderr,
                 )
                 continue
