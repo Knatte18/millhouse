@@ -153,9 +153,12 @@ exercise.
 
 - Decision: The daemon writes `<wiki>/.wiki-daemon.json` and
   `<wiki>/.wiki-daemon.log` inside the wiki clone. Both are added to the wiki
-  repo's `.gitignore` — the daemon ensures these entries exist on startup
-  (idempotent; if it adds them, it commits and pushes that one-time `.gitignore`
-  housekeeping change). State file fields: `protocol_version`, `pid`, `host`,
+  repo's `.gitignore` — the daemon ensures these entries exist (idempotent; if
+  it adds them, it commits and pushes that one-time `.gitignore` housekeeping
+  change). This housekeeping runs **only after** the daemon has won the
+  `O_EXCL` spawn race (see `spawn-race-and-staleness`) — never before, so two
+  racing daemons cannot collide on the push. State file fields:
+  `protocol_version`, `pid`, `host`,
   `port`, `token`, `started_at` (ISO-8601 UTC). It is written **once** at
   startup, **atomically** (temp file + rename), and removed on clean idle-exit.
   The log uses `logging.handlers.RotatingFileHandler` with a small cap
@@ -173,13 +176,18 @@ exercise.
 ### spawn-race-and-staleness
 
 - Decision: Two daemons writing the same clone would corrupt it, so spawn must
-  resolve to exactly one. On startup the daemon **`O_EXCL`-creates** the state
-  file *before serving*; the loser exits immediately. A stale state file (dead
-  daemon — detected via connection-refused, or dead `pid` via `os.kill(pid, 0)`
-  with the Windows-tolerant handling used in `_bg.py`) is cleared first, then
-  `O_EXCL` retried. A `protocol_version` mismatch (old daemon survived a module
-  upgrade) means the client kills the old daemon by `pid`, waits for it to die,
-  then spawns a fresh one.
+  resolve to exactly one. **`O_EXCL`-creating the state file is the very first
+  startup action** — it runs before `.gitignore` housekeeping, before binding
+  the port to serve, before anything else; a losing daemon exits immediately,
+  before it can push or serve. Only the winner proceeds to `.gitignore`
+  maintenance and then serving. A stale state file (dead daemon — detected via
+  connection-refused, or dead `pid` via `os.kill(pid, 0)` with the
+  Windows-tolerant handling used in `_bg.py`) is cleared first, then `O_EXCL`
+  retried. A `protocol_version` mismatch (old daemon survived a module upgrade)
+  means the client kills the old daemon by `pid`, waits for it to die, then
+  spawns a fresh one. The expected `protocol_version` is a single
+  `PROTOCOL_VERSION` constant in `wiki/__init__.py`, imported by both
+  `_client.py` and `_server.py` so the value cannot drift between them.
 - Rationale: Exactly-one-daemon-per-clone is the core invariant. `O_EXCL` is an
   atomic OS primitive; the loser cannot also serve.
 - Rejected: A separate spawn-lock file (extra lock, extra wait path).
@@ -225,7 +233,8 @@ exercise.
   base-hash its edit was based on; the daemon (after its pre-write pull) checks
   each file still matches that hash. Any mismatch -> the whole write is rejected
   with a `CONFLICT` response; the client re-reads the now-current file,
-  recomputes its edit, and retries (bounded retries, then raises). The V2
+  recomputes its edit, and retries — up to a default of 3 times, then raises.
+  The V2
   behaviors are preserved: `git add` -> nothing-staged means success (idempotent
   re-runs) -> `git commit` -> `git push` with **one rebase-retry** on
   non-fast-forward (`git pull --rebase`; `rebase --abort` + raise on a genuine
@@ -372,3 +381,4 @@ path-traversal rejection; read of a non-existent file.
 - **Q:** If the server can be swapped behind the socket protocol, how is it spawned? **A:** Separate `connect` from `spawn`; `spawn` is one isolated, implementation-specific launcher function (LSP model) — you isolate spawning, you do not generalize it.
 - **Q:** Where does the daemon log go, and can it grow unbounded? **A:** `<wiki>/.wiki-daemon.log`, gitignored, size-bounded via `RotatingFileHandler` (~3 MB ceiling), truncated on startup.
 - **Q:** Does V3 cover `clone_or_init` / config-`health_check` / junction readers? **A:** No — they stay in V2 `_wiki.py`; they are not document-store ops and `clone_or_init` runs before any daemon exists.
+- **Q:** (Review r1) When does the daemon's `.gitignore` housekeeping run relative to the `O_EXCL` spawn-race claim? **A:** `O_EXCL` is the very first startup action; only the winning daemon does `.gitignore` housekeeping, after winning — so two racing daemons cannot collide on the push.
