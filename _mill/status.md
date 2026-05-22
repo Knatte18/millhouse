@@ -37,8 +37,8 @@ batches:
     start_sha: 3287862e38c0333ae5f01019a4d608c2c02f5b8e
   - name: CLAUDE.md updates
     state: running
-    implementer_session: 485fc3c8-ef65-4e11-ba5d-4b08be33e1c2
-    start_sha: 2198da04da1327ba81ca399ada5283f7cd6fa6b4
+    implementer_session: ac8338f1-219e-42d3-a0d0-adef62a72741
+    start_sha: 4a8014698e63125b16cd6c69488914863a85b08b
   - name: skill replace heavy
     state: pending
   - name: skill replace remaining
