@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-Unit tests
+phase: approved-Integration test and docs
 slug: v3-wiki-module
 branch: hanf/v3-wiki-module
 plan: _mill/plan
@@ -32,6 +32,7 @@ approved-Git sync layer  '2026-05-22T11:50:17Z'
 approved-Wiki server  '2026-05-22T11:52:30Z'
 approved-Wiki client  '2026-05-22T11:54:30Z'
 approved-Unit tests  '2026-05-22T12:05:29Z'
+approved-Integration test and docs  '2026-05-22T12:08:20Z'
 ```
 
 ## Batches
@@ -63,7 +64,7 @@ batches:
     implementer_session: d14302f0-ee75-4327-a6d4-3380bd276549
     start_sha: bbef9ab78a9afd202875c2dc124b9e4a9944efe2
   - name: Integration test and docs
-    state: running
+    state: approved
     implementer_session: 8d15bcc5-1d15-4463-85f0-3dfb92168987
     start_sha: 9639356e5f91382cee19170665d040bdcfd68d84
 ```
