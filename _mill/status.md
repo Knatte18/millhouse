@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-Core implementation
 slug: psmux-idle-prompt-detection
 branch: hanf/psmux-idle-prompt-detection
 plan: _mill/plan
@@ -23,6 +23,7 @@ plan-fix-r1  '2026-05-22T07:00:01Z'
 plan-review-r2  '2026-05-22T07:04:30Z'
 planned  '2026-05-22T07:04:40Z'
 implementing  '2026-05-22T07:06:27Z'
+approved-Core implementation  '2026-05-22T07:10:14Z'
 ```
 
 ## Batches
@@ -30,7 +31,7 @@ implementing  '2026-05-22T07:06:27Z'
 ```yaml
 batches:
   - name: Core implementation
-    state: running
+    state: approved
     implementer_session: e31bcb7e-1eb1-415f-adef-cc299bc90f32
     start_sha: 7103e48c7b90c6946322d0b004d1e9391ae04a22
   - name: Tests
