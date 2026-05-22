@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-Git sync layer
+phase: approved-Wiki server
 slug: v3-wiki-module
 branch: hanf/v3-wiki-module
 plan: _mill/plan
@@ -29,6 +29,7 @@ implementing  '2026-05-22T11:44:41Z'
 approved-Wiki subpackage foundation  '2026-05-22T11:46:31Z'
 approved-Generic daemon base  '2026-05-22T11:48:19Z'
 approved-Git sync layer  '2026-05-22T11:50:17Z'
+approved-Wiki server  '2026-05-22T11:52:30Z'
 ```
 
 ## Batches
@@ -48,7 +49,7 @@ batches:
     implementer_session: cc86f28d-21ad-4a6e-b8c3-f83f29f9ab42
     start_sha: 148312ba4bfe0ca40eb66932406affe0b80f3faa
   - name: Wiki server
-    state: running
+    state: approved
     implementer_session: 2b439679-031f-4586-a799-0705716a2e63
     start_sha: ae59afb7615fce8c87fdca3fb45810c842ba27aa
   - name: Wiki client
