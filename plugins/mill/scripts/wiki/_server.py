@@ -117,11 +117,7 @@ class WikiServer(DaemonBase):
                 pull(self._wiki_path)
                 self._store.invalidate_all()
             except WikiPushError as e:
-                return {
-                    FIELD_OK: False,
-                    FIELD_ERROR_TYPE: ERR_PUSH_FAILED,
-                    FIELD_ERROR: str(e),
-                }
+                self._log.warning("lazy refresh failed, serving cache: %s" % str(e))
 
         # Try cache hit
         hit = self._store.get(rel_path)
@@ -239,9 +235,10 @@ class WikiServer(DaemonBase):
         except FileNotFoundError:
             content = ""
 
-        # Check if both entries are present
-        has_json = ".wiki-daemon.json" in content
-        has_log = ".wiki-daemon.log" in content
+        # Check if both entries are present as lines
+        lines = content.splitlines()
+        has_json = any(line.strip() == ".wiki-daemon.json" for line in lines)
+        has_log = any(line.strip() == ".wiki-daemon.log" for line in lines)
 
         if has_json and has_log:
             return

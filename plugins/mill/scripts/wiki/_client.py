@@ -37,7 +37,7 @@ from wiki import (
 )
 
 SPAWN_TIMEOUT: int = 10
-CAS_RETRIES: int = 3
+CAS_RETRIES: int = 3  # Exported for callers; not used internally in _client.py
 _SERVER_MODULE: str = "wiki._server"
 
 
@@ -167,8 +167,8 @@ def health_check(wiki_path: Path) -> bool:
         if not all([host, port, token]):
             return False
 
-        sock = socket.create_connection((host, port), timeout=0.5)
-        sock.close()
+        req = {FIELD_OP: OP_READ, FIELD_TOKEN: token, FIELD_PATH: ""}
+        _connect_send_recv(host, port, token, req)
         return True
     except Exception:
         return False
@@ -256,7 +256,7 @@ def _spawn_server(
     scripts_dir = str(Path(__file__).parent.parent)
     pythonpath = env.get("PYTHONPATH", "")
     if pythonpath:
-        env["PYTHONPATH"] = scripts_dir + os.pathsep + pythonpath
+        env["PYTHONPATH"] = (scripts_dir + os.pathsep + pythonpath).strip(os.pathsep)
     else:
         env["PYTHONPATH"] = scripts_dir
 
