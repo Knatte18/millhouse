@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-mill-setup bootstrap
 slug: mill-python-env-var
 branch: hanf/mill-python-env-var
 plan: _mill/plan
@@ -24,6 +24,7 @@ plan-fix-r1  '2026-05-22T07:26:58Z'
 plan-review-r2  '2026-05-22T07:36:18Z'
 planned  '2026-05-22T07:36:33Z'
 implementing  '2026-05-22T07:55:46Z'
+approved-mill-setup bootstrap  '2026-05-22T07:58:22Z'
 ```
 
 ## Batches
@@ -31,7 +32,7 @@ implementing  '2026-05-22T07:55:46Z'
 ```yaml
 batches:
   - name: mill-setup bootstrap
-    state: running
+    state: approved
     implementer_session: 50451e07-d067-4536-aa54-884d90b47afd
     start_sha: 3287862e38c0333ae5f01019a4d608c2c02f5b8e
   - name: CLAUDE.md updates
