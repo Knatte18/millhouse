@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-python-env-var
 branch: hanf/mill-python-env-var
 plan: _mill/plan
@@ -23,4 +23,21 @@ plan-review-r1  '2026-05-22T07:26:58Z'
 plan-fix-r1  '2026-05-22T07:26:58Z'
 plan-review-r2  '2026-05-22T07:36:18Z'
 planned  '2026-05-22T07:36:33Z'
+implementing  '2026-05-22T07:55:46Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: mill-setup bootstrap
+    state: pending
+  - name: CLAUDE.md updates
+    state: pending
+  - name: skill replace heavy
+    state: pending
+  - name: skill replace remaining
+    state: pending
+  - name: verify
+    state: pending
 ```
