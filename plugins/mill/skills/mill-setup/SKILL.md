@@ -62,11 +62,11 @@ mill-setup is the bootstrapper that **creates** the global `PYTHONPATH` Windows 
 # WRONG — invokes from source tree
 PYTHONPATH="plugins/mill/scripts" uv run --project plugins/mill python -c "..."
 
-# RIGHT — invokes from cache (the canonical mill-script form, shared with every other mill SKILL.md)
+# RIGHT — invokes from cache (mill-setup bootstrapper exception; all other skills use "$MILL_PYTHON")
 PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "..."
 ```
 
-This direct-binary form is used by every mill SKILL.md (mill-go uses an equivalent form with `$MILL_PYTHON`, an alias defined in its Step 0 block). The source-tree form (`uv run --project plugins/mill ...`) remains the documented exception for cases where the cache path is unavailable — for example, running unit tests from the millhouse repo itself.
+This direct-binary form is used by mill-setup only (bootstrapper exception — Phase 4.8 writes `MILL_PYTHON` to `~/.claude/settings.json`; all other mill skills use `"$MILL_PYTHON"`). The source-tree form (`uv run --project plugins/mill ...`) remains the documented exception for cases where the cache path is unavailable — for example, running unit tests from the millhouse repo itself.
 
 Helpers used by this skill: `_setup` (Phase 4 — `create_hub_links`), `_gitignore` (Phase 4.5b), `_shortcuts` (Phase 4.7), `_sidebar` (Phase 6a), `_vscode` (Phase 7), `_render` (transitively via `_vscode` and `_shortcuts`), `_wiki` (Phase 3, 3.1, 6, 6a).
 
@@ -350,6 +350,32 @@ Write-Host \"Set PYTHONPATH (User) = \$scripts\"
 Log: `Set PYTHONPATH (User) = <scripts>. Note: takes effect in NEW shell sessions; current mill-setup session must keep using the inline PYTHONPATH prefix above.`
 
 **Note:** After running `update-plugins.ps1` to install a new plugin version, re-run `/mill-setup` to refresh PYTHONPATH and the PS1 wrappers to the new version. If upgrading from a pre-PS1 hub (one where `.millhouse/` still contains `.py` wrappers), re-run `/mill-setup` — Phase 4.7 is idempotent and will replace the `.py` wrappers with `.ps1` wrappers in a single pass, and Phase 8 will verify their absence.
+
+
+### Phase 4.8 — Write `MILL_PYTHON` to `~/.claude/settings.json`
+
+Sets the `MILL_PYTHON` environment variable in the global Claude Code settings so every other mill skill can reference `"$MILL_PYTHON"` instead of the full venv path. This phase is the bootstrapper exception: mill-setup cannot use `$MILL_PYTHON` in its own commands because the variable is not yet active in the current CC session (CC reads `settings.json` at startup). All other mill skills use `"$MILL_PYTHON"`.
+
+```bash
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "
+import json, os
+from pathlib import Path
+
+mill_python = str(Path(os.environ['CLAUDE_PLUGIN_ROOT']) / '.venv' / 'Scripts' / 'python.exe')
+settings_path = Path.home() / '.claude' / 'settings.json'
+
+data = json.loads(settings_path.read_text(encoding='utf-8')) if settings_path.exists() else {}
+env_block = data.setdefault('env', {})
+if env_block.get('MILL_PYTHON') == mill_python:
+    print(f'MILL_PYTHON already correct: {mill_python}')
+else:
+    env_block['MILL_PYTHON'] = mill_python
+    settings_path.write_text(json.dumps(data, indent=2), encoding='utf-8')
+    print(f'MILL_PYTHON set: {mill_python}')
+"
+```
+
+Log the result. After writing, emit: `MILL_PYTHON set in ~/.claude/settings.json. Takes effect in the next CC session -- existing sessions must restart to pick it up.`
 
 
 ### Phase 4.9 — Seed `hub_relative_path` in `config.local.yaml`
