@@ -32,13 +32,13 @@ Runs a grep verification over `plugins/mill/skills/` to confirm the full venv pa
 
   **Expected output:** exactly one line: `plugins/mill/skills/mill-setup/SKILL.md`. If any other file appears, the replacement in that file was incomplete. For each unexpected hit, re-run the `replace_all` Edit for that file and re-run the grep.
 
-  Also run the count check for mill-setup to confirm it was not accidentally modified:
+  Also run the count check for mill-setup to confirm Batch 1 added occurrences but nothing was unexpectedly removed:
 
   ```bash
   grep -c '\.venv/Scripts/python\.exe' plugins/mill/skills/mill-setup/SKILL.md
   ```
 
-  **Expected output:** `18` (the original count; no occurrences should have been added or removed from mill-setup).
+  **Expected output:** `20`. Batch 1 adds 2 new occurrences to mill-setup: one in the Phase 4.8 Bash command block (Card 1) and one in the Phase 8 verification bullet (Card 2). The pre-task baseline was 18; 18 + 2 = 20. If the count is less than 20, a Batch 1 edit was not applied. If more than 20, an unintended addition slipped in.
 
   Finally, confirm the CLAUDE.md canonical form was updated:
 

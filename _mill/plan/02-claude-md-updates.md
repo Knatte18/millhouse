@@ -75,7 +75,7 @@ Updates two CLAUDE.md files: the hub project CLAUDE.md (`CLAUDE.md` at the workt
   - **Never use `python3`.** On Windows, `python3` is a broken Microsoft Store alias. Bare `python` works (Python 3.13.1 is installed). For mill scripts, use `$MILL_PYTHON` (set by mill-setup in `~/.claude/settings.json`). Exception: mill-setup itself uses the full path `${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe` since it is the bootstrapper.
   ```
 
-- **Commit:** `docs(user-CLAUDE.md): update mill script path to use $MILL_PYTHON`
+- **Commit:** none — `C:\Users\hanf\.claude\CLAUDE.md` is outside the task git repository. Make the edit directly; do not attempt `git add` or `git commit` for this file. The change is tracked only in the user's local file system, not in the repo history.
 
 ## Batch Tests
 
