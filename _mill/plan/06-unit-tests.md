@@ -4,7 +4,7 @@
 task: V3 wiki module with daemon and in-process cache
 batch: Unit tests
 number: 6
-cards: 4
+cards: 5
 verify: "PYTHONPATH=plugins/mill/scripts python plugins/mill/unit_tests/test-wiki-store.py && PYTHONPATH=plugins/mill/scripts python plugins/mill/unit_tests/test-wiki-protocol.py && PYTHONPATH=plugins/mill/scripts python plugins/mill/unit_tests/test-wiki-daemon.py && PYTHONPATH=plugins/mill/scripts python plugins/mill/unit_tests/test-wiki-sync.py"
 depends-on: [5]
 ```
@@ -14,6 +14,8 @@ depends-on: [5]
 Writes four unit test files covering the pure logic of the wiki module. Tests follow the existing unit test style in `plugins/mill/unit_tests/` — standalone scripts that print `PASS`/`FAIL` per case and exit 0 on all-pass, non-zero on any failure. No pytest, no real daemon socket or process except in `test-wiki-sync.py` which uses a real tempfile git repo (bare remote + working clone). Each test file is self-contained and runnable via `PYTHONPATH=plugins/mill/scripts python <file>`.
 
 Batch-local decision: `test-wiki-sync.py` requires git to be available on PATH. This is acceptable for the unit test tier because real git in a tempfile repo is fast (sub-second) and produces deterministic results.
+
+Batch-local decision: `run-all.py` — `test-wiki-store.py`, `test-wiki-protocol.py`, and `test-wiki-daemon.py` are added to `run-all.py` (they satisfy the in-memory/tempfile constraint). `test-wiki-sync.py` is excluded from `run-all.py` because it uses real git subprocess calls, violating the "no real git" constraint documented in the unit test README. It is covered by the batch verify command instead.
 
 ## Cards
 
@@ -71,13 +73,28 @@ Batch-local decision: `test-wiki-sync.py` requires git to be available on PATH. 
   All tests use tempfile dirs; no real TCP socket or accept loop. Cover: (1) `_write_state_file(path, data)`: call it, read back the JSON, assert fields match; (2) `_is_stale` returns True when given a state dict with `pid=os.getpid()+999999` (non-existent PID) — call the method directly on a `DaemonBase` subclass instance; (3) `_is_stale` returns False when given a state dict with `pid=os.getpid()` (current process); (4) O_EXCL claim: `open(path, 'x')` succeeds once; second `open(path, 'x')` raises `FileExistsError` — assert this is the correct behavior (not testing `DaemonBase.run()`, just the O_EXCL primitive); (5) Idle-timeout computation: elapsed > idle_timeout triggers exit — test the predicate `(time.monotonic() - last_activity) > idle_timeout` with injected values; (6) `.gitignore` idempotent: write a `.gitignore` with `.wiki-daemon.json` already present; call a standalone helper that checks and appends missing entries; verify the file still has exactly one occurrence of `.wiki-daemon.json` after a second call. For (2) and (3), subclass `DaemonBase` with a trivial `handle_request` so it can be instantiated.
 - **Commit:** `test(wiki): add test-wiki-daemon.py daemon base logic tests`
 
+### Card 11: `run-all.py` — register wiki unit tests
+
+- **Context:**
+  - `plugins/mill/unit_tests/run-all.py`
+  - `plugins/mill/unit_tests/test-wiki-store.py`
+  - `plugins/mill/unit_tests/test-wiki-protocol.py`
+  - `plugins/mill/unit_tests/test-wiki-daemon.py`
+- **Edits:**
+  - `plugins/mill/unit_tests/run-all.py`
+- **Creates:** none
+- **Deletes:** none
+- **Requirements:**
+  Add `test-wiki-store.py`, `test-wiki-protocol.py`, and `test-wiki-daemon.py` to the test registry in `run-all.py` (whichever mechanism it uses to enumerate tests — inspect the file and follow the existing pattern). Do NOT add `test-wiki-sync.py`: it uses real git subprocess calls and violates the no-real-git constraint for `run-all.py`.
+- **Commit:** `test(wiki): register wiki unit tests in run-all.py (excluding test-wiki-sync)`
+
 ## Batch Tests
 
-Run all four with `PYTHONPATH=plugins/mill/scripts`:
+Run all five with `PYTHONPATH=plugins/mill/scripts`:
 ```
 python plugins/mill/unit_tests/test-wiki-store.py
 python plugins/mill/unit_tests/test-wiki-protocol.py
 python plugins/mill/unit_tests/test-wiki-daemon.py
 python plugins/mill/unit_tests/test-wiki-sync.py
 ```
-All four must exit 0. The verify command in the frontmatter chains them with `&&`.
+All four standalone tests must exit 0. `run-all.py` must also pass with the three new tests included. The verify command in the frontmatter chains the four standalone tests with `&&`.

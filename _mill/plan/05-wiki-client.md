@@ -24,6 +24,7 @@ Batch-local decision: `_spawn_server()` is the single implementation-specific se
   - `plugins/mill/scripts/wiki/_server.py`
   - `plugins/mill/scripts/_bg.py`
   - `plugins/mill/scripts/_subprocess_util.py`
+  - `plugins/mill/scripts/_daemon.py`
 - **Edits:** none
 - **Creates:**
   - `plugins/mill/scripts/wiki/_client.py`
@@ -59,7 +60,7 @@ Batch-local decision: `_spawn_server()` is the single implementation-specific se
   **`_spawn_server(wiki_path: Path, idle_timeout: int, refresh_interval: float) -> None`**:
   - `cmd = [sys.executable, "-m", _SERVER_MODULE, str(wiki_path), str(idle_timeout), str(refresh_interval)]`.
   - `env = dict(os.environ)`. Ensure `PYTHONPATH` includes the `scripts/` directory (parent of `wiki/`): `scripts_dir = str(Path(__file__).parent.parent)`. Set `env["PYTHONPATH"] = scripts_dir` (preserve existing if present: `os.pathsep.join([scripts_dir, env.get("PYTHONPATH", "")])` stripped of trailing sep).
-  - Windows branch (`sys.platform == "win32"`): `DETACHED_PROCESS = 0x00000008`, `CREATE_NO_WINDOW = 0x08000000`, `CREATE_NEW_PROCESS_GROUP = 0x00000200`, `CREATE_BREAKAWAY_FROM_JOB = 0x01000000`. `subprocess.Popen(cmd, env=env, close_fds=True, creationflags=DETACHED_PROCESS | CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP | CREATE_BREAKAWAY_FROM_JOB)`. `CREATE_BREAKAWAY_FROM_JOB` is required to escape the VS Code / Claude Code parent Job Object so the daemon survives when the CC session that spawned it exits.
+  - Windows branch (`sys.platform == "win32"`): `CREATE_NO_WINDOW = 0x08000000`, `CREATE_NEW_PROCESS_GROUP = 0x00000200`, `CREATE_BREAKAWAY_FROM_JOB = 0x01000000`. Use two-stage cmd.exe shim: `launch_cmd = ["cmd", "/c", "start", "", "/B", "/MIN"] + cmd`. `subprocess.Popen(launch_cmd, env=env, close_fds=True, creationflags=CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP | CREATE_BREAKAWAY_FROM_JOB)`. The cmd.exe shim escapes the VS Code / CC Win32 Job Object so the daemon survives CC session exit. `DETACHED_PROCESS` is intentionally omitted — it causes a console flash when combined with `CREATE_NO_WINDOW` (mirrors `_subprocess_util.popen_detached` lines 311-319 exactly; mill imports are disallowed so this pattern is inlined).
   - POSIX branch: `subprocess.Popen(cmd, env=env, close_fds=True, start_new_session=True)`.
   - Do not wait for the process; do not store the Popen object.
 

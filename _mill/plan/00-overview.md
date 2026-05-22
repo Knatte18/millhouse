@@ -71,7 +71,7 @@ batches:
 
 ### Decision: windows-compatible-subprocess
 
-- **Decision:** Detached subprocess spawning in `_client.py` must work on Windows 11. Use `subprocess.Popen` with `CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP | DETACHED_PROCESS` creationflags on Windows; `start_new_session=True` on POSIX.
+- **Decision:** Detached subprocess spawning in `_client.py` must work on Windows 11. Use the two-stage cmd.exe shim pattern (`["cmd", "/c", "start", "", "/B", "/MIN"] + cmd`) with `CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP | CREATE_BREAKAWAY_FROM_JOB`. `DETACHED_PROCESS` is intentionally omitted — it causes a console flash when combined with `CREATE_NO_WINDOW` (documented in `_subprocess_util.popen_detached`; inlined here because mill imports are forbidden). On POSIX: `start_new_session=True`.
 - **Applies to:** batches 5, 7
 
 ### Decision: utf8-wire
@@ -94,6 +94,7 @@ batches:
 - `plugins/mill/scripts/wiki/_server.py`
 - `plugins/mill/scripts/wiki/_store.py`
 - `plugins/mill/scripts/wiki/_sync.py`
+- `plugins/mill/unit_tests/run-all.py`
 - `plugins/mill/unit_tests/test-wiki-daemon.py`
 - `plugins/mill/unit_tests/test-wiki-protocol.py`
 - `plugins/mill/unit_tests/test-wiki-store.py`

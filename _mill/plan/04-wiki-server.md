@@ -53,7 +53,7 @@ Creates `wiki/_server.py` — the wiki-specific daemon server. Subclasses `Daemo
 
   `_handle_read(self, msg: dict) -> dict`:
   - `rel_path = msg.get(FIELD_PATH, "")`. Call `path_guard(rel_path)` — on `WikiPathError` return `{FIELD_OK: False, FIELD_ERROR_TYPE: ERR_PATH, FIELD_ERROR: str(e)}`.
-  - Lazy refresh: if `time.monotonic() - self._last_pull > self._refresh_interval`: call `pull(self._wiki_path)`, `self._store.invalidate_all()`, `self._last_pull = time.monotonic()`.
+  - Lazy refresh: if `time.monotonic() - self._last_pull > self._refresh_interval`: set `self._last_pull = time.monotonic()` first (before calling `pull()`), then call `pull(self._wiki_path)`, `self._store.invalidate_all()`. Setting `_last_pull` before the call ensures the refresh interval is honored even if `pull()` raises — preventing a request-rate hammer on a transiently unavailable remote.
   - Try cache: `hit = self._store.get(rel_path)`. If hit: return `{FIELD_OK: True, FIELD_CONTENT: hit[0], FIELD_HASH: hit[1]}`.
   - Miss: read from disk `(self._wiki_path / rel_path).read_text("utf-8")`. If `FileNotFoundError`: return `{FIELD_OK: False, FIELD_ERROR_TYPE: ERR_NOT_FOUND, FIELD_ERROR: rel_path}`. Store in cache via `self._store.set(rel_path, content)`. Re-read hash from store: `_, hash_ = self._store.get(rel_path)`. Return `{FIELD_OK: True, FIELD_CONTENT: content, FIELD_HASH: hash_}`.
 

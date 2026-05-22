@@ -15,7 +15,7 @@ Delivers the end-to-end integration test and a one-line CLAUDE.md update. The in
 
 ## Cards
 
-### Card 11: `test-wiki-e2e.py` — end-to-end integration test
+### Card 12: `test-wiki-e2e.py` — end-to-end integration test
 
 - **Context:**
   - `plugins/mill/scripts/wiki/_client.py`
@@ -52,7 +52,7 @@ Delivers the end-to-end integration test and a one-line CLAUDE.md update. The in
 
 - **Commit:** `test(wiki): add test-wiki-e2e.py end-to-end integration test`
 
-### Card 12: CLAUDE.md — record wiki subpackage exception
+### Card 13: CLAUDE.md — record wiki subpackage exception
 
 - **Context:**
   - `CLAUDE.md`
