@@ -43,5 +43,6 @@ nul
 **/.scratch/
 **/.wiki/
 **/.active/
+**/_mill/*.active
 **/.portals/
 # === end mill-managed ===

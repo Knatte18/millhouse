@@ -1,4 +1,0 @@
-PS C:\Code\millhouse\wts\claude-p-wrapper>
-MILL_BEGIN_AAA
-Some response content here
-But the end marker is missing

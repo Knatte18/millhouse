@@ -13,7 +13,6 @@ from __future__ import annotations
 import argparse
 import json
 import re
-import secrets
 import sys
 import time
 import uuid
@@ -131,6 +130,28 @@ def _wait_for_idle_prompt(session_name: str, timeout_s: float) -> bool:
         time.sleep(POLL_INTERVAL_S)
 
 
+def _wait_for_idle_stable(session_name: str, timeout_s: float) -> bool:
+    """Return True when idle char appears in two consecutive captures 1s apart."""
+    idle_prompt = "❯"
+    start = time.monotonic()
+    prev_idle = False
+    while True:
+        try:
+            capture = _psmux.capture_pane(session_name, alternate=True)
+            curr_idle = any(
+                line.strip().startswith(idle_prompt)
+                for line in capture.splitlines()
+            )
+        except _psmux.PsmuxError:
+            curr_idle = False
+        if prev_idle and curr_idle:
+            return True
+        prev_idle = curr_idle
+        if time.monotonic() - start >= timeout_s:
+            return False
+        time.sleep(POLL_INTERVAL_S)
+
+
 def _resolve_reuse_idle_timeout_s() -> float:
     """Load reuse_idle_timeout_s from config, defaulting to REUSE_IDLE_TIMEOUT_S_DEFAULT."""
     try:
@@ -156,23 +177,14 @@ def main() -> int:
         print("[millpy-claude-sub] empty prompt on stdin", file=sys.stderr)
         return 2
 
-    # Step 2: Generate session name and markers
+    # Step 2: Generate session name
     session_name = args.psmux_session if args.psmux_session is not None else f"mill-{uuid.uuid4().hex[:8]}"
-    begin_marker = f"MILL_BEGIN_{secrets.token_hex(4)}"
-    end_marker = f"MILL_END_{secrets.token_hex(4)}"
-
-    # Step 3: Append dual-marker footer to prompt
-    footer = f"""Reply protocol (mandatory): begin your reply with the literal text
-{begin_marker} on its own line, end your reply with the literal
-text {end_marker} on its own line. Do not include either token
-anywhere else in your reply."""
-    full_prompt = prompt_body + "\n\n" + footer
 
     # Step 4: Resolve scratch dir and write prompt file
     scratch_dir = _paths.resolve_git_root() / ".scratch"
     scratch_dir.mkdir(exist_ok=True)
     prompt_path = scratch_dir / f"wrapper-{session_name}-prompt.txt"
-    prompt_path.write_text(full_prompt, encoding="utf-8")
+    prompt_path.write_text(prompt_body, encoding="utf-8")
 
     # Step 5-12: Try/finally block for cleanup
     try:
@@ -274,40 +286,37 @@ anywhere else in your reply."""
         time.sleep(POLL_INTERVAL_S)
         _psmux.send_keys(session_name, "Enter", enter=False)
 
-        # Step 11: Poll for response using markers
+        # Step 11: Wait for stable idle prompt, then capture and extract response
         start = time.monotonic()
-        while True:
+        if not _wait_for_idle_stable(session_name, RESPONSE_POLL_TIMEOUT_S[args.mode]):
             elapsed = time.monotonic() - start
-            capture = _psmux.capture_pane(session_name, alternate=True)
+            raise RuntimeError(
+                f"response-poll timeout: mode={args.mode} elapsed={elapsed:.1f}s"
+            )
+        snapshot_b = _psmux.capture_pane(session_name, alternate=True)
+        elapsed = time.monotonic() - start
+        response = _psmux_capture.extract_response(snapshot_b)
+        print(response, end="")
+        print(
+            json.dumps({
+                "session_id": args.session_id,
+                "duration_s": round(elapsed, 2),
+                "mode": args.mode
+            }),
+            file=sys.stderr
+        )
+        # Success-path cleanup: kill session only if not keeping alive
+        if not args.keep_alive:
             try:
-                response = _psmux_capture.extract_response(capture, begin_marker, end_marker)
-                print(response, end="")
-                print(
-                    json.dumps({
-                        "session_id": args.session_id,
-                        "duration_s": round(elapsed, 2),
-                        "mode": args.mode
-                    }),
-                    file=sys.stderr
-                )
-                # Success-path cleanup: kill session only if not keeping alive
-                if not args.keep_alive:
-                    try:
-                        _psmux.kill_session(session_name)
-                    except _psmux.PsmuxError:
-                        pass
-                else:
-                    print(
-                        f"[millpy-claude-sub] keepalive: leaving psmux session {session_name} running",
-                        file=sys.stderr
-                    )
-                return 0
-            except _psmux_capture.MarkerNotFoundError:
-                if elapsed > RESPONSE_POLL_TIMEOUT_S[args.mode]:
-                    raise RuntimeError(
-                        f"response-poll timeout: mode={args.mode} elapsed={elapsed:.1f}s"
-                    )
-                time.sleep(POLL_INTERVAL_S)
+                _psmux.kill_session(session_name)
+            except _psmux.PsmuxError:
+                pass
+        else:
+            print(
+                f"[millpy-claude-sub] keepalive: leaving psmux session {session_name} running",
+                file=sys.stderr
+            )
+        return 0
 
     except Exception as exc:
         print(f"[millpy-claude-sub] {type(exc).__name__}: {exc}", file=sys.stderr)
