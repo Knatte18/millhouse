@@ -63,5 +63,7 @@ batches:
     implementer_session: d14302f0-ee75-4327-a6d4-3380bd276549
     start_sha: bbef9ab78a9afd202875c2dc124b9e4a9944efe2
   - name: Integration test and docs
-    state: pending
+    state: running
+    implementer_session: 8d15bcc5-1d15-4463-85f0-3dfb92168987
+    start_sha: 9639356e5f91382cee19170665d040bdcfd68d84
 ```
