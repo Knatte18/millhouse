@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-CLAUDE.md updates
+phase: approved-skill replace heavy
 slug: mill-python-env-var
 branch: hanf/mill-python-env-var
 plan: _mill/plan
@@ -26,6 +26,7 @@ planned  '2026-05-22T07:36:33Z'
 implementing  '2026-05-22T07:55:46Z'
 approved-mill-setup bootstrap  '2026-05-22T07:58:22Z'
 approved-CLAUDE.md updates  '2026-05-22T08:07:06Z'
+approved-skill replace heavy  '2026-05-22T08:09:46Z'
 ```
 
 ## Batches
@@ -41,7 +42,7 @@ batches:
     implementer_session: ac8338f1-219e-42d3-a0d0-adef62a72741
     start_sha: 4a8014698e63125b16cd6c69488914863a85b08b
   - name: skill replace heavy
-    state: running
+    state: approved
     implementer_session: 8359eb04-d70f-4ab4-9635-937efd7e2553
     start_sha: f6611191a1af4740611bac5de09cdd1f45e33470
   - name: skill replace remaining
