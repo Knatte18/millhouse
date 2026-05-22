@@ -11,7 +11,7 @@ depends-on: [1, 2]
 
 ## Batch Scope
 
-Adds unit tests for all new behaviour introduced in Batches 1 and 2. Tests for the `write_hub_active_indicator` helper go into the existing `test-spawn-core.py`; tests for indicator deletion in cleanup go into `test-cleanup.py`; the glob fallback in `find_active_slug` gets a new dedicated file `test-review-common.py`. All three test files are run by the shared `run-all.py` runner.
+Adds unit tests for all new behaviour introduced in Batches 1 and 2. Tests for the `write_hub_active_indicator` helper go into the existing `test-spawn-core.py`; tests for indicator deletion in cleanup go into `test-cleanup.py`; the glob fallback in `find_active_slug` is appended to the existing `test-review-common.py` (1836 lines). All three test files are run by the shared `run-all.py` runner.
 
 ## Cards
 
@@ -48,42 +48,36 @@ Adds unit tests for all new behaviour introduced in Batches 1 and 2. Tests for t
 - **Requirements:**
   1. At the end of `test-cleanup.py`, add a new section `# Hub active indicator deletion` with three tests. Study the existing test for `_apply_inplace_record` (around line 565) and `apply_plan` for the mocking pattern used for git/junction calls.
 
-     `test_apply_inplace_deletes_hub_indicator`: create a temp `hub_root` with `hub_root/_mill/<slug>.active` present; mock all subprocess and junction calls so `_apply_inplace_record` does not need a real git repo (mock `_subprocess_util.run` to succeed for `checkout` and `branch -D`, mock `_junction.remove` to no-op); call `_apply_inplace_record(record, hub_root, task_branch, cfg={})`; assert `hub_root / "_mill" / f"{record.slug}.active"` no longer exists.
+     `test_apply_inplace_deletes_hub_indicator`: create a temp `hub_root` with `hub_root/_mill/<slug>.active` present; mock all subprocess and junction calls so `_apply_inplace_record` does not need a real git repo: mock `_subprocess_util.run` to succeed for `checkout` and `branch -D`, mock `_junction.remove` to no-op, and mock `mill_cleanup._paths.resolve_container_path` to return a temp container path (see the existing in-place cleanup test around line 565 for this pattern); call `_apply_inplace_record(record, hub_root, task_branch, cfg={})`; assert `hub_root / "_mill" / f"{record.slug}.active"` no longer exists.
 
-     `test_apply_worktree_deletes_hub_indicator`: same structure for `_apply_worktree_record`; mock `_worktree.remove_safe` and `_junction.remove` to no-op (worktree_path may be None or nonexistent); assert indicator gone after the call.
+     `test_apply_worktree_deletes_hub_indicator`: same structure for `_apply_worktree_record`; mock `_worktree.remove_safe`, `_junction.remove`, and `mill_cleanup._paths.resolve_container_path` to no-op (worktree_path may be None or nonexistent); assert indicator gone after the call.
 
-     `test_apply_inplace_indicator_missing_ok`: do NOT create the indicator file; call `_apply_inplace_record` with the same mocks; assert no `FileNotFoundError` is raised.
+     `test_apply_inplace_indicator_missing_ok`: do NOT create the indicator file; call `_apply_inplace_record` with the same mocks (including `resolve_container_path`); assert no `FileNotFoundError` is raised.
 
   2. Import `tempfile` if not already imported (it is already imported in the file).
   3. Add calls to all three tests in the `if __name__ == "__main__":` block.
 - **Commit:** `test(cleanup): add hub active indicator deletion tests`
 
-### Card 9: New `test-review-common.py` for glob fallback
+### Card 9: Append glob fallback tests to `test-review-common.py`
 
 - **Context:**
   - `plugins/mill/scripts/_review_common.py`
   - `plugins/mill/scripts/_marker.py`
-  - `plugins/mill/unit_tests/test-marker.py`
-- **Edits:** none
-- **Creates:**
+- **Edits:**
   - `plugins/mill/unit_tests/test-review-common.py`
+- **Creates:** none
 - **Deletes:** none
 - **Requirements:**
-  1. File header: follow the pattern of other test files — `HUB = Path(__file__).resolve().parent.parent.parent.parent`, `sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))`.
-  2. Import `find_active_slug` and `ReviewError` from `_review_common`; import `_marker` for `MarkerError`; use `unittest.mock.patch` and `tempfile.TemporaryDirectory`.
-  3. Add five tests:
+  1. The file already imports `find_active_slug` and `ReviewError` from `_review_common` and already has two `find_active_slug` tests: one covering the branch-success path and one covering the "non-task branch, no `.active` files → ReviewError" path (around lines 196–213). Do not duplicate these.
+  2. Append three new tests inside the existing runner `if __name__ == "__main__":` block (or equivalent), each using `tempfile.TemporaryDirectory` and `unittest.mock.patch("_review_common._marker.slug_from_branch", side_effect=_marker.MarkerError(...))`:
 
-     `test_find_active_slug_branch_success`: patch `_marker.slug_from_branch` to return `"my-task"`; call `find_active_slug(Path("/fake"), Path("/wiki"), {})`; assert returns `"my-task"`.
-
-     `test_find_active_slug_one_active_file`: use `TemporaryDirectory` for `hub_root`; create `hub_root/_mill/my-task.active`; patch `_marker.slug_from_branch` to raise `_marker.MarkerError("detached HEAD")`; call `find_active_slug(Path(hub_root), Path("/wiki"), {})`; assert returns `"my-task"`.
-
-     `test_find_active_slug_zero_active_files`: `hub_root/_mill/` exists but is empty; patch raises `MarkerError`; assert `ReviewError` is raised and its message contains `"no active task"`.
+     `test_find_active_slug_one_active_file`: create `hub_root/_mill/my-task.active`; patch raises `MarkerError`; call `find_active_slug(Path(hub_root), Path("/wiki"), {})`; assert returns `"my-task"`.
 
      `test_find_active_slug_multiple_active_files`: create `_mill/task-a.active` and `_mill/task-b.active`; patch raises `MarkerError`; assert `ReviewError` is raised and its message contains `"use --slug"`.
 
-     `test_find_active_slug_no_mill_dir`: `hub_root/_mill/` does not exist; patch raises `MarkerError`; assert `ReviewError` is raised (OSError handled gracefully, treated as zero matches).
+     `test_find_active_slug_no_mill_dir`: `hub_root/_mill/` does not exist (never created); patch raises `MarkerError`; assert `ReviewError` is raised (OSError from glob handled gracefully as zero matches).
 
-  4. `if __name__ == "__main__":` block calls all five tests.
+  3. Each test must print a `PASS:` line on success, matching the style of the existing tests in the file.
 - **Commit:** `test(review-common): add find_active_slug glob fallback tests`
 
 ## Batch Tests

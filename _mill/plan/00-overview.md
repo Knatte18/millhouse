@@ -3,7 +3,7 @@
 ```yaml
 task: Write active-slug indicator file in hub
 slug: hub-active-slug
-approved: false
+approved: true
 started: 20260522-064846
 parent: main
 root: ""
