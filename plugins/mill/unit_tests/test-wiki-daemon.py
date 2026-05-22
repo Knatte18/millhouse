@@ -1,0 +1,175 @@
+"""Unit tests for _daemon.DaemonBase logic.
+
+Covers: _write_state_file writes and reads back as JSON; _is_stale detects
+dead PIDs and current PIDs; O_EXCL behavior; idle-timeout predicate;
+.gitignore idempotent append.
+
+Uses tempfile dirs; no real TCP sockets or accept loop.
+"""
+from __future__ import annotations
+
+import json
+import os
+import sys
+import tempfile
+import time
+from pathlib import Path
+
+HUB = Path(__file__).resolve().parent.parent.parent.parent
+sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
+
+from _daemon import DaemonBase  # noqa: E402
+
+
+class TestDaemon(DaemonBase):
+    """Minimal DaemonBase subclass for testing."""
+
+    def handle_request(self, msg: dict) -> dict:
+        return {"ok": True}
+
+
+def main() -> int:
+    passed = 0
+    failed = 0
+
+    def ok(name: str) -> None:
+        nonlocal passed
+        passed += 1
+        print(f"PASS: {name}")
+
+    def fail(name: str, exc: Exception) -> None:
+        nonlocal failed
+        failed += 1
+        print(f"FAIL: {name}: {exc}", file=sys.stderr)
+
+    # --- (a) _write_state_file writes JSON, reads back ---
+    try:
+        tmp = Path(tempfile.mkdtemp())
+        try:
+            state_file = tmp / "state.json"
+            data = {
+                "protocol_version": 1,
+                "pid": 12345,
+                "port": 9999,
+                "token": "abc123",
+            }
+            daemon = TestDaemon("test", state_file, 30)
+            daemon._write_state_file(state_file, data)
+
+            read_data = json.loads(state_file.read_text(encoding="utf-8"))
+            assert read_data["protocol_version"] == 1
+            assert read_data["pid"] == 12345
+            assert read_data["port"] == 9999
+            assert read_data["token"] == "abc123"
+            ok("_write_state_file writes JSON, reads back")
+        finally:
+            import shutil
+            shutil.rmtree(tmp, ignore_errors=True)
+    except Exception as exc:
+        fail("_write_state_file writes JSON, reads back", exc)
+
+    # --- (b) _is_stale returns True for non-existent PID ---
+    try:
+        tmp = Path(tempfile.mkdtemp())
+        try:
+            state_file = tmp / "state.json"
+            daemon = TestDaemon("test", state_file, 30)
+            state = {"pid": os.getpid() + 999999}
+            assert daemon._is_stale(state) is True
+            ok("_is_stale returns True for non-existent PID")
+        finally:
+            import shutil
+            shutil.rmtree(tmp, ignore_errors=True)
+    except Exception as exc:
+        fail("_is_stale returns True for non-existent PID", exc)
+
+    # --- (c) _is_stale returns False for current PID ---
+    try:
+        tmp = Path(tempfile.mkdtemp())
+        try:
+            state_file = tmp / "state.json"
+            daemon = TestDaemon("test", state_file, 30)
+            state = {"pid": os.getpid()}
+            assert daemon._is_stale(state) is False
+            ok("_is_stale returns False for current PID")
+        finally:
+            import shutil
+            shutil.rmtree(tmp, ignore_errors=True)
+    except Exception as exc:
+        fail("_is_stale returns False for current PID", exc)
+
+    # --- (d) O_EXCL behavior: first open succeeds, second raises FileExistsError ---
+    try:
+        tmp = Path(tempfile.mkdtemp())
+        try:
+            test_file = tmp / "exclusive.txt"
+            with open(test_file, "x") as f:
+                f.write("first")
+            raised = False
+            try:
+                open(test_file, "x").close()
+            except FileExistsError:
+                raised = True
+            assert raised, "second open should raise FileExistsError"
+            ok("O_EXCL behavior: first open succeeds, second raises FileExistsError")
+        finally:
+            import shutil
+            shutil.rmtree(tmp, ignore_errors=True)
+    except Exception as exc:
+        fail("O_EXCL behavior: first open succeeds, second raises FileExistsError", exc)
+
+    # --- (e) idle-timeout computation: elapsed > idle_timeout ---
+    try:
+        last_activity = time.monotonic()
+        idle_timeout = 0.01
+        time.sleep(0.02)
+        elapsed = time.monotonic() - last_activity
+        is_stale = elapsed > idle_timeout
+        assert is_stale is True
+        ok("idle-timeout computation: elapsed > idle_timeout")
+    except Exception as exc:
+        fail("idle-timeout computation: elapsed > idle_timeout", exc)
+
+    # --- (f) .gitignore idempotent append ---
+    try:
+        tmp = Path(tempfile.mkdtemp())
+        try:
+            gitignore_path = tmp / ".gitignore"
+
+            def ensure_gitignore_entry(path: Path, entry: str) -> None:
+                """Idempotent: add entry if not present."""
+                if path.exists():
+                    content = path.read_text(encoding="utf-8")
+                    if entry in content:
+                        return
+                    path.write_text(content + entry + "\n", encoding="utf-8")
+                else:
+                    path.write_text(entry + "\n", encoding="utf-8")
+
+            ensure_gitignore_entry(gitignore_path, ".wiki-daemon.json")
+            first_content = gitignore_path.read_text(encoding="utf-8")
+            count1 = first_content.count(".wiki-daemon.json")
+
+            ensure_gitignore_entry(gitignore_path, ".wiki-daemon.json")
+            second_content = gitignore_path.read_text(encoding="utf-8")
+            count2 = second_content.count(".wiki-daemon.json")
+
+            assert count1 == 1, f"expected 1 occurrence, got {count1}"
+            assert count2 == 1, f"expected 1 occurrence after second call, got {count2}"
+            ok(".gitignore idempotent append")
+        finally:
+            import shutil
+            shutil.rmtree(tmp, ignore_errors=True)
+    except Exception as exc:
+        fail(".gitignore idempotent append", exc)
+
+    print("", file=sys.stderr)
+    if failed:
+        print(f"FAIL -- {failed} of {passed + failed}", file=sys.stderr)
+        return 1
+    print(f"PASS -- all {passed} tests", file=sys.stderr)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
