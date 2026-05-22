@@ -1,87 +1,14 @@
 # .millhouse/config.local.yaml — per-worktree overrides.
 #
 # This file is gitignored (together with the rest of .millhouse/).
-# It is a *partial overlay* on wiki/config.yaml — include only the keys you
+# It is a *partial overlay* on mill-config.yaml — include only the keys you
 # want to override. Scripts load this via _config.load_config; local values
 # win on any conflict.
 #
-# Merge layers (lowest -> highest precedence):
-#   1. wiki/config.yaml                         - shared, git-tracked in the wiki
-#   2. ~/.millhouse/config.machine.yaml         - per-machine
-#   3. THIS FILE                                - per-worktree, highest precedence
-#
 # Secrets DO NOT belong here. Put API keys in .env at the repo root.
-#
-# Full schema below (mirrors wiki/config.yaml defaults). Uncomment to override.
 
 # ---------------------------------------------------------------------------
-# hub_relative_path — LOCAL ONLY, not in wiki/config.yaml.
+# hub_relative_path — LOCAL ONLY, not in mill-config.yaml.
 # Written by mill-setup. Use "." when cwd == git toplevel.
 # ---------------------------------------------------------------------------
-# hub_relative_path: .
-
-# ---------------------------------------------------------------------------
-# LLM-provider timeouts (seconds)
-# ---------------------------------------------------------------------------
-# llm:
-#   bulk_timeout: 900
-#   holistic_timeout: 1800
-#   tool_use_timeout: 900
-#   implementer_timeout: 1800
-
-# ---------------------------------------------------------------------------
-# mill-go pipeline
-# ---------------------------------------------------------------------------
-# pipeline:
-#   auto_merge: true
-#   auto_report: true
-
-# ---------------------------------------------------------------------------
-# Reviewer roles — names reference wiki/reviewers.yaml entries.
-# rounds: 0 OR reviewer: null → skip that scope.
-# ---------------------------------------------------------------------------
-# roles:
-#   discussion-review:
-#     holistic:
-#       rounds: 2
-#       reviewer: sonnetmax_tool
-#
-#   plan-review:
-#     batch:
-#       rounds: 0
-#       reviewer: null
-#     holistic:
-#       rounds: 3
-#       reviewer: sonnetmax
-#
-#   code-review:
-#     batch:
-#       rounds: 0
-#       reviewer: null
-#     holistic:
-#       rounds: 3
-#       reviewer: sonnetmedium
-#     diff_scope_threshold: 0.25
-#
-#   implementer:
-#     self_fix_rounds: 2
-
-# ---------------------------------------------------------------------------
-# mill-merge-in verify — skip known-broken pre-existing test failures.
-# ---------------------------------------------------------------------------
-# verify:
-#   skip_known_broken:
-#     - plugins/mill/unit_tests/test-some-flaky.py
-
-# ---------------------------------------------------------------------------
-# Notifications
-# ---------------------------------------------------------------------------
-# notify:
-#   backend: stdout   # stdout | toast
-
-# ---------------------------------------------------------------------------
-# Wiki repo (set by mill-setup --from-url / --branch; rarely changed manually)
-# ---------------------------------------------------------------------------
-# wiki:
-#   repo_url: https://github.com/Org/shared.git
-#   branch: wiki/millhouse
+hub_relative_path: .
