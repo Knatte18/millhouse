@@ -30,7 +30,12 @@ Runs a grep verification over `plugins/mill/skills/` to confirm the full venv pa
   grep -r '\.venv/Scripts/python\.exe' plugins/mill/skills/ --include="SKILL.md" -l
   ```
 
-  **Expected output:** exactly one line: `plugins/mill/skills/mill-setup/SKILL.md`. If any other file appears, the replacement in that file was incomplete. For each unexpected hit, re-run the `replace_all` Edit for that file and re-run the grep.
+  **Expected output:** exactly two lines:
+  ```
+  plugins/mill/skills/mill-go/SKILL.md
+  plugins/mill/skills/mill-setup/SKILL.md
+  ```
+  `mill-go/SKILL.md` has 2 intentional hits — the venv-check blocks preserved by Card 5, Step 3. `mill-setup/SKILL.md` has its bootstrapper hits. Any other file in the output means that file's replacement was incomplete; for each unexpected hit, re-run the `replace_all` Edit for that file and re-run the grep.
 
   Also run the count check for mill-setup to confirm Batch 1 added occurrences but nothing was unexpectedly removed:
 

@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-fix-r1
+phase: plan-review-r2
 slug: mill-python-env-var
 branch: hanf/mill-python-env-var
 plan: _mill/plan
@@ -21,4 +21,5 @@ discussed  '2026-05-22T07:06:39Z'
 planning  '2026-05-22T07:17:28Z'
 plan-review-r1  '2026-05-22T07:26:58Z'
 plan-fix-r1  '2026-05-22T07:26:58Z'
+plan-review-r2  '2026-05-22T07:36:18Z'
 ```

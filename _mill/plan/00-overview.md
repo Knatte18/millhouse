@@ -3,7 +3,7 @@
 ```yaml
 task: Set MILL_PYTHON via mill-setup, use in all skill invocations
 slug: mill-python-env-var
-approved: false
+approved: true
 started: 20260522-071246
 parent: main
 root: ""

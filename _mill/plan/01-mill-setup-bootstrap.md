@@ -84,6 +84,20 @@ Modifies `plugins/mill/skills/mill-setup/SKILL.md` in three places: (1) inserts 
   This direct-binary form is used by mill-setup only (bootstrapper exception — Phase 4.8 writes `MILL_PYTHON` to `~/.claude/settings.json`; all other mill skills use `"$MILL_PYTHON"`). The source-tree form (`uv run --project plugins/mill ...`) remains the documented exception for cases where the cache path is unavailable — for example, running unit tests from the millhouse repo itself.
   ```
 
+  **Edit C — update `# RIGHT` comment in the same code block.**
+
+  In the `## How to invoke the helpers` section, within the fenced bash block, locate the comment line:
+
+  ```
+  # RIGHT — invokes from cache (the canonical mill-script form, shared with every other mill SKILL.md)
+  ```
+
+  Replace it with:
+
+  ```
+  # RIGHT — invokes from cache (mill-setup bootstrapper exception; all other skills use "$MILL_PYTHON")
+  ```
+
 - **Commit:** `docs(mill-setup): add Phase 4.8 MILL_PYTHON write + update invoke-helpers note`
 
 ### Card 2: Update Phase 8 verification and idempotency in mill-setup SKILL.md
