@@ -71,6 +71,7 @@ class WikiServer(DaemonBase):
         self._log = logging.getLogger("wiki-server")
         self._log.addHandler(handler)
         self._log.setLevel(logging.INFO)
+        self._log.propagate = False
 
     def on_start(self, port: int, token: str) -> None:
         """Log startup and ensure gitignore."""
