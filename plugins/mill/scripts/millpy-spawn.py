@@ -224,6 +224,7 @@ def main(argv: list[str] | None = None) -> int:
     # rather than via mill-config.yaml junctions block so it is not auto-created
     # in non-task worktrees.
     _spawn_core.recreate_active_junction(dest_hub)
+    _spawn_core.write_hub_active_indicator(git_root, slug)
 
     # Pick a colour + write .vscode/settings.json. The palette scans the
     # *existing* sibling worktrees in the shared worktrees dir; the newly
