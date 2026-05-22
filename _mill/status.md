@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussion-fix-r1
+phase: discussion-fix-r2
 slug: mill-python-env-var
 branch: hanf/mill-python-env-var
 plan: null
@@ -16,4 +16,5 @@ task_description: |
 ```text
 discussing  '2026-05-22T05:50:03Z'
 discussion-fix-r1  '2026-05-22T06:46:58Z'
+discussion-fix-r2  '2026-05-22T07:06:19Z'
 ```

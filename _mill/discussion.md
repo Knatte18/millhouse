@@ -124,7 +124,9 @@ from pathlib import Path
 mill_python = str(Path(os.environ['CLAUDE_PLUGIN_ROOT']) / '.venv' / 'Scripts' / 'python.exe')
 settings_path = Path.home() / '.claude' / 'settings.json'
 
-data = json.loads(settings_path.read_text(encoding='utf-8'))
+# CC creates settings.json on first launch; mill-setup requires an active CC
+# session so the file is always present. Guard handles edge case.
+data = json.loads(settings_path.read_text(encoding='utf-8')) if settings_path.exists() else {}
 env_block = data.setdefault('env', {})
 if env_block.get('MILL_PYTHON') == mill_python:
     print(f'MILL_PYTHON already correct: {mill_python}')
@@ -133,6 +135,10 @@ else:
     settings_path.write_text(json.dumps(data, indent=2), encoding='utf-8')
     print(f'MILL_PYTHON set: {mill_python}')
 ```
+
+**Assumption:** `~/.claude/settings.json` exists because CC creates it on first
+launch; mill-setup requires an active CC session by definition. The guard above
+handles the hypothetical edge case gracefully.
 
 The snippet must be wrapped in the standard mill command prefix:
 `PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "..."`.
@@ -207,7 +213,7 @@ SKILL.md files and CLAUDE.md. Verification is:
    should return hits ONLY in `mill-setup/SKILL.md`. Zero hits elsewhere.
 
 2. **Phase 4.8 manual verification**: run `/mill-setup` on this machine; confirm
-   `python -c "import json; d=json.load(open('~/.claude/settings.json')); print(d['env']['MILL_PYTHON'])"` returns the correct path.
+   `python -c "import json; from pathlib import Path; d=json.loads((Path.home()/'.claude'/'settings.json').read_text()); print(d['env']['MILL_PYTHON'])"` returns the correct path.
 
 3. **Roundtrip check**: in a fresh CC session after mill-setup, run
    `echo $MILL_PYTHON` in a Bash tool call and confirm it expands to the expected path.
