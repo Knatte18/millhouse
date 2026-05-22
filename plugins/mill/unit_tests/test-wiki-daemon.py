@@ -85,13 +85,22 @@ def main() -> int:
 
     # --- (c) _is_stale returns False for current PID ---
     try:
+        import socket
         tmp = Path(tempfile.mkdtemp())
         try:
             state_file = tmp / "state.json"
             daemon = TestDaemon("test", state_file, 30)
-            state = {"pid": os.getpid()}
-            assert daemon._is_stale(state) is False
-            ok("_is_stale returns False for current PID")
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+            sock.listen(1)
+            try:
+                state = {"pid": os.getpid(), "host": "127.0.0.1", "port": port}
+                result = daemon._is_stale(state)
+                assert result is False, f"expected False, got {result}"
+                ok("_is_stale returns False for current PID")
+            finally:
+                sock.close()
         finally:
             import shutil
             shutil.rmtree(tmp, ignore_errors=True)
