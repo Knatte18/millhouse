@@ -56,46 +56,13 @@ def main() -> int:
     try:
         bare = tmp / "bare.git"
         clone = tmp / "clone"
-        temp_clone = tmp / "temp"
 
         # Initialize bare repo
         subprocess.run(["git", "init", "--bare", str(bare)], check=True, capture_output=True)
 
-        # Clone it to temp for initial commit
-        subprocess.run(["git", "clone", str(bare), str(temp_clone)], check=True, capture_output=True)
-
-        # Configure git user in temp
-        subprocess.run(
-            ["git", "-C", str(temp_clone), "config", "user.email", "test@test.com"],
-            check=True,
-            capture_output=True,
-        )
-        subprocess.run(
-            ["git", "-C", str(temp_clone), "config", "user.name", "Test User"],
-            check=True,
-            capture_output=True,
-        )
-
-        # Initial commit in temp
-        (temp_clone / "Home.md").write_text("# Home\n", encoding="utf-8")
-        subprocess.run(
-            ["git", "-C", str(temp_clone), "add", "Home.md"],
-            check=True,
-            capture_output=True,
-        )
-        subprocess.run(
-            ["git", "-C", str(temp_clone), "commit", "-m", "init"],
-            check=True,
-            capture_output=True,
-        )
-        subprocess.run(
-            ["git", "-C", str(temp_clone), "push", "-u", "origin", "main"],
-            check=True,
-            capture_output=True,
-        )
-
-        # Clone again for the actual test
-        subprocess.run(["git", "clone", str(bare), str(clone)], check=True, capture_output=True)
+        # Initialize clone with main branch
+        clone.mkdir(parents=True)
+        subprocess.run(["git", "init", "-b", "main", str(clone)], check=True, capture_output=True)
 
         # Configure git user in clone
         subprocess.run(
@@ -105,6 +72,31 @@ def main() -> int:
         )
         subprocess.run(
             ["git", "-C", str(clone), "config", "user.name", "Test User"],
+            check=True,
+            capture_output=True,
+        )
+
+        # Add remote pointing to bare
+        subprocess.run(
+            ["git", "-C", str(clone), "remote", "add", "origin", str(bare)],
+            check=True,
+            capture_output=True,
+        )
+
+        # Initial commit
+        (clone / "Home.md").write_text("# Home\n", encoding="utf-8")
+        subprocess.run(
+            ["git", "-C", str(clone), "add", "Home.md"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(clone), "commit", "-m", "init"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(clone), "push", "-u", "origin", "main"],
             check=True,
             capture_output=True,
         )
@@ -156,8 +148,9 @@ def main() -> int:
         # --- (e) non-fast-forward rebase-retry ---
         try:
             clone2 = tmp / "clone2"
+            clone2.mkdir(parents=True)
             subprocess.run(
-                ["git", "clone", str(bare), str(clone2)],
+                ["git", "init", "-b", "main", str(clone2)],
                 check=True,
                 capture_output=True,
             )
@@ -168,6 +161,21 @@ def main() -> int:
             )
             subprocess.run(
                 ["git", "-C", str(clone2), "config", "user.name", "Test User"],
+                check=True,
+                capture_output=True,
+            )
+            subprocess.run(
+                ["git", "-C", str(clone2), "remote", "add", "origin", str(bare)],
+                check=True,
+                capture_output=True,
+            )
+            subprocess.run(
+                ["git", "-C", str(clone2), "fetch", "origin", "main"],
+                check=True,
+                capture_output=True,
+            )
+            subprocess.run(
+                ["git", "-C", str(clone2), "checkout", "-b", "main", "origin/main"],
                 check=True,
                 capture_output=True,
             )
