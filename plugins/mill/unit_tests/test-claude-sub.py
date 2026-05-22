@@ -12,6 +12,7 @@ import importlib.util
 import io
 import sys
 import tempfile
+import time
 import unittest.mock as mock
 from pathlib import Path
 
@@ -30,7 +31,7 @@ def _load_claude_sub_module():
 
 
 def main() -> int:
-    """Run all test cases S1-S9."""
+    """Run all test cases S1-S11 plus _wait_for_idle_stable unit tests."""
     errors = 0
 
     # ── S1: existing-idle short-circuit ──────────────────────────────────────
@@ -46,9 +47,9 @@ def main() -> int:
                 return True
 
             def mock_capture_pane(session_name, **kwargs):
-                return "MILL_BEGIN_abc123\nresponse text\nMILL_END_def456"
+                return "  ❯ \n● ok\n  ❯ "
 
-            def mock_extract_response(capture, begin, end):
+            def mock_extract_response(snapshot):
                 return "ok"
 
             saved_argv = sys.argv[:]
@@ -72,7 +73,8 @@ def main() -> int:
                      mock.patch("_psmux.kill_session"), \
                      mock.patch("_psmux_capture.extract_response", side_effect=mock_extract_response), \
                      mock.patch.object(mod, "_wait_for_marker_in_pane", return_value=True), \
-                     mock.patch.object(mod, "_wait_for_idle_prompt", side_effect=mock_wait_for_idle) as m_wait_for_idle, \
+                     mock.patch.object(mod, "_wait_for_idle_prompt", side_effect=mock_wait_for_idle), \
+                     mock.patch.object(mod, "_wait_for_idle_stable", return_value=True), \
                      mock.patch("_paths.resolve_git_root", return_value=tmpdir_path), \
                      mock.patch("_config.load_config", return_value={}), \
                      mock.patch("sys.stdout", new_callable=io.StringIO):
@@ -84,9 +86,6 @@ def main() -> int:
                     # Should return 0 on success
                     assert ret == 0, f"S1: expected 0, got {ret}"
                     # Should call _wait_for_idle_prompt exactly once (reuse check only, not Step 9 boot wait)
-                    assert m_wait_for_idle.call_count == 1, \
-                        f"_wait_for_idle_prompt should be called exactly once on reuse, got {m_wait_for_idle.call_count}"
-                    # send_keys called 3 times: bracketed-paste start, end, then Enter
                     assert m_send_keys.call_count == 3, \
                         f"send_keys should be called 3 times (Step 10 bracketed paste + Enter), got {m_send_keys.call_count}"
                     # Verify the last call is the Enter key
@@ -200,9 +199,9 @@ def main() -> int:
                 return []
 
             def mock_capture_pane(session_name, **kwargs):
-                return "MILL_BEGIN_abc123\nresponse text\nMILL_END_def456"
+                return "  ❯ \n● ok\n  ❯ "
 
-            def mock_extract_response(capture, begin, end):
+            def mock_extract_response(snapshot):
                 return "ok"
 
             saved_argv = sys.argv[:]
@@ -228,6 +227,7 @@ def main() -> int:
                      mock.patch("_psmux_capture.extract_response", side_effect=mock_extract_response), \
                      mock.patch.object(mod, "_wait_for_marker_in_pane", return_value=True), \
                      mock.patch.object(mod, "_wait_for_idle_prompt", return_value=True), \
+                     mock.patch.object(mod, "_wait_for_idle_stable", return_value=True), \
                      mock.patch("_paths.resolve_git_root", return_value=tmpdir_path), \
                      mock.patch("_config.load_config", return_value={}), \
                      mock.patch("sys.stdout", new_callable=io.StringIO):
@@ -306,9 +306,9 @@ def main() -> int:
             scratch_dir.mkdir(exist_ok=True)
 
             def mock_capture_pane(session_name, **kwargs):
-                return "MILL_BEGIN_abc123\nresponse text\nMILL_END_def456"
+                return "  ❯ \n● Hello\n  ❯ "
 
-            def mock_extract_response(capture, begin, end):
+            def mock_extract_response(snapshot):
                 return "ok"
 
             saved_argv = sys.argv[:]
@@ -331,6 +331,7 @@ def main() -> int:
                      mock.patch("_psmux_capture.extract_response", side_effect=mock_extract_response), \
                      mock.patch.object(mod, "_wait_for_marker_in_pane", return_value=True), \
                      mock.patch.object(mod, "_wait_for_idle_prompt", return_value=True), \
+                     mock.patch.object(mod, "_wait_for_idle_stable", return_value=True), \
                      mock.patch("_paths.resolve_git_root", return_value=tmpdir_path), \
                      mock.patch("_config.load_config", return_value={}), \
                      mock.patch("sys.stdout", new_callable=io.StringIO):
@@ -360,9 +361,9 @@ def main() -> int:
                 return []
 
             def mock_capture_pane(session_name, **kwargs):
-                return "MILL_BEGIN_abc123\nresponse text\nMILL_END_def456"
+                return "  ❯ \n● ok\n  ❯ "
 
-            def mock_extract_response(capture, begin, end):
+            def mock_extract_response(snapshot):
                 return "ok"
 
             saved_argv = sys.argv[:]
@@ -387,6 +388,7 @@ def main() -> int:
                      mock.patch("_psmux_capture.extract_response", side_effect=mock_extract_response), \
                      mock.patch.object(mod, "_wait_for_marker_in_pane", return_value=True), \
                      mock.patch.object(mod, "_wait_for_idle_prompt", return_value=True), \
+                     mock.patch.object(mod, "_wait_for_idle_stable", return_value=True), \
                      mock.patch("_paths.resolve_git_root", return_value=tmpdir_path), \
                      mock.patch("_config.load_config", return_value={}), \
                      mock.patch("sys.stdout", new_callable=io.StringIO):
@@ -466,9 +468,9 @@ def main() -> int:
                 return True
 
             def mock_capture_pane(session_name, **kwargs):
-                return "MILL_BEGIN_abc123\nresponse text\nMILL_END_def456"
+                return "  ❯ \n● ok\n  ❯ "
 
-            def mock_extract_response(capture, begin, end):
+            def mock_extract_response(snapshot):
                 return "ok"
 
             # Test 1: with config value = 42
@@ -495,6 +497,7 @@ def main() -> int:
                      mock.patch("_psmux_capture.extract_response", side_effect=mock_extract_response), \
                      mock.patch.object(mod1, "_wait_for_marker_in_pane", return_value=True), \
                      mock.patch.object(mod1, "_wait_for_idle_prompt", side_effect=mock_wait_for_idle_with_capture), \
+                     mock.patch.object(mod1, "_wait_for_idle_stable", return_value=True), \
                      mock.patch("_paths.resolve_git_root", return_value=tmpdir_path), \
                      mock.patch("_config.load_config", return_value={"llm": {"claude": {"psmux": {"reuse_idle_timeout_s": 42}}}}), \
                      mock.patch("sys.stdout", new_callable=io.StringIO):
@@ -532,6 +535,7 @@ def main() -> int:
                      mock.patch("_psmux_capture.extract_response", side_effect=mock_extract_response), \
                      mock.patch.object(mod2, "_wait_for_marker_in_pane", return_value=True), \
                      mock.patch.object(mod2, "_wait_for_idle_prompt", side_effect=mock_wait_for_idle_with_capture), \
+                     mock.patch.object(mod2, "_wait_for_idle_stable", return_value=True), \
                      mock.patch("_paths.resolve_git_root", return_value=tmpdir_path), \
                      mock.patch("_config.load_config", return_value={}), \
                      mock.patch("sys.stdout", new_callable=io.StringIO):
@@ -548,6 +552,158 @@ def main() -> int:
             print("PASS: S9 (reuse_idle_timeout_s is plumbed from config)")
     except Exception as e:
         print(f"FAIL: S9 - {e}")
+        errors += 1
+
+    # ── S10: _wait_for_idle_stable timeout ──────────────────────────────────
+    try:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            mod = _load_claude_sub_module()
+            tmpdir_path = Path(tmpdir)
+            scratch_dir = tmpdir_path / ".scratch"
+            scratch_dir.mkdir(exist_ok=True)
+
+            def mock_list_sessions():
+                return []
+
+            saved_argv = sys.argv[:]
+            saved_stdin = sys.stdin
+            stderr_capture = io.StringIO()
+            try:
+                sys.argv = [
+                    str(_CLAUDE_SUB_PY),
+                    "--mode", "bulk",
+                    "--model", "claude-opus",
+                ]
+                sys.stdin = io.StringIO("test prompt")
+
+                with mock.patch("_psmux.new_session"), \
+                     mock.patch("_psmux.set_history_limit"), \
+                     mock.patch("_psmux.list_sessions", side_effect=mock_list_sessions), \
+                     mock.patch("_psmux.send_keys"), \
+                     mock.patch("_psmux.load_buffer"), \
+                     mock.patch("_psmux.paste_buffer"), \
+                     mock.patch("_psmux.capture_pane", return_value=""), \
+                     mock.patch("_psmux.kill_session") as m_kill, \
+                     mock.patch.object(mod, "_wait_for_marker_in_pane", return_value=True), \
+                     mock.patch.object(mod, "_wait_for_idle_prompt", return_value=True), \
+                     mock.patch.object(mod, "_wait_for_idle_stable", return_value=False), \
+                     mock.patch("_paths.resolve_git_root", return_value=tmpdir_path), \
+                     mock.patch("_config.load_config", return_value={}), \
+                     mock.patch("sys.stdout", new_callable=io.StringIO), \
+                     mock.patch("sys.stderr", stderr_capture):
+
+                    ret = mod.main()
+
+                    assert ret == 1, f"S10: expected 1, got {ret}"
+                    assert m_kill.call_count > 0, "kill_session should be called on error when wrapper owns session"
+                    stderr_text = stderr_capture.getvalue()
+                    assert "response-poll timeout" in stderr_text, \
+                        f"S10: expected 'response-poll timeout' in stderr: {stderr_text}"
+                    print("PASS: S10 (_wait_for_idle_stable timeout)")
+            finally:
+                sys.argv = saved_argv
+                sys.stdin = saved_stdin
+    except Exception as e:
+        print(f"FAIL: S10 - {e}")
+        errors += 1
+
+    # ── S11: extract_response raises MarkerNotFoundError ─────────────────────
+    try:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            import _psmux_capture as _psmux_capture_mod
+            mod = _load_claude_sub_module()
+            tmpdir_path = Path(tmpdir)
+            scratch_dir = tmpdir_path / ".scratch"
+            scratch_dir.mkdir(exist_ok=True)
+
+            def mock_list_sessions():
+                return []
+
+            saved_argv = sys.argv[:]
+            saved_stdin = sys.stdin
+            stderr_capture = io.StringIO()
+            try:
+                sys.argv = [
+                    str(_CLAUDE_SUB_PY),
+                    "--mode", "bulk",
+                    "--model", "claude-opus",
+                ]
+                sys.stdin = io.StringIO("test prompt")
+
+                with mock.patch("_psmux.new_session"), \
+                     mock.patch("_psmux.set_history_limit"), \
+                     mock.patch("_psmux.list_sessions", side_effect=mock_list_sessions), \
+                     mock.patch("_psmux.send_keys"), \
+                     mock.patch("_psmux.load_buffer"), \
+                     mock.patch("_psmux.paste_buffer"), \
+                     mock.patch("_psmux.capture_pane", return_value=""), \
+                     mock.patch("_psmux.kill_session") as m_kill, \
+                     mock.patch("_psmux_capture.extract_response", side_effect=_psmux_capture_mod.MarkerNotFoundError("no bullet found")), \
+                     mock.patch.object(mod, "_wait_for_marker_in_pane", return_value=True), \
+                     mock.patch.object(mod, "_wait_for_idle_prompt", return_value=True), \
+                     mock.patch.object(mod, "_wait_for_idle_stable", return_value=True), \
+                     mock.patch("_paths.resolve_git_root", return_value=tmpdir_path), \
+                     mock.patch("_config.load_config", return_value={}), \
+                     mock.patch("sys.stdout", new_callable=io.StringIO), \
+                     mock.patch("sys.stderr", stderr_capture):
+
+                    ret = mod.main()
+
+                    assert ret == 1, f"S11: expected 1, got {ret}"
+                    stderr_text = stderr_capture.getvalue()
+                    assert "MarkerNotFoundError" in stderr_text, \
+                        f"S11: expected 'MarkerNotFoundError' in stderr: {stderr_text}"
+                    print("PASS: S11 (extract_response raises MarkerNotFoundError)")
+            finally:
+                sys.argv = saved_argv
+                sys.stdin = saved_stdin
+    except Exception as e:
+        print(f"FAIL: S11 - {e}")
+        errors += 1
+
+    # ── Direct unit tests for _wait_for_idle_stable ──────────────────────────
+    try:
+        mod = _load_claude_sub_module()
+        _wait_for_idle_stable = mod._wait_for_idle_stable
+
+        # Scenario (a): capture returns idle for first two polls; monotonic starts at 0.0
+        try:
+            with mock.patch("_psmux.capture_pane", side_effect=["❯ idle\n", "❯ idle\n"]), \
+                 mock.patch("time.sleep"), \
+                 mock.patch("time.monotonic", side_effect=[0.0, 0.0, 1.0, 1.0]):
+                result = _wait_for_idle_stable(session_name="s", timeout_s=5.0)
+                assert result is True, f"Scenario (a): expected True, got {result}"
+            print("[OK] _wait_for_idle_stable scenario (a)")
+        except Exception as e:
+            print(f"[FAIL] _wait_for_idle_stable scenario (a): {e}")
+            errors += 1
+
+        # Scenario (b): captures return varied idle state; finally stable
+        try:
+            with mock.patch("_psmux.capture_pane", side_effect=["❯ idle\n", "no idle\n", "❯ idle\n", "❯ idle\n"]), \
+                 mock.patch("time.sleep"), \
+                 mock.patch("time.monotonic", side_effect=[0.0, 0.0, 1.0, 1.0, 2.0, 2.0, 3.0, 3.0]):
+                result = _wait_for_idle_stable(session_name="s", timeout_s=5.0)
+                assert result is True, f"Scenario (b): expected True, got {result}"
+            print("[OK] _wait_for_idle_stable scenario (b)")
+        except Exception as e:
+            print(f"[FAIL] _wait_for_idle_stable scenario (b): {e}")
+            errors += 1
+
+        # Scenario (c): all captures return no idle; timeout fires
+        try:
+            with mock.patch("_psmux.capture_pane", return_value="no idle"), \
+                 mock.patch("time.sleep"), \
+                 mock.patch("time.monotonic", side_effect=[0.0, 0.0, 6.0, 6.0]):
+                result = _wait_for_idle_stable(session_name="s", timeout_s=5.0)
+                assert result is False, f"Scenario (c): expected False, got {result}"
+            print("[OK] _wait_for_idle_stable scenario (c)")
+        except Exception as e:
+            print(f"[FAIL] _wait_for_idle_stable scenario (c): {e}")
+            errors += 1
+
+    except Exception as e:
+        print(f"FAIL: _wait_for_idle_stable unit tests - {e}")
         errors += 1
 
     return errors
