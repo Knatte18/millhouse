@@ -33,7 +33,9 @@ implementing  '2026-05-22T11:44:41Z'
 ```yaml
 batches:
   - name: Wiki subpackage foundation
-    state: pending
+    state: running
+    implementer_session: 4792fbbe-8313-447e-b7ef-82be5de59fb5
+    start_sha: 3751f58f97f8c6d4030a1c4b540300bba7c24356
   - name: Generic daemon base
     state: pending
   - name: Git sync layer
