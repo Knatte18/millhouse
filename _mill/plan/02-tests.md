@@ -87,12 +87,12 @@ Batch-local decisions: inline snapshot strings use raw multi-line Python strings
 
   **3. Add S10 (`_wait_for_idle_stable` timeout):**
   - New test after S9. Name it S10.
-  - Setup: auto-generated session (no `--psmux-session`); mock `_psmux.new_session`, `_psmux.set_history_limit`, `_psmux.send_keys`, `_psmux.capture_pane` returning `""`, `_psmux.kill_session` as `m_kill`; `mock.patch.object(mod, "_wait_for_marker_in_pane", return_value=True)`; `mock.patch.object(mod, "_wait_for_idle_prompt", return_value=True)`; `mock.patch.object(mod, "_wait_for_idle_stable", return_value=False)`. Capture stderr.
+  - Setup: auto-generated session (no `--psmux-session`); mock `_psmux.new_session`, `_psmux.set_history_limit`, `_psmux.send_keys`, `_psmux.load_buffer`, `_psmux.paste_buffer`, `_psmux.capture_pane` returning `""`, `_psmux.kill_session` as `m_kill`; `mock.patch.object(mod, "_wait_for_marker_in_pane", return_value=True)`; `mock.patch.object(mod, "_wait_for_idle_prompt", return_value=True)`; `mock.patch.object(mod, "_wait_for_idle_stable", return_value=False)`. Capture stderr.
   - Assert `ret == 1`, `m_kill.call_count > 0` (session owned, error cleanup), and that `"response-poll timeout"` appears in stderr.
 
   **4. Add S11 (`extract_response` raises `MarkerNotFoundError`):**
   - New test after S10. Name it S11.
-  - Setup identical to S10 except `_wait_for_idle_stable` returns True, and `_psmux_capture.extract_response` raises `_psmux_capture_mod.MarkerNotFoundError("no bullet found")` (import `_psmux_capture` module at top of test as `_psmux_capture_mod` if not already imported, or use `mock.patch("_psmux_capture.extract_response", side_effect=...)`). Capture stderr.
+  - Setup identical to S10 except `_wait_for_idle_stable` returns True, add `mock.patch("_psmux.load_buffer")` and `mock.patch("_psmux.paste_buffer")` (same as S10), and `_psmux_capture.extract_response` raises `_psmux_capture_mod.MarkerNotFoundError("no bullet found")` (import `_psmux_capture` module at top of test as `_psmux_capture_mod` if not already imported, or use `mock.patch("_psmux_capture.extract_response", side_effect=...)`). Capture stderr.
   - Assert `ret == 1` and that `"MarkerNotFoundError"` appears in stderr.
 
   **5. Add direct unit tests for `_wait_for_idle_stable`:**
@@ -105,7 +105,7 @@ Batch-local decisions: inline snapshot strings use raw multi-line Python strings
 
   Scenario (c): all captures return `"no idle"` (no `❯` line); `time.monotonic` side_effect returns `[0.0, 0.0, 6.0, 6.0]` so the timeout check fires. Assert returns `False`.
 
-  Note: `time.monotonic` is called twice per loop iteration (once for `curr_idle` timing and once for the timeout check). Provide enough values in the side_effect list. Mock `time.sleep` to avoid actual delays.
+  Note: `time.monotonic` is called once before the loop (for `start`) and once per loop iteration (for the timeout check). Provide enough values in the side_effect list. Mock `time.sleep` to avoid actual delays.
 
 - **Commit:** `test(claude-sub): update mocks for idle-prompt flow; add S10/S11/wait-stable tests`
 
