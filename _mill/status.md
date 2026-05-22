@@ -58,7 +58,9 @@ batches:
     implementer_session: 9069eddc-8f57-4dea-80b8-1e05536820b4
     start_sha: da18546b8c6f4733e4eb54e41fda21843fbfc936
   - name: Unit tests
-    state: pending
+    state: running
+    implementer_session: d14302f0-ee75-4327-a6d4-3380bd276549
+    start_sha: bbef9ab78a9afd202875c2dc124b9e4a9944efe2
   - name: Integration test and docs
     state: pending
 ```
