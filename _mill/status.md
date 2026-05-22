@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-Wiki subpackage foundation
 slug: v3-wiki-module
 branch: hanf/v3-wiki-module
 plan: _mill/plan
@@ -26,6 +26,7 @@ plan-review-r3  '2026-05-22T11:39:30Z'
 plan-fix-r3  '2026-05-22T11:39:30Z'
 planned  '2026-05-22T11:40:07Z'
 implementing  '2026-05-22T11:44:41Z'
+approved-Wiki subpackage foundation  '2026-05-22T11:46:31Z'
 ```
 
 ## Batches
@@ -33,7 +34,7 @@ implementing  '2026-05-22T11:44:41Z'
 ```yaml
 batches:
   - name: Wiki subpackage foundation
-    state: running
+    state: approved
     implementer_session: 4792fbbe-8313-447e-b7ef-82be5de59fb5
     start_sha: 3751f58f97f8c6d4030a1c4b540300bba7c24356
   - name: Generic daemon base
