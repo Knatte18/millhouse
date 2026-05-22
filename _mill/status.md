@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-approved
+phase: done
 slug: psmux-idle-prompt-detection
 branch: hanf/psmux-idle-prompt-detection
 plan: _mill/plan
@@ -27,6 +27,7 @@ approved-Core implementation  '2026-05-22T07:10:14Z'
 approved-Tests  '2026-05-22T07:14:25Z'
 holistic-reviewing  '2026-05-22T07:14:54Z'
 holistic-approved  '2026-05-22T07:18:53Z'
+done  '2026-05-22T07:19:09Z'
 ```
 
 ## Batches
