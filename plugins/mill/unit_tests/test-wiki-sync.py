@@ -56,14 +56,48 @@ def main() -> int:
     try:
         bare = tmp / "bare.git"
         clone = tmp / "clone"
+        temp_clone = tmp / "temp"
 
         # Initialize bare repo
         subprocess.run(["git", "init", "--bare", str(bare)], check=True, capture_output=True)
 
-        # Clone it
+        # Clone it to temp for initial commit
+        subprocess.run(["git", "clone", str(bare), str(temp_clone)], check=True, capture_output=True)
+
+        # Configure git user in temp
+        subprocess.run(
+            ["git", "-C", str(temp_clone), "config", "user.email", "test@test.com"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(temp_clone), "config", "user.name", "Test User"],
+            check=True,
+            capture_output=True,
+        )
+
+        # Initial commit in temp
+        (temp_clone / "Home.md").write_text("# Home\n", encoding="utf-8")
+        subprocess.run(
+            ["git", "-C", str(temp_clone), "add", "Home.md"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(temp_clone), "commit", "-m", "init"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(temp_clone), "push", "-u", "origin", "main"],
+            check=True,
+            capture_output=True,
+        )
+
+        # Clone again for the actual test
         subprocess.run(["git", "clone", str(bare), str(clone)], check=True, capture_output=True)
 
-        # Configure git user
+        # Configure git user in clone
         subprocess.run(
             ["git", "-C", str(clone), "config", "user.email", "test@test.com"],
             check=True,
@@ -71,24 +105,6 @@ def main() -> int:
         )
         subprocess.run(
             ["git", "-C", str(clone), "config", "user.name", "Test User"],
-            check=True,
-            capture_output=True,
-        )
-
-        # Initial commit
-        (clone / "Home.md").write_text("# Home\n", encoding="utf-8")
-        subprocess.run(
-            ["git", "-C", str(clone), "add", "Home.md"],
-            check=True,
-            capture_output=True,
-        )
-        subprocess.run(
-            ["git", "-C", str(clone), "commit", "-m", "init"],
-            check=True,
-            capture_output=True,
-        )
-        subprocess.run(
-            ["git", "-C", str(clone), "push", "-u", "origin", "main"],
             check=True,
             capture_output=True,
         )
