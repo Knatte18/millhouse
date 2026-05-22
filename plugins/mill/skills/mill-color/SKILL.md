@@ -10,7 +10,7 @@ Rewrites `.vscode/settings.json` in the current worktree with the chosen palette
 ## Run it
 
 ```bash
-PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-color.py" <color-name>
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-color.py" <color-name>
 ```
 
 Valid color names: `green`, `purple`, `blue`, `yellow`, `red`, `cyan`, `indigo`, `orange`. Exits 2 on invalid or missing color name, 1 on other errors.
