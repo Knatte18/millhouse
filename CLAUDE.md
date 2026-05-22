@@ -45,10 +45,10 @@ _mill/   ← status.md, discussion.md, plan/, reviews/
 Cache form (all operational calls):
 
 ```bash
-PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-X.py"
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-X.py"
 ```
 
-Exceptions: unit tests use `uv run --project plugins/mill`; mill-go uses `$MILL_PYTHON`; nested calls after `--` in millpy-bg inherit PYTHONPATH automatically and must not carry the prefix.
+Exceptions: unit tests use `uv run --project plugins/mill`; mill-setup keeps the full path (bootstrapper — it writes `MILL_PYTHON` to `~/.claude/settings.json` via Phase 4.8); nested calls after `--` in millpy-bg inherit PYTHONPATH automatically and must not carry the prefix. `$MILL_PYTHON` is now the standard form for all other mill skills.
 
 ## Conventions
 

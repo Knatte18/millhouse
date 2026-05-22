@@ -55,16 +55,16 @@ There is no `--force` flag. The rationale: mill-spawn commits a frozen plan at t
 uv run --project plugins/mill plugins/mill/scripts/millpy-fold.py <slug> --issue <N>
 
 # RIGHT — invokes from cache
-PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-fold.py" <slug> --issue <N>
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-fold.py" <slug> --issue <N>
 ```
 
 ```powershell
 # GH issue path
-PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" `
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" `
     "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-fold.py" mill-misc-fixes-7 --issue 99
 
 # Scope path
-PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" `
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" `
     "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-fold.py" cluster-reviewer --scope "Support async batch calls"
 ```
 
@@ -79,7 +79,7 @@ uv run --project plugins/mill plugins/mill/scripts/millpy-fold.py mill-misc-fixe
 ### (a) Fold GH issue #99 into `mill-misc-fixes-7`
 
 ```powershell
-PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" `
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" `
     "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-fold.py" mill-misc-fixes-7 --issue 99
 ```
 
@@ -97,7 +97,7 @@ Home.md now contains `- Sources: #99 — Fix sidebar ordering regression` in the
 ### (b) Fold scope text into `cluster-reviewer`
 
 ```powershell
-PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" `
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" `
     "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-fold.py" cluster-reviewer --scope "Support async batch calls"
 ```
 
@@ -112,7 +112,7 @@ Home.md now contains `- Folded in: Support async batch calls` in the `cluster-re
 ### (c) Attempted fold into `[active]` task — error shown verbatim
 
 ```powershell
-PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" `
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" `
     "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-fold.py" mill-fold --issue 42
 ```
 

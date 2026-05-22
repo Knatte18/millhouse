@@ -22,7 +22,7 @@ Cleanup takes the wiki lock only when `--apply` is set. PR-reap also runs only u
 ## Run it
 
 ```bash
-PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-cleanup.py" [--apply]
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-cleanup.py" [--apply]
 ```
 
 Default is dry-run — pass `--apply` to execute removals. Must run from the hub, not from a worktree. Takes the wiki lock only when `--apply` is set.

@@ -33,7 +33,7 @@ You are the **Builder** — a lean orchestrator. You coordinate per-batch implem
    - `roles.code-review.batch.reviewer` — if null (or rounds: 0), skip per-batch code review for all batches.
 4. Acquire the builder lock:
    ```bash
-   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-builder-lock.py" acquire <slug>
+   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-builder-lock.py" acquire <slug>
    ```
    On exit code 1: surface the stderr message and halt — a second mill-go will corrupt state.
 4.5. **Path Setup.** `worktree_root` is not yet set in prior steps; `cfg` was loaded in step 3. Derive:
@@ -90,7 +90,7 @@ For each batch in `order`:
 The per-batch cleanup block:
 
 ```bash
-PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
 import sys
 sys.path.insert(0, r'${CLAUDE_PLUGIN_ROOT}/scripts')
 from pathlib import Path
@@ -107,7 +107,7 @@ _llm_claude.cleanup_session(sid)
 Before launching the implementer / reviewer for this batch, verify a config source is reachable. If the check fails, release the builder lock and halt — a config source became unavailable mid-run and the implementer's downstream error would mask the root cause.
 
 ```bash
-PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
 import sys
 import _paths, _wiki
 hub_root = _paths.resolve_git_root()
@@ -117,7 +117,7 @@ except _wiki.WikiHealthError as e:
     print(f'[mill-go] wiki health check failed: {e}', file=sys.stderr)
     raise SystemExit(1)
 " || {
-    PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-builder-lock.py" release
+    PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-builder-lock.py" release
     echo "[mill-go] HALT: no config source reachable -- re-run mill-setup if mill-config.yaml is missing" >&2
     exit 1
 }
@@ -143,9 +143,9 @@ fi
 ```
 
 ```bash
-PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-bg.py" \
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-bg.py" \
     --slug implement-<batch_name> -- \
-    "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-implement.py" <batch_name>
+    "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-implement.py" <batch_name>
 ```
 
 Returns immediately with `pid=<N> log=<abs-path>`. Do not use `run_in_background: true` on the Bash tool — that routes output to CC's temp dir. Poll the log file with `cat <log-path>` until `[mill-bg] EXIT` appears. Once it does, run `grep '^{' <log-path> | tail -1` to extract the JSON summary line.
@@ -199,9 +199,9 @@ For each round `N` from 1 to `roles.code-review.batch.rounds`:
    > **Before invoking `millpy-bg`**: verify `pwd` in the Bash terminal matches the task worktree. If `millpy-bg` rejects cwd with the parent-worktree error (`mill-bg: cwd appears to be a non-task worktree`), halt and instruct the operator to switch to the task-worktree terminal.
 
    ```bash
-   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-bg.py" \
+   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-bg.py" \
        --slug review-code-<batch_name>-r<N> -- \
-       "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-review-code.py" \
+       "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-review-code.py" \
            --batch <batch_name> [--extra-file <p> ...]
    ```
 
@@ -218,9 +218,9 @@ For each round `N` from 1 to `roles.code-review.batch.rounds`:
      > **Before invoking `millpy-bg`**: verify `pwd` in the Bash terminal matches the task worktree. If `millpy-bg` rejects cwd with the parent-worktree error (`mill-bg: cwd appears to be a non-task worktree`), halt and instruct the operator to switch to the task-worktree terminal.
 
      ```bash
-     PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-bg.py" \
+     PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-bg.py" \
          --slug fix-<batch_name>-r<N> -- \
-         "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-fix.py" --scope batch --batch-name <batch_name> --review-file <review-file-abs-path> --round <N>
+         "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-fix.py" --scope batch --batch-name <batch_name> --review-file <review-file-abs-path> --round <N>
      ```
      Returns immediately with `pid=<N> log=<abs-path>`. Do not use `run_in_background: true` on the Bash tool — that routes output to CC's temp dir. Poll the log file with `cat <log-path>` until `[mill-bg] EXIT` appears. Once it does, run `grep '^{' <log-path> | tail -1` to extract the JSON summary line.
 
@@ -233,9 +233,9 @@ For each round `N` from 1 to `roles.code-review.batch.rounds`:
    > **Before invoking `millpy-bg`**: verify `pwd` in the Bash terminal matches the task worktree. If `millpy-bg` rejects cwd with the parent-worktree error (`mill-bg: cwd appears to be a non-task worktree`), halt and instruct the operator to switch to the task-worktree terminal.
 
    ```bash
-   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-bg.py" \
+   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-bg.py" \
        --slug review-code-<batch_name>-retry-r<N> -- \
-       "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-review-code.py" \
+       "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-review-code.py" \
            --batch <batch_name> [--extra-file <p> ...]
    ```
 
@@ -259,7 +259,7 @@ If the deep-merged config has `pipeline.autonomous_mode: true`: for any `stuck_t
 - `_notify.notify("mill-go.blocked", f"batch {batch_name}: {blocked_reason}", slug=slug, batch=batch_name)`.
 - Release the builder lock:
   ```bash
-  PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-builder-lock.py" release
+  PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-builder-lock.py" release
   ```
 - Tell the user: "Batch X blocked with reason Y. Inspect reviews/ and status.md. Re-run `/mill-go` after resolving, or `/mill-abandon` to wind down." Do not proceed to Handoff.
 
@@ -274,9 +274,9 @@ When mill-go's Entry-step 5 phase gate routes here (phase is `implementing`, `re
      > **Before invoking `millpy-bg`**: verify `pwd` in the Bash terminal matches the task worktree. If `millpy-bg` rejects cwd with the parent-worktree error (`mill-bg: cwd appears to be a non-task worktree`), halt and instruct the operator to switch to the task-worktree terminal.
 
      ```bash
-     PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-bg.py" \
+     PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-bg.py" \
          --slug implement-<batch_name>-resume -- \
-         "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-implement.py" <batch_name>
+         "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-implement.py" <batch_name>
      ```
      The interrupted implementer session is dead and cannot be re-attached. A fresh batch start is the correct recovery: the CLI re-initialises state -> running, captures a new snapshot, and spawns a fresh implementer session. After parsing the report, continue at Execute step 2b (cleanliness gate).
    - **`reviewing`** — the implementer report was already consumed; the reviewer was running. Re-invoke the per-batch code-review CLI from the start of round `review_round` (read this field from the batch entry):
@@ -284,9 +284,9 @@ When mill-go's Entry-step 5 phase gate routes here (phase is `implementing`, `re
      > **Before invoking `millpy-bg`**: verify `pwd` in the Bash terminal matches the task worktree. If `millpy-bg` rejects cwd with the parent-worktree error (`mill-bg: cwd appears to be a non-task worktree`), halt and instruct the operator to switch to the task-worktree terminal.
 
      ```bash
-     PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-bg.py" \
+     PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-bg.py" \
          --slug review-code-<batch_name>-r<review_round>-resume -- \
-         "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-review-code.py" --batch <batch_name>
+         "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-review-code.py" --batch <batch_name>
      ```
      The CLI's crash-recovery scan handles a written-but-uncommitted review file. After parsing the JSON verdict, continue at Execute step 3 sub-step 3 (load `mill-receiving-review`) and step 4 (branch on verdict).
    - **`fixing`** — the reviewer returned `REQUEST_CHANGES`; the fix-implementer was running. Re-invoke:
@@ -294,9 +294,9 @@ When mill-go's Entry-step 5 phase gate routes here (phase is `implementing`, `re
      > **Before invoking `millpy-bg`**: verify `pwd` in the Bash terminal matches the task worktree. If `millpy-bg` rejects cwd with the parent-worktree error (`mill-bg: cwd appears to be a non-task worktree`), halt and instruct the operator to switch to the task-worktree terminal.
 
      ```bash
-     PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-bg.py" \
+     PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-bg.py" \
          --slug fix-<batch_name>-r<review_round>-resume -- \
-         "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-fix.py" --scope batch --batch-name <batch_name> --review-file <review-file-abs-path> --round <review_round>
+         "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-fix.py" --scope batch --batch-name <batch_name> --review-file <review-file-abs-path> --round <review_round>
      ```
      The `<review-file-abs-path>` is the most recent `_mill/reviews/*-code-review-<batch_name>-r<review_round>.md` file. After parsing the report, continue at Execute step 3 sub-step 5 (max-rounds check) or back to step 3 round N+1 if the fix produced an APPROVE-eligible state on next review.
 3. **No state mutation before resume.** Do NOT pre-emptively flip `state` or call `_status.append_phase` before re-invoking the CLI. The CLI handles state transitions atomically; double-writes corrupt the timeline.
@@ -309,7 +309,7 @@ When mill-go's Entry-step 5 phase gate routes here (phase is `implementing`, `re
 The holistic cleanup block:
 
 ```bash
-PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
 import sys
 sys.path.insert(0, r'${CLAUDE_PLUGIN_ROOT}/scripts')
 import _llm_claude
@@ -330,7 +330,7 @@ For each round `H` from 1 to `max_holistic_rounds`:
    Before launching the implementer / reviewer for this batch, verify a config source is reachable. If the check fails, release the builder lock and halt — a config source became unavailable mid-run and the implementer's downstream error would mask the root cause.
 
    ```bash
-   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "
+   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
    import sys
    import _paths, _wiki
    hub_root = _paths.resolve_git_root()
@@ -340,7 +340,7 @@ For each round `H` from 1 to `max_holistic_rounds`:
        print(f'[mill-go] wiki health check failed: {e}', file=sys.stderr)
        raise SystemExit(1)
    " || {
-       PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-builder-lock.py" release
+       PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-builder-lock.py" release
        echo "[mill-go] HALT: no config source reachable -- re-run mill-setup if mill-config.yaml is missing" >&2
        exit 1
    }
@@ -356,7 +356,7 @@ For each round `H` from 1 to `max_holistic_rounds`:
    Inline Python helper for branches (a) and (c):
 
    ```bash
-   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "
+   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
    from pathlib import Path
    import _paths, _bg, json, sys
    git_root = _paths.resolve_git_root()
@@ -401,9 +401,9 @@ For each round `H` from 1 to `max_holistic_rounds`:
    ```
 
    ```bash
-   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-bg.py" \
+   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-bg.py" \
      --slug review-code-holistic-r{H} -- \
-     "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-review-code.py" \
+     "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-review-code.py" \
        [--extra-file <p> ...]
    ```
    Include any accumulated `extra_files` from prior `NEED_CONTEXT` rounds via `--extra-file <p>` (one flag per path). Poll and extract JSON as per the per-batch pattern.
@@ -417,9 +417,9 @@ For each round `H` from 1 to `max_holistic_rounds`:
    > **Before invoking `millpy-bg`**: verify `pwd` in the Bash terminal matches the task worktree. If `millpy-bg` rejects cwd with the parent-worktree error (`mill-bg: cwd appears to be a non-task worktree`), halt and instruct the operator to switch to the task-worktree terminal.
 
    ```bash
-   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-bg.py" \
+   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-bg.py" \
      --slug review-code-holistic-retry-r<H> -- \
-     "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-review-code.py" \
+     "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-review-code.py" \
        [--extra-file <p> ...]
    ```
 
@@ -443,7 +443,7 @@ For each round `H` from 1 to `max_holistic_rounds`:
 
 5. On `REQUEST_CHANGES`: the holistic-fix CLI dispatches a fresh fixer; the fixer loads `mill-receiving-review` (see Principles below). Builder does not load the skill. Invoke the holistic cleanup block (reaps the previous round's session before the next one starts). Dispatch:
    ```bash
-   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-fix.py" --scope holistic --review-file <abs-path-to-holistic-review-file> --round {H}
+   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-fix.py" --scope holistic --review-file <abs-path-to-holistic-review-file> --round {H}
    ```
    Parse stdout JSON (same last-`{"status":...}`-line pattern as per-batch). The CLI handles `holistic-fixing` phase + commit + push itself.
    - `stuck_type: transient`: one-retry policy (re-invoke once). If still transient: surface to user — retry fresh / skip holistic / block task. On user-chosen block: invoke the holistic cleanup block, then go to *Blocked*.
@@ -483,7 +483,7 @@ If the output is empty, proceed normally.
 3. `_notify.notify("mill-go.done", f"task {slug} complete", slug=slug)`.
 4. **Release the builder lock immediately:**
    ```bash
-   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-builder-lock.py" release
+   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-builder-lock.py" release
    ```
 5. If `pipeline.auto_merge: true` → invoke `/mill-finalize`. Otherwise tell the user: "Task complete. Run `/mill-finalize` to finalize the task (creates a PR or squashes directly, depending on config)." mill-finalize may halt on `pr-pending` in PR mode — that is expected; treat it as completion of step 5 and continue to step 6.
 6. If `pipeline.auto_report: true` → invoke `/mill-self-report --auto`. **Always fires** at the end of Handoff, including after a `pr-pending` halt in step 5 — do NOT treat the PR-pending message as task termination. The skill checks `gh auth` itself and bails cleanly if absent. Cross-thread merges and post-PR teardowns are not auto-reflected; user can run `/mill-self-report` manually if wanted.
