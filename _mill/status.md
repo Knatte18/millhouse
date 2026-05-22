@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: hub-active-slug
 branch: hanf/hub-active-slug
 plan: _mill/plan
@@ -20,4 +20,17 @@ planning  '2026-05-22T06:51:54Z'
 plan-review-r1  '2026-05-22T06:57:26Z'
 plan-fix-r1  '2026-05-22T06:57:26Z'
 planned  '2026-05-22T06:57:50Z'
+implementing  '2026-05-22T07:00:00Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: Core helpers
+    state: pending
+  - name: Callers
+    state: pending
+  - name: Tests
+    state: pending
 ```
