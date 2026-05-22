@@ -14,7 +14,7 @@ The underlying script (`millpy-wikipush.py`) can also be run manually from `.mil
 ## Run it
 
 ```bash
-PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-wikipush.py" --leave-conflicts
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-wikipush.py" --leave-conflicts
 ```
 
 Capture exit code and stdout/stderr. Branch on exit code:
@@ -36,7 +36,7 @@ The wiki repo is in mid-rebase state. Your local commit is on top, and one or mo
    Resolve `<wiki-path>` via:
 
    ```bash
-   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "
+   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
    import _paths
    print(_paths.resolve_wiki_path(_paths.resolve_git_root()))
    "

@@ -47,7 +47,7 @@ for script_path in _skill_writer.iter_target_scripts(plugins_root):
    ## Run it
 
    ```bash
-   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-<X>.py" <args from Usage block>
+   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-<X>.py" <args from Usage block>
    ```
 
    <2–3 lines of must-know constraints — e.g. "no wiki lock taken", "exits 1 if no .millhouse/wiki", or other tight invariants visible in the script docstring>
@@ -57,7 +57,7 @@ for script_path in _skill_writer.iter_target_scripts(plugins_root):
 
 5. After all 12 are written, run `mill-skills-index` to refresh `SKILLS.md`:
    ```bash
-   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-skills-index.py"
+   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-skills-index.py"
    ```
 
 6. Commit and push the 12 new SKILL.md files and the regenerated `SKILLS.md` in one commit.

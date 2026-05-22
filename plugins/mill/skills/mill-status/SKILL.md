@@ -10,7 +10,7 @@ Prints a multi-column table cross-referencing Home.md markers, wiki `active/` di
 ## Run it
 
 ```bash
-PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-status.py" [--json] [--no-color] [--sort {slug,phase}]
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-status.py" [--json] [--no-color] [--sort {slug,phase}]
 ```
 
 Outputs colored text by default; `--no-color` disables ANSI. `--json` emits a JSON array for scripting. Sorts by `slug` (default) or `phase`.
