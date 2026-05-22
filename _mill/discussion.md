@@ -120,8 +120,11 @@ exercise.
 - Decision: The `_client.py` library **auto-ensures** the daemon. Every
   `read` / `write_commit_push` call first runs the ensure logic: read
   `.wiki-daemon.json`, try to connect; on failure (no daemon / dead / stale)
-  spawn `_server.py`, wait until it is up, then proceed. A connection error
-  mid-request triggers one re-ensure + retry, then raises. `connect` (the
+  spawn `_server.py` (detached), then poll for the daemon to come up — state
+  file present and the port accepting connections — for up to a bounded timeout
+  (default 10s). On timeout the client raises a startup error rather than
+  retrying indefinitely. A connection error mid-request triggers one re-ensure
+  + retry, then raises. `connect` (the
   stable socket boundary) and `spawn` are **separated**: `_spawn_server()` is
   one isolated function — the single implementation-specific seam (LSP model:
   the protocol is universal, the "command to start the server" is isolated).
@@ -157,7 +160,10 @@ exercise.
   it adds them, it commits and pushes that one-time `.gitignore` housekeeping
   change). This housekeeping runs **only after** the daemon has won the
   `O_EXCL` spawn race (see `spawn-race-and-staleness`) — never before, so two
-  racing daemons cannot collide on the push. State file fields:
+  racing daemons cannot collide on the push. If that one-time `.gitignore`
+  commit+push fails (e.g. a transient network error), the daemon logs a warning
+  and continues — startup is not aborted over `.gitignore` hygiene. State file
+  fields:
   `protocol_version`, `pid`, `host`,
   `port`, `token`, `started_at` (ISO-8601 UTC). It is written **once** at
   startup, **atomically** (temp file + rename), and removed on clean idle-exit.
@@ -251,8 +257,10 @@ exercise.
 
 ### api-surface
 
-- Decision: The client API is `read(...)`, `write_commit_push(...)`, and an
-  optional `health_check() -> bool`. The daemon's fixed JSON protocol carries
+- Decision: The client API is `read(...)`, `write_commit_push(...)` — the
+  caller supplies the commit message (V2 parity), carried in the JSON request
+  envelope — and an optional `health_check() -> bool`. The daemon's fixed JSON
+  protocol carries
   only `read` and `write_commit_push`; lifecycle (spawn, terminate, health
   probe) is out-of-band, not JSON request ops. There is **no** `sync_pull` (the
   daemon owns freshness internally) and **no** `lock`/`unlock` (CAS replaces
