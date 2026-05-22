@@ -43,7 +43,9 @@ batches:
     implementer_session: fd676003-03ca-4fb5-8d4d-7088e9ccd568
     start_sha: 3c1f6d093462c2f419227e376ab1bee951139e7a
   - name: Git sync layer
-    state: pending
+    state: running
+    implementer_session: cc86f28d-21ad-4a6e-b8c3-f83f29f9ab42
+    start_sha: 148312ba4bfe0ca40eb66932406affe0b80f3faa
   - name: Wiki server
     state: pending
   - name: Wiki client
