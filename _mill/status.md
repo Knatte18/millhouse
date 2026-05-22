@@ -53,7 +53,9 @@ batches:
     implementer_session: 2b439679-031f-4586-a799-0705716a2e63
     start_sha: ae59afb7615fce8c87fdca3fb45810c842ba27aa
   - name: Wiki client
-    state: pending
+    state: running
+    implementer_session: 9069eddc-8f57-4dea-80b8-1e05536820b4
+    start_sha: da18546b8c6f4733e4eb54e41fda21843fbfc936
   - name: Unit tests
     state: pending
   - name: Integration test and docs
