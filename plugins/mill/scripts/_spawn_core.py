@@ -49,6 +49,9 @@ Public API:
     recreate_active_junction(hub_root) -> None
         Delete-then-create the ``.active`` junction so it points at
         ``hub_root / "_mill"``. Used by both ``mill-claim`` and ``mill-spawn``.
+    write_hub_active_indicator(hub_root, slug) -> None
+        Write an empty <hub_root>/_mill/<slug>.active indicator file so hub-side
+        tools can detect the active task without branch inspection.
     discover_active_worktrees(worktrees_dir, home_tasks, branch_prefix) -> list[tuple[Path, str, str]]
         Scan ``worktrees_dir`` for directories whose current branch slug
         (after stripping ``branch_prefix``) matches an entry in
@@ -770,3 +773,14 @@ def recreate_active_junction(
     # (where Path.exists() and Path.is_symlink() both return False on Windows).
     _junction.remove(link_path)
     _junction.create(target, link_path)
+
+
+def write_hub_active_indicator(hub_root: Path, slug: str) -> None:
+    """Write an empty indicator file at hub_root/_mill/<slug>.active.
+
+    Args:
+        hub_root: Absolute path to the hub git checkout.
+        slug: Task slug; determines the indicator file name.
+    """
+    (hub_root / "_mill").mkdir(parents=True, exist_ok=True)
+    (hub_root / "_mill" / f"{slug}.active").touch()
