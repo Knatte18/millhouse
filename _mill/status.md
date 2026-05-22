@@ -31,7 +31,9 @@ implementing  '2026-05-22T07:55:46Z'
 ```yaml
 batches:
   - name: mill-setup bootstrap
-    state: pending
+    state: running
+    implementer_session: 50451e07-d067-4536-aa54-884d90b47afd
+    start_sha: 3287862e38c0333ae5f01019a4d608c2c02f5b8e
   - name: CLAUDE.md updates
     state: pending
   - name: skill replace heavy
