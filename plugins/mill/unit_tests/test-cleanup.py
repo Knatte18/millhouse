@@ -1218,10 +1218,11 @@ def main() -> int:
                 home_marker="done",
             )
 
-            with patch("mill_cleanup._worktree.remove_safe"):
-                with patch("mill_cleanup._junction.remove"):
-                    with patch("mill_cleanup._subprocess_util.run", return_value=MagicMock(returncode=0, stdout="", stderr="")):
-                        mod._apply_worktree_record(record, hub_root, wiki_path, {})
+            with patch("mill_cleanup._paths.resolve_container_path", return_value=tmp / "container"):
+                with patch("mill_cleanup._worktree.remove_safe"):
+                    with patch("mill_cleanup._junction.remove"):
+                        with patch("mill_cleanup._subprocess_util.run", return_value=MagicMock(returncode=0, stdout="", stderr="")):
+                            mod._apply_worktree_record(record, hub_root, wiki_path, {})
 
             if indicator_path.exists():
                 raise AssertionError(f"indicator file should be deleted at {indicator_path}")

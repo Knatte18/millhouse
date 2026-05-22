@@ -17,6 +17,7 @@ sys.path.insert(0, str(_UNIT_TESTS))
 
 from _test_helpers import _make_task_worktree  # noqa: E402
 from _paths import ActiveWorktreeSlugMismatch  # noqa: E402
+import _marker  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -1834,7 +1835,7 @@ def main() -> int:
             (mill_dir / "my-task.active").write_text("", encoding="utf-8")
 
             cfg = {}
-            with patch("_review_common._marker.slug_from_branch", side_effect=__import__('_marker', fromlist=['MarkerError']).MarkerError("test")):
+            with patch("_review_common._marker.slug_from_branch", side_effect=_marker.MarkerError("test")):
                 result = find_active_slug(hub_root, Path(tmp) / "wiki", cfg)
 
             assert result == "my-task", f"Expected 'my-task', got {result!r}"
@@ -1856,7 +1857,7 @@ def main() -> int:
             (mill_dir / "task-b.active").write_text("", encoding="utf-8")
 
             cfg = {}
-            with patch("_review_common._marker.slug_from_branch", side_effect=__import__('_marker', fromlist=['MarkerError']).MarkerError("test")):
+            with patch("_review_common._marker.slug_from_branch", side_effect=_marker.MarkerError("test")):
                 try:
                     find_active_slug(hub_root, Path(tmp) / "wiki", cfg)
                     print("FAIL: find_active_slug glob fallback multiple files: expected ReviewError", file=sys.stderr)
@@ -1879,7 +1880,7 @@ def main() -> int:
             # Do NOT create _mill/
 
             cfg = {}
-            with patch("_review_common._marker.slug_from_branch", side_effect=__import__('_marker', fromlist=['MarkerError']).MarkerError("test")):
+            with patch("_review_common._marker.slug_from_branch", side_effect=_marker.MarkerError("test")):
                 try:
                     find_active_slug(hub_root, Path(tmp) / "wiki", cfg)
                     print("FAIL: find_active_slug glob fallback no _mill: expected ReviewError", file=sys.stderr)
