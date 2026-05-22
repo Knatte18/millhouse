@@ -1,8 +1,8 @@
 """Unit tests for plugins/mill/scripts/_psmux_capture.py.
 
 Pure-function tests on the output parser extract_response(). Each test
-loads a static fixture from fixtures/psmux-capture/ and asserts the
-extracted response or exception.
+uses an inline multi-line string snapshot and asserts the extracted
+response or exception.
 """
 from __future__ import annotations
 
@@ -17,151 +17,130 @@ import _psmux_capture as _psmux_capture_mod  # noqa: E402
 
 def main() -> int:
     errors = 0
-    fixture_base = Path(__file__).resolve().parent / "fixtures" / "psmux-capture"
 
-    # Test 1: clean.txt
+    # Test 1: Basic response
     try:
-        capture_text = (fixture_base / "clean.txt").read_text()
-        result = _psmux_capture_mod.extract_response(
-            capture_text, "MILL_BEGIN_AAA", "MILL_END_BBB"
-        )
-        if result == "PONG":
-            print("[OK] clean.txt: extracted single line")
-        else:
-            print(f"[FAIL] clean.txt: expected 'PONG', got {result!r}")
-            errors += 1
-    except Exception as e:
-        print(f"[FAIL] clean.txt: raised {e!r}")
-        errors += 1
-
-    # Test 2: multiline.txt
-    try:
-        capture_text = (fixture_base / "multiline.txt").read_text()
-        result = _psmux_capture_mod.extract_response(
-            capture_text, "MILL_BEGIN_AAA", "MILL_END_BBB"
-        )
-        expected = (
-            "Thread code shimmers,\n"
-            "PowerShellthreadsweaveasone\n"
-            "Into data streams."
-        )
+        snapshot = r"""  ❯
+● First line
+Second line
+  ❯ """
+        result = _psmux_capture_mod.extract_response(snapshot)
+        expected = "First line\nSecond line"
         if result == expected:
-            print("[OK] multiline.txt: extracted three response lines")
+            print("[OK] Test 1: Basic response")
         else:
-            print(f"[FAIL] multiline.txt: expected {expected!r}, got {result!r}")
+            print(f"[FAIL] Test 1: expected {expected!r}, got {result!r}")
             errors += 1
     except Exception as e:
-        print(f"[FAIL] multiline.txt: raised {e!r}")
+        print(f"[FAIL] Test 1: raised {e!r}")
         errors += 1
 
-    # Test 3: with-status.txt
+    # Test 2: Multi-line response (10 lines total)
     try:
-        capture_text = (fixture_base / "with-status.txt").read_text()
-        result = _psmux_capture_mod.extract_response(
-            capture_text, "MILL_BEGIN_AAA", "MILL_END_BBB"
-        )
-        expected = "First response line\nSecond response line"
+        snapshot = r"""  ❯
+● Start line
+Line 2
+Line 3
+Line 4
+Line 5
+Line 6
+Line 7
+Line 8
+Line 9
+Line 10
+  ❯ """
+        result = _psmux_capture_mod.extract_response(snapshot)
+        # Should contain all 10 lines, with bullet prefix stripped from first
+        expected_lines = ["Start line"] + [f"Line {i}" for i in range(2, 11)]
+        expected = "\n".join(expected_lines)
         if result == expected:
-            print("[OK] with-status.txt: excluded status line after marker")
+            print("[OK] Test 2: Multi-line response")
         else:
-            print(f"[FAIL] with-status.txt: expected {expected!r}, got {result!r}")
+            print(f"[FAIL] Test 2: expected {expected!r}, got {result!r}")
             errors += 1
     except Exception as e:
-        print(f"[FAIL] with-status.txt: raised {e!r}")
+        print(f"[FAIL] Test 2: raised {e!r}")
         errors += 1
 
-    # Test 4: with-scrollback.txt
+    # Test 3: Bullet-prefix strip
     try:
-        capture_text = (fixture_base / "with-scrollback.txt").read_text()
-        result = _psmux_capture_mod.extract_response(
-            capture_text, "MILL_BEGIN_AAA", "MILL_END_BBB"
-        )
-        expected = "\n".join(f"LINE_{i}" for i in range(1, 81))
+        snapshot = r"""  ❯
+● extra space
+  ❯ """
+        result = _psmux_capture_mod.extract_response(snapshot)
+        expected = "extra space"
         if result == expected:
-            print("[OK] with-scrollback.txt: extracted 80 lines without truncation")
+            print("[OK] Test 3: Bullet-prefix strip")
         else:
-            print(f"[FAIL] with-scrollback.txt: length mismatch")
+            print(f"[FAIL] Test 3: expected {expected!r}, got {result!r}")
             errors += 1
     except Exception as e:
-        print(f"[FAIL] with-scrollback.txt: raised {e!r}")
+        print(f"[FAIL] Test 3: raised {e!r}")
         errors += 1
 
-    # Test 5: whitespace-compressed.txt
+    # Test 4: Session history (multiple prior blocks, only current response returned)
     try:
-        capture_text = (fixture_base / "whitespace-compressed.txt").read_text()
-        result = _psmux_capture_mod.extract_response(
-            capture_text, "MILL_BEGIN_AAA", "MILL_END_BBB"
-        )
-        expected = "ResponsewithoutspaceBetweenWords"
+        snapshot = r"""  ❯
+● Prior1
+prior1 continuation
+  ❯
+● Prior2
+prior2 continuation
+  ❯
+● Current response
+  ❯ """
+        result = _psmux_capture_mod.extract_response(snapshot)
+        expected = "Current response"
         if result == expected:
-            print("[OK] whitespace-compressed.txt: preserved missing space")
+            print("[OK] Test 4: Session history")
         else:
-            print(f"[FAIL] whitespace-compressed.txt: expected {expected!r}, got {result!r}")
+            print(f"[FAIL] Test 4: expected {expected!r}, got {result!r}")
             errors += 1
     except Exception as e:
-        print(f"[FAIL] whitespace-compressed.txt: raised {e!r}")
+        print(f"[FAIL] Test 4: raised {e!r}")
         errors += 1
 
-    # Test 6: quoted-marker-text.txt
+    # Test 5: No bullet prefix
     try:
-        capture_text = (fixture_base / "quoted-marker-text.txt").read_text()
-        result = _psmux_capture_mod.extract_response(
-            capture_text, "MILL_BEGIN_AAA", "MILL_END_BBB"
-        )
-        expected = (
-            "This response mentions `MILL_BEGIN_AAA` inside backticks.\n"
-            "It also has `MILL_END_BBB` quoted here.\n"
-            "But these are not on their own lines."
-        )
-        if result == expected:
-            print("[OK] quoted-marker-text.txt: ignored mid-line marker mentions")
-        else:
-            print(f"[FAIL] quoted-marker-text.txt: expected {expected!r}, got {result!r}")
-            errors += 1
-    except Exception as e:
-        print(f"[FAIL] quoted-marker-text.txt: raised {e!r}")
-        errors += 1
-
-    # Test 7: no-end-marker.txt
-    try:
-        capture_text = (fixture_base / "no-end-marker.txt").read_text()
-        result = _psmux_capture_mod.extract_response(
-            capture_text, "MILL_BEGIN_AAA", "MILL_END_BBB"
-        )
-        print(f"[FAIL] no-end-marker.txt: expected MarkerNotFoundError, got {result!r}")
+        snapshot = r"""  ❯
+Response text
+  ❯ """
+        result = _psmux_capture_mod.extract_response(snapshot)
+        print(f"[FAIL] Test 5: expected MarkerNotFoundError, got {result!r}")
         errors += 1
     except _psmux_capture_mod.MarkerNotFoundError:
-        print("[OK] no-end-marker.txt: raised MarkerNotFoundError")
+        print("[OK] Test 5: No bullet prefix raises MarkerNotFoundError")
     except Exception as e:
-        print(f"[FAIL] no-end-marker.txt: raised {type(e).__name__}, expected MarkerNotFoundError")
+        print(f"[FAIL] Test 5: raised {type(e).__name__}, expected MarkerNotFoundError")
         errors += 1
 
-    # Test 8: markers-reversed.txt
+    # Test 6: No idle char
     try:
-        capture_text = (fixture_base / "markers-reversed.txt").read_text()
-        result = _psmux_capture_mod.extract_response(
-            capture_text, "MILL_BEGIN_AAA", "MILL_END_BBB"
-        )
-        print(f"[FAIL] markers-reversed.txt: expected MarkerNotFoundError, got {result!r}")
+        snapshot = r"""● Response text"""
+        result = _psmux_capture_mod.extract_response(snapshot)
+        print(f"[FAIL] Test 6: expected MarkerNotFoundError, got {result!r}")
         errors += 1
     except _psmux_capture_mod.MarkerNotFoundError:
-        print("[OK] markers-reversed.txt: raised MarkerNotFoundError")
+        print("[OK] Test 6: No idle char raises MarkerNotFoundError")
     except Exception as e:
-        print(f"[FAIL] markers-reversed.txt: raised {type(e).__name__}, expected MarkerNotFoundError")
+        print(f"[FAIL] Test 6: raised {type(e).__name__}, expected MarkerNotFoundError")
         errors += 1
 
-    # Test 9: polling-not-ready.txt
+    # Test 7: Whitespace variants
     try:
-        capture_text = (fixture_base / "polling-not-ready.txt").read_text()
-        result = _psmux_capture_mod.extract_response(
-            capture_text, "MILL_BEGIN_AAA", "MILL_END_BBB"
-        )
-        print(f"[FAIL] polling-not-ready.txt: expected MarkerNotFoundError, got {result!r}")
-        errors += 1
-    except _psmux_capture_mod.MarkerNotFoundError:
-        print("[OK] polling-not-ready.txt: raised MarkerNotFoundError")
+        snapshot = r"""  ❯ done
+  ● First line
+Second line
+  ❯ """
+        result = _psmux_capture_mod.extract_response(snapshot)
+        expected = "First line\nSecond line"
+        if result == expected:
+            print("[OK] Test 7: Whitespace variants")
+        else:
+            print(f"[FAIL] Test 7: expected {expected!r}, got {result!r}")
+            errors += 1
     except Exception as e:
-        print(f"[FAIL] polling-not-ready.txt: raised {type(e).__name__}, expected MarkerNotFoundError")
+        print(f"[FAIL] Test 7: raised {e!r}")
         errors += 1
 
     return errors
