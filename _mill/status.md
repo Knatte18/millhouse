@@ -30,7 +30,9 @@ implementing  '2026-05-22T07:06:27Z'
 ```yaml
 batches:
   - name: Core implementation
-    state: pending
+    state: running
+    implementer_session: e31bcb7e-1eb1-415f-adef-cc299bc90f32
+    start_sha: 7103e48c7b90c6946322d0b004d1e9391ae04a22
   - name: Tests
     state: pending
 ```
