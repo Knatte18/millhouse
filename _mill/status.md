@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-skill replace remaining
+phase: approved-verify
 slug: mill-python-env-var
 branch: hanf/mill-python-env-var
 plan: _mill/plan
@@ -28,6 +28,7 @@ approved-mill-setup bootstrap  '2026-05-22T07:58:22Z'
 approved-CLAUDE.md updates  '2026-05-22T08:07:06Z'
 approved-skill replace heavy  '2026-05-22T08:09:46Z'
 approved-skill replace remaining  '2026-05-22T08:12:00Z'
+approved-verify  '2026-05-22T08:13:12Z'
 ```
 
 ## Batches
@@ -51,7 +52,7 @@ batches:
     implementer_session: c7a58f0e-a91c-424e-ae16-5f5d03f4803e
     start_sha: 593ca1d19f04baf8d50afb9960cea94a8105db75
   - name: verify
-    state: running
+    state: approved
     implementer_session: fb6a4c1e-6527-4b76-b97a-ffbb7f9e6ab8
     start_sha: de066f11e31e4261eb2dae93830ac094bcdcfb26
 ```
