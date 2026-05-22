@@ -1,5 +1,0 @@
-PS C:\Code\millhouse\wts\claude-p-wrapper>
-MILL_END_BBB
-Some response content
-MILL_BEGIN_AAA
-PS C:\Code\millhouse\wts\claude-p-wrapper>
