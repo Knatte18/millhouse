@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-review-r2
+phase: planned
 slug: psmux-idle-prompt-detection
 branch: hanf/psmux-idle-prompt-detection
 plan: _mill/plan
@@ -21,4 +21,5 @@ planning  '2026-05-22T06:53:42Z'
 plan-review-r1  '2026-05-22T06:59:25Z'
 plan-fix-r1  '2026-05-22T07:00:01Z'
 plan-review-r2  '2026-05-22T07:04:30Z'
+planned  '2026-05-22T07:04:40Z'
 ```
