@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: discussed
 slug: hub-active-slug
 branch: hanf/hub-active-slug
 plan: null
@@ -15,4 +15,5 @@ task_description: |
 
 ```text
 discussing  '2026-05-22T05:49:22Z'
+discussed  '2026-05-22T06:31:55Z'
 ```
