@@ -3,7 +3,7 @@
 ```yaml
 task: Replace psmux marker protocol with idle-prompt detection
 slug: psmux-idle-prompt-detection
-approved: false
+approved: true
 started: 20260522-064837
 parent: main
 root: ""
