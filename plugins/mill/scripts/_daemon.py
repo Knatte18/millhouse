@@ -60,7 +60,8 @@ class DaemonBase(abc.ABC):
     def run(self) -> None:
         """Main entry point: O_EXCL claim, bind, accept loop, idle-exit."""
         try:
-            self._claim_state_file()
+            if not self._claim_state_file():
+                return
 
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.bind(("127.0.0.1", 0))
@@ -97,12 +98,16 @@ class DaemonBase(abc.ABC):
             self.on_stop()
             self._state_file_path.unlink(missing_ok=True)
 
-    def _claim_state_file(self) -> None:
-        """Claim state file with O_EXCL; on conflict check staleness."""
+    def _claim_state_file(self) -> bool:
+        """Claim state file with O_EXCL; on conflict check staleness.
+
+        Returns:
+            True if successfully claimed, False if another daemon is running.
+        """
         while True:
             try:
                 open(self._state_file_path, "x").close()
-                return
+                return True
             except FileExistsError:
                 state_text = self._state_file_path.read_text(encoding="utf-8")
                 state = json.loads(state_text)
@@ -110,7 +115,7 @@ class DaemonBase(abc.ABC):
                     self._state_file_path.unlink()
                 else:
                     self._logger.info("another daemon is running, exiting")
-                    return
+                    return False
 
     def _handle_connection(self, conn: socket.socket) -> None:
         """Handle one connection: read JSON, auth, dispatch, respond."""
