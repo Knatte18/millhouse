@@ -253,15 +253,22 @@ Scenarios to cover:
 
 ### `test-claude-sub.py` — updated/new scenarios
 
-S1–S5, S7–S9: update `extract_response` mock signature only (1-arg lambda).
-S6: rewrite as success-path regression guard using `_wait_for_idle_stable` mock.
-New S10: `_wait_for_idle_stable` returns False → RuntimeError → exit code 1.
-New S11: `_wait_for_idle_stable` returns True, `extract_response` raises
-         `MarkerNotFoundError` → exit code 1.
+- **S2, S3, S5, S8**: no changes (exit before Step 11; no `extract_response` mock)
+- **S1, S4, S7, S9**: update `extract_response` mock to 1-arg lambda; add
+  `_wait_for_idle_stable` mock returning True
+- **S6**: full rewrite — `_wait_for_idle_stable` returns True; `capture_pane`
+  returns valid snapshot with `❯` and `● ` lines; `extract_response` returns "ok"
+- **New S10**: `_wait_for_idle_stable` returns False → RuntimeError → exit code 1
+- **New S11**: `_wait_for_idle_stable` returns True, `extract_response` raises
+  `MarkerNotFoundError` → exit code 1
 
 TDD candidates: `extract_response` (pure function, no mocking needed),
-`_wait_for_idle_stable` (can be tested by mocking `_psmux.capture_pane`
-with a sequence of return values).
+`_wait_for_idle_stable` (mock `_psmux.capture_pane` with a sequence of return
+values). Key `_wait_for_idle_stable` scenarios:
+- (a) First poll has `❯`, second poll has `❯` → returns True
+- (b) First poll has `❯`, second poll has no `❯`, third and fourth polls both
+  have `❯` → returns True (transient recovery)
+- (c) `❯` never appears in any poll → returns False on timeout
 
 ## Q&A log
 

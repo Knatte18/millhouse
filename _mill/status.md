@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: discussion-fix-r2
 slug: psmux-idle-prompt-detection
 branch: hanf/psmux-idle-prompt-detection
 plan: null
@@ -15,4 +15,5 @@ task_description: |
 
 ```text
 discussing  '2026-05-22T05:49:43Z'
+discussion-fix-r2  '2026-05-22T06:33:41Z'
 ```
