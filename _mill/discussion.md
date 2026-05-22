@@ -28,9 +28,12 @@ and re-running `/mill-setup` is all that is needed to keep the path current.
 **In:**
 
 - `plugins/mill/skills/mill-setup/SKILL.md` — add Phase 4.8 (write `MILL_PYTHON`
-  to `~/.claude/settings.json`) and update Phase 8 verification check
+  to `~/.claude/settings.json`), update Phase 8 verification check, and update
+  the "How to invoke helpers" parenthetical on line 69 (currently says "mill-go
+  uses an equivalent form with `$MILL_PYTHON`, an alias defined in its Step 0
+  block" — replace with "a CC env var written by mill-setup")
 - `plugins/mill/skills/mill-go/SKILL.md` — replace all 33 occurrences
-- 22 other `plugins/mill/skills/*/SKILL.md` files — replace 1–4 occurrences each
+- 22 other `plugins/mill/skills/*/SKILL.md` files — replace 1–14 occurrences each
   (full list: git-commit, mill-abandon, mill-add, mill-autofix, mill-claim,
   mill-cleanup, mill-color, mill-fold, mill-ghissues-to-tasks, mill-groom,
   mill-inspect, mill-merge-in, mill-plan, mill-resume, mill-skills-from-scripts,
@@ -60,8 +63,8 @@ and re-running `/mill-setup` is all that is needed to keep the path current.
   which project or worktree is active. Task worktrees (e.g. `wts/mill-python-env-var`)
   have their own git root and do NOT inherit a hub-level `.claude/settings.local.json`,
   so a project-level file would silently fail for all mill-plan / mill-go runs.
-  The user-level settings file is already present and already has an `"env": {}`
-  key, requiring no bootstrapping.
+  The Phase 4.8 snippet uses `setdefault('env', {})` to create the `env` block
+  if absent — no prior bootstrapping is required.
 - **Rejected:** Hub's `.claude/settings.local.json` — not inherited by task
   worktrees; Windows User env var (same mechanism as PYTHONPATH) — takes effect
   only in new terminal sessions opened after mill-setup, not in the current CC
