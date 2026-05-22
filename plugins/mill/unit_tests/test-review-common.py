@@ -17,6 +17,7 @@ sys.path.insert(0, str(_UNIT_TESTS))
 
 from _test_helpers import _make_task_worktree  # noqa: E402
 from _paths import ActiveWorktreeSlugMismatch  # noqa: E402
+import _marker  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -1824,6 +1825,75 @@ def main() -> int:
     except Exception as exc:
         print(f"FAIL: write_review_file holistic naming (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
         errors += 1
+
+    # find_active_slug glob fallback: one .active file -> returns slug
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            hub_root = Path(tmp)
+            mill_dir = hub_root / "_mill"
+            mill_dir.mkdir(parents=True)
+            (mill_dir / "my-task.active").write_text("", encoding="utf-8")
+
+            cfg = {}
+            with patch("_review_common._marker.slug_from_branch", side_effect=_marker.MarkerError("test")):
+                result = find_active_slug(hub_root, Path(tmp) / "wiki", cfg)
+
+            assert result == "my-task", f"Expected 'my-task', got {result!r}"
+            print("PASS: find_active_slug glob fallback — one .active file -> 'my-task'")
+    except AssertionError as exc:
+        print(f"FAIL: find_active_slug glob fallback one file: {exc}", file=sys.stderr)
+        errors += 1
+    except Exception as exc:
+        print(f"FAIL: find_active_slug glob fallback one file (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        errors += 1
+
+    # find_active_slug glob fallback: multiple .active files -> ReviewError
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            hub_root = Path(tmp)
+            mill_dir = hub_root / "_mill"
+            mill_dir.mkdir(parents=True)
+            (mill_dir / "task-a.active").write_text("", encoding="utf-8")
+            (mill_dir / "task-b.active").write_text("", encoding="utf-8")
+
+            cfg = {}
+            with patch("_review_common._marker.slug_from_branch", side_effect=_marker.MarkerError("test")):
+                try:
+                    find_active_slug(hub_root, Path(tmp) / "wiki", cfg)
+                    print("FAIL: find_active_slug glob fallback multiple files: expected ReviewError", file=sys.stderr)
+                    errors += 1
+                except ReviewError as e:
+                    if "use --slug" not in str(e):
+                        print(f"FAIL: find_active_slug glob fallback multiple files: expected 'use --slug' in error, got {e!r}", file=sys.stderr)
+                        errors += 1
+                    else:
+                        print("PASS: find_active_slug glob fallback — multiple .active files -> ReviewError with 'use --slug'")
+    except Exception as exc:
+        if not isinstance(exc, AssertionError):
+            print(f"FAIL: find_active_slug glob fallback multiple files (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+            errors += 1
+
+    # find_active_slug glob fallback: no _mill/ dir -> ReviewError
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            hub_root = Path(tmp)
+            # Do NOT create _mill/
+
+            cfg = {}
+            with patch("_review_common._marker.slug_from_branch", side_effect=_marker.MarkerError("test")):
+                try:
+                    find_active_slug(hub_root, Path(tmp) / "wiki", cfg)
+                    print("FAIL: find_active_slug glob fallback no _mill: expected ReviewError", file=sys.stderr)
+                    errors += 1
+                except ReviewError:
+                    print("PASS: find_active_slug glob fallback — no _mill/ dir -> ReviewError")
+    except AssertionError as exc:
+        print(f"FAIL: find_active_slug glob fallback no _mill: {exc}", file=sys.stderr)
+        errors += 1
+    except Exception as exc:
+        if not isinstance(exc, (ReviewError, AssertionError)):
+            print(f"FAIL: find_active_slug glob fallback no _mill (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+            errors += 1
 
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)

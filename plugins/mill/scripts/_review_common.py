@@ -12,7 +12,7 @@ Public API:
     ReviewResult         — dataclass; serialised to the CLI's stdout JSON
     RE_SIMPLE            — regex matching simple review filenames
     RE_BATCH             — regex matching plan-batch review filenames
-    find_active_slug()   — delegate to _marker.slug_from_branch for slug derivation
+    find_active_slug()   — branch-based slug detection with _mill/*.active glob fallback
     load_task_title()    — delegate to _marker.task_data for task_title; fall back to slug on MarkerError
     worktree_snapshot_guard() — context manager; snapshot guard wrapping each backend run()
     read_constraints_md()— read CONSTRAINTS.md, empty string if absent
@@ -241,15 +241,28 @@ class ReviewResult:
 # ---------------------------------------------------------------------------
 
 def find_active_slug(git_root: Path, wiki_path: Path, cfg: dict) -> str:
-    """Delegate to _marker.slug_from_branch for slug derivation.
+    """Detect active slug via branch name, falling back to _mill/*.active glob.
 
-    Raises ReviewError (wrapping MarkerError) so callers using
-    ``except ReviewError:`` keep working unchanged.
+    Raises ReviewError (wrapping MarkerError or glob-fallback errors).
     """
     try:
         return _marker.slug_from_branch(git_root, wiki_path, cfg)
     except _marker.MarkerError as exc:
-        raise ReviewError(str(exc)) from exc
+        try:
+            matches = list((git_root / "_mill").glob("*.active"))
+        except OSError:
+            matches = []
+        if len(matches) == 1:
+            return matches[0].stem
+        if len(matches) > 1:
+            slugs = sorted(m.stem for m in matches)
+            raise ReviewError(
+                f"{len(slugs)} tasks active ({', '.join(slugs)}); use --slug <slug>"
+            ) from exc
+        raise ReviewError(
+            f"no active task detected; run mill-spawn or mill-claim to start a task"
+            f" (branch detection: {exc})"
+        ) from exc
 
 
 def load_task_title(git_root: Path, wiki_path: Path, cfg: dict, slug: str) -> str:

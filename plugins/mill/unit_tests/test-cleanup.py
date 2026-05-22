@@ -1161,8 +1161,109 @@ def main() -> int:
             )
             print("PASS build_plan — orphan check covers [ready-to-merge], [pr-pending], and [active]")
 
+        # --- test_apply_inplace_deletes_hub_indicator ---
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            hub_root = tmp / "hub"
+            hub_root.mkdir()
+            (hub_root / "_mill").mkdir()
+            indicator_path = hub_root / "_mill" / "my-task.active"
+            indicator_path.write_text("", encoding="utf-8")
+
+            # Create minimal status.md for the inplace record
+            (hub_root / "_mill" / "status.md").write_text(_make_status_md("done"), encoding="utf-8")
+
+            record = SlugRecord(
+                slug="my-task",
+                worktree_path=hub_root,
+                branch="impl/my-task",
+                home_marker="done",
+            )
+
+            def _fake_run_indicator(argv, **kwargs):
+                result = MagicMock()
+                result.returncode = 0
+                result.stdout = ""
+                result.stderr = ""
+                return result
+
+            with patch("mill_cleanup._subprocess_util.run", side_effect=_fake_run_indicator):
+                with patch("mill_cleanup._junction.remove"):
+                    with patch("mill_cleanup._paths.resolve_container_path", return_value=tmp / "container"):
+                        mod._apply_inplace_record(record, hub_root, task_branch="impl/my-task", cfg={"paths": {"status_md": "_mill/status.md"}})
+
+            if indicator_path.exists():
+                raise AssertionError(f"indicator file should be deleted at {indicator_path}")
+        print("PASS test_apply_inplace_deletes_hub_indicator — indicator file deleted")
+
+        # --- test_apply_worktree_deletes_hub_indicator ---
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            hub_root = tmp / "hub"
+            hub_root.mkdir()
+            (hub_root / "_mill").mkdir()
+            indicator_path = hub_root / "_mill" / "my-task.active"
+            indicator_path.write_text("", encoding="utf-8")
+
+            wt_path = tmp / "wts" / "my-task"
+            wt_path.mkdir(parents=True)
+
+            wiki_path = tmp / "wiki"
+            wiki_path.mkdir()
+
+            record = SlugRecord(
+                slug="my-task",
+                worktree_path=wt_path,
+                branch="impl/my-task",
+                home_marker="done",
+            )
+
+            with patch("mill_cleanup._paths.resolve_container_path", return_value=tmp / "container"):
+                with patch("mill_cleanup._worktree.remove_safe"):
+                    with patch("mill_cleanup._junction.remove"):
+                        with patch("mill_cleanup._subprocess_util.run", return_value=MagicMock(returncode=0, stdout="", stderr="")):
+                            mod._apply_worktree_record(record, hub_root, wiki_path, {})
+
+            if indicator_path.exists():
+                raise AssertionError(f"indicator file should be deleted at {indicator_path}")
+        print("PASS test_apply_worktree_deletes_hub_indicator — indicator file deleted")
+
+        # --- test_apply_inplace_indicator_missing_ok ---
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            hub_root = tmp / "hub"
+            hub_root.mkdir()
+            (hub_root / "_mill").mkdir()
+            # Do NOT create the indicator file
+
+            # Create minimal status.md
+            (hub_root / "_mill" / "status.md").write_text(_make_status_md("done"), encoding="utf-8")
+
+            record = SlugRecord(
+                slug="my-task",
+                worktree_path=hub_root,
+                branch="impl/my-task",
+                home_marker="done",
+            )
+
+            def _fake_run_no_indicator(argv, **kwargs):
+                result = MagicMock()
+                result.returncode = 0
+                result.stdout = ""
+                result.stderr = ""
+                return result
+
+            with patch("mill_cleanup._subprocess_util.run", side_effect=_fake_run_no_indicator):
+                with patch("mill_cleanup._junction.remove"):
+                    with patch("mill_cleanup._paths.resolve_container_path", return_value=tmp / "container"):
+                        try:
+                            mod._apply_inplace_record(record, hub_root, task_branch="impl/my-task", cfg={"paths": {"status_md": "_mill/status.md"}})
+                        except FileNotFoundError:
+                            raise AssertionError("_apply_inplace_record raised FileNotFoundError when indicator missing; missing_ok=True expected")
+        print("PASS test_apply_inplace_indicator_missing_ok — no error when indicator file absent")
+
         test_scan_orphan_portals()
-        print("All build_plan unit tests passed.")
+        print("All build_plan and cleanup indicator unit tests passed.")
         return 0
     except AssertionError as exc:
         print(f"FAIL: {exc}", file=sys.stderr)

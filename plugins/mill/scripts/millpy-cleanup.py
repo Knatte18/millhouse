@@ -384,6 +384,10 @@ def _apply_inplace_record(
     _junction.remove(active_junction)
     print(f"[cleanup] removed .active junction: {active_junction}", file=sys.stderr)
 
+    indicator = hub_root / "_mill" / f"{record.slug}.active"
+    indicator.unlink(missing_ok=True)
+    print(f"[cleanup] removed hub active indicator: {indicator}", file=sys.stderr)
+
     # Remove the portal entry for this task.
     container_path = _paths.resolve_container_path(hub_root)
     _junction.remove(container_path / "portals" / record.slug)
@@ -427,6 +431,10 @@ def _apply_worktree_record(
     container_path = _paths.resolve_container_path(hub_root)
     _junction.remove(container_path / "portals" / record.slug)
     print(f"[cleanup] removed portal entry: {container_path / 'portals' / record.slug}", file=sys.stderr)
+
+    indicator = hub_root / "_mill" / f"{record.slug}.active"
+    indicator.unlink(missing_ok=True)
+    print(f"[cleanup] removed hub active indicator: {indicator}", file=sys.stderr)
 
 
 def _apply_pr_reap_record(

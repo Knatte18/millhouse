@@ -297,6 +297,7 @@ def main(argv: list[str] | None = None) -> int:
             _junction.create(target=resolve_hub_path() / "_mill", link_path=portal_link)
 
     _spawn_core.recreate_active_junction(resolve_hub_path())
+    _spawn_core.write_hub_active_indicator(resolve_hub_path(), slug)
 
     # Render and write the initial status.md; commit on task branch.
     status_abs = _spawn_core.write_initial_status(
