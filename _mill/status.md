@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-approved
+phase: done
 slug: mill-python-env-var
 branch: hanf/mill-python-env-var
 plan: _mill/plan
@@ -31,6 +31,7 @@ approved-skill replace remaining  '2026-05-22T08:12:00Z'
 approved-verify  '2026-05-22T08:13:12Z'
 holistic-reviewing  '2026-05-22T08:13:35Z'
 holistic-approved  '2026-05-22T08:17:41Z'
+done  '2026-05-22T08:17:56Z'
 ```
 
 ## Batches
