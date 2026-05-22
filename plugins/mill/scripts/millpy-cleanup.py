@@ -563,7 +563,15 @@ def apply_plan(
         if mode == "inplace":
             _apply_inplace_record(record, hub_root, task_branch, cfg=cfg)
         else:
-            _apply_worktree_record(record, hub_root, wiki_path, junctions_cfg)
+            try:
+                _apply_worktree_record(record, hub_root, wiki_path, junctions_cfg)
+            except _worktree.WorktreeLockedError as exc:
+                print(
+                    f"REPORT: {record.slug} -- worktree locked (file handle held by VS Code or "
+                    f"terminal?); skipped. Run cleanup again after closing it. Detail: {exc}",
+                    file=sys.stderr,
+                )
+                continue
 
     for record in plan.to_reap_pr:
         wiki_relative_paths.extend(
