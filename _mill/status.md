@@ -41,7 +41,9 @@ batches:
     implementer_session: ac8338f1-219e-42d3-a0d0-adef62a72741
     start_sha: 4a8014698e63125b16cd6c69488914863a85b08b
   - name: skill replace heavy
-    state: pending
+    state: running
+    implementer_session: 8359eb04-d70f-4ab4-9635-937efd7e2553
+    start_sha: f6611191a1af4740611bac5de09cdd1f45e33470
   - name: skill replace remaining
     state: pending
   - name: verify
