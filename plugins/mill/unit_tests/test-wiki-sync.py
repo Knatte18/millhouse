@@ -57,8 +57,12 @@ def main() -> int:
         bare = tmp / "bare.git"
         clone = tmp / "clone"
 
-        # Initialize bare repo
-        subprocess.run(["git", "init", "--bare", str(bare)], check=True, capture_output=True)
+        # Initialize bare repo with main branch
+        subprocess.run(
+            ["git", "init", "--bare", "-b", "main", str(bare)],
+            check=True,
+            capture_output=True,
+        )
 
         # Initialize clone with main branch
         clone.mkdir(parents=True)
@@ -223,14 +227,18 @@ def main() -> int:
         except Exception as exc:
             fail("path_guard('../escape') raises WikiPathError", exc)
 
-        # --- (h) path_guard("/absolute") raises WikiPathError ---
+        # --- (h) path_guard with absolute path raises WikiPathError ---
         try:
-            path_guard("/absolute")
-            fail("path_guard('/absolute') raises WikiPathError", Exception("Did not raise"))
+            import platform
+            if platform.system() == "Windows":
+                path_guard("C:\\absolute")
+            else:
+                path_guard("/absolute")
+            fail("path_guard with absolute path raises WikiPathError", Exception("Did not raise"))
         except WikiPathError:
-            ok("path_guard('/absolute') raises WikiPathError")
+            ok("path_guard with absolute path raises WikiPathError")
         except Exception as exc:
-            fail("path_guard('/absolute') raises WikiPathError", exc)
+            fail("path_guard with absolute path raises WikiPathError", exc)
 
         # --- (i) path_guard("Home.md") does not raise ---
         try:
