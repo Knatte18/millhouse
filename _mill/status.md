@@ -46,7 +46,9 @@ batches:
     implementer_session: 8359eb04-d70f-4ab4-9635-937efd7e2553
     start_sha: f6611191a1af4740611bac5de09cdd1f45e33470
   - name: skill replace remaining
-    state: pending
+    state: running
+    implementer_session: c7a58f0e-a91c-424e-ae16-5f5d03f4803e
+    start_sha: 593ca1d19f04baf8d50afb9960cea94a8105db75
   - name: verify
     state: pending
 ```
