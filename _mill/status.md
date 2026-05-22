@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-Callers
+phase: approved-Tests
 slug: hub-active-slug
 branch: hanf/hub-active-slug
 plan: _mill/plan
@@ -23,6 +23,7 @@ planned  '2026-05-22T06:57:50Z'
 implementing  '2026-05-22T07:00:00Z'
 approved-Core helpers  '2026-05-22T07:08:29Z'
 approved-Callers  '2026-05-22T07:14:28Z'
+approved-Tests  '2026-05-22T07:28:57Z'
 ```
 
 ## Batches
@@ -38,7 +39,7 @@ batches:
     implementer_session: ceb43846-4a9e-4f3d-bb8f-11b09748e68b
     start_sha: 702a7afdc0d5d0b091e4c18f05155bb3e6261527
   - name: Tests
-    state: running
+    state: approved
     implementer_session: 07843ecc-dff6-40a0-b99e-397d86004931
     start_sha: ee9e90477771a3765868c869ed286ab23fb8d4fc
 ```
