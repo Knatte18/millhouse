@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-Generic daemon base
+phase: approved-Git sync layer
 slug: v3-wiki-module
 branch: hanf/v3-wiki-module
 plan: _mill/plan
@@ -28,6 +28,7 @@ planned  '2026-05-22T11:40:07Z'
 implementing  '2026-05-22T11:44:41Z'
 approved-Wiki subpackage foundation  '2026-05-22T11:46:31Z'
 approved-Generic daemon base  '2026-05-22T11:48:19Z'
+approved-Git sync layer  '2026-05-22T11:50:17Z'
 ```
 
 ## Batches
@@ -43,7 +44,7 @@ batches:
     implementer_session: fd676003-03ca-4fb5-8d4d-7088e9ccd568
     start_sha: 3c1f6d093462c2f419227e376ab1bee951139e7a
   - name: Git sync layer
-    state: running
+    state: approved
     implementer_session: cc86f28d-21ad-4a6e-b8c3-f83f29f9ab42
     start_sha: 148312ba4bfe0ca40eb66932406affe0b80f3faa
   - name: Wiki server
