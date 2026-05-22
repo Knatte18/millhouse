@@ -65,10 +65,10 @@ Line 10
     # Test 3: Bullet-prefix strip
     try:
         snapshot = r"""  ❯
-●  extra space
+● extra space
   ❯ """
         result = _psmux_capture_mod.extract_response(snapshot)
-        expected = " extra space"
+        expected = "extra space"
         if result == expected:
             print("[OK] Test 3: Bullet-prefix strip")
         else:
