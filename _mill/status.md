@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: psmux-idle-prompt-detection
 branch: hanf/psmux-idle-prompt-detection
 plan: _mill/plan
@@ -22,4 +22,15 @@ plan-review-r1  '2026-05-22T06:59:25Z'
 plan-fix-r1  '2026-05-22T07:00:01Z'
 plan-review-r2  '2026-05-22T07:04:30Z'
 planned  '2026-05-22T07:04:40Z'
+implementing  '2026-05-22T07:06:27Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: Core implementation
+    state: pending
+  - name: Tests
+    state: pending
 ```
