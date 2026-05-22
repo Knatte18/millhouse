@@ -165,12 +165,17 @@ Step 11: Call _wait_for_idle_stable(); on timeout raise RuntimeError
 `_wait_for_idle_prompt` (existing) — returns on the FIRST `❯` sighting.
 Used for: (a) reuse-check before submission, (b) boot-wait after `claude` TUI
 launch. Both are single-sighting scenarios — once `❯` appears, the session is
-available.
+available. Uses `capture_pane(session_name, alternate=True)`.
 
 `_wait_for_idle_stable` (new) — requires `❯` in TWO consecutive captures
-separated by `POLL_INTERVAL_S`. Used only for post-response detection. Timeout
-constant: `RESPONSE_POLL_TIMEOUT_S[args.mode]` (same dict, same per-mode values
-as the current marker-polling loop).
+separated by `POLL_INTERVAL_S`. Uses `capture_pane(session_name, alternate=True)`
+for each poll. Used only for post-response detection. Timeout constant:
+`RESPONSE_POLL_TIMEOUT_S[args.mode]` (same dict, same per-mode values as the
+current marker-polling loop).
+
+The snapshot_b capture in the new Step 11 also uses `capture_pane(session_name,
+alternate=True)`, consistent with every other idle/response detection call in
+the file.
 
 ### `_psmux_capture.py` — new module structure
 
@@ -199,30 +204,25 @@ changes `❯`, that is a Phase 2 concern.
 - `secrets` — was used only for `token_hex(4)` in marker generation
 - No other import changes
 
-### `test-claude-sub.py` update scope
+### `test-claude-sub.py` update scope — definitive list
 
-The nine existing tests (S1–S9) cover reuse/keepalive logic. The mocks that
-change are those that patch `_psmux_capture.extract_response` — six of the nine
-tests do this. The patch call changes from:
+Tests that never reach Step 10/11 (exit before submission) need no changes:
+- **S2** (existing-busy raise) — exits at reuse idle check; no `extract_response` mock
+- **S3** (reused session not killed on failure) — same early exit
+- **S5** (keep-alive true, error) — boot-wait fails; exits before Step 10
+- **S8** (list_sessions raises) — exits immediately
 
-```python
-mock.patch("_psmux_capture.extract_response", side_effect=lambda c, b, e: "ok")
-```
+Tests that reach Step 10/11 on the success path need both: (a) a
+`_wait_for_idle_stable` mock added and (b) the `extract_response` mock updated
+to a 1-arg lambda:
+- **S1** (existing-idle short-circuit) — reuse path reaches Step 10/11
+- **S4** (keep-alive true, success) — new session; reaches Step 10/11
+- **S7** (named-but-missing creates) — new session; reaches Step 10/11
+- **S9** (reuse_idle_timeout_s plumbing) — reuse path reaches Step 10/11
 
-to:
-
-```python
-mock.patch("_psmux_capture.extract_response", side_effect=lambda snapshot: "ok")
-```
-
-Additionally, the tests that exercise the success path (S1, S4, S6, S7) need to
-mock `_wait_for_idle_stable` instead of the marker-polling loop.
-
-S6 (regression guard, no flags) needs the most work: it currently asserts the
-kill behaviour on the success path but mocks `capture_pane` returning a
-marker-formatted string. It becomes a new test that mocks `_wait_for_idle_stable`
-returning True, `capture_pane` returning a valid snapshot, and `extract_response`
-returning "ok".
+**S6** (regression guard, no flags) — full rewrite: remove marker-based
+`capture_pane` mock; add `_wait_for_idle_stable` returning True; `capture_pane`
+returns a valid snapshot (has `❯` and `● ` lines); `extract_response` returns "ok".
 
 ## Constraints
 
