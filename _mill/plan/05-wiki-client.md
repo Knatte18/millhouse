@@ -39,12 +39,12 @@ Batch-local decision: `_spawn_server()` is the single implementation-specific se
   - `host, port, token = _ensure_daemon(wiki_path, idle_timeout=idle_timeout, refresh_interval=refresh_interval)`.
   - Build request: `{"op": OP_READ, "token": token, "path": rel_path}`.
   - `resp = _connect_send_recv(host, port, token, req)` — on `OSError` (mid-request failure): one re-ensure + retry; on second failure raise `WikiStartupError`.
-  - If `resp["ok"]`: return `(resp[FIELD_CONTENT], resp[FIELD_HASH])`. If `resp[FIELD_ERROR_TYPE] == ERR_NOT_FOUND`: raise `WikiNotFoundError(rel_path)`. Else raise `WikiProtocolError(resp.get(FIELD_ERROR, ""))`.
+  - If `resp[FIELD_OK]`: return `(resp[FIELD_CONTENT], resp[FIELD_HASH])`. If `resp.get(FIELD_ERROR_TYPE) == ERR_NOT_FOUND`: raise `WikiNotFoundError(rel_path)`. Else raise `WikiProtocolError(resp.get(FIELD_ERROR, ""))`.
 
   **`write_commit_push(wiki_path: Path, files: dict[str, tuple[str, str]], message: str, *, refresh_interval: float = 10.0, idle_timeout: int = 600) -> None`**:
   - `files` maps `rel_path -> (new_content, base_hash)`.
   - `host, port, token = _ensure_daemon(wiki_path, idle_timeout=idle_timeout, refresh_interval=refresh_interval)`.
-  - CAS retry loop (up to `CAS_RETRIES`): build request `{"op": OP_WRITE, "token": token, "files": {k: {"new_content": v[0], "base_hash": v[1]} for k, v in files.items()}, "message": message}`. Send. If `resp["ok"]`: return. If `ERR_CONFLICT`: re-read each conflicting file to get fresh `(content, hash)` via `_connect_send_recv` read request; update `files` dict with fresh base_hash and new_content recomputed by caller — wait, the caller supplies new_content; on CONFLICT the caller should recompute its edit on top of the fresh content. But since `_client.py` is a thin API (it doesn't know the caller's edit logic), on CONFLICT it raises `WikiConflictError` with the conflicting path — the caller re-reads and re-calls. Drop the inline retry loop in the client; raise immediately on CONFLICT; the integration test and callers retry at their level. This is simpler and correct: the client is not the right place for edit-recompute logic. Raise `WikiConflictError(path)` on first CONFLICT. If `ERR_PUSH_FAILED`: raise `WikiPushError`. Else raise `WikiProtocolError`.
+  - Build request `{FIELD_OP: OP_WRITE, FIELD_TOKEN: token, FIELD_FILES: {k: {FIELD_NEW_CONTENT: v[0], FIELD_BASE_HASH: v[1]} for k, v in files.items()}, FIELD_MESSAGE: message}`. Send via `_connect_send_recv`. If `resp[FIELD_OK]`: return. If `resp.get(FIELD_ERROR_TYPE) == ERR_CONFLICT`: raise `WikiConflictError(resp.get(FIELD_ERROR, ""))` — the client is thin; callers retry with re-read + re-edit. If `ERR_PUSH_FAILED`: raise `WikiPushError(resp.get(FIELD_ERROR, ""))`. Else raise `WikiProtocolError(resp.get(FIELD_ERROR, ""))`.
 
   **`health_check(wiki_path: Path) -> bool`**:
   - Try to read state file. Try connect. Return True if daemon responds to a read request for a non-existent path (any response means alive). Return False on any exception.
@@ -59,7 +59,7 @@ Batch-local decision: `_spawn_server()` is the single implementation-specific se
   **`_spawn_server(wiki_path: Path, idle_timeout: int, refresh_interval: float) -> None`**:
   - `cmd = [sys.executable, "-m", _SERVER_MODULE, str(wiki_path), str(idle_timeout), str(refresh_interval)]`.
   - `env = dict(os.environ)`. Ensure `PYTHONPATH` includes the `scripts/` directory (parent of `wiki/`): `scripts_dir = str(Path(__file__).parent.parent)`. Set `env["PYTHONPATH"] = scripts_dir` (preserve existing if present: `os.pathsep.join([scripts_dir, env.get("PYTHONPATH", "")])` stripped of trailing sep).
-  - Windows branch (`sys.platform == "win32"`): `DETACHED_PROCESS = 0x00000008`, `CREATE_NO_WINDOW = 0x08000000`, `CREATE_NEW_PROCESS_GROUP = 0x00000200`. `subprocess.Popen(cmd, env=env, close_fds=True, creationflags=DETACHED_PROCESS | CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP)`.
+  - Windows branch (`sys.platform == "win32"`): `DETACHED_PROCESS = 0x00000008`, `CREATE_NO_WINDOW = 0x08000000`, `CREATE_NEW_PROCESS_GROUP = 0x00000200`, `CREATE_BREAKAWAY_FROM_JOB = 0x01000000`. `subprocess.Popen(cmd, env=env, close_fds=True, creationflags=DETACHED_PROCESS | CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP | CREATE_BREAKAWAY_FROM_JOB)`. `CREATE_BREAKAWAY_FROM_JOB` is required to escape the VS Code / Claude Code parent Job Object so the daemon survives when the CC session that spawned it exits.
   - POSIX branch: `subprocess.Popen(cmd, env=env, close_fds=True, start_new_session=True)`.
   - Do not wait for the process; do not store the Popen object.
 

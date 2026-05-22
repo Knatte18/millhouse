@@ -52,7 +52,7 @@ batches:
     name: Integration test and docs
     file: 07-integration-test.md
     depends-on: [6]
-    verify: null
+    verify: "PYTHONPATH=plugins/mill/scripts python plugins/mill/integration_tests/test-wiki-e2e.py"
 ```
 
 ## Shared Decisions

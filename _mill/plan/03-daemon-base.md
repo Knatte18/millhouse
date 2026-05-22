@@ -27,7 +27,7 @@ Batch-local decision: `_daemon.py` is flat in `scripts/` (not inside `wiki/`) so
   - `plugins/mill/scripts/_daemon.py`
 - **Deletes:** none
 - **Requirements:**
-  Stdlib imports only: `abc`, `json`, `logging`, `os`, `pathlib`, `secrets`, `signal`, `socket`, `time`, `tempfile`. No mill imports.
+  Stdlib imports only: `abc`, `datetime`, `json`, `logging`, `os`, `pathlib`, `secrets`, `signal`, `socket`, `time`, `tempfile`. No mill imports.
 
   **`class DaemonBase(abc.ABC)`:**
 

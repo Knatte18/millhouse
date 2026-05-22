@@ -27,7 +27,7 @@ Creates `wiki/_sync.py` — the git-operations layer the server uses to pull, st
 - **Requirements:**
   Import `subprocess`, `os`, `tempfile`, `pathlib.Path` from stdlib. Import `WikiPushError`, `WikiPathError` from `wiki`. No other mill imports.
 
-  `path_guard(rel_path: str) -> None` — raises `WikiPathError` if `rel_path` is absolute, contains `..` components, or after joining to a dummy base path resolves outside the base (use `Path(rel_path).parts` to check for `..` and then `(base / rel_path).resolve()` to check for escape). Called by server before any read or write.
+  `path_guard(rel_path: str) -> None` — raises `WikiPathError` if `rel_path` is empty (`not rel_path`), is absolute (`Path(rel_path).is_absolute()`), or contains any `..` component (`".." in Path(rel_path).parts`). No dummy-base resolve needed — part-level checks are sufficient since paths are validated before any filesystem access. Called by server before any read or write.
 
   `atomic_write(wiki_path: Path, rel_path: str, content: str) -> None` — writes `content` (UTF-8) to a temp file in `wiki_path`, then `os.replace(tmp, wiki_path / rel_path)` (atomic on POSIX and Windows). Creates parent directories if needed.
 

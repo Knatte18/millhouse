@@ -49,21 +49,21 @@ Creates `wiki/_server.py` — the wiki-specific daemon server. Subclasses `Daemo
   - Log "wiki-server stopping".
 
   `handle_request(self, msg: dict) -> dict`:
-  - Dispatch on `msg.get(FIELD_OP)`: `OP_READ` → `_handle_read(msg)`, `OP_WRITE` → `_handle_write(msg)`, else `{"ok": False, "error_type": ERR_PROTOCOL, "error": "unknown op"}`.
+  - Dispatch on `msg.get(FIELD_OP)`: `OP_READ` → `_handle_read(msg)`, `OP_WRITE` → `_handle_write(msg)`, else `{FIELD_OK: False, FIELD_ERROR_TYPE: ERR_PROTOCOL, FIELD_ERROR: "unknown op"}`.
 
   `_handle_read(self, msg: dict) -> dict`:
-  - `rel_path = msg.get(FIELD_PATH, "")`. Call `path_guard(rel_path)` — on `WikiPathError` return `{"ok": False, "error_type": ERR_PATH, "error": str(e)}`.
+  - `rel_path = msg.get(FIELD_PATH, "")`. Call `path_guard(rel_path)` — on `WikiPathError` return `{FIELD_OK: False, FIELD_ERROR_TYPE: ERR_PATH, FIELD_ERROR: str(e)}`.
   - Lazy refresh: if `time.monotonic() - self._last_pull > self._refresh_interval`: call `pull(self._wiki_path)`, `self._store.invalidate_all()`, `self._last_pull = time.monotonic()`.
-  - Try cache: `hit = self._store.get(rel_path)`. If hit: return `{"ok": True, FIELD_CONTENT: hit[0], FIELD_HASH: hit[1]}`.
-  - Miss: read from disk `(self._wiki_path / rel_path).read_text("utf-8")`. If `FileNotFoundError`: return `{"ok": False, "error_type": ERR_NOT_FOUND, "error": rel_path}`. Store in cache via `self._store.set(rel_path, content)`. Re-read hash from store: `_, hash_ = self._store.get(rel_path)`. Return `{"ok": True, FIELD_CONTENT: content, FIELD_HASH: hash_}`.
+  - Try cache: `hit = self._store.get(rel_path)`. If hit: return `{FIELD_OK: True, FIELD_CONTENT: hit[0], FIELD_HASH: hit[1]}`.
+  - Miss: read from disk `(self._wiki_path / rel_path).read_text("utf-8")`. If `FileNotFoundError`: return `{FIELD_OK: False, FIELD_ERROR_TYPE: ERR_NOT_FOUND, FIELD_ERROR: rel_path}`. Store in cache via `self._store.set(rel_path, content)`. Re-read hash from store: `_, hash_ = self._store.get(rel_path)`. Return `{FIELD_OK: True, FIELD_CONTENT: content, FIELD_HASH: hash_}`.
 
   `_handle_write(self, msg: dict) -> dict`:
   - `files_payload = msg.get(FIELD_FILES, {})` — format `{rel_path: {FIELD_NEW_CONTENT: str, FIELD_BASE_HASH: str}}`. `message = msg.get(FIELD_MESSAGE, "wiki: update")`.
   - Pull before write (always): `pull(self._wiki_path)`, `self._store.invalidate_all()`, `self._last_pull = time.monotonic()`.
-  - CAS check: for each `(rel_path, entry)` in `files_payload`: `path_guard(rel_path)`. Current hash = `self._store.get(rel_path)[1]` if in cache, else compute from disk (`Store.content_hash(disk_content)`) or treat as `""` if file absent. If `entry[FIELD_BASE_HASH] != current_hash`: return `{"ok": False, "error_type": ERR_CONFLICT, "error": f"conflict on {rel_path}"}`.
+  - CAS check: for each `(rel_path, entry)` in `files_payload`: `path_guard(rel_path)`. Current hash = `self._store.get(rel_path)[1]` if in cache, else compute from disk (`Store.content_hash(disk_content)`) or treat as `""` if file absent. If `entry[FIELD_BASE_HASH] != current_hash`: return `{FIELD_OK: False, FIELD_ERROR_TYPE: ERR_CONFLICT, FIELD_ERROR: f"conflict on {rel_path}"}`.
   - Write phase: for each file: `atomic_write(self._wiki_path, rel_path, entry[FIELD_NEW_CONTENT])`.
-  - `commit_push(self._wiki_path, list(files_payload.keys()), message)` — on `WikiPushError`: return `{"ok": False, "error_type": ERR_PUSH_FAILED, "error": str(e)}`.
-  - Invalidate written paths in cache. Return `{"ok": True}`.
+  - `commit_push(self._wiki_path, list(files_payload.keys()), message)` — on `WikiPushError`: return `{FIELD_OK: False, FIELD_ERROR_TYPE: ERR_PUSH_FAILED, FIELD_ERROR: str(e)}`.
+  - Invalidate written paths in cache. Return `{FIELD_OK: True}`.
 
   `_ensure_gitignore(self) -> None`:
   - Read `self._wiki_path / ".gitignore"` (empty string if absent). Check if `.wiki-daemon.json` and `.wiki-daemon.log` are present as lines. If both present: return (idempotent).

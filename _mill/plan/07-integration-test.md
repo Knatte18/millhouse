@@ -5,7 +5,7 @@ task: V3 wiki module with daemon and in-process cache
 batch: Integration test and docs
 number: 7
 cards: 2
-verify: null
+verify: "PYTHONPATH=plugins/mill/scripts python plugins/mill/integration_tests/test-wiki-e2e.py"
 depends-on: [6]
 ```
 
@@ -66,8 +66,4 @@ Delivers the end-to-end integration test and a one-line CLAUDE.md update. The in
 
 ## Batch Tests
 
-`verify: null` — the integration test is long-running (daemon spawn + idle-exit wait) and not part of the automated verify cycle. Run manually to validate:
-```
-PYTHONPATH=plugins/mill/scripts python plugins/mill/integration_tests/test-wiki-e2e.py
-```
-CLAUDE.md change has no runnable verification.
+The `verify:` command runs the integration test end-to-end. It takes ~10 seconds (daemon spawn, idle-exit wait with `idle_timeout=3`, respawn). Expected output: `PASS` per scenario and exit 0. CLAUDE.md change has no runnable verification beyond confirming the one line is updated.

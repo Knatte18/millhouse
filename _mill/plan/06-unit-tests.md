@@ -41,7 +41,7 @@ Batch-local decision: `test-wiki-sync.py` requires git to be available on PATH. 
   - `plugins/mill/unit_tests/test-wiki-protocol.py`
 - **Deletes:** none
 - **Requirements:**
-  Cover: (1) Read request round-trip: build `{"op": OP_READ, "token": "t", "path": "Home.md"}`, JSON-encode, JSON-decode, assert fields survive; (2) Write request: build with `FIELD_FILES` mapping, encode/decode, assert `base_hash` and `new_content` fields survive; (3) Success response envelope: `{"ok": True, "content": "x", "hash": "y"}` — assert `resp[FIELD_OK]` is True; (4) Error response envelope: `{"ok": False, "error_type": ERR_NOT_FOUND, "error": "Home.md"}` — assert `resp[FIELD_ERROR_TYPE] == ERR_NOT_FOUND`; (5) CONFLICT envelope uses `ERR_CONFLICT`; (6) AUTH error envelope uses `ERR_AUTH`; (7) `PROTOCOL_VERSION` is `1` (integer). These are pure dict/JSON tests — no network calls.
+  Cover: (1) Read request round-trip: build `{FIELD_OP: OP_READ, FIELD_TOKEN: "t", FIELD_PATH: "Home.md"}`, JSON-encode, JSON-decode, assert fields survive; (2) Write request: build with `FIELD_FILES` mapping (`{FIELD_BASE_HASH: ..., FIELD_NEW_CONTENT: ...}`), encode/decode, assert fields survive; (3) Success response envelope: `{FIELD_OK: True, FIELD_CONTENT: "x", FIELD_HASH: "y"}` — assert `resp[FIELD_OK]` is True; (4) Error response envelope: `{FIELD_OK: False, FIELD_ERROR_TYPE: ERR_NOT_FOUND, FIELD_ERROR: "Home.md"}` — assert `resp[FIELD_ERROR_TYPE] == ERR_NOT_FOUND`; (5) CONFLICT envelope uses `ERR_CONFLICT`; (6) AUTH error envelope uses `ERR_AUTH`; (7) `PROTOCOL_VERSION` is `1` (integer). These are pure dict/JSON tests — no network calls.
 - **Commit:** `test(wiki): add test-wiki-protocol.py JSON protocol envelope tests`
 
 ### Card 9: `test-wiki-sync.py` — git operations tests
