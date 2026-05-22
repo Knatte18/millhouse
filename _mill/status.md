@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: v3-wiki-module
 branch: hanf/v3-wiki-module
 plan: _mill/plan
@@ -25,4 +25,25 @@ plan-fix-r2  '2026-05-22T11:33:07Z'
 plan-review-r3  '2026-05-22T11:39:30Z'
 plan-fix-r3  '2026-05-22T11:39:30Z'
 planned  '2026-05-22T11:40:07Z'
+implementing  '2026-05-22T11:44:41Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: Wiki subpackage foundation
+    state: pending
+  - name: Generic daemon base
+    state: pending
+  - name: Git sync layer
+    state: pending
+  - name: Wiki server
+    state: pending
+  - name: Wiki client
+    state: pending
+  - name: Unit tests
+    state: pending
+  - name: Integration test and docs
+    state: pending
 ```
