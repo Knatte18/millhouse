@@ -19,6 +19,7 @@ from _spawn_core import (  # noqa: E402
     pick_task_single_or_multi,
     prompt_merged_entry,
     recreate_active_junction,
+    write_hub_active_indicator,
     write_initial_status,
 )
 import _tasks_md  # noqa: E402
@@ -524,6 +525,59 @@ def test_recreate_active_junction_idempotent() -> None:
 
 
 # ---------------------------------------------------------------------------
+# write_hub_active_indicator
+# ---------------------------------------------------------------------------
+
+
+def test_write_hub_active_indicator_happy_path() -> None:
+    """Create temp hub_root with _mill/ present; call write_hub_active_indicator; assert file exists."""
+    with safe_temp_dir() as tmp:
+        hub_root = tmp / "hub"
+        hub_root.mkdir(parents=True)
+        (hub_root / "_mill").mkdir(parents=True)
+
+        write_hub_active_indicator(hub_root, "my-task")
+
+        indicator_path = hub_root / "_mill" / "my-task.active"
+        if not indicator_path.is_file():
+            raise AssertionError(f"indicator file not created at {indicator_path}")
+    print("PASS: write_hub_active_indicator creates indicator file in _mill/")
+
+
+def test_write_hub_active_indicator_idempotent() -> None:
+    """Calling write_hub_active_indicator twice must succeed without exception."""
+    with safe_temp_dir() as tmp:
+        hub_root = tmp / "hub"
+        hub_root.mkdir(parents=True)
+        (hub_root / "_mill").mkdir(parents=True)
+
+        write_hub_active_indicator(hub_root, "my-task")
+        write_hub_active_indicator(hub_root, "my-task")
+
+        indicator_path = hub_root / "_mill" / "my-task.active"
+        if not indicator_path.is_file():
+            raise AssertionError(f"indicator file should exist after two calls at {indicator_path}")
+    print("PASS: write_hub_active_indicator is idempotent")
+
+
+def test_write_hub_active_indicator_creates_mill_dir() -> None:
+    """Create temp hub_root without _mill/; call write_hub_active_indicator; assert _mill/ and file exist."""
+    with safe_temp_dir() as tmp:
+        hub_root = tmp / "hub"
+        hub_root.mkdir(parents=True)
+
+        write_hub_active_indicator(hub_root, "my-task")
+
+        mill_dir = hub_root / "_mill"
+        indicator_path = mill_dir / "my-task.active"
+        if not mill_dir.exists():
+            raise AssertionError(f"_mill directory not created at {mill_dir}")
+        if not indicator_path.is_file():
+            raise AssertionError(f"indicator file not created at {indicator_path}")
+    print("PASS: write_hub_active_indicator creates _mill/ directory if absent")
+
+
+# ---------------------------------------------------------------------------
 # pick_task_single_or_multi — single number
 # ---------------------------------------------------------------------------
 
@@ -950,6 +1004,9 @@ def main() -> int:
         test_write_initial_status_push_failure_raises_runtime_error,
         test_recreate_active_junction_creates_link,
         test_recreate_active_junction_idempotent,
+        test_write_hub_active_indicator_happy_path,
+        test_write_hub_active_indicator_idempotent,
+        test_write_hub_active_indicator_creates_mill_dir,
         test_discover_active_worktrees_standard_layout,
         test_discover_active_worktrees_subfolder_install,
     ]
