@@ -498,6 +498,7 @@ Check every invariant; halt with a specific error if any fails:
 - `hub_relative_path:` is set in `.millhouse/config.local.yaml`
 - Every script in `_shortcuts.SHORTCUT_SCRIPTS` has a wrapper at `.millhouse/<script>.ps1` (and no legacy `.millhouse/<script>.py` exists)
 - `PYTHONPATH` user env var contains `<CLAUDE_PLUGIN_ROOT>/scripts` (verify via `[System.Environment]::GetEnvironmentVariable('PYTHONPATH', 'User')`)
+- `.env.MILL_PYTHON` in `~/.claude/settings.json` equals `${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe` (runtime-expanded value); verify via: `PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "import json; from pathlib import Path; d=json.loads((Path.home()/'.claude'/'settings.json').read_text(encoding='utf-8')); print(d['env']['MILL_PYTHON'])"`
 - `.millhouse/config.local.yaml` exists
 - `<WIKI_PATH>/Home.md` exists and starts with `# Tasks`
 - `<WIKI_PATH>/_Sidebar.md` exists and begins with `### Navigation`
@@ -519,6 +520,7 @@ mill-setup complete.
   VS Code:           .vscode/settings.json (titleBar = #2d7d46 green)
   Shortcut wrappers: N PS1 scripts under .millhouse/
   PYTHONPATH (User): <scripts>
+  MILL_PYTHON:       <python-path>
 
 Junctions (from mill-config.yaml):
   Hub-scope (created now):
@@ -558,5 +560,6 @@ Every phase checks current state before acting. Re-running after a partial or co
 - `_Sidebar.md` regenerated unconditionally; commit only if bytes changed.
 - `.vscode/settings.json` already green → skipped.
 - PYTHONPATH user env var re-set to the current latest plugin version on every run.
+- Phase 4.8 is idempotent: compares existing `.env.MILL_PYTHON` against computed value; writes only if they differ.
 
 A second `/mill-setup` run on a fully-set-up clone makes no changes and prints the same summary block.
