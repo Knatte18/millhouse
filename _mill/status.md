@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-approved
+phase: done
 slug: v3-wiki-module
 branch: hanf/v3-wiki-module
 plan: _mill/plan
@@ -42,6 +42,7 @@ holistic-fixing  '2026-05-23T05:43:22Z'
 holistic-fixing  '2026-05-23T05:44:14Z'
 holistic-reviewing  '2026-05-23T05:47:08Z'
 holistic-approved  '2026-05-23T05:51:55Z'
+done  '2026-05-23T05:52:08Z'
 ```
 
 ## Batches
