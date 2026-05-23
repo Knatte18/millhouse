@@ -152,7 +152,15 @@ def main() -> int:
         return 0
 
     finally:
-        shutil.rmtree(tmp_dir, ignore_errors=True)
+        _kill_daemon(tmp_dir / "wiki")
+        time.sleep(0.3)
+
+        def _on_rm_error(func, path, _exc):
+            import stat
+            os.chmod(path, stat.S_IWRITE)
+            func(path)
+
+        shutil.rmtree(tmp_dir, onerror=_on_rm_error)
 
 
 if __name__ == "__main__":
