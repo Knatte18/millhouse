@@ -122,7 +122,7 @@ pipeline:
 roles:
   discussion-review:
     holistic:
-      rounds: 3
+      rounds: 4
       reviewer: sonnetmax_tool
       # large_prompt:            # optional: override reviewer for large prompts
       #   threshold_ktok: 100    # switch when estimated tok count >= this (char/4000)
@@ -133,7 +133,7 @@ roles:
       rounds: 0
       reviewer: null
     holistic:
-      rounds: 3
+      rounds: 4
       reviewer: sonnetmax
       # large_prompt:            # optional: override reviewer for large prompts
       #   threshold_ktok: 100    # switch when estimated tok count >= this (char/4000)
@@ -144,7 +144,7 @@ roles:
       rounds: 0
       reviewer: null
     holistic:
-      rounds: 3
+      rounds: 4
       reviewer: sonnethigh
       fallback_reviewer: null     # reviewer name from agents.yaml to swap in on consecutive rate-limit ERRORs; null = no fallback
       fallback_on:                 # list of substrings (lowercased match) in reviews[].error that trigger fallback

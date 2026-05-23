@@ -25,14 +25,14 @@ paths:
 roles:
   discussion-review:
     holistic:
-      rounds: 3
+      rounds: 4
       reviewer: sonnetmax_tool
   plan-review:
     batch:
       rounds: 0
       reviewer: null
     holistic:
-      rounds: 3
+      rounds: 4
       reviewer: sonnetmax
   code-review:
     batch:
