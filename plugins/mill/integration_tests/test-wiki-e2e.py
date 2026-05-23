@@ -168,17 +168,17 @@ def _scenario_2_concurrent_cas(wiki_path: Path) -> bool:
             encoding="utf-8",
         )
 
-        ret_a = proc_a.wait(timeout=30)
-        ret_b = proc_b.wait(timeout=30)
+        out_a, err_a = proc_a.communicate(timeout=30)
+        ret_a = proc_a.returncode
+        out_b, err_b = proc_b.communicate(timeout=30)
+        ret_b = proc_b.returncode
 
         if ret_a != 0:
-            out, err = proc_a.communicate()
-            print(f"FAIL [scenario 2]: proc_a exited {ret_a}: {err}", file=sys.stderr)
+            print(f"FAIL [scenario 2]: proc_a exited {ret_a}: {err_a}", file=sys.stderr)
             return False
 
         if ret_b != 0:
-            out, err = proc_b.communicate()
-            print(f"FAIL [scenario 2]: proc_b exited {ret_b}: {err}", file=sys.stderr)
+            print(f"FAIL [scenario 2]: proc_b exited {ret_b}: {err_b}", file=sys.stderr)
             return False
 
         # Verify both lines are present
