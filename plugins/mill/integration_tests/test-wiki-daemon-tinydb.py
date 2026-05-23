@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import signal
 import subprocess
 import sys
 import time
@@ -61,18 +62,21 @@ def _setup_wiki(tmp_dir: Path) -> Path:
 
 
 def _kill_daemon(wiki_path: Path) -> None:
-    """Kill daemon by removing state file and taskkill."""
+    """Kill daemon by removing state file and sending SIGTERM (or taskkill on Windows)."""
     state_file = wiki_path / ".wiki-daemon.json"
     if state_file.exists():
         import json
         try:
             state = json.loads(state_file.read_text("utf-8"))
             pid = state.get("pid")
-            if pid and sys.platform == "win32":
-                subprocess.run(
-                    ["taskkill", "/F", "/PID", str(pid)],
-                    capture_output=True,
-                )
+            if pid:
+                if sys.platform == "win32":
+                    subprocess.run(
+                        ["taskkill", "/F", "/PID", str(pid)],
+                        capture_output=True,
+                    )
+                else:
+                    os.kill(pid, signal.SIGTERM)
         except Exception:
             pass
         state_file.unlink(missing_ok=True)
