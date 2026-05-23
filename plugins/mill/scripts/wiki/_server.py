@@ -167,6 +167,7 @@ class WikiServer(DaemonBase):
         # Step 1: Pull before write
         try:
             pull(self._wiki_path)
+            self._last_pull = time.monotonic()
         except WikiPushError as e:
             return {
                 FIELD_OK: False,
@@ -181,7 +182,6 @@ class WikiServer(DaemonBase):
                 self._store.set("Home.md", disk_content)
             except FileNotFoundError:
                 pass
-            self._last_pull = time.monotonic()
 
         # Step 3: CAS check for each file
         for rel_path, entry in files_payload.items():
