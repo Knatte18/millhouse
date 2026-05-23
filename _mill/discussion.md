@@ -20,8 +20,9 @@ This task touches only the `wiki/` daemon module. The old `_wiki.py` module and 
 **In:**
 - Replace `wiki/_store.py` in-memory dict with a TinyDB-backed task store
 - Task data model: `id`, `slug`, `title`, `group`, `brief`, `body`, `status`
-- `render()` function: generates `Home.md` and `_Sidebar.md` from TinyDB tasks
-- Daemon commits `tasks.json` + `Home.md` + `_Sidebar.md` in one commit per write operation
+- `render()` function: generates `Home.md`, `_Sidebar.md`, and `proposal-<slug>.md` detail files from TinyDB tasks
+- `_server.py`: intercept Home.md writes to update TinyDB; re-render all files after every write; re-read Home.md from disk after pull to repopulate TinyDB
+- Daemon commits `tasks.json` + `Home.md` + `_Sidebar.md` + any `proposal-*.md` files in one commit per write operation
 - Add `tinydb` to `pyproject.toml` dependencies
 - Unit tests: TinyDB CRUD, `render()` output format
 - Integration tests: daemon read/write cycle
@@ -77,8 +78,8 @@ This task touches only the `wiki/` daemon module. The old `_wiki.py` module and 
 
 ### Daemon commits tasks.json + Home.md + _Sidebar.md per write
 
-- Decision: After every successful write operation, the daemon commits `tasks.json`, `Home.md`, and `_Sidebar.md` together in one git commit.
-- Rationale: Keeps the commit graph coherent — `tasks.json` and rendered views are always in sync.
+- Decision: After every successful write operation, the daemon commits `tasks.json`, `Home.md`, `_Sidebar.md`, and all `proposal-<slug>.md` files returned by `render()`, together in one git commit.
+- Rationale: Keeps the commit graph coherent — `tasks.json` and all rendered views are always in sync.
 
 ## Technical context
 
@@ -95,13 +96,16 @@ plugins/mill/scripts/wiki/
 
 ### Store replacement
 
-`_store.py` currently exposes: `set(rel_path, content)`, `get(rel_path) -> (content, hash) | None`, `invalidate(rel_path)`, `invalidate_all()`. The TinyDB replacement must:
+`_store.py` currently exposes: `set(rel_path, content)`, `get(rel_path) -> (content, hash) | None`, `invalidate(rel_path)`, `invalidate_all()`. The TinyDB replacement removes `invalidate_all()` and must:
 
 - Store tasks as JSON documents with the full data model (see below)
 - Expose task-oriented methods for the server: `all_tasks()`, `upsert_task(task_dict)`, `get_by_slug(slug)`, `content_hash(content) -> str`
 - On `set("Home.md", content)`: parse incoming markdown to extract task structure, update TinyDB documents
-- On `get("Home.md")`: render current TinyDB tasks to markdown and return `(rendered_content, hash)`
-- On `set`/`get` for non-Home.md paths: fall through to the existing file-content caching behaviour
+- On `get("Home.md")`: render current TinyDB tasks to markdown and return `(rendered_content, hash)`; return `None` if TinyDB contains no tasks and has never been populated (uninitialized state, distinct from a genuinely empty task list)
+- On `set`/`get` for non-Home.md paths: fall through to the existing file-content caching behaviour (path -> content dict, unchanged)
+- `invalidate(rel_path)`: for non-Home.md paths, clears the path entry from the file-content dict as before; for `"Home.md"`, marks TinyDB as uninitialized so the next `get("Home.md")` returns `None` (cache miss)
+
+**Post-pull repopulation:** `invalidate_all()` is gone. After a successful `pull()`, `_handle_read` explicitly reads `Home.md` from disk and calls `store.set("Home.md", disk_content)` to repopulate TinyDB. This replaces the old pattern of clearing the cache and relying on cache-miss reads.
 
 ### Data model
 
@@ -128,7 +132,7 @@ When `_handle_write` receives a write of `Home.md`, the server must parse the ma
 
 ### render() output format
 
-`render(tasks: list[dict]) -> tuple[str, str]` returns `(home_md, sidebar_md)`.
+`render(tasks: list[dict]) -> dict[str, str]` returns a mapping of `rel_path -> content` for all files the daemon should write and commit: `Home.md`, `_Sidebar.md`, and one `proposal-<slug>.md` per task with non-empty `body`.
 
 `Home.md` structure:
 - `# Tasks\n\n`
@@ -136,7 +140,9 @@ When `_handle_write` receives a write of `Home.md`, the server must parse the ma
 - Then groups in order A -> B -> C -> D -> Z, each preceded by `# Layer <X>\n\n`
 - Each entry: `## <title>\n[<slug>]` + phase marker if `status` is one of `active`, `done`, `pr-pending`, `ready-to-merge` (blocked and None emit no marker) + blank line + `brief`
 
-`_Sidebar.md`: list of task links in the same group order as `Home.md`.
+`_Sidebar.md`: navigation list in the same group order as `Home.md`. Tasks with `body != ""` get a wiki link to `proposal-<slug>.md`; tasks without body are listed as plaintext.
+
+`proposal-<slug>.md`: one file per task where `body != ""`. Content is the `body` field verbatim. The daemon commits these files alongside `Home.md`, `_Sidebar.md`, and `tasks.json`.
 
 ### tasks.json location
 
@@ -152,18 +158,21 @@ Add `tinydb>=4.8` to `dependencies`.
 
 **`test-wiki-store.py`** — TinyDB store:
 - `upsert_task` / `get_by_slug` / `all_tasks` round-trip
-- `invalidate(slug)` removes the entry; `invalidate_all()` clears all tasks
+- `invalidate("Home.md")` marks TinyDB uninitialized; next `get("Home.md")` returns `None`
+- `invalidate("other.md")` clears only the file-content entry for that path
 - `content_hash()` is deterministic
-- Store initialises from existing `tasks.json` on disk (tempfile fixture)
+- Store loads from existing `tasks.json` on disk (tempfile fixture)
 - `set("Home.md", content)` parses incoming markdown and updates TinyDB documents
-- `get("Home.md")` renders current tasks to markdown
+- `get("Home.md")` returns `None` before first `set` (uninitialized), then renders tasks after `set`
 
 **`test-wiki-render.py`** -- render():
 - Tasks with no group appear before grouped tasks
 - Groups appear in A->B->C->D->Z order
 - Status `"blocked"` and `None` both emit no phase marker
 - Status `"active"` emits `[active]` marker
-- Empty task list renders to `# Tasks\n`
+- Task with `body != ""` gets a wiki link in `_Sidebar.md` and a `proposal-<slug>.md` entry in the returned dict
+- Task with `body == ""` is listed as plaintext in `_Sidebar.md`, no proposal file in output
+- Empty task list: `Home.md` renders to `# Tasks\n`, no proposal files
 
 ### Integration tests (`plugins/mill/integration_tests/`)
 
@@ -180,5 +189,8 @@ Add `tinydb>=4.8` to `dependencies`.
 - **Q:** Is group used for filtering in spawn/claim? **A:** No -- render metadata only.
 - **Q:** Does rendered Home.md keep the preamble warning block? **A:** No -- dropped. Rendered output starts at the task sections.
 - **Q:** Are `brief` and `body` separate fields? **A:** Yes.
-- **Q:** Does the daemon commit tasks.json on every write? **A:** Yes -- daemon commits tasks.json + Home.md + _Sidebar.md per write.
+- **Q:** Does the daemon commit tasks.json on every write? **A:** Yes -- daemon commits tasks.json + Home.md + _Sidebar.md + proposal-*.md per write.
 - **Q:** What happens with `"blocked"` status in the rendered view? **A:** No phase marker emitted -- blocked tasks appear as unclaimed in Home.md.
+- **Q:** What are the detail documents named? **A:** `proposal-<slug>.md` -- same convention as before; body field content verbatim.
+- **Q:** Does the sidebar link all tasks? **A:** Tasks with non-empty body get a wiki link to their proposal file; tasks without body are plaintext.
+- **Q:** Does `invalidate_all()` exist in the new store? **A:** No -- removed. After pull, server explicitly re-reads Home.md from disk and calls `store.set("Home.md", content)` to repopulate TinyDB.
