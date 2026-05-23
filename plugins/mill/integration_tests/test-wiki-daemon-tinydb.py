@@ -13,7 +13,6 @@ import os
 import shutil
 import subprocess
 import sys
-import tempfile
 import time
 from pathlib import Path
 
@@ -79,8 +78,28 @@ def _kill_daemon(wiki_path: Path) -> None:
         state_file.unlink(missing_ok=True)
 
 
+def _rmtree(path: Path) -> None:
+    if not path.exists():
+        return
+
+    def _on_error(func, p, _exc):
+        import stat
+        try:
+            os.chmod(p, stat.S_IWRITE)
+            func(p)
+        except Exception:
+            pass
+
+    shutil.rmtree(path, onerror=_on_error)
+
+
 def main() -> int:
-    tmp_dir = Path(tempfile.mkdtemp(prefix="mill-wiki-test-"))
+    tmp_dir = (SCRATCH / "test-wiki-daemon-tinydb").resolve()
+
+    _kill_daemon(tmp_dir / "wiki")
+    time.sleep(0.3)
+    _rmtree(tmp_dir)
+    tmp_dir.mkdir(parents=True, exist_ok=True)
 
     try:
         wiki_path = _setup_wiki(tmp_dir)
@@ -154,13 +173,7 @@ def main() -> int:
     finally:
         _kill_daemon(tmp_dir / "wiki")
         time.sleep(0.3)
-
-        def _on_rm_error(func, path, _exc):
-            import stat
-            os.chmod(path, stat.S_IWRITE)
-            func(path)
-
-        shutil.rmtree(tmp_dir, onerror=_on_rm_error)
+        _rmtree(tmp_dir)
 
 
 if __name__ == "__main__":
