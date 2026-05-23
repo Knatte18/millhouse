@@ -45,7 +45,7 @@ This batch adds all tests for the new data layer and server integration. Card 7 
 
   8. **Task with empty brief:** a task with `brief=""` has no blank-line+brief block after the slug line (the entry ends with the slug line, then a blank before the next entry).
 
-  Register `test-wiki-render.py` in `run-all.py` by adding it to the test list in that file.
+  No edit to `run-all.py` needed — it auto-discovers all `test-*.py` files by glob.
 - **Commit:** `test(wiki): unit tests for _render.py`
 
 ### Card 8: Unit tests for wiki/_store.py
@@ -54,12 +54,14 @@ This batch adds all tests for the new data layer and server integration. Card 7 
   - `plugins/mill/scripts/wiki/_store.py`
   - `plugins/mill/scripts/wiki/_parse.py`
   - `plugins/mill/scripts/wiki/_render.py`
-  - `plugins/mill/unit_tests/run-all.py`
-- **Edits:** none
-- **Creates:**
   - `plugins/mill/unit_tests/test-wiki-store.py`
+- **Edits:**
+  - `plugins/mill/unit_tests/test-wiki-store.py`
+- **Creates:** none
 - **Deletes:** none
 - **Requirements:**
+  The existing `test-wiki-store.py` tests the old no-arg `Store()` API and `invalidate_all()`. Replace the entire file content with tests for the new TinyDB-backed Store. Follow the existing test file structure: `HUB = Path(__file__).resolve().parent.parent.parent.parent`, `sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))`, `def main() -> int`, `if __name__ == "__main__": sys.exit(main())`.
+
   Use a `tempfile.mkdtemp()` call (not `tempfile.TemporaryDirectory`) to create a throwaway directory for `tasks.json`. Clean up manually at test end or let OS clean it (acceptable for unit tests).
 
   Test cases (each prints `PASS: <description>` on success):
@@ -84,7 +86,7 @@ This batch adds all tests for the new data layer and server integration. Card 7 
 
   10. **Store loads existing tasks.json on init:** create a `Store`, insert a task, close it (let it go out of scope), create a new `Store` with the same path. Assert the task is visible via `get_by_slug`.
 
-  Register `test-wiki-store.py` in `run-all.py`.
+  No edit to `run-all.py` needed — it auto-discovers all `test-*.py` files by glob.
 - **Commit:** `test(wiki): unit tests for _store.py`
 
 ### Card 9: Integration test for daemon with TinyDB

@@ -3,7 +3,7 @@
 ```yaml
 task: Migrate wiki task store to TinyDB
 slug: wiki-tinydb
-approved: false
+approved: true
 started: 20260523-132841
 parent: main
 root: ""
@@ -71,5 +71,5 @@ batches:
 - `plugins/mill/scripts/wiki/_render.py`
 - `plugins/mill/scripts/wiki/_server.py`
 - `plugins/mill/scripts/wiki/_store.py`
-- `plugins/mill/unit_tests/test-wiki-render.py`
-- `plugins/mill/unit_tests/test-wiki-store.py`
+- `plugins/mill/unit_tests/test-wiki-render.py` (creates)
+- `plugins/mill/unit_tests/test-wiki-store.py` (edits — full replacement)

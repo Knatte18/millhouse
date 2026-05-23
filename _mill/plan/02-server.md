@@ -56,7 +56,7 @@ This batch modifies `wiki/_server.py` to use the new TinyDB-backed `Store` from 
 
   1. **Pull:** call `pull(self._wiki_path)`. On `WikiPushError`, return `{FIELD_OK: False, FIELD_ERROR_TYPE: ERR_PUSH_FAILED, FIELD_ERROR: str(e)}`.
 
-  2. **Repopulate TinyDB from pulled state:** if `Home.md` is in `files_payload` (a write is incoming for it), or if `_initialized` is False, read `Home.md` from disk and call `self._store.set("Home.md", disk_content)`. Wrap in try/except `FileNotFoundError` — skip if absent. Update `self._last_pull = time.monotonic()`.
+  2. **Repopulate TinyDB from pulled state:** if `Home.md` is in `files_payload` (a write is incoming for it), or if `self._store.get("Home.md") is None` (store uninitialized), read `Home.md` from disk and call `self._store.set("Home.md", disk_content)`. Wrap in try/except `FileNotFoundError` — skip if absent. Update `self._last_pull = time.monotonic()`.
 
   3. **CAS check** for each `rel_path` in `files_payload`:
      - Call `path_guard(rel_path)` — on `WikiPathError`, return path error response.
