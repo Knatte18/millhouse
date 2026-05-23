@@ -1,14 +1,12 @@
-"""Unit tests for wiki._store.Store in-process cache logic.
+"""Unit tests for wiki._store.Store TinyDB-backed implementation.
 
-Covers: empty store returns None; set+get round-trip with hash;
-invalidate removes entries and is idempotent; invalidate_all clears all;
-hash is SHA-256 of UTF-8 content; independent stores are isolated;
-non-ASCII content survives round-trip with correct hash.
+Covers: content_hash, set/get for Home.md with parsing, set/get for other files,
+invalidate semantics, upsert_task, all_tasks, get_by_slug, and persistence.
 """
 from __future__ import annotations
 
-import hashlib
 import sys
+import tempfile
 from pathlib import Path
 
 HUB = Path(__file__).resolve().parent.parent.parent.parent
@@ -31,98 +29,190 @@ def main() -> int:
         failed += 1
         print(f"FAIL: {name}: {exc}", file=sys.stderr)
 
-    # --- (a) empty store returns None ---
+    # --- (1) content_hash is deterministic ---
     try:
-        store = Store()
-        result = store.get("nonexistent.md")
-        assert result is None, "expected None on empty store"
-        ok("empty store returns None")
+        h1 = Store.content_hash("hello")
+        h2 = Store.content_hash("hello")
+        h3 = Store.content_hash("world")
+        assert h1 == h2, "Same content should have same hash"
+        assert h1 != h3, "Different content should have different hash"
+        ok("content_hash is deterministic")
     except Exception as exc:
-        fail("empty store returns None", exc)
+        fail("content_hash is deterministic", exc)
 
-    # --- (b) set then get returns (content, hash) with correct hash ---
+    # --- (2) get returns None before first set ---
     try:
-        store = Store()
-        content = "hello world"
-        store.set("test.md", content)
-        result = store.get("test.md")
-        assert result is not None, "expected non-None after set"
-        actual_content, actual_hash = result
-        assert actual_content == content, f"content mismatch: {actual_content!r} != {content!r}"
-        expected_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
-        assert actual_hash == expected_hash, f"hash mismatch: {actual_hash!r} != {expected_hash!r}"
-        ok("set then get returns (content, hash) with correct hash")
+        tmp_dir = tempfile.mkdtemp()
+        try:
+            db_path = Path(tmp_dir) / "tasks.json"
+            store = Store(db_path)
+            result = store.get("Home.md")
+            assert result is None, "get should return None before set"
+            ok("get returns None before first set")
+        finally:
+            import shutil
+            shutil.rmtree(tmp_dir, ignore_errors=True)
     except Exception as exc:
-        fail("set then get returns (content, hash) with correct hash", exc)
+        fail("get returns None before first set", exc)
 
-    # --- (c) invalidate removes entry (subsequent get returns None) ---
+    # --- (3) set Home.md with valid markdown populates TinyDB ---
     try:
-        store = Store()
-        store.set("test.md", "content")
-        store.invalidate("test.md")
-        result = store.get("test.md")
-        assert result is None, "expected None after invalidate"
-        ok("invalidate removes entry")
+        tmp_dir = tempfile.mkdtemp()
+        try:
+            db_path = Path(tmp_dir) / "tasks.json"
+            store = Store(db_path)
+            home_content = "# Tasks\n\n## Title\n[my-slug]\n\n"
+            store.set("Home.md", home_content)
+            task = store.get_by_slug("my-slug")
+            assert task is not None, "Task should be retrieved by slug"
+            assert task["title"] == "Title", f"Title mismatch: {task.get('title')!r}"
+            ok("set Home.md populates TinyDB")
+        finally:
+            import shutil
+            shutil.rmtree(tmp_dir, ignore_errors=True)
     except Exception as exc:
-        fail("invalidate removes entry", exc)
+        fail("set Home.md populates TinyDB", exc)
 
-    # --- (d) invalidate on absent key is no-op (no exception) ---
+    # --- (4) get Home.md after set returns rendered content ---
     try:
-        store = Store()
-        store.invalidate("nonexistent.md")
-        ok("invalidate on absent key is no-op")
+        tmp_dir = tempfile.mkdtemp()
+        try:
+            db_path = Path(tmp_dir) / "tasks.json"
+            store = Store(db_path)
+            home_content = "# Tasks\n\n## Title\n[my-slug]\n\n"
+            store.set("Home.md", home_content)
+            result = store.get("Home.md")
+            assert result is not None, "get should return tuple after set"
+            rendered_content, content_hash = result
+            assert isinstance(rendered_content, str), "First element should be string"
+            assert isinstance(content_hash, str), "Second element should be hash string"
+            assert "## Title" in rendered_content, "Title should be in rendered content"
+            expected_hash = Store.content_hash(rendered_content)
+            assert content_hash == expected_hash, "Hash should match rendered content"
+            ok("get Home.md returns rendered content")
+        finally:
+            import shutil
+            shutil.rmtree(tmp_dir, ignore_errors=True)
     except Exception as exc:
-        fail("invalidate on absent key is no-op", exc)
+        fail("get Home.md returns rendered content", exc)
 
-    # --- (e) invalidate_all clears all entries ---
+    # --- (5) upsert_task assigns auto-increment id ---
     try:
-        store = Store()
-        store.set("a.md", "content a")
-        store.set("b.md", "content b")
-        store.set("c.md", "content c")
-        store.invalidate_all()
-        assert store.get("a.md") is None
-        assert store.get("b.md") is None
-        assert store.get("c.md") is None
-        ok("invalidate_all clears all entries")
+        tmp_dir = tempfile.mkdtemp()
+        try:
+            db_path = Path(tmp_dir) / "tasks.json"
+            store = Store(db_path)
+            store.upsert_task({"slug": "a", "title": "Task A"})
+            store.upsert_task({"slug": "b", "title": "Task B"})
+            task_a = store.get_by_slug("a")
+            task_b = store.get_by_slug("b")
+            assert task_a is not None and task_a.get("id") is not None, "Task A should have id"
+            assert task_b is not None and task_b.get("id") is not None, "Task B should have id"
+            id_a = task_a["id"]
+            id_b = task_b["id"]
+            assert isinstance(id_a, int) and isinstance(id_b, int), "IDs should be integers"
+            assert id_a != id_b, "IDs should be different"
+            ok("upsert_task assigns auto-increment id")
+        finally:
+            import shutil
+            shutil.rmtree(tmp_dir, ignore_errors=True)
     except Exception as exc:
-        fail("invalidate_all clears all entries", exc)
+        fail("upsert_task assigns auto-increment id", exc)
 
-    # --- (f) content_hash is SHA-256 of UTF-8 content ---
+    # --- (6) upsert_task merge preserves body ---
     try:
-        test_content = "hello"
-        expected = hashlib.sha256("hello".encode()).hexdigest()
-        actual = Store.content_hash(test_content)
-        assert actual == expected, f"hash mismatch: {actual!r} != {expected!r}"
-        ok("content_hash is SHA-256 of UTF-8 content")
+        tmp_dir = tempfile.mkdtemp()
+        try:
+            db_path = Path(tmp_dir) / "tasks.json"
+            store = Store(db_path)
+            store.upsert_task({"slug": "t", "title": "Original", "body": "existing body"})
+            store.upsert_task({"slug": "t", "title": "New Title"})
+            task = store.get_by_slug("t")
+            assert task is not None, "Task should exist"
+            assert task["body"] == "existing body", f"Body should be preserved, got {task.get('body')!r}"
+            assert task["title"] == "New Title", f"Title should be updated, got {task.get('title')!r}"
+            ok("upsert_task merge preserves body")
+        finally:
+            import shutil
+            shutil.rmtree(tmp_dir, ignore_errors=True)
     except Exception as exc:
-        fail("content_hash is SHA-256 of UTF-8 content", exc)
+        fail("upsert_task merge preserves body", exc)
 
-    # --- (g) two stores are independent instances ---
+    # --- (7) all_tasks returns all documents ---
     try:
-        store1 = Store()
-        store2 = Store()
-        store1.set("test.md", "content1")
-        result2 = store2.get("test.md")
-        assert result2 is None, "store2 should not have store1's entry"
-        ok("two stores are independent instances")
+        tmp_dir = tempfile.mkdtemp()
+        try:
+            db_path = Path(tmp_dir) / "tasks.json"
+            store = Store(db_path)
+            store.upsert_task({"slug": "a", "title": "A"})
+            store.upsert_task({"slug": "b", "title": "B"})
+            store.upsert_task({"slug": "c", "title": "C"})
+            tasks = store.all_tasks()
+            assert len(tasks) == 3, f"Should have 3 tasks, got {len(tasks)}"
+            ok("all_tasks returns all documents")
+        finally:
+            import shutil
+            shutil.rmtree(tmp_dir, ignore_errors=True)
     except Exception as exc:
-        fail("two stores are independent instances", exc)
+        fail("all_tasks returns all documents", exc)
 
-    # --- (h) non-ASCII content survives set+get round-trip with correct hash ---
+    # --- (8) invalidate Home.md marks uninitialized ---
     try:
-        content = "Nær"
-        store = Store()
-        store.set("norwegian.md", content)
-        result = store.get("norwegian.md")
-        assert result is not None
-        actual_content, actual_hash = result
-        assert actual_content == content, f"non-ASCII content mismatch: {actual_content!r} != {content!r}"
-        expected_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
-        assert actual_hash == expected_hash, f"hash mismatch for non-ASCII: {actual_hash!r} != {expected_hash!r}"
-        ok("non-ASCII content survives round-trip with correct hash")
+        tmp_dir = tempfile.mkdtemp()
+        try:
+            db_path = Path(tmp_dir) / "tasks.json"
+            store = Store(db_path)
+            home_content = "# Tasks\n\n## Title\n[my-slug]\n\n"
+            store.set("Home.md", home_content)
+            assert store.get("Home.md") is not None, "Should be initialized after set"
+            store.invalidate("Home.md")
+            result = store.get("Home.md")
+            assert result is None, "Should be None after invalidate"
+            ok("invalidate Home.md marks uninitialized")
+        finally:
+            import shutil
+            shutil.rmtree(tmp_dir, ignore_errors=True)
     except Exception as exc:
-        fail("non-ASCII content survives round-trip with correct hash", exc)
+        fail("invalidate Home.md marks uninitialized", exc)
+
+    # --- (9) invalidate other.md clears file cache ---
+    try:
+        tmp_dir = tempfile.mkdtemp()
+        try:
+            db_path = Path(tmp_dir) / "tasks.json"
+            store = Store(db_path)
+            store.set("other.md", "content")
+            assert store.get("other.md") is not None, "Should be cached after set"
+            store.invalidate("other.md")
+            result = store.get("other.md")
+            assert result is None, "Should be None after invalidate"
+            ok("invalidate other.md clears file cache")
+        finally:
+            import shutil
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+    except Exception as exc:
+        fail("invalidate other.md clears file cache", exc)
+
+    # --- (10) Store loads existing tasks.json on init ---
+    try:
+        tmp_dir = tempfile.mkdtemp()
+        try:
+            db_path = Path(tmp_dir) / "tasks.json"
+
+            store1 = Store(db_path)
+            store1.upsert_task({"slug": "persistent", "title": "Persistent Task"})
+            del store1
+
+            store2 = Store(db_path)
+            task = store2.get_by_slug("persistent")
+            assert task is not None, "Task should be loaded from disk on new Store init"
+            assert task["title"] == "Persistent Task", "Task data should be preserved"
+            ok("Store loads existing tasks.json on init")
+        finally:
+            import shutil
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+    except Exception as exc:
+        fail("Store loads existing tasks.json on init", exc)
 
     print("", file=sys.stderr)
     if failed:
