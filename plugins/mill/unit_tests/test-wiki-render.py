@@ -103,8 +103,8 @@ def main() -> int:
         result = render(tasks)
         assert "proposal-with-body.md" in result, "proposal-with-body.md not generated"
         assert result["proposal-with-body.md"] == "proposal content here", "Proposal content mismatch"
-        home_content = result["Home.md"]
-        assert "[[Has Proposal]](proposal-with-body.md)" in home_content, "Sidebar link not found"
+        sidebar_content = result["_Sidebar.md"]
+        assert "[[Has Proposal]](proposal-with-body.md)" in sidebar_content, "Sidebar link not found"
         ok("proposal file generated for non-empty body")
     except Exception as exc:
         fail("proposal file generated for non-empty body", exc)
