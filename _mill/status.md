@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: wiki-tinydb
 branch: hanf/wiki-tinydb
 plan: _mill/plan
@@ -19,4 +19,17 @@ discussed  '2026-05-23T13:26:13Z'
 planning  '2026-05-23T13:32:05Z'
 plan-fix-r1  '2026-05-23T13:38:25Z'
 planned  '2026-05-23T13:38:46Z'
+implementing  '2026-05-23T13:40:54Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: Data Layer
+    state: pending
+  - name: Server Integration
+    state: pending
+  - name: Tests
+    state: pending
 ```
