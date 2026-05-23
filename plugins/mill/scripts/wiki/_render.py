@@ -2,11 +2,6 @@ from __future__ import annotations
 
 
 def render(tasks: list[dict]) -> dict[str, str]:
-    """
-    Render task dicts to Home.md, _Sidebar.md, and proposal-<slug>.md files.
-
-    Returns a dict mapping rel_path -> content.
-    """
     result: dict[str, str] = {}
 
     home_lines: list[str] = ["# Tasks", ""]

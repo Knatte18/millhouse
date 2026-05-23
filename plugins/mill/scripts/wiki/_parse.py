@@ -4,12 +4,6 @@ import re
 
 
 def parse_home_md(content: str) -> list[dict]:
-    """
-    Parse Home.md content into a list of task dicts.
-
-    Each dict has keys: slug, title, group, brief, status.
-    Does not extract body or id fields.
-    """
     tasks: list[dict] = []
 
     lines = content.split("\n")
@@ -25,7 +19,7 @@ def parse_home_md(content: str) -> list[dict]:
             i += 1
             continue
 
-        if re.match(r"^# ", line) and not layer_match:
+        if re.match(r"^# ", line):
             current_group = None
             i += 1
             continue
