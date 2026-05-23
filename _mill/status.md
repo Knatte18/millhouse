@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: discussed
 slug: wiki-tinydb
 branch: hanf/wiki-tinydb
 plan: null
@@ -15,4 +15,5 @@ task_description: |
 
 ```text
 discussing  '2026-05-23T09:28:45Z'
+discussed  '2026-05-23T13:26:13Z'
 ```
