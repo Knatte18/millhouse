@@ -10,7 +10,7 @@ def render(tasks: list[dict]) -> dict[str, str]:
     result: dict[str, str] = {}
 
     home_lines: list[str] = ["# Tasks", ""]
-    sidebar_lines: list[str] = []
+    sidebar_groups: list[list[str]] = []
 
     tasks_by_group: dict[str | None, list[dict]] = {}
     for task in tasks:
@@ -31,6 +31,7 @@ def render(tasks: list[dict]) -> dict[str, str]:
             home_lines.append(f"# Layer {group}")
             home_lines.append("")
 
+        group_sidebar: list[str] = []
         for task in group_tasks:
             title = task.get("title", "")
             slug = task.get("slug", "")
@@ -52,16 +53,21 @@ def render(tasks: list[dict]) -> dict[str, str]:
             home_lines.append("")
 
             if body:
-                sidebar_lines.append(f"[[{title}]](proposal-{slug}.md)")
+                group_sidebar.append(f"[[{title}]](proposal-{slug}.md)")
                 result[f"proposal-{slug}.md"] = body
             else:
-                sidebar_lines.append(title)
+                group_sidebar.append(title)
 
-        if group is not None:
-            sidebar_lines.append("")
+        sidebar_groups.append(group_sidebar)
 
     home_content = "\n".join(home_lines)
     result["Home.md"] = home_content
+
+    sidebar_lines: list[str] = []
+    for i, group_sidebar in enumerate(sidebar_groups):
+        sidebar_lines.extend(group_sidebar)
+        if i < len(sidebar_groups) - 1:
+            sidebar_lines.append("")
 
     sidebar_content = "\n".join(sidebar_lines)
     result["_Sidebar.md"] = sidebar_content
