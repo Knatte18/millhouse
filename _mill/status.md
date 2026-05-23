@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-fix-r1
+phase: planned
 slug: wiki-tinydb
 branch: hanf/wiki-tinydb
 plan: _mill/plan
@@ -18,4 +18,5 @@ discussing  '2026-05-23T09:28:45Z'
 discussed  '2026-05-23T13:26:13Z'
 planning  '2026-05-23T13:32:05Z'
 plan-fix-r1  '2026-05-23T13:38:25Z'
+planned  '2026-05-23T13:38:46Z'
 ```
