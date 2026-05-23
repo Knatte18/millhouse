@@ -13,6 +13,7 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -25,32 +26,27 @@ sys.path.insert(0, str(SCRIPTS))
 import wiki._client as _client  # noqa: E402
 
 
-def _git(args: list[str], *, cwd: Path) -> subprocess.CompletedProcess:
-    """Run git command and return result."""
+def _run_git(args: list[str], cwd: Path) -> subprocess.CompletedProcess:
+    """Run git command."""
     return subprocess.run(
         ["git"] + args,
         cwd=str(cwd),
-        check=True,
         capture_output=True,
         text=True,
         encoding="utf-8",
     )
 
 
-def _setup_wiki(container: Path) -> Path:
+def _setup_wiki(tmp_dir: Path) -> Path:
     """Initialize a real wiki repo (bare remote + working clone)."""
-    bare = container / "wiki.git"
-    bare.mkdir(parents=True, exist_ok=True)
-    _git(["init", "--bare", str(bare)], cwd=container)
+    bare = tmp_dir / "wiki.git"
+    _run_git(["init", "--bare", "-b", "main", str(bare)], tmp_dir)
 
-    clone = container / "wiki"
-    clone.mkdir(parents=True, exist_ok=True)
-    _git(["init", str(clone)], cwd=clone)
+    clone = tmp_dir / "wiki"
+    _run_git(["clone", str(bare), str(clone)], tmp_dir)
 
-    _git(["config", "user.email", "test@test.com"], cwd=clone)
-    _git(["config", "user.name", "Test User"], cwd=clone)
-
-    _git(["remote", "add", "origin", str(bare)], cwd=clone)
+    _run_git(["config", "user.email", "test@test.com"], clone)
+    _run_git(["config", "user.name", "Test User"], clone)
 
     home_content = "# Tasks\n\n## My Task\n[my-task]\n\n"
     (clone / "Home.md").write_text(home_content, encoding="utf-8")
@@ -58,9 +54,9 @@ def _setup_wiki(container: Path) -> Path:
     config_content = "version: 1\n"
     (clone / "config.yaml").write_text(config_content, encoding="utf-8")
 
-    _git(["add", "Home.md", "config.yaml"], cwd=clone)
-    _git(["commit", "-m", "init"], cwd=clone)
-    _git(["push", "-u", "origin", "main"], cwd=clone)
+    _run_git(["add", "Home.md", "config.yaml"], clone)
+    _run_git(["commit", "-m", "init"], clone)
+    _run_git(["push", "origin", "HEAD"], clone)
 
     return clone
 
@@ -84,15 +80,10 @@ def _kill_daemon(wiki_path: Path) -> None:
 
 
 def main() -> int:
-    container = SCRATCH / "test-wiki-daemon-tinydb"
-
-    if container.exists():
-        shutil.rmtree(container, ignore_errors=True)
+    tmp_dir = Path(tempfile.mkdtemp())
 
     try:
-        container.mkdir(parents=True, exist_ok=True)
-
-        wiki_path = _setup_wiki(container)
+        wiki_path = _setup_wiki(tmp_dir)
 
         # Set PYTHONPATH for subprocess calls
         env = dict(os.environ)
@@ -127,12 +118,7 @@ def main() -> int:
             tasks_json = wiki_path / "tasks.json"
             assert tasks_json.exists(), "tasks.json should exist after write"
 
-            result = subprocess.run(
-                ["git", "-C", str(wiki_path), "show", "--name-only", "HEAD"],
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-            )
+            result = _run_git(["show", "--name-only", "HEAD"], wiki_path)
             assert "tasks.json" in result.stdout, "tasks.json should be in latest commit"
             print("PASS: Write Home.md and verify tasks.json committed")
         except Exception as exc:
@@ -166,8 +152,7 @@ def main() -> int:
         return 0
 
     finally:
-        if container.exists():
-            shutil.rmtree(container, ignore_errors=True)
+        shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
 if __name__ == "__main__":
