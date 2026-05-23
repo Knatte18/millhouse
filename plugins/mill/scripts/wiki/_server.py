@@ -29,6 +29,7 @@ from wiki import (
     WikiPathError,
     WikiPushError,
 )
+from wiki._render import render
 from wiki._store import Store
 from wiki._sync import path_guard, pull, atomic_write, commit_push
 
@@ -55,7 +56,7 @@ class WikiServer(DaemonBase):
         super().__init__("wiki", wiki_path / ".wiki-daemon.json", idle_timeout)
         self._wiki_path = wiki_path
         self._refresh_interval = refresh_interval
-        self._store = Store()
+        self._store = Store(wiki_path / "tasks.json")
         self._last_pull: float = 0.0
 
         # Set up rotating file logger
@@ -112,10 +113,15 @@ class WikiServer(DaemonBase):
         # Lazy refresh: check if we should pull
         now = time.monotonic()
         if now - self._last_pull > self._refresh_interval:
-            self._last_pull = now
             try:
                 pull(self._wiki_path)
-                self._store.invalidate_all()
+                # Repopulate TinyDB from pulled state
+                try:
+                    disk_content = (self._wiki_path / "Home.md").read_text("utf-8")
+                    self._store.set("Home.md", disk_content)
+                except FileNotFoundError:
+                    pass
+                self._last_pull = time.monotonic()
             except WikiPushError as e:
                 self._log.warning("lazy refresh failed, serving cache: %s" % str(e))
 
@@ -140,22 +146,27 @@ class WikiServer(DaemonBase):
 
         # Store in cache and return
         self._store.set(rel_path, content)
-        _, hash_ = self._store.get(rel_path)
+        result = self._store.get(rel_path)
+        if result is None:
+            return {
+                FIELD_OK: False,
+                FIELD_ERROR_TYPE: ERR_NOT_FOUND,
+                FIELD_ERROR: rel_path,
+            }
         return {
             FIELD_OK: True,
-            FIELD_CONTENT: content,
-            FIELD_HASH: hash_,
+            FIELD_CONTENT: result[0],
+            FIELD_HASH: result[1],
         }
 
     def _handle_write(self, msg: dict) -> dict:
-        """Handle write request with CAS checking."""
+        """Handle write request with CAS checking and TinyDB integration."""
         files_payload = msg.get(FIELD_FILES, {})
         message = msg.get(FIELD_MESSAGE, "wiki: update")
 
-        # Pull before write
+        # Step 1: Pull before write
         try:
             pull(self._wiki_path)
-            self._store.invalidate_all()
             self._last_pull = time.monotonic()
         except WikiPushError as e:
             return {
@@ -164,7 +175,15 @@ class WikiServer(DaemonBase):
                 FIELD_ERROR: str(e),
             }
 
-        # CAS check for each file
+        # Step 2: Repopulate TinyDB from pulled state
+        if "Home.md" in files_payload or self._store.get("Home.md") is None:
+            try:
+                disk_content = (self._wiki_path / "Home.md").read_text("utf-8")
+                self._store.set("Home.md", disk_content)
+            except FileNotFoundError:
+                pass
+
+        # Step 3: CAS check for each file
         for rel_path, entry in files_payload.items():
             try:
                 path_guard(rel_path)
@@ -175,18 +194,21 @@ class WikiServer(DaemonBase):
                     FIELD_ERROR: str(e),
                 }
 
-            # Determine current hash
-            cached = self._store.get(rel_path)
-            if cached is not None:
-                current_hash = cached[1]
+            # Compute current_hash
+            if rel_path == "Home.md":
+                home_cached = self._store.get("Home.md")
+                current_hash = home_cached[1] if home_cached is not None else ""
             else:
-                # Read from disk or treat as absent
-                full_path = self._wiki_path / rel_path
-                try:
-                    disk_content = full_path.read_text("utf-8")
-                    current_hash = Store.content_hash(disk_content)
-                except FileNotFoundError:
-                    current_hash = ""
+                cached = self._store.get(rel_path)
+                if cached is not None:
+                    current_hash = cached[1]
+                else:
+                    full_path = self._wiki_path / rel_path
+                    try:
+                        disk_content = full_path.read_text("utf-8")
+                        current_hash = Store.content_hash(disk_content)
+                    except FileNotFoundError:
+                        current_hash = ""
 
             # CAS check
             base_hash = entry.get(FIELD_BASE_HASH, "")
@@ -197,7 +219,7 @@ class WikiServer(DaemonBase):
                     FIELD_ERROR: f"conflict on {rel_path}",
                 }
 
-        # Write phase
+        # Step 4: atomic_write each client file
         for rel_path, entry in files_payload.items():
             new_content = entry.get(FIELD_NEW_CONTENT, "")
             try:
@@ -209,9 +231,28 @@ class WikiServer(DaemonBase):
                     FIELD_ERROR: str(e),
                 }
 
-        # Commit and push
+        # Step 5: Update TinyDB
+        for rel_path, entry in files_payload.items():
+            new_content = entry.get(FIELD_NEW_CONTENT, "")
+            self._store.set(rel_path, new_content)
+
+        # Step 6: Render
+        rendered = render(self._store.all_tasks())
+        for rel_path, content in rendered.items():
+            try:
+                atomic_write(self._wiki_path, rel_path, content)
+            except OSError as e:
+                return {
+                    FIELD_OK: False,
+                    FIELD_ERROR_TYPE: ERR_PUSH_FAILED,
+                    FIELD_ERROR: str(e),
+                }
+
+        # Step 7: Commit
+        commit_paths = list(files_payload.keys()) + list(rendered.keys()) + ["tasks.json"]
+        commit_paths = list(dict.fromkeys(commit_paths))
         try:
-            commit_push(self._wiki_path, list(files_payload.keys()), message)
+            commit_push(self._wiki_path, commit_paths, message)
         except WikiPushError as e:
             return {
                 FIELD_OK: False,
@@ -219,9 +260,10 @@ class WikiServer(DaemonBase):
                 FIELD_ERROR: str(e),
             }
 
-        # Invalidate written paths in cache
+        # Step 8: Invalidate non-Home.md cache entries
         for rel_path in files_payload.keys():
-            self._store.invalidate(rel_path)
+            if rel_path != "Home.md":
+                self._store.invalidate(rel_path)
 
         return {FIELD_OK: True}
 
