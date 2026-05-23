@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-Tests
+phase: holistic-reviewing
 slug: wiki-tinydb
 branch: hanf/wiki-tinydb
 plan: _mill/plan
@@ -23,6 +23,7 @@ implementing  '2026-05-23T13:40:54Z'
 approved-Data Layer  '2026-05-23T13:44:24Z'
 approved-Server Integration  '2026-05-23T13:47:04Z'
 approved-Tests  '2026-05-23T13:51:56Z'
+holistic-reviewing  '2026-05-23T13:52:18Z'
 ```
 
 ## Batches
