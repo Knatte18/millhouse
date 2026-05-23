@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-Data Layer
 slug: wiki-tinydb
 branch: hanf/wiki-tinydb
 plan: _mill/plan
@@ -20,6 +20,7 @@ planning  '2026-05-23T13:32:05Z'
 plan-fix-r1  '2026-05-23T13:38:25Z'
 planned  '2026-05-23T13:38:46Z'
 implementing  '2026-05-23T13:40:54Z'
+approved-Data Layer  '2026-05-23T13:44:24Z'
 ```
 
 ## Batches
@@ -27,7 +28,7 @@ implementing  '2026-05-23T13:40:54Z'
 ```yaml
 batches:
   - name: Data Layer
-    state: running
+    state: approved
     implementer_session: f19ec09f-75be-4329-ba1d-576fcdfeb9be
     start_sha: fab311270e0a4dc06c9f57c0779c469465c508c9
   - name: Server Integration
