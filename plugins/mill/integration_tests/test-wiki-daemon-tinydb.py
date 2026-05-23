@@ -80,7 +80,8 @@ def _kill_daemon(wiki_path: Path) -> None:
 
 
 def main() -> int:
-    tmp_dir = Path(tempfile.mkdtemp())
+    tmp_dir = SCRATCH / "test-wiki-daemon-tinydb"
+    tmp_dir.mkdir(parents=True, exist_ok=True)
 
     try:
         wiki_path = _setup_wiki(tmp_dir)
