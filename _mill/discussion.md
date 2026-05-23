@@ -107,6 +107,18 @@ plugins/mill/scripts/wiki/
 
 **Post-pull repopulation:** `invalidate_all()` is gone. After a successful `pull()`, `_handle_read` explicitly reads `Home.md` from disk and calls `store.set("Home.md", disk_content)` to repopulate TinyDB. This replaces the old pattern of clearing the cache and relying on cache-miss reads.
 
+**Write path sequence** — `_handle_write` executes in this order:
+1. `pull()` — fetch latest from remote
+2. Re-read `Home.md` from disk and call `store.set("Home.md", disk_content)` to sync TinyDB with the pulled state (same as post-pull repopulation in reads)
+3. CAS check — compute current hash from `store.get("Home.md")` (or disk for non-Home.md files); compare against `base_hash` from client; reject on mismatch
+4. `atomic_write` — write each client file to disk
+5. `store.set("Home.md", new_content)` — update TinyDB from the written content
+6. `render()` — generate `Home.md`, `_Sidebar.md`, `proposal-*.md` from TinyDB
+7. Write rendered files to disk (overwriting the atomic_write result for `Home.md`)
+8. `commit_push` — commit `tasks.json` + `Home.md` + `_Sidebar.md` + `proposal-*.md`
+
+**upsert_task merge behaviour:** `upsert_task` merges the incoming dict with the existing TinyDB document — fields not present in the incoming data are preserved from the stored document. In particular, `body` (not recoverable from Home.md) is never overwritten with `""` on a Home.md write; the existing value is kept.
+
 ### Data model
 
 ```python
