@@ -37,5 +37,7 @@ batches:
     implementer_session: 05dfa2a4-7752-4398-9bfd-06addbbadfb9
     start_sha: e6e94a8245b251a7bc14fbccca9701671296b39d
   - name: Tests
-    state: pending
+    state: running
+    implementer_session: 20c1c64e-7ccb-47a2-b50b-840c596f1605
+    start_sha: 7a186b40c20dc8d3de77100333ab5eefa4842520
 ```
