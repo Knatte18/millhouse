@@ -32,7 +32,9 @@ batches:
     implementer_session: f19ec09f-75be-4329-ba1d-576fcdfeb9be
     start_sha: fab311270e0a4dc06c9f57c0779c469465c508c9
   - name: Server Integration
-    state: pending
+    state: running
+    implementer_session: 05dfa2a4-7752-4398-9bfd-06addbbadfb9
+    start_sha: e6e94a8245b251a7bc14fbccca9701671296b39d
   - name: Tests
     state: pending
 ```
