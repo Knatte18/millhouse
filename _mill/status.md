@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-reviewing
+phase: holistic-approved
 slug: wiki-tinydb
 branch: hanf/wiki-tinydb
 plan: _mill/plan
@@ -30,6 +30,7 @@ holistic-fixing  '2026-05-23T14:25:28Z'
 holistic-reviewing  '2026-05-23T14:31:18Z'
 holistic-fixing  '2026-05-23T14:37:23Z'
 holistic-reviewing  '2026-05-23T14:40:13Z'
+holistic-approved  '2026-05-23T14:44:50Z'
 ```
 
 ## Batches
