@@ -39,7 +39,7 @@ roles:
       rounds: 0
       reviewer: null
     holistic:
-      rounds: 4
+      rounds: 5
       reviewer: sonnethigh
       fallback_reviewer: null
       fallback_on:

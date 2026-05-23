@@ -74,7 +74,7 @@ Review severity: `discussion` → GAP/NOTE → APPROVE/GAPS_FOUND; `plan`/`code`
 
 ## Repo layout
 
-- `plugins/mill/scripts/` — flat Python (no submodules); `millpy-*.py` CLIs + `_*.py` helpers
+- `plugins/mill/scripts/` — flat Python; `millpy-*.py` CLIs + `_*.py` helpers; `wiki/` subpackage is the deliberate V3 module exception; `_daemon.py` is a generic daemon base reusable by future V3 modules
 - `plugins/mill/templates/` — review-prompt templates + `review-output.schema.md`
 - `plugins/mill/skills/` — one `SKILL.md` per skill; indexed at root `SKILLS.md`
 - `plugins/mill/unit_tests/` — `test-<name>.py`; run via `run-all.py`. In-memory/tempfile fixtures; no real git/LLM.
