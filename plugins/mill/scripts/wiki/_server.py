@@ -55,7 +55,7 @@ class WikiServer(DaemonBase):
         super().__init__("wiki", wiki_path / ".wiki-daemon.json", idle_timeout)
         self._wiki_path = wiki_path
         self._refresh_interval = refresh_interval
-        self._store = Store()
+        self._store = Store(wiki_path / "tasks.json")
         self._last_pull: float = 0.0
 
         # Set up rotating file logger
@@ -112,10 +112,15 @@ class WikiServer(DaemonBase):
         # Lazy refresh: check if we should pull
         now = time.monotonic()
         if now - self._last_pull > self._refresh_interval:
-            self._last_pull = now
             try:
                 pull(self._wiki_path)
-                self._store.invalidate_all()
+                # Repopulate TinyDB from pulled state
+                try:
+                    disk_content = (self._wiki_path / "Home.md").read_text("utf-8")
+                    self._store.set("Home.md", disk_content)
+                except FileNotFoundError:
+                    pass
+                self._last_pull = time.monotonic()
             except WikiPushError as e:
                 self._log.warning("lazy refresh failed, serving cache: %s" % str(e))
 
@@ -140,11 +145,17 @@ class WikiServer(DaemonBase):
 
         # Store in cache and return
         self._store.set(rel_path, content)
-        _, hash_ = self._store.get(rel_path)
+        result = self._store.get(rel_path)
+        if result is None:
+            return {
+                FIELD_OK: False,
+                FIELD_ERROR_TYPE: ERR_NOT_FOUND,
+                FIELD_ERROR: rel_path,
+            }
         return {
             FIELD_OK: True,
-            FIELD_CONTENT: content,
-            FIELD_HASH: hash_,
+            FIELD_CONTENT: result[0],
+            FIELD_HASH: result[1],
         }
 
     def _handle_write(self, msg: dict) -> dict:
