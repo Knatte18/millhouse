@@ -9,8 +9,6 @@ import time
 from pathlib import Path
 from secrets import token_hex
 
-logging.basicConfig(level=logging.INFO, format="[%(name)s] %(message)s")
-
 
 class DaemonBase(abc.ABC):
     """Generic daemon base — subclass provides handle_request, identity, and lifecycle callbacks."""
@@ -58,6 +56,9 @@ class DaemonBase(abc.ABC):
 
     def run(self) -> None:
         """Main entry point: O_EXCL claim, bind, accept loop, idle-exit."""
+        if not logging.root.handlers:
+            logging.basicConfig(level=logging.INFO, format="[%(name)s] %(message)s")
+
         claimed = False
         try:
             if not self._claim_state_file():
@@ -166,15 +167,11 @@ class DaemonBase(abc.ABC):
 
         try:
             os.kill(pid, 0)
-            pid_alive = True
         except ProcessLookupError:
             return True
         except PermissionError:
-            pid_alive = True
+            pass
         except Exception:
-            return True
-
-        if not pid_alive:
             return True
 
         host = state.get("host", "127.0.0.1")
