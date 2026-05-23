@@ -71,13 +71,13 @@ def read(
     req = {FIELD_OP: OP_READ, FIELD_TOKEN: token, FIELD_PATH: rel_path}
 
     try:
-        resp = _connect_send_recv(host, port, token, req)
+        resp = _connect_send_recv(host, port, req)
     except OSError:
         host, port, token = _ensure_daemon(
             wiki_path, idle_timeout=idle_timeout, refresh_interval=refresh_interval
         )
         try:
-            resp = _connect_send_recv(host, port, token, req)
+            resp = _connect_send_recv(host, port, req)
         except OSError as e:
             raise WikiStartupError("daemon connection failed after retry") from e
 
@@ -129,7 +129,7 @@ def write_commit_push(
     }
 
     try:
-        resp = _connect_send_recv(host, port, token, req)
+        resp = _connect_send_recv(host, port, req)
     except OSError as e:
         raise WikiStartupError("daemon connection failed") from e
 
@@ -168,7 +168,7 @@ def health_check(wiki_path: Path) -> bool:
             return False
 
         req = {FIELD_OP: OP_READ, FIELD_TOKEN: token, FIELD_PATH: ""}
-        _connect_send_recv(host, port, token, req)
+        _connect_send_recv(host, port, req)
         return True
     except Exception:
         return False
@@ -275,13 +275,12 @@ def _spawn_server(
         subprocess.Popen(cmd, env=env, close_fds=True, start_new_session=True)
 
 
-def _connect_send_recv(host: str, port: int, token: str, msg: dict) -> dict:
+def _connect_send_recv(host: str, port: int, msg: dict) -> dict:
     """Send JSON request and receive JSON response over TCP.
 
     Args:
         host: Server host.
         port: Server port.
-        token: Authentication token (unused here, but part of msg).
         msg: Request dict to send.
 
     Returns:
