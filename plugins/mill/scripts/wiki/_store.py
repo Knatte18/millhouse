@@ -22,6 +22,14 @@ class Store:
     def set(self, rel_path: str, content: str) -> None:
         if rel_path == "Home.md":
             tasks = parse_home_md(content)
+            # Collect slugs from parsed content
+            current_slugs = {task["slug"] for task in tasks}
+            # Delete tasks not in the new content
+            slug_query = Query()
+            for doc in self._db.all():
+                if doc.get("slug") not in current_slugs:
+                    self._db.remove(slug_query.slug == doc["slug"])
+            # Upsert remaining tasks
             for task in tasks:
                 self.upsert_task(task)
             self._initialized = True
