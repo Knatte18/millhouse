@@ -5,7 +5,6 @@ import json
 import logging
 import os
 import socket
-import tempfile
 import time
 from pathlib import Path
 from secrets import token_hex
@@ -59,9 +58,11 @@ class DaemonBase(abc.ABC):
 
     def run(self) -> None:
         """Main entry point: O_EXCL claim, bind, accept loop, idle-exit."""
+        claimed = False
         try:
             if not self._claim_state_file():
                 return
+            claimed = True
 
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.bind(("127.0.0.1", 0))
@@ -95,8 +96,9 @@ class DaemonBase(abc.ABC):
                         self._logger.info("idle-exit")
                         break
         finally:
-            self.on_stop()
-            self._state_file_path.unlink(missing_ok=True)
+            if claimed:
+                self.on_stop()
+                self._state_file_path.unlink(missing_ok=True)
 
     def _claim_state_file(self) -> bool:
         """Claim state file with O_EXCL; on conflict check staleness.
