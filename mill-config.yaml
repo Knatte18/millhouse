@@ -25,7 +25,7 @@ paths:
 roles:
   discussion-review:
     holistic:
-      rounds: 4
+      rounds: 5
       reviewer: sonnetmax_tool
   plan-review:
     batch:

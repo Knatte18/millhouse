@@ -46,6 +46,10 @@ This task reshapes V3 into the only wiki API, migrates every V2 call site, remov
   - Drop `s` from the recognised status set (parsed to `None` if encountered).
   - Keep `abandoned` as a first-class status.
   - Used only by the migration script; not invoked by the daemon at runtime.
+  - **Extended-parser additions for migration** (mirrors the Testing section's expectations):
+    - Recognise `# Layer ([A-Z])(?: .*)?$` — parenthetical / freeform suffix on layer headers allowed and ignored (`# Layer D (isolated — run alone)` → group `D`).
+    - Capture multi-paragraph briefs verbatim across blank lines until the next `##` or `#` heading, then collapse to one space-joined paragraph for the `brief` field.
+    - Skip `##` headings whose next non-blank line is NOT a `[slug]` line (info-only notes like `## ⚠ …`). The backup retains them.
 - Add `millpy-wiki-migrate.py` one-shot migration script:
   - Argparse: `--dry-run` (print parsed state, no commits), default = commit.
   - Backs up current `<wiki>/Home.md` to `<wiki>/Home.md.pre-v3.bak`.
@@ -56,10 +60,10 @@ This task reshapes V3 into the only wiki API, migrates every V2 call site, remov
   - Single commit: `Home.md.pre-v3.bak`, `tasks.json`, regenerated `Home.md`, `_Sidebar.md`, and `proposal-*.md`.
 - Port every V2 wiki call site to the new structured API:
   - `millpy-add.py`: replace `wiki_lock` + `_tasks_md.append_entry` + `_wiki.write_commit_push` with `wiki.upsert_task(slug, title=, brief=, body=, group=)`. (No `status` kwarg in the normal add flow — new tasks default to `None` / unmarked; phase transitions go through `set_phase` later.)
-  - `millpy-cleanup.py`: replace `wiki_lock` + `_tasks_md.set_phase` + `_wiki.write_commit_push` with `wiki.set_phase(slug_or_id, phase)`. Replace any `_tasks_md.remove_entry` with `wiki.remove_task`. Replace `Home.md` reads with `wiki.list_tasks_brief()`.
-  - `millpy-claim.py`: drop `_wiki.sync_pull` (daemon lazy-refreshes inside each op). Replace the direct `wiki_path / "config.yaml"` read at line 68 with the `_config.load_config` path. Replace Home.md parsing with `wiki.list_tasks_brief()` / `wiki.get_task(slug)` for the claim flow.
+  - `millpy-cleanup.py`: Lines to address: `:25` (`import _tasks_md` — delete), `:75` (`list[_tasks_md.Task]` type hint — change to `list[dict]`), `:523` (`_tasks_md.set_phase(home_text, slug, "done")` → `wiki.set_phase(slug, "done")`), `:596` (`_tasks_md.set_phase(home_text, slug, None)` → `wiki.set_phase(slug, None)`), `:627` (`_tasks_md.parse(...)` for `_home_for_check` → `wiki.list_tasks_brief()`), `:635` (`_tasks_md.parse(home_text)` → `wiki.list_tasks_brief()`). Drop the surrounding `wiki_lock` and `_wiki.write_commit_push` calls (`:603`, `:653`) — `wiki.set_phase` commits inline.
+  - `millpy-claim.py`: Lines to address: `:45` (`import _tasks_md` — delete), `:68` (direct `wiki_path / "config.yaml"` read — route through `_config.load_config`), `:185` (`_wiki.sync_pull` — delete; daemon lazy-refreshes inside each op), `:187` (`tasks = _tasks_md.parse(home_text)` — replace with `tasks = wiki.list_tasks_brief()`; the brief shape covers the claim flow's needs).
   - `millpy-fold.py`: full migration off `_tasks_md`. Lines to address:
-    - `:15` local duplicate `LOCKED_FOLD_PHASES` constant — delete (use `wiki.LOCKED_FOLD_PHASES` instead, which is the canonical home after the constant moves to `wiki/__init__.py`).
+    - `:15` is a docstring line (`LOCKED_FOLD_PHASES = ("active", ...)` inside the module docstring at lines 1–32) — update the docstring text to reference `wiki.LOCKED_FOLD_PHASES` as the canonical home; no Python constant assignment exists at that line.
     - `:39` `import _tasks_md` — delete.
     - `:76` `_tasks_md._SLUG_RE.match(target_slug)` — replace with a local `re.compile(r"^[a-z][a-z0-9-]*$")` constant at the top of `millpy-fold.py`. (The slug regex is a one-liner; moving it into `wiki/__init__.py` couples the wiki module to caller-side validation it doesn't need.)
     - `:87` `_wiki.wiki_lock` — delete the context manager wrapping; CAS handles concurrency.
@@ -67,10 +71,25 @@ This task reshapes V3 into the only wiki API, migrates every V2 call site, remov
     - `:99` `phase in _tasks_md.LOCKED_FOLD_PHASES` — replace with `phase in wiki.LOCKED_FOLD_PHASES` after the constant moves.
     - `:135` `_tasks_md.append_to_body` — replace with `task = wiki.get_task(target_slug); wiki.upsert_task(target_slug, body=task["body"] + "\n" + fold_line)`.
     - `:144` `_wiki.write_commit_push` — delete (the `upsert_task` call commits inline).
-  - `millpy-spawn.py`: replace `_wiki.sync_pull` (drop entirely) and the eventual `_spawn_core.claim_in_wiki` call (already switching below).
-  - `_spawn_core.claim_in_wiki`: replace with `wiki.set_phase(slug, "active")`.
-  - `_spawn_core.groom_and_claim_merge`: replace the read-modify-write window with N × `wiki.remove_task(slug)` + `wiki.upsert_task(merged_slug, ..., body=..., has_proposal=...)` + `wiki.set_phase(merged_slug, "active")`. No advisory lock; CAS conflicts surface as `WikiConflictError` and the caller retries up to `wiki._client.CAS_RETRIES` attempts (see decision `cas-retry-count` below — `CAS_RETRIES` is bumped from 3 to 5 in this task so the constant matches the existing `test-wiki-e2e.py` integration-test pattern; `groom_and_claim_merge` uses the constant, not a local literal).
+  - `millpy-spawn.py`: Lines to address: `:44` (`import _tasks_md` — delete), `:66–72` (drop the `wiki_cfg = resolve_wiki_path(repo_root) / "config.yaml"` branch and the wiki-fallback in the missing-config guard — covered above in the purge), `:128` (`_wiki.sync_pull` — drop entirely; daemon lazy-refreshes), `:130` (`tasks = _tasks_md.parse(home_text)` — replace with `tasks = wiki.list_tasks_brief()`).
+  - `_spawn_core.claim_in_wiki` (`:636–641`): replace the `wiki_lock` + Home.md read + `_tasks_md.claim` + write + `_wiki.write_commit_push` with `wiki.set_phase(slug, "active")`.
+  - `_spawn_core.groom_and_claim_merge` (`:488–514`): replace the read-modify-write window with N × `wiki.remove_task(slug)` + `wiki.upsert_task(merged_slug, ..., body=..., has_proposal=...)` + `wiki.set_phase(merged_slug, "active")`. No advisory lock; CAS conflicts surface as `WikiConflictError` and the caller retries up to `wiki._client.CAS_RETRIES` attempts (see decision `cas-retry-count` — `CAS_RETRIES` is bumped from 3 to 5 in this task so the constant matches the existing `test-wiki-e2e.py` integration-test pattern; `groom_and_claim_merge` uses the constant, not a local literal).
+  - `_spawn_core.py` — broader `_tasks_md` references that must be removed to allow `_tasks_md.py` deletion:
+    - `:73` `import _tasks_md` — delete.
+    - `:153, 231, 257, 259, 321, 322, 390, 392, 454, 528` — type hints `list[_tasks_md.Task]` / `_tasks_md.Task` → replace with `list[dict]` / `dict` (the `Task` dataclass is gone; functions consume the brief-shape dict returned by `wiki.list_tasks_brief()`).
+    - `:461–463` docstring references to `_tasks_md.remove_entry` / `append_entry` / `claim` — update to reference the V3 equivalents (`wiki.remove_task`, `wiki.upsert_task`, `wiki.set_phase`).
+    - `:493` `_tasks_md.remove_entry(text, slug)` → already covered by the `wiki.remove_task(slug)` rewrite above.
+    - `:494` `_tasks_md.append_entry(text, merged_slug, …)` → already covered by `wiki.upsert_task(merged_slug, …)` above.
+    - `:497, :638` `_tasks_md.claim(text, slug)` → already covered by `wiki.set_phase(slug, "active")` above.
+    - `:518` `_tasks_md.parse(new_text)` (re-parse after commit to return a `Task` object) → replace with `wiki.get_task(merged_slug)` returning the brief dict; the function's return signature changes from `_tasks_md.Task` to `dict`.
 - Move `read_junctions` / `read_hardlinks` from `_wiki.py` to `_junction.py`. Strip the `wiki/config.yaml` fallback path — `mill-config.yaml` (hub root) is the only source. Update the two call sites (`_setup.py:85,86` and `millpy-cleanup.py:636`) for the new import path.
+- **Additional `_tasks_md` callers that must be ported off the deleted module:**
+  - `millpy-inspect.py` (`:20` import, `:54` `_tasks_md.parse(home_md.read_text(...))` → `wiki.list_tasks_brief()`).
+  - `millpy-status.py` (`:20` import, `:32` `_tasks_md.parse(...)` → `wiki.list_tasks_brief()`).
+  - `millpy-terminal.py` (`:23` import, `:59` `_tasks_md.parse(...)` → `wiki.list_tasks_brief()`).
+  - `millpy-vscode.py` (`:31` import, `:180` `_tasks_md.parse(...)` → `wiki.list_tasks_brief()`).
+  - `_marker.py` (`:22` import, `:53` and `:97` `_tasks_md.parse(home_text)` → `wiki.list_tasks_brief()` then filter by slug or look up via `wiki.get_task(slug)` depending on what each call site does with the result).
+- **Delete `millpy-migrate-layout.py`** (`:49` import, `:230` `_tasks_md.parse(...)` plus the whole script): same shape as `millpy-migrate-config.py` — a one-shot migration for the old `hub/` + `worktrees/` layout that is long since done. Same disposition: delete script and any test that covers it. (If the user wants it kept, the plan should port `:230` to `wiki.list_tasks_brief()`; default is delete.)
 - Move `clone_or_init` from `_wiki.py` into `_setup.py` (its sole caller).
 - Delete `_wiki.py`, `_tasks_md.py`, `_sidebar.py` outright (no shim, no deprecation). The `Task` dataclass and `LOCKED_FOLD_PHASES` constant move into `wiki/__init__.py`.
 - Strip the `wiki/config.yaml` fallback from `_config.py:load_config` (lines 179, 188, 198–202). Only `mill-config.yaml` is consulted; missing → clean error.
@@ -221,15 +240,21 @@ This task reshapes V3 into the only wiki API, migrates every V2 call site, remov
 | File | Lines | V2 call | V3 replacement |
 |---|---|---|---|
 | `millpy-add.py` | 169, 198 | `wiki_lock` + `write_commit_push` | `wiki.upsert_task` |
-| `millpy-cleanup.py` | 603, 632, 636, 653 | `write_commit_push`, `sync_pull`, `read_junctions`, `wiki_lock` | `wiki.set_phase`/`remove_task`/`list_tasks_brief`; `read_junctions` moves to `_junction.py`; lock dropped |
-| `millpy-claim.py` | 185, 68 | `sync_pull`; direct `wiki_path / "config.yaml"` read | drop sync_pull; route config read through `_config.load_config` |
+| `millpy-cleanup.py` | 25, 75, 523, 596, 603, 627, 632, 635, 636, 653 | `import _tasks_md`; `Task` type hint; `_tasks_md.set_phase` ×2; `write_commit_push`; `_tasks_md.parse` ×2; `sync_pull`; `read_junctions`; `wiki_lock` | delete import; `list[dict]` type; `wiki.set_phase` ×2; commit inline; `wiki.list_tasks_brief()` ×2; drop sync_pull; `_junction.read_junctions`; lock dropped |
+| `millpy-claim.py` | 45, 68, 185, 187 | `import _tasks_md`; direct config read; `sync_pull`; `_tasks_md.parse` | delete import; route config read through `_config.load_config`; drop sync_pull; `wiki.list_tasks_brief()` |
 | `millpy-migrate-config.py` | all | direct git calls | **delete file** |
 | `millpy-fold.py` | 15, 39, 76, 87, 93, 99, 135, 144 | local LOCKED_FOLD_PHASES dup; `import _tasks_md`; `_SLUG_RE`; `wiki_lock`; `_tasks_md.parse`; `LOCKED_FOLD_PHASES`; `append_to_body`; `write_commit_push` | delete dup constant; remove `_tasks_md` import; inline local slug regex; drop wiki_lock; `wiki.list_tasks_brief`; `wiki.LOCKED_FOLD_PHASES`; `wiki.get_task` + `wiki.upsert_task`; commit inline |
 | `_review_common.py` | 34, 1211, 1233–1270 | `wiki/config.yaml` fallback (docstrings + runtime) | strip fallback identical to `_config.py`; missing-config error references `mill-config.yaml` only |
 | `millpy-spawn.py` | 66–72 | `wiki_cfg = resolve_wiki_path(repo_root) / "config.yaml"` + missing-config guard | drop the `wiki_cfg` branch; guard checks only `mill_cfg` |
 | `millpy-wikipush.py` | 32, 104, 111, 113 | `import _wiki`, `wiki_lock`, `LockBusy` | drop `_wiki` import; remove the `wiki_lock` guard (replace with bare call to inner push helper); push logic stays on direct git subprocess |
-| `millpy-spawn.py` | 128 (sync_pull) — note: 66–72 covered in row above | `sync_pull` | drop |
-| `_spawn_core.py` | 488, 514, 636, 641 | `wiki_lock` + `write_commit_push` (groom_and_claim_merge + claim_in_wiki) | `wiki.remove_task` + `upsert_task` + `set_phase`; CAS retry loop |
+| `millpy-spawn.py` | 44, 66–72, 128, 130 | `import _tasks_md`; direct `wiki_cfg` + guard; `sync_pull`; `_tasks_md.parse` | delete import; guard checks only `mill_cfg`; drop sync_pull; `wiki.list_tasks_brief()` |
+| `_spawn_core.py` | 73, 153, 231, 257, 259, 321, 322, 390, 392, 454, 461–463, 488, 493, 494, 497, 514, 518, 528, 636, 638, 641 | `import _tasks_md`; many `Task` type hints; docstring refs; `wiki_lock`; `remove_entry`; `append_entry`; `claim` ×2; `write_commit_push` ×2; `parse` | delete import; `list[dict]`/`dict` types; doc refs to V3 ops; drop lock; `wiki.remove_task`; `wiki.upsert_task`; `wiki.set_phase` ×2; commit inline ×2; `wiki.get_task` (returns brief dict, callers updated) |
+| `millpy-inspect.py` | 20, 54 | `import _tasks_md`; `_tasks_md.parse` | delete import; `wiki.list_tasks_brief()` |
+| `millpy-status.py` | 20, 32 | `import _tasks_md`; `_tasks_md.parse` | delete import; `wiki.list_tasks_brief()` |
+| `millpy-terminal.py` | 23, 59 | `import _tasks_md`; `_tasks_md.parse` | delete import; `wiki.list_tasks_brief()` |
+| `millpy-vscode.py` | 31, 180 | `import _tasks_md`; `_tasks_md.parse` | delete import; `wiki.list_tasks_brief()` |
+| `_marker.py` | 22, 53, 97 | `import _tasks_md`; `_tasks_md.parse` ×2 | delete import; `wiki.list_tasks_brief()` ×2 (with per-call-site filtering or `wiki.get_task(slug)` where appropriate) |
+| `millpy-migrate-layout.py` | all (49 import, 230 parse, plus full script) | one-shot migration | **delete file** (same disposition as `millpy-migrate-config.py`) |
 | `_setup.py` | 85, 86 | `read_junctions`, `read_hardlinks` | new import: `_junction.read_junctions`/`read_hardlinks` |
 | `_paths.py` | 125, 140, 407 | error-message text only | update text to drop `_wiki.write_commit_push` reference |
 | `_junction.py` | 239 | docstring only | update reference |
@@ -362,4 +387,7 @@ This task reshapes V3 into the only wiki API, migrates every V2 call site, remov
 - **Q (review r2):** Per-task daemon commits collide with the "single commit" migration claim — what's the resolution? **A:** Add `OP_UPSERT_TASKS_BATCH` to the daemon protocol; migration sends one batch call, daemon renders + commits once. Backup gets its own bootstrap commit before the daemon comes up. Net: two commits.
 - **Q (review r2):** `_review_common.py` carries the same `wiki/config.yaml` fallback as `_config.py` — is it in scope? **A:** Yes — added explicitly. Strip lines 1233–1270 (and docstring mentions at 34, 1211) alongside the `_config.py` strip.
 - **Q (review r2):** Does `millpy-spawn.py:68` need the same direct-`config.yaml` fix as `millpy-claim.py:68`? **A:** Yes — added. Update the missing-config guard at 66–72 to drop the `wiki_cfg` branch.
-- **Q (review r2):** `millpy-fold.py` uses `_tasks_md` at lines 15, 39, 76, 93, 99, 135 — does the migration cover them all? **A:** Yes — expanded the call-site entry to address every usage explicitly (delete local LOCKED_FOLD_PHASES dup, inline slug regex, route through `wiki.list_tasks_brief`/`get_task`/`upsert_task`).
+- **Q (review r2):** `millpy-fold.py` uses `_tasks_md` at lines 15, 39, 76, 93, 99, 135 — does the migration cover them all? **A:** Yes — expanded the call-site entry to address every usage explicitly (update docstring at :15, inline slug regex, route through `wiki.list_tasks_brief`/`get_task`/`upsert_task`).
+- **Q (review r3):** Six additional files (`millpy-inspect`, `millpy-status`, `millpy-terminal`, `millpy-vscode`, `_marker`, `millpy-migrate-layout`) plus `millpy-spawn:130` and the wider `_spawn_core` surface (Task type hints + parse + append_entry + remove_entry + claim) import or call `_tasks_md` and would break on its deletion. **A:** All added to scope. `millpy-migrate-layout.py` deleted as a one-shot migration of an already-completed layout transition (same disposition as `millpy-migrate-config.py`); other call sites port to `wiki.list_tasks_brief()` / `wiki.get_task()`.
+- **Q (review r3):** Is `millpy-fold.py:15` a Python constant or a docstring line? **A:** Docstring (inside the module docstring at lines 1–32). Updated the scope note to say "update docstring text", not "delete constant".
+- **Q (review r3):** `_parse.py` scope bullet lists only the `[s]`/`[abandoned]` fixes, but the test section requires three extended-parser features. **A:** Added the parenthetical layer-header recognition, multi-paragraph brief capture, and info-note heading skip to the `_parse.py` scope bullet so scope and tests align.
