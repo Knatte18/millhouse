@@ -1,7 +1,7 @@
 """Unit tests for wiki._store.Store TinyDB-backed implementation.
 
-Covers: content_hash, set/get for Home.md with parsing, set/get for other files,
-invalidate semantics, upsert_task, all_tasks, get_by_slug, and persistence.
+Covers: id-from-0, identifier dispatch, get_task, remove_task, set_phase,
+list_tasks_brief, list_tasks_full, upsert_tasks_batch, merge_tasks, reload.
 """
 from __future__ import annotations
 
@@ -29,190 +29,281 @@ def main() -> int:
         failed += 1
         print(f"FAIL: {name}: {exc}", file=sys.stderr)
 
-    # --- (1) content_hash is deterministic ---
-    try:
-        h1 = Store.content_hash("hello")
-        h2 = Store.content_hash("hello")
-        h3 = Store.content_hash("world")
-        assert h1 == h2, "Same content should have same hash"
-        assert h1 != h3, "Different content should have different hash"
-        ok("content_hash is deterministic")
-    except Exception as exc:
-        fail("content_hash is deterministic", exc)
-
-    # --- (2) get returns None before first set ---
+    # --- (1) upsert_task on empty DB assigns id = 0 ---
     try:
         tmp_dir = tempfile.mkdtemp()
         try:
             db_path = Path(tmp_dir) / "tasks.json"
             store = Store(db_path)
-            result = store.get("Home.md")
-            assert result is None, "get should return None before set"
-            ok("get returns None before first set")
+            task = store.upsert_task({"slug": "first"})
+            assert task.get("id") == 0, f"First task should have id=0, got {task.get('id')}"
+            ok("upsert_task on empty DB assigns id = 0")
         finally:
             import shutil
             shutil.rmtree(tmp_dir, ignore_errors=True)
     except Exception as exc:
-        fail("get returns None before first set", exc)
+        fail("upsert_task on empty DB assigns id = 0", exc)
 
-    # --- (3) set Home.md with valid markdown populates TinyDB ---
+    # --- (2) upsert_task assigns next id = max + 1 ---
     try:
         tmp_dir = tempfile.mkdtemp()
         try:
             db_path = Path(tmp_dir) / "tasks.json"
             store = Store(db_path)
-            home_content = "# Tasks\n\n## Title\n[my-slug]\n\n"
-            store.set("Home.md", home_content)
-            task = store.get_by_slug("my-slug")
-            assert task is not None, "Task should be retrieved by slug"
-            assert task["title"] == "Title", f"Title mismatch: {task.get('title')!r}"
-            ok("set Home.md populates TinyDB")
+            store.upsert_task({"slug": "a", "id": 0})
+            store.upsert_task({"slug": "b", "id": 1})
+            store.upsert_task({"slug": "d", "id": 3})
+            task = store.upsert_task({"slug": "e"})
+            assert task.get("id") == 4, f"Next id should be 4, got {task.get('id')}"
+            ok("upsert_task with gaps assigns next id = max + 1")
         finally:
             import shutil
             shutil.rmtree(tmp_dir, ignore_errors=True)
     except Exception as exc:
-        fail("set Home.md populates TinyDB", exc)
+        fail("upsert_task with gaps assigns next id = max + 1", exc)
 
-    # --- (4) get Home.md after set returns rendered content ---
+    # --- (3) upsert_task with existing slug updates and preserves id ---
     try:
         tmp_dir = tempfile.mkdtemp()
         try:
             db_path = Path(tmp_dir) / "tasks.json"
             store = Store(db_path)
-            home_content = "# Tasks\n\n## Title\n[my-slug]\n\n"
-            store.set("Home.md", home_content)
-            result = store.get("Home.md")
-            assert result is not None, "get should return tuple after set"
-            rendered_content, content_hash = result
-            assert isinstance(rendered_content, str), "First element should be string"
-            assert isinstance(content_hash, str), "Second element should be hash string"
-            assert "## Title" in rendered_content, "Title should be in rendered content"
-            expected_hash = Store.content_hash(rendered_content)
-            assert content_hash == expected_hash, "Hash should match rendered content"
-            ok("get Home.md returns rendered content")
+            task1 = store.upsert_task({"slug": "t", "title": "Original"})
+            orig_id = task1.get("id")
+            task2 = store.upsert_task({"slug": "t", "title": "Updated"})
+            assert task2.get("id") == orig_id, "ID should be preserved on update"
+            assert task2.get("title") == "Updated", "Title should be updated"
+            ok("upsert_task with existing slug updates and preserves id")
         finally:
             import shutil
             shutil.rmtree(tmp_dir, ignore_errors=True)
     except Exception as exc:
-        fail("get Home.md returns rendered content", exc)
+        fail("upsert_task with existing slug updates and preserves id", exc)
 
-    # --- (5) upsert_task assigns auto-increment id ---
+    # --- (4) get_task(slug) and get_task(id) return same record ---
     try:
         tmp_dir = tempfile.mkdtemp()
         try:
             db_path = Path(tmp_dir) / "tasks.json"
             store = Store(db_path)
-            store.upsert_task({"slug": "a", "title": "Task A"})
-            store.upsert_task({"slug": "b", "title": "Task B"})
-            task_a = store.get_by_slug("a")
-            task_b = store.get_by_slug("b")
-            assert task_a is not None and task_a.get("id") is not None, "Task A should have id"
-            assert task_b is not None and task_b.get("id") is not None, "Task B should have id"
-            id_a = task_a["id"]
-            id_b = task_b["id"]
-            assert isinstance(id_a, int) and isinstance(id_b, int), "IDs should be integers"
-            assert id_a != id_b, "IDs should be different"
-            ok("upsert_task assigns auto-increment id")
+            task1 = store.upsert_task({"slug": "myslug", "title": "My Task"})
+            task_id = task1.get("id")
+
+            by_slug = store.get_task("myslug")
+            by_id = store.get_task(task_id)
+
+            assert by_slug == by_id, "get_task by slug and id should return same dict"
+            ok("get_task(slug) and get_task(id) return same record")
         finally:
             import shutil
             shutil.rmtree(tmp_dir, ignore_errors=True)
     except Exception as exc:
-        fail("upsert_task assigns auto-increment id", exc)
+        fail("get_task(slug) and get_task(id) return same record", exc)
 
-    # --- (6) upsert_task merge preserves body ---
+    # --- (5) get_task with missing identifier returns None ---
     try:
         tmp_dir = tempfile.mkdtemp()
         try:
             db_path = Path(tmp_dir) / "tasks.json"
             store = Store(db_path)
-            store.upsert_task({"slug": "t", "title": "Original", "body": "existing body"})
-            store.upsert_task({"slug": "t", "title": "New Title"})
-            task = store.get_by_slug("t")
-            assert task is not None, "Task should exist"
-            assert task["body"] == "existing body", f"Body should be preserved, got {task.get('body')!r}"
-            assert task["title"] == "New Title", f"Title should be updated, got {task.get('title')!r}"
-            ok("upsert_task merge preserves body")
+            result_slug = store.get_task("nonexistent")
+            result_id = store.get_task(999)
+            assert result_slug is None, "Missing slug should return None"
+            assert result_id is None, "Missing id should return None"
+            ok("get_task with missing identifier returns None")
         finally:
             import shutil
             shutil.rmtree(tmp_dir, ignore_errors=True)
     except Exception as exc:
-        fail("upsert_task merge preserves body", exc)
+        fail("get_task with missing identifier returns None", exc)
 
-    # --- (7) all_tasks returns all documents ---
+    # --- (6) remove_task(slug) and remove_task(id) both work ---
     try:
         tmp_dir = tempfile.mkdtemp()
         try:
             db_path = Path(tmp_dir) / "tasks.json"
             store = Store(db_path)
-            store.upsert_task({"slug": "a", "title": "A"})
-            store.upsert_task({"slug": "b", "title": "B"})
-            store.upsert_task({"slug": "c", "title": "C"})
-            tasks = store.all_tasks()
-            assert len(tasks) == 3, f"Should have 3 tasks, got {len(tasks)}"
-            ok("all_tasks returns all documents")
+            task1 = store.upsert_task({"slug": "r1"})
+            task2 = store.upsert_task({"slug": "r2"})
+            task_id = task1.get("id")
+
+            store.remove_task("r1")
+            assert store.get_task("r1") is None, "Task should be removed by slug"
+
+            store.remove_task(task2.get("id"))
+            assert store.get_task("r2") is None, "Task should be removed by id"
+            ok("remove_task(slug) and remove_task(id) both work")
         finally:
             import shutil
             shutil.rmtree(tmp_dir, ignore_errors=True)
     except Exception as exc:
-        fail("all_tasks returns all documents", exc)
+        fail("remove_task(slug) and remove_task(id) both work", exc)
 
-    # --- (8) invalidate Home.md marks uninitialized ---
+    # --- (7) remove_task with missing identifier returns silently ---
     try:
         tmp_dir = tempfile.mkdtemp()
         try:
             db_path = Path(tmp_dir) / "tasks.json"
             store = Store(db_path)
-            home_content = "# Tasks\n\n## Title\n[my-slug]\n\n"
-            store.set("Home.md", home_content)
-            assert store.get("Home.md") is not None, "Should be initialized after set"
-            store.invalidate("Home.md")
-            result = store.get("Home.md")
-            assert result is None, "Should be None after invalidate"
-            ok("invalidate Home.md marks uninitialized")
+            store.remove_task("nonexistent")
+            store.remove_task(999)
+            ok("remove_task with missing identifier returns silently")
         finally:
             import shutil
             shutil.rmtree(tmp_dir, ignore_errors=True)
     except Exception as exc:
-        fail("invalidate Home.md marks uninitialized", exc)
+        fail("remove_task with missing identifier returns silently", exc)
 
-    # --- (9) invalidate other.md clears file cache ---
+    # --- (8) set_phase updates and clears status ---
     try:
         tmp_dir = tempfile.mkdtemp()
         try:
             db_path = Path(tmp_dir) / "tasks.json"
             store = Store(db_path)
-            store.set("other.md", "content")
-            assert store.get("other.md") is not None, "Should be cached after set"
-            store.invalidate("other.md")
-            result = store.get("other.md")
-            assert result is None, "Should be None after invalidate"
-            ok("invalidate other.md clears file cache")
+            task = store.upsert_task({"slug": "p"})
+
+            store.set_phase("p", "active")
+            updated = store.get_task("p")
+            assert updated.get("status") == "active", "Status should be set"
+
+            store.set_phase("p", None)
+            cleared = store.get_task("p")
+            assert cleared.get("status") is None, "Status should be cleared"
+            ok("set_phase updates and clears status")
         finally:
             import shutil
             shutil.rmtree(tmp_dir, ignore_errors=True)
     except Exception as exc:
-        fail("invalidate other.md clears file cache", exc)
+        fail("set_phase updates and clears status", exc)
 
-    # --- (10) Store loads existing tasks.json on init ---
+    # --- (9) list_tasks_brief returns correct key set and has_proposal ---
     try:
         tmp_dir = tempfile.mkdtemp()
         try:
             db_path = Path(tmp_dir) / "tasks.json"
+            store = Store(db_path)
+            store.upsert_task({"slug": "with-body", "body": "content"})
+            store.upsert_task({"slug": "without-body", "body": ""})
 
-            store1 = Store(db_path)
-            store1.upsert_task({"slug": "persistent", "title": "Persistent Task"})
-            del store1
+            brief_list = store.list_tasks_brief()
+            assert len(brief_list) == 2, f"Should have 2 tasks, got {len(brief_list)}"
 
+            for row in brief_list:
+                key_set = set(row.keys())
+                expected = {"id", "slug", "title", "group", "brief", "status", "has_proposal"}
+                assert key_set == expected, f"Key set mismatch: {key_set} vs {expected}"
+                assert "body" not in row, "body should not be in brief dict"
+
+            by_slug = {r["slug"]: r for r in brief_list}
+            assert by_slug["with-body"]["has_proposal"] == True, "has_proposal should be True for task with body"
+            assert by_slug["without-body"]["has_proposal"] == False, "has_proposal should be False for task without body"
+            ok("list_tasks_brief returns correct key set and has_proposal")
+        finally:
+            import shutil
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+    except Exception as exc:
+        fail("list_tasks_brief returns correct key set and has_proposal", exc)
+
+    # --- (10) list_tasks_full returns all fields including body ---
+    try:
+        tmp_dir = tempfile.mkdtemp()
+        try:
+            db_path = Path(tmp_dir) / "tasks.json"
+            store = Store(db_path)
+            store.upsert_task({"slug": "full", "body": "proposal content"})
+
+            full_list = store.list_tasks_full()
+            assert len(full_list) == 1, f"Should have 1 task, got {len(full_list)}"
+            task = full_list[0]
+            assert "body" in task, "Full task should contain body field"
+            assert task["body"] == "proposal content", "Body should be preserved"
+            ok("list_tasks_full returns all fields including body")
+        finally:
+            import shutil
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+    except Exception as exc:
+        fail("list_tasks_full returns all fields including body", exc)
+
+    # --- (11) upsert_tasks_batch upserts multiple tasks ---
+    try:
+        tmp_dir = tempfile.mkdtemp()
+        try:
+            db_path = Path(tmp_dir) / "tasks.json"
+            store = Store(db_path)
+            tasks = [
+                {"slug": "batch1", "title": "Batch 1"},
+                {"slug": "batch2", "title": "Batch 2"},
+            ]
+            store.upsert_tasks_batch(tasks)
+
+            result = store.list_tasks_brief()
+            assert len(result) == 2, f"Should have 2 tasks, got {len(result)}"
+            ok("upsert_tasks_batch upserts multiple tasks")
+        finally:
+            import shutil
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+    except Exception as exc:
+        fail("upsert_tasks_batch upserts multiple tasks", exc)
+
+    # --- (12) merge_tasks performs atomic multi-step operation ---
+    try:
+        tmp_dir = tempfile.mkdtemp()
+        try:
+            db_path = Path(tmp_dir) / "tasks.json"
+            store = Store(db_path)
+
+            store.upsert_task({"slug": "remove-a"})
+            store.upsert_task({"slug": "remove-b"})
+            upsert_task = store.upsert_task({"slug": "merge-c", "title": "C"})
+            merge_c_id = upsert_task.get("id")
+
+            result = store.merge_tasks(
+                remove_slugs=["remove-a", "remove-b"],
+                upsert={"slug": "merge-c", "title": "Updated C"},
+                set_phase=(merge_c_id, "active"),
+            )
+
+            assert result.get("slug") == "merge-c", "Upserted task should be returned"
+            assert store.get_task("remove-a") is None, "remove-a should be removed"
+            assert store.get_task("remove-b") is None, "remove-b should be removed"
+
+            c_task = store.get_task("merge-c")
+            assert c_task.get("title") == "Updated C", "merge-c should be updated"
+            assert c_task.get("status") == "active", "merge-c status should be set to active"
+            ok("merge_tasks performs atomic multi-step operation")
+        finally:
+            import shutil
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+    except Exception as exc:
+        fail("merge_tasks performs atomic multi-step operation", exc)
+
+    # --- (13) reload discards in-memory state ---
+    try:
+        tmp_dir = tempfile.mkdtemp()
+        try:
+            db_path = Path(tmp_dir) / "tasks.json"
+            store = Store(db_path)
+            store.upsert_task({"slug": "reload-test"})
+
+            # Manually mutate tasks.json file via a new Store instance
             store2 = Store(db_path)
-            task = store2.get_by_slug("persistent")
-            assert task is not None, "Task should be loaded from disk on new Store init"
-            assert task["title"] == "Persistent Task", "Task data should be preserved"
-            ok("Store loads existing tasks.json on init")
+            store2.upsert_task({"slug": "new-task", "title": "New"})
+            del store2
+
+            # Original store should still see only the original task
+            brief_before = store.list_tasks_brief()
+            assert len(brief_before) == 1, "Before reload, should see 1 task"
+
+            # After reload, should see both tasks
+            store.reload()
+            brief_after = store.list_tasks_brief()
+            assert len(brief_after) == 2, f"After reload, should see 2 tasks, got {len(brief_after)}"
+            ok("reload discards in-memory state")
         finally:
             import shutil
             shutil.rmtree(tmp_dir, ignore_errors=True)
     except Exception as exc:
-        fail("Store loads existing tasks.json on init", exc)
+        fail("reload discards in-memory state", exc)
 
     print("", file=sys.stderr)
     if failed:
