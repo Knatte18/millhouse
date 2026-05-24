@@ -1,11 +1,21 @@
 from __future__ import annotations
 
 
-PROTOCOL_VERSION: int = 1
+PROTOCOL_VERSION: int = 2
 
 # Operations
-OP_READ = "read"
-OP_WRITE = "write_commit_push"
+OP_UPSERT_TASK = "upsert_task"
+OP_UPSERT_TASKS_BATCH = "upsert_tasks_batch"
+OP_SET_PHASE = "set_phase"
+OP_REMOVE_TASK = "remove_task"
+OP_MERGE_TASKS = "merge_tasks"
+OP_GET_TASK = "get_task"
+OP_LIST_TASKS_BRIEF = "list_tasks_brief"
+OP_LIST_TASKS_FULL = "list_tasks_full"
+OP_HEALTH = "health"
+
+# Locked fold phases - phases where tasks cannot be folded into other tasks
+LOCKED_FOLD_PHASES = ("active", "ready-to-merge", "pr-pending")
 
 # Response fields
 FIELD_OK = "ok"
