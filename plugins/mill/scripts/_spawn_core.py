@@ -180,6 +180,7 @@ def discover_active_worktrees(
         List of ``(path, slug, task_title)`` triples, one per matched worktree.
         Empty list when no matches.
     """
+    home_tasks = [_task_to_dict(t) for t in home_tasks]
     slugs_in_home = {t["slug"]: t for t in home_tasks}
     results: list[tuple[Path, str, str]] = []
 
@@ -253,10 +254,23 @@ def _prompt_numbered(candidates: list[_tasks_md.Task]) -> Optional[_tasks_md.Tas
     return candidates[choice - 1]
 
 
+def _task_to_dict(task: _tasks_md.Task) -> dict:
+    """Convert Task dataclass to dict for V3 compatibility."""
+    if isinstance(task, dict):
+        return task
+    return {
+        "slug": task.slug,
+        "title": task.title,
+        "phase": task.phase,
+        "has_proposal": task.has_proposal,
+        "heading_line_no": getattr(task, "heading_line_no", None),
+    }
+
+
 def pick_task_single(
     tasks: list[_tasks_md.Task],
     slug: Optional[str] = None,
-) -> _tasks_md.Task:
+) -> dict:
     """
     Pick exactly one task from ``tasks`` for claiming.
 
@@ -287,6 +301,7 @@ def pick_task_single(
         ValueError: The requested slug is unknown, already claimed/done/abandoned,
             or the numbered picker returned no selection.
     """
+    tasks = [_task_to_dict(t) for t in tasks]
     if slug is not None:
         matched = next(
             (t for t in tasks if t["slug"] == slug and t["phase"] in (None, "s")),
@@ -389,7 +404,7 @@ def _prompt_numbered_multi(
 def pick_task_single_or_multi(
     tasks: list[_tasks_md.Task],
     slug: Optional[str] = None,
-) -> tuple[str, _tasks_md.Task | list[_tasks_md.Task] | None, list[_tasks_md.Task]]:
+) -> tuple[str, dict | list[dict] | None, list[dict]]:
     """
     Pick one or more tasks from ``tasks`` for claiming, with multi-select support.
 
@@ -415,6 +430,7 @@ def pick_task_single_or_multi(
     Raises:
         ValueError: Invalid slug, or no valid selection after 3 prompt attempts.
     """
+    tasks = [_task_to_dict(t) for t in tasks]
     # --slug short-circuit: bypass picker entirely, always single.
     if slug is not None:
         matched = next(
@@ -451,7 +467,7 @@ def multi_select_groom_then_claim(
     merged_body: str,
     has_proposal: bool = False,
     proposal_body: Optional[str] = None,
-) -> _tasks_md.Task:
+) -> dict:
     """
     Atomic wiki transaction that absorbs multiple tasks into a single merged entry.
 
@@ -516,6 +532,7 @@ def multi_select_groom_then_claim(
     # Re-parse after commit to return an authoritative Task object.
     new_text = home_path.read_text(encoding="utf-8")
     parsed_tasks = _tasks_md.parse(new_text)
+    parsed_tasks = [_task_to_dict(t) for t in parsed_tasks]
     merged_task = next((t for t in parsed_tasks if t["slug"] == merged_slug), None)
     if merged_task is None:
         raise RuntimeError(
@@ -552,6 +569,7 @@ def prompt_merged_entry(
     Raises:
         ValueError: Merged title or slug could not be collected after 3 attempts.
     """
+    source_tasks = [_task_to_dict(t) for t in source_tasks]
     # Print source task titles so the user knows what they are merging.
     print("Merging these tasks:", file=sys.stderr)
     for t in source_tasks:
