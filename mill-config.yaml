@@ -32,8 +32,8 @@ roles:
       rounds: 0
       reviewer: null
     holistic:
-      rounds: 4
-      reviewer: sonnetmax
+      rounds: 5
+      reviewer: opushigh
   code-review:
     batch:
       rounds: 0

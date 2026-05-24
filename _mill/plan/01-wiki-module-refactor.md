@@ -16,7 +16,7 @@ Reshape the V3 wiki module (`plugins/mill/scripts/wiki/`) into the structured-ta
 External interface delivered to batches 2 and 3 (every public function takes `wiki_path: Path` as required first positional argument, mirroring the existing V3 `read` / `write_commit_push` shape so call sites continue to obtain and pass `wiki_path` exactly as they do today):
 
 - `wiki._client.upsert_task(wiki_path, slug, *, title=None, brief=None, body=None, group=None, status=None) -> dict`
-- `wiki._client.upsert_tasks_batch(wiki_path, tasks: list[dict]) -> None`
+- `wiki._client.upsert_tasks_batch(wiki_path, tasks: list[dict], *, message: str | None = None) -> None` — optional `message` overrides the daemon's default commit-message tail (used by the migration script to commit as `wiki: migrate to V3 (TinyDB-backed)`)
 - `wiki._client.set_phase(wiki_path, id_or_slug, phase) -> None`
 - `wiki._client.remove_task(wiki_path, id_or_slug) -> None`
 - `wiki._client.merge_tasks(wiki_path, *, remove_slugs: list[str], upsert: dict, set_phase: tuple[str, str | None] | None = None) -> dict` — atomic multi-step op for `_spawn_core.groom_and_claim_merge`; daemon executes remove + upsert + set_phase in one TinyDB transaction, one render, one commit
@@ -93,7 +93,7 @@ Batch-local decisions (differ from `## Shared Decisions` in `00-overview.md`):
 - **Deletes:** none
 - **Requirements:** Delete `_handle_read` and `_handle_write` entirely. Remove all dispatch entries for `OP_READ` and `OP_WRITE` from the request-router. Add one handler per new op:
   - `_handle_upsert_task(payload)` — payload is the full task dict; calls `Store.upsert_task`, then `_render_and_commit_all(slug_for_msg=payload["slug"])`. Response `{ok: true, task: <full dict>}`.
-  - `_handle_upsert_tasks_batch(payload)` — payload is `{tasks: [...]}`; calls `Store.upsert_tasks_batch(tasks)`, then `_render_and_commit_all(slug_for_msg="batch")`. Response `{ok: true, count: <len>}`.
+  - `_handle_upsert_tasks_batch(payload)` — payload is `{tasks: [...], message: <str | null>}`; calls `Store.upsert_tasks_batch(tasks)`, then `_render_and_commit_all(slug_for_msg=payload["message"] or "batch")`. When `payload["message"]` is present and non-empty, the commit message becomes `wiki: <message>` verbatim (the prefix is still `wiki: ` per the canonical commit-message shape; the migration script passes `message="migrate to V3 (TinyDB-backed)"` which produces `"wiki: migrate to V3 (TinyDB-backed)"`). Response `{ok: true, count: <len>}`.
   - `_handle_set_phase(payload)` — payload `{id_or_slug, phase}`; calls `Store.set_phase`; on miss respond `{ok: false, error_type: "not_found", error: ...}`; on hit `_render_and_commit_all(slug_for_msg=str(id_or_slug))`. Response `{ok: true}`.
   - `_handle_remove_task(payload)` — payload `{id_or_slug}`; calls `Store.remove_task`; on miss `{ok: false, error_type: "not_found", ...}`; on hit `_render_and_commit_all(...)`. Response `{ok: true}`.
   - `_handle_get_task(payload)` — payload `{id_or_slug}`; returns `{ok: true, task: <dict or null>}`. No render, no commit.
@@ -118,7 +118,7 @@ Batch-local decisions (differ from `## Shared Decisions` in `00-overview.md`):
 - **Deletes:** none
 - **Requirements:** **Delete the module-level `CAS_RETRIES` constant entirely.** With the `base_hash` CAS path gone (card 5) and the daemon serialising writes on one host, no client method retries; the constant has no production use and no test should import it (card 11 is updated accordingly). Delete public functions `read` and `write_commit_push`. Add public functions matching the External interface section in the batch-scope above — every function takes `wiki_path: Path` as required first positional argument, mirroring the existing `read`/`write_commit_push` shape:
   - `upsert_task(wiki_path, slug, *, title=None, brief=None, body=None, group=None, status=None) -> dict`
-  - `upsert_tasks_batch(wiki_path, tasks: list[dict]) -> None`
+  - `upsert_tasks_batch(wiki_path, tasks: list[dict], *, message: str | None = None) -> None` — `message` (when non-empty) becomes the commit-message tail after the daemon's canonical `wiki: ` prefix; passed through to `_handle_upsert_tasks_batch`'s payload
   - `set_phase(wiki_path, id_or_slug, phase) -> None`
   - `remove_task(wiki_path, id_or_slug) -> None`
   - `merge_tasks(wiki_path, *, remove_slugs: list[str], upsert: dict, set_phase: tuple[str, str | None] | None = None) -> dict`
