@@ -22,7 +22,7 @@ batches:
     name: wiki-module-refactor
     file: 01-wiki-module-refactor.md
     depends-on: []
-    verify: uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py
+    verify: "uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py && uv run --project plugins/mill python plugins/mill/unit_tests/test-wiki-sync.py && uv run --project plugins/mill python plugins/mill/integration_tests/test-wiki-e2e.py && uv run --project plugins/mill python plugins/mill/integration_tests/test-wiki-daemon-tinydb.py && uv run --project plugins/mill python plugins/mill/integration_tests/test-wiki-concurrency.py"
   - number: 2
     name: migration-script
     file: 02-migration-script.md
@@ -32,7 +32,7 @@ batches:
     name: v2-deletion-and-port
     file: 03-v2-deletion-and-port.md
     depends-on: [1]
-    verify: uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py
+    verify: "uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py && uv run --project plugins/mill python plugins/mill/unit_tests/test-wiki-sync.py && uv run --project plugins/mill python plugins/mill/integration_tests/test-wiki-e2e.py"
 ```
 
 ## Shared Decisions
@@ -75,13 +75,13 @@ batches:
 
 ### Decision: no-advisory-lock
 
-- **Decision:** `wiki_lock` and the `.mill-lock` file are gone. CAS (with 5 retries — see decision `cas-retry-count` in the task discussion) handles cross-host conflicts via `WikiConflictError`. Callers do not wrap mutations in any lock context manager.
-- **Rationale:** Discussion decision `no-advisory-lock`. The daemon already serialises writes on one host; CAS handles cross-host.
+- **Decision:** `wiki_lock` and the `.mill-lock` file are gone. The daemon's single-threaded request handler serialises writes on a single host; `commit_push`'s existing one-rebase-retry handles cross-host non-fast-forward conflicts. Callers do not wrap mutations in any lock context manager and do not need to retry on `WikiConflictError` (the V3 `base_hash` CAS path is removed in batch 1 cards 5-6 because structured ops carry full intent and never require client-supplied base hashes — see card 6's CAS-removal rationale). Permanent push failure surfaces as `WikiPushError`; callers may surface that to the user but do not auto-retry.
+- **Rationale:** Discussion decision `no-advisory-lock` plus batch 1's protocol redesign. With structured task ops (each = one TinyDB write + one render + one commit), there is no read-modify-write window for the client to expose; conflicts are exclusively at the git-push layer and handled inside `commit_push`.
 - **Applies to:** all batches
 
 ### Decision: card-numbering-global
 
-- **Decision:** Cards are numbered globally across all three batches. Batch 1 holds cards 1-12; batch 2 holds cards 13-14; batch 3 holds cards 15-36. Reviewer and implementer cite by global card number.
+- **Decision:** Cards are numbered globally across all three batches. Batch 1 holds cards 1-12; batch 2 holds cards 13-14; batch 3 holds cards 15-38. Reviewer and implementer cite by global card number.
 - **Rationale:** mill-plan template rule; uniqueness avoids ambiguity.
 - **Applies to:** all batches
 

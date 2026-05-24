@@ -4,8 +4,9 @@
 task: Adopt V3 wiki module in V2 scripts
 batch: v2-deletion-and-port
 number: 3
-cards: 22
-verify: uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py
+cards: 24
+# (cards 15-38; the test-sweep was split into cards 36, 37, 38 in plan-fix r2)
+verify: "uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py && uv run --project plugins/mill python plugins/mill/unit_tests/test-wiki-sync.py && uv run --project plugins/mill python plugins/mill/integration_tests/test-wiki-e2e.py"
 depends-on: [1]
 ```
 
@@ -112,7 +113,7 @@ Batch-local decisions (differ from `## Shared Decisions` in `00-overview.md`):
   - `plugins/mill/scripts/millpy-claim.py`
 - **Creates:** none
 - **Deletes:** none
-- **Requirements:** At line 45, delete `import _tasks_md`. At line 68, replace the direct `wiki_path / "config.yaml"` read with a call through `_config.load_config(repo_root, worktree_root)` (matching the existing pattern in sibling scripts; pass the hub root as `repo_root`, not the wiki path — see linked bug in the discussion's Constraints if a fix lands). At line 185, delete the `_wiki.sync_pull(...)` call entirely — the daemon lazy-refreshes inside every op. At line 187, replace `tasks = _tasks_md.parse(home_text)` with `tasks = wiki.list_tasks_brief(wiki_path)`; the brief shape (`id, slug, title, group, brief, status, has_proposal`) covers everything the claim flow reads. Update downstream consumers in the same file that previously accessed `Task` dataclass attributes -> use dict key access (`task["slug"]`, `task["title"]`, etc.). Drop the `_wiki` and `_tasks_md` imports.
+- **Requirements:** At line 45, delete `import _tasks_md`. At line 68, replace the direct `wiki_path / "config.yaml"` read with a call through `_config.load_config(repo_root, worktree_root)` where `repo_root` is the hub repo root (NOT the wiki path) and `worktree_root` is the current task worktree's git root. Sibling scripts use the same shape. The `_config.load_config` function signature is `(repo_root: Path, worktree_root: Path) -> dict` and consults `<repo_root>/mill-config.yaml` then deep-merges `<worktree_root>/.millhouse/config.local.yaml`; passing `wiki_path` as `repo_root` would silently return template defaults because `<wiki_path>/mill-config.yaml` does not exist. At line 185, delete the `_wiki.sync_pull(...)` call entirely — the daemon lazy-refreshes inside every op. At line 187, replace `tasks = _tasks_md.parse(home_text)` with `tasks = wiki.list_tasks_brief(wiki_path)`; the brief shape (`id, slug, title, group, brief, status, has_proposal`) covers everything the claim flow reads. Update downstream consumers in the same file that previously accessed `Task` dataclass attributes -> use dict key access (`task["slug"]`, `task["title"]`, etc.). Drop the `_wiki` and `_tasks_md` imports.
 
   **`_spawn_core` return-shape propagation:** `millpy-claim.py` calls `_spawn_core.multi_select_groom_then_claim` (and/or `_spawn_core.claim_in_wiki`). Per card 26 those helpers now return `dict` (or `list[dict]`) instead of `_tasks_md.Task`. Every site in `millpy-claim.py` that consumes the return value and accesses attributes (`.slug`, `.title`, `.brief`, `.group`, `.status`) MUST be updated to dict-key access (`picked["slug"]`, etc.). Grep the file end-to-end for any remaining attribute access on these return values and convert.
 - **Commit:** `refactor(millpy-claim): port to wiki.list_tasks_brief; dict-shape consumers`
@@ -358,7 +359,7 @@ Batch-local decisions (differ from `## Shared Decisions` in `00-overview.md`):
   Each ported test must still pass against the post-batch state. Patch targets must match the post-card-21/22/24 import shape — instead of patching `mill_<cli>._wiki.write_commit_push` or `mill_<cli>._tasks_md.set_phase`, patch `mill_<cli>.wiki.upsert_task` / `mill_<cli>.wiki.set_phase` etc. matching whatever `from wiki import ...` shape the ported script uses.
 - **Commit:** `test: delete V2 tests; port per-CLI tests to V3 wiki API`
 
-### Card 36: Sweep every remaining test file for `_wiki` / `_tasks_md` / `_sidebar` references
+### Card 36: Test sweep, pass 1 — import deletions and direct call replacements
 
 - **Context:**
   - `plugins/mill/scripts/wiki/_client.py`
@@ -395,28 +396,99 @@ Batch-local decisions (differ from `## Shared Decisions` in `00-overview.md`):
   - `plugins/mill/unit_tests/test-spawn-core.py`
 - **Creates:** none
 - **Deletes:** none
-- **Requirements:** Final sweep. Run `grep -rn "_wiki\|_tasks_md\|_sidebar" plugins/mill/unit_tests/ plugins/mill/integration_tests/` and inspect every match. For each:
+- **Requirements:** Pass 1 of the test sweep. Run `grep -rn "_wiki\|_tasks_md\|_sidebar" plugins/mill/unit_tests/ plugins/mill/integration_tests/` to enumerate every match. In this card address only:
 
-  1. **Import statements** (`import _wiki`, `from _wiki import ...`, etc.) — delete. If a symbol from the V2 module was used elsewhere in the file, replace per the rules below.
+  1. **Import statements** (`import _wiki`, `from _wiki import ...`, `import _tasks_md`, `import _sidebar`, etc.) — delete every one. If a symbol from the V2 module was used elsewhere in the file, leave the use intact for now (cards 37 and 38 will replace it); the test will be temporarily broken until cards 37/38 land. (Sequential card execution within batch 3 means cards 36 -> 37 -> 38 run in order; the batch verify gate only runs at the end.)
 
-  2. **`mock.patch("mill_<cli>._wiki.<fn>")` / `mock.patch("mill_<cli>._tasks_md.<fn>")` / `mock.patch("mill_<cli>._sidebar.regenerate")`** — replace with the post-port import shape. After card 21 / 23 / 24 / 25 / 26, ported scripts no longer import `_wiki` or `_tasks_md`; they `from wiki import _client as wiki`. The new patch target is `mill_<cli>.wiki.<fn>` (e.g. `mill_cleanup.wiki.set_phase`, `mill_add.wiki.upsert_task`). The `_sidebar` patches go away — `_Sidebar.md` is now produced by the daemon's `render` call, not a separate caller-side regeneration step. Each former `_sidebar.regenerate` patch becomes either an assertion that the daemon rendered the sidebar (via inspecting `<wiki>/_Sidebar.md` content post-call) or is dropped if it added no signal.
+  2. **`_tasks_md.parse(...)` / `_tasks_md.set_phase` / `_tasks_md.append_entry` / `_tasks_md.claim` / `_tasks_md.remove_entry` / `_tasks_md.append_to_body` direct calls** — replace with the corresponding `wiki.list_tasks_brief(wiki_path)` / `wiki.set_phase(wiki_path, slug, phase)` / `wiki.upsert_task(wiki_path, slug, ...)` / `wiki.set_phase(wiki_path, slug, "active")` / `wiki.remove_task(wiki_path, slug)` / `wiki.upsert_task(wiki_path, slug, body=...)` calls.
 
-  3. **`_wiki.wiki_lock` / `_wiki.LockBusy` references inside tests** — delete. No advisory lock anymore; CAS handles concurrency, and the wiki client retries internally.
+  3. **`_wiki.write_commit_push` / `_wiki.sync_pull` direct calls in test bodies** (not in mock.patch — that is card 37) — replace with the matching V3 op: state-mutating fixture call becomes `wiki.upsert_task(wiki_path, ...)` or `wiki.set_phase(wiki_path, slug, ...)`; `sync_pull` becomes a no-op (delete the line; daemon lazy-refreshes).
 
-  4. **`_wiki.write_commit_push` / `_wiki.sync_pull` direct calls** (in `test-merge.py` and similar) — replace with the matching V3 op: a state-mutating fixture call becomes `wiki.upsert_task(wiki_path, ...)` or `wiki.set_phase(wiki_path, slug, ...)`; `sync_pull` becomes a no-op (delete the call; daemon lazy-refreshes).
+  4. **`_sidebar.regenerate(...)` direct calls** — delete the call (daemon handles it).
 
-  5. **`_tasks_md.parse(...)` / `_tasks_md.Task` / `_tasks_md.set_phase` / `_tasks_md.append_entry` / `_tasks_md.claim` / `_tasks_md.remove_entry` direct calls** — replace with the corresponding `wiki.list_tasks_brief(wiki_path)` / `dict` / `wiki.set_phase(wiki_path, slug, phase)` / `wiki.upsert_task(wiki_path, slug, ...)` / `wiki.set_phase(wiki_path, slug, "active")` / `wiki.remove_task(wiki_path, slug)` calls. If a test used the `_tasks_md.Task` dataclass as a fixture builder, replace with a plain dict literal carrying the same keys.
+  5. **`_wiki.wiki_lock(...)` context managers wrapping fixture setup** — unwrap; replace `with wiki_lock(...) as _: ...` with the flat body.
 
-  6. **`_sidebar.regenerate(...)` direct calls** — delete (daemon handles it).
+  After this card, the unit-test suite is *expected* to fail in some files because mock.patch targets and `_tasks_md.Task` fixture references still need cards 37 and 38. Do NOT halt on that — the batch verify gate runs at the very end of batch 3. The implementer should at least verify the EDITED file is syntactically valid (no `import _wiki` line left dangling, no `_tasks_md.parse(` call left unreplaced).
+- **Commit:** `test: sweep pass 1 -- delete V2 imports and replace direct V2 calls`
 
-  7. **`paths.<...>` text references in fixtures (e.g. seeding state via writing Home.md text and parsing it back through `_tasks_md`)** — replace with calls through `wiki.upsert_tasks_batch(wiki_path, [...])` to seed state via the daemon API. If a test does not need real daemon roundtrip and previously asserted on textual Home.md content, prefer asserting on the daemon-rendered `<wiki>/Home.md` after the operation.
+### Card 37: Test sweep, pass 2 — `mock.patch` retargeting
 
-  8. **Tests that ONLY exercised a now-removed semantic** (e.g. `test-cleanup.py::test_wiki_lock_busy_retries`) — delete the test function entirely (not the file). Mention the deleted test name in the commit message body.
+- **Context:**
+  - `plugins/mill/scripts/wiki/_client.py`
+- **Edits:**
+  - `plugins/mill/integration_tests/test-merge.py`
+  - `plugins/mill/unit_tests/_test_helpers.py`
+  - `plugins/mill/unit_tests/test-abandon.py`
+  - `plugins/mill/unit_tests/test-cleanup.py`
+  - `plugins/mill/unit_tests/test-millpy-add.py`
+  - `plugins/mill/unit_tests/test-millpy-claim.py`
+  - `plugins/mill/unit_tests/test-millpy-spawn.py`
+  - `plugins/mill/unit_tests/test-millpy-terminal.py`
+  - `plugins/mill/unit_tests/test-millpy-vscode.py`
+  - `plugins/mill/unit_tests/test-review-cli.py`
+  - `plugins/mill/unit_tests/test-review-common.py`
+  - `plugins/mill/unit_tests/test-spawn-core.py`
+- **Creates:** none
+- **Deletes:** none
+- **Requirements:** Pass 2 of the test sweep. Grep each Edits file for `mock.patch(` strings containing `_wiki`, `_tasks_md`, or `_sidebar`. For each:
 
-  After this card, `grep -rn "_wiki\|_tasks_md\|_sidebar" plugins/mill/unit_tests/ plugins/mill/integration_tests/` returns zero matches (excluding any incidental string content unrelated to these module names — visually verify). The full unit-test suite passes green per the batch verify command. Each file edited keeps the same overall test count UNLESS a function was deliberately deleted per rule 8; deletions must be commit-message documented.
+  - `mock.patch("mill_<cli>._wiki.<fn>")` -> replace with the post-port patch target matching the import shape from cards 21-28. Ported scripts now `from wiki import _client as wiki`; the new patch target is `mill_<cli>.wiki.<fn>` (for example `mock.patch("mill_cleanup.wiki.set_phase")`, `mock.patch("mill_add.wiki.upsert_task")`). If the script ported to `from wiki._client import upsert_task` (top-level name), patch the bound name (`mock.patch("mill_<cli>.upsert_task")`).
+  - `mock.patch("mill_<cli>._tasks_md.<fn>")` -> same retargeting rules: the new home is `mill_<cli>.wiki.<corresponding-v3-fn>` (`parse` -> `list_tasks_brief`, `set_phase` -> `set_phase`, `append_entry` -> `upsert_task`, etc.).
+  - `mock.patch("mill_<cli>._sidebar.regenerate")` -> delete the patch entirely. The daemon now produces `_Sidebar.md` inside the same op; if the test relied on the patch to assert "sidebar was rerendered", replace with a post-call file-read assertion on `<wiki>/_Sidebar.md` instead. If the patch existed only to suppress side effects (no assertion), delete it.
 
-  This is the largest card in the plan. The implementer should grep first, group edits by file, work through each file in one sitting, and rerun `uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py` after every two or three files to catch regressions early.
-- **Commit:** `test: sweep V2 wiki references; port all test files to V3 wiki API`
+  Verify after each file: the mock.patch target string must match a symbol that actually exists on the post-card 21-28 ported script. Run the single file (`uv run --project plugins/mill python plugins/mill/unit_tests/test-cleanup.py`) after each edit to catch `AttributeError`. If a patch target is invalid (typo or wrong import shape), fix it in the same edit, not in a follow-up commit.
+- **Commit:** `test: sweep pass 2 -- retarget mock.patch to V3 wiki API`
+
+### Card 38: Test sweep, pass 3 — fixture-builder conversion and dead-test deletion
+
+- **Context:**
+  - `plugins/mill/scripts/wiki/_client.py`
+- **Edits:**
+  - `plugins/mill/integration_tests/bench-reviewers.py`
+  - `plugins/mill/integration_tests/test-merge.py`
+  - `plugins/mill/integration_tests/test-spawn.py`
+  - `plugins/mill/integration_tests/test-spawn-units.py`
+  - `plugins/mill/integration_tests/test-worktree-sibling-resolution.py`
+  - `plugins/mill/unit_tests/_test_helpers.py`
+  - `plugins/mill/unit_tests/test-abandon.py`
+  - `plugins/mill/unit_tests/test-bg-launcher.py`
+  - `plugins/mill/unit_tests/test-cleanup.py`
+  - `plugins/mill/unit_tests/test-millpy-bg.py`
+  - `plugins/mill/unit_tests/test-millpy-color.py`
+  - `plugins/mill/unit_tests/test-millpy-fix.py`
+  - `plugins/mill/unit_tests/test-millpy-implement.py`
+  - `plugins/mill/unit_tests/test-millpy-merge-in-subagent.py`
+  - `plugins/mill/unit_tests/test-millpy-spawn.py`
+  - `plugins/mill/unit_tests/test-millpy-terminal.py`
+  - `plugins/mill/unit_tests/test-millpy-validate-plan.py`
+  - `plugins/mill/unit_tests/test-millpy-vscode.py`
+  - `plugins/mill/unit_tests/test-paths.py`
+  - `plugins/mill/unit_tests/test-plan-validate.py`
+  - `plugins/mill/unit_tests/test-review-cli-error-envelope.py`
+  - `plugins/mill/unit_tests/test-review-cli.py`
+  - `plugins/mill/unit_tests/test-review-code-flow.py`
+  - `plugins/mill/unit_tests/test-review-common.py`
+  - `plugins/mill/unit_tests/test-review-discussion-flow.py`
+  - `plugins/mill/unit_tests/test-review-plan-flow.py`
+  - `plugins/mill/unit_tests/test-reviewers.py`
+  - `plugins/mill/unit_tests/test-setup-hub-links.py`
+  - `plugins/mill/unit_tests/test-spawn-core.py`
+- **Creates:** none
+- **Deletes:** none
+- **Requirements:** Pass 3 of the test sweep. After cards 36 and 37 have run, the only remaining V2 references should be (a) `_tasks_md.Task(...)` fixture-builder calls and (b) tests that exercised now-removed semantics. Address each:
+
+  1. **`_tasks_md.Task(slug=..., title=..., group=..., brief=..., status=...)`** -> replace with a plain `dict` literal `{"slug": ..., "title": ..., "group": ..., "brief": ..., "status": ..., "id": <id>, "has_proposal": <bool>}` carrying the same keys plus `id` (any unique int the test cares about) and `has_proposal` if the consuming code reads it. If the test built a `list[Task]`, build a `list[dict]` instead.
+
+  2. **Text-Home.md fixtures** (tests that wrote raw `Home.md` text into a temp dir and parsed it back via `_tasks_md.parse`) -> replace with `wiki._client.upsert_tasks_batch(wiki_path, [...])` seeding state through the daemon API. If the test does not need real daemon roundtrip, build the dict list directly and pass it where the parsed list was consumed.
+
+  3. **Tests that ONLY exercised a now-removed semantic** (e.g. `test-cleanup.py::test_wiki_lock_busy_retries`, `test-millpy-add.py::test_wiki_lock_acquired_before_write`, or any test asserting `LockBusy` behaviour, `OP_READ` round-trip, or `wiki/config.yaml` fallback) -> delete the test function entirely (not the file). Mention each deleted test by name in the commit message body so it is searchable in git history.
+
+  4. **`paths.<...>` text references in fixtures that drove `_tasks_md.parse` workflows** -> route through the daemon (`wiki.upsert_tasks_batch`) or assert on daemon-rendered output, matching the patterns from passes 1 and 2.
+
+  After this card, `grep -rn "_wiki\|_tasks_md\|_sidebar" plugins/mill/unit_tests/ plugins/mill/integration_tests/` returns zero matches (visually verify; some matches may be incidental string content unrelated to module names — skip those). The full unit-test suite passes green per the batch verify command. Each file edited keeps the same overall test count UNLESS a function was deliberately deleted per rule 3; deletions are commit-message documented.
+
+  The implementer should rerun `uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py` after every three or four files to catch regressions early. After the last file, also run the batch verify command in full (run-all + test-wiki-sync + test-wiki-e2e) to confirm batch 3 ready-to-merge.
+- **Commit:** `test: sweep pass 3 -- dict fixtures, daemon-seeded state, dead-test deletion`
 
 ## Batch Tests
 
