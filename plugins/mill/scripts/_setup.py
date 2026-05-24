@@ -28,7 +28,6 @@ from pathlib import Path
 import _junction
 import _paths
 import _subprocess_util
-import _wiki
 
 _TOKEN_RE = re.compile(r"<([A-Za-z][A-Za-z0-9_]*)>")
 
@@ -246,8 +245,8 @@ def create_hub_links(
             finding an unknown token after filtering (logic error in caller).
     """
     hub_root = target_root
-    junctions_cfg = _wiki.read_junctions(hub_root, wiki_path=wiki_path)
-    hardlinks_cfg = _wiki.read_hardlinks(hub_root, wiki_path=wiki_path)
+    junctions_cfg = _junction.read_junctions(hub_root)
+    hardlinks_cfg = _junction.read_hardlinks(hub_root)
 
     created_junctions: list[Path] = []
     created_hardlinks: list[Path] = []
