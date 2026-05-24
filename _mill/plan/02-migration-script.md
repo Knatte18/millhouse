@@ -36,19 +36,25 @@ Batch-local decisions:
 - **Creates:**
   - `plugins/mill/scripts/millpy-wiki-migrate.py`
 - **Deletes:** none
-- **Requirements:** Create a new top-level CLI script following the `millpy-*.py` argparse pattern. Single optional flag `--dry-run` (default: commit). Behaviour:
-  1. Resolve `wiki_path` via `_paths.resolve_wiki_path(_paths.resolve_git_root())`. Abort with a clean error if the path does not exist.
+- **Requirements:** Create a new top-level CLI script following the `millpy-*.py` argparse pattern. Single optional flag `--dry-run` (default: commit). Preconditions (stated in the script's `--help` text and at the top of `main()`):
+  - `mill-config.yaml` must exist at the hub repo root. After batch 3 cards 19-20 strip the `wiki/config.yaml` fallback, this is the only accepted config source; if `mill-config.yaml` is missing, `_paths.resolve_wiki_path` raises and the script aborts with a clean error referencing only `mill-config.yaml` (no `wiki/config.yaml` mention).
+  - The script is one-shot per wiki. Re-running after a successful first invocation is idempotent (no new daemon commit); see step 6 below for the aborted-prior-run guarantee.
+
+  Behaviour:
+  1. Resolve `wiki_path` via `_paths.resolve_wiki_path(_paths.resolve_git_root())`. Abort with a clean error if the path does not exist or `mill-config.yaml` is missing (the resolver's existing exception is sufficient — do not re-wrap).
   2. Read `<wiki_path>/Home.md`. If missing, abort with a clean error.
-  3. Parse with `wiki._parse.parse_home_md(home_text)` (the extended parser delivered in batch 1 card 3). For each parsed task with a `[[slug]](proposal-slug.md)` link, read `<wiki_path>/proposal-{slug}.md` if it exists and attach the file's contents as the task's `body` field; missing proposal file -> `body = ""`.
-  4. If `--dry-run`: print every parsed task dict (slug, title, group, brief, status, has-body flag) to stdout in ASCII, exit 0. No file writes, no commits.
+  3. Parse with `wiki._parse.parse_home_md(home_text)` (the extended parser delivered in batch 1 card 3; pure string-in / list-out per card 3's explicit guarantee — does not initialise `_client` and cannot trigger daemon spawn). For each parsed task with a `[[slug]](proposal-slug.md)` link, read `<wiki_path>/proposal-{slug}.md` if it exists and attach the file's contents as the task's `body` field; missing proposal file -> `body = ""`.
+  4. If `--dry-run`: print every parsed task dict (slug, title, group, brief, status, has-body flag) to stdout in ASCII, exit 0. No file writes, no commits, no daemon contact — assert this by not importing `wiki._client` from the module's top-level (lazy-import it only inside the commit-mode branch in step 5d).
   5. Otherwise (commit mode):
      a. Atomic-write `<wiki_path>/Home.md.pre-v3.bak` containing the original `Home.md` text. The file is unconditionally overwritten if it already exists.
      b. Run `git -C <wiki_path> add Home.md.pre-v3.bak && git -C <wiki_path> commit -m "wiki: backup pre-V3 Home.md"`. This direct-git step is the one intentional bootstrap-commit exception — document inline in the script's docstring referencing decision `migration-commit-shape`.
      c. Build the full task list as `list[dict]`, each dict containing keys `slug, title, group, brief, body, status` (no `id` — the daemon assigns).
-     d. Call `wiki._client.upsert_tasks_batch(tasks)`. The daemon's `OP_UPSERT_TASKS_BATCH` handler upserts every task into TinyDB and renders + commits once with message `wiki: migrate to V3 (TinyDB-backed)`.
+     d. Import `wiki._client` lazily (`from wiki import _client as wiki_client`) and call `wiki_client.upsert_tasks_batch(wiki_path, tasks)` (note `wiki_path` is the required first positional argument per batch 1 card 6). The daemon's `OP_UPSERT_TASKS_BATCH` handler upserts every task into TinyDB and renders + commits once with message `wiki: migrate to V3 (TinyDB-backed)`.
      e. Print a final summary line: `migrated N tasks; M with proposal bodies; backup at <wiki>/Home.md.pre-v3.bak`.
 
-  The script must be idempotent: a second invocation after a successful first run produces no new daemon-side commit (TinyDB upsert is no-op for matching dicts; daemon's render is byte-identical; `commit_push` skips the empty commit). The backup file is overwritten and the backup commit may or may not produce a new wiki commit depending on whether the original `Home.md` has drifted — either is acceptable for the first idempotency assertion below.
+  6. **Aborted-prior-run guarantee.** If a previous run aborted mid-way and left a partial `tasks.json` on disk, re-running is safe: the script always rebuilds the full task list from the current `Home.md` and calls `upsert_tasks_batch` with every task. `Store.upsert_task` is keyed by slug — every entry is brought to its current state regardless of prior partial state. No silent drift is possible because the script never reads from `tasks.json` (it always re-parses `Home.md`), and `upsert_tasks_batch` overwrites each task's fields wholesale. If the operator wants a clean re-migration (e.g. they suspect the partial `tasks.json` is corrupt), they delete `<wiki>/tasks.json` manually before re-running; the script does not auto-delete.
+
+  The script is idempotent: a second invocation after a successful first run produces no new daemon-side commit (TinyDB upsert is no-op for matching dicts; daemon's render is byte-identical; `commit_push` skips the empty commit). The backup file is overwritten and the backup commit may or may not produce a new wiki commit depending on whether the original `Home.md` has drifted — either is acceptable for the first idempotency assertion in card 14.
 
   Use `_timestamp.now_utc_iso()` only if you print timestamps in stdout summary; do not embed timestamps in commit messages (kept stable per the byte-identical render contract).
 
@@ -75,7 +81,7 @@ Batch-local decisions:
   - Two tasks with `[[slug]](proposal-slug.md)` links plus matching `proposal-{slug}.md` files containing non-empty bodies.
 
   Test cases (each runs in a fresh fixture copy):
-  - `--dry-run`: assert no `Home.md.pre-v3.bak` written, no new git commits on the wiki, parsed task list printed to stdout includes every expected slug.
+  - `--dry-run`: assert no `Home.md.pre-v3.bak` written, no new git commits on the wiki, no `<wiki>/tasks.json` file created, no `<wiki>/.wiki-daemon.json` state file created (daemon must not spawn during dry-run per card 13 step 4), parsed task list printed to stdout includes every expected slug.
   - commit mode: assert (1) `Home.md.pre-v3.bak` exists with the original content byte-identical to the input fixture's `Home.md`; (2) `tasks.json` exists with one TinyDB row per migrated task; (3) the newly-rendered `Home.md` is V3-format — `# Layer D` and `# Layer Z` headers (no parenthetical), info-note absent, `[active]`/`[abandoned]` markers present, ungrouped task appears after both layer sections; (4) `proposal-{slug}.md` files for the two body-carrying tasks exist with content matching the fixture inputs; (5) exactly two new commits exist on the wiki (`wiki: backup pre-V3 Home.md`, `wiki: migrate to V3 (TinyDB-backed)`) and the second commit message matches verbatim.
   - re-run idempotency: invoke the script a second time on the just-migrated fixture; assert no additional wiki commit is produced by the daemon (`git log` head SHA unchanged after the second `upsert_tasks_batch`). The backup commit may or may not produce a new commit if `Home.md` has been re-rendered; that part of idempotency is not asserted.
 

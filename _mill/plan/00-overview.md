@@ -81,7 +81,7 @@ batches:
 
 ### Decision: card-numbering-global
 
-- **Decision:** Cards are numbered globally across all three batches. Batch 1 holds cards 1-12; batch 2 holds cards 13-14; batch 3 holds cards 15-35. Reviewer and implementer cite by global card number.
+- **Decision:** Cards are numbered globally across all three batches. Batch 1 holds cards 1-12; batch 2 holds cards 13-14; batch 3 holds cards 15-36. Reviewer and implementer cite by global card number.
 - **Rationale:** mill-plan template rule; uniqueness avoids ambiguity.
 - **Applies to:** all batches
 
@@ -132,13 +132,39 @@ batches:
 - `plugins/mill/skills/mill-finalize/SKILL.md`
 - `plugins/mill/templates/review-plan-batch.md`
 - `plugins/mill/templates/review-plan-holistic.md`
+- `plugins/mill/integration_tests/bench-reviewers.py`
+- `plugins/mill/integration_tests/test-spawn-units.py`
+- `plugins/mill/integration_tests/test-spawn.py`
+- `plugins/mill/integration_tests/test-worktree-sibling-resolution.py`
+- `plugins/mill/unit_tests/_test_helpers.py`
+- `plugins/mill/unit_tests/test-abandon.py`
+- `plugins/mill/unit_tests/test-bg-launcher.py`
 - `plugins/mill/unit_tests/test-cleanup.py`
 - `plugins/mill/unit_tests/test-config.py`
 - `plugins/mill/unit_tests/test-fold.py`
 - `plugins/mill/unit_tests/test-millpy-add.py`
+- `plugins/mill/unit_tests/test-millpy-bg.py`
 - `plugins/mill/unit_tests/test-millpy-claim.py`
+- `plugins/mill/unit_tests/test-millpy-color.py`
+- `plugins/mill/unit_tests/test-millpy-fix.py`
 - `plugins/mill/unit_tests/test-millpy-implement.py`
+- `plugins/mill/unit_tests/test-millpy-merge-in-subagent.py`
+- `plugins/mill/unit_tests/test-millpy-spawn.py`
+- `plugins/mill/unit_tests/test-millpy-terminal.py`
+- `plugins/mill/unit_tests/test-millpy-validate-plan.py`
+- `plugins/mill/unit_tests/test-millpy-vscode.py`
+- `plugins/mill/unit_tests/test-paths.py`
+- `plugins/mill/unit_tests/test-plan-validate.py`
+- `plugins/mill/unit_tests/test-review-cli-error-envelope.py`
+- `plugins/mill/unit_tests/test-review-cli.py`
+- `plugins/mill/unit_tests/test-review-code-flow.py`
+- `plugins/mill/unit_tests/test-review-common.py`
+- `plugins/mill/unit_tests/test-review-discussion-flow.py`
+- `plugins/mill/unit_tests/test-review-plan-flow.py`
+- `plugins/mill/unit_tests/test-reviewers.py`
+- `plugins/mill/unit_tests/test-setup-hub-links.py`
 - `plugins/mill/unit_tests/test-sidebar.py`
+- `plugins/mill/unit_tests/test-spawn-core.py`
 - `plugins/mill/unit_tests/test-tasks-md.py`
 - `plugins/mill/unit_tests/test-wiki-parse.py`
 - `plugins/mill/unit_tests/test-wiki-protocol.py`

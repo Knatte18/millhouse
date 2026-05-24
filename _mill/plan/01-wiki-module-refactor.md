@@ -13,16 +13,16 @@ depends-on: []
 
 Reshape the V3 wiki module (`plugins/mill/scripts/wiki/`) into the structured-task API every V2 caller will consume in batch 3 and the migration script will consume in batch 2. This batch is the producer of the public surface; nothing outside `plugins/mill/scripts/wiki/` and its unit/integration tests is modified.
 
-External interface delivered to batches 2 and 3:
+External interface delivered to batches 2 and 3 (every public function takes `wiki_path: Path` as required first positional argument, mirroring the existing V3 `read` / `write_commit_push` shape so call sites continue to obtain and pass `wiki_path` exactly as they do today):
 
-- `wiki._client.upsert_task(slug, *, title=None, brief=None, body=None, group=None, status=None) -> dict`
-- `wiki._client.upsert_tasks_batch(tasks: list[dict]) -> None`
-- `wiki._client.set_phase(id_or_slug, phase) -> None`
-- `wiki._client.remove_task(id_or_slug) -> None`
-- `wiki._client.get_task(id_or_slug) -> dict | None`
-- `wiki._client.list_tasks_brief() -> list[dict]` (keys `{id, slug, title, group, brief, status, has_proposal}`)
-- `wiki._client.list_tasks_full() -> list[dict]` (every field)
-- `wiki._client.health_check() -> bool`
+- `wiki._client.upsert_task(wiki_path, slug, *, title=None, brief=None, body=None, group=None, status=None) -> dict`
+- `wiki._client.upsert_tasks_batch(wiki_path, tasks: list[dict]) -> None`
+- `wiki._client.set_phase(wiki_path, id_or_slug, phase) -> None`
+- `wiki._client.remove_task(wiki_path, id_or_slug) -> None`
+- `wiki._client.get_task(wiki_path, id_or_slug) -> dict | None`
+- `wiki._client.list_tasks_brief(wiki_path) -> list[dict]` (keys `{id, slug, title, group, brief, status, has_proposal}`)
+- `wiki._client.list_tasks_full(wiki_path) -> list[dict]` (every field)
+- `wiki._client.health_check(wiki_path) -> bool`
 - `wiki.LOCKED_FOLD_PHASES` re-export from `wiki/__init__.py`
 - Protocol constants in `wiki/__init__.py`: `PROTOCOL_VERSION = 2`, new `OP_*` symbols, no `OP_READ`/`OP_WRITE`
 - Extended `wiki._parse.parse_home_md(content) -> list[dict]` covering parenthetical layer headers, multi-paragraph briefs, info-only `##` skip, `[s] -> None`, `[abandoned]` preserved
@@ -65,7 +65,7 @@ Batch-local decisions (differ from `## Shared Decisions` in `00-overview.md`):
   - `plugins/mill/scripts/wiki/_parse.py`
 - **Creates:** none
 - **Deletes:** none
-- **Requirements:** `parse_home_md(content: str) -> list[dict]` returns dicts with keys `{slug, title, group, brief, status}` (no `body`/`id` — those are seeded separately by the migration script). Recognise `# Layer ([A-Z])(?:\s+.*)?$` as a layer header — the parenthetical/freeform suffix (e.g. `# Layer D (isolated -- run alone)`) is allowed and ignored; group letter is the captured `[A-Z]`. Capture each task's brief verbatim across blank lines until the next `##` or `#` heading, then collapse the captured paragraphs to one space-joined paragraph for the `brief` field. Skip `##` headings whose next non-blank line is NOT a `[slug]` line or `[[slug]](proposal-slug.md)` line — these are info-only notes (e.g. `## (warn) wiki/config.yaml ...`) and must not produce a task entry. Parse `[s]` (legacy spawn-ready marker) as `status = None`. Parse `[abandoned]` as `status = "abandoned"`. Existing supported statuses (`active`, `done`, `pr-pending`, `ready-to-merge`, `blocked`) remain first-class. Titles may carry numeric prefix and group code (e.g. `## 30 (D) -- Foo`); parse without crash, retain the full title text after the leading numeric/group prefix is stripped if present. The function is invoked by the migration script (batch 2); the daemon never calls it at runtime.
+- **Requirements:** `parse_home_md(content: str) -> list[dict]` is a pure string-in / list-out function — it does not touch the filesystem and does not import or initialise `_client` (so importing it during dry-run mode in batch 2 card 13 cannot trigger daemon spawn). Returns dicts with keys `{slug, title, group, brief, status}` (no `body`/`id` — those are seeded separately by the migration script). Recognise `# Layer ([A-Z])(?:\s+.*)?$` as a layer header — the parenthetical/freeform suffix (e.g. `# Layer D (isolated -- run alone)`) is allowed and ignored; group letter is the captured `[A-Z]`. Capture each task's brief verbatim across blank lines until the next `##` or `#` heading, then collapse the captured paragraphs to one space-joined paragraph for the `brief` field. **The paragraph-collapse is one-way and migration-only** — new tasks added via `wiki.upsert_task` keep their brief verbatim; the renderer (card 2) emits whatever `brief` string it receives and never re-splits, so collapsed briefs render as a single line block forever. Skip `##` headings whose next non-blank line is NOT a `[slug]` line or `[[slug]](proposal-slug.md)` line — these are info-only notes (e.g. `## (warn) wiki/config.yaml ...`) and must not produce a task entry. Parse `[s]` (legacy spawn-ready marker) as `status = None`. Parse `[abandoned]` as `status = "abandoned"`. Existing supported statuses (`active`, `done`, `pr-pending`, `ready-to-merge`, `blocked`) remain first-class. Titles may carry numeric prefix and group code (e.g. `## 30 (D) -- Foo`); parse without crash, retain the full title text after the leading numeric/group prefix is stripped if present. The function is invoked by the migration script (batch 2); the daemon never calls it at runtime.
 - **Commit:** `feat(wiki/_parse): extended parser for migration; drop [s], keep [abandoned]`
 
 ### Card 4: `wiki/__init__.py` — protocol op constants, PROTOCOL_VERSION bump, LOCKED_FOLD_PHASES
@@ -103,7 +103,7 @@ Batch-local decisions (differ from `## Shared Decisions` in `00-overview.md`):
   Factor the `render(all_tasks) -> atomic_write each file -> commit_push (with one rebase retry, as today)` sequence into a single private helper `_render_and_commit_all(slug_for_msg: str)` invoked by every mutating handler. The commit message uses the form `wiki: {slug_for_msg}` (matching the existing V3 commit-message shape from `_handle_write` so wiki history stays consistent). Unknown ops return `{ok: false, error_type: "protocol_error", error: "unknown op: {op}"}`. Keep the auth-token check, version-mismatch handling, `_last_pull` lazy refresh, and `.wiki-daemon.json` / `.wiki-daemon.log` lifecycle exactly as today.
 - **Commit:** `feat(wiki/_server): structured op handlers, batch render+commit`
 
-### Card 6: `_client.py` — drop read/write_commit_push, add structured methods, CAS_RETRIES=5, health via OP_HEALTH
+### Card 6: `_client.py` — drop read/write_commit_push, add structured methods (wiki_path as first arg), CAS_RETRIES=5, health via OP_HEALTH
 
 - **Context:**
   - `plugins/mill/scripts/wiki/__init__.py`
@@ -111,7 +111,16 @@ Batch-local decisions (differ from `## Shared Decisions` in `00-overview.md`):
   - `plugins/mill/scripts/wiki/_client.py`
 - **Creates:** none
 - **Deletes:** none
-- **Requirements:** Bump module-level `CAS_RETRIES` from `3` to `5`. Delete public functions `read` and `write_commit_push`. Add public functions matching the External interface section above: `upsert_task(slug, *, title=None, brief=None, body=None, group=None, status=None) -> dict`, `upsert_tasks_batch(tasks: list[dict]) -> None`, `set_phase(id_or_slug, phase) -> None`, `remove_task(id_or_slug) -> None`, `get_task(id_or_slug) -> dict | None`, `list_tasks_brief() -> list[dict]`, `list_tasks_full() -> list[dict]`. Each constructs the request payload, calls `_ensure_daemon()` then `_connect_send_recv(op, payload)`, wraps `error_type == "conflict"` -> `WikiConflictError`, `error_type == "not_found"` -> `WikiNotFoundError`, `error_type == "push_error"` -> `WikiPushError`, `error_type == "protocol_error"` -> `WikiProtocolError`. Mutating methods (`upsert_task`, `upsert_tasks_batch`, `set_phase`, `remove_task`) catch `WikiConflictError` and retry up to `CAS_RETRIES` attempts; raise on final exhaustion. Read-only methods (`get_task`, `list_tasks_brief`, `list_tasks_full`) do not retry. Rewrite `health_check()` to send `OP_HEALTH` (no payload, no retry); on any error return `False`, on `{ok: true}` return `True`. Re-export `LOCKED_FOLD_PHASES` from `wiki/__init__.py` at module top so callers can `from wiki._client import LOCKED_FOLD_PHASES` if convenient (primary path is `from wiki import LOCKED_FOLD_PHASES`).
+- **Requirements:** Bump module-level `CAS_RETRIES` from `3` to `5`. Delete public functions `read` and `write_commit_push`. Add public functions matching the External interface section in the batch-scope above — every function takes `wiki_path: Path` as required first positional argument, mirroring the existing `read`/`write_commit_push` shape:
+  - `upsert_task(wiki_path, slug, *, title=None, brief=None, body=None, group=None, status=None) -> dict`
+  - `upsert_tasks_batch(wiki_path, tasks: list[dict]) -> None`
+  - `set_phase(wiki_path, id_or_slug, phase) -> None`
+  - `remove_task(wiki_path, id_or_slug) -> None`
+  - `get_task(wiki_path, id_or_slug) -> dict | None`
+  - `list_tasks_brief(wiki_path) -> list[dict]`
+  - `list_tasks_full(wiki_path) -> list[dict]`
+
+  Each function calls `_ensure_daemon(wiki_path, idle_timeout=..., refresh_interval=...)` then `_connect_send_recv(wiki_path, op, payload)` exactly as the existing `read` / `write_commit_push` do today. The `wiki_path` argument is the path callers already obtain via `_paths.resolve_wiki_path(_paths.resolve_git_root())` (or from their own existing local) and pass into the V2 `_wiki.*` helpers today — the migration is a like-for-like signature. Wrap `error_type == "conflict"` -> `WikiConflictError`, `error_type == "not_found"` -> `WikiNotFoundError`, `error_type == "push_error"` -> `WikiPushError`, `error_type == "protocol_error"` -> `WikiProtocolError`. Mutating methods (`upsert_task`, `upsert_tasks_batch`, `set_phase`, `remove_task`) catch `WikiConflictError` and retry up to `CAS_RETRIES` attempts; raise on final exhaustion. Read-only methods (`get_task`, `list_tasks_brief`, `list_tasks_full`) do not retry. Rewrite `health_check(wiki_path) -> bool` to send `OP_HEALTH` (no extra payload, no retry); on any error return `False`, on `{ok: true}` return `True`. Re-export `LOCKED_FOLD_PHASES` from `wiki/__init__.py` at module top so callers can `from wiki._client import LOCKED_FOLD_PHASES` if convenient (primary path is `from wiki import LOCKED_FOLD_PHASES`).
 - **Commit:** `feat(wiki/_client): structured task API, CAS_RETRIES=5, OP_HEALTH`
 
 ### Card 7: `test-wiki-store.py` — id-from-0, identifier dispatch, brief/full shapes
@@ -170,7 +179,7 @@ Batch-local decisions (differ from `## Shared Decisions` in `00-overview.md`):
   - `plugins/mill/integration_tests/test-wiki-e2e.py`
 - **Creates:** none
 - **Deletes:** none
-- **Requirements:** Replace every `_client.read(...)` / `_client.write_commit_push("Home.md", ...)` call with structured equivalents (`upsert_task`, `set_phase`, `list_tasks_brief`, `get_task`). The concurrent-write soak test must drive two subprocesses each calling `set_phase` on the same slug from different angles; assert at least one CAS conflict is observed and the retry path resolves it. Replace the existing local literal `max_retries = 5` with `from wiki._client import CAS_RETRIES` and reference the constant directly (no duplicate literal). The test must continue running end-to-end with a real spawned daemon, real TinyDB, real git repo.
+- **Requirements:** Replace every `_client.read(...)` / `_client.write_commit_push("Home.md", ...)` call with structured equivalents (`upsert_task`, `set_phase`, `list_tasks_brief`, `get_task`). Each call passes `wiki_path` as the first positional argument (per card 6's signature shape). The concurrent-write soak test must drive two subprocesses each calling `set_phase(wiki_path, slug, ...)` on the same slug from different angles; assert at least one CAS conflict is observed and the retry path resolves it. Replace the existing local literal `max_retries = 5` with `from wiki._client import CAS_RETRIES` and reference the constant directly (no duplicate literal). The test must continue running end-to-end with a real spawned daemon, real TinyDB, real git repo.
 - **Commit:** `test(wiki-e2e): structured ops, CAS_RETRIES via constant`
 
 ### Card 12: Audit and update remaining wiki tests for OP_READ/OP_WRITE usage
@@ -192,7 +201,7 @@ Batch-local decisions (differ from `## Shared Decisions` in `00-overview.md`):
   - Driving concurrent mutation -> `set_phase`.
   - Liveness probe -> `health_check` (which now sends `OP_HEALTH`).
 
-  If a test exercised only the now-removed `OP_READ`/`OP_WRITE` semantic and has no V3 analogue (e.g. asserting raw-file write coalescing on the daemon side), delete that single test function (not the whole file) and leave a one-line `# removed: covered by test-wiki-protocol.py::test_unknown_op_rejection` referenced commit-message-only; do not write the comment into the file. The five files in Edits: above are the integration suite — they continue to spawn a real daemon. Do not break the existing assertions about commit messages, push behaviour, or noop-commit detection — only translate the protocol surface.
+  If a test exercised only the now-removed `OP_READ`/`OP_WRITE` semantic and has no V3 analogue (e.g. asserting raw-file write coalescing on the daemon side), delete that single test function (not the whole file). Mention the deleted test name in the commit message body so it is searchable in git history; do not leave any `# removed:` comment inside the test file itself. The five files in Edits: above are the integration suite — they continue to spawn a real daemon. Do not break the existing assertions about commit messages, push behaviour, or noop-commit detection — only translate the protocol surface.
 - **Commit:** `test(wiki): port remaining wiki tests to structured ops`
 
 ## Batch Tests
