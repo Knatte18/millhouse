@@ -1,71 +1,36 @@
 from __future__ import annotations
 
-import hashlib
 from pathlib import Path
 
 from tinydb import TinyDB, Query
 
-from wiki._parse import parse_home_md
-from wiki._render import render
+
+def _resolve_id_or_slug(db: TinyDB, identifier: int | str) -> int | None:
+    if isinstance(identifier, int):
+        query = Query()
+        doc = db.get(doc_id=identifier)
+        return identifier if doc else None
+    else:
+        query = Query()
+        doc = db.get(query.slug == identifier)
+        return doc.doc_id if doc else None
 
 
 class Store:
     def __init__(self, db_path: Path) -> None:
         self._db = TinyDB(str(db_path))
-        self._file_cache: dict[str, tuple[str, str]] = {}
-        self._initialized = False
 
-    @staticmethod
-    def content_hash(content: str) -> str:
-        return hashlib.sha256(content.encode("utf-8")).hexdigest()
-
-    def set(self, rel_path: str, content: str) -> None:
-        if rel_path == "Home.md":
-            tasks = parse_home_md(content)
-            # Collect slugs from parsed content
-            current_slugs = {task["slug"] for task in tasks}
-            # Delete tasks not in the new content
-            slug_query = Query()
-            for doc in self._db.all():
-                if doc.get("slug") not in current_slugs:
-                    self._db.remove(slug_query.slug == doc["slug"])
-            # Upsert remaining tasks
-            for task in tasks:
-                self.upsert_task(task)
-            self._initialized = True
-        else:
-            hash_value = Store.content_hash(content)
-            self._file_cache[rel_path] = (content, hash_value)
-
-    def get(self, rel_path: str) -> tuple[str, str] | None:
-        if rel_path == "Home.md":
-            if not self._initialized:
-                return None
-            rendered = render(self.all_tasks())
-            home_content = rendered["Home.md"]
-            return (home_content, Store.content_hash(home_content))
-        else:
-            return self._file_cache.get(rel_path)
-
-    def invalidate(self, rel_path: str) -> None:
-        if rel_path == "Home.md":
-            self._initialized = False
-        else:
-            self._file_cache.pop(rel_path, None)
-
-    def upsert_task(self, task: dict) -> None:
+    def upsert_task(self, task: dict) -> dict:
         slug = task["slug"]
-        slug_query = Query()
-        existing = self._db.get(slug_query.slug == slug)
+        query = Query()
+        existing = self._db.get(query.slug == slug)
 
         if existing:
             existing.update(task)
-            self._db.update(existing, slug_query.slug == slug)
+            self._db.update(existing, query.slug == slug)
+            return self._db.get(doc_id=existing.doc_id)
         else:
-            max_id = 0
-            for doc in self._db.all():
-                if isinstance(doc.get("id"), int) and doc["id"] > max_id:
-                    max_id = doc["id"]
+            max_id = max([t["id"] for t in self._db.all()], default=-1)
             next_id = max_id + 1
 
             new_task = {
@@ -77,11 +42,125 @@ class Store:
                 "status": None,
             }
             new_task.update(task)
-            self._db.insert(new_task)
+            doc_id = self._db.insert(new_task)
+            return self._db.get(doc_id=doc_id)
+
+    def get_task(self, identifier: int | str) -> dict | None:
+        doc_id = _resolve_id_or_slug(self._db, identifier)
+        if doc_id is not None:
+            return self._db.get(doc_id=doc_id)
+        return None
+
+    def remove_task(self, identifier: int | str) -> None:
+        doc_id = _resolve_id_or_slug(self._db, identifier)
+        if doc_id is not None:
+            self._db.remove(doc_id=doc_id)
+
+    def set_phase(self, identifier: int | str, phase: str | None) -> None:
+        doc_id = _resolve_id_or_slug(self._db, identifier)
+        if doc_id is not None:
+            task = self._db.get(doc_id=doc_id)
+            if phase is None:
+                task.pop("status", None)
+            else:
+                task["status"] = phase
+            self._db.update(task, doc_ids=[doc_id])
+
+    def list_tasks_brief(self) -> list[dict]:
+        result = []
+        for doc in self._db.all():
+            result.append({
+                "id": doc["id"],
+                "slug": doc["slug"],
+                "title": doc.get("title", ""),
+                "group": doc.get("group"),
+                "brief": doc.get("brief", ""),
+                "status": doc.get("status"),
+                "has_proposal": bool(doc.get("body")),
+            })
+        return result
+
+    def list_tasks_full(self) -> list[dict]:
+        return self._db.all()
+
+    def upsert_tasks_batch(self, tasks: list[dict]) -> None:
+        for task in tasks:
+            slug = task["slug"]
+            query = Query()
+            existing = self._db.get(query.slug == slug)
+
+            if existing:
+                existing.update(task)
+                self._db.update(existing, query.slug == slug)
+            else:
+                max_id = max([t["id"] for t in self._db.all()], default=-1)
+                next_id = max_id + 1
+
+                new_task = {
+                    "id": next_id,
+                    "slug": slug,
+                    "group": None,
+                    "brief": "",
+                    "body": "",
+                    "status": None,
+                }
+                new_task.update(task)
+                self._db.insert(new_task)
+
+    def merge_tasks(
+        self,
+        remove_slugs: list[str],
+        upsert: dict,
+        set_phase: tuple[str, str | None] | None = None,
+    ) -> dict:
+        with self._db.write_access():
+            for slug in remove_slugs:
+                query = Query()
+                doc = self._db.get(query.slug == slug)
+                if doc:
+                    self._db.remove(doc_id=doc.doc_id)
+
+            upserting_slug = upsert["slug"]
+            query = Query()
+            existing = self._db.get(query.slug == upserting_slug)
+
+            if existing:
+                existing.update(upsert)
+                self._db.update(existing, query.slug == upserting_slug)
+                upserted_doc = self._db.get(doc_id=existing.doc_id)
+            else:
+                max_id = max([t["id"] for t in self._db.all()], default=-1)
+                next_id = max_id + 1
+
+                new_task = {
+                    "id": next_id,
+                    "slug": upserting_slug,
+                    "group": None,
+                    "brief": "",
+                    "body": "",
+                    "status": None,
+                }
+                new_task.update(upsert)
+                doc_id = self._db.insert(new_task)
+                upserted_doc = self._db.get(doc_id=doc_id)
+
+            if set_phase is not None:
+                phase_identifier, phase_value = set_phase
+                doc_id = _resolve_id_or_slug(self._db, phase_identifier)
+                if doc_id is not None:
+                    task = self._db.get(doc_id=doc_id)
+                    if phase_value is None:
+                        task.pop("status", None)
+                    else:
+                        task["status"] = phase_value
+                    self._db.update(task, doc_ids=[doc_id])
+
+            return self._db.get(doc_id=upserted_doc.doc_id)
+
+    def reload(self) -> None:
+        self._db.close()
+        db_path = Path(self._db._handle.name)
+        self._db = TinyDB(str(db_path))
 
     def all_tasks(self) -> list[dict]:
         return self._db.all()
-
-    def get_by_slug(self, slug: str) -> dict | None:
-        slug_query = Query()
-        return self._db.get(slug_query.slug == slug)
