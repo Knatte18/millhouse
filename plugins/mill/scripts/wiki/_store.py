@@ -114,49 +114,48 @@ class Store:
         upsert: dict,
         set_phase: tuple[str, str | None] | None = None,
     ) -> dict:
-        with self._db.write_access():
-            for slug in remove_slugs:
-                query = Query()
-                doc = self._db.get(query.slug == slug)
-                if doc:
-                    self._db.remove(doc_id=doc.doc_id)
-
-            upserting_slug = upsert["slug"]
+        for slug in remove_slugs:
             query = Query()
-            existing = self._db.get(query.slug == upserting_slug)
+            doc = self._db.get(query.slug == slug)
+            if doc:
+                self._db.remove(doc_id=doc.doc_id)
 
-            if existing:
-                existing.update(upsert)
-                self._db.update(existing, query.slug == upserting_slug)
-                upserted_doc = self._db.get(doc_id=existing.doc_id)
-            else:
-                max_id = max([t["id"] for t in self._db.all()], default=-1)
-                next_id = max_id + 1
+        upserting_slug = upsert["slug"]
+        query = Query()
+        existing = self._db.get(query.slug == upserting_slug)
 
-                new_task = {
-                    "id": next_id,
-                    "slug": upserting_slug,
-                    "group": None,
-                    "brief": "",
-                    "body": "",
-                    "status": None,
-                }
-                new_task.update(upsert)
-                doc_id = self._db.insert(new_task)
-                upserted_doc = self._db.get(doc_id=doc_id)
+        if existing:
+            existing.update(upsert)
+            self._db.update(existing, query.slug == upserting_slug)
+            upserted_doc = self._db.get(doc_id=existing.doc_id)
+        else:
+            max_id = max([t["id"] for t in self._db.all()], default=-1)
+            next_id = max_id + 1
 
-            if set_phase is not None:
-                phase_identifier, phase_value = set_phase
-                doc_id = _resolve_id_or_slug(self._db, phase_identifier)
-                if doc_id is not None:
-                    task = self._db.get(doc_id=doc_id)
-                    if phase_value is None:
-                        task.pop("status", None)
-                    else:
-                        task["status"] = phase_value
-                    self._db.update(task, doc_ids=[doc_id])
+            new_task = {
+                "id": next_id,
+                "slug": upserting_slug,
+                "group": None,
+                "brief": "",
+                "body": "",
+                "status": None,
+            }
+            new_task.update(upsert)
+            doc_id = self._db.insert(new_task)
+            upserted_doc = self._db.get(doc_id=doc_id)
 
-            return self._db.get(doc_id=upserted_doc.doc_id)
+        if set_phase is not None:
+            phase_identifier, phase_value = set_phase
+            doc_id = _resolve_id_or_slug(self._db, phase_identifier)
+            if doc_id is not None:
+                task = self._db.get(doc_id=doc_id)
+                if phase_value is None:
+                    task.pop("status", None)
+                else:
+                    task["status"] = phase_value
+                self._db.update(task, doc_ids=[doc_id])
+
+        return self._db.get(doc_id=upserted_doc.doc_id)
 
     def reload(self) -> None:
         self._db.close()
