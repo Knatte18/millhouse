@@ -55,7 +55,7 @@ class Store:
     def remove_task(self, identifier: int | str) -> None:
         doc_id = _resolve_id_or_slug(self._db, identifier)
         if doc_id is not None:
-            self._db.remove(doc_id=doc_id)
+            self._db.remove(doc_ids=[doc_id])
 
     def set_phase(self, identifier: int | str, phase: str | None) -> None:
         doc_id = _resolve_id_or_slug(self._db, identifier)
@@ -118,7 +118,7 @@ class Store:
             query = Query()
             doc = self._db.get(query.slug == slug)
             if doc:
-                self._db.remove(doc_id=doc.doc_id)
+                self._db.remove(doc_ids=[doc.doc_id])
 
         upserting_slug = upsert["slug"]
         query = Query()
