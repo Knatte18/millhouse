@@ -3,7 +3,7 @@
 ```yaml
 task: Adopt V3 wiki module in V2 scripts
 slug: wiki-v3-adoption
-approved: false
+approved: true
 started: 20260524-170303
 parent: main
 root: ""
@@ -76,6 +76,7 @@ batches:
 ### Decision: no-advisory-lock
 
 - **Decision:** `wiki_lock` and the `.mill-lock` file are gone. The daemon's single-threaded request handler serialises writes on a single host; `commit_push`'s existing one-rebase-retry handles cross-host non-fast-forward conflicts. Callers do not wrap mutations in any lock context manager and do not need to retry on `WikiConflictError` (the V3 `base_hash` CAS path is removed in batch 1 cards 5-6 because structured ops carry full intent and never require client-supplied base hashes — see card 6's CAS-removal rationale). Permanent push failure surfaces as `WikiPushError`; callers may surface that to the user but do not auto-retry.
+- **Known regression — client-composed read-modify-write windows.** A client-side pattern of `wiki.get_task(...)` -> compute -> `wiki.upsert_task(...)` (used by `millpy-fold.py` to append a fold note to an existing `brief`) is a read-modify-write window the daemon cannot serialise. Two concurrent folds on the same slug can lose one of the appended lines (last-writer-wins). V2's `wiki_lock` protected this. The regression is accepted in this task because (a) `mill-fold` runs interactively and concurrent folds on the same slug are extremely rare; (b) the same regression applies to any future client-composed multi-step pattern that does not get its own atomic daemon op. If a real conflict appears in practice, the fix is to add a dedicated atomic op (e.g. `OP_APPEND_BRIEF` / `OP_APPEND_BODY`) following the `OP_MERGE_TASKS` precedent, with a matching `wiki.append_brief` client method. `multi_select_groom_then_claim` already uses `wiki.merge_tasks` (single atomic op) so it does NOT have this regression.
 - **Rationale:** Discussion decision `no-advisory-lock` plus batch 1's protocol redesign. With structured task ops (each = one TinyDB write + one render + one commit), there is no read-modify-write window for the client to expose; conflicts are exclusively at the git-push layer and handled inside `commit_push`.
 - **Applies to:** all batches
 
