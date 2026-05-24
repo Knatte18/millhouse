@@ -335,6 +335,7 @@ def _test_idempotent_rerun(wiki_path: Path, task_repo: Path) -> bool:
         # Get state before re-run
         head_before = _git(["rev-parse", "HEAD"], cwd=wiki_path).stdout.strip()
         commits_before = _count_commits(wiki_path)
+        log_before = _get_commit_messages(wiki_path, 5)
 
         # Run migration again from the task repo
         result = subprocess.run(
@@ -354,16 +355,19 @@ def _test_idempotent_rerun(wiki_path: Path, task_repo: Path) -> bool:
         # Verify no new commits
         head_after = _git(["rev-parse", "HEAD"], cwd=wiki_path).stdout.strip()
         commits_after = _count_commits(wiki_path)
-
-        if head_before != head_after:
-            print(f"FAIL [idempotent]: HEAD changed (was {head_before}, now {head_after})", file=sys.stderr)
-            return False
+        log_after = _get_commit_messages(wiki_path, 5)
 
         if commits_before != commits_after:
             print(
                 f"FAIL [idempotent]: commit count changed ({commits_before} -> {commits_after})",
                 file=sys.stderr,
             )
+            print(f"Before: {log_before}", file=sys.stderr)
+            print(f"After: {log_after}", file=sys.stderr)
+            return False
+
+        if head_before != head_after:
+            print(f"FAIL [idempotent]: HEAD changed (was {head_before}, now {head_after})", file=sys.stderr)
             return False
 
         print("PASS [idempotent]: second invocation produced no new commits")
@@ -371,6 +375,8 @@ def _test_idempotent_rerun(wiki_path: Path, task_repo: Path) -> bool:
 
     except Exception as exc:
         print(f"FAIL [idempotent]: {exc}", file=sys.stderr)
+        import traceback
+        traceback.print_exc(file=sys.stderr)
         return False
 
 
