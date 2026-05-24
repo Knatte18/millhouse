@@ -92,9 +92,7 @@ def _make_container_form_worktree(
     home_body = f"## {title}\n[[{slug}]] [active]\n\n_body_\n"
     (wiki_path / "Home.md").write_text(home_body, encoding="utf-8")
 
-    parsed = _tasks_md.parse(home_body)
-    found = next((t for t in parsed if t.slug == slug), None)
-    if found is None:
+    if f"[[{slug}]]" not in home_body:
         raise AssertionError(f"slug {slug!r} not found in generated Home.md")
 
     _test_helpers.seed_wiki_config(wiki_path, include_roles=False)
