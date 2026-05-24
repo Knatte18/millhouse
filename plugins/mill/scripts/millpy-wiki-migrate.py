@@ -120,40 +120,43 @@ def main() -> None:
 
     # Commit mode: write backup, commit, upsert, and print summary
     backup_file = wiki_path / "Home.md.pre-v3.bak"
-    try:
-        backup_file.write_text(home_text, encoding="utf-8")
-    except Exception as e:
-        print(f"ERROR: Failed to write backup: {e}", file=sys.stderr)
-        sys.exit(1)
 
     # Direct-git backup commit (with skip on idempotent re-run).
     # Justification: The daemon is not yet running for the freshly-V3 wiki.
     # Bootstrapping the backup commit through git -C is a single isolated
     # exception to the "daemon owns wiki writes" rule. After initial migration,
     # all subsequent wiki mutations flow through the daemon.
+    #
+    # Idempotency: only create the backup if it doesn't already exist in git.
+    # This ensures that running the script multiple times produces exactly one
+    # backup commit per wiki, capturing the original pre-V3 Home.md.
     try:
         import subprocess
 
-        # Stage the backup file
-        subprocess.run(
-            ["git", "-C", str(wiki_path), "add", "Home.md.pre-v3.bak"],
-            check=True,
+        # Check if backup file already exists in git
+        check_result = subprocess.run(
+            ["git", "-C", str(wiki_path), "ls-files", "Home.md.pre-v3.bak"],
             capture_output=True,
+            text=True,
         )
+        backup_exists_in_git = bool(check_result.stdout.strip())
 
-        # Check if there is anything to commit (skip if content matches prior backup)
-        result = subprocess.run(
-            ["git", "-C", str(wiki_path), "diff", "--cached", "--quiet"],
-            capture_output=True,
-        )
+        if not backup_exists_in_git:
+            # First run: create and commit the backup
+            backup_file.write_text(home_text, encoding="utf-8")
 
-        if result.returncode != 0:
-            # Backup file differs from what was already committed; make a new commit
+            subprocess.run(
+                ["git", "-C", str(wiki_path), "add", "Home.md.pre-v3.bak"],
+                check=True,
+                capture_output=True,
+            )
+
             subprocess.run(
                 ["git", "-C", str(wiki_path), "commit", "-m", "wiki: backup pre-V3 Home.md"],
                 check=True,
                 capture_output=True,
             )
+        # else: subsequent runs skip the backup commit entirely
     except Exception as e:
         print(f"ERROR: Failed to backup Home.md: {e}", file=sys.stderr)
         sys.exit(1)
