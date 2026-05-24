@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: wiki-v3-adoption
 branch: hanf/wiki-v3-adoption
 plan: _mill/plan
@@ -32,4 +32,17 @@ plan-fix-r4  '2026-05-24T18:02:49Z'
 plan-review-r5  '2026-05-24T18:11:44Z'
 plan-fix-r5  '2026-05-24T18:11:44Z'
 planned  '2026-05-24T18:11:23Z'
+implementing  '2026-05-24T18:14:00Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: wiki-module-refactor
+    state: pending
+  - name: migration-script
+    state: pending
+  - name: v2-deletion-and-port
+    state: pending
 ```
