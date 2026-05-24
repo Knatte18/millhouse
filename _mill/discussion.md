@@ -33,7 +33,7 @@ This task reshapes V3 into the only wiki API, migrates every V2 call site, remov
 - Update `wiki/_store.py`:
   - First task assigned `id = 0` (when DB empty), then `max + 1`.
   - Methods accept `int | str` identifier (slug or id): `get_task`, `remove_task`, `set_phase`.
-  - `list_tasks_brief()` returns dicts with keys `{id, slug, group, brief, status}` (no `body`, no `title`).
+  - `list_tasks_brief()` returns dicts with keys `{id, slug, title, group, brief, status, has_proposal}`. `has_proposal` is computed server-side as `bool(task["body"])`. Only `body` is dropped — that's the heavy field. Title and the boolean proposal flag are kept because every picker / discovery call site needs them (`_spawn_core._prompt_numbered:236`, `_prompt_numbered_multi:344–345`, `prompt_merged_entry:558`, `discover_active_worktrees:216`, and downstream consumers in `millpy-claim.py:221`, `millpy-vscode.py:203`, `millpy-terminal.py:81`).
   - `list_tasks_full()` returns full dicts.
 - Update `wiki/_render.py`:
   - Render groups in alphabetical order `A`, `B`, `C`, …, `Z`, then ungrouped (`group is None`) last.
@@ -91,7 +91,7 @@ This task reshapes V3 into the only wiki API, migrates every V2 call site, remov
   - `_marker.py` (`:22` import, `:53` and `:97` `_tasks_md.parse(home_text)` → `wiki.list_tasks_brief()` then filter by slug or look up via `wiki.get_task(slug)` depending on what each call site does with the result).
 - **Delete `millpy-migrate-layout.py`** (`:49` import, `:230` `_tasks_md.parse(...)` plus the whole script): same shape as `millpy-migrate-config.py` — a one-shot migration for the old `hub/` + `worktrees/` layout that is long since done. Same disposition: delete script and any test that covers it. (If the user wants it kept, the plan should port `:230` to `wiki.list_tasks_brief()`; default is delete.)
 - Move `clone_or_init` from `_wiki.py` into `_setup.py` (its sole caller).
-- Delete `_wiki.py`, `_tasks_md.py`, `_sidebar.py` outright (no shim, no deprecation). The `Task` dataclass and `LOCKED_FOLD_PHASES` constant move into `wiki/__init__.py`.
+- Delete `_wiki.py`, `_tasks_md.py`, `_sidebar.py` outright (no shim, no deprecation). The `LOCKED_FOLD_PHASES` constant moves into `wiki/__init__.py`; the `Task` dataclass is deleted outright — all callers shift to the brief / full dict shapes returned by the wiki API.
 - Strip the `wiki/config.yaml` fallback from `_config.py:load_config` (lines 179, 188, 198–202). Only `mill-config.yaml` is consulted; missing → clean error.
 - Strip the duplicate `wiki/config.yaml` fallback in `_review_common.py` (the review-side config loader): runtime fallback code at lines ~1233–1270 (assignment at 1235–1239, presence check at 1248, merge at 1254–1257, stale warning at 1250, "using legacy" warning at 1260, missing-config error message at 1269); docstring mentions at lines 34 and 1211. Update the missing-config error to reference only `mill-config.yaml`.
 - Update `millpy-spawn.py:66–72`: drop the `wiki_cfg = resolve_wiki_path(repo_root) / "config.yaml"` branch and the missing-config guard's reference to `wiki_cfg`; only check `mill_cfg.exists()`.
@@ -168,8 +168,8 @@ This task reshapes V3 into the only wiki API, migrates every V2 call site, remov
 
 ### delete-v2-wiki-layer
 
-- Decision: `_wiki.py`, `_tasks_md.py`, `_sidebar.py` deleted in this task. No shim, no deprecation cycle.
-- Rationale: One squashed task; once the call-site migration is complete, the modules have no callers and adding a shim layer would just defer the cleanup.
+- Decision: `_wiki.py`, `_tasks_md.py`, `_sidebar.py` deleted in this task. No shim, no deprecation cycle. `LOCKED_FOLD_PHASES` moves to `wiki/__init__.py` (one constant, used by `millpy-fold.py`). `Task` dataclass is deleted outright — every caller switches to the dict shape returned by `wiki.list_tasks_brief()` / `wiki.list_tasks_full()` / `wiki.get_task()`.
+- Rationale: One squashed task; once the call-site migration is complete, the modules have no callers and adding a shim layer would just defer the cleanup. Keeping `Task` as a dataclass would require either re-exporting it from `wiki/__init__.py` (extra surface for zero callers — the wiki API returns dicts) or maintaining a translation layer (parse → dict → re-construct Task → … ); not worth it.
 - Rejected: deprecation cycle — would block the `wiki/config.yaml` purge and the `LOCKED_FOLD_PHASES` move to `wiki/__init__.py`.
 
 ### purge-wiki-config-yaml
@@ -391,3 +391,5 @@ This task reshapes V3 into the only wiki API, migrates every V2 call site, remov
 - **Q (review r3):** Six additional files (`millpy-inspect`, `millpy-status`, `millpy-terminal`, `millpy-vscode`, `_marker`, `millpy-migrate-layout`) plus `millpy-spawn:130` and the wider `_spawn_core` surface (Task type hints + parse + append_entry + remove_entry + claim) import or call `_tasks_md` and would break on its deletion. **A:** All added to scope. `millpy-migrate-layout.py` deleted as a one-shot migration of an already-completed layout transition (same disposition as `millpy-migrate-config.py`); other call sites port to `wiki.list_tasks_brief()` / `wiki.get_task()`.
 - **Q (review r3):** Is `millpy-fold.py:15` a Python constant or a docstring line? **A:** Docstring (inside the module docstring at lines 1–32). Updated the scope note to say "update docstring text", not "delete constant".
 - **Q (review r3):** `_parse.py` scope bullet lists only the `[s]`/`[abandoned]` fixes, but the test section requires three extended-parser features. **A:** Added the parenthetical layer-header recognition, multi-paragraph brief capture, and info-note heading skip to the `_parse.py` scope bullet so scope and tests align.
+- **Q (review r4):** Does `list_tasks_brief()` need `title` and `has_proposal`? Every picker / discovery call site uses them. **A:** Yes — brief shape becomes `{id, slug, title, group, brief, status, has_proposal}`. Only `body` is dropped (the heavy proposal-body field). `has_proposal` is computed server-side as `bool(body)`.
+- **Q (review r4):** Does the `Task` dataclass move to `wiki/__init__.py` or get deleted? **A:** Deleted outright. Only `LOCKED_FOLD_PHASES` moves. Callers shift to dicts.
