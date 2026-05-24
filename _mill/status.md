@@ -45,7 +45,9 @@ batches:
     implementer_session: 99a985a2-8cb9-4184-a64a-45786b88a99d
     start_sha: 1c44913daba630c0af3e728514b7a4509f0c8c88
   - name: migration-script
-    state: pending
+    state: running
+    implementer_session: ec5d9829-cc7c-4152-bc68-dfd2ffd03426
+    start_sha: ac1aac1e1326ceb53caa9af1e274b2e7d4589635
   - name: v2-deletion-and-port
     state: pending
 ```
