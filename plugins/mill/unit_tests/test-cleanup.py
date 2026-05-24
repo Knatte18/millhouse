@@ -761,6 +761,20 @@ def main() -> int:
             def _fake_remove_safe_18a(path, **kwargs):
                 remove_safe_calls_18a.append(path)
 
+            def _fake_set_phase_18a(wiki_path, slug, phase):
+                # Mock that updates Home.md to simulate wiki.set_phase behavior for testing
+                home_path = wiki_path / "Home.md"
+                if home_path.exists():
+                    content = home_path.read_text("utf-8")
+                    # Replace [slug] phase marker with new phase
+                    import re
+                    content = re.sub(
+                        rf"\[{re.escape(slug)}\](\s*\[[^\]]+\])?",
+                        f"[{slug}]" + (f" [{phase}]" if phase else ""),
+                        content,
+                    )
+                    home_path.write_text(content, "utf-8")
+
             plan_pr_merged = CleanupPlan(
                 to_remove_done=[],
                 to_remove_abandoned=[],
@@ -775,6 +789,7 @@ def main() -> int:
                 patch("mill_cleanup._worktree.remove_safe", side_effect=_fake_remove_safe_18a),
                 patch("mill_cleanup._junction.remove"),
                 patch("mill_cleanup._paths.resolve_container_path", return_value=tmp / "container"),
+                patch("mill_cleanup.wiki.set_phase", side_effect=_fake_set_phase_18a),
             ):
                 apply_plan(plan_pr_merged, wiki_path_pr, hub_root_pr, {}, cfg={"paths": {"status_md": "_mill/status.md"}})
 
