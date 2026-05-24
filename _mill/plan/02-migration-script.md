@@ -37,11 +37,11 @@ Batch-local decisions:
   - `plugins/mill/scripts/millpy-wiki-migrate.py`
 - **Deletes:** none
 - **Requirements:** Create a new top-level CLI script following the `millpy-*.py` argparse pattern. Single optional flag `--dry-run` (default: commit). Preconditions (stated in the script's `--help` text and at the top of `main()`):
-  - `mill-config.yaml` must exist at the hub repo root. After batch 3 cards 19-20 strip the `wiki/config.yaml` fallback, this is the only accepted config source; if `mill-config.yaml` is missing, `_paths.resolve_wiki_path` raises and the script aborts with a clean error referencing only `mill-config.yaml` (no `wiki/config.yaml` mention).
+  - The wiki path must be resolvable via `_paths.resolve_wiki_path` — either sibling discovery finds `<container>/wiki/`, or `paths.wiki:` is set in `<worktree>/.millhouse/config.local.yaml`. The migration script does NOT consult `mill-config.yaml` or `wiki/config.yaml` — `_paths.resolve_wiki_path` reads only `.millhouse/config.local.yaml` and otherwise uses sibling discovery (see `_paths.py:386` `resolve_wiki_path` docstring). The script aborts cleanly via the resolver's own exception on failure; no preflight check is needed.
   - The script is one-shot per wiki. Re-running after a successful first invocation is idempotent (no new daemon commit); see step 6 below for the aborted-prior-run guarantee.
 
   Behaviour:
-  1. Resolve `wiki_path` via `_paths.resolve_wiki_path(_paths.resolve_git_root())`. Abort with a clean error if the path does not exist or `mill-config.yaml` is missing (the resolver's existing exception is sufficient — do not re-wrap).
+  1. Resolve `wiki_path` via `_paths.resolve_wiki_path(_paths.resolve_git_root())`. Abort with a clean error if the resolver raises. Do not add a separate `mill-config.yaml`-exists check — the resolver's contract does not require it.
   2. Read `<wiki_path>/Home.md`. If missing, abort with a clean error.
   3. Parse with `wiki._parse.parse_home_md(home_text)` (the extended parser delivered in batch 1 card 3; pure string-in / list-out per card 3's explicit guarantee — does not initialise `_client` and cannot trigger daemon spawn). For each parsed task with a `[[slug]](proposal-slug.md)` link, read `<wiki_path>/proposal-{slug}.md` if it exists and attach the file's contents as the task's `body` field; missing proposal file -> `body = ""`.
   4. If `--dry-run`: print every parsed task dict (slug, title, group, brief, status, has-body flag) to stdout in ASCII, exit 0. No file writes, no commits, no daemon contact — assert this by not importing `wiki._client` from the module's top-level (lazy-import it only inside the commit-mode branch in step 5d).
