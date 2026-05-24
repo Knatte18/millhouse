@@ -1,4 +1,4 @@
-"""Wiki client — public read/write API with transparent daemon auto-start."""
+"""Wiki client — public structured task API with transparent daemon auto-start."""
 from __future__ import annotations
 
 import json
@@ -12,133 +12,318 @@ from pathlib import Path
 
 from wiki import (
     PROTOCOL_VERSION,
-    OP_READ,
-    OP_WRITE,
+    OP_UPSERT_TASK,
+    OP_UPSERT_TASKS_BATCH,
+    OP_SET_PHASE,
+    OP_REMOVE_TASK,
+    OP_MERGE_TASKS,
+    OP_GET_TASK,
+    OP_LIST_TASKS_BRIEF,
+    OP_LIST_TASKS_FULL,
+    OP_HEALTH,
+    LOCKED_FOLD_PHASES,
     FIELD_OP,
     FIELD_TOKEN,
-    FIELD_PATH,
     FIELD_OK,
-    FIELD_CONTENT,
-    FIELD_HASH,
     FIELD_ERROR_TYPE,
     FIELD_ERROR,
-    FIELD_FILES,
-    FIELD_MESSAGE,
-    FIELD_BASE_HASH,
-    FIELD_NEW_CONTENT,
     ERR_NOT_FOUND,
-    ERR_CONFLICT,
     ERR_PUSH_FAILED,
     WikiNotFoundError,
-    WikiConflictError,
     WikiPushError,
     WikiProtocolError,
     WikiStartupError,
 )
 
 SPAWN_TIMEOUT: int = 10
-CAS_RETRIES: int = 3  # Exported for callers; not used internally in _client.py
 _SERVER_MODULE: str = "wiki._server"
 
 
-def read(
+def upsert_task(
     wiki_path: Path,
-    rel_path: str,
+    slug: str,
     *,
-    refresh_interval: float = 10.0,
-    idle_timeout: int = 600,
-) -> tuple[str, str]:
-    """Read a file from the wiki with automatic daemon management.
+    title: str | None = None,
+    brief: str | None = None,
+    body: str | None = None,
+    group: str | None = None,
+    status: str | None = None,
+) -> dict:
+    """Upsert a task in the wiki.
 
     Args:
         wiki_path: Path to wiki clone root.
-        rel_path: Relative path within wiki.
-        refresh_interval: Seconds between lazy pulls.
-        idle_timeout: Seconds before idle-exit.
+        slug: Task slug (required).
+        title: Task title.
+        brief: Task brief.
+        body: Task body (proposal content).
+        group: Task group.
+        status: Task status.
 
     Returns:
-        Tuple of (content, hash).
+        The upserted task dict.
 
     Raises:
-        WikiNotFoundError: File not found.
-        WikiProtocolError: Protocol or message error.
-        WikiStartupError: Daemon failed to start.
-    """
-    host, port, token = _ensure_daemon(
-        wiki_path, idle_timeout=idle_timeout, refresh_interval=refresh_interval
-    )
-
-    req = {FIELD_OP: OP_READ, FIELD_TOKEN: token, FIELD_PATH: rel_path}
-
-    try:
-        resp = _connect_send_recv(host, port, req)
-    except OSError:
-        host, port, token = _ensure_daemon(
-            wiki_path, idle_timeout=idle_timeout, refresh_interval=refresh_interval
-        )
-        try:
-            resp = _connect_send_recv(host, port, req)
-        except OSError as e:
-            raise WikiStartupError("daemon connection failed after retry") from e
-
-    if resp.get(FIELD_OK):
-        return (resp.get(FIELD_CONTENT, ""), resp.get(FIELD_HASH, ""))
-
-    error_type = resp.get(FIELD_ERROR_TYPE)
-    if error_type == ERR_NOT_FOUND:
-        raise WikiNotFoundError(rel_path)
-
-    raise WikiProtocolError(resp.get(FIELD_ERROR, ""))
-
-
-def write_commit_push(
-    wiki_path: Path,
-    files: dict[str, tuple[str, str]],
-    message: str,
-    *,
-    refresh_interval: float = 10.0,
-    idle_timeout: int = 600,
-) -> None:
-    """Write files to the wiki with CAS and automatic daemon management.
-
-    Args:
-        wiki_path: Path to wiki clone root.
-        files: Mapping of rel_path -> (new_content, base_hash).
-        message: Commit message.
-        refresh_interval: Seconds between lazy pulls.
-        idle_timeout: Seconds before idle-exit.
-
-    Raises:
-        WikiConflictError: CAS conflict detected.
         WikiPushError: Git push failed.
         WikiProtocolError: Protocol or message error.
         WikiStartupError: Daemon failed to start.
     """
-    host, port, token = _ensure_daemon(
-        wiki_path, idle_timeout=idle_timeout, refresh_interval=refresh_interval
-    )
+    payload = {"slug": slug}
+    if title is not None:
+        payload["title"] = title
+    if brief is not None:
+        payload["brief"] = brief
+    if body is not None:
+        payload["body"] = body
+    if group is not None:
+        payload["group"] = group
+    if status is not None:
+        payload["status"] = status
 
-    files_payload = {
-        k: {FIELD_NEW_CONTENT: v[0], FIELD_BASE_HASH: v[1]} for k, v in files.items()
-    }
-    req = {
-        FIELD_OP: OP_WRITE,
-        FIELD_TOKEN: token,
-        FIELD_FILES: files_payload,
-        FIELD_MESSAGE: message,
-    }
+    host, port, token = _ensure_daemon(wiki_path)
+    req = {FIELD_OP: OP_UPSERT_TASK, FIELD_TOKEN: token, "payload": payload}
 
-    try:
-        resp = _connect_send_recv(host, port, req)
-    except OSError as e:
-        raise WikiStartupError("daemon connection failed") from e
+    resp = _connect_send_recv(host, port, req)
+
+    if resp.get(FIELD_OK):
+        return resp.get("task", {})
+
+    error_type = resp.get(FIELD_ERROR_TYPE)
+    if error_type == ERR_PUSH_FAILED:
+        raise WikiPushError(resp.get(FIELD_ERROR, ""))
+
+    raise WikiProtocolError(resp.get(FIELD_ERROR, ""))
+
+
+def upsert_tasks_batch(
+    wiki_path: Path,
+    tasks: list[dict],
+    *,
+    message: str | None = None,
+) -> None:
+    """Upsert multiple tasks in a batch.
+
+    Args:
+        wiki_path: Path to wiki clone root.
+        tasks: List of task dicts to upsert.
+        message: Optional commit message tail.
+
+    Raises:
+        WikiPushError: Git push failed.
+        WikiProtocolError: Protocol or message error.
+        WikiStartupError: Daemon failed to start.
+    """
+    payload = {"tasks": tasks}
+    if message is not None:
+        payload["message"] = message
+
+    host, port, token = _ensure_daemon(wiki_path)
+    req = {FIELD_OP: OP_UPSERT_TASKS_BATCH, FIELD_TOKEN: token, "payload": payload}
+
+    resp = _connect_send_recv(host, port, req)
 
     if resp.get(FIELD_OK):
         return
 
     error_type = resp.get(FIELD_ERROR_TYPE)
-    if error_type == ERR_CONFLICT:
-        raise WikiConflictError(resp.get(FIELD_ERROR, ""))
+    if error_type == ERR_PUSH_FAILED:
+        raise WikiPushError(resp.get(FIELD_ERROR, ""))
+
+    raise WikiProtocolError(resp.get(FIELD_ERROR, ""))
+
+
+def set_phase(
+    wiki_path: Path,
+    id_or_slug: int | str,
+    phase: str | None,
+) -> None:
+    """Set or clear a task's phase/status.
+
+    Args:
+        wiki_path: Path to wiki clone root.
+        id_or_slug: Task ID or slug.
+        phase: Phase string or None to clear.
+
+    Raises:
+        WikiNotFoundError: Task not found.
+        WikiPushError: Git push failed.
+        WikiProtocolError: Protocol or message error.
+        WikiStartupError: Daemon failed to start.
+    """
+    payload = {"id_or_slug": id_or_slug, "phase": phase}
+
+    host, port, token = _ensure_daemon(wiki_path)
+    req = {FIELD_OP: OP_SET_PHASE, FIELD_TOKEN: token, "payload": payload}
+
+    resp = _connect_send_recv(host, port, req)
+
+    if resp.get(FIELD_OK):
+        return
+
+    error_type = resp.get(FIELD_ERROR_TYPE)
+    if error_type == ERR_NOT_FOUND:
+        raise WikiNotFoundError(str(id_or_slug))
+    if error_type == ERR_PUSH_FAILED:
+        raise WikiPushError(resp.get(FIELD_ERROR, ""))
+
+    raise WikiProtocolError(resp.get(FIELD_ERROR, ""))
+
+
+def remove_task(
+    wiki_path: Path,
+    id_or_slug: int | str,
+) -> None:
+    """Remove a task from the wiki.
+
+    Args:
+        wiki_path: Path to wiki clone root.
+        id_or_slug: Task ID or slug.
+
+    Raises:
+        WikiNotFoundError: Task not found.
+        WikiPushError: Git push failed.
+        WikiProtocolError: Protocol or message error.
+        WikiStartupError: Daemon failed to start.
+    """
+    payload = {"id_or_slug": id_or_slug}
+
+    host, port, token = _ensure_daemon(wiki_path)
+    req = {FIELD_OP: OP_REMOVE_TASK, FIELD_TOKEN: token, "payload": payload}
+
+    resp = _connect_send_recv(host, port, req)
+
+    if resp.get(FIELD_OK):
+        return
+
+    error_type = resp.get(FIELD_ERROR_TYPE)
+    if error_type == ERR_NOT_FOUND:
+        raise WikiNotFoundError(str(id_or_slug))
+    if error_type == ERR_PUSH_FAILED:
+        raise WikiPushError(resp.get(FIELD_ERROR, ""))
+
+    raise WikiProtocolError(resp.get(FIELD_ERROR, ""))
+
+
+def get_task(
+    wiki_path: Path,
+    id_or_slug: int | str,
+) -> dict | None:
+    """Get a task by ID or slug.
+
+    Args:
+        wiki_path: Path to wiki clone root.
+        id_or_slug: Task ID or slug.
+
+    Returns:
+        Task dict or None if not found.
+
+    Raises:
+        WikiProtocolError: Protocol or message error.
+        WikiStartupError: Daemon failed to start.
+    """
+    payload = {"id_or_slug": id_or_slug}
+
+    host, port, token = _ensure_daemon(wiki_path)
+    req = {FIELD_OP: OP_GET_TASK, FIELD_TOKEN: token, "payload": payload}
+
+    resp = _connect_send_recv(host, port, req)
+
+    if resp.get(FIELD_OK):
+        return resp.get("task")
+
+    raise WikiProtocolError(resp.get(FIELD_ERROR, ""))
+
+
+def list_tasks_brief(wiki_path: Path) -> list[dict]:
+    """List all tasks with brief fields.
+
+    Args:
+        wiki_path: Path to wiki clone root.
+
+    Returns:
+        List of task dicts with keys {id, slug, title, group, brief, status, has_proposal}.
+
+    Raises:
+        WikiProtocolError: Protocol or message error.
+        WikiStartupError: Daemon failed to start.
+    """
+    payload = {}
+
+    host, port, token = _ensure_daemon(wiki_path)
+    req = {FIELD_OP: OP_LIST_TASKS_BRIEF, FIELD_TOKEN: token, "payload": payload}
+
+    resp = _connect_send_recv(host, port, req)
+
+    if resp.get(FIELD_OK):
+        return resp.get("tasks", [])
+
+    raise WikiProtocolError(resp.get(FIELD_ERROR, ""))
+
+
+def list_tasks_full(wiki_path: Path) -> list[dict]:
+    """List all tasks with all fields.
+
+    Args:
+        wiki_path: Path to wiki clone root.
+
+    Returns:
+        List of task dicts with all TinyDB fields.
+
+    Raises:
+        WikiProtocolError: Protocol or message error.
+        WikiStartupError: Daemon failed to start.
+    """
+    payload = {}
+
+    host, port, token = _ensure_daemon(wiki_path)
+    req = {FIELD_OP: OP_LIST_TASKS_FULL, FIELD_TOKEN: token, "payload": payload}
+
+    resp = _connect_send_recv(host, port, req)
+
+    if resp.get(FIELD_OK):
+        return resp.get("tasks", [])
+
+    raise WikiProtocolError(resp.get(FIELD_ERROR, ""))
+
+
+def merge_tasks(
+    wiki_path: Path,
+    *,
+    remove_slugs: list[str],
+    upsert: dict,
+    set_phase: tuple[str, str | None] | None = None,
+) -> dict:
+    """Perform atomic multi-step task operations: remove, upsert, set phase.
+
+    Args:
+        wiki_path: Path to wiki clone root.
+        remove_slugs: Slugs to remove.
+        upsert: Task dict to upsert.
+        set_phase: Tuple of (slug_or_id, phase) to set, or None.
+
+    Returns:
+        The upserted task dict.
+
+    Raises:
+        WikiPushError: Git push failed.
+        WikiProtocolError: Protocol or message error.
+        WikiStartupError: Daemon failed to start.
+    """
+    payload = {
+        "remove_slugs": remove_slugs,
+        "upsert": upsert,
+        "set_phase": set_phase,
+    }
+
+    host, port, token = _ensure_daemon(wiki_path)
+    req = {FIELD_OP: OP_MERGE_TASKS, FIELD_TOKEN: token, "payload": payload}
+
+    resp = _connect_send_recv(host, port, req)
+
+    if resp.get(FIELD_OK):
+        return resp.get("task", {})
+
+    error_type = resp.get(FIELD_ERROR_TYPE)
     if error_type == ERR_PUSH_FAILED:
         raise WikiPushError(resp.get(FIELD_ERROR, ""))
 
@@ -167,24 +352,20 @@ def health_check(wiki_path: Path) -> bool:
         if not all([host, port, token]):
             return False
 
-        req = {FIELD_OP: OP_READ, FIELD_TOKEN: token, FIELD_PATH: ""}
+        req = {FIELD_OP: OP_HEALTH, FIELD_TOKEN: token, "payload": {}}
         _connect_send_recv(host, port, req)
         return True
     except Exception:
         return False
 
 
-def _ensure_daemon(
-    wiki_path: Path, *, idle_timeout: int, refresh_interval: float
-) -> tuple[str, int, str]:
+def _ensure_daemon(wiki_path: Path) -> tuple[str, int, str]:
     """Ensure daemon is running and return (host, port, token).
 
     Checks state file, respawns if stale or version mismatch, waits for startup.
 
     Args:
         wiki_path: Path to wiki clone root.
-        idle_timeout: Seconds before idle-exit.
-        refresh_interval: Seconds between lazy pulls.
 
     Returns:
         Tuple of (host, port, token).
@@ -221,7 +402,7 @@ def _ensure_daemon(
         except Exception:
             pass
 
-    _spawn_server(wiki_path, idle_timeout, refresh_interval)
+    _spawn_server(wiki_path)
 
     deadline = time.monotonic() + SPAWN_TIMEOUT
     while time.monotonic() < deadline:
@@ -240,17 +421,13 @@ def _ensure_daemon(
     raise WikiStartupError("daemon did not start within timeout")
 
 
-def _spawn_server(
-    wiki_path: Path, idle_timeout: int, refresh_interval: float
-) -> None:
+def _spawn_server(wiki_path: Path) -> None:
     """Spawn wiki daemon in a detached process.
 
     Args:
         wiki_path: Path to wiki clone root.
-        idle_timeout: Seconds before idle-exit.
-        refresh_interval: Seconds between lazy pulls.
     """
-    cmd = [sys.executable, "-m", _SERVER_MODULE, str(wiki_path), str(idle_timeout), str(refresh_interval)]
+    cmd = [sys.executable, "-m", _SERVER_MODULE, str(wiki_path)]
 
     env = dict(os.environ)
     scripts_dir = str(Path(__file__).parent.parent)
