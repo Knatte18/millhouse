@@ -560,6 +560,7 @@ def main() -> int:
                 patch("mill_cleanup._junction.remove") as mock_junction_remove2,
                 patch("mill_cleanup._paths.resolve_container_path", return_value=tmp / "container"),
                 patch("mill_cleanup._paths.resolve_main_worktree_root", return_value=hub_root),
+                patch("mill_cleanup.wiki.set_phase"),
             ):
                 apply_plan(plan_stale, wiki_path, hub_root, {}, cfg={"paths": {"status_md": "_mill/status.md"}})
 
