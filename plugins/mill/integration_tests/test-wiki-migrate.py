@@ -382,10 +382,11 @@ def _test_idempotent_rerun(wiki_path: Path, task_repo: Path) -> bool:
 
 def main() -> None:
     """Run all migration tests."""
-    if not SCRATCH.exists():
-        SCRATCH.mkdir(parents=True)
+    # Clean up scratch directory at the start
+    if SCRATCH.exists():
+        _safe_rmtree.safe_rmtree(str(SCRATCH), allowed_root=str(SCRATCH), ignore_errors=True)
 
-    fixture_base = SCRATCH / "migrate-fixture"
+    SCRATCH.mkdir(parents=True, exist_ok=True)
 
     # Test 1: Dry-run
     print("=" * 60)
@@ -393,8 +394,6 @@ def main() -> None:
     print("=" * 60)
 
     test1_dir = SCRATCH / "test-dryrun"
-    if test1_dir.exists():
-        _safe_rmtree.safe_rmtree(str(test1_dir), allowed_root=str(test1_dir), ignore_errors=True)
     test1_dir.mkdir(parents=True, exist_ok=True)
 
     wiki_path, task_repo = _setup_wiki_fixture(test1_dir)
@@ -410,8 +409,6 @@ def main() -> None:
     print("=" * 60)
 
     test2_dir = SCRATCH / "test-commit"
-    if test2_dir.exists():
-        _safe_rmtree.safe_rmtree(str(test2_dir), allowed_root=str(test2_dir), ignore_errors=True)
     test2_dir.mkdir(parents=True, exist_ok=True)
 
     wiki_path, task_repo = _setup_wiki_fixture(test2_dir)
