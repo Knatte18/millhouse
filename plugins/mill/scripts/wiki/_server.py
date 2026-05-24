@@ -1,4 +1,4 @@
-"""Wiki daemon server — handles read/write requests with in-process caching and git operations."""
+"""Wiki daemon server — handles structured task operations with TinyDB and git integration."""
 import logging
 import logging.handlers
 import os
@@ -9,35 +9,32 @@ import sys
 from _daemon import DaemonBase
 from wiki import (
     FIELD_OP,
-    OP_READ,
-    OP_WRITE,
+    OP_UPSERT_TASK,
+    OP_UPSERT_TASKS_BATCH,
+    OP_SET_PHASE,
+    OP_REMOVE_TASK,
+    OP_MERGE_TASKS,
+    OP_GET_TASK,
+    OP_LIST_TASKS_BRIEF,
+    OP_LIST_TASKS_FULL,
+    OP_HEALTH,
     FIELD_OK,
-    FIELD_CONTENT,
-    FIELD_HASH,
     FIELD_ERROR_TYPE,
     FIELD_ERROR,
-    FIELD_PATH,
-    FIELD_FILES,
-    FIELD_MESSAGE,
-    FIELD_BASE_HASH,
-    FIELD_NEW_CONTENT,
     ERR_NOT_FOUND,
-    ERR_CONFLICT,
     ERR_PUSH_FAILED,
     ERR_PROTOCOL,
-    ERR_PATH,
-    WikiPathError,
     WikiPushError,
 )
 from wiki._render import render
 from wiki._store import Store
-from wiki._sync import path_guard, pull, atomic_write, commit_push
+from wiki._sync import pull, atomic_write, commit_push
 
 
 class WikiServer(DaemonBase):
-    """Wiki daemon server — in-process cache, lazy refresh, CAS writes."""
+    """Wiki daemon server — structured task operations with TinyDB."""
 
-    _protocol_version = 1
+    _protocol_version = 2
 
     def __init__(
         self,
@@ -86,186 +83,216 @@ class WikiServer(DaemonBase):
     def handle_request(self, msg: dict) -> dict:
         """Dispatch request on operation type."""
         op = msg.get(FIELD_OP)
-        if op == OP_READ:
-            return self._handle_read(msg)
-        elif op == OP_WRITE:
-            return self._handle_write(msg)
+        payload = msg.get("payload", {})
+
+        if op == OP_UPSERT_TASK:
+            return self._handle_upsert_task(payload)
+        elif op == OP_UPSERT_TASKS_BATCH:
+            return self._handle_upsert_tasks_batch(payload)
+        elif op == OP_SET_PHASE:
+            return self._handle_set_phase(payload)
+        elif op == OP_REMOVE_TASK:
+            return self._handle_remove_task(payload)
+        elif op == OP_GET_TASK:
+            return self._handle_get_task(payload)
+        elif op == OP_LIST_TASKS_BRIEF:
+            return self._handle_list_tasks_brief(payload)
+        elif op == OP_LIST_TASKS_FULL:
+            return self._handle_list_tasks_full(payload)
+        elif op == OP_MERGE_TASKS:
+            return self._handle_merge_tasks(payload)
+        elif op == OP_HEALTH:
+            return self._handle_health(payload)
         else:
             return {
                 FIELD_OK: False,
                 FIELD_ERROR_TYPE: ERR_PROTOCOL,
-                FIELD_ERROR: "unknown op",
+                FIELD_ERROR: f"unknown op: {op}",
             }
 
-    def _handle_read(self, msg: dict) -> dict:
-        """Handle read request with lazy refresh and caching."""
-        rel_path = msg.get(FIELD_PATH, "")
-
+    def _handle_upsert_task(self, payload: dict) -> dict:
+        """Handle upsert_task operation."""
         try:
-            path_guard(rel_path)
-        except WikiPathError as e:
+            task = self._store.upsert_task(payload)
+            self._render_and_commit_all(slug_for_msg=payload.get("slug", "task"))
+            return {FIELD_OK: True, "task": task}
+        except WikiPushError as e:
             return {
                 FIELD_OK: False,
-                FIELD_ERROR_TYPE: ERR_PATH,
+                FIELD_ERROR_TYPE: ERR_PUSH_FAILED,
+                FIELD_ERROR: str(e),
+            }
+        except Exception as e:
+            return {
+                FIELD_OK: False,
+                FIELD_ERROR_TYPE: ERR_PROTOCOL,
                 FIELD_ERROR: str(e),
             }
 
-        # Lazy refresh: check if we should pull
-        now = time.monotonic()
-        if now - self._last_pull > self._refresh_interval:
-            try:
-                pull(self._wiki_path)
-                # Repopulate TinyDB from pulled state
-                try:
-                    disk_content = (self._wiki_path / "Home.md").read_text("utf-8")
-                    self._store.set("Home.md", disk_content)
-                except FileNotFoundError:
-                    pass
-                self._last_pull = time.monotonic()
-            except WikiPushError as e:
-                self._log.warning("lazy refresh failed, serving cache: %s" % str(e))
-
-        # Try cache hit
-        hit = self._store.get(rel_path)
-        if hit is not None:
-            return {
-                FIELD_OK: True,
-                FIELD_CONTENT: hit[0],
-                FIELD_HASH: hit[1],
-            }
-
-        # Cache miss: read from disk
+    def _handle_upsert_tasks_batch(self, payload: dict) -> dict:
+        """Handle upsert_tasks_batch operation."""
         try:
-            content = (self._wiki_path / rel_path).read_text("utf-8")
-        except FileNotFoundError:
+            tasks = payload.get("tasks", [])
+            message = payload.get("message")
+            self._store.upsert_tasks_batch(tasks)
+            msg = message if message else "batch"
+            self._render_and_commit_all(slug_for_msg=msg)
+            return {FIELD_OK: True, "count": len(tasks)}
+        except WikiPushError as e:
+            return {
+                FIELD_OK: False,
+                FIELD_ERROR_TYPE: ERR_PUSH_FAILED,
+                FIELD_ERROR: str(e),
+            }
+        except Exception as e:
+            return {
+                FIELD_OK: False,
+                FIELD_ERROR_TYPE: ERR_PROTOCOL,
+                FIELD_ERROR: str(e),
+            }
+
+    def _handle_set_phase(self, payload: dict) -> dict:
+        """Handle set_phase operation."""
+        try:
+            id_or_slug = payload.get("id_or_slug")
+            phase = payload.get("phase")
+
+            self._store.set_phase(id_or_slug, phase)
+            self._render_and_commit_all(slug_for_msg=str(id_or_slug))
+            return {FIELD_OK: True}
+        except Exception as e:
             return {
                 FIELD_OK: False,
                 FIELD_ERROR_TYPE: ERR_NOT_FOUND,
-                FIELD_ERROR: rel_path,
+                FIELD_ERROR: str(e),
             }
 
-        # Store in cache and return
-        self._store.set(rel_path, content)
-        result = self._store.get(rel_path)
-        if result is None:
+    def _handle_remove_task(self, payload: dict) -> dict:
+        """Handle remove_task operation."""
+        try:
+            id_or_slug = payload.get("id_or_slug")
+            task = self._store.get_task(id_or_slug)
+            if task is None:
+                return {
+                    FIELD_OK: False,
+                    FIELD_ERROR_TYPE: ERR_NOT_FOUND,
+                    FIELD_ERROR: f"task not found: {id_or_slug}",
+                }
+            self._store.remove_task(id_or_slug)
+            self._render_and_commit_all(slug_for_msg=str(id_or_slug))
+            return {FIELD_OK: True}
+        except WikiPushError as e:
             return {
                 FIELD_OK: False,
-                FIELD_ERROR_TYPE: ERR_NOT_FOUND,
-                FIELD_ERROR: rel_path,
+                FIELD_ERROR_TYPE: ERR_PUSH_FAILED,
+                FIELD_ERROR: str(e),
             }
-        return {
-            FIELD_OK: True,
-            FIELD_CONTENT: result[0],
-            FIELD_HASH: result[1],
-        }
+        except Exception as e:
+            return {
+                FIELD_OK: False,
+                FIELD_ERROR_TYPE: ERR_PROTOCOL,
+                FIELD_ERROR: str(e),
+            }
 
-    def _handle_write(self, msg: dict) -> dict:
-        """Handle write request with CAS checking and TinyDB integration."""
-        files_payload = msg.get(FIELD_FILES, {})
-        message = msg.get(FIELD_MESSAGE, "wiki: update")
+    def _handle_get_task(self, payload: dict) -> dict:
+        """Handle get_task operation."""
+        try:
+            id_or_slug = payload.get("id_or_slug")
+            task = self._store.get_task(id_or_slug)
+            return {FIELD_OK: True, "task": task}
+        except Exception as e:
+            return {
+                FIELD_OK: False,
+                FIELD_ERROR_TYPE: ERR_PROTOCOL,
+                FIELD_ERROR: str(e),
+            }
 
-        # Step 1: Pull before write
+    def _handle_list_tasks_brief(self, payload: dict) -> dict:
+        """Handle list_tasks_brief operation."""
+        try:
+            tasks = self._store.list_tasks_brief()
+            return {FIELD_OK: True, "tasks": tasks}
+        except Exception as e:
+            return {
+                FIELD_OK: False,
+                FIELD_ERROR_TYPE: ERR_PROTOCOL,
+                FIELD_ERROR: str(e),
+            }
+
+    def _handle_list_tasks_full(self, payload: dict) -> dict:
+        """Handle list_tasks_full operation."""
+        try:
+            tasks = self._store.list_tasks_full()
+            return {FIELD_OK: True, "tasks": tasks}
+        except Exception as e:
+            return {
+                FIELD_OK: False,
+                FIELD_ERROR_TYPE: ERR_PROTOCOL,
+                FIELD_ERROR: str(e),
+            }
+
+    def _handle_health(self, payload: dict) -> dict:
+        """Handle health check operation."""
+        return {FIELD_OK: True}
+
+    def _handle_merge_tasks(self, payload: dict) -> dict:
+        """Handle merge_tasks operation."""
+        try:
+            remove_slugs = payload.get("remove_slugs", [])
+            upsert = payload.get("upsert", {})
+            set_phase_tuple = payload.get("set_phase")
+
+            task = self._store.merge_tasks(
+                remove_slugs=remove_slugs,
+                upsert=upsert,
+                set_phase=set_phase_tuple,
+            )
+            self._render_and_commit_all(slug_for_msg=upsert.get("slug", "merge"))
+            return {FIELD_OK: True, "task": task}
+        except WikiPushError as e:
+            return {
+                FIELD_OK: False,
+                FIELD_ERROR_TYPE: ERR_PUSH_FAILED,
+                FIELD_ERROR: str(e),
+            }
+        except Exception as e:
+            return {
+                FIELD_OK: False,
+                FIELD_ERROR_TYPE: ERR_PROTOCOL,
+                FIELD_ERROR: str(e),
+            }
+
+    def _render_and_commit_all(self, slug_for_msg: str) -> None:
+        """Pull, reload, render, write, and commit all files.
+
+        This is the canonical sequence for all mutating operations.
+        """
+        # Pull before render
         try:
             pull(self._wiki_path)
+            self._store.reload()
             self._last_pull = time.monotonic()
-        except WikiPushError as e:
-            return {
-                FIELD_OK: False,
-                FIELD_ERROR_TYPE: ERR_PUSH_FAILED,
-                FIELD_ERROR: str(e),
-            }
+        except WikiPushError:
+            pass
 
-        # Step 2: Repopulate TinyDB from pulled state
-        if "Home.md" in files_payload or self._store.get("Home.md") is None:
-            try:
-                disk_content = (self._wiki_path / "Home.md").read_text("utf-8")
-                self._store.set("Home.md", disk_content)
-            except FileNotFoundError:
-                pass
-
-        # Step 3: CAS check for each file
-        for rel_path, entry in files_payload.items():
-            try:
-                path_guard(rel_path)
-            except WikiPathError as e:
-                return {
-                    FIELD_OK: False,
-                    FIELD_ERROR_TYPE: ERR_PATH,
-                    FIELD_ERROR: str(e),
-                }
-
-            # Compute current_hash
-            if rel_path == "Home.md":
-                home_cached = self._store.get("Home.md")
-                current_hash = home_cached[1] if home_cached is not None else ""
-            else:
-                cached = self._store.get(rel_path)
-                if cached is not None:
-                    current_hash = cached[1]
-                else:
-                    full_path = self._wiki_path / rel_path
-                    try:
-                        disk_content = full_path.read_text("utf-8")
-                        current_hash = Store.content_hash(disk_content)
-                    except FileNotFoundError:
-                        current_hash = ""
-
-            # CAS check
-            base_hash = entry.get(FIELD_BASE_HASH, "")
-            if base_hash != current_hash:
-                return {
-                    FIELD_OK: False,
-                    FIELD_ERROR_TYPE: ERR_CONFLICT,
-                    FIELD_ERROR: f"conflict on {rel_path}",
-                }
-
-        # Step 4: atomic_write each client file
-        for rel_path, entry in files_payload.items():
-            new_content = entry.get(FIELD_NEW_CONTENT, "")
-            try:
-                atomic_write(self._wiki_path, rel_path, new_content)
-            except OSError as e:
-                return {
-                    FIELD_OK: False,
-                    FIELD_ERROR_TYPE: ERR_PUSH_FAILED,
-                    FIELD_ERROR: str(e),
-                }
-
-        # Step 5: Update TinyDB
-        for rel_path, entry in files_payload.items():
-            new_content = entry.get(FIELD_NEW_CONTENT, "")
-            self._store.set(rel_path, new_content)
-
-        # Step 6: Render
+        # Render all tasks
         rendered = render(self._store.all_tasks())
-        for rel_path, content in rendered.items():
-            try:
-                atomic_write(self._wiki_path, rel_path, content)
-            except OSError as e:
-                return {
-                    FIELD_OK: False,
-                    FIELD_ERROR_TYPE: ERR_PUSH_FAILED,
-                    FIELD_ERROR: str(e),
-                }
 
-        # Step 7: Commit
-        commit_paths = list(files_payload.keys()) + list(rendered.keys()) + ["tasks.json"]
+        # Atomic write each rendered file
+        for rel_path, content in rendered.items():
+            atomic_write(self._wiki_path, rel_path, content)
+
+        # Commit and push
+        commit_paths = list(rendered.keys()) + ["tasks.json"]
         commit_paths = list(dict.fromkeys(commit_paths))
+        message = f"wiki: {slug_for_msg}"
+
         try:
             commit_push(self._wiki_path, commit_paths, message)
-        except WikiPushError as e:
-            return {
-                FIELD_OK: False,
-                FIELD_ERROR_TYPE: ERR_PUSH_FAILED,
-                FIELD_ERROR: str(e),
-            }
-
-        # Step 8: Invalidate non-Home.md cache entries
-        for rel_path in files_payload.keys():
-            if rel_path != "Home.md":
-                self._store.invalidate(rel_path)
-
-        return {FIELD_OK: True}
+            # Reload after successful push to pick up any cross-host changes from rebase
+            self._store.reload()
+        except WikiPushError:
+            raise
 
     def _ensure_gitignore(self) -> None:
         """Ensure .gitignore contains daemon artifact entries."""
