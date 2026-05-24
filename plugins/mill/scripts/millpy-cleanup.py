@@ -633,7 +633,7 @@ def main() -> None:
 
     home_text = (wiki_path / "Home.md").read_text("utf-8")
     home_tasks = _tasks_md.parse(home_text)
-    junctions_cfg = _wiki.read_junctions(git_root)
+    junctions_cfg = _junction.read_junctions(git_root)
 
     active_wt_list = _spawn_core.discover_active_worktrees(
         container_path / "wts", home_tasks, branch_prefix
