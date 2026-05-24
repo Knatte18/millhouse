@@ -387,7 +387,7 @@ def main() -> None:
     print("=" * 60)
 
     if fixture_base.exists():
-        _safe_rmtree.safe_rmtree(str(fixture_base))
+        _safe_rmtree.safe_rmtree(str(fixture_base), allowed_root=str(fixture_base), ignore_errors=True)
     fixture_base.mkdir(parents=True)
 
     wiki_path, task_repo = _setup_wiki_fixture(fixture_base)
@@ -403,7 +403,7 @@ def main() -> None:
     print("=" * 60)
 
     if fixture_base.exists():
-        _safe_rmtree.safe_rmtree(str(fixture_base))
+        _safe_rmtree.safe_rmtree(str(fixture_base), allowed_root=str(fixture_base), ignore_errors=True)
     fixture_base.mkdir(parents=True)
 
     wiki_path, task_repo = _setup_wiki_fixture(fixture_base)
