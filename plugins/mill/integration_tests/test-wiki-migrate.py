@@ -39,14 +39,20 @@ import _safe_rmtree  # noqa: E402
 
 def _git(args: list[str], *, cwd: Path) -> subprocess.CompletedProcess:
     """Run a git command in the given directory."""
-    return subprocess.run(
+    result = subprocess.run(
         ["git"] + args,
         cwd=str(cwd),
-        check=True,
         capture_output=True,
         text=True,
         encoding="utf-8",
     )
+    if result.returncode != 0:
+        print(f"GIT ERROR: {' '.join(['git'] + args)}", file=sys.stderr)
+        print(f"CWD: {cwd}", file=sys.stderr)
+        print(f"STDOUT: {result.stdout}", file=sys.stderr)
+        print(f"STDERR: {result.stderr}", file=sys.stderr)
+        result.check_returncode()
+    return result
 
 
 def _setup_wiki_fixture(container: Path) -> tuple[Path, Path]:
