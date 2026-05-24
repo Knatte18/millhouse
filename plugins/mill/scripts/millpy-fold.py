@@ -32,13 +32,14 @@ Exit codes:
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 
 import _gh_issues
-import _sidebar
-import _tasks_md
-import _wiki
+from wiki import _client as wiki, LOCKED_FOLD_PHASES
 from _paths import resolve_git_root, resolve_wiki_path
+
+_SLUG_RE = re.compile(r"^[a-z][a-z0-9-]*$")
 
 
 def _build_fold_line(issue_dict: dict | None, scope_text: str | None) -> str:
@@ -73,7 +74,7 @@ def main(argv: list[str] | None = None, *, _fetch_one=None, _close_with_comment=
     args = parser.parse_args(argv)
 
     target_slug = args.target_slug
-    if not _tasks_md._SLUG_RE.match(target_slug):
+    if not _SLUG_RE.match(target_slug):
         raise SystemExit(f"Invalid slug {target_slug!r}: must match [a-z][a-z0-9-]*")
 
     git_root = resolve_git_root()
@@ -84,64 +85,56 @@ def main(argv: list[str] | None = None, *, _fetch_one=None, _close_with_comment=
 
     issue = None
 
-    with _wiki.wiki_lock(wiki_path, target_slug):
-        home_path = wiki_path / "Home.md"
-        if not home_path.exists():
-            raise SystemExit(f"Wiki not found at {wiki_path}.")
+    home_path = wiki_path / "Home.md"
+    if not home_path.exists():
+        raise SystemExit(f"Wiki not found at {wiki_path}.")
 
-        home_text = home_path.read_text(encoding="utf-8")
-        tasks = _tasks_md.parse(home_text)
-        target_task = next((t for t in tasks if t.slug == target_slug), None)
-        if target_task is None:
-            raise SystemExit(f"Slug {target_slug!r} not found in Home.md.")
+    tasks = wiki.list_tasks_brief(wiki_path)
+    target_task = next((t for t in tasks if t["slug"] == target_slug), None)
+    if target_task is None:
+        raise SystemExit(f"Slug {target_slug!r} not found in Home.md.")
 
-        phase = target_task.phase
-        if phase in _tasks_md.LOCKED_FOLD_PHASES:
-            raise SystemExit(
-                f"Cannot fold into {target_slug!r}: task is [{phase}]. "
-                "Plan is frozen — scope additions silently invalidate it."
-            )
+    phase = target_task["status"]
+    if phase in LOCKED_FOLD_PHASES:
+        raise SystemExit(
+            f"Cannot fold into {target_slug!r}: task is [{phase}]. "
+            "Plan is frozen — scope additions silently invalidate it."
+        )
 
-        if args.issue is not None:
-            try:
-                issue = fetch_one_fn(args.issue, git_root=git_root)
-            except _gh_issues.GhError as exc:
-                raise SystemExit(str(exc)) from exc
+    if args.issue is not None:
+        try:
+            issue = fetch_one_fn(args.issue, git_root=git_root)
+        except _gh_issues.GhError as exc:
+            raise SystemExit(str(exc)) from exc
 
-            draft_line = _build_fold_line(issue, None)
+        draft_line = _build_fold_line(issue, None)
 
-            if sys.stdin.isatty():
-                for _attempt in range(3):
-                    print(draft_line)
-                    choice = input("1) Use as-is (Recommended) / 2) Edit / 3) Abort\n> ").strip()
-                    if choice == "1":
-                        fold_line = draft_line
-                        break
-                    elif choice == "2":
-                        new_title = input("Enter new title: ").strip()
-                        issue = dict(issue)
-                        issue["title"] = new_title
-                        fold_line = _build_fold_line(issue, None)
-                        break
-                    elif choice == "3":
-                        raise SystemExit("Aborted by user.")
-                else:
+        if sys.stdin.isatty():
+            for _attempt in range(3):
+                print(draft_line)
+                choice = input("1) Use as-is (Recommended) / 2) Edit / 3) Abort\n> ").strip()
+                if choice == "1":
+                    fold_line = draft_line
+                    break
+                elif choice == "2":
+                    new_title = input("Enter new title: ").strip()
+                    issue = dict(issue)
+                    issue["title"] = new_title
+                    fold_line = _build_fold_line(issue, None)
+                    break
+                elif choice == "3":
                     raise SystemExit("Aborted by user.")
             else:
-                fold_line = draft_line
+                raise SystemExit("Aborted by user.")
         else:
-            fold_line = _build_fold_line(None, args.scope)
+            fold_line = draft_line
+    else:
+        fold_line = _build_fold_line(None, args.scope)
 
-        new_home_text = _tasks_md.append_to_body(home_text, target_slug, fold_line)
-        home_path.write_text(new_home_text, encoding="utf-8")
-        _sidebar.regenerate(wiki_path)
-
-        if args.issue is not None:
-            commit_msg = f"fold #{args.issue} into {target_slug}"
-        else:
-            commit_msg = f"fold scope item into {target_slug}"
-
-        _wiki.write_commit_push(wiki_path, ["Home.md", "_Sidebar.md"], commit_msg, slug=target_slug)
+    # Append fold line to the brief field
+    current_brief = target_task.get("brief") or ""
+    new_brief = ((current_brief + "\n" + fold_line) if current_brief else fold_line)
+    wiki.upsert_task(wiki_path, target_slug, brief=new_brief)
 
     if args.issue is not None:
         try:
