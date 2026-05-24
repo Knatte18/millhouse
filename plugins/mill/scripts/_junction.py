@@ -29,13 +29,21 @@ Public API:
 
     resolve_target(template, tokens)
         Substitute ``<name>`` tokens in a junction target template. Used by
-        mill-setup and mill-spawn to turn entries from the wiki config's
+        mill-setup and mill-spawn to turn entries from the ``mill-config.yaml``
         ``junctions:`` block into concrete paths.
 
     has_slug_token(template)
         True if a target template contains the ``<SLUG>`` task-variable.
         Used to decide scope: present → per-worktree (mill-spawn), absent →
         hub/worktree-wide (mill-setup).
+
+    read_junctions(hub_root)
+        Read the ``junctions:`` block from ``<hub_root>/mill-config.yaml``.
+        Returns a dict mapping junction-path to unresolved target template.
+
+    read_hardlinks(hub_root)
+        Read the ``hardlinks:`` block from ``<hub_root>/mill-config.yaml``.
+        Returns a dict mapping link-path to unresolved target template.
 """
 from __future__ import annotations
 
@@ -44,10 +52,63 @@ import re
 import sys
 from pathlib import Path
 
+import yaml
+
 import _subprocess_util
 
 
 _TOKEN_RE = re.compile(r"<([A-Za-z][A-Za-z0-9_]*)>")
+
+_JUNCTION_DEFAULTS: dict[str, str] = {
+    ".wiki": "<WIKI_PATH>",
+}
+
+_HARDLINK_DEFAULTS: dict[str, str] = {}  # no hardlinks unless configured
+
+
+def read_junctions(hub_root: Path) -> dict[str, str]:
+    """Read the ``junctions:`` block from ``<hub_root>/mill-config.yaml``.
+
+    Returns an ordered dict mapping junction-path to unresolved target
+    template. Tokens in the target are NOT substituted here — callers pass
+    the raw template through ``resolve_target`` with the token map
+    appropriate to their scope (mill-setup lacks ``<SLUG>``, mill-spawn
+    has it).
+
+    If ``<hub_root>/mill-config.yaml`` does not exist or lacks the
+    junctions block, returns the ``_JUNCTION_DEFAULTS`` fallback.
+    """
+    mill_cfg_path = hub_root / "mill-config.yaml"
+    if mill_cfg_path.exists():
+        cfg = yaml.safe_load(mill_cfg_path.read_text(encoding="utf-8")) or {}
+        raw = cfg.get("junctions")
+        if raw:
+            return {str(k): str(v) for k, v in raw.items()}
+        return dict(_JUNCTION_DEFAULTS)
+
+    return dict(_JUNCTION_DEFAULTS)
+
+
+def read_hardlinks(hub_root: Path) -> dict[str, str]:
+    """Read the ``hardlinks:`` block from ``<hub_root>/mill-config.yaml``.
+
+    Returns an ordered dict mapping link-path to unresolved target template.
+    Tokens in the target are NOT substituted here — callers pass the raw
+    template through ``resolve_target`` with the appropriate token map.
+
+    If ``<hub_root>/mill-config.yaml`` does not exist or lacks the
+    hardlinks block, returns an empty dict. An explicit null (hardlinks: null)
+    also yields an empty dict.
+    """
+    mill_cfg_path = hub_root / "mill-config.yaml"
+    if mill_cfg_path.exists():
+        cfg = yaml.safe_load(mill_cfg_path.read_text(encoding="utf-8")) or {}
+        raw = cfg.get("hardlinks")
+        if raw:
+            return {str(k): str(v) for k, v in raw.items()}
+        return dict(_HARDLINK_DEFAULTS)
+
+    return dict(_HARDLINK_DEFAULTS)
 
 
 def resolve_target(template: str, tokens: dict[str, str]) -> str:
@@ -235,8 +296,8 @@ def strip_all_in_worktree(worktree_path: Path, junctions_cfg: dict[str, str]) ->
 
     Args:
         worktree_path: Absolute path to the worktree being torn down.
-        junctions_cfg: The ``junctions:`` block from ``wiki/config.yaml``,
-            as returned by ``_wiki.read_junctions``. Caller passes this
+        junctions_cfg: The ``junctions:`` block from ``mill-config.yaml``,
+            as returned by ``read_junctions``. Caller passes this
             in to avoid a circular import on ``_wiki``.
 
     Returns:
