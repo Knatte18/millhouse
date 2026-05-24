@@ -70,8 +70,17 @@ def _make_container_form_worktree(
     )
 
     (worktree_path / ".keep").write_text("", encoding="utf-8")
+
+    # Create mill-config.yaml in the worktree root (serves as the hub root for this test)
+    # Add it on main branch so it's available in all branches
+    mill_config = worktree_path / "mill-config.yaml"
+    mill_config.write_text(
+        "spawn:\n  branch_prefix: \"hanf/\"\nroles:\n  discussion-review:\n    holistic:\n      reviewer: test_stub\n",
+        encoding="utf-8",
+    )
+
     subprocess.run(
-        ["git", "-C", str(worktree_path), "add", ".keep"],
+        ["git", "-C", str(worktree_path), "add", ".keep", "mill-config.yaml"],
         check=True,
         capture_output=True,
     )
@@ -232,7 +241,7 @@ def test_launcher_accepts_valid_task_worktree() -> None:
                 sys.executable,
                 str(MILLPY_BG_PATH),
                 "--slug",
-                "test",
+                "test-task",
                 "--",
                 sys.executable,
                 "-c",
