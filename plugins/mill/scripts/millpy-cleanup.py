@@ -18,13 +18,11 @@ import _inplace
 import _junction
 import _marker
 import _paths
-import _sidebar
 import _spawn_core
 import _status
 import _subprocess_util
-import _tasks_md
-import _wiki
 import _worktree
+from wiki import _client as wiki
 from _config import load_config as _load_config
 
 
@@ -72,7 +70,7 @@ def _scan_orphan_portals(portals_dir: Path, active_slugs: set[str]) -> list[Path
 
 def build_plan(
     active_worktrees: list[Path],
-    home_tasks: list[_tasks_md.Task],
+    home_tasks: list[dict],
     wiki_path: Path,
     hub_root: Path,
     *,
@@ -518,11 +516,7 @@ def _apply_pr_reap_record(
             ["git", "-C", str(hub_root), "push", "origin", f"archive/{record.slug}"]
         )
 
-    home_path = wiki_path / "Home.md"
-    home_text = home_path.read_text(encoding="utf-8")
-    home_text = _tasks_md.set_phase(home_text, record.slug, "done")
-    home_path.write_text(home_text, encoding="utf-8")
-    wiki_relative_paths.append("Home.md")
+    wiki.set_phase(wiki_path, record.slug, "done")
 
     mode, task_branch = _resolve_inplace_mode(record, hub_root, wiki_path, cfg)
     if mode == "abort":
@@ -591,22 +585,8 @@ def apply_plan(
         print(f"[cleanup] removed dangling .active junction: {active_link}", file=sys.stderr)
 
     if plan.to_reset_home:
-        home_text = (wiki_path / "Home.md").read_text("utf-8")
         for slug in plan.to_reset_home:
-            home_text = _tasks_md.set_phase(home_text, slug, None)
-        (wiki_path / "Home.md").write_text(home_text, "utf-8")
-        wiki_relative_paths.append("Home.md")
-
-    if wiki_relative_paths:
-        _sidebar.regenerate(wiki_path)
-        wiki_relative_paths.append("_Sidebar.md")
-        _wiki.write_commit_push(
-            wiki_path,
-            wiki_relative_paths,
-            f"chore: cleanup -- {len(plan.to_remove_done)} done, "
-            f"{len(plan.to_remove_abandoned)} abandoned, {len(plan.to_reap_pr)} pr-reaped",
-            slug="mill-cleanup",
-        )
+            wiki.set_phase(wiki_path, slug, None)
 
 
 def main() -> None:
@@ -623,16 +603,12 @@ def main() -> None:
     # Hub check: if current branch is an active task branch, refuse to run.
     _br = _subprocess_util.run(["git", "-C", str(Path.cwd()), "branch", "--show-current"])
     _cur_branch = _br.stdout.strip() if _br.returncode == 0 else ""
-    _home_md = wiki_path / "Home.md"
-    _home_for_check = _tasks_md.parse(_home_md.read_text(encoding="utf-8")) if _home_md.exists() else []
     _check_slug = _cur_branch.removeprefix(branch_prefix) if branch_prefix and _cur_branch.startswith(branch_prefix) else (_cur_branch if not branch_prefix else "")
-    if _check_slug and any(t.slug == _check_slug and t.phase == "active" for t in _home_for_check):
+
+    home_tasks = wiki.list_tasks_brief(wiki_path)
+
+    if _check_slug and any(t["slug"] == _check_slug and t["status"] == "active" for t in home_tasks):
         sys.exit("Error: mill-cleanup must run from the hub, not from a worktree.")
-
-    _wiki.sync_pull(wiki_path, slug="mill-cleanup")
-
-    home_text = (wiki_path / "Home.md").read_text("utf-8")
-    home_tasks = _tasks_md.parse(home_text)
     junctions_cfg = _junction.read_junctions(git_root)
 
     active_wt_list = _spawn_core.discover_active_worktrees(
@@ -650,8 +626,7 @@ def main() -> None:
         print("\nDry-run. Pass --apply to execute.")
         sys.exit(0)
 
-    with _wiki.wiki_lock(wiki_path, "mill-cleanup"):
-        apply_plan(plan, wiki_path, git_root, junctions_cfg, cfg=cfg)
+    apply_plan(plan, wiki_path, git_root, junctions_cfg, cfg=cfg)
 
     print(
         f"\nDone: {len(plan.to_remove_done)} done, "
