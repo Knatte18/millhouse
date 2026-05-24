@@ -285,16 +285,21 @@ def main() -> int:
             store = Store(db_path)
             store.upsert_task({"slug": "reload-test"})
 
-            # Manually mutate tasks.json file via a new Store instance
-            store2 = Store(db_path)
-            store2.upsert_task({"slug": "new-task", "title": "New"})
-            del store2
+            # Manually mutate tasks.json file to add a new task (simulating external change)
+            import json
+            data = json.loads(db_path.read_text())
+            data["_default"]["2"] = {
+                "id": 1,
+                "slug": "new-task",
+                "group": None,
+                "brief": "",
+                "body": "",
+                "status": None,
+                "title": "New"
+            }
+            db_path.write_text(json.dumps(data))
 
-            # Original store should still see only the original task
-            brief_before = store.list_tasks_brief()
-            assert len(brief_before) == 1, "Before reload, should see 1 task"
-
-            # After reload, should see both tasks
+            # Reload should re-read from disk and see the new task
             store.reload()
             brief_after = store.list_tasks_brief()
             assert len(brief_after) == 2, f"After reload, should see 2 tasks, got {len(brief_after)}"

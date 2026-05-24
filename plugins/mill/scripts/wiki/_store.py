@@ -6,12 +6,11 @@ from tinydb import TinyDB, Query
 
 
 def _resolve_id_or_slug(db: TinyDB, identifier: int | str) -> int | None:
+    query = Query()
     if isinstance(identifier, int):
-        query = Query()
-        doc = db.get(doc_id=identifier)
-        return identifier if doc else None
+        doc = db.get(query.id == identifier)
+        return doc.doc_id if doc else None
     else:
-        query = Query()
         doc = db.get(query.slug == identifier)
         return doc.doc_id if doc else None
 
@@ -60,12 +59,13 @@ class Store:
     def set_phase(self, identifier: int | str, phase: str | None) -> None:
         doc_id = _resolve_id_or_slug(self._db, identifier)
         if doc_id is not None:
-            task = self._db.get(doc_id=doc_id)
+            task = dict(self._db.get(doc_id=doc_id))
             if phase is None:
                 task.pop("status", None)
             else:
                 task["status"] = phase
-            self._db.update(task, doc_ids=[doc_id])
+            self._db.remove(doc_ids=[doc_id])
+            self._db.insert(task)
 
     def list_tasks_brief(self) -> list[dict]:
         result = []
