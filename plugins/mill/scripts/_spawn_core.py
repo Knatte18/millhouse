@@ -180,7 +180,7 @@ def discover_active_worktrees(
         List of ``(path, slug, task_title)`` triples, one per matched worktree.
         Empty list when no matches.
     """
-    slugs_in_home = {t.slug: t for t in home_tasks}
+    slugs_in_home = {t["slug"]: t for t in home_tasks}
     results: list[tuple[Path, str, str]] = []
 
     argv = ["git"]
@@ -213,7 +213,7 @@ def discover_active_worktrees(
                         )
                         task = slugs_in_home.get(slug)
                         if task is not None:
-                            results.append((current_path, slug, task.title))
+                            results.append((current_path, slug, task["title"]))
             current_path = None
             current_branch = None
             continue
@@ -232,8 +232,8 @@ def _prompt_numbered(candidates: list[_tasks_md.Task]) -> Optional[_tasks_md.Tas
     """Read a 1-indexed choice from stdin; return the chosen Task or None."""
     print("Pick a task:", file=sys.stderr)
     for i, t in enumerate(candidates, start=1):
-        marker = " (proposal)" if t.has_proposal else ""
-        print(f"  {i}) {t.title} [{t.slug}]{marker}", file=sys.stderr)
+        marker = " (proposal)" if t["has_proposal"] else ""
+        print(f"  {i}) {t["title"]} [{t["slug"]}]{marker}", file=sys.stderr)
     try:
         raw = input("Pick a task number: ")
     except EOFError:
@@ -289,7 +289,7 @@ def pick_task_single(
     """
     if slug is not None:
         matched = next(
-            (t for t in tasks if t.slug == slug and t.phase in (None, "s")),
+            (t for t in tasks if t["slug"] == slug and t["phase"] in (None, "s")),
             None,
         )
         if matched is None:
@@ -299,12 +299,12 @@ def pick_task_single(
         return matched
 
     # Fast-path: first [s] task in file order.
-    fast = next((t for t in tasks if t.phase == "s"), None)
+    fast = next((t for t in tasks if t["phase"] == "s"), None)
     if fast is not None:
         return fast
 
     # Numbered picker: unmarked tasks only.
-    unmarked = [t for t in tasks if t.phase is None]
+    unmarked = [t for t in tasks if t["phase"] is None]
     if not unmarked:
         raise BacklogEmpty(
             "No pickable tasks. Mark a task [s] or leave one unmarked "
@@ -341,8 +341,8 @@ def _prompt_numbered_multi(
         file=sys.stderr,
     )
     for i, t in enumerate(candidates, start=1):
-        marker = " (proposal)" if t.has_proposal else ""
-        print(f"  {i}) {t.title} [{t.slug}]{marker}", file=sys.stderr)
+        marker = " (proposal)" if t["has_proposal"] else ""
+        print(f"  {i}) {t["title"]} [{t["slug"]}]{marker}", file=sys.stderr)
 
     for _ in range(3):
         try:
@@ -418,7 +418,7 @@ def pick_task_single_or_multi(
     # --slug short-circuit: bypass picker entirely, always single.
     if slug is not None:
         matched = next(
-            (t for t in tasks if t.slug == slug and t.phase in (None, "s")),
+            (t for t in tasks if t["slug"] == slug and t["phase"] in (None, "s")),
             None,
         )
         if matched is None:
@@ -428,12 +428,12 @@ def pick_task_single_or_multi(
         return ("single", matched, [])
 
     # Fast-path: first [s] task, always single.
-    fast = next((t for t in tasks if t.phase == "s"), None)
+    fast = next((t for t in tasks if t["phase"] == "s"), None)
     if fast is not None:
         return ("single", fast, [])
 
     # Numbered multi-select: unmarked tasks only.
-    candidates = [t for t in tasks if t.phase is None]
+    candidates = [t for t in tasks if t["phase"] is None]
     if not candidates:
         return ("empty", None, [])
 
@@ -516,7 +516,7 @@ def multi_select_groom_then_claim(
     # Re-parse after commit to return an authoritative Task object.
     new_text = home_path.read_text(encoding="utf-8")
     parsed_tasks = _tasks_md.parse(new_text)
-    merged_task = next((t for t in parsed_tasks if t.slug == merged_slug), None)
+    merged_task = next((t for t in parsed_tasks if t["slug"] == merged_slug), None)
     if merged_task is None:
         raise RuntimeError(
             f"merged task {merged_slug!r} not found after commit — parse failed"
@@ -555,7 +555,7 @@ def prompt_merged_entry(
     # Print source task titles so the user knows what they are merging.
     print("Merging these tasks:", file=sys.stderr)
     for t in source_tasks:
-        print(f"  - {t.title} [{t.slug}]", file=sys.stderr)
+        print(f"  - {t["title"]} [{t["slug"]}]", file=sys.stderr)
 
     # Collect merged title: free-text, must be non-empty.
     merged_title: Optional[str] = None

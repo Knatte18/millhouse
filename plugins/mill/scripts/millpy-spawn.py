@@ -147,7 +147,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if mode == "multi":
         # Collect merged entry from the user, then atomically groom+claim.
-        source_slugs = [t.slug for t in picked]
+        source_slugs = [t["slug"] for t in picked]
         merged_title, merged_slug, body_for_home, has_proposal, proposal_body = (
             _spawn_core.prompt_merged_entry(picked)
         )

@@ -53,7 +53,7 @@ def _collect(git_root: Path, slug_filter: str | None) -> list[dict]:
     if home_md.exists():
         home_tasks_list = _tasks_md.parse(home_md.read_text(encoding="utf-8"))
         for task in home_tasks_list:
-            home_marker_map[task.slug] = task.phase if task.phase is not None else "unclaimed"
+            home_marker_map[task["slug"]] = task["phase"] if task["phase"] is not None else "unclaimed"
 
     # Active worktrees: (path, slug, title) triples from <container>/wts/
     active_worktree_list = _spawn_core.discover_active_worktrees(

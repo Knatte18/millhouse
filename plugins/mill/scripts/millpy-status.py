@@ -30,7 +30,7 @@ def _build_rows(git_root: Path) -> list[dict]:
     home_md = wiki / "Home.md"
     if home_md.exists():
         home_tasks_list = _tasks_md.parse(home_md.read_text(encoding="utf-8"))
-        home_tasks = {t.slug: t for t in home_tasks_list}
+        home_tasks = {t["slug"]: t for t in home_tasks_list}
     else:
         home_tasks_list = []
         home_tasks = {}
@@ -80,7 +80,7 @@ def _build_rows(git_root: Path) -> list[dict]:
         # marker
         if slug in home_tasks:
             ht = home_tasks[slug]
-            marker = ht.phase if ht.phase is not None else "unclaimed"
+            marker = ht["phase"] if ht["phase"] is not None else "unclaimed"
         else:
             marker = "missing"
 

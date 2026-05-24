@@ -97,7 +97,7 @@ def build_plan(
             ``_paths.resolve_container_path(hub_root)`` from the caller.
             When ``None``, orphan worktree detection is skipped.
     """
-    marker_by_slug: dict[str, str | None] = {t.slug: t.phase for t in home_tasks}
+    marker_by_slug: dict[str, str | None] = {t["slug"]: t["phase"] for t in home_tasks}
     active_slugs: set[str] = set()
 
     to_remove_done: list[SlugRecord] = []
@@ -199,9 +199,9 @@ def build_plan(
 
     # Orphan Home.md marker: [active]/[ready-to-merge]/[pr-pending] slug with no active worktree.
     for task in home_tasks:
-        if task.phase in ("active", "ready-to-merge", "pr-pending") and task.slug not in active_slugs:
+        if task["phase"] in ("active", "ready-to-merge", "pr-pending") and task["slug"] not in active_slugs:
             to_report.append(
-                f"orphan Home.md marker: {task.slug} is [{task.phase}] but has no "
+                f"orphan Home.md marker: {task["slug"]} is [{task["phase"]}] but has no "
                 f"active worktree"
             )
 
