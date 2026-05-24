@@ -189,16 +189,16 @@ def _make_git_repo(tmp: str, branch: str = "main") -> Path:
 def test_pick_task_single_slug_matching_unmarked() -> None:
     tasks = _tasks_md.parse(_HOME_MD)
     picked = pick_task_single(tasks, slug="fix-login")
-    if picked.slug != "fix-login":
-        raise AssertionError(f"expected fix-login, got {picked.slug!r}")
+    if picked["slug"] != "fix-login":
+        raise AssertionError(f"expected fix-login, got {picked["slug"]!r}")
     print("PASS: pick_task_single with --slug matching unmarked task")
 
 
 def test_pick_task_single_slug_matching_s() -> None:
     tasks = _tasks_md.parse(_HOME_MD)
     picked = pick_task_single(tasks, slug="dark-mode")
-    if picked.slug != "dark-mode":
-        raise AssertionError(f"expected dark-mode, got {picked.slug!r}")
+    if picked["slug"] != "dark-mode":
+        raise AssertionError(f"expected dark-mode, got {picked["slug"]!r}")
     print("PASS: pick_task_single with --slug matching [s] task")
 
 
@@ -230,8 +230,8 @@ def test_pick_task_single_slug_not_found_raises() -> None:
 def test_pick_task_single_fast_path_s() -> None:
     tasks = _tasks_md.parse(_HOME_MD)
     picked = pick_task_single(tasks)
-    if picked.slug != "dark-mode":
-        raise AssertionError(f"expected dark-mode (only [s] task), got {picked.slug!r}")
+    if picked["slug"] != "dark-mode":
+        raise AssertionError(f"expected dark-mode (only [s] task), got {picked["slug"]!r}")
     print("PASS: pick_task_single fast-path returns first [s] task without prompt")
 
 
@@ -265,8 +265,8 @@ def test_pick_task_single_numbered_path() -> None:
         picked = pick_task_single(tasks)
     finally:
         sys.stdin = original_stdin
-    if picked.slug != "task-two":
-        raise AssertionError(f"expected task-two, got {picked.slug!r}")
+    if picked["slug"] != "task-two":
+        raise AssertionError(f"expected task-two, got {picked["slug"]!r}")
     print("PASS: pick_task_single numbered-picker path returns chosen task")
 
 
@@ -300,8 +300,8 @@ def test_claim_in_wiki() -> None:
         if "[active]" not in home_text:
             raise AssertionError("Home.md should contain [active] after claim")
         tasks = _tasks_md.parse(home_text)
-        task_one = next((t for t in tasks if t.slug == "task-one"), None)
-        if task_one is None or task_one.phase != "active":
+        task_one = next((t for t in tasks if t["slug"] == "task-one"), None)
+        if task_one is None or task_one["phase"] != "active":
             raise AssertionError(f"task-one phase should be active, got {task_one!r}")
 
         if not (wiki / "_Sidebar.md").exists():
@@ -594,8 +594,8 @@ def test_pick_task_single_or_multi_single_number() -> None:
         sys.stdin = original_stdin
     if mode != "single":
         raise AssertionError(f"expected mode=single, got {mode!r}")
-    if picked.slug != "task-one":
-        raise AssertionError(f"expected task-one, got {picked.slug!r}")
+    if picked["slug"] != "task-one":
+        raise AssertionError(f"expected task-one, got {picked["slug"]!r}")
     if candidates != []:
         raise AssertionError(f"expected candidates=[], got {candidates!r}")
     print("PASS: pick_task_single_or_multi single number -> mode=single")
@@ -620,7 +620,7 @@ def test_pick_task_single_or_multi_multi_numbers() -> None:
         raise AssertionError(f"expected mode=multi, got {mode!r}")
     if not isinstance(picked, list) or len(picked) != 2:
         raise AssertionError(f"expected list of 2, got {picked!r}")
-    slugs = [t.slug for t in picked]
+    slugs = [t["slug"] for t in picked]
     if slugs != ["task-alpha", "task-gamma"]:
         raise AssertionError(f"expected [task-alpha, task-gamma], got {slugs!r}")
     print("PASS: pick_task_single_or_multi comma-separated -> mode=multi")
@@ -638,7 +638,7 @@ def test_pick_task_single_or_multi_dedup() -> None:
         sys.stdin = original_stdin
     if mode != "multi":
         raise AssertionError(f"expected mode=multi, got {mode!r}")
-    slugs = [t.slug for t in picked]
+    slugs = [t["slug"] for t in picked]
     if slugs != ["task-alpha", "task-beta"]:
         raise AssertionError(f"expected [task-alpha, task-beta], got {slugs!r}")
     print("PASS: pick_task_single_or_multi de-duplicates 1,1,2 -> [task-alpha, task-beta]")
@@ -661,8 +661,8 @@ def test_pick_task_single_or_multi_out_of_range_then_valid() -> None:
         sys.stdin = original_stdin
     if mode != "single":
         raise AssertionError(f"expected mode=single, got {mode!r}")
-    if picked.slug != "task-one":
-        raise AssertionError(f"expected task-one, got {picked.slug!r}")
+    if picked["slug"] != "task-one":
+        raise AssertionError(f"expected task-one, got {picked["slug"]!r}")
     print("PASS: pick_task_single_or_multi out-of-range then valid -> mode=single")
 
 
@@ -704,8 +704,8 @@ def test_pick_task_single_or_multi_slug_bypass() -> None:
     mode, picked, candidates = pick_task_single_or_multi(tasks, slug="fix-login")
     if mode != "single":
         raise AssertionError(f"expected mode=single, got {mode!r}")
-    if picked.slug != "fix-login":
-        raise AssertionError(f"expected fix-login, got {picked.slug!r}")
+    if picked["slug"] != "fix-login":
+        raise AssertionError(f"expected fix-login, got {picked["slug"]!r}")
     print("PASS: pick_task_single_or_multi --slug -> mode=single, no prompt")
 
 
@@ -715,8 +715,8 @@ def test_pick_task_single_or_multi_fast_path_s() -> None:
     mode, picked, candidates = pick_task_single_or_multi(tasks)
     if mode != "single":
         raise AssertionError(f"expected mode=single for [s] fast-path, got {mode!r}")
-    if picked.slug != "dark-mode":
-        raise AssertionError(f"expected dark-mode, got {picked.slug!r}")
+    if picked["slug"] != "dark-mode":
+        raise AssertionError(f"expected dark-mode, got {picked["slug"]!r}")
     print("PASS: pick_task_single_or_multi [s] fast-path -> mode=single")
 
 
@@ -741,7 +741,7 @@ def test_multi_select_groom_then_claim_basic() -> None:
         tasks = _tasks_md.parse(home_text)
         if len(tasks) != 1:
             raise AssertionError(
-                f"expected 1 task remaining, got {len(tasks)}: {[t.slug for t in tasks]}"
+                f"expected 1 task remaining, got {len(tasks)}: {[t["slug"] for t in tasks]}"
             )
         if tasks[0].slug != "merged-task":
             raise AssertionError(f"expected merged-task, got {tasks[0].slug!r}")
@@ -765,10 +765,10 @@ def test_multi_select_groom_then_claim_basic() -> None:
                 f"expected commit msg {expected_msg!r} in:\n{log.stdout}"
             )
 
-        if task.slug != "merged-task":
-            raise AssertionError(f"expected returned task slug=merged-task, got {task.slug!r}")
-        if task.phase != "active":
-            raise AssertionError(f"expected returned task phase=active, got {task.phase!r}")
+        if task["slug"] != "merged-task":
+            raise AssertionError(f"expected returned task slug=merged-task, got {task["slug"]!r}")
+        if task["phase"] != "active":
+            raise AssertionError(f"expected returned task phase=active, got {task["phase"]!r}")
     print("PASS: multi_select_groom_then_claim basic flow")
 
 
@@ -802,7 +802,7 @@ def test_multi_select_groom_then_claim_with_proposal() -> None:
 def test_prompt_merged_entry_happy_path_no_proposal() -> None:
     """Happy path without proposal: returns title, slug, typed body, False, None."""
     tasks = _tasks_md.parse(_HOME_MD_THREE_TASKS)
-    source = [t for t in tasks if t.slug in ("task-alpha", "task-beta")]
+    source = [t for t in tasks if t["slug"] in ("task-alpha", "task-beta")]
     import io
     original_stdin = sys.stdin
     sys.stdin = io.StringIO(
@@ -835,7 +835,7 @@ def test_prompt_merged_entry_happy_path_no_proposal() -> None:
 def test_prompt_merged_entry_with_proposal() -> None:
     """With proposal: body_for_home is wiki link form; proposal_body holds typed body."""
     tasks = _tasks_md.parse(_HOME_MD_THREE_TASKS)
-    source = [t for t in tasks if t.slug in ("task-alpha", "task-beta")]
+    source = [t for t in tasks if t["slug"] in ("task-alpha", "task-beta")]
     import io
     original_stdin = sys.stdin
     sys.stdin = io.StringIO(
@@ -863,7 +863,7 @@ def test_prompt_merged_entry_with_proposal() -> None:
 def test_prompt_merged_entry_bad_title_raises() -> None:
     """Three empty title attempts raise ValueError."""
     tasks = _tasks_md.parse(_HOME_MD_THREE_TASKS)
-    source = [t for t in tasks if t.slug == "task-alpha"]
+    source = [t for t in tasks if t["slug"] == "task-alpha"]
     import io
     original_stdin = sys.stdin
     sys.stdin = io.StringIO("\n\n\n")  # Three empty lines
@@ -880,7 +880,7 @@ def test_prompt_merged_entry_bad_title_raises() -> None:
 def test_prompt_merged_entry_bad_slug_raises() -> None:
     """Three invalid slug attempts raise ValueError."""
     tasks = _tasks_md.parse(_HOME_MD_THREE_TASKS)
-    source = [t for t in tasks if t.slug == "task-alpha"]
+    source = [t for t in tasks if t["slug"] == "task-alpha"]
     import io
     original_stdin = sys.stdin
     sys.stdin = io.StringIO(
