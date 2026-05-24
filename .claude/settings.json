@@ -1,0 +1,5 @@
+{
+  "env": {
+    "MILL_TEST_PYTHON": "C:\\Code\\millhouse\\wts\\millhouse\\plugins\\mill\\.venv\\Scripts\\python.exe"
+  }
+}

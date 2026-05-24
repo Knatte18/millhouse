@@ -31,6 +31,10 @@ ALLOWED_FILES: set[str] = {
     "plugins/mill/unit_tests/test-no-direct-rmtree.py",
     "plugins/mill/unit_tests/test-safe-rmtree.py",
     "plugins/mill/unit_tests/test-worktree.py",
+    "plugins/mill/unit_tests/test-wiki-daemon.py",
+    "plugins/mill/unit_tests/test-wiki-store.py",
+    "plugins/mill/unit_tests/test-wiki-sync.py",
+    "plugins/mill/integration_tests/test-wiki-daemon-tinydb.py",
 }
 
 

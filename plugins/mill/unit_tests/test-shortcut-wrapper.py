@@ -13,42 +13,62 @@ sys.path.insert(0, str(SCRIPTS_DIR))
 from _render import render  # noqa: E402
 from _shortcuts import SHORTCUT_SCRIPTS, write_all  # noqa: E402
 
-TEMPLATE_PATH = TEMPLATES_DIR / "shortcut-wrapper.ps1"
+TEMPLATE_PATH = TEMPLATES_DIR / "shortcut-wrapper.cmd"
 
 
 def main() -> int:
     errors = 0
 
-    # --- render(template, {"SCRIPT": ..., "SCRIPT_PATH": ...}) contains uv run --active call ---
+    # --- render(template, {...tokens...}) substitutes all four tokens ---
     fake_latest_path = Path("/fake/latest")
-    rendered = render(TEMPLATE_PATH, {"SCRIPT": "millpy-status", "SCRIPT_PATH": str(fake_latest_path / "scripts" / "millpy-status.py")})
+    fake_mill_python = str(fake_latest_path / ".venv" / "Scripts" / "python.exe")
+    fake_plugin_root = str(fake_latest_path)
+    fake_script_path = str(fake_latest_path / "scripts" / "millpy-status.py")
+    rendered = render(
+        TEMPLATE_PATH,
+        {
+            "SCRIPT": "millpy-status",
+            "SCRIPT_PATH": fake_script_path,
+            "MILL_PYTHON": fake_mill_python,
+            "PLUGIN_ROOT": fake_plugin_root,
+        },
+    )
     if "millpy-status.py" not in rendered:
         print("FAIL: rendered template does not contain 'millpy-status.py'", file=sys.stderr)
         errors += 1
     else:
         print("PASS: render substitutes <SCRIPT> -> millpy-status.py in template")
-    if "uv run" not in rendered:
-        print("FAIL: rendered template does not contain 'uv run'", file=sys.stderr)
+    if "@echo off" not in rendered:
+        print("FAIL: rendered template does not contain '@echo off'", file=sys.stderr)
         errors += 1
     else:
-        print("PASS: rendered template contains uv run")
-    if "uv run --active" not in rendered:
-        print("FAIL: rendered template does not contain 'uv run --active'", file=sys.stderr)
+        print("PASS: rendered template is a cmd batch file (@echo off)")
+    if "uv run" in rendered:
+        print("FAIL: rendered template still contains 'uv run' (should be direct python invocation)", file=sys.stderr)
         errors += 1
     else:
-        print("PASS: rendered template contains uv run --active")
-    if str(fake_latest_path / "scripts" / "millpy-status.py") not in rendered:
+        print("PASS: rendered template uses direct python invocation, not uv run")
+    if fake_mill_python not in rendered:
+        print("FAIL: rendered template does not contain MILL_PYTHON path", file=sys.stderr)
+        errors += 1
+    else:
+        print("PASS: rendered template contains MILL_PYTHON path")
+    if fake_script_path not in rendered:
         print("FAIL: rendered template does not contain SCRIPT_PATH", file=sys.stderr)
         errors += 1
     else:
         print("PASS: rendered template contains SCRIPT_PATH")
-    if "--project" in rendered:
-        print("FAIL: rendered template still contains '--project'", file=sys.stderr)
-        errors += 1
+    if f"PYTHONPATH={fake_plugin_root}" not in rendered.replace("\\", "/").replace("/", "\\"):
+        # tolerant: token substitution preserves path separators
+        if "PYTHONPATH=" not in rendered:
+            print("FAIL: rendered template does not set PYTHONPATH", file=sys.stderr)
+            errors += 1
+        else:
+            print("PASS: rendered template sets PYTHONPATH")
     else:
-        print("PASS: rendered template does not contain '--project'")
+        print("PASS: rendered template sets PYTHONPATH to PLUGIN_ROOT/scripts")
 
-    # --- write_all against empty tempdir creates one PS1 file per SHORTCUT_SCRIPTS entry ---
+    # --- write_all against empty tempdir creates one .cmd file per SHORTCUT_SCRIPTS entry ---
     with tempfile.TemporaryDirectory() as tmpdir:
         mill_dir = Path(tmpdir)
         fake_latest_path = Path(tmpdir) / "fake-latest"
@@ -63,9 +83,9 @@ def main() -> int:
         else:
             print(f"PASS: write_all creates all {expected_count} wrapper files")
         for script in SHORTCUT_SCRIPTS:
-            target = mill_dir / f"{script}.ps1"
+            target = mill_dir / f"{script}.cmd"
             if not target.exists():
-                print(f"FAIL: PS1 wrapper missing for {script}", file=sys.stderr)
+                print(f"FAIL: .cmd wrapper missing for {script}", file=sys.stderr)
                 errors += 1
             else:
                 content = target.read_text(encoding="utf-8")
@@ -99,8 +119,8 @@ def main() -> int:
         fake_latest_path = Path(tmpdir) / "fake-latest"
         write_all(mill_dir, fake_latest_path)  # seed all files
         stale_script = SHORTCUT_SCRIPTS[0]
-        stale_path = mill_dir / f"{stale_script}.ps1"
-        stale_path.write_text("# stale content\n", encoding="utf-8")
+        stale_path = mill_dir / f"{stale_script}.cmd"
+        stale_path.write_text("@echo stale\n", encoding="utf-8")
         written_third = write_all(mill_dir, fake_latest_path)
         if len(written_third) != 1:
             print(
@@ -115,7 +135,7 @@ def main() -> int:
             )
             errors += 1
         else:
-            print(f"PASS: only stale wrapper ({stale_script}.ps1) is rewritten")
+            print(f"PASS: only stale wrapper ({stale_script}.cmd) is rewritten")
         # Confirm the stale file now has the correct content
         refreshed = stale_path.read_text(encoding="utf-8")
         if f"{stale_script}.py" not in refreshed:
@@ -127,12 +147,13 @@ def main() -> int:
         else:
             print(f"PASS: refreshed wrapper for {stale_script} has correct content")
 
-    # --- write_all against tempdir with legacy .py wrappers -> .py files deleted, .ps1 files present ---
+    # --- write_all against tempdir with legacy .py and .ps1 wrappers -> both deleted, .cmd present ---
     with tempfile.TemporaryDirectory() as tmpdir:
         mill_dir = Path(tmpdir)
         fake_latest_path = Path(tmpdir) / "fake-latest"
         for script in SHORTCUT_SCRIPTS:
-            (mill_dir / f"{script}.py").write_text("# legacy wrapper\n", encoding="utf-8")
+            (mill_dir / f"{script}.py").write_text("# legacy py wrapper\n", encoding="utf-8")
+            (mill_dir / f"{script}.ps1").write_text("# legacy ps1 wrapper\n", encoding="utf-8")
         write_all(mill_dir, fake_latest_path)
         legacy_errors = 0
         for script in SHORTCUT_SCRIPTS:
@@ -140,13 +161,17 @@ def main() -> int:
                 print(f"FAIL: legacy .py wrapper still exists for {script}", file=sys.stderr)
                 legacy_errors += 1
                 errors += 1
+            if (mill_dir / f"{script}.ps1").exists():
+                print(f"FAIL: legacy .ps1 wrapper still exists for {script}", file=sys.stderr)
+                legacy_errors += 1
+                errors += 1
         for script in SHORTCUT_SCRIPTS:
-            if not (mill_dir / f"{script}.ps1").exists():
-                print(f"FAIL: PS1 wrapper missing after legacy cleanup for {script}", file=sys.stderr)
+            if not (mill_dir / f"{script}.cmd").exists():
+                print(f"FAIL: .cmd wrapper missing after legacy cleanup for {script}", file=sys.stderr)
                 legacy_errors += 1
                 errors += 1
         if legacy_errors == 0:
-            print(f"PASS: write_all deletes all {len(SHORTCUT_SCRIPTS)} legacy .py wrappers")
+            print(f"PASS: write_all deletes all legacy .py and .ps1 wrappers for {len(SHORTCUT_SCRIPTS)} scripts")
 
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)

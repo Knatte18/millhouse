@@ -568,6 +568,7 @@ def main() -> int:
                 patch("mill_cleanup._wiki.write_commit_push"),
                 patch("mill_cleanup._sidebar.regenerate"),
                 patch("mill_cleanup._paths.resolve_container_path", return_value=tmp / "container"),
+                patch("mill_cleanup._paths.resolve_main_worktree_root", return_value=hub_root),
             ):
                 apply_plan(plan_stale, wiki_path, hub_root, {}, cfg={"paths": {"status_md": "_mill/status.md"}})
 
