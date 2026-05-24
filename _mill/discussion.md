@@ -27,8 +27,8 @@ This task reshapes V3 into the only wiki API, migrates every V2 call site, remov
 
 **In:**
 
-- Rework V3 daemon protocol: replace `OP_READ` / `OP_WRITE` with structured task ops (`OP_UPSERT_TASK`, `OP_SET_PHASE`, `OP_REMOVE_TASK`, `OP_GET_TASK`, `OP_LIST_TASKS_BRIEF`, `OP_LIST_TASKS_FULL`, `OP_HEALTH`). `OP_HEALTH` handler returns `{ok: true}` immediately with no DB or git access — used by `wiki._client.health_check`. Bump `PROTOCOL_VERSION` from 1 → 2 so stale daemons get killed and respawned.
-- Update `wiki/_client.py` Python wrapper: drop `read` / `write_commit_push`; add `upsert_task(slug, *, title=None, brief=None, body=None, group=None, status=None)`, `set_phase(id_or_slug, phase)`, `remove_task(id_or_slug)`, `get_task(id_or_slug)`, `list_tasks_brief()`, `list_tasks_full()`, `health_check()`. Bump `CAS_RETRIES` from 3 to 5 (matches the existing `test-wiki-e2e.py` retry literal — see decision `cas-retry-count`). Rewrite `health_check` to send `OP_HEALTH` instead of `OP_READ` (the latter is being removed; see decision `structured-ops-over-socket`).
+- Rework V3 daemon protocol: replace `OP_READ` / `OP_WRITE` with structured task ops (`OP_UPSERT_TASK`, `OP_UPSERT_TASKS_BATCH`, `OP_SET_PHASE`, `OP_REMOVE_TASK`, `OP_GET_TASK`, `OP_LIST_TASKS_BRIEF`, `OP_LIST_TASKS_FULL`, `OP_HEALTH`). `OP_HEALTH` handler returns `{ok: true}` immediately with no DB or git access — used by `wiki._client.health_check`. `OP_UPSERT_TASKS_BATCH` accepts a list of task dicts, upserts each into TinyDB, then renders + commits exactly once for the whole batch (the migration script is its canonical caller — see decision `migration-commit-shape`). Bump `PROTOCOL_VERSION` from 1 → 2 so stale daemons get killed and respawned.
+- Update `wiki/_client.py` Python wrapper: drop `read` / `write_commit_push`; add `upsert_task(slug, *, title=None, brief=None, body=None, group=None, status=None)`, `upsert_tasks_batch(tasks: list[dict])`, `set_phase(id_or_slug, phase)`, `remove_task(id_or_slug)`, `get_task(id_or_slug)`, `list_tasks_brief()`, `list_tasks_full()`, `health_check()`. Bump `CAS_RETRIES` from 3 to 5 (matches the existing `test-wiki-e2e.py` retry literal — see decision `cas-retry-count`). Rewrite `health_check` to send `OP_HEALTH` instead of `OP_READ` (the latter is being removed; see decision `structured-ops-over-socket`).
 - Update `wiki/_server.py`: drop `_handle_read` / `_handle_write`; add one handler per structured op. Each mutating handler does TinyDB op → `render(all_tasks)` → `atomic_write` each rendered file → `commit_push` (with one rebase retry, as today).
 - Update `wiki/_store.py`:
   - First task assigned `id = 0` (when DB empty), then `max + 1`.
@@ -58,7 +58,15 @@ This task reshapes V3 into the only wiki API, migrates every V2 call site, remov
   - `millpy-add.py`: replace `wiki_lock` + `_tasks_md.append_entry` + `_wiki.write_commit_push` with `wiki.upsert_task(slug, title=, brief=, body=, group=)`. (No `status` kwarg in the normal add flow — new tasks default to `None` / unmarked; phase transitions go through `set_phase` later.)
   - `millpy-cleanup.py`: replace `wiki_lock` + `_tasks_md.set_phase` + `_wiki.write_commit_push` with `wiki.set_phase(slug_or_id, phase)`. Replace any `_tasks_md.remove_entry` with `wiki.remove_task`. Replace `Home.md` reads with `wiki.list_tasks_brief()`.
   - `millpy-claim.py`: drop `_wiki.sync_pull` (daemon lazy-refreshes inside each op). Replace the direct `wiki_path / "config.yaml"` read at line 68 with the `_config.load_config` path. Replace Home.md parsing with `wiki.list_tasks_brief()` / `wiki.get_task(slug)` for the claim flow.
-  - `millpy-fold.py`: replace `wiki_lock` + body amendment + `_wiki.write_commit_push` with `wiki.get_task` → mutate locally → `wiki.upsert_task`.
+  - `millpy-fold.py`: full migration off `_tasks_md`. Lines to address:
+    - `:15` local duplicate `LOCKED_FOLD_PHASES` constant — delete (use `wiki.LOCKED_FOLD_PHASES` instead, which is the canonical home after the constant moves to `wiki/__init__.py`).
+    - `:39` `import _tasks_md` — delete.
+    - `:76` `_tasks_md._SLUG_RE.match(target_slug)` — replace with a local `re.compile(r"^[a-z][a-z0-9-]*$")` constant at the top of `millpy-fold.py`. (The slug regex is a one-liner; moving it into `wiki/__init__.py` couples the wiki module to caller-side validation it doesn't need.)
+    - `:87` `_wiki.wiki_lock` — delete the context manager wrapping; CAS handles concurrency.
+    - `:93` `tasks = _tasks_md.parse(home_text)` — replace with `tasks = wiki.list_tasks_brief()`; the brief shape (id, slug, group, brief, status) covers everything `millpy-fold` reads from a parsed Task today.
+    - `:99` `phase in _tasks_md.LOCKED_FOLD_PHASES` — replace with `phase in wiki.LOCKED_FOLD_PHASES` after the constant moves.
+    - `:135` `_tasks_md.append_to_body` — replace with `task = wiki.get_task(target_slug); wiki.upsert_task(target_slug, body=task["body"] + "\n" + fold_line)`.
+    - `:144` `_wiki.write_commit_push` — delete (the `upsert_task` call commits inline).
   - `millpy-spawn.py`: replace `_wiki.sync_pull` (drop entirely) and the eventual `_spawn_core.claim_in_wiki` call (already switching below).
   - `_spawn_core.claim_in_wiki`: replace with `wiki.set_phase(slug, "active")`.
   - `_spawn_core.groom_and_claim_merge`: replace the read-modify-write window with N × `wiki.remove_task(slug)` + `wiki.upsert_task(merged_slug, ..., body=..., has_proposal=...)` + `wiki.set_phase(merged_slug, "active")`. No advisory lock; CAS conflicts surface as `WikiConflictError` and the caller retries up to `wiki._client.CAS_RETRIES` attempts (see decision `cas-retry-count` below — `CAS_RETRIES` is bumped from 3 to 5 in this task so the constant matches the existing `test-wiki-e2e.py` integration-test pattern; `groom_and_claim_merge` uses the constant, not a local literal).
@@ -66,6 +74,8 @@ This task reshapes V3 into the only wiki API, migrates every V2 call site, remov
 - Move `clone_or_init` from `_wiki.py` into `_setup.py` (its sole caller).
 - Delete `_wiki.py`, `_tasks_md.py`, `_sidebar.py` outright (no shim, no deprecation). The `Task` dataclass and `LOCKED_FOLD_PHASES` constant move into `wiki/__init__.py`.
 - Strip the `wiki/config.yaml` fallback from `_config.py:load_config` (lines 179, 188, 198–202). Only `mill-config.yaml` is consulted; missing → clean error.
+- Strip the duplicate `wiki/config.yaml` fallback in `_review_common.py` (the review-side config loader): runtime fallback code at lines ~1233–1270 (assignment at 1235–1239, presence check at 1248, merge at 1254–1257, stale warning at 1250, "using legacy" warning at 1260, missing-config error message at 1269); docstring mentions at lines 34 and 1211. Update the missing-config error to reference only `mill-config.yaml`.
+- Update `millpy-spawn.py:66–72`: drop the `wiki_cfg = resolve_wiki_path(repo_root) / "config.yaml"` branch and the missing-config guard's reference to `wiki_cfg`; only check `mill_cfg.exists()`.
 - Delete `millpy-migrate-config.py` and its integration test `test-migration.py`.
 - Update fixtures across `test-cleanup.py`, `test-merge.py`, `test-millpy-implement.py`, `test-review-discussion.py`, `test-config.py` to stop creating `wiki/config.yaml`. Where the fixture's purpose was to exercise the fallback path, delete the test.
 - Update skill docs `plugins/mill/skills/mill-claim/SKILL.md` and `plugins/mill/skills/mill-finalize/SKILL.md` to remove `wiki/config.yaml` references.
@@ -167,6 +177,12 @@ This task reshapes V3 into the only wiki API, migrates every V2 call site, remov
 - Rationale: The migration script needs to seed `[active]` / `[abandoned]` markers as part of the initial state. Adding the parameter to the public API is one line; doing it via a private `OP_UPSERT_TASK` dispatch with a different field set splits the contract.
 - Rejected: separate `wiki.seed_task(...)` for migration — single-use API for a one-shot script; not worth the surface area.
 
+### migration-commit-shape
+
+- Decision: Add a daemon op `OP_UPSERT_TASKS_BATCH` (public API: `wiki.upsert_tasks_batch(tasks: list[dict])`). Handler upserts every task into TinyDB, then renders + commits exactly once for the whole batch. The migration script is the canonical caller. Net migration commit count: two (backup commit via direct `git -C`, then batch-upsert commit via daemon).
+- Rationale: Per-task `upsert_task` triggers per-task render + commit (`_server.py:_handle_write` → `commit_push`). With ~20 tasks that would mean ~20 noise commits in wiki history. A batch op is the one place the protocol legitimately needs to coalesce mutations — migrations are not a general pattern, so the surface stays small.
+- Rejected: (a) accept N commits — wiki history clutter on a one-shot operation that should look atomic; (b) have the migration script write `tasks.json` directly via TinyDB and call a separate `OP_RENDER_AND_COMMIT` — reintroduces a daemon-bypass write path (`tasks.json` written outside the daemon's lifecycle) which contradicts decision `tinydb-source-of-truth`; (c) bake the batch behaviour into `upsert_task` with a `commit: bool = True` flag — a kwarg whose effect is "skip the commit and trust someone else to do it" is exactly the kind of stateful API the protocol-op shape avoids.
+
 ### health-check-op-health
 
 - Decision: Add an `OP_HEALTH` op to the protocol. The daemon's handler returns `{ok: true}` immediately (no DB or git access). `wiki._client.health_check` sends `OP_HEALTH` instead of the now-removed `OP_READ` with empty path.
@@ -208,9 +224,11 @@ This task reshapes V3 into the only wiki API, migrates every V2 call site, remov
 | `millpy-cleanup.py` | 603, 632, 636, 653 | `write_commit_push`, `sync_pull`, `read_junctions`, `wiki_lock` | `wiki.set_phase`/`remove_task`/`list_tasks_brief`; `read_junctions` moves to `_junction.py`; lock dropped |
 | `millpy-claim.py` | 185, 68 | `sync_pull`; direct `wiki_path / "config.yaml"` read | drop sync_pull; route config read through `_config.load_config` |
 | `millpy-migrate-config.py` | all | direct git calls | **delete file** |
-| `millpy-fold.py` | 87, 144 | `wiki_lock` + `write_commit_push` | `get_task` + `upsert_task` |
+| `millpy-fold.py` | 15, 39, 76, 87, 93, 99, 135, 144 | local LOCKED_FOLD_PHASES dup; `import _tasks_md`; `_SLUG_RE`; `wiki_lock`; `_tasks_md.parse`; `LOCKED_FOLD_PHASES`; `append_to_body`; `write_commit_push` | delete dup constant; remove `_tasks_md` import; inline local slug regex; drop wiki_lock; `wiki.list_tasks_brief`; `wiki.LOCKED_FOLD_PHASES`; `wiki.get_task` + `wiki.upsert_task`; commit inline |
+| `_review_common.py` | 34, 1211, 1233–1270 | `wiki/config.yaml` fallback (docstrings + runtime) | strip fallback identical to `_config.py`; missing-config error references `mill-config.yaml` only |
+| `millpy-spawn.py` | 66–72 | `wiki_cfg = resolve_wiki_path(repo_root) / "config.yaml"` + missing-config guard | drop the `wiki_cfg` branch; guard checks only `mill_cfg` |
 | `millpy-wikipush.py` | 32, 104, 111, 113 | `import _wiki`, `wiki_lock`, `LockBusy` | drop `_wiki` import; remove the `wiki_lock` guard (replace with bare call to inner push helper); push logic stays on direct git subprocess |
-| `millpy-spawn.py` | 128 | `sync_pull` | drop |
+| `millpy-spawn.py` | 128 (sync_pull) — note: 66–72 covered in row above | `sync_pull` | drop |
 | `_spawn_core.py` | 488, 514, 636, 641 | `wiki_lock` + `write_commit_push` (groom_and_claim_merge + claim_in_wiki) | `wiki.remove_task` + `upsert_task` + `set_phase`; CAS retry loop |
 | `_setup.py` | 85, 86 | `read_junctions`, `read_hardlinks` | new import: `_junction.read_junctions`/`read_hardlinks` |
 | `_paths.py` | 125, 140, 407 | error-message text only | update text to drop `_wiki.write_commit_push` reference |
@@ -226,10 +244,11 @@ This task reshapes V3 into the only wiki API, migrates every V2 call site, remov
    - Recognise `## (.+)` task headings followed by `[slug]` or `[[slug]](proposal-slug.md)` on the next line, optional `[phase]` marker. Multi-paragraph briefs captured verbatim until next heading.
    - Skip `##` headings whose next non-blank line isn't a `[slug]` line (info notes — backup retains them).
    - For each task with `[[slug]](proposal-slug.md)`, read `<wiki>/proposal-slug.md` and set the task's `body` to that file's content.
-4. For each parsed task, call the public `wiki.upsert_task(slug, title=..., group=..., brief=..., body=..., status=...)` — the migration is the canonical consumer of the `status` kwarg added in decision `upsert-task-status-param`. No internal `_ensure_daemon` / `_connect_send_recv` bypass; same API as every other caller.
-5. Daemon renders new `Home.md`, `_Sidebar.md`, `proposal-*.md` on each upsert (existing flow — render after every mutation). Final state on disk is V3-rendered.
-6. Single commit covering `tasks.json`, `Home.md.pre-v3.bak`, `Home.md`, `_Sidebar.md`, all `proposal-*.md` files. Commit message: `wiki: migrate to V3 (TinyDB-backed)`.
-7. `--dry-run` mode: stop after step 3, print parsed tasks to stdout, no commits.
+4. Commit the backup-only delta first via a direct `git -C <wiki>` call (the daemon is not yet running on a V2 host; bootstrap commit is fine): `git add Home.md.pre-v3.bak && git commit -m "wiki: backup pre-V3 Home.md"`. This commit is independent of TinyDB and produces the recovery artifact even if the next step fails.
+5. Build the full task list in memory (a list of dicts, each with `slug`, `title`, `group`, `brief`, `body`, `status`). Call the public `wiki.upsert_tasks_batch(tasks)` exactly once — the migration is the canonical consumer of the batch op added in decision `migration-commit-shape`, and of the `status` kwarg added in decision `upsert-task-status-param`. No internal `_ensure_daemon` / `_connect_send_recv` bypass; same public API as every other caller.
+6. The daemon's `OP_UPSERT_TASKS_BATCH` handler upserts each task into TinyDB, renders `Home.md` + `_Sidebar.md` + every `proposal-{slug}.md` once at the end, and commits all generated files plus `tasks.json` in a single commit with message `wiki: migrate to V3 (TinyDB-backed)`.
+7. Net commit count: two — `wiki: backup pre-V3 Home.md` followed by `wiki: migrate to V3 (TinyDB-backed)`.
+8. `--dry-run` mode: stop after step 3, print parsed tasks to stdout, no commits, no backup write.
 
 **Constraints from CLAUDE.md:**
 
@@ -340,3 +359,7 @@ This task reshapes V3 into the only wiki API, migrates every V2 call site, remov
 - **Q (review r1):** Does `_spawn_core.groom_and_claim_merge` retry 3 times (`CAS_RETRIES`) or 5 (test literal)? **A:** Bump `CAS_RETRIES` in `wiki/_client.py` from 3 to 5. Use the constant. Single source of truth.
 - **Q (review r1):** Does `health_check` need rewriting once `OP_READ` is gone? **A:** Yes — switch to `OP_HEALTH`. Added to client scope.
 - **Q (review r1):** Does the public `upsert_task` need a `status` parameter for the migration script? **A:** Yes — added as an optional kwarg. The migration script uses the same public API; no private bypass.
+- **Q (review r2):** Per-task daemon commits collide with the "single commit" migration claim — what's the resolution? **A:** Add `OP_UPSERT_TASKS_BATCH` to the daemon protocol; migration sends one batch call, daemon renders + commits once. Backup gets its own bootstrap commit before the daemon comes up. Net: two commits.
+- **Q (review r2):** `_review_common.py` carries the same `wiki/config.yaml` fallback as `_config.py` — is it in scope? **A:** Yes — added explicitly. Strip lines 1233–1270 (and docstring mentions at 34, 1211) alongside the `_config.py` strip.
+- **Q (review r2):** Does `millpy-spawn.py:68` need the same direct-`config.yaml` fix as `millpy-claim.py:68`? **A:** Yes — added. Update the missing-config guard at 66–72 to drop the `wiki_cfg` branch.
+- **Q (review r2):** `millpy-fold.py` uses `_tasks_md` at lines 15, 39, 76, 93, 99, 135 — does the migration cover them all? **A:** Yes — expanded the call-site entry to address every usage explicitly (delete local LOCKED_FOLD_PHASES dup, inline slug regex, route through `wiki.list_tasks_brief`/`get_task`/`upsert_task`).

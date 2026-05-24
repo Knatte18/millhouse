@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussion-gap-fix-r1
+phase: discussion-gap-fix-r2
 slug: wiki-v3-adoption
 branch: hanf/wiki-v3-adoption
 plan: null
@@ -16,4 +16,5 @@ task_description: |
 ```text
 discussing  '2026-05-24T15:49:29Z'
 discussion-gap-fix-r1  '2026-05-24T16:32:08Z'
+discussion-gap-fix-r2  '2026-05-24T16:40:23Z'
 ```
