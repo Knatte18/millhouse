@@ -13,7 +13,8 @@ def parse_home_md(content: str) -> list[dict]:
     while i < len(lines):
         line = lines[i]
 
-        layer_match = re.match(r"^# Layer ([A-Z])$", line)
+        # Layer header with optional parenthetical suffix: # Layer D (isolated -- run alone)
+        layer_match = re.match(r"^# Layer ([A-Z])(?:\s+.*)?$", line)
         if layer_match:
             current_group = layer_match.group(1)
             i += 1
@@ -26,31 +27,48 @@ def parse_home_md(content: str) -> list[dict]:
 
         task_heading_match = re.match(r"^## (.+)$", line)
         if task_heading_match:
-            title = task_heading_match.group(1)
+            title_raw = task_heading_match.group(1)
             i += 1
 
             if i >= len(lines):
                 break
 
             slug_line = lines[i]
+
+            # Check for valid slug line (either [slug] or [[slug]](proposal-slug.md))
             slug_match = re.match(
-                r"^\[(?P<slug>[a-z][a-z0-9-]*)\]( \[(?P<status>s|active|ready-to-merge|pr-pending|done|abandoned)\])?",
+                r"^\[(?P<slug>[a-z][a-z0-9-]*)\]( \[(?P<status>s|active|ready-to-merge|pr-pending|done|blocked|abandoned)\])?",
                 slug_line,
             )
-            if not slug_match:
+            # Also check for proposal link format
+            proposal_match = re.match(
+                r"^\[\[(?P<slug>[a-z][a-z0-9-]*)\]\]\(proposal-[a-z][a-z0-9-]*\.md\)",
+                slug_line,
+            )
+
+            if not slug_match and not proposal_match:
+                # This is an info-only ## heading, skip it
                 i += 1
                 continue
 
-            slug = slug_match.group("slug")
-            status = slug_match.group("status")
-            if status in ("s", "abandoned"):
+            if slug_match:
+                slug = slug_match.group("slug")
+                status = slug_match.group("status")
+            else:
+                slug = proposal_match.group("slug")
                 status = None
+
+            # Parse [s] as None, [abandoned] as "abandoned", others as-is
+            if status == "s":
+                status = None
+            elif status == "abandoned":
+                status = "abandoned"
 
             i += 1
 
-            brief = ""
-            brief_lines: list[str] = []
-            in_brief = False
+            # Capture brief across multiple paragraphs
+            brief_paragraphs: list[str] = []
+            current_paragraph: list[str] = []
 
             while i < len(lines):
                 current_line = lines[i]
@@ -59,19 +77,29 @@ def parse_home_md(content: str) -> list[dict]:
                     break
 
                 if current_line.strip():
-                    if not in_brief:
-                        in_brief = True
-                    brief_lines.append(current_line)
+                    current_paragraph.append(current_line.strip())
                 else:
-                    if in_brief:
-                        break
-                    i += 1
-                    continue
+                    # Blank line - end current paragraph
+                    if current_paragraph:
+                        brief_paragraphs.append(" ".join(current_paragraph))
+                        current_paragraph = []
 
                 i += 1
 
-            if brief_lines:
-                brief = " ".join(line.strip() for line in brief_lines)
+            # Add any remaining paragraph
+            if current_paragraph:
+                brief_paragraphs.append(" ".join(current_paragraph))
+
+            # Collapse all paragraphs to one space-joined string
+            brief = " ".join(brief_paragraphs)
+
+            # Strip numeric prefix and group code from title
+            # e.g., "30 (D) -- Foo" -> "Foo" or "30 -- Foo" -> "Foo"
+            title = title_raw
+            title = re.sub(r"^\d+\s+", "", title)  # Remove numeric prefix
+            title = re.sub(r"^\([A-Z]\)\s+", "", title)  # Remove group code
+            title = re.sub(r"^\([A-Z]\)\s*--\s*", "", title)  # Remove (D) -- pattern
+            title = re.sub(r"^--\s+", "", title)  # Remove leading --
 
             tasks.append(
                 {
