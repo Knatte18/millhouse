@@ -14,13 +14,13 @@ def render(tasks: list[dict]) -> dict[str, str]:
             tasks_by_group[group] = []
         tasks_by_group[group].append(task)
 
-    group_order = [None, "A", "B", "C", "D", "Z"]
+    # Sort groups: A-Z alphabetically first, then None last; skip empty groups
+    group_order = sorted([g for g in tasks_by_group.keys() if g is not None]) + ([None] if None in tasks_by_group else [])
 
     for group in group_order:
-        if group not in tasks_by_group:
-            continue
-
         group_tasks = tasks_by_group[group]
+        # Sort tasks within group by id ascending for deterministic output
+        group_tasks = sorted(group_tasks, key=lambda t: t.get("id", 0))
 
         if group is not None:
             home_lines.append(f"# Layer {group}")
@@ -34,10 +34,14 @@ def render(tasks: list[dict]) -> dict[str, str]:
             status = task.get("status")
             body = task.get("body", "")
 
+            # Drop [s] status - treat as None
+            if status == "s":
+                status = None
+
             home_lines.append(f"## {title}")
 
             slug_line = f"[{slug}]"
-            if status in ("active", "done", "pr-pending", "ready-to-merge"):
+            if status in ("active", "done", "pr-pending", "ready-to-merge", "abandoned"):
                 slug_line += f" [{status}]"
             home_lines.append(slug_line)
 
