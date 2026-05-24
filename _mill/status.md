@@ -40,7 +40,9 @@ implementing  '2026-05-24T18:14:00Z'
 ```yaml
 batches:
   - name: wiki-module-refactor
-    state: pending
+    state: running
+    implementer_session: 99a985a2-8cb9-4184-a64a-45786b88a99d
+    start_sha: 1c44913daba630c0af3e728514b7a4509f0c8c88
   - name: migration-script
     state: pending
   - name: v2-deletion-and-port
