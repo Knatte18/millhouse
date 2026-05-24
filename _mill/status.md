@@ -51,6 +51,6 @@ batches:
     start_sha: ac1aac1e1326ceb53caa9af1e274b2e7d4589635
   - name: v2-deletion-and-port
     state: running
-    implementer_session: d8d24992-fd0c-4e86-b02c-0e9305f7b3f4
-    start_sha: 9f14a459b49e800aaf1feeaa1d9c52a0c2e8bfce
+    implementer_session: 0e2ed67e-9a51-4dfa-80b8-683860fd8cdd
+    start_sha: d792b8b0efc7b980d93a8dc4898fbefec576113f
 ```
