@@ -20,10 +20,12 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
 import textwrap
+import time
 from pathlib import Path
 
 HUB = Path(__file__).resolve().parent.parent.parent.parent
@@ -385,7 +387,7 @@ def main() -> None:
     print("=" * 60)
 
     if fixture_base.exists():
-        shutil.rmtree(fixture_base)
+        _safe_rmtree.safe_rmtree(str(fixture_base))
     fixture_base.mkdir(parents=True)
 
     wiki_path, task_repo = _setup_wiki_fixture(fixture_base)
@@ -393,19 +395,23 @@ def main() -> None:
     if not _test_dry_run(wiki_path, task_repo):
         sys.exit(1)
 
+    time.sleep(1)  # Let daemons cleanup
+
     # Test 2: Commit mode
     print("\n" + "=" * 60)
     print("TEST 2: Commit mode")
     print("=" * 60)
 
     if fixture_base.exists():
-        shutil.rmtree(fixture_base)
+        _safe_rmtree.safe_rmtree(str(fixture_base))
     fixture_base.mkdir(parents=True)
 
     wiki_path, task_repo = _setup_wiki_fixture(fixture_base)
 
     if not _test_commit(wiki_path, task_repo):
         sys.exit(1)
+
+    time.sleep(1)  # Let daemons cleanup
 
     # Test 3: Idempotent re-run
     print("\n" + "=" * 60)
