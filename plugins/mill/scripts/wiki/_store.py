@@ -18,6 +18,7 @@ def _resolve_id_or_slug(db: TinyDB, identifier: int | str) -> int | None:
 
 class Store:
     def __init__(self, db_path: Path) -> None:
+        self._db_path = db_path
         self._db = TinyDB(str(db_path))
 
     def upsert_task(self, task: dict) -> dict:
@@ -159,8 +160,7 @@ class Store:
 
     def reload(self) -> None:
         self._db.close()
-        db_path = Path(self._db._handle.name)
-        self._db = TinyDB(str(db_path))
+        self._db = TinyDB(str(self._db_path))
 
     def all_tasks(self) -> list[dict]:
         return self._db.all()
