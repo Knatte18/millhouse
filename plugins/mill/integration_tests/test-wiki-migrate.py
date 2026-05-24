@@ -395,7 +395,7 @@ def main() -> None:
     test1_dir = SCRATCH / "test-dryrun"
     if test1_dir.exists():
         _safe_rmtree.safe_rmtree(str(test1_dir), allowed_root=str(test1_dir), ignore_errors=True)
-    test1_dir.mkdir(parents=True)
+    test1_dir.mkdir(parents=True, exist_ok=True)
 
     wiki_path, task_repo = _setup_wiki_fixture(test1_dir)
 
@@ -412,7 +412,7 @@ def main() -> None:
     test2_dir = SCRATCH / "test-commit"
     if test2_dir.exists():
         _safe_rmtree.safe_rmtree(str(test2_dir), allowed_root=str(test2_dir), ignore_errors=True)
-    test2_dir.mkdir(parents=True)
+    test2_dir.mkdir(parents=True, exist_ok=True)
 
     wiki_path, task_repo = _setup_wiki_fixture(test2_dir)
 
