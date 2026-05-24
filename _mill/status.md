@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-wiki-module-refactor
+phase: approved-migration-script
 slug: wiki-v3-adoption
 branch: hanf/wiki-v3-adoption
 plan: _mill/plan
@@ -34,6 +34,7 @@ plan-fix-r5  '2026-05-24T18:11:44Z'
 planned  '2026-05-24T18:11:23Z'
 implementing  '2026-05-24T18:14:00Z'
 approved-wiki-module-refactor  '2026-05-24T18:31:20Z'
+approved-migration-script  '2026-05-24T18:40:03Z'
 ```
 
 ## Batches
@@ -45,7 +46,7 @@ batches:
     implementer_session: 99a985a2-8cb9-4184-a64a-45786b88a99d
     start_sha: 1c44913daba630c0af3e728514b7a4509f0c8c88
   - name: migration-script
-    state: running
+    state: approved
     implementer_session: ec5d9829-cc7c-4152-bc68-dfd2ffd03426
     start_sha: ac1aac1e1326ceb53caa9af1e274b2e7d4589635
   - name: v2-deletion-and-port
