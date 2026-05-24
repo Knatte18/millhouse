@@ -26,6 +26,7 @@ import sys
 import tempfile
 import textwrap
 import time
+import uuid
 from pathlib import Path
 
 HUB = Path(__file__).resolve().parent.parent.parent.parent
@@ -388,10 +389,6 @@ def _test_idempotent_rerun(wiki_path: Path, task_repo: Path) -> bool:
 
 def main() -> None:
     """Run all migration tests."""
-    # Clean up scratch directory at the start
-    if SCRATCH.exists():
-        _safe_rmtree.safe_rmtree(str(SCRATCH), allowed_root=str(SCRATCH), ignore_errors=True)
-
     SCRATCH.mkdir(parents=True, exist_ok=True)
 
     # Test 1: Dry-run
@@ -399,7 +396,7 @@ def main() -> None:
     print("TEST 1: Dry-run mode")
     print("=" * 60)
 
-    test1_dir = SCRATCH / "test-dryrun"
+    test1_dir = SCRATCH / f"test-dryrun-{uuid.uuid4().hex[:8]}"
     test1_dir.mkdir(parents=True, exist_ok=True)
 
     wiki_path, task_repo = _setup_wiki_fixture(test1_dir)
@@ -414,7 +411,7 @@ def main() -> None:
     print("TEST 2: Commit mode")
     print("=" * 60)
 
-    test2_dir = SCRATCH / "test-commit"
+    test2_dir = SCRATCH / f"test-commit-{uuid.uuid4().hex[:8]}"
     test2_dir.mkdir(parents=True, exist_ok=True)
 
     wiki_path, task_repo = _setup_wiki_fixture(test2_dir)
