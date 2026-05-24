@@ -179,10 +179,10 @@ Batch-local decisions (differ from `## Shared Decisions` in `00-overview.md`):
   - `plugins/mill/scripts/wiki/_client.py`
   - `plugins/mill/scripts/wiki/__init__.py`
 - **Edits:**
-  - `plugins/mill/integration_tests/test-wiki-daemon.py`
+  - `plugins/mill/unit_tests/test-wiki-daemon.py`
   - `plugins/mill/integration_tests/test-wiki-daemon-tinydb.py`
-  - `plugins/mill/integration_tests/test-wiki-noop-commit.py`
-  - `plugins/mill/integration_tests/test-wiki-sync.py`
+  - `plugins/mill/unit_tests/test-wiki-noop-commit.py`
+  - `plugins/mill/unit_tests/test-wiki-sync.py`
   - `plugins/mill/integration_tests/test-wiki-concurrency.py`
 - **Creates:** none
 - **Deletes:** none

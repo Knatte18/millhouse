@@ -93,11 +93,11 @@ batches:
 - `plugins/mill/integration_tests/test-review-discussion.py`
 - `plugins/mill/integration_tests/test-wiki-concurrency.py`
 - `plugins/mill/integration_tests/test-wiki-daemon-tinydb.py`
-- `plugins/mill/integration_tests/test-wiki-daemon.py`
 - `plugins/mill/integration_tests/test-wiki-e2e.py`
 - `plugins/mill/integration_tests/test-wiki-migrate.py`
-- `plugins/mill/integration_tests/test-wiki-noop-commit.py`
-- `plugins/mill/integration_tests/test-wiki-sync.py`
+- `plugins/mill/unit_tests/test-wiki-daemon.py`
+- `plugins/mill/unit_tests/test-wiki-noop-commit.py`
+- `plugins/mill/unit_tests/test-wiki-sync.py`
 - `plugins/mill/scripts/_config.py`
 - `plugins/mill/scripts/_junction.py`
 - `plugins/mill/scripts/_marker.py`
