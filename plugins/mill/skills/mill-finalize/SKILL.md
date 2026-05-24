@@ -13,8 +13,8 @@ You are the end-of-task finalization orchestrator. Your job is to choose the cor
 
 1. Resolve `git_root` via `_paths.resolve_git_root()`, `wiki_path` via `_paths.resolve_wiki_path(git_root)`.
 2. `_wiki.sync_pull(wiki_path, slug="mill-finalize")`.
-3. Load config: `cfg = _config.load_config(wiki_path, git_root)`.
-   `signature: _config.load_config(wiki_path: Path, worktree_root: Path) -> dict` — deep-merges `<wiki_path>/config.yaml` with `<worktree_root>/.millhouse/config.local.yaml`.
+3. Load config: `cfg = _config.load_config(repo_root, git_root)`.
+   `signature: _config.load_config(repo_root: Path, worktree_root: Path) -> dict` — deep-merges `<repo_root>/mill-config.yaml` with `<worktree_root>/.millhouse/config.local.yaml`.
 3.5. **Path Setup.** `cfg` was loaded in step 3; `worktree_root = git_root` from step 1. Derive `status_path = _paths.resolve_task_path(worktree_root, cfg['paths']['status_md'])` and `task_dir = status_path.parent`. Use these variables for all subsequent path references.
 4. Resolve task data: `active_data = _marker.task_data(git_root, wiki_path, cfg)`. On `MarkerError` → halt: "This worktree has no registered task branch — mill-finalize needs a tracked branch. Run mill-claim to register it, or merge manually."
 5. `slug = active_data['slug']`.

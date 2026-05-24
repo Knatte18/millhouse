@@ -31,6 +31,6 @@ mill-claim creates a portal entry pointing to `<active_hub>/_mill/` at `<contain
 - `.active` → `<container>/portals/<slug>/`
 - `.portals` → `<container>/portals/`
 
-These are the same set that mill-spawn creates in separate worktrees. Junction targets are read from `wiki/config.yaml`.
+These are the same set that mill-spawn creates in separate worktrees.
 
 Use mill-spawn instead when you want a separate worktree directory for the task.
