@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-fix-r5
+phase: planned
 slug: wiki-v3-adoption
 branch: hanf/wiki-v3-adoption
 plan: _mill/plan
@@ -31,4 +31,5 @@ plan-review-r4  '2026-05-24T18:02:49Z'
 plan-fix-r4  '2026-05-24T18:02:49Z'
 plan-review-r5  '2026-05-24T18:11:44Z'
 plan-fix-r5  '2026-05-24T18:11:44Z'
+planned  '2026-05-24T18:11:23Z'
 ```
