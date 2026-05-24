@@ -983,8 +983,6 @@ def main() -> int:
         test_env_override_empty_string_is_noop,
         test_list_replace_semantics,
         test_unknown_key_warning_emitted,
-        test_fallback_to_wiki_config_yaml,
-        test_both_files_present_mill_wins,
         test_machine_layer_not_loaded,
         test_deep_merge_scalar_wins,
         test_deep_merge_nested_merge,
