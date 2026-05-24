@@ -17,6 +17,7 @@ preserved on failure for inspection.
 """
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import subprocess
@@ -46,8 +47,12 @@ def _git(args: list[str], *, cwd: Path) -> subprocess.CompletedProcess:
     )
 
 
-def _setup_wiki_fixture(container: Path) -> Path:
-    """Initialise a local wiki repo with Home.md and proposal files."""
+def _setup_wiki_fixture(container: Path) -> tuple[Path, Path]:
+    """Initialise a local wiki repo with Home.md and proposal files.
+
+    Returns: (wiki_path, task_repo_path)
+    """
+    # Create wiki repo
     bare = container / "wiki.git"
     bare.mkdir(parents=True, exist_ok=True)
     _git(["init", "--bare", str(bare)], cwd=container)
@@ -112,7 +117,29 @@ def _setup_wiki_fixture(container: Path) -> Path:
     _git(["commit", "-m", "init: seed Home.md and proposals"], cwd=clone)
     _git(["push", "origin", "HEAD"], cwd=clone)
 
-    return clone
+    # Create a minimal task repo with .millhouse config pointing to the wiki
+    task_repo = container / "task-repo"
+    task_repo.mkdir(parents=True)
+
+    # Initialize git repo
+    _git(["init"], cwd=task_repo)
+    _git(["config", "user.email", "test@test.com"], cwd=task_repo)
+    _git(["config", "user.name", "Test"], cwd=task_repo)
+
+    # Create .millhouse directory with config
+    millhouse_dir = task_repo / ".millhouse"
+    millhouse_dir.mkdir(parents=True)
+
+    config = millhouse_dir / "config.local.yaml"
+    config.write_text(f"paths:\n  wiki: {clone}\n", encoding="utf-8")
+
+    # Create an initial commit so git rev-parse works
+    init_file = task_repo / "README.md"
+    init_file.write_text("Task repo\n", encoding="utf-8")
+    _git(["add", "README.md", ".millhouse/config.local.yaml"], cwd=task_repo)
+    _git(["commit", "-m", "init"], cwd=task_repo)
+
+    return clone, task_repo
 
 
 def _count_commits(wiki_path: Path, ref: str = "HEAD") -> int:
@@ -130,7 +157,7 @@ def _get_commit_messages(wiki_path: Path, count: int) -> list[str]:
     return result.stdout.strip().split("\n\n") if result.stdout.strip() else []
 
 
-def _test_dry_run(wiki_path: Path, task_worktree: Path) -> bool:
+def _test_dry_run(wiki_path: Path, task_repo: Path) -> bool:
     """Test --dry-run mode: no side effects."""
     try:
         # Get initial state
@@ -139,13 +166,14 @@ def _test_dry_run(wiki_path: Path, task_worktree: Path) -> bool:
         tasks_json = wiki_path / "tasks.json"
         daemon_state = wiki_path / ".wiki-daemon.json"
 
-        # Run migration in dry-run mode
+        # Run migration in dry-run mode from the task repo
         result = subprocess.run(
-            [sys.executable, "plugins/mill/scripts/millpy-wiki-migrate.py", "--dry-run"],
-            cwd=str(task_worktree),
+            [sys.executable, str(HUB / "plugins" / "mill" / "scripts" / "millpy-wiki-migrate.py"), "--dry-run"],
+            cwd=str(task_repo),
             capture_output=True,
             text=True,
             encoding="utf-8",
+            env={**os.environ, "PYTHONPATH": str(SCRIPTS)},
         )
 
         if result.returncode != 0:
@@ -187,7 +215,7 @@ def _test_dry_run(wiki_path: Path, task_worktree: Path) -> bool:
         return False
 
 
-def _test_commit(wiki_path: Path, task_worktree: Path) -> bool:
+def _test_commit(wiki_path: Path, task_repo: Path) -> bool:
     """Test commit mode: backup, migrate, render."""
     try:
         initial_commits = _count_commits(wiki_path)
@@ -198,13 +226,14 @@ def _test_commit(wiki_path: Path, task_worktree: Path) -> bool:
         # Get original Home.md content
         original_home = home_md.read_text(encoding="utf-8")
 
-        # Run migration in commit mode
+        # Run migration in commit mode from the task repo
         result = subprocess.run(
-            [sys.executable, "plugins/mill/scripts/millpy-wiki-migrate.py"],
-            cwd=str(task_worktree),
+            [sys.executable, str(HUB / "plugins" / "mill" / "scripts" / "millpy-wiki-migrate.py")],
+            cwd=str(task_repo),
             capture_output=True,
             text=True,
             encoding="utf-8",
+            env={**os.environ, "PYTHONPATH": str(SCRIPTS)},
         )
 
         if result.returncode != 0:
@@ -298,20 +327,21 @@ def _test_commit(wiki_path: Path, task_worktree: Path) -> bool:
         return False
 
 
-def _test_idempotent_rerun(wiki_path: Path, task_worktree: Path) -> bool:
+def _test_idempotent_rerun(wiki_path: Path, task_repo: Path) -> bool:
     """Test idempotent re-run: no new commits on second invocation."""
     try:
         # Get state before re-run
         head_before = _git(["rev-parse", "HEAD"], cwd=wiki_path).stdout.strip()
         commits_before = _count_commits(wiki_path)
 
-        # Run migration again
+        # Run migration again from the task repo
         result = subprocess.run(
-            [sys.executable, "plugins/mill/scripts/millpy-wiki-migrate.py"],
-            cwd=str(task_worktree),
+            [sys.executable, str(HUB / "plugins" / "mill" / "scripts" / "millpy-wiki-migrate.py")],
+            cwd=str(task_repo),
             capture_output=True,
             text=True,
             encoding="utf-8",
+            env={**os.environ, "PYTHONPATH": str(SCRIPTS)},
         )
 
         if result.returncode != 0:
@@ -358,11 +388,9 @@ def main() -> None:
         shutil.rmtree(fixture_base)
     fixture_base.mkdir(parents=True)
 
-    wiki_path = _setup_wiki_fixture(fixture_base)
-    task_worktree = fixture_base / "task"
-    task_worktree.mkdir(parents=True)
+    wiki_path, task_repo = _setup_wiki_fixture(fixture_base)
 
-    if not _test_dry_run(wiki_path, task_worktree):
+    if not _test_dry_run(wiki_path, task_repo):
         sys.exit(1)
 
     # Test 2: Commit mode
@@ -374,11 +402,9 @@ def main() -> None:
         shutil.rmtree(fixture_base)
     fixture_base.mkdir(parents=True)
 
-    wiki_path = _setup_wiki_fixture(fixture_base)
-    task_worktree = fixture_base / "task"
-    task_worktree.mkdir(parents=True)
+    wiki_path, task_repo = _setup_wiki_fixture(fixture_base)
 
-    if not _test_commit(wiki_path, task_worktree):
+    if not _test_commit(wiki_path, task_repo):
         sys.exit(1)
 
     # Test 3: Idempotent re-run
@@ -387,7 +413,7 @@ def main() -> None:
     print("=" * 60)
 
     # Re-use the wiki from test 2 (already migrated)
-    if not _test_idempotent_rerun(wiki_path, task_worktree):
+    if not _test_idempotent_rerun(wiki_path, task_repo):
         sys.exit(1)
 
     print("\n" + "=" * 60)
