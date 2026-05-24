@@ -10,7 +10,6 @@ _SCRIPTS = _HERE.parent / "scripts"
 if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 
-import _tasks_md  # noqa: E402
 import _test_helpers  # noqa: E402
 
 MILLPY_BG_PATH = _HERE.parent / "scripts" / "millpy-bg.py"
