@@ -32,10 +32,10 @@ _BODY_FIXTURE = (
 )
 
 
-def _load_add_module(wiki_path: Path) -> tuple[types.ModuleType, MagicMock, MagicMock]:
-    """Load millpy-add.py with all external dependencies stubbed.
+def _load_add_module(wiki_path: Path) -> tuple[types.ModuleType, MagicMock]:
+    """Load millpy-add.py with wiki module stubbed.
 
-    Returns ``(mod, wiki_stub, sidebar_stub)``.
+    Returns ``(mod, wiki_stub)``.
     """
     spec = importlib.util.spec_from_file_location("mill_add", ADD_PATH)
     if spec is None or spec.loader is None:
@@ -43,14 +43,14 @@ def _load_add_module(wiki_path: Path) -> tuple[types.ModuleType, MagicMock, Magi
     mod = importlib.util.module_from_spec(spec)
 
     wiki_stub = MagicMock()
-    sidebar_stub = MagicMock()
+    wiki_stub.get_task = MagicMock(return_value=None)
+    wiki_stub.upsert_task = MagicMock()
     paths_stub = MagicMock()
     paths_stub.resolve_git_root = MagicMock(return_value=Path("/fake/repo"))
     paths_stub.resolve_wiki_path = MagicMock(return_value=wiki_path)
 
     stub_map: dict[str, object] = {
-        "_sidebar": sidebar_stub,
-        "_wiki": wiki_stub,
+        "wiki._client": wiki_stub,
         "_paths": paths_stub,
     }
     saved: dict[str, object] = {}
@@ -67,11 +67,11 @@ def _load_add_module(wiki_path: Path) -> tuple[types.ModuleType, MagicMock, Magi
             else:
                 sys.modules[name] = original  # type: ignore[assignment]
 
-    return mod, wiki_stub, sidebar_stub
+    return mod, wiki_stub
 
 
 def test_proposal_body_file_reads_content() -> None:
-    """--proposal-body-file reads file content and uses it as the proposal body."""
+    """--proposal-body-file reads file content and passes to wiki.upsert_task."""
     with tempfile.TemporaryDirectory() as tmpdir:
         wiki_path = Path(tmpdir)
         (wiki_path / "Home.md").write_text("# Tasks\n", encoding="utf-8")
@@ -79,7 +79,7 @@ def test_proposal_body_file_reads_content() -> None:
         body_file = wiki_path / "body.md"
         body_file.write_text(_BODY_FIXTURE, encoding="utf-8")
 
-        mod, _wiki_stub, _sidebar_stub = _load_add_module(wiki_path)
+        mod, wiki_stub = _load_add_module(wiki_path)
 
         try:
             with (
@@ -98,35 +98,40 @@ def test_proposal_body_file_reads_content() -> None:
         if exit_code != 0:
             raise AssertionError(f"expected exit 0, got {exit_code}")
 
-        proposal_path = wiki_path / "proposal-test-slug.md"
-        if not proposal_path.exists():
-            raise AssertionError(f"proposal file not created at {proposal_path}")
+        if not wiki_stub.upsert_task.called:
+            raise AssertionError("wiki.upsert_task was not called")
 
-        actual = proposal_path.read_text(encoding="utf-8")
-        # Production code normalises trailing newlines: rstrip("\n") + "\n"
-        expected = _BODY_FIXTURE.rstrip("\n") + "\n"
-        if actual != expected:
+        call_args = wiki_stub.upsert_task.call_args
+        if call_args is None:
+            raise AssertionError("wiki.upsert_task called but no args captured")
+
+        # Normalize expected body (production code: rstrip("\n") + "\n")
+        expected_body = _BODY_FIXTURE.rstrip("\n") + "\n"
+        actual_body = call_args.kwargs.get("body")
+
+        if actual_body != expected_body:
             raise AssertionError(
-                f"proposal content mismatch.\nExpected: {expected!r}\nGot:      {actual!r}"
+                f"proposal body mismatch.\nExpected: {expected_body!r}\nGot:      {actual_body!r}"
             )
 
-    print("PASS: --proposal-body-file reads file content byte-for-byte")
+    print("PASS: --proposal-body-file reads file content and passes to wiki.upsert_task")
 
 
 def test_proposal_body_and_file_mutually_exclusive() -> None:
-    """--proposal-body and --proposal-body-file together -> non-zero SystemExit."""
+    """--proposal-body and --proposal-body-file together -> non-zero exit."""
     with tempfile.TemporaryDirectory() as tmpdir:
         wiki_path = Path(tmpdir)
         (wiki_path / "Home.md").write_text("# Tasks\n", encoding="utf-8")
 
-        mod, _, _ = _load_add_module(wiki_path)
+        mod, _wiki_stub = _load_add_module(wiki_path)
 
+        exit_code = None
         try:
             with (
                 patch.object(mod, "resolve_git_root", return_value=Path("/fake/repo")),
                 patch.object(mod, "resolve_wiki_path", return_value=wiki_path),
             ):
-                mod.main(
+                exit_code = mod.main(
                     [
                         "test-slug",
                         "--title",
@@ -138,35 +143,33 @@ def test_proposal_body_and_file_mutually_exclusive() -> None:
                     ]
                 )
         except SystemExit as exc:
-            if exc.code == 0:
-                raise AssertionError(
-                    "expected non-zero SystemExit for mutually-exclusive flags, got code 0"
-                )
-        else:
+            exit_code = exc.code
+
+        if exit_code == 0 or exit_code is None:
             raise AssertionError(
-                "expected SystemExit for mutually-exclusive flags, but main() returned normally"
+                f"expected non-zero exit for mutually-exclusive flags, got {exit_code}"
             )
 
-    print("PASS: --proposal-body and --proposal-body-file together cause non-zero SystemExit")
+    print("PASS: --proposal-body and --proposal-body-file together cause non-zero exit")
 
 
 def test_proposal_body_file_missing_path() -> None:
-    """--proposal-body-file with non-existent path -> clean SystemExit, no partial wiki writes."""
+    """--proposal-body-file with non-existent path -> clean non-zero exit."""
     missing_path = "/nonexistent/path/that/cannot/exist/body.md"
 
     with tempfile.TemporaryDirectory() as tmpdir:
         wiki_path = Path(tmpdir)
-        original_home = "# Tasks\n"
-        (wiki_path / "Home.md").write_text(original_home, encoding="utf-8")
+        (wiki_path / "Home.md").write_text("# Tasks\n", encoding="utf-8")
 
-        mod, _, _ = _load_add_module(wiki_path)
+        mod, wiki_stub = _load_add_module(wiki_path)
 
+        exit_code = None
         try:
             with (
                 patch.object(mod, "resolve_git_root", return_value=Path("/fake/repo")),
                 patch.object(mod, "resolve_wiki_path", return_value=wiki_path),
             ):
-                mod.main(
+                exit_code = mod.main(
                     [
                         "test-slug",
                         "--title",
@@ -176,21 +179,19 @@ def test_proposal_body_file_missing_path() -> None:
                     ]
                 )
         except SystemExit as exc:
-            if exc.code == 0:
-                raise AssertionError(
-                    "expected non-zero SystemExit for missing body file, got code 0"
-                )
-            home_text = (wiki_path / "Home.md").read_text(encoding="utf-8")
-            if home_text != original_home:
-                raise AssertionError(
-                    "Home.md was modified despite --proposal-body-file pointing to a missing file"
-                )
-        else:
+            exit_code = exc.code
+
+        if exit_code == 0 or exit_code is None:
             raise AssertionError(
-                "expected SystemExit for missing --proposal-body-file, but main() returned normally"
+                f"expected non-zero exit for missing body file, got {exit_code}"
             )
 
-    print("PASS: missing --proposal-body-file causes clean non-zero exit without partial wiki writes")
+        if wiki_stub.upsert_task.called:
+            raise AssertionError(
+                "wiki.upsert_task should not be called for missing --proposal-body-file"
+            )
+
+    print("PASS: missing --proposal-body-file causes clean non-zero exit without upsert")
 
 
 def main() -> int:
