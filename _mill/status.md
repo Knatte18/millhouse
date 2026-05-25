@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: wiki-v3-test-suite-green
 branch: hanf/wiki-v3-test-suite-green
 plan: _mill/plan
@@ -20,4 +20,17 @@ discussed  '2026-05-25T17:29:45Z'
 planning  '2026-05-25T17:42:34Z'
 plan-fix-r1  '2026-05-25T17:48:29Z'
 planned  '2026-05-25T17:49:01Z'
+implementing  '2026-05-25T17:55:05Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: foundation
+    state: pending
+  - name: gate-and-syntax-fixes
+    state: pending
+  - name: fixture-updates
+    state: pending
 ```
