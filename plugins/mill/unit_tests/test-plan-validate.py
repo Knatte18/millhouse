@@ -1251,7 +1251,7 @@ def test_check_verify_not_isolated_dirty_no_prefix() -> int:
         try:
             assert len(verify_errs) == 1, f"expected 1 error, got {len(verify_errs)}: {verify_errs}"
             e = verify_errs[0]
-            assert e["batch"] == "alpha", f"wrong batch: {e['batch']!r}"
+            assert e["batch"] == "01-alpha", f"wrong batch: {e['batch']!r}"
             assert e["card"] is None, f"wrong card: {e['card']!r}"
             assert e["path"] == "uv run --project plugins/mill python test.py", f"wrong path: {e['path']!r}"
             assert e["message"] == "verify command missing PYTHONPATH= prefix", f"wrong message: {e['message']!r}"
@@ -1349,7 +1349,7 @@ def test_check_verify_not_isolated_two_batches_dirty() -> int:
         try:
             assert len(verify_errs) == 2, f"expected 2 errors, got {len(verify_errs)}: {verify_errs}"
             batches = {e["batch"] for e in verify_errs}
-            assert batches == {"alpha", "beta"}, f"wrong batch names: {batches}"
+            assert batches == {"01-alpha", "02-beta"}, f"wrong batch names: {batches}"
             print("PASS test_check_verify_not_isolated_two_batches_dirty")
             return 0
         except AssertionError as exc:
@@ -1464,7 +1464,7 @@ def test_check_verify_not_isolated_run_integration() -> int:
                 f"envelope missing keys: {set(e.keys())}"
             )
             assert e["check"] == "verify-not-isolated"
-            assert e["batch"] == "alpha"
+            assert e["batch"] == "01-alpha"
             assert e["card"] is None
             assert e["path"] == "uv run test.py"
             assert e["message"] == "verify command missing PYTHONPATH= prefix"

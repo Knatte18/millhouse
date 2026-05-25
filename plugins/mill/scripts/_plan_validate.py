@@ -823,7 +823,6 @@ def _check_verify_not_isolated(batch_files: list[Path]) -> list[dict]:
             parsed = yaml.safe_load(yaml_text) or {}
         except Exception:
             continue
-        batch_name = parsed.get("batch")
         verify = parsed.get("verify")
         if verify is None or not isinstance(verify, str):
             continue
@@ -833,7 +832,7 @@ def _check_verify_not_isolated(batch_files: list[Path]) -> list[dict]:
         if not verify_stripped.startswith("PYTHONPATH="):
             errors.append({
                 "check": "verify-not-isolated",
-                "batch": batch_name or batch_path.stem,
+                "batch": batch_path.stem,
                 "card": None,
                 "path": verify,
                 "message": "verify command missing PYTHONPATH= prefix",
@@ -858,7 +857,7 @@ def run(
     Returns a sorted list of error dicts with keys:
     {check, batch, card, path, message}.
 
-    Checks 1, 2, 3, 4, 5, 6, 8 from issue #10, plus wiki-config-mutation.
+    Checks 1, 2, 3, 4, 5, 6, 8 from issue #10, plus wiki-config-mutation and verify-not-isolated.
     """
     overview_path = plan_dir / "00-overview.md"
     if not overview_path.exists():
