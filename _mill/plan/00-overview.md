@@ -108,6 +108,7 @@ batches:
 - `plugins/mill/scripts/millpy-vscode.py`
 - `plugins/mill/scripts/millpy-wikipush.py`
 - `plugins/mill/scripts/wiki/_client.py`
+- `plugins/mill/scripts/wiki/_parse.py`
 - `plugins/mill/unit_tests/_test_helpers.py`
 - `plugins/mill/unit_tests/test-fold.py`
 - `plugins/mill/unit_tests/test-millpy-spawn.py`
