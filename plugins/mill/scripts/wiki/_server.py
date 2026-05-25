@@ -77,8 +77,14 @@ class WikiServer(DaemonBase):
         self._ensure_gitignore()
 
     def on_stop(self) -> None:
-        """Log shutdown."""
+        """Log shutdown and release log handlers."""
         self._log.info("wiki-server stopping")
+        for handler in list(self._log.handlers):
+            try:
+                handler.close()
+            except Exception:
+                pass
+            self._log.removeHandler(handler)
 
     def handle_request(self, msg: dict) -> dict:
         """Dispatch request on operation type."""
