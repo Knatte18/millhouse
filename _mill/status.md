@@ -38,5 +38,7 @@ batches:
     implementer_session: 3d81f4db-74c1-4dac-9068-1cb85be71807
     start_sha: af2056d63a71aa0fe23bba651f197c4d6630d6f0
   - name: fixture-updates
-    state: pending
+    state: running
+    implementer_session: d1a613ae-2356-4715-9801-71a81d8bcfa5
+    start_sha: 9a2fa16de20c652f8482b4227f1e646bc67d794a
 ```
