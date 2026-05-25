@@ -67,11 +67,9 @@ from typing import Optional
 
 import _junction
 import _paths
-import _sidebar
 import _status
 import _subprocess_util
-import _tasks_md
-import _wiki
+from wiki import _client as wiki
 
 _SLUG_PATTERN = re.compile(r"^[a-z][a-z0-9-]*$")
 
@@ -150,7 +148,7 @@ def pick_worktree_color(worktrees_dir: Path) -> str:
 
 def discover_active_worktrees(
     worktrees_dir: Path,
-    home_tasks: list[_tasks_md.Task],
+    home_tasks: list[dict],
     branch_prefix: str,
     cwd: Path | None = None,
 ) -> list[tuple[Path, str, str]]:
@@ -180,7 +178,6 @@ def discover_active_worktrees(
         List of ``(path, slug, task_title)`` triples, one per matched worktree.
         Empty list when no matches.
     """
-    home_tasks = [_task_to_dict(t) for t in home_tasks]
     slugs_in_home = {t["slug"]: t for t in home_tasks}
     results: list[tuple[Path, str, str]] = []
 
@@ -229,7 +226,7 @@ class BacklogEmpty(Exception):
     """Raised by ``pick_task_single`` when no pickable task exists in Home.md."""
 
 
-def _prompt_numbered(candidates: list[_tasks_md.Task]) -> Optional[_tasks_md.Task]:
+def _prompt_numbered(candidates: list[dict]) -> Optional[dict]:
     """Read a 1-indexed choice from stdin; return the chosen Task or None."""
     print("Pick a task:", file=sys.stderr)
     for i, t in enumerate(candidates, start=1):
@@ -254,39 +251,24 @@ def _prompt_numbered(candidates: list[_tasks_md.Task]) -> Optional[_tasks_md.Tas
     return candidates[choice - 1]
 
 
-def _task_to_dict(task: _tasks_md.Task) -> dict:
-    """Convert Task dataclass to dict for V3 compatibility."""
-    if isinstance(task, dict):
-        return task
-    return {
-        "slug": task.slug,
-        "title": task.title,
-        "phase": task.phase,
-        "has_proposal": task.has_proposal,
-        "heading_line_no": getattr(task, "heading_line_no", None),
-    }
-
-
 def pick_task_single(
-    tasks: list[_tasks_md.Task],
+    tasks: list[dict],
     slug: Optional[str] = None,
 ) -> dict:
     """
     Pick exactly one task from ``tasks`` for claiming.
 
-    When ``slug`` is provided the task must exist and have phase ``None``
-    or ``"s"`` (i.e. not already active, done, or abandoned). Any other
+    When ``slug`` is provided the task must exist and have status ``None``
+    (i.e. not already active, done, or abandoned). Any other
     slug value raises ``ValueError``.
 
     When ``slug`` is ``None`` the standard interactive flow runs:
 
-    1. If at least one task carries ``[s]``, return the first such task
-       (fast-path — no user prompt).
-    2. Otherwise, if at least one unmarked task exists, present the
+    1. If at least one unmarked task exists, present the
        numbered picker and return the chosen task.  A failed picker (EOF
        or out-of-range input) returns ``None`` from ``_prompt_numbered``,
        which is propagated as ``ValueError``.
-    3. If nothing is pickable, raise ``BacklogEmpty``.
+    2. If nothing is pickable, raise ``BacklogEmpty``.
 
     Args:
         tasks: All tasks parsed from Home.md (including active/done/abandoned).
@@ -294,17 +276,16 @@ def pick_task_single(
             interactive picker entirely.
 
     Returns:
-        The selected ``Task``.
+        The selected task dict.
 
     Raises:
         BacklogEmpty: No pickable task exists (slug=None path only).
         ValueError: The requested slug is unknown, already claimed/done/abandoned,
             or the numbered picker returned no selection.
     """
-    tasks = [_task_to_dict(t) for t in tasks]
     if slug is not None:
         matched = next(
-            (t for t in tasks if t["slug"] == slug and t["phase"] in (None, "s")),
+            (t for t in tasks if t["slug"] == slug and t["status"] is None),
             None,
         )
         if matched is None:
@@ -313,16 +294,11 @@ def pick_task_single(
             )
         return matched
 
-    # Fast-path: first [s] task in file order.
-    fast = next((t for t in tasks if t["phase"] == "s"), None)
-    if fast is not None:
-        return fast
-
     # Numbered picker: unmarked tasks only.
-    unmarked = [t for t in tasks if t["phase"] is None]
+    unmarked = [t for t in tasks if t["status"] is None]
     if not unmarked:
         raise BacklogEmpty(
-            "No pickable tasks. Mark a task [s] or leave one unmarked "
+            "No pickable tasks. Leave one unmarked "
             "(see /mill-add)."
         )
 
@@ -333,8 +309,8 @@ def pick_task_single(
 
 
 def _prompt_numbered_multi(
-    candidates: list[_tasks_md.Task],
-) -> list[_tasks_md.Task]:
+    candidates: list[dict],
+) -> list[dict]:
     """
     Read one or more 1-indexed comma-separated choices from stdin.
 
@@ -346,7 +322,7 @@ def _prompt_numbered_multi(
         candidates: Ordered list of pickable tasks shown to the user.
 
     Returns:
-        A non-empty list of the selected Task objects (de-duplicated).
+        A non-empty list of the selected task dicts (de-duplicated).
 
     Raises:
         ValueError: All 3 attempts were invalid, or EOF on stdin.
@@ -402,7 +378,7 @@ def _prompt_numbered_multi(
 
 
 def pick_task_single_or_multi(
-    tasks: list[_tasks_md.Task],
+    tasks: list[dict],
     slug: Optional[str] = None,
 ) -> tuple[str, dict | list[dict] | None, list[dict]]:
     """
@@ -410,11 +386,11 @@ def pick_task_single_or_multi(
 
     Extends ``pick_task_single`` by allowing the numbered interactive prompt to
     return multiple tasks when the user enters comma-separated indices. The
-    ``--slug`` short-circuit and ``[s]`` fast-path always resolve to a single
-    task; multi only fires from the numbered prompt.
+    ``--slug`` short-circuit always resolves to a single task; multi only fires
+    from the numbered prompt.
 
     Return shape:
-        - ``("single", task, [])`` — one task picked (slug bypass, fast-path,
+        - ``("single", task, [])`` — one task picked (slug bypass
           or numbered prompt with a single index).
         - ``("multi", [task_a, ...], [])`` — two or more tasks from the prompt.
         - ``("empty", None, [])`` — no pickable (unmarked) tasks exist.
@@ -430,11 +406,10 @@ def pick_task_single_or_multi(
     Raises:
         ValueError: Invalid slug, or no valid selection after 3 prompt attempts.
     """
-    tasks = [_task_to_dict(t) for t in tasks]
     # --slug short-circuit: bypass picker entirely, always single.
     if slug is not None:
         matched = next(
-            (t for t in tasks if t["slug"] == slug and t["phase"] in (None, "s")),
+            (t for t in tasks if t["slug"] == slug and t["status"] is None),
             None,
         )
         if matched is None:
@@ -443,13 +418,8 @@ def pick_task_single_or_multi(
             )
         return ("single", matched, [])
 
-    # Fast-path: first [s] task, always single.
-    fast = next((t for t in tasks if t["phase"] == "s"), None)
-    if fast is not None:
-        return ("single", fast, [])
-
     # Numbered multi-select: unmarked tasks only.
-    candidates = [t for t in tasks if t["phase"] is None]
+    candidates = [t for t in tasks if t["status"] is None]
     if not candidates:
         return ("empty", None, [])
 
@@ -471,78 +441,47 @@ def multi_select_groom_then_claim(
     """
     Atomic wiki transaction that absorbs multiple tasks into a single merged entry.
 
-    Performs all edits under the wiki advisory lock so no concurrent writer
-    can interleave between the read and the commit:
+    Performs all edits in a single atomic call via V3 daemon:
 
-    1. Remove each source slug's entry from Home.md via ``_tasks_md.remove_entry``.
-    2. Append the merged entry via ``_tasks_md.append_entry``.
-    3. Mark the merged entry ``[active]`` via ``_tasks_md.claim``.
-    4. Regenerate the sidebar.
-    5. Optionally write ``proposal-<merged_slug>.md`` when ``has_proposal=True``
-       and ``proposal_body`` is provided.
-    6. Commit and push under a descriptive commit message.
-    7. Re-parse Home.md and return the merged Task.
+    1. Remove each source slug's entry via ``wiki.merge_tasks(... remove_slugs=...)``.
+    2. Upsert the merged entry via ``wiki.merge_tasks(... upsert=...)``.
+    3. Mark the merged entry ``"active"`` via ``wiki.merge_tasks(... set_phase=(merged_slug, "active"))``.
 
     Args:
         wiki_path: Directory containing the wiki clone.
         source_slugs: Slugs of the tasks to remove and absorb.
         merged_title: Human-readable title for the merged entry.
         merged_slug: Slug for the merged entry. Must be new (not already in Home.md).
-        merged_body: Body text for the merged entry in Home.md.
-        has_proposal: When True, emit the ``[[slug]](proposal-slug)`` link form.
-        proposal_body: Content to write into ``proposal-<merged_slug>.md``. Only
-            written when ``has_proposal=True`` and not None.
+        merged_body: Body text for the merged entry in Home.md (maps to brief in V3).
+        has_proposal: When True, include body in upsert dict for proposal file.
+        proposal_body: Content for ``proposal-<merged_slug>.md``. Only
+            included when ``has_proposal=True`` and not None.
 
     Returns:
-        The newly created and claimed ``Task`` (phase ``"active"``).
+        The newly created and claimed task dict (status ``"active"``).
 
     Raises:
-        ValueError: A source slug is not found in Home.md (from ``remove_entry``).
-        RuntimeError: The merged task cannot be found after re-parsing (parse failure).
+        WikiPushError: Git push failed.
     """
-    home_path = wiki_path / "Home.md"
-    with _wiki.wiki_lock(wiki_path, merged_slug):
-        text = home_path.read_text(encoding="utf-8")
+    upsert_dict: dict = {
+        "slug": merged_slug,
+        "title": merged_title,
+        "brief": merged_body,
+    }
+    if has_proposal and proposal_body is not None:
+        upsert_dict["body"] = proposal_body
 
-        # Remove all source entries first, then append the merged one.
-        for slug in source_slugs:
-            text = _tasks_md.remove_entry(text, slug)
-        text = _tasks_md.append_entry(
-            text, merged_slug, merged_title, merged_body, has_proposal=has_proposal
-        )
-        text = _tasks_md.claim(text, merged_slug)
-        home_path.write_text(text, encoding="utf-8")
-        _sidebar.regenerate(wiki_path)
-
-        files_to_commit = ["Home.md", "_Sidebar.md"]
-
-        # Write the proposal file alongside Home.md if requested.
-        if has_proposal and proposal_body is not None:
-            proposal_path = wiki_path / f"proposal-{merged_slug}.md"
-            proposal_path.write_text(proposal_body, encoding="utf-8")
-            files_to_commit.append(f"proposal-{merged_slug}.md")
-
-        absorbed = ", ".join(source_slugs)
-        commit_msg = (
-            f"task: groom-and-claim {len(source_slugs)}->1 "
-            f"({merged_slug}; absorbed {absorbed})"
-        )
-        _wiki.write_commit_push(wiki_path, files_to_commit, commit_msg, slug=merged_slug)
-
-    # Re-parse after commit to return an authoritative Task object.
-    new_text = home_path.read_text(encoding="utf-8")
-    parsed_tasks = _tasks_md.parse(new_text)
-    parsed_tasks = [_task_to_dict(t) for t in parsed_tasks]
-    merged_task = next((t for t in parsed_tasks if t["slug"] == merged_slug), None)
-    if merged_task is None:
-        raise RuntimeError(
-            f"merged task {merged_slug!r} not found after commit — parse failed"
-        )
-    return merged_task
+    result = wiki.merge_tasks(
+        wiki_path,
+        remove_slugs=source_slugs,
+        upsert=upsert_dict,
+        set_phase=(merged_slug, "active"),
+    )
+    return result
 
 
 def prompt_merged_entry(
-    source_tasks: list[_tasks_md.Task],
+    source_tasks: list[dict],
 ) -> tuple[str, str, str, bool, Optional[str]]:
     """
     Collect a merged entry definition from the user via stdin.
@@ -569,7 +508,6 @@ def prompt_merged_entry(
     Raises:
         ValueError: Merged title or slug could not be collected after 3 attempts.
     """
-    source_tasks = [_task_to_dict(t) for t in source_tasks]
     # Print source task titles so the user knows what they are merging.
     print("Merging these tasks:", file=sys.stderr)
     for t in source_tasks:
@@ -641,24 +579,13 @@ def prompt_merged_entry(
 
 def claim_in_wiki(wiki_path: Path, slug: str) -> None:
     """
-    Mark ``slug`` as ``[active]`` in Home.md, regen sidebar, and commit+push.
-
-    Acquires the wiki advisory lock for the full operation so no other
-    writer can interleave a Home.md edit between the read and the commit.
+    Mark ``slug`` as ``"active"`` via the V3 daemon.
 
     Args:
         wiki_path: Directory containing the wiki clone.
         slug: Task slug to claim.
     """
-    home_path = wiki_path / "Home.md"
-    with _wiki.wiki_lock(wiki_path, slug):
-        home_text = home_path.read_text(encoding="utf-8")
-        claimed_text = _tasks_md.claim(home_text, slug)
-        home_path.write_text(claimed_text, encoding="utf-8")
-        _sidebar.regenerate(wiki_path)
-        _wiki.write_commit_push(
-            wiki_path, ["Home.md", "_Sidebar.md"], f"task: claim {slug}", slug=slug
-        )
+    wiki.set_phase(wiki_path, slug, "active")
 
 
 def capture_parent_branch(git_root: Path) -> str:

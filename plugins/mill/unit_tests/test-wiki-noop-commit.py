@@ -38,6 +38,11 @@ def _setup_wiki(wiki_path: Path) -> None:
     (wiki_path / "Home.md").write_text("# Wiki\n", encoding="utf-8")
     _git(["add", "Home.md"], wiki_path)
     _git(["commit", "-m", "init"], wiki_path)
+    # Bare-clone "origin" so commit_push's git push has a destination.
+    bare = wiki_path.parent / f"{wiki_path.name}.git"
+    subprocess.run(["git", "init", "--bare", str(bare)], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(wiki_path), "remote", "add", "origin", str(bare)], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(wiki_path), "push", "-u", "origin", "HEAD"], check=True, capture_output=True)
 
 
 def _get_head_sha(wiki_path: Path) -> str:

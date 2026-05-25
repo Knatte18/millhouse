@@ -108,6 +108,7 @@ def parse_home_md(content: str) -> list[dict]:
                     "group": current_group,
                     "brief": brief,
                     "status": status,
+                    "has_proposal": bool(proposal_match),
                 }
             )
             continue

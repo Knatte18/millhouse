@@ -37,7 +37,7 @@ def test_smoke_import() -> None:
     # Provide minimal stubs for the heavy imports so the module loads without
     # a real git repo or wiki on disk.
     stubs = [
-        "_junction", "_setup", "_spawn_core", "_tasks_md", "_vscode", "_wiki",
+        "_junction", "_setup", "_spawn_core", "_vscode",
         "_worktree", "_paths", "_sibling", "_subprocess_util",
     ]
     for name in stubs:
@@ -951,23 +951,24 @@ def test_spawn_discovery_round_trip_subfolder() -> None:
         wiki = tmpdir / "wiki"
         wiki.mkdir()
         (wiki / "config.yaml").write_text("junctions: {}\nhardlinks: {}\n", encoding="utf-8")
+        (wiki / "mill-config.yaml").write_text("paths:\n  discussion_file: discussion.md\nspawn:\n  branch_prefix: \"\"\n", encoding="utf-8")
         (wiki / "Home.md").write_text(
-            f"## RT Task\n[[{slug}]] [active]\n\n_body_\n", encoding="utf-8"
+            f"## RT Task\n[{slug}] [active]\n\n_body_\n", encoding="utf-8"
         )
 
         # Import real module implementations (scripts dir is on sys.path)
         # Temporarily clear any stubs injected by previous tests.
         _to_clear = ["_spawn_core", "_config", "_paths", "_yaml_writer",
-                     "_sibling", "_subprocess_util", "_tasks_md"]
+                     "_sibling", "_subprocess_util"]
         _saved = {n: sys.modules.pop(n, None) for n in _to_clear}
         try:
             import _spawn_core as real_sc
             import _config as real_cfg_mod
             import _paths as real_paths_mod
-            import _tasks_md as real_tasks_md
+            from wiki._parse import parse_home_md
 
             # 1. discover_active_worktrees with new signature
-            home_tasks = real_tasks_md.parse((wiki / "Home.md").read_text(encoding="utf-8"))
+            home_tasks = parse_home_md((wiki / "Home.md").read_text(encoding="utf-8"))
             discovered = real_sc.discover_active_worktrees(worktrees, home_tasks, branch_prefix, cwd=wt)
             if len(discovered) != 1:
                 raise AssertionError(

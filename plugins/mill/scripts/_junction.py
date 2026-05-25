@@ -298,7 +298,7 @@ def strip_all_in_worktree(worktree_path: Path, junctions_cfg: dict[str, str]) ->
         worktree_path: Absolute path to the worktree being torn down.
         junctions_cfg: The ``junctions:`` block from ``mill-config.yaml``,
             as returned by ``read_junctions``. Caller passes this
-            in to avoid a circular import on ``_wiki``.
+            in for separation of concerns; ``_junction`` does not depend on the wiki subpackage.
 
     Returns:
         List of link paths that were stripped (or attempted; ``remove`` is

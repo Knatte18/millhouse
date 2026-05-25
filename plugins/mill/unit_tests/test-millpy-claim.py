@@ -27,11 +27,17 @@ CLAIM_PATH = HUB / "plugins" / "mill" / "scripts" / "millpy-claim.py"
 # ---------------------------------------------------------------------------
 
 
-def _make_fake_task(slug: str = "my-task", title: str = "My Task") -> MagicMock:
-    task = MagicMock()
-    task.slug = slug
-    task.title = title
-    return task
+def _make_fake_task(slug: str = "my-task", title: str = "My Task") -> dict:
+    """Return a fake task dict compatible with wiki.list_tasks_brief()."""
+    return {
+        "id": 1,
+        "slug": slug,
+        "title": title,
+        "group": None,
+        "brief": "",
+        "status": None,
+        "has_proposal": False,
+    }
 
 
 def _make_ok_run(stdout: str = "", stderr: str = "") -> MagicMock:
@@ -87,20 +93,12 @@ def _make_stub_map(
     paths_mod.resolve_short_name = MagicMock(return_value="MI")
     paths_mod.resolve_hub_path = MagicMock(return_value=Path("/fake/repo/subdir"))
 
-    tasks_md_mod = MagicMock()
-    tasks_md_mod.parse.return_value = [_make_fake_task()]
-
-    wiki_mod = MagicMock()
-    wiki_mod.sync_pull.return_value = None
-
     config_mod = types.ModuleType("_config")
     config_mod.load_config = MagicMock(return_value={})
 
     return {
         "_spawn_core": sc,
         "_subprocess_util": subprocess_stub,
-        "_tasks_md": tasks_md_mod,
-        "_wiki": wiki_mod,
         "_paths": paths_mod,
         "_vscode": MagicMock(),
         "_junction": MagicMock(),

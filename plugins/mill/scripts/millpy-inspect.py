@@ -17,7 +17,7 @@ import _config
 import _paths
 import _spawn_core
 import _status
-import _tasks_md
+from wiki import _client as wiki
 
 PHASE_ORDER = (
     "discussing",
@@ -42,18 +42,19 @@ def _phase_index(phase: str | None) -> int:
 
 
 def _collect(git_root: Path, slug_filter: str | None) -> list[dict]:
-    wiki = _paths.resolve_wiki_path(git_root)
+    wiki_path = _paths.resolve_wiki_path(git_root)
     container_path = _paths.resolve_container_path(git_root)
     cfg = _config.load_config(git_root, git_root)
     branch_prefix = cfg.get("spawn", {}).get("branch_prefix", "")
 
-    home_md = wiki / "Home.md"
     home_tasks_list: list = []
     home_marker_map: dict[str, str] = {}
-    if home_md.exists():
-        home_tasks_list = _tasks_md.parse(home_md.read_text(encoding="utf-8"))
+    try:
+        home_tasks_list = wiki.list_tasks_brief(wiki_path)
         for task in home_tasks_list:
-            home_marker_map[task["slug"]] = task["phase"] if task["phase"] is not None else "unclaimed"
+            home_marker_map[task["slug"]] = task["status"] if task["status"] is not None else "unclaimed"
+    except Exception:
+        pass
 
     # Active worktrees: (path, slug, title) triples from <container>/wts/
     active_worktree_list = _spawn_core.discover_active_worktrees(

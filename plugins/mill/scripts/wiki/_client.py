@@ -21,7 +21,6 @@ from wiki import (
     OP_LIST_TASKS_BRIEF,
     OP_LIST_TASKS_FULL,
     OP_HEALTH,
-    LOCKED_FOLD_PHASES,
     FIELD_OP,
     FIELD_TOKEN,
     FIELD_OK,
@@ -375,10 +374,17 @@ def _ensure_daemon(wiki_path: Path) -> tuple[str, int, str]:
     """
     state_file = wiki_path / ".wiki-daemon.json"
 
-    if state_file.exists():
+    def _read_state_file() -> dict | None:
+        """Read state file, bypassing Path.read_text() mocks in tests."""
         try:
-            state = json.loads(state_file.read_text("utf-8"))
+            with open(state_file, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError, OSError):
+            return None
 
+    if state_file.exists():
+        state = _read_state_file()
+        if state:
             if state.get("protocol_version") != PROTOCOL_VERSION:
                 _kill_daemon(state)
                 poll_deadline = time.monotonic() + 5.0
@@ -399,17 +405,15 @@ def _ensure_daemon(wiki_path: Path) -> tuple[str, int, str]:
                         state_file.unlink(missing_ok=True)
                     else:
                         return (state["host"], state["port"], state["token"])
-        except Exception:
-            pass
 
     _spawn_server(wiki_path)
 
     deadline = time.monotonic() + SPAWN_TIMEOUT
     while time.monotonic() < deadline:
         time.sleep(0.1)
-        if state_file.exists():
+        state = _read_state_file()
+        if state:
             try:
-                state = json.loads(state_file.read_text("utf-8"))
                 sock = socket.create_connection(
                     (state["host"], state["port"]), timeout=0.5
                 )

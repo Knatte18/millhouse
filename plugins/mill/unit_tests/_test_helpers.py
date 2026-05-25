@@ -22,7 +22,7 @@ if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 
 import _safe_rmtree  # noqa: E402
-import _tasks_md  # noqa: E402
+from wiki._parse import parse_home_md  # noqa: E402
 
 
 def _make_task_worktree(
@@ -105,20 +105,20 @@ def _make_task_worktree(
 
     wiki_path.mkdir(parents=True, exist_ok=True)
     if phase == "none":
-        home_body = f"## {title}\n[[{slug}]]\n\n_body_\n"
+        home_body = f"## {title}\n[{slug}]\n\n_body_\n"
     else:
-        home_body = f"## {title}\n[[{slug}]] [{phase}]\n\n_body_\n"
+        home_body = f"## {title}\n[{slug}] [{phase}]\n\n_body_\n"
 
     (wiki_path / "Home.md").write_text(home_body, encoding="utf-8")
 
-    parsed = _tasks_md.parse(home_body)
-    found = next((t for t in parsed if t.slug == slug), None)
+    parsed = parse_home_md(home_body)
+    found = next((t for t in parsed if t["slug"] == slug), None)
     if found is None:
         raise AssertionError(f"slug {slug!r} not found in generated Home.md")
-    expected_phase = None if phase == "none" else phase
-    if found.phase != expected_phase:
+    expected_status = None if phase == "none" else phase
+    if found["status"] != expected_status:
         raise AssertionError(
-            f"expected phase={expected_phase!r} for slug {slug!r}, got {found.phase!r}"
+            f"expected status={expected_status!r} for slug {slug!r}, got {found['status']!r}"
         )
 
     return (worktree_path, wiki_path)
