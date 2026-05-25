@@ -30,6 +30,7 @@ Batch-local decisions (differ from `## Shared Decisions` in `00-overview.md`):
 - **Context:**
   - `plugins/mill/scripts/wiki/__init__.py`
   - `plugins/mill/scripts/wiki/_client.py`
+  - `plugins/mill/scripts/wiki/_render.py`
   - `plugins/mill/unit_tests/test-millpy-color.py`
 - **Edits:**
   - `plugins/mill/scripts/_spawn_core.py`
@@ -80,7 +81,7 @@ Batch-local decisions (differ from `## Shared Decisions` in `00-overview.md`):
 
   Replace the entire `with _wiki.wiki_lock(wiki_path, merged_slug):` block (line 504 through line ~534) with a single atomic call. The function's existing signature is `multi_select_groom_then_claim(wiki_path, source_slugs: list[str], merged_title, merged_slug, merged_body, has_proposal=False, proposal_body=None)` — verified at `_spawn_core.py:462–469`.
 
-  **V2→V3 field semantics (load-bearing):** the function's `merged_body` parameter holds `body_for_home` from `prompt_merged_entry` — the text that appears under the Home.md slug heading. In V3 that maps to **`brief`**, not `body`. The function's `proposal_body` parameter holds the content destined for `proposal-<merged_slug>.md`. In V3 that maps to **`body`** (the V3 daemon renders `body` into `proposal-<slug>.md` automatically). `has_proposal` is **derived** by `Store.list_tasks_brief` from `bool(body)` — do NOT pass it explicitly. Build the upsert dict accordingly:
+  **V2→V3 field semantics (load-bearing).** The function's `merged_body` parameter holds `body_for_home` from `prompt_merged_entry` — the text that appears under the Home.md slug heading. In V3 that maps to **`brief`**, not `body`. The function's `proposal_body` parameter holds the content destined for `proposal-<merged_slug>.md`. In V3 that maps to **`body`** (the V3 daemon renders `body` into `proposal-<slug>.md` automatically — verified at `plugins/mill/scripts/wiki/_render.py:56` which contains `result[f"proposal-{slug}.md"] = body`). `has_proposal` is **derived** by `Store.list_tasks_brief` from `bool(body)` — do NOT pass it explicitly. Build the upsert dict accordingly:
 
   ```python
   upsert_dict: dict = {

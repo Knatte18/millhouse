@@ -77,19 +77,21 @@ Batch-local decisions (differ from `## Shared Decisions` in `00-overview.md`):
 - **Deletes:** none
 - **Requirements:** The test `test_real_change_commits_normally` in `plugins/mill/unit_tests/test-wiki-noop-commit.py` currently fails with `wiki.WikiPushError: git push failed: 'fatal: No configured push destination.'`. The cause is that the test fixture creates a wiki clone with no `origin` remote, but `wiki._sync.commit_push` calls `git push` unconditionally. Production `commit_push` is correct (wikis always have an `origin` in production); the test fixture is wrong.
 
-  Add a bare-clone `origin` remote to the test's wiki fixture. The standard pattern in `_test_helpers.py:28+` (`_make_task_worktree`) shows how other tests do it — copy the bare-clone setup into `test-wiki-noop-commit.py`'s fixture if it does not already share a helper.
+  Add a bare-clone `origin` remote to the test's wiki fixture. All three tests in `test-wiki-noop-commit.py` build their fixture via the shared `_setup_wiki(wiki_path)` helper at the top of the file (line 31). Modify the helper itself — that's one edit that fixes all three tests at once (the two no-op tests already pass; the third reaches the push and currently fails).
 
-  Concretely, locate the fixture creation in `test-wiki-noop-commit.py` (likely in `setUp` or a per-test `tmpdir`-style block). Add:
+  In `_setup_wiki(wiki_path)`, after the existing wiki-clone init steps, add:
 
   ```python
-  # Create a bare-clone "origin" so commit_push's git push has a destination.
-  bare = tmp_path / "wiki.git"
+  # Bare-clone "origin" so commit_push's git push has a destination.
+  bare = wiki_path.parent / f"{wiki_path.name}.git"
   subprocess.run(["git", "init", "--bare", str(bare)], check=True, capture_output=True)
-  subprocess.run(["git", "-C", str(wiki), "remote", "add", "origin", str(bare)], check=True, capture_output=True)
-  subprocess.run(["git", "-C", str(wiki), "push", "-u", "origin", "HEAD"], check=True, capture_output=True)
+  subprocess.run(["git", "-C", str(wiki_path), "remote", "add", "origin", str(bare)], check=True, capture_output=True)
+  subprocess.run(["git", "-C", str(wiki_path), "push", "-u", "origin", "HEAD"], check=True, capture_output=True)
   ```
 
-  Where `wiki` is the existing wiki-clone path local and `tmp_path` is the test's tempdir base. The exact local variable names depend on the existing fixture shape — read the fixture and adapt.
+  Where `wiki_path` is the existing helper's parameter (line 31 signature: `def _setup_wiki(wiki_path: Path) -> None:`). The bare clone lives as a sibling of `wiki_path` so it shares the same tempdir lifecycle.
+
+  Do NOT add per-test patching — the helper edit covers all three tests with one change.
 
   Then re-run the test to confirm it passes:
 

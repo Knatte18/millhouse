@@ -60,8 +60,18 @@ Batch-local decisions (differ from `## Shared Decisions` in `00-overview.md`):
 
   - Line 32: delete `import _wiki`.
   - Line 102: the comment `# Capture changed files BEFORE acquiring the lock — _wiki.wiki_lock` is now misleading; either delete the entire comment line or rewrite as `# Capture changed files BEFORE pushing` (one-line, no reference to the deleted helper).
-  - Line 111: delete the `with _wiki.wiki_lock(wiki, "wikipush"):` context manager. The body of the `with` block becomes a flat sequence of statements at the previous outer indentation.
-  - Line 113: delete the `except _wiki.LockBusy as e:` clause and its body. There is no V3 equivalent — the daemon serialises writes for daemon-mediated ops, and `wikipush` is deliberately NOT daemon-mediated. Any `git push` failure manifests as the existing subprocess error path; no special LockBusy handling needed.
+  - Line 110: delete the bare `try:` line. Without an `except` or `finally` clause (both are being removed below), Python would raise `SyntaxError` on a dangling `try:`.
+  - Line 111: delete the `with _wiki.wiki_lock(wiki, "wikipush"):` context manager. The body of the `with` block becomes a flat top-level statement at the outer (function) indentation.
+  - Lines 113-118: delete the `except _wiki.LockBusy as e:` clause AND its body (the `print(...)` and `return 1` lines). There is no V3 equivalent — the daemon serialises writes for daemon-mediated ops, and `wikipush` is deliberately NOT daemon-mediated. Any `git push` failure manifests as the existing subprocess error path; no special LockBusy handling needed.
+  - Post-edit shape of the block (lines 109-119 collapse to two lines):
+
+    ```python
+    changed = _changed_files(wiki)
+
+    return _push_inner(wiki, changed, leave_conflicts=args.leave_conflicts)
+    ```
+
+    Confirm with `python -c "import ast; ast.parse(open('plugins/mill/scripts/millpy-wikipush.py').read())"` — must exit 0 (no `SyntaxError`).
   - Local-variable name: `wiki` is used as the wiki path local; this file never calls `wiki.<fn>` so do NOT add `from wiki import _client as wiki`. There is no name collision; keep the local named `wiki` (or rename to `wiki_path` for cross-file consistency — implementer's call, either is fine).
 
   Confirm at the end:

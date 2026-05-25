@@ -103,6 +103,8 @@ Batch-local decisions (differ from `## Shared Decisions` in `00-overview.md`):
 
   Rename `_failing_write` to `_failing_upsert` and adjust its signature to match `upsert_task(wiki_path, slug, *, title=None, brief=None, body=None, group=None, status=None) -> dict` — raise `WikiPushError("simulated push failure")` from inside (the exception class is imported into the test's namespace by the `from wiki import` line above).
 
+  **Patch-scope note (subtle but important).** Because `mill_fold.wiki` IS the `wiki._client` module object (Python's `from X import Y as Z` binds Z to the same object), assigning to `mill_fold.wiki.upsert_task` mutates `wiki._client.upsert_task` globally for the running process. Any other test in the same process that touches `wiki._client.upsert_task` would see the failing version. The `try/finally` restoration handles this cleanly IF the `finally` block always runs — which it does in Python EXCEPT when the test code raises a Python exception that the test runner does not catch before the function returns. To guarantee restoration on assertion-failure paths, prefer `unittest.mock.patch.object(mill_fold.wiki, "upsert_task", side_effect=_failing_upsert)` as a context manager OR ensure the `try/finally` brackets every assertion that could raise (e.g. wrap the whole test body in the try, restore in finally).
+
   Where `mill_fold` is the module reference — match whatever import shape the test already uses (look for `mill_fold = ...` near the top of the file).
 
   **Final verification (do inside the implementer's edit loop, before committing):**
@@ -163,14 +165,13 @@ Batch-local decisions (differ from `## Shared Decisions` in `00-overview.md`):
 
   These hard-coded multi-line fixture strings at the module top (lines ~30-180) use V2 Home.md syntax — `## <title>\n[[<slug>]] [<phase>]\n\n_body_\n`. V3's `parse_home_md` accepts the same syntax (verified at `wiki/_parse.py:30+` which matches `[(?P<slug>[a-z][a-z0-9-]*)\]( \[(?P<status>s|active|ready-to-merge|pr-pending|done|blocked|abandoned)\])?`). Do NOT rewrite the fixture strings; they parse correctly under V3. The `[s]` (spawn-ready) phase token IS still parsed by V3 (the parser regex allows it) but `_parse.py` maps `[s]` to `status=None` — i.e. fixtures that exercised the `[s]` fast-path no longer trigger any special behaviour after batch 2's card 4 deletes those fast-paths. Tests that asserted on `t.phase == "s"` behaviour become dead — delete those test functions outright.
 
-  **Tests to delete (enumerated at plan time from `test-spawn-core.py:230` and `:712`):**
+  **Tests to delete (enumerated at plan time from `test-spawn-core.py`):**
 
   - `test_pick_task_single_fast_path_s` (defined at line 230; referenced in the main runner list)
   - `test_pick_task_single_or_multi_fast_path_s` (defined at line 712; referenced in the main runner list)
+  - `test_pick_task_single_slug_matching_s` (defined at line 197; referenced in the main runner list). Under V3 this test is functionally identical to `test_pick_task_single_slug_matching_unmarked` (line 189) because `[s]` parses to `status=None`; the duplicate adds no coverage and the test name references a status that no longer exists. Delete the function and its runner-list entry.
 
-  Delete the function definitions AND remove their entries from the `tests = [...]` list at the bottom of `test-spawn-core.py:980+`. The commit message body lists both deletions by name.
-
-  `test_pick_task_single_slug_matching_s` at line 197 stays — it exercises `--slug` mode (explicit slug matching), not the `[s]` fast-path. After V3 parses `[s]` to `status=None`, the test continues to validate slug-matching against the same fixture entry; only the implicit `[s]`-fast-path tests above die.
+  Delete each function definition AND remove its entry from the `tests = [...]` list at the bottom of `test-spawn-core.py:980+`. The commit message body lists all three deletions by name.
 
   **Test-name and assertion adjustments:**
 
