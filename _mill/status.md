@@ -28,5 +28,7 @@ implementing  '2026-05-25T11:25:47Z'
 ```yaml
 batches:
   - name: verify-isolation
-    state: pending
+    state: running
+    implementer_session: fb0751ce-4ae5-47c0-b17c-c5f69782c3fc
+    start_sha: 46b717f72d35aa9ced12a245ddd6d85557d159d8
 ```
