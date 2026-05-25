@@ -99,15 +99,16 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         selected_path, selected_slug, _ = active[num - 1]
 
-    # Load per-worktree config to honour hub_relative_path.
-    if wiki_path is not None:
+    # Load per-worktree stub config to honour hub_relative_path.
+    hub_subpath = "."
+    stub_path = selected_path / ".millhouse" / "config.local.yaml"
+    if stub_path.exists():
         try:
-            worktree_cfg = _load_config(selected_path, selected_path)
-        except (SystemExit, FileNotFoundError):
-            worktree_cfg = {}
-    else:
-        worktree_cfg = {}
-    hub_subpath = worktree_cfg.get("hub_relative_path", ".")
+            import yaml
+            stub_cfg = yaml.safe_load(stub_path.read_text(encoding="utf-8")) or {}
+            hub_subpath = stub_cfg.get("hub_relative_path", ".")
+        except Exception:
+            pass
     launch_path = resolve_hub_relative_path(selected_path, hub_subpath)
 
     print(f"Launching Claude Code in: {launch_path}", file=sys.stderr)

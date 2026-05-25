@@ -75,11 +75,15 @@ def _filter_open_worktrees(
     for entry_path, slug, title in active:
         hub_subpath = hub_subpath_default
         if wiki_path is not None:
-            try:
-                entry_cfg = _load_config(entry_path, entry_path)
-                hub_subpath = entry_cfg.get("hub_relative_path", hub_subpath_default)
-            except (SystemExit, FileNotFoundError):
-                hub_subpath = hub_subpath_default
+            hub_subpath = hub_subpath_default
+            stub_path = entry_path / ".millhouse" / "config.local.yaml"
+            if stub_path.exists():
+                try:
+                    import yaml
+                    stub_cfg = yaml.safe_load(stub_path.read_text(encoding="utf-8")) or {}
+                    hub_subpath = stub_cfg.get("hub_relative_path", hub_subpath_default)
+                except Exception:
+                    hub_subpath = hub_subpath_default
         launch = resolve_hub_relative_path(entry_path, hub_subpath)
         if not any(
             _vscode_processes.signature_matches(launch, slug, str(cmdline))
@@ -113,14 +117,16 @@ def _spawn_and_open(
         )
         return 1
     new_path, new_slug, _ = new_entries[0]
+    hub_subpath = "."
     if wiki_path is not None:
-        try:
-            worktree_cfg = _load_config(new_path, new_path)
-        except (SystemExit, FileNotFoundError):
-            worktree_cfg = {}
-    else:
-        worktree_cfg = {}
-    hub_subpath = worktree_cfg.get("hub_relative_path", ".")
+        stub_path = new_path / ".millhouse" / "config.local.yaml"
+        if stub_path.exists():
+            try:
+                import yaml
+                stub_cfg = yaml.safe_load(stub_path.read_text(encoding="utf-8")) or {}
+                hub_subpath = stub_cfg.get("hub_relative_path", ".")
+            except Exception:
+                pass
     launch_path = resolve_hub_relative_path(new_path, hub_subpath)
     print(f"Opening VS Code in: {launch_path}", file=sys.stderr)
     subprocess.run(_build_code_argv(launch_path))
@@ -250,15 +256,17 @@ def main(argv: list[str] | None = None) -> int:
         if selected_path is None:
             return 1
 
-    # Load per-worktree config to honour hub_relative_path.
+    # Load per-worktree stub config to honour hub_relative_path.
+    hub_subpath = "."
     if wiki_path is not None:
-        try:
-            worktree_cfg = _load_config(selected_path, selected_path)
-        except (SystemExit, FileNotFoundError):
-            worktree_cfg = {}
-    else:
-        worktree_cfg = {}
-    hub_subpath = worktree_cfg.get("hub_relative_path", ".")
+        stub_path = selected_path / ".millhouse" / "config.local.yaml"
+        if stub_path.exists():
+            try:
+                import yaml
+                stub_cfg = yaml.safe_load(stub_path.read_text(encoding="utf-8")) or {}
+                hub_subpath = stub_cfg.get("hub_relative_path", ".")
+            except Exception:
+                pass
     launch_path = resolve_hub_relative_path(selected_path, hub_subpath)
 
     print(f"Opening VS Code in: {launch_path}", file=sys.stderr)
