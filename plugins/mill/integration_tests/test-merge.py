@@ -294,10 +294,7 @@ def main() -> int:
 
         # --- Home.md [active] -> [done] (Step 7) ---
         # V3: no advisory lock; daemon handles concurrent commits
-        home_text = (wiki_path / "Home.md").read_text(encoding="utf-8")
-        new_text = wiki.set_phase(wiki_path, slug, "done")
-        (wiki_path / "Home.md").write_text(new_text, encoding="utf-8")
-
+        wiki.set_phase(wiki_path, slug, "done")
         home_after = (wiki_path / "Home.md").read_text(encoding="utf-8")
         _assert(f"[{slug}] [done]" in home_after,
                 f"Home.md did not flip to [done]:\n{home_after}")

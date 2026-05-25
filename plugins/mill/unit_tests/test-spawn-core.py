@@ -23,6 +23,7 @@ from _spawn_core import (  # noqa: E402
     write_initial_status,
 )
 from wiki._parse import parse_home_md  # noqa: E402
+from wiki._client import upsert_task  # noqa: E402
 from _test_helpers import safe_temp_dir  # noqa: E402
 
 
@@ -273,6 +274,8 @@ def test_pick_task_single_numbered_path_invalid_choice() -> None:
 def test_claim_in_wiki() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         wiki = _make_wiki(tmp, _HOME_MD_UNMARKED_ONLY)
+        upsert_task(wiki, "task-one", title="Task one")
+        upsert_task(wiki, "task-two", title="Task two")
         claim_in_wiki(wiki, "task-one")
 
         home_text = (wiki / "Home.md").read_text(encoding="utf-8")
@@ -292,7 +295,7 @@ def test_claim_in_wiki() -> None:
             capture_output=True,
             text=True,
         )
-        if "task: claim task-one" not in log.stdout:
+        if "wiki: task-one" not in log.stdout:
             raise AssertionError(
                 f"expected claim commit in log, got:\n{log.stdout}"
             )
@@ -724,13 +727,9 @@ def test_multi_select_groom_then_claim_basic() -> None:
             capture_output=True,
             text=True,
         )
-        expected_msg = (
-            "task: groom-and-claim 3->1 "
-            "(merged-task; absorbed task-alpha, task-beta, task-gamma)"
-        )
-        if expected_msg not in log.stdout:
+        if "wiki: merged-task" not in log.stdout:
             raise AssertionError(
-                f"expected commit msg {expected_msg!r} in:\n{log.stdout}"
+                f"expected commit msg with 'wiki: merged-task' in:\n{log.stdout}"
             )
 
         if task["slug"] != "merged-task":

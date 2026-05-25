@@ -93,20 +93,12 @@ def _make_stub_map(
     paths_mod.resolve_short_name = MagicMock(return_value="MI")
     paths_mod.resolve_hub_path = MagicMock(return_value=Path("/fake/repo/subdir"))
 
-    tasks_md_mod = MagicMock()
-    tasks_md_mod.parse.return_value = [_make_fake_task()]
-
-    wiki_mod = MagicMock()
-    wiki_mod.sync_pull.return_value = None
-
     config_mod = types.ModuleType("_config")
     config_mod.load_config = MagicMock(return_value={})
 
     return {
         "_spawn_core": sc,
         "_subprocess_util": subprocess_stub,
-        "_tasks_md": tasks_md_mod,
-        "_wiki": wiki_mod,
         "_paths": paths_mod,
         "_vscode": MagicMock(),
         "_junction": MagicMock(),
