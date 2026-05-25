@@ -413,6 +413,10 @@ def main() -> int:
             "  model: claude-sonnet-4-6\n",
             encoding="utf-8",
         )
+        (_wiki / "Home.md").write_text(
+            "# Home\n[test-slug] [active]\n",
+            encoding="utf-8",
+        )
         wiki.upsert_task(_wiki, "test-slug", title="Test", status="active")
 
         # Initialize _tmp as a real git repo (worktree role)
