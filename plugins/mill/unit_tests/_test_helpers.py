@@ -22,7 +22,6 @@ if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 
 import _safe_rmtree  # noqa: E402
-import _tasks_md  # noqa: E402
 
 
 def _make_task_worktree(
@@ -110,6 +109,8 @@ def _make_task_worktree(
         home_body = f"## {title}\n[[{slug}]] [{phase}]\n\n_body_\n"
 
     (wiki_path / "Home.md").write_text(home_body, encoding="utf-8")
+
+    import _tasks_md  # noqa: E402
 
     parsed = _tasks_md.parse(home_body)
     found = next((t for t in parsed if t.slug == slug), None)
