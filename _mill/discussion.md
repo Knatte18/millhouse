@@ -56,8 +56,10 @@ Result: tests run against a Frankenstein of V2 cache + V3 worktree. They fail in
 
 ### validator-check-shape
 
-- **Decision:** New `_plan_validate.py` check `verify-not-isolated`. Fires per batch entry in the overview's Batch Index DAG (the `verify:` field per `_plan_dag.iter_batch_verifies` shape). Trigger: `verify` is a non-null, non-empty string AND `verify.strip().startswith("PYTHONPATH=") is False`. Error payload: `{"check": "verify-not-isolated", "batch": "<batch_name>", "verify": "<full string>"}`. Also checked at the plan-overview top-level `verify:` field (same trigger logic).
-- **Rationale:** Simple to implement; mirrors the proposal's "one-line fix"; covers both the per-batch `verify:` and the top-level overview `verify:` (which exists in the template but isn't routinely populated — guard it anyway so adoption of that field doesn't reintroduce the leak).
+- **Decision:** New `_plan_validate.py` check `verify-not-isolated`. **Source checked:** per-batch file frontmatter `verify:` only — the same field `_plan_dag.iter_batch_verifies` (`_plan_dag.py:318-319`) reads at runtime. Trigger: `verify` is a non-null, non-empty string AND `verify.strip().startswith("PYTHONPATH=") is False`. Error payload conforms to the existing 5-key envelope every other check uses: `{"check": "verify-not-isolated", "batch": "<batch_file_stem>", "card": None, "path": "<full verify string>", "message": "verify command missing PYTHONPATH= prefix"}`. `batch:` is the per-batch file's stem (matches `non-existent-path` and friends — see `_plan_validate.py:246-255`). `card:` is `None` because the verify field is per-batch, not per-card. `path:` carries the offending verify string so the mechanical-fix dispatcher can read and rewrite it.
+- **Rationale:** The runtime-relevant source is per-batch frontmatter; checking only there is sufficient. The 5-key envelope is mandatory because `_plan_validate.run()` (`_plan_validate.py:855`) sorts errors via `(e["batch"] or "", e["card"] or 0, e["check"])` — any check that omits `card` would `KeyError` at sort time. Conforming also means the existing mill-plan mechanical-fix dispatcher needs no schema changes.
+- **Rejected:** Also check the overview's `batches:` Batch Index mirror entries' `verify:` field and the overview's top-level `verify:` field. Neither is read at runtime (`iter_batch_verifies` resolves through the batch index to per-batch files; nothing reads the top-level or the mirror `verify:`). Drift in those fields has no runtime effect, so YAGNI.
+- **Rejected:** A 3-key payload (`{check, batch, verify}`). Would `KeyError` at sort time in `_plan_validate.run()`; would also require touching the mill-plan dispatcher to handle the new shape.
 - **Rejected:** Permitting alternative leading tokens (`env -i`, `unset PYTHONPATH &&`) — added complexity for no concrete benefit; the planner is generating these strings, we want one canonical shape.
 - **Rejected:** Validator runs but only warns. Existing validator gates are hard fails per the SKILL.md fix table; no precedent for warnings, and a warning that doesn't block lets drift back in.
 
@@ -65,8 +67,8 @@ Result: tests run against a Frankenstein of V2 cache + V3 worktree. They fail in
 
 - **Decision:** Add a new row to the mill-plan SKILL.md "Phase: Plan Review → Step 1.5 fix table":
   - `check`: `verify-not-isolated`
-  - `mechanical fix`: "Prepend `PYTHONPATH= ` (literal — empty value, single space, then the existing command) to the offending `verify:` field in the overview's Batch Index entry and/or the per-batch file's frontmatter. The error payload's `batch:` field names which file to edit; the top-level overview `verify:` is identified by `batch: <overview>` (sentinel)."
-- **Rationale:** Symmetric with how other mechanical-fix rows are described; identifies the file + the literal change. The `<overview>` sentinel for the top-level field is a small new convention but the fix table already uses one-off sentinels in similar rows.
+  - `mechanical fix`: "Prepend `PYTHONPATH= ` (literal — empty value, single space, then the existing command) to the `verify:` field in the per-batch file named by the error payload's `batch:` field (`_mill/plan/<batch>.md`). Read the offending command from the payload's `path:` field; replace the file's frontmatter `verify:` line with `verify: PYTHONPATH= <original>`."
+- **Rationale:** Symmetric with how other mechanical-fix rows are described; identifies the file + the literal change. Only one file kind to edit (per-batch frontmatter) since that's the only source the validator checks.
 - **Rejected:** Halt instead of mechanical-fix. Halting on a one-character fix wastes a planning round when the planner can be told to prepend.
 
 ### docs-touchpoints
@@ -88,13 +90,13 @@ Result: tests run against a Frankenstein of V2 cache + V3 worktree. They fail in
 **Verify-string authoring sites (these change):**
 
 - `plugins/mill/skills/mill-plan/SKILL.md` — the planner LLM is guided here. Add a "verify command shape" paragraph in Phase: Plan that mandates the `PYTHONPATH=` prefix; add the `verify-not-isolated` row to the Step 1.5 fix table.
-- `plugins/mill/templates/plan-overview.md:33,48` — `verify: null` in the top frontmatter and `verify: <command or null>` in the Batch Index example. Change the Batch Index example to `verify: PYTHONPATH= <command> or null` (top-level stays `null` since the proposal-driven plans rarely set it).
-- `plugins/mill/templates/plan-batch.md:25` — `verify: null` placeholder. Add a comment line above explaining the prefix requirement, since the planner reads template comments.
+- `plugins/mill/templates/plan-overview.md:33,48` — `verify: null` in the top frontmatter and `verify: <command or null>` in the Batch Index example. Change the Batch Index example to `verify: PYTHONPATH= <command> or null`. Top-level `verify:` stays `null`. **Note:** the validator does NOT check the overview's mirror `verify:` or top-level `verify:` — these are documentation-only fields the planner uses for human readers. Showing the prefixed form in the template is purely for example consistency.
+- `plugins/mill/templates/plan-batch.md:25` — `verify: null` placeholder. This file's frontmatter `verify:` IS what the validator checks (and what `iter_batch_verifies` executes at runtime). Add a comment line above explaining the prefix requirement, since the planner reads template comments.
 
 **Validator changes:**
 
-- `plugins/mill/scripts/_plan_validate.py` — add `verify-not-isolated` check function. Look at the existing check functions in that file for the registration shape (likely a list of check functions or a check-dispatcher).
-- `plugins/mill/unit_tests/test-plan-validate.py` — add unit tests: (a) non-null verify without prefix → error fired with correct payload; (b) non-null verify WITH prefix → no error; (c) `verify: null` → no error; (d) overview-level verify field and batch-level verify field both checked.
+- `plugins/mill/scripts/_plan_validate.py` — add `_check_verify_not_isolated(batch_files)` function alongside the existing `_check_*` functions (see `_check_non_existent_path` at line 246 for the canonical shape). Register the call via `errors.extend(_check_verify_not_isolated(batch_files))` inserted into `run()` (around `_plan_validate.py:842-853`), grouped with the other batch-scoped checks. The function reads each batch file's frontmatter via the existing helper (look for `_read_batch_frontmatter` import — or `iter_batch_verifies` already does it via `_plan_dag._read_batch_frontmatter` — choose whichever is the in-module convention) and emits the 5-key error dict per the validator-check-shape decision above.
+- `plugins/mill/unit_tests/test-plan-validate.py` — add unit tests: (a) per-batch frontmatter `verify:` without prefix → error fired with correct 5-key payload; (b) per-batch frontmatter `verify:` WITH prefix → no error; (c) per-batch frontmatter `verify: null` → no error; (d) per-batch frontmatter `verify:` with leading whitespace before `PYTHONPATH=` → no error (we trim first); (e) per-batch frontmatter `verify: PYTHONPATH=/some/path uv run ...` (non-empty value after `PYTHONPATH=`) → no error (we only require the prefix token, not a specific value). Use the existing fixture pattern in that test file for setting up batch files with frontmatter.
 
 **Doc changes:**
 
@@ -105,20 +107,21 @@ Result: tests run against a Frankenstein of V2 cache + V3 worktree. They fail in
 
 - The validator runs in the cache via `${CLAUDE_PLUGIN_ROOT}/scripts/millpy-validate-plan.py` per the SKILL invocation pattern. Don't expect to test it interactively from this worktree alone — tests under `unit_tests/` import from worktree code with `uv run --project plugins/mill`, which is itself subject to the very PYTHONPATH bug this task fixes. Self-referential: the test for the verify-isolation validator must itself use the isolated verify form. Tests in `test-plan-validate.py` invoke pure-Python check functions in-process — no subprocess, no `verify:` execution — so they're unaffected by the leak. The verify-string-of-the-test-runner is what's affected, and the test-runner's verify string (any future plan covering this task) is the only one we're enforcing.
 - `_plan_validate.py` already has a multi-row mechanical-fix table referenced by SKILL.md row-by-row. Use the same JSON envelope shape (`{"check": "...", "batch": "...", ...}`) so the existing fix-dispatcher in mill-plan picks it up without changes.
-- The overview `verify:` top-level field (vs. batch-level) — the existing plan written for `hanf/wiki-v3-adoption` populates the top-level too (line 10: `verify: uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py`). The validator must check both: top-level `verify:` from the overview YAML block, AND per-batch `verify:` from the Batch Index DAG. Use `batch: <overview>` sentinel in the error payload to disambiguate.
+- The overview's top-level `verify:` and the overview's Batch Index `batches:` mirror entries' `verify:` are documentation-only fields — nothing reads them at runtime. `iter_batch_verifies` (`_plan_dag.py:285-322`) resolves through the batch-index DAG to per-batch files and reads each per-batch file's frontmatter `verify:`. The validator therefore only checks per-batch file frontmatter. Drift in the overview's mirrored or top-level `verify:` has no runtime effect.
 
 ## Testing
 
 **TDD candidates (write tests first):**
 
-- `_plan_validate.py::check_verify_isolated` — table-driven test in `test-plan-validate.py`:
-  - input: overview YAML with `verify: null` + batch entries with `verify: null` → no errors.
-  - input: overview YAML with `verify: uv run ...` (no prefix) → one error, `batch: "<overview>"`.
-  - input: overview YAML `verify: null` + batch with `verify: uv run ...` → one error, `batch: <batch_name>`.
-  - input: overview + batch BOTH unprefixed → two errors.
-  - input: overview + batch BOTH `verify: PYTHONPATH= uv run ...` → no errors.
+- `_plan_validate._check_verify_not_isolated` — table-driven test in `test-plan-validate.py`. All cases vary the per-batch file's frontmatter `verify:` only (overview top-level and batch-index mirror `verify:` are not validated):
+  - input: per-batch file `verify: null` → no errors.
+  - input: per-batch file `verify: <unset / missing key>` → no errors.
+  - input: per-batch file `verify: uv run ...` (no prefix) → one error with the 5-key envelope `{check: "verify-not-isolated", batch: <batch_file_stem>, card: None, path: "uv run ...", message: "verify command missing PYTHONPATH= prefix"}`.
+  - input: two batches both unprefixed → two errors, one per batch, each with its own `batch:` stem.
+  - input: per-batch file `verify: PYTHONPATH= uv run ...` → no errors.
   - input: leading whitespace before `PYTHONPATH=` (e.g. `  PYTHONPATH= uv run ...`) → no error (trim before checking).
-  - input: `verify: PYTHONPATH=/some/path uv run ...` (non-empty value) → no error (we only require the prefix, not a specific reset value — the planner might intentionally set it).
+  - input: `verify: PYTHONPATH=/some/path uv run ...` (non-empty value after the prefix) → no error (we only require the `PYTHONPATH=` token, not a specific reset value — the planner might intentionally set it).
+  - integration via `_plan_validate.run()`: a batch file with unprefixed `verify:` produces an error that survives the final `errors.sort(key=lambda e: (e["batch"] or "", e["card"] or 0, e["check"]))` call (`_plan_validate.py:855`) without `KeyError`. Verifies the 5-key envelope is correctly populated.
 
 **Coverage scenarios — full pass through the planning loop (out of scope for this task's automated tests, but must work end-to-end):**
 
@@ -137,5 +140,7 @@ Result: tests run against a Frankenstein of V2 cache + V3 worktree. They fail in
 - **Q:** Retroactive patch of `hanf/wiki-v3-adoption`'s `_mill/plan/*.md`? **A:** Out of scope. Parent is stale, waiting for `wiki-v3-batch3-finish` to produce a fresh smaller-batch plan off the corrected templates. Editing the parent from this child worktree violates worktree-isolation rules and would carry foreign plan files on this branch.
 - **Q:** Should mill-config.yaml schema comment + CLAUDE.md note both be added? **A:** Yes. Same place future readers look when wondering why the prefix is required.
 - **Q:** Exact validator-check trigger shape? **A:** Regex-free: trim leading whitespace, require `startswith("PYTHONPATH=")`. Anything else is rejected with mechanical fix = prepend `PYTHONPATH= `.
+- **Q:** Error-payload schema? **A:** 5-key envelope matching every other check in `_plan_validate.py`: `{check, batch, card, path, message}`. A 3-key payload would `KeyError` at `_plan_validate.run()`'s sort step (line 855 sorts on `(batch, card, check)`).
+- **Q:** Which `verify:` field does the validator inspect — overview top-level, overview Batch Index mirror entries, or per-batch file frontmatter? **A:** Per-batch file frontmatter only. That is the field `_plan_dag.iter_batch_verifies` reads (`_plan_dag.py:319`) and the only one executed at runtime. The other two are documentation-only and not validated.
 - **Q:** Why reject `uv run --isolated`? **A:** That flag means "ignore project pyproject", which breaks `--project plugins/mill` resolution. Wrong semantic for this fix.
 - **Q:** Do we touch the executed-string path (implementer brief, fixer brief, mill-merge-in subagent)? **A:** No. Single source of truth at authoring time (planner + validator). Runtime stays a verbatim string runner.
