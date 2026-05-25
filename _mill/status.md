@@ -50,7 +50,9 @@ batches:
     start_sha: a529d989e17894f670306bdae24f501708acb31e
     commit_sha: f28afc688f5bba715abfd05951db9bae575109a8
   - name: small-clis-and-surface-fixes
-    state: pending
+    state: running
+    implementer_session: 3ea340de-ec6b-401c-b756-36fe8bdc2848
+    start_sha: b4ce219f5bc45888066cb1ab8746c12cbc1664d8
   - name: millpy-spawn-v2-elimination
     state: pending
   - name: test-sweep-heavy
