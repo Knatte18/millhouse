@@ -15,6 +15,8 @@ from pathlib import Path
 HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
+import _test_helpers  # noqa: E402
+from wiki import _client as wiki  # noqa: E402
 from _review_cli import print_error, print_error_envelope  # noqa: E402
 from _review_common import ReviewError  # noqa: E402
 
@@ -389,10 +391,9 @@ def main() -> int:
     _mod = _ilu.module_from_spec(_spec)
     _spec.loader.exec_module(_mod)
 
-    with tempfile.TemporaryDirectory() as _tmpdir:
-        _tmp = Path(_tmpdir)
+    with _test_helpers.safe_temp_dir() as _tmp:
         _wiki = _tmp / "wiki"
-        _wiki.mkdir()
+        _test_helpers.init_wiki_repo(_wiki)
         (_wiki / "config.yaml").write_text(
             "roles:\n"
             "  discussion-review:\n"
@@ -412,6 +413,18 @@ def main() -> int:
             "  model: claude-sonnet-4-6\n",
             encoding="utf-8",
         )
+        wiki.upsert_task(_wiki, "test-slug", title="Test", status="active")
+
+        # Initialize _tmp as a real git repo (worktree role)
+        import subprocess as _sp
+        _sp.run(["git", "init", "--initial-branch=main", str(_tmp)], capture_output=True, check=True)
+        _sp.run(["git", "-C", str(_tmp), "config", "user.email", "test@test.com"], capture_output=True, check=True)
+        _sp.run(["git", "-C", str(_tmp), "config", "user.name", "Test"], capture_output=True, check=True)
+        (_tmp / ".keep").write_text("", encoding="utf-8")
+        _sp.run(["git", "-C", str(_tmp), "add", ".keep"], capture_output=True, check=True)
+        _sp.run(["git", "-C", str(_tmp), "commit", "-m", "init"], capture_output=True, check=True)
+        _sp.run(["git", "-C", str(_tmp), "checkout", "-b", "hanf/test-slug"], capture_output=True, check=True)
+
         _mill = _tmp / ".millhouse"
         _mill.mkdir()
 
