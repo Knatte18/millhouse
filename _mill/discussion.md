@@ -141,17 +141,19 @@ Current state on `hanf/wiki-v3-batch3-finish` under proper isolation (`PYTHONPAT
 
 `plugins/mill/scripts/wiki/_client.py` exports:
 
+All signatures verified against `plugins/mill/scripts/wiki/_client.py`.
+
 | Function | Returns | Purpose |
 |---|---|---|
-| `upsert_task(wiki_path, slug, **fields)` | dict | Add/update a single task. |
-| `upsert_tasks_batch(wiki_path, tasks: list[dict])` | None | Atomic batch upsert; replaces text-Home.md fixture pattern. |
-| `set_phase(wiki_path, slug, status)` | None | Replaces V2 `_tasks_md.claim`/`set_phase`. Note: V3 field is `status`, V2 was `phase`. |
-| `remove_task(wiki_path, slug)` | None | Replaces `_tasks_md.remove_entry`. |
-| `get_task(wiki_path, slug)` | dict | Replaces `_tasks_md.parse(text); find by slug`. |
-| `list_tasks_brief(wiki_path)` | `list[dict]` | Each dict has keys `{id, slug, title, group, brief, status, has_proposal}`. Replaces `_tasks_md.parse(home_md.read_text())`. |
-| `list_tasks_full(wiki_path)` | `list[dict]` | Full task fields. Not used in this task. |
-| `merge_tasks(wiki_path, source_slugs, merged_slug, merged_fields)` | None | Atomic op replacing `_wiki.wiki_lock` + read-modify-write windows in `_spawn_core.multi_select_groom_then_claim`. |
-| `health_check(wiki_path)` | bool | Daemon ping. |
+| `upsert_task(wiki_path, slug, *, title=None, brief=None, body=None, group=None, status=None)` | `dict` (the upserted task) | Add or update a single task. `slug` is positional and required; all other fields are keyword-only and optional. Verified `_client.py:42–95`. |
+| `upsert_tasks_batch(wiki_path, tasks: list[dict], *, message: str \| None = None)` | `None` | Atomic batch upsert; replaces text-Home.md fixture pattern. `message` is an optional commit-message tail. Verified `_client.py:98–132`. |
+| `set_phase(wiki_path, id_or_slug: int \| str, phase: str \| None)` | `None` | Replaces V2 `_tasks_md.claim`/`set_phase`. Accepts either the TinyDB `id` or the `slug`; `phase=None` clears. Raises `WikiNotFoundError` if the target doesn't exist. Verified `_client.py:135–169`. |
+| `remove_task(wiki_path, id_or_slug: int \| str)` | `None` | Replaces `_tasks_md.remove_entry`. Raises `WikiNotFoundError` if missing. Verified `_client.py:172–204`. |
+| `get_task(wiki_path, id_or_slug: int \| str)` | `dict \| None` | Returns the task dict or `None` if not found (does NOT raise). Replaces `_tasks_md.parse(text); find by slug`. Verified `_client.py:207–234`. |
+| `list_tasks_brief(wiki_path)` | `list[dict]` | Each dict has keys `{id, slug, title, group, brief, status, has_proposal}`. Replaces `_tasks_md.parse(home_md.read_text())`. Verified `_client.py:237–260`. |
+| `list_tasks_full(wiki_path)` | `list[dict]` | All TinyDB task fields. Not used in this task. Verified `_client.py:263–286`. |
+| `merge_tasks(wiki_path, *, remove_slugs: list[str], upsert: dict, set_phase: tuple[int \| str, str \| None] \| None = None)` | `dict` (the upserted task) | Atomic op replacing `_wiki.wiki_lock` + read-modify-write windows in `_spawn_core.multi_select_groom_then_claim`. All operational args are **keyword-only**. `set_phase` is `(id_or_slug, phase)`. Verified `_client.py:289–331`. |
+| `health_check(wiki_path)` | `bool` | Daemon ping. Verified `_client.py:333+`. |
 
 The error hierarchy (`wiki/__init__.py`): `WikiError`, `WikiNotFoundError`, `WikiConflictError`, `WikiPushError`, `WikiProtocolError`, `WikiStartupError`, `WikiPathError`. There is **no** `WikiLockBusy` — the old `_wiki.LockBusy` exception has no V3 equivalent because the daemon serialises writes internally. Code that catches `LockBusy` should drop the except block entirely (no retry needed; V3 calls are synchronous and atomic).
 
@@ -286,3 +288,4 @@ Key TDD scenarios (the plan should articulate, not assume the implementer will i
 - **Q:** Overarching scope framing? **A:** This task **eliminates wiki V2** from the mill codebase — not "ports" V2 callers to V3. End state has zero V2 references anywhere (scripts, tests, docstrings, error messages, fixture helpers, dead semantics).
 - **Q (review r1 gap-fix):** Card 26's enumerated removals omitted `_sidebar`. Was that an oversight? **A:** Yes — `_spawn_core.py` line 70 has `import _sidebar` and lines 515/658 call `_sidebar.regenerate(wiki_path)`. Card 26's scope now includes the `_sidebar` import deletion plus dropping (not replacing) both `_sidebar.regenerate` call sites; V3's daemon handles sidebar internally. Without this, the post-card-26 `import millpy_spawn` smoke would still raise `ModuleNotFoundError: _sidebar`.
 - **Q (review r1 note-fix):** Cards 37 and 38's listed test files appear stale — current grep finds zero matches for V2 `mock.patch` strings and zero V2 `Task(slug=` builders. **A:** Confirmed via fresh grep. Cards 37 and 38 may be largely empty in practice — the test-port commits on this branch (`23eabc6`, `8d3b24b`, `94ef5e2`, `7637f08`, `0c5d1fe`) appear to have already done this work. The discussion now flags this: the planner must verify against `_mill/plan/03-v2-deletion-and-port.md` on parent `hanf/wiki-v3-adoption` (authoritative source) AND a fresh grep at plan time. Whatever residual work remains becomes the actual card-37/38 scope; if both come back clean, those cards fold into the batch-C verify-smoke with a one-line "found empty" note.
+- **Q (review r2 gap-fix):** The `merge_tasks` API signature in the Technical-context table was wrong (table said `merge_tasks(wiki_path, source_slugs, merged_slug, merged_fields) -> None`; actual signature is keyword-only `merge_tasks(wiki_path, *, remove_slugs, upsert, set_phase=None) -> dict`). **A:** Fixed. Cross-checked every other row in the table while in there: `set_phase`/`remove_task`/`get_task`/`upsert_task` all had wrong param names (`slug` vs `id_or_slug`) and `get_task` was missing the `dict | None` return type. All rows now correct, each tagged with the verifying line range in `_client.py`. The planner can trust the table for card-26 code generation.
