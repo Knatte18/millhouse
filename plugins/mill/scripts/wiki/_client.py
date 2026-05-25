@@ -21,7 +21,6 @@ from wiki import (
     OP_LIST_TASKS_BRIEF,
     OP_LIST_TASKS_FULL,
     OP_HEALTH,
-    LOCKED_FOLD_PHASES,
     FIELD_OP,
     FIELD_TOKEN,
     FIELD_OK,
@@ -424,6 +423,8 @@ def _ensure_daemon(wiki_path: Path) -> tuple[str, int, str]:
 def _spawn_server(wiki_path: Path) -> None:
     """Spawn wiki daemon in a detached process.
 
+    When MILL_WIKI_DAEMON_DEBUG=1, child stdout+stderr are captured to <wiki_path>/.wiki-daemon-debug.log for diagnostic use. Default-off path unchanged.
+
     Args:
         wiki_path: Path to wiki clone root.
     """
@@ -436,6 +437,36 @@ def _spawn_server(wiki_path: Path) -> None:
         env["PYTHONPATH"] = (scripts_dir + os.pathsep + pythonpath).strip(os.pathsep)
     else:
         env["PYTHONPATH"] = scripts_dir
+
+    if os.environ.get("MILL_WIKI_DAEMON_DEBUG") == "1":
+        debug_log = wiki_path / ".wiki-daemon-debug.log"
+        wiki_path.mkdir(parents=True, exist_ok=True)
+        log_file = open(debug_log, "w", encoding="utf-8")
+        try:
+            if sys.platform == "win32":
+                CREATE_NO_WINDOW = 0x08000000
+                CREATE_NEW_PROCESS_GROUP = 0x00000200
+                CREATE_BREAKAWAY_FROM_JOB = 0x01000000
+                subprocess.Popen(
+                    cmd,
+                    env=env,
+                    stdout=log_file,
+                    stderr=subprocess.STDOUT,
+                    close_fds=True,
+                    creationflags=CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP | CREATE_BREAKAWAY_FROM_JOB,
+                )
+            else:
+                subprocess.Popen(
+                    cmd,
+                    env=env,
+                    stdout=log_file,
+                    stderr=subprocess.STDOUT,
+                    close_fds=True,
+                    start_new_session=True,
+                )
+        finally:
+            log_file.close()
+        return
 
     if sys.platform == "win32":
         CREATE_NO_WINDOW = 0x08000000
