@@ -95,7 +95,7 @@ Result: tests run against a Frankenstein of V2 cache + V3 worktree. They fail in
 
 **Validator changes:**
 
-- `plugins/mill/scripts/_plan_validate.py` — add `_check_verify_not_isolated(batch_files)` function alongside the existing `_check_*` functions (see `_check_non_existent_path` at line 246 for the canonical shape). Register the call via `errors.extend(_check_verify_not_isolated(batch_files))` inserted into `run()` (around `_plan_validate.py:842-853`), grouped with the other batch-scoped checks. The function reads each batch file's frontmatter via the existing helper (look for `_read_batch_frontmatter` import — or `iter_batch_verifies` already does it via `_plan_dag._read_batch_frontmatter` — choose whichever is the in-module convention) and emits the 5-key error dict per the validator-check-shape decision above.
+- `plugins/mill/scripts/_plan_validate.py` — add `_check_verify_not_isolated(batch_files)` function alongside the existing `_check_*` functions (see `_check_non_existent_path` at line 246 for the canonical shape). Register the call via `errors.extend(_check_verify_not_isolated(batch_files))` inserted into `run()` (around `_plan_validate.py:842-853`), grouped with the other batch-scoped checks. For frontmatter extraction, use the in-module inline-YAML pattern already in `_plan_validate.py` — see `_check_depends_on_batch_mismatch` at lines 534-549: read text, find the fenced ` ```yaml ` block, `yaml.safe_load` the inner lines. The function then reads each batch's `verify:` field and emits the 5-key error dict per the validator-check-shape decision above when the field is a non-null, non-empty string that does not satisfy `verify.strip().startswith("PYTHONPATH=")`.
 - `plugins/mill/unit_tests/test-plan-validate.py` — add unit tests: (a) per-batch frontmatter `verify:` without prefix → error fired with correct 5-key payload; (b) per-batch frontmatter `verify:` WITH prefix → no error; (c) per-batch frontmatter `verify: null` → no error; (d) per-batch frontmatter `verify:` with leading whitespace before `PYTHONPATH=` → no error (we trim first); (e) per-batch frontmatter `verify: PYTHONPATH=/some/path uv run ...` (non-empty value after `PYTHONPATH=`) → no error (we only require the prefix token, not a specific value). Use the existing fixture pattern in that test file for setting up batch files with frontmatter.
 
 **Doc changes:**
@@ -127,7 +127,7 @@ Result: tests run against a Frankenstein of V2 cache + V3 worktree. They fail in
 
 - Fresh mill-plan run writes a verify with the prefix → validator passes on first try.
 - Planner writes a verify without the prefix → validator fires → mechanical fix prepends `PYTHONPATH= ` → validator passes on second try.
-- Two unprefixed verify strings (top-level + batch) in one plan → both fixed in one mechanical-fix pass → validator passes.
+- Two batch files both with unprefixed `verify:` in one plan → both fixed in one mechanical-fix pass → validator passes.
 
 **Not tested in unit tests (but verified during integration):**
 
