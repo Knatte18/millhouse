@@ -38,7 +38,9 @@ implementing  '2026-05-25T14:34:43Z'
 ```yaml
 batches:
   - name: daemon-startup-diagnose-and-fix
-    state: pending
+    state: running
+    implementer_session: 1b829918-b259-4756-b8aa-b37cd6c415f7
+    start_sha: 3874c15cf0038db34f5c48850b529bcc49787010
   - name: spawn-core-v2-elimination
     state: pending
   - name: small-clis-and-surface-fixes
