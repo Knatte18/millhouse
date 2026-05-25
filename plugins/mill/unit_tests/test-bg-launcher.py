@@ -11,6 +11,7 @@ if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 
 import _test_helpers  # noqa: E402
+from wiki import _client as wiki  # noqa: E402
 
 MILLPY_BG_PATH = _HERE.parent / "scripts" / "millpy-bg.py"
 
@@ -97,13 +98,15 @@ def _make_container_form_worktree(
         capture_output=True,
     )
 
-    wiki_path.mkdir(parents=True, exist_ok=True)
-    home_body = f"## {title}\n[[{slug}]] [active]\n\n_body_\n"
+    _test_helpers.init_wiki_repo(wiki_path)
+
+    home_body = f"## {title}\n[{slug}] [active]\n\n_body_\n"
     (wiki_path / "Home.md").write_text(home_body, encoding="utf-8")
 
-    if f"[[{slug}]]" not in home_body:
+    if f"[{slug}]" not in home_body:
         raise AssertionError(f"slug {slug!r} not found in generated Home.md")
 
+    wiki.upsert_task(wiki_path, slug, title=title, status="active")
     _test_helpers.seed_wiki_config(wiki_path, include_roles=False)
 
     return (worktree_path, wiki_path)
