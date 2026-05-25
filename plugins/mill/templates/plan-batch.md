@@ -13,6 +13,8 @@ Fill every section; no heading-only skeletons.
 Replace `NN` in `number: NN` with the integer from the batch filename
 (e.g., `02-field-rename.md` → `number: 2`).
 
+Non-null verify: commands MUST start with "PYTHONPATH= " (empty value, single space) so the test subprocess does not inherit the cache PYTHONPATH. The validator check verify-not-isolated enforces this.
+
 Strip this HTML comment before writing.
 -->
 # Batch: <BATCH_NAME>
