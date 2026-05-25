@@ -3,7 +3,7 @@
 ```yaml
 task: "Finish V3 wiki adoption — complete batch 3 port and test sweep"
 slug: wiki-v3-batch3-finish
-approved: false
+approved: true
 started: '20260525-132035'
 parent: hanf/wiki-v3-adoption
 root: ""

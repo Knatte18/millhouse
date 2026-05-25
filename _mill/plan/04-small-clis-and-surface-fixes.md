@@ -47,14 +47,16 @@ Batch-local decisions (differ from `## Shared Decisions` in `00-overview.md`):
   - Replace the `_tasks_md.parse(home_md.read_text(encoding="utf-8"))` (or equivalent) call with `wiki.list_tasks_brief(wiki_path)`. The `wiki_path` local is already in scope at each call site as the wiki path used for the V2 parse — see Context. Delete the `home_md = ...` / `home_md.read_text(...)` lines that fed `_tasks_md.parse`; they become unused.
   - Update any downstream code in the file that accessed `Task` attributes (`.slug`, `.title`, `.phase`, `.has_proposal`, `.group`, `.brief`, `.status`) to dict-key access (`t["slug"]`, etc.). Field-rename note: `.phase` → `["status"]`.
 
-  **Local-variable naming collision.** Each of the four reader CLIs currently uses `wiki` as the local variable for the resolved wiki path (e.g. `wiki = _paths.resolve_wiki_path(...)`). The new import binds the name `wiki` to the V3 client module; the local would shadow the module inside its function. This works in Python (locals shadow globals inside their scope) but is a footgun for readers. **Rename the local in each file from `wiki` to `wiki_path`** end-to-end (every reference inside the function it lives in). Use targeted grep-and-replace within each file's scope.
+  **Local-variable naming collision (applies to inspect.py and status.py ONLY).** Two of the four reader CLIs use `wiki` as the local variable for the resolved wiki path: `millpy-inspect.py:45` and `millpy-status.py:24`. The new import binds the name `wiki` to the V3 client module; the local would shadow the module inside its function. **Rename the local in each of those two files from `wiki` to `wiki_path`** end-to-end (every reference inside the function it lives in). Use targeted grep-and-replace within each file's scope.
+
+  `millpy-terminal.py` and `millpy-vscode.py` already use `wiki_path` as the local name (verified at `terminal.py:52, 55, 57, 105` and `vscode.py:68, 77, 95, 116`); no rename needed for those two files.
 
   Per-file specifics:
 
   - `millpy-inspect.py:20` (`import _tasks_md`), `:45` (local `wiki = _paths.resolve_wiki_path(...)` -- rename to `wiki_path`), `:54` (`_tasks_md.parse(home_md.read_text(...))` -- replace with `home_tasks_list = wiki.list_tasks_brief(wiki_path)`).
   - `millpy-status.py:20` (`import _tasks_md`), `:24` (local rename), `:32` (`_tasks_md.parse(home_md.read_text(...))` -- replace with `wiki.list_tasks_brief(wiki_path)`).
-  - `millpy-terminal.py:23` (`import _tasks_md`), `:55` (local rename), `:59` (`_tasks_md.parse(...)` -- replace with `wiki.list_tasks_brief(wiki_path)`).
-  - `millpy-vscode.py:31` (`import _tasks_md`), `:176` (local rename), `:180` (`_tasks_md.parse(...)` -- replace with `wiki.list_tasks_brief(wiki_path)`).
+  - `millpy-terminal.py:23` (`import _tasks_md`), `:59` (`_tasks_md.parse(...)` -- replace with `wiki.list_tasks_brief(wiki_path)`). No local rename needed.
+  - `millpy-vscode.py:31` (`import _tasks_md`), `:180` (`_tasks_md.parse(...)` -- replace with `wiki.list_tasks_brief(wiki_path)`). No local rename needed.
 
   For `millpy-wikipush.py` (sliver):
 

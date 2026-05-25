@@ -93,17 +93,20 @@ Batch-local decisions (differ from `## Shared Decisions` in `00-overview.md`):
   - Patch `wiki._sync.commit_push` directly OR
   - Patch the higher-level call site (`mill_fold.wiki.upsert_task`) to raise `WikiPushError`.
 
-  Choose patching `mill_fold.wiki.upsert_task` to raise `WikiPushError("push failed")` — the test then asserts that `mill-fold`'s CLI flow surfaces the error correctly. Rename the local from `orig_wcp` to `orig_upsert`; the `try/finally` restoration logic stays the same shape.
+  Patch `mill_fold.wiki.upsert_task` to raise `WikiPushError("simulated push failure")` — the test then asserts that `mill-fold`'s CLI flow surfaces the error correctly. **Use `unittest.mock.patch.object` as a context manager** — do NOT use the manual attribute-assignment + try/finally pattern. Rationale: `mill_fold.wiki` IS the `wiki._client` module object (Python's `from X import Y as Z` binds Z to the same object); direct assignment mutates `wiki._client.upsert_task` globally for the running process, and a manual try/finally is fragile if an assertion fires before `finally` runs — subsequent tests see the broken stub. `patch.object` guarantees restoration on any control-flow exit including exceptions.
 
-  Concretely, replace the 506-528 block's three references. Because `millpy-fold.py:39` imports as `from wiki import _client as wiki, LOCKED_FOLD_PHASES`, the module attribute `mill_fold.wiki` is the `_client` module — `mill_fold.wiki.upsert_task` resolves correctly.
+  Concrete shape:
 
-  - `orig_wcp = _wiki.write_commit_push` → `orig_upsert = mill_fold.wiki.upsert_task`
-  - `_wiki.write_commit_push = _failing_write` → `mill_fold.wiki.upsert_task = _failing_upsert`
-  - `_wiki.write_commit_push = orig_wcp` → `mill_fold.wiki.upsert_task = orig_upsert`
+  ```python
+  from unittest.mock import patch
+  # ... inside the failure-path test ...
+  with patch.object(mill_fold.wiki, "upsert_task", side_effect=WikiPushError("simulated push failure")):
+      rc = mill_fold.main([slug, "--scope", "some note"])
+  assert rc != 0  # CLI surfaced the push error
+  # No try/finally needed; the `with` block restores on exit.
+  ```
 
-  Rename `_failing_write` to `_failing_upsert` and adjust its signature to match `upsert_task(wiki_path, slug, *, title=None, brief=None, body=None, group=None, status=None) -> dict` — raise `WikiPushError("simulated push failure")` from inside (the exception class is imported into the test's namespace by the `from wiki import` line above).
-
-  **Patch-scope note (subtle but important).** Because `mill_fold.wiki` IS the `wiki._client` module object (Python's `from X import Y as Z` binds Z to the same object), assigning to `mill_fold.wiki.upsert_task` mutates `wiki._client.upsert_task` globally for the running process. Any other test in the same process that touches `wiki._client.upsert_task` would see the failing version. The `try/finally` restoration handles this cleanly IF the `finally` block always runs — which it does in Python EXCEPT when the test code raises a Python exception that the test runner does not catch before the function returns. To guarantee restoration on assertion-failure paths, prefer `unittest.mock.patch.object(mill_fold.wiki, "upsert_task", side_effect=_failing_upsert)` as a context manager OR ensure the `try/finally` brackets every assertion that could raise (e.g. wrap the whole test body in the try, restore in finally).
+  Delete the old `orig_wcp = _wiki.write_commit_push` / `_failing_write = ...` / try / finally scaffolding at lines 504-528 in `test-fold.py`. The `_failing_upsert` helper function isn't needed — `side_effect=WikiPushError(...)` does the job directly. The `WikiPushError` exception class is imported into the test's namespace by the `from wiki import _client as wiki, LOCKED_FOLD_PHASES, WikiPushError` line at the top of the file.
 
   Where `mill_fold` is the module reference — match whatever import shape the test already uses (look for `mill_fold = ...` near the top of the file).
 
