@@ -12,6 +12,7 @@ from unittest.mock import patch
 HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
+import _safe_rmtree  # noqa: E402
 import _gh_issues  # noqa: E402
 from wiki import _client as wiki, LOCKED_FOLD_PHASES, WikiPushError  # noqa: E402
 
@@ -88,13 +89,12 @@ def _setup_tempfile_wiki(home_md_content: str, tasks: list[dict] = None) -> temp
     # Wrap cleanup to handle Windows file locking from daemon process
     original_cleanup = td.cleanup
     def safe_cleanup():
-        import shutil
         try:
             original_cleanup()
         except (OSError, PermissionError):
-            # Daemon may still hold file locks on Windows; try shutil.rmtree with ignore_errors
+            # Daemon may still hold file locks on Windows; try _safe_rmtree.safe_rmtree with ignore_errors
             try:
-                shutil.rmtree(td.name, ignore_errors=True)
+                _safe_rmtree.safe_rmtree(Path(td.name), allowed_root=Path(td.name), ignore_errors=True)
             except Exception:
                 pass  # Best effort cleanup; let OS clean up on exit
 
