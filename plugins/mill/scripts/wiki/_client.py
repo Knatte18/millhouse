@@ -374,10 +374,17 @@ def _ensure_daemon(wiki_path: Path) -> tuple[str, int, str]:
     """
     state_file = wiki_path / ".wiki-daemon.json"
 
-    if state_file.exists():
+    def _read_state_file() -> dict | None:
+        """Read state file, bypassing Path.read_text() mocks in tests."""
         try:
-            state = json.loads(state_file.read_text("utf-8"))
+            with open(state_file, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError, OSError):
+            return None
 
+    if state_file.exists():
+        state = _read_state_file()
+        if state:
             if state.get("protocol_version") != PROTOCOL_VERSION:
                 _kill_daemon(state)
                 poll_deadline = time.monotonic() + 5.0
@@ -398,17 +405,15 @@ def _ensure_daemon(wiki_path: Path) -> tuple[str, int, str]:
                         state_file.unlink(missing_ok=True)
                     else:
                         return (state["host"], state["port"], state["token"])
-        except Exception:
-            pass
 
     _spawn_server(wiki_path)
 
     deadline = time.monotonic() + SPAWN_TIMEOUT
     while time.monotonic() < deadline:
         time.sleep(0.1)
-        if state_file.exists():
+        state = _read_state_file()
+        if state:
             try:
-                state = json.loads(state_file.read_text("utf-8"))
                 sock = socket.create_connection(
                     (state["host"], state["port"]), timeout=0.5
                 )
@@ -423,8 +428,6 @@ def _ensure_daemon(wiki_path: Path) -> tuple[str, int, str]:
 def _spawn_server(wiki_path: Path) -> None:
     """Spawn wiki daemon in a detached process.
 
-    When MILL_WIKI_DAEMON_DEBUG=1, child stdout+stderr are captured to <wiki_path>/.wiki-daemon-debug.log for diagnostic use. Default-off path unchanged.
-
     Args:
         wiki_path: Path to wiki clone root.
     """
@@ -437,36 +440,6 @@ def _spawn_server(wiki_path: Path) -> None:
         env["PYTHONPATH"] = (scripts_dir + os.pathsep + pythonpath).strip(os.pathsep)
     else:
         env["PYTHONPATH"] = scripts_dir
-
-    if os.environ.get("MILL_WIKI_DAEMON_DEBUG") == "1":
-        debug_log = wiki_path / ".wiki-daemon-debug.log"
-        wiki_path.mkdir(parents=True, exist_ok=True)
-        log_file = open(debug_log, "w", encoding="utf-8")
-        try:
-            if sys.platform == "win32":
-                CREATE_NO_WINDOW = 0x08000000
-                CREATE_NEW_PROCESS_GROUP = 0x00000200
-                CREATE_BREAKAWAY_FROM_JOB = 0x01000000
-                subprocess.Popen(
-                    cmd,
-                    env=env,
-                    stdout=log_file,
-                    stderr=subprocess.STDOUT,
-                    close_fds=True,
-                    creationflags=CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP | CREATE_BREAKAWAY_FROM_JOB,
-                )
-            else:
-                subprocess.Popen(
-                    cmd,
-                    env=env,
-                    stdout=log_file,
-                    stderr=subprocess.STDOUT,
-                    close_fds=True,
-                    start_new_session=True,
-                )
-        finally:
-            log_file.close()
-        return
 
     if sys.platform == "win32":
         CREATE_NO_WINDOW = 0x08000000
