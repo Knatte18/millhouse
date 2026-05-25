@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-reviewing
+phase: holistic-fixing
 slug: wiki-v3-batch3-finish
 branch: hanf/wiki-v3-batch3-finish
 plan: _mill/plan
@@ -38,6 +38,7 @@ approved-millpy-spawn-v2-elimination  '2026-05-25T15:07:21Z'
 approved-test-sweep-heavy  '2026-05-25T15:17:46Z'
 approved-test-sweep-light-and-finalize  '2026-05-25T15:32:45Z'
 holistic-reviewing  '2026-05-25T15:32:53Z'
+holistic-fixing  '2026-05-25T15:39:11Z'
 ```
 
 ## Batches
