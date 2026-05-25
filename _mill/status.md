@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-daemon-startup-diagnose-and-fix
 slug: wiki-v3-batch3-finish
 branch: hanf/wiki-v3-batch3-finish
 plan: _mill/plan
@@ -31,6 +31,7 @@ plan-fix-r5  '2026-05-25T14:13:39Z'
 plan-fix-r6  '2026-05-25T14:32:02Z'
 planned  '2026-05-25T14:32:15Z'
 implementing  '2026-05-25T14:34:43Z'
+approved-daemon-startup-diagnose-and-fix  '2026-05-25T14:53:10Z'
 ```
 
 ## Batches
@@ -38,9 +39,10 @@ implementing  '2026-05-25T14:34:43Z'
 ```yaml
 batches:
   - name: daemon-startup-diagnose-and-fix
-    state: running
+    state: approved
     implementer_session: 1b829918-b259-4756-b8aa-b37cd6c415f7
     start_sha: 3874c15cf0038db34f5c48850b529bcc49787010
+    commit_sha: 2d6906112de2b80bd0d845d97b8b16b426c025a7
   - name: spawn-core-v2-elimination
     state: pending
   - name: small-clis-and-surface-fixes
