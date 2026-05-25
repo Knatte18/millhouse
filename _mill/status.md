@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: wiki-v3-batch3-finish
 branch: hanf/wiki-v3-batch3-finish
 plan: _mill/plan
@@ -30,4 +30,23 @@ plan-review-r5  '2026-05-25T14:13:39Z'
 plan-fix-r5  '2026-05-25T14:13:39Z'
 plan-fix-r6  '2026-05-25T14:32:02Z'
 planned  '2026-05-25T14:32:15Z'
+implementing  '2026-05-25T14:34:43Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: daemon-startup-diagnose-and-fix
+    state: pending
+  - name: spawn-core-v2-elimination
+    state: pending
+  - name: small-clis-and-surface-fixes
+    state: pending
+  - name: millpy-spawn-v2-elimination
+    state: pending
+  - name: test-sweep-heavy
+    state: pending
+  - name: test-sweep-light-and-finalize
+    state: pending
 ```
