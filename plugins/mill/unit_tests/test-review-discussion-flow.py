@@ -54,7 +54,8 @@ def _make_fixture(tmp: Path) -> tuple[Path, Path, Path]:
     )
     wiki.upsert_task(wiki_root, SLUG, title="Test Task", status="active")
     (mill_dir / "config.local.yaml").write_text(
-        f"paths:\n  wiki: '{wiki_root.as_posix()}'\n", encoding="utf-8"
+        f"paths:\n  wiki: '{wiki_root.as_posix()}'\n"
+        f"spawn:\n  branch_prefix: 'hanf/'\n", encoding="utf-8"
     )
     _test_registry.write_to(wiki_root)
     return mill_dir, worktree, wiki_root

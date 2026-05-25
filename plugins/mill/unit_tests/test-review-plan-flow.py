@@ -121,7 +121,8 @@ def _make_plan_fixture(
     )
     wiki.upsert_task(wiki_root, SLUG, title="Test Task", status="active")
     (mill_dir / "config.local.yaml").write_text(
-        f"paths:\n  wiki: '{wiki_root.as_posix()}'\n", encoding="utf-8"
+        f"paths:\n  wiki: '{wiki_root.as_posix()}'\n"
+        f"spawn:\n  branch_prefix: 'hanf/'\n", encoding="utf-8"
     )
     project_root = worktree
 
