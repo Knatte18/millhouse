@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-daemon-startup-diagnose-and-fix
+phase: approved-spawn-core-v2-elimination
 slug: wiki-v3-batch3-finish
 branch: hanf/wiki-v3-batch3-finish
 plan: _mill/plan
@@ -32,6 +32,7 @@ plan-fix-r6  '2026-05-25T14:32:02Z'
 planned  '2026-05-25T14:32:15Z'
 implementing  '2026-05-25T14:34:43Z'
 approved-daemon-startup-diagnose-and-fix  '2026-05-25T14:53:10Z'
+approved-spawn-core-v2-elimination  '2026-05-25T14:57:09Z'
 ```
 
 ## Batches
@@ -44,9 +45,10 @@ batches:
     start_sha: 3874c15cf0038db34f5c48850b529bcc49787010
     commit_sha: 2d6906112de2b80bd0d845d97b8b16b426c025a7
   - name: spawn-core-v2-elimination
-    state: running
+    state: approved
     implementer_session: bd273264-2a3c-4878-b661-90abb0678881
     start_sha: a529d989e17894f670306bdae24f501708acb31e
+    commit_sha: f28afc688f5bba715abfd05951db9bae575109a8
   - name: small-clis-and-surface-fixes
     state: pending
   - name: millpy-spawn-v2-elimination
