@@ -1,10 +1,10 @@
 # Status
 
 ```yaml
-phase: discussed
+phase: planning
 slug: wiki-v3-batch3-finish
 branch: hanf/wiki-v3-batch3-finish
-plan: null
+plan: _mill/plan
 parent: hanf/wiki-v3-adoption
 task: Finish V3 wiki adoption — complete batch 3 port and test sweep
 task_description: |
@@ -17,4 +17,5 @@ task_description: |
 discussing  '2026-05-25T12:12:12Z'
 discussion-fix-r3  '2026-05-25T13:03:36Z'
 discussed  '2026-05-25T13:03:47Z'
+planning  '2026-05-25T13:27:58Z'
 ```
