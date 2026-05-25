@@ -27,6 +27,7 @@ Checks performed (check keys):
                                in backtick-only format (exempts bare 'none')
     all-files-touched-mismatch — (#10 check 8) Mismatch between overview's
                                All Files Touched section and cards' Edits:/Creates:
+    verify-not-isolated      — per-batch frontmatter verify: command does not start with PYTHONPATH= reset prefix
     wiki-config-mutation  — batch Edits:/Creates: contains wiki/config.yaml (self-applying layout risk)
 """
 from __future__ import annotations
@@ -799,6 +800,47 @@ def _check_all_files_touched_mismatch(
 
 
 # ---------------------------------------------------------------------------
+# verify-not-isolated check
+# ---------------------------------------------------------------------------
+
+def _check_verify_not_isolated(batch_files: list[Path]) -> list[dict]:
+    errors: list[dict] = []
+    for batch_path in batch_files:
+        text = batch_path.read_text(encoding="utf-8")
+        lines = text.splitlines()
+        start_idx = None
+        end_idx = None
+        for i, line in enumerate(lines):
+            if line.strip() == "```yaml":
+                start_idx = i
+            elif start_idx is not None and line.strip() == "```":
+                end_idx = i
+                break
+        if start_idx is None or end_idx is None:
+            continue
+        yaml_text = "\n".join(lines[start_idx + 1:end_idx])
+        try:
+            parsed = yaml.safe_load(yaml_text) or {}
+        except Exception:
+            continue
+        verify = parsed.get("verify")
+        if verify is None or not isinstance(verify, str):
+            continue
+        verify_stripped = verify.strip()
+        if not verify_stripped:
+            continue
+        if not verify_stripped.startswith("PYTHONPATH="):
+            errors.append({
+                "check": "verify-not-isolated",
+                "batch": batch_path.stem,
+                "card": None,
+                "path": verify,
+                "message": "verify command missing PYTHONPATH= prefix",
+            })
+    return errors
+
+
+# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
@@ -849,6 +891,7 @@ def run(
     errors.extend(_check_depends_on_batch_mismatch(batch_files, overview_text))
     errors.extend(_check_parallel_modifies_overlap(batch_files, overview_text))
     errors.extend(_check_ref_not_backtick_path(batch_files))
+    errors.extend(_check_verify_not_isolated(batch_files))
     errors.extend(_check_wiki_config_mutation(batch_files))
     errors.extend(_check_all_files_touched_mismatch(overview_path, batch_files))
 
