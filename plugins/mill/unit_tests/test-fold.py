@@ -591,9 +591,9 @@ def main() -> int:
                         _fetch_one=_make_fake_fetch_one(state="OPEN"),
                         _close_with_comment=close_fn,
                     )
-                except SystemExit:
+                except (SystemExit, WikiPushError):
                     raised = True
-            assert raised, "Expected SystemExit from wiki push failure"
+            assert raised, "Expected exception (SystemExit or WikiPushError) from wiki push failure"
             assert captured_calls == [], (
                 f"Expected no close calls after push failure, got {captured_calls}"
             )
