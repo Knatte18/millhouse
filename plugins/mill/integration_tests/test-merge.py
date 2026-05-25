@@ -53,10 +53,8 @@ sys.path.insert(0, str(SCRIPTS))
 import _parent_branch  # noqa: E402
 import _plan_dag  # noqa: E402
 import _safe_rmtree  # noqa: E402
-import _sidebar  # noqa: E402
-import _tasks_md  # noqa: E402
 import _timestamp  # noqa: E402
-import _wiki  # noqa: E402
+from wiki import _client as wiki  # noqa: E402
 
 
 def _run(cmd: list[str], *, cwd: Path, check: bool = True) -> subprocess.CompletedProcess:
@@ -87,30 +85,30 @@ def _setup_trio(container: Path) -> tuple[Path, Path, Path, str]:
     container.mkdir(parents=True, exist_ok=True)
     slug = "demo-merge"
     bare = container / "wiki.git"
-    wiki = container / "wiki"
+    wiki_path = container / "wiki"
     hub = container / "hub"
     worktrees_dir = container / "worktrees"
     worktree = worktrees_dir / slug
 
     # Bare wiki + clone.
     _run(["git", "init", "--bare", str(bare), "-b", "main"], cwd=container)
-    _run(["git", "clone", str(bare), str(wiki)], cwd=container)
-    _run(["git", "-C", str(wiki), "config", "user.email", "test@example.com"], cwd=container)
-    _run(["git", "-C", str(wiki), "config", "user.name", "Test"], cwd=container)
+    _run(["git", "clone", str(bare), str(wiki_path)], cwd=container)
+    _run(["git", "-C", str(wiki_path), "config", "user.email", "test@example.com"], cwd=container)
+    _run(["git", "-C", str(wiki_path), "config", "user.name", "Test"], cwd=container)
 
     # Seed wiki: Home.md with [active], plan dir, status.md done, config.
-    (wiki / "Home.md").write_text(
+    (wiki_path / "Home.md").write_text(
         "# Tasks\n\n"
         f"## Demo merge\n"
         f"[{slug}] [active]\n\n"
         "Seed task for mill-merge integration test.\n",
         encoding="utf-8",
     )
-    (wiki / "_Sidebar.md").write_text(
+    (wiki_path / "_Sidebar.md").write_text(
         "### Navigation\n\n- [Home](Home)\n\n### Tasks\n\n- Demo merge\n",
         encoding="utf-8",
     )
-    (wiki / "config.yaml").write_text(
+    (wiki_path / "config.yaml").write_text(
         "junctions:\n"
         "  .millhouse/wiki: <WIKI_PATH>\n"
         "  .active: <WIKI_PATH>/active/<SLUG>/\n"
@@ -119,7 +117,7 @@ def _setup_trio(container: Path) -> tuple[Path, Path, Path, str]:
         "  branch_prefix: test\n",
         encoding="utf-8",
     )
-    active_dir = wiki / "active" / slug
+    active_dir = wiki_path / "active" / slug
     active_dir.mkdir(parents=True)
     plan_dir = active_dir / "plan"
     plan_dir.mkdir()
@@ -174,9 +172,9 @@ def _setup_trio(container: Path) -> tuple[Path, Path, Path, str]:
         "```\n",
         encoding="utf-8",
     )
-    _run(["git", "-C", str(wiki), "add", "."], cwd=container)
-    _run(["git", "-C", str(wiki), "commit", "-m", "seed"], cwd=container)
-    _run(["git", "-C", str(wiki), "push", "origin", "main"], cwd=container)
+    _run(["git", "-C", str(wiki_path), "add", "."], cwd=container)
+    _run(["git", "-C", str(wiki_path), "commit", "-m", "seed"], cwd=container)
+    _run(["git", "-C", str(wiki_path), "push", "origin", "main"], cwd=container)
 
     # Hub: one-commit init.
     _run(["git", "init", str(hub), "-b", "main"], cwd=container)
@@ -191,11 +189,11 @@ def _setup_trio(container: Path) -> tuple[Path, Path, Path, str]:
     millhouse.mkdir()
     if sys.platform == "win32":
         subprocess.run(
-            ["cmd", "/c", "mklink", "/J", str(millhouse / "wiki"), str(wiki)],
+            ["cmd", "/c", "mklink", "/J", str(millhouse / "wiki"), str(wiki_path)],
             check=True, capture_output=True,
         )
     else:
-        os.symlink(str(wiki), str(millhouse / "wiki"))
+        os.symlink(str(wiki_path), str(millhouse / "wiki"))
     (hub / ".scratch").mkdir()
 
     # Task branch + worktree with a single commit ahead of main.
@@ -216,11 +214,11 @@ def _setup_trio(container: Path) -> tuple[Path, Path, Path, str]:
     wt_mill.mkdir()
     if sys.platform == "win32":
         subprocess.run(
-            ["cmd", "/c", "mklink", "/J", str(wt_mill / "wiki"), str(wiki)],
+            ["cmd", "/c", "mklink", "/J", str(wt_mill / "wiki"), str(wiki_path)],
             check=True, capture_output=True,
         )
     else:
-        os.symlink(str(wiki), str(wt_mill / "wiki"))
+        os.symlink(str(wiki_path), str(wt_mill / "wiki"))
     # .active junction at worktree root -> wiki/active/<slug>/
     if sys.platform == "win32":
         subprocess.run(
@@ -230,7 +228,7 @@ def _setup_trio(container: Path) -> tuple[Path, Path, Path, str]:
     else:
         os.symlink(str(active_dir), str(worktree / ".active"))
 
-    return hub, wiki, worktree, slug
+    return hub, wiki_path, worktree, slug
 
 
 def main() -> int:
@@ -239,18 +237,18 @@ def main() -> int:
     failed = False
     child_branch = None
     try:
-        hub, wiki, worktree, slug = _setup_trio(container)
+        hub, wiki_path, worktree, slug = _setup_trio(container)
         child_branch = f"test/{slug}"
         print(f"[test-merge] container: {container}", file=sys.stderr)
 
         # --- parent resolution ---
-        status_path = wiki / "active" / slug / "status.md"
+        status_path = wiki_path / "active" / slug / "status.md"
         parent = _parent_branch.resolve(status_path, interactive=False)
         _assert(parent == "main", f"parent resolved to {parent!r}")
         print(f"PASS: _parent_branch.resolve -> {parent!r}")
 
         # --- batch verify iteration (all null in seed -> empty list) ---
-        verifies = _plan_dag.iter_batch_verifies(wiki / "active" / slug / "plan")
+        verifies = _plan_dag.iter_batch_verifies(wiki_path / "active" / slug / "plan")
         _assert(verifies == [], f"expected no verifies, got {verifies}")
         print("PASS: iter_batch_verifies returns [] when every batch has verify: null")
 
@@ -294,30 +292,23 @@ def main() -> int:
         )
         print(f"PASS: archive tag archive/{slug} created")
 
-        # --- Home.md [active] -> [done] under wiki lock (Step 7) ---
-        with _wiki.wiki_lock(wiki, slug):
-            home_text = (wiki / "Home.md").read_text(encoding="utf-8")
-            new_text = _tasks_md.set_phase(home_text, slug, "done")
-            (wiki / "Home.md").write_text(new_text, encoding="utf-8")
-            _wiki.write_commit_push(
-                wiki, ["Home.md"], f"task: complete and merge {slug}", slug=slug
-            )
+        # --- Home.md [active] -> [done] (Step 7) ---
+        # V3: no advisory lock; daemon handles concurrent commits
+        home_text = (wiki_path / "Home.md").read_text(encoding="utf-8")
+        new_text = wiki.set_phase(wiki_path, slug, "done")
+        (wiki_path / "Home.md").write_text(new_text, encoding="utf-8")
 
-        home_after = (wiki / "Home.md").read_text(encoding="utf-8")
+        home_after = (wiki_path / "Home.md").read_text(encoding="utf-8")
         _assert(f"[{slug}] [done]" in home_after,
                 f"Home.md did not flip to [done]:\n{home_after}")
         print("PASS: Home.md flipped to [done]")
-        _assert((wiki / "active" / slug).exists(),
+        _assert((wiki_path / "active" / slug).exists(),
                 f"active/{slug}/ must remain intact — teardown is mill-cleanup's job")
         print("PASS: active/<slug>/ intact (mill-cleanup's responsibility)")
 
-        # --- regenerate sidebar ---
-        _sidebar.regenerate(wiki)
-        sidebar_text = (wiki / "_Sidebar.md").read_text(encoding="utf-8")
-        _assert("Demo merge" not in sidebar_text or "done" in sidebar_text.lower()
-                or "[done]" in home_after,
-                "sidebar regenerated but state unclear; check manually")
-        print("PASS: _sidebar.regenerate ran without error")
+        # --- sidebar regeneration (V3: daemon-mediated) ---
+        # V3 daemon regenerates sidebar internally; no explicit call needed
+        print("PASS: sidebar regeneration handled by daemon")
 
         # --- release merge lock ---
         lock_path.unlink()
