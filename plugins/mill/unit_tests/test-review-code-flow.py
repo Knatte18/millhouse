@@ -13,7 +13,6 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
 
 HUB = Path(__file__).resolve().parent.parent.parent.parent
@@ -21,6 +20,8 @@ sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
 import _reviewer_test_stub as stub  # noqa: E402
 import _test_registry  # noqa: E402
+import _test_helpers  # noqa: E402
+from wiki import _client as wiki  # noqa: E402
 from _llm_claude import LLMError  # noqa: E402
 from _review_code import run as code_run  # noqa: E402
 from _review_common import ReviewError  # noqa: E402
@@ -107,11 +108,12 @@ def _make_fixture(tmp_path: Path) -> tuple[Path, Path, Path, dict]:
     mill_dir = worktree / ".millhouse"
     mill_dir.mkdir(parents=True, exist_ok=True)
     wiki_root = tmp_path / "wiki"
-    wiki_root.mkdir(parents=True, exist_ok=True)
+    _test_helpers.init_wiki_repo(wiki_root)
     seed_wiki_config(wiki_root)
     (wiki_root / "Home.md").write_text(
-        f"## Test Task\n[[{SLUG}]] [active]\n\n_body_\n", encoding="utf-8"
+        f"## Test Task\n[{SLUG}] [active]\n\n_body_\n", encoding="utf-8"
     )
+    wiki.upsert_task(wiki_root, SLUG, title="Test Task", status="active")
     (mill_dir / "config.local.yaml").write_text(
         f"paths:\n  wiki: '{wiki_root.as_posix()}'\n", encoding="utf-8"
     )
@@ -147,6 +149,9 @@ def _make_fixture(tmp_path: Path) -> tuple[Path, Path, Path, dict]:
             "reviews_dir":     "reviews/",
             "status_md":       "_mill/status.md",
         },
+        "spawn": {
+            "branch_prefix": "hanf/",
+        },
         "llm": {
             "bulk_timeout":     None,
             "holistic_timeout": None,
@@ -178,8 +183,8 @@ def main() -> int:
     # Regression pin for #21/#62/#63: holistic must start at r1 even after
     # multiple per-batch rounds have been recorded.
     # ------------------------------------------------------------------
-    with tempfile.TemporaryDirectory() as tmpdir:
-        mill_dir, wiki_root, project_root, cfg = _make_fixture(Path(tmpdir))
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        mill_dir, wiki_root, project_root, cfg = _make_fixture(tmpdir)
         orig_dir = os.getcwd()
         os.chdir(project_root)
         try:
@@ -233,8 +238,8 @@ def main() -> int:
     # ------------------------------------------------------------------
     # Test 2 — manifest present in prompt
     # ------------------------------------------------------------------
-    with tempfile.TemporaryDirectory() as tmpdir:
-        mill_dir, wiki_root, project_root, cfg = _make_fixture(Path(tmpdir))
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        mill_dir, wiki_root, project_root, cfg = _make_fixture(tmpdir)
         orig_dir = os.getcwd()
         os.chdir(project_root)
         try:
@@ -264,8 +269,8 @@ def main() -> int:
     # A batch's Reads: path that is in another batch's Creates: must not
     # raise ReviewError even when the file doesn't exist on disk (#60).
     # ------------------------------------------------------------------
-    with tempfile.TemporaryDirectory() as tmpdir:
-        worktree = Path(tmpdir) / "container" / "wts" / SLUG
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        worktree = tmpdir / "container" / "wts" / SLUG
         worktree.mkdir(parents=True)
         subprocess.run(["git", "-C", str(worktree), "init"], check=True, capture_output=True)
         subprocess.run(["git", "-C", str(worktree), "checkout", "-b", f"hanf/{SLUG}"], capture_output=True)
@@ -276,7 +281,7 @@ def main() -> int:
         subprocess.run(["git", "-C", str(worktree), "commit", "-m", "seed"], check=True, capture_output=True)
         mill_dir = worktree / ".millhouse"
         mill_dir.mkdir(parents=True, exist_ok=True)
-        wiki_root = Path(tmpdir) / "wiki"
+        wiki_root = tmpdir / "wiki"
         wiki_root.mkdir(parents=True, exist_ok=True)
         seed_wiki_config(wiki_root)
         (wiki_root / "Home.md").write_text(f"## Test Task\n[[{SLUG}]] [active]\n\n_body_\n", encoding="utf-8")
@@ -335,8 +340,8 @@ def main() -> int:
     # ------------------------------------------------------------------
     # Test 4 — hard-fail on missing ref not in creates_union (#41/#43)
     # ------------------------------------------------------------------
-    with tempfile.TemporaryDirectory() as tmpdir:
-        worktree = Path(tmpdir) / "container" / "wts" / SLUG
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        worktree = tmpdir / "container" / "wts" / SLUG
         worktree.mkdir(parents=True)
         subprocess.run(["git", "-C", str(worktree), "init"], check=True, capture_output=True)
         subprocess.run(["git", "-C", str(worktree), "checkout", "-b", f"hanf/{SLUG}"], capture_output=True)
@@ -347,7 +352,7 @@ def main() -> int:
         subprocess.run(["git", "-C", str(worktree), "commit", "-m", "seed"], check=True, capture_output=True)
         mill_dir = worktree / ".millhouse"
         mill_dir.mkdir(parents=True, exist_ok=True)
-        wiki_root = Path(tmpdir) / "wiki"
+        wiki_root = tmpdir / "wiki"
         wiki_root.mkdir(parents=True, exist_ok=True)
         seed_wiki_config(wiki_root)
         (wiki_root / "Home.md").write_text(f"## Test Task\n[[{SLUG}]] [active]\n\n_body_\n", encoding="utf-8")
@@ -406,8 +411,8 @@ def main() -> int:
     # ------------------------------------------------------------------
     # Test 5 — NEED_CONTEXT resume fallback: 1 retry -> APPROVE (#5/#7)
     # ------------------------------------------------------------------
-    with tempfile.TemporaryDirectory() as tmpdir:
-        mill_dir, wiki_root, project_root, cfg = _make_fixture(Path(tmpdir))
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        mill_dir, wiki_root, project_root, cfg = _make_fixture(tmpdir)
         orig_dir = os.getcwd()
         os.chdir(project_root)
         # src/a.py exists on disk (created by _make_fixture); NEED_CONTEXT_TEXT
@@ -445,8 +450,8 @@ def main() -> int:
     # ------------------------------------------------------------------
     # Test 6 — NEED_CONTEXT propagated when retry also returns NEED_CONTEXT
     # ------------------------------------------------------------------
-    with tempfile.TemporaryDirectory() as tmpdir:
-        mill_dir, wiki_root, project_root, cfg = _make_fixture(Path(tmpdir))
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        mill_dir, wiki_root, project_root, cfg = _make_fixture(tmpdir)
         orig_dir = os.getcwd()
         os.chdir(project_root)
         stub.seed([
@@ -475,8 +480,8 @@ def main() -> int:
     # ------------------------------------------------------------------
     # Test 7 — max_rounds kwarg override
     # ------------------------------------------------------------------
-    with tempfile.TemporaryDirectory() as tmpdir:
-        project_root = Path(tmpdir) / "container" / "wts" / SLUG
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        project_root = tmpdir / "container" / "wts" / SLUG
         project_root.mkdir(parents=True)
         subprocess.run(["git", "-C", str(project_root), "init"], check=True, capture_output=True)
         subprocess.run(["git", "-C", str(project_root), "checkout", "-b", f"hanf/{SLUG}"], capture_output=True)
@@ -485,7 +490,7 @@ def main() -> int:
         (project_root / ".gitignore").write_text("\n", encoding="utf-8")
         subprocess.run(["git", "-C", str(project_root), "add", ".gitignore"], check=True, capture_output=True)
         subprocess.run(["git", "-C", str(project_root), "commit", "-m", "seed"], check=True, capture_output=True)
-        wiki_root = Path(tmpdir) / "wiki"
+        wiki_root = tmpdir / "wiki"
         wiki_root.mkdir(parents=True, exist_ok=True)
         seed_wiki_config(wiki_root)
         (wiki_root / "Home.md").write_text(f"## Test Task\n[[{SLUG}]] [active]\n\n_body_\n", encoding="utf-8")
@@ -563,8 +568,8 @@ def main() -> int:
     # ------------------------------------------------------------------
     # Test 8 — blocking_count populated from BLOCKING headings
     # ------------------------------------------------------------------
-    with tempfile.TemporaryDirectory() as tmpdir:
-        mill_dir, wiki_root, project_root, cfg = _make_fixture(Path(tmpdir))
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        mill_dir, wiki_root, project_root, cfg = _make_fixture(tmpdir)
         orig_dir = os.getcwd()
         os.chdir(project_root)
         try:
@@ -597,8 +602,8 @@ def main() -> int:
     # ------------------------------------------------------------------
     # Test 9 — ERROR parity: initial LLM call raises (per-batch)
     # ------------------------------------------------------------------
-    with tempfile.TemporaryDirectory() as tmpdir:
-        mill_dir, wiki_root, project_root, cfg = _make_fixture(Path(tmpdir))
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        mill_dir, wiki_root, project_root, cfg = _make_fixture(tmpdir)
         orig_dir = os.getcwd()
         os.chdir(project_root)
         original_run = stub.run
@@ -630,8 +635,8 @@ def main() -> int:
     # ------------------------------------------------------------------
     # Test 10 — ERROR parity: initial LLM call raises (holistic)
     # ------------------------------------------------------------------
-    with tempfile.TemporaryDirectory() as tmpdir:
-        mill_dir, wiki_root, project_root, cfg = _make_fixture(Path(tmpdir))
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        mill_dir, wiki_root, project_root, cfg = _make_fixture(tmpdir)
         orig_dir = os.getcwd()
         os.chdir(project_root)
         original_run = stub.run
@@ -661,8 +666,8 @@ def main() -> int:
     # ------------------------------------------------------------------
     # Test 11 — ERROR on resume: first call returns NEED_CONTEXT, retry raises
     # ------------------------------------------------------------------
-    with tempfile.TemporaryDirectory() as tmpdir:
-        mill_dir, wiki_root, project_root, cfg = _make_fixture(Path(tmpdir))
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        mill_dir, wiki_root, project_root, cfg = _make_fixture(tmpdir)
         orig_dir = os.getcwd()
         os.chdir(project_root)
         original_run = stub.run
@@ -699,8 +704,8 @@ def main() -> int:
     # ------------------------------------------------------------------
     # Test 12 — deletes surface: ## Intentionally deleted in prompt
     # ------------------------------------------------------------------
-    with tempfile.TemporaryDirectory() as tmpdir:
-        worktree = Path(tmpdir) / "container" / "wts" / SLUG
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        worktree = tmpdir / "container" / "wts" / SLUG
         worktree.mkdir(parents=True)
         subprocess.run(["git", "-C", str(worktree), "init"], check=True, capture_output=True)
         subprocess.run(["git", "-C", str(worktree), "checkout", "-b", f"hanf/{SLUG}"], capture_output=True)
@@ -711,7 +716,7 @@ def main() -> int:
         subprocess.run(["git", "-C", str(worktree), "commit", "-m", "seed"], check=True, capture_output=True)
         mill_dir = worktree / ".millhouse"
         mill_dir.mkdir(parents=True, exist_ok=True)
-        wiki_root = Path(tmpdir) / "wiki"
+        wiki_root = tmpdir / "wiki"
         wiki_root.mkdir(parents=True, exist_ok=True)
         seed_wiki_config(wiki_root)
         (wiki_root / "Home.md").write_text(f"## Test Task\n[[{SLUG}]] [active]\n\n_body_\n", encoding="utf-8")
@@ -772,8 +777,8 @@ def main() -> int:
     # ------------------------------------------------------------------
     # Test 13 — timeout plumbing: bulk_timeout and holistic_timeout forwarded
     # ------------------------------------------------------------------
-    with tempfile.TemporaryDirectory() as tmpdir:
-        mill_dir, wiki_root, project_root, cfg = _make_fixture(Path(tmpdir))
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        mill_dir, wiki_root, project_root, cfg = _make_fixture(tmpdir)
         orig_dir = os.getcwd()
         os.chdir(project_root)
         cfg["llm"]["bulk_timeout"] = 900
@@ -811,8 +816,8 @@ def main() -> int:
     # ------------------------------------------------------------------
 
     # 14c: per-batch with start_sha present -> prompt contains DIFF delimiter
-    with tempfile.TemporaryDirectory() as tmpdir:
-        mill_dir, wiki_root, project_root, cfg = _make_fixture(Path(tmpdir))
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        mill_dir, wiki_root, project_root, cfg = _make_fixture(tmpdir)
         orig_dir = os.getcwd()
         os.chdir(project_root)
         try:
@@ -878,8 +883,8 @@ def main() -> int:
             os.chdir(orig_dir)
 
     # 14d: per-batch with missing start_sha -> prompt uses FILE delimiter (no DIFF)
-    with tempfile.TemporaryDirectory() as tmpdir:
-        mill_dir, wiki_root, project_root, cfg = _make_fixture(Path(tmpdir))
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        mill_dir, wiki_root, project_root, cfg = _make_fixture(tmpdir)
         orig_dir = os.getcwd()
         os.chdir(project_root)
         try:
@@ -913,8 +918,8 @@ def main() -> int:
             os.chdir(orig_dir)
 
     # 14e: per-batch with large diff -> prompt uses FILE delimiter (not DIFF)
-    with tempfile.TemporaryDirectory() as tmpdir:
-        mill_dir, wiki_root, project_root, cfg = _make_fixture(Path(tmpdir))
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        mill_dir, wiki_root, project_root, cfg = _make_fixture(tmpdir)
         orig_dir = os.getcwd()
         os.chdir(project_root)
         try:
@@ -982,8 +987,8 @@ def main() -> int:
     # Tests both holistic (batch_name=None) and per-batch (batch_name="alpha").
     # Unparseable output -> ERROR entry with file path.
     # ------------------------------------------------------------------
-    with tempfile.TemporaryDirectory() as tmpdir:
-        mill_dir, wiki_root, project_root, cfg = _make_fixture(Path(tmpdir))
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        mill_dir, wiki_root, project_root, cfg = _make_fixture(tmpdir)
         orig_dir = os.getcwd()
         os.chdir(project_root)
         try:
@@ -1038,8 +1043,8 @@ def main() -> int:
     # ------------------------------------------------------------------
     # Test 16 — rounds=0 holistic early return (APPROVE stub)
     # ------------------------------------------------------------------
-    with tempfile.TemporaryDirectory() as tmpdir:
-        mill_dir, wiki_root, project_root, cfg = _make_fixture(Path(tmpdir))
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        mill_dir, wiki_root, project_root, cfg = _make_fixture(tmpdir)
         orig_dir = os.getcwd()
         os.chdir(project_root)
         cfg["roles"]["code-review"]["holistic"]["rounds"] = 0
