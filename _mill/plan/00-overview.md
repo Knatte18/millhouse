@@ -92,7 +92,7 @@ batches:
 
 ## All Files Touched
 
-- `_mill/handoff.md`
+- `_mill/plan/01-daemon-startup-diagnose-and-fix.md`
 - `plugins/mill/integration_tests/test-merge.py`
 - `plugins/mill/integration_tests/test-spawn-units.py`
 - `plugins/mill/integration_tests/test-spawn.py`

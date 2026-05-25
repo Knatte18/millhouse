@@ -16,7 +16,7 @@ Finish the V2 elimination across the remaining test surface and finalize the tas
 1. Port `_test_helpers.py` + the small V2 block inside `test-millpy-spawn.py:967-970`.
 2. Fix the `test-wiki-noop-commit.py` fixture's missing-`origin` issue (the in-scope surfaced bug from discussion's `## Decisions ## Surfaced-bug policy`).
 3. Spot-clean integration tests that still reference V2 (out of verify gate per discussion, but cleaned to avoid future confusion).
-4. Run the final `run-all.py` smoke; assert zero failures; delete `_mill/handoff.md`.
+4. Run the final `run-all.py` smoke and assert zero failures. (Note: `_mill/handoff.md` was already removed in commit `f5a186b` on this branch — no rm needed.)
 
 Four S-effort cards, sum effort 4 — exactly fills the batch ceiling.
 
@@ -148,14 +148,13 @@ Batch-local decisions (differ from `## Shared Decisions` in `00-overview.md`):
   Zero matches required across all four files. The integration tests are not run as part of this card's verify; their cleanup is purely textual.
 - **Commit:** `test(integration): spot-clean V2 references; skip deeply broken with follow-up issues`
 
-### Card 13: Final smoke + delete `_mill/handoff.md`
+### Card 13: Final V2-elimination smoke
 
 - **Effort:** S
 - **Context:** none
 - **Edits:** none
 - **Creates:** none
-- **Deletes:**
-  - `_mill/handoff.md`
+- **Deletes:** none
 - **Requirements:** Final-batch wrap-up. Steps in order:
 
   1. Run the full unit-test smoke:
@@ -176,16 +175,8 @@ Batch-local decisions (differ from `## Shared Decisions` in `00-overview.md`):
 
      Zero matches required across shipping + unit tests. Integration tests may still have residual references that card 12 skipped via `pytest.skip` — the skip-marked tests are acceptable; the imports themselves should still be gone.
 
-  3. Delete the handoff doc:
-
-     ```bash
-     rm _mill/handoff.md
-     ```
-
-     Confirm the file is gone (`ls _mill/handoff.md` should error). This doc was the diagnostic checkpoint from `hanf/wiki-v3-adoption`; it has been consumed by this task and lives in git history at commit `5d8a077`.
-
-  The verify gate is `run-all.py`; the file deletion is the secondary success criterion.
-- **Commit:** `chore: final V2-elimination smoke; delete _mill/handoff.md`
+  This card has no file edits — the verify itself is the only deliverable. If `run-all.py` is already green with no skip-marks added, this commit is empty; in that case skip the commit and let mill-go observe the batch verify-pass directly. (`_mill/handoff.md` was already removed in commit `f5a186b` on this branch — no rm step is needed.)
+- **Commit:** `chore: final V2-elimination smoke`
 
 ## Batch Tests
 
