@@ -427,6 +427,7 @@ def main() -> int:
 
         _mill = _tmp / ".millhouse"
         _mill.mkdir()
+        (_mill / "discussion.md").write_text("# Discussion\n", encoding="utf-8")
 
         import unittest.mock as _mock
         import os as _os
