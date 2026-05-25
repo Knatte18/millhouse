@@ -3,7 +3,7 @@
 ```yaml
 task: Isolate verify PYTHONPATH so tests validate worktree code
 slug: wiki-v3-verify-isolation
-approved: false
+approved: true
 started: 20260525-105607
 parent: hanf/wiki-v3-adoption
 root: ""
