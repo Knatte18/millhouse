@@ -3,7 +3,7 @@
 ```yaml
 task: Green the unit test suite on wiki-v3-adoption so it can merge to main
 slug: wiki-v3-test-suite-green
-approved: false
+approved: true
 started: 20260525-173416
 parent: hanf/wiki-v3-adoption
 root: ""
