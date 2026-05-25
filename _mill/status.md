@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-gate-and-syntax-fixes
+phase: approved-fixture-updates
 slug: wiki-v3-test-suite-green
 branch: hanf/wiki-v3-test-suite-green
 plan: _mill/plan
@@ -23,6 +23,7 @@ planned  '2026-05-25T17:49:01Z'
 implementing  '2026-05-25T17:55:05Z'
 approved-foundation  '2026-05-25T17:59:51Z'
 approved-gate-and-syntax-fixes  '2026-05-25T18:06:11Z'
+approved-fixture-updates  '2026-05-25T18:29:37Z'
 ```
 
 ## Batches
@@ -38,7 +39,7 @@ batches:
     implementer_session: 3d81f4db-74c1-4dac-9068-1cb85be71807
     start_sha: af2056d63a71aa0fe23bba651f197c4d6630d6f0
   - name: fixture-updates
-    state: running
+    state: approved
     implementer_session: d1a613ae-2356-4715-9801-71a81d8bcfa5
     start_sha: 9a2fa16de20c652f8482b4227f1e646bc67d794a
 ```
