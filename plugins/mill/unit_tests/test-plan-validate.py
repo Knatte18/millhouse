@@ -1162,6 +1162,319 @@ def test_skip_checks_unknown_check_silently_ignored() -> int:
             return 1
 
 
+def test_check_verify_not_isolated_null() -> int:
+    """Clean: per-batch frontmatter verify: null -> no verify-not-isolated error."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file("alpha")
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        verify_errs = [e for e in result if e["check"] == "verify-not-isolated"]
+        try:
+            assert len(verify_errs) == 0, f"expected no errors, got {len(verify_errs)}: {verify_errs}"
+            print("PASS test_check_verify_not_isolated_null")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_check_verify_not_isolated_null: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_check_verify_not_isolated_missing_key() -> int:
+    """Clean: per-batch frontmatter omits verify: entirely -> no verify-not-isolated error."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = (
+            "# Batch: alpha\n\n"
+            "```yaml\n"
+            "task: test\nbatch: alpha\ncards: 1\ndepends-on: []\n"
+            "```\n\n"
+            "## Cards\n\n"
+            "### Card 1: card 1\n\n"
+            "- **Context:** none\n"
+            "- **Edits:** none\n"
+            "- **Creates:** none\n"
+            "- **Deletes:** none\n"
+            "- **Requirements:**\n  See scope.\n"
+            "- **Commit:** feat(alpha): card 1\n"
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        verify_errs = [e for e in result if e["check"] == "verify-not-isolated"]
+        try:
+            assert len(verify_errs) == 0, f"expected no errors, got {len(verify_errs)}: {verify_errs}"
+            print("PASS test_check_verify_not_isolated_missing_key")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_check_verify_not_isolated_missing_key: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_check_verify_not_isolated_dirty_no_prefix() -> int:
+    """Dirty: per-batch frontmatter verify: without PYTHONPATH= prefix -> one error."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = (
+            "# Batch: alpha\n\n"
+            "```yaml\n"
+            "task: test\nbatch: alpha\ncards: 1\nverify: uv run --project plugins/mill python test.py\ndepends-on: []\n"
+            "```\n\n"
+            "## Cards\n\n"
+            "### Card 1: card 1\n\n"
+            "- **Context:** none\n"
+            "- **Edits:** none\n"
+            "- **Creates:** none\n"
+            "- **Deletes:** none\n"
+            "- **Requirements:**\n  See scope.\n"
+            "- **Commit:** feat(alpha): card 1\n"
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        verify_errs = [e for e in result if e["check"] == "verify-not-isolated"]
+        try:
+            assert len(verify_errs) == 1, f"expected 1 error, got {len(verify_errs)}: {verify_errs}"
+            e = verify_errs[0]
+            assert e["batch"] == "01-alpha", f"wrong batch: {e['batch']!r}"
+            assert e["card"] is None, f"wrong card: {e['card']!r}"
+            assert e["path"] == "uv run --project plugins/mill python test.py", f"wrong path: {e['path']!r}"
+            assert e["message"] == "verify command missing PYTHONPATH= prefix", f"wrong message: {e['message']!r}"
+            # Verify 5-key envelope
+            assert set(e.keys()) == {"check", "batch", "card", "path", "message"}, (
+                f"wrong keys: {set(e.keys())}"
+            )
+            print("PASS test_check_verify_not_isolated_dirty_no_prefix")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_check_verify_not_isolated_dirty_no_prefix: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_check_verify_not_isolated_clean_with_prefix() -> int:
+    """Clean: per-batch frontmatter verify: with PYTHONPATH= prefix -> no error."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = (
+            "# Batch: alpha\n\n"
+            "```yaml\n"
+            "task: test\nbatch: alpha\ncards: 1\nverify: PYTHONPATH= uv run --project plugins/mill python test.py\ndepends-on: []\n"
+            "```\n\n"
+            "## Cards\n\n"
+            "### Card 1: card 1\n\n"
+            "- **Context:** none\n"
+            "- **Edits:** none\n"
+            "- **Creates:** none\n"
+            "- **Deletes:** none\n"
+            "- **Requirements:**\n  See scope.\n"
+            "- **Commit:** feat(alpha): card 1\n"
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        verify_errs = [e for e in result if e["check"] == "verify-not-isolated"]
+        try:
+            assert len(verify_errs) == 0, f"expected no errors, got {len(verify_errs)}: {verify_errs}"
+            print("PASS test_check_verify_not_isolated_clean_with_prefix")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_check_verify_not_isolated_clean_with_prefix: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_check_verify_not_isolated_two_batches_dirty() -> int:
+    """Dirty: two batch files both unprefixed -> exactly two verify-not-isolated errors."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        overview = _make_overview([
+            {"name": "alpha", "file": "01-alpha.md"},
+            {"name": "beta", "file": "02-beta.md"},
+        ])
+        batch_a = (
+            "# Batch: alpha\n\n"
+            "```yaml\n"
+            "task: test\nbatch: alpha\ncards: 1\nverify: uv run test-a.py\ndepends-on: []\n"
+            "```\n\n"
+            "## Cards\n\n"
+            "### Card 1: card 1\n\n"
+            "- **Context:** none\n"
+            "- **Edits:** none\n"
+            "- **Creates:** none\n"
+            "- **Deletes:** none\n"
+            "- **Requirements:**\n  See scope.\n"
+            "- **Commit:** feat(alpha): card 1\n"
+        )
+        batch_b = (
+            "# Batch: beta\n\n"
+            "```yaml\n"
+            "task: test\nbatch: beta\ncards: 1\nverify: uv run test-b.py\ndepends-on: []\n"
+            "```\n\n"
+            "## Cards\n\n"
+            "### Card 1: card 1\n\n"
+            "- **Context:** none\n"
+            "- **Edits:** none\n"
+            "- **Creates:** none\n"
+            "- **Deletes:** none\n"
+            "- **Requirements:**\n  See scope.\n"
+            "- **Commit:** feat(beta): card 1\n"
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_a), ("02-beta.md", batch_b)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        verify_errs = [e for e in result if e["check"] == "verify-not-isolated"]
+        try:
+            assert len(verify_errs) == 2, f"expected 2 errors, got {len(verify_errs)}: {verify_errs}"
+            batches = {e["batch"] for e in verify_errs}
+            assert batches == {"01-alpha", "02-beta"}, f"wrong batch names: {batches}"
+            print("PASS test_check_verify_not_isolated_two_batches_dirty")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_check_verify_not_isolated_two_batches_dirty: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_check_verify_not_isolated_leading_whitespace() -> int:
+    """Clean: extra leading whitespace before PYTHONPATH= -> no error (uses .strip())."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = (
+            "# Batch: alpha\n\n"
+            "```yaml\n"
+            "task: test\nbatch: alpha\ncards: 1\nverify:   PYTHONPATH= uv run test.py\ndepends-on: []\n"
+            "```\n\n"
+            "## Cards\n\n"
+            "### Card 1: card 1\n\n"
+            "- **Context:** none\n"
+            "- **Edits:** none\n"
+            "- **Creates:** none\n"
+            "- **Deletes:** none\n"
+            "- **Requirements:**\n  See scope.\n"
+            "- **Commit:** feat(alpha): card 1\n"
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        verify_errs = [e for e in result if e["check"] == "verify-not-isolated"]
+        try:
+            assert len(verify_errs) == 0, f"expected no errors, got {len(verify_errs)}: {verify_errs}"
+            print("PASS test_check_verify_not_isolated_leading_whitespace")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_check_verify_not_isolated_leading_whitespace: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_check_verify_not_isolated_non_empty_pythonpath_value() -> int:
+    """Clean: verify: PYTHONPATH=/some/path uv run ... -> no error."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = (
+            "# Batch: alpha\n\n"
+            "```yaml\n"
+            "task: test\nbatch: alpha\ncards: 1\nverify: PYTHONPATH=/some/path uv run test.py\ndepends-on: []\n"
+            "```\n\n"
+            "## Cards\n\n"
+            "### Card 1: card 1\n\n"
+            "- **Context:** none\n"
+            "- **Edits:** none\n"
+            "- **Creates:** none\n"
+            "- **Deletes:** none\n"
+            "- **Requirements:**\n  See scope.\n"
+            "- **Commit:** feat(alpha): card 1\n"
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        verify_errs = [e for e in result if e["check"] == "verify-not-isolated"]
+        try:
+            assert len(verify_errs) == 0, f"expected no errors, got {len(verify_errs)}: {verify_errs}"
+            print("PASS test_check_verify_not_isolated_non_empty_pythonpath_value")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_check_verify_not_isolated_non_empty_pythonpath_value: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_check_verify_not_isolated_run_integration() -> int:
+    """Integration: invoke _plan_validate.run() with unprefixed batch, verify 5-key envelope."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = (
+            "# Batch: alpha\n\n"
+            "```yaml\n"
+            "task: test\nbatch: alpha\ncards: 1\nverify: uv run test.py\ndepends-on: []\n"
+            "```\n\n"
+            "## Cards\n\n"
+            "### Card 1: card 1\n\n"
+            "- **Context:** none\n"
+            "- **Edits:** none\n"
+            "- **Creates:** none\n"
+            "- **Deletes:** none\n"
+            "- **Requirements:**\n  See scope.\n"
+            "- **Commit:** feat(alpha): card 1\n"
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        try:
+            result = _plan_validate.run(plan_dir, project_root)
+            verify_errs = [e for e in result if e["check"] == "verify-not-isolated"]
+            assert len(verify_errs) == 1, f"expected 1 error, got {len(verify_errs)}: {verify_errs}"
+            e = verify_errs[0]
+            # Verify all 5 keys are present
+            assert set(e.keys()) == {"check", "batch", "card", "path", "message"}, (
+                f"envelope missing keys: {set(e.keys())}"
+            )
+            assert e["check"] == "verify-not-isolated"
+            assert e["batch"] == "01-alpha"
+            assert e["card"] is None
+            assert e["path"] == "uv run test.py"
+            assert e["message"] == "verify command missing PYTHONPATH= prefix"
+            print("PASS test_check_verify_not_isolated_run_integration")
+            return 0
+        except (AssertionError, KeyError) as exc:
+            print(f"FAIL test_check_verify_not_isolated_run_integration: {exc}", file=sys.stderr)
+            return 1
+
+
 def test_reads_token_missing_both_unions_dirty() -> int:
     """(g) Reads: token missing on disk + in neither union -> non-existent-path error."""
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -1371,6 +1684,15 @@ def main() -> int:
         test_skip_checks_filters_wiki_config_mutation,
         test_skip_checks_does_not_suppress_other_checks,
         test_skip_checks_unknown_check_silently_ignored,
+        # verify-not-isolated check
+        test_check_verify_not_isolated_null,
+        test_check_verify_not_isolated_missing_key,
+        test_check_verify_not_isolated_dirty_no_prefix,
+        test_check_verify_not_isolated_clean_with_prefix,
+        test_check_verify_not_isolated_two_batches_dirty,
+        test_check_verify_not_isolated_leading_whitespace,
+        test_check_verify_not_isolated_non_empty_pythonpath_value,
+        test_check_verify_not_isolated_run_integration,
     ]
 
     errors = 0
