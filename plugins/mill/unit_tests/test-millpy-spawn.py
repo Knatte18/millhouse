@@ -19,6 +19,11 @@ from unittest.mock import MagicMock, patch
 HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
+_UNIT_TESTS = Path(__file__).resolve().parent
+sys.path.insert(0, str(_UNIT_TESTS))
+
+import _test_helpers  # noqa: E402
+
 
 # ---------------------------------------------------------------------------
 # Smoke import
@@ -793,11 +798,7 @@ def _run_spawn_real_fs(
 
 def test_spawn_standard_layout_regression() -> None:
     """Standard layout (no hub_relative_path): hub state lands at worktree_path/.millhouse/."""
-    import _safe_rmtree
-    import tempfile
-
-    tmpdir = Path(tempfile.mkdtemp())
-    try:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         exit_code, wt, vscode_mock, setup_mock = _run_spawn_real_fs(tmpdir, ".")
 
         if exit_code != 0:
@@ -834,8 +835,6 @@ def test_spawn_standard_layout_regression() -> None:
                 raise AssertionError(
                     f"config.local.yaml has unexpected hub_relative_path={hub_rel!r}"
                 )
-    finally:
-        _safe_rmtree.safe_rmtree(tmpdir, allowed_root=tmpdir, ignore_errors=True)
 
     print("PASS: test_spawn_standard_layout_regression")
 
@@ -847,13 +846,10 @@ def test_spawn_standard_layout_regression() -> None:
 
 def test_spawn_subfolder_install_destination_layout() -> None:
     """Subfolder-install (hub_relative_path: src/Models): hub state lands at dest_hub."""
-    import _safe_rmtree
-    import tempfile
     import yaml
 
     hub_subpath = "src/Models"
-    tmpdir = Path(tempfile.mkdtemp())
-    try:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         exit_code, wt, vscode_mock, setup_mock = _run_spawn_real_fs(
             tmpdir, hub_subpath, slug="subfolder-task", title="Subfolder Task"
         )
@@ -896,8 +892,6 @@ def test_spawn_subfolder_install_destination_layout() -> None:
             raise AssertionError(
                 f"create_hub_links first arg should be {dest_hub}, got {first_arg!r}"
             )
-    finally:
-        _safe_rmtree.safe_rmtree(tmpdir, allowed_root=tmpdir, ignore_errors=True)
 
     print("PASS: test_spawn_subfolder_install_destination_layout")
 

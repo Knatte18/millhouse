@@ -208,14 +208,14 @@ def main() -> int:
 
     # find_active_slug: on task branch -> returns slug
     with _test_helpers.safe_temp_dir() as tmpdir:
-        wt, wiki = _make_task_worktree(Path(tmpdir), "my-task", "My Task", branch_prefix="hanf/")
+        wt, wiki = _make_task_worktree(Path(tmpdir), "my-task", "My Task", branch_prefix="hanf/", seed_task=True)
         cfg = {"spawn": {"branch_prefix": "hanf/"}}
         assert find_active_slug(wt, wiki, cfg) == "my-task"
         print("PASS: find_active_slug: 'my-task'")
 
     # load_task_title: task_title present in Home.md
     with _test_helpers.safe_temp_dir() as tmpdir:
-        wt, wiki = _make_task_worktree(Path(tmpdir), "my-task", "My Task Title", branch_prefix="hanf/")
+        wt, wiki = _make_task_worktree(Path(tmpdir), "my-task", "My Task Title", branch_prefix="hanf/", seed_task=True)
         cfg = {"spawn": {"branch_prefix": "hanf/"}}
         assert load_task_title(wt, wiki, cfg, "my-task") == "My Task Title"
         print("PASS: load_task_title with task_title in Home.md")
