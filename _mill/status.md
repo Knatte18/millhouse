@@ -68,5 +68,7 @@ batches:
     start_sha: b6d8301c7f0f68a030c905552d1d2e2d953b615d
     commit_sha: af1ead5bcae6996b707b54e8a1db2503ad3a59fd
   - name: test-sweep-light-and-finalize
-    state: pending
+    state: running
+    implementer_session: 137c8b91-24f6-4a76-9ac5-de56e1d16c11
+    start_sha: 1164ca9478c6e4e6cad87e1dd51055ee5d41c138
 ```
