@@ -45,7 +45,7 @@ def _setup_tempfile_wiki(home_md_content: str, tasks: list[dict] = None) -> temp
 
     Sets up a bare sibling repo as origin so git push works in commit_push.
     If tasks is supplied, seeds tasks.json via daemon upsert_task calls for each task dict.
-    Returns the TemporaryDirectory; caller must call .cleanup().
+    Returns a wrapper with .cleanup() that handles daemon file locking on Windows.
     """
     td = tempfile.TemporaryDirectory()
     wiki_path = Path(td.name)
@@ -85,6 +85,20 @@ def _setup_tempfile_wiki(home_md_content: str, tasks: list[dict] = None) -> temp
         for task in tasks:
             wiki.upsert_task(wiki_path, **task)
 
+    # Wrap cleanup to handle Windows file locking from daemon process
+    original_cleanup = td.cleanup
+    def safe_cleanup():
+        import shutil
+        try:
+            original_cleanup()
+        except (OSError, PermissionError):
+            # Daemon may still hold file locks on Windows; try shutil.rmtree with ignore_errors
+            try:
+                shutil.rmtree(td.name, ignore_errors=True)
+            except Exception:
+                pass  # Best effort cleanup; let OS clean up on exit
+
+    td.cleanup = safe_cleanup
     return td
 
 
