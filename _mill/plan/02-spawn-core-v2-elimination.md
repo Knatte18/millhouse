@@ -68,7 +68,7 @@ Batch-local decisions (differ from `## Shared Decisions` in `00-overview.md`):
   - `<var>.group` → `<var>["group"]`
   - `<var>.status` → `<var>["status"]`
 
-  After this pass, run `grep -nE "\b(t|task|entry|picked|chosen|c|cand)\.(slug|title|phase|has_proposal|heading_line_no|brief|group|status)\b" plugins/mill/scripts/_spawn_core.py` — zero matches required.
+  After this pass, run `grep -nE "[a-zA-Z_][a-zA-Z0-9_]*\.(slug|title|phase|has_proposal|heading_line_no|brief|group|status)\b" plugins/mill/scripts/_spawn_core.py` — zero matches required. The regex matches **any identifier** (not just a closed name set), so iteration variables like `home_task`, `source_task`, `merged_task`, `parsed_task` are caught too. Expect a higher false-positive rate (e.g., `dict.<key>` references on actual dict literals could match if the key name overlaps with these attribute names) — review each remaining match by hand; if it is a legitimate dict-access or unrelated symbol, leave it.
 
   **Docstring references (lines 477-479):**
 

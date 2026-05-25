@@ -66,6 +66,26 @@ Batch-local decisions (differ from `## Shared Decisions` in `00-overview.md`):
 
   - Line 207: this is a negative test that V2 raised on unknown slugs. The V3 equivalent: `wiki.upsert_task(wiki_path, "no-such-slug", brief="- note")` would CREATE a new task (V3 upsert is upsert, not update-only). To preserve the V2 semantics ("unknown slug raises"), the test must FIRST check existence via `wiki.get_task(wiki_path, "no-such-slug")` (which returns `None`); if it returns `None`, raise the expected exception in the test code itself OR delete this test method outright (since V3 has no "update-only" mode and the semantic is gone). **Delete the test method** under the V2-only-tests-get-deleted principle from `## Shared Decisions ## Decision: card-4-deletes-_task_to_dict-helper` (the decision body explicitly extends the principle to V2-only test cases in batch 5).
 
+  **Seed daemon state for EVERY surviving test that invokes `millpy_fold.main(...)`.**
+
+  Critical post-port behaviour: `millpy-fold.py` (after card 24 of the parent plan, already merged) calls `wiki.list_tasks_brief(wiki_path)`, which queries the V3 daemon, which reads from `<wiki>/tasks.json` (TinyDB). `_setup_tempfile_wiki(home_md_content)` writes only `Home.md` as text — it does NOT seed `tasks.json`. After the V3 port, every existing test that builds a Home.md fixture string with `_setup_tempfile_wiki(...)` and then calls `millpy_fold.main([slug, ...])` will see `list_tasks_brief() -> []`, hit the "Slug not found" branch, and exit with code != 0. The intended phase-guard tests (`test_locked_phase_active_refused` at line 234, `test_locked_phase_ready_to_merge_refused` at line 259, `test_locked_phase_pr_pending_refused` at line 284), the "open GH issue accepted" test (line 306), the spawn-ready / done / abandoned phase tests (lines 330, 352, 372), the nonexistent-slug test (line 395), the invalid-slug test (line 416), and the GH-API tests (lines 443+, 474+, 515+) would all silently exercise the wrong code path. The bug is silent because the assertions (raised=True, Home.md unchanged) happen to hold for the "Slug not found" branch too.
+
+  **Required pattern:** extend `_setup_tempfile_wiki` to accept an optional `tasks: list[dict] = None` parameter; when supplied, after Home.md is written and the bare origin is set up, iterate over `tasks` and call `wiki.upsert_task(wiki_path, **task)` for each — this seeds `tasks.json` through the daemon, matching what `list_tasks_brief` reads. Each surviving test that calls `millpy_fold.main` must pass its `tasks=[{...}]` list explicitly:
+
+  ```python
+  td = _setup_tempfile_wiki(
+      home_content,
+      tasks=[
+          {"slug": "locked-task", "title": "Locked task", "brief": "", "status": "active"},
+          # ...one per task the test cares about, status mirroring the [phase] in home_content
+      ],
+  )
+  ```
+
+  Where the test's intent is the phase guard, set `"status"` to the phase being guarded. Where it is an "accepted" path, set the appropriate non-locked status. Where the test seeds an `[s]` task (V2 spawn-ready), set `"status": None` (V3 has no `"s"`).
+
+  Validate post-edit: every `millpy_fold.main(...)` call in `test-fold.py` must be preceded (in the same test function's setup) by a `_setup_tempfile_wiki(home_content, tasks=[...])` call with a non-None `tasks=` argument naming the slug under test. Grep `grep -nE "millpy_fold\.main\(" plugins/mill/unit_tests/test-fold.py` to enumerate all call sites; for each, scroll up to the nearest `_setup_tempfile_wiki(...)` call and confirm the `tasks=` kwarg is present.
+
   **`_wiki.write_commit_push` patching (lines 506, 511, 528):**
 
   These lines patch `_wiki.write_commit_push` to inject a failure for the failure-path test. V3 has no `write_commit_push`. The test's intent — "what happens when the push fails?" — translates to V3 as "what happens when `wiki._sync.commit_push` raises `WikiPushError`?". Two options:

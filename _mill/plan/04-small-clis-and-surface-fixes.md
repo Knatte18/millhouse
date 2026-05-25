@@ -99,7 +99,9 @@ Batch-local decisions (differ from `## Shared Decisions` in `00-overview.md`):
   - Line 301: the docstring text `Caller passes this\n            in to avoid a circular import on ``_wiki``.` references the deleted `_wiki` module. Replace with: `Caller passes this\n            in for separation of concerns; ``_junction`` does not depend on the wiki subpackage.`
 
   `plugins/mill/scripts/_worktree.py`:
+  - Line 206: the docstring text ``junctions_cfg: The ``junctions:`` block from ``wiki/config.yaml``,`` references the deleted V2 config-file path. Replace `wiki/config.yaml` with `mill-config.yaml`. Post-edit text: ``junctions_cfg: The ``junctions:`` block from ``mill-config.yaml``,``.
   - Line 207: the docstring text `as returned by ``_wiki.read_junctions``.` references the deleted `_wiki` module. Replace with: `as returned by ``_junction.read_junctions``.` (the helper lives in `_junction.py` after the V3 adoption).
+  - After both line-edits, grep `grep -nE "wiki/config\.yaml" plugins/mill/scripts/_paths.py plugins/mill/scripts/_junction.py plugins/mill/scripts/_worktree.py` — zero matches required across all three files.
 
   After both files are edited, run:
 
