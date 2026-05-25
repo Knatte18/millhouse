@@ -28,7 +28,9 @@ implementing  '2026-05-25T17:55:05Z'
 ```yaml
 batches:
   - name: foundation
-    state: pending
+    state: running
+    implementer_session: 9613f55a-3401-47bf-8a0c-551be7a4097b
+    start_sha: 13b551be0a684919ab1e15690926b75c170ddffe
   - name: gate-and-syntax-fixes
     state: pending
   - name: fixture-updates
