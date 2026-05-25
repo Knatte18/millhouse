@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-millpy-spawn-v2-elimination
+phase: approved-test-sweep-heavy
 slug: wiki-v3-batch3-finish
 branch: hanf/wiki-v3-batch3-finish
 plan: _mill/plan
@@ -35,6 +35,7 @@ approved-daemon-startup-diagnose-and-fix  '2026-05-25T14:53:10Z'
 approved-spawn-core-v2-elimination  '2026-05-25T14:57:09Z'
 approved-small-clis-and-surface-fixes  '2026-05-25T15:04:20Z'
 approved-millpy-spawn-v2-elimination  '2026-05-25T15:07:21Z'
+approved-test-sweep-heavy  '2026-05-25T15:17:46Z'
 ```
 
 ## Batches
@@ -62,9 +63,10 @@ batches:
     start_sha: 170298b5b625b7da0a39c355be92aba3a7ae2fe7
     commit_sha: aead6980c90f9755201f1778fc3a8c6eff643c9c
   - name: test-sweep-heavy
-    state: running
+    state: approved
     implementer_session: 8ee4bb45-27df-4a6a-8d5a-3e5c8b188ebe
     start_sha: b6d8301c7f0f68a030c905552d1d2e2d953b615d
+    commit_sha: af1ead5bcae6996b707b54e8a1db2503ad3a59fd
   - name: test-sweep-light-and-finalize
     state: pending
 ```
