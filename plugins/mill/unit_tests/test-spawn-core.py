@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
 
 HUB = Path(__file__).resolve().parent.parent.parent.parent
@@ -272,7 +271,7 @@ def test_pick_task_single_numbered_path_invalid_choice() -> None:
 
 
 def test_claim_in_wiki() -> None:
-    with tempfile.TemporaryDirectory() as tmp:
+    with safe_temp_dir() as tmp:
         wiki = _make_wiki(tmp, _HOME_MD_UNMARKED_ONLY)
         upsert_task(wiki, "task-one", title="Task one")
         upsert_task(wiki, "task-two", title="Task two")
@@ -308,7 +307,7 @@ def test_claim_in_wiki() -> None:
 
 
 def test_capture_parent_branch_returns_branch_name() -> None:
-    with tempfile.TemporaryDirectory() as tmp:
+    with safe_temp_dir() as tmp:
         repo = _make_git_repo(tmp, branch="main")
         branch = capture_parent_branch(repo)
         if branch != "main":
@@ -317,7 +316,7 @@ def test_capture_parent_branch_returns_branch_name() -> None:
 
 
 def test_capture_parent_branch_on_non_repo_raises() -> None:
-    with tempfile.TemporaryDirectory() as tmp:
+    with safe_temp_dir() as tmp:
         non_repo = Path(tmp) / "not-a-repo"
         non_repo.mkdir()
         try:
@@ -334,7 +333,7 @@ def test_capture_parent_branch_on_non_repo_raises() -> None:
 
 
 def test_write_initial_status() -> None:
-    with tempfile.TemporaryDirectory() as tmp:
+    with safe_temp_dir() as tmp:
         repo = _make_git_repo(tmp, branch="main")
         subprocess.run(
             ["git", "-C", str(repo), "checkout", "-b", "hanf/task-one"],
@@ -384,7 +383,7 @@ def test_write_initial_status() -> None:
 
 def test_write_initial_status_forced_failure_raises_runtime_error() -> None:
     """Forcing git add to fail (via index lock) must raise RuntimeError with stderr."""
-    with tempfile.TemporaryDirectory() as tmp:
+    with safe_temp_dir() as tmp:
         repo = _make_git_repo(tmp, branch="main")
         # Create an index lock file — git add will fail with
         # "Unable to create '...index.lock': File exists."
@@ -418,7 +417,7 @@ def test_write_initial_status_forced_failure_raises_runtime_error() -> None:
 
 def test_write_initial_status_push_failure_raises_runtime_error() -> None:
     """No origin remote -> push fails -> RuntimeError mentioning git push --set-upstream origin."""
-    with tempfile.TemporaryDirectory() as tmp:
+    with safe_temp_dir() as tmp:
         repo = Path(tmp) / "repo-no-origin"
         repo.mkdir()
         subprocess.run(["git", "-C", str(repo), "init"], check=True, capture_output=True)
@@ -698,7 +697,7 @@ def test_pick_task_single_or_multi_slug_bypass() -> None:
 
 def test_multi_select_groom_then_claim_basic() -> None:
     """Removes all 3 sources, appends merged entry [active], sidebar regenerated, commit message matches."""
-    with tempfile.TemporaryDirectory() as tmp:
+    with safe_temp_dir() as tmp:
         wiki = _make_wiki(tmp, _HOME_MD_THREE_TASKS)
         task = multi_select_groom_then_claim(
             wiki_path=wiki,
@@ -741,7 +740,7 @@ def test_multi_select_groom_then_claim_basic() -> None:
 
 def test_multi_select_groom_then_claim_with_proposal() -> None:
     """With has_proposal=True + proposal_body, writes proposal-<slug>.md."""
-    with tempfile.TemporaryDirectory() as tmp:
+    with safe_temp_dir() as tmp:
         wiki = _make_wiki(tmp, _HOME_MD_THREE_TASKS)
         multi_select_groom_then_claim(
             wiki_path=wiki,
@@ -894,7 +893,7 @@ def _make_parent_with_worktree(tmp: Path, wt_name: str, branch: str) -> tuple[Pa
 
 def test_discover_active_worktrees_standard_layout() -> None:
     """Standard layout: worktree on task branch is found via git worktree list."""
-    with tempfile.TemporaryDirectory() as tmp:
+    with safe_temp_dir() as tmp:
         parent, wts_dir = _make_parent_with_worktree(Path(tmp), "my-task", "hanf/my-task")
         entry = (wts_dir / "my-task").resolve()
 
@@ -915,7 +914,7 @@ def test_discover_active_worktrees_standard_layout() -> None:
 
 def test_discover_active_worktrees_subfolder_install() -> None:
     """Subfolder-install layout: worktree git root is the entry dir regardless of hub_subpath."""
-    with tempfile.TemporaryDirectory() as tmp:
+    with safe_temp_dir() as tmp:
         parent, wts_dir = _make_parent_with_worktree(Path(tmp), "my-task", "hanf/my-task")
         entry = (wts_dir / "my-task").resolve()
 
