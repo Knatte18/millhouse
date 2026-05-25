@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-verify-isolation
 slug: wiki-v3-verify-isolation
 branch: hanf/wiki-v3-verify-isolation
 plan: _mill/plan
@@ -21,6 +21,7 @@ planning  '2026-05-25T10:58:08Z'
 plan-fix-r1  '2026-05-25T11:18:41Z'
 planned  '2026-05-25T11:18:53Z'
 implementing  '2026-05-25T11:25:47Z'
+approved-verify-isolation  '2026-05-25T11:31:01Z'
 ```
 
 ## Batches
@@ -28,7 +29,7 @@ implementing  '2026-05-25T11:25:47Z'
 ```yaml
 batches:
   - name: verify-isolation
-    state: running
+    state: approved
     implementer_session: fb0751ce-4ae5-47c0-b17c-c5f69782c3fc
     start_sha: 46b717f72d35aa9ced12a245ddd6d85557d159d8
 ```
