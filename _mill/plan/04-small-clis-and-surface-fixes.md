@@ -30,6 +30,8 @@ Batch-local decisions (differ from `## Shared Decisions` in `00-overview.md`):
 - **Context:**
   - `plugins/mill/scripts/wiki/__init__.py`
   - `plugins/mill/scripts/wiki/_client.py`
+  - `plugins/mill/unit_tests/test-millpy-terminal.py`
+  - `plugins/mill/unit_tests/test-millpy-vscode.py`
 - **Edits:**
   - `plugins/mill/scripts/millpy-inspect.py`
   - `plugins/mill/scripts/millpy-status.py`
@@ -41,18 +43,18 @@ Batch-local decisions (differ from `## Shared Decisions` in `00-overview.md`):
 - **Requirements:** For each of the four reader CLIs (`inspect`, `status`, `terminal`, `vscode`), make the same mechanical V2 → V3 swap:
 
   - Delete the `import _tasks_md` line near the top of the file.
-  - Add `import wiki` in the absolute-imports block.
+  - Add `from wiki import _client as wiki` in the absolute-imports block. This is the canonical V3 import pattern (mirrors `millpy-add.py:36`, `millpy-claim.py:46`, `millpy-cleanup.py:25`, `millpy-fold.py:39`, `_marker.py:22`). `wiki/__init__.py` re-exports constants and exception classes only; the functions live in `_client.py`, so the alias is required.
   - Replace the `_tasks_md.parse(home_md.read_text(encoding="utf-8"))` (or equivalent) call with `wiki.list_tasks_brief(wiki_path)`. The `wiki_path` local is already in scope at each call site as the wiki path used for the V2 parse — see Context. Delete the `home_md = ...` / `home_md.read_text(...)` lines that fed `_tasks_md.parse`; they become unused.
   - Update any downstream code in the file that accessed `Task` attributes (`.slug`, `.title`, `.phase`, `.has_proposal`, `.group`, `.brief`, `.status`) to dict-key access (`t["slug"]`, etc.). Field-rename note: `.phase` → `["status"]`.
 
+  **Local-variable naming collision.** Each of the four reader CLIs currently uses `wiki` as the local variable for the resolved wiki path (e.g. `wiki = _paths.resolve_wiki_path(...)`). The new import binds the name `wiki` to the V3 client module; the local would shadow the module inside its function. This works in Python (locals shadow globals inside their scope) but is a footgun for readers. **Rename the local in each file from `wiki` to `wiki_path`** end-to-end (every reference inside the function it lives in). Use targeted grep-and-replace within each file's scope.
+
   Per-file specifics:
 
-  - `millpy-inspect.py:20` (`import _tasks_md`), `:45` (the `wiki = _paths.resolve_wiki_path(...)` local is `wiki`; the existing call site uses that name — keep), `:54` (`_tasks_md.parse(home_md.read_text(...))`). Replace `:54` with `home_tasks_list = wiki.list_tasks_brief(wiki)` (note `wiki` here is the local Path; do NOT alias the V3 module to a clashing name — rename the local to `wiki_path` if the new `import wiki` causes a NameError or shadowing warning; otherwise the imported module and the local can coexist in Python because `wiki.list_tasks_brief(wiki)` resolves `wiki` from local first, but THIS IS A FOOTGUN — rename the local to `wiki_path` for clarity).
-  - `millpy-status.py:20` (`import _tasks_md`), `:24` (local `wiki = _paths.resolve_wiki_path(...)` — apply the same `wiki` → `wiki_path` rename as inspect), `:32` (`_tasks_md.parse(home_md.read_text(...))` → `wiki.list_tasks_brief(wiki_path)`).
-  - `millpy-terminal.py:23` (`import _tasks_md`), `:55` (local — apply rename), `:59` (`_tasks_md.parse(...)` → `wiki.list_tasks_brief(wiki_path)`).
-  - `millpy-vscode.py:31` (`import _tasks_md`), `:176` (local — apply rename), `:180` (`_tasks_md.parse(...)` → `wiki.list_tasks_brief(wiki_path)`).
-
-  The local `wiki = ...` → `wiki_path = ...` rename in each file MUST be done end-to-end (rename every reference to that local) to avoid a name collision with the new `import wiki` statement. Use the editor's rename-symbol feature or a targeted grep-and-replace within each file's scope.
+  - `millpy-inspect.py:20` (`import _tasks_md`), `:45` (local `wiki = _paths.resolve_wiki_path(...)` -- rename to `wiki_path`), `:54` (`_tasks_md.parse(home_md.read_text(...))` -- replace with `home_tasks_list = wiki.list_tasks_brief(wiki_path)`).
+  - `millpy-status.py:20` (`import _tasks_md`), `:24` (local rename), `:32` (`_tasks_md.parse(home_md.read_text(...))` -- replace with `wiki.list_tasks_brief(wiki_path)`).
+  - `millpy-terminal.py:23` (`import _tasks_md`), `:55` (local rename), `:59` (`_tasks_md.parse(...)` -- replace with `wiki.list_tasks_brief(wiki_path)`).
+  - `millpy-vscode.py:31` (`import _tasks_md`), `:176` (local rename), `:180` (`_tasks_md.parse(...)` -- replace with `wiki.list_tasks_brief(wiki_path)`).
 
   For `millpy-wikipush.py` (sliver):
 
@@ -60,12 +62,12 @@ Batch-local decisions (differ from `## Shared Decisions` in `00-overview.md`):
   - Line 102: the comment `# Capture changed files BEFORE acquiring the lock — _wiki.wiki_lock` is now misleading; either delete the entire comment line or rewrite as `# Capture changed files BEFORE pushing` (one-line, no reference to the deleted helper).
   - Line 111: delete the `with _wiki.wiki_lock(wiki, "wikipush"):` context manager. The body of the `with` block becomes a flat sequence of statements at the previous outer indentation.
   - Line 113: delete the `except _wiki.LockBusy as e:` clause and its body. There is no V3 equivalent — the daemon serialises writes for daemon-mediated ops, and `wikipush` is deliberately NOT daemon-mediated. Any `git push` failure manifests as the existing subprocess error path; no special LockBusy handling needed.
-  - Local-variable name: `wiki` is used as the wiki path local; rename to `wiki_path` to avoid the same import-collision footgun as the reader CLIs, OR confirm that no `import wiki` is added to this file (since this file does not call any `wiki.<fn>`, an `import wiki` is unnecessary and should NOT be added).
+  - Local-variable name: `wiki` is used as the wiki path local; this file never calls `wiki.<fn>` so do NOT add `from wiki import _client as wiki`. There is no name collision; keep the local named `wiki` (or rename to `wiki_path` for cross-file consistency — implementer's call, either is fine).
 
   Confirm at the end:
 
-  - `millpy-wikipush.py` does NOT have `import wiki` (no need; never calls `wiki.<fn>`).
-  - The four reader CLIs each have `import wiki` and use `wiki.list_tasks_brief(wiki_path)`.
+  - `millpy-wikipush.py` does NOT have any `wiki` module import (never calls `wiki.<fn>`).
+  - The four reader CLIs each have `from wiki import _client as wiki` and use `wiki.list_tasks_brief(wiki_path)`.
 
   **Final verification (do inside the implementer's edit loop, before committing):**
 
@@ -97,7 +99,7 @@ Batch-local decisions (differ from `## Shared Decisions` in `00-overview.md`):
   - Line 301: the docstring text `Caller passes this\n            in to avoid a circular import on ``_wiki``.` references the deleted `_wiki` module. Replace with: `Caller passes this\n            in for separation of concerns; ``_junction`` does not depend on the wiki subpackage.`
 
   `plugins/mill/scripts/_worktree.py`:
-  - Line 207: the docstring text `as returned by ``_wiki.read_junctions``.` references the deleted `_wiki` module. Replace with: `as returned by ``_junction.read_junctions``.` (the helper moved to `_junction.py` in card 15 of the parent plan).
+  - Line 207: the docstring text `as returned by ``_wiki.read_junctions``.` references the deleted `_wiki` module. Replace with: `as returned by ``_junction.read_junctions``.` (the helper lives in `_junction.py` after the V3 adoption).
 
   After both files are edited, run:
 

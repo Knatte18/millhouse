@@ -117,7 +117,7 @@ Batch-local decisions (differ from `## Shared Decisions` in `00-overview.md`):
 - **Deletes:** none
 - **Requirements:** Spot-clean each integration test file's V2 references. Integration tests are out of the verify gate per discussion, but cleaning them is in-scope per the "eliminate every trace of V2" framing.
 
-  For each file, apply the same V2→V3 rewrites used by batch 5 cards 8 and 9:
+  For each file, apply the same V2→V3 rewrites used by batch 5 cards 8 and 9. Where the file genuinely calls V3 client functions (not just `LOCKED_FOLD_PHASES` or `WikiPushError`), use the canonical alias-import pattern `from wiki import _client as wiki` (mirrors `millpy-fold.py:39`).
 
   - `import _tasks_md` / `import _wiki` / `import _sidebar` → delete the line.
   - `_tasks_md.parse(text)` → `parse_home_md(text)` (after `from wiki._parse import parse_home_md`).
@@ -135,7 +135,7 @@ Batch-local decisions (differ from `## Shared Decisions` in `00-overview.md`):
   - `test-merge.py:56` (`import _sidebar`), `:57` (`import _tasks_md`), `:59` (`import _wiki`), `:298` (`_wiki.wiki_lock`), `:300` (`_tasks_md.set_phase`), `:302` (`_wiki.write_commit_push`), `:315` (`_sidebar.regenerate`), `:320` (`print("PASS: _sidebar.regenerate ran without error")` — also rewrite the print to no longer reference the deleted helper).
   - `test-wiki-concurrency.py:6` (docstring mention), `:64` (docstring mention), `:72` (`_wiki.sync_pull` inside a subprocess source string). The subprocess source is a code template — rewrite to call a V3 sync if needed (e.g. `wiki.health_check(wiki_path)` to drive a daemon ping, which exercises the same network-roundtrip behaviour the V2 test wanted to exercise). If the test's purpose is specifically the V2 advisory-lock contention (which doesn't exist in V3), delete the test outright and file a follow-up issue noting that the V3 concurrency model is different and warrants its own test design.
 
-  If any file is structurally beyond a mechanical port (e.g. `test-merge.py:298-315` is complex enough that the rewrite isn't obvious), DO NOT attempt a deep redesign in this card. Add a `pytest.skip("V2 fixture; see follow-up issue #NNN")` mark to the affected test method, file the follow-up issue, and move on. The V2 import lines themselves still get deleted regardless.
+  If any file is structurally beyond a mechanical port (e.g. `test-merge.py:298-315` is complex enough that the rewrite isn't obvious), DO NOT attempt a deep redesign in this card. Add a `pytest.skip("V2 fixture; see follow-up issue #NNN")` mark to the affected test method, file the follow-up issue, and move on. The V2 import lines themselves still get deleted regardless. **Cap on skips: at most 2 `pytest.skip` marks added in this card across the four integration test files.** If more would be needed to mechanically clean the references, halt under the stuck-policy (`## Shared Decisions ## Decision: stuck-policy-pause-for-human`) and ask the operator to redesign the card — the V2-elimination framing of this task does not tolerate an unbounded skip escape.
 
   Do NOT touch `test-bootstrap.ps1` — it is a PowerShell integration test, out of scope (no PowerShell on this machine).
 
@@ -151,7 +151,8 @@ Batch-local decisions (differ from `## Shared Decisions` in `00-overview.md`):
 ### Card 13: Final V2-elimination smoke
 
 - **Effort:** S
-- **Context:** none
+- **Context:**
+  - `plugins/mill/unit_tests/run-all.py`
 - **Edits:** none
 - **Creates:** none
 - **Deletes:** none

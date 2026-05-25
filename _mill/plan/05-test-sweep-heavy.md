@@ -42,15 +42,15 @@ Batch-local decisions (differ from `## Shared Decisions` in `00-overview.md`):
   **Imports (lines 15, 16):**
   - Delete `import _tasks_md  # noqa: E402` (line 15).
   - Delete `import _wiki  # noqa: E402` (line 16).
-  - Add `import wiki  # noqa: E402` in the same import block.
+  - Add `from wiki import _client as wiki, LOCKED_FOLD_PHASES, WikiPushError  # noqa: E402` in the same import block. This is the canonical V3 import (mirrors `millpy-fold.py:39`). `wiki/__init__.py` re-exports `LOCKED_FOLD_PHASES` and `WikiPushError` as top-level names; `_client` is the module that holds the functions, aliased to `wiki` so `wiki.upsert_task(...)` works.
 
   **`_tasks_md.LOCKED_FOLD_PHASES` assertions (lines 142-143):**
 
-  Replace both references in the assert with `wiki.LOCKED_FOLD_PHASES`. The post-edit shape:
+  Replace both references in the assert with the bare name `LOCKED_FOLD_PHASES` (now in scope via the `from` import above). The post-edit shape:
 
   ```python
-  assert wiki.LOCKED_FOLD_PHASES == ("active", "ready-to-merge", "pr-pending"), (
-      f"Got {wiki.LOCKED_FOLD_PHASES!r}"
+  assert LOCKED_FOLD_PHASES == ("active", "ready-to-merge", "pr-pending"), (
+      f"Got {LOCKED_FOLD_PHASES!r}"
   )
   ```
 
@@ -66,7 +66,7 @@ Batch-local decisions (differ from `## Shared Decisions` in `00-overview.md`):
 
     The card 11 noop-commit fixture fix (batch 6) addresses the test-wiki origin remote — but that's a separate test. The fixtures in `test-fold.py` may have the same issue; if `wiki.upsert_task` raises `WikiPushError` because the fixture lacks an `origin` remote, fold the fix in here too: add a bare-clone `origin` setup in the test's wiki-fixture creation. If `_test_helpers._make_task_worktree` already handles this (after card 11 lands; check by reading the helper post-card-11), reuse it.
 
-  - Line 207: this is a negative test that V2 raised on unknown slugs. The V3 equivalent: `wiki.upsert_task(wiki_path, "no-such-slug", brief="- note")` would CREATE a new task (V3 upsert is upsert, not update-only). To preserve the V2 semantics ("unknown slug raises"), the test must FIRST check existence via `wiki.get_task(wiki_path, "no-such-slug")` (which returns `None`); if it returns `None`, raise the expected exception in the test code itself OR delete this test method outright (since V3 has no "update-only" mode and the semantic is gone). **Delete the test method** under the policy in `## Shared Decisions ## Decision: card-26-deletes-_task_to_dict-helper` (semantic principle: dead V2-only test cases get deleted, not bent to fit V3).
+  - Line 207: this is a negative test that V2 raised on unknown slugs. The V3 equivalent: `wiki.upsert_task(wiki_path, "no-such-slug", brief="- note")` would CREATE a new task (V3 upsert is upsert, not update-only). To preserve the V2 semantics ("unknown slug raises"), the test must FIRST check existence via `wiki.get_task(wiki_path, "no-such-slug")` (which returns `None`); if it returns `None`, raise the expected exception in the test code itself OR delete this test method outright (since V3 has no "update-only" mode and the semantic is gone). **Delete the test method** under the V2-only-tests-get-deleted principle from `## Shared Decisions ## Decision: card-4-deletes-_task_to_dict-helper` (the decision body explicitly extends the principle to V2-only test cases in batch 5).
 
   **`_wiki.write_commit_push` patching (lines 506, 511, 528):**
 
@@ -75,14 +75,15 @@ Batch-local decisions (differ from `## Shared Decisions` in `00-overview.md`):
   - Patch `wiki._sync.commit_push` directly OR
   - Patch the higher-level call site (`mill_fold.wiki.upsert_task`) to raise `WikiPushError`.
 
-  Choose patching `mill_fold.wiki.upsert_task` to raise `wiki.WikiPushError("push failed")` — the test then asserts that `mill-fold`'s CLI flow surfaces the error correctly. Rename the local from `orig_wcp` to `orig_upsert`; the `try/finally` restoration logic stays the same shape.
+  Choose patching `mill_fold.wiki.upsert_task` to raise `WikiPushError("push failed")` — the test then asserts that `mill-fold`'s CLI flow surfaces the error correctly. Rename the local from `orig_wcp` to `orig_upsert`; the `try/finally` restoration logic stays the same shape.
 
-  Concretely, replace the 506-528 block's three references:
+  Concretely, replace the 506-528 block's three references. Because `millpy-fold.py:39` imports as `from wiki import _client as wiki, LOCKED_FOLD_PHASES`, the module attribute `mill_fold.wiki` is the `_client` module — `mill_fold.wiki.upsert_task` resolves correctly.
+
   - `orig_wcp = _wiki.write_commit_push` → `orig_upsert = mill_fold.wiki.upsert_task`
   - `_wiki.write_commit_push = _failing_write` → `mill_fold.wiki.upsert_task = _failing_upsert`
   - `_wiki.write_commit_push = orig_wcp` → `mill_fold.wiki.upsert_task = orig_upsert`
 
-  Rename `_failing_write` to `_failing_upsert` and adjust its signature to match `upsert_task(wiki_path, slug, *, title=None, brief=None, body=None, group=None, status=None) -> dict` — raise `wiki.WikiPushError("simulated push failure")` from inside.
+  Rename `_failing_write` to `_failing_upsert` and adjust its signature to match `upsert_task(wiki_path, slug, *, title=None, brief=None, body=None, group=None, status=None) -> dict` — raise `WikiPushError("simulated push failure")` from inside (the exception class is imported into the test's namespace by the `from wiki import` line above).
 
   Where `mill_fold` is the module reference — match whatever import shape the test already uses (look for `mill_fold = ...` near the top of the file).
 

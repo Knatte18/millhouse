@@ -78,11 +78,11 @@ batches:
 - **Rationale:** Discussion-level policy. The handoff anticipated this — `test-wiki-noop-commit`'s push-destination failure (handled by card 11) is exactly this kind of case.
 - **Applies to:** all batches
 
-### Decision: card-26-deletes-_task_to_dict-helper
+### Decision: card-4-deletes-_task_to_dict-helper
 
 - **Decision:** The `_task_to_dict` helper at `_spawn_core.py:257-268` (introduced in commit `a1f7aac` as a partial-port scaffold) is **deleted** as part of card 4's last step. Once `_spawn_core.py` consumes `wiki.list_tasks_brief` directly, no V2 `Task` objects flow through the system, so no conversion helper is needed.
-- **Rationale:** Keeping the helper forever would be dead code. Deleting it is part of the "eliminate V2" goal.
-- **Applies to:** batch 2 (card 4)
+- **Rationale:** Keeping the helper forever would be dead code. Deleting it is part of the "eliminate V2" goal. The same principle applies generally: any V2-only scaffolding (helper, test case, fixture) introduced as a transition aid gets deleted, not bent to fit V3.
+- **Applies to:** batch 2 (card 4); the deletion principle extends to V2-only test cases in batch 5 (cards 8, 9) and batch 6 (card 12).
 
 ### Decision: drop-heading_line_no-and-s-phase-everywhere
 

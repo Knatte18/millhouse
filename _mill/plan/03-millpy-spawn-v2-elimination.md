@@ -40,7 +40,7 @@ Batch-local decisions (differ from `## Shared Decisions` in `00-overview.md`):
   **Imports (lines 44, 46):**
   - Delete `import _tasks_md` (line 44).
   - Delete `import _wiki` (line 46).
-  - Add `import wiki` in the absolute-imports block alongside `_junction`, `_setup`, `_spawn_core`, etc. (alphabetical position acceptable).
+  - Add `from wiki import _client as wiki` in the absolute-imports block alongside `_junction`, `_setup`, `_spawn_core`, etc. (alphabetical position acceptable). This is the canonical V3 import pattern (mirrors `millpy-add.py:36`, `millpy-claim.py:46`, `millpy-cleanup.py:25`, `millpy-fold.py:39`, `_marker.py:22`). `wiki/__init__.py` re-exports constants and exception classes only; the functions live in `_client.py`, so the alias is required.
 
   **`_load_config` config-guard (function defined around lines 53-72; the wiki/config.yaml branch is at lines 66-72):**
 

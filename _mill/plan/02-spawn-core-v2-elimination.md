@@ -30,6 +30,7 @@ Batch-local decisions (differ from `## Shared Decisions` in `00-overview.md`):
 - **Context:**
   - `plugins/mill/scripts/wiki/__init__.py`
   - `plugins/mill/scripts/wiki/_client.py`
+  - `plugins/mill/unit_tests/test-millpy-color.py`
 - **Edits:**
   - `plugins/mill/scripts/_spawn_core.py`
 - **Creates:** none
@@ -41,7 +42,7 @@ Batch-local decisions (differ from `## Shared Decisions` in `00-overview.md`):
   - Delete `import _sidebar` (line 70).
   - Delete `import _tasks_md` (line 73).
   - Delete `import _wiki` (line 74).
-  - Add `import wiki` near the top of the imports block (alongside the other absolute imports). The module exposes the V3 client API surface used below.
+  - Add `from wiki import _client as wiki` near the top of the imports block (alongside the other absolute imports). This is the canonical V3 import pattern used by `millpy-add.py:36`, `millpy-claim.py:46`, `millpy-cleanup.py:25`, `millpy-fold.py:39`, and `_marker.py:22`. Note: `wiki/__init__.py` re-exports constants and exception classes only; the functions (`list_tasks_brief`, `set_phase`, `upsert_task`, `merge_tasks`, `get_task`, `remove_task`, `health_check`) live in `_client.py`. The `_client as wiki` alias gives a clean `wiki.<fn>` call surface that mirrors the API table in the discussion.
 
   **Type hints and the partial-port helper (lines 153, 232, 257-268, 271, 336-337, 405, 545):**
 
@@ -51,7 +52,7 @@ Batch-local decisions (differ from `## Shared Decisions` in `00-overview.md`):
   - Line 271: change `tasks: list[_tasks_md.Task]` to `tasks: list[dict]` (one of the `multi_select_groom_then_claim` signature lines).
   - Lines 336-337: change the `candidates: list[_tasks_md.Task]` / `) -> list[_tasks_md.Task]:` pair to `candidates: list[dict]` / `) -> list[dict]:`.
   - Line 405: change `tasks: list[_tasks_md.Task]` to `tasks: list[dict]`.
-  - Line 545: change `source_tasks: list[_tasks_md.Task]` to `source_tasks: list[dict]`.
+  - Line 545: change `source_tasks: list[_tasks_md.Task]` to `source_tasks: list[dict]` (this parameter is in `prompt_merged_entry`, not `multi_select_groom_then_claim`).
 
   Remove every remaining `_tasks_md.Task` reference (grep `_tasks_md\.Task` end-to-end after the above; zero matches required).
 
@@ -77,16 +78,15 @@ Batch-local decisions (differ from `## Shared Decisions` in `00-overview.md`):
 
   **`multi_select_groom_then_claim` body (lines 504, 509-513, 515, 530, 534):**
 
-  Replace the entire `with _wiki.wiki_lock(wiki_path, merged_slug):` block (line 504 through line ~534) with a single atomic call:
+  Replace the entire `with _wiki.wiki_lock(wiki_path, merged_slug):` block (line 504 through line ~534) with a single atomic call. The function's existing signature is `multi_select_groom_then_claim(wiki_path, source_slugs: list[str], merged_title, merged_slug, merged_body, has_proposal=False, proposal_body=None)` — verified at `_spawn_core.py:462–469`. **`source_slugs` is already `list[str]`, so pass it directly to `remove_slugs`:**
 
   ```python
   result = wiki.merge_tasks(
       wiki_path,
-      remove_slugs=[t["slug"] for t in source_tasks],
+      remove_slugs=source_slugs,
       upsert={
           "slug": merged_slug,
           "title": merged_title,
-          "brief": merged_brief,
           "body": merged_body,
           "group": merged_group,
       },
@@ -94,7 +94,7 @@ Batch-local decisions (differ from `## Shared Decisions` in `00-overview.md`):
   )
   ```
 
-  The variable names `merged_title`, `merged_brief`, `merged_body`, `merged_group` should match whatever locals the surrounding code already builds (rename only if necessary). The `upsert` dict's keys mirror the V3 `upsert_task` keyword args (`title`, `brief`, `body`, `group`); do NOT pass `has_proposal` — it is computed by `Store.list_tasks_brief` from `body`. After the call:
+  The variable names `merged_title`, `merged_body` exist already as parameters; `merged_group` may need to be derived (the function does not take a `group` param explicitly — read the existing body to see if a group is inferred from one of the source tasks or hardcoded; pass it through accordingly. If no group is in scope, drop the `"group"` key from the upsert dict — `upsert_task` treats omitted keys as no-change/inherit). Do NOT introduce a `source_tasks` local — only `source_slugs` exists in this function's scope. Do NOT pass `has_proposal` to the `upsert` dict — it is computed by `Store.list_tasks_brief` from `body`. After the call:
 
   - Delete the `_sidebar.regenerate(wiki_path)` line (line 515) outright — the V3 daemon renders the sidebar inside the same op.
   - Delete the `_wiki.write_commit_push(wiki_path, files_to_commit, commit_msg, slug=merged_slug)` line (line 530) — `merge_tasks` commits inline.
