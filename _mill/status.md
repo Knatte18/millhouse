@@ -33,7 +33,9 @@ batches:
     implementer_session: 9613f55a-3401-47bf-8a0c-551be7a4097b
     start_sha: 13b551be0a684919ab1e15690926b75c170ddffe
   - name: gate-and-syntax-fixes
-    state: pending
+    state: running
+    implementer_session: 3d81f4db-74c1-4dac-9068-1cb85be71807
+    start_sha: af2056d63a71aa0fe23bba651f197c4d6630d6f0
   - name: fixture-updates
     state: pending
 ```
