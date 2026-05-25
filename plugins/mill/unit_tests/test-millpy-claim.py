@@ -27,11 +27,17 @@ CLAIM_PATH = HUB / "plugins" / "mill" / "scripts" / "millpy-claim.py"
 # ---------------------------------------------------------------------------
 
 
-def _make_fake_task(slug: str = "my-task", title: str = "My Task") -> MagicMock:
-    task = MagicMock()
-    task.slug = slug
-    task.title = title
-    return task
+def _make_fake_task(slug: str = "my-task", title: str = "My Task") -> dict:
+    """Return a fake task dict compatible with wiki.list_tasks_brief()."""
+    return {
+        "id": 1,
+        "slug": slug,
+        "title": title,
+        "group": None,
+        "brief": "",
+        "status": None,
+        "has_proposal": False,
+    }
 
 
 def _make_ok_run(stdout: str = "", stderr: str = "") -> MagicMock:
