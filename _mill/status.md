@@ -62,7 +62,9 @@ batches:
     start_sha: 170298b5b625b7da0a39c355be92aba3a7ae2fe7
     commit_sha: aead6980c90f9755201f1778fc3a8c6eff643c9c
   - name: test-sweep-heavy
-    state: pending
+    state: running
+    implementer_session: 8ee4bb45-27df-4a6a-8d5a-3e5c8b188ebe
+    start_sha: b6d8301c7f0f68a030c905552d1d2e2d953b615d
   - name: test-sweep-light-and-finalize
     state: pending
 ```
