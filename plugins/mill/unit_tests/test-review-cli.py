@@ -394,7 +394,7 @@ def main() -> int:
     with _test_helpers.safe_temp_dir() as _tmp:
         _wiki = _tmp / "wiki"
         _test_helpers.init_wiki_repo(_wiki)
-        (_wiki / "config.yaml").write_text(
+        (_tmp / "mill-config.yaml").write_text(
             "roles:\n"
             "  discussion-review:\n"
             "    holistic:\n"
@@ -403,10 +403,12 @@ def main() -> int:
             "paths:\n"
             "  discussion_file: discussion.md\n"
             "  plan_dir: plan/\n"
-            "  reviews_dir: reviews/\n",
+            "  reviews_dir: reviews/\n"
+            "spawn:\n"
+            "  branch_prefix: 'hanf/'\n",
             encoding="utf-8",
         )
-        (_wiki / "agents.yaml").write_text(
+        (_tmp / "agents.yaml").write_text(
             "sonnetmax:\n"
             "  type: single\n"
             "  provider: claude\n"
