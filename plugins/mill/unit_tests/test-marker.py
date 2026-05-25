@@ -5,7 +5,6 @@ import contextlib
 import io
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
 
 _HERE = Path(__file__).resolve().parent
@@ -19,10 +18,9 @@ import _test_helpers  # noqa: E402
 
 
 def test_slug_from_branch_happy_path() -> None:
-    with tempfile.TemporaryDirectory() as tmp:
-        tmp = Path(tmp)
+    with _test_helpers.safe_temp_dir() as tmp:
         worktree_path, wiki_path = _test_helpers._make_task_worktree(
-            tmp, "foo", "Foo Title", branch_prefix="hanf/", phase="active"
+            tmp, "foo", "Foo Title", branch_prefix="hanf/", phase="active", seed_task=True
         )
         cfg = {"spawn": {"branch_prefix": "hanf/"}}
         slug = _marker.slug_from_branch(worktree_path, wiki_path, cfg)
@@ -32,10 +30,9 @@ def test_slug_from_branch_happy_path() -> None:
 
 
 def test_slug_from_branch_empty_prefix() -> None:
-    with tempfile.TemporaryDirectory() as tmp:
-        tmp = Path(tmp)
+    with _test_helpers.safe_temp_dir() as tmp:
         worktree_path, wiki_path = _test_helpers._make_task_worktree(
-            tmp, "foo", "Foo Title", branch_prefix="", phase="active"
+            tmp, "foo", "Foo Title", branch_prefix="", phase="active", seed_task=True
         )
         cfg = {}
         slug = _marker.slug_from_branch(worktree_path, wiki_path, cfg)
@@ -45,8 +42,7 @@ def test_slug_from_branch_empty_prefix() -> None:
 
 
 def test_slug_from_branch_detached_head() -> None:
-    with tempfile.TemporaryDirectory() as tmp:
-        tmp = Path(tmp)
+    with _test_helpers.safe_temp_dir() as tmp:
         worktree_path, wiki_path = _test_helpers._make_task_worktree(
             tmp, "foo", "Foo Title", branch_prefix="hanf/", phase="active"
         )
@@ -72,8 +68,7 @@ def test_slug_from_branch_detached_head() -> None:
 
 
 def test_slug_from_branch_unknown_slug() -> None:
-    with tempfile.TemporaryDirectory() as tmp:
-        tmp = Path(tmp)
+    with _test_helpers.safe_temp_dir() as tmp:
         # branch=hanf/bar, Home.md will only have 'foo'
         worktree_path, wiki_path = _test_helpers._make_task_worktree(
             tmp, "bar", "Bar", branch_prefix="hanf/", phase="active"
@@ -92,10 +87,9 @@ def test_slug_from_branch_unknown_slug() -> None:
 
 
 def test_slug_from_branch_ready_to_merge() -> None:
-    with tempfile.TemporaryDirectory() as tmp:
-        tmp = Path(tmp)
+    with _test_helpers.safe_temp_dir() as tmp:
         worktree_path, wiki_path = _test_helpers._make_task_worktree(
-            tmp, "foo", "Foo Title", branch_prefix="hanf/", phase="ready-to-merge"
+            tmp, "foo", "Foo Title", branch_prefix="hanf/", phase="ready-to-merge", seed_task=True
         )
         cfg = {"spawn": {"branch_prefix": "hanf/"}}
         slug = _marker.slug_from_branch(worktree_path, wiki_path, cfg)
@@ -105,10 +99,9 @@ def test_slug_from_branch_ready_to_merge() -> None:
 
 
 def test_slug_from_branch_pr_pending() -> None:
-    with tempfile.TemporaryDirectory() as tmp:
-        tmp = Path(tmp)
+    with _test_helpers.safe_temp_dir() as tmp:
         worktree_path, wiki_path = _test_helpers._make_task_worktree(
-            tmp, "foo", "Foo Title", branch_prefix="hanf/", phase="pr-pending"
+            tmp, "foo", "Foo Title", branch_prefix="hanf/", phase="pr-pending", seed_task=True
         )
         cfg = {"spawn": {"branch_prefix": "hanf/"}}
         slug = _marker.slug_from_branch(worktree_path, wiki_path, cfg)
@@ -118,10 +111,9 @@ def test_slug_from_branch_pr_pending() -> None:
 
 
 def test_slug_from_branch_done() -> None:
-    with tempfile.TemporaryDirectory() as tmp:
-        tmp = Path(tmp)
+    with _test_helpers.safe_temp_dir() as tmp:
         worktree_path, wiki_path = _test_helpers._make_task_worktree(
-            tmp, "foo", "Foo Title", branch_prefix="hanf/", phase="done"
+            tmp, "foo", "Foo Title", branch_prefix="hanf/", phase="done", seed_task=True
         )
         cfg = {"spawn": {"branch_prefix": "hanf/"}}
         slug = _marker.slug_from_branch(worktree_path, wiki_path, cfg)
@@ -131,10 +123,9 @@ def test_slug_from_branch_done() -> None:
 
 
 def test_slug_from_branch_abandoned() -> None:
-    with tempfile.TemporaryDirectory() as tmp:
-        tmp = Path(tmp)
+    with _test_helpers.safe_temp_dir() as tmp:
         worktree_path, wiki_path = _test_helpers._make_task_worktree(
-            tmp, "foo", "Foo Title", branch_prefix="hanf/", phase="abandoned"
+            tmp, "foo", "Foo Title", branch_prefix="hanf/", phase="abandoned", seed_task=True
         )
         cfg = {"spawn": {"branch_prefix": "hanf/"}}
         slug = _marker.slug_from_branch(worktree_path, wiki_path, cfg)
@@ -144,10 +135,9 @@ def test_slug_from_branch_abandoned() -> None:
 
 
 def test_slug_from_branch_none() -> None:
-    with tempfile.TemporaryDirectory() as tmp:
-        tmp = Path(tmp)
+    with _test_helpers.safe_temp_dir() as tmp:
         worktree_path, wiki_path = _test_helpers._make_task_worktree(
-            tmp, "foo", "Foo Title", branch_prefix="hanf/", phase="none"
+            tmp, "foo", "Foo Title", branch_prefix="hanf/", phase="none", seed_task=True
         )
         cfg = {"spawn": {"branch_prefix": "hanf/"}}
         slug = _marker.slug_from_branch(worktree_path, wiki_path, cfg)
@@ -157,8 +147,7 @@ def test_slug_from_branch_none() -> None:
 
 
 def test_slug_from_branch_prefix_mismatch() -> None:
-    with tempfile.TemporaryDirectory() as tmp:
-        tmp = Path(tmp)
+    with _test_helpers.safe_temp_dir() as tmp:
         # branch is other/foo; cfg says prefix=hanf/
         worktree_path, wiki_path = _test_helpers._make_task_worktree(
             tmp, "foo", "Foo Title", branch_prefix="other/", phase="active"
@@ -174,10 +163,9 @@ def test_slug_from_branch_prefix_mismatch() -> None:
 
 
 def test_slug_from_branch_prefix_mismatch_bare_branch_known() -> None:
-    with tempfile.TemporaryDirectory() as tmp:
-        tmp = Path(tmp)
+    with _test_helpers.safe_temp_dir() as tmp:
         worktree_path, wiki_path = _test_helpers._make_task_worktree(
-            tmp, "foo", "Foo Title", branch_prefix="", phase="active"
+            tmp, "foo", "Foo Title", branch_prefix="", phase="active", seed_task=True
         )
         cfg = {"spawn": {"branch_prefix": "hanf/"}}
         stderr_capture = io.StringIO()
@@ -192,8 +180,7 @@ def test_slug_from_branch_prefix_mismatch_bare_branch_known() -> None:
 
 
 def test_slug_from_branch_prefix_mismatch_bare_branch_unknown() -> None:
-    with tempfile.TemporaryDirectory() as tmp:
-        tmp = Path(tmp)
+    with _test_helpers.safe_temp_dir() as tmp:
         worktree_path, wiki_path = _test_helpers._make_task_worktree(
             tmp, "foo", "Foo Title", branch_prefix="", phase="active"
         )
@@ -211,10 +198,9 @@ def test_slug_from_branch_prefix_mismatch_bare_branch_unknown() -> None:
 
 
 def test_slug_from_branch_user_prefix_no_config_prefix() -> None:
-    with tempfile.TemporaryDirectory() as tmp:
-        tmp = Path(tmp)
+    with _test_helpers.safe_temp_dir() as tmp:
         worktree_path, wiki_path = _test_helpers._make_task_worktree(
-            tmp, "foo", "Foo Title", branch_prefix="hanf/", phase="active"
+            tmp, "foo", "Foo Title", branch_prefix="hanf/", phase="active", seed_task=True
         )
         cfg = {}
         slug = _marker.slug_from_branch(worktree_path, wiki_path, cfg)
@@ -224,8 +210,7 @@ def test_slug_from_branch_user_prefix_no_config_prefix() -> None:
 
 
 def test_slug_from_branch_user_prefix_slug_not_found() -> None:
-    with tempfile.TemporaryDirectory() as tmp:
-        tmp = Path(tmp)
+    with _test_helpers.safe_temp_dir() as tmp:
         worktree_path, wiki_path = _test_helpers._make_task_worktree(
             tmp, "bar", "Bar", branch_prefix="hanf/", phase="active"
         )
@@ -241,10 +226,9 @@ def test_slug_from_branch_user_prefix_slug_not_found() -> None:
 
 
 def test_task_data_happy_path() -> None:
-    with tempfile.TemporaryDirectory() as tmp:
-        tmp = Path(tmp)
+    with _test_helpers.safe_temp_dir() as tmp:
         worktree_path, wiki_path = _test_helpers._make_task_worktree(
-            tmp, "foo", "Foo Title", branch_prefix="hanf/", phase="active"
+            tmp, "foo", "Foo Title", branch_prefix="hanf/", phase="active", seed_task=True
         )
         cfg = {"spawn": {"branch_prefix": "hanf/"}}
         data = _marker.task_data(worktree_path, wiki_path, cfg)
