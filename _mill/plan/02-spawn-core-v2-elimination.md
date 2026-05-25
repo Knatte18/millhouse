@@ -48,7 +48,7 @@ Batch-local decisions (differ from `## Shared Decisions` in `00-overview.md`):
 
   - Line 153: change parameter type hint `home_tasks: list[_tasks_md.Task]` to `home_tasks: list[dict]`.
   - Line 232: change `def _prompt_numbered(candidates: list[_tasks_md.Task]) -> Optional[_tasks_md.Task]:` to `def _prompt_numbered(candidates: list[dict]) -> Optional[dict]:`.
-  - Lines 257-268: **delete the entire `_task_to_dict` function**. It was added by commit `a1f7aac` as a partial-port scaffold and has no V3 purpose once all callers consume dicts.
+  - Lines 257-268: **delete the entire `_task_to_dict` function**. It was added by commit `a1f7aac` as a partial-port scaffold and has no V3 purpose once all callers consume dicts. After deleting the function definition, also delete every call site — verified existing call sites at `_spawn_core.py:183`, `:304`, `:433`, `:535`, `:572`. Each call site looks like `home_tasks = [_task_to_dict(t) for t in home_tasks]` (or similar list-comprehension); delete the entire reassignment line because `wiki.list_tasks_brief(wiki_path)` already returns `list[dict]` — no conversion needed. Without these deletions, Python raises `NameError: name '_task_to_dict' is not defined` at runtime. The grep guard `grep -n '_task_to_dict' plugins/mill/scripts/_spawn_core.py` (added to the final-verification block below) catches any missed sites.
   - Line 271: change `tasks: list[_tasks_md.Task]` to `tasks: list[dict]` (one of the `multi_select_groom_then_claim` signature lines).
   - Lines 336-337: change the `candidates: list[_tasks_md.Task]` / `) -> list[_tasks_md.Task]:` pair to `candidates: list[dict]` / `) -> list[dict]:`.
   - Line 405: change `tasks: list[_tasks_md.Task]` to `tasks: list[dict]`.
@@ -78,25 +78,31 @@ Batch-local decisions (differ from `## Shared Decisions` in `00-overview.md`):
 
   **`multi_select_groom_then_claim` body (lines 504, 509-513, 515, 530, 534):**
 
-  Replace the entire `with _wiki.wiki_lock(wiki_path, merged_slug):` block (line 504 through line ~534) with a single atomic call. The function's existing signature is `multi_select_groom_then_claim(wiki_path, source_slugs: list[str], merged_title, merged_slug, merged_body, has_proposal=False, proposal_body=None)` — verified at `_spawn_core.py:462–469`. **`source_slugs` is already `list[str]`, so pass it directly to `remove_slugs`:**
+  Replace the entire `with _wiki.wiki_lock(wiki_path, merged_slug):` block (line 504 through line ~534) with a single atomic call. The function's existing signature is `multi_select_groom_then_claim(wiki_path, source_slugs: list[str], merged_title, merged_slug, merged_body, has_proposal=False, proposal_body=None)` — verified at `_spawn_core.py:462–469`.
+
+  **V2→V3 field semantics (load-bearing):** the function's `merged_body` parameter holds `body_for_home` from `prompt_merged_entry` — the text that appears under the Home.md slug heading. In V3 that maps to **`brief`**, not `body`. The function's `proposal_body` parameter holds the content destined for `proposal-<merged_slug>.md`. In V3 that maps to **`body`** (the V3 daemon renders `body` into `proposal-<slug>.md` automatically). `has_proposal` is **derived** by `Store.list_tasks_brief` from `bool(body)` — do NOT pass it explicitly. Build the upsert dict accordingly:
 
   ```python
+  upsert_dict: dict = {
+      "slug": merged_slug,
+      "title": merged_title,
+      "brief": merged_body,  # V2 merged_body -> V3 brief (Home.md inline text)
+  }
+  if has_proposal and proposal_body is not None:
+      upsert_dict["body"] = proposal_body  # V3 daemon renders body -> proposal-<slug>.md
+
   result = wiki.merge_tasks(
       wiki_path,
       remove_slugs=source_slugs,
-      upsert={
-          "slug": merged_slug,
-          "title": merged_title,
-          "body": merged_body,
-          "group": merged_group,
-      },
+      upsert=upsert_dict,
       set_phase=(merged_slug, "active"),
   )
   ```
 
-  The variable names `merged_title`, `merged_body` exist already as parameters; `merged_group` may need to be derived (the function does not take a `group` param explicitly — read the existing body to see if a group is inferred from one of the source tasks or hardcoded; pass it through accordingly. If no group is in scope, drop the `"group"` key from the upsert dict — `upsert_task` treats omitted keys as no-change/inherit). Do NOT introduce a `source_tasks` local — only `source_slugs` exists in this function's scope. Do NOT pass `has_proposal` to the `upsert` dict — it is computed by `Store.list_tasks_brief` from `body`. After the call:
+  Pass `source_slugs` directly to `remove_slugs` (the parameter is already `list[str]`). Do NOT introduce a `source_tasks` local — only `source_slugs` exists in this function's scope. Do NOT include `"group"` in the upsert dict — the function does not take a `group` param explicitly and there is no group local in scope; `upsert_task` treats omitted keys as no-change/inherit. Do NOT pass `has_proposal` — derived from `body`. After the call:
 
   - Delete the `_sidebar.regenerate(wiki_path)` line (line 515) outright — the V3 daemon renders the sidebar inside the same op.
+  - Delete the explicit proposal-file write block at lines 520-523 (`proposal_path = wiki_path / f"proposal-{merged_slug}.md"` + `proposal_path.write_text(proposal_body, ...)` + `files_to_commit.append(...)`). The V3 daemon writes `proposal-<slug>.md` automatically from the `body` key in the upsert dict — see the V2→V3 field semantics above. Leaving an explicit write would race with the daemon's own write.
   - Delete the `_wiki.write_commit_push(wiki_path, files_to_commit, commit_msg, slug=merged_slug)` line (line 530) — `merge_tasks` commits inline.
   - Delete the `parsed_tasks = _tasks_md.parse(new_text)` line (line 534) — `merge_tasks` returns the upserted dict directly. If downstream code in the same function needed `parsed_tasks` (e.g. to return the merged task), use `result` from the `merge_tasks` call. If it needed a re-fetch by slug, use `wiki.get_task(wiki_path, merged_slug)`.
 
@@ -133,6 +139,8 @@ Batch-local decisions (differ from `## Shared Decisions` in `00-overview.md`):
   grep -nE "^import _(wiki|tasks_md|sidebar)|^from _(wiki|tasks_md|sidebar) " plugins/mill/scripts/_spawn_core.py
   grep -nE "_(wiki|tasks_md|sidebar)\." plugins/mill/scripts/_spawn_core.py
   grep -nE "\.heading_line_no\b" plugins/mill/scripts/_spawn_core.py
+  grep -n '"body": merged_body' plugins/mill/scripts/_spawn_core.py
+  grep -n '_task_to_dict' plugins/mill/scripts/_spawn_core.py
   ```
 
   Then run `PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/test-millpy-color.py` — this test currently fails with `ModuleNotFoundError: No module named '_sidebar'` because `millpy-color.py` imports `_spawn_core` which imports `_sidebar`. After this card, the import chain is clean and the test passes.
