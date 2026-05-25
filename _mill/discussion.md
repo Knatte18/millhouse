@@ -26,7 +26,7 @@ The post-task expectation is a single line at the bottom of `run-all.py` output:
 **In:**
 
 - Fix the four root causes below so `PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py` reports 77/77 pass.
-- One production-code change: close logging handlers in `WikiServer.on_stop()` so the `RotatingFileHandler`-held lock on `.wiki-daemon.log` is released before the daemon process exits.
+- Two minimal production-code changes: (1) close logging handlers in `WikiServer.on_stop()` so the `RotatingFileHandler`-held lock on `.wiki-daemon.log` is released before the daemon process exits; (2) extend `plugins/mill/scripts/wiki/_server.py`'s `__main__` block to read a `WIKI_DAEMON_IDLE_TIMEOUT` env var (overriding the default `idle_timeout` but with the same precedence pattern as `sys.argv[2]`) so test fixtures can shrink the idle window to ~1s without touching the client-side launcher. The client launcher (`plugins/mill/scripts/wiki/_client.py:~434`) is not modified -- the env var is read by the daemon subprocess directly.
 - Test-fixture changes in `test-bg-launcher.py`, `test-spawn-core.py`, `test-fold.py`, plus a shared low-`idle_timeout` + daemon-exit-wait pattern usable by any daemon-touching test fixture.
 
 **Out:**
