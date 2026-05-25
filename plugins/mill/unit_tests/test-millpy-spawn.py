@@ -85,11 +85,17 @@ def test_smoke_import() -> None:
 # ---------------------------------------------------------------------------
 
 
-def _make_fake_task(slug: str = "my-task", title: str = "My Task") -> MagicMock:
-    task = MagicMock()
-    task.slug = slug
-    task.title = title
-    return task
+def _make_fake_task(slug: str = "my-task", title: str = "My Task") -> dict:
+    return {
+        "slug": slug,
+        "title": title,
+        "group": None,
+        "brief": "",
+        "status": "active",
+        "id": 0,
+        "body": "",
+        "has_proposal": False,
+    }
 
 
 def _run_main_with_mocks(
