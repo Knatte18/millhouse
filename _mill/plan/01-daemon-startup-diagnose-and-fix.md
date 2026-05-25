@@ -90,9 +90,9 @@ Batch-local decisions (differ from `## Shared Decisions` in `00-overview.md`):
   - `plugins/mill/scripts/wiki/_store.py`
   - `plugins/mill/scripts/wiki/_sync.py`
   - `plugins/mill/scripts/wiki/__init__.py`
-  - `plugins/mill/unit_tests/test-millpy-claim.py`
 - **Edits:**
   - `plugins/mill/scripts/wiki/_client.py`
+  - `plugins/mill/unit_tests/test-millpy-claim.py`
 - **Creates:** none
 - **Deletes:** none
 - **Requirements:** Apply the fix identified in card 2's `**Diagnosis (from card 2):**` sub-bullet (added to this very section by card 2) AND revert the debug instrumentation in the same commit.
