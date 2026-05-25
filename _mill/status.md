@@ -56,7 +56,9 @@ batches:
     start_sha: b4ce219f5bc45888066cb1ab8746c12cbc1664d8
     commit_sha: b9b402fc4969edb8efea320b07abecbaeb9f803d
   - name: millpy-spawn-v2-elimination
-    state: pending
+    state: running
+    implementer_session: ee7cb92a-fa5a-4580-be09-8e29377ec459
+    start_sha: 170298b5b625b7da0a39c355be92aba3a7ae2fe7
   - name: test-sweep-heavy
     state: pending
   - name: test-sweep-light-and-finalize
