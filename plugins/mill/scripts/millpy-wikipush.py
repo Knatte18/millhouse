@@ -29,7 +29,6 @@ _SCRIPTS = Path(__file__).resolve().parent
 sys.path.insert(0, str(_SCRIPTS))
 
 import _paths
-import _wiki
 
 
 def _run(args: list[str]) -> subprocess.CompletedProcess[str]:
@@ -101,21 +100,10 @@ def main(argv: list[str] | None = None) -> int:
     git_root = _paths.resolve_git_root()
     wiki = _paths.resolve_wiki_path(git_root)
 
-    # Capture changed files BEFORE acquiring the lock — _wiki.wiki_lock
-    # writes `.mill-lock` inside the wiki dir, and a post-lock
-    # `git add -A` would sweep that file into the commit. The list
-    # is also our ground truth for the commit message.
+    # Capture changed files BEFORE pushing
     changed = _changed_files(wiki)
 
-    try:
-        with _wiki.wiki_lock(wiki, "wikipush"):
-            return _push_inner(wiki, changed, leave_conflicts=args.leave_conflicts)
-    except _wiki.LockBusy as e:
-        print(
-            f"wiki lock busy (held by {e.holder!r}, age {e.age_seconds}s)",
-            file=sys.stderr,
-        )
-        return 1
+    return _push_inner(wiki, changed, leave_conflicts=args.leave_conflicts)
 
 
 if __name__ == "__main__":
