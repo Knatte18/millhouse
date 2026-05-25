@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussion-fix-r3
+phase: discussed
 slug: wiki-v3-batch3-finish
 branch: hanf/wiki-v3-batch3-finish
 plan: null
@@ -16,4 +16,5 @@ task_description: |
 ```text
 discussing  '2026-05-25T12:12:12Z'
 discussion-fix-r3  '2026-05-25T13:03:36Z'
+discussed  '2026-05-25T13:03:47Z'
 ```
