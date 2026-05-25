@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-spawn-core-v2-elimination
+phase: approved-small-clis-and-surface-fixes
 slug: wiki-v3-batch3-finish
 branch: hanf/wiki-v3-batch3-finish
 plan: _mill/plan
@@ -33,6 +33,7 @@ planned  '2026-05-25T14:32:15Z'
 implementing  '2026-05-25T14:34:43Z'
 approved-daemon-startup-diagnose-and-fix  '2026-05-25T14:53:10Z'
 approved-spawn-core-v2-elimination  '2026-05-25T14:57:09Z'
+approved-small-clis-and-surface-fixes  '2026-05-25T15:04:20Z'
 ```
 
 ## Batches
@@ -50,9 +51,10 @@ batches:
     start_sha: a529d989e17894f670306bdae24f501708acb31e
     commit_sha: f28afc688f5bba715abfd05951db9bae575109a8
   - name: small-clis-and-surface-fixes
-    state: running
+    state: approved
     implementer_session: 3ea340de-ec6b-401c-b756-36fe8bdc2848
     start_sha: b4ce219f5bc45888066cb1ab8746c12cbc1664d8
+    commit_sha: b9b402fc4969edb8efea320b07abecbaeb9f803d
   - name: millpy-spawn-v2-elimination
     state: pending
   - name: test-sweep-heavy
