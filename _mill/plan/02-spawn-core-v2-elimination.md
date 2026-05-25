@@ -34,6 +34,7 @@ Batch-local decisions (differ from `## Shared Decisions` in `00-overview.md`):
   - `plugins/mill/unit_tests/test-millpy-color.py`
 - **Edits:**
   - `plugins/mill/scripts/_spawn_core.py`
+  - `plugins/mill/scripts/wiki/_parse.py`
 - **Creates:** none
 - **Deletes:** none
 - **Requirements:** Eliminate every V2 reference from `plugins/mill/scripts/_spawn_core.py`. Apply the following changes; line numbers are from the current state on `hanf/wiki-v3-batch3-finish` HEAD.
@@ -131,6 +132,29 @@ Batch-local decisions (differ from `## Shared Decisions` in `00-overview.md`):
   Drop any `home_text = ...` local that becomes unused after the rewrite.
 
   **`LockBusy` catches:** if any `except _wiki.LockBusy as e:` (or similar) clauses remain after the above edits, delete them outright. V3 has no equivalent exception; let `WikiPushError` propagate.
+
+  **Shape-compat fix to `wiki/_parse.py` (in-scope addition).**
+
+  Card 4's V3 attribute conversions (`t["has_proposal"]` at `_spawn_core.py:236, 359`) assume tasks carry a `has_proposal` key. `wiki._client.list_tasks_brief` produces it; `wiki._parse.parse_home_md` does not (verified at `wiki/_parse.py:104-113`, the returned dict has only `{slug, title, group, brief, status}`). Card 9 and card 10 in batch 5 + batch 6 feed `parse_home_md` output into `pick_task_single`/`pick_task_single_or_multi`, which would `KeyError` on `has_proposal` after this card's conversion lands. Fix the parser to match the client shape:
+
+  In `plugins/mill/scripts/wiki/_parse.py`, edit the `tasks.append({...})` block (around lines 104-113) to also emit `"has_proposal": bool(proposal_match)`. The `proposal_match` regex local is already set at line 44; reuse it. Post-edit shape:
+
+  ```python
+  tasks.append(
+      {
+          "slug": slug,
+          "title": title,
+          "group": current_group,
+          "brief": brief,
+          "status": status,
+          "has_proposal": bool(proposal_match),
+      }
+  )
+  ```
+
+  Do NOT add an `id` key — TinyDB document ids are not derivable from text. Callers that need `id` must use `.get("id")` or work with `list_tasks_brief` directly.
+
+  After this edit, `parse_home_md` is shape-compatible with `list_tasks_brief` for the 6 keys the picker code reads (`slug, title, group, brief, status, has_proposal`).
 
   **Final verification (do inside the implementer's edit loop, before committing):**
 

@@ -24,8 +24,8 @@ Depends on batch 5 because the helper-port in card 10 must come after the heavy 
 
 Batch-local decisions (differ from `## Shared Decisions` in `00-overview.md`):
 
-- **Integration tests are out of the verify gate, but the spot-clean is in-scope.** The discussion's `## Out` list excludes integration tests from gating, but the V2-elimination scope DOES require cleaning every reference — see discussion's framing: "End state has zero V2 references anywhere". The spot-clean treats integration tests as best-effort; if any can't be cleaned mechanically (e.g. requires fixture redesign), file a follow-up issue + add a `pytest.skip` mark in the test.
-- **Zero failures is the final-batch criterion.** Per discussion's `## Decisions ## Per-batch verify mandatory + zero-failure end criterion`, this batch's verify (`run-all.py`) MUST exit 0 with zero failing tests. Any test that cannot be brought green in-scope gets a GitHub issue + a `pytest.skip("see #NNN")` mark with the issue link in the test file.
+- **Integration tests are out of the verify gate, but the spot-clean is in-scope.** The discussion's `## Out` list excludes integration tests from gating, but the V2-elimination scope DOES require cleaning every reference — see discussion's framing: "End state has zero V2 references anywhere". The spot-clean treats integration tests as best-effort; if any can't be cleaned mechanically (e.g. requires fixture redesign), file a follow-up issue + drop the affected test function from the file's runner list (or replace its body with an early-return-with-print, per card 12's bare-script skip pattern). **Do not use `pytest.skip()` anywhere in this batch** — every test under `unit_tests/` and `integration_tests/` is a bare Python script invoked via `python <file>.py`, not a pytest collection; `pytest.skip()` raises `Skipped` outside pytest context and crashes the script.
+- **Zero failures is the final-batch criterion.** Per discussion's `## Decisions ## Per-batch verify mandatory + zero-failure end criterion`, this batch's verify (`run-all.py`) MUST exit 0 with zero failing tests. Any test that cannot be brought green in-scope gets a GitHub issue, and the test is removed from the per-file `tests = [...]` runner list with a top-of-file `# SKIP: see #NNN -- <reason>` comment (bare-script skip pattern — NEVER `pytest.skip`).
 
 ## Cards
 
@@ -123,7 +123,7 @@ Batch-local decisions (differ from `## Shared Decisions` in `00-overview.md`):
 
   - `import _tasks_md` / `import _wiki` / `import _sidebar` → delete the line.
   - `_tasks_md.parse(text)` → `parse_home_md(text)` (after `from wiki._parse import parse_home_md`).
-  - `_tasks_md.Task(slug=..., title=..., phase=..., has_proposal=...)` → `{"slug": ..., "title": ..., "status": ..., "has_proposal": ..., "id": <int>, "group": None, "brief": None}` dict literal (V3 dict shape with `id` int — pick any unique int per test).
+  - `_tasks_md.Task(slug=..., title=..., phase=..., has_proposal=...)` → `{"slug": ..., "title": ..., "status": ..., "has_proposal": ..., "id": <int>, "group": None, "brief": ""}` dict literal (V3 dict shape with `id` int — pick any unique int per test; use `"brief": ""` not `None` because both `parse_home_md` and `Store.list_tasks_brief` produce empty-string for unset brief, and downstream `brief + "\n" + ...` operations would fail on `None`).
   - `_tasks_md.set_phase(home_text, slug, phase)` → `wiki.set_phase(wiki_path, slug, phase)`.
   - `_wiki.write_commit_push(wiki, files, msg, slug=...)` → delete (V3 daemon-mediated ops commit inline) OR `wiki._sync.commit_push(wiki, files, msg)` if the test exercises non-daemon-mediated commit semantics.
   - `_wiki.wiki_lock(wiki, slug)` → unwrap the context manager (V3 has no advisory lock).
@@ -172,7 +172,7 @@ Batch-local decisions (differ from `## Shared Decisions` in `00-overview.md`):
 
      The command MUST exit 0 with zero failing tests. If any test fails:
      - Confirm the failure is reasonably attributable to the V2→V3 port. If yes, halt under the stuck-policy and ask the operator before adding new cards.
-     - If no (orthogonal bug), file a GitHub issue, add a `pytest.skip("see #NNN")` mark with the issue link in the affected test file, and rerun. The skip-mark addition + issue-filing is a tiny extension of this card's scope; the commit message should mention the skip.
+     - If no (orthogonal bug), file a GitHub issue, then apply the bare-script skip pattern: drop the failing test function from the file's `tests = [...]` runner list and add a top-of-file `# SKIP: see #NNN -- <reason>` comment (do NOT use `pytest.skip` — every test in this repo is a bare Python script, not a pytest collection). The skip + issue-filing is a tiny extension of this card's scope; the commit message should mention the skip and the issue number.
 
   2. Run a final V2-elimination grep across the entire repo to confirm the framing is honoured:
 
@@ -180,7 +180,7 @@ Batch-local decisions (differ from `## Shared Decisions` in `00-overview.md`):
      grep -rnE "^import _(wiki|tasks_md|sidebar)|^from _(wiki|tasks_md|sidebar) " plugins/mill/scripts/ plugins/mill/unit_tests/ plugins/mill/integration_tests/
      ```
 
-     Zero matches required across shipping + unit tests. Integration tests may still have residual references that card 12 skipped via `pytest.skip` — the skip-marked tests are acceptable; the imports themselves should still be gone.
+     Zero matches required across shipping + unit tests. Integration tests may still have residual references that card 12 skipped via the bare-script skip pattern (dropped from runner list + `# SKIP: see #NNN` comment) — the skip-marked tests are acceptable; the imports themselves should still be gone.
 
   This card has no file edits — the verify itself is the only deliverable. If `run-all.py` is already green with no skip-marks added, this commit is empty; in that case skip the commit and let mill-go observe the batch verify-pass directly. (`_mill/handoff.md` was already removed in commit `f5a186b` on this branch — no rm step is needed.)
 - **Commit:** `chore: final V2-elimination smoke`
@@ -189,6 +189,6 @@ Batch-local decisions (differ from `## Shared Decisions` in `00-overview.md`):
 
 The batch verify command is `PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py`. This is the final smoke for the entire task. It MUST exit 0 with zero failing tests after card 13 lands.
 
-Acceptable end-state failures are limited to `pytest.skip`-marked tests with a follow-up GitHub issue link in the skip reason; these still count as PASS in `run-all.py`'s exit code.
+Acceptable end-state failures are limited to tests dropped from their per-file runner list via the bare-script skip pattern (top-of-file `# SKIP: see #NNN -- <reason>` comment); these are simply not executed by `run-all.py`, so they cannot fail. No `pytest.skip` is used anywhere — every test in this repo is a bare Python script.
 
 After this batch, the task is `phase: implemented` (mill-go handles the status transition). `mill-finalize` then squash-merges to `hanf/wiki-v3-adoption` per the discussion's merge-strategy decision.
