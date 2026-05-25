@@ -109,7 +109,8 @@ Batch-local decisions (differ from `## Shared Decisions` in `00-overview.md`):
 
   **Verification:** After applying the fix and reverting the debug branch, run `PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/test-millpy-claim.py`. All 12 tests in `test-millpy-claim.py` MUST pass. If any still ERROR with `daemon did not start within timeout`, the fix is incomplete — iterate on the diagnosis or halt under the stuck-policy.
 
-  **Diagnosis (from card 2):** _(this sub-bullet is to be filled in by card 2; left as a placeholder here)_
+  **Diagnosis (from card 2):**
+  - **(e) Test fixture mocks interfering with state file reads** — The daemon starts successfully and creates valid `.wiki-daemon.json` state files (confirmed in `C:/fake/wiki/.wiki-daemon-debug.log` and `.wiki-daemon.log`). However, test fixtures globally patch `Path.read_text()` to return fake content (`"# Home\n"`) intended for reading `Home.md`. When `_ensure_daemon` calls `state_file.read_text("utf-8")` to read the daemon state, it gets the fake `"# Home\n"` instead of the actual JSON state. This causes `json.loads()` to raise JSONDecodeError, which is caught and ignored, but then the client cannot verify daemon startup because it doesn't have the correct port/token. The cached `.wiki-daemon.json` contains the real port and token (e.g., `protocol_version: 2, port: 51399, token: ca1f50f85fa3c13ea6b1425824950184`), but the client reads the fake `"# Home\n"` and fails to connect.
 
 - **Commit:** `fix(wiki/_client): resolve daemon-startup failure; revert debug instrumentation`
 
