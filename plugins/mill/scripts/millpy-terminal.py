@@ -103,7 +103,7 @@ def main(argv: list[str] | None = None) -> int:
     if wiki_path is not None:
         try:
             worktree_cfg = _load_config(selected_path, selected_path)
-        except SystemExit:
+        except (SystemExit, FileNotFoundError):
             worktree_cfg = {}
     else:
         worktree_cfg = {}

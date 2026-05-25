@@ -78,7 +78,7 @@ def _filter_open_worktrees(
             try:
                 entry_cfg = _load_config(entry_path, entry_path)
                 hub_subpath = entry_cfg.get("hub_relative_path", hub_subpath_default)
-            except SystemExit:
+            except (SystemExit, FileNotFoundError):
                 hub_subpath = hub_subpath_default
         launch = resolve_hub_relative_path(entry_path, hub_subpath)
         if not any(
@@ -116,7 +116,7 @@ def _spawn_and_open(
     if wiki_path is not None:
         try:
             worktree_cfg = _load_config(new_path, new_path)
-        except SystemExit:
+        except (SystemExit, FileNotFoundError):
             worktree_cfg = {}
     else:
         worktree_cfg = {}
@@ -254,7 +254,7 @@ def main(argv: list[str] | None = None) -> int:
     if wiki_path is not None:
         try:
             worktree_cfg = _load_config(selected_path, selected_path)
-        except SystemExit:
+        except (SystemExit, FileNotFoundError):
             worktree_cfg = {}
     else:
         worktree_cfg = {}
