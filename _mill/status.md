@@ -44,7 +44,9 @@ batches:
     start_sha: 3874c15cf0038db34f5c48850b529bcc49787010
     commit_sha: 2d6906112de2b80bd0d845d97b8b16b426c025a7
   - name: spawn-core-v2-elimination
-    state: pending
+    state: running
+    implementer_session: bd273264-2a3c-4878-b661-90abb0678881
+    start_sha: a529d989e17894f670306bdae24f501708acb31e
   - name: small-clis-and-surface-fixes
     state: pending
   - name: millpy-spawn-v2-elimination
