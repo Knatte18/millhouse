@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-fix-r1
+phase: planned
 slug: wiki-v3-test-suite-green
 branch: hanf/wiki-v3-test-suite-green
 plan: _mill/plan
@@ -19,4 +19,5 @@ discussion-fix-r3  '2026-05-25T17:29:26Z'
 discussed  '2026-05-25T17:29:45Z'
 planning  '2026-05-25T17:42:34Z'
 plan-fix-r1  '2026-05-25T17:48:29Z'
+planned  '2026-05-25T17:49:01Z'
 ```
