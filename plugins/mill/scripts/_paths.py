@@ -122,7 +122,7 @@ def resolve_git_root(start: Path | None = None) -> Path:
         raise SystemExit(
             f"cwd is inside wiki ({repo_root}) — scripts must run from a task worktree"
             " or the main repo, not the wiki. Wiki mutations go through"
-            " git -C <wiki_path> or _wiki.write_commit_push."
+            " git -C <wiki_path>."
         )
     try:
         wiki_path = resolve_wiki_path(repo_root)
@@ -137,7 +137,7 @@ def resolve_git_root(start: Path | None = None) -> Path:
             raise SystemExit(
                 f"cwd is inside wiki ({wiki_path}) — scripts must run from a task worktree"
                 " or the main repo, not the wiki. Wiki mutations go through"
-                " git -C <wiki_path> or _wiki.write_commit_push."
+                " git -C <wiki_path>."
             )
     return repo_root
 
@@ -315,8 +315,8 @@ def resolve_active_worktree(
     import _marker
 
     try:
-        _wiki = resolve_wiki_path(git_root)
-        marker_slug = _marker.slug_from_branch(git_root, _wiki, cfg)
+        wiki_path = resolve_wiki_path(git_root)
+        marker_slug = _marker.slug_from_branch(git_root, wiki_path, cfg)
     except (_marker.MarkerError, SystemExit):
         marker_slug = None
     if marker_slug == slug and _inplace.is_inplace(slug, git_root, cfg):
@@ -404,7 +404,7 @@ def resolve_wiki_path(git_toplevel: Path) -> Path:
         raise SystemExit(
             f"cwd is inside wiki ({git_toplevel}) — scripts must run from a task worktree"
             " or the main repo, not the wiki. Wiki mutations go through"
-            " git -C <wiki_path> or _wiki.write_commit_push."
+            " git -C <wiki_path>."
         )
     import yaml
 
