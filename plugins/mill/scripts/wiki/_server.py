@@ -77,8 +77,14 @@ class WikiServer(DaemonBase):
         self._ensure_gitignore()
 
     def on_stop(self) -> None:
-        """Log shutdown."""
+        """Log shutdown and release log handlers."""
         self._log.info("wiki-server stopping")
+        for handler in list(self._log.handlers):
+            try:
+                handler.close()
+            except Exception:
+                pass
+            self._log.removeHandler(handler)
 
     def handle_request(self, msg: dict) -> dict:
         """Dispatch request on operation type."""
@@ -331,6 +337,14 @@ class WikiServer(DaemonBase):
 
 if __name__ == "__main__":
     wiki_path = Path(sys.argv[1])
-    idle_timeout = int(sys.argv[2]) if len(sys.argv) > 2 else 600
+    idle_timeout = 600
+    try:
+        env_idle = os.environ.get("WIKI_DAEMON_IDLE_TIMEOUT")
+        if env_idle:
+            idle_timeout = int(env_idle)
+    except (ValueError, TypeError):
+        pass
+    if idle_timeout == 600 and len(sys.argv) > 2:
+        idle_timeout = int(sys.argv[2])
     refresh_interval = float(sys.argv[3]) if len(sys.argv) > 3 else 10.0
     WikiServer(wiki_path, idle_timeout=idle_timeout, refresh_interval=refresh_interval).run()

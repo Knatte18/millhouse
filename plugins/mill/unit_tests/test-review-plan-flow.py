@@ -12,7 +12,6 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
 
 HUB = Path(__file__).resolve().parent.parent.parent.parent
@@ -20,6 +19,8 @@ sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
 import _reviewer_test_stub as stub  # noqa: E402
 import _test_registry  # noqa: E402
+import _test_helpers  # noqa: E402
+from wiki import _client as wiki  # noqa: E402
 from _llm_claude import LLMError  # noqa: E402
 from _review_plan import run as plan_run  # noqa: E402
 from _review_common import ReviewError  # noqa: E402
@@ -113,13 +114,15 @@ def _make_plan_fixture(
     mill_dir = worktree / ".millhouse"
     mill_dir.mkdir(parents=True, exist_ok=True)
     wiki_root = tmp_path / "wiki"
-    wiki_root.mkdir(parents=True, exist_ok=True)
+    _test_helpers.init_wiki_repo(wiki_root)
     seed_wiki_config(wiki_root)
     (wiki_root / "Home.md").write_text(
-        f"## Test Task\n[[{SLUG}]] [active]\n\n_body_\n", encoding="utf-8"
+        f"## Test Task\n[{SLUG}] [active]\n\n_body_\n", encoding="utf-8"
     )
+    wiki.upsert_task(wiki_root, SLUG, title="Test Task", status="active")
     (mill_dir / "config.local.yaml").write_text(
-        f"paths:\n  wiki: '{wiki_root.as_posix()}'\n", encoding="utf-8"
+        f"paths:\n  wiki: '{wiki_root.as_posix()}'\n"
+        f"spawn:\n  branch_prefix: 'hanf/'\n", encoding="utf-8"
     )
     project_root = worktree
 
@@ -147,6 +150,9 @@ def _make_plan_fixture(
             "discussion_file": "discussion.md",
             "plan_dir":        "plan/",
             "reviews_dir":     "reviews/",
+        },
+        "spawn": {
+            "branch_prefix": "hanf/",
         },
         "roles": {
             "plan-review": {
@@ -176,13 +182,13 @@ def main() -> int:
     # 3 per-batch + 1 holistic = 4 responses per run.
     # After re-invocation all scopes advance to r2 independently.
     # ------------------------------------------------------------------
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         batch_specs = [
             ("alpha", "01-alpha.md", ["src/a.py"], []),
             ("beta",  "02-beta.md",  ["src/b.py"], []),
             ("gamma", "03-gamma.md", ["src/c.py"], []),
         ]
-        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(Path(tmpdir), batch_specs)
+        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(tmpdir, batch_specs)
         orig_dir = os.getcwd()
         os.chdir(project_root)
         try:
@@ -244,13 +250,13 @@ def main() -> int:
     # A holistic-r1 file is also pre-created so detect_resume_round
     # returns None (completed round, not interrupted mid-round).
     # ------------------------------------------------------------------
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         batch_specs = [
             ("alpha", "01-alpha.md", ["src/a.py"], []),
             ("beta",  "02-beta.md",  ["src/b.py"], []),
             ("gamma", "03-gamma.md", ["src/c.py"], []),
         ]
-        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(Path(tmpdir), batch_specs)
+        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(tmpdir, batch_specs)
         orig_dir = os.getcwd()
         os.chdir(project_root)
         try:
@@ -299,14 +305,14 @@ def main() -> int:
     # Test 3 — creates_union suppression in per-batch parallel section (#60)
     # beta Reads a file alpha Creates; file not on disk. No ReviewError expected.
     # ------------------------------------------------------------------
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         batch_specs = [
             ("alpha", "01-alpha.md", ["src/a.py"], ["generated/by_alpha.py"]),
             ("beta",  "02-beta.md",  ["generated/by_alpha.py"], []),
             ("gamma", "03-gamma.md", ["src/c.py"], []),
         ]
         mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(
-            Path(tmpdir), batch_specs, skip_create={"generated/by_alpha.py"}
+            tmpdir, batch_specs, skip_create={"generated/by_alpha.py"}
         )
         orig_dir = os.getcwd()
         os.chdir(project_root)
@@ -333,13 +339,13 @@ def main() -> int:
     # alpha (clean) succeeds; beta (bad ref) -> ERROR entry; holistic disabled.
     # Aggregate must be REQUEST_CHANGES (not ReviewError), since not all ERROR.
     # ------------------------------------------------------------------
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         batch_specs = [
             ("alpha", "01-alpha.md", ["src/a.py"], []),
             ("beta",  "02-beta.md",  ["nonexistent/path.py"], []),
         ]
         mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(
-            Path(tmpdir), batch_specs, skip_create={"nonexistent/path.py"}
+            tmpdir, batch_specs, skip_create={"nonexistent/path.py"}
         )
         cfg4 = dict(cfg)
         cfg4["roles"] = dict(cfg["roles"])
@@ -382,14 +388,14 @@ def main() -> int:
     # alpha + gamma succeed; beta has bad ref -> ERROR entry (no reviewer call).
     # Holistic resolver encounters beta's bad ref -> ReviewError propagates.
     # ------------------------------------------------------------------
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         batch_specs = [
             ("alpha", "01-alpha.md", ["src/a.py"], []),
             ("beta",  "02-beta.md",  ["nonexistent/path.py"], []),
             ("gamma", "03-gamma.md", ["src/c.py"], []),
         ]
         mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(
-            Path(tmpdir), batch_specs, skip_create={"nonexistent/path.py"}
+            tmpdir, batch_specs, skip_create={"nonexistent/path.py"}
         )
         orig_dir = os.getcwd()
         os.chdir(project_root)
@@ -425,10 +431,10 @@ def main() -> int:
     # Test 6 — NEED_CONTEXT resume fallback in per-batch (#5/#7)
     # Single batch (alpha) + holistic. Alpha retries once -> APPROVE.
     # ------------------------------------------------------------------
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         batch_specs = [("alpha", "01-alpha.md", ["src/a.py"], [])]
         mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(
-            Path(tmpdir), batch_specs
+            tmpdir, batch_specs
         )
         orig_dir = os.getcwd()
         os.chdir(project_root)
@@ -470,10 +476,10 @@ def main() -> int:
     # Test 7 — NEED_CONTEXT resume fallback in holistic block (#5/#7)
     # Single batch (alpha) succeeds; holistic NEED_CONTEXT -> retry APPROVE.
     # ------------------------------------------------------------------
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         batch_specs = [("alpha", "01-alpha.md", ["src/a.py"], [])]
         mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(
-            Path(tmpdir), batch_specs
+            tmpdir, batch_specs
         )
         orig_dir = os.getcwd()
         os.chdir(project_root)
@@ -518,13 +524,13 @@ def main() -> int:
     # Three batches; 01-a and 03-c are approved in r1; 02-b is not.
     # Stub should fire exactly twice: once for 02-b, once for holistic.
     # ------------------------------------------------------------------
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         batch_specs = [
             ("a", "01-a.md", ["src/a.py"], []),
             ("b", "02-b.md", ["src/b.py"], []),
             ("c", "03-c.md", ["src/c.py"], []),
         ]
-        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(Path(tmpdir), batch_specs)
+        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(tmpdir, batch_specs)
         orig_dir = os.getcwd()
         os.chdir(project_root)
         try:
@@ -594,13 +600,13 @@ def main() -> int:
     # All three batches approved in r1 -> stub fires exactly once (holistic).
     # reviews has 1 entry (holistic only, resume path, bug C fix #184).
     # ------------------------------------------------------------------
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         batch_specs = [
             ("a", "01-a.md", ["src/a.py"], []),
             ("b", "02-b.md", ["src/b.py"], []),
             ("c", "03-c.md", ["src/c.py"], []),
         ]
-        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(Path(tmpdir), batch_specs)
+        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(tmpdir, batch_specs)
         orig_dir = os.getcwd()
         os.chdir(project_root)
         try:
@@ -638,13 +644,13 @@ def main() -> int:
     # 01-a r1 file has unparseable content -> treated as not-approved.
     # Stub fires for 01-a, 02-b, 03-c, and holistic (4 calls).
     # ------------------------------------------------------------------
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         batch_specs = [
             ("a", "01-a.md", ["src/a.py"], []),
             ("b", "02-b.md", ["src/b.py"], []),
             ("c", "03-c.md", ["src/c.py"], []),
         ]
-        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(Path(tmpdir), batch_specs)
+        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(tmpdir, batch_specs)
         orig_dir = os.getcwd()
         os.chdir(project_root)
         try:
@@ -681,12 +687,12 @@ def main() -> int:
     # ------------------------------------------------------------------
     # Test 11 — holistic_only=True: only holistic fires
     # ------------------------------------------------------------------
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         batch_specs = [
             ("alpha", "01-alpha.md", ["src/a.py"], []),
             ("beta",  "02-beta.md",  ["src/b.py"], []),
         ]
-        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(Path(tmpdir), batch_specs)
+        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(tmpdir, batch_specs)
         orig_dir = os.getcwd()
         os.chdir(project_root)
         try:
@@ -711,12 +717,12 @@ def main() -> int:
     # ------------------------------------------------------------------
     # Test 12 — no_holistic=True: only per-batch fires
     # ------------------------------------------------------------------
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         batch_specs = [
             ("alpha", "01-alpha.md", ["src/a.py"], []),
             ("beta",  "02-beta.md",  ["src/b.py"], []),
         ]
-        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(Path(tmpdir), batch_specs)
+        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(tmpdir, batch_specs)
         orig_dir = os.getcwd()
         os.chdir(project_root)
         try:
@@ -742,9 +748,9 @@ def main() -> int:
     # ------------------------------------------------------------------
     # Test 13 — mutual exclusion: holistic_only + no_holistic raises ReviewError
     # ------------------------------------------------------------------
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         batch_specs = [("alpha", "01-alpha.md", ["src/a.py"], [])]
-        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(Path(tmpdir), batch_specs)
+        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(tmpdir, batch_specs)
         orig_dir = os.getcwd()
         os.chdir(project_root)
         try:
@@ -770,12 +776,12 @@ def main() -> int:
     # batch a: 2 BLOCKINGs, batch b: 1 BLOCKING, holistic: 0 BLOCKINGs
     # aggregate = 3
     # ------------------------------------------------------------------
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         batch_specs = [
             ("alpha", "01-alpha.md", ["src/a.py"], []),
             ("beta",  "02-beta.md",  ["src/b.py"], []),
         ]
-        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(Path(tmpdir), batch_specs)
+        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(tmpdir, batch_specs)
         orig_dir = os.getcwd()
         os.chdir(project_root)
         try:
@@ -813,9 +819,9 @@ def main() -> int:
     # Without kwarg (cfg max=3): raises ReviewError (round 4 would exceed max).
     # With max_rounds=5: holistic r4 succeeds (per-batch all approved -> carryforward).
     # ------------------------------------------------------------------
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         batch_specs = [("alpha", "01-alpha.md", ["src/a.py"], [])]
-        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(Path(tmpdir), batch_specs)
+        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(tmpdir, batch_specs)
         orig_dir = os.getcwd()
         os.chdir(project_root)
         try:
@@ -869,9 +875,9 @@ def main() -> int:
     # After Card 17, the total-fail check is removed, so plan_run falls
     # through to aggregate_verdict and returns REQUEST_CHANGES.
     # ------------------------------------------------------------------
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         batch_specs = [("alpha", "01-alpha.md", ["src/a.py"], [])]
-        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(Path(tmpdir), batch_specs)
+        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(tmpdir, batch_specs)
         orig_dir = os.getcwd()
         os.chdir(project_root)
         original_run = stub.run
@@ -908,12 +914,12 @@ def main() -> int:
     # (holistic only); reviews has 1 entry (holistic only, bug C fix #184).
     # ------------------------------------------------------------------
     REQUEST_CHANGES_TEXT2 = "# Review: test\n\n```yaml\nverdict: REQUEST_CHANGES\n```\n"
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         batch_specs = [
             ("alpha", "01-alpha.md", ["src/a.py"], []),
             ("beta",  "02-beta.md",  ["src/b.py"], []),
         ]
-        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(Path(tmpdir), batch_specs)
+        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(tmpdir, batch_specs)
         orig_dir = os.getcwd()
         os.chdir(project_root)
         try:
@@ -955,9 +961,9 @@ def main() -> int:
     # Test 18 — deletes surface: batch declares Deletes token
     # The per-batch prompt must contain ## Intentionally deleted + the token.
     # ------------------------------------------------------------------
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         batch_specs = [("alpha", "01-alpha.md", ["src/a.py"], [])]
-        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(Path(tmpdir), batch_specs)
+        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(tmpdir, batch_specs)
         orig_dir = os.getcwd()
         os.chdir(project_root)
         try:
@@ -993,9 +999,9 @@ def main() -> int:
     # Test 19 — timeout plumbing: bulk_timeout -> per-batch, holistic_timeout -> holistic
     # Single-batch fixture so captured_prompts() ordering is deterministic.
     # ------------------------------------------------------------------
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         batch_specs = [("alpha", "01-alpha.md", ["src/a.py"], [])]
-        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(Path(tmpdir), batch_specs)
+        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(tmpdir, batch_specs)
         cfg["llm"]["bulk_timeout"] = 900
         cfg["llm"]["holistic_timeout"] = 1800
         orig_dir = os.getcwd()
@@ -1029,9 +1035,9 @@ def main() -> int:
     # One-batch plan; holistic returns raw prose without yaml block ->
     # parse_verdict raises ReviewError -> ERROR entry, no raise.
     # ------------------------------------------------------------------
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         batch_specs = [("alpha", "01-alpha.md", ["src/a.py"], [])]
-        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(Path(tmpdir), batch_specs)
+        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(tmpdir, batch_specs)
         orig_dir = os.getcwd()
         os.chdir(project_root)
         try:
@@ -1066,9 +1072,9 @@ def main() -> int:
     # ------------------------------------------------------------------
     # Test 6a — batch=null: holistic fires, per-batch skipped
     # ------------------------------------------------------------------
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         batch_specs = [("core", "01-core.md", ["src/a.py"], [])]
-        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(Path(tmpdir), batch_specs)
+        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(tmpdir, batch_specs)
         cfg["roles"]["plan-review"]["batch"]["reviewer"] = None  # keep holistic: "test_stub"
         orig_dir = os.getcwd()
         os.chdir(project_root)
@@ -1095,9 +1101,9 @@ def main() -> int:
     # ------------------------------------------------------------------
     # Test 6b — batch=null + holistic=null raises ReviewError
     # ------------------------------------------------------------------
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         batch_specs = [("core", "01-core.md", ["src/a.py"], [])]
-        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(Path(tmpdir), batch_specs)
+        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(tmpdir, batch_specs)
         cfg["roles"]["plan-review"]["batch"]["reviewer"] = None
         cfg["roles"]["plan-review"]["holistic"]["reviewer"] = None
         orig_dir = os.getcwd()
@@ -1126,9 +1132,9 @@ def main() -> int:
     # No per-batch reviews; holistic-only mode. Unparseable output -> ERROR entry
     # with file path. Aggregate verdict is ERROR (all reviews are ERROR).
     # ------------------------------------------------------------------
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         batch_specs = [("alpha", "01-alpha.md", ["src/a.py"], [])]
-        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(Path(tmpdir), batch_specs)
+        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(tmpdir, batch_specs)
         cfg["roles"]["plan-review"]["batch"]["reviewer"] = None  # holistic only
         orig_dir = os.getcwd()
         os.chdir(project_root)
@@ -1163,9 +1169,9 @@ def main() -> int:
     # ------------------------------------------------------------------
     # Test 22 — rounds=0 holistic via kwarg (early return APPROVE stub)
     # ------------------------------------------------------------------
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         batch_specs = [("core", "01-core.md", ["src/a.py"], [])]
-        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(Path(tmpdir), batch_specs)
+        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(tmpdir, batch_specs)
         cfg["roles"]["plan-review"]["holistic"]["reviewer"] = "test_stub"
         cfg["roles"]["plan-review"]["holistic"]["rounds"] = 3
         cfg["roles"]["plan-review"]["batch"]["reviewer"] = None

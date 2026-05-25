@@ -897,7 +897,7 @@ def test_discover_active_worktrees_standard_layout() -> None:
         parent, wts_dir = _make_parent_with_worktree(Path(tmp), "my-task", "hanf/my-task")
         entry = (wts_dir / "my-task").resolve()
 
-        home_md = "# Home\n\n## My Task\n[[my-task]] [active]\n"
+        home_md = "# Home\n\n## My Task\n[my-task] [active]\n"
         home_tasks = parse_home_md(home_md)
 
         results = discover_active_worktrees(wts_dir, home_tasks, "hanf/", cwd=parent)
@@ -918,7 +918,7 @@ def test_discover_active_worktrees_subfolder_install() -> None:
         parent, wts_dir = _make_parent_with_worktree(Path(tmp), "my-task", "hanf/my-task")
         entry = (wts_dir / "my-task").resolve()
 
-        home_md = "# Home\n\n## My Subfolder Task\n[[my-task]] [active]\n"
+        home_md = "# Home\n\n## My Subfolder Task\n[my-task] [active]\n"
         home_tasks = parse_home_md(home_md)
 
         results = discover_active_worktrees(wts_dir, home_tasks, "hanf/", cwd=parent)

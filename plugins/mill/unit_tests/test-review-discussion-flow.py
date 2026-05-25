@@ -12,7 +12,6 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
 
 HUB = Path(__file__).resolve().parent.parent.parent.parent
@@ -20,6 +19,8 @@ sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
 import _reviewer_test_stub as stub  # noqa: E402
 import _test_registry  # noqa: E402
+import _test_helpers  # noqa: E402
+from wiki import _client as wiki  # noqa: E402
 from _review_discussion import run as discussion_run  # noqa: E402
 from _test_helpers import seed_wiki_config  # noqa: E402
 
@@ -46,13 +47,15 @@ def _make_fixture(tmp: Path) -> tuple[Path, Path, Path]:
     mill_dir = worktree / ".millhouse"
     mill_dir.mkdir(parents=True, exist_ok=True)
     wiki_root = tmp / "wiki"
-    wiki_root.mkdir(parents=True, exist_ok=True)
+    _test_helpers.init_wiki_repo(wiki_root)
     seed_wiki_config(wiki_root)
     (wiki_root / "Home.md").write_text(
-        f"## Test Task\n[[{SLUG}]] [active]\n\n_body_\n", encoding="utf-8"
+        f"## Test Task\n[{SLUG}] [active]\n\n_body_\n", encoding="utf-8"
     )
+    wiki.upsert_task(wiki_root, SLUG, title="Test Task", status="active")
     (mill_dir / "config.local.yaml").write_text(
-        f"paths:\n  wiki: '{wiki_root.as_posix()}'\n", encoding="utf-8"
+        f"paths:\n  wiki: '{wiki_root.as_posix()}'\n"
+        f"spawn:\n  branch_prefix: 'hanf/'\n", encoding="utf-8"
     )
     _test_registry.write_to(wiki_root)
     return mill_dir, worktree, wiki_root
@@ -64,8 +67,8 @@ def main() -> int:
     # ------------------------------------------------------------------
     # Single test — per-scope round counter for holistic discussion review
     # ------------------------------------------------------------------
-    with tempfile.TemporaryDirectory() as tmpdir:
-        mill_dir, project_root, wiki_root = _make_fixture(Path(tmpdir))
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        mill_dir, project_root, wiki_root = _make_fixture(tmpdir)
 
         # Create discussion file at worktree root
         (project_root / "discussion.md").write_text(
@@ -77,6 +80,9 @@ def main() -> int:
                 "discussion_file": "discussion.md",
                 "plan_dir":        "plan/",
                 "reviews_dir":     "reviews/",
+            },
+            "spawn": {
+                "branch_prefix": "hanf/",
             },
             "roles": {
                 "discussion-review": {
@@ -128,8 +134,8 @@ def main() -> int:
     # ------------------------------------------------------------------
     # max_rounds override
     # ------------------------------------------------------------------
-    with tempfile.TemporaryDirectory() as tmpdir:
-        mill_dir, project_root, wiki_root = _make_fixture(Path(tmpdir))
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        mill_dir, project_root, wiki_root = _make_fixture(tmpdir)
         (project_root / "discussion.md").write_text(
             "# Discussion\n\nTest.\n", encoding="utf-8"
         )
@@ -188,8 +194,8 @@ def main() -> int:
     # ------------------------------------------------------------------
     # blocking_count populated from GAP headings
     # ------------------------------------------------------------------
-    with tempfile.TemporaryDirectory() as tmpdir:
-        mill_dir, project_root, wiki_root = _make_fixture(Path(tmpdir))
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        mill_dir, project_root, wiki_root = _make_fixture(tmpdir)
         (project_root / "discussion.md").write_text(
             "# Discussion\n\nTest.\n", encoding="utf-8"
         )
@@ -241,8 +247,8 @@ def main() -> int:
     # Test parse_verdict failure — returns ERROR envelope (#315)
     # Unparseable output -> ERROR verdict, ERROR entry with file path.
     # ------------------------------------------------------------------
-    with tempfile.TemporaryDirectory() as tmpdir:
-        mill_dir, project_root, wiki_root = _make_fixture(Path(tmpdir))
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        mill_dir, project_root, wiki_root = _make_fixture(tmpdir)
 
         # Create discussion file
         (project_root / "discussion.md").write_text(
@@ -296,8 +302,8 @@ def main() -> int:
     # ------------------------------------------------------------------
     # rounds=0 early return (APPROVE stub)
     # ------------------------------------------------------------------
-    with tempfile.TemporaryDirectory() as tmpdir:
-        mill_dir, project_root, wiki_root = _make_fixture(Path(tmpdir))
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        mill_dir, project_root, wiki_root = _make_fixture(tmpdir)
         (project_root / "discussion.md").write_text(
             "# Discussion\n\nTest discussion.\n", encoding="utf-8"
         )

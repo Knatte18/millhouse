@@ -2,13 +2,15 @@
 
 Covers: _write_state_file writes and reads back as JSON; _is_stale detects
 dead PIDs and current PIDs; O_EXCL behavior; idle-timeout predicate;
-.gitignore idempotent append.
+.gitignore idempotent append; WikiServer.on_stop closes log handlers.
 
 Uses tempfile dirs; no real TCP sockets or accept loop.
 """
 from __future__ import annotations
 
 import json
+import logging
+import logging.handlers
 import os
 import sys
 import tempfile
@@ -19,6 +21,8 @@ HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
 from _daemon import DaemonBase  # noqa: E402
+from wiki._server import WikiServer  # noqa: E402
+from _test_helpers import safe_temp_dir  # noqa: E402
 
 
 class TestDaemon(DaemonBase):
@@ -171,6 +175,32 @@ def main() -> int:
             shutil.rmtree(tmp, ignore_errors=True)
     except Exception as exc:
         fail(".gitignore idempotent append", exc)
+
+    # --- (g) WikiServer.on_stop closes log handlers and removes them from logger ---
+    try:
+        with safe_temp_dir() as tmp:
+            wiki_path = tmp / "wiki"
+            wiki_path.mkdir(parents=True, exist_ok=True)
+            (wiki_path / "tasks.json").write_text('{"_default": {}}', encoding="utf-8")
+            wiki_server = WikiServer(wiki_path, idle_timeout=1)
+
+            our_handlers = [
+                h for h in wiki_server._log.handlers
+                if isinstance(h, logging.handlers.RotatingFileHandler)
+                and Path(h.baseFilename).resolve() == (wiki_path / ".wiki-daemon.log").resolve()
+            ]
+            assert len(our_handlers) == 1, f"expected 1 handler, got {len(our_handlers)}"
+            handler = our_handlers[0]
+
+            wiki_server.on_stop()
+
+            assert handler.stream is None or handler.stream.closed, \
+                "handler stream should be closed or None after on_stop"
+            assert handler not in wiki_server._log.handlers, \
+                "handler should be removed from logger after on_stop"
+            ok("WikiServer.on_stop closes log handlers and removes them from logger")
+    except Exception as exc:
+        fail("WikiServer.on_stop closes log handlers and removes them from logger", exc)
 
     print("", file=sys.stderr)
     if failed:
