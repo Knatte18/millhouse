@@ -7,13 +7,14 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from unittest.mock import patch
 
 HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
+import _safe_rmtree  # noqa: E402
 import _gh_issues  # noqa: E402
-import _tasks_md  # noqa: E402
-import _wiki  # noqa: E402
+from wiki import _client as wiki, LOCKED_FOLD_PHASES, WikiPushError  # noqa: E402
 
 millpy_fold = importlib.import_module("millpy-fold")
 
@@ -40,11 +41,12 @@ _HOME_MD_FIXTURE = (
 # Test helpers for millpy-fold.main (batch 2)
 # ---------------------------------------------------------------------------
 
-def _setup_tempfile_wiki(home_md_content: str) -> tempfile.TemporaryDirectory:
+def _setup_tempfile_wiki(home_md_content: str, tasks: list[dict] = None) -> tempfile.TemporaryDirectory:
     """Create a throwaway git repo in a TemporaryDirectory with Home.md and _Sidebar.md.
 
-    Sets up a bare sibling repo as origin so git push works in write_commit_push.
-    Returns the TemporaryDirectory; caller must call .cleanup().
+    Sets up a bare sibling repo as origin so git push works in commit_push.
+    If tasks is supplied, seeds tasks.json via daemon upsert_task calls for each task dict.
+    Returns a wrapper with .cleanup() that handles daemon file locking on Windows.
     """
     td = tempfile.TemporaryDirectory()
     wiki_path = Path(td.name)
@@ -80,6 +82,23 @@ def _setup_tempfile_wiki(home_md_content: str) -> tempfile.TemporaryDirectory:
         check=True, capture_output=True, env=git_env,
     )
 
+    if tasks:
+        for task in tasks:
+            wiki.upsert_task(wiki_path, **task)
+
+    # Wrap cleanup to handle Windows file locking from daemon process
+    original_cleanup = td.cleanup
+    def safe_cleanup():
+        try:
+            original_cleanup()
+        except (OSError, PermissionError):
+            # Daemon may still hold file locks on Windows; try _safe_rmtree.safe_rmtree with ignore_errors
+            try:
+                _safe_rmtree.safe_rmtree(Path(td.name), allowed_root=Path(td.name), ignore_errors=True)
+            except Exception:
+                pass  # Best effort cleanup; let OS clean up on exit
+
+    td.cleanup = safe_cleanup
     return td
 
 
@@ -139,82 +158,87 @@ def _suppress_stdin_isatty():
 def main() -> int:
     # --- LOCKED_FOLD_PHASES constant ---
     try:
-        assert _tasks_md.LOCKED_FOLD_PHASES == ("active", "ready-to-merge", "pr-pending"), (
-            f"Got {_tasks_md.LOCKED_FOLD_PHASES!r}"
+        assert LOCKED_FOLD_PHASES == ("active", "ready-to-merge", "pr-pending"), (
+            f"Got {LOCKED_FOLD_PHASES!r}"
         )
         print("PASS: LOCKED_FOLD_PHASES has the correct value")
     except (AssertionError, Exception) as exc:
         print(f"FAIL: LOCKED_FOLD_PHASES constant: {exc}")
         return 1
 
-    # --- append_to_body inserts before next heading ---
+    # --- append to task body via daemon round-trip ---
     try:
-        result = _tasks_md.append_to_body(
-            _HOME_MD_FIXTURE, "spawn-ready", "- Sources: #99 — example"
+        home_content = "# Tasks\n\n## Spawn Ready Task\n[spawn-ready]\n\nInitial body.\n\n## Active Task\n[active-task]\n\nOther task.\n"
+        td = _setup_tempfile_wiki(
+            home_content,
+            tasks=[
+                {"slug": "spawn-ready", "title": "Spawn Ready Task", "brief": "Initial body.", "status": None},
+                {"slug": "active-task", "title": "Active Task", "brief": "Other task.", "status": None},
+            ],
         )
-        # Find the entry region for spawn-ready (up to ## Active Task)
-        next_heading_pos = result.index("## Active Task")
-        entry_text = result[:next_heading_pos]
-        entry_lines = entry_text.rstrip("\n").splitlines()
-        last_non_blank = next(line for line in reversed(entry_lines) if line.strip())
-        assert last_non_blank == "- Sources: #99 — example", (
-            f"Last non-blank line of entry body: {last_non_blank!r}"
-        )
-        # Substring from next heading onward must be unchanged
-        orig_next_heading_pos = _HOME_MD_FIXTURE.index("## Active Task")
-        assert result[next_heading_pos:] == _HOME_MD_FIXTURE[orig_next_heading_pos:], (
-            "Substring from next heading onward was mutated"
-        )
-        print("PASS: append_to_body inserts before next heading with trailing blank line")
-    except (AssertionError, Exception) as exc:
-        print(f"FAIL: append_to_body inserts before next heading: {exc}")
-        return 1
-
-    # --- append_to_body EOF target ---
-    try:
-        result = _tasks_md.append_to_body(
-            _HOME_MD_FIXTURE, "done-task", "- Sources: #100 — final"
-        )
-        bullet = "- Sources: #100 — final"
-        bullet_pos = result.rindex(bullet)
-        after_bullet = result[bullet_pos + len(bullet):]
-        assert after_bullet == "\n", (
-            f"Expected single trailing newline after bullet, got {after_bullet!r}"
-        )
-        assert "## " not in after_bullet
-        print("PASS: append_to_body EOF target lands above single trailing newline")
-    except (AssertionError, Exception) as exc:
-        print(f"FAIL: append_to_body EOF target: {exc}")
-        return 1
-
-    # --- append_to_body empty body ---
-    try:
-        empty_fixture = "## Empty Task\n[empty-task]\n"
-        result = _tasks_md.append_to_body(empty_fixture, "empty-task", "- note")
-        expected = "## Empty Task\n[empty-task]\n\n- note\n"
-        assert result == expected, (
-            f"Empty-body result mismatch:\n  got:      {result!r}\n  expected: {expected!r}"
-        )
-        print("PASS: append_to_body empty body inserts blank line before bullet")
-    except (AssertionError, Exception) as exc:
-        print(f"FAIL: append_to_body empty body: {exc}")
-        return 1
-
-    # --- append_to_body missing slug ---
-    try:
-        raised = False
+        wiki_path = Path(td.name)
         try:
-            _tasks_md.append_to_body(_HOME_MD_FIXTURE, "no-such-slug", "- note")
-        except ValueError as exc:
-            raised = True
-            assert "'no-such-slug'" in str(exc), (
-                f"Expected slug in repr form in error message, got: {exc}"
+            # Append new line to spawn-ready task
+            task = wiki.get_task(wiki_path, "spawn-ready")
+            wiki.upsert_task(wiki_path, slug="spawn-ready", brief=task["brief"] + "\n- Sources: #99 -- example")
+            # Verify the append
+            updated = wiki.get_task(wiki_path, "spawn-ready")
+            assert "- Sources: #99 -- example" in updated["brief"], (
+                f"Expected appended line in brief, got: {updated['brief']!r}"
             )
-        if not raised:
-            raise AssertionError("Expected ValueError for missing slug; none was raised")
-        print("PASS: append_to_body missing slug raises ValueError with slug in repr form")
+            print("PASS: append to task body via daemon round-trip")
+        finally:
+            td.cleanup()
     except (AssertionError, Exception) as exc:
-        print(f"FAIL: append_to_body missing slug: {exc}")
+        print(f"FAIL: append to task body via daemon round-trip: {exc}")
+        return 1
+
+    # --- append to EOF task ---
+    try:
+        home_content = "# Tasks\n\n## Done Task\n[done-task]\n\nBody.\n"
+        td = _setup_tempfile_wiki(
+            home_content,
+            tasks=[
+                {"slug": "done-task", "title": "Done Task", "brief": "Body.", "status": "done"},
+            ],
+        )
+        wiki_path = Path(td.name)
+        try:
+            task = wiki.get_task(wiki_path, "done-task")
+            wiki.upsert_task(wiki_path, slug="done-task", brief=task["brief"] + "\n- Sources: #100 -- final")
+            updated = wiki.get_task(wiki_path, "done-task")
+            assert "- Sources: #100 -- final" in updated["brief"], (
+                f"Expected appended line in brief, got: {updated['brief']!r}"
+            )
+            print("PASS: append to EOF task")
+        finally:
+            td.cleanup()
+    except (AssertionError, Exception) as exc:
+        print(f"FAIL: append to EOF task: {exc}")
+        return 1
+
+    # --- append to empty task body ---
+    try:
+        home_content = "# Tasks\n\n## Empty Task\n[empty-task]\n"
+        td = _setup_tempfile_wiki(
+            home_content,
+            tasks=[
+                {"slug": "empty-task", "title": "Empty Task", "brief": "", "status": None},
+            ],
+        )
+        wiki_path = Path(td.name)
+        try:
+            task = wiki.get_task(wiki_path, "empty-task")
+            wiki.upsert_task(wiki_path, slug="empty-task", brief=task["brief"] + "\n- note" if task["brief"] else "- note")
+            updated = wiki.get_task(wiki_path, "empty-task")
+            assert updated["brief"] == "- note", (
+                f"Expected brief to be '- note', got: {updated['brief']!r}"
+            )
+            print("PASS: append to empty task body")
+        finally:
+            td.cleanup()
+    except (AssertionError, Exception) as exc:
+        print(f"FAIL: append to empty task body: {exc}")
         return 1
 
     # -----------------------------------------------------------------------
@@ -224,7 +248,12 @@ def main() -> int:
     # --- locked phase active refused ---
     try:
         home_content = "# Tasks\n\n## Locked Task\n[locked-task] [active]\n\nBody.\n"
-        td = _setup_tempfile_wiki(home_content)
+        td = _setup_tempfile_wiki(
+            home_content,
+            tasks=[
+                {"slug": "locked-task", "title": "Locked Task", "brief": "Body.", "status": "active"},
+            ],
+        )
         wiki_path = Path(td.name)
         orig_rg, orig_rwp = _patch_resolve_paths(wiki_path)
         try:
@@ -249,7 +278,12 @@ def main() -> int:
     # --- locked phase ready-to-merge refused ---
     try:
         home_content = "# Tasks\n\n## Locked Task\n[locked-task] [ready-to-merge]\n\nBody.\n"
-        td = _setup_tempfile_wiki(home_content)
+        td = _setup_tempfile_wiki(
+            home_content,
+            tasks=[
+                {"slug": "locked-task", "title": "Locked Task", "brief": "Body.", "status": "ready-to-merge"},
+            ],
+        )
         wiki_path = Path(td.name)
         orig_rg, orig_rwp = _patch_resolve_paths(wiki_path)
         try:
@@ -274,7 +308,12 @@ def main() -> int:
     # --- locked phase pr-pending refused ---
     try:
         home_content = "# Tasks\n\n## Locked Task\n[locked-task] [pr-pending]\n\nBody.\n"
-        td = _setup_tempfile_wiki(home_content)
+        td = _setup_tempfile_wiki(
+            home_content,
+            tasks=[
+                {"slug": "locked-task", "title": "Locked Task", "brief": "Body.", "status": "pr-pending"},
+            ],
+        )
         wiki_path = Path(td.name)
         orig_rg, orig_rwp = _patch_resolve_paths(wiki_path)
         try:
@@ -299,7 +338,12 @@ def main() -> int:
     # --- unmarked target accepts scope fold ---
     try:
         home_content = "# Tasks\n\n## My Task\n[my-task]\n\nTask body.\n"
-        td = _setup_tempfile_wiki(home_content)
+        td = _setup_tempfile_wiki(
+            home_content,
+            tasks=[
+                {"slug": "my-task", "title": "My Task", "brief": "Task body.", "status": None},
+            ],
+        )
         wiki_path = Path(td.name)
         orig_rg, orig_rwp = _patch_resolve_paths(wiki_path)
         try:
@@ -323,7 +367,12 @@ def main() -> int:
     # --- spawn-ready target accepts scope fold ---
     try:
         home_content = "# Tasks\n\n## Ready Task\n[ready-task] [s]\n\nBody.\n"
-        td = _setup_tempfile_wiki(home_content)
+        td = _setup_tempfile_wiki(
+            home_content,
+            tasks=[
+                {"slug": "ready-task", "title": "Ready Task", "brief": "Body.", "status": None},
+            ],
+        )
         wiki_path = Path(td.name)
         orig_rg, orig_rwp = _patch_resolve_paths(wiki_path)
         try:
@@ -345,7 +394,12 @@ def main() -> int:
     # --- done phase accepts fold ---
     try:
         home_content = "# Tasks\n\n## Done Task\n[done-task] [done]\n\nBody.\n"
-        td = _setup_tempfile_wiki(home_content)
+        td = _setup_tempfile_wiki(
+            home_content,
+            tasks=[
+                {"slug": "done-task", "title": "Done Task", "brief": "Body.", "status": "done"},
+            ],
+        )
         wiki_path = Path(td.name)
         orig_rg, orig_rwp = _patch_resolve_paths(wiki_path)
         try:
@@ -365,7 +419,12 @@ def main() -> int:
     # --- abandoned phase accepts fold ---
     try:
         home_content = "# Tasks\n\n## Abandoned Task\n[abandoned-task] [abandoned]\n\nBody.\n"
-        td = _setup_tempfile_wiki(home_content)
+        td = _setup_tempfile_wiki(
+            home_content,
+            tasks=[
+                {"slug": "abandoned-task", "title": "Abandoned Task", "brief": "Body.", "status": "abandoned"},
+            ],
+        )
         wiki_path = Path(td.name)
         orig_rg, orig_rwp = _patch_resolve_paths(wiki_path)
         try:
@@ -385,7 +444,12 @@ def main() -> int:
     # --- missing slug errors ---
     try:
         home_content = "# Tasks\n\n## Some Task\n[some-task]\n\nBody.\n"
-        td = _setup_tempfile_wiki(home_content)
+        td = _setup_tempfile_wiki(
+            home_content,
+            tasks=[
+                {"slug": "some-task", "title": "Some Task", "brief": "Body.", "status": None},
+            ],
+        )
         wiki_path = Path(td.name)
         orig_rg, orig_rwp = _patch_resolve_paths(wiki_path)
         try:
@@ -431,7 +495,12 @@ def main() -> int:
     # --- closed GH issue refused ---
     try:
         home_content = "# Tasks\n\n## My Task\n[my-task]\n\nTask body.\n"
-        td = _setup_tempfile_wiki(home_content)
+        td = _setup_tempfile_wiki(
+            home_content,
+            tasks=[
+                {"slug": "my-task", "title": "My Task", "brief": "Task body.", "status": None},
+            ],
+        )
         wiki_path = Path(td.name)
         orig_rg, orig_rwp = _patch_resolve_paths(wiki_path)
         close_fn, captured_calls = _make_fake_close_with_comment()
@@ -465,7 +534,12 @@ def main() -> int:
     try:
         target = "my-task"
         home_content = "# Tasks\n\n## My Task\n[my-task]\n\nTask body.\n"
-        td = _setup_tempfile_wiki(home_content)
+        td = _setup_tempfile_wiki(
+            home_content,
+            tasks=[
+                {"slug": "my-task", "title": "My Task", "brief": "Task body.", "status": None},
+            ],
+        )
         wiki_path = Path(td.name)
         orig_rg, orig_rwp = _patch_resolve_paths(wiki_path)
         close_fn, captured_calls = _make_fake_close_with_comment()
@@ -498,34 +572,33 @@ def main() -> int:
     # --- wiki commit failure skips GH close ---
     try:
         home_content = "# Tasks\n\n## My Task\n[my-task]\n\nTask body.\n"
-        td = _setup_tempfile_wiki(home_content)
+        td = _setup_tempfile_wiki(
+            home_content,
+            tasks=[
+                {"slug": "my-task", "title": "My Task", "brief": "Task body.", "status": None},
+            ],
+        )
         wiki_path = Path(td.name)
         orig_rg, orig_rwp = _patch_resolve_paths(wiki_path)
         close_fn, captured_calls = _make_fake_close_with_comment()
         orig_isatty = _suppress_stdin_isatty()
-        orig_wcp = _wiki.write_commit_push
-
-        def _failing_write(*a, **kw):
-            raise RuntimeError("simulated push failure")
-
-        _wiki.write_commit_push = _failing_write
         try:
             raised = False
-            try:
-                millpy_fold.main(
-                    ["my-task", "--issue", "42"],
-                    _fetch_one=_make_fake_fetch_one(state="OPEN"),
-                    _close_with_comment=close_fn,
-                )
-            except (SystemExit, RuntimeError):
-                raised = True
-            assert raised, "Expected exception from wiki commit failure"
+            with patch.object(millpy_fold.wiki, "upsert_task", side_effect=WikiPushError("simulated push failure")):
+                try:
+                    millpy_fold.main(
+                        ["my-task", "--issue", "42"],
+                        _fetch_one=_make_fake_fetch_one(state="OPEN"),
+                        _close_with_comment=close_fn,
+                    )
+                except (SystemExit, WikiPushError):
+                    raised = True
+            assert raised, "Expected exception (SystemExit or WikiPushError) from wiki push failure"
             assert captured_calls == [], (
-                f"Expected no close calls after commit failure, got {captured_calls}"
+                f"Expected no close calls after push failure, got {captured_calls}"
             )
             print("PASS: wiki commit failure skips GH close")
         finally:
-            _wiki.write_commit_push = orig_wcp
             millpy_fold.resolve_git_root = orig_rg
             millpy_fold.resolve_wiki_path = orig_rwp
             sys.stdin.isatty = orig_isatty

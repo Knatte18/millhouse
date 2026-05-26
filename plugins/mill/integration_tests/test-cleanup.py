@@ -116,8 +116,8 @@ def _setup_fixture(container: Path) -> tuple[Path, Path, Path]:
     (wiki / "Home.md").write_text(home_md, encoding="utf-8")
     (wiki / "_Sidebar.md").write_text("### Navigation\n\n- [Home](Home)\n", encoding="utf-8")
 
-    # wiki/config.yaml
-    (wiki / "config.yaml").write_text(
+    # mill-config.yaml at hub root
+    (hub / "mill-config.yaml").write_text(
         "junctions:\n"
         "  .millhouse/wiki: <WIKI_PATH>\n"
         "  .active: <WIKI_PATH>/active/<SLUG>/\n",

@@ -45,7 +45,7 @@ batches:
     name: <batch-name>
     file: NN-<batch-slug>.md
     depends-on: []
-    verify: <command or null>
+    verify: PYTHONPATH= <command> or null
 ```
 
 ## Shared Decisions

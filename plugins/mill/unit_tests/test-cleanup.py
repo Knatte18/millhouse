@@ -25,7 +25,6 @@ apply_plan = mod.apply_plan
 _resolve_inplace_mode = mod._resolve_inplace_mode
 
 import _status  # noqa: E402
-import _tasks_md  # noqa: E402
 
 
 def _make_status_md(phase: str, parent: str = "main") -> str:
@@ -45,8 +44,8 @@ def _make_status_md(phase: str, parent: str = "main") -> str:
     )
 
 
-def _make_task(slug: str, phase_marker: str | None) -> _tasks_md.Task:
-    return _tasks_md.Task(slug=slug, title="test", phase=phase_marker, has_proposal=False, heading_line_no=1)
+def _make_task(slug: str, phase_marker: str | None) -> dict:
+    return {"slug": slug, "title": "test", "status": phase_marker, "has_proposal": False, "id": 1}
 
 
 def _mock_branch_run(branch: str):
@@ -386,19 +385,17 @@ def main() -> int:
             with patch("mill_cleanup._subprocess_util.run", side_effect=_fake_run):
                 with patch("mill_cleanup._resolve_inplace_mode", return_value=("inplace", "impl/my-task")):
                     with patch("mill_cleanup._junction.remove") as mock_junction_remove:
-                        with patch("mill_cleanup._wiki.write_commit_push"):
-                            with patch("mill_cleanup._sidebar.regenerate"):
-                                with patch("mill_cleanup._paths.resolve_container_path", return_value=tmp / "container"):
-                                    wiki_path = tmp / "wiki"
-                                    wiki_path.mkdir(exist_ok=True)
-                                    (wiki_path / "Home.md").write_text("", encoding="utf-8")
-                                    plan = CleanupPlan(
-                                        to_remove_done=[record],
-                                        to_remove_abandoned=[],
-                                        to_reset_home=[],
-                                        to_report=[],
-                                    )
-                                    apply_plan(plan, wiki_path, hub_root, {}, cfg={"paths": {"status_md": "_mill/status.md"}})
+                        with patch("mill_cleanup._paths.resolve_container_path", return_value=tmp / "container"):
+                            wiki_path = tmp / "wiki"
+                            wiki_path.mkdir(exist_ok=True)
+                            (wiki_path / "Home.md").write_text("", encoding="utf-8")
+                            plan = CleanupPlan(
+                                to_remove_done=[record],
+                                to_remove_abandoned=[],
+                                to_reset_home=[],
+                                to_report=[],
+                            )
+                            apply_plan(plan, wiki_path, hub_root, {}, cfg={"paths": {"status_md": "_mill/status.md"}})
 
             worktree_remove_calls = [
                 c for c in run_calls if "worktree" in c and "remove" in c
@@ -455,19 +452,17 @@ def main() -> int:
                 with patch("mill_cleanup._worktree.remove"):
                     with patch("mill_cleanup._subprocess_util.run", return_value=MagicMock(returncode=0, stdout="", stderr="")):
                         with patch("mill_cleanup._junction.remove", side_effect=_fake_junction_remove):
-                            with patch("mill_cleanup._wiki.write_commit_push"):
-                                with patch("mill_cleanup._sidebar.regenerate"):
-                                    with patch("mill_cleanup._paths.resolve_container_path", return_value=container):
-                                        wiki_path = tmp / "wiki"
-                                        wiki_path.mkdir(exist_ok=True)
-                                        (wiki_path / "Home.md").write_text("", encoding="utf-8")
-                                        plan = CleanupPlan(
-                                            to_remove_done=[record],
-                                            to_remove_abandoned=[],
-                                            to_reset_home=[],
-                                            to_report=[],
-                                        )
-                                        apply_plan(plan, wiki_path, hub_root, {}, cfg={"paths": {"status_md": "_mill/status.md"}})
+                            with patch("mill_cleanup._paths.resolve_container_path", return_value=container):
+                                wiki_path = tmp / "wiki"
+                                wiki_path.mkdir(exist_ok=True)
+                                (wiki_path / "Home.md").write_text("", encoding="utf-8")
+                                plan = CleanupPlan(
+                                    to_remove_done=[record],
+                                    to_remove_abandoned=[],
+                                    to_reset_home=[],
+                                    to_report=[],
+                                )
+                                apply_plan(plan, wiki_path, hub_root, {}, cfg={"paths": {"status_md": "_mill/status.md"}})
 
             portal_removal = [p for p in junction_remove_calls if "portals" in str(p) and "my-task" in str(p)]
             assert len(portal_removal) == 1, (
@@ -497,19 +492,17 @@ def main() -> int:
                 with patch("mill_cleanup._worktree.remove"):
                     with patch("mill_cleanup._subprocess_util.run", return_value=MagicMock(returncode=0, stdout="", stderr="")):
                         with patch("mill_cleanup._junction.remove"):
-                            with patch("mill_cleanup._wiki.write_commit_push"):
-                                with patch("mill_cleanup._sidebar.regenerate"):
-                                    with patch("mill_cleanup._paths.resolve_container_path", return_value=tmp):
-                                        wiki_path = tmp / "wiki"
-                                        wiki_path.mkdir(exist_ok=True)
-                                        (wiki_path / "Home.md").write_text("", encoding="utf-8")
-                                        plan = CleanupPlan(
-                                            to_remove_done=[record],
-                                            to_remove_abandoned=[],
-                                            to_reset_home=[],
-                                            to_report=[],
-                                        )
-                                        apply_plan(plan, wiki_path, hub_root, {}, cfg={"paths": {"status_md": "_mill/status.md"}})
+                            with patch("mill_cleanup._paths.resolve_container_path", return_value=tmp):
+                                wiki_path = tmp / "wiki"
+                                wiki_path.mkdir(exist_ok=True)
+                                (wiki_path / "Home.md").write_text("", encoding="utf-8")
+                                plan = CleanupPlan(
+                                    to_remove_done=[record],
+                                    to_remove_abandoned=[],
+                                    to_reset_home=[],
+                                    to_report=[],
+                                )
+                                apply_plan(plan, wiki_path, hub_root, {}, cfg={"paths": {"status_md": "_mill/status.md"}})
 
             print("PASS apply_plan — fresh layout: apply succeeds, worktree handled by _worktree.remove")
 
@@ -565,9 +558,9 @@ def main() -> int:
                 patch("mill_cleanup._marker.slug_from_branch", return_value="my-task"),
                 patch("mill_cleanup._inplace.prompt_stale_worktree", return_value="inplace") as mock_prompt,
                 patch("mill_cleanup._junction.remove") as mock_junction_remove2,
-                patch("mill_cleanup._wiki.write_commit_push"),
-                patch("mill_cleanup._sidebar.regenerate"),
                 patch("mill_cleanup._paths.resolve_container_path", return_value=tmp / "container"),
+                patch("mill_cleanup._paths.resolve_main_worktree_root", return_value=hub_root),
+                patch("mill_cleanup.wiki.set_phase"),
             ):
                 apply_plan(plan_stale, wiki_path, hub_root, {}, cfg={"paths": {"status_md": "_mill/status.md"}})
 
@@ -768,6 +761,20 @@ def main() -> int:
             def _fake_remove_safe_18a(path, **kwargs):
                 remove_safe_calls_18a.append(path)
 
+            def _fake_set_phase_18a(wiki_path, slug, phase):
+                # Mock that updates Home.md to simulate wiki.set_phase behavior for testing
+                home_path = wiki_path / "Home.md"
+                if home_path.exists():
+                    content = home_path.read_text("utf-8")
+                    # Replace [slug] phase marker with new phase
+                    import re
+                    content = re.sub(
+                        rf"\[{re.escape(slug)}\](\s*\[[^\]]+\])?",
+                        f"[{slug}]" + (f" [{phase}]" if phase else ""),
+                        content,
+                    )
+                    home_path.write_text(content, "utf-8")
+
             plan_pr_merged = CleanupPlan(
                 to_remove_done=[],
                 to_remove_abandoned=[],
@@ -781,9 +788,8 @@ def main() -> int:
                 patch("mill_cleanup._resolve_inplace_mode", return_value=("worktree", "")),
                 patch("mill_cleanup._worktree.remove_safe", side_effect=_fake_remove_safe_18a),
                 patch("mill_cleanup._junction.remove"),
-                patch("mill_cleanup._wiki.write_commit_push"),
-                patch("mill_cleanup._sidebar.regenerate"),
                 patch("mill_cleanup._paths.resolve_container_path", return_value=tmp / "container"),
+                patch("mill_cleanup.wiki.set_phase", side_effect=_fake_set_phase_18a),
             ):
                 apply_plan(plan_pr_merged, wiki_path_pr, hub_root_pr, {}, cfg={"paths": {"status_md": "_mill/status.md"}})
 
@@ -795,8 +801,7 @@ def main() -> int:
                 f"Expected a git tag create call, got run_calls: {run_calls_18a}"
             )
             home_text_after = home_md_pr.read_text("utf-8")
-            done_tasks = [t for t in _tasks_md.parse(home_text_after) if t.slug == "pr-slug" and t.phase == "done"]
-            assert len(done_tasks) == 1, (
+            assert "[pr-slug] [done]" in home_text_after, (
                 f"Expected pr-slug to be [done] in Home.md, got: {home_text_after!r}"
             )
             assert any(c == wt_path_pr for c in remove_safe_calls_18a), (
@@ -855,8 +860,6 @@ def main() -> int:
                 patch("mill_cleanup._subprocess_util.run", side_effect=_mock_run_18b),
                 patch("mill_cleanup._worktree.remove_safe", side_effect=_fake_remove_safe_18b),
                 patch("mill_cleanup._junction.remove"),
-                patch("mill_cleanup._wiki.write_commit_push"),
-                patch("mill_cleanup._sidebar.regenerate"),
                 patch("mill_cleanup._paths.resolve_container_path", return_value=tmp / "container"),
             ):
                 apply_plan(plan_pr_open, wiki_path_po, hub_root_po, {}, cfg={"paths": {"status_md": "_mill/status.md"}})
@@ -864,8 +867,7 @@ def main() -> int:
             tag_calls_18b = [c for c in run_calls_18b if "tag" in c]
             assert tag_calls_18b == [], f"Expected no tag calls for OPEN, got: {tag_calls_18b}"
             home_text_po = home_md_po.read_text("utf-8")
-            pr_tasks_po = [t for t in _tasks_md.parse(home_text_po) if t.slug == "pr-slug"]
-            assert len(pr_tasks_po) == 1 and pr_tasks_po[0].phase == "pr-pending", (
+            assert "[pr-slug] [pr-pending]" in home_text_po, (
                 f"Expected pr-slug still [pr-pending], got: {home_text_po!r}"
             )
             assert remove_safe_calls_18b == [], (
@@ -925,8 +927,6 @@ def main() -> int:
                 patch("mill_cleanup._subprocess_util.run", side_effect=_mock_run_18c),
                 patch("mill_cleanup._worktree.remove_safe", side_effect=_fake_remove_safe_18c),
                 patch("mill_cleanup._junction.remove"),
-                patch("mill_cleanup._wiki.write_commit_push"),
-                patch("mill_cleanup._sidebar.regenerate"),
                 patch("mill_cleanup._paths.resolve_container_path", return_value=tmp / "container"),
             ):
                 with contextlib.redirect_stderr(stderr_18c):
@@ -999,8 +999,6 @@ def main() -> int:
                 patch("mill_cleanup._subprocess_util.run", side_effect=_mock_run_18d),
                 patch("mill_cleanup._worktree.remove_safe", side_effect=_fake_remove_safe_18d),
                 patch("mill_cleanup._junction.remove"),
-                patch("mill_cleanup._wiki.write_commit_push"),
-                patch("mill_cleanup._sidebar.regenerate"),
                 patch("mill_cleanup._paths.resolve_container_path", return_value=tmp / "container"),
             ):
                 with contextlib.redirect_stderr(stderr_18d):
@@ -1012,8 +1010,7 @@ def main() -> int:
                 f"Expected no remove_safe calls on gh failure, got: {remove_safe_calls_18d}"
             )
             home_text_pf = home_md_pf.read_text("utf-8")
-            pr_tasks_pf = [t for t in _tasks_md.parse(home_text_pf) if t.slug == "pr-slug"]
-            assert len(pr_tasks_pf) == 1 and pr_tasks_pf[0].phase == "pr-pending", (
+            assert "[pr-slug] [pr-pending]" in home_text_pf, (
                 f"Expected pr-slug still [pr-pending] after gh failure, got: {home_text_pf!r}"
             )
             stderr_text_18d = stderr_18d.getvalue()

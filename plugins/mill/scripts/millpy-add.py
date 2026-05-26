@@ -33,18 +33,10 @@ import re
 import sys
 from pathlib import Path
 
-import _sidebar
-import _wiki
+from wiki import _client as wiki
 from _paths import resolve_git_root, resolve_wiki_path
 
 _SLUG_RE = re.compile(r"^[a-z][a-z0-9-]*$")
-
-# Matches both heading forms (slug on line after title) — same pattern as
-# _sidebar, kept in sync by design. Used only for duplicate-slug detection.
-_TASK_HEADING_RE = re.compile(
-    r"^##\s+.+?\n\[\[?([a-z][a-z0-9-]*)\]?\](?:\([^)]+\))?[ \t]*$",
-    re.MULTILINE,
-)
 
 
 def _validate_slug(slug: str) -> None:
@@ -54,42 +46,6 @@ def _validate_slug(slug: str) -> None:
             f"Invalid slug {slug!r}: must match [a-z][a-z0-9-]* "
             "(kebab-case, lowercase, digits and hyphens)."
         )
-
-
-def _slug_already_present(home_text: str, slug: str) -> bool:
-    """True if Home.md already contains a task heading for ``slug``."""
-    return any(match.group(1) == slug for match in _TASK_HEADING_RE.finditer(home_text))
-
-
-def _render_task_section(
-    slug: str,
-    title: str,
-    summary: str,
-    has_proposal: bool,
-) -> str:
-    """
-    Build the markdown block that gets appended to Home.md.
-
-    Heading is two lines — title then slug — so the slug is visible and
-    scannable without crowding the title:
-
-        ## <title>
-        [<slug>]                           # plain (no proposal)
-
-        ## <title>
-        [[<slug>]](proposal-<slug>)        # linked (proposal exists)
-
-    A leading blank line separates the new section from whatever preceded it.
-    """
-    if has_proposal:
-        slug_line = f"[[{slug}]](proposal-{slug}.md)"
-    else:
-        slug_line = f"[{slug}]"
-
-    body = summary.strip()
-    if body:
-        return f"\n## {title}\n{slug_line}\n\n{body}\n"
-    return f"\n## {title}\n{slug_line}\n"
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -162,42 +118,24 @@ def main(argv: list[str] | None = None) -> int:
             f"Proposal file {proposal_path} already exists; refusing to overwrite."
         )
 
-    # Acquire the shared wiki lock before any read or write. Home.md and
-    # _Sidebar.md are both multi-writer shared resources per `ref-formats.md`
-    # so the entire read-append-regenerate-commit sequence runs under one
-    # lock acquisition to avoid another writer interleaving.
-    with _wiki.wiki_lock(wiki_path, args.slug):
-        home_text = home_path.read_text(encoding="utf-8")
-        if _slug_already_present(home_text, args.slug):
-            raise SystemExit(f"Slug {args.slug!r} already present in Home.md.")
+    # Check for duplicate slug before upserting
+    existing = wiki.get_task(wiki_path, args.slug)
+    if existing is not None:
+        raise SystemExit(f"Slug {args.slug!r} already present in Home.md.")
 
-        # Ensure trailing newline so the appended section starts on its own
-        # line regardless of how the previous editor left the file.
-        if not home_text.endswith("\n"):
-            home_text += "\n"
-        new_section = _render_task_section(
-            args.slug, args.title, args.summary, has_proposal
-        )
-        home_path.write_text(home_text + new_section, encoding="utf-8")
+    # Normalize proposal body: strip trailing newline and re-add exactly one
+    body = None
+    if has_proposal:
+        body = proposal_body.rstrip("\n") + "\n"
 
-        changed_paths = ["Home.md", "_Sidebar.md"]
-        if has_proposal:
-            # Strip a single trailing newline if present, then re-add exactly
-            # one, so we do not accumulate blanks when the caller already
-            # terminated the string with ``\n``.
-            body = proposal_body.rstrip("\n") + "\n"
-            proposal_path.write_text(body, encoding="utf-8")
-            changed_paths.append(proposal_path.name)
-
-        # Regenerate _Sidebar.md *after* Home.md is written so the sidebar
-        # reflects the new task. _sidebar scans the wiki root for
-        # proposal-*.md files itself, so writing the proposal above is enough
-        # for the heading to render as a link.
-        _sidebar.regenerate(wiki_path)
-
-        _wiki.write_commit_push(
-            wiki_path, changed_paths, f"add task: {args.slug}", slug=args.slug
-        )
+    # Upsert the task. The daemon commits and renders automatically.
+    wiki.upsert_task(
+        wiki_path,
+        args.slug,
+        title=args.title,
+        brief=args.summary,
+        body=body,
+    )
 
     print(f"Added task {args.slug!r} to {home_path}")
     return 0

@@ -1,0 +1,100 @@
+from __future__ import annotations
+
+
+def render(tasks: list[dict]) -> dict[str, str]:
+    result: dict[str, str] = {}
+
+    home_lines: list[str] = ["# Tasks", ""]
+    sidebar_groups: list[list[str]] = []
+
+    # Bucket tasks: done tasks go to a separate "done" pseudo-group regardless of
+    # their original layer; everything else is bucketed by `group` (None = unspecified).
+    tasks_by_bucket: dict[str | None, list[dict]] = {}
+    for task in tasks:
+        bucket = "__done__" if task.get("status") == "done" else task.get("group")
+        if bucket not in tasks_by_bucket:
+            tasks_by_bucket[bucket] = []
+        tasks_by_bucket[bucket].append(task)
+
+    # Render order: letter layers (A-Z) first, then Unspecified, then Done.
+    letter_buckets = sorted(
+        b for b in tasks_by_bucket if b is not None and b != "__done__"
+    )
+    bucket_order: list[str | None] = list(letter_buckets)
+    if None in tasks_by_bucket:
+        bucket_order.append(None)
+    if "__done__" in tasks_by_bucket:
+        bucket_order.append("__done__")
+
+    for bucket in bucket_order:
+        bucket_tasks = tasks_by_bucket[bucket]
+        # Sort tasks within bucket by id ascending for deterministic output
+        bucket_tasks = sorted(bucket_tasks, key=lambda t: t.get("id", 0))
+
+        if bucket == "__done__":
+            home_lines.append("# Done")
+            home_lines.append("")
+        elif bucket is None:
+            home_lines.append("# Unspecified")
+            home_lines.append("")
+        else:
+            home_lines.append(f"# Layer {bucket}")
+            home_lines.append("")
+
+        group_sidebar: list[str] = []
+        for task in bucket_tasks:
+            title = task.get("title", "")
+            slug = task.get("slug", "")
+            brief = task.get("brief", "")
+            status = task.get("status")
+            body = task.get("body", "")
+            task_id = task.get("id")
+            task_group = task.get("group")
+
+            # Drop [s] status - treat as None
+            if status == "s":
+                status = None
+
+            # Format: "**#<zero-padded-id>:** <title> [<group>]". Group uses the
+            # task's own group, not the bucket, so done-tasks keep their origin marker.
+            id_prefix = f"**#{task_id:03d}:**" if task_id is not None else ""
+            group_suffix = f"[{task_group}]" if task_group is not None else ""
+            display_title = " ".join(p for p in (id_prefix, title, group_suffix) if p)
+
+            home_lines.append(f"## {display_title}")
+
+            if body:
+                slug_line = f"[{slug}](proposal-{slug}.md)"
+            else:
+                slug_line = f"[{slug}]"
+            if status in ("active", "done", "pr-pending", "ready-to-merge", "abandoned"):
+                slug_line += f" [{status}]"
+            home_lines.append(slug_line)
+
+            if brief:
+                home_lines.append("")
+                home_lines.append(brief)
+
+            home_lines.append("")
+
+            if body:
+                group_sidebar.append(f"- [{display_title}](proposal-{slug}.md)")
+                result[f"proposal-{slug}.md"] = body
+            else:
+                group_sidebar.append(f"- {display_title}")
+
+        sidebar_groups.append(group_sidebar)
+
+    home_content = "\n".join(home_lines)
+    result["Home.md"] = home_content
+
+    sidebar_lines: list[str] = []
+    for i, group_sidebar in enumerate(sidebar_groups):
+        sidebar_lines.extend(group_sidebar)
+        if i < len(sidebar_groups) - 1:
+            sidebar_lines.append("")
+
+    sidebar_content = "\n".join(sidebar_lines)
+    result["_Sidebar.md"] = sidebar_content
+
+    return result

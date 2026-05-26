@@ -25,21 +25,21 @@ paths:
 roles:
   discussion-review:
     holistic:
-      rounds: 4
+      rounds: 5
       reviewer: sonnetmax_tool
   plan-review:
     batch:
       rounds: 0
       reviewer: null
     holistic:
-      rounds: 4
+      rounds: 7
       reviewer: sonnetmax
   code-review:
     batch:
       rounds: 0
       reviewer: null
     holistic:
-      rounds: 4
+      rounds: 5
       reviewer: sonnethigh
       fallback_reviewer: null
       fallback_on:

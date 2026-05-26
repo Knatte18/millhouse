@@ -39,7 +39,7 @@ sys.path.insert(0, str(SCRIPTS))
 
 import _safe_rmtree  # noqa: E402
 import _spawn_core  # noqa: E402
-import _tasks_md  # noqa: E402
+from wiki._parse import parse_home_md  # noqa: E402
 
 
 def _run(cmd: list[str], *, cwd: Path, check: bool = True) -> subprocess.CompletedProcess:
@@ -203,7 +203,7 @@ def main() -> int:
         )
 
         # discover_active_worktrees finds the new worktree by branch slug.
-        home_tasks = _tasks_md.parse((wiki / "Home.md").read_text(encoding="utf-8"))
+        home_tasks = parse_home_md((wiki / "Home.md").read_text(encoding="utf-8"))
         found = _spawn_core.discover_active_worktrees(worktrees_dir, home_tasks, "test/")
         _assert(
             any(s == "demo-task" for _, s, _ in found),

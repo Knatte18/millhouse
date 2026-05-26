@@ -19,7 +19,7 @@ import sys
 from pathlib import Path
 
 import _pygit2_util
-import _tasks_md
+from wiki import _client as wiki
 
 
 class MarkerError(RuntimeError):
@@ -49,22 +49,21 @@ def slug_from_branch(git_root: Path, wiki_path: Path, cfg: dict) -> str:
 
     prefix = cfg.get("spawn", {}).get("branch_prefix", "")
 
-    home_text = (wiki_path / "Home.md").read_text(encoding="utf-8")
-    tasks = _tasks_md.parse(home_text)
+    tasks = wiki.list_tasks_brief(wiki_path)
 
     if prefix and not branch.startswith(prefix):
-        task = next((t for t in tasks if t.slug == branch), None)
+        task = next((t for t in tasks if t["slug"] == branch), None)
         if task is not None:
             print(f"[_marker] warning: branch {branch!r} does not match prefix {prefix!r} but slug exists in Home.md; accepting", file=sys.stderr)
             return branch
         raise MarkerError(f"branch {branch!r} does not start with configured prefix {prefix!r} and is not a known slug")
     slug = branch.removeprefix(prefix)
 
-    task = next((t for t in tasks if t.slug == slug), None)
+    task = next((t for t in tasks if t["slug"] == slug), None)
     if task is None:
         if "/" in branch and not prefix:
             stripped_slug = branch.split("/", 1)[1]
-            task = next((t for t in tasks if t.slug == stripped_slug), None)
+            task = next((t for t in tasks if t["slug"] == stripped_slug), None)
             if task is not None:
                 return stripped_slug
             raise MarkerError(f"branch slugs {slug!r} and {stripped_slug!r} not found in Home.md")
@@ -93,8 +92,7 @@ def task_data(git_root: Path, wiki_path: Path, cfg: dict) -> dict:
     except _pygit2_util.GitOpsError as e:
         raise MarkerError(f"could not read branch in {git_root}: {e}") from e
 
-    home_text = (wiki_path / "Home.md").read_text(encoding="utf-8")
-    tasks = _tasks_md.parse(home_text)
-    task = next(t for t in tasks if t.slug == slug)
+    tasks = wiki.list_tasks_brief(wiki_path)
+    task = next(t for t in tasks if t["slug"] == slug)
 
-    return {"slug": slug, "branch": branch, "task_title": task.title}
+    return {"slug": slug, "branch": branch, "task_title": task["title"]}

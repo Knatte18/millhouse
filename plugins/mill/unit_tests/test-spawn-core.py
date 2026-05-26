@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
 
 HUB = Path(__file__).resolve().parent.parent.parent.parent
@@ -22,7 +21,8 @@ from _spawn_core import (  # noqa: E402
     write_hub_active_indicator,
     write_initial_status,
 )
-import _tasks_md  # noqa: E402
+from wiki._parse import parse_home_md  # noqa: E402
+from wiki._client import upsert_task  # noqa: E402
 from _test_helpers import safe_temp_dir  # noqa: E402
 
 
@@ -85,7 +85,7 @@ def _make_wiki(tmp: str, home_text: str) -> Path:
       - ``<tmp>/wiki/`` — working clone with Home.md and _Sidebar.md
         committed and pushed to the bare remote.
 
-    The working clone is returned. ``_wiki.write_commit_push`` can push
+    The working clone is returned. ``wiki._sync.commit_push`` can push
     to the bare remote without a network connection.
     """
     # Bare "remote"
@@ -187,23 +187,15 @@ def _make_git_repo(tmp: str, branch: str = "main") -> Path:
 
 
 def test_pick_task_single_slug_matching_unmarked() -> None:
-    tasks = _tasks_md.parse(_HOME_MD)
+    tasks = parse_home_md(_HOME_MD)
     picked = pick_task_single(tasks, slug="fix-login")
-    if picked.slug != "fix-login":
-        raise AssertionError(f"expected fix-login, got {picked.slug!r}")
+    if picked["slug"] != "fix-login":
+        raise AssertionError(f'expected fix-login, got {picked["slug"]!r}')
     print("PASS: pick_task_single with --slug matching unmarked task")
 
 
-def test_pick_task_single_slug_matching_s() -> None:
-    tasks = _tasks_md.parse(_HOME_MD)
-    picked = pick_task_single(tasks, slug="dark-mode")
-    if picked.slug != "dark-mode":
-        raise AssertionError(f"expected dark-mode, got {picked.slug!r}")
-    print("PASS: pick_task_single with --slug matching [s] task")
-
-
 def test_pick_task_single_slug_already_done_raises() -> None:
-    tasks = _tasks_md.parse(_HOME_MD)
+    tasks = parse_home_md(_HOME_MD)
     try:
         pick_task_single(tasks, slug="old-feature")
     except ValueError:
@@ -213,7 +205,7 @@ def test_pick_task_single_slug_already_done_raises() -> None:
 
 
 def test_pick_task_single_slug_not_found_raises() -> None:
-    tasks = _tasks_md.parse(_HOME_MD)
+    tasks = parse_home_md(_HOME_MD)
     try:
         pick_task_single(tasks, slug="nonexistent-slug")
     except ValueError:
@@ -223,25 +215,12 @@ def test_pick_task_single_slug_not_found_raises() -> None:
 
 
 # ---------------------------------------------------------------------------
-# pick_task_single — fast-path ([s] marker)
-# ---------------------------------------------------------------------------
-
-
-def test_pick_task_single_fast_path_s() -> None:
-    tasks = _tasks_md.parse(_HOME_MD)
-    picked = pick_task_single(tasks)
-    if picked.slug != "dark-mode":
-        raise AssertionError(f"expected dark-mode (only [s] task), got {picked.slug!r}")
-    print("PASS: pick_task_single fast-path returns first [s] task without prompt")
-
-
-# ---------------------------------------------------------------------------
 # pick_task_single — empty backlog
 # ---------------------------------------------------------------------------
 
 
 def test_pick_task_single_empty_backlog_raises() -> None:
-    tasks = _tasks_md.parse(_HOME_MD_EMPTY)
+    tasks = parse_home_md(_HOME_MD_EMPTY)
     try:
         pick_task_single(tasks)
     except BacklogEmpty:
@@ -257,7 +236,7 @@ def test_pick_task_single_empty_backlog_raises() -> None:
 
 def test_pick_task_single_numbered_path() -> None:
     """Inject synthetic stdin so the numbered picker returns task-two."""
-    tasks = _tasks_md.parse(_HOME_MD_UNMARKED_ONLY)
+    tasks = parse_home_md(_HOME_MD_UNMARKED_ONLY)
     import io
     original_stdin = sys.stdin
     sys.stdin = io.StringIO("2\n")
@@ -265,14 +244,14 @@ def test_pick_task_single_numbered_path() -> None:
         picked = pick_task_single(tasks)
     finally:
         sys.stdin = original_stdin
-    if picked.slug != "task-two":
-        raise AssertionError(f"expected task-two, got {picked.slug!r}")
+    if picked["slug"] != "task-two":
+        raise AssertionError(f'expected task-two, got {picked["slug"]!r}')
     print("PASS: pick_task_single numbered-picker path returns chosen task")
 
 
 def test_pick_task_single_numbered_path_invalid_choice() -> None:
     """Out-of-range numbered input causes ValueError (no task selected)."""
-    tasks = _tasks_md.parse(_HOME_MD_UNMARKED_ONLY)
+    tasks = parse_home_md(_HOME_MD_UNMARKED_ONLY)
     import io
     original_stdin = sys.stdin
     sys.stdin = io.StringIO("99\n")
@@ -292,16 +271,18 @@ def test_pick_task_single_numbered_path_invalid_choice() -> None:
 
 
 def test_claim_in_wiki() -> None:
-    with tempfile.TemporaryDirectory() as tmp:
+    with safe_temp_dir() as tmp:
         wiki = _make_wiki(tmp, _HOME_MD_UNMARKED_ONLY)
+        upsert_task(wiki, "task-one", title="Task one")
+        upsert_task(wiki, "task-two", title="Task two")
         claim_in_wiki(wiki, "task-one")
 
         home_text = (wiki / "Home.md").read_text(encoding="utf-8")
         if "[active]" not in home_text:
             raise AssertionError("Home.md should contain [active] after claim")
-        tasks = _tasks_md.parse(home_text)
-        task_one = next((t for t in tasks if t.slug == "task-one"), None)
-        if task_one is None or task_one.phase != "active":
+        tasks = parse_home_md(home_text)
+        task_one = next((t for t in tasks if t["slug"] == "task-one"), None)
+        if task_one is None or task_one["status"] != "active":
             raise AssertionError(f"task-one phase should be active, got {task_one!r}")
 
         if not (wiki / "_Sidebar.md").exists():
@@ -313,7 +294,7 @@ def test_claim_in_wiki() -> None:
             capture_output=True,
             text=True,
         )
-        if "task: claim task-one" not in log.stdout:
+        if "wiki: task-one" not in log.stdout:
             raise AssertionError(
                 f"expected claim commit in log, got:\n{log.stdout}"
             )
@@ -326,7 +307,7 @@ def test_claim_in_wiki() -> None:
 
 
 def test_capture_parent_branch_returns_branch_name() -> None:
-    with tempfile.TemporaryDirectory() as tmp:
+    with safe_temp_dir() as tmp:
         repo = _make_git_repo(tmp, branch="main")
         branch = capture_parent_branch(repo)
         if branch != "main":
@@ -335,7 +316,7 @@ def test_capture_parent_branch_returns_branch_name() -> None:
 
 
 def test_capture_parent_branch_on_non_repo_raises() -> None:
-    with tempfile.TemporaryDirectory() as tmp:
+    with safe_temp_dir() as tmp:
         non_repo = Path(tmp) / "not-a-repo"
         non_repo.mkdir()
         try:
@@ -352,7 +333,7 @@ def test_capture_parent_branch_on_non_repo_raises() -> None:
 
 
 def test_write_initial_status() -> None:
-    with tempfile.TemporaryDirectory() as tmp:
+    with safe_temp_dir() as tmp:
         repo = _make_git_repo(tmp, branch="main")
         subprocess.run(
             ["git", "-C", str(repo), "checkout", "-b", "hanf/task-one"],
@@ -402,7 +383,7 @@ def test_write_initial_status() -> None:
 
 def test_write_initial_status_forced_failure_raises_runtime_error() -> None:
     """Forcing git add to fail (via index lock) must raise RuntimeError with stderr."""
-    with tempfile.TemporaryDirectory() as tmp:
+    with safe_temp_dir() as tmp:
         repo = _make_git_repo(tmp, branch="main")
         # Create an index lock file — git add will fail with
         # "Unable to create '...index.lock': File exists."
@@ -436,7 +417,7 @@ def test_write_initial_status_forced_failure_raises_runtime_error() -> None:
 
 def test_write_initial_status_push_failure_raises_runtime_error() -> None:
     """No origin remote -> push fails -> RuntimeError mentioning git push --set-upstream origin."""
-    with tempfile.TemporaryDirectory() as tmp:
+    with safe_temp_dir() as tmp:
         repo = Path(tmp) / "repo-no-origin"
         repo.mkdir()
         subprocess.run(["git", "-C", str(repo), "init"], check=True, capture_output=True)
@@ -584,7 +565,7 @@ def test_write_hub_active_indicator_creates_mill_dir() -> None:
 
 def test_pick_task_single_or_multi_single_number() -> None:
     """Single number from numbered prompt -> mode='single'."""
-    tasks = _tasks_md.parse(_HOME_MD_UNMARKED_ONLY)
+    tasks = parse_home_md(_HOME_MD_UNMARKED_ONLY)
     import io
     original_stdin = sys.stdin
     sys.stdin = io.StringIO("1\n")
@@ -594,8 +575,8 @@ def test_pick_task_single_or_multi_single_number() -> None:
         sys.stdin = original_stdin
     if mode != "single":
         raise AssertionError(f"expected mode=single, got {mode!r}")
-    if picked.slug != "task-one":
-        raise AssertionError(f"expected task-one, got {picked.slug!r}")
+    if picked["slug"] != "task-one":
+        raise AssertionError(f'expected task-one, got {picked["slug"]!r}')
     if candidates != []:
         raise AssertionError(f"expected candidates=[], got {candidates!r}")
     print("PASS: pick_task_single_or_multi single number -> mode=single")
@@ -608,7 +589,7 @@ def test_pick_task_single_or_multi_single_number() -> None:
 
 def test_pick_task_single_or_multi_multi_numbers() -> None:
     """Comma-separated numbers -> mode='multi' with correct tasks."""
-    tasks = _tasks_md.parse(_HOME_MD_THREE_TASKS)
+    tasks = parse_home_md(_HOME_MD_THREE_TASKS)
     import io
     original_stdin = sys.stdin
     sys.stdin = io.StringIO("1, 3\n")
@@ -620,7 +601,7 @@ def test_pick_task_single_or_multi_multi_numbers() -> None:
         raise AssertionError(f"expected mode=multi, got {mode!r}")
     if not isinstance(picked, list) or len(picked) != 2:
         raise AssertionError(f"expected list of 2, got {picked!r}")
-    slugs = [t.slug for t in picked]
+    slugs = [t["slug"] for t in picked]
     if slugs != ["task-alpha", "task-gamma"]:
         raise AssertionError(f"expected [task-alpha, task-gamma], got {slugs!r}")
     print("PASS: pick_task_single_or_multi comma-separated -> mode=multi")
@@ -628,7 +609,7 @@ def test_pick_task_single_or_multi_multi_numbers() -> None:
 
 def test_pick_task_single_or_multi_dedup() -> None:
     """Repeated indices are de-duplicated silently."""
-    tasks = _tasks_md.parse(_HOME_MD_THREE_TASKS)
+    tasks = parse_home_md(_HOME_MD_THREE_TASKS)
     import io
     original_stdin = sys.stdin
     sys.stdin = io.StringIO("1, 1, 2\n")
@@ -638,7 +619,7 @@ def test_pick_task_single_or_multi_dedup() -> None:
         sys.stdin = original_stdin
     if mode != "multi":
         raise AssertionError(f"expected mode=multi, got {mode!r}")
-    slugs = [t.slug for t in picked]
+    slugs = [t["slug"] for t in picked]
     if slugs != ["task-alpha", "task-beta"]:
         raise AssertionError(f"expected [task-alpha, task-beta], got {slugs!r}")
     print("PASS: pick_task_single_or_multi de-duplicates 1,1,2 -> [task-alpha, task-beta]")
@@ -651,7 +632,7 @@ def test_pick_task_single_or_multi_dedup() -> None:
 
 def test_pick_task_single_or_multi_out_of_range_then_valid() -> None:
     """Out-of-range on first attempt, valid on second -> succeeds."""
-    tasks = _tasks_md.parse(_HOME_MD_UNMARKED_ONLY)
+    tasks = parse_home_md(_HOME_MD_UNMARKED_ONLY)
     import io
     original_stdin = sys.stdin
     sys.stdin = io.StringIO("99\n1\n")
@@ -661,14 +642,14 @@ def test_pick_task_single_or_multi_out_of_range_then_valid() -> None:
         sys.stdin = original_stdin
     if mode != "single":
         raise AssertionError(f"expected mode=single, got {mode!r}")
-    if picked.slug != "task-one":
-        raise AssertionError(f"expected task-one, got {picked.slug!r}")
+    if picked["slug"] != "task-one":
+        raise AssertionError(f'expected task-one, got {picked["slug"]!r}')
     print("PASS: pick_task_single_or_multi out-of-range then valid -> mode=single")
 
 
 def test_pick_task_single_or_multi_three_bad_attempts_raises() -> None:
     """Three non-numeric attempts exhaust retries and raise ValueError."""
-    tasks = _tasks_md.parse(_HOME_MD_UNMARKED_ONLY)
+    tasks = parse_home_md(_HOME_MD_UNMARKED_ONLY)
     import io
     original_stdin = sys.stdin
     sys.stdin = io.StringIO("abc\ndef\nghi\n")
@@ -689,7 +670,7 @@ def test_pick_task_single_or_multi_three_bad_attempts_raises() -> None:
 
 def test_pick_task_single_or_multi_empty_backlog() -> None:
     """No unmarked tasks -> mode='empty', picked=None."""
-    tasks = _tasks_md.parse(_HOME_MD_EMPTY)
+    tasks = parse_home_md(_HOME_MD_EMPTY)
     mode, picked, candidates = pick_task_single_or_multi(tasks)
     if mode != "empty":
         raise AssertionError(f"expected mode=empty, got {mode!r}")
@@ -700,24 +681,13 @@ def test_pick_task_single_or_multi_empty_backlog() -> None:
 
 def test_pick_task_single_or_multi_slug_bypass() -> None:
     """--slug bypass always yields mode='single', no prompt."""
-    tasks = _tasks_md.parse(_HOME_MD)
+    tasks = parse_home_md(_HOME_MD)
     mode, picked, candidates = pick_task_single_or_multi(tasks, slug="fix-login")
     if mode != "single":
         raise AssertionError(f"expected mode=single, got {mode!r}")
-    if picked.slug != "fix-login":
-        raise AssertionError(f"expected fix-login, got {picked.slug!r}")
+    if picked["slug"] != "fix-login":
+        raise AssertionError(f'expected fix-login, got {picked["slug"]!r}')
     print("PASS: pick_task_single_or_multi --slug -> mode=single, no prompt")
-
-
-def test_pick_task_single_or_multi_fast_path_s() -> None:
-    """[s] fast-path always yields mode='single', no prompt."""
-    tasks = _tasks_md.parse(_HOME_MD)
-    mode, picked, candidates = pick_task_single_or_multi(tasks)
-    if mode != "single":
-        raise AssertionError(f"expected mode=single for [s] fast-path, got {mode!r}")
-    if picked.slug != "dark-mode":
-        raise AssertionError(f"expected dark-mode, got {picked.slug!r}")
-    print("PASS: pick_task_single_or_multi [s] fast-path -> mode=single")
 
 
 # ---------------------------------------------------------------------------
@@ -727,7 +697,7 @@ def test_pick_task_single_or_multi_fast_path_s() -> None:
 
 def test_multi_select_groom_then_claim_basic() -> None:
     """Removes all 3 sources, appends merged entry [active], sidebar regenerated, commit message matches."""
-    with tempfile.TemporaryDirectory() as tmp:
+    with safe_temp_dir() as tmp:
         wiki = _make_wiki(tmp, _HOME_MD_THREE_TASKS)
         task = multi_select_groom_then_claim(
             wiki_path=wiki,
@@ -738,15 +708,15 @@ def test_multi_select_groom_then_claim_basic() -> None:
         )
 
         home_text = (wiki / "Home.md").read_text(encoding="utf-8")
-        tasks = _tasks_md.parse(home_text)
+        tasks = parse_home_md(home_text)
         if len(tasks) != 1:
             raise AssertionError(
-                f"expected 1 task remaining, got {len(tasks)}: {[t.slug for t in tasks]}"
+                f'expected 1 task remaining, got {len(tasks)}: {[t["slug"] for t in tasks]}'
             )
-        if tasks[0].slug != "merged-task":
-            raise AssertionError(f"expected merged-task, got {tasks[0].slug!r}")
-        if tasks[0].phase != "active":
-            raise AssertionError(f"expected active phase, got {tasks[0].phase!r}")
+        if tasks[0]["slug"] != "merged-task":
+            raise AssertionError(f'expected merged-task, got {tasks[0]["slug"]!r}')
+        if tasks[0]["status"] != "active":
+            raise AssertionError(f'expected active status, got {tasks[0]["status"]!r}')
 
         if not (wiki / "_Sidebar.md").exists():
             raise AssertionError("_Sidebar.md should exist after groom-and-claim")
@@ -756,25 +726,21 @@ def test_multi_select_groom_then_claim_basic() -> None:
             capture_output=True,
             text=True,
         )
-        expected_msg = (
-            "task: groom-and-claim 3->1 "
-            "(merged-task; absorbed task-alpha, task-beta, task-gamma)"
-        )
-        if expected_msg not in log.stdout:
+        if "wiki: merged-task" not in log.stdout:
             raise AssertionError(
-                f"expected commit msg {expected_msg!r} in:\n{log.stdout}"
+                f"expected commit msg with 'wiki: merged-task' in:\n{log.stdout}"
             )
 
-        if task.slug != "merged-task":
-            raise AssertionError(f"expected returned task slug=merged-task, got {task.slug!r}")
-        if task.phase != "active":
-            raise AssertionError(f"expected returned task phase=active, got {task.phase!r}")
+        if task["slug"] != "merged-task":
+            raise AssertionError(f'expected returned task slug=merged-task, got {task["slug"]!r}')
+        if task["status"] != "active":
+            raise AssertionError(f'expected returned task phase=active, got {task["status"]!r}')
     print("PASS: multi_select_groom_then_claim basic flow")
 
 
 def test_multi_select_groom_then_claim_with_proposal() -> None:
     """With has_proposal=True + proposal_body, writes proposal-<slug>.md."""
-    with tempfile.TemporaryDirectory() as tmp:
+    with safe_temp_dir() as tmp:
         wiki = _make_wiki(tmp, _HOME_MD_THREE_TASKS)
         multi_select_groom_then_claim(
             wiki_path=wiki,
@@ -801,8 +767,8 @@ def test_multi_select_groom_then_claim_with_proposal() -> None:
 
 def test_prompt_merged_entry_happy_path_no_proposal() -> None:
     """Happy path without proposal: returns title, slug, typed body, False, None."""
-    tasks = _tasks_md.parse(_HOME_MD_THREE_TASKS)
-    source = [t for t in tasks if t.slug in ("task-alpha", "task-beta")]
+    tasks = parse_home_md(_HOME_MD_THREE_TASKS)
+    source = [t for t in tasks if t["slug"] in ("task-alpha", "task-beta")]
     import io
     original_stdin = sys.stdin
     sys.stdin = io.StringIO(
@@ -834,8 +800,8 @@ def test_prompt_merged_entry_happy_path_no_proposal() -> None:
 
 def test_prompt_merged_entry_with_proposal() -> None:
     """With proposal: body_for_home is wiki link form; proposal_body holds typed body."""
-    tasks = _tasks_md.parse(_HOME_MD_THREE_TASKS)
-    source = [t for t in tasks if t.slug in ("task-alpha", "task-beta")]
+    tasks = parse_home_md(_HOME_MD_THREE_TASKS)
+    source = [t for t in tasks if t["slug"] in ("task-alpha", "task-beta")]
     import io
     original_stdin = sys.stdin
     sys.stdin = io.StringIO(
@@ -862,8 +828,8 @@ def test_prompt_merged_entry_with_proposal() -> None:
 
 def test_prompt_merged_entry_bad_title_raises() -> None:
     """Three empty title attempts raise ValueError."""
-    tasks = _tasks_md.parse(_HOME_MD_THREE_TASKS)
-    source = [t for t in tasks if t.slug == "task-alpha"]
+    tasks = parse_home_md(_HOME_MD_THREE_TASKS)
+    source = [t for t in tasks if t["slug"] == "task-alpha"]
     import io
     original_stdin = sys.stdin
     sys.stdin = io.StringIO("\n\n\n")  # Three empty lines
@@ -879,8 +845,8 @@ def test_prompt_merged_entry_bad_title_raises() -> None:
 
 def test_prompt_merged_entry_bad_slug_raises() -> None:
     """Three invalid slug attempts raise ValueError."""
-    tasks = _tasks_md.parse(_HOME_MD_THREE_TASKS)
-    source = [t for t in tasks if t.slug == "task-alpha"]
+    tasks = parse_home_md(_HOME_MD_THREE_TASKS)
+    source = [t for t in tasks if t["slug"] == "task-alpha"]
     import io
     original_stdin = sys.stdin
     sys.stdin = io.StringIO(
@@ -927,12 +893,12 @@ def _make_parent_with_worktree(tmp: Path, wt_name: str, branch: str) -> tuple[Pa
 
 def test_discover_active_worktrees_standard_layout() -> None:
     """Standard layout: worktree on task branch is found via git worktree list."""
-    with tempfile.TemporaryDirectory() as tmp:
+    with safe_temp_dir() as tmp:
         parent, wts_dir = _make_parent_with_worktree(Path(tmp), "my-task", "hanf/my-task")
         entry = (wts_dir / "my-task").resolve()
 
-        home_md = "# Home\n\n## My Task\n[[my-task]] [active]\n"
-        home_tasks = _tasks_md.parse(home_md)
+        home_md = "# Home\n\n## My Task\n[my-task] [active]\n"
+        home_tasks = parse_home_md(home_md)
 
         results = discover_active_worktrees(wts_dir, home_tasks, "hanf/", cwd=parent)
 
@@ -948,12 +914,12 @@ def test_discover_active_worktrees_standard_layout() -> None:
 
 def test_discover_active_worktrees_subfolder_install() -> None:
     """Subfolder-install layout: worktree git root is the entry dir regardless of hub_subpath."""
-    with tempfile.TemporaryDirectory() as tmp:
+    with safe_temp_dir() as tmp:
         parent, wts_dir = _make_parent_with_worktree(Path(tmp), "my-task", "hanf/my-task")
         entry = (wts_dir / "my-task").resolve()
 
-        home_md = "# Home\n\n## My Subfolder Task\n[[my-task]] [active]\n"
-        home_tasks = _tasks_md.parse(home_md)
+        home_md = "# Home\n\n## My Subfolder Task\n[my-task] [active]\n"
+        home_tasks = parse_home_md(home_md)
 
         results = discover_active_worktrees(wts_dir, home_tasks, "hanf/", cwd=parent)
 
@@ -975,10 +941,8 @@ def test_discover_active_worktrees_subfolder_install() -> None:
 def main() -> int:
     tests = [
         test_pick_task_single_slug_matching_unmarked,
-        test_pick_task_single_slug_matching_s,
         test_pick_task_single_slug_already_done_raises,
         test_pick_task_single_slug_not_found_raises,
-        test_pick_task_single_fast_path_s,
         test_pick_task_single_empty_backlog_raises,
         test_pick_task_single_numbered_path,
         test_pick_task_single_numbered_path_invalid_choice,
@@ -989,7 +953,6 @@ def main() -> int:
         test_pick_task_single_or_multi_three_bad_attempts_raises,
         test_pick_task_single_or_multi_empty_backlog,
         test_pick_task_single_or_multi_slug_bypass,
-        test_pick_task_single_or_multi_fast_path_s,
         test_multi_select_groom_then_claim_basic,
         test_multi_select_groom_then_claim_with_proposal,
         test_prompt_merged_entry_happy_path_no_proposal,

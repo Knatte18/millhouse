@@ -31,7 +31,7 @@ Public API:
     parse_blocking_count() — count "### [<severity>]" headings in review output
     write_review_file()  — write a review file with a canonical timestamp name
     aggregate_verdict()  — worst-case verdict across a list of sub-verdicts
-    load_config()        — load wiki/config.yaml + optional config.local.yaml
+    load_config()        — load mill-config.yaml + optional config.local.yaml
     parse_batch_refs()   — extract Context/Edits/Creates paths from a batch file (case-insensitive none filter)
     compute_creates_union() — union of all Creates: tokens across every batch in a plan_dir
     compute_deletes_union() — union of all Deletes: tokens across every batch in a plan_dir
@@ -1208,7 +1208,7 @@ def load_config(repo_root: Path, mill_dir: Path) -> dict:
 
     Merge order (lowest to highest precedence):
     1. Plugin template (mill-config.yaml)
-    2. Repo layer (mill-config.yaml at repo root, or fallback to wiki/config.yaml)
+    2. Repo layer (mill-config.yaml at repo root)
     3. Local layer (mill_dir / config.local.yaml)
     4. Environment variable overrides
 
@@ -1232,41 +1232,20 @@ def load_config(repo_root: Path, mill_dir: Path) -> dict:
 
     # 2. Resolve repo-layer sources
     mill_cfg_path = _paths.resolve_mill_config_path(repo_root)
-    wiki_cfg_path = None
-    try:
-        wiki_cfg_path = _paths.resolve_wiki_path(repo_root) / "config.yaml"
-    except (Exception, SystemExit):
-        wiki_cfg_path = None
 
-    # 3. Apply repo-layer merge logic (both-files-present and fallback rules)
+    # 3. Apply repo-layer merge logic
     found_repo_layer = False
     if mill_cfg_path.exists():
         with mill_cfg_path.open(encoding="utf-8") as fh:
             repo_cfg = yaml.safe_load(fh) or {}
         cfg = _deep_merge(cfg, repo_cfg)
         found_repo_layer = True
-        if wiki_cfg_path and wiki_cfg_path.exists():
-            print(
-                f"[config] stale wiki/config.yaml detected at {wiki_cfg_path}; "
-                f"mill-config.yaml wins -- remove the wiki file via mill-setup",
-                file=sys.stderr,
-            )
-    elif wiki_cfg_path and wiki_cfg_path.exists():
-        with wiki_cfg_path.open(encoding="utf-8") as fh:
-            wiki_cfg = yaml.safe_load(fh) or {}
-        cfg = _deep_merge(cfg, wiki_cfg)
-        found_repo_layer = True
-        print(
-            f"[config] using legacy wiki/config.yaml at {wiki_cfg_path}; "
-            f"rebase onto main to pick up mill-config.yaml",
-            file=sys.stderr,
-        )
 
     # 4. Strict-missing semantics: require at least one source
     if not template_path.exists() and not found_repo_layer:
         raise ReviewError(
-            f"Missing config: searched plugin template at {template_path}, "
-            f"mill-config.yaml at {mill_cfg_path}, and wiki/config.yaml at {wiki_cfg_path}"
+            f"Missing config: searched plugin template at {template_path} "
+            f"and mill-config.yaml at {mill_cfg_path}"
         )
 
     # 5. Deep-merge the local layer

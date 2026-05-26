@@ -1,6 +1,6 @@
-"""Unit tests for the no-op commit path in _wiki.write_commit_push.
+"""Unit tests for the no-op commit path in wiki._sync.commit_push.
 
-Tests that write_commit_push correctly detects when no changes are staged
+Tests that commit_push correctly detects when no changes are staged
 (even when files are rewritten with identical content) and skips the commit
 and push without raising an error.
 """
@@ -15,7 +15,7 @@ from pathlib import Path
 HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
-import _wiki  # noqa: E402
+from wiki._sync import commit_push  # noqa: E402
 
 
 def _git(argv: list[str], cwd: Path) -> subprocess.CompletedProcess:
@@ -38,6 +38,11 @@ def _setup_wiki(wiki_path: Path) -> None:
     (wiki_path / "Home.md").write_text("# Wiki\n", encoding="utf-8")
     _git(["add", "Home.md"], wiki_path)
     _git(["commit", "-m", "init"], wiki_path)
+    # Bare-clone "origin" so commit_push's git push has a destination.
+    bare = wiki_path.parent / f"{wiki_path.name}.git"
+    subprocess.run(["git", "init", "--bare", str(bare)], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(wiki_path), "remote", "add", "origin", str(bare)], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(wiki_path), "push", "-u", "origin", "HEAD"], check=True, capture_output=True)
 
 
 def _get_head_sha(wiki_path: Path) -> str:
@@ -47,7 +52,7 @@ def _get_head_sha(wiki_path: Path) -> str:
 
 
 class TestWikiNoop(unittest.TestCase):
-    """Test the no-op commit detection in _wiki.write_commit_push."""
+    """Test the no-op commit detection in wiki._sync.commit_push."""
 
     def test_noop_unchanged_file(self) -> None:
         """Test that unchanged files do not trigger a commit."""
@@ -56,8 +61,8 @@ class TestWikiNoop(unittest.TestCase):
             _setup_wiki(wiki)
             initial_sha = _get_head_sha(wiki)
 
-            # Stage and try to commit without changing the file
-            _wiki.write_commit_push(wiki, ["Home.md"], "no-op commit", slug="test")
+            # Call commit_push without changing the file
+            commit_push(wiki, ["Home.md"], "no-op commit")
 
             final_sha = _get_head_sha(wiki)
             self.assertEqual(
@@ -80,8 +85,8 @@ class TestWikiNoop(unittest.TestCase):
             # Rewrite with identical content (changes mtime but not content)
             home_file.write_text(original_content, encoding="utf-8")
 
-            # Stage and try to commit
-            _wiki.write_commit_push(wiki, ["Home.md"], "rewrite identical", slug="test")
+            # Call commit_push
+            commit_push(wiki, ["Home.md"], "rewrite identical")
 
             final_sha = _get_head_sha(wiki)
             self.assertEqual(
@@ -91,20 +96,13 @@ class TestWikiNoop(unittest.TestCase):
             )
 
     def test_real_change_commits_normally(self) -> None:
-        """Test that real changes are committed and pushed normally."""
+        """Test that real changes are committed normally."""
         with tempfile.TemporaryDirectory() as tmp_str:
             tmp = Path(tmp_str)
             wiki = tmp / "wiki"
-            remote = tmp / "remote.git"
 
-            # Set up a bare remote
-            remote.mkdir(parents=True, exist_ok=True)
-            _git(["init", "--bare", str(remote)], tmp)
-
-            # Set up the wiki with the remote
+            # Set up the wiki
             _setup_wiki(wiki)
-            _git(["remote", "add", "origin", str(remote)], wiki)
-            _git(["push", "-u", "origin", "main"], wiki)
 
             initial_sha = _get_head_sha(wiki)
 
@@ -112,8 +110,8 @@ class TestWikiNoop(unittest.TestCase):
             home_file = wiki / "Home.md"
             home_file.write_text("# Wiki\n\nNew content\n", encoding="utf-8")
 
-            # Stage and commit
-            _wiki.write_commit_push(wiki, ["Home.md"], "real change", slug="test")
+            # Call commit_push
+            commit_push(wiki, ["Home.md"], "real change")
 
             final_sha = _get_head_sha(wiki)
             self.assertNotEqual(

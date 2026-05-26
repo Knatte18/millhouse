@@ -1,192 +1,24 @@
-"""Unit tests for plugins/mill/scripts/_vscode_processes.py."""
+"""Unit tests for plugins/mill/scripts/_vscode_processes.py.
+
+Only the _path_matches_cmdline helper is unit-tested here. _probe_windows now uses
+the Win32 EnumWindows API directly (ctypes), and _probe_posix relies on the `ps`
+command — both are environment-dependent and skipped from automated tests.
+"""
 from __future__ import annotations
 
 import os
-import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from unittest.mock import patch
 
 HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
-from _vscode_processes import _path_matches_cmdline, find_open_vscode_paths  # noqa: E402
+from _vscode_processes import _path_matches_cmdline  # noqa: E402
 
 
 def main() -> int:
     errors = 0
-
-    # ------------------------------------------------------------------
-    # Test: windows_parser_basic — two distinct paths + one duplicate.
-    # ------------------------------------------------------------------
-    with (
-        patch("_vscode_processes.os.name", "nt"),
-        patch(
-            "_vscode_processes._subprocess_util.run",
-            return_value=subprocess.CompletedProcess(
-                args=[],
-                returncode=0,
-                stdout="code C:\\wts\\foo\r\ncode C:\\wts\\bar\r\ncode C:\\wts\\foo\r\n",
-                stderr="",
-            ),
-        ),
-    ):
-        result = find_open_vscode_paths()
-    result_strs = {str(p).lower() for p in result}
-    if len(result) != 2:
-        print(f"FAIL: windows_parser_basic: expected 2 elements, got {len(result)}", file=sys.stderr)
-        errors += 1
-    elif "code c:\\wts\\foo" not in result_strs or "code c:\\wts\\bar" not in result_strs:
-        print(f"FAIL: windows_parser_basic: expected paths not in {result_strs!r}", file=sys.stderr)
-        errors += 1
-    else:
-        print("PASS: windows_parser_basic")
-
-    # ------------------------------------------------------------------
-    # Test: windows_parser_quoted_paths — path with spaces, verbatim round-trip.
-    # ------------------------------------------------------------------
-    quoted_line = '"C:\\Program Files\\Microsoft VS Code\\Code.exe" "C:\\wts\\foo bar"'
-    with (
-        patch("_vscode_processes.os.name", "nt"),
-        patch(
-            "_vscode_processes._subprocess_util.run",
-            return_value=subprocess.CompletedProcess(
-                args=[],
-                returncode=0,
-                stdout=quoted_line + "\r\n",
-                stderr="",
-            ),
-        ),
-    ):
-        result = find_open_vscode_paths()
-    if len(result) != 1:
-        print(f"FAIL: windows_parser_quoted_paths: expected 1 element, got {len(result)}", file=sys.stderr)
-        errors += 1
-    elif str(next(iter(result))) != quoted_line:
-        got = str(next(iter(result)))
-        print(f"FAIL: windows_parser_quoted_paths: expected {quoted_line!r}, got {got!r}", file=sys.stderr)
-        errors += 1
-    else:
-        print("PASS: windows_parser_quoted_paths")
-
-    # ------------------------------------------------------------------
-    # Test: windows_parser_empty_output — empty stdout returns empty set.
-    # ------------------------------------------------------------------
-    with (
-        patch("_vscode_processes.os.name", "nt"),
-        patch(
-            "_vscode_processes._subprocess_util.run",
-            return_value=subprocess.CompletedProcess(
-                args=[], returncode=0, stdout="", stderr=""
-            ),
-        ),
-    ):
-        result = find_open_vscode_paths()
-    if result != set():
-        print(f"FAIL: windows_parser_empty_output: expected empty set, got {result}", file=sys.stderr)
-        errors += 1
-    else:
-        print("PASS: windows_parser_empty_output")
-
-    # ------------------------------------------------------------------
-    # Test: posix_parser_basic — code lines kept, firefox dropped.
-    # ------------------------------------------------------------------
-    if os.name != "nt":
-        posix_stdout = (
-            "/usr/bin/code /home/u/wts/foo\n"
-            "firefox --headless\n"
-            "/opt/visual-studio-code/code /home/u/wts/bar\n"
-        )
-        with (
-            patch("_vscode_processes.os.name", "posix"),
-            patch(
-                "_vscode_processes._subprocess_util.run",
-                return_value=subprocess.CompletedProcess(
-                    args=[], returncode=0, stdout=posix_stdout, stderr=""
-                ),
-            ),
-        ):
-            result = find_open_vscode_paths()
-        if len(result) != 2:
-            print(f"FAIL: posix_parser_basic: expected 2 elements, got {len(result)}", file=sys.stderr)
-            errors += 1
-        elif any("firefox" in str(p) for p in result):
-            print(f"FAIL: posix_parser_basic: firefox not excluded from {result}", file=sys.stderr)
-            errors += 1
-        else:
-            print("PASS: posix_parser_basic")
-    else:
-        print("SKIP: posix_parser_basic (Windows)")
-
-    # ------------------------------------------------------------------
-    # Test: posix_parser_no_code_processes — no code basename -> empty set.
-    # ------------------------------------------------------------------
-    if os.name != "nt":
-        with (
-            patch("_vscode_processes.os.name", "posix"),
-            patch(
-                "_vscode_processes._subprocess_util.run",
-                return_value=subprocess.CompletedProcess(
-                    args=[],
-                    returncode=0,
-                    stdout="firefox --headless\n/usr/bin/python script.py\n",
-                    stderr="",
-                ),
-            ),
-        ):
-            result = find_open_vscode_paths()
-        if result != set():
-            print(f"FAIL: posix_parser_no_code_processes: expected empty set, got {result}", file=sys.stderr)
-            errors += 1
-        else:
-            print("PASS: posix_parser_no_code_processes")
-    else:
-        print("SKIP: posix_parser_no_code_processes (Windows)")
-
-    # ------------------------------------------------------------------
-    # Test: probe_subprocess_nonzero_exit — rc=1 returns empty set.
-    # ------------------------------------------------------------------
-    with patch(
-        "_vscode_processes._subprocess_util.run",
-        return_value=subprocess.CompletedProcess(
-            args=[], returncode=1, stdout="", stderr="boom"
-        ),
-    ):
-        result = find_open_vscode_paths()
-    if result != set():
-        print(f"FAIL: probe_subprocess_nonzero_exit: expected empty set, got {result}", file=sys.stderr)
-        errors += 1
-    else:
-        print("PASS: probe_subprocess_nonzero_exit")
-
-    # ------------------------------------------------------------------
-    # Test: probe_subprocess_timeout — TimeoutExpired returns empty set.
-    # ------------------------------------------------------------------
-    with patch(
-        "_vscode_processes._subprocess_util.run",
-        side_effect=subprocess.TimeoutExpired(cmd=[], timeout=5),
-    ):
-        result = find_open_vscode_paths()
-    if result != set():
-        print(f"FAIL: probe_subprocess_timeout: expected empty set, got {result}", file=sys.stderr)
-        errors += 1
-    else:
-        print("PASS: probe_subprocess_timeout")
-
-    # ------------------------------------------------------------------
-    # Test: probe_subprocess_oserror — FileNotFoundError returns empty set.
-    # ------------------------------------------------------------------
-    with patch(
-        "_vscode_processes._subprocess_util.run",
-        side_effect=FileNotFoundError("powershell missing"),
-    ):
-        result = find_open_vscode_paths()
-    if result != set():
-        print(f"FAIL: probe_subprocess_oserror: expected empty set, got {result}", file=sys.stderr)
-        errors += 1
-    else:
-        print("PASS: probe_subprocess_oserror")
 
     # ------------------------------------------------------------------
     # Test: path_match_helper_bare — exact resolved path is a match.
@@ -265,7 +97,6 @@ def main() -> int:
         foo = Path(tmpdir) / "foo"
         foo.mkdir()
         resolved = str(foo.resolve())
-        # Cmdline ends immediately after the path — no trailing whitespace.
         ok = _path_matches_cmdline(foo, f"code {resolved}")
     if not ok:
         print("FAIL: path_match_helper_end_of_string: expected True", file=sys.stderr)

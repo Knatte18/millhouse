@@ -5,7 +5,6 @@ import json
 import os
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -15,6 +14,7 @@ sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 _UNIT_TESTS = Path(__file__).resolve().parent
 sys.path.insert(0, str(_UNIT_TESTS))
 
+import _test_helpers  # noqa: E402
 from _test_helpers import _make_task_worktree  # noqa: E402
 from _paths import ActiveWorktreeSlugMismatch  # noqa: E402
 import _marker  # noqa: E402
@@ -59,6 +59,11 @@ def _make_worktree_fixture(tmp: str, slug: str) -> tuple[Path, Path]:
     subprocess.run(
         ["git", "-C", str(worktree), "checkout", "-b", f"hanf/{slug}"],
         check=True, capture_output=True,
+    )
+    (worktree / "mill-config.yaml").write_text(
+        "paths:\n  discussion_file: discussion.md\n"
+        "spawn:\n  branch_prefix: \"hanf/\"\n",
+        encoding="utf-8",
     )
     wiki_root = container / "wiki"
     wiki_root.mkdir(parents=True, exist_ok=True)
@@ -131,8 +136,8 @@ def main() -> int:
     print("PASS: RE_SIMPLE matches plan-holistic before RE_BATCH could mis-identify")
 
     # discover_round cross-type isolation
-    with tempfile.TemporaryDirectory() as tmpdir:
-        reviews = Path(tmpdir)
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        reviews = tmpdir
         (reviews / "20260418-001200-plan-review-01-setup-r2.md").write_text("x")
         assert discover_round(reviews, "discussion", "holistic") == 1
         print("PASS: discover_round cross-type isolation (plan-batch ignored for discussion)")
@@ -145,8 +150,8 @@ def main() -> int:
         print("PASS: discover_round plan other-batch unaffected by 01-setup file")
 
     # discover_round per-scope isolation across all five (review_type, scope) axes
-    with tempfile.TemporaryDirectory() as tmpdir:
-        reviews = Path(tmpdir)
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        reviews = tmpdir
         # discussion holistic: 2 files
         (reviews / "20260418-001200-discussion-review-r1.md").write_text("x")
         (reviews / "20260418-001300-discussion-review-r2.md").write_text("x")
@@ -195,7 +200,7 @@ def main() -> int:
         print(f"PASS: discover_round per-scope code/batch-b (absent for code): {result}")
 
     # find_active_slug: not on a task branch -> MarkerError re-raised as ReviewError
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         wt, wiki = _make_task_worktree(Path(tmpdir) / "sub", "some-task", "Some Task", branch_prefix="hanf/")
         subprocess.run(["git", "-C", str(wt), "checkout", "main"], check=True, capture_output=True)
         cfg = {"spawn": {"branch_prefix": "hanf/"}}
@@ -207,26 +212,26 @@ def main() -> int:
             print("PASS: find_active_slug non-task branch -> ReviewError (MarkerError translation)")
 
     # find_active_slug: on task branch -> returns slug
-    with tempfile.TemporaryDirectory() as tmpdir:
-        wt, wiki = _make_task_worktree(Path(tmpdir), "my-task", "My Task", branch_prefix="hanf/")
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        wt, wiki = _make_task_worktree(Path(tmpdir), "my-task", "My Task", branch_prefix="hanf/", seed_task=True)
         cfg = {"spawn": {"branch_prefix": "hanf/"}}
         assert find_active_slug(wt, wiki, cfg) == "my-task"
         print("PASS: find_active_slug: 'my-task'")
 
     # load_task_title: task_title present in Home.md
-    with tempfile.TemporaryDirectory() as tmpdir:
-        wt, wiki = _make_task_worktree(Path(tmpdir), "my-task", "My Task Title", branch_prefix="hanf/")
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        wt, wiki = _make_task_worktree(Path(tmpdir), "my-task", "My Task Title", branch_prefix="hanf/", seed_task=True)
         cfg = {"spawn": {"branch_prefix": "hanf/"}}
         assert load_task_title(wt, wiki, cfg, "my-task") == "My Task Title"
         print("PASS: load_task_title with task_title in Home.md")
 
     # load_task_title: non-task branch -> falls back to slug
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         assert load_task_title(Path(tmpdir), Path(tmpdir), {}, "my-task") == "my-task"
         print("PASS: load_task_title non-task branch -> fallback to slug")
 
     # resolve_path: discussion.md -> worktree root
-    with tempfile.TemporaryDirectory() as tmp:
+    with _test_helpers.safe_temp_dir() as tmp:
         slug = "my-task"
         container, worktree = _make_worktree_fixture(tmp, slug)
         original_cwd = Path.cwd()
@@ -240,7 +245,7 @@ def main() -> int:
         print("PASS: resolve_path('discussion.md', slug) -> worktree/discussion.md")
 
     # resolve_path: plan/ and reviews/ templates
-    with tempfile.TemporaryDirectory() as tmp:
+    with _test_helpers.safe_temp_dir() as tmp:
         slug = "my-task"
         container, worktree = _make_worktree_fixture(tmp, slug)
         original_cwd = Path.cwd()
@@ -257,7 +262,7 @@ def main() -> int:
         print("PASS: resolve_path covers plan/, reviews/, nested reviews/r1/holistic.md")
 
     # resolve_path: stale <SLUG> in template is substituted (not a literal segment)
-    with tempfile.TemporaryDirectory() as tmp:
+    with _test_helpers.safe_temp_dir() as tmp:
         slug = "my-task"
         container, worktree = _make_worktree_fixture(tmp, slug)
         original_cwd = Path.cwd()
@@ -272,7 +277,7 @@ def main() -> int:
         print("PASS: resolve_path stale <SLUG> template substituted (no literal segment)")
 
     # resolve_path: slug-mismatch raises ActiveWorktreeSlugMismatch
-    with tempfile.TemporaryDirectory() as tmp:
+    with _test_helpers.safe_temp_dir() as tmp:
         slug = "my-task"
         container, worktree = _make_worktree_fixture(tmp, slug)
         # Create a directory named "wrong-slug" but checked out on branch "hanf/my-task"
@@ -312,7 +317,7 @@ def main() -> int:
             os.chdir(original_cwd)
 
     # resolve_path: M2 in-place mode (hub_rel=".")
-    with tempfile.TemporaryDirectory() as tmp:
+    with _test_helpers.safe_temp_dir() as tmp:
         tmp_path = Path(tmp)
         git_root = tmp_path / "git_root"
         git_root.mkdir()
@@ -348,7 +353,7 @@ def main() -> int:
         print("PASS: resolve_path M2 in-place (hub_rel='.') -> git_root/task/discussion.md")
 
     # resolve_path: M2+sub in-place mode (hub_rel="src/Models")
-    with tempfile.TemporaryDirectory() as tmp:
+    with _test_helpers.safe_temp_dir() as tmp:
         tmp_path = Path(tmp)
         git_root = tmp_path / "git_root"
         git_root.mkdir()
@@ -455,8 +460,8 @@ def main() -> int:
     print("PASS: parse_verdict verdict with extra whitespace")
 
     # write_review_file: creates file
-    with tempfile.TemporaryDirectory() as tmpdir:
-        reviews = Path(tmpdir) / "reviews"
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        reviews = tmpdir / "reviews"
         path = write_review_file(reviews, "discussion", 1, "---\nverdict: APPROVE\n---\n")
         assert path.exists() and "discussion-review-r1" in path.name
         print(f"PASS: write_review_file discussion: {path.name}")
@@ -474,7 +479,7 @@ def main() -> int:
         print(f"PASS: write_review_file code-batch: {path4.name}")
 
     # bulk_files: nonexistent skipped
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         existing = Path(tmpdir) / "a.md"
         existing.write_text("hello")
         result = bulk_files([existing, Path("/nonexistent/x.md")])
@@ -482,7 +487,7 @@ def main() -> int:
         print("PASS: bulk_files skips missing files")
 
     # bulk_files: END FILE delimiter present
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         p1 = Path(tmpdir) / "a.py"
         p2 = Path(tmpdir) / "b.py"
         p1.write_text("content-a", encoding="utf-8")
@@ -495,7 +500,7 @@ def main() -> int:
         print("PASS: bulk_files END FILE delimiters present and ordered")
 
     # bulk_files_with_diff: END FILE delimiter present
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         p1 = Path(tmpdir) / "a.py"
         p2 = Path(tmpdir) / "b.py"
         p1.write_text("content-a", encoding="utf-8")
@@ -538,7 +543,7 @@ def main() -> int:
         print("PASS: build_tool_rule unknown mode -> ValueError")
 
     # load_config: valid YAML + local override
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         tmpdir_path = Path(tmpdir)
         wiki = tmpdir_path / "wiki"
         wiki.mkdir()
@@ -563,7 +568,7 @@ def main() -> int:
         print("PASS: load_config local override wins; other keys preserved")
 
     # load_config: missing config -> ReviewError
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         tmpdir_path = Path(tmpdir)
         mill = tmpdir_path / ".millhouse"
         mill.mkdir()
@@ -580,7 +585,7 @@ def main() -> int:
             print("PASS: load_config missing config -> ReviewError")
 
     # load_config: stale review: overlay in config.local.yaml -> stderr warning
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         import io as _io
         import contextlib as _cl
         tmpdir_path = Path(tmpdir)
@@ -605,7 +610,7 @@ def main() -> int:
         print("PASS: load_config stale review: overlay emits stderr warning with overlay path")
 
     # load_config bare roles: key does not crash
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         tmpdir_path = Path(tmpdir)
         mill = tmpdir_path / ".millhouse"
         mill.mkdir()
@@ -630,7 +635,7 @@ def main() -> int:
         print("PASS: load_config bare roles: does not crash; template roles: preserved")
 
     # load_config hub_relative_path does not emit unknown-key warning
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         tmpdir_path = Path(tmpdir)
         mill = tmpdir_path / ".millhouse"
         mill.mkdir()
@@ -651,7 +656,7 @@ def main() -> int:
         print("PASS: load_config hub_relative_path in config.local.yaml does not emit unknown-key warning")
 
     # parse_batch_refs: multi-line bullet form returns all sub-bullet paths
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         batch = Path(tmpdir) / "batch.md"
         batch.write_text(
             "### Card 1\n\n"
@@ -666,7 +671,7 @@ def main() -> int:
         print("PASS: parse_batch_refs multi-line bullet form returns both paths")
 
     # parse_batch_refs: 'none' token is filtered out
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         batch = Path(tmpdir) / "batch.md"
         batch.write_text("- **Creates:** none\n", encoding="utf-8")
         refs = parse_batch_refs(batch)
@@ -674,7 +679,7 @@ def main() -> int:
         print("PASS: parse_batch_refs 'none' token filtered")
 
     # parse_batch_refs: single-line form returns both paths
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         batch = Path(tmpdir) / "batch.md"
         batch.write_text("- **Context:** `x`, `y`\n", encoding="utf-8")
         refs = parse_batch_refs(batch)
@@ -682,7 +687,7 @@ def main() -> int:
         print("PASS: parse_batch_refs single-line form returns both paths")
 
     # parse_batch_refs: mixed single-line and multi-line fields
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         batch = Path(tmpdir) / "batch.md"
         batch.write_text(
             "- **Context:** `a`\n"
@@ -697,7 +702,7 @@ def main() -> int:
         print("PASS: parse_batch_refs mixed single-line and multi-line fields")
 
     # parse_batch_refs: case-variant none tokens filtered (Block A: None)
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         batch = Path(tmpdir) / "batch.md"
         batch.write_text("- **Creates:** None\n", encoding="utf-8")
         refs = parse_batch_refs(batch)
@@ -705,7 +710,7 @@ def main() -> int:
         print("PASS: parse_batch_refs 'None' (capital N) filtered")
 
     # parse_batch_refs: case-variant none tokens filtered (Block B: NONE)
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         batch = Path(tmpdir) / "batch.md"
         batch.write_text("- **Edits:** NONE\n", encoding="utf-8")
         refs = parse_batch_refs(batch)
@@ -713,7 +718,7 @@ def main() -> int:
         print("PASS: parse_batch_refs 'NONE' (all caps) filtered")
 
     # parse_batch_refs: case-variant none in sub-bullet form (Block C: `None`)
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         batch = Path(tmpdir) / "batch.md"
         batch.write_text(
             "- **Creates:**\n"
@@ -725,7 +730,7 @@ def main() -> int:
         print("PASS: parse_batch_refs sub-bullet `None` filtered")
 
     # parse_batch_refs: mixed token + lowercase none inline (Block D: regression pin)
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         batch = Path(tmpdir) / "batch.md"
         batch.write_text("- **Context:** `a`, none\n", encoding="utf-8")
         refs = parse_batch_refs(batch)
@@ -734,7 +739,7 @@ def main() -> int:
         print("PASS: parse_batch_refs backtick tokens win; trailing 'none' filtered")
 
     # parse_batch_refs: Deletes: field extracted alongside Context/Edits/Creates
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         batch = Path(tmpdir) / "batch.md"
         batch.write_text(
             "- **Context:** `src/a.py`\n"
@@ -751,7 +756,7 @@ def main() -> int:
         print("PASS: parse_batch_refs includes Deletes tokens alongside Context/Edits/Creates")
 
     # resolve_ref_paths: hit on disk
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         tmp_dir = Path(tmpdir)
         real_file = tmp_dir / "real.py"
         real_file.write_text("x")
@@ -760,7 +765,7 @@ def main() -> int:
         print("PASS: resolve_ref_paths hit on disk returns resolved path")
 
     # resolve_ref_paths: suppression via creates_union (no error, empty return)
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         tmp_dir = Path(tmpdir)
         result = resolve_ref_paths(
             ["nonexistent.py"], tmp_dir, root=None,
@@ -770,7 +775,7 @@ def main() -> int:
         print("PASS: resolve_ref_paths creates_union suppresses missing path")
 
     # resolve_ref_paths: hard-fail on unresolved path
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         tmp_dir = Path(tmpdir)
         try:
             resolve_ref_paths(["nonexistent.py"], tmp_dir, root=None)
@@ -782,7 +787,7 @@ def main() -> int:
             print("PASS: resolve_ref_paths hard-fails with 'referenced path not found'")
 
     # resolve_ref_paths: wiki path resolved
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         tmp_project = Path(tmpdir) / "project"
         tmp_project.mkdir()
         tmp_wiki = Path(tmpdir) / "wiki"
@@ -796,7 +801,7 @@ def main() -> int:
         print("PASS: resolve_ref_paths wiki/ prefix resolved via wiki_root")
 
     # resolve_ref_paths: wiki path missing wiki_root raises ReviewError
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         tmp_dir = Path(tmpdir)
         try:
             resolve_ref_paths(["wiki/foo"], tmp_dir, root=None)
@@ -807,7 +812,7 @@ def main() -> int:
             print("PASS: resolve_ref_paths wiki/ without wiki_root raises ReviewError")
 
     # resolve_ref_paths: wiki path exists in wiki_root but not in creates_union -> hard-fail
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         tmp_project = Path(tmpdir) / "project"
         tmp_project.mkdir()
         tmp_wiki = Path(tmpdir) / "wiki"
@@ -824,7 +829,7 @@ def main() -> int:
             print("PASS: resolve_ref_paths wiki path missing on disk hard-fails")
 
     # resolve_ref_paths: caller_label appears in error message
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         tmp_dir = Path(tmpdir)
         try:
             resolve_ref_paths(
@@ -838,7 +843,7 @@ def main() -> int:
             print("PASS: resolve_ref_paths caller_label appears in error message")
 
     # resolve_ref_paths: defensive None filter (Python None in list)
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         tmp_dir = Path(tmpdir)
         real_file = tmp_dir / "real.py"
         real_file.write_text("x")
@@ -847,7 +852,7 @@ def main() -> int:
         print("PASS: resolve_ref_paths defensive None skipped silently")
 
     # resolve_ref_paths: defensive lowercase 'none' filter
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         tmp_dir = Path(tmpdir)
         real_file = tmp_dir / "real.py"
         real_file.write_text("x")
@@ -856,7 +861,7 @@ def main() -> int:
         print("PASS: resolve_ref_paths 'none' string skipped silently")
 
     # resolve_ref_paths: defensive 'None' (capital N) filter
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         tmp_dir = Path(tmpdir)
         real_file = tmp_dir / "real.py"
         real_file.write_text("x")
@@ -865,7 +870,7 @@ def main() -> int:
         print("PASS: resolve_ref_paths 'None' string skipped silently")
 
     # resolve_ref_paths: missing + in deletes_union -> silent suppress
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         tmp_dir = Path(tmpdir)
         result = resolve_ref_paths(
             ["nonexistent.py"], tmp_dir, root=None,
@@ -875,7 +880,7 @@ def main() -> int:
         print("PASS: resolve_ref_paths deletes_union suppresses missing path")
 
     # resolve_ref_paths: missing + in both unions -> silent suppress
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         tmp_dir = Path(tmpdir)
         result = resolve_ref_paths(
             ["nonexistent.py"], tmp_dir, root=None,
@@ -886,7 +891,7 @@ def main() -> int:
         print("PASS: resolve_ref_paths missing + in both unions -> silent suppress")
 
     # resolve_ref_paths: on-disk + in deletes_union -> resolved normally, included
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         tmp_dir = Path(tmpdir)
         real_file = tmp_dir / "real.py"
         real_file.write_text("x")
@@ -898,7 +903,7 @@ def main() -> int:
         print("PASS: resolve_ref_paths on-disk + in deletes_union -> resolved and included")
 
     # resolve_ref_paths: missing + in neither union -> ReviewError (existing behaviour preserved)
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         tmp_dir = Path(tmpdir)
         try:
             resolve_ref_paths(
@@ -912,7 +917,7 @@ def main() -> int:
             print("PASS: resolve_ref_paths missing + not in deletes_union -> ReviewError")
 
     # resolve_ref_paths: caller_label in error when deletes_union present but path missing
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         tmp_dir = Path(tmpdir)
         try:
             resolve_ref_paths(
@@ -927,13 +932,13 @@ def main() -> int:
             print("PASS: resolve_ref_paths caller_label in error with deletes_union present")
 
     # compute_creates_union: empty plan dir returns empty set
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         result = compute_creates_union(Path(tmpdir) / "nonexistent")
         assert result == set(), f"Got {result}"
         print("PASS: compute_creates_union nonexistent plan_dir returns empty set")
 
     # compute_creates_union: one batch with inline Creates tokens
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         plan_dir = Path(tmpdir)
         (plan_dir / "01-setup.md").write_text(
             "- **Creates:** `a`, `b`\n", encoding="utf-8"
@@ -943,7 +948,7 @@ def main() -> int:
         print("PASS: compute_creates_union inline Creates returns set of tokens")
 
     # compute_creates_union: none token filtered
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         plan_dir = Path(tmpdir)
         (plan_dir / "01-setup.md").write_text(
             "- **Creates:** none\n", encoding="utf-8"
@@ -953,7 +958,7 @@ def main() -> int:
         print("PASS: compute_creates_union 'none' token filtered")
 
     # compute_creates_union: two batches with sub-bullet Creates -> union
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         plan_dir = Path(tmpdir)
         (plan_dir / "01-setup.md").write_text(
             "- **Creates:**\n"
@@ -971,7 +976,7 @@ def main() -> int:
         print("PASS: compute_creates_union two batches -> union of Creates tokens")
 
     # compute_creates_union: 00-overview.md excluded
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         plan_dir = Path(tmpdir)
         (plan_dir / "00-overview.md").write_text(
             "- **Creates:** `overview-token`\n", encoding="utf-8"
@@ -984,7 +989,7 @@ def main() -> int:
         print("PASS: compute_creates_union 00-overview.md excluded")
 
     # compute_creates_union: case-variant None filtered
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         plan_dir = Path(tmpdir)
         (plan_dir / "01-setup.md").write_text(
             "- **Creates:** None\n", encoding="utf-8"
@@ -998,13 +1003,13 @@ def main() -> int:
     # ---------------------------------------------------------------------------
 
     # empty plan dir returns empty set
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         result = compute_deletes_union(Path(tmpdir) / "nonexistent")
         assert result == set(), f"Got {result}"
         print("PASS: compute_deletes_union nonexistent plan_dir returns empty set")
 
     # single batch single-line Deletes tokens
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         plan_dir = Path(tmpdir)
         (plan_dir / "01-setup.md").write_text(
             "- **Deletes:** `a`, `b`\n", encoding="utf-8"
@@ -1014,7 +1019,7 @@ def main() -> int:
         print("PASS: compute_deletes_union inline Deletes returns set of tokens")
 
     # multi-line bullet form
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         plan_dir = Path(tmpdir)
         (plan_dir / "01-setup.md").write_text(
             "- **Deletes:**\n"
@@ -1028,7 +1033,7 @@ def main() -> int:
 
     # 'none' sentinel filtered (case variants)
     for sentinel in ("none", "None", "NONE"):
-        with tempfile.TemporaryDirectory() as tmpdir:
+        with _test_helpers.safe_temp_dir() as tmpdir:
             plan_dir = Path(tmpdir)
             (plan_dir / "01-setup.md").write_text(
                 f"- **Deletes:** {sentinel}\n", encoding="utf-8"
@@ -1038,7 +1043,7 @@ def main() -> int:
         print(f"PASS: compute_deletes_union '{sentinel}' sentinel filtered")
 
     # two batches with overlapping deletes — de-duplicated
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         plan_dir = Path(tmpdir)
         (plan_dir / "01-setup.md").write_text(
             "- **Deletes:** `x.py`, `y.py`\n", encoding="utf-8"
@@ -1051,7 +1056,7 @@ def main() -> int:
         print("PASS: compute_deletes_union two batches with overlap -> de-duplicated")
 
     # Deletes: absent on a card contributes nothing; other cards in same batch do
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         plan_dir = Path(tmpdir)
         (plan_dir / "01-setup.md").write_text(
             "- **Context:** `src/a.py`\n"
@@ -1064,7 +1069,7 @@ def main() -> int:
         print("PASS: compute_deletes_union Deletes absent on some cards; present on others")
 
     # 00-overview.md is skipped
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         plan_dir = Path(tmpdir)
         (plan_dir / "00-overview.md").write_text(
             "- **Deletes:** `overview-token`\n", encoding="utf-8"
@@ -1138,7 +1143,7 @@ def main() -> int:
     # resolve_existing_paths
     # ---------------------------------------------------------------------------
 
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         project = Path(tmpdir) / "project"
         project.mkdir()
 
@@ -1200,8 +1205,8 @@ def main() -> int:
         print("PASS: resolve_existing_paths mixed input -> only existing paths returned")
 
     # Per-scope counters survive interleaved per-batch + holistic writes (regression for #21, #62, #63)
-    with tempfile.TemporaryDirectory() as tmpdir:
-        reviews = Path(tmpdir)
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        reviews = tmpdir
         ts = "20260418-002000"
         (reviews / f"{ts}-code-review-helper-modules-r1.md").write_text("x")
 
@@ -1289,7 +1294,7 @@ def main() -> int:
     print("PASS: build_reattached_section empty input -> ''")
 
     # One path -> heading + blank line + FILE delimiter
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         f = Path(tmpdir) / "foo.py"
         f.write_text("content")
         result = build_reattached_section([f])
@@ -1299,7 +1304,7 @@ def main() -> int:
         print("PASS: build_reattached_section one path -> heading + FILE delimiter")
 
     # Two paths -> both delimiters in order
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         fa = Path(tmpdir) / "a.py"
         fb = Path(tmpdir) / "b.py"
         fa.write_text("aaa")
@@ -1466,14 +1471,14 @@ def main() -> int:
     print("PASS: detect_resume_round nonexistent dir -> None")
 
     # no files -> None
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         result = detect_resume_round(Path(tmpdir), "plan")
         assert result is None, f"Got {result}"
         print("PASS: detect_resume_round empty dir -> None")
 
     # per-batch round-1 files + holistic round-1 file -> None
-    with tempfile.TemporaryDirectory() as tmpdir:
-        reviews = Path(tmpdir)
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        reviews = tmpdir
         (reviews / "20260418-001200-plan-review-01-setup-r1.md").write_text("x")
         (reviews / "20260418-001300-plan-review-r1.md").write_text("x")
         result = detect_resume_round(reviews, "plan")
@@ -1481,8 +1486,8 @@ def main() -> int:
         print("PASS: detect_resume_round per-batch r1 + holistic r1 -> None")
 
     # per-batch round-1 files + no holistic round-1 -> 1
-    with tempfile.TemporaryDirectory() as tmpdir:
-        reviews = Path(tmpdir)
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        reviews = tmpdir
         (reviews / "20260418-001200-plan-review-01-setup-r1.md").write_text("x")
         (reviews / "20260418-001300-plan-review-02-wire-r1.md").write_text("x")
         result = detect_resume_round(reviews, "plan")
@@ -1490,8 +1495,8 @@ def main() -> int:
         print("PASS: detect_resume_round per-batch r1 + no holistic -> 1")
 
     # per-batch rounds 1 and 2 + holistic round-1 + no holistic round-2 -> 2
-    with tempfile.TemporaryDirectory() as tmpdir:
-        reviews = Path(tmpdir)
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        reviews = tmpdir
         (reviews / "20260418-001200-plan-review-01-setup-r1.md").write_text("x")
         (reviews / "20260418-001300-plan-review-01-setup-r2.md").write_text("x")
         (reviews / "20260418-001400-plan-review-r1.md").write_text("x")  # holistic r1
@@ -1500,8 +1505,8 @@ def main() -> int:
         print("PASS: detect_resume_round per-batch r1+r2, holistic r1 only -> 2")
 
     # per-batch round 2 partial (some at r2, some at r1) + no holistic r2 -> 2
-    with tempfile.TemporaryDirectory() as tmpdir:
-        reviews = Path(tmpdir)
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        reviews = tmpdir
         (reviews / "20260418-001200-plan-review-01-setup-r1.md").write_text("x")
         (reviews / "20260418-001300-plan-review-01-setup-r2.md").write_text("x")
         (reviews / "20260418-001400-plan-review-02-wire-r1.md").write_text("x")
@@ -1511,8 +1516,8 @@ def main() -> int:
         print("PASS: detect_resume_round partial r2 batches, no holistic -> 2 (highest batch round)")
 
     # type isolation: plan per-batch files don't affect code detect_resume_round
-    with tempfile.TemporaryDirectory() as tmpdir:
-        reviews = Path(tmpdir)
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        reviews = tmpdir
         (reviews / "20260418-001200-plan-review-01-setup-r1.md").write_text("x")
         result = detect_resume_round(reviews, "code")
         assert result is None, f"Got {result}"
@@ -1523,7 +1528,7 @@ def main() -> int:
     # ---------------------------------------------------------------------------
 
     # Test A — file with small diff uses DIFF delimiter
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         repo = Path(tmpdir)
         subprocess.run(["git", "-C", str(repo), "init"], check=True, capture_output=True)
         subprocess.run(["git", "-C", str(repo), "config", "user.email", "t@t.com"], check=True, capture_output=True)
@@ -1548,7 +1553,7 @@ def main() -> int:
         print("PASS: bulk_files_with_diff small diff -> DIFF delimiter")
 
     # Test B — file with large diff uses FILE delimiter
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         repo = Path(tmpdir)
         subprocess.run(["git", "-C", str(repo), "init"], check=True, capture_output=True)
         subprocess.run(["git", "-C", str(repo), "config", "user.email", "t@t.com"], check=True, capture_output=True)
@@ -1571,7 +1576,7 @@ def main() -> int:
         print("PASS: bulk_files_with_diff large diff -> FILE delimiter")
 
     # Test C — unchanged file (empty diff) uses FILE delimiter
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         repo = Path(tmpdir)
         subprocess.run(["git", "-C", str(repo), "init"], check=True, capture_output=True)
         subprocess.run(["git", "-C", str(repo), "config", "user.email", "t@t.com"], check=True, capture_output=True)
@@ -1593,7 +1598,7 @@ def main() -> int:
         print("PASS: bulk_files_with_diff empty diff (unchanged file) -> FILE delimiter")
 
     # Test D — non-existent file is skipped
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         repo = Path(tmpdir)
         subprocess.run(["git", "-C", str(repo), "init"], check=True, capture_output=True)
         subprocess.run(["git", "-C", str(repo), "config", "user.email", "t@t.com"], check=True, capture_output=True)
@@ -1610,7 +1615,7 @@ def main() -> int:
         print("PASS: bulk_files_with_diff non-existent file skipped")
 
     # Test E — git diff failure falls back to full file
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         repo = Path(tmpdir)
         subprocess.run(["git", "-C", str(repo), "init"], check=True, capture_output=True)
         subprocess.run(["git", "-C", str(repo), "config", "user.email", "t@t.com"], check=True, capture_output=True)
@@ -1626,7 +1631,7 @@ def main() -> int:
         print("PASS: bulk_files_with_diff git diff failure -> FILE delimiter fallback")
 
     # _read_for_bulk: code-cell-only notebook -> source concatenated with \n\n
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         notebook_path = Path(tmpdir) / "code_only.ipynb"
         notebook_path.write_text(
             json.dumps({
@@ -1642,7 +1647,7 @@ def main() -> int:
         print("PASS: _read_for_bulk code-cell-only notebook")
 
     # _read_for_bulk: markdown-cell-only notebook
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         notebook_path = Path(tmpdir) / "md_only.ipynb"
         notebook_path.write_text(
             json.dumps({
@@ -1658,7 +1663,7 @@ def main() -> int:
         print("PASS: _read_for_bulk markdown-cell-only notebook")
 
     # _read_for_bulk: mixed code + markdown
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         notebook_path = Path(tmpdir) / "mixed.ipynb"
         notebook_path.write_text(
             json.dumps({
@@ -1675,7 +1680,7 @@ def main() -> int:
         print("PASS: _read_for_bulk mixed code + markdown")
 
     # _read_for_bulk: cell with source as list of strings
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         notebook_path = Path(tmpdir) / "list_source.ipynb"
         notebook_path.write_text(
             json.dumps({
@@ -1690,7 +1695,7 @@ def main() -> int:
         print("PASS: _read_for_bulk cell with list-form source")
 
     # _read_for_bulk: cell with source as single string
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         notebook_path = Path(tmpdir) / "str_source.ipynb"
         notebook_path.write_text(
             json.dumps({
@@ -1705,7 +1710,7 @@ def main() -> int:
         print("PASS: _read_for_bulk cell with string-form source")
 
     # _read_for_bulk: raw cell present -> skipped
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         notebook_path = Path(tmpdir) / "with_raw.ipynb"
         notebook_path.write_text(
             json.dumps({
@@ -1723,7 +1728,7 @@ def main() -> int:
         print("PASS: _read_for_bulk raw cell skipped")
 
     # _read_for_bulk: non-.ipynb file (e.g. .py)
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         py_path = Path(tmpdir) / "code.py"
         py_path.write_text("def hello():\n    return 42", encoding="utf-8")
         result = _read_for_bulk(py_path)
@@ -1731,7 +1736,7 @@ def main() -> int:
         print("PASS: _read_for_bulk .py file returns text as-is")
 
     # _read_for_bulk: malformed JSON .ipynb -> returns "" with stderr warning
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         import io as _io
         import contextlib as _cl
         notebook_path = Path(tmpdir) / "bad.ipynb"
@@ -1747,7 +1752,7 @@ def main() -> int:
 
     # write_review_file: UTC-timestamp regression test (frozen clock)
     import datetime as _dt
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         reviews_dir = Path(tmpdir)
         frozen_dt = _dt.datetime(2026, 1, 2, 3, 4, 5, tzinfo=_dt.timezone.utc)
         with patch("_review_common.datetime") as mock_dt_module:
@@ -1788,7 +1793,7 @@ def main() -> int:
     # Regression: ensure "-holistic-review-" substring never appears in filenames.
     # scope=None, scope="holistic", and scope="01-foo" should produce the correct patterns.
     try:
-        with tempfile.TemporaryDirectory() as tmpdir:
+        with _test_helpers.safe_temp_dir() as tmpdir:
             reviews_dir = Path(tmpdir)
 
             # Case 1: scope=None (holistic)
@@ -1828,7 +1833,7 @@ def main() -> int:
 
     # find_active_slug glob fallback: one .active file -> returns slug
     try:
-        with tempfile.TemporaryDirectory() as tmp:
+        with _test_helpers.safe_temp_dir() as tmp:
             hub_root = Path(tmp)
             mill_dir = hub_root / "_mill"
             mill_dir.mkdir(parents=True)
@@ -1849,7 +1854,7 @@ def main() -> int:
 
     # find_active_slug glob fallback: multiple .active files -> ReviewError
     try:
-        with tempfile.TemporaryDirectory() as tmp:
+        with _test_helpers.safe_temp_dir() as tmp:
             hub_root = Path(tmp)
             mill_dir = hub_root / "_mill"
             mill_dir.mkdir(parents=True)
@@ -1875,7 +1880,7 @@ def main() -> int:
 
     # find_active_slug glob fallback: no _mill/ dir -> ReviewError
     try:
-        with tempfile.TemporaryDirectory() as tmp:
+        with _test_helpers.safe_temp_dir() as tmp:
             hub_root = Path(tmp)
             # Do NOT create _mill/
 

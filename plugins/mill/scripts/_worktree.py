@@ -203,8 +203,8 @@ def remove_safe(
     Args:
         path: Absolute path to the worktree directory to remove.
         cwd: Repo root from which to invoke ``git``.
-        junctions_cfg: The ``junctions:`` block from ``wiki/config.yaml``,
-            as returned by ``_wiki.read_junctions``.
+        junctions_cfg: The ``junctions:`` block from ``mill-config.yaml``,
+            as returned by ``_junction.read_junctions``.
         force: Forwarded to ``git worktree remove`` and to the fallback's
             ``_safe_rmtree.safe_rmtree(ignore_errors=...)`` decision.
 

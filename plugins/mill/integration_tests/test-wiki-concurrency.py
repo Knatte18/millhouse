@@ -75,6 +75,12 @@ def _make_sync_pull_script(wiki_path: Path, slug: str) -> str:
 
 
 def main() -> int:
+    # SKIP: V2 advisory lock model (_wiki.sync_pull) removed in V3
+    # V3 uses daemon-mediated lazy refresh; concurrency model is different
+    # See #<github-issue-pending> for V3 concurrency design
+    print("SKIP: V2 advisory lock concurrency test; see #<github-issue-pending>")
+    return 0
+
     run_id = uuid.uuid4().hex[:8]
     container = SCRATCH / f"wiki-concurrency-{run_id}"
     container.mkdir(parents=True, exist_ok=True)

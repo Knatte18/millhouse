@@ -1,21 +1,20 @@
 """
 Shortcut-wrapper writer for mill-setup Phase 4.7.
 
-Renders ``plugins/mill/templates/shortcut-wrapper.ps1`` once per user-callable
-script and writes the result to ``.millhouse/<script>.ps1``.  Idempotent: a
+Renders ``plugins/mill/templates/shortcut-wrapper.cmd`` once per user-callable
+script and writes the result to ``.millhouse/<script>.cmd``.  Idempotent: a
 file that already contains identical content is not rewritten.
 
-After writing PS1 wrappers, any legacy ``.py`` wrappers for the same scripts
-that still exist in ``mill_dir`` are deleted (idempotent cleanup).
+After writing CMD wrappers, any legacy ``.py`` or ``.ps1`` wrappers for the
+same scripts that still exist in ``mill_dir`` are deleted (idempotent cleanup).
 
 Public API:
     write_all(mill_dir, latest_path)
         Render and write every shortcut wrapper under ``mill_dir``.
-        Returns the list of PS1 paths that were created or overwritten
-        (legacy .py deletion is a side effect, not part of the return).
+        Returns the list of CMD paths that were created or overwritten.
 
 Constants:
-    SHORTCUT_SCRIPTS — ordered list of script stems to wrap.
+    SHORTCUT_SCRIPTS -- ordered list of script stems to wrap.
 """
 from __future__ import annotations
 
@@ -40,42 +39,45 @@ SHORTCUT_SCRIPTS: list[str] = [
 ]
 
 # Template path relative to this file's package root.
-_TEMPLATE_PATH = Path(__file__).resolve().parent.parent / "templates" / "shortcut-wrapper.ps1"
+_TEMPLATE_PATH = Path(__file__).resolve().parent.parent / "templates" / "shortcut-wrapper.cmd"
 
 
 def write_all(mill_dir: Path, latest_path: Path) -> list[Path]:
     """
     Render and write all shortcut wrappers under ``mill_dir``.
 
-    For each script in ``SHORTCUT_SCRIPTS``, the template is rendered with
-    ``{"SCRIPT": script_stem}`` and written to ``mill_dir / f"{script}.ps1"``.
-    A file is skipped when its on-disk content is already byte-equal to the
-    rendered output; only created or overwritten PS1 paths are returned.
+    For each script in ``SHORTCUT_SCRIPTS``, the template is rendered and
+    written to ``mill_dir / f"{script}.cmd"``.  A file is skipped when its
+    on-disk content is already byte-equal to the rendered output.
 
-    After the write loop, any legacy ``.py`` wrapper in ``mill_dir`` whose
-    stem matches a ``SHORTCUT_SCRIPTS`` entry is deleted
-    (``Path.unlink(missing_ok=True)``).  Deletion is a side effect and is
-    not reflected in the return value.
+    After the write loop, any legacy ``.py`` or ``.ps1`` wrappers whose stem
+    matches a ``SHORTCUT_SCRIPTS`` entry are deleted.
 
     Args:
         mill_dir: Directory in which to write the wrappers (typically
-            ``.millhouse/`` at the repo root). The directory must already
-            exist; this function does not create it.
-        latest_path: Path — Absolute path to the latest plugin cache entry;
-            used to construct SCRIPT_PATH tokens.
+            ``.millhouse/`` at the repo root). Must already exist.
+        latest_path: Absolute path to the latest plugin cache entry;
+            used to construct SCRIPT_PATH and MILL_PYTHON tokens.
 
     Returns:
-        List of ``Path`` objects for every PS1 file that was created or
+        List of ``Path`` objects for every .cmd file that was created or
         rewritten. Empty list if all wrappers were already up-to-date.
     """
+    tokens = {
+        "MILL_PYTHON": str(latest_path / ".venv" / "Scripts" / "python.exe"),
+    }
     written: list[Path] = []
     for script in SHORTCUT_SCRIPTS:
-        rendered = _render.render(_TEMPLATE_PATH, {"SCRIPT": script, "SCRIPT_PATH": str(latest_path / "scripts" / f"{script}.py")})
-        target = mill_dir / f"{script}.ps1"
+        rendered = _render.render(
+            _TEMPLATE_PATH,
+            {**tokens, "SCRIPT": script, "SCRIPT_PATH": str(latest_path / "scripts" / f"{script}.py")},
+        )
+        target = mill_dir / f"{script}.cmd"
         if target.exists() and target.read_text(encoding="utf-8") == rendered:
             continue
         target.write_text(rendered, encoding="utf-8")
         written.append(target)
     for script in SHORTCUT_SCRIPTS:
         (mill_dir / f"{script}.py").unlink(missing_ok=True)
+        (mill_dir / f"{script}.ps1").unlink(missing_ok=True)
     return written

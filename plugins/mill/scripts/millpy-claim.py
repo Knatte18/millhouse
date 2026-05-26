@@ -42,10 +42,9 @@ import _junction
 import _paths
 import _spawn_core
 import _subprocess_util
-import _tasks_md
 import _vscode
-import _wiki
-from _config import load_config as _load_config_lenient
+from wiki import _client as wiki
+from _config import load_config as _load_config
 from _paths import resolve_container_path, resolve_git_root, resolve_hub_path, resolve_short_name, resolve_wiki_path
 
 
@@ -54,23 +53,17 @@ from _paths import resolve_container_path, resolve_git_root, resolve_hub_path, r
 # --------------------------------------------------------------------------- #
 
 
-def _load_config(repo_root: Path, worktree_root: Path) -> dict:
+def _strict_load_config(repo_root: Path, worktree_root: Path) -> dict:
     """Load config; raises SystemExit when no config source is found.
 
     Strict-mode wrapper around ``_config.load_config``: mill-claim requires
     a properly initialised config to resolve branch prefixes and other
     spawn settings, so a missing source is always a fatal user error here.
     """
-    import _paths
     mill_cfg = repo_root / "mill-config.yaml"
-    wiki_cfg = None
-    try:
-        wiki_cfg = _paths.resolve_wiki_path(repo_root) / "config.yaml"
-    except SystemExit:
-        wiki_cfg = None
-    if not mill_cfg.exists() and (wiki_cfg is None or not wiki_cfg.exists()):
-        raise SystemExit(f"Missing config: searched {mill_cfg} and {wiki_cfg}")
-    return _load_config_lenient(repo_root, worktree_root)
+    if not mill_cfg.exists():
+        raise SystemExit(f"Missing config: searched {mill_cfg}")
+    return _load_config(repo_root, worktree_root)
 
 
 def _is_dirty(git_root: Path) -> bool:
@@ -172,7 +165,7 @@ def main(argv: list[str] | None = None) -> int:
 
     git_root = resolve_git_root()
     wiki_path = resolve_wiki_path(git_root)
-    cfg = _load_config(git_root, resolve_hub_path())
+    cfg = _strict_load_config(git_root, resolve_hub_path())
     spawn_cfg = cfg.get("spawn", {})
 
     home_path = wiki_path / "Home.md"
@@ -182,9 +175,7 @@ def main(argv: list[str] | None = None) -> int:
             "or set paths.wiki: in .millhouse/config.local.yaml."
         )
 
-    _wiki.sync_pull(wiki_path, slug="mill-claim")
-    home_text = home_path.read_text(encoding="utf-8")
-    tasks = _tasks_md.parse(home_text)
+    tasks = wiki.list_tasks_brief(wiki_path)
 
     # Pick a task; multi-select is not yet wired (arrives in Card 13).
     try:
@@ -203,7 +194,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if mode == "multi":
         # Collect merged entry from the user, then atomically groom+claim.
-        source_slugs = [t.slug for t in picked]
+        source_slugs = [t["slug"] for t in picked]
         merged_title, merged_slug, body_for_home, has_proposal, proposal_body = (
             _spawn_core.prompt_merged_entry(picked)
         )
@@ -212,13 +203,13 @@ def main(argv: list[str] | None = None) -> int:
             has_proposal=has_proposal, proposal_body=proposal_body,
         )
 
-    slug = picked.slug
+    slug = picked["slug"]
 
     branch_prefix = spawn_cfg.get("branch_prefix", "")
     branch_name = f"{branch_prefix}{slug}" if branch_prefix else slug
 
     if args.dry_run:
-        print(f"[DryRun] Task:    {picked.title} [{slug}]")
+        print(f"[DryRun] Task:    {picked['title']} [{slug}]")
         print(f"[DryRun] Branch:  {branch_name}")
         print(f"[DryRun] Status:  {_paths.status_path(resolve_hub_path(), cfg)}")
         print("[DryRun] Mode:    in-place")
@@ -303,7 +294,7 @@ def main(argv: list[str] | None = None) -> int:
     status_abs = _spawn_core.write_initial_status(
         worktree_path=resolve_hub_path(),
         slug=slug,
-        title=picked.title,
+        title=picked["title"],
         ts=ts,
         parent_branch=parent_branch,
         branch=branch_name,

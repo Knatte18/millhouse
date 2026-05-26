@@ -41,13 +41,12 @@ import _junction
 import _paths
 import _setup
 import _spawn_core
-import _tasks_md
 import _vscode
-import _wiki
 import _worktree
 from _config import load_config as _load_config_lenient
 from _paths import resolve_container_path, resolve_git_root, resolve_hub_path, resolve_hub_relative_path, resolve_main_worktree_root, resolve_short_name, resolve_wiki_path, resolve_worktrees_dir
 from _spawn_core import pick_worktree_color
+from wiki import _client as wiki
 
 
 # --------------------------------------------------------------------------- #
@@ -63,13 +62,8 @@ def _load_config(repo_root: Path, worktree_root: Path) -> dict:
     spawn settings, so a missing source is always a fatal user error here.
     """
     mill_cfg = repo_root / "mill-config.yaml"
-    wiki_cfg = None
-    try:
-        wiki_cfg = resolve_wiki_path(repo_root) / "config.yaml"
-    except SystemExit:
-        wiki_cfg = None
-    if not mill_cfg.exists() and (wiki_cfg is None or not wiki_cfg.exists()):
-        raise SystemExit(f"Missing config: searched {mill_cfg} and {wiki_cfg}")
+    if not mill_cfg.exists():
+        raise SystemExit(f"Missing config: {mill_cfg}")
     return _load_config_lenient(repo_root, worktree_root)
 
 
@@ -125,9 +119,7 @@ def main(argv: list[str] | None = None) -> int:
             "or set paths.wiki: in .millhouse/config.local.yaml."
         )
 
-    _wiki.sync_pull(wiki_path, slug="mill-spawn")
-    home_text = home_path.read_text(encoding="utf-8")
-    tasks = _tasks_md.parse(home_text)
+    tasks = wiki.list_tasks_brief(wiki_path)
 
     # Pick the task. --slug short-circuits to single; multi fires from the
     # numbered prompt when the user enters comma-separated indices.
@@ -147,7 +139,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if mode == "multi":
         # Collect merged entry from the user, then atomically groom+claim.
-        source_slugs = [t.slug for t in picked]
+        source_slugs = [t["slug"] for t in picked]
         merged_title, merged_slug, body_for_home, has_proposal, proposal_body = (
             _spawn_core.prompt_merged_entry(picked)
         )
@@ -156,7 +148,7 @@ def main(argv: list[str] | None = None) -> int:
             has_proposal=has_proposal, proposal_body=proposal_body,
         )
 
-    slug = picked.slug
+    slug = picked["slug"]
 
     branch_prefix = spawn_cfg.get("branch_prefix", "")
     branch_name = f"{branch_prefix}{slug}" if branch_prefix else slug
@@ -166,7 +158,7 @@ def main(argv: list[str] | None = None) -> int:
     dest_hub = resolve_hub_relative_path(worktree_path, hub_subpath)
 
     if args.dry_run:
-        print(f"[DryRun] Task:     {picked.title} [{slug}]")
+        print(f"[DryRun] Task:     {picked['title']} [{slug}]")
         print(f"[DryRun] Branch:   {branch_name}")
         print(f"[DryRun] Worktree: {worktree_path}")
         print(f"[DryRun] Status:   {_paths.status_path(worktree_path, cfg)}")
@@ -249,7 +241,7 @@ def main(argv: list[str] | None = None) -> int:
     status_abs = _spawn_core.write_initial_status(
         worktree_path=worktree_path,
         slug=slug,
-        title=picked.title,
+        title=picked["title"],
         ts=ts,
         parent_branch=parent_branch,
         branch=branch_name,

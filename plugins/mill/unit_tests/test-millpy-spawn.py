@@ -19,6 +19,11 @@ from unittest.mock import MagicMock, patch
 HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
+_UNIT_TESTS = Path(__file__).resolve().parent
+sys.path.insert(0, str(_UNIT_TESTS))
+
+import _test_helpers  # noqa: E402
+
 
 # ---------------------------------------------------------------------------
 # Smoke import
@@ -37,7 +42,7 @@ def test_smoke_import() -> None:
     # Provide minimal stubs for the heavy imports so the module loads without
     # a real git repo or wiki on disk.
     stubs = [
-        "_junction", "_setup", "_spawn_core", "_tasks_md", "_vscode", "_wiki",
+        "_junction", "_setup", "_spawn_core", "_vscode",
         "_worktree", "_paths", "_sibling", "_subprocess_util",
     ]
     for name in stubs:
@@ -85,11 +90,17 @@ def test_smoke_import() -> None:
 # ---------------------------------------------------------------------------
 
 
-def _make_fake_task(slug: str = "my-task", title: str = "My Task") -> MagicMock:
-    task = MagicMock()
-    task.slug = slug
-    task.title = title
-    return task
+def _make_fake_task(slug: str = "my-task", title: str = "My Task") -> dict:
+    return {
+        "slug": slug,
+        "title": title,
+        "group": None,
+        "brief": "",
+        "status": "active",
+        "id": 0,
+        "body": "",
+        "has_proposal": False,
+    }
 
 
 def _run_main_with_mocks(
@@ -787,11 +798,7 @@ def _run_spawn_real_fs(
 
 def test_spawn_standard_layout_regression() -> None:
     """Standard layout (no hub_relative_path): hub state lands at worktree_path/.millhouse/."""
-    import _safe_rmtree
-    import tempfile
-
-    tmpdir = Path(tempfile.mkdtemp())
-    try:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         exit_code, wt, vscode_mock, setup_mock = _run_spawn_real_fs(tmpdir, ".")
 
         if exit_code != 0:
@@ -828,8 +835,6 @@ def test_spawn_standard_layout_regression() -> None:
                 raise AssertionError(
                     f"config.local.yaml has unexpected hub_relative_path={hub_rel!r}"
                 )
-    finally:
-        _safe_rmtree.safe_rmtree(tmpdir, allowed_root=tmpdir, ignore_errors=True)
 
     print("PASS: test_spawn_standard_layout_regression")
 
@@ -841,13 +846,10 @@ def test_spawn_standard_layout_regression() -> None:
 
 def test_spawn_subfolder_install_destination_layout() -> None:
     """Subfolder-install (hub_relative_path: src/Models): hub state lands at dest_hub."""
-    import _safe_rmtree
-    import tempfile
     import yaml
 
     hub_subpath = "src/Models"
-    tmpdir = Path(tempfile.mkdtemp())
-    try:
+    with _test_helpers.safe_temp_dir() as tmpdir:
         exit_code, wt, vscode_mock, setup_mock = _run_spawn_real_fs(
             tmpdir, hub_subpath, slug="subfolder-task", title="Subfolder Task"
         )
@@ -890,8 +892,6 @@ def test_spawn_subfolder_install_destination_layout() -> None:
             raise AssertionError(
                 f"create_hub_links first arg should be {dest_hub}, got {first_arg!r}"
             )
-    finally:
-        _safe_rmtree.safe_rmtree(tmpdir, allowed_root=tmpdir, ignore_errors=True)
 
     print("PASS: test_spawn_subfolder_install_destination_layout")
 
@@ -951,23 +951,24 @@ def test_spawn_discovery_round_trip_subfolder() -> None:
         wiki = tmpdir / "wiki"
         wiki.mkdir()
         (wiki / "config.yaml").write_text("junctions: {}\nhardlinks: {}\n", encoding="utf-8")
+        (wiki / "mill-config.yaml").write_text("paths:\n  discussion_file: discussion.md\nspawn:\n  branch_prefix: \"\"\n", encoding="utf-8")
         (wiki / "Home.md").write_text(
-            f"## RT Task\n[[{slug}]] [active]\n\n_body_\n", encoding="utf-8"
+            f"## RT Task\n[{slug}] [active]\n\n_body_\n", encoding="utf-8"
         )
 
         # Import real module implementations (scripts dir is on sys.path)
         # Temporarily clear any stubs injected by previous tests.
         _to_clear = ["_spawn_core", "_config", "_paths", "_yaml_writer",
-                     "_sibling", "_subprocess_util", "_tasks_md"]
+                     "_sibling", "_subprocess_util"]
         _saved = {n: sys.modules.pop(n, None) for n in _to_clear}
         try:
             import _spawn_core as real_sc
             import _config as real_cfg_mod
             import _paths as real_paths_mod
-            import _tasks_md as real_tasks_md
+            from wiki._parse import parse_home_md
 
             # 1. discover_active_worktrees with new signature
-            home_tasks = real_tasks_md.parse((wiki / "Home.md").read_text(encoding="utf-8"))
+            home_tasks = parse_home_md((wiki / "Home.md").read_text(encoding="utf-8"))
             discovered = real_sc.discover_active_worktrees(worktrees, home_tasks, branch_prefix, cwd=wt)
             if len(discovered) != 1:
                 raise AssertionError(

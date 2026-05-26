@@ -88,6 +88,7 @@ class TestReviewCliErrorEnvelope(unittest.TestCase):
         with patch("sys.stdout", captured_stdout), \
              patch("sys.stderr", captured_stderr), \
              patch("_paths.resolve_wiki_path", return_value=self.tempdir_path), \
+             patch("_paths.resolve_git_root", return_value=self.tempdir_path), \
              patch("_review_common.load_config", return_value={"paths": {}, "roles": {}}), \
              patch("_reviewers.load", return_value={}), \
              patch("_reviewers.validate_role_refs", return_value=None), \

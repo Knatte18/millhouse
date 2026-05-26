@@ -174,33 +174,16 @@ def load_config(repo_root: Path, worktree_root: Path) -> dict:
 
     # 2. Resolve repo-layer sources
     mill_cfg_path = _paths.resolve_mill_config_path(repo_root)
-    wiki_cfg_path = None
-    try:
-        wiki_cfg_path = _paths.resolve_wiki_path(repo_root) / "config.yaml"
-    except (Exception, SystemExit):
-        wiki_cfg_path = None
 
-    # 3. Apply repo-layer merge logic (both-files-present and fallback rules)
+    # 3. Apply repo-layer merge logic
     source_label = ""
-    if mill_cfg_path.exists():
-        repo_cfg = yaml.safe_load(mill_cfg_path.read_text(encoding="utf-8")) or {}
-        cfg = deep_merge(cfg, repo_cfg)
-        source_label = "mill-config.yaml"
-        if wiki_cfg_path and wiki_cfg_path.exists():
-            print(
-                f"[config] stale wiki/config.yaml detected at {wiki_cfg_path}; "
-                f"mill-config.yaml wins -- remove the wiki file via mill-setup",
-                file=sys.stderr,
-            )
-    elif wiki_cfg_path and wiki_cfg_path.exists():
-        wiki_cfg = yaml.safe_load(wiki_cfg_path.read_text(encoding="utf-8")) or {}
-        cfg = deep_merge(cfg, wiki_cfg)
-        source_label = "wiki/config.yaml"
-        print(
-            f"[config] using legacy wiki/config.yaml at {wiki_cfg_path}; "
-            f"rebase onto main to pick up mill-config.yaml",
-            file=sys.stderr,
+    if not mill_cfg_path.exists():
+        raise FileNotFoundError(
+            f"Required {mill_cfg_path} not found; run mill-setup to initialize"
         )
+    repo_cfg = yaml.safe_load(mill_cfg_path.read_text(encoding="utf-8")) or {}
+    cfg = deep_merge(cfg, repo_cfg)
+    source_label = "mill-config.yaml"
 
     # 4. Apply stub-aware local config logic (preserved from existing code)
     stub_path = worktree_root / ".millhouse" / "config.local.yaml"

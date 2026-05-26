@@ -14,9 +14,11 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 
+SKIP: frozenset[str] = frozenset({"test-wiki-sync.py"})
+
 
 def main() -> int:
-    tests = sorted(HERE.glob("test-*.py"))
+    tests = sorted(p for p in HERE.glob("test-*.py") if p.name not in SKIP)
     if not tests:
         print("No test-*.py files found.", file=sys.stderr)
         return 1

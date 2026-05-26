@@ -10,8 +10,8 @@ _SCRIPTS = _HERE.parent / "scripts"
 if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 
-import _tasks_md  # noqa: E402
 import _test_helpers  # noqa: E402
+from wiki import _client as wiki  # noqa: E402
 
 MILLPY_BG_PATH = _HERE.parent / "scripts" / "millpy-bg.py"
 
@@ -71,8 +71,17 @@ def _make_container_form_worktree(
     )
 
     (worktree_path / ".keep").write_text("", encoding="utf-8")
+
+    # Create mill-config.yaml in the worktree root (serves as the hub root for this test)
+    # Add it on main branch so it's available in all branches
+    mill_config = worktree_path / "mill-config.yaml"
+    mill_config.write_text(
+        "spawn:\n  branch_prefix: \"hanf/\"\nroles:\n  discussion-review:\n    holistic:\n      reviewer: test_stub\n",
+        encoding="utf-8",
+    )
+
     subprocess.run(
-        ["git", "-C", str(worktree_path), "add", ".keep"],
+        ["git", "-C", str(worktree_path), "add", ".keep", "mill-config.yaml"],
         check=True,
         capture_output=True,
     )
@@ -89,15 +98,15 @@ def _make_container_form_worktree(
         capture_output=True,
     )
 
-    wiki_path.mkdir(parents=True, exist_ok=True)
-    home_body = f"## {title}\n[[{slug}]] [active]\n\n_body_\n"
+    _test_helpers.init_wiki_repo(wiki_path)
+
+    home_body = f"## {title}\n[{slug}] [active]\n\n_body_\n"
     (wiki_path / "Home.md").write_text(home_body, encoding="utf-8")
 
-    parsed = _tasks_md.parse(home_body)
-    found = next((t for t in parsed if t.slug == slug), None)
-    if found is None:
+    if f"[{slug}]" not in home_body:
         raise AssertionError(f"slug {slug!r} not found in generated Home.md")
 
+    wiki.upsert_task(wiki_path, slug, title=title, status="active")
     _test_helpers.seed_wiki_config(wiki_path, include_roles=False)
 
     return (worktree_path, wiki_path)
@@ -235,7 +244,7 @@ def test_launcher_accepts_valid_task_worktree() -> None:
                 sys.executable,
                 str(MILLPY_BG_PATH),
                 "--slug",
-                "test",
+                "test-task",
                 "--",
                 sys.executable,
                 "-c",
