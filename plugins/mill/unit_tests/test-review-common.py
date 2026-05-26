@@ -60,6 +60,11 @@ def _make_worktree_fixture(tmp: str, slug: str) -> tuple[Path, Path]:
         ["git", "-C", str(worktree), "checkout", "-b", f"hanf/{slug}"],
         check=True, capture_output=True,
     )
+    (worktree / "mill-config.yaml").write_text(
+        "paths:\n  discussion_file: discussion.md\n"
+        "spawn:\n  branch_prefix: \"hanf/\"\n",
+        encoding="utf-8",
+    )
     wiki_root = container / "wiki"
     wiki_root.mkdir(parents=True, exist_ok=True)
     (wiki_root / "config.yaml").write_text(

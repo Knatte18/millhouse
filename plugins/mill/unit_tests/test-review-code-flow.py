@@ -287,7 +287,8 @@ def main() -> int:
         seed_wiki_config(wiki_root)
         (wiki_root / "Home.md").write_text(f"## Test Task\n[[{SLUG}]] [active]\n\n_body_\n", encoding="utf-8")
         (mill_dir / "config.local.yaml").write_text(
-            f"paths:\n  wiki: '{wiki_root.as_posix()}'\n", encoding="utf-8"
+            f"paths:\n  wiki: '{wiki_root.as_posix()}'\n"
+            f"spawn:\n  branch_prefix: 'hanf/'\n", encoding="utf-8"
         )
         project_root = worktree
         plan_dir = worktree / "plan"
@@ -358,7 +359,8 @@ def main() -> int:
         seed_wiki_config(wiki_root)
         (wiki_root / "Home.md").write_text(f"## Test Task\n[[{SLUG}]] [active]\n\n_body_\n", encoding="utf-8")
         (mill_dir / "config.local.yaml").write_text(
-            f"paths:\n  wiki: '{wiki_root.as_posix()}'\n", encoding="utf-8"
+            f"paths:\n  wiki: '{wiki_root.as_posix()}'\n"
+            f"spawn:\n  branch_prefix: 'hanf/'\n", encoding="utf-8"
         )
         project_root = worktree
         plan_dir = worktree / "plan"
@@ -498,7 +500,8 @@ def main() -> int:
         mill_dir = project_root / ".millhouse"
         mill_dir.mkdir(parents=True, exist_ok=True)
         (mill_dir / "config.local.yaml").write_text(
-            f"paths:\n  wiki: '{wiki_root.as_posix()}'\n", encoding="utf-8"
+            f"paths:\n  wiki: '{wiki_root.as_posix()}'\n"
+            f"spawn:\n  branch_prefix: 'hanf/'\n", encoding="utf-8"
         )
         plan_dir = project_root / "plan"
         plan_dir.mkdir(parents=True)
@@ -722,7 +725,8 @@ def main() -> int:
         seed_wiki_config(wiki_root)
         (wiki_root / "Home.md").write_text(f"## Test Task\n[[{SLUG}]] [active]\n\n_body_\n", encoding="utf-8")
         (mill_dir / "config.local.yaml").write_text(
-            f"paths:\n  wiki: '{wiki_root.as_posix()}'\n", encoding="utf-8"
+            f"paths:\n  wiki: '{wiki_root.as_posix()}'\n"
+            f"spawn:\n  branch_prefix: 'hanf/'\n", encoding="utf-8"
         )
         project_root = worktree
         plan_dir = worktree / "plan"

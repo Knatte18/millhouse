@@ -38,18 +38,23 @@ from _test_helpers import safe_temp_dir  # noqa: E402
 # ---------------------------------------------------------------------------
 
 
-def _write_wiki_config(wiki_path: Path, cfg: dict) -> None:
-    """Write cfg as YAML to wiki_path/config.yaml."""
-    (wiki_path / "config.yaml").write_text(
+def _write_hub_config(hub_root: Path, cfg: dict) -> None:
+    """Write cfg as YAML to hub_root/mill-config.yaml (where _junction.read_* looks)."""
+    hub_root.mkdir(parents=True, exist_ok=True)
+    (hub_root / "mill-config.yaml").write_text(
         yaml.dump(cfg, default_flow_style=False), encoding="utf-8"
     )
 
 
-def _make_minimal_wiki(wiki_path: Path, cfg: dict) -> None:
-    """Create wiki_path with Home.md and config.yaml containing cfg."""
+def _make_minimal_wiki(wiki_path: Path, hub_root: Path, cfg: dict) -> None:
+    """Create wiki_path with Home.md and write cfg as hub_root/mill-config.yaml.
+
+    The junctions/hardlinks blocks live at the hub (mill-config.yaml), not the
+    wiki — _junction.read_junctions/read_hardlinks read from <hub_root>/mill-config.yaml.
+    """
     wiki_path.mkdir(parents=True, exist_ok=True)
     (wiki_path / "Home.md").write_text("# Home\n", encoding="utf-8")
-    _write_wiki_config(wiki_path, cfg)
+    _write_hub_config(hub_root, cfg)
 
 
 # Config with the full new junctions block + one hardlink (used by most tests)
@@ -99,9 +104,9 @@ def test_token_scope_filter_no_slug() -> None:
         wiki_path = container / "wiki"
         target_root = container / "wts" / "my-repo"
 
-        _make_minimal_wiki(wiki_path, _FULL_CFG)
+        _make_minimal_wiki(wiki_path, target_root, _FULL_CFG)
         (wiki_path / "active").mkdir(parents=True)
-        target_root.mkdir(parents=True)
+        target_root.mkdir(parents=True, exist_ok=True)
 
         tokens = {
             "HUB_PATH": str(target_root),
@@ -151,9 +156,9 @@ def test_token_scope_filter_with_slug() -> None:
         wiki_path = container / "wiki"
         target_root = container / "wts" / "my-task"
 
-        _make_minimal_wiki(wiki_path, _FULL_CFG)
+        _make_minimal_wiki(wiki_path, target_root, _FULL_CFG)
         (wiki_path / "active" / "my-task").mkdir(parents=True)
-        target_root.mkdir(parents=True)
+        target_root.mkdir(parents=True, exist_ok=True)
 
         tokens = {
             "HUB_PATH": str(target_root),
@@ -209,9 +214,9 @@ def test_junction_idempotent_skip_on_correct_target() -> None:
         wiki_path = container / "wiki"
         target_root = container / "wts" / "my-task"
 
-        _make_minimal_wiki(wiki_path, _FULL_CFG)
+        _make_minimal_wiki(wiki_path, target_root, _FULL_CFG)
         (wiki_path / "active" / "my-task").mkdir(parents=True)
-        target_root.mkdir(parents=True)
+        target_root.mkdir(parents=True, exist_ok=True)
 
         tokens = {
             "HUB_PATH": str(target_root),
@@ -273,11 +278,11 @@ def test_junction_recreated_on_wrong_target() -> None:
         wiki_b = container / "wiki_b"
         target_root = container / "wts" / "my-repo"
 
-        _make_minimal_wiki(wiki_a, _FULL_CFG)
+        _make_minimal_wiki(wiki_a, target_root, _FULL_CFG)
         wiki_b.mkdir(parents=True)
         (wiki_b / "config.yaml").write_text("junctions: {}\nhardlinks: {}\n", encoding="utf-8")
         (wiki_b / "sentinel.txt").write_text("wiki-b-content", encoding="utf-8")
-        target_root.mkdir(parents=True)
+        target_root.mkdir(parents=True, exist_ok=True)
 
         junction_mod.create(target=wiki_b, link_path=target_root / ".wiki")
 
@@ -332,8 +337,8 @@ def test_junction_refuses_to_replace_real_directory() -> None:
         wiki_path = container / "wiki"
         target_root = container / "wts" / "my-repo"
 
-        _make_minimal_wiki(wiki_path, _FULL_CFG)
-        target_root.mkdir(parents=True)
+        _make_minimal_wiki(wiki_path, target_root, _FULL_CFG)
+        target_root.mkdir(parents=True, exist_ok=True)
 
         real_wiki_dir = target_root / ".wiki"
         real_wiki_dir.mkdir()
@@ -383,8 +388,8 @@ def test_hardlink_inode_skip_idempotent() -> None:
         wiki_path = container / "wiki"
         target_root = container / "wts" / "my-repo"
 
-        _make_minimal_wiki(wiki_path, _HARDLINK_ONLY_CFG)
-        target_root.mkdir(parents=True)
+        _make_minimal_wiki(wiki_path, target_root, _HARDLINK_ONLY_CFG)
+        target_root.mkdir(parents=True, exist_ok=True)
 
         tokens = {
             "HUB_PATH": str(target_root),
@@ -431,8 +436,8 @@ def test_hardlink_inode_mismatch_backup_and_recreate() -> None:
         wiki_path = container / "wiki"
         target_root = container / "wts" / "my-repo"
 
-        _make_minimal_wiki(wiki_path, _FULL_CFG)
-        target_root.mkdir(parents=True)
+        _make_minimal_wiki(wiki_path, target_root, _FULL_CFG)
+        target_root.mkdir(parents=True, exist_ok=True)
 
         # Pre-create a tasks.md that is a regular file (different inode from Home.md)
         tasks_md = target_root / "tasks.md"
@@ -492,8 +497,8 @@ def test_all_entries_filtered_return_empty_lists() -> None:
         wiki_path = tmp / "wiki"
         target_root = tmp / "worktree"
 
-        _make_minimal_wiki(wiki_path, _ALL_SLUG_CFG)
-        target_root.mkdir()
+        _make_minimal_wiki(wiki_path, target_root, _ALL_SLUG_CFG)
+        target_root.mkdir(exist_ok=True)
 
         tokens = {
             "HUB_PATH": str(target_root),
@@ -524,8 +529,8 @@ def test_cross_volume_hardlink_raises_clear_error() -> None:
     with safe_temp_dir() as tmp:
         wiki_path = tmp / "wiki"
         target_root = tmp / "worktree"
-        _make_minimal_wiki(wiki_path, {"junctions": {}, "hardlinks": {"tasks.md": "<WIKI_PATH>/Home.md"}})
-        target_root.mkdir()
+        _make_minimal_wiki(wiki_path, target_root, {"junctions": {}, "hardlinks": {"tasks.md": "<WIKI_PATH>/Home.md"}})
+        target_root.mkdir(exist_ok=True)
 
         tokens = {
             "HUB_PATH": str(target_root),
@@ -589,10 +594,10 @@ def test_portal_flow_integration() -> None:
         portals = container / "portals"
         target_root = container / "wts" / "my-task"
 
-        _make_minimal_wiki(wiki_path, _FULL_CFG)
+        _make_minimal_wiki(wiki_path, target_root, _FULL_CFG)
         (wiki_path / "active" / "my-task").mkdir(parents=True)
         portals.mkdir(parents=True)
-        target_root.mkdir(parents=True)
+        target_root.mkdir(parents=True, exist_ok=True)
 
         # Create portals/<slug> junction -> wiki/active/my-task/ (mirrors new mill-spawn)
         junction_mod.create(target=wiki_path / "active" / "my-task", link_path=portals / "my-task")
@@ -677,8 +682,8 @@ def test_create_hub_links_handles_missing_hardlinks_block() -> None:
             },
             # deliberately no hardlinks key
         }
-        _make_minimal_wiki(wiki_path, cfg_no_hardlinks)
-        target_root.mkdir(parents=True)
+        _make_minimal_wiki(wiki_path, target_root, cfg_no_hardlinks)
+        target_root.mkdir(parents=True, exist_ok=True)
 
         tokens = {
             "HUB_PATH": str(target_root),
@@ -715,8 +720,8 @@ def test_create_hub_links_handles_null_hardlinks_block() -> None:
             },
             "hardlinks": None,  # explicit null -> yaml.safe_load yields None
         }
-        _make_minimal_wiki(wiki_path, cfg_null_hardlinks)
-        target_root.mkdir(parents=True)
+        _make_minimal_wiki(wiki_path, target_root, cfg_null_hardlinks)
+        target_root.mkdir(parents=True, exist_ok=True)
 
         tokens = {
             "HUB_PATH": str(target_root),
