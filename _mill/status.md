@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-approved
+phase: done
 slug: stale-v2-references-audit
 branch: hanf/stale-v2-references-audit
 plan: _mill/plan
@@ -28,6 +28,7 @@ approved-High-complexity skill fixes  '2026-05-27T08:07:43Z'
 approved-Python comment fixes  '2026-05-27T08:10:13Z'
 holistic-reviewing  '2026-05-27T08:10:41Z'
 holistic-approved  '2026-05-27T08:15:50Z'
+done  '2026-05-27T08:16:01Z'
 ```
 
 ## Batches
