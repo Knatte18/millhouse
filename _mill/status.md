@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-archive-tag
 slug: mill-merge-teardown-recovery
 branch: hanf/mill-merge-teardown-recovery
 plan: _mill/plan
@@ -23,6 +23,7 @@ plan-fix-r1  '2026-05-27T09:06:09Z'
 plan-fix-r2  '2026-05-27T09:14:34Z'
 planned  '2026-05-27T09:14:51Z'
 implementing  '2026-05-27T09:15:49Z'
+approved-archive-tag  '2026-05-27T09:32:32Z'
 ```
 
 ## Batches
@@ -30,7 +31,7 @@ implementing  '2026-05-27T09:15:49Z'
 ```yaml
 batches:
   - name: archive-tag
-    state: running
+    state: approved
     implementer_session: eacf1ab4-8569-4534-80b8-0fe447f233fc
     start_sha: 073c4adebb1b611bf7763368634cdff698cb00b0
   - name: merge-continue
