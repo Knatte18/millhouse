@@ -28,7 +28,9 @@ implementing  '2026-05-27T07:53:47Z'
 ```yaml
 batches:
   - name: Simple skill fixes
-    state: pending
+    state: running
+    implementer_session: c69080a4-2848-403e-bbfa-dd099864a447
+    start_sha: 1559c537ba1551af3dda2ca6b3cc8e97d686762c
   - name: Medium skill fixes
     state: pending
   - name: mill-go skill fix
