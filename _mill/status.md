@@ -45,5 +45,7 @@ batches:
     implementer_session: ab6655a4-99b6-4dd9-99bb-b9cdd5445b73
     start_sha: 55589aeb85bdc0cb4dfe6eca07a8267bc9dce7e1
   - name: fixer-isolation
-    state: pending
+    state: running
+    implementer_session: 5b44d2ed-5f0c-44a5-828c-2cbe5bc46ca1
+    start_sha: c924ec8b811082ea84e295efe9d92d292cbcc75e
 ```
