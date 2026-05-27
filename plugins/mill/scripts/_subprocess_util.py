@@ -185,6 +185,26 @@ def run(
     )
 
 
+def git_commit(
+    cwd: Path | str,
+    message: str,
+    *,
+    name: str,
+    email: str,
+) -> subprocess.CompletedProcess[str]:
+    """
+    Issue a git commit with explicit author name/email, immune to worktree-local
+    config drift. Constructs argv with -c flags to override user.name and
+    user.email for this invocation only, leaving the worktree's .git/config
+    unchanged. Returns subprocess.CompletedProcess; caller inspects returncode
+    for success/failure.
+    """
+    return run(
+        ["git", "-c", f"user.name={name}", "-c", f"user.email={email}", "commit", "-m", message],
+        cwd=cwd,
+    )
+
+
 def _run_windows_watchdog(
     proc: subprocess.Popen,
     *,
