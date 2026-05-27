@@ -38,7 +38,9 @@ batches:
     implementer_session: bba3c947-f8c3-4f31-ba0e-aaee95f98106
     start_sha: fa840cdddacc8f6f0c4f8e4790fb2f6819e52434
   - name: mill-go skill fix
-    state: pending
+    state: running
+    implementer_session: a9f28c85-abc5-4d65-b1e4-f0919b82528f
+    start_sha: a4fd84e3e7690b49605ffcbf8e6e913bfc828264
   - name: High-complexity skill fixes
     state: pending
   - name: Python comment fixes
