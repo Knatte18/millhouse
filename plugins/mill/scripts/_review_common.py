@@ -640,16 +640,29 @@ def resolve_existing_paths(
     root: str | None,
     *,
     wiki_root: Path | None = None,
+    git_root: Path | None = None,
 ) -> list[Path]:
     """Resolve raw paths and return only those that already exist on disk.
 
     Mirrors resolve_ref_paths's standard-vs-wiki routing (wiki/ prefix
-    routes through wiki_root; otherwise project_root + root). Unlike
-    resolve_ref_paths, missing paths and routing failures are silently
-    dropped — no warning, no error, no creates_union check. Used to
-    expand the bulk with cross-batch ancestor creates that already
-    exist; missing creates are not an error here, they just aren't
+    routes through wiki_root; otherwise project_root + root) plus optional
+    git_root fallback. Unlike resolve_ref_paths, missing paths and routing
+    failures are silently dropped — no warning, no error, no creates_union
+    check. Used to expand the bulk with cross-batch ancestor creates that
+    already exist; missing creates are not an error here, they just aren't
     included.
+
+    Resolution order (first match wins):
+    1. wiki/ prefix routes through wiki_root (unchanged).
+    2. Candidate path under project_root (unchanged).
+    3. Candidate path under git_root (when provided).
+    4. Silent drop (no raise).
+
+    Keyword args:
+        wiki_root: When provided, raw paths starting with ``wiki/`` are
+            resolved against ``wiki_root`` instead of ``project_root``.
+        git_root: When provided, paths not found under project_root are
+            tried under git_root as a fallback before silent drop.
     """
     result: list[Path] = []
     for raw in raw_paths:
@@ -668,6 +681,13 @@ def resolve_existing_paths(
             candidate = project_root / raw
         if candidate.exists():
             result.append(candidate)
+            continue
+        # Git-root fallback (only for non-wiki paths).
+        if not raw.startswith("wiki/") and git_root is not None:
+            gr_candidate = git_root / raw
+            if gr_candidate.exists():
+                result.append(gr_candidate)
+                continue
     return result
 
 

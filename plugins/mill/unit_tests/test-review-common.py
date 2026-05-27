@@ -1279,6 +1279,44 @@ def main() -> int:
         assert result == [existing, wiki_file], f"Got {result}"
         print("PASS: resolve_existing_paths mixed input -> only existing paths returned")
 
+    # resolve_existing_paths: git_root fallback hit
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        tmp_project = Path(tmpdir) / "project"
+        tmp_project.mkdir()
+        tmp_git = Path(tmpdir) / "git"
+        git_file = tmp_git / "fallback.py"
+        git_file.parent.mkdir(parents=True)
+        git_file.write_text("x")
+        result = resolve_existing_paths(
+            ["fallback.py"], tmp_project, root=None,
+            git_root=tmp_git,
+        )
+        assert result == [git_file], f"Got {result}"
+        print("PASS: resolve_existing_paths git_root fallback hit returns git_root path")
+
+    # resolve_existing_paths: git_root fallback miss (silent drop, no error)
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        tmp_project = Path(tmpdir) / "project"
+        tmp_project.mkdir()
+        tmp_git = Path(tmpdir) / "git"
+        tmp_git.mkdir()
+        result = resolve_existing_paths(
+            ["missing.py"], tmp_project, root=None,
+            git_root=tmp_git,
+        )
+        assert result == [], f"Got {result}"
+        print("PASS: resolve_existing_paths git_root fallback miss silently drops (no error)")
+
+    # resolve_existing_paths: no git_root kwarg (current behavior unchanged)
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        tmp_project = Path(tmpdir) / "project"
+        tmp_project.mkdir()
+        result = resolve_existing_paths(
+            ["missing.py"], tmp_project, root=None,
+        )
+        assert result == [], f"Got {result}"
+        print("PASS: resolve_existing_paths without git_root preserves current behavior")
+
     # Per-scope counters survive interleaved per-batch + holistic writes (regression for #21, #62, #63)
     with _test_helpers.safe_temp_dir() as tmpdir:
         reviews = tmpdir
