@@ -463,12 +463,18 @@ def _ensure_daemon(wiki_path: Path) -> tuple[str, int, str]:
                         (state["host"], state["port"]), timeout=0.5
                     )
                     sock.close()
-                    return (state["host"], state["port"], state["token"])
+                    req = {FIELD_OP: OP_HEALTH, FIELD_TOKEN: state["token"], "payload": {}}
+                    try:
+                        resp = _connect_send_recv(state["host"], state["port"], req, timeout=1.0)
+                        if resp.get(FIELD_OK) is True:
+                            return (state["host"], state["port"], state["token"])
+                    except OSError:
+                        pass
+                    if _is_stale(state):
+                        state_file.unlink(missing_ok=True)
                 except OSError:
                     if _is_stale(state):
                         state_file.unlink(missing_ok=True)
-                    else:
-                        return (state["host"], state["port"], state["token"])
 
     _spawn_server(wiki_path)
 
@@ -520,13 +526,14 @@ def _spawn_server(wiki_path: Path) -> None:
         subprocess.Popen(cmd, env=env, close_fds=True, start_new_session=True)
 
 
-def _connect_send_recv(host: str, port: int, msg: dict) -> dict:
+def _connect_send_recv(host: str, port: int, msg: dict, *, timeout: float = 10.0) -> dict:
     """Send JSON request and receive JSON response over TCP.
 
     Args:
         host: Server host.
         port: Server port.
         msg: Request dict to send.
+        timeout: Connection timeout in seconds (default 10.0).
 
     Returns:
         Response dict.
@@ -534,7 +541,7 @@ def _connect_send_recv(host: str, port: int, msg: dict) -> dict:
     Raises:
         OSError: Connection or I/O error.
     """
-    sock = socket.create_connection((host, port), timeout=10.0)
+    sock = socket.create_connection((host, port), timeout=timeout)
     try:
         sock.sendall(json.dumps(msg).encode("utf-8"))
         sock.shutdown(socket.SHUT_WR)
