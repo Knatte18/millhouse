@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussion-fix-r5
+phase: discussed
 slug: stale-v2-references-audit
 branch: hanf/stale-v2-references-audit
 plan: null
@@ -16,4 +16,5 @@ task_description: |
 ```text
 discussing  '2026-05-27T06:24:51Z'
 discussion-fix-r5  '2026-05-27T07:12:48Z'
+discussed  '2026-05-27T07:13:01Z'
 ```
