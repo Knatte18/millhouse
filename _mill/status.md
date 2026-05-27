@@ -41,8 +41,8 @@ batches:
     start_sha: 9ea0971dc8c16f603b7b0a6b6662f8808cd2dceb
   - name: status-gate
     state: running
-    implementer_session: 04353b0a-2f60-4e49-9745-fe8ca7dbde21
-    start_sha: 0b472ad3a1f810d43597c5784da96fb74de081ec
+    implementer_session: 0c9d717c-b3c6-4766-84c8-85227f56fb5f
+    start_sha: c5b686173c11ba65fec6071559dad8d5435d4026
   - name: fixer-isolation
     state: pending
 ```
