@@ -557,6 +557,7 @@ def resolve_ref_paths(
     creates_union: set[str] | None = None,
     deletes_union: set[str] | None = None,
     wiki_root: Path | None = None,
+    git_root: Path | None = None,
     caller_label: str = "resolve_ref_paths",
 ) -> list[Path]:
     """Resolve batch-reference path strings to absolute ``Path``s.
@@ -565,6 +566,13 @@ def resolve_ref_paths(
     overview's frontmatter ``root:`` field. When present every raw path
     is resolved under ``project_root / root``; otherwise directly under
     ``project_root``.
+
+    Resolution order (first match wins):
+    1. wiki/ prefix routes through wiki_root (unchanged).
+    2. Candidate path under project_root (unchanged).
+    3. Candidate path under git_root (when provided).
+    4. creates_union/deletes_union suppression (unchanged).
+    5. Hard-fail ReviewError (unchanged).
 
     Keyword args:
         creates_union: Set of raw token strings extracted from ``Creates:``
@@ -578,6 +586,8 @@ def resolve_ref_paths(
             in ``deletes_union`` are resolved normally and included.
         wiki_root: When provided, raw paths starting with ``wiki/`` are
             resolved against ``wiki_root`` instead of ``project_root`` (#43).
+        git_root: When provided, paths not found under project_root are
+            tried under git_root as a fallback before suppression/hard-fail.
         caller_label: Prefix used in ``ReviewError`` messages. Defaults to
             the function name.
 
@@ -607,6 +617,12 @@ def resolve_ref_paths(
         if candidate.exists():
             resolved.append(candidate)
             continue
+        # Git-root fallback (only for non-wiki paths).
+        if not raw.startswith("wiki/") and git_root is not None:
+            gr_candidate = git_root / raw
+            if gr_candidate.exists():
+                resolved.append(gr_candidate)
+                continue
         # Suppression via creates_union or deletes_union.
         if raw in creates or raw in deletes:
             continue

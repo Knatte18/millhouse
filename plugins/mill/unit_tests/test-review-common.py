@@ -931,6 +931,81 @@ def main() -> int:
             assert str(e).startswith("[test_caller]"), f"Unexpected message: {e}"
             print("PASS: resolve_ref_paths caller_label in error with deletes_union present")
 
+    # resolve_ref_paths: git_root fallback hit
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        tmp_project = Path(tmpdir) / "project"
+        tmp_project.mkdir()
+        tmp_git = Path(tmpdir) / "git"
+        git_file = tmp_git / "fallback.py"
+        git_file.parent.mkdir(parents=True)
+        git_file.write_text("x")
+        result = resolve_ref_paths(
+            ["fallback.py"], tmp_project, root=None,
+            git_root=tmp_git,
+        )
+        assert result == [git_file], f"Got {result}"
+        print("PASS: resolve_ref_paths git_root fallback hit returns git_root path")
+
+    # resolve_ref_paths: git_root fallback miss (hard-fail)
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        tmp_project = Path(tmpdir) / "project"
+        tmp_project.mkdir()
+        tmp_git = Path(tmpdir) / "git"
+        tmp_git.mkdir()
+        try:
+            resolve_ref_paths(
+                ["missing.py"], tmp_project, root=None,
+                git_root=tmp_git,
+            )
+            print("FAIL: resolve_ref_paths git_root fallback miss: expected ReviewError", file=sys.stderr)
+            errors += 1
+        except ReviewError as e:
+            assert "referenced path not found" in str(e), f"Unexpected message: {e}"
+            print("PASS: resolve_ref_paths git_root fallback miss -> hard-fail ReviewError")
+
+    # resolve_ref_paths: no git_root kwarg (current behavior unchanged)
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        tmp_dir = Path(tmpdir)
+        try:
+            resolve_ref_paths(["missing.py"], tmp_dir, root=None)
+            print("FAIL: resolve_ref_paths no git_root: expected ReviewError", file=sys.stderr)
+            errors += 1
+        except ReviewError as e:
+            assert "referenced path not found" in str(e), f"Unexpected message: {e}"
+            print("PASS: resolve_ref_paths without git_root preserves current behavior")
+
+    # resolve_ref_paths: creates_union precedence over git_root
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        tmp_project = Path(tmpdir) / "project"
+        tmp_project.mkdir()
+        tmp_git = Path(tmpdir) / "git"
+        tmp_git.mkdir()
+        result = resolve_ref_paths(
+            ["missing.py"], tmp_project, root=None,
+            creates_union={"missing.py"},
+            git_root=tmp_git,
+        )
+        assert result == [], f"Got {result}"
+        print("PASS: resolve_ref_paths creates_union suppresses even with git_root fallback")
+
+    # resolve_ref_paths: wiki/ prefix unaffected by git_root fallback
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        tmp_project = Path(tmpdir) / "project"
+        tmp_project.mkdir()
+        tmp_wiki = Path(tmpdir) / "wiki"
+        tmp_wiki.mkdir()
+        tmp_git = Path(tmpdir) / "git"
+        tmp_git.mkdir()
+        wiki_file = tmp_wiki / "doc.md"
+        wiki_file.write_text("x")
+        result = resolve_ref_paths(
+            ["wiki/doc.md"], tmp_project, root=None,
+            wiki_root=tmp_wiki,
+            git_root=tmp_git,
+        )
+        assert result == [wiki_file], f"Got {result}"
+        print("PASS: resolve_ref_paths wiki/ prefix ignores git_root fallback")
+
     # compute_creates_union: empty plan dir returns empty set
     with _test_helpers.safe_temp_dir() as tmpdir:
         result = compute_creates_union(Path(tmpdir) / "nonexistent")
