@@ -1,6 +1,6 @@
 ---
 name: mill-setup
-description: Initialise mill in a fresh primary-clone directory. Creates the wiki clone, seeds wiki/config.yaml, creates hub junctions and hardlinks, seeds config.local.yaml and Home.md, and sets VS Code window colour. Idempotent — safe to re-run after a partial setup.
+description: Initialise mill in a fresh primary-clone directory. Creates the wiki clone, seeds wiki/config.yaml, creates hub junctions and hardlinks, seeds config.local.yaml, and sets VS Code window colour. Idempotent — safe to re-run after a partial setup.
 argument-hint: "[--from-url <url>] [--branch <name>]"
 ---
 
@@ -28,7 +28,7 @@ Bootstrap the mill infrastructure from nothing. Produces a working `.millhouse/`
 - `cwd` is the hub directory inside a container (typically `<container>/wts/<repo>/`)
 - `git remote get-url origin` returns a valid URL
 - `uv` is installed (`uv --version` exits 0); install via `irm https://astral.sh/uv/install.ps1 | iex`
-- `${CLAUDE_PLUGIN_ROOT}/scripts/` contains `_junction.py`, `_wiki.py`, `_subprocess_util.py`, `_render.py`, `_setup.py`
+- `${CLAUDE_PLUGIN_ROOT}/scripts/` contains `_junction.py`, `_subprocess_util.py`, `_render.py`, `_setup.py`
 - `${CLAUDE_PLUGIN_ROOT}/templates/config.local.yaml`, `${CLAUDE_PLUGIN_ROOT}/templates/mill-config.yaml`, `${CLAUDE_PLUGIN_ROOT}/templates/mill-agents.yaml`, and `${CLAUDE_PLUGIN_ROOT}/templates/Home.md` exist
 
 ## Layout assumed
@@ -68,7 +68,7 @@ PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/
 
 This direct-binary form is used by mill-setup only (bootstrapper exception — Phase 4.8 writes `MILL_PYTHON` to `~/.claude/settings.json`; all other mill skills use `"$MILL_PYTHON"`). The source-tree form (`uv run --project plugins/mill ...`) remains the documented exception for cases where the cache path is unavailable — for example, running unit tests from the millhouse repo itself.
 
-Helpers used by this skill: `_setup` (Phase 4 — `create_hub_links`), `_gitignore` (Phase 4.5b), `_shortcuts` (Phase 4.7), `_sidebar` (Phase 6a), `_vscode` (Phase 7), `_render` (transitively via `_vscode` and `_shortcuts`), `_wiki` (Phase 3, 3.1, 6, 6a).
+Helpers used by this skill: `_setup` (Phase 4 — `create_hub_links`), `_gitignore` (Phase 4.5b), `_shortcuts` (Phase 4.7), `_vscode` (Phase 7), `_render` (transitively via `_vscode` and `_shortcuts`).
 
 ## Phases
 
@@ -133,13 +133,13 @@ PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/
 
 `<hub-path>` is derived via `git rev-parse --show-toplevel`. Users can override via `.millhouse/config.local.yaml`'s `wiki_path:` key.
 
-After `<wiki-dir>` is computed, call `_wiki.clone_or_init`:
+After `<wiki-dir>` is computed, call `_setup.clone_or_init`:
 
 ```bash
 PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "
 from pathlib import Path
-import _wiki, json
-result = _wiki.clone_or_init(
+import _setup, json
+result = _setup.clone_or_init(
     url=r'<wiki-url>',
     branch=r'<wiki-branch>' if r'<wiki-branch>' else None,
     dest=Path(r'<wiki-dir>').resolve(),
@@ -221,7 +221,7 @@ Idempotency: re-running mill-setup after a successful migration is a no-op for t
 
    Log which blocks were added (from the `print('upserted blocks:', ...)` output) so the operator can see the diff.
 
-**Why verbatim copy:** the token placeholders (`<WIKI_PATH>` etc.) are resolved by `_junction.resolve_target` and `_wiki.read_hardlinks` at runtime. Substituting at seed time would bake in machine-specific paths. If `mill-config.yaml` already exists, the upsert step validates and fills any required top-level blocks that are missing (`paths`, `llm`, `pipeline`, `roles`, `notify`, `spawn`, `groom`, `merge`). This prevents downstream `KeyError` in mill-spawn when an older mill-config.yaml predates a required schema block.
+**Why verbatim copy:** the token placeholders (`<WIKI_PATH>` etc.) are resolved by `_junction.resolve_target` at runtime. Substituting at seed time would bake in machine-specific paths. If `mill-config.yaml` already exists, the upsert step validates and fills any required top-level blocks that are missing (`paths`, `llm`, `pipeline`, `roles`, `notify`, `spawn`, `groom`, `merge`). This prevents downstream `KeyError` in mill-spawn when an older mill-config.yaml predates a required schema block.
 
 ### Phase 3.2 — Persist wiki overrides to `config.local.yaml`
 
