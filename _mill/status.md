@@ -29,8 +29,8 @@ implementing  '2026-05-27T09:30:26Z'
 batches:
   - name: helper-api
     state: running
-    implementer_session: 0aa62440-dd3f-4c49-be61-7fb1c203e957
-    start_sha: d82fd851b70207ff689609f39983340daa571252
+    implementer_session: 6beaf37c-40a1-4ffb-8eea-d394f6b66ce3
+    start_sha: f63a24a3b607bc31d16ca339cfd22e909bd85957
   - name: config-callsite-fixes
     state: pending
   - name: skill-md-docs
