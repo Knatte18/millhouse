@@ -22,7 +22,7 @@ You are the **Builder** — a lean orchestrator. You coordinate per-batch implem
 1. Read the task slug: `slug = _marker.slug_from_branch(git_root, wiki_path, cfg)`. On `MarkerError` → halt with "this worktree was not created by mill-spawn".
    `signature: _marker.slug_from_branch(git_root: Path, wiki_path: Path, cfg: dict) -> str`
 2. Resolve the wiki path: `wiki_path = _paths.resolve_wiki_path(_paths.resolve_git_root())`.
-3. Load config — load `mill-config.yaml` from the hub root, merged with `.millhouse/config.local.yaml`, via `_review_common.load_config(_paths.resolve_git_root(), Path(".millhouse"))`. Read these keys:
+3. Load config — load `mill-config.yaml` from the hub root, merged with `.millhouse/config.local.yaml`, via `_review_common.load_config(_paths.resolve_hub_path(), _paths.resolve_hub_path() / ".millhouse")`. Read these keys:
    - `pipeline.auto_merge` — whether to invoke mill-finalize after success.
    - `pipeline.auto_report` — whether to auto-fire mill-self-report at end-of-work. mill-go fires it at Handoff step 6, AFTER any `/mill-merge` invocation in step 5 — including after PR-pending halts. See step 6 for the explicit "do not treat PR-pending as termination" rule.
    - `roles.code-review.batch.rounds` — max review rounds per batch.
@@ -35,9 +35,11 @@ You are the **Builder** — a lean orchestrator. You coordinate per-batch implem
    PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-builder-lock.py" acquire <slug>
    ```
    On exit code 1: surface the stderr message and halt — a second mill-go will corrupt state.
-4.5. **Path Setup.** `worktree_root` is not yet set in prior steps; `cfg` was loaded in step 3. Derive:
+4.5. **Path Setup.** `worktree_root` is not yet set in prior steps; `slug` is in scope from step 1 and `cfg` was loaded in step 3. Derive:
    ```python
-   worktree_root = _paths.resolve_git_root()
+   git_root       = _paths.resolve_git_root()
+   container_path = _paths.resolve_container_path(git_root)
+   worktree_root  = _paths.resolve_active_hub(container_path, slug, cfg=cfg, git_root=git_root)
    status_path   = _paths.resolve_task_path(worktree_root, cfg['paths']['status_md'])
    plan_dir      = _paths.resolve_task_path(worktree_root, cfg['paths']['plan_dir'])
    overview_path = plan_dir / "00-overview.md"
