@@ -5,7 +5,7 @@ description: Fold a GitHub issue or scope item into an existing Home.md backlog 
 
 # mill-fold
 
-A thin skill wrapping `millpy-fold.py`. Use it when the user wants to attach a GitHub issue or a free-form scope note to an existing backlog task in Home.md. The script acquires the wiki lock, appends one bullet to the target task's body, commits and pushes, then (GH path only) closes the issue with comment `"Folded into wiki task: <slug>"`. Locked-phase targets (`[active]`, `[ready-to-merge]`, `[pr-pending]`) are refused outright — the plan was frozen at spawn time and silent scope additions would invalidate it. `_tasks_md.LOCKED_FOLD_PHASES` is the single source of truth for the locked-phase set.
+A thin skill wrapping `millpy-fold.py`. Use it when the user wants to attach a GitHub issue or a free-form scope note to an existing backlog task in Home.md. The script acquires the wiki lock, appends one bullet to the target task's body, commits and pushes, then (GH path only) closes the issue with comment `"Folded into wiki task: <slug>"`. Locked-phase targets (`[active]`, `[ready-to-merge]`, `[pr-pending]`) are refused outright — the plan was frozen at spawn time and silent scope additions would invalidate it. The locked phase set is `{"active", "ready-to-merge", "pr-pending"}` — inline this set in operator instructions; the locked-phase policy is authoritative.
 
 ## When the user invokes me
 
@@ -29,7 +29,7 @@ Typical triggers:
 1. The script parses Home.md, runs the phase guard, then calls `_gh_issues.fetch_one(N)` to retrieve the issue title.
 2. It prints the draft Sources line and (when stdin is a tty) prompts: `1) Use as-is (Recommended) / 2) Edit / 3) Abort`.
 3. On confirmation it appends `- Sources: #N — <title>` to the target body.
-4. After `_wiki.write_commit_push` succeeds it calls `_gh_issues.close_with_comment(N, 'Folded into wiki task: <slug>', git_root=...)`.
+4. After the daemon commit/push succeeds (daemon auto-commits on each `_client` mutation) it calls `_gh_issues.close_with_comment(N, 'Folded into wiki task: <slug>', git_root=...)`.
 5. If the close fails the wiki commit stands and a warning is printed to stderr — the operator can close the issue manually.
 
 ### `/mill-fold <target-slug> --scope "<text>"` — scope item
@@ -46,7 +46,7 @@ Tasks marked `[active]`, `[ready-to-merge]`, or `[pr-pending]` reject the fold w
 Cannot fold into '<slug>': task is [<phase>]. Plan is frozen — scope additions silently invalidate it.
 ```
 
-There is no `--force` flag. The rationale: mill-spawn commits a frozen plan at the time a task enters `[active]`; appending scope after that point silently invalidates the plan that the implementer is following. Pick a different action: skip the issue, handle it in a follow-up task, or wait until the current task merges. `_tasks_md.LOCKED_FOLD_PHASES` is the source of truth — never duplicate the tuple in operator instructions or scripts.
+There is no `--force` flag. The rationale: mill-spawn commits a frozen plan at the time a task enters `[active]`; appending scope after that point silently invalidates the plan that the implementer is following. Pick a different action: skip the issue, handle it in a follow-up task, or wait until the current task merges. The locked phase set `{"active", "ready-to-merge", "pr-pending"}` is the source of truth — never duplicate it in operator instructions or scripts.
 
 ## How to call the script
 
