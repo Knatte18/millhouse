@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-helper-api
+phase: approved-config-callsite-fixes
 slug: hub-relative-path-support
 branch: hanf/hub-relative-path-support
 plan: _mill/plan
@@ -22,6 +22,7 @@ plan-fix-r1  '2026-05-27T09:24:58Z'
 planned  '2026-05-27T09:25:20Z'
 implementing  '2026-05-27T09:30:26Z'
 approved-helper-api  '2026-05-27T12:17:24Z'
+approved-config-callsite-fixes  '2026-05-27T12:21:48Z'
 ```
 
 ## Batches
@@ -34,7 +35,8 @@ batches:
     start_sha: d32ea955dd0f8e46d49443e8fe5112f833d31b2b
     commit_sha: 552235b586d2c1d64daceeab6dcb6fdddb1a7852
   - name: config-callsite-fixes
-    state: pending
+    state: approved
+    commit_sha: 10464af8510956eaa969a4ab43775dfda7afb4ff
   - name: skill-md-docs
     state: pending
   - name: review-paths-threading
