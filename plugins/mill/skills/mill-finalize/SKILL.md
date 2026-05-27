@@ -12,13 +12,12 @@ You are the end-of-task finalization orchestrator. Your job is to choose the cor
 ## Entry
 
 1. Resolve `git_root` via `_paths.resolve_git_root()`, `wiki_path` via `_paths.resolve_wiki_path(git_root)`.
-2. `_wiki.sync_pull(wiki_path, slug="mill-finalize")`.
-3. Load config: `cfg = _config.load_config(repo_root, git_root)`.
+2. Load config: `cfg = _config.load_config(repo_root, git_root)`.
    `signature: _config.load_config(repo_root: Path, worktree_root: Path) -> dict` — deep-merges `<repo_root>/mill-config.yaml` with `<worktree_root>/.millhouse/config.local.yaml`.
-3.5. **Path Setup.** `cfg` was loaded in step 3; `worktree_root = git_root` from step 1. Derive `status_path = _paths.resolve_task_path(worktree_root, cfg['paths']['status_md'])` and `task_dir = status_path.parent`. Use these variables for all subsequent path references.
-4. Resolve task data: `active_data = _marker.task_data(git_root, wiki_path, cfg)`. On `MarkerError` → halt: "This worktree has no registered task branch — mill-finalize needs a tracked branch. Run mill-claim to register it, or merge manually."
-5. `slug = active_data['slug']`.
-6. `status_path` is set in Path Setup (step 3.5). Call `data = _status.read_status(status_path)`. Verify `data["phase"] == "done"`. If not: halt "status.md phase is `<value>`; mill-finalize expects `done`. Run mill-go first to bring the task to done."
+2.5. **Path Setup.** `cfg` was loaded in step 2; `worktree_root = git_root` from step 1. Derive `status_path = _paths.resolve_task_path(worktree_root, cfg['paths']['status_md'])` and `task_dir = status_path.parent`. Use these variables for all subsequent path references.
+3. Resolve task data: `active_data = _marker.task_data(git_root, wiki_path, cfg)`. On `MarkerError` → halt: "This worktree has no registered task branch — mill-finalize needs a tracked branch. Run mill-claim to register it, or merge manually."
+4. `slug = active_data['slug']`.
+5. `status_path` is set in Path Setup (step 2.5). Call `data = _status.read_status(status_path)`. Verify `data["phase"] == "done"`. If not: halt "status.md phase is `<value>`; mill-finalize expects `done`. Run mill-go first to bring the task to done."
    `signature: _status.read_status(status_path: Path) -> dict` — returns flat dict with keys `phase`, `task`, `current_batch`, `last_timeline_entry`, `blocked_reason`. Access phase via `data["phase"]` (not `data["yaml"]["phase"]` — that is `read_full`'s shape).
 
 ## Dispatch
@@ -75,15 +74,14 @@ Invoke `/git-pr <base_branch>` (the base branch as argument). The skill generate
 
 ### Step 6: Home.md → [pr-pending]
 
-```python
-with _wiki.wiki_lock(wiki_path, slug):
-    _tasks_md.set_phase_at(wiki_path / "Home.md", slug, "pr-pending")
-    _wiki.write_commit_push(wiki_path, ["Home.md"], f"task: pr-pending {slug}", slug=slug)
+```bash
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
+from pathlib import Path; import _paths
+from wiki import _client
+wiki_path = _paths.resolve_wiki_path(_paths.resolve_git_root())
+_client.set_phase(wiki_path, '<slug>', 'pr-pending')
+"
 ```
-
-`signature: _tasks_md.set_phase_at(path: Path, slug: str, phase: str | None) -> None`
-`signature: _wiki.wiki_lock(wiki_path: Path, slug: str) -> ContextManager[None]`
-`signature: _wiki.write_commit_push(wiki_path: Path, paths: list[str], msg: str, *, slug: str) -> None`
 
 ### Step 7: Halt
 
@@ -94,6 +92,6 @@ Report to the user:
 ## Board discipline
 
 - `status_path` writes are committed on the task branch via `git add` + `git commit`. Never written to the wiki.
-- Home.md writes go through `_wiki.write_commit_push` (acquires the wiki lock internally). For the read-modify-write in Step 6, wrap in `with _wiki.wiki_lock(wiki_path, slug):`.
+- Wiki mutations go through `_client` calls (`set_phase`, `upsert_task`, `merge_tasks`); the daemon serializes all writes and pushes automatically. For multi-step atomic operations use `_client.merge_tasks`.
 - No `cd` to wiki or parent worktree. All parent-branch git operations use `git -C <parent-path>` if ever needed.
 - `${CLAUDE_PLUGIN_ROOT}` for all intra-plugin path references.
