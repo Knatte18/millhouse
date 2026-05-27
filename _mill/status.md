@@ -38,7 +38,9 @@ batches:
     state: approved
     commit_sha: 10464af8510956eaa969a4ab43775dfda7afb4ff
   - name: skill-md-docs
-    state: pending
+    state: running
+    implementer_session: 4edc6554-897b-46b2-871a-e1e58c77c50d
+    start_sha: 3fbedc992223be23020df788941bd77b75c4741f
   - name: review-paths-threading
     state: pending
   - name: integration-test
