@@ -669,57 +669,6 @@ def test_load_config_bare_roles_key() -> None:
     print("PASS load_config -- bare roles: key does not crash; template roles: dict preserved")
 
 
-def test_load_config_no_hub_overlay_returns_template() -> None:
-    """load_config returns template when hub overlay (mill-config.yaml) is absent."""
-    with tempfile.TemporaryDirectory() as tmp:
-        tmp_path = Path(tmp)
-        _setup_plugin_template(tmp_path)
-        hub_root = tmp_path / "projects" / "sub"
-        hub_root.mkdir(parents=True, exist_ok=True)
-        # No mill-config.yaml at hub_root; only template exists
-
-        with patch.object(_paths, "resolve_wiki_path", side_effect=SystemExit):
-            with patch.object(
-                _config, "resolve_plugin_template_path",
-                return_value=tmp_path / "templates" / "mill-config.yaml"
-            ):
-                cfg = _config.load_config(hub_root, tmp_path)
-
-        # Assert that the config returned contains template defaults
-        assert isinstance(cfg, dict), f"Config should be a dict; got {type(cfg)!r}"
-        assert "spawn" in cfg, f"Template defaults should be present; got {cfg!r}"
-        assert cfg["spawn"]["branch_prefix"] == "", (
-            f"Template branch_prefix should be empty string; got {cfg['spawn']['branch_prefix']!r}"
-        )
-    print("PASS load_config -- no hub overlay returns template")
-
-
-def test_load_config_sub_project_hub_overlay() -> None:
-    """load_config merges hub overlay from sub-project hub_root."""
-    with tempfile.TemporaryDirectory() as tmp:
-        tmp_path = Path(tmp)
-        _setup_plugin_template(tmp_path)
-        # Create hub at projects/sub with a custom mill-config.yaml
-        hub_root = tmp_path / "projects" / "sub"
-        hub_root.mkdir(parents=True, exist_ok=True)
-        _write_yaml(hub_root / "mill-config.yaml", "spawn:\n  branch_prefix: sub_project\n")
-        # Worktree root is tmp_path (outer) with no .millhouse/config.local.yaml
-        worktree_root = tmp_path
-
-        with patch.object(_paths, "resolve_wiki_path", side_effect=SystemExit):
-            with patch.object(
-                _config, "resolve_plugin_template_path",
-                return_value=tmp_path / "templates" / "mill-config.yaml"
-            ):
-                cfg = _config.load_config(hub_root, worktree_root)
-
-        # Assert that hub_root's mill-config.yaml value wins
-        assert cfg["spawn"]["branch_prefix"] == "sub_project", (
-            f"Hub overlay branch_prefix should win; got {cfg['spawn']['branch_prefix']!r}"
-        )
-    print("PASS load_config -- sub-project hub overlay merges correctly")
-
-
 def test_load_config_hub_relative_path_no_warning() -> None:
     """load_config with hub_relative_path in config.local.yaml does not emit unknown-key warning."""
     with tempfile.TemporaryDirectory() as tmp:
@@ -741,6 +690,55 @@ def test_load_config_hub_relative_path_no_warning() -> None:
             f"hub_relative_path should not appear in warning; got {stderr_output!r}"
         )
     print("PASS load_config -- hub_relative_path in config.local.yaml does not emit unknown-key warning")
+
+
+def test_load_config_no_hub_overlay_returns_template() -> None:
+    """load_config without hub overlay (mill-config.yaml absent) returns template defaults."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        _setup_plugin_template(tmp_path)
+        hub_root = tmp_path / "hub"
+        hub_root.mkdir()
+        # No mill-config.yaml at hub_root; test that load_config does not raise
+
+        with patch.object(_paths, "resolve_wiki_path", side_effect=SystemExit):
+            with patch.object(
+                _config, "resolve_plugin_template_path",
+                return_value=tmp_path / "templates" / "mill-config.yaml"
+            ):
+                cfg = _config.load_config(hub_root, hub_root)
+
+        # Should return template defaults, not raise FileNotFoundError
+        assert isinstance(cfg, dict), f"Expected dict, got {type(cfg)!r}"
+        assert cfg.get("spawn", {}).get("branch_prefix") == "", (
+            f"Template default should be present; got {cfg.get('spawn')!r}"
+        )
+    print("PASS load_config -- no hub overlay: returns template defaults, does not raise")
+
+
+def test_load_config_sub_project_hub_overlay() -> None:
+    """load_config with sub-project hub overlay merges template + hub overlay."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        _setup_plugin_template(tmp_path)
+        # Hub is in a subdirectory (sub-project layout)
+        hub_root = tmp_path / "projects" / "sub"
+        hub_root.mkdir(parents=True)
+        # Hub overlay with non-default value
+        _write_yaml(hub_root / "mill-config.yaml", "spawn:\n  branch_prefix: sub_project\n")
+
+        with patch.object(_paths, "resolve_wiki_path", side_effect=SystemExit):
+            with patch.object(
+                _config, "resolve_plugin_template_path",
+                return_value=tmp_path / "templates" / "mill-config.yaml"
+            ):
+                cfg = _config.load_config(hub_root, tmp_path)
+
+        # Hub overlay should win over template
+        assert cfg.get("spawn", {}).get("branch_prefix") == "sub_project", (
+            f"Hub overlay value should win; got {cfg.get('spawn', {}).get('branch_prefix')!r}"
+        )
+    print("PASS load_config -- sub-project hub overlay: hub value wins over template")
 
 
 def main() -> int:
@@ -767,9 +765,9 @@ def main() -> int:
         test_deep_merge_none_overlay_scalar_base,
         test_resolve_plugin_template_path_stale_root,
         test_load_config_bare_roles_key,
+        test_load_config_hub_relative_path_no_warning,
         test_load_config_no_hub_overlay_returns_template,
         test_load_config_sub_project_hub_overlay,
-        test_load_config_hub_relative_path_no_warning,
         test_no_op_when_both_args_none,
         test_creates_file_when_missing,
         test_updates_existing_value,

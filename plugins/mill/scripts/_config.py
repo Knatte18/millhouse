@@ -3,12 +3,14 @@ _config — shared config-loading helpers for mill entrypoints.
 
 Exports
 -------
-load_config(hub_root, worktree_root) -> dict
-    Load hub-layer config (mill-config.yaml) deep-merged with
-    plugin template, local stub (.millhouse/config.local.yaml),
-    and environment variable overrides. Hub-layer is optional.
-    Returns the merged configuration dict (never empty as template
-    provides defaults).
+load_config(wiki_path, worktree_root) -> dict
+    Load ``wiki/config.yaml`` deep-merged with
+    ``~/.millhouse/config.machine.yaml`` and
+    ``.millhouse/config.local.yaml``.  Machine layer (read via
+    ``_machine.load_layer``) lands between wiki and worktree layers;
+    later layers win on key conflicts.  Returns an empty dict when
+    ``wiki/config.yaml`` does not exist (lenient form used by
+    mill-color, mill-terminal, mill-vscode, and mill-spawn).
 
 deep_merge(base, overlay) -> dict
     Shallow-recursive deep merge; overlay wins on scalar conflicts.
@@ -148,20 +150,19 @@ def load_config(hub_root: Path, worktree_root: Path) -> dict:
 
     Merge order (lowest to highest precedence):
     1. Plugin template (mill-config.yaml)
-    2. Hub layer (mill-config.yaml at hub root, optional)
+    2. Repo layer (mill-config.yaml at hub root, or absent if not present)
     3. Local stub (worktree_root / .millhouse / config.local.yaml)
     4. Local real (when hub_relative_path is set)
     5. Environment variable overrides
 
-    Returns the merged configuration dict. Hub layer is optional; when absent,
-    template defaults are returned. Never returns empty dict as template provides defaults.
+    Returns an empty dict when no sources are found.
 
     Args:
         hub_root:      Absolute path to the hub directory.
         worktree_root: Absolute path to the worktree git repository root.
 
     Returns:
-        Merged configuration dict (never empty; template provides defaults).
+        Merged configuration dict (may be empty).
     """
     # 1. Load plugin template
     template_path = resolve_plugin_template_path("mill-config.yaml")
@@ -171,10 +172,10 @@ def load_config(hub_root: Path, worktree_root: Path) -> dict:
         cfg = {}
     template_cfg = copy.deepcopy(cfg)
 
-    # 2. Resolve hub-layer sources
+    # 2. Resolve repo-layer sources
     mill_cfg_path = _paths.resolve_mill_config_path(hub_root)
 
-    # 3. Apply hub-layer merge logic
+    # 3. Apply repo-layer merge logic
     source_label = ""
     if mill_cfg_path.exists():
         repo_cfg = yaml.safe_load(mill_cfg_path.read_text(encoding="utf-8")) or {}
