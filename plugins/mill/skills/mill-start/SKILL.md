@@ -41,8 +41,7 @@ Operator-driven entries keep the existing bare format (`- **Q:** … **A:** …`
 
 ## Entry
 
-1. Resolve the wiki path via `_paths.resolve_wiki_path(_paths.resolve_git_root())` and call `_wiki.sync_pull(wiki_path, slug="mill-start")`.
-   `signature: _wiki.sync_pull(wiki_path: Path, *, slug: str) -> None`
+1. Resolve the wiki path via `_paths.resolve_wiki_path(_paths.resolve_git_root())`.
    `signature: _paths.resolve_git_root(start: Path | None = None) -> Path`
    `signature: _paths.resolve_wiki_path(git_toplevel: Path) -> Path`
 2. Read the slug via `_marker.slug_from_branch(git_root, wiki_path, cfg)`. On `MarkerError`, halt and tell the user this worktree was not created by `mill-spawn`.
@@ -164,6 +163,6 @@ Report: **"Discussion complete. Run `/mill-plan` next to start autonomous plan w
 
 ## Board discipline
 
-- Home.md writes go through `_wiki.write_commit_push` (which acquires the wiki lock internally). For multi-operation windows, use `with _wiki.wiki_lock(wiki_path, slug):`.
+- Wiki mutations go through `_client` calls (`set_phase`, `upsert_task`, `merge_tasks`); the daemon serializes all writes and pushes automatically. For multi-step atomic operations use `_client.merge_tasks`.
 - Task-state writes (`status_path`, `discussion_path`) are committed on the task branch via `git add` + `git commit`, then pushed to remote. They never go through the wiki.
 - Phase transitions are recorded via `_status.append_phase`. Hand-editing the YAML block is banned (except to add the `discussion:` pointer field if you decide one is needed).
