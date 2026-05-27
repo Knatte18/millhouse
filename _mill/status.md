@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: hub-relative-path-support
 branch: hanf/hub-relative-path-support
 plan: _mill/plan
@@ -20,4 +20,21 @@ discussed  '2026-05-27T09:04:34Z'
 planning  '2026-05-27T09:11:58Z'
 plan-fix-r1  '2026-05-27T09:24:58Z'
 planned  '2026-05-27T09:25:20Z'
+implementing  '2026-05-27T09:30:26Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: helper-api
+    state: pending
+  - name: config-callsite-fixes
+    state: pending
+  - name: skill-md-docs
+    state: pending
+  - name: review-paths-threading
+    state: pending
+  - name: integration-test
+    state: pending
 ```
