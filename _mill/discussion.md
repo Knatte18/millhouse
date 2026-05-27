@@ -33,7 +33,8 @@ Why now: `hub_relative_path` support was wired into `_paths.py` (resolve_hub_rel
 - Rename the first positional arg from `repo_root` to `hub_root` in `_config.load_config`, `_review_common.load_config`, and `_paths.resolve_mill_config_path`. Pure naming + docstring change; positional signature is otherwise untouched.
 - Delete `_strict_load_config` in `millpy-claim.py` and the `_load_config` wrapper in `millpy-spawn.py`. Callers invoke `_config.load_config(resolve_hub_path(), resolve_hub_path())` directly.
 - In `mill-go` SKILL.md step 4.5: replace `worktree_root = _paths.resolve_git_root()` with `worktree_root = _paths.resolve_active_hub(container_path, slug, cfg=cfg, git_root=git_root)` where `container_path = _paths.resolve_container_path(git_root)`. Also update step 3 to use the hub for `_review_common.load_config`'s first arg.
-- Add a `git_root: Path | None = None` keyword arg to `_review_common.resolve_ref_paths`. When a candidate under `project_root` does not exist and the raw token is not in `creates_union` or `deletes_union`, try `git_root / raw` before raising. Update all five callsites in `_review_code.py` (3 sites) and `_review_plan.py` / `_review_discussion.py` to pass `git_root`. Routing precedence: `wiki/` prefix → wiki_root (unchanged); else `project_root / root / raw` if exists; else `git_root / raw` if exists; else suppression by creates/deletes union; else raise.
+- Add a `git_root: Path | None = None` keyword arg to `_review_common.resolve_ref_paths`. When a candidate under `project_root` does not exist and the raw token is not in `creates_union` or `deletes_union`, try `git_root / raw` before raising. Routing precedence: `wiki/` prefix → wiki_root (unchanged); else `project_root / root / raw` if exists; else `git_root / raw` if exists; else suppression by creates/deletes union; else raise. Verified callsites to update (3 sites total): `_review_code.py:254`, `_review_plan.py:134`, `_review_plan.py:470`.
+- Add the same `git_root: Path | None = None` keyword arg to `_review_common.resolve_existing_paths`, with identical fallback semantics — when the candidate under `project_root` does not exist, try `git_root / raw` before silently dropping. Symmetric with `resolve_ref_paths`. Without this, sub-project layouts silently drop git-root-relative `lib/...` paths from the bulk and reviewers see an incomplete context. Verified callsites to update (6 sites total): `_review_code.py:274`, `_review_code.py:374`, `_review_plan.py:140`, `_review_plan.py:205`, `_review_plan.py:476`, `_review_plan.py:544`.
 - Fix the four SKILL.md docs: `mill-start/SKILL.md:49`, `mill-plan/SKILL.md:19`, `mill-merge-in/SKILL.md:56`, `mill-go/SKILL.md:25` — change documented first arg from `wiki_path` to `hub_root` and update the signature annotation. Also fix the undefined `repo_root` reference in `mill-finalize/SKILL.md:15` (uses the variable name without ever defining it).
 - Add one integration test (`plugins/mill/integration_tests/test-hub-relative-path.py`) that constructs a sub-project fixture and asserts `millpy-spawn --dry-run` + asset-level checks (status.md path resolution, `.millhouse/config.local.yaml` stub contains `hub_relative_path:`, junctions land at the hub subfolder).
 - Extend unit tests:
@@ -165,7 +166,7 @@ After deletion the call sites become a single `_config.load_config(resolve_hub_p
 
 `_config.py` currently raises `FileNotFoundError` when `<hub_root>/mill-config.yaml` is missing. Per the layering principle the hub overlay is optional — template-only is a valid configuration. The raise must be removed; instead, when the file is missing, skip the hub-overlay merge step (continue with template + local overlays). Implementer must remove the raise and add a no-op path. Unit test `test-config.py` must add a case where no hub overlay is present and confirm template defaults are returned without raising.
 
-### `resolve_ref_paths` signature change
+### `resolve_ref_paths` and `resolve_existing_paths` signature change
 
 Update `_review_common.resolve_ref_paths` to:
 
@@ -203,12 +204,39 @@ raise ReviewError(...)
 
 The wiki/-prefix branch is untouched. The fallback applies to non-wiki, non-existing-under-project paths.
 
-Callers to update with explicit `git_root=...` kwarg:
-- `_review_code.py:254` — pass `git_root=project_root` if cwd is git_root, else the resolved git_root. `_review_code.py` already takes `project_root` as a param; add `git_root` to `run()`'s signature and thread it through from `millpy-review-code.py:main()`.
-- `_review_code.py:276` and `:375` — same threading.
-- `_review_plan.py`, `_review_discussion.py` — if they call `resolve_ref_paths`, same treatment (audit during implementation; check is straightforward).
+Apply the **same** kwarg + same fallback to `_review_common.resolve_existing_paths`:
 
-`millpy-review-code.py:main()` resolves `git_root = _paths.resolve_git_root()` already (or adds it), then threads to `_review_code.run(... git_root=git_root, ...)`.
+```python
+def resolve_existing_paths(
+    raw_paths: list[str],
+    project_root: Path,
+    root: str | None,
+    *,
+    wiki_root: Path | None = None,
+    git_root: Path | None = None,           # NEW
+) -> list[Path]:
+```
+
+With identical wiki/ → project_root → git_root precedence. The function still silently drops paths that exist nowhere — that behaviour is unchanged. The fallback only adds the git_root attempt before the silent drop.
+
+Verified callsites to update (audited by grep against the current source tree, not inferred):
+
+**`resolve_ref_paths` (3 sites):**
+- `_review_code.py:254` — inside `_review_code.run()`; add `git_root=git_root` to call and to `run()`'s signature.
+- `_review_plan.py:134` — inside batch-card resolution; same treatment.
+- `_review_plan.py:470` — inside holistic plan-review path; same treatment.
+
+**`resolve_existing_paths` (6 sites):**
+- `_review_code.py:274` — ancestors-on-disk for the batch under review.
+- `_review_code.py:374` — missing-paths reconciliation step.
+- `_review_plan.py:140` — batch-card ancestor expansion.
+- `_review_plan.py:205` — batch-card missing-path resolution.
+- `_review_plan.py:476` — holistic all-creates-on-disk expansion.
+- `_review_plan.py:544` — holistic missing-path resolution.
+
+For each callsite, the implementer threads `git_root` from the caller's main entry (`millpy-review-code.py`, `millpy-review-plan.py`) down through the `_review_code.run` / `_review_plan.run` signatures and into the callsite. `millpy-review-discussion.py` does not call either function — no change needed.
+
+Source-of-truth verification: implementer must re-grep `resolve_ref_paths` and `resolve_existing_paths` in `_review_code.py` and `_review_plan.py` at implementation time and assert the count matches (3 and 6 respectively). If counts diverge, the codebase has shifted since this discussion was written — pause and update the plan rather than guessing.
 
 ### `mill-go` SKILL.md edits
 
@@ -257,8 +285,8 @@ The fixture stays under `.scratch/` and is cleaned by the test's teardown (mirro
 
 For the implementer's planning:
 
-- **Batch A — helper API (layering correctness):** `_config.load_config` rename + remove raise; `_review_common.load_config` rename; `_paths.resolve_mill_config_path` rename; add `resolve_ref_paths` `git_root` kwarg + fallback. Update unit tests `test-config.py`, `test-review-common.py`, `test-paths.py`.
-- **Batch B — callsite fixes:** all 11 `_config.load_config` callers; all 4 `_review_common.load_config` callers; delete `_strict_load_config` / `_load_config` wrappers in claim/spawn. Thread `git_root` through `_review_code.run`, `_review_plan.run`, `_review_discussion.run` to their `resolve_ref_paths` callsites.
+- **Batch A — helper API (layering correctness):** `_config.load_config` rename + remove raise; `_review_common.load_config` rename; `_paths.resolve_mill_config_path` rename; add `resolve_ref_paths` `git_root` kwarg + fallback; add `resolve_existing_paths` `git_root` kwarg + fallback. Update unit tests `test-config.py`, `test-review-common.py`, `test-paths.py`.
+- **Batch B — callsite fixes:** all 11 `_config.load_config` callers; all 4 `_review_common.load_config` callers; delete `_strict_load_config` / `_load_config` wrappers in claim/spawn. Thread `git_root` through `_review_code.run` and `_review_plan.run` to the 3 verified `resolve_ref_paths` callsites and the 6 verified `resolve_existing_paths` callsites.
 - **Batch C — SKILL.md docs + mill-go path:** edit mill-start, mill-plan, mill-merge-in, mill-go, mill-finalize SKILL.md per the Decisions. Adjust mill-go step 4.5 prose to use `resolve_active_hub`.
 - **Batch D — integration test:** new `test-hub-relative-path.py`.
 
@@ -290,6 +318,9 @@ From `CLAUDE.md` and project conventions:
   - `test_resolve_ref_paths_no_git_root_kwarg`: existing callers that don't pass `git_root` → behaviour unchanged (current tests must still pass).
   - `test_resolve_ref_paths_creates_union_precedence`: raw in creates_union, not on disk under `project_root` or `git_root`, with `git_root` passed → suppressed (creates_union wins over fallback miss).
   - `test_resolve_ref_paths_wiki_prefix_unaffected`: `wiki/foo`-prefixed path → still routes to `wiki_root`, ignores `git_root`.
+  - `test_resolve_existing_paths_git_root_fallback_hit`: same shape as the ref_paths variant — raw missing under `project_root`, present under `git_root`, with `git_root=...` → returns `git_root / raw`.
+  - `test_resolve_existing_paths_git_root_fallback_miss`: raw missing both places → silently dropped (no raise; existing behaviour for missing-everywhere paths).
+  - `test_resolve_existing_paths_no_git_root_kwarg`: existing callers that don't pass `git_root` → behaviour unchanged.
 
 - **`test-paths.py`** — confirm an existing test exercises `resolve_active_hub` with `hub_relative_path != "."`; add one if not, mirroring the integration fixture shape but in-memory.
 
@@ -319,3 +350,4 @@ The new integration test is added to `plugins/mill/integration_tests/`. It is no
 - **Q:** Integration test scope? **A:** Structural, asset-level assertions only, no LLM. Mirror `test-spawn.py`'s shape.
 - **Q:** Rename the first positional arg from `repo_root` to `hub_root`? **A:** Yes — pure doc/naming improvement, no behavioural change, no kw-only enforcement.
 - **Q:** Should `mill-finalize` SKILL.md's undefined `repo_root` variable be fixed in this task? **A:** Yes — it's a parallel doc bug in the same family; small enough to fold in.
+- **Q (round 1 gap):** How many `resolve_ref_paths` callsites are there, and should `resolve_existing_paths` get the same fallback? **A:** 3 `resolve_ref_paths` callsites verified (`_review_code.py:254`, `_review_plan.py:134`, `_review_plan.py:470`). `_review_discussion.py` has none. Yes — `resolve_existing_paths` gets the same `git_root` kwarg + fallback for symmetry; 6 callsites verified (`_review_code.py:274, :374`, `_review_plan.py:140, :205, :476, :544`).
