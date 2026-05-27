@@ -153,14 +153,15 @@ def load_config(hub_root: Path, worktree_root: Path) -> dict:
     4. Local real (when hub_relative_path is set)
     5. Environment variable overrides
 
-    Returns an empty dict when no sources are found.
+    Returns the merged configuration dict. Hub layer is optional; when absent,
+    template defaults are returned. Never returns empty dict as template provides defaults.
 
     Args:
         hub_root:      Absolute path to the hub directory.
         worktree_root: Absolute path to the worktree git repository root.
 
     Returns:
-        Merged configuration dict (may be empty).
+        Merged configuration dict (never empty; template provides defaults).
     """
     # 1. Load plugin template
     template_path = resolve_plugin_template_path("mill-config.yaml")
