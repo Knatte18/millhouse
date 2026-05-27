@@ -697,7 +697,7 @@ def main() -> int:
         os.chdir(project_root)
         try:
             stub.seed([(APPROVE_TEXT, "sid-hol-only")])
-            r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root, holistic_only=True)
+            r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, holistic_only=True)
             prompts = stub.captured_prompts()
             assert len(prompts) == 1, (
                 f"holistic_only: expected exactly 1 prompt (holistic), got {len(prompts)}"
@@ -727,7 +727,7 @@ def main() -> int:
         os.chdir(project_root)
         try:
             _seed_approve(2)
-            r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root, no_holistic=True)
+            r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, no_holistic=True)
             prompts = stub.captured_prompts()
             assert len(prompts) == 2, (
                 f"no_holistic: expected 2 prompts (per-batch only), got {len(prompts)}"
@@ -755,7 +755,7 @@ def main() -> int:
         os.chdir(project_root)
         try:
             try:
-                plan_run(cfg, SLUG, mill_dir, wiki_root, project_root,
+                plan_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root,
                          holistic_only=True, no_holistic=True)
                 errors += 1
                 print("FAIL test13: expected ReviewError for mutually exclusive flags", file=sys.stderr)
@@ -854,7 +854,7 @@ def main() -> int:
 
             # With max_rounds=5: succeeds (alpha carryforward, holistic fresh r4)
             stub.seed([(APPROVE_TEXT, "sid-hol4")])
-            r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root, max_rounds=5)
+            r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, max_rounds=5)
             rv_hol = next((rv for rv in r.reviews if rv["scope"] == "holistic"), None)
             assert rv_hol is not None, "holistic entry missing"
             fname = Path(rv_hol["file"]).name
@@ -1178,7 +1178,7 @@ def main() -> int:
         orig_dir = os.getcwd()
         os.chdir(project_root)
         try:
-            r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root, max_rounds=0)
+            r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, max_rounds=0)
             assert r.verdict == "APPROVE", f"expected APPROVE for max_rounds=0, got {r.verdict}"
             assert r.blocking_count == 0, f"expected blocking_count=0, got {r.blocking_count}"
             print("PASS test22: max_rounds=0 kwarg -> holistic APPROVE stub")
