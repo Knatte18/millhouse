@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-fix-r1
+phase: planned
 slug: stale-v2-references-audit
 branch: hanf/stale-v2-references-audit
 plan: _mill/plan
@@ -19,4 +19,5 @@ discussion-fix-r5  '2026-05-27T07:12:48Z'
 discussed  '2026-05-27T07:13:01Z'
 planning  '2026-05-27T07:31:03Z'
 plan-fix-r1  '2026-05-27T07:49:30Z'
+planned  '2026-05-27T07:49:50Z'
 ```
