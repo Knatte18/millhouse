@@ -110,7 +110,7 @@ _client.upsert_task(wiki_path, slug, *, title=..., brief=..., body=..., group=..
 _client.merge_tasks(wiki_path, remove_slugs=[...], upsert={...}, set_phase=(slug, phase))
 
 # Daemon
-_client.health_check(wiki_path)  # -> bool; triggers auto-start
+_client.health_check(wiki_path)  # -> bool; does NOT auto-start (probe only)
 _client.rerender(wiki_path)
 ```
 
@@ -165,7 +165,7 @@ These three grep checks are the acceptance criteria. The auto-report mechanism h
 ## Q&A log
 
 - **Q:** Should SKILL.md pseudocode use raw TCP + curl, thin CLI wrappers, or inline Python `_client` calls for wiki operations? **A:** Inline Python `_client`. The daemon carries the heavy work; Python startup for a thin TCP client call is ~100–200ms — negligible. Pattern is consistent with existing millpy scripts. No new wrappers needed.
-- **Q:** What replaces mill-setup Phase 6 (Home.md init / v2-shape gate)? **A:** Delete Phase 6 entirely. Add a `_client.health_check(wiki_path)` call in Phase 5 post-clone verification. Daemon creates `tasks.json` and renders Home.md on first access.
+- **Q:** What replaces mill-setup Phase 6 (Home.md init / v2-shape gate)? **A:** Delete Phase 6 and Phase 6a entirely. Replace Phase 6a with `_client.list_tasks_brief(wiki_path)` — this goes through `_ensure_daemon`, triggering auto-start + initial render of both Home.md and _Sidebar.md. `health_check` must NOT be used here: it bypasses `_ensure_daemon` and returns False on a fresh install instead of spawning the daemon.
 - **Q:** Should mill-autofix be fully rewritten or marked TODO? **A:** Full rewrite. Partial rewrites with TODO markers still mislead implementers.
 - **Q:** Fix stale code comments in Python scripts? **A:** Yes, fix all of them.
 - **Q:** Prioritise hot-path skills or do all 13? **A:** All 13 in one pass.
