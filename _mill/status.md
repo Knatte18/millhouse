@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-Medium skill fixes
+phase: approved-mill-go skill fix
 slug: stale-v2-references-audit
 branch: hanf/stale-v2-references-audit
 plan: _mill/plan
@@ -23,6 +23,7 @@ planned  '2026-05-27T07:49:50Z'
 implementing  '2026-05-27T07:53:47Z'
 approved-Simple skill fixes  '2026-05-27T07:57:23Z'
 approved-Medium skill fixes  '2026-05-27T08:01:40Z'
+approved-mill-go skill fix  '2026-05-27T08:04:21Z'
 ```
 
 ## Batches
@@ -38,7 +39,7 @@ batches:
     implementer_session: bba3c947-f8c3-4f31-ba0e-aaee95f98106
     start_sha: fa840cdddacc8f6f0c4f8e4790fb2f6819e52434
   - name: mill-go skill fix
-    state: running
+    state: approved
     implementer_session: a9f28c85-abc5-4d65-b1e4-f0919b82528f
     start_sha: a4fd84e3e7690b49605ffcbf8e6e913bfc828264
   - name: High-complexity skill fixes
