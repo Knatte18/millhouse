@@ -3,7 +3,7 @@
 ```yaml
 task: V3 wiki adoption follow-up bugs
 slug: wiki-v3-followups
-approved: false
+approved: true
 started: 20260527-085619
 parent: main
 root: ""
