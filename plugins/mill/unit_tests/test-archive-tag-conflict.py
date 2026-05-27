@@ -83,6 +83,16 @@ class TestArchiveTagConflict(unittest.TestCase):
         )
         return result.stdout.strip()
 
+    def _get_head_sha(self, worktree: Path) -> str:
+        """Get the current HEAD SHA."""
+        result = subprocess.run(
+            ["git", "-C", str(worktree), "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        return result.stdout.strip()
+
     def test_no_existing_tag_creates(self) -> None:
         """When no tag exists, create_or_resolve creates the tag."""
         with tempfile.TemporaryDirectory() as tmp:
@@ -173,22 +183,31 @@ class TestArchiveTagConflict(unittest.TestCase):
                 capture_output=True,
             )
 
-            # Create a new branch from initial and commit to it
+            # Create an orphan branch (completely unrelated history)
             subprocess.run(
-                ["git", "-C", str(worktree), "checkout", "-b", "newbranch", "HEAD"],
+                ["git", "-C", str(worktree), "checkout", "--orphan", "orphan-branch"],
                 check=True,
                 capture_output=True,
             )
-            divergent_sha = self._make_commit(worktree, "divergent")
-
-            # Switch back to main and make different commits
+            # Clear the staging area
             subprocess.run(
-                ["git", "-C", str(worktree), "checkout", "-"],
+                ["git", "-C", str(worktree), "rm", "-rf", "."],
+                check=False,
+                capture_output=True,
+            )
+            # Create a new commit on the orphan branch
+            (worktree / "orphan-file.txt").write_text("orphan commit")
+            subprocess.run(
+                ["git", "-C", str(worktree), "add", "orphan-file.txt"],
                 check=True,
                 capture_output=True,
             )
-            self._make_commit(worktree, "mainline2")
-            new_sha = self._make_commit(worktree, "mainline3")
+            subprocess.run(
+                ["git", "-C", str(worktree), "commit", "-m", "orphan commit"],
+                check=True,
+                capture_output=True,
+            )
+            new_sha = self._get_head_sha(worktree)
 
             result = _archive_tag.create_or_resolve(worktree, "test-slug", "HEAD")
 
@@ -196,7 +215,7 @@ class TestArchiveTagConflict(unittest.TestCase):
             self.assertEqual(result["tag"], "archive/test-slug")
             self.assertEqual(result["moved_aside_to"], "archive/test-slug-01")
 
-            # Verify old tag moved to -01 and points at divergent SHA
+            # Verify old tag moved to -01 and points at original SHA
             old_tag_sha = subprocess.run(
                 ["git", "-C", str(worktree), "rev-parse", "archive/test-slug-01"],
                 check=True,
@@ -226,36 +245,56 @@ class TestArchiveTagConflict(unittest.TestCase):
                 capture_output=True,
             )
 
-            # First divergence: create -01
+            # First divergence: create -01 using orphan branch
             subprocess.run(
-                ["git", "-C", str(worktree), "checkout", "-b", "branch1", "HEAD"],
+                ["git", "-C", str(worktree), "checkout", "--orphan", "orphan1"],
                 check=True,
                 capture_output=True,
             )
-            self._make_commit(worktree, "branch1-commit")
             subprocess.run(
-                ["git", "-C", str(worktree), "checkout", "-"],
+                ["git", "-C", str(worktree), "rm", "-rf", "."],
+                check=False,
+                capture_output=True,
+            )
+            (worktree / "orphan1-file.txt").write_text("orphan1")
+            subprocess.run(
+                ["git", "-C", str(worktree), "add", "orphan1-file.txt"],
                 check=True,
                 capture_output=True,
             )
-            sha_after_first = self._make_commit(worktree, "main-commit1")
+            subprocess.run(
+                ["git", "-C", str(worktree), "commit", "-m", "orphan1"],
+                check=True,
+                capture_output=True,
+            )
+            sha_after_first = self._get_head_sha(worktree)
 
             result1 = _archive_tag.create_or_resolve(worktree, "test-slug", "HEAD")
             self.assertEqual(result1["moved_aside_to"], "archive/test-slug-01")
 
-            # Second divergence: create -02
+            # Second divergence: create -02 using another orphan branch
             subprocess.run(
-                ["git", "-C", str(worktree), "checkout", "-b", "branch2", "HEAD"],
+                ["git", "-C", str(worktree), "checkout", "--orphan", "orphan2"],
                 check=True,
                 capture_output=True,
             )
-            self._make_commit(worktree, "branch2-commit")
             subprocess.run(
-                ["git", "-C", str(worktree), "checkout", "-"],
+                ["git", "-C", str(worktree), "rm", "-rf", "."],
+                check=False,
+                capture_output=True,
+            )
+            (worktree / "orphan2-file.txt").write_text("orphan2")
+            subprocess.run(
+                ["git", "-C", str(worktree), "add", "orphan2-file.txt"],
                 check=True,
                 capture_output=True,
             )
-            sha_after_second = self._make_commit(worktree, "main-commit2")
+            subprocess.run(
+                ["git", "-C", str(worktree), "commit", "-m", "orphan2"],
+                check=True,
+                capture_output=True,
+            )
+            sha_after_second = self._get_head_sha(worktree)
 
             result2 = _archive_tag.create_or_resolve(worktree, "test-slug", "HEAD")
 
