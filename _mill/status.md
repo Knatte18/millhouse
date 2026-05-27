@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: wiki-v3-followups
 branch: hanf/wiki-v3-followups
 plan: _mill/plan
@@ -24,4 +24,19 @@ plan-review-r2  '2026-05-27T09:22:32Z'
 plan-fix-r2  '2026-05-27T09:22:32Z'
 plan-fix-r3  '2026-05-27T09:30:51Z'
 planned  '2026-05-27T09:31:13Z'
+implementing  '2026-05-27T10:09:45Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: wiki-daemon-fixes
+    state: pending
+  - name: junction-fs-scan
+    state: pending
+  - name: millpy-fix-windows-lock
+    state: pending
+  - name: safe-rmtree-chmod-retry
+    state: pending
 ```
