@@ -28,7 +28,9 @@ implementing  '2026-05-27T09:30:26Z'
 ```yaml
 batches:
   - name: helper-api
-    state: pending
+    state: running
+    implementer_session: 1b47d874-b953-4dc5-aeef-73a58536f15a
+    start_sha: 7e9930c3ccde7e6fdd483939102c5b8efa7b9b70
   - name: config-callsite-fixes
     state: pending
   - name: skill-md-docs
