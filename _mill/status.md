@@ -48,5 +48,7 @@ batches:
     implementer_session: f35cd1b3-5ffb-4965-af26-3081ab6961ec
     start_sha: a95e9c2b72e514c167de446a3a6c6e5340413c9c
   - name: Python comment fixes
-    state: pending
+    state: running
+    implementer_session: 03610504-7b8c-4873-974f-4dec86097cd5
+    start_sha: dc6d1de057464b49d3db87239da1e6912a0a5bd6
 ```
