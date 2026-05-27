@@ -9,14 +9,14 @@ parent: main
 
 ## Problem
 
-The wiki migration from V2 (Home.md as source of truth, `_wiki.py` + `_tasks_md.py` helper modules) to V3 (TinyDB daemon, `wiki._client` TCP API, Home.md auto-rendered) is functionally complete in Python scripts, but 12 SKILL.md files still instruct Claude to call `_wiki.sync_pull`, `_wiki.wiki_lock`, `_wiki.write_commit_push`, `_tasks_md.parse`, `_tasks_md.set_phase_at` etc. Both `_wiki.py` and `_tasks_md.py` no longer exist in the repository. Any skill invocation that follows the stale instructions gets `ModuleNotFoundError` on the first wiki operation.
+The wiki migration from V2 (Home.md as source of truth, `_wiki.py` + `_tasks_md.py` helper modules) to V3 (TinyDB daemon, `wiki._client` TCP API, Home.md auto-rendered) is functionally complete in Python scripts, but 13 SKILL.md files still instruct Claude to call `_wiki.sync_pull`, `_wiki.wiki_lock`, `_wiki.write_commit_push`, `_tasks_md.parse`, `_tasks_md.set_phase_at` etc. Both `_wiki.py` and `_tasks_md.py` no longer exist in the repository. Any skill invocation that follows the stale instructions gets `ModuleNotFoundError` on the first wiki operation.
 
 Three Python source files also carry stale "v2" comments (no logic impact, but confusing). One integration test comment mentions "v2 shape".
 
 ## Scope
 
 **In:**
-- All 12 SKILL.md files under `plugins/mill/skills/` that reference `_wiki.` or `_tasks_md.`
+- All 13 SKILL.md files under `plugins/mill/skills/` that reference `_wiki.` or `_tasks_md.`
 - Stale "v2" comments in 3 Python scripts (`millpy-add.py`, `millpy-spawn.py`, `_worktree.py`)
 - Stale "v2 shape" comment in `integration_tests/test-plan-assets.py`
 - mill-setup Phase 6 ("Initialise or normalise Home.md") — full architectural rethink (see Decisions)
@@ -166,7 +166,7 @@ No unit tests cover SKILL.md content. Verification is:
 
 1. After all edits, `grep -r "_wiki\." plugins/mill/skills/` must return zero hits.
 2. After all edits, `grep -r "_tasks_md\." plugins/mill/skills/` must return zero hits.
-3. After all edits, `grep -rn "v2 shape\|v2's contract\|valid v2 task" plugins/mill/scripts/ plugins/mill/integration_tests/` must return zero hits.
+3. After all edits, `grep -rn "v2 shape\|v2's contract\|valid v2 task\|v2's Home" plugins/mill/scripts/ plugins/mill/integration_tests/` must return zero hits.
 
 These three grep checks are the acceptance criteria. The auto-report mechanism handles surfacing any runtime failures discovered during subsequent skill invocations.
 
