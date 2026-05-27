@@ -33,7 +33,9 @@ batches:
     implementer_session: c69080a4-2848-403e-bbfa-dd099864a447
     start_sha: 1559c537ba1551af3dda2ca6b3cc8e97d686762c
   - name: Medium skill fixes
-    state: pending
+    state: running
+    implementer_session: bba3c947-f8c3-4f31-ba0e-aaee95f98106
+    start_sha: fa840cdddacc8f6f0c4f8e4790fb2f6819e52434
   - name: mill-go skill fix
     state: pending
   - name: High-complexity skill fixes
