@@ -59,12 +59,16 @@ def main() -> int:
 
             with mock.patch.object(_subprocess_util_mod, "run", side_effect=capture_run):
                 with mock.patch.object(_llm_claude_mod, "_get_via_psmux_flag", return_value=True):
-                    result, session_id = _llm_claude_mod._invoke(
-                        "test prompt",
-                        model="claude-opus-4-7",
-                        timeout=30,
-                        cwd=None
-                    )
+                    with mock.patch("shutil.which", return_value="/usr/bin/psmux"):
+                        result, session_id = _llm_claude_mod._invoke(
+                            "test prompt",
+                            model="claude-opus-4-7",
+                            effort=None,
+                            allowed_tools="",
+                            mode_label="bulk",
+                            timeout=30,
+                            cwd=None
+                        )
 
             assert captured_env is not None, "env was not captured from run() call"
             assert "GIT_DIR" not in captured_env, "GIT_DIR was not stripped"
@@ -111,6 +115,9 @@ def main() -> int:
                     result, session_id = _llm_claude_mod._invoke(
                         "test prompt",
                         model="claude-opus-4-7",
+                        effort=None,
+                        allowed_tools="",
+                        mode_label="bulk",
                         timeout=30,
                         cwd=None
                     )
@@ -155,6 +162,9 @@ def main() -> int:
                     result, session_id = _llm_claude_mod._invoke(
                         "test prompt",
                         model="claude-opus-4-7",
+                        effort=None,
+                        allowed_tools="",
+                        mode_label="bulk",
                         timeout=30,
                         cwd=None
                     )
@@ -194,6 +204,9 @@ def main() -> int:
                     result, session_id = _llm_claude_mod._invoke(
                         "test prompt",
                         model="claude-opus-4-7",
+                        effort=None,
+                        allowed_tools="",
+                        mode_label="bulk",
                         timeout=30,
                         cwd=None
                     )
