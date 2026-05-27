@@ -32,7 +32,9 @@ implementing  '2026-05-27T10:09:45Z'
 ```yaml
 batches:
   - name: wiki-daemon-fixes
-    state: pending
+    state: running
+    implementer_session: c4d44767-0fa7-47ac-afed-6f9f65e1eabd
+    start_sha: 626c0dbc159b664d8df6870a03b1e61ca4126f83
   - name: junction-fs-scan
     state: pending
   - name: millpy-fix-windows-lock
