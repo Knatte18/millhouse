@@ -23,14 +23,6 @@ Claude proposes; you decide; nothing is written until you type `approve`.
    "
    ```
    Store as `<WIKI_PATH>`.
-3. `_wiki.sync_pull(<WIKI_PATH>)`:
-   ```bash
-   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
-   import _paths, _wiki
-   wiki = _paths.resolve_wiki_path(_paths.resolve_git_root())
-   _wiki.sync_pull(wiki)
-   "
-   ```
 
 ## Step 1 — Read config
 
@@ -41,24 +33,25 @@ Load `wiki/config.yaml` from `<WIKI_PATH>`. Extract:
 
 Use these thresholds in Step 3.
 
-## Step 2 — Parse Home.md
+## Step 2 — Read task list
 
-Read `<WIKI_PATH>/Home.md`. Parse with `_tasks_md.parse()`:
+List tasks using the client API:
 
 ```bash
 PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
-import _paths, _tasks_md
+import json, _paths
+from wiki import _client
 wiki = _paths.resolve_wiki_path(_paths.resolve_git_root())
-text = (wiki / 'Home.md').read_text(encoding='utf-8')
-tasks = _tasks_md.parse(text)
-import json
-print(json.dumps([{'slug': t.slug, 'title': t.title, 'phase': t.phase} for t in tasks], indent=2))
+tasks = _client.list_tasks_brief(wiki)
+print(json.dumps(tasks, indent=2))
 "
 ```
 
+Note: V3 task dicts have `"status"` (not `"phase"`), `"slug"`, `"title"`, `"brief"`, `"body"`, `"group"`, `"has_proposal"`.
+
 **Scope rules:**
 
-| `task.phase` | Listed? | Actions available |
+| `task["status"]` | Listed? | Actions available |
 |---|---|---|
 | `None` (plain backlog) | Yes | keep / shorten / fold / drop / extract |
 | `"s"` (spawn-ready) | Yes | keep / shorten / fold / drop / extract |
@@ -189,26 +182,9 @@ On `reject`: ask what to change, revise decisions, rewrite the proposal, and ask
    - **Extract**: replace the entry body with a 1-line link:
      `See [proposal-<slug>.md](proposal-<slug>.md).`; write the full body to
      `<WIKI_PATH>/proposal-<slug>.md`.
-4. Write all changed files and push via `_wiki.write_commit_push`:
-   ```bash
-   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
-   import _paths, _wiki
-   wiki = _paths.resolve_wiki_path(_paths.resolve_git_root())
-   # Build relative_paths = ['Home.md'] + any 'proposal-<slug>.md' created
-   _wiki.write_commit_push(wiki, relative_paths, commit_msg)
-   "
-   ```
-   Commit message format: `chore: groom Home.md — N shortened, N folded, N dropped, N extracted`
-   (omit zero-count terms, e.g. `chore: groom Home.md — 2 shortened, 1 dropped`).
-5. Regenerate the sidebar:
-   ```bash
-   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
-   import _paths, _sidebar
-   wiki = _paths.resolve_wiki_path(_paths.resolve_git_root())
-   _sidebar.regenerate(wiki)
-   "
-   ```
-6. Delete `.scratch/groom-proposal.md`.
+4. For each task whose fields changed, call `_client.upsert_task(wiki, slug, brief=..., body=...)`. The daemon commits and pushes to the wiki remote automatically on each mutation.
+
+5. Delete `.scratch/groom-proposal.md`.
 
 ## Step 7 — Report
 
@@ -228,7 +204,7 @@ Groom complete.
   `<!-- protected -->` is listed as read-only; no actions are offered.
 - **`[active]` tasks are never modified.** Listed for context; all actions blocked.
 - **`[done]` tasks get only the `drop` action** — never shorten, fold, or extract.
-- **One commit per session** — all changes land in a single `_wiki.write_commit_push` call.
+- **Daemon auto-commits per mutation** — each `_client.upsert_task` call triggers a daemon commit + push; no explicit write_commit_push step is needed.
 - **All-or-nothing approval** — the user approves or rejects the full proposal.
   Adjust individual decisions before approving if needed.
 
