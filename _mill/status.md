@@ -30,7 +30,9 @@ implementing  '2026-05-27T09:15:49Z'
 ```yaml
 batches:
   - name: archive-tag
-    state: pending
+    state: running
+    implementer_session: eacf1ab4-8569-4534-80b8-0fe447f233fc
+    start_sha: 073c4adebb1b611bf7763368634cdff698cb00b0
   - name: merge-continue
     state: pending
   - name: status-gate
