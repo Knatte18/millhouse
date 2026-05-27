@@ -235,9 +235,7 @@ def main(argv: list[str] | None = None) -> int:
             encoding="utf-8",
         )
 
-    # Render and write the initial status.md. v2's Home.md has no
-    # dedicated description column; use the task title as description so
-    # the template renders without empty placeholders.
+    # Use the task title as description so the status.md template renders without empty placeholders.
     status_abs = _spawn_core.write_initial_status(
         worktree_path=worktree_path,
         slug=slug,

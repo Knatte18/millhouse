@@ -21,8 +21,7 @@ You are the **Builder** — a lean orchestrator. You coordinate per-batch implem
 
 1. Read the task slug: `slug = _marker.slug_from_branch(git_root, wiki_path, cfg)`. On `MarkerError` → halt with "this worktree was not created by mill-spawn".
    `signature: _marker.slug_from_branch(git_root: Path, wiki_path: Path, cfg: dict) -> str`
-2. Resolve the wiki path: `wiki_path = _paths.resolve_wiki_path(_paths.resolve_git_root())`. Sync the wiki clone: `_wiki.sync_pull(wiki_path, slug=slug)`.
-   `signature: _wiki.sync_pull(wiki_path: Path, *, slug: str) -> None`
+2. Resolve the wiki path: `wiki_path = _paths.resolve_wiki_path(_paths.resolve_git_root())`.
 3. Load config — load `mill-config.yaml` from the hub root, merged with `.millhouse/config.local.yaml`, via `_review_common.load_config(_paths.resolve_git_root(), Path(".millhouse"))`. Read these keys:
    - `pipeline.auto_merge` — whether to invoke mill-finalize after success.
    - `pipeline.auto_report` — whether to auto-fire mill-self-report at end-of-work. mill-go fires it at Handoff step 6, AFTER any `/mill-merge` invocation in step 5 — including after PR-pending halts. See step 6 for the explicit "do not treat PR-pending as termination" rule.
@@ -109,12 +108,11 @@ Before launching the implementer / reviewer for this batch, verify a config sour
 ```bash
 PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
 import sys
-import _paths, _wiki
-hub_root = _paths.resolve_git_root()
-try:
-    _wiki.health_check(hub_root)
-except _wiki.WikiHealthError as e:
-    print(f'[mill-go] wiki health check failed: {e}', file=sys.stderr)
+import _paths
+from wiki import _client
+wiki_path = _paths.resolve_wiki_path(_paths.resolve_git_root())
+if not _client.health_check(wiki_path):
+    print('[mill-go] wiki daemon health check failed', file=sys.stderr)
     raise SystemExit(1)
 " || {
     PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-builder-lock.py" release
@@ -332,12 +330,11 @@ For each round `H` from 1 to `max_holistic_rounds`:
    ```bash
    PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
    import sys
-   import _paths, _wiki
-   hub_root = _paths.resolve_git_root()
-   try:
-       _wiki.health_check(hub_root)
-   except _wiki.WikiHealthError as e:
-       print(f'[mill-go] wiki health check failed: {e}', file=sys.stderr)
+   import _paths
+   from wiki import _client
+   wiki_path = _paths.resolve_wiki_path(_paths.resolve_git_root())
+   if not _client.health_check(wiki_path):
+       print('[mill-go] wiki daemon health check failed', file=sys.stderr)
        raise SystemExit(1)
    " || {
        PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-builder-lock.py" release
@@ -470,16 +467,14 @@ If the output is empty, proceed normally.
 1. `_status.append_phase(status_path, "done", _timestamp.now_utc_iso())`. Commit on the task branch: `git -C <worktree> add <status_path> && git -C <worktree> commit -m "mill-go: done {slug}"`.
 
 2. Flip Home.md's task line to `[ready-to-merge]` — the new intermediate state signalling 'mill-go done, mill-merge pending':
-   ```python
-   home_path = wiki_path / "Home.md"
-   with _wiki.wiki_lock(wiki_path, slug):
-       _tasks_md.set_phase_at(home_path, slug, "ready-to-merge")
-       _wiki.write_commit_push(wiki_path, ["Home.md"], f"task: ready-to-merge {slug}", slug=slug)
+   ```bash
+   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
+   from pathlib import Path; import _paths
+   from wiki import _client
+   wiki_path = _paths.resolve_wiki_path(_paths.resolve_git_root())
+   _client.set_phase(wiki_path, '<slug>', 'ready-to-merge')
+   "
    ```
-   `signature: _tasks_md.set_phase_at(path: Path, slug: str, phase: str | None) -> None`
-   `signature: _wiki.wiki_lock(wiki_path: Path, slug: str) -> ContextManager[None]`
-   `signature: _wiki.write_commit_push(wiki_path: Path, paths: list[str], msg: str, *, slug: str) -> None`
-   The lock-context wraps the read-modify-write atomically; `set_phase_at` does the read+transform+write itself; `write_commit_push` acquires the lock internally but the counter from `wiki_lock` makes that a no-op.
 3. `_notify.notify("mill-go.done", f"task {slug} complete", slug=slug)`.
 4. **Release the builder lock immediately:**
    ```bash
@@ -502,6 +497,6 @@ If the output is empty, proceed normally.
 ## Board discipline
 
 - `status_path`, `reviews_dir/<file>`, and `plan_dir/<file>` writes are committed on the **task branch** via `git -C <worktree> add ... && git -C <worktree> commit`. `millpy-implement.py` and `millpy-fix.py` push their own task-branch state commits (batch-start, batch-fix, holistic-fix) to `origin/<task-branch>` immediately after each `git commit`. The Builder's own state commits (Prepare, Approve, blocked, done) and per-card implementer commits do not push — mill-merge pushes the full task branch at task end. Adding push to the Builder's own commits is a follow-up task; this PR scopes the push policy to CLI commits only.
-- Home.md writes (the Handoff `[done]` flip) go through `_wiki.write_commit_push(..., slug=...)` inside a `with _wiki.wiki_lock(wiki_path, slug):` block. The wiki helpers acquire the lock internally; the context manager makes the read-modify-write atomic.
+- Wiki phase mutations (the Handoff `[ready-to-merge]` flip) go through `_client.set_phase(wiki_path, slug, "ready-to-merge")`. The daemon serializes all writes and pushes automatically.
 - Phase transitions via `_status.append_phase`; batch-state mutations via `_status.set_batch_field`. Hand-editing either yaml block is banned.
 - The path-invariant rule from CLAUDE.md is load-bearing: working state never goes to the wiki — only Home.md / _Sidebar.md do.

@@ -51,30 +51,21 @@ Each issue dict: `number`, `title`, `body` (includes rendered comments), `labels
 
 Store result as `all_issues`. Apply `--max-bugs` cap: `issues = all_issues[:N]` (or all if no cap).
 
-### 1b. Load Home.md and extract existing slugs
+### 1b. Load existing slugs from wiki
 
-Resolve the wiki path:
+Call `_client.list_tasks_brief(wiki_path)` and extract the set of existing slugs:
 
 ```bash
 PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
-from _paths import resolve_git_root, resolve_wiki_path
-print(resolve_wiki_path(resolve_git_root()))
+import json, _paths
+from wiki import _client
+wiki_path = _paths.resolve_wiki_path(_paths.resolve_git_root())
+tasks = _client.list_tasks_brief(wiki_path)
+print(json.dumps([t['slug'] for t in tasks]))
 "
 ```
 
-Read `<wiki_path>/Home.md` and extract the set of existing slugs using the `_TASK_HEADING_RE` pattern (same pattern as `millpy-add.py`):
-
-```python
-import re
-_TASK_HEADING_RE = re.compile(
-    r"^##\s+.+?\n\[\[?([a-z][a-z0-9-]*)\]?\](?:\([^)]+\))?[ \t]*$",
-    re.MULTILINE,
-)
-home_text = open("<wiki_path>/Home.md", encoding="utf-8").read()
-existing_home_slugs = {m.group(1) for m in _TASK_HEADING_RE.finditer(home_text)}
-```
-
-Maintain `existing_home_slugs` in working context throughout the run.
+Maintain `existing_home_slugs` in working context throughout the run: `existing_home_slugs = {t["slug"] for t in _client.list_tasks_brief(wiki_path)}`.
 
 ## Phase 1c: Dry-run exit
 
@@ -200,20 +191,19 @@ The `--summary` value is `issue["body"][:200].strip()` (use `""` if body is None
 
   ```bash
   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
-  import _tasks_md, sys
-  from pathlib import Path
-  home_text = Path(sys.argv[1]).read_text(encoding='utf-8')
-  tasks = _tasks_md.parse(home_text)
-  t = next((t for t in tasks if t.slug == sys.argv[2]), None)
-  if t is None:
+  import sys, _paths
+  from wiki import _client
+  wiki_path = _paths.resolve_wiki_path(_paths.resolve_git_root())
+  task = _client.get_task(wiki_path, sys.argv[1])
+  if task is None:
       print('not-found')
   else:
-      print(t.phase or 'unmarked')
-  " "<wiki_path>/Home.md" "<slug>"
+      print(task.get('status') or 'unmarked')
+  " "<slug>"
   ```
 
-  - Phase `active` or `done` → skip this issue. Do not record in any list. Continue to next issue.
-  - Phase `unmarked` (or `not-found`) → the task entry exists but was never claimed. Proceed to step 3 (claim it).
+  - Status `active` or `done` → skip this issue. Do not record in any list. Continue to next issue.
+  - Status `unmarked` (or `not-found`) → the task entry exists but was never claimed. Proceed to step 3 (claim it).
 
 - **Any other exit 1 reason:** record in `errored_list` as `{slug, issue_number, title, error: <stderr>}` and continue to next issue.
 

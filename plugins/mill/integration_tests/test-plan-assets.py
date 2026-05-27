@@ -13,9 +13,8 @@ depends on:
     - ``_plan_dag.extract_batch_index`` + ``validate`` accept a small
       hand-written dummy plan and reject a cyclic variant of it.
     - ``_review_plan._load_root_from_overview`` reads the ``root:``
-      field from the fenced-yaml frontmatter (the v2 shape) — the
-      function used to only understand ``---`` frontmatter, which would
-      silently drop ``root:`` on every v2 plan.
+      field from the fenced-yaml frontmatter — the function used to only
+      understand ``---`` frontmatter, which would silently drop ``root:``.
     - ``_timestamp.now_utc_compact`` + ``now_utc_iso`` produce the
       shapes the skill substitutes into templates.
 

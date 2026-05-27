@@ -67,7 +67,7 @@ If the issue does not overlap with any current Home.md task, present: `1) New ta
 **On selection 2 (Fold into existing):**
 - Prompt for target slug (free text).
 - Validate against the parsed Home.md slug list; re-prompt if not found.
-- Phase check: parse Home.md via `_tasks_md.parse()` and inspect the target Task's phase. When the phase is in `_tasks_md.LOCKED_FOLD_PHASES` (i.e. one of `"active"`, `"ready-to-merge"`, `"pr-pending"`), refuse the fold for this issue: print `"Cannot fold #<N> into <slug>: task is [<phase>]. Plan is frozen — scope additions silently invalidate it. Pick a different action for this issue."` and re-present the decision menu with option 2 omitted (struck-through or disabled). Use `_tasks_md.LOCKED_FOLD_PHASES` as the source of truth — never duplicate the tuple in this SKILL.md or anywhere else.
+- Phase check: call `task = _client.get_task(wiki_path, target_slug)` and inspect `task["status"]`. When the status is in the locked set (`"active"`, `"ready-to-merge"`, `"pr-pending"`), refuse the fold for this issue: print `"Cannot fold #<N> into <slug>: task is [<status>]. Plan is frozen — scope additions silently invalidate it. Pick a different action for this issue."` and re-present the decision menu with option 2 omitted (struck-through or disabled). Use the locked set `{"active", "ready-to-merge", "pr-pending"}` as the source of truth.
 - Record the decision.
 
 **On selection 3 (Skip):**
@@ -118,10 +118,9 @@ Print a one-line summary to chat + the path. User replies `approve` or `reject`.
 
 1. Build the updated `Home.md` content:
    - Append new task entries using the mill-add format (`## <Title> [<slug>]` or bracketed-proposal form).
-   - For each fold-in, call `_tasks_md.append_to_body(home_text, target_slug, f"- Sources: #{N} — {issue_title}")` to add a Sources: bullet to the target body. The append is unconditional — there is no longer a "leave unchanged" path. Each fold-in produces the same Home.md output as a `/mill-fold #N <slug>` invocation.
-2. Write Home.md + any new `proposal-<slug>.md` files to the wiki and push via `_wiki.write_commit_push`.
-3. Regenerate the sidebar (`_sidebar.regenerate`) and commit if it changed.
-4. For each consumed issue, close it on GitHub with the per-decision comment string:
+   - For each fold-in, call `task = _client.get_task(wiki_path, target_slug); new_body = (task["body"] or "") + f"\\n- Sources: #{N} — {issue_title}"; _client.upsert_task(wiki_path, target_slug, body=new_body)` to append the Sources: bullet. The append is unconditional — there is no longer a "leave unchanged" path. Each fold-in produces the same Home.md output as a `/mill-fold #N <slug>` invocation.
+2. Each `_client.upsert_task` call commits and pushes to the wiki remote automatically. New task entries go through `_client.upsert_task(wiki_path, slug, title=..., brief=..., body=...)`; new proposals are written to `body=` (the daemon renders `proposal-<slug>.md` from that field).
+3. For each consumed issue, close it on GitHub with the per-decision comment string:
    - For each consumed **New-task** issue, call:
      ```bash
      PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
@@ -156,6 +155,6 @@ Revision applied.
 - **Skipped issues are untouched** — no comment, no label, no close. Forgetting is better than lingering "tracked" state.
 - **Close only on approval + actual write** — never close an issue before the task is committed to Home.md.
 - **Pointer comment is the invariant** — every closed issue gets `Consolidated into wiki task: <slug>` so someone browsing closed issues later can find where it went.
-- Fold targets must be in an unlocked phase. `_tasks_md.LOCKED_FOLD_PHASES` is the source of truth — never duplicate the tuple.
-- Fold-in always appends a `"- Sources: #N — <issue title>"` bullet to the target body via `_tasks_md.append_to_body`. The Home.md output of a fold-in is identical between this skill and `/mill-fold`.
+- Fold targets must be in an unlocked phase. The locked set `{"active", "ready-to-merge", "pr-pending"}` is the source of truth — never duplicate it.
+- Fold-in always appends a `"- Sources: #N — <issue title>"` bullet via `_client.get_task` + `_client.upsert_task(..., body=...)`. The Home.md output of a fold-in is identical between this skill and `/mill-fold`.
 - Close-comment strings: New-task → `"Consolidated into wiki task: <slug>"`; Fold-in → `"Folded into wiki task: <slug>"`. The Fold-in string matches `/mill-fold`'s comment verbatim.

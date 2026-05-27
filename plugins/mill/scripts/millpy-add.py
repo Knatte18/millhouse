@@ -40,7 +40,7 @@ _SLUG_RE = re.compile(r"^[a-z][a-z0-9-]*$")
 
 
 def _validate_slug(slug: str) -> None:
-    """Reject anything that is not a valid v2 task slug."""
+    """Reject anything that is not a valid task slug."""
     if not _SLUG_RE.match(slug):
         raise SystemExit(
             f"Invalid slug {slug!r}: must match [a-z][a-z0-9-]* "

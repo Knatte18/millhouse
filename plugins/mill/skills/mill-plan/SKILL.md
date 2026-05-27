@@ -11,8 +11,7 @@ You are an autonomous planner running on Opus. Your job is to turn `discussion.m
 
 ## Entry
 
-1. Resolve the wiki path via `_paths.resolve_wiki_path(_paths.resolve_git_root())` and call `_wiki.sync_pull(wiki_path, slug="mill-plan")`.
-   `signature: _wiki.sync_pull(wiki_path: Path, *, slug: str) -> None`
+1. Resolve the wiki path via `_paths.resolve_wiki_path(_paths.resolve_git_root())`.
    `signature: _paths.resolve_git_root(start: Path | None = None) -> Path`
    `signature: _paths.resolve_wiki_path(git_toplevel: Path) -> Path`
 2. Read the slug via `_marker.slug_from_branch(git_root, wiki_path, cfg)`. On `MarkerError` → halt with "this worktree was not created by mill-spawn".
