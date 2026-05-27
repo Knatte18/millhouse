@@ -94,7 +94,7 @@ Why now: `hub_relative_path` support was wired into `_paths.py` (resolve_hub_rel
   3. `git_root / raw` if on disk (new fallback).
   4. Suppression via creates/deletes union (unchanged).
   5. `ReviewError` (unchanged).
-- Update callers in `_review_code.py` (lines 254, 305 area, 375) and `_review_plan.py` / `_review_discussion.py` to pass `git_root=_paths.resolve_git_root()`. `millpy-review-code.py` resolves and passes both `project_root` and `git_root` from its main entry.
+- Update the callers verified in the Technical Context tables below (3 `resolve_ref_paths` sites + 6 `resolve_existing_paths` sites) to pass `git_root=_paths.resolve_git_root()`. `millpy-review-code.py` / `millpy-review-plan.py` resolve and pass `git_root` from their main entries through `_review_code.run` / `_review_plan.run`.
 - Rationale: plan files written by `mill-plan` use git-root-relative paths like `lib/avm/...` for files outside the hub but inside the repo (a common pattern in monorepos). The fallback keeps plans portable across both layouts without forcing mill-plan to canonicalise differently per layout. Symmetric with the existing `wiki/`-prefix routing.
 - Rejected: making `mill-plan` rewrite Context paths to project-relative (`../../lib/...`) when `hub_relative_path != "."` — less permissive, breaks hand-edited plans, complicates plan-review (relative paths obscure intent); adding a `git_root:` frontmatter field — over-engineered; replacing the hard-fail with a silent-skip — defeats #41's intent.
 
