@@ -318,12 +318,19 @@ class WikiServer(DaemonBase):
         # Render all tasks
         rendered = render(self._store.all_tasks())
 
+        # Delete orphan proposal-*.md files
+        existing = {p.name for p in self._wiki_path.glob("proposal-*.md")}
+        rendered_proposals = {k for k in rendered.keys() if k.startswith("proposal-")}
+        orphans = sorted(existing - rendered_proposals)
+        for name in orphans:
+            (self._wiki_path / name).unlink(missing_ok=True)
+
         # Atomic write each rendered file
         for rel_path, content in rendered.items():
             atomic_write(self._wiki_path, rel_path, content)
 
         # Commit and push
-        commit_paths = list(rendered.keys()) + ["tasks.json"]
+        commit_paths = list(rendered.keys()) + orphans + ["tasks.json"]
         commit_paths = list(dict.fromkeys(commit_paths))
         message = f"wiki: {slug_for_msg}"
 
