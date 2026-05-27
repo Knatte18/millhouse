@@ -43,7 +43,9 @@ batches:
     implementer_session: a9f28c85-abc5-4d65-b1e4-f0919b82528f
     start_sha: a4fd84e3e7690b49605ffcbf8e6e913bfc828264
   - name: High-complexity skill fixes
-    state: pending
+    state: running
+    implementer_session: f35cd1b3-5ffb-4965-af26-3081ab6961ec
+    start_sha: a95e9c2b72e514c167de446a3a6c6e5340413c9c
   - name: Python comment fixes
     state: pending
 ```
