@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-High-complexity skill fixes
+phase: approved-Python comment fixes
 slug: stale-v2-references-audit
 branch: hanf/stale-v2-references-audit
 plan: _mill/plan
@@ -25,6 +25,7 @@ approved-Simple skill fixes  '2026-05-27T07:57:23Z'
 approved-Medium skill fixes  '2026-05-27T08:01:40Z'
 approved-mill-go skill fix  '2026-05-27T08:04:21Z'
 approved-High-complexity skill fixes  '2026-05-27T08:07:43Z'
+approved-Python comment fixes  '2026-05-27T08:10:13Z'
 ```
 
 ## Batches
@@ -48,7 +49,7 @@ batches:
     implementer_session: f35cd1b3-5ffb-4965-af26-3081ab6961ec
     start_sha: a95e9c2b72e514c167de446a3a6c6e5340413c9c
   - name: Python comment fixes
-    state: running
+    state: approved
     implementer_session: 03610504-7b8c-4873-974f-4dec86097cd5
     start_sha: dc6d1de057464b49d3db87239da1e6912a0a5bd6
 ```
