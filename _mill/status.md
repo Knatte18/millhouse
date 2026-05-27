@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: stale-v2-references-audit
 branch: hanf/stale-v2-references-audit
 plan: _mill/plan
@@ -20,4 +20,21 @@ discussed  '2026-05-27T07:13:01Z'
 planning  '2026-05-27T07:31:03Z'
 plan-fix-r1  '2026-05-27T07:49:30Z'
 planned  '2026-05-27T07:49:50Z'
+implementing  '2026-05-27T07:53:47Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: Simple skill fixes
+    state: pending
+  - name: Medium skill fixes
+    state: pending
+  - name: mill-go skill fix
+    state: pending
+  - name: High-complexity skill fixes
+    state: pending
+  - name: Python comment fixes
+    state: pending
 ```
