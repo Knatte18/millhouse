@@ -185,6 +185,7 @@ class WikiServer(DaemonBase):
             id_or_slug = payload.get("id_or_slug")
             task = self._store.get_task(id_or_slug)
             if task is None:
+                self._render_and_commit_all(slug_for_msg=f"remove-noop-{id_or_slug}")
                 return {
                     FIELD_OK: False,
                     FIELD_ERROR_TYPE: ERR_NOT_FOUND,
