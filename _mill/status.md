@@ -35,7 +35,9 @@ batches:
     implementer_session: eacf1ab4-8569-4534-80b8-0fe447f233fc
     start_sha: 073c4adebb1b611bf7763368634cdff698cb00b0
   - name: merge-continue
-    state: pending
+    state: running
+    implementer_session: 500c2e51-6476-4e76-b428-de25f0853a66
+    start_sha: 9ea0971dc8c16f603b7b0a6b6662f8808cd2dceb
   - name: status-gate
     state: pending
   - name: fixer-isolation
