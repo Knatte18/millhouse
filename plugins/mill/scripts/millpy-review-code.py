@@ -63,6 +63,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
+    import _paths
     import _reviewers
     from _paths import resolve_hub_path, resolve_wiki_path
     from _review_cli import print_error_envelope
@@ -71,6 +72,7 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         project_root = Path.cwd()
+        git_root = _paths.resolve_git_root()
         mill_dir = project_root / ".millhouse"
         wiki_root = resolve_wiki_path(project_root)
         cfg = load_config(resolve_hub_path(), mill_dir)
@@ -103,6 +105,7 @@ def main(argv: list[str] | None = None) -> int:
             mill_dir,
             wiki_root,
             project_root,
+            git_root=git_root,
             max_rounds=args.max_rounds,
             batch_name=args.batch,
             extra_files=extra_files,
