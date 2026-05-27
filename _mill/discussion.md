@@ -63,7 +63,7 @@ behaviour. All six have concrete reproduction paths; none require speculative de
 
 ### #366 — chmod+retry in _safe_rmtree, test files converted
 
-- **Decision:** In `_safe_rmtree.safe_rmtree`, replace `shutil.rmtree(str(original), ignore_errors=ignore_errors)` with a call that uses a chmod+retry error handler. For Python ≥ 3.12 use the `onexc` parameter; for older versions use `onerror`. The handler does `os.chmod(path, 0o777)` then retries the failing operation. When `ignore_errors=True` and the retry also fails, swallow the error. Convert `test-wiki-daemon.py`, `test-wiki-store.py`, and `test-wiki-sync.py` from bare `shutil.rmtree(tmp, ignore_errors=True)` to `_safe_rmtree.safe_rmtree(tmp, allowed_root=tmp, ignore_errors=True)`, and remove those three files from the allowlist in `test-no-direct-rmtree.py`.
+- **Decision:** In `_safe_rmtree.safe_rmtree`, replace `shutil.rmtree(str(original), ignore_errors=ignore_errors)` with a call that uses a chmod+retry error handler. For Python ≥ 3.12 use the `onexc` parameter; for older versions use `onerror`. The handler does `os.chmod(path, stat.S_IWRITE)` then retries the failing operation. When `ignore_errors=True` and the retry also fails, swallow the error. Convert `test-wiki-daemon.py`, `test-wiki-store.py`, and `test-wiki-sync.py` from bare `shutil.rmtree(tmp, ignore_errors=True)` to `_safe_rmtree.safe_rmtree(tmp, allowed_root=tmp, ignore_errors=True)`, and remove those three files from the allowlist in `test-no-direct-rmtree.py`.
 - **Rationale:** Git pack files (`.idx`/`.pack`) are marked read-only on Windows. `shutil.rmtree` with `ignore_errors=True` silently skips them, leaving temp dirs around. A chmod+retry correctly deletes them. Converting test files completes the fix end-to-end and shrinks the allowlist.
 - **Rejected:** Fixing `_safe_rmtree.py` only and leaving test files on the allowlist — the test files themselves create git repos as fixtures, so they also encounter pack files.
 
@@ -92,12 +92,15 @@ behaviour. All six have concrete reproduction paths; none require speculative de
 returns `(host, port, token)`. After the fix, the TCP connect is followed by:
 ```python
 req = {FIELD_OP: OP_HEALTH, FIELD_TOKEN: token, "payload": {}}
-_connect_send_recv(host, port, req)  # raises OSError on failure
+_connect_send_recv(host, port, req, timeout=1.0)  # raises OSError on failure
 ```
+`_connect_send_recv` gains an optional `timeout` parameter defaulting to 10.0 (the current
+hardcoded value); the health-exchange call site in `_ensure_daemon` passes 1.0.
 On `OSError` or non-`ok` response: unlink the state file and fall through to `_spawn_server`.
 The `_is_stale` helper (lines 581–607) also does a bare TCP connect; it is used only to
 decide whether to unlink before respawn and does not need the same fix (it's a hint, not a
-gate).
+gate). The spawn-loop (lines 476–488) is also exempt — we spawned the daemon and it writes
+the state file, so the port is ours.
 
 ### _render_and_commit_all orphan deletion (#384)
 
