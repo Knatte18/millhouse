@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-merge-teardown-recovery
 branch: hanf/mill-merge-teardown-recovery
 plan: _mill/plan
@@ -22,4 +22,19 @@ plan-review-r1  '2026-05-27T09:06:09Z'
 plan-fix-r1  '2026-05-27T09:06:09Z'
 plan-fix-r2  '2026-05-27T09:14:34Z'
 planned  '2026-05-27T09:14:51Z'
+implementing  '2026-05-27T09:15:49Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: archive-tag
+    state: pending
+  - name: merge-continue
+    state: pending
+  - name: status-gate
+    state: pending
+  - name: fixer-isolation
+    state: pending
 ```
