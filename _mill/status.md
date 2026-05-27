@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussion-fix-r2
+phase: discussed
 slug: hub-relative-path-support
 branch: hanf/hub-relative-path-support
 plan: null
@@ -16,4 +16,5 @@ task_description: |
 ```text
 discussing  '2026-05-27T08:27:42Z'
 discussion-fix-r2  '2026-05-27T09:04:34Z'
+discussed  '2026-05-27T09:04:34Z'
 ```
