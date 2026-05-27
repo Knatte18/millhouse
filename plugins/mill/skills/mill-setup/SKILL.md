@@ -427,45 +427,19 @@ else:
 1. If `.millhouse/config.local.yaml` exists: skip.
 2. Otherwise: copy `${CLAUDE_PLUGIN_ROOT}/templates/config.local.yaml` → `.millhouse/config.local.yaml` verbatim, then set `hub_relative_path:` to the value computed in Phase 4.9 (uncomment and fill in the line).
 
-### Phase 6 — Initialise or normalise `Home.md`
+### Phase 6a — Trigger daemon startup and initial render
 
-Decide what to do based on the current content of `<wiki-dir>/Home.md`:
-
-| Current state | Action |
-|---|---|
-| File missing | Write template, commit & push (`chore: init Home.md`) |
-| Matches GitHub default — content is literally `Welcome to the <repo> wiki!` (optionally followed by whitespace) | Overwrite from template, commit & push (`chore: replace GitHub-default Home.md with v2 tasks template`). Safe because GitHub authored it, not the user. |
-| First non-blank line is `# Tasks` | Already in v2 shape — skip. |
-| Anything else | User content present — skip and emit a warning: "Home.md does not start with `# Tasks`; mill-add may behave unexpectedly. Edit Home.md manually if you want it normalised." Do not overwrite. |
-
-For "missing" and "GitHub default" cases:
-
-1. Copy `${CLAUDE_PLUGIN_ROOT}/templates/Home.md` → `<wiki-dir>/Home.md` verbatim.
-2. Commit and push via `_wiki.write_commit_push`:
-
-   ```bash
-   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "from pathlib import Path; import _wiki; _wiki.write_commit_push(Path(r'<wiki-dir>').resolve(), ['Home.md'], '<commit-msg>')"
-   ```
-
-**GitHub-default detection:** read the file, strip outer whitespace, match the pattern `^Welcome to the .+ wiki!$` (single line).
-
-### Phase 6a — Initialise `_Sidebar.md` via `_sidebar.regenerate()`
-
-Regenerate the wiki sidebar every time mill-setup runs:
+Call `_client.list_tasks_brief(wiki_path)` to start the wiki daemon and trigger
+initial rendering of `Home.md` and `_Sidebar.md` from `tasks.json`. The daemon
+creates `tasks.json` if absent and auto-renders both derived files on first access.
 
 ```bash
-PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "from pathlib import Path; import _sidebar; _sidebar.regenerate(Path(r'<wiki-dir>').resolve())"
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "
+from pathlib import Path
+from wiki import _client
+_client.list_tasks_brief(Path(r'<wiki-dir>').resolve())
+"
 ```
-
-Then commit + push if the file changed:
-
-1. Check `git -C <wiki-dir> status --porcelain _Sidebar.md`.
-2. If nothing printed: already correct — skip the commit.
-3. Otherwise commit:
-
-   ```bash
-   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "from pathlib import Path; import _wiki; _wiki.write_commit_push(Path(r'<wiki-dir>').resolve(), ['_Sidebar.md'], 'chore: regenerate _Sidebar.md')"
-   ```
 
 ### Phase 7 — VS Code window colour (hub = green)
 
@@ -500,8 +474,7 @@ Check every invariant; halt with a specific error if any fails:
 - `PYTHONPATH` user env var contains `<CLAUDE_PLUGIN_ROOT>/scripts` (verify via `[System.Environment]::GetEnvironmentVariable('PYTHONPATH', 'User')`)
 - `.env.MILL_PYTHON` in `~/.claude/settings.json` equals `${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe` (runtime-expanded value); verify via: `PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "import json; from pathlib import Path; d=json.loads((Path.home()/'.claude'/'settings.json').read_text(encoding='utf-8')); print(d['env']['MILL_PYTHON'])"`
 - `.millhouse/config.local.yaml` exists
-- `<WIKI_PATH>/Home.md` exists and starts with `# Tasks`
-- `<WIKI_PATH>/_Sidebar.md` exists and begins with `### Navigation`
+- Wiki daemon starts successfully: `_client.list_tasks_brief(wiki_path)` returns without error and Home.md exists in the wiki clone.
 - `.vscode/settings.json` exists with `titleBar.activeBackground == "#2d7d46"`
 
 On success, print a summary:
