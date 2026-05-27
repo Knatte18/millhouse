@@ -180,11 +180,11 @@ Insert before the `json.dumps` line in the `except _llm_claude.LLMError` block.
 ### test-wiki-daemon.py (existing, extend for #382)
 Add: mock `socket.create_connection` to succeed but mock `_connect_send_recv` to raise `OSError`. Verify that `_ensure_daemon` unlinks the state file and calls `_spawn_server`. Also add: mock `_connect_send_recv` to return `{FIELD_OK: False}`. Same expected outcome.
 
-### test-wiki-protocol.py or test-wiki-server.py (existing/new, #383 + #384)
+### test-wiki-protocol.py (existing, extend for #383 + #384)
 **#383:** Call `_handle_remove_task` with a slug that is not in the store. Verify `_render_and_commit_all` is called (via mock/spy) and that `ERR_NOT_FOUND` is returned.
 **#384:** Seed `wiki_path` with a `proposal-old-slug.md` file. Call `_render_and_commit_all` with tasks that do not include `old-slug`. Verify `proposal-old-slug.md` is deleted and its path appears in the `commit_push` call.
 
-### test-junction.py (existing, extend for #385)
+### test-junction.py (new, create for #385)
 Add: create a temp worktree dir with a symlink/junction named `.active` and another named `.wiki`. Call `strip_all_in_worktree(worktree, junctions_cfg={})` (empty config). Verify both are stripped and returned in the result list.
 
 ### test-safe-rmtree.py (existing, extend for #366)
