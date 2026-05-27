@@ -55,6 +55,7 @@ Batch-local decisions:
     HUB = Path(__file__).resolve().parent.parent.parent.parent
     sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
     import _junction
+    import _safe_rmtree
     ```
   - Add `if __name__ == "__main__": sys.exit(main())` at the bottom matching the convention.
   - Test cases:
