@@ -118,6 +118,8 @@ Four skills with medium-complexity V2 references: lock + write_commit_push + set
   ```
   Note: V3 task dicts have `"status"` (not `"phase"`), `"slug"`, `"title"`, `"brief"`, `"body"`, `"group"`, `"has_proposal"`.
 
+  In Step 3's scope rules table: update the column header from `` `task.phase` `` to `` `task["status"]` `` so the table matches the dict shape returned by `_client.list_tasks_brief`.
+
   Replace step 4 "Write all changed files and push via `_wiki.write_commit_push`" (lines 192–199): since mutations go through `_client.upsert_task` (which the daemon auto-commits and pushes), the explicit write_commit_push call is gone. Replace with: "For each task whose fields changed, call `_client.upsert_task(wiki, slug, brief=..., body=...)`. The daemon commits and pushes to the wiki remote automatically on each mutation."
 
   Delete the `_sidebar.regenerate` step (lines 204–209): the entire code block calling `_sidebar.regenerate(wiki)`. In V3 the daemon auto-renders `_Sidebar.md`.

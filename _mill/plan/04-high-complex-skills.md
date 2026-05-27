@@ -53,6 +53,8 @@ Three skills requiring structural rewrites beyond simple API swaps. mill-setup h
   - `- \`<WIKI_PATH>/_Sidebar.md\` exists and begins with \`### Navigation\``
   Replace both with a single bullet: `- Wiki daemon starts successfully: \`_client.list_tasks_brief(wiki_path)\` returns without error and Home.md exists in the wiki clone.`
 
+  Phase 8 comprehensive Verify+report checklist: remove the same two bullets (`<WIKI_PATH>/Home.md exists and starts with # Tasks` and `<WIKI_PATH>/_Sidebar.md exists and begins with ### Navigation`) from Phase 8's checklist as well. Replace with the same daemon-health bullet: `_client.list_tasks_brief(wiki_path) returns without error`.
+
   Delete Phase 6 entirely (lines ~430–448): the heading `### Phase 6 — Initialise or normalise \`Home.md\`` and all its content including the decision table, copy-from-template instruction, and `_wiki.write_commit_push` bash block. In V3 `Home.md` is daemon-rendered and must not be manually seeded.
 
   Replace Phase 6a entirely (lines ~452–468): delete the heading `### Phase 6a — Initialise \`_Sidebar.md\` via \`_sidebar.regenerate()\`` and all its content (the `_sidebar.regenerate` bash call, the `git -C` status check, and the `_wiki.write_commit_push` commit bash call).

@@ -3,7 +3,7 @@
 ```yaml
 task: Audit and clean up stale V2 references
 slug: stale-v2-references-audit
-approved: false
+approved: true
 started: 20260527-072704
 parent: main
 root: ""
