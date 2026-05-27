@@ -67,7 +67,16 @@ Five concrete failure modes are tracked as #356, #357, #358, #367, #368 (all in 
 
 ### fixer-implementer-git-env-isolation
 
-- **Decision:** In `_llm_claude._invoke` (the shared dispatch path for both implementer and fixer subprocess spawns), build an explicit child env that **strips** `GIT_DIR`, `GIT_WORK_TREE`, `GIT_INDEX_FILE`, `GIT_AUTHOR_NAME`, `GIT_AUTHOR_EMAIL`, `GIT_COMMITTER_NAME`, `GIT_COMMITTER_EMAIL` before passing the env to `_subprocess_util.run`. The Python implementation: `env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_") or k in {"GIT_PYTHON_REFRESH"}}` — a strict-allowlist would be safer but breaks if Claude CLI later adds a benign `GIT_*` it needs; the blocklist covers the known-dangerous surface. Apply to both implementer (`millpy-implement.py`) and fixer (`millpy-fix.py`) dispatches via the shared `_invoke` change. Document in the implementer and fixer brief templates: *"Do not `cd` outside the task worktree. Use `git -C <path>` for cross-repo reads or the Read tool for fixture inspection. The Bash tool's cwd persists between calls — `cd <fixture>` corrupts every subsequent git operation."*
+- **Decision:** In `_llm_claude._invoke` (the shared dispatch path for both implementer and fixer subprocess spawns), build an explicit child env that **strips** exactly these seven named vars: `GIT_DIR`, `GIT_WORK_TREE`, `GIT_INDEX_FILE`, `GIT_AUTHOR_NAME`, `GIT_AUTHOR_EMAIL`, `GIT_COMMITTER_NAME`, `GIT_COMMITTER_EMAIL`. Implementation:
+  ```python
+  STRIP_VARS = {
+      "GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE",
+      "GIT_AUTHOR_NAME", "GIT_AUTHOR_EMAIL",
+      "GIT_COMMITTER_NAME", "GIT_COMMITTER_EMAIL",
+  }
+  env = {k: v for k, v in os.environ.items() if k not in STRIP_VARS}
+  ```
+  Named blocklist (not prefix-strip) is mandatory — other `GIT_*` vars like `GIT_PAGER`, `GIT_TERMINAL_PROMPT`, `GIT_CONFIG_GLOBAL`, `GIT_PYTHON_REFRESH` are benign and must survive. Apply to both implementer (`millpy-implement.py`) and fixer (`millpy-fix.py`) dispatches via the shared `_invoke` change. Document in the implementer and fixer brief templates: *"Do not `cd` outside the task worktree. Use `git -C <path>` for cross-repo reads or the Read tool for fixture inspection. The Bash tool's cwd persists between calls — `cd <fixture>` corrupts every subsequent git operation."*
 - **Rationale:** The reported incident (#367) was caused by env-level GIT_DIR pollution from a test fixture. Stripping these vars from the child env at dispatch removes the entire mechanism. Symmetric application to implementer + fixer is mandatory because the same subprocess path serves both; protecting one without the other leaves a known-reproducible hole. Brief-level documentation of the cwd-drift concern complements the env strip — env isolation prevents inherited pollution, but the session can still `cd` into a fixture mid-run, and the brief is the only surface that can warn against that.
 - **Rejected:**
   - Set `GIT_DIR=<worktree>/.git` + `GIT_WORK_TREE=<worktree>` explicitly — breaks `git -C <parent>` cross-worktree reads documented as allowed in CLAUDE.md `## Worktree isolation`. With `GIT_DIR` set, git ignores cwd and `-C`'s pre-cd and always operates on the env-pinned repo.
@@ -131,7 +140,7 @@ Shared helpers that **must** be reused (not reimplemented):
 Gotchas:
 
 - The `_invoke` function in `_llm_claude.py` has two subprocess-spawn branches (psmux and direct); both must get the env strip.
-- The strip set must not include `GIT_PAGER`, `GIT_TERMINAL_PROMPT`, etc. — those are user-experience env vars, not state-affecting ones. Only the seven listed above are correctness-affecting.
+- The strip set is a NAMED blocklist of exactly seven vars (see `STRIP_VARS` constant in the decision above). It is NOT a `GIT_*` prefix strip — that would also remove benign vars like `GIT_PAGER`, `GIT_TERMINAL_PROMPT`, `GIT_CONFIG_GLOBAL`, `GIT_PYTHON_REFRESH` that are user-experience or library-internal, not correctness-affecting.
 - `git config --global --get user.email` exits with code 1 and empty stdout when the key is unset; the script's resolution code must handle that without crashing the script.
 - The `archive/<slug>-<NN>` move-aside collision check must be deterministic across re-runs — list existing matching tags via `git tag -l "archive/<slug>-*"`, parse the suffixes, pick the lowest unused.
 - The SKILL.md edits for #356, #357, #358 are interpreted by an LLM (Builder thread); the prose must be precise. Avoid ambiguous phrasing like "handle the conflict" — spell out the exact Bash commands per branch.
@@ -155,7 +164,7 @@ Gotchas:
   - Archive-tag conflict resolution helper — if the resolution logic is extracted into `_archive_tag.py` (mill-plan call), write the test against the three branches before writing the helper.
 - **Scenarios that MUST be covered:**
   - Archive tag: same-SHA (no-op), ancestor-SHA (force-update succeeds), divergent-SHA (move-aside to `-01` succeeds; second divergence in same task moves to `-02`).
-  - Fixer env: confirm the seven listed env vars are stripped; confirm benign env vars (`PATH`, `HOME`, `CLAUDE_PLUGIN_ROOT`, `PYTHONPATH`) survive.
+  - Fixer env: confirm the seven named env vars in `STRIP_VARS` are stripped; confirm benign env vars (`PATH`, `HOME`, `CLAUDE_PLUGIN_ROOT`, `PYTHONPATH`, `GIT_PAGER`, `GIT_TERMINAL_PROMPT`) survive — the latter two specifically pinning that the strip is a named blocklist, not a `GIT_*` prefix strip.
   - CLI commit author: fixture worktree with `user.email=test@test.com` in `.git/config`; CLI commit lands with the explicit `-c` author; fixture's local config remains polluted (i.e., we do *not* save+restore — and that's intentional).
   - mill-go absent-status fallback: each branch (`ready-to-merge`, `pr-pending`, `done`, `None`, unknown) emits the correct halt message. Monkey-patch `_client.get_task` to fixture each branch.
 - **Out of test scope:**
@@ -177,5 +186,5 @@ Gotchas:
 - **Q:** Batching strategy? **A:** [auto-pick] Four independent batches: `archive-tag` (#356), `merge-continue` (#357, doc-only), `status-gate` (#358), `fixer-isolation` (#367+#368, shared dispatch surface). **Why:** clean isolation per issue; parallelisable; #367+#368 co-located because they touch the same files.
 - **Q:** Should worktree-local user.name/email be saved+restored around fixer dispatch? **A:** [auto-pick] No — the `-c` flag approach on CLI commits fully fixes the reported incident; save/restore adds correctness-on-failure complexity without addressing a real bug. **Why:** YAGNI; pollution to the worktree config is annoying but not load-bearing.
 - **Q:** Should the `-c` author pattern also apply to Builder Bash commits in mill-go/mill-merge? **A:** [auto-pick] No — out of scope for this task. **Why:** the incidents documented are CLI state commits; broadening to Builder Bash would expand the change set without addressing any docketed issue. Follow-up task if needed.
-- **Q:** Should we use an allowlist or blocklist for `GIT_*` env vars in the strip? **A:** [auto-pick] Blocklist of the seven known-dangerous vars (`GIT_DIR`, `GIT_WORK_TREE`, `GIT_INDEX_FILE`, `GIT_AUTHOR_NAME`, `GIT_AUTHOR_EMAIL`, `GIT_COMMITTER_NAME`, `GIT_COMMITTER_EMAIL`). **Why:** allowlist breaks if Claude CLI later needs a benign `GIT_*` var; blocklist covers the documented attack surface.
+- **Q:** Should we use an allowlist or blocklist for `GIT_*` env vars in the strip, and prefix-strip or named-strip? **A:** [auto-pick] Named blocklist of exactly seven vars (`GIT_DIR`, `GIT_WORK_TREE`, `GIT_INDEX_FILE`, `GIT_AUTHOR_NAME`, `GIT_AUTHOR_EMAIL`, `GIT_COMMITTER_NAME`, `GIT_COMMITTER_EMAIL`) — NOT a `GIT_*` prefix strip. **Why:** prefix-strip would also remove benign `GIT_*` vars (`GIT_PAGER`, `GIT_TERMINAL_PROMPT`, `GIT_CONFIG_GLOBAL`, `GIT_PYTHON_REFRESH`); allowlist breaks if Claude CLI later needs a new benign `GIT_*` var. Named blocklist covers exactly the documented correctness-affecting surface.
 - **Q:** For the archive-tag force-update branch, `--force` or `--force-with-lease`? **A:** [auto-pick] `--force-with-lease`. **Why:** safer against concurrent operator pushes; standard convention elsewhere in the codebase.
