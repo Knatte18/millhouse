@@ -31,7 +31,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    from _paths import resolve_git_root, resolve_wiki_path
+    from _paths import resolve_git_root, resolve_hub_path, resolve_wiki_path
     from _review_common import ReviewError, find_active_slug, load_config, resolve_path
     import _plan_validate
 
@@ -41,7 +41,7 @@ def main(argv: list[str] | None = None) -> int:
     wiki_root = resolve_wiki_path(repo_root)
 
     try:
-        cfg = load_config(repo_root, mill_dir)
+        cfg = load_config(resolve_hub_path(), mill_dir)
         slug = find_active_slug(project_root, wiki_root, cfg)
         plan_dir = resolve_path(cfg["paths"]["plan_dir"], slug)
         errors = _plan_validate.run(plan_dir, project_root, wiki_root=wiki_root, skip_checks=frozenset(args.skip_checks))
