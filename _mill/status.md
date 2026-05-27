@@ -43,7 +43,9 @@ batches:
     implementer_session: 4edc6554-897b-46b2-871a-e1e58c77c50d
     start_sha: 3fbedc992223be23020df788941bd77b75c4741f
   - name: review-paths-threading
-    state: pending
+    state: running
+    implementer_session: f1d65bda-c26d-4d20-856a-a161170d4da1
+    start_sha: 5aabbf207c1149ea36c5695c263f9a71ba9efd04
   - name: integration-test
     state: pending
 ```
