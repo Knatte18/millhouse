@@ -21,8 +21,7 @@ You are the **Builder** — a lean orchestrator. You coordinate per-batch implem
 
 1. Read the task slug: `slug = _marker.slug_from_branch(git_root, wiki_path, cfg)`. On `MarkerError` → halt with "this worktree was not created by mill-spawn".
    `signature: _marker.slug_from_branch(git_root: Path, wiki_path: Path, cfg: dict) -> str`
-2. Resolve the wiki path: `wiki_path = _paths.resolve_wiki_path(_paths.resolve_git_root())`. Sync the wiki clone: `_wiki.sync_pull(wiki_path, slug=slug)`.
-   `signature: _wiki.sync_pull(wiki_path: Path, *, slug: str) -> None`
+2. Resolve the wiki path: `wiki_path = _paths.resolve_wiki_path(_paths.resolve_git_root())`.
 3. Load config — load `mill-config.yaml` from the hub root, merged with `.millhouse/config.local.yaml`, via `_review_common.load_config(_paths.resolve_git_root(), Path(".millhouse"))`. Read these keys:
    - `pipeline.auto_merge` — whether to invoke mill-finalize after success.
    - `pipeline.auto_report` — whether to auto-fire mill-self-report at end-of-work. mill-go fires it at Handoff step 6, AFTER any `/mill-merge` invocation in step 5 — including after PR-pending halts. See step 6 for the explicit "do not treat PR-pending as termination" rule.
@@ -109,12 +108,11 @@ Before launching the implementer / reviewer for this batch, verify a config sour
 ```bash
 PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
 import sys
-import _paths, _wiki
-hub_root = _paths.resolve_git_root()
-try:
-    _wiki.health_check(hub_root)
-except _wiki.WikiHealthError as e:
-    print(f'[mill-go] wiki health check failed: {e}', file=sys.stderr)
+import _paths
+from wiki import _client
+wiki_path = _paths.resolve_wiki_path(_paths.resolve_git_root())
+if not _client.health_check(wiki_path):
+    print('[mill-go] wiki daemon health check failed', file=sys.stderr)
     raise SystemExit(1)
 " || {
     PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-builder-lock.py" release
@@ -332,12 +330,11 @@ For each round `H` from 1 to `max_holistic_rounds`:
    ```bash
    PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
    import sys
-   import _paths, _wiki
-   hub_root = _paths.resolve_git_root()
-   try:
-       _wiki.health_check(hub_root)
-   except _wiki.WikiHealthError as e:
-       print(f'[mill-go] wiki health check failed: {e}', file=sys.stderr)
+   import _paths
+   from wiki import _client
+   wiki_path = _paths.resolve_wiki_path(_paths.resolve_git_root())
+   if not _client.health_check(wiki_path):
+       print('[mill-go] wiki daemon health check failed', file=sys.stderr)
        raise SystemExit(1)
    " || {
        PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-builder-lock.py" release
