@@ -57,9 +57,9 @@ Three Python source files also carry stale "v2" comments (no logic impact, but c
 
 ### mill-setup-phase6-deletion
 
-- **Decision:** Delete mill-setup Phase 6 ("Initialise or normalise Home.md") entirely. Replace with a single `_client.health_check(wiki_path)` call to confirm daemon starts successfully.
-- **Rationale:** Phase 6's sole purpose was to seed Home.md from a template (V2 pattern). In V3, Home.md is auto-rendered by the daemon from `tasks.json` on every mutation. `tasks.json` is created by the daemon on first access. A `health_check` call triggers daemon startup + initial render, replacing what the old phase did. The "v2 shape" probe (`# Tasks` first-line check) is meaningless in V3.
-- **Rejected:** Replacing with a `tasks.json` existence check — redundant; daemon handles it. Keeping phase 6 with a daemon call — adds a phase that does nothing visible beyond confirming daemon is alive, which is better expressed as part of Phase 5 (post-clone verification).
+- **Decision:** Delete mill-setup Phase 6 ("Initialise or normalise Home.md") and Phase 6a ("Initialise `_Sidebar.md` via `_sidebar.regenerate()`") entirely. Replace both with a single `_client.list_tasks_brief(wiki_path)` call (goes through `_ensure_daemon`, triggering auto-start + initial render of both Home.md and _Sidebar.md).
+- **Rationale:** Phase 6 seeded Home.md from a template (V2 pattern). Phase 6a called `_sidebar.regenerate()` (also V2 module, now gone). In V3, both files are auto-rendered by the daemon from `tasks.json`. `_client.health_check` does NOT trigger auto-start (it returns False if `.wiki-daemon.json` is absent); `list_tasks_brief` goes through `_ensure_daemon` and is the correct trigger. The "v2 shape" probe (`# Tasks` first-line check) is meaningless in V3.
+- **Rejected:** Using `_client.health_check` as the startup trigger — confirmed by source inspection that `health_check` bypasses `_ensure_daemon` and returns `False` on fresh install instead of spawning the daemon.
 
 ### mill-autofix-full-rewrite
 
@@ -135,21 +135,13 @@ Daemon auto-starts on first `_client` call. No sync_pull, no wiki lock needed.
 - `mill-groom/SKILL.md` — 7 hits: delete sync_pull, replace `_tasks_md.parse()` with `_client.list_tasks_brief`, replace write_commit_push
 
 **High complexity (structural rewrites):**
-- `mill-setup/SKILL.md` — delete Phase 6 entirely; replace health_check call (was `_wiki.health_check(hub_root)` raising `WikiHealthError`) with `_client.health_check(wiki_path)`; update Phase 4.8 `_wiki.write_commit_push` call for config.yaml seeding with `git -C <wiki_path>` direct commit (config.yaml is a file write, not a task mutation — daemon doesn't manage it, so this becomes a plain git commit); update Phase 5 verification list; update description line
+- `mill-setup/SKILL.md` — four changes: (a) Phase 3: replace `import _wiki; result = _wiki.clone_or_init(...)` with `import _setup; result = _setup.clone_or_init(...)` (function moved to `_setup.py`); (b) Phase 6: delete entirely (Home.md is daemon-rendered); (c) Phase 6a: delete `_sidebar.regenerate(...)` call and `_wiki.write_commit_push(["_Sidebar.md"], ...)` — replace the entire phase with a single `_client.list_tasks_brief(wiki_path)` call that triggers daemon startup + initial render; (d) update Phase 5 verification list to remove the "Home.md starts with `# Tasks`" check; (e) update description line to remove "seeds ... Home.md"
 - `mill-ghissues-to-tasks/SKILL.md` — 5 hits: replace `_tasks_md.parse()` with `_client.list_tasks_brief`, replace `_tasks_md.append_to_body` pattern with `_client.upsert_task(..., body=...)`, replace `_tasks_md.LOCKED_FOLD_PHASES` with locked-phase inline list (the constant is gone; use hardcoded set `{"active", "ready-to-merge", "pr-pending"}`), replace write_commit_push
 - `mill-autofix/SKILL.md` — replace Home.md text reading + `_TASK_HEADING_RE` slug extraction with `_client.list_tasks_brief(wiki_path)` to get existing slugs; replace Step 2 "Add to Home.md" with `_client.upsert_task` call; remove Home.md open() call; remove `_tasks_md` import
 
 ### LOCKED_FOLD_PHASES
 
 `_tasks_md.LOCKED_FOLD_PHASES` was a tuple of phase strings you cannot fold into. The module is gone. Its value was `("active", "ready-to-merge", "pr-pending")`. SKILL.md files referencing it should inline this set directly or note it as a policy check.
-
-### mill-setup config.yaml seeding (Phase 4.8)
-
-Phase 4.8 seeds `<wiki-dir>/config.yaml`. This is a plain file write + git commit — not a task mutation. The V3 daemon does not manage `config.yaml`. The correct replacement for `_wiki.write_commit_push(wiki_path, ["config.yaml"], msg)` here is:
-
-```bash
-git -C <wiki_path> add config.yaml && git -C <wiki_path> commit -m "<msg>" && git -C <wiki_path> push
-```
 
 ### Stale code comment locations
 
@@ -176,5 +168,5 @@ These three grep checks are the acceptance criteria. The auto-report mechanism h
 - **Q:** What replaces mill-setup Phase 6 (Home.md init / v2-shape gate)? **A:** Delete Phase 6 entirely. Add a `_client.health_check(wiki_path)` call in Phase 5 post-clone verification. Daemon creates `tasks.json` and renders Home.md on first access.
 - **Q:** Should mill-autofix be fully rewritten or marked TODO? **A:** Full rewrite. Partial rewrites with TODO markers still mislead implementers.
 - **Q:** Fix stale code comments in Python scripts? **A:** Yes, fix all of them.
-- **Q:** Prioritise hot-path skills or do all 12? **A:** All 12 in one pass.
+- **Q:** Prioritise hot-path skills or do all 13? **A:** All 13 in one pass.
 - **Q:** Formal skill tests? **A:** No. Auto-report handles surfacing runtime failures.
