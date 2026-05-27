@@ -438,16 +438,16 @@ def resolve_wiki_path(git_toplevel: Path) -> Path:
     return resolve_path("wiki", main_root)
 
 
-def resolve_mill_config_path(repo_root: Path) -> Path:
+def resolve_mill_config_path(hub_root: Path) -> Path:
     """Return the hub-root mill-config.yaml path.
 
     Args:
-        repo_root: Absolute path to the hub directory (worktree root or repo root).
+        hub_root: Absolute path to the hub directory.
 
     Returns:
         Absolute ``Path`` of the mill-config.yaml file.
     """
-    return repo_root / "mill-config.yaml"
+    return hub_root / "mill-config.yaml"
 
 
 def resolve_task_path(worktree_root: Path, cfg_relative_path: str) -> Path:
