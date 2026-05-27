@@ -23,13 +23,14 @@ Batch-local decisions:
 
 ## Cards
 
-### Card 8: Add chmod+retry handler to _safe_rmtree.safe_rmtree
+### Card 8: Add chmod+retry handler to _safe_rmtree.safe_rmtree and update its kwargs test
 
 - **Context:**
   - `plugins/mill/scripts/_junction.py`
   - `plugins/mill/scripts/_paths.py`
 - **Edits:**
   - `plugins/mill/scripts/_safe_rmtree.py`
+  - `plugins/mill/unit_tests/test-safe-rmtree.py`
 - **Creates:** none
 - **Deletes:** none
 - **Requirements:**
@@ -45,6 +46,7 @@ Batch-local decisions:
     with: define a nested `_readonly_handler(func, path, exc)` closure that does `try: os.chmod(path, stat.S_IWRITE); func(path)` and on `OSError` re-raises iff `not ignore_errors`. Then call `shutil.rmtree(str(original), onexc=_readonly_handler)` on Python 3.12+ and `shutil.rmtree(str(original), onerror=lambda func, path, exc_info: _readonly_handler(func, path, exc_info[1]))` on older Pythons. Wrap the rmtree call in `try: ... except OSError: if not ignore_errors: raise` so the outer `ignore_errors=True` contract is preserved even when the handler itself raises.
   - Use `sys.version_info >= (3, 12)` for the branch.
   - Update the function's docstring's "Step 8: rmtree with defense-in-depth for ignore_errors." comment to note the chmod+retry behaviour: "Step 8: rmtree with chmod+retry for read-only files (e.g. git pack idx/pack on Windows) and defense-in-depth for ignore_errors."
+  - In `test-safe-rmtree.py`, replace the existing `# --- ignore_errors passes through to shutil.rmtree ---` test block (`test-safe-rmtree.py:261-282`). The prior block asserted that the `ignore_errors=` kwarg was forwarded directly to `shutil.rmtree`; after the prod change, `safe_rmtree` no longer passes `ignore_errors=` to `shutil.rmtree` (it uses `onexc` / `onerror` plus an outer `try/except OSError` to honour the `ignore_errors=True` contract). Rewrite the test as `# --- ignore_errors contract honoured via outer try/except ---`: still `patch("_safe_rmtree.shutil.rmtree", mock)` and call `safe_rmtree(scratch, allowed_root=scratch, ignore_errors=True)`; assert `mock.assert_called_once()`; assert that the call kwargs contain `"onexc"` if `sys.version_info >= (3, 12)` else `"onerror"` (whichever applies on the running interpreter); do NOT assert anything about `ignore_errors` being in the kwargs. Then in the `ignore_errors=False` branch, also patch `shutil.rmtree` and verify the same kwarg-name presence. Keep the existing `# --- ignore_errors=True swallows OSError from rmtree ---` test block at line 242 unchanged — it exercises the outer try/except contract end-to-end (it patches `shutil.rmtree` to raise `OSError` and expects `ignore_errors=True` to swallow, `ignore_errors=False` to propagate). That block must still pass after the prod change because the outer wrapper is exactly what preserves the contract.
 - **Commit:** `fix(safe-rmtree): chmod+retry read-only files instead of silently leaving them (#366)`
 
 ### Card 9: Convert shutil.rmtree calls in wiki test files to safe_rmtree
