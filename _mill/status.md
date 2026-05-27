@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-Python comment fixes
+phase: holistic-reviewing
 slug: stale-v2-references-audit
 branch: hanf/stale-v2-references-audit
 plan: _mill/plan
@@ -26,6 +26,7 @@ approved-Medium skill fixes  '2026-05-27T08:01:40Z'
 approved-mill-go skill fix  '2026-05-27T08:04:21Z'
 approved-High-complexity skill fixes  '2026-05-27T08:07:43Z'
 approved-Python comment fixes  '2026-05-27T08:10:13Z'
+holistic-reviewing  '2026-05-27T08:10:41Z'
 ```
 
 ## Batches
