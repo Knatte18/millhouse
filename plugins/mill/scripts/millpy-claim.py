@@ -53,19 +53,6 @@ from _paths import resolve_container_path, resolve_git_root, resolve_hub_path, r
 # --------------------------------------------------------------------------- #
 
 
-def _strict_load_config(repo_root: Path, worktree_root: Path) -> dict:
-    """Load config; raises SystemExit when no config source is found.
-
-    Strict-mode wrapper around ``_config.load_config``: mill-claim requires
-    a properly initialised config to resolve branch prefixes and other
-    spawn settings, so a missing source is always a fatal user error here.
-    """
-    mill_cfg = repo_root / "mill-config.yaml"
-    if not mill_cfg.exists():
-        raise SystemExit(f"Missing config: searched {mill_cfg}")
-    return _load_config(repo_root, worktree_root)
-
-
 def _is_dirty(git_root: Path) -> bool:
     """Return True if the working tree has any uncommitted changes."""
     result = _subprocess_util.run(
@@ -165,7 +152,7 @@ def main(argv: list[str] | None = None) -> int:
 
     git_root = resolve_git_root()
     wiki_path = resolve_wiki_path(git_root)
-    cfg = _strict_load_config(git_root, resolve_hub_path())
+    cfg = _load_config(resolve_hub_path(), resolve_hub_path())
     spawn_cfg = cfg.get("spawn", {})
 
     home_path = wiki_path / "Home.md"

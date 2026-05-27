@@ -43,7 +43,7 @@ import _setup
 import _spawn_core
 import _vscode
 import _worktree
-from _config import load_config as _load_config_lenient
+from _config import load_config as _load_config
 from _paths import resolve_container_path, resolve_git_root, resolve_hub_path, resolve_hub_relative_path, resolve_main_worktree_root, resolve_short_name, resolve_wiki_path, resolve_worktrees_dir
 from _spawn_core import pick_worktree_color
 from wiki import _client as wiki
@@ -52,19 +52,6 @@ from wiki import _client as wiki
 # --------------------------------------------------------------------------- #
 # Path resolution                                                             #
 # --------------------------------------------------------------------------- #
-
-
-def _load_config(repo_root: Path, worktree_root: Path) -> dict:
-    """Load config; raises SystemExit when no config source is found.
-
-    Strict-mode wrapper around ``_config.load_config``: mill-spawn requires
-    a properly initialised config to resolve branch prefixes and other
-    spawn settings, so a missing source is always a fatal user error here.
-    """
-    mill_cfg = repo_root / "mill-config.yaml"
-    if not mill_cfg.exists():
-        raise SystemExit(f"Missing config: {mill_cfg}")
-    return _load_config_lenient(repo_root, worktree_root)
 
 
 def _build_tokens(
@@ -108,7 +95,7 @@ def main(argv: list[str] | None = None) -> int:
 
     git_root = resolve_git_root()
     wiki_path = resolve_wiki_path(git_root)
-    cfg = _load_config(git_root, resolve_hub_path())
+    cfg = _load_config(resolve_hub_path(), resolve_hub_path())
     hub_subpath = cfg.get("hub_relative_path", ".")
     spawn_cfg = cfg.get("spawn", {})
 

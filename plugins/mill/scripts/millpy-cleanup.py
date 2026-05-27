@@ -597,7 +597,7 @@ def main() -> None:
 
     git_root = _paths.resolve_git_root()
     wiki_path = _paths.resolve_wiki_path(git_root)
-    cfg = _load_config(git_root, git_root)
+    cfg = _load_config(_paths.resolve_hub_path(), git_root)
     branch_prefix = cfg.get("spawn", {}).get("branch_prefix", "")
     container_path = _paths.resolve_container_path(git_root)
 

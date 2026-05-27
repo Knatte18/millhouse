@@ -87,7 +87,7 @@ def main(argv: list[str] | None = None) -> int:
         wiki_path = None
         try:
             wiki_path = resolve_wiki_path(git_root)
-            cfg = _load_config(git_root, resolve_hub_path())
+            cfg = _load_config(resolve_hub_path(), resolve_hub_path())
         except SystemExit:
             cfg = {}
         short_name = resolve_short_name(cfg, git_root.name)
