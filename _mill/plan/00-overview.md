@@ -3,7 +3,7 @@
 ```yaml
 task: "Sub-project repo (hub_relative_path) support"
 slug: "hub-relative-path-support"
-approved: false
+approved: true
 started: "20260527-090728"
 parent: "main"
 root: ""
