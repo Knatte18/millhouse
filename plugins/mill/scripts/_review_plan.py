@@ -120,6 +120,7 @@ def _review_one_batch(
     creates_union: set[str],
     deletes_union: set[str],
     wiki_root: Path,
+    git_root: Path,
     bulk_timeout: int | None,
 ) -> dict:
     """Review a single plan batch file. Returns a reviews[] entry dict."""
@@ -134,7 +135,7 @@ def _review_one_batch(
         reads = resolve_ref_paths(
             raw_refs, project_root, root,
             creates_union=creates_union, deletes_union=deletes_union,
-            wiki_root=wiki_root, caller_label="_review_plan",
+            wiki_root=wiki_root, git_root=git_root, caller_label="_review_plan",
         )
 
         ancestors_on_disk = resolve_existing_paths(
@@ -142,6 +143,7 @@ def _review_one_batch(
             project_root,
             root,
             wiki_root=wiki_root,
+            git_root=git_root,
         )
         reads_set = {*reads, overview_path, batch_path}
         ancestors_on_disk = [p for p in ancestors_on_disk if p not in reads_set]
@@ -203,7 +205,7 @@ def _review_one_batch(
         if verdict == "NEED_CONTEXT":
             missing_raw = parse_missing_context(raw)
             missing_paths = resolve_existing_paths(
-                missing_raw, project_root, root, wiki_root=wiki_root
+                missing_raw, project_root, root, wiki_root=wiki_root, git_root=git_root
             )
             if missing_paths:
                 retry_prompt = (
@@ -271,6 +273,7 @@ def run(
     wiki_root: Path,
     project_root: Path,
     *,
+    git_root: Path,
     max_rounds: int | None = None,
     holistic_only: bool = False,
     no_holistic: bool = False,
@@ -432,6 +435,7 @@ def run(
                                     creates_union,
                                     deletes_union,
                                     wiki_root,
+                                    git_root,
                                     bulk_timeout,
                                 )
                                 futures_map[future] = batch_path
@@ -470,7 +474,7 @@ def run(
             all_reads = resolve_ref_paths(
                 list(all_raw_refs.keys()), project_root, root,
                 creates_union=creates_union, deletes_union=deletes_union,
-                wiki_root=wiki_root, caller_label="_review_plan",
+                wiki_root=wiki_root, git_root=git_root, caller_label="_review_plan",
             )
 
             all_creates_on_disk = resolve_existing_paths(
@@ -478,6 +482,7 @@ def run(
                 project_root,
                 root,
                 wiki_root=wiki_root,
+                git_root=git_root,
             )
             reads_set = {*all_reads, overview_path, *batch_files}
             all_creates_on_disk = [p for p in all_creates_on_disk if p not in reads_set]
@@ -542,7 +547,7 @@ def run(
                     if verdict == "NEED_CONTEXT":
                         missing_raw = parse_missing_context(raw)
                         missing_paths = resolve_existing_paths(
-                            missing_raw, project_root, root, wiki_root=wiki_root
+                            missing_raw, project_root, root, wiki_root=wiki_root, git_root=git_root
                         )
                         if missing_paths:
                             retry_prompt = (
