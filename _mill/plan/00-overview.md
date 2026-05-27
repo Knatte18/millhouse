@@ -3,7 +3,7 @@
 ```yaml
 task: "mill-merge / fixer teardown recovery"
 slug: mill-merge-teardown-recovery
-approved: false
+approved: true
 started: "20260527-085451"
 parent: main
 root: ""
