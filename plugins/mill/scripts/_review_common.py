@@ -1203,20 +1203,20 @@ def _deep_merge(base: dict, override: dict) -> dict:
     return result
 
 
-def load_config(repo_root: Path, mill_dir: Path) -> dict:
+def load_config(hub_root: Path, mill_dir: Path) -> dict:
     """Load mill config with overlay from plugin template, repo layer, and local layer.
 
     Merge order (lowest to highest precedence):
     1. Plugin template (mill-config.yaml)
-    2. Repo layer (mill-config.yaml at repo root)
+    2. Hub layer (mill-config.yaml at hub root)
     3. Local layer (mill_dir / config.local.yaml)
     4. Environment variable overrides
 
     Raises ReviewError if no sources are found (strict form for reviews).
 
     Args:
-        repo_root: Absolute path to the hub repository root.
-        mill_dir:  Absolute path to the .millhouse directory.
+        hub_root: Absolute path to the hub directory.
+        mill_dir: Absolute path to the .millhouse directory.
 
     Returns:
         Merged configuration dict.
@@ -1230,8 +1230,8 @@ def load_config(repo_root: Path, mill_dir: Path) -> dict:
         cfg = {}
     template_cfg = copy.deepcopy(cfg)
 
-    # 2. Resolve repo-layer sources
-    mill_cfg_path = _paths.resolve_mill_config_path(repo_root)
+    # 2. Resolve hub-layer sources
+    mill_cfg_path = _paths.resolve_mill_config_path(hub_root)
 
     # 3. Apply repo-layer merge logic
     found_repo_layer = False
