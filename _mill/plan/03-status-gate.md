@@ -44,6 +44,7 @@ External interface for batches 1/2/4: none.
 
 - **Context:**
   - `plugins/mill/scripts/_phase_gate.py`
+  - `plugins/mill/scripts/wiki/__init__.py`
   - `plugins/mill/scripts/wiki/_client.py`
   - `plugins/mill/scripts/_paths.py`
   - `plugins/mill/scripts/_status.py`
@@ -56,12 +57,17 @@ External interface for batches 1/2/4: none.
   if not status_path.exists():
       import sys
       from wiki import _client
+      from wiki import WikiStartupError, WikiProtocolError
       import _phase_gate
-      task = _client.get_task(wiki_path, slug)
+      try:
+          task = _client.get_task(wiki_path, slug)
+      except (WikiStartupError, WikiProtocolError) as e:
+          print(f"_mill/status.md absent and wiki daemon unavailable: {e} -- inspect manually.", file=sys.stderr)
+          raise SystemExit(1)
       print(_phase_gate.absent_status_halt_message(task, slug), file=sys.stderr)
       raise SystemExit(1)
   ```
-  Insertion point: between Step 4.5's Path Setup block and the existing Step 5 phase-gate code. Add a one-sentence intro above the new block: "Before reading `status_path`, guard against the merge-interrupted state where `_mill/status.md` has been removed by mill-merge's cleanup commit but teardown did not complete -- mirrors mill-merge's own Step 5 fallback." Preserve the existing phase table (`planned`, `implementing`/`reviewing`/`fixing`, `blocked`, `discussed`/`discussing`/`planning`, `done`, other) untouched -- the guard runs BEFORE that table is consulted. Do not modify Step 5's existing branches; do not modify Step 4.5's Path Setup; do not modify any other section of the SKILL.
+  Insertion point: between Step 4.5's Path Setup block and the existing Step 5 phase-gate code. Add a one-sentence intro above the new block: "Before reading `status_path`, guard against the merge-interrupted state where `_mill/status.md` has been removed by mill-merge's cleanup commit but teardown did not complete -- mirrors mill-merge's own Step 5 fallback. Wiki daemon errors are caught explicitly so a daemon outage surfaces a readable message instead of a raw traceback." Preserve the existing phase table (`planned`, `implementing`/`reviewing`/`fixing`, `blocked`, `discussed`/`discussing`/`planning`, `done`, other) untouched -- the guard runs BEFORE that table is consulted. Do not modify Step 5's existing branches; do not modify Step 4.5's Path Setup; do not modify any other section of the SKILL.
 - **Commit:** `docs(mill-go): guard entry phase gate against absent status.md`
 
 ## Batch Tests

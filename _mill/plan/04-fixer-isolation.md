@@ -31,7 +31,8 @@ External interface for batches 1/2/3: none — this batch is self-contained.
 
 ### Card 9: Implement `_subprocess_util.git_commit`
 
-- **Context:** none
+- **Context:**
+  - `plugins/mill/unit_tests/test-cli-commit-author.py`
 - **Edits:**
   - `plugins/mill/scripts/_subprocess_util.py`
 - **Creates:** none
@@ -54,7 +55,9 @@ External interface for batches 1/2/3: none — this batch is self-contained.
 
 ### Card 11: Implement env-strip in `_llm_claude._invoke`
 
-- **Context:** none
+- **Context:**
+  - `plugins/mill/scripts/_subprocess_util.py`
+  - `plugins/mill/unit_tests/test-fixer-env-isolation.py`
 - **Edits:**
   - `plugins/mill/scripts/_llm_claude.py`
 - **Creates:** none
@@ -98,7 +101,8 @@ External interface for batches 1/2/3: none — this batch is self-contained.
 
 ### Card 14: Document cwd discipline in fixer + implementer briefs
 
-- **Context:** none
+- **Context:**
+  - `plugins/mill/skills/conversation/SKILL.md`
 - **Edits:**
   - `plugins/mill/templates/fixer-batch-brief.md`
   - `plugins/mill/templates/fixer-holistic-brief.md`
