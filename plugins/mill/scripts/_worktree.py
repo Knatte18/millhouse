@@ -83,7 +83,7 @@ def copy_millhouse(src: Path, dst: Path, exclude: set[str]) -> None:
     Copy contents of ``src`` (a ``.millhouse/`` directory) into ``dst``.
 
     Entries whose basename is in ``exclude`` are skipped. Existing files
-    in ``dst`` are overwritten — v2's contract is that mill-spawn owns
+    in ``dst`` are overwritten — mill-spawn owns
     the new worktree's ``.millhouse/`` until it hands it back.
 
     The caller passes the exclude set explicitly so different callers
