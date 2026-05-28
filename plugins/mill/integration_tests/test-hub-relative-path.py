@@ -122,7 +122,7 @@ def _setup_subproject_pair(container: Path) -> tuple[Path, Path, Path, Path]:
     _run(["git", "-C", str(outer_repo), "add", "lib", "README.md"], cwd=container)
     _run(["git", "-C", str(outer_repo), "commit", "-m", "init"], cwd=container)
 
-    # Hub subfolder with mill-config.yaml.
+    # Hub subfolder with mill-config.yaml and config.local.yaml.
     hub.mkdir(parents=True, exist_ok=True)
     (hub / "mill-config.yaml").write_text(
         "spawn:\n"
@@ -133,7 +133,13 @@ def _setup_subproject_pair(container: Path) -> tuple[Path, Path, Path, Path]:
         "  reviews_dir: _mill/reviews\n",
         encoding="utf-8",
     )
-    _run(["git", "-C", str(outer_repo), "add", "projects/sub/mill-config.yaml"], cwd=container)
+    # Create .millhouse stub at hub with hub_relative_path so resolve_wiki_path works when running from the hub.
+    (hub / ".millhouse").mkdir(exist_ok=True)
+    (hub / ".millhouse" / "config.local.yaml").write_text(
+        "hub_relative_path: projects/sub\n",
+        encoding="utf-8",
+    )
+    _run(["git", "-C", str(outer_repo), "add", "projects/sub/mill-config.yaml", "projects/sub/.millhouse/config.local.yaml"], cwd=container)
     _run(["git", "-C", str(outer_repo), "commit", "-m", "add hub"], cwd=container)
 
     # .millhouse/ with wiki junction + config.local.yaml at outer-repo root.
