@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: discussion-fix-r1
 slug: codeguide-jupyter-support
 branch: codeguide-jupyter-support
 plan: null
@@ -15,4 +15,5 @@ task_description: |
 
 ```text
 discussing  '2026-05-28T21:37:54Z'
+discussion-fix-r1  '2026-05-28T21:54:14Z'
 ```

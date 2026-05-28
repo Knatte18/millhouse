@@ -223,7 +223,17 @@ What mill-plan needs to know about the codebase:
 - Token economy is the governing constraint: the documenting agent must never
   load notebook *outputs* into context. This is why the helper strips at the
   source and why the never-Read-raw rule is non-negotiable.
-- ASCII-only stdout from the helper (Windows cp1252 crashes on non-ASCII).
+- ASCII-only stdout for the helper's own **diagnostic / marker text** (Windows
+  cp1252 crashes on non-ASCII): the `[N outputs omitted]` / `[code cell
+  truncated]` markers and any stderr warnings use only ASCII (`—`→` -- `,
+  `→`→` -> `). **Cell content is the exception** — markdown and code cells are
+  user-authored and frequently contain non-ASCII (Unicode prose, math symbols,
+  CJK comments). The helper must emit cell content through an ASCII-safe stream
+  so it never crashes on a cp1252 stdout — reconfigure stdout to UTF-8 with
+  `errors='replace'` (e.g. `sys.stdout.reconfigure(encoding="utf-8",
+  errors="replace")`) rather than escaping, so readable prose survives. Exact
+  form is mill-plan's call, but non-crashing emission of non-ASCII cell content
+  is a hard correctness requirement, and a unit-test case must cover it.
 - Pure stdlib only — do not assume `nbformat`/`jupyter` packages are installed
   in the plugin venv.
 - Do not edit `DocumentationGuide.md` "locally" in a consuming repo — it is
@@ -249,7 +259,9 @@ What mill-plan needs to know about the codebase:
     digest.
   - Empty notebook (no cells) and outputs-free notebook → sensible minimal
     digest, no crash.
-  - ASCII-only stdout (no raw non-ASCII bytes leak from cell content markers).
+  - Non-ASCII cell content (Unicode prose / CJK comment in a markdown or code
+    cell) is emitted without crashing and round-trips into stdout; the helper's
+    own marker/warning text stays ASCII.
 - **Not unit-testable (prose):** the guide subsection, the three skill edits,
   and the template additions. Validate by inspection / the discussion-and-plan
   review loop and, optionally, a light integration check: point
