@@ -42,7 +42,9 @@ batches:
     start_sha: 5aa635a3aacc39e572ba014694a4c1bd13f7e15f
     commit_sha: d79bddf8e249e4e2aeec6d16d68d18595cfc7adb
   - name: status-phase-timestamp
-    state: pending
+    state: running
+    implementer_session: deb2ed6d-ec47-441e-be6e-90cb0460eee8
+    start_sha: 67916d52f7e9431242255fcd685f197b5a05623f
   - name: mill-start-skill
     state: pending
   - name: code-review-nit-envelope
