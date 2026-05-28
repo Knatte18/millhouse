@@ -1639,6 +1639,119 @@ def test_depends_on_batch_mismatch_emits_finding() -> int:
 
 
 # ---------------------------------------------------------------------------
+# out-of-worktree-target check
+# ---------------------------------------------------------------------------
+
+def test_out_of_worktree_target_home_dir_flags() -> int:
+    """Dirty: Edits/Creates with ~/ prefix -> out-of-worktree-target error."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file("alpha", edits=["~/.claude/CLAUDE.md"])
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        target_errs = [e for e in result if e["check"] == "out-of-worktree-target"]
+        try:
+            assert len(target_errs) == 1, f"expected 1 error, got {len(target_errs)}: {target_errs}"
+            assert target_errs[0]["path"] == "~/.claude/CLAUDE.md", (
+                f"wrong path: {target_errs[0]['path']!r}"
+            )
+            assert "resolves outside the worktree" in target_errs[0]["message"], (
+                f"message should mention 'resolves outside': {target_errs[0]['message']!r}"
+            )
+            print("PASS test_out_of_worktree_target_home_dir_flags")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_out_of_worktree_target_home_dir_flags: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_out_of_worktree_target_absolute_path_flags() -> int:
+    """Dirty: Edits/Creates with absolute path outside tree -> out-of-worktree-target error."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        # Create an external directory for the absolute path test
+        external_dir = tmp / "external"
+        external_dir.mkdir()
+        external_file = external_dir / "file.txt"
+        external_file.write_text("content", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file("alpha", edits=[str(external_file)])
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        target_errs = [e for e in result if e["check"] == "out-of-worktree-target"]
+        try:
+            assert len(target_errs) == 1, f"expected 1 error, got {len(target_errs)}: {target_errs}"
+            assert "resolves outside the worktree" in target_errs[0]["message"], (
+                f"message should mention 'resolves outside': {target_errs[0]['message']!r}"
+            )
+            print("PASS test_out_of_worktree_target_absolute_path_flags")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_out_of_worktree_target_absolute_path_flags: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_out_of_worktree_target_relative_path_clean() -> int:
+    """Clean: Edits/Creates with relative path inside tree -> no error."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        # Create file to reference
+        (project_root / "src" / "main.py").parent.mkdir(parents=True)
+        (project_root / "src" / "main.py").write_text("# code", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file("alpha", edits=["src/main.py"])
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        target_errs = [e for e in result if e["check"] == "out-of-worktree-target"]
+        if target_errs:
+            print(f"FAIL test_out_of_worktree_target_relative_path_clean: unexpected errors: {target_errs}",
+                  file=sys.stderr)
+            return 1
+        print("PASS test_out_of_worktree_target_relative_path_clean")
+        return 0
+
+
+def test_out_of_worktree_target_creates_nonexistent_clean() -> int:
+    """Clean: Creates: target that doesn't yet exist + inside tree -> no error."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file("alpha", creates=["generated/output.py"])
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        target_errs = [e for e in result if e["check"] == "out-of-worktree-target"]
+        if target_errs:
+            print(f"FAIL test_out_of_worktree_target_creates_nonexistent_clean: unexpected errors: {target_errs}",
+                  file=sys.stderr)
+            return 1
+        print("PASS test_out_of_worktree_target_creates_nonexistent_clean")
+        return 0
+
+
+# ---------------------------------------------------------------------------
 # batch-oversized check
 # ---------------------------------------------------------------------------
 
@@ -1828,6 +1941,11 @@ def main() -> int:
         test_check_verify_not_isolated_leading_whitespace,
         test_check_verify_not_isolated_non_empty_pythonpath_value,
         test_check_verify_not_isolated_run_integration,
+        # out-of-worktree-target check
+        test_out_of_worktree_target_home_dir_flags,
+        test_out_of_worktree_target_absolute_path_flags,
+        test_out_of_worktree_target_relative_path_clean,
+        test_out_of_worktree_target_creates_nonexistent_clean,
         # batch-oversized check
         test_batch_oversized_card_count_clean,
         test_batch_oversized_card_count_dirty,
