@@ -208,6 +208,33 @@ def status_porcelain(path: Path, *, include_untracked: bool = True) -> list[str]
         raise GitOpsError(f"could not get status in {path}: {error_msg}") from e
 
 
+def is_ancestor(path: Path, ancestor_sha: str, descendant_sha: str) -> bool:
+    """Check if ancestor_sha is an ancestor of (or equal to) descendant_sha.
+
+    Args:
+        path: Path inside the repository.
+        ancestor_sha: The potential ancestor commit SHA.
+        descendant_sha: The potential descendant commit SHA.
+
+    Returns:
+        True if descendant_sha is a descendant of ancestor_sha, or if they are equal.
+        False if ancestor_sha is not an ancestor of descendant_sha.
+
+    Raises:
+        GitOpsError: If unable to read the repository or if a SHA is invalid.
+    """
+    try:
+        repo = open_repo(path)
+        if ancestor_sha == descendant_sha:
+            return True
+        return repo.descendant_of(descendant_sha, ancestor_sha)
+    except (pygit2.GitError, KeyError, ValueError) as e:
+        error_msg = str(e).encode("ascii", errors="replace").decode("ascii")
+        raise GitOpsError(
+            f"could not check ancestry in {path}: {error_msg}"
+        ) from e
+
+
 def list_worktrees(cwd: Path) -> list[dict[str, str | None]]:
     """List all git worktrees for the repository.
 
@@ -288,5 +315,6 @@ __all__ = [
     "head_sha",
     "current_branch",
     "status_porcelain",
+    "is_ancestor",
     "list_worktrees",
 ]

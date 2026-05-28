@@ -1639,6 +1639,254 @@ def test_depends_on_batch_mismatch_emits_finding() -> int:
 
 
 # ---------------------------------------------------------------------------
+# out-of-worktree-target check
+# ---------------------------------------------------------------------------
+
+def test_out_of_worktree_target_home_dir_flags() -> int:
+    """Dirty: Edits/Creates with ~/ prefix -> out-of-worktree-target error."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file("alpha", edits=["~/.claude/CLAUDE.md"])
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        target_errs = [e for e in result if e["check"] == "out-of-worktree-target"]
+        try:
+            assert len(target_errs) == 1, f"expected 1 error, got {len(target_errs)}: {target_errs}"
+            assert target_errs[0]["path"] == "~/.claude/CLAUDE.md", (
+                f"wrong path: {target_errs[0]['path']!r}"
+            )
+            assert "resolves outside the worktree" in target_errs[0]["message"], (
+                f"message should mention 'resolves outside': {target_errs[0]['message']!r}"
+            )
+            print("PASS test_out_of_worktree_target_home_dir_flags")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_out_of_worktree_target_home_dir_flags: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_out_of_worktree_target_absolute_path_flags() -> int:
+    """Dirty: Edits/Creates with absolute path outside tree -> out-of-worktree-target error."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        # Create an external directory for the absolute path test
+        external_dir = tmp / "external"
+        external_dir.mkdir()
+        external_file = external_dir / "file.txt"
+        external_file.write_text("content", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file("alpha", edits=[str(external_file)])
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        target_errs = [e for e in result if e["check"] == "out-of-worktree-target"]
+        try:
+            assert len(target_errs) == 1, f"expected 1 error, got {len(target_errs)}: {target_errs}"
+            assert "resolves outside the worktree" in target_errs[0]["message"], (
+                f"message should mention 'resolves outside': {target_errs[0]['message']!r}"
+            )
+            print("PASS test_out_of_worktree_target_absolute_path_flags")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_out_of_worktree_target_absolute_path_flags: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_out_of_worktree_target_relative_path_clean() -> int:
+    """Clean: Edits/Creates with relative path inside tree -> no error."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        # Create file to reference
+        (project_root / "src" / "main.py").parent.mkdir(parents=True)
+        (project_root / "src" / "main.py").write_text("# code", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file("alpha", edits=["src/main.py"])
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        target_errs = [e for e in result if e["check"] == "out-of-worktree-target"]
+        if target_errs:
+            print(f"FAIL test_out_of_worktree_target_relative_path_clean: unexpected errors: {target_errs}",
+                  file=sys.stderr)
+            return 1
+        print("PASS test_out_of_worktree_target_relative_path_clean")
+        return 0
+
+
+def test_out_of_worktree_target_creates_nonexistent_clean() -> int:
+    """Clean: Creates: target that doesn't yet exist + inside tree -> no error."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file("alpha", creates=["generated/output.py"])
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        target_errs = [e for e in result if e["check"] == "out-of-worktree-target"]
+        if target_errs:
+            print(f"FAIL test_out_of_worktree_target_creates_nonexistent_clean: unexpected errors: {target_errs}",
+                  file=sys.stderr)
+            return 1
+        print("PASS test_out_of_worktree_target_creates_nonexistent_clean")
+        return 0
+
+
+# ---------------------------------------------------------------------------
+# batch-oversized check
+# ---------------------------------------------------------------------------
+
+def test_batch_oversized_card_count_clean() -> int:
+    """Clean: batch with 5 cards (under cap of 10) -> no batch-oversized error."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file_cards("alpha", [1, 2, 3, 4, 5])
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root, max_cards_per_batch=10)
+        oversized_errs = [e for e in result if e["check"] == "batch-oversized"]
+        if oversized_errs:
+            print(f"FAIL test_batch_oversized_card_count_clean: unexpected errors: {oversized_errs}",
+                  file=sys.stderr)
+            return 1
+        print("PASS test_batch_oversized_card_count_clean")
+        return 0
+
+
+def test_batch_oversized_card_count_dirty() -> int:
+    """Dirty: batch with 12 cards (over cap of 10) -> one batch-oversized error."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file_cards("alpha", list(range(1, 13)))
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root, max_cards_per_batch=10)
+        oversized_errs = [e for e in result if e["check"] == "batch-oversized" and "cards" in e["message"]]
+        try:
+            assert len(oversized_errs) == 1, f"expected 1 error, got {len(oversized_errs)}: {oversized_errs}"
+            assert "12 cards" in oversized_errs[0]["message"], f"message should mention '12 cards': {oversized_errs[0]['message']!r}"
+            assert "cap 10" in oversized_errs[0]["message"], f"message should mention 'cap 10': {oversized_errs[0]['message']!r}"
+            print("PASS test_batch_oversized_card_count_dirty")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_batch_oversized_card_count_dirty: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_batch_oversized_context_tokens_clean() -> int:
+    """Clean: batch with small file (under 480k token cap) -> no batch-oversized error."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        # Create a small 10KB file (2500 token estimate)
+        existing_file = project_root / "src" / "small.py"
+        existing_file.parent.mkdir(parents=True)
+        existing_file.write_text("x" * 10000, encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file("alpha", context=["src/small.py"])
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root, max_batch_context_tokens=120000)
+        oversized_errs = [e for e in result if e["check"] == "batch-oversized" and "tokens" in e["message"]]
+        if oversized_errs:
+            print(f"FAIL test_batch_oversized_context_tokens_clean: unexpected errors: {oversized_errs}",
+                  file=sys.stderr)
+            return 1
+        print("PASS test_batch_oversized_context_tokens_clean")
+        return 0
+
+
+def test_batch_oversized_context_tokens_dirty() -> int:
+    """Dirty: batch with large file (over 12k token cap) -> one batch-oversized error."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        # Create a file that's 50KB = 12500 tokens (over 12k cap)
+        large_file = project_root / "src" / "large.py"
+        large_file.parent.mkdir(parents=True)
+        large_file.write_text("x" * 50000, encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file("alpha", context=["src/large.py"])
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root, max_batch_context_tokens=12000)
+        oversized_errs = [e for e in result if e["check"] == "batch-oversized" and "tokens" in e["message"]]
+        try:
+            assert len(oversized_errs) == 1, f"expected 1 error, got {len(oversized_errs)}: {oversized_errs}"
+            assert "tokens" in oversized_errs[0]["message"], f"message should mention 'tokens': {oversized_errs[0]['message']!r}"
+            assert "cap 12000" in oversized_errs[0]["message"], f"message should mention 'cap 12000': {oversized_errs[0]['message']!r}"
+            print("PASS test_batch_oversized_context_tokens_dirty")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_batch_oversized_context_tokens_dirty: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_batch_oversized_defaults_applied() -> int:
+    """Clean: run() called without max_*_per_batch kwargs applies 10 and 120000 defaults."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file_cards("alpha", list(range(1, 11)))
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        # Call without max_cards_per_batch/max_batch_context_tokens to test defaults
+        result = _plan_validate.run(plan_dir, project_root)
+        oversized_errs = [e for e in result if e["check"] == "batch-oversized"]
+        try:
+            assert len(oversized_errs) == 0, (
+                f"batch with exactly 10 cards and small files should pass defaults, "
+                f"got: {oversized_errs}"
+            )
+            print("PASS test_batch_oversized_defaults_applied")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_batch_oversized_defaults_applied: {exc}", file=sys.stderr)
+            return 1
+
+
+# ---------------------------------------------------------------------------
 # Runner
 # ---------------------------------------------------------------------------
 
@@ -1693,6 +1941,17 @@ def main() -> int:
         test_check_verify_not_isolated_leading_whitespace,
         test_check_verify_not_isolated_non_empty_pythonpath_value,
         test_check_verify_not_isolated_run_integration,
+        # out-of-worktree-target check
+        test_out_of_worktree_target_home_dir_flags,
+        test_out_of_worktree_target_absolute_path_flags,
+        test_out_of_worktree_target_relative_path_clean,
+        test_out_of_worktree_target_creates_nonexistent_clean,
+        # batch-oversized check
+        test_batch_oversized_card_count_clean,
+        test_batch_oversized_card_count_dirty,
+        test_batch_oversized_context_tokens_clean,
+        test_batch_oversized_context_tokens_dirty,
+        test_batch_oversized_defaults_applied,
     ]
 
     errors = 0

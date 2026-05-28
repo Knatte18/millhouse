@@ -23,6 +23,7 @@ Public API:
     read_parent_branch(status_path) -> str | None
     read_slug(status_path) -> str
     read_branch(status_path, *, cfg, slug) -> str
+    phase_entry_timestamp(status_path, phase, *, occurrence=1) -> str | None
     update_field(status_path, key, value) -> None
     set_blocked(status_path, reason, *, timestamp) -> None
     append_phase(status_path, phase, timestamp) -> None
@@ -678,6 +679,59 @@ def read_parent_branch(status_path: Path) -> str | None:
         return value.strip()
     except (ValueError, KeyError, TypeError):
         return None
+
+
+def phase_entry_timestamp(
+    status_path: Path, phase: str, *, occurrence: int = 1
+) -> str | None:
+    """Return the timestamp of the occurrence-th matching phase entry from timeline.
+
+    Reads the timeline and searches for entries with phase name matching ``phase``.
+    Returns the timestamp of the ``occurrence``-th match (1-indexed). When fewer
+    than ``occurrence`` matches are found, or the matched row has no timestamp,
+    returns ``None`` without raising.
+
+    Args:
+        status_path: Absolute path to the status.md file.
+        phase: Phase name to search for in the timeline.
+        occurrence: Which matching phase entry to return (1-indexed). Defaults to 1.
+
+    Returns:
+        The ISO-8601 timestamp string (with surrounding quotes stripped),
+        or ``None`` if fewer than ``occurrence`` matches are found, the matched
+        row has no timestamp field, or ``status_path`` does not exist.
+
+    Raises:
+        ValueError: if the timeline block is malformed (unterminated).
+    """
+    try:
+        full = read_full(status_path)
+    except ValueError:
+        raise
+    timeline = full["timeline"]
+
+    count = 0
+    for row in timeline:
+        # Split row into phase token and remainder with split(None, 1)
+        parts = row.split(None, 1)
+        if not parts:
+            continue
+        phase_token = parts[0]
+
+        if phase_token == phase:
+            count += 1
+            if count == occurrence:
+                # Found the target occurrence
+                if len(parts) < 2:
+                    # No timestamp field
+                    return None
+                timestamp_field = parts[1]
+                # Strip surrounding quotes (single or double)
+                timestamp = timestamp_field.strip("'\"")
+                return timestamp
+
+    # occurrence-th match not found
+    return None
 
 
 def read_slug(status_path: Path) -> str:

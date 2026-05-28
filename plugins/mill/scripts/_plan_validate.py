@@ -32,6 +32,7 @@ Checks performed (check keys):
 """
 from __future__ import annotations
 
+import os
 import re
 import yaml
 from pathlib import Path
@@ -841,6 +842,113 @@ def _check_verify_not_isolated(batch_files: list[Path]) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
+# Check 9 — out-of-worktree-target
+# ---------------------------------------------------------------------------
+
+def _check_out_of_worktree_target(
+    batch_files: list[Path],
+    project_root: Path,
+) -> list[dict]:
+    errors: list[dict] = []
+    wt = project_root.resolve()
+
+    for batch_path in batch_files:
+        edits = _parse_edits_only(batch_path)
+        creates = _parse_creates_only(batch_path)
+        tokens = edits | creates
+
+        for token in tokens:
+            if token.lower() == "none":
+                continue
+
+            # Expand ~ and resolve to absolute path
+            expanded = os.path.expanduser(token)
+            candidate = Path(expanded)
+            if not candidate.is_absolute():
+                candidate = project_root / expanded
+            resolved = candidate.resolve()
+
+            # Check if resolved path is inside worktree
+            if resolved != wt and wt not in resolved.parents:
+                errors.append({
+                    "check": "out-of-worktree-target",
+                    "batch": batch_path.stem,
+                    "card": None,
+                    "path": token,
+                    "message": (
+                        f"Edits/Creates target '{token}' resolves outside the worktree root; "
+                        "home-dir and absolute targets must be handled manually, not by the implementer"
+                    ),
+                })
+
+    return errors
+
+
+# ---------------------------------------------------------------------------
+# Check 10 — batch-oversized (note: check 9 above)
+# ---------------------------------------------------------------------------
+
+def _check_batch_oversized(
+    batch_files: list[Path],
+    project_root: Path,
+    root: str | None,
+    *,
+    max_cards: int,
+    max_context_tokens: int,
+    wiki_root: Path | None = None,
+) -> list[dict]:
+    errors: list[dict] = []
+    for batch_path in batch_files:
+        text = batch_path.read_text(encoding="utf-8")
+        cards = _parse_cards(text)
+        card_count = len(cards)
+
+        # Check 1: card count
+        if card_count > max_cards:
+            errors.append({
+                "check": "batch-oversized",
+                "batch": batch_path.stem,
+                "card": None,
+                "path": None,
+                "message": f"batch has {card_count} cards (cap {max_cards})",
+            })
+
+        # Check 2: context size (token estimate)
+        # Collect Context/Edits/Creates tokens from the batch
+        all_refs = parse_batch_refs(batch_path)
+        deletes = _parse_deletes_only(batch_path)
+
+        # Subtract deleted tokens so they don't inflate the estimate
+        context_tokens = set(all_refs) - deletes
+
+        # Resolve existing paths, skipping those that don't exist (like Creates targets)
+        if context_tokens:
+            resolved = resolve_existing_paths(
+                list(context_tokens),
+                project_root,
+                root,
+                wiki_root=wiki_root,
+            )
+
+            # Sum byte sizes and divide by 4 for token estimate
+            total_bytes = sum(p.stat().st_size for p in resolved)
+            token_estimate = total_bytes // 4
+
+            if token_estimate > max_context_tokens:
+                errors.append({
+                    "check": "batch-oversized",
+                    "batch": batch_path.stem,
+                    "card": None,
+                    "path": None,
+                    "message": (
+                        f"batch context ~{token_estimate} tokens (cap {max_context_tokens})"
+                    ),
+                })
+
+    return errors
+
+
+# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
@@ -851,13 +959,15 @@ def run(
     root: str | None = None,
     wiki_root: Path | None = None,
     skip_checks: frozenset[str] = frozenset(),
+    max_cards_per_batch: int = 10,
+    max_batch_context_tokens: int = 120000,
 ) -> list[dict]:
     """Validate plan files in plan_dir.
 
     Returns a sorted list of error dicts with keys:
     {check, batch, card, path, message}.
 
-    Checks 1, 2, 3, 4, 5, 6, 8 from issue #10, plus wiki-config-mutation and verify-not-isolated.
+    Checks 1, 2, 3, 4, 5, 6, 8 from issue #10, plus wiki-config-mutation, verify-not-isolated, out-of-worktree-target, and batch-oversized.
     """
     overview_path = plan_dir / "00-overview.md"
     if not overview_path.exists():
@@ -894,6 +1004,13 @@ def run(
     errors.extend(_check_verify_not_isolated(batch_files))
     errors.extend(_check_wiki_config_mutation(batch_files))
     errors.extend(_check_all_files_touched_mismatch(overview_path, batch_files))
+    errors.extend(_check_out_of_worktree_target(batch_files, project_root))
+    errors.extend(_check_batch_oversized(
+        batch_files, project_root, effective_root,
+        max_cards=max_cards_per_batch,
+        max_context_tokens=max_batch_context_tokens,
+        wiki_root=wiki_root,
+    ))
 
     errors.sort(key=lambda e: (e["batch"] or "", e["card"] or 0, e["check"]))
     if skip_checks:

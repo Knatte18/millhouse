@@ -1048,6 +1048,50 @@ def main() -> int:
         finally:
             os.chdir(orig_dir)
 
+    # ------------------------------------------------------------------
+    # Test 17 — nit_count computed from review output
+    # ------------------------------------------------------------------
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        mill_dir, wiki_root, project_root, cfg = _make_fixture(tmpdir)
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            # Review with 3 NITs and APPROVE verdict
+            review_with_nits = (
+                "# Review: test\n\n"
+                "```yaml\nverdict: APPROVE\n```\n\n"
+                "### [NIT] minor style issue\n"
+                "### [NIT] another minor issue\n"
+                "### [NIT] third minor note\n"
+            )
+            _seed_approve(0)
+            stub.seed([(review_with_nits, "sid-nits")])
+            r = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, batch_name="alpha")
+            assert r.verdict == "APPROVE", f"expected APPROVE, got {r.verdict}"
+            assert r.nit_count == 3, f"expected nit_count=3, got {r.nit_count}"
+            print("PASS test17a: nit_count=3 computed from review with 3 [NIT] headings")
+
+            # Review with zero NITs (only APPROVE, no [NIT] headings)
+            review_no_nits = (
+                "# Review: test\n\n"
+                "```yaml\nverdict: APPROVE\n```\n\n"
+                "This looks good.\n"
+            )
+            _seed_approve(0)
+            stub.seed([(review_no_nits, "sid-no-nits")])
+            r = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, batch_name="beta")
+            assert r.verdict == "APPROVE", f"expected APPROVE, got {r.verdict}"
+            assert r.nit_count == 0, f"expected nit_count=0, got {r.nit_count}"
+            print("PASS test17b: nit_count=0 when no [NIT] headings present")
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test17: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test17 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
+
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)
         return 1

@@ -91,6 +91,7 @@ from _review_common import (  # noqa: E402
     RE_BATCH,
     RE_SIMPLE,
     ReviewError,
+    ReviewResult,
     _load_root_from_overview,
     _read_for_bulk,
     aggregate_verdict,
@@ -2012,6 +2013,28 @@ def main() -> int:
         if not isinstance(exc, (ReviewError, AssertionError)):
             print(f"FAIL: find_active_slug glob fallback no _mill (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
             errors += 1
+
+    # ---------------------------------------------------------------------------
+    # ReviewResult.nit_count field
+    # ---------------------------------------------------------------------------
+
+    # nit_count defaults to 0
+    result = ReviewResult(type="code", round=1, verdict="APPROVE")
+    assert result.nit_count == 0, f"Expected nit_count=0 by default, got {result.nit_count}"
+    print("PASS: ReviewResult nit_count defaults to 0")
+
+    # to_dict() includes nit_count
+    result_dict = result.to_dict()
+    assert "nit_count" in result_dict, f"nit_count not in to_dict(): {result_dict.keys()}"
+    assert result_dict["nit_count"] == 0, f"Expected to_dict()['nit_count']=0, got {result_dict['nit_count']}"
+    print("PASS: ReviewResult.to_dict() includes nit_count field")
+
+    # nit_count non-default value round-trips
+    result_with_nits = ReviewResult(type="code", round=1, verdict="APPROVE", nit_count=5)
+    assert result_with_nits.nit_count == 5, f"Expected nit_count=5, got {result_with_nits.nit_count}"
+    result_dict = result_with_nits.to_dict()
+    assert result_dict["nit_count"] == 5, f"Expected to_dict()['nit_count']=5, got {result_dict['nit_count']}"
+    print("PASS: ReviewResult nit_count non-default value round-trips through to_dict()")
 
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)

@@ -102,7 +102,14 @@ def main(argv: list[str] | None = None) -> int:
         if not args.skip_validate:
             from _plan_validate import run as validate_run
             plan_dir = resolve_path(cfg["paths"]["plan_dir"], slug)
-            errors = validate_run(plan_dir, project_root, wiki_root=wiki_root, skip_checks=frozenset(args.skip_checks))
+            errors = validate_run(
+                plan_dir,
+                project_root,
+                wiki_root=wiki_root,
+                skip_checks=frozenset(args.skip_checks),
+                max_cards_per_batch=cfg.get("pipeline", {}).get("max_cards_per_batch", 10),
+                max_batch_context_tokens=cfg.get("pipeline", {}).get("max_batch_context_tokens", 120000),
+            )
             if errors:
                 n = len(errors)
                 m = len({e["batch"] for e in errors if e["batch"]})
@@ -125,6 +132,9 @@ def main(argv: list[str] | None = None) -> int:
     # Pre-launch errors only -- engine-internal failures return verdict:ERROR via run() (#338).
     except ReviewError as exc:
         print_error_envelope("plan", str(exc))
+        return 1
+    except Exception as exc:
+        print_error_envelope("plan", f"unhandled review error: {exc}")
         return 1
 
 

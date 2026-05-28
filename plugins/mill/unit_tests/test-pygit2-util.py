@@ -252,6 +252,102 @@ def test_list_worktrees_with_linked() -> None:
     print("PASS: test_list_worktrees_with_linked")
 
 
+def test_is_ancestor_real_chain() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = Path(tmp)
+        _init_repo(tmp)
+        ancestor_sha = subprocess.run(
+            ["git", "-C", str(tmp), "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+        (tmp / "file2.txt").write_text("file2", encoding="utf-8")
+        subprocess.run(
+            ["git", "-C", str(tmp), "add", "file2.txt"],
+            capture_output=True,
+            check=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(tmp), "commit", "-m", "commit 2"],
+            capture_output=True,
+            check=True,
+        )
+        descendant_sha = subprocess.run(
+            ["git", "-C", str(tmp), "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+        if not _pygit2_util.is_ancestor(tmp, ancestor_sha, descendant_sha):
+            raise AssertionError(f"expected {ancestor_sha} to be ancestor of {descendant_sha}")
+    print("PASS: test_is_ancestor_real_chain")
+
+
+def test_is_ancestor_unrelated() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = Path(tmp)
+        _init_repo(tmp)
+        first_sha = subprocess.run(
+            ["git", "-C", str(tmp), "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+        subprocess.run(
+            ["git", "-C", str(tmp), "checkout", "--orphan", "other-branch"],
+            capture_output=True,
+            check=True,
+        )
+        (tmp / ".keep").write_text("other", encoding="utf-8")
+        subprocess.run(
+            ["git", "-C", str(tmp), "add", ".keep"],
+            capture_output=True,
+            check=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(tmp), "commit", "-m", "other"],
+            capture_output=True,
+            check=True,
+        )
+        other_sha = subprocess.run(
+            ["git", "-C", str(tmp), "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+        if _pygit2_util.is_ancestor(tmp, first_sha, other_sha):
+            raise AssertionError(f"expected {first_sha} NOT to be ancestor of {other_sha}")
+    print("PASS: test_is_ancestor_unrelated")
+
+
+def test_is_ancestor_identical_sha() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = Path(tmp)
+        _init_repo(tmp)
+        sha = subprocess.run(
+            ["git", "-C", str(tmp), "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+        if not _pygit2_util.is_ancestor(tmp, sha, sha):
+            raise AssertionError(f"expected identical SHAs to return True")
+    print("PASS: test_is_ancestor_identical_sha")
+
+
+def test_is_ancestor_invalid_sha() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = Path(tmp)
+        _init_repo(tmp)
+        try:
+            _pygit2_util.is_ancestor(tmp, "0000000000000000000000000000000000000000", "invalid_sha_12345")
+            raise AssertionError("expected GitOpsError for invalid SHA")
+        except _pygit2_util.GitOpsError:
+            pass
+    print("PASS: test_is_ancestor_invalid_sha")
+
+
 def run_all() -> int:
     tests = [
         test_discover_workdir_happy_path,
@@ -267,6 +363,10 @@ def run_all() -> int:
         test_status_porcelain_untracked,
         test_list_worktrees_single,
         test_list_worktrees_with_linked,
+        test_is_ancestor_real_chain,
+        test_is_ancestor_unrelated,
+        test_is_ancestor_identical_sha,
+        test_is_ancestor_invalid_sha,
     ]
 
     failures: list[str] = []

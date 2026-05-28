@@ -202,13 +202,28 @@ If the returned list is empty, invoke the per-batch cleanup block (after a `succ
 If `roles.code-review.batch.reviewer` is null (or rounds: 0): set batch state → `approved`, `_status.append_phase(status_path, f"approved-{batch_name}", _timestamp.now_utc_iso())`, commit on the task branch: `git -C <worktree> add <status_path> && git -C <worktree> commit -m "mill-go: approve batch {batch_name} (per-batch review disabled)"`, and continue to the next batch. Skip the rest of this section.
 
 - Set batch state → `reviewing`, `review_round: 1`.
-- `_status.append_phase(status_path, f"reviewing-{batch_name}-r1", _timestamp.now_utc_iso())`.
 - `extra_files = []`.
 
 For each round `N` from 1 to `roles.code-review.batch.rounds`:
 
-1. **Crash-recovery check.** Before firing the CLI, scan `reviews_dir` for a file matching `*-code-review-{batch_name}-r{N}.md`. If found, treat it as this round's review file — parse its verdict from the fenced yaml block via `_review_common.parse_verdict(file_content)` and skip to step 4 below. This covers the case where mill-go crashed after writing the review but before committing state.
+- `_status.append_phase(status_path, f"reviewing-{batch_name}-r{N}", _timestamp.now_utc_iso())`.
+
+1. **Crash-recovery check.** Before firing the CLI, scan `reviews_dir` for a file matching `*-code-review-{batch_name}-r{N}.md`. If found, validate its freshness: fetch `ref_ts = _status.phase_entry_timestamp(status_path, f"reviewing-{batch_name}-r{N}", occurrence=1)`; treat the file as this round's review ONLY if `ref_ts` is not None AND the file's mtime (UTC) is at or after `ref_ts`. If freshness validation passes, parse its verdict from the fenced yaml block via `_review_common.parse_verdict(file_content)` and skip to step 4 below. This covers the case where mill-go crashed after writing the review but before committing state. If the file is stale (mtime before `ref_ts`) or `ref_ts` is None, ignore the file and fall through to firing the CLI.
+
+   Freshness validation in inline Python:
+   ```python
+   from datetime import datetime, timezone
+   from pathlib import Path
+   ref_ts_str = "<iso-timestamp-string>"  # result from phase_entry_timestamp
+   file_path = Path("<review-file-path>")
+   ref_ts = datetime.fromisoformat(ref_ts_str.strip('"')).replace(tzinfo=timezone.utc) if ref_ts_str else None
+   file_mtime = datetime.fromtimestamp(file_path.stat().st_mtime, tz=timezone.utc)
+   is_fresh = ref_ts is not None and file_mtime >= ref_ts
+   ```
+
+   State explicitly: ERROR-only retries still do NOT consume the round counter; freshness — not counter consumption — is what rejects stale pre-retry files.
    `signature: _review_common.parse_verdict(text: str) -> str`
+   `signature: _status.phase_entry_timestamp(status_path: Path, phase: str, *, occurrence: int = 1) -> str | None`
 
 2. Background via `millpy-bg`:
 
@@ -226,7 +241,13 @@ For each round `N` from 1 to `roles.code-review.batch.rounds`:
 3. **Builder reads only the JSON envelope verdict, never the findings.** Loading `mill-receiving-review` is the dispatched implementer's job (see Principles below). Builder does not load the skill.
 
 4. Branch on verdict:
-   - `APPROVE` — batch state → `approved`, `review_file: <path>`. `_status.append_phase(status_path, f"approved-{batch_name}", _timestamp.now_utc_iso())`. Use the `file` field from `reviews[0]` in the JSON summary (or the crash-recovery scan path) as `<review_file_path>`. Commit on the task branch: `git -C <worktree> add <status_path> <review_file_path> && git -C <worktree> commit -m "mill-go: approve batch {batch_name}"`. Invoke the per-batch cleanup block. Break out of the loop → next batch.
+   - `APPROVE` — If `nit_count > 0` in the envelope, dispatch one cold-start NIT-only fix pass via `millpy-bg`:
+     ```bash
+     PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-bg.py" \
+         --slug fix-<batch_name>-r<N>-nits -- \
+         "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-fix.py" --scope batch --batch-name <batch_name> --review-file <review-file-abs-path> --round <N>
+     ```
+     Poll the log file with `cat <log-path>` until `[mill-bg] EXIT` appears. Once it does, run `grep '^{' <log-path> | tail -1` to extract the JSON summary line. The fixer loads `mill-receiving-review` and applies the NITs from the APPROVE'd review file. Parse the JSON report the same way as step 2 — including the exit-code-1-with-stuck-JSON behavior. Do NOT re-review — the NIT fix is trusted. The NIT-fix session commits its own source-file changes atomically; on stuck → escalate via the existing Stuck escalation path. After the NIT-fix completes successfully (or is skipped because `nit_count = 0`): set batch state → `approved`, `review_file: <path>`. `_status.append_phase(status_path, f"approved-{batch_name}", _timestamp.now_utc_iso())`. Use the `file` field from `reviews[0]` in the JSON summary (or the crash-recovery scan path) as `<review_file_path>`. Commit on the task branch: `git -C <worktree> add <status_path> <review_file_path> && git -C <worktree> commit -m "mill-go: approve batch {batch_name}"`. Invoke the per-batch cleanup block. Break out of the loop → next batch.
    - `NEED_CONTEXT` — read the `## Missing context` bullets from the review file. For each listed path, if it exists under the worktree, append to `extra_files` for the NEXT round. `_notify.notify("mill-go.review-need-context", f"batch {batch_name} round {N}", slug=slug, files=len(missing))`. Record this gap for mill-self-report (see Handoff). Increment round and continue the loop. If ALL the missing files are paths already in `extra_files` from a prior round (no new info), treat as a stuck-logic failure and break. Reading the structured `## Missing context` bullet list does not require `mill-receiving-review` -- only finding-handling does.
      `signature: _notify.notify(event: str, detail: str, **context) -> None`
    - `REQUEST_CHANGES` — Background via millpy-bg:
@@ -362,7 +383,7 @@ For each round `H` from 1 to `max_holistic_rounds`:
    ```
 
 1. **Crash-recovery.** Three-way branch based on what is on disk in `_mill/reviews/` and `.scratch/`:
-   - **(a) Review file present.** Scan `reviews/` for a file matching `*-code-review-r{H}.md` (holistic code review files have format `{ts}-code-review-r{N}.md` -- no batch-name segment, no `-holistic-` substring; per-batch files embed `{batch_name}` so the glob never collides). If found, skip the CLI and use that file's verdict directly. Proceed to step 4 (verdict branch); do NOT execute step 2 (the phase entry was already appended on the original run) and do NOT execute step 3.
+   - **(a) Review file present.** Scan `reviews/` for a file matching `*-code-review-r{H}.md` (holistic code review files have format `{ts}-code-review-r{N}.md` -- no batch-name segment, no `-holistic-` substring; per-batch files embed `{batch_name}` so the glob never collides). If found, validate its freshness: fetch `ref_ts = _status.phase_entry_timestamp(status_path, "holistic-reviewing", occurrence=H)` (the Hth occurrence corresponds to round H); treat the file as this round's review ONLY if `ref_ts` is not None AND the file's mtime (UTC) is at or after `ref_ts`. If freshness validation passes, skip the CLI and use that file's verdict directly. Proceed to step 4 (verdict branch); do NOT execute step 2 (the phase entry was already appended on the original run) and do NOT execute step 3. If the file is stale or `ref_ts` is None, fall through to branch (b)/(c) handling (fire the CLI). Provide the inline-Python comparison snippet as per the per-batch section above.
    - **(b) No review file, no bg log for round H.** Proceed normally to step 2 (append `holistic-reviewing` phase) and step 3 (fire CLI via `millpy-bg`).
    - **(c) No review file, bg log exists for round H** (matching glob `.scratch/bg-*-review-code-holistic-r{H}.log`). Pick the most recent matching file and call `_bg.is_bg_worker_alive(log_path)`:
       - **Alive** -> poll `cat <log-path>` until `[mill-bg] EXIT` appears, then resume at step 4 (parse JSON, branch on verdict). Do NOT execute step 2; do NOT execute step 3.
@@ -454,7 +475,13 @@ For each round `H` from 1 to `max_holistic_rounds`:
 
    Operator interactive path (no `autonomous_mode`, no `fallback_reviewer`): user prompt remains identical to today (the existing step 5 ROUND-EXHAUSTION sub-section handles this case).
 
-4. On `APPROVE`: `_status.append_phase(status_path, "holistic-approved", _timestamp.now_utc_iso())`. Commit status. Invoke the holistic cleanup block. Proceed to Handoff.
+4. On `APPROVE`: If `nit_count > 0` in the envelope, dispatch one cold-start NIT-only fix pass via `millpy-bg`:
+   ```bash
+   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-bg.py" \
+       --slug fix-holistic-r{H}-nits -- \
+       "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-fix.py" --scope holistic --review-file <review-file-abs-path> --round {H}
+   ```
+   Poll and extract JSON as per the per-batch pattern. The fixer loads `mill-receiving-review` and applies the NITs. Do NOT re-review — the NIT fix is trusted. On stuck → escalate via the existing Stuck escalation path. After the NIT-fix completes successfully (or is skipped because `nit_count = 0`): `_status.append_phase(status_path, "holistic-approved", _timestamp.now_utc_iso())`. Commit on the task branch: `git -C <worktree> add <status_path> <review_file_path> && git -C <worktree> commit -m "mill-go: holistic approve {slug}"`, where `<review_file_path>` is the `file` field from `reviews[0]` of the JSON envelope (or the crash-recovery branch (a) scan path). This mirrors the per-batch APPROVE branch, which already stages its review file. If a NIT-fix pass ran for the holistic scope this round, the fixer already committed its own changes; this commit still stages the review file plus the `holistic-approved` status row. Invoke the holistic cleanup block. Proceed to Handoff.
 
 5. On `REQUEST_CHANGES`: the holistic-fix CLI dispatches a fresh fixer; the fixer loads `mill-receiving-review` (see Principles below). Builder does not load the skill. Invoke the holistic cleanup block (reaps the previous round's session before the next one starts). Dispatch:
    ```bash

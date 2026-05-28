@@ -136,7 +136,7 @@ Loop up to `max_review_rounds` rounds. Each round:
 
    The round counter `N` is **not** consumed -- the round produced no reviewable output. On the **second** consecutive run that still has top-level `verdict: "ERROR"`, halt with `BLOCKED: discussion review ERROR-only round {N}` and surface each entry's `error` string from `reviews[]` to the user. Under `--auto` mode, halt by calling `_status.set_blocked(status_path, f"auto: discussion review ERROR-only round {N}", timestamp=_timestamp.now_utc_iso())`, then `git -C <worktree> add <status_path> && git commit -m "mill-start: blocked (auto: discussion review ERROR) for <slug>" && git push`. Do NOT auto-retry beyond the second pass. The two-pass cap mirrors mill-go's Step 4.5.
 
-4a. On APPROVE (verdict from JSON) with no NOTE findings: read the review file at the absolute path supplied by `reviews[0].file` in the JSON envelope from step 2 and confirm zero `[NOTE]`-prefixed findings. Break the loop and proceed to Handoff.
+4a. On APPROVE (verdict from JSON) with no NOTE findings: read the review file at the absolute path supplied by `reviews[0].file` in the JSON envelope from step 2 and confirm zero `[NOTE]`-prefixed findings. Break the loop and proceed to Handoff. The review file is committed at Handoff (so the path is auditable) — see Phase: Handoff.
 
 4b. On APPROVE with one or more `[NOTE]` findings: apply each NOTE fix per the `mill-receiving-review` decision tree by editing `<discussion_path>` directly. Write a fixer report at `<reviews_dir>/<YYYYMMDD-HHMMSS>-discussion-fix-r<N>.md` (timestamp from `_timestamp.now_utc_compact()`) with two sections — `## Fixed` (one line per fixed NOTE: short reference to the source review file + quoted finding title) and `## Pushed Back` (one line per rejected NOTE: short reference + reason citing code, doc, or scope per `mill-receiving-review`'s legitimate-pushback rules). Call `_status.append_phase(status_path, f"discussion-fix-r{N}", _timestamp.now_utc_iso())`. Single git commit covering exactly three pathspecs — `<discussion_path>`, `<reviews_dir>/`, `<status_path>` — with message `mill-start: discussion-fix round {N} for {slug}`. Push. Break loop → Handoff. Do NOT run round N+1. Do NOT advance the round counter; the fixer report's `discussion-fix-r<N>` reuses the just-completed review round's `N` value.
 
@@ -146,7 +146,7 @@ If unresolved gaps remain after `max_review_rounds`: present them to the user fo
 
 ### Phase: Handoff
 
-Call `_status.append_phase(status_path, "discussed", timestamp)`. Commit on the task branch: `git -C <worktree> add <status_path> && git commit -m "mill-start: handoff {slug}"`.
+Call `_status.append_phase(status_path, "discussed", timestamp)`. Commit on the task branch: `git -C <worktree> add <status_path> <reviews_dir> && git commit -m "mill-start: handoff {slug}"`.
 
 Report: **"Discussion complete. Run `/mill-plan` next to start autonomous plan writing."** Do not invoke `/mill-plan` yourself — handoff is always an explicit user decision.
 
