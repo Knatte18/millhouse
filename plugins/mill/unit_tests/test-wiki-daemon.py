@@ -20,6 +20,7 @@ from pathlib import Path
 HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
+import _safe_rmtree  # noqa: E402
 from unittest.mock import patch, MagicMock  # noqa: E402
 from _daemon import DaemonBase  # noqa: E402
 from wiki._server import WikiServer  # noqa: E402
@@ -69,8 +70,7 @@ def main() -> int:
             assert read_data["token"] == "abc123"
             ok("_write_state_file writes JSON, reads back")
         finally:
-            import shutil
-            shutil.rmtree(tmp, ignore_errors=True)
+            _safe_rmtree.safe_rmtree(tmp, allowed_root=tmp, ignore_errors=True)
     except Exception as exc:
         fail("_write_state_file writes JSON, reads back", exc)
 
@@ -84,8 +84,7 @@ def main() -> int:
             assert daemon._is_stale(state) is True
             ok("_is_stale returns True for non-existent PID")
         finally:
-            import shutil
-            shutil.rmtree(tmp, ignore_errors=True)
+            _safe_rmtree.safe_rmtree(tmp, allowed_root=tmp, ignore_errors=True)
     except Exception as exc:
         fail("_is_stale returns True for non-existent PID", exc)
 
@@ -108,8 +107,7 @@ def main() -> int:
             finally:
                 sock.close()
         finally:
-            import shutil
-            shutil.rmtree(tmp, ignore_errors=True)
+            _safe_rmtree.safe_rmtree(tmp, allowed_root=tmp, ignore_errors=True)
     except Exception as exc:
         fail("_is_stale returns False for current PID", exc)
 
@@ -128,8 +126,7 @@ def main() -> int:
             assert raised, "second open should raise FileExistsError"
             ok("O_EXCL behavior: first open succeeds, second raises FileExistsError")
         finally:
-            import shutil
-            shutil.rmtree(tmp, ignore_errors=True)
+            _safe_rmtree.safe_rmtree(tmp, allowed_root=tmp, ignore_errors=True)
     except Exception as exc:
         fail("O_EXCL behavior: first open succeeds, second raises FileExistsError", exc)
 
@@ -173,8 +170,7 @@ def main() -> int:
             assert count2 == 1, f"expected 1 occurrence after second call, got {count2}"
             ok(".gitignore idempotent append")
         finally:
-            import shutil
-            shutil.rmtree(tmp, ignore_errors=True)
+            _safe_rmtree.safe_rmtree(tmp, allowed_root=tmp, ignore_errors=True)
     except Exception as exc:
         fail(".gitignore idempotent append", exc)
 
@@ -242,8 +238,7 @@ def main() -> int:
                     assert mock_spawn.call_count == 1, f"spawn_server called {mock_spawn.call_count} times, expected 1"
                     ok("_ensure_daemon stale-port-reuse: OSError on health check triggers respawn")
         finally:
-            import shutil
-            shutil.rmtree(tmp, ignore_errors=True)
+            _safe_rmtree.safe_rmtree(tmp, allowed_root=tmp, ignore_errors=True)
     except Exception as exc:
         fail("_ensure_daemon stale-port-reuse: OSError on health check triggers respawn", exc)
 
@@ -285,8 +280,7 @@ def main() -> int:
                     assert mock_spawn.call_count == 1, f"spawn_server called {mock_spawn.call_count} times, expected 1"
                     ok("_ensure_daemon non-ok-health-response: bad response triggers respawn")
         finally:
-            import shutil
-            shutil.rmtree(tmp, ignore_errors=True)
+            _safe_rmtree.safe_rmtree(tmp, allowed_root=tmp, ignore_errors=True)
     except Exception as exc:
         fail("_ensure_daemon non-ok-health-response: bad response triggers respawn", exc)
 
@@ -321,8 +315,7 @@ def main() -> int:
                 assert mock_spawn.call_count == 0, f"spawn_server should not be called, but was called {mock_spawn.call_count} times"
                 ok("_ensure_daemon successful-health: returns tuple without respawn")
         finally:
-            import shutil
-            shutil.rmtree(tmp, ignore_errors=True)
+            _safe_rmtree.safe_rmtree(tmp, allowed_root=tmp, ignore_errors=True)
     except Exception as exc:
         fail("_ensure_daemon successful-health: returns tuple without respawn", exc)
 

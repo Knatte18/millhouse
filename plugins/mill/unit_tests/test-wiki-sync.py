@@ -8,7 +8,6 @@ Uses a real tempfile bare repo + working clone (fast, deterministic, no mocks).
 """
 from __future__ import annotations
 
-import os
 import subprocess
 import sys
 import tempfile
@@ -17,12 +16,13 @@ from pathlib import Path
 HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
-from wiki._sync import (
+import _safe_rmtree  # noqa: E402, F401
+from wiki._sync import (  # noqa: E402
     pull,
     atomic_write,
     commit_push,
     path_guard,
-)  # noqa: E402
+)
 from wiki import WikiPathError, WikiPushError  # noqa: E402
 
 
@@ -107,7 +107,7 @@ def main() -> int:
 
         # --- (a) pull() on up-to-date (does not raise) ---
         try:
-            result = pull(clone)
+            pull(clone)
             ok("pull() on up-to-date (does not raise)")
         except Exception as exc:
             fail("pull() on up-to-date (does not raise)", exc)
@@ -255,8 +255,7 @@ def main() -> int:
             fail("path_guard('subdir/file.md') does not raise", exc)
 
     finally:
-        import shutil
-        shutil.rmtree(tmp, ignore_errors=True)
+        _safe_rmtree.safe_rmtree(tmp, allowed_root=tmp, ignore_errors=True)
 
     print("", file=sys.stderr)
     if failed:
