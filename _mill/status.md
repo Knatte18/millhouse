@@ -33,8 +33,8 @@ implementing  '2026-05-27T10:09:45Z'
 batches:
   - name: wiki-daemon-fixes
     state: running
-    implementer_session: 5845bef8-9e3a-4882-85eb-09a5ed06b776
-    start_sha: 5143b4570329f0da5d0693d3a2de8d6bfa232d0f
+    implementer_session: f120a090-8a1e-4b7b-96b9-2d7b7ba2bb32
+    start_sha: 376b25f0e82da802e912d4a4b86315786dec45bf
   - name: junction-fs-scan
     state: pending
   - name: millpy-fix-windows-lock
