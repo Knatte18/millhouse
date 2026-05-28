@@ -17,6 +17,7 @@ Patterns follow .gitignore conventions: `pi_data/` matches at any depth, `/pi_da
 - .tox/
 - .pytest_cache/
 - .mypy_cache/
+- .ipynb_checkpoints/
 - _codeguide/
 - .llm/
 - RunOutput/

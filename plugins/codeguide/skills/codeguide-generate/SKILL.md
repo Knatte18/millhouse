@@ -41,10 +41,17 @@ Before doing anything else, run `python ${CLAUDE_PLUGIN_ROOT}/scripts/resolve.py
 
 7. **Read undocumented source files:** Read only the source files that need new docs. Use parallel agent reads for large sets.
 
+   For any in-scope source file ending in `.ipynb`, do NOT use the Read tool. Instead, run:
+   ```
+   python ${CLAUDE_PLUGIN_ROOT}/scripts/nb_digest.py <abs-path>
+   ```
+   and read its stdout as the file's content (markdown + code only; outputs stripped). A non-zero exit means skip the file and flag it to the user.
+
 8. **Decide doc granularity:** Following the guide's rules:
    - One doc per source file or source folder
    - Large modules with subfolders get their own `_codeguide/modules/<Module>/Overview.md` + per-file docs
    - Small modules get a flat `_codeguide/modules/<Name>.md`
+   - For `.ipynb` source files, follow the Notebooks doc shape and verbatim-stem naming defined in the Documentation Guide (do not restate the full shape — point to the guide).
 
 9. **Create docs for new project (if no Overview exists):**
 
@@ -80,6 +87,8 @@ Before doing anything else, run `python ${CLAUDE_PLUGIN_ROOT}/scripts/resolve.py
     - When not to use (negative space)
     - Relationships (depends on, consumed by)
     - Source — relative paths from the doc file to each source file it covers
+    
+    For notebooks, use the Notebooks doc shape (Purpose, Inputs, Analysis, Outputs, How, Source) as defined in the Documentation Guide.
 
 11. **Update the project Overview:** Add rows to the module table for each new doc. For excluded modules (from cgexclude.md), add a row with the description from cgexclude and *excluded* in the Doc column. Never add "not yet documented" placeholder rows — a module either has docs, is excluded, or is not listed.
 
@@ -103,3 +112,4 @@ Include the relevant `_codeguide/Overview.md` in every subagent prompt.
 - Do not modify existing docs. That is `/codeguide-maintain`'s job.
 - Capability summaries are the highest-value section — a reader should know if the module is relevant without reading source.
 - Write docs as if they were written first and the code was written to satisfy them.
+- Never read a raw `.ipynb` — obtain its content via `nb_digest.py` (see the Documentation Guide's Notebooks rules).

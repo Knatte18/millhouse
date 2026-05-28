@@ -46,6 +46,7 @@ On a non-base branch with no argument, the no-arg default expands to `<parent-br
    e. **For each source file in the group's filtered scope:**
 
       - Find the corresponding doc using the guide's naming rules (two-step lookup via Overview.md).
+      - **If source file ends in `.ipynb`:** Read it via `python ${CLAUDE_PLUGIN_ROOT}/scripts/nb_digest.py <abs-path>` (stdout), never the Read tool. A non-zero exit means skip the file and flag it to the user. When creating a new notebook doc, use the Notebooks doc shape and verbatim-stem naming from `DocumentationGuide.md`.
       - **If doc exists:** Read the doc and the source file. If the doc is stale or inaccurate, update it. Preserve accurate content.
       - **If no doc exists and not in cgexclude:** Create it following the guide structure. Update the Overview.md module table.
       - **If source was deleted** (only applies to git diff scope): Flag the orphan doc to the user. Do not delete it.
@@ -74,3 +75,4 @@ On a non-base branch with no argument, the no-arg default expands to `<parent-br
 - Inline mode: do NOT commit (the outer `@git-commit` does that). `codeguide_commit.py --mode inline` only stages.
 - Sibling mode: `codeguide_commit.py --mode sibling` stages + commits in the sibling repo. One commit per group.
 - Multi-codeguide: always process each cg-root's group with its own mode + anchor, never a mixed call.
+- Never read a raw `.ipynb` — obtain its content via `nb_digest.py` (see the Documentation Guide's Notebooks rules).

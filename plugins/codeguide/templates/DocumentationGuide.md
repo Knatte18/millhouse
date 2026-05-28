@@ -94,6 +94,16 @@ The project-level Overview's module table lists sub-areas by name and links to t
 
 **Cross-subfolder links:** A sub-area Overview or module doc may link to a *different* sub-area's `Overview.md` — never to a specific doc within it. Links between sub-area Overviews are allowed because Overviews are stable routing tables. For flat modules in the parent `modules/` folder, refer to them by plain-text name (the project Overview resolves names to files).
 
+### Notebooks
+
+Jupyter notebooks differ from traditional modules: they are linear analyses, not reusable components. Three special rules apply.
+
+**Reading:** Never read a raw `.ipynb` file with the Read tool. A notebook file contains execution outputs (datasets, figures, base64-encoded images, stdout) that bloat the token budget with no documentation value. Obtain notebook content ONLY by running `python ${CLAUDE_PLUGIN_ROOT}/scripts/nb_digest.py <path>` and reading its stdout, which contains markdown + code cells with all outputs stripped. A non-zero exit means skip the file and flag it.
+
+**Naming:** A notebook's doc uses the verbatim filename stem with `.md` extension: `notebooks/01_explore.ipynb` -> `_codeguide/modules/01_explore.md`. Do NOT PascalCase the stem. This keeps the source -> doc round-trip literal in both directions. The `## Source` link points at the exact `.ipynb`. If a verbatim stem would collide with another doc (e.g. `foo.py` and `foo.ipynb`), disambiguate with a sub-area folder per the sub-area collision rule above.
+
+**Doc shape:** Notebooks use a tailored structure instead of the Module Doc template, since they are linear analyses rather than reusable modules with public interfaces. Use these sections: **Purpose**, **Inputs / data sources**, **Analysis / transformations**, **Outputs / artifacts** (described from the code, never from observed execution output), **How / when to run**, **Source**. This shape replaces the Module Doc's Usage and Behavior sections — those read as filler for notebooks.
+
 ### Minimal projects
 
 Some projects (test harnesses, standalone tools) have no meaningful module decomposition. These projects get an `Overview.md` with no `modules/` folder. The Overview states what the project is, what it does not own, and includes whatever project-specific content is useful (e.g., a coverage matrix for a test project). Do not create empty `modules/` folders or stub module docs.
