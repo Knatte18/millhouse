@@ -91,19 +91,28 @@ def _inprocess_server(wiki_path: Path):
 def _dispatch(wiki_path: Path, op: str, payload: dict) -> dict:
     """Route an op to either the in-process server or the daemon over TCP.
 
-    When ``WIKI_DAEMON_INPROCESS=1`` is set in the environment, an in-process
-    server is auto-registered on first dispatch for any wiki_path that does
-    not yet have one. Tests opt in by setting that env var in their helpers.
+    When ``WIKI_DAEMON_INPROCESS=1`` is set in the environment, a transient
+    in-process server is built per request and closed immediately afterwards.
+    No file handles accumulate across requests, so tests using
+    ``tempfile.TemporaryDirectory()`` can clean up reliably on Windows.
+    Tests that explicitly call ``use_inprocess(path)`` keep a persistent
+    server for that path (callers must call ``stop_inprocess(path)`` on
+    teardown). The env-var auto-mode is the default for the unit suite.
     """
     server = _inprocess_server(wiki_path)
-    if server is None and os.environ.get("WIKI_DAEMON_INPROCESS") == "1":
-        try:
-            use_inprocess(wiki_path)
-            server = _inprocess_server(wiki_path)
-        except Exception:
-            server = None
     if server is not None:
         return server.handle_request({FIELD_OP: op, "payload": payload})
+    if os.environ.get("WIKI_DAEMON_INPROCESS") == "1":
+        from wiki._server import WikiServer
+        transient = WikiServer(Path(wiki_path))
+        try:
+            transient._ensure_gitignore()
+            return transient.handle_request({FIELD_OP: op, "payload": payload})
+        finally:
+            try:
+                transient.on_stop()
+            except Exception:
+                pass
     host, port, token = _ensure_daemon(wiki_path)
     req = {FIELD_OP: op, FIELD_TOKEN: token, "payload": payload}
     return _connect_send_recv(host, port, req)

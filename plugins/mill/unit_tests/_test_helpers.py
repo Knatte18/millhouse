@@ -283,6 +283,15 @@ def safe_temp_dir():
         yield tmp
     finally:
         try:
+            import wiki._client as _wc
+
+            tmp_resolved = str(tmp.resolve()).lower()
+            for key in list(_wc._INPROCESS_SERVERS.keys()):
+                if key.lower().startswith(tmp_resolved):
+                    _wc.stop_inprocess(Path(key))
+        except Exception:
+            pass
+        try:
             for state_file in list(tmp.rglob(".wiki-daemon.json")):
                 wait_for_daemon_exit(state_file.parent, timeout=5.0)
         except OSError:

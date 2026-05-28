@@ -137,10 +137,18 @@ def _launcher_main(args: list[str]) -> int:
         import _paths
         import _config
         import _marker
+        import wiki as _wiki_mod
 
         wiki_path = _paths.resolve_wiki_path(Path(git_root))
         cfg = _config.load_config(_paths.resolve_hub_path(), Path(git_root))
         _marker.slug_from_branch(Path(git_root), wiki_path, cfg)
+    except _wiki_mod.WikiError as exc:
+        print(
+            f"mill-bg: cannot validate cwd (wiki unreachable: {exc}). "
+            f"Verify cwd is a task worktree and wiki is set up.",
+            file=sys.stderr,
+        )
+        return 1
     except _marker.MarkerError as exc:
         git_branch_result = _subprocess_util.run(
             ["git", "-C", git_root, "branch", "--show-current"]

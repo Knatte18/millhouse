@@ -98,13 +98,9 @@ def _make_fixture(tmp_path: Path) -> tuple[Path, Path, Path, dict]:
     """
     worktree = tmp_path / "container" / "wts" / SLUG
     worktree.mkdir(parents=True)
-    subprocess.run(["git", "-C", str(worktree), "init"], check=True, capture_output=True)
-    subprocess.run(["git", "-C", str(worktree), "checkout", "-b", f"hanf/{SLUG}"], capture_output=True)
-    subprocess.run(["git", "-C", str(worktree), "config", "user.email", "test@example.com"], check=True, capture_output=True)
-    subprocess.run(["git", "-C", str(worktree), "config", "user.name", "test"], check=True, capture_output=True)
+    _repo = _test_helpers.init_minimal_git_repo(worktree, branch="main")
+    _test_helpers.checkout_new_branch(_repo, f"hanf/{SLUG}")
     (worktree / ".gitignore").write_text("\n", encoding="utf-8")
-    subprocess.run(["git", "-C", str(worktree), "add", ".gitignore"], check=True, capture_output=True)
-    subprocess.run(["git", "-C", str(worktree), "commit", "-m", "seed"], check=True, capture_output=True)
     mill_dir = worktree / ".millhouse"
     mill_dir.mkdir(parents=True, exist_ok=True)
     wiki_root = tmp_path / "wiki"
@@ -273,13 +269,9 @@ def main() -> int:
     with _test_helpers.safe_temp_dir() as tmpdir:
         worktree = tmpdir / "container" / "wts" / SLUG
         worktree.mkdir(parents=True)
-        subprocess.run(["git", "-C", str(worktree), "init"], check=True, capture_output=True)
-        subprocess.run(["git", "-C", str(worktree), "checkout", "-b", f"hanf/{SLUG}"], capture_output=True)
-        subprocess.run(["git", "-C", str(worktree), "config", "user.email", "test@example.com"], check=True, capture_output=True)
-        subprocess.run(["git", "-C", str(worktree), "config", "user.name", "test"], check=True, capture_output=True)
+        _repo = _test_helpers.init_minimal_git_repo(worktree, branch="main")
+        _test_helpers.checkout_new_branch(_repo, f"hanf/{SLUG}")
         (worktree / ".gitignore").write_text("\n", encoding="utf-8")
-        subprocess.run(["git", "-C", str(worktree), "add", ".gitignore"], check=True, capture_output=True)
-        subprocess.run(["git", "-C", str(worktree), "commit", "-m", "seed"], check=True, capture_output=True)
         mill_dir = worktree / ".millhouse"
         mill_dir.mkdir(parents=True, exist_ok=True)
         wiki_root = tmpdir / "wiki"
@@ -345,13 +337,9 @@ def main() -> int:
     with _test_helpers.safe_temp_dir() as tmpdir:
         worktree = tmpdir / "container" / "wts" / SLUG
         worktree.mkdir(parents=True)
-        subprocess.run(["git", "-C", str(worktree), "init"], check=True, capture_output=True)
-        subprocess.run(["git", "-C", str(worktree), "checkout", "-b", f"hanf/{SLUG}"], capture_output=True)
-        subprocess.run(["git", "-C", str(worktree), "config", "user.email", "test@example.com"], check=True, capture_output=True)
-        subprocess.run(["git", "-C", str(worktree), "config", "user.name", "test"], check=True, capture_output=True)
+        _repo = _test_helpers.init_minimal_git_repo(worktree, branch="main")
+        _test_helpers.checkout_new_branch(_repo, f"hanf/{SLUG}")
         (worktree / ".gitignore").write_text("\n", encoding="utf-8")
-        subprocess.run(["git", "-C", str(worktree), "add", ".gitignore"], check=True, capture_output=True)
-        subprocess.run(["git", "-C", str(worktree), "commit", "-m", "seed"], check=True, capture_output=True)
         mill_dir = worktree / ".millhouse"
         mill_dir.mkdir(parents=True, exist_ok=True)
         wiki_root = tmpdir / "wiki"
@@ -486,13 +474,9 @@ def main() -> int:
     with _test_helpers.safe_temp_dir() as tmpdir:
         project_root = tmpdir / "container" / "wts" / SLUG
         project_root.mkdir(parents=True)
-        subprocess.run(["git", "-C", str(project_root), "init"], check=True, capture_output=True)
-        subprocess.run(["git", "-C", str(project_root), "checkout", "-b", f"hanf/{SLUG}"], capture_output=True)
-        subprocess.run(["git", "-C", str(project_root), "config", "user.email", "test@example.com"], check=True, capture_output=True)
-        subprocess.run(["git", "-C", str(project_root), "config", "user.name", "test"], check=True, capture_output=True)
+        _repo = _test_helpers.init_minimal_git_repo(project_root, branch="main")
+        _test_helpers.checkout_new_branch(_repo, f"hanf/{SLUG}")
         (project_root / ".gitignore").write_text("\n", encoding="utf-8")
-        subprocess.run(["git", "-C", str(project_root), "add", ".gitignore"], check=True, capture_output=True)
-        subprocess.run(["git", "-C", str(project_root), "commit", "-m", "seed"], check=True, capture_output=True)
         wiki_root = tmpdir / "wiki"
         wiki_root.mkdir(parents=True, exist_ok=True)
         seed_wiki_config(wiki_root)
@@ -711,13 +695,9 @@ def main() -> int:
     with _test_helpers.safe_temp_dir() as tmpdir:
         worktree = tmpdir / "container" / "wts" / SLUG
         worktree.mkdir(parents=True)
-        subprocess.run(["git", "-C", str(worktree), "init"], check=True, capture_output=True)
-        subprocess.run(["git", "-C", str(worktree), "checkout", "-b", f"hanf/{SLUG}"], capture_output=True)
-        subprocess.run(["git", "-C", str(worktree), "config", "user.email", "test@example.com"], check=True, capture_output=True)
-        subprocess.run(["git", "-C", str(worktree), "config", "user.name", "test"], check=True, capture_output=True)
+        _repo = _test_helpers.init_minimal_git_repo(worktree, branch="main")
+        _test_helpers.checkout_new_branch(_repo, f"hanf/{SLUG}")
         (worktree / ".gitignore").write_text("\n", encoding="utf-8")
-        subprocess.run(["git", "-C", str(worktree), "add", ".gitignore"], check=True, capture_output=True)
-        subprocess.run(["git", "-C", str(worktree), "commit", "-m", "seed"], check=True, capture_output=True)
         mill_dir = worktree / ".millhouse"
         mill_dir.mkdir(parents=True, exist_ok=True)
         wiki_root = tmpdir / "wiki"

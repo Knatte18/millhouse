@@ -157,6 +157,9 @@ def _run_main_with_mocks(
     paths_mock.resolve_short_name.return_value = "MI"
     paths_mock.resolve_container_path.return_value = Path("/fake/container")
     paths_mock.status_path.return_value = Path("/fake/worktrees/my-task/_mill/status.md")
+    paths_mock.resolve_hub_relative_path.side_effect = lambda wt, sub: wt if sub == "." else wt / sub
+    paths_mock.resolve_hub_path.return_value = Path("/fake/hub")
+    paths_mock.resolve_main_worktree_root.return_value = Path("/fake/repo")
 
     setup_mock = MagicMock()
     setup_mock.create_hub_links.return_value = {"junctions": [], "hardlinks": []}
@@ -290,6 +293,9 @@ def test_write_settings_uses_short_name_and_slug() -> None:
     paths_mock.resolve_short_name.return_value = "MI"
     paths_mock.resolve_container_path.return_value = Path("/fake/container")
     paths_mock.status_path.return_value = Path("/fake/worktrees/my-task/_mill/status.md")
+    paths_mock.resolve_hub_relative_path.side_effect = lambda wt, sub: wt if sub == "." else wt / sub
+    paths_mock.resolve_hub_path.return_value = Path("/fake/hub")
+    paths_mock.resolve_main_worktree_root.return_value = Path("/fake/repo")
 
     setup_mock = MagicMock()
     setup_mock.create_hub_links.return_value = {"junctions": [], "hardlinks": []}

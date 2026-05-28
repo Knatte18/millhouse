@@ -58,20 +58,28 @@ class WikiServer(DaemonBase):
         self._store = Store(wiki_path / "tasks.json")
         self._last_pull: float = 0.0
 
-        # Set up rotating file logger
-        handler = logging.handlers.RotatingFileHandler(
-            wiki_path / ".wiki-daemon.log",
-            maxBytes=1_000_000,
-            backupCount=2,
-            mode="w",
-        )
-        handler.setFormatter(
-            logging.Formatter("%(asctime)s %(levelname)s %(message)s")
-        )
         self._log = logging.getLogger("wiki-server")
-        self._log.addHandler(handler)
+        for h in list(self._log.handlers):
+            try:
+                h.close()
+            except Exception:
+                pass
+            self._log.removeHandler(h)
         self._log.setLevel(logging.INFO)
         self._log.propagate = False
+        if os.environ.get("WIKI_DAEMON_SKIP_GIT") == "1":
+            self._log.addHandler(logging.NullHandler())
+        else:
+            handler = logging.handlers.RotatingFileHandler(
+                wiki_path / ".wiki-daemon.log",
+                maxBytes=1_000_000,
+                backupCount=2,
+                mode="w",
+            )
+            handler.setFormatter(
+                logging.Formatter("%(asctime)s %(levelname)s %(message)s")
+            )
+            self._log.addHandler(handler)
 
     def on_start(self, port: int, token: str) -> None:
         """Log startup and ensure gitignore."""
@@ -79,8 +87,12 @@ class WikiServer(DaemonBase):
         self._ensure_gitignore()
 
     def on_stop(self) -> None:
-        """Log shutdown and release log handlers."""
+        """Log shutdown, close the store, release log handlers."""
         self._log.info("wiki-server stopping")
+        try:
+            self._store.close()
+        except Exception:
+            pass
         for handler in list(self._log.handlers):
             try:
                 handler.close()

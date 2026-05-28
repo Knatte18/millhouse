@@ -162,6 +162,9 @@ class Store:
 
         return self._db.get(doc_id=upserted_doc.doc_id)
 
+    def close(self) -> None:
+        self._db.close()
+
     def reload(self) -> None:
         self._db.close()
         self._db = TinyDB(str(self._db_path), indent=2, sort_keys=True)
