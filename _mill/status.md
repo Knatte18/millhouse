@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-bg-worker-shell-edge-cases
+phase: holistic-reviewing
 slug: bg-worker-and-shell-edge-cases
 branch: bg-worker-and-shell-edge-cases
 plan: _mill/plan
@@ -22,6 +22,7 @@ plan-fix-r1  '2026-05-28T21:21:17Z'
 planned  '2026-05-28T21:21:34Z'
 implementing  '2026-05-28T21:23:37Z'
 approved-bg-worker-shell-edge-cases  '2026-05-28T21:27:56Z'
+holistic-reviewing  '2026-05-28T21:28:18Z'
 ```
 
 ## Batches
