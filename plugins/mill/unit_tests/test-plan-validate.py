@@ -1639,6 +1639,141 @@ def test_depends_on_batch_mismatch_emits_finding() -> int:
 
 
 # ---------------------------------------------------------------------------
+# batch-oversized check
+# ---------------------------------------------------------------------------
+
+def test_batch_oversized_card_count_clean() -> int:
+    """Clean: batch with 5 cards (under cap of 10) -> no batch-oversized error."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file_cards("alpha", [1, 2, 3, 4, 5])
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root, max_cards_per_batch=10)
+        oversized_errs = [e for e in result if e["check"] == "batch-oversized"]
+        if oversized_errs:
+            print(f"FAIL test_batch_oversized_card_count_clean: unexpected errors: {oversized_errs}",
+                  file=sys.stderr)
+            return 1
+        print("PASS test_batch_oversized_card_count_clean")
+        return 0
+
+
+def test_batch_oversized_card_count_dirty() -> int:
+    """Dirty: batch with 12 cards (over cap of 10) -> one batch-oversized error."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file_cards("alpha", list(range(1, 13)))
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root, max_cards_per_batch=10)
+        oversized_errs = [e for e in result if e["check"] == "batch-oversized" and "cards" in e["message"]]
+        try:
+            assert len(oversized_errs) == 1, f"expected 1 error, got {len(oversized_errs)}: {oversized_errs}"
+            assert "12 cards" in oversized_errs[0]["message"], f"message should mention '12 cards': {oversized_errs[0]['message']!r}"
+            assert "cap 10" in oversized_errs[0]["message"], f"message should mention 'cap 10': {oversized_errs[0]['message']!r}"
+            print("PASS test_batch_oversized_card_count_dirty")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_batch_oversized_card_count_dirty: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_batch_oversized_context_tokens_clean() -> int:
+    """Clean: batch with small file (under 480k token cap) -> no batch-oversized error."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        # Create a small 10KB file (2500 token estimate)
+        existing_file = project_root / "src" / "small.py"
+        existing_file.parent.mkdir(parents=True)
+        existing_file.write_text("x" * 10000, encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file("alpha", context=["src/small.py"])
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root, max_batch_context_tokens=120000)
+        oversized_errs = [e for e in result if e["check"] == "batch-oversized" and "tokens" in e["message"]]
+        if oversized_errs:
+            print(f"FAIL test_batch_oversized_context_tokens_clean: unexpected errors: {oversized_errs}",
+                  file=sys.stderr)
+            return 1
+        print("PASS test_batch_oversized_context_tokens_clean")
+        return 0
+
+
+def test_batch_oversized_context_tokens_dirty() -> int:
+    """Dirty: batch with large file (over 12k token cap) -> one batch-oversized error."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        # Create a file that's 50KB = 12500 tokens (over 12k cap)
+        large_file = project_root / "src" / "large.py"
+        large_file.parent.mkdir(parents=True)
+        large_file.write_text("x" * 50000, encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file("alpha", context=["src/large.py"])
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root, max_batch_context_tokens=12000)
+        oversized_errs = [e for e in result if e["check"] == "batch-oversized" and "tokens" in e["message"]]
+        try:
+            assert len(oversized_errs) == 1, f"expected 1 error, got {len(oversized_errs)}: {oversized_errs}"
+            assert "tokens" in oversized_errs[0]["message"], f"message should mention 'tokens': {oversized_errs[0]['message']!r}"
+            assert "cap 12000" in oversized_errs[0]["message"], f"message should mention 'cap 12000': {oversized_errs[0]['message']!r}"
+            print("PASS test_batch_oversized_context_tokens_dirty")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_batch_oversized_context_tokens_dirty: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_batch_oversized_defaults_applied() -> int:
+    """Clean: run() called without max_*_per_batch kwargs applies 10 and 120000 defaults."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file_cards("alpha", list(range(1, 11)))
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        # Call without max_cards_per_batch/max_batch_context_tokens to test defaults
+        result = _plan_validate.run(plan_dir, project_root)
+        oversized_errs = [e for e in result if e["check"] == "batch-oversized"]
+        try:
+            assert len(oversized_errs) == 0, (
+                f"batch with exactly 10 cards and small files should pass defaults, "
+                f"got: {oversized_errs}"
+            )
+            print("PASS test_batch_oversized_defaults_applied")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_batch_oversized_defaults_applied: {exc}", file=sys.stderr)
+            return 1
+
+
+# ---------------------------------------------------------------------------
 # Runner
 # ---------------------------------------------------------------------------
 
@@ -1693,6 +1828,12 @@ def main() -> int:
         test_check_verify_not_isolated_leading_whitespace,
         test_check_verify_not_isolated_non_empty_pythonpath_value,
         test_check_verify_not_isolated_run_integration,
+        # batch-oversized check
+        test_batch_oversized_card_count_clean,
+        test_batch_oversized_card_count_dirty,
+        test_batch_oversized_context_tokens_clean,
+        test_batch_oversized_context_tokens_dirty,
+        test_batch_oversized_defaults_applied,
     ]
 
     errors = 0
