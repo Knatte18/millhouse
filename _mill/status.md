@@ -28,7 +28,9 @@ implementing  '2026-05-28T22:10:02Z'
 ```yaml
 batches:
   - name: nb-digest-helper
-    state: pending
+    state: running
+    implementer_session: 487bcf12-24a4-42bc-8754-1176aa813ea3
+    start_sha: feea020b8983798a3ca76216b171b2a62e03b007
   - name: codeguide-templates
     state: pending
   - name: codeguide-skills
