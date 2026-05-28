@@ -64,6 +64,10 @@ lands.
   summed across `reviews[]`). On `APPROVE` with `nit_count > 0`, the Builder dispatches one
   cold-start NIT-only fix pass (`millpy-fix.py` with the APPROVE'd review file) and then
   approves. No extra review round is consumed; the NIT fix is trusted (not re-reviewed).
+  This applies to BOTH mill-go APPROVE paths: the per-batch Code Review loop (Execute step 3
+  sub-step 4) and the Holistic code review (Holistic step 4). Both branches gain the same
+  `if nit_count > 0: dispatch one NIT-only fix pass, then approve` logic; the holistic
+  branch dispatches the fixer with `--scope holistic`.
 - Rationale: The Builder is intentionally lean and never reads findings, so it cannot apply
   NITs itself. Surfacing only a count keeps the lean-Builder invariant intact while still
   acting on the NITs. This mirrors mill-plan's already-correct 4b path ("apply NITs, then
@@ -99,6 +103,11 @@ lands.
   recorded in `status.md` (`reviewing-{batch_name}-r{N}` / `holistic-reviewing` for the
   current round). A stale file (mtime older than that timestamp) is ignored and the CLI is
   re-fired. ERROR-only retries continue to NOT consume the round counter.
+  **Timeline-row selection:** the per-batch row is unambiguous because the round number is in
+  the phase name (`reviewing-{batch_name}-r{N}`). The holistic rows are NOT round-numbered
+  (`holistic-reviewing` repeats once per round), so for round H select the **Hth occurrence**
+  of `holistic-reviewing` in the timeline (1-indexed, in timeline order) and compare the
+  candidate file's mtime against that row's timestamp.
 - Rationale: ERROR retries deliberately do not consume the round, so the H/N counter and
   the on-disk file round-number can desync. Validating mtime against the recorded
   phase-entry timestamp distinguishes a fresh review from a stale pre-retry artifact without
@@ -153,7 +162,11 @@ lands.
   killed / OOM, no envelope possible) is treated as ERROR-equivalent and routed through the
   existing two-pass retry; on the second consecutive absent-JSON, halt with
   `BLOCKED: plan review no-JSON round {N}`. This mirrors mill-go's "only treat exit 1 as
-  unrecoverable when the JSON line is absent" rule.
+  unrecoverable when the JSON line is absent" rule. **Counter scope:** absent-JSON and
+  `verdict: ERROR` share the SAME consecutive-non-reviewable-round counter that step 4.5
+  already tracks -- "non-reviewable" is one category. Any mix of two consecutive
+  non-reviewable rounds (ERROR then absent-JSON, or vice versa) trips the two-pass cap and
+  halts; there is no separate absent-JSON counter.
 - Rationale: A Python-level crash is recoverable by guaranteeing an envelope; a truly killed
   worker cannot print anything, so the SKILL-side absent-JSON handling is the backstop. Both
   layers together close the gap.
