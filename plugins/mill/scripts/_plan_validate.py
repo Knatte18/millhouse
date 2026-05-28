@@ -914,21 +914,24 @@ def _check_batch_oversized(
             })
 
         # Check 2: context size (token estimate)
-        context_tokens = _parse_edits_only(batch_path) | _parse_creates_only(batch_path)
+        # Collect Context/Edits/Creates tokens from the batch
+        all_refs = parse_batch_refs(batch_path)
         deletes = _parse_deletes_only(batch_path)
 
-        # Resolve existing paths for context/edits/creates, skipping those in deletes_union
-        all_tokens = list(context_tokens - deletes)
-        if all_tokens:
+        # Subtract deleted tokens so they don't inflate the estimate
+        context_tokens = set(all_refs) - deletes
+
+        # Resolve existing paths, skipping those that don't exist (like Creates targets)
+        if context_tokens:
             resolved = resolve_existing_paths(
-                all_tokens,
+                list(context_tokens),
                 project_root,
                 root,
                 wiki_root=wiki_root,
             )
 
             # Sum byte sizes and divide by 4 for token estimate
-            total_bytes = sum(p.stat().st_size for p in resolved if p.exists())
+            total_bytes = sum(p.stat().st_size for p in resolved)
             token_estimate = total_bytes // 4
 
             if token_estimate > max_context_tokens:
