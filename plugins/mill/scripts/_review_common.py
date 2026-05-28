@@ -294,7 +294,7 @@ def resolve_path(path_tmpl: str, slug: str) -> Path:
       - container via _paths.resolve_container_path(git_root)
       - hub_dir via _paths.resolve_hub_path() (Path.cwd().resolve() — the hub
         where mill scripts run; equals git_root for hub_relative_path == ".")
-      - cfg via load_config(_paths.resolve_wiki_path(git_root), hub_dir / ".millhouse")
+      - cfg via load_config(hub_dir, hub_dir / ".millhouse")
 
     cfg is sourced from the hub's own .millhouse/, not from git_root/.millhouse/,
     because mill-claim writes hub_relative_path only at the hub (it does not
@@ -309,7 +309,7 @@ def resolve_path(path_tmpl: str, slug: str) -> Path:
     git_root = _paths.resolve_git_root()
     container_path = _paths.resolve_container_path(git_root)
     hub_dir = _paths.resolve_hub_path()
-    cfg = load_config(git_root, hub_dir / ".millhouse")
+    cfg = load_config(hub_dir, hub_dir / ".millhouse")
     active_hub = _paths.resolve_active_hub(
         container_path, slug, cfg=cfg, git_root=git_root,
     )
