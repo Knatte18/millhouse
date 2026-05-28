@@ -28,5 +28,7 @@ implementing  '2026-05-28T21:23:37Z'
 ```yaml
 batches:
   - name: bg-worker-shell-edge-cases
-    state: pending
+    state: running
+    implementer_session: c5c86f94-2862-4ff4-a568-19173aa2f9f9
+    start_sha: 3c033cb5150d424fc58368819dc1c229991890be
 ```
