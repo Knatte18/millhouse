@@ -299,6 +299,21 @@ def main() -> int:
         assert not non_container.exists(), "non_container dir should be removed"
         print("PASS: non-container allowed_root does not crash")
 
+    # --- safe_rmtree removes read-only files via chmod+retry ---
+    tmp = Path(tempfile.mkdtemp())
+    try:
+        sub = tmp / "sub"
+        sub.mkdir(parents=True)
+        readonly_file = sub / "readonly.idx"
+        readonly_file.write_bytes(b"x")
+        os.chmod(str(readonly_file), 0)
+
+        safe_rmtree(tmp, allowed_root=tmp, ignore_errors=False)
+        assert not tmp.exists(), "tmp must be gone after safe_rmtree"
+        print("PASS: safe_rmtree removes read-only files via chmod+retry")
+    finally:
+        safe_rmtree(tmp, allowed_root=tmp, ignore_errors=True)
+
     return 0
 
 
