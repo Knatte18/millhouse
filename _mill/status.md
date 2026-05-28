@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-reviewing
+phase: holistic-approved
 slug: wiki-v3-followups
 branch: hanf/wiki-v3-followups
 plan: _mill/plan
@@ -32,6 +32,7 @@ approved-safe-rmtree-chmod-retry  '2026-05-28T21:30:45Z'
 holistic-reviewing  '2026-05-28T21:30:57Z'
 holistic-fixing  '2026-05-28T21:35:18Z'
 holistic-reviewing  '2026-05-28T22:14:22Z'
+holistic-approved  '2026-05-28T22:19:43Z'
 ```
 
 ## Batches
