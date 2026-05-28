@@ -1,0 +1,287 @@
+"""
+Integration test for hub_relative_path sub-project layout support.
+
+Builds an isolated hub+wiki pair with a sub-project layout under ``.scratch/``
+and exercises the path-resolution surface fixed in batches 1-3 against this
+structure. The test:
+
+1. Constructs a minimal sub-project fixture where the hub is a subfolder
+   of the git repo root (e.g. ``<repo>/projects/sub/`` is the hub).
+2. Runs ``millpy-spawn --dry-run`` from the hub subfolder to verify the
+   path resolution works end-to-end.
+3. Makes direct calls to ``_paths.resolve_active_hub`` and
+   ``_review_common.resolve_ref_paths`` to assert the git_root fallback
+   and hub_relative_path offset are applied correctly.
+
+No LLM is invoked; no claude / sonnet subprocess fires. Git operations run
+via subprocess against a real ``git`` in PATH.
+
+Run from hub root:
+    PYTHONPATH= uv run --project plugins/mill python plugins/mill/integration_tests/test-hub-relative-path.py
+
+Exits 0 on PASS, 1 on any assertion failure (scratch dir preserved for post-mortem).
+"""
+from __future__ import annotations
+
+import os
+import subprocess
+import sys
+import uuid
+from pathlib import Path
+
+HUB = Path(__file__).resolve().parent.parent.parent.parent
+SCRIPTS = HUB / "plugins" / "mill" / "scripts"
+PLUGIN_ROOT = HUB / "plugins" / "mill"
+SCRATCH = HUB / ".scratch"
+
+sys.path.insert(0, str(SCRIPTS))
+
+import _config  # noqa: E402
+import _paths  # noqa: E402
+import _review_common  # noqa: E402
+import _safe_rmtree  # noqa: E402
+
+
+def _run(cmd: list[str], *, cwd: Path, check: bool = True) -> subprocess.CompletedProcess:
+    """Invoke ``cmd`` in ``cwd`` with UTF-8 output capture."""
+    return subprocess.run(
+        cmd,
+        cwd=str(cwd),
+        check=check,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+
+
+def _setup_subproject_pair(container: Path) -> tuple[Path, Path, Path, Path]:
+    """
+    Construct a minimal hub + wiki pair with sub-project layout under ``container``.
+
+    Layout:
+        <container>/wts/outer-repo/               — git repo root
+        <container>/wts/outer-repo/lib/example.py — example file
+        <container>/wts/outer-repo/projects/sub/  — hub subfolder
+        <container>/wts/outer-repo/.millhouse/config.local.yaml — declares hub_relative_path
+        <container>/wiki.git                      — bare "remote"
+        <container>/wiki                          — working clone of the bare
+
+    Returns ``(outer_repo, hub, wiki, worktrees_dir)``.
+    """
+    container.mkdir(parents=True, exist_ok=True)
+    bare = container / "wiki.git"
+    wiki = container / "wiki"
+    outer_repo = container / "wts" / "outer-repo"
+    hub = outer_repo / "projects" / "sub"
+    worktrees_dir = container / "wts"
+
+    # Bare wiki + clone.
+    _run(["git", "init", "--bare", str(bare), "-b", "main"], cwd=container)
+    _run(["git", "clone", str(bare), str(wiki)], cwd=container)
+    _run(["git", "-C", str(wiki), "config", "user.email", "test@example.com"], cwd=container)
+    _run(["git", "-C", str(wiki), "config", "user.name", "Test"], cwd=container)
+
+    # Seed Home.md with one spawn-ready task.
+    (wiki / "Home.md").write_text(
+        "# Tasks\n\n"
+        "## Sub-project fixture\n"
+        "[subproj-fixture] [s]\n\n"
+        "Seed task for the hub-relative-path integration test.\n",
+        encoding="utf-8",
+    )
+    (wiki / "_Sidebar.md").write_text(
+        "### Navigation\n\n- [Home](Home)\n\n### Tasks\n\n- Sub-project fixture\n",
+        encoding="utf-8",
+    )
+    (wiki / "config.yaml").write_text(
+        "junctions:\n"
+        "  .millhouse/wiki: <WIKI_PATH>\n"
+        "  .active: <WIKI_PATH>/active/<SLUG>/\n"
+        "\n"
+        "spawn:\n"
+        '  branch_prefix: "test/"\n',
+        encoding="utf-8",
+    )
+    _run(["git", "-C", str(wiki), "add", "."], cwd=container)
+    _run(["git", "-C", str(wiki), "commit", "-m", "seed"], cwd=container)
+    _run(["git", "-C", str(wiki), "push", "origin", "main"], cwd=container)
+
+    # Outer repo — git root with lib/example.py file.
+    outer_repo.mkdir(parents=True, exist_ok=True)
+    _run(["git", "init", str(outer_repo), "-b", "main"], cwd=container)
+    _run(["git", "-C", str(outer_repo), "config", "user.email", "test@example.com"], cwd=container)
+    _run(["git", "-C", str(outer_repo), "config", "user.name", "Test"], cwd=container)
+
+    (outer_repo / "lib").mkdir(exist_ok=True)
+    (outer_repo / "lib" / "example.py").write_text("def fn(): return 1\n", encoding="utf-8")
+    (outer_repo / "README.md").write_text("sub-project test\n", encoding="utf-8")
+    _run(["git", "-C", str(outer_repo), "add", "lib", "README.md"], cwd=container)
+    _run(["git", "-C", str(outer_repo), "commit", "-m", "init"], cwd=container)
+
+    # Hub subfolder with mill-config.yaml.
+    hub.mkdir(parents=True, exist_ok=True)
+    (hub / "mill-config.yaml").write_text(
+        "spawn:\n"
+        '  branch_prefix: "test/"\n'
+        "paths:\n"
+        "  status_md: _mill/status.md\n"
+        "  discussion_file: _mill/discussion.md\n"
+        "  reviews_dir: _mill/reviews\n",
+        encoding="utf-8",
+    )
+    _run(["git", "-C", str(outer_repo), "add", "projects/sub/mill-config.yaml"], cwd=container)
+    _run(["git", "-C", str(outer_repo), "commit", "-m", "add hub"], cwd=container)
+
+    # .millhouse/ with wiki junction + config.local.yaml at outer-repo root.
+    millhouse = outer_repo / ".millhouse"
+    millhouse.mkdir()
+    if sys.platform == "win32":
+        subprocess.run(
+            ["cmd", "/c", "mklink", "/J", str(millhouse / "wiki"), str(wiki)],
+            check=True,
+            capture_output=True,
+        )
+    else:
+        os.symlink(str(wiki), str(millhouse / "wiki"))
+    (millhouse / "config.local.yaml").write_text(
+        "hub_relative_path: projects/sub\n",
+        encoding="utf-8",
+    )
+    _run(["git", "-C", str(outer_repo), "add", ".millhouse"], cwd=container)
+    _run(["git", "-C", str(outer_repo), "commit", "-m", "add millhouse config"], cwd=container)
+
+    return outer_repo, hub, wiki, worktrees_dir
+
+
+def _assert(cond: bool, msg: str) -> None:
+    if not cond:
+        raise AssertionError(msg)
+
+
+def _run_spawn(hub: Path) -> subprocess.CompletedProcess:
+    """Run mill-spawn --dry-run against ``hub`` subfolder."""
+    env = os.environ.copy()
+    env["PYTHONIOENCODING"] = "utf-8"
+    return subprocess.run(
+        ["uv", "run", "--project", str(PLUGIN_ROOT), str(SCRIPTS / "millpy-spawn.py"), "--dry-run", "--slug", "subproj-fixture"],
+        cwd=str(hub),
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        env=env,
+        check=False,
+    )
+
+
+def main() -> int:
+    SCRATCH.mkdir(parents=True, exist_ok=True)
+    container = SCRATCH / f"test-hub-relative-path-{uuid.uuid4().hex[:8]}"
+    failed = False
+    try:
+        outer_repo, hub, wiki, worktrees_dir = _setup_subproject_pair(container)
+        print(f"[test-hub-relative-path] container: {container}", file=sys.stderr)
+
+        # === Step 1: Run mill-spawn --dry-run from hub subfolder ===
+        proc = _run_spawn(hub)
+        print(f"--- mill-spawn stdout ---\n{proc.stdout}", file=sys.stderr)
+        print(f"--- mill-spawn stderr ---\n{proc.stderr}", file=sys.stderr)
+        _assert(proc.returncode == 0, f"mill-spawn exit={proc.returncode}")
+
+        # Assert the dry-run output shows the correct hub-relative status path.
+        _assert(
+            "[DryRun] Status:" in proc.stdout,
+            f"mill-spawn stdout missing [DryRun] Status: line:\n{proc.stdout}",
+        )
+        expected_status_path_str = str(worktrees_dir / "subproj-fixture" / "projects" / "sub" / "_mill" / "status.md")
+        _assert(
+            expected_status_path_str in proc.stdout,
+            f"mill-spawn stdout missing expected path {expected_status_path_str}:\n{proc.stdout}",
+        )
+
+        # === Step 2: Load config and resolve_active_hub ===
+        cfg = _config.load_config(hub, hub)
+        container_path = _paths.resolve_container_path(outer_repo)
+
+        # Create stub worktree directory for resolve_active_hub call.
+        stub_wt = worktrees_dir / "subproj-fixture"
+        (stub_wt / "projects" / "sub").mkdir(parents=True, exist_ok=True)
+        # Initialize stub as a git repo (needed for branch detection).
+        _run(["git", "init", str(stub_wt)], cwd=stub_wt)
+        _run(["git", "-C", str(stub_wt), "config", "user.email", "test@example.com"], cwd=stub_wt)
+        _run(["git", "-C", str(stub_wt), "config", "user.name", "Test"], cwd=stub_wt)
+        # Create an initial commit so there's a branch to checkout.
+        (stub_wt / ".gitkeep").touch()
+        _run(["git", "-C", str(stub_wt), "add", ".gitkeep"], cwd=stub_wt)
+        _run(["git", "-C", str(stub_wt), "commit", "-m", "init"], cwd=stub_wt)
+        # Create the test/subproj-fixture branch.
+        _run(["git", "-C", str(stub_wt), "checkout", "-b", "test/subproj-fixture"], cwd=stub_wt)
+        # Add the stub config at the worktree root.
+        (stub_wt / ".millhouse").mkdir(exist_ok=True)
+        (stub_wt / ".millhouse" / "config.local.yaml").write_text(
+            "hub_relative_path: projects/sub\n",
+            encoding="utf-8",
+        )
+
+        # Call resolve_active_hub and assert it returns the hub subfolder.
+        resolved_hub = _paths.resolve_active_hub(container_path, "subproj-fixture", cfg=cfg, git_root=outer_repo)
+        _assert(
+            resolved_hub == hub,
+            f"resolve_active_hub returned {resolved_hub}, expected {hub}",
+        )
+
+        # === Step 3: Test resolve_ref_paths with git_root fallback ===
+        raw_paths = ["lib/example.py"]
+        resolved = _review_common.resolve_ref_paths(
+            raw_paths,
+            project_root=hub,
+            root=None,
+            git_root=outer_repo,
+        )
+        _assert(
+            len(resolved) == 1,
+            f"resolve_ref_paths returned {len(resolved)} paths, expected 1",
+        )
+        _assert(
+            resolved[0].suffix == ".py" and "example.py" in str(resolved[0]),
+            f"resolved path does not match: {resolved[0]}",
+        )
+        _assert(
+            resolved[0] == outer_repo / "lib" / "example.py",
+            f"resolved path {resolved[0]} != expected {outer_repo / 'lib' / 'example.py'}",
+        )
+
+        # Test that without git_root it raises ReviewError (fallback is required for sub-project).
+        try:
+            _review_common.resolve_ref_paths(
+                raw_paths,
+                project_root=hub,
+                root=None,
+                git_root=None,
+            )
+            _assert(False, "resolve_ref_paths should have raised ReviewError without git_root")
+        except _review_common.ReviewError:
+            pass  # Expected.
+
+        print("PASS", file=sys.stderr)
+        return 0
+
+    except AssertionError as exc:
+        print(f"FAIL: {exc}", file=sys.stderr)
+        failed = True
+        return 1
+    except Exception as exc:  # noqa: BLE001 — want full surface on unexpected
+        print(f"FAIL (unexpected): {type(exc).__name__}: {exc}", file=sys.stderr)
+        failed = True
+        return 1
+    finally:
+        if failed:
+            print(
+                f"Scratch dir preserved for inspection: {container}",
+                file=sys.stderr,
+            )
+        else:
+            _safe_rmtree.safe_rmtree(container, allowed_root=container, ignore_errors=True)
+
+
+if __name__ == "__main__":
+    sys.exit(main())
