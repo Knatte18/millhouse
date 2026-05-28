@@ -40,6 +40,7 @@ import _config  # noqa: E402
 import _paths  # noqa: E402
 import _review_common  # noqa: E402
 import _safe_rmtree  # noqa: E402
+from wiki import _client as wiki_client  # noqa: E402
 
 
 def _run(cmd: list[str], *, cwd: Path, check: bool = True) -> subprocess.CompletedProcess:
@@ -81,18 +82,7 @@ def _setup_subproject_pair(container: Path) -> tuple[Path, Path, Path, Path]:
     _run(["git", "-C", str(wiki), "config", "user.email", "test@example.com"], cwd=container)
     _run(["git", "-C", str(wiki), "config", "user.name", "Test"], cwd=container)
 
-    # Seed Home.md with one spawn-ready task.
-    (wiki / "Home.md").write_text(
-        "# Tasks\n\n"
-        "## Sub-project fixture\n"
-        "[subproj-fixture] [s]\n\n"
-        "Seed task for the hub-relative-path integration test.\n",
-        encoding="utf-8",
-    )
-    (wiki / "_Sidebar.md").write_text(
-        "### Navigation\n\n- [Home](Home)\n\n### Tasks\n\n- Sub-project fixture\n",
-        encoding="utf-8",
-    )
+    # Static wiki config (not task data — wiki._client.upsert_task seeds tasks.json + renders Home.md).
     (wiki / "config.yaml").write_text(
         "junctions:\n"
         "  .millhouse/wiki: <WIKI_PATH>\n"
@@ -102,13 +92,19 @@ def _setup_subproject_pair(container: Path) -> tuple[Path, Path, Path, Path]:
         '  branch_prefix: "test/"\n',
         encoding="utf-8",
     )
-    (wiki / "proposal-subproj-fixture.md").write_text(
-        "# Sub-project fixture\n\nProposal for the hub-relative-path integration test.\n",
-        encoding="utf-8",
-    )
-    _run(["git", "-C", str(wiki), "add", "."], cwd=container)
-    _run(["git", "-C", str(wiki), "commit", "-m", "seed"], cwd=container)
+    _run(["git", "-C", str(wiki), "add", "config.yaml"], cwd=container)
+    _run(["git", "-C", str(wiki), "commit", "-m", "seed config"], cwd=container)
     _run(["git", "-C", str(wiki), "push", "origin", "main"], cwd=container)
+
+    # Seed the spawn-ready task via the wiki client — daemon writes tasks.json,
+    # renders Home.md, commits & pushes. status=None == spawn-ready ([s]).
+    wiki_client.upsert_task(
+        wiki,
+        "subproj-fixture",
+        title="Sub-project fixture",
+        brief="Seed task for the hub-relative-path integration test.",
+        body="# Sub-project fixture\n\nProposal for the hub-relative-path integration test.\n",
+    )
 
     # Outer repo — git root with lib/example.py file.
     outer_repo.mkdir(parents=True, exist_ok=True)
