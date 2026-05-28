@@ -38,7 +38,9 @@ batches:
     start_sha: 376b25f0e82da802e912d4a4b86315786dec45bf
     commit_sha: 812244844cf1d6560decddf61e5c287cf0b60de8
   - name: junction-fs-scan
-    state: pending
+    state: running
+    implementer_session: ae3b7274-39c5-4ea4-bada-6580a01d7808
+    start_sha: ba505618d1fb09454cfad3dbf3897b048a0e5b46
   - name: millpy-fix-windows-lock
     state: pending
   - name: safe-rmtree-chmod-retry
