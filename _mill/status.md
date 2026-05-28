@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-review-guard-overstep
 slug: mill-orchestration-loop-hardening
 branch: mill-orchestration-loop-hardening
 plan: _mill/plan
@@ -23,6 +23,7 @@ plan-fix-r1  '2026-05-28T21:58:55Z'
 plan-fix-r2  '2026-05-28T22:05:17Z'
 planned  '2026-05-28T22:05:34Z'
 implementing  '2026-05-28T22:10:21Z'
+approved-review-guard-overstep  '2026-05-28T22:13:46Z'
 ```
 
 ## Batches
@@ -30,9 +31,10 @@ implementing  '2026-05-28T22:10:21Z'
 ```yaml
 batches:
   - name: review-guard-overstep
-    state: running
+    state: approved
     implementer_session: baf4c91b-fb7e-4dfc-8e68-4d247c49f3cf
     start_sha: 1eb46ec7d72ec2fca627798584b72eaff1264544
+    commit_sha: e6be3e098e7c73ebabc99da123a32fa4aee6c126
   - name: plan-review-cli-and-validator
     state: pending
   - name: status-phase-timestamp
