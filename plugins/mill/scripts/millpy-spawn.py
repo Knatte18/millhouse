@@ -148,7 +148,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"[DryRun] Task:     {picked['title']} [{slug}]")
         print(f"[DryRun] Branch:   {branch_name}")
         print(f"[DryRun] Worktree: {worktree_path}")
-        print(f"[DryRun] Status:   {_paths.status_path(worktree_path, cfg)}")
+        print(f"[DryRun] Status:   {_paths.status_path(dest_hub, cfg)}")
         return 0
 
     # Claim the task under the wiki lock. Multi mode already claimed inside
@@ -224,7 +224,7 @@ def main(argv: list[str] | None = None) -> int:
 
     # Use the task title as description so the status.md template renders without empty placeholders.
     status_abs = _spawn_core.write_initial_status(
-        worktree_path=worktree_path,
+        worktree_path=dest_hub,
         slug=slug,
         title=picked["title"],
         ts=ts,
