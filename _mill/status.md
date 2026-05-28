@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-bg-worker-shell-edge-cases
 slug: bg-worker-and-shell-edge-cases
 branch: bg-worker-and-shell-edge-cases
 plan: _mill/plan
@@ -21,6 +21,7 @@ planning  '2026-05-28T21:17:53Z'
 plan-fix-r1  '2026-05-28T21:21:17Z'
 planned  '2026-05-28T21:21:34Z'
 implementing  '2026-05-28T21:23:37Z'
+approved-bg-worker-shell-edge-cases  '2026-05-28T21:27:56Z'
 ```
 
 ## Batches
@@ -28,7 +29,8 @@ implementing  '2026-05-28T21:23:37Z'
 ```yaml
 batches:
   - name: bg-worker-shell-edge-cases
-    state: running
+    state: approved
     implementer_session: c5c86f94-2862-4ff4-a568-19173aa2f9f9
     start_sha: 3c033cb5150d424fc58368819dc1c229991890be
+    commit_sha: b899c2719b2c93d669986e25aac2c3b240c0979f
 ```
