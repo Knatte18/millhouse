@@ -12,6 +12,7 @@ from pathlib import Path
 HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
+import _safe_rmtree  # noqa: E402
 from wiki._store import Store  # noqa: E402
 
 
@@ -39,8 +40,7 @@ def main() -> int:
             assert task.get("id") == 0, f"First task should have id=0, got {task.get('id')}"
             ok("upsert_task on empty DB assigns id = 0")
         finally:
-            import shutil
-            shutil.rmtree(tmp_dir, ignore_errors=True)
+            _safe_rmtree.safe_rmtree(Path(tmp_dir), allowed_root=Path(tmp_dir), ignore_errors=True)
     except Exception as exc:
         fail("upsert_task on empty DB assigns id = 0", exc)
 
@@ -57,8 +57,7 @@ def main() -> int:
             assert task.get("id") == 4, f"Next id should be 4, got {task.get('id')}"
             ok("upsert_task with gaps assigns next id = max + 1")
         finally:
-            import shutil
-            shutil.rmtree(tmp_dir, ignore_errors=True)
+            _safe_rmtree.safe_rmtree(Path(tmp_dir), allowed_root=Path(tmp_dir), ignore_errors=True)
     except Exception as exc:
         fail("upsert_task with gaps assigns next id = max + 1", exc)
 
@@ -75,8 +74,7 @@ def main() -> int:
             assert task2.get("title") == "Updated", "Title should be updated"
             ok("upsert_task with existing slug updates and preserves id")
         finally:
-            import shutil
-            shutil.rmtree(tmp_dir, ignore_errors=True)
+            _safe_rmtree.safe_rmtree(Path(tmp_dir), allowed_root=Path(tmp_dir), ignore_errors=True)
     except Exception as exc:
         fail("upsert_task with existing slug updates and preserves id", exc)
 
@@ -95,8 +93,7 @@ def main() -> int:
             assert by_slug == by_id, "get_task by slug and id should return same dict"
             ok("get_task(slug) and get_task(id) return same record")
         finally:
-            import shutil
-            shutil.rmtree(tmp_dir, ignore_errors=True)
+            _safe_rmtree.safe_rmtree(Path(tmp_dir), allowed_root=Path(tmp_dir), ignore_errors=True)
     except Exception as exc:
         fail("get_task(slug) and get_task(id) return same record", exc)
 
@@ -112,8 +109,7 @@ def main() -> int:
             assert result_id is None, "Missing id should return None"
             ok("get_task with missing identifier returns None")
         finally:
-            import shutil
-            shutil.rmtree(tmp_dir, ignore_errors=True)
+            _safe_rmtree.safe_rmtree(Path(tmp_dir), allowed_root=Path(tmp_dir), ignore_errors=True)
     except Exception as exc:
         fail("get_task with missing identifier returns None", exc)
 
@@ -134,8 +130,7 @@ def main() -> int:
             assert store.get_task("r2") is None, "Task should be removed by id"
             ok("remove_task(slug) and remove_task(id) both work")
         finally:
-            import shutil
-            shutil.rmtree(tmp_dir, ignore_errors=True)
+            _safe_rmtree.safe_rmtree(Path(tmp_dir), allowed_root=Path(tmp_dir), ignore_errors=True)
     except Exception as exc:
         fail("remove_task(slug) and remove_task(id) both work", exc)
 
@@ -149,8 +144,7 @@ def main() -> int:
             store.remove_task(999)
             ok("remove_task with missing identifier returns silently")
         finally:
-            import shutil
-            shutil.rmtree(tmp_dir, ignore_errors=True)
+            _safe_rmtree.safe_rmtree(Path(tmp_dir), allowed_root=Path(tmp_dir), ignore_errors=True)
     except Exception as exc:
         fail("remove_task with missing identifier returns silently", exc)
 
@@ -171,8 +165,7 @@ def main() -> int:
             assert cleared.get("status") is None, "Status should be cleared"
             ok("set_phase updates and clears status")
         finally:
-            import shutil
-            shutil.rmtree(tmp_dir, ignore_errors=True)
+            _safe_rmtree.safe_rmtree(Path(tmp_dir), allowed_root=Path(tmp_dir), ignore_errors=True)
     except Exception as exc:
         fail("set_phase updates and clears status", exc)
 
@@ -195,12 +188,11 @@ def main() -> int:
                 assert "body" not in row, "body should not be in brief dict"
 
             by_slug = {r["slug"]: r for r in brief_list}
-            assert by_slug["with-body"]["has_proposal"] == True, "has_proposal should be True for task with body"
-            assert by_slug["without-body"]["has_proposal"] == False, "has_proposal should be False for task without body"
+            assert by_slug["with-body"]["has_proposal"], "has_proposal should be True for task with body"
+            assert not by_slug["without-body"]["has_proposal"], "has_proposal should be False for task without body"
             ok("list_tasks_brief returns correct key set and has_proposal")
         finally:
-            import shutil
-            shutil.rmtree(tmp_dir, ignore_errors=True)
+            _safe_rmtree.safe_rmtree(Path(tmp_dir), allowed_root=Path(tmp_dir), ignore_errors=True)
     except Exception as exc:
         fail("list_tasks_brief returns correct key set and has_proposal", exc)
 
@@ -219,8 +211,7 @@ def main() -> int:
             assert task["body"] == "proposal content", "Body should be preserved"
             ok("list_tasks_full returns all fields including body")
         finally:
-            import shutil
-            shutil.rmtree(tmp_dir, ignore_errors=True)
+            _safe_rmtree.safe_rmtree(Path(tmp_dir), allowed_root=Path(tmp_dir), ignore_errors=True)
     except Exception as exc:
         fail("list_tasks_full returns all fields including body", exc)
 
@@ -240,8 +231,7 @@ def main() -> int:
             assert len(result) == 2, f"Should have 2 tasks, got {len(result)}"
             ok("upsert_tasks_batch upserts multiple tasks")
         finally:
-            import shutil
-            shutil.rmtree(tmp_dir, ignore_errors=True)
+            _safe_rmtree.safe_rmtree(Path(tmp_dir), allowed_root=Path(tmp_dir), ignore_errors=True)
     except Exception as exc:
         fail("upsert_tasks_batch upserts multiple tasks", exc)
 
@@ -272,8 +262,7 @@ def main() -> int:
             assert c_task.get("status") == "active", "merge-c status should be set to active"
             ok("merge_tasks performs atomic multi-step operation")
         finally:
-            import shutil
-            shutil.rmtree(tmp_dir, ignore_errors=True)
+            _safe_rmtree.safe_rmtree(Path(tmp_dir), allowed_root=Path(tmp_dir), ignore_errors=True)
     except Exception as exc:
         fail("merge_tasks performs atomic multi-step operation", exc)
 
@@ -299,8 +288,7 @@ def main() -> int:
             assert store.get_task("keep-b") is not None, "keep-b must survive failed merge_tasks"
             ok("merge_tasks rejects empty upsert without mutating store")
         finally:
-            import shutil
-            shutil.rmtree(tmp_dir, ignore_errors=True)
+            _safe_rmtree.safe_rmtree(Path(tmp_dir), allowed_root=Path(tmp_dir), ignore_errors=True)
     except Exception as exc:
         fail("merge_tasks rejects empty upsert without mutating store", exc)
 
@@ -332,8 +320,7 @@ def main() -> int:
             assert len(brief_after) == 2, f"After reload, should see 2 tasks, got {len(brief_after)}"
             ok("reload discards in-memory state")
         finally:
-            import shutil
-            shutil.rmtree(tmp_dir, ignore_errors=True)
+            _safe_rmtree.safe_rmtree(Path(tmp_dir), allowed_root=Path(tmp_dir), ignore_errors=True)
     except Exception as exc:
         fail("reload discards in-memory state", exc)
 

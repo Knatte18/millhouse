@@ -20,8 +20,11 @@ from pathlib import Path
 HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
+import _safe_rmtree  # noqa: E402
+from unittest.mock import patch, MagicMock  # noqa: E402
 from _daemon import DaemonBase  # noqa: E402
 from wiki._server import WikiServer  # noqa: E402
+from wiki import PROTOCOL_VERSION, WikiStartupError  # noqa: E402
 from _test_helpers import safe_temp_dir  # noqa: E402
 
 
@@ -67,8 +70,7 @@ def main() -> int:
             assert read_data["token"] == "abc123"
             ok("_write_state_file writes JSON, reads back")
         finally:
-            import shutil
-            shutil.rmtree(tmp, ignore_errors=True)
+            _safe_rmtree.safe_rmtree(tmp, allowed_root=tmp, ignore_errors=True)
     except Exception as exc:
         fail("_write_state_file writes JSON, reads back", exc)
 
@@ -82,8 +84,7 @@ def main() -> int:
             assert daemon._is_stale(state) is True
             ok("_is_stale returns True for non-existent PID")
         finally:
-            import shutil
-            shutil.rmtree(tmp, ignore_errors=True)
+            _safe_rmtree.safe_rmtree(tmp, allowed_root=tmp, ignore_errors=True)
     except Exception as exc:
         fail("_is_stale returns True for non-existent PID", exc)
 
@@ -106,8 +107,7 @@ def main() -> int:
             finally:
                 sock.close()
         finally:
-            import shutil
-            shutil.rmtree(tmp, ignore_errors=True)
+            _safe_rmtree.safe_rmtree(tmp, allowed_root=tmp, ignore_errors=True)
     except Exception as exc:
         fail("_is_stale returns False for current PID", exc)
 
@@ -126,8 +126,7 @@ def main() -> int:
             assert raised, "second open should raise FileExistsError"
             ok("O_EXCL behavior: first open succeeds, second raises FileExistsError")
         finally:
-            import shutil
-            shutil.rmtree(tmp, ignore_errors=True)
+            _safe_rmtree.safe_rmtree(tmp, allowed_root=tmp, ignore_errors=True)
     except Exception as exc:
         fail("O_EXCL behavior: first open succeeds, second raises FileExistsError", exc)
 
@@ -171,8 +170,7 @@ def main() -> int:
             assert count2 == 1, f"expected 1 occurrence after second call, got {count2}"
             ok(".gitignore idempotent append")
         finally:
-            import shutil
-            shutil.rmtree(tmp, ignore_errors=True)
+            _safe_rmtree.safe_rmtree(tmp, allowed_root=tmp, ignore_errors=True)
     except Exception as exc:
         fail(".gitignore idempotent append", exc)
 
@@ -209,6 +207,125 @@ def main() -> int:
             ok("WikiServer.on_stop closes log handlers and removes them from logger")
     except Exception as exc:
         fail("WikiServer.on_stop closes log handlers and removes them from logger", exc)
+
+    # --- (h) _ensure_daemon stale-port-reuse: OSError on health check triggers respawn ---
+    try:
+        from wiki import _client
+        tmp = Path(tempfile.mkdtemp())
+        try:
+            wiki_path = tmp / "wiki"
+            wiki_path.mkdir(parents=True, exist_ok=True)
+            (wiki_path / "tasks.json").write_text('{"_default": {}}', encoding="utf-8")
+
+            state_file = wiki_path / ".wiki-daemon.json"
+            state = {
+                "protocol_version": PROTOCOL_VERSION,
+                "pid": os.getpid() + 999999,
+                "host": "127.0.0.1",
+                "port": 9999,
+                "token": "test-token",
+            }
+            state_file.write_text(json.dumps(state), encoding="utf-8")
+
+            with patch("wiki._client.socket.create_connection") as mock_create_conn, \
+                 patch("wiki._client._connect_send_recv") as mock_send_recv, \
+                 patch("wiki._client._spawn_server") as mock_spawn, \
+                 patch("wiki._client._is_stale") as mock_is_stale, \
+                 patch("wiki._client.SPAWN_TIMEOUT", 0.01):
+
+                mock_create_conn.return_value = MagicMock(close=MagicMock())
+                mock_send_recv.side_effect = OSError("connection failed")
+                mock_is_stale.return_value = True
+
+                try:
+                    _client._ensure_daemon(wiki_path)
+                    fail("_ensure_daemon stale-port-reuse: OSError on health check triggers respawn",
+                         Exception("expected WikiStartupError"))
+                except WikiStartupError:
+                    assert not state_file.exists(), "state file should be unlinked"
+                    assert mock_spawn.call_count == 1, f"spawn_server called {mock_spawn.call_count} times, expected 1"
+                    ok("_ensure_daemon stale-port-reuse: OSError on health check triggers respawn")
+        finally:
+            _safe_rmtree.safe_rmtree(tmp, allowed_root=tmp, ignore_errors=True)
+    except Exception as exc:
+        fail("_ensure_daemon stale-port-reuse: OSError on health check triggers respawn", exc)
+
+    # --- (i) _ensure_daemon non-ok-health-response: bad response triggers respawn ---
+    try:
+        from wiki import _client, FIELD_OK, FIELD_ERROR
+        tmp = Path(tempfile.mkdtemp())
+        try:
+            wiki_path = tmp / "wiki"
+            wiki_path.mkdir(parents=True, exist_ok=True)
+            (wiki_path / "tasks.json").write_text('{"_default": {}}', encoding="utf-8")
+
+            state_file = wiki_path / ".wiki-daemon.json"
+            state = {
+                "protocol_version": PROTOCOL_VERSION,
+                "pid": os.getpid() + 999999,
+                "host": "127.0.0.1",
+                "port": 9999,
+                "token": "test-token",
+            }
+            state_file.write_text(json.dumps(state), encoding="utf-8")
+
+            with patch("wiki._client.socket.create_connection") as mock_create_conn, \
+                 patch("wiki._client._connect_send_recv") as mock_send_recv, \
+                 patch("wiki._client._spawn_server") as mock_spawn, \
+                 patch("wiki._client._is_stale") as mock_is_stale, \
+                 patch("wiki._client.SPAWN_TIMEOUT", 0.01):
+
+                mock_create_conn.return_value = MagicMock(close=MagicMock())
+                mock_send_recv.return_value = {FIELD_OK: False, FIELD_ERROR: "test"}
+                mock_is_stale.return_value = True
+
+                try:
+                    _client._ensure_daemon(wiki_path)
+                    fail("_ensure_daemon non-ok-health-response: bad response triggers respawn",
+                         Exception("expected WikiStartupError"))
+                except WikiStartupError:
+                    assert not state_file.exists(), "state file should be unlinked"
+                    assert mock_spawn.call_count == 1, f"spawn_server called {mock_spawn.call_count} times, expected 1"
+                    ok("_ensure_daemon non-ok-health-response: bad response triggers respawn")
+        finally:
+            _safe_rmtree.safe_rmtree(tmp, allowed_root=tmp, ignore_errors=True)
+    except Exception as exc:
+        fail("_ensure_daemon non-ok-health-response: bad response triggers respawn", exc)
+
+    # --- (j) _ensure_daemon successful-health: returns tuple without respawn ---
+    try:
+        from wiki import _client, FIELD_OK
+        tmp = Path(tempfile.mkdtemp())
+        try:
+            wiki_path = tmp / "wiki"
+            wiki_path.mkdir(parents=True, exist_ok=True)
+            (wiki_path / "tasks.json").write_text('{"_default": {}}', encoding="utf-8")
+
+            state_file = wiki_path / ".wiki-daemon.json"
+            state = {
+                "protocol_version": PROTOCOL_VERSION,
+                "pid": os.getpid() + 999999,
+                "host": "127.0.0.1",
+                "port": 9999,
+                "token": "test-token",
+            }
+            state_file.write_text(json.dumps(state), encoding="utf-8")
+
+            with patch("wiki._client.socket.create_connection") as mock_create_conn, \
+                 patch("wiki._client._connect_send_recv") as mock_send_recv, \
+                 patch("wiki._client._spawn_server") as mock_spawn:
+
+                mock_create_conn.return_value = MagicMock(close=MagicMock())
+                mock_send_recv.return_value = {FIELD_OK: True}
+
+                result = _client._ensure_daemon(wiki_path)
+                assert result == ("127.0.0.1", 9999, "test-token"), f"unexpected result: {result}"
+                assert mock_spawn.call_count == 0, f"spawn_server should not be called, but was called {mock_spawn.call_count} times"
+                ok("_ensure_daemon successful-health: returns tuple without respawn")
+        finally:
+            _safe_rmtree.safe_rmtree(tmp, allowed_root=tmp, ignore_errors=True)
+    except Exception as exc:
+        fail("_ensure_daemon successful-health: returns tuple without respawn", exc)
 
     print("", file=sys.stderr)
     if failed:
