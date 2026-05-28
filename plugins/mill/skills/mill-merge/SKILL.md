@@ -180,11 +180,18 @@ PR dispatch lives in mill-finalize. This step is direct path only.
 ### 6. Archive tag
 
 ```bash
-git tag archive/<slug> "$CHILD_BRANCH"
-git push origin "archive/<slug>"
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
+from pathlib import Path
+import _paths, _archive_tag
+worktree = _paths.resolve_git_root()
+result = _archive_tag.create_or_resolve(worktree, '<slug>', '$CHILD_BRANCH')
+print(f'[mill-merge] archive-tag action: {result[\"action\"]} -- tag: {result[\"tag\"]}')
+if result['moved_aside_to']:
+    print(f'[mill-merge] prior tag preserved as {result[\"moved_aside_to\"]}')
+"
 ```
 
-Tags the cleanup-commit tip of the task branch before the branch is deleted. The tag is cheap, persistent, and lets any operator recover the full task history via `git checkout archive/<slug>`.
+Idempotently tags the cleanup-commit tip of the task branch. The helper handles the three conflict cases — same-SHA no-op, ancestor force-update, divergent move-aside — so re-running `/mill-merge` after a partial teardown never fails at this step. See `_archive_tag.py` for the resolution logic.
 
 ### 7. Home.md — mark [done]
 

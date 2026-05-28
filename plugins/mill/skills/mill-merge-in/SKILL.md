@@ -45,7 +45,7 @@ git merge <parent-branch>
 | Whitespace- / formatting-only differences | Accept current branch version. |
 | Package lock files (`package-lock.json`, `yarn.lock`, `pnpm-lock.yaml`, `poetry.lock`, `Cargo.lock`) | Accept current branch version, then regenerate via the project's install command (`npm install`, `yarn`, `pnpm install`, `poetry lock --no-update`, `cargo build`, etc.). Commit the regenerated file. |
 | Build artefacts (dist/, build/, *.min.*) | Accept current branch version. |
-| Real code conflicts | Enumerate unresolved files via `git diff --name-only --diff-filter=U`. Call: `PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-merge-in-subagent.py" --mode conflicts --files <file1> <file2> ...` On `{"status":"success"}`: run `git merge --continue` to create the merge commit. On `{"status":"stuck"}`: roll back → `git reset --hard "$CHK"` — preserve checkpoint, report to caller. |
+| Real code conflicts | Enumerate unresolved files via `git diff --name-only --diff-filter=U`. Call: `PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-merge-in-subagent.py" --mode conflicts --files <file1> <file2> ...` On `{"status":"success"}`: run `git -c core.editor=true merge --continue` to create the merge commit. `-c core.editor=true` scopes the editor suppression to this one command -- no env-var leak into subsequent operations. On `{"status":"stuck"}`: roll back → `git reset --hard "$CHK"` — preserve checkpoint, report to caller. |
 
 On `{"status":"stuck"}` from the sub-agent → roll back to checkpoint (`git reset --hard "$CHK"`), preserve the checkpoint, report to the caller.
 

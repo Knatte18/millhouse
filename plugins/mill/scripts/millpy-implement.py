@@ -58,6 +58,14 @@ def main(argv=None) -> int:
         print(str(e), file=sys.stderr)
         return 1
 
+    name_result = _subprocess_util.run(["git", "config", "--global", "--get", "user.name"], cwd=project_root)
+    email_result = _subprocess_util.run(["git", "config", "--global", "--get", "user.email"], cwd=project_root)
+    git_name = name_result.stdout.strip()
+    git_email = email_result.stdout.strip()
+    if not git_name or not git_email:
+        print("git config --global user.name and user.email must be set", file=sys.stderr)
+        return 1
+
     try:
         slug = _marker.slug_from_branch(git_root, wiki_path, cfg)
     except _marker.MarkerError as e:
@@ -137,9 +145,11 @@ def main(argv=None) -> int:
     if result.returncode != 0:
         print(result.stderr, file=sys.stderr)
         return 1
-    result = _subprocess_util.run(
-        ["git", "commit", "-m", f"mill-go: start batch {args.batch_name}"],
-        cwd=project_root,
+    result = _subprocess_util.git_commit(
+        project_root,
+        f"mill-go: start batch {args.batch_name}",
+        name=git_name,
+        email=git_email,
     )
     if result.returncode != 0:
         print(result.stderr, file=sys.stderr)
