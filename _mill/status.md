@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-plan-review-cli-and-validator
+phase: approved-status-phase-timestamp
 slug: mill-orchestration-loop-hardening
 branch: mill-orchestration-loop-hardening
 plan: _mill/plan
@@ -25,6 +25,7 @@ planned  '2026-05-28T22:05:34Z'
 implementing  '2026-05-28T22:10:21Z'
 approved-review-guard-overstep  '2026-05-28T22:13:46Z'
 approved-plan-review-cli-and-validator  '2026-05-28T22:17:46Z'
+approved-status-phase-timestamp  '2026-05-28T22:19:50Z'
 ```
 
 ## Batches
@@ -42,9 +43,10 @@ batches:
     start_sha: 5aa635a3aacc39e572ba014694a4c1bd13f7e15f
     commit_sha: d79bddf8e249e4e2aeec6d16d68d18595cfc7adb
   - name: status-phase-timestamp
-    state: running
+    state: approved
     implementer_session: deb2ed6d-ec47-441e-be6e-90cb0460eee8
     start_sha: 67916d52f7e9431242255fcd685f197b5a05623f
+    commit_sha: c8eb4b9a1913b2563b800f4d6975970d373c80d0
   - name: mill-start-skill
     state: pending
   - name: code-review-nit-envelope
