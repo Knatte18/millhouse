@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planning
+phase: plan-fix-r1
 slug: bg-worker-and-shell-edge-cases
 branch: bg-worker-and-shell-edge-cases
 plan: _mill/plan
@@ -18,4 +18,5 @@ discussing  '2026-05-28T20:51:36Z'
 discussion-fix-r1  '2026-05-28T21:11:34Z'
 discussed  '2026-05-28T21:11:52Z'
 planning  '2026-05-28T21:17:53Z'
+plan-fix-r1  '2026-05-28T21:21:17Z'
 ```

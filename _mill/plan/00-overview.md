@@ -3,7 +3,7 @@
 ```yaml
 task: Background worker + shell-metadata edge cases
 slug: bg-worker-and-shell-edge-cases
-approved: false
+approved: true
 started: 20260528-211634
 parent: main
 root: ""
