@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-wiki-daemon-fixes
 slug: wiki-v3-followups
 branch: hanf/wiki-v3-followups
 plan: _mill/plan
@@ -25,6 +25,7 @@ plan-fix-r2  '2026-05-27T09:22:32Z'
 plan-fix-r3  '2026-05-27T09:30:51Z'
 planned  '2026-05-27T09:31:13Z'
 implementing  '2026-05-27T10:09:45Z'
+approved-wiki-daemon-fixes  '2026-05-28T20:52:17Z'
 ```
 
 ## Batches
@@ -32,9 +33,10 @@ implementing  '2026-05-27T10:09:45Z'
 ```yaml
 batches:
   - name: wiki-daemon-fixes
-    state: running
+    state: approved
     implementer_session: f120a090-8a1e-4b7b-96b9-2d7b7ba2bb32
     start_sha: 376b25f0e82da802e912d4a4b86315786dec45bf
+    commit_sha: 812244844cf1d6560decddf61e5c287cf0b60de8
   - name: junction-fs-scan
     state: pending
   - name: millpy-fix-windows-lock
