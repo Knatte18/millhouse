@@ -285,7 +285,11 @@ def main() -> int:
             orphan_file = wiki_path / "proposal-old-slug.md"
             orphan_file.write_text("old proposal", encoding="utf-8")
 
-            with patch("wiki._server.commit_push") as mock_commit_push:
+            # WIKI_DAEMON_SKIP_GIT=1 (set by _test_helpers) prevents commit_push from
+            # being called. Clear it here so the mock can assert the call was made.
+            import os as _os
+            with patch("wiki._server.commit_push") as mock_commit_push, \
+                 patch.dict(_os.environ, {"WIKI_DAEMON_SKIP_GIT": ""}):
                 payload = {}
                 wiki_server._handle_rerender(payload)
 
