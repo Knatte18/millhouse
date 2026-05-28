@@ -12,6 +12,8 @@ llm:
 pipeline:
   auto_merge: true
   auto_report: true
+  max_cards_per_batch: 10
+  max_batch_context_tokens: 120000
 merge:
   model: sonnethigh
 junctions:
