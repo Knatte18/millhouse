@@ -140,6 +140,10 @@ def _test_prompt_stale_worktree_returns_abort_on_eof():
 
 def main() -> int:
     tests = [
+        _test_is_inplace_importable_and_callable,
+        _test_prompt_stale_worktree_importable_and_callable,
+        _test_is_inplace_returns_bool,
+        _test_prompt_stale_worktree_returns_str,
         _test_is_inplace_true_when_no_worktree_dir,
         _test_is_inplace_false_when_worktree_dir_exists_default,
         _test_is_inplace_false_when_worktree_dir_exists_override,
@@ -166,6 +170,55 @@ def main() -> int:
         return 1
     print(f"All {len(tests)} _inplace unit tests passed.")
     return 0
+
+
+# ---------------------------------------------------------------------------
+# Public-surface signature smoke tests (was test-mill-merge-inplace.py).
+# These catch API drift before behavioural tests run.
+# ---------------------------------------------------------------------------
+
+def _test_is_inplace_importable_and_callable():
+    import inspect
+    fn = getattr(_inplace, "is_inplace", None)
+    if fn is None:
+        raise AssertionError("_inplace has no is_inplace function")
+    params = list(inspect.signature(fn).parameters.keys())
+    if params != ["slug", "git_root", "cfg"]:
+        raise AssertionError(
+            f"is_inplace signature mismatch: expected ['slug', 'git_root', 'cfg'], got {params}"
+        )
+    print("PASS _inplace.is_inplace — importable with correct signature")
+
+
+def _test_prompt_stale_worktree_importable_and_callable():
+    import inspect
+    fn = getattr(_inplace, "prompt_stale_worktree", None)
+    if fn is None:
+        raise AssertionError("_inplace has no prompt_stale_worktree function")
+    params = list(inspect.signature(fn).parameters.keys())
+    if params != ["slug", "worktree_path"]:
+        raise AssertionError(
+            f"prompt_stale_worktree signature mismatch: expected ['slug', 'worktree_path'], got {params}"
+        )
+    print("PASS _inplace.prompt_stale_worktree — importable with correct signature")
+
+
+def _test_is_inplace_returns_bool():
+    import typing
+    hints = typing.get_type_hints(_inplace.is_inplace)
+    if hints.get("return") is not bool:
+        raise AssertionError(f"is_inplace return annotation expected bool, got {hints.get('return')!r}")
+    print("PASS _inplace.is_inplace — return annotation is bool")
+
+
+def _test_prompt_stale_worktree_returns_str():
+    import typing
+    hints = typing.get_type_hints(_inplace.prompt_stale_worktree)
+    if hints.get("return") is not str:
+        raise AssertionError(
+            f"prompt_stale_worktree return annotation expected str, got {hints.get('return')!r}"
+        )
+    print("PASS _inplace.prompt_stale_worktree — return annotation is str")
 
 
 if __name__ == "__main__":
