@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-reviewing
+phase: holistic-fixing
 slug: hub-relative-path-support
 branch: hanf/hub-relative-path-support
 plan: _mill/plan
@@ -27,6 +27,7 @@ approved-skill-md-docs  '2026-05-27T12:32:12Z'
 approved-review-paths-threading  '2026-05-28T10:32:14Z'
 approved-integration-test  '2026-05-28T10:38:20Z'
 holistic-reviewing  '2026-05-28T10:39:21Z'
+holistic-fixing  '2026-05-28T10:45:02Z'
 ```
 
 ## Batches
