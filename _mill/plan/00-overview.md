@@ -3,7 +3,7 @@
 ```yaml
 task: "CodeGuide support for .ipynb"
 slug: codeguide-jupyter-support
-approved: false
+approved: true
 started: 20260528-215859
 parent: main
 root: ""

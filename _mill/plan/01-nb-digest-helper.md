@@ -115,6 +115,11 @@ stderr=diagnostics, documented exit codes), and follows the
       e.g. `"R"` produces fences labeled `R` via `notebook_language`.
     - **Empty notebook** (`cells: []`) and **outputs-free notebook** produce a
       digest with no crash and no spurious `output(s) omitted` marker.
+    - **Raw cell:** a notebook containing a `raw` (or unknown) cell type produces
+      the `# [raw cell K]` marker followed by the cell's verbatim source.
+    - **Single-string `source`:** a cell whose `source` is a plain `str` (not a
+      `list[str]`) is handled by `cell_source_text` and its text appears
+      correctly in the digest (covers both `source` representations).
   - For CLI-level cases, invoke the script as a subprocess with
     `subprocess.run([sys.executable, str(HUB / "plugins" / "codeguide" /
     "scripts" / "nb_digest.py"), str(nb_path)], capture_output=True, text=True,
