@@ -34,7 +34,9 @@ batches:
     start_sha: feea020b8983798a3ca76216b171b2a62e03b007
     commit_sha: e8423d25d0f8d90311e28d1fb0cbe1b719deca12
   - name: codeguide-templates
-    state: pending
+    state: running
+    implementer_session: 8f648fe2-da12-4934-9500-4f57be48d5ae
+    start_sha: 73eb972d75ddb8733549d86dcf54c75ca7b8e8e2
   - name: codeguide-skills
     state: pending
 ```
