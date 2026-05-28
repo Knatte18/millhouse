@@ -278,7 +278,7 @@ def points_to(link_path: Path, target: Path) -> bool:
 
 def strip_all_in_worktree(worktree_path: Path, junctions_cfg: dict[str, str]) -> list[Path]:
     """
-    Unlink every junction declared in ``junctions_cfg`` inside ``worktree_path``.
+    Unlink every junction inside ``worktree_path`` discovered by a one-level FS scan.
 
     This is the mandatory safety prelude to any recursive removal of a
     worktree on Windows. ``rmdir /s`` (cmd.exe) and ``shutil.rmtree``
@@ -288,25 +288,30 @@ def strip_all_in_worktree(worktree_path: Path, junctions_cfg: dict[str, str]) ->
     (`.others -> <CONTAINER_PATH>/portals/`), or sibling worktrees
     (`.active -> <CONTAINER_PATH>/portals/<SLUG>/`).
 
-    Removes ALL junctions regardless of token scope — both hub-scope
-    (no ``<SLUG>``) and per-worktree (with ``<SLUG>``) entries are stripped,
-    because mill-spawn creates both inside every task worktree.
+    Rather than iterating a declared list of junctions from ``mill-config.yaml``,
+    this function scans the worktree root (one level only) for any symlink or
+    junction, including undeclared ones (e.g. legacy ``.active`` in old worktrees).
+    This catches junctions regardless of whether they appear in ``junctions_cfg``.
 
-    Idempotent: missing junctions are silently skipped via ``remove``.
+    Idempotent: missing paths and non-junction entries are silently skipped.
+    The ``junctions_cfg`` parameter is retained for backward compatibility;
+    it is no longer consulted.
 
     Args:
         worktree_path: Absolute path to the worktree being torn down.
-        junctions_cfg: The ``junctions:`` block from ``mill-config.yaml``,
-            as returned by ``read_junctions``. Caller passes this
-            in for separation of concerns; ``_junction`` does not depend on the wiki subpackage.
+        junctions_cfg: Deprecated; no longer read. Retained for caller compatibility.
 
     Returns:
-        List of link paths that were stripped (or attempted; ``remove`` is
-        idempotent on missing paths).
+        List of link paths that were stripped.
     """
     removed: list[Path] = []
-    for link_relative in junctions_cfg.keys():
-        abs_link = worktree_path / link_relative
-        remove(abs_link)
-        removed.append(abs_link)
+    try:
+        with os.scandir(str(worktree_path)) as it:
+            for entry in it:
+                ep = Path(entry.path)
+                if entry.is_symlink() or _is_junction_or_symlink(ep):
+                    remove(ep)
+                    removed.append(ep)
+    except FileNotFoundError:
+        return []
     return removed

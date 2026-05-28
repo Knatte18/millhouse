@@ -7,7 +7,9 @@ from __future__ import annotations
 
 import json
 import sys
+import tempfile
 from pathlib import Path
+from unittest.mock import patch, MagicMock
 
 HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
@@ -31,6 +33,8 @@ from wiki import (
     ERR_NOT_FOUND,
     ERR_PROTOCOL,
 )  # noqa: E402
+from wiki._server import WikiServer  # noqa: E402
+from _test_helpers import safe_temp_dir  # noqa: E402
 
 
 def main() -> int:
@@ -226,6 +230,78 @@ def main() -> int:
         ok("health check request")
     except Exception as exc:
         fail("health check request", exc)
+
+    # --- (18) Remove-missing-rerenders case ---
+    try:
+        with safe_temp_dir() as tmp:
+            wiki_path = tmp / "wiki"
+            wiki_path.mkdir(parents=True, exist_ok=True)
+            (wiki_path / "tasks.json").write_text('{"_default": {}}', encoding="utf-8")
+
+            wiki_server = WikiServer(wiki_path, idle_timeout=1)
+            wiki_server._store.upsert_task({"slug": "x", "title": "Task X"})
+
+            with patch.object(wiki_server, "_render_and_commit_all") as mock_render:
+                payload = {"id_or_slug": "nonexistent-slug"}
+                resp = wiki_server._handle_remove_task(payload)
+
+                assert mock_render.call_count == 1, f"_render_and_commit_all called {mock_render.call_count} times, expected 1"
+                assert resp[FIELD_OK] is False, f"response ok should be False, got {resp.get(FIELD_OK)}"
+                assert resp[FIELD_ERROR_TYPE] == ERR_NOT_FOUND, f"error_type should be not_found, got {resp.get(FIELD_ERROR_TYPE)}"
+                ok("Remove-missing-rerenders case")
+    except Exception as exc:
+        fail("Remove-missing-rerenders case", exc)
+
+    # --- (19) Remove-existing-rerenders case ---
+    try:
+        with safe_temp_dir() as tmp:
+            wiki_path = tmp / "wiki"
+            wiki_path.mkdir(parents=True, exist_ok=True)
+            (wiki_path / "tasks.json").write_text('{"_default": {}}', encoding="utf-8")
+
+            wiki_server = WikiServer(wiki_path, idle_timeout=1)
+            wiki_server._store.upsert_task({"slug": "x", "title": "Task X"})
+
+            with patch.object(wiki_server, "_render_and_commit_all") as mock_render:
+                payload = {"id_or_slug": "x"}
+                resp = wiki_server._handle_remove_task(payload)
+
+                assert mock_render.call_count == 1, f"_render_and_commit_all called {mock_render.call_count} times, expected 1"
+                assert resp[FIELD_OK] is True, f"response ok should be True, got {resp.get(FIELD_OK)}"
+                ok("Remove-existing-rerenders case")
+    except Exception as exc:
+        fail("Remove-existing-rerenders case", exc)
+
+    # --- (20) Orphan-deletion case ---
+    try:
+        with safe_temp_dir() as tmp:
+            wiki_path = tmp / "wiki"
+            wiki_path.mkdir(parents=True, exist_ok=True)
+            (wiki_path / "tasks.json").write_text('{"_default": {}}', encoding="utf-8")
+
+            wiki_server = WikiServer(wiki_path, idle_timeout=1)
+            wiki_server._store.upsert_task({"slug": "new-slug", "title": "New Task"})
+
+            orphan_file = wiki_path / "proposal-old-slug.md"
+            orphan_file.write_text("old proposal", encoding="utf-8")
+
+            # WIKI_DAEMON_SKIP_GIT=1 (set by _test_helpers) prevents commit_push from
+            # being called. Clear it here so the mock can assert the call was made.
+            import os as _os
+            with patch("wiki._server.commit_push") as mock_commit_push, \
+                 patch.dict(_os.environ, {"WIKI_DAEMON_SKIP_GIT": ""}):
+                payload = {}
+                wiki_server._handle_rerender(payload)
+
+                assert not orphan_file.exists(), "orphan file proposal-old-slug.md should be deleted"
+                assert mock_commit_push.call_count == 1, f"commit_push called {mock_commit_push.call_count} times, expected 1"
+
+                call_args = mock_commit_push.call_args[0]
+                commit_paths = call_args[1]
+                assert "proposal-old-slug.md" in commit_paths, f"proposal-old-slug.md not in commit_paths: {commit_paths}"
+                ok("Orphan-deletion case")
+    except Exception as exc:
+        fail("Orphan-deletion case", exc)
 
     print("", file=sys.stderr)
     if failed:

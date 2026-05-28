@@ -277,8 +277,12 @@ def main() -> int:
             safe_rmtree(scratch, allowed_root=scratch, ignore_errors=False)
         mock2.assert_called_once()
         call_kwargs2 = mock2.call_args[1]
-        assert call_kwargs2.get("ignore_errors") is False, \
-            f"expected ignore_errors=False, got {call_kwargs2}"
+        # ignore_errors=False path uses onexc=_onexc_chmod_retry (read-only retry)
+        # instead of ignore_errors=False, so the kwarg should not be set to True.
+        assert call_kwargs2.get("ignore_errors") is not True, \
+            f"expected ignore_errors not True, got {call_kwargs2}"
+        assert "onexc" in call_kwargs2, \
+            f"expected onexc handler on ignore_errors=False path, got {call_kwargs2}"
         print("PASS: ignore_errors passes through to shutil.rmtree")
 
     # --- non-container allowed_root does not crash ---

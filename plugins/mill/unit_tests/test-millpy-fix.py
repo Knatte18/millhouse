@@ -327,6 +327,73 @@ class TestMillpyFix(unittest.TestCase):
         self.assertEqual(data["status"], "stuck")
         self.assertEqual(data["stuck_type"], "transient")
 
+    def test_is_windows_lock_error_helper(self):
+        """Unit test for _is_windows_lock_error helper with various inputs."""
+        # Test message patterns
+        self.assertTrue(
+            millpy_fix._is_windows_lock_error(millpy_fix._llm_claude.LLMError("failed: WinError 32: file in use"))
+        )
+        self.assertTrue(
+            millpy_fix._is_windows_lock_error(millpy_fix._llm_claude.LLMError("the process cannot access the file"))
+        )
+        self.assertTrue(
+            millpy_fix._is_windows_lock_error(millpy_fix._llm_claude.LLMError("being used by another process"))
+        )
+
+        # Test non-matching message
+        self.assertFalse(
+            millpy_fix._is_windows_lock_error(millpy_fix._llm_claude.LLMError("timeout after 60s"))
+        )
+
+        # Test OSError __cause__ with winerror=32
+        e_with_cause_32 = millpy_fix._llm_claude.LLMError("file error")
+        cause_32 = OSError("Cannot access file")
+        cause_32.winerror = 32
+        e_with_cause_32.__cause__ = cause_32
+        self.assertTrue(millpy_fix._is_windows_lock_error(e_with_cause_32))
+
+        # Test OSError __cause__ with winerror != 32 (access denied)
+        e_with_cause_5 = millpy_fix._llm_claude.LLMError("file error")
+        cause_5 = OSError("Access denied")
+        cause_5.winerror = 5
+        e_with_cause_5.__cause__ = cause_5
+        self.assertFalse(millpy_fix._is_windows_lock_error(e_with_cause_5))
+
+    def test_windows_lock_error_routes_to_verify(self):
+        """Windows lock error from fixer -> stuck/verify JSON on stdout."""
+        with unittest.mock.patch.object(
+            millpy_fix._implementer_claude, "run",
+            side_effect=millpy_fix._llm_claude.LLMError("WinError 32: file in use"),
+        ):
+            rc, out = self._run_main([
+                "--scope", "batch",
+                "--batch-name", "test-batch",
+                "--review-file", str(self.review_file),
+            ])
+
+        self.assertEqual(rc, 1)
+        data = json.loads(out.strip().splitlines()[-1])
+        self.assertEqual(data["status"], "stuck")
+        self.assertEqual(data["stuck_type"], "verify")
+        self.assertEqual(data["reason"], "WinError 32: file in use")
+
+    def test_generic_llm_error_still_routes_to_transient(self):
+        """Generic LLMError (non-Windows-lock) -> stuck/transient JSON (regression test)."""
+        with unittest.mock.patch.object(
+            millpy_fix._implementer_claude, "run",
+            side_effect=millpy_fix._llm_claude.LLMError("timeout"),
+        ):
+            rc, out = self._run_main([
+                "--scope", "batch",
+                "--batch-name", "test-batch",
+                "--review-file", str(self.review_file),
+            ])
+
+        self.assertEqual(rc, 1)
+        data = json.loads(out.strip().splitlines()[-1])
+        self.assertEqual(data["status"], "stuck")
+        self.assertEqual(data["stuck_type"], "transient")
+
     def test_implementer_no_json_emits_stuck_logic(self):
         """Fixer output with no valid JSON -> stuck/logic JSON, exit 0."""
         with unittest.mock.patch.object(

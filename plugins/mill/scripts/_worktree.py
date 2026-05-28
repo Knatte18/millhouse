@@ -228,7 +228,14 @@ def remove_safe(
         return
 
     stderr = result.stderr.strip()
-    rmtree_fallback = "Filename too long" in stderr or "filename too long" in stderr or "is not a working tree" in stderr
+    _rmtree_fallback_patterns = (
+        "Filename too long",
+        "filename too long",
+        "is not a working tree",
+        "Directory not empty",   # Windows: nested .scratch/ test fixtures
+        "directory not empty",
+    )
+    rmtree_fallback = any(p in stderr for p in _rmtree_fallback_patterns)
     _lock_patterns = ("Permission denied", "is in use", "Access is denied", "Invalid argument")
     if any(p in stderr for p in _lock_patterns):
         raise WorktreeLockedError(f"worktree is locked (path={path}): {stderr!r}")

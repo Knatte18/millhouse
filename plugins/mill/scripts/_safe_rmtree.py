@@ -23,11 +23,27 @@ from __future__ import annotations
 
 import os
 import shutil
+import stat
 import sys
 from pathlib import Path
 
 import _junction
 import _paths
+
+
+def _onexc_chmod_retry(func, path, exc):
+    """shutil.rmtree onexc handler: strip read-only and retry (Python 3.12+).
+
+    Windows git pack files (.git/objects/pack/*.pack, .git/objects/*/*)
+    are written read-only by git. shutil.rmtree's default behavior is to
+    raise PermissionError on these. Clearing the read-only bit via
+    os.chmod(path, stat.S_IWRITE) and retrying the unlink/rmdir lets the
+    walk complete.
+    """
+    if not os.path.exists(path):
+        return
+    os.chmod(path, stat.S_IWRITE)
+    func(path)
 
 
 def _is_reparse_point(p: Path) -> bool:
@@ -134,9 +150,13 @@ def safe_rmtree(path: Path, *, allowed_root: Path, ignore_errors: bool = False) 
     # Step 7: strip junctions/symlinks recursively before rmtree.
     _walk_strip_reparse_points(original)
 
-    # Step 8: rmtree with defense-in-depth for ignore_errors.
+    # Step 8: rmtree with read-only retry and defense-in-depth for ignore_errors.
+    # Windows git pack files (.git/objects/...) are read-only; strip the bit and retry.
     try:
-        shutil.rmtree(str(original), ignore_errors=ignore_errors)
+        if ignore_errors:
+            shutil.rmtree(str(original), ignore_errors=True)
+        else:
+            shutil.rmtree(str(original), onexc=_onexc_chmod_retry)
     except OSError:
         if not ignore_errors:
             raise
