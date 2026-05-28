@@ -44,7 +44,9 @@ batches:
     start_sha: ba505618d1fb09454cfad3dbf3897b048a0e5b46
     commit_sha: f259f10b8da70ca3f6332fd523abf6b445b9376b
   - name: millpy-fix-windows-lock
-    state: pending
+    state: running
+    implementer_session: 45f3f7fe-999f-448f-bfd9-47837b6f6352
+    start_sha: 5802353382010380b23e3066a784bd901c5a8dd5
   - name: safe-rmtree-chmod-retry
     state: pending
 ```
