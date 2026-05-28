@@ -250,6 +250,7 @@ class ReviewResult:
     verdict: str                           # "APPROVE" | "REQUEST_CHANGES"
     reviews: list[dict] = field(default_factory=list)
     blocking_count: int = 0
+    nit_count: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -257,6 +258,7 @@ class ReviewResult:
             "round": self.round,
             "verdict": self.verdict,
             "blocking_count": self.blocking_count,
+            "nit_count": self.nit_count,
             "reviews": self.reviews,
         }
 
