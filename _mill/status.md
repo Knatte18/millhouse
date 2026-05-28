@@ -60,7 +60,9 @@ batches:
     start_sha: 152aff15cf2b7c169f643f565981e2fcb11fa225
     commit_sha: 5988fb3af1337543050f372ca7b1c42baf08a252
   - name: mill-plan-skill
-    state: pending
+    state: running
+    implementer_session: 5d9a0f0e-04c5-4511-87dd-a0127626dc16
+    start_sha: c75504431d1ec12e24d4d654c921ea3ecd8269ef
   - name: mill-go-skill
     state: pending
 ```
