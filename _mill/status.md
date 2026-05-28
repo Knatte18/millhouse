@@ -40,5 +40,7 @@ batches:
     start_sha: 73eb972d75ddb8733549d86dcf54c75ca7b8e8e2
     commit_sha: df6cd8ee93dcec838cddc0610b47f0b9d2db4667
   - name: codeguide-skills
-    state: pending
+    state: running
+    implementer_session: 9a92580c-a84e-455f-8022-70b61e2e43df
+    start_sha: ccf400f1a68056ae2793f444501589c690615408
 ```
