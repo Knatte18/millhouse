@@ -185,9 +185,7 @@ def main() -> int:
         outer_repo, hub, wiki, worktrees_dir = _setup_subproject_pair(container)
         print(f"[test-hub-relative-path] container: {container}", file=sys.stderr)
 
-        # === Step 1: Verify basic fixture structure ===
-        # Skip the mill-spawn dry-run test for now; focus on path resolution
-        # which is the core functionality being tested.
+        # === Step 1: Run mill-spawn dry-run and verify status path ===
         _assert(
             (outer_repo / "lib" / "example.py").exists(),
             f"example.py not found at {outer_repo / 'lib' / 'example.py'}",
@@ -199,6 +197,37 @@ def main() -> int:
         _assert(
             (wiki / "Home.md").exists(),
             f"Home.md not found at {wiki / 'Home.md'}",
+        )
+
+        # Run mill-spawn dry-run from hub subfolder.
+        spawn_result = _run_spawn(hub)
+        _assert(
+            spawn_result.returncode == 0,
+            f"mill-spawn dry-run failed with exit code {spawn_result.returncode}: {spawn_result.stderr}",
+        )
+
+        # Parse dry-run output to find the Status: line.
+        status_line = None
+        for line in spawn_result.stdout.split("\n"):
+            if "[DryRun] Status:" in line:
+                status_line = line
+                break
+        _assert(
+            status_line is not None,
+            f"No [DryRun] Status: line in spawn output:\n{spawn_result.stdout}",
+        )
+
+        # Extract path from "Status: /path/to/status.md" format.
+        status_path_str = status_line.split("[DryRun] Status:")[-1].strip()
+        status_path_obj = Path(status_path_str)
+
+        # Verify the status path is under the hub subfolder, not the worktree root.
+        # Expected: <worktrees_dir>/subproj-fixture/projects/sub/_mill/status.md
+        expected_hub_in_path = worktrees_dir / "subproj-fixture" / "projects" / "sub"
+        expected_status_path = expected_hub_in_path / "_mill" / "status.md"
+        _assert(
+            status_path_obj == expected_status_path,
+            f"Status path {status_path_obj} does not match expected {expected_status_path}",
         )
 
         # === Step 2: Load config and resolve_active_hub ===
