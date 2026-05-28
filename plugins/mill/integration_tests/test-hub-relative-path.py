@@ -157,6 +157,17 @@ def _setup_subproject_pair(container: Path) -> tuple[Path, Path, Path, Path]:
         "hub_relative_path: projects/sub\n",
         encoding="utf-8",
     )
+    # Also create the wiki junction at the hub subfolder so resolve_wiki_path can find it.
+    hub_millhouse = hub / ".millhouse"
+    hub_millhouse.mkdir(parents=True, exist_ok=True)
+    if sys.platform == "win32":
+        subprocess.run(
+            ["cmd", "/c", "mklink", "/J", str(hub_millhouse / "wiki"), str(wiki)],
+            check=True,
+            capture_output=True,
+        )
+    else:
+        os.symlink(str(wiki), str(hub_millhouse / "wiki"))
     _run(["git", "-C", str(outer_repo), "add", ".millhouse"], cwd=container)
     _run(["git", "-C", str(outer_repo), "commit", "-m", "add millhouse config"], cwd=container)
 
