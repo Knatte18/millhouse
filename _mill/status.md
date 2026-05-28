@@ -66,5 +66,7 @@ batches:
     start_sha: c75504431d1ec12e24d4d654c921ea3ecd8269ef
     commit_sha: ce805a24071303435dc5678eabd986d083ee01cd
   - name: mill-go-skill
-    state: pending
+    state: running
+    implementer_session: a1d181fc-0488-43f1-8b7d-641bd37e24d1
+    start_sha: 4ee81dc22b84365383ca51f49c52a024a225de6a
 ```
