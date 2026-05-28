@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-approved
+phase: done
 slug: codeguide-jupyter-support
 branch: codeguide-jupyter-support
 plan: _mill/plan
@@ -26,6 +26,7 @@ approved-codeguide-templates  '2026-05-28T22:15:35Z'
 approved-codeguide-skills  '2026-05-28T22:18:21Z'
 holistic-reviewing  '2026-05-28T22:18:45Z'
 holistic-approved  '2026-05-28T22:22:18Z'
+done  '2026-05-28T22:22:41Z'
 ```
 
 ## Batches
