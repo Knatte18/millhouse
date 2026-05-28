@@ -3,7 +3,7 @@
 ```yaml
 task: "mill-go / mill-plan loop hardening"
 slug: mill-orchestration-loop-hardening
-approved: false
+approved: true
 started: "20260528-214851"
 parent: main
 root: ""
