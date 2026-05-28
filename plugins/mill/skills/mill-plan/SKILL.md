@@ -15,8 +15,8 @@ You are an autonomous planner running on Opus. Your job is to turn `discussion.m
    `signature: _paths.resolve_git_root(start: Path | None = None) -> Path`
    `signature: _paths.resolve_wiki_path(git_toplevel: Path) -> Path`
 2. Read the slug via `_marker.slug_from_branch(git_root, wiki_path, cfg)`. On `MarkerError` → halt with "this worktree was not created by mill-spawn".
-3. Load config — deep-merge `<WIKI_PATH>/config.yaml` with `.millhouse/config.local.yaml`. Read `roles.plan-review.holistic.rounds` as `max_review_rounds`.
-   `signature: _config.load_config(wiki_path: Path, worktree_root: Path) -> dict`
+3. Load config — deep-merge `<hub_root>/mill-config.yaml` with `.millhouse/config.local.yaml`. Read `roles.plan-review.holistic.rounds` as `max_review_rounds`.
+   `signature: _config.load_config(hub_root: Path, worktree_root: Path) -> dict`
 
 **Path Setup.** Derive from config: `status_path = _paths.resolve_task_path(worktree_root, cfg['paths']['status_md'])`. `plan_dir` and `reviews_dir` will be derived during Phase: Plan (writes) or Phase: Plan Review (reads) as appropriate — see those phases for details.
 

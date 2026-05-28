@@ -294,7 +294,7 @@ def resolve_path(path_tmpl: str, slug: str) -> Path:
       - container via _paths.resolve_container_path(git_root)
       - hub_dir via _paths.resolve_hub_path() (Path.cwd().resolve() — the hub
         where mill scripts run; equals git_root for hub_relative_path == ".")
-      - cfg via load_config(_paths.resolve_wiki_path(git_root), hub_dir / ".millhouse")
+      - cfg via load_config(hub_dir, hub_dir / ".millhouse")
 
     cfg is sourced from the hub's own .millhouse/, not from git_root/.millhouse/,
     because mill-claim writes hub_relative_path only at the hub (it does not
@@ -309,7 +309,7 @@ def resolve_path(path_tmpl: str, slug: str) -> Path:
     git_root = _paths.resolve_git_root()
     container_path = _paths.resolve_container_path(git_root)
     hub_dir = _paths.resolve_hub_path()
-    cfg = load_config(git_root, hub_dir / ".millhouse")
+    cfg = load_config(hub_dir, hub_dir / ".millhouse")
     active_hub = _paths.resolve_active_hub(
         container_path, slug, cfg=cfg, git_root=git_root,
     )
@@ -557,6 +557,7 @@ def resolve_ref_paths(
     creates_union: set[str] | None = None,
     deletes_union: set[str] | None = None,
     wiki_root: Path | None = None,
+    git_root: Path | None = None,
     caller_label: str = "resolve_ref_paths",
 ) -> list[Path]:
     """Resolve batch-reference path strings to absolute ``Path``s.
@@ -565,6 +566,13 @@ def resolve_ref_paths(
     overview's frontmatter ``root:`` field. When present every raw path
     is resolved under ``project_root / root``; otherwise directly under
     ``project_root``.
+
+    Resolution order (first match wins):
+    1. wiki/ prefix routes through wiki_root (unchanged).
+    2. Candidate path under project_root (unchanged).
+    3. Candidate path under git_root (when provided).
+    4. creates_union/deletes_union suppression (unchanged).
+    5. Hard-fail ReviewError (unchanged).
 
     Keyword args:
         creates_union: Set of raw token strings extracted from ``Creates:``
@@ -578,6 +586,8 @@ def resolve_ref_paths(
             in ``deletes_union`` are resolved normally and included.
         wiki_root: When provided, raw paths starting with ``wiki/`` are
             resolved against ``wiki_root`` instead of ``project_root`` (#43).
+        git_root: When provided, paths not found under project_root are
+            tried under git_root as a fallback before suppression/hard-fail.
         caller_label: Prefix used in ``ReviewError`` messages. Defaults to
             the function name.
 
@@ -607,6 +617,12 @@ def resolve_ref_paths(
         if candidate.exists():
             resolved.append(candidate)
             continue
+        # Git-root fallback (only for non-wiki paths).
+        if not raw.startswith("wiki/") and git_root is not None:
+            gr_candidate = git_root / raw
+            if gr_candidate.exists():
+                resolved.append(gr_candidate)
+                continue
         # Suppression via creates_union or deletes_union.
         if raw in creates or raw in deletes:
             continue
@@ -624,16 +640,29 @@ def resolve_existing_paths(
     root: str | None,
     *,
     wiki_root: Path | None = None,
+    git_root: Path | None = None,
 ) -> list[Path]:
     """Resolve raw paths and return only those that already exist on disk.
 
     Mirrors resolve_ref_paths's standard-vs-wiki routing (wiki/ prefix
-    routes through wiki_root; otherwise project_root + root). Unlike
-    resolve_ref_paths, missing paths and routing failures are silently
-    dropped — no warning, no error, no creates_union check. Used to
-    expand the bulk with cross-batch ancestor creates that already
-    exist; missing creates are not an error here, they just aren't
+    routes through wiki_root; otherwise project_root + root) plus optional
+    git_root fallback. Unlike resolve_ref_paths, missing paths and routing
+    failures are silently dropped — no warning, no error, no creates_union
+    check. Used to expand the bulk with cross-batch ancestor creates that
+    already exist; missing creates are not an error here, they just aren't
     included.
+
+    Resolution order (first match wins):
+    1. wiki/ prefix routes through wiki_root (unchanged).
+    2. Candidate path under project_root (unchanged).
+    3. Candidate path under git_root (when provided).
+    4. Silent drop (no raise).
+
+    Keyword args:
+        wiki_root: When provided, raw paths starting with ``wiki/`` are
+            resolved against ``wiki_root`` instead of ``project_root``.
+        git_root: When provided, paths not found under project_root are
+            tried under git_root as a fallback before silent drop.
     """
     result: list[Path] = []
     for raw in raw_paths:
@@ -652,6 +681,13 @@ def resolve_existing_paths(
             candidate = project_root / raw
         if candidate.exists():
             result.append(candidate)
+            continue
+        # Git-root fallback (only for non-wiki paths).
+        if not raw.startswith("wiki/") and git_root is not None:
+            gr_candidate = git_root / raw
+            if gr_candidate.exists():
+                result.append(gr_candidate)
+                continue
     return result
 
 
@@ -1203,20 +1239,20 @@ def _deep_merge(base: dict, override: dict) -> dict:
     return result
 
 
-def load_config(repo_root: Path, mill_dir: Path) -> dict:
+def load_config(hub_root: Path, mill_dir: Path) -> dict:
     """Load mill config with overlay from plugin template, repo layer, and local layer.
 
     Merge order (lowest to highest precedence):
     1. Plugin template (mill-config.yaml)
-    2. Repo layer (mill-config.yaml at repo root)
+    2. Hub layer (mill-config.yaml at hub root)
     3. Local layer (mill_dir / config.local.yaml)
     4. Environment variable overrides
 
     Raises ReviewError if no sources are found (strict form for reviews).
 
     Args:
-        repo_root: Absolute path to the hub repository root.
-        mill_dir:  Absolute path to the .millhouse directory.
+        hub_root: Absolute path to the hub directory.
+        mill_dir: Absolute path to the .millhouse directory.
 
     Returns:
         Merged configuration dict.
@@ -1230,8 +1266,8 @@ def load_config(repo_root: Path, mill_dir: Path) -> dict:
         cfg = {}
     template_cfg = copy.deepcopy(cfg)
 
-    # 2. Resolve repo-layer sources
-    mill_cfg_path = _paths.resolve_mill_config_path(repo_root)
+    # 2. Resolve hub-layer sources
+    mill_cfg_path = _paths.resolve_mill_config_path(hub_root)
 
     # 3. Apply repo-layer merge logic
     found_repo_layer = False

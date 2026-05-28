@@ -53,7 +53,7 @@ On `{"status":"stuck"}` from the sub-agent → roll back to checkpoint (`git res
 
 Replay exactly the tests that ran during implementation. Call `_plan_dag.iter_batch_verifies(plan_dir)` where `plan_dir = Path("_mill/plan/").resolve()`. That yields `(batch_name, verify_cmd)` pairs in DAG order, skipping batches with `verify: null`.
 
-Before the loop, load config and read the allowlist: call `cfg = _config.load_config(wiki_path, git_root)`, then read `skip_list = (cfg.get("verify") or {}).get("skip_known_broken") or []`. `skip_list` is the empty list when the key is absent (the default for all existing hubs). Initialise counters `ran = 0` and `skipped = 0`.
+Before the loop, load config and read the allowlist: call `cfg = _config.load_config(_paths.resolve_hub_path(), git_root)`, then read `skip_list = (cfg.get("verify") or {}).get("skip_known_broken") or []`. `skip_list` is the empty list when the key is absent (the default for all existing hubs). Initialise counters `ran = 0` and `skipped = 0`.
 
 For each `(name, cmd)`:
 - Plugin-root substitution: compute `local_plugin_root = str(git_root / "plugins" / "mill")`; if `(git_root / "plugins" / "mill").is_dir()`, rewrite `cmd = cmd.replace("${PLUGIN_ROOT}", local_plugin_root)`. If `plugins/mill` does not exist in the current git root (non-millhouse repos), this is a no-op.

@@ -23,7 +23,7 @@ from wiki import _client as wiki
 def _build_rows(git_root: Path) -> list[dict]:
     wiki_path = _paths.resolve_wiki_path(git_root)
     container_path = _paths.resolve_container_path(git_root)
-    cfg = _config.load_config(git_root, git_root)
+    cfg = _config.load_config(_paths.resolve_hub_path(), _paths.resolve_hub_path())
     branch_prefix = cfg.get("spawn", {}).get("branch_prefix", "")
 
     # Home.md tasks

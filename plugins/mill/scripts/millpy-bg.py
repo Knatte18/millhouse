@@ -139,7 +139,7 @@ def _launcher_main(args: list[str]) -> int:
         import _marker
 
         wiki_path = _paths.resolve_wiki_path(Path(git_root))
-        cfg = _config.load_config(Path(git_root), Path(git_root))
+        cfg = _config.load_config(_paths.resolve_hub_path(), Path(git_root))
         _marker.slug_from_branch(Path(git_root), wiki_path, cfg)
     except _marker.MarkerError as exc:
         git_branch_result = _subprocess_util.run(

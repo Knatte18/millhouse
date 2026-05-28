@@ -191,7 +191,7 @@ def main() -> int:
         try:
             # alpha round 1
             _seed_approve(1)
-            r = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, batch_name="alpha")
+            r = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, batch_name="alpha")
             assert r.round == 1, f"expected round 1, got {r.round}"
             assert r.verdict == "APPROVE"
             fname = Path(r.reviews[0]["file"]).name
@@ -203,7 +203,7 @@ def main() -> int:
 
             # alpha round 2 (counter increments per-scope)
             _seed_approve(1)
-            r = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, batch_name="alpha")
+            r = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, batch_name="alpha")
             assert r.round == 2, f"expected round 2, got {r.round}"
             fname = Path(r.reviews[0]["file"]).name
             assert "code-review-alpha-r2" in fname, f"unexpected filename: {fname}"
@@ -211,7 +211,7 @@ def main() -> int:
 
             # beta round 1 (fresh per-scope counter, not r3)
             _seed_approve(1)
-            r = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, batch_name="beta")
+            r = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, batch_name="beta")
             assert r.round == 1, f"expected round 1 for beta, got {r.round}"
             fname = Path(r.reviews[0]["file"]).name
             assert "code-review-beta-r1" in fname, f"unexpected filename: {fname}"
@@ -219,7 +219,7 @@ def main() -> int:
 
             # holistic round 1 (independent of both per-batch counters)
             _seed_approve(1)
-            r = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, batch_name=None)
+            r = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, batch_name=None)
             assert r.round == 1, f"expected holistic round 1, got {r.round}"
             fname = Path(r.reviews[0]["file"]).name
             assert "code-review-r1" in fname, f"unexpected holistic filename: {fname}"
@@ -245,7 +245,7 @@ def main() -> int:
         os.chdir(project_root)
         try:
             _seed_approve(1)
-            code_run(cfg, SLUG, mill_dir, wiki_root, project_root, batch_name=None)
+            code_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, batch_name=None)
             prompts = stub.captured_prompts()
             assert prompts, "expected at least one captured prompt"
             first_prompt = prompts[0][0]
@@ -327,7 +327,7 @@ def main() -> int:
         os.chdir(project_root)
         _seed_approve(1)
         try:
-            r = code_run(cfg3, SLUG, mill_dir, wiki_root, project_root, batch_name="beta")
+            r = code_run(cfg3, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, batch_name="beta")
             assert r.verdict == "APPROVE", f"expected APPROVE, got {r.verdict}"
             print("PASS test3: creates_union suppresses missing cross-batch Reads ref (#60)")
         except AssertionError as exc:
@@ -391,7 +391,7 @@ def main() -> int:
         os.chdir(project_root)
         _seed_approve(1)
         try:
-            code_run(cfg4, SLUG, mill_dir, wiki_root, project_root, batch_name="alpha")
+            code_run(cfg4, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, batch_name="alpha")
             errors += 1
             print("FAIL test4: expected ReviewError for missing ref, none raised", file=sys.stderr)
         except ReviewError as exc:
@@ -425,7 +425,7 @@ def main() -> int:
             (APPROVE_TEXT,      "sid-2"),
         ])
         try:
-            r = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, batch_name="alpha")
+            r = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, batch_name="alpha")
             assert r.verdict == "APPROVE", f"expected APPROVE after retry, got {r.verdict}"
             prompts = stub.captured_prompts()
             assert len(prompts) == 2, f"expected 2 captured prompts, got {len(prompts)}"
@@ -462,7 +462,7 @@ def main() -> int:
             (NEED_CONTEXT_TEXT, "sid-2"),
         ])
         try:
-            r = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, batch_name="alpha")
+            r = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, batch_name="alpha")
             assert r.verdict == "NEED_CONTEXT", (
                 f"expected NEED_CONTEXT propagation, got {r.verdict}"
             )
@@ -535,14 +535,14 @@ def main() -> int:
         try:
             # Pre-populate 3 review files for batch "foo"
             _seed_approve(3)
-            code_run(cfg7, SLUG, mill_dir, wiki_root, project_root, batch_name="foo")
-            code_run(cfg7, SLUG, mill_dir, wiki_root, project_root, batch_name="foo")
-            code_run(cfg7, SLUG, mill_dir, wiki_root, project_root, batch_name="foo")
+            code_run(cfg7, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, batch_name="foo")
+            code_run(cfg7, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, batch_name="foo")
+            code_run(cfg7, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, batch_name="foo")
 
             # Round 4 without kwarg: cfg.rounds == 3 -> ReviewError
             try:
                 _seed_approve(1)
-                code_run(cfg7, SLUG, mill_dir, wiki_root, project_root, batch_name="foo")
+                code_run(cfg7, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, batch_name="foo")
                 errors += 1
                 print("FAIL test7: expected ReviewError for round 4 with cfg max=3", file=sys.stderr)
             except Exception as exc:
@@ -554,7 +554,7 @@ def main() -> int:
 
             # Round 4 with max_rounds=5 kwarg: should succeed
             _seed_approve(1)
-            r4 = code_run(cfg7, SLUG, mill_dir, wiki_root, project_root, batch_name="foo", max_rounds=5)
+            r4 = code_run(cfg7, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, batch_name="foo", max_rounds=5)
             assert r4.round == 4, f"expected round 4, got {r4.round}"
             fname4 = Path(r4.reviews[0]["file"]).name
             assert "code-review-foo-r4" in fname4, f"unexpected filename: {fname4}"
@@ -585,12 +585,12 @@ def main() -> int:
                 "```yaml\nverdict: REQUEST_CHANGES\n```\n"
             )
             stub.seed([(three_blockings, "sid-b1")])
-            r = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, batch_name="alpha")
+            r = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, batch_name="alpha")
             assert r.blocking_count == 3, f"expected blocking_count=3, got {r.blocking_count}"
             print("PASS test8a: three BLOCKING headings -> blocking_count == 3")
 
             stub.seed([(APPROVE_TEXT, "sid-b2")])
-            r2 = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, batch_name="beta")
+            r2 = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, batch_name="beta")
             assert r2.blocking_count == 0, f"expected blocking_count=0, got {r2.blocking_count}"
             print("PASS test8b: no BLOCKING headings -> blocking_count == 0")
 
@@ -616,7 +616,7 @@ def main() -> int:
         stub.run = _raise_boom
         stub.seed([])  # clear prompts log
         try:
-            r = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, batch_name="alpha")
+            r = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, batch_name="alpha")
             assert r.verdict == "ERROR", f"expected ERROR for all-ERROR run, got {r.verdict}"
             assert len(r.reviews) == 1
             rev = r.reviews[0]
@@ -649,7 +649,7 @@ def main() -> int:
         stub.run = _raise_boom
         stub.seed([])
         try:
-            r = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, batch_name=None)
+            r = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, batch_name=None)
             assert r.verdict == "ERROR", f"expected ERROR for all-ERROR run, got {r.verdict}"
             rev = r.reviews[0]
             assert rev["verdict"] == "ERROR"
@@ -685,7 +685,7 @@ def main() -> int:
         stub.seed([(NEED_CONTEXT_TEXT, "sid-1")])
         stub.run = _seq
         try:
-            r = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, batch_name="alpha")
+            r = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, batch_name="alpha")
             assert r.verdict == "ERROR", f"expected ERROR for all-ERROR run, got {r.verdict}"
             rev = r.reviews[0]
             assert rev["verdict"] == "ERROR"
@@ -759,7 +759,7 @@ def main() -> int:
         os.chdir(project_root)
         _seed_approve(1)
         try:
-            code_run(cfg12, SLUG, mill_dir, wiki_root, project_root, batch_name="alpha")
+            code_run(cfg12, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, batch_name="alpha")
             prompts = stub.captured_prompts()
             assert prompts, "expected at least one captured prompt"
             first_prompt = prompts[0][0]
@@ -790,7 +790,7 @@ def main() -> int:
         cfg["llm"]["holistic_timeout"] = 1800
         try:
             _seed_approve(1)
-            code_run(cfg, SLUG, mill_dir, wiki_root, project_root, batch_name="alpha")
+            code_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, batch_name="alpha")
             prompts = stub.captured_prompts()
             assert prompts, "expected at least one captured prompt"
             _, kwargs = prompts[0]
@@ -800,7 +800,7 @@ def main() -> int:
             print("PASS test13a: bulk_timeout=900 forwarded to reviewer for per-batch call")
 
             _seed_approve(1)
-            code_run(cfg, SLUG, mill_dir, wiki_root, project_root, batch_name=None)
+            code_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, batch_name=None)
             prompts = stub.captured_prompts()
             _, kwargs = prompts[0]
             assert kwargs["timeout"] == 1800, (
@@ -871,7 +871,7 @@ def main() -> int:
                 encoding="utf-8",
             )
             _seed_approve(1)
-            code_run(cfg, SLUG, mill_dir, wiki_root, project_root, batch_name="alpha")
+            code_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, batch_name="alpha")
             prompts = stub.captured_prompts()
             assert prompts, "expected at least one captured prompt"
             assert "--- DIFF:" in prompts[0][0], (
@@ -906,7 +906,7 @@ def main() -> int:
                 encoding="utf-8",
             )
             _seed_approve(1)
-            code_run(cfg, SLUG, mill_dir, wiki_root, project_root, batch_name="alpha")
+            code_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, batch_name="alpha")
             prompts = stub.captured_prompts()
             assert prompts, "expected at least one captured prompt"
             assert "--- DIFF:" not in prompts[0][0], (
@@ -971,7 +971,7 @@ def main() -> int:
                 encoding="utf-8",
             )
             _seed_approve(1)
-            code_run(cfg, SLUG, mill_dir, wiki_root, project_root, batch_name="alpha")
+            code_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, batch_name="alpha")
             prompts = stub.captured_prompts()
             assert prompts, "expected at least one captured prompt"
             assert "--- DIFF:" not in prompts[0][0], (
@@ -1001,7 +1001,7 @@ def main() -> int:
             stub.seed([
                 ("# Raw prose without yaml block\n\nCode looks good.", "sid-hol"),
             ])
-            r_hol = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, batch_name=None)
+            r_hol = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, batch_name=None)
             assert r_hol.verdict in ("ERROR", "REQUEST_CHANGES"), (
                 f"expected ERROR or REQUEST_CHANGES, got {r_hol.verdict}"
             )
@@ -1020,7 +1020,7 @@ def main() -> int:
             stub.seed([
                 ("# Raw prose\n\nBatch code OK.", "sid-batch"),
             ])
-            r_batch = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, batch_name="alpha")
+            r_batch = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, batch_name="alpha")
             assert r_batch.verdict in ("ERROR", "REQUEST_CHANGES"), (
                 f"expected ERROR or REQUEST_CHANGES for per-batch, got {r_batch.verdict}"
             )
@@ -1054,7 +1054,7 @@ def main() -> int:
         os.chdir(project_root)
         cfg["roles"]["code-review"]["holistic"]["rounds"] = 0
         try:
-            r = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, batch_name=None)
+            r = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, batch_name=None)
             assert r.verdict == "APPROVE", f"expected APPROVE for rounds=0, got {r.verdict}"
             assert r.round == 0, f"expected round=0, got {r.round}"
             assert r.blocking_count == 0, f"expected blocking_count=0, got {r.blocking_count}"
