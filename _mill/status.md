@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-wiki-daemon-fixes
+phase: approved-junction-fs-scan
 slug: wiki-v3-followups
 branch: hanf/wiki-v3-followups
 plan: _mill/plan
@@ -26,6 +26,7 @@ plan-fix-r3  '2026-05-27T09:30:51Z'
 planned  '2026-05-27T09:31:13Z'
 implementing  '2026-05-27T10:09:45Z'
 approved-wiki-daemon-fixes  '2026-05-28T20:52:17Z'
+approved-junction-fs-scan  '2026-05-28T21:06:25Z'
 ```
 
 ## Batches
@@ -38,9 +39,10 @@ batches:
     start_sha: 376b25f0e82da802e912d4a4b86315786dec45bf
     commit_sha: 812244844cf1d6560decddf61e5c287cf0b60de8
   - name: junction-fs-scan
-    state: running
+    state: approved
     implementer_session: ae3b7274-39c5-4ea4-bada-6580a01d7808
     start_sha: ba505618d1fb09454cfad3dbf3897b048a0e5b46
+    commit_sha: f259f10b8da70ca3f6332fd523abf6b445b9376b
   - name: millpy-fix-windows-lock
     state: pending
   - name: safe-rmtree-chmod-retry
