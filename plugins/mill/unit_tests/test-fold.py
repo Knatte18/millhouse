@@ -12,6 +12,10 @@ from unittest.mock import patch
 HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
+os.environ.setdefault("WIKI_DAEMON_IDLE_TIMEOUT", "1")
+os.environ.setdefault("WIKI_DAEMON_SKIP_GIT", "1")
+os.environ.setdefault("WIKI_DAEMON_INPROCESS", "1")
+
 import _safe_rmtree  # noqa: E402
 import _gh_issues  # noqa: E402
 from wiki import _client as wiki, LOCKED_FOLD_PHASES, WikiPushError  # noqa: E402
@@ -50,53 +54,66 @@ def _setup_tempfile_wiki(home_md_content: str, tasks: list[dict] = None) -> temp
     """
     td = tempfile.TemporaryDirectory()
     wiki_path = Path(td.name)
-    bare_path = wiki_path / "bare.git"
-
-    git_env = os.environ.copy()
-    git_env.update({
-        "GIT_AUTHOR_NAME": "Test",
-        "GIT_AUTHOR_EMAIL": "test@test.com",
-        "GIT_COMMITTER_NAME": "Test",
-        "GIT_COMMITTER_EMAIL": "test@test.com",
-    })
-
-    subprocess.run(["git", "init", "--bare", str(bare_path)], check=True, capture_output=True, env=git_env)
-    subprocess.run(["git", "init", str(wiki_path)], check=True, capture_output=True, env=git_env)
-    subprocess.run(["git", "-C", str(wiki_path), "config", "user.email", "test@test.com"], check=True, capture_output=True)
-    subprocess.run(["git", "-C", str(wiki_path), "config", "user.name", "Test"], check=True, capture_output=True)
-    subprocess.run(["git", "-C", str(wiki_path), "remote", "add", "origin", str(bare_path)], check=True, capture_output=True)
 
     (wiki_path / "Home.md").write_text(home_md_content, encoding="utf-8")
     (wiki_path / "_Sidebar.md").write_text("", encoding="utf-8")
 
-    subprocess.run(["git", "-C", str(wiki_path), "add", "--", "Home.md", "_Sidebar.md"], check=True, capture_output=True, env=git_env)
-    subprocess.run(["git", "-C", str(wiki_path), "commit", "-m", "init"], check=True, capture_output=True, env=git_env)
+    # Under WIKI_DAEMON_SKIP_GIT (default in this test file) the server never
+    # invokes git, so the git init/remote/commit/push dance below is dead
+    # weight — ~1 s per test on Windows just from subprocess spawn. Skip it.
+    # When SKIP_GIT is off, set up a real repo + bare origin so commit_push
+    # has somewhere to push to.
+    if os.environ.get("WIKI_DAEMON_SKIP_GIT") != "1":
+        bare_path = wiki_path / "bare.git"
+        git_env = os.environ.copy()
+        git_env.update({
+            "GIT_AUTHOR_NAME": "Test",
+            "GIT_AUTHOR_EMAIL": "test@test.com",
+            "GIT_COMMITTER_NAME": "Test",
+            "GIT_COMMITTER_EMAIL": "test@test.com",
+        })
+        subprocess.run(["git", "init", "--bare", str(bare_path)], check=True, capture_output=True, env=git_env)
+        subprocess.run(["git", "init", str(wiki_path)], check=True, capture_output=True, env=git_env)
+        subprocess.run(["git", "-C", str(wiki_path), "config", "user.email", "test@test.com"], check=True, capture_output=True)
+        subprocess.run(["git", "-C", str(wiki_path), "config", "user.name", "Test"], check=True, capture_output=True)
+        subprocess.run(["git", "-C", str(wiki_path), "remote", "add", "origin", str(bare_path)], check=True, capture_output=True)
+        subprocess.run(["git", "-C", str(wiki_path), "add", "--", "Home.md", "_Sidebar.md"], check=True, capture_output=True, env=git_env)
+        subprocess.run(["git", "-C", str(wiki_path), "commit", "-m", "init"], check=True, capture_output=True, env=git_env)
+        branch_res = subprocess.run(
+            ["git", "-C", str(wiki_path), "branch", "--show-current"],
+            check=True, capture_output=True, text=True, env=git_env,
+        )
+        branch_name = branch_res.stdout.strip() or "main"
+        subprocess.run(
+            ["git", "-C", str(wiki_path), "push", "--set-upstream", "origin", branch_name],
+            check=True, capture_output=True, env=git_env,
+        )
 
-    branch_res = subprocess.run(
-        ["git", "-C", str(wiki_path), "branch", "--show-current"],
-        check=True, capture_output=True, text=True, env=git_env,
-    )
-    branch_name = branch_res.stdout.strip() or "main"
-    subprocess.run(
-        ["git", "-C", str(wiki_path), "push", "--set-upstream", "origin", branch_name],
-        check=True, capture_output=True, env=git_env,
-    )
+    # Register an in-process server for this wiki_path so subsequent client ops
+    # don't pay the daemon subprocess spawn cost. Each test gets a fresh path
+    # so registrations don't collide.
+    wiki.use_inprocess(wiki_path)
 
     if tasks:
         for task in tasks:
             wiki.upsert_task(wiki_path, **task)
 
-    # Wrap cleanup to handle Windows file locking from daemon process
+    # Cleanup: unregister the in-process server (releases any file handles
+    # before tempdir removal), then remove the tempdir. ignore_errors fallback
+    # is kept in case a stale daemon from an earlier run holds locks.
     original_cleanup = td.cleanup
     def safe_cleanup():
         try:
+            wiki.stop_inprocess(wiki_path)
+        except Exception:
+            pass
+        try:
             original_cleanup()
         except (OSError, PermissionError):
-            # Daemon may still hold file locks on Windows; try _safe_rmtree.safe_rmtree with ignore_errors
             try:
                 _safe_rmtree.safe_rmtree(Path(td.name), allowed_root=Path(td.name), ignore_errors=True)
             except Exception:
-                pass  # Best effort cleanup; let OS clean up on exit
+                pass
 
     td.cleanup = safe_cleanup
     return td

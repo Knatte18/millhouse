@@ -41,15 +41,9 @@ def _container_form(tmp_path: Path) -> Path:
 
 def _make_active_marker(worktree_dir: Path, *, branch: str) -> None:
     """Create a real git repo checked out on branch (replaces old marker-write helper)."""
-    import subprocess
-    worktree_dir.mkdir(parents=True, exist_ok=True)
-    subprocess.run(["git", "init", str(worktree_dir)], capture_output=True)
-    subprocess.run(["git", "-C", str(worktree_dir), "config", "user.email", "test@test.com"], capture_output=True)
-    subprocess.run(["git", "-C", str(worktree_dir), "config", "user.name", "Test"], capture_output=True)
-    (worktree_dir / ".keep").write_text("", encoding="utf-8")
-    subprocess.run(["git", "-C", str(worktree_dir), "add", ".keep"], capture_output=True)
-    subprocess.run(["git", "-C", str(worktree_dir), "commit", "-m", "init"], capture_output=True)
-    subprocess.run(["git", "-C", str(worktree_dir), "checkout", "-b", branch], capture_output=True)
+    import _test_helpers  # noqa: E402
+    repo = _test_helpers.init_minimal_git_repo(worktree_dir, branch="main")
+    _test_helpers.checkout_new_branch(repo, branch)
 
 
 def _write_stub(mill_dir, hub_relative_path):
@@ -138,6 +132,65 @@ def test_resolve_task_path() -> None:
         assert got == root / "task" / "plan", f"case 7: got {got}"
         assert "[compat]" in buf.getvalue(), "case 7: expected [compat] in stderr"
     print("PASS resolve_task_path case 7: empty _mill/plan/ dir + task/plan/ present -> task/plan/, [compat] stderr")
+
+
+def test_status_path() -> None:
+    """Merged in from former test-paths-status.py."""
+    cfg = {"paths": {"status_md": "_mill/status.md"}}
+
+    # Case 1: file exists -> returns configured path, no [compat] in stderr
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "_mill").mkdir()
+        (root / "_mill" / "status.md").write_text("", encoding="utf-8")
+        buf = io.StringIO()
+        with contextlib.redirect_stderr(buf):
+            got = _paths.status_path(root, cfg)
+        assert got == root / "_mill" / "status.md", f"case 1: got {got}"
+        assert "[compat]" not in buf.getvalue(), "case 1: unexpected [compat] in stderr"
+    print("PASS status_path case 1: _mill/status.md exists -> configured path, no stderr")
+
+    # Case 2: _mill/status.md missing, task/status.md present -> compat fallback with [compat] in stderr
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "task").mkdir()
+        (root / "task" / "status.md").write_text("", encoding="utf-8")
+        buf = io.StringIO()
+        with contextlib.redirect_stderr(buf):
+            got = _paths.status_path(root, cfg)
+        assert got == root / "task" / "status.md", f"case 2: got {got}"
+        assert "[compat]" in buf.getvalue(), "case 2: expected [compat] in stderr"
+    print("PASS status_path case 2: _mill/ absent, task/status.md present -> task/ path, [compat] stderr")
+
+    # Case 3: neither file exists -> returns configured path, no [compat]
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        buf = io.StringIO()
+        with contextlib.redirect_stderr(buf):
+            got = _paths.status_path(root, cfg)
+        assert got == root / "_mill" / "status.md", f"case 3: got {got}"
+        assert "[compat]" not in buf.getvalue(), "case 3: unexpected [compat] in stderr"
+    print("PASS status_path case 3: neither file exists -> configured path, no stderr")
+
+    # Case 4: cfg has no 'paths' key -> KeyError naming paths.status_md
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        try:
+            _paths.status_path(root, {})
+            raise AssertionError("case 4: expected KeyError, got none")
+        except KeyError as exc:
+            assert "paths.status_md" in str(exc), f"case 4: KeyError message missing 'paths.status_md': {exc}"
+    print("PASS status_path case 4: cfg={} -> KeyError naming paths.status_md")
+
+    # Case 5: cfg has 'paths' but no 'status_md' key -> KeyError naming paths.status_md
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        try:
+            _paths.status_path(root, {"paths": {}})
+            raise AssertionError("case 5: expected KeyError, got none")
+        except KeyError as exc:
+            assert "paths.status_md" in str(exc), f"case 5: KeyError message missing 'paths.status_md': {exc}"
+    print("PASS status_path case 5: cfg={'paths': {}} -> KeyError naming paths.status_md")
 
 
 def main() -> int:
@@ -803,6 +856,7 @@ def main() -> int:
         print("PASS: resolve_wiki_path falls through (no exception) when git_toplevel.name != 'wiki'")
 
         test_resolve_task_path()
+        test_status_path()
 
         # Test resolve_git_root with start argument
         # Test 1: resolve_git_root(start) on a real git repo

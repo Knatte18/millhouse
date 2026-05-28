@@ -39,6 +39,75 @@ from wiki import (
 SPAWN_TIMEOUT: int = 10
 _SERVER_MODULE: str = "wiki._server"
 
+# Registry of in-process WikiServer instances, keyed by resolved wiki_path.
+# When a wiki_path is registered, all client ops route directly to the server's
+# handle_request method instead of spawning a subprocess and talking over TCP.
+# Intended for the unit test suite — production code never touches this map.
+_INPROCESS_SERVERS: dict[str, "object"] = {}
+
+
+def use_inprocess(wiki_path: Path) -> None:
+    """Register an in-process WikiServer for ``wiki_path``, bypassing the daemon.
+
+    After this call, every client op on this wiki_path is dispatched in the
+    same Python process — no subprocess spawn, no socket, no token. Same
+    semantics as the daemon path (writes tasks.json, renders files, commits
+    via git; honours WIKI_DAEMON_SKIP_PUSH to skip the push step).
+
+    Intended for unit tests. Production callers must not use this.
+
+    Idempotent: calling twice on the same path is a no-op.
+    """
+    from wiki._server import WikiServer
+
+    key = str(Path(wiki_path).resolve())
+    if key in _INPROCESS_SERVERS:
+        return
+    server = WikiServer(Path(wiki_path))
+    # Mirror the on_start side-effect (the only one is _ensure_gitignore).
+    server._ensure_gitignore()
+    _INPROCESS_SERVERS[key] = server
+
+
+def stop_inprocess(wiki_path: Path) -> None:
+    """Unregister the in-process server for ``wiki_path``.
+
+    Safe to call when no server is registered. After this call, subsequent
+    ops on this path fall back to the daemon TCP path.
+    """
+    key = str(Path(wiki_path).resolve())
+    server = _INPROCESS_SERVERS.pop(key, None)
+    if server is not None:
+        try:
+            server.on_stop()
+        except Exception:
+            pass
+
+
+def _inprocess_server(wiki_path: Path):
+    return _INPROCESS_SERVERS.get(str(Path(wiki_path).resolve()))
+
+
+def _dispatch(wiki_path: Path, op: str, payload: dict) -> dict:
+    """Route an op to either the in-process server or the daemon over TCP.
+
+    When ``WIKI_DAEMON_INPROCESS=1`` is set in the environment, an in-process
+    server is auto-registered on first dispatch for any wiki_path that does
+    not yet have one. Tests opt in by setting that env var in their helpers.
+    """
+    server = _inprocess_server(wiki_path)
+    if server is None and os.environ.get("WIKI_DAEMON_INPROCESS") == "1":
+        try:
+            use_inprocess(wiki_path)
+            server = _inprocess_server(wiki_path)
+        except Exception:
+            server = None
+    if server is not None:
+        return server.handle_request({FIELD_OP: op, "payload": payload})
+    host, port, token = _ensure_daemon(wiki_path)
+    req = {FIELD_OP: op, FIELD_TOKEN: token, "payload": payload}
+    return _connect_send_recv(host, port, req)
+
 
 def upsert_task(
     wiki_path: Path,
@@ -81,10 +150,7 @@ def upsert_task(
     if status is not None:
         payload["status"] = status
 
-    host, port, token = _ensure_daemon(wiki_path)
-    req = {FIELD_OP: OP_UPSERT_TASK, FIELD_TOKEN: token, "payload": payload}
-
-    resp = _connect_send_recv(host, port, req)
+    resp = _dispatch(wiki_path, OP_UPSERT_TASK, payload)
 
     if resp.get(FIELD_OK):
         return resp.get("task", {})
@@ -118,10 +184,7 @@ def upsert_tasks_batch(
     if message is not None:
         payload["message"] = message
 
-    host, port, token = _ensure_daemon(wiki_path)
-    req = {FIELD_OP: OP_UPSERT_TASKS_BATCH, FIELD_TOKEN: token, "payload": payload}
-
-    resp = _connect_send_recv(host, port, req)
+    resp = _dispatch(wiki_path, OP_UPSERT_TASKS_BATCH, payload)
 
     if resp.get(FIELD_OK):
         return
@@ -153,10 +216,7 @@ def set_phase(
     """
     payload = {"id_or_slug": id_or_slug, "phase": phase}
 
-    host, port, token = _ensure_daemon(wiki_path)
-    req = {FIELD_OP: OP_SET_PHASE, FIELD_TOKEN: token, "payload": payload}
-
-    resp = _connect_send_recv(host, port, req)
+    resp = _dispatch(wiki_path, OP_SET_PHASE, payload)
 
     if resp.get(FIELD_OK):
         return
@@ -188,10 +248,7 @@ def remove_task(
     """
     payload = {"id_or_slug": id_or_slug}
 
-    host, port, token = _ensure_daemon(wiki_path)
-    req = {FIELD_OP: OP_REMOVE_TASK, FIELD_TOKEN: token, "payload": payload}
-
-    resp = _connect_send_recv(host, port, req)
+    resp = _dispatch(wiki_path, OP_REMOVE_TASK, payload)
 
     if resp.get(FIELD_OK):
         return
@@ -224,10 +281,7 @@ def get_task(
     """
     payload = {"id_or_slug": id_or_slug}
 
-    host, port, token = _ensure_daemon(wiki_path)
-    req = {FIELD_OP: OP_GET_TASK, FIELD_TOKEN: token, "payload": payload}
-
-    resp = _connect_send_recv(host, port, req)
+    resp = _dispatch(wiki_path, OP_GET_TASK, payload)
 
     if resp.get(FIELD_OK):
         return resp.get("task")
@@ -248,12 +302,7 @@ def list_tasks_brief(wiki_path: Path) -> list[dict]:
         WikiProtocolError: Protocol or message error.
         WikiStartupError: Daemon failed to start.
     """
-    payload = {}
-
-    host, port, token = _ensure_daemon(wiki_path)
-    req = {FIELD_OP: OP_LIST_TASKS_BRIEF, FIELD_TOKEN: token, "payload": payload}
-
-    resp = _connect_send_recv(host, port, req)
+    resp = _dispatch(wiki_path, OP_LIST_TASKS_BRIEF, {})
 
     if resp.get(FIELD_OK):
         return resp.get("tasks", [])
@@ -274,12 +323,7 @@ def list_tasks_full(wiki_path: Path) -> list[dict]:
         WikiProtocolError: Protocol or message error.
         WikiStartupError: Daemon failed to start.
     """
-    payload = {}
-
-    host, port, token = _ensure_daemon(wiki_path)
-    req = {FIELD_OP: OP_LIST_TASKS_FULL, FIELD_TOKEN: token, "payload": payload}
-
-    resp = _connect_send_recv(host, port, req)
+    resp = _dispatch(wiki_path, OP_LIST_TASKS_FULL, {})
 
     if resp.get(FIELD_OK):
         return resp.get("tasks", [])
@@ -316,10 +360,7 @@ def merge_tasks(
         "set_phase": set_phase,
     }
 
-    host, port, token = _ensure_daemon(wiki_path)
-    req = {FIELD_OP: OP_MERGE_TASKS, FIELD_TOKEN: token, "payload": payload}
-
-    resp = _connect_send_recv(host, port, req)
+    resp = _dispatch(wiki_path, OP_MERGE_TASKS, payload)
 
     if resp.get(FIELD_OK):
         return resp.get("task", {})
@@ -344,10 +385,7 @@ def rerender(wiki_path: Path) -> None:
         WikiProtocolError: Protocol or message error.
         WikiStartupError: Daemon failed to start.
     """
-    host, port, token = _ensure_daemon(wiki_path)
-    req = {FIELD_OP: OP_RERENDER, FIELD_TOKEN: token, "payload": {}}
-
-    resp = _connect_send_recv(host, port, req)
+    resp = _dispatch(wiki_path, OP_RERENDER, {})
 
     if resp.get(FIELD_OK):
         return
@@ -394,30 +432,23 @@ def shutdown(wiki_path: Path) -> bool:
 
 
 def health_check(wiki_path: Path) -> bool:
-    """Check if daemon is alive and responding.
+    """Ensure the daemon is up and responding, spawning it if needed.
+
+    Semantically equivalent to every other client op: auto-spawns when the
+    state file is missing, stale, or the daemon is dead. Returns False only
+    when spawn itself fails (e.g. WikiStartupError) or the live daemon
+    rejects the health probe.
 
     Args:
         wiki_path: Path to wiki clone root.
 
     Returns:
-        True if daemon is alive, False otherwise.
+        True if the daemon is alive (possibly after a fresh spawn), False
+        if it could not be brought up.
     """
     try:
-        state_file = wiki_path / ".wiki-daemon.json"
-        if not state_file.exists():
-            return False
-
-        state = json.loads(state_file.read_text("utf-8"))
-        host = state.get("host", "127.0.0.1")
-        port = state.get("port", 0)
-        token = state.get("token", "")
-
-        if not all([host, port, token]):
-            return False
-
-        req = {FIELD_OP: OP_HEALTH, FIELD_TOKEN: token, "payload": {}}
-        _connect_send_recv(host, port, req)
-        return True
+        resp = _dispatch(wiki_path, OP_HEALTH, {})
+        return bool(resp.get(FIELD_OK))
     except Exception:
         return False
 

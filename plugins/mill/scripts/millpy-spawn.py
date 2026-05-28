@@ -107,8 +107,9 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     git_root = resolve_git_root()
+    hub = resolve_hub_path()
     wiki_path = resolve_wiki_path(git_root)
-    cfg = _load_config(git_root, resolve_hub_path())
+    cfg = _load_config(git_root, hub)
     hub_subpath = cfg.get("hub_relative_path", ".")
     spawn_cfg = cfg.get("spawn", {})
 
@@ -191,7 +192,7 @@ def main(argv: list[str] | None = None) -> int:
     # the parent clone's last run and (b) junctions that must be
     # recreated per-worktree.
     _worktree.copy_millhouse(
-        src=resolve_hub_path() / ".millhouse",
+        src=hub / ".millhouse",
         dst=dest_hub / ".millhouse",
         exclude={"wiki", "active"},
     )

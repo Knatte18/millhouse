@@ -189,6 +189,10 @@ def commit_push(
         wiki_path,
     )
 
+    # Test mode: stop after local commit; skip the network push.
+    if os.environ.get("WIKI_DAEMON_SKIP_PUSH") == "1":
+        return
+
     for attempt in range(2):
         push = _run(
             ["git", "-C", str(wiki_path), "push"],
