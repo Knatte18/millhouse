@@ -54,7 +54,9 @@ batches:
     start_sha: 48e94f0f453b754654bbe6a0c7f8ca739613efdb
     commit_sha: 99d70267cbd867a5ca94f518ac286a39329f0716
   - name: code-review-nit-envelope
-    state: pending
+    state: running
+    implementer_session: 7755e23f-c16d-4ecb-b1f0-34999a41a133
+    start_sha: 152aff15cf2b7c169f643f565981e2fcb11fa225
   - name: mill-plan-skill
     state: pending
   - name: mill-go-skill
