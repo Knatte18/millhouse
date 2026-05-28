@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-mill-start-skill
+phase: approved-code-review-nit-envelope
 slug: mill-orchestration-loop-hardening
 branch: mill-orchestration-loop-hardening
 plan: _mill/plan
@@ -27,6 +27,7 @@ approved-review-guard-overstep  '2026-05-28T22:13:46Z'
 approved-plan-review-cli-and-validator  '2026-05-28T22:17:46Z'
 approved-status-phase-timestamp  '2026-05-28T22:19:50Z'
 approved-mill-start-skill  '2026-05-28T22:21:23Z'
+approved-code-review-nit-envelope  '2026-05-28T22:26:30Z'
 ```
 
 ## Batches
@@ -54,9 +55,10 @@ batches:
     start_sha: 48e94f0f453b754654bbe6a0c7f8ca739613efdb
     commit_sha: 99d70267cbd867a5ca94f518ac286a39329f0716
   - name: code-review-nit-envelope
-    state: running
+    state: approved
     implementer_session: 7755e23f-c16d-4ecb-b1f0-34999a41a133
     start_sha: 152aff15cf2b7c169f643f565981e2fcb11fa225
+    commit_sha: 5988fb3af1337543050f372ca7b1c42baf08a252
   - name: mill-plan-skill
     state: pending
   - name: mill-go-skill
