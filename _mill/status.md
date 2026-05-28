@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-skill-md-docs
+phase: approved-review-paths-threading
 slug: hub-relative-path-support
 branch: hanf/hub-relative-path-support
 plan: _mill/plan
@@ -24,6 +24,7 @@ implementing  '2026-05-27T09:30:26Z'
 approved-helper-api  '2026-05-27T12:17:24Z'
 approved-config-callsite-fixes  '2026-05-27T12:21:48Z'
 approved-skill-md-docs  '2026-05-27T12:32:12Z'
+approved-review-paths-threading  '2026-05-28T10:32:14Z'
 ```
 
 ## Batches
@@ -43,9 +44,10 @@ batches:
     implementer_session: 4edc6554-897b-46b2-871a-e1e58c77c50d
     start_sha: 3fbedc992223be23020df788941bd77b75c4741f
   - name: review-paths-threading
-    state: running
+    state: approved
     implementer_session: f1d65bda-c26d-4d20-856a-a161170d4da1
     start_sha: 5aabbf207c1149ea36c5695c263f9a71ba9efd04
+    commit_sha: 01f71bc585d628ccfcfd58921228639a98928659
   - name: integration-test
     state: pending
 ```

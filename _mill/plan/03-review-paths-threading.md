@@ -5,7 +5,7 @@ task: "Sub-project repo (hub_relative_path) support"
 batch: "review-paths-threading"
 number: 3
 cards: 2
-verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py
+verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/test-review-common.py && PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/test-review-code-flow.py && PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/test-review-plan-flow.py && PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/test-review-cli.py
 depends-on: [2]
 ```
 
