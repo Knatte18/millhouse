@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-codeguide-templates
+phase: approved-codeguide-skills
 slug: codeguide-jupyter-support
 branch: codeguide-jupyter-support
 plan: _mill/plan
@@ -23,6 +23,7 @@ planned  '2026-05-28T22:04:48Z'
 implementing  '2026-05-28T22:10:02Z'
 approved-nb-digest-helper  '2026-05-28T22:13:18Z'
 approved-codeguide-templates  '2026-05-28T22:15:35Z'
+approved-codeguide-skills  '2026-05-28T22:18:21Z'
 ```
 
 ## Batches
@@ -40,7 +41,8 @@ batches:
     start_sha: 73eb972d75ddb8733549d86dcf54c75ca7b8e8e2
     commit_sha: df6cd8ee93dcec838cddc0610b47f0b9d2db4667
   - name: codeguide-skills
-    state: running
+    state: approved
     implementer_session: 9a92580c-a84e-455f-8022-70b61e2e43df
     start_sha: ccf400f1a68056ae2793f444501589c690615408
+    commit_sha: 4dcddf171402e837e8e25c57b223073e930b63d9
 ```
