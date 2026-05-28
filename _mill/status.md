@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-fixing
+phase: holistic-reviewing
 slug: wiki-v3-followups
 branch: hanf/wiki-v3-followups
 plan: _mill/plan
@@ -31,6 +31,7 @@ approved-millpy-fix-windows-lock  '2026-05-28T21:12:47Z'
 approved-safe-rmtree-chmod-retry  '2026-05-28T21:30:45Z'
 holistic-reviewing  '2026-05-28T21:30:57Z'
 holistic-fixing  '2026-05-28T21:35:18Z'
+holistic-reviewing  '2026-05-28T22:14:22Z'
 ```
 
 ## Batches
