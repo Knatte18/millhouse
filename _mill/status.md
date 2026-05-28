@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-integration-test
+phase: holistic-reviewing
 slug: hub-relative-path-support
 branch: hanf/hub-relative-path-support
 plan: _mill/plan
@@ -26,6 +26,7 @@ approved-config-callsite-fixes  '2026-05-27T12:21:48Z'
 approved-skill-md-docs  '2026-05-27T12:32:12Z'
 approved-review-paths-threading  '2026-05-28T10:32:14Z'
 approved-integration-test  '2026-05-28T10:38:20Z'
+holistic-reviewing  '2026-05-28T10:39:21Z'
 ```
 
 ## Batches
