@@ -383,6 +383,31 @@ def main() -> int:
     except Exception as exc:
         failures.append(f"FAIL (o) worker-FileNotFoundError ({type(exc).__name__}): {exc}")
 
+    # (p) worker KeyboardInterrupt writes EXIT -1 via finally (re-raises after finally)
+    try:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = Path(tmpdir) / "test-keyboard.log"
+            try:
+                with unittest.mock.patch("subprocess.run", side_effect=KeyboardInterrupt()):
+                    ret = _worker_main(["--log", str(log_path), "--", "fake-cmd"])
+            except KeyboardInterrupt:
+                # Worker re-raises BaseException after finally completes
+                pass
+            assert log_path.exists(), "log file not created"
+            log_text = log_path.read_text(encoding="utf-8")
+            exit_lines = [ln for ln in log_text.splitlines() if "[mill-bg] EXIT" in ln]
+            assert len(exit_lines) == 1, (
+                f"expected exactly one EXIT line, got {len(exit_lines)}: {exit_lines}"
+            )
+            assert exit_lines[0] == "[mill-bg] EXIT -1", (
+                f"expected EXIT -1, got: {exit_lines[0]!r}"
+            )
+        print("PASS (p): worker KeyboardInterrupt -> EXIT -1 written via finally, then re-raised")
+    except AssertionError as exc:
+        failures.append(f"FAIL (p) worker-KeyboardInterrupt: {exc}")
+    except Exception as exc:
+        failures.append(f"FAIL (p) worker-KeyboardInterrupt ({type(exc).__name__}): {exc}")
+
     if failures:
         for msg in failures:
             print(msg, file=sys.stderr)

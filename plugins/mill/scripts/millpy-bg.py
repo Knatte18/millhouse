@@ -51,7 +51,7 @@ if "--_worker" in sys.argv:
         if log_path is None:
             print("mill-bg worker: missing --log", file=sys.stderr)
             return 1
-        exit_written = False
+        exit_code = -1
         try:
             with open(log_path, "w", encoding="utf-8", buffering=1) as log_f:
                 log_f.write(
@@ -64,9 +64,7 @@ if "--_worker" in sys.argv:
                     stderr=subprocess.STDOUT,
                     creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
                 )
-                log_f.write(f"\n[mill-bg] EXIT {result.returncode}\n")
-                log_f.flush()
-                exit_written = True
+                exit_code = result.returncode
             return 0
         except Exception as exc:
             try:
@@ -75,14 +73,15 @@ if "--_worker" in sys.argv:
                     log_f.flush()
             except Exception:
                 print(f"[mill-bg] WORKER ERROR {exc!r}", file=sys.stderr)
-            if not exit_written:
-                try:
-                    with open(log_path, "a", encoding="utf-8") as _lf:
-                        _lf.write("[mill-bg] EXIT -1\n")
-                        _lf.flush()
-                except Exception:
-                    pass
+            exit_code = -1
             return 1
+        finally:
+            try:
+                with open(log_path, "a", encoding="utf-8") as log_f:
+                    log_f.write(f"[mill-bg] EXIT {exit_code}\n")
+                    log_f.flush()
+            except Exception:
+                pass
 
     def main(argv: list[str] | None = None) -> int:
         args = argv if argv is not None else sys.argv[1:]
@@ -194,10 +193,6 @@ def _launcher_main(args: list[str]) -> int:
     # PID is inside the log file as [mill-bg] WORKER PID=... sentinel.
     print(f"pid={proc.pid} log={log_path}")
     return 0
-
-
-def _worker_main(args: list[str]) -> int:
-    raise RuntimeError("_worker_main is only available in worker mode")
 
 
 def main(argv: list[str] | None = None) -> int:

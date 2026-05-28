@@ -11,6 +11,7 @@ import sys
 import tempfile
 import time
 import unittest
+import unittest.mock
 from pathlib import Path
 
 HUB = Path(__file__).resolve().parent.parent.parent.parent
@@ -100,6 +101,37 @@ class TestBgLiveness(unittest.TestCase):
             alive, pid = _bg.is_bg_worker_alive(log_path)
             self.assertTrue(alive)
             self.assertEqual(pid, current_pid)
+
+    def test_log_oserror_fallback_to_mtime(self) -> None:
+        """Log with os.kill raising OSError falls back to mtime staleness check."""
+        with tempfile.TemporaryDirectory() as tmp_str:
+            log_path = Path(tmp_str) / "test.log"
+            pid_value = 99999999
+            log_path.write_text(
+                f"[mill-bg] WORKER PID={pid_value} START 2026-05-17T15:00:00Z\n"
+                "some output\n",
+                encoding="utf-8",
+            )
+            # Monkeypatch os.kill to raise OSError (WinError 87 / EINVAL shape)
+            with unittest.mock.patch.object(_bg.os, "kill", side_effect=OSError(22, "Invalid parameter")):
+                # Test case (a): fresh mtime -> (True, pid)
+                with self.assertLogs(_bg.__name__, level="DEBUG") as cm:
+                    alive, pid = _bg.is_bg_worker_alive(log_path)
+                    self.assertTrue(alive)
+                    self.assertEqual(pid, pid_value)
+                # Verify debug breadcrumb was emitted
+                self.assertEqual(len(cm.output), 1)
+                self.assertIn("is_bg_worker_alive", cm.output[0])
+                self.assertIn("os.kill", cm.output[0])
+                self.assertIn("falling back to log-mtime staleness", cm.output[0])
+
+            # Test case (b): stale mtime -> (False, pid)
+            with unittest.mock.patch.object(_bg.os, "kill", side_effect=OSError(22, "Invalid parameter")):
+                old_ts = time.time() - (_bg._STALE_LOG_SECONDS + 60)
+                os.utime(log_path, (old_ts, old_ts))
+                alive, pid = _bg.is_bg_worker_alive(log_path)
+                self.assertFalse(alive)
+                self.assertEqual(pid, pid_value)
 
 
 if __name__ == "__main__":

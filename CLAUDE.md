@@ -5,6 +5,10 @@ repo: millhouse (v2 rewrite)
 scope: this file is read on session start; keep it short
 ```
 
+## Environment
+
+The harness reports `Shell: PowerShell` environment metadata, but the Bash tool always uses a POSIX shell regardless. Emit POSIX syntax in Bash tool calls (`$null` no -- use `2>/dev/null`, `[ -f x ]`, `for x in ...`), and reserve PowerShell syntax for the PowerShell tool.
+
 ## Project shape
 
 `mill-v2` — plugin-based task/review/orchestration system. Wiki (sibling clone) owns the task index. Working state lives in `_mill/` on the task branch.
