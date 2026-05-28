@@ -435,6 +435,7 @@ def run(
                     # Second NEED_CONTEXT propagates to caller untouched.
 
             blocking_count = parse_blocking_count(raw, severity="BLOCKING")
+            nit_count = parse_blocking_count(raw, severity="NIT")
             path = write_review_file(
                 reviews_dir,
                 "code",
@@ -456,6 +457,7 @@ def run(
                 round=round_n,
                 verdict=_aggregate_top_verdict(_reviews, verdict),
                 blocking_count=blocking_count,
+                nit_count=nit_count,
                 reviews=_reviews,
             )
         except ReviewError as exc:
