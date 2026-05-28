@@ -41,13 +41,12 @@ Operator-driven entries keep the existing bare format (`- **Q:** … **A:** …`
 
 ## Entry
 
-1. Resolve the wiki path via `_paths.resolve_wiki_path(_paths.resolve_git_root())` and call `_wiki.sync_pull(wiki_path, slug="mill-start")`.
-   `signature: _wiki.sync_pull(wiki_path: Path, *, slug: str) -> None`
+1. Resolve the wiki path via `_paths.resolve_wiki_path(_paths.resolve_git_root())`.
    `signature: _paths.resolve_git_root(start: Path | None = None) -> Path`
    `signature: _paths.resolve_wiki_path(git_toplevel: Path) -> Path`
 2. Read the slug via `_marker.slug_from_branch(git_root, wiki_path, cfg)`. On `MarkerError`, halt and tell the user this worktree was not created by `mill-spawn`.
-3. Load config — deep-merge `<WIKI_PATH>/config.yaml` (shared) with `.millhouse/config.local.yaml` (gitignored overlay). Read `roles.discussion-review.holistic.rounds` as `max_review_rounds`.
-   `signature: _config.load_config(wiki_path: Path, worktree_root: Path) -> dict`
+3. Load config — deep-merge `<hub_root>/mill-config.yaml` (shared hub overlay) with `.millhouse/config.local.yaml` (gitignored worktree overlay). Read `roles.discussion-review.holistic.rounds` as `max_review_rounds`.
+   `signature: _config.load_config(hub_root: Path, worktree_root: Path) -> dict`
 
 **Path Setup.** `cfg` is already loaded. Derive: `status_path = _paths.resolve_task_path(worktree_root, cfg['paths']['status_md'])`. For new discussion file creation (Phase: Discussion File), use `discussion_path = worktree_root / cfg['paths']['discussion_file']` (config-canonical; no compat fallback on write). For reviews: `reviews_dir = worktree_root / cfg['paths']['reviews_dir']`. Use these variables for all subsequent path references.
 
@@ -164,6 +163,6 @@ Report: **"Discussion complete. Run `/mill-plan` next to start autonomous plan w
 
 ## Board discipline
 
-- Home.md writes go through `_wiki.write_commit_push` (which acquires the wiki lock internally). For multi-operation windows, use `with _wiki.wiki_lock(wiki_path, slug):`.
+- Wiki mutations go through `_client` calls (`set_phase`, `upsert_task`, `merge_tasks`); the daemon serializes all writes and pushes automatically. For multi-step atomic operations use `_client.merge_tasks`.
 - Task-state writes (`status_path`, `discussion_path`) are committed on the task branch via `git add` + `git commit`, then pushed to remote. They never go through the wiki.
 - Phase transitions are recorded via `_status.append_phase`. Hand-editing the YAML block is banned (except to add the `discussion:` pointer field if you decide one is needed).

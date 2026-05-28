@@ -15,6 +15,8 @@ Replace `NN` in `number: NN` with the integer from the batch filename
 
 Non-null verify: commands MUST start with "PYTHONPATH= " (empty value, single space) so the test subprocess does not inherit the cache PYTHONPATH. The validator check verify-not-isolated enforces this.
 
+verify: scope MUST match what the batch touches — usually a single test file or a `--only` list (e.g. `verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-fold.py test-marker.py`). Unbounded `run-all.py` runs the entire suite (multiple minutes); use it only when the batch genuinely touches a cross-cutting helper and justify the scope choice in the ## Batch Tests section.
+
 Strip this HTML comment before writing.
 -->
 # Batch: <BATCH_NAME>

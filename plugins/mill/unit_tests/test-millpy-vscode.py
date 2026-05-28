@@ -14,6 +14,9 @@ from unittest.mock import MagicMock, call, patch
 
 HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
+sys.path.insert(0, str(HUB / "plugins" / "mill" / "unit_tests"))
+
+import _test_helpers  # noqa: E402
 
 # Load millpy-vscode.py via importlib (hyphenated name).
 _SCRIPT = HUB / "plugins" / "mill" / "scripts" / "millpy-vscode.py"
@@ -24,27 +27,13 @@ _spec.loader.exec_module(mill_vscode)
 
 def _make_git_repo(tmp: Path) -> Path:
     """Initialise a minimal git repo under ``tmp`` and return its path."""
-    subprocess.run(
-        ["git", "init", str(tmp)], check=True, capture_output=True,
-    )
-    subprocess.run(
-        ["git", "-C", str(tmp), "commit", "--allow-empty", "-m", "init"],
-        check=True, capture_output=True,
-    )
+    _test_helpers.init_minimal_git_repo(tmp, branch="main")
     return tmp
 
 
 def _write_active_marker(worktree: Path, slug: str, title: str) -> None:
     """Init a git repo on branch <slug> and register the task in wiki/Home.md."""
-    subprocess.run(["git", "init", str(worktree)], check=True, capture_output=True)
-    subprocess.run(
-        ["git", "-C", str(worktree), "commit", "--allow-empty", "-m", "init"],
-        check=True, capture_output=True,
-    )
-    subprocess.run(
-        ["git", "-C", str(worktree), "branch", "-M", slug],
-        check=True, capture_output=True,
-    )
+    _test_helpers.init_minimal_git_repo(worktree, branch=slug)
     wiki_dir = worktree.parent.parent / "wiki"
     wiki_dir.mkdir(parents=True, exist_ok=True)
     home_md = wiki_dir / "Home.md"

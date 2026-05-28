@@ -29,7 +29,7 @@ Use the appropriate skill based on the current activity:
 
 ## Wiki mutations
 
-Wiki edits go through `_wiki.write_commit_push(wiki_path, paths, msg, slug=...)` (which acquires the wiki lock internally). For multi-operation read-modify-write windows (e.g. read Home.md → flip a phase → write back), wrap the whole sequence in `with _wiki.wiki_lock(wiki_path, slug):` — the inner `write_commit_push`'s lock acquire becomes a no-op via the held-lock counter. Never edit wiki files via raw `Edit` / `Write` — that bypasses the commit + push and the lock, leaving the wiki out of sync across machines. Per-task working state (`status.md`, `discussion.md`, `plan/`, `reviews/`) is NOT in the wiki — it lives at the worktree root on the task branch. Only `Home.md` and `_Sidebar.md` belong in the wiki.
+Wiki mutations go through `_client` calls (`set_phase`, `upsert_task`, `merge_tasks`); the daemon serializes all writes and pushes automatically. For multi-step atomic operations (e.g. remove + upsert + set phase together), use `_client.merge_tasks`. Never write wiki files via raw `Edit` / `Write` — the daemon owns the wiki repo. Per-task working state (`status.md`, `discussion.md`, `plan/`, `reviews/`) is NOT in the wiki — it lives on the task branch. `Home.md`, `_Sidebar.md`, and `proposal-*.md` are daemon-rendered derived files.
 
 ---
 

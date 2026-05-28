@@ -104,13 +104,9 @@ def _make_plan_fixture(
     skip_create = skip_create or set()
     worktree = tmp_path / "container" / "wts" / SLUG
     worktree.mkdir(parents=True)
-    subprocess.run(["git", "-C", str(worktree), "init"], check=True, capture_output=True)
-    subprocess.run(["git", "-C", str(worktree), "checkout", "-b", f"hanf/{SLUG}"], capture_output=True)
-    subprocess.run(["git", "-C", str(worktree), "config", "user.email", "test@example.com"], check=True, capture_output=True)
-    subprocess.run(["git", "-C", str(worktree), "config", "user.name", "test"], check=True, capture_output=True)
+    repo = _test_helpers.init_minimal_git_repo(worktree, branch="main")
+    _test_helpers.checkout_new_branch(repo, f"hanf/{SLUG}")
     (worktree / ".gitignore").write_text("\n", encoding="utf-8")
-    subprocess.run(["git", "-C", str(worktree), "add", ".gitignore"], check=True, capture_output=True)
-    subprocess.run(["git", "-C", str(worktree), "commit", "-m", "seed"], check=True, capture_output=True)
     mill_dir = worktree / ".millhouse"
     mill_dir.mkdir(parents=True, exist_ok=True)
     wiki_root = tmp_path / "wiki"
@@ -194,7 +190,7 @@ def main() -> int:
         try:
             # First run — each scope gets r1
             _seed_approve(4)
-            r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root)
+            r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root)
             assert r.verdict == "APPROVE", f"expected APPROVE, got {r.verdict}"
             assert len(r.reviews) == 4, f"expected 4 reviews, got {len(r.reviews)}"
             per_batch = [rv for rv in r.reviews if rv["scope"] != "holistic"]
@@ -215,7 +211,7 @@ def main() -> int:
             # Second run — per-batch batches all APPROVE -> carryforward (r1 files);
             # only holistic fires fresh (r2). Skip-approved scan active.
             _seed_approve(1)  # only holistic needs a response
-            r2 = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root)
+            r2 = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root)
             assert r2.verdict == "APPROVE"
             assert len(r2.reviews) == 4, f"expected 4 reviews, got {len(r2.reviews)}"
             per_batch2 = [rv for rv in r2.reviews if rv["scope"] != "holistic"]
@@ -272,7 +268,7 @@ def main() -> int:
             )
 
             _seed_approve(4)
-            r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root)
+            r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root)
             assert r.verdict == "APPROVE"
             # alpha should be r2; beta/gamma r1; holistic r2 (prior holistic was r1)
             rv_alpha = next(rv for rv in r.reviews if rv["scope"] == "01-alpha")
@@ -318,7 +314,7 @@ def main() -> int:
         os.chdir(project_root)
         _seed_approve(4)
         try:
-            r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root)
+            r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root)
             assert r.verdict == "APPROVE", f"expected APPROVE, got {r.verdict}"
             for rv in r.reviews:
                 assert rv["verdict"] == "APPROVE", (
@@ -358,7 +354,7 @@ def main() -> int:
         # 1 approve for alpha; beta fails before calling reviewer
         _seed_approve(1)
         try:
-            r = plan_run(cfg4, SLUG, mill_dir, wiki_root, project_root)
+            r = plan_run(cfg4, SLUG, mill_dir, wiki_root, project_root, git_root=project_root)
             assert r.verdict == "REQUEST_CHANGES", (
                 f"expected REQUEST_CHANGES, got {r.verdict}"
             )
@@ -403,7 +399,7 @@ def main() -> int:
         # The third seeded response is never consumed.
         _seed_approve(3)
         try:
-            plan_run(cfg, SLUG, mill_dir, wiki_root, project_root)
+            plan_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root)
             errors += 1
             print("FAIL test5: expected ReviewError from holistic, none raised", file=sys.stderr)
         except ReviewError as exc:
@@ -445,7 +441,7 @@ def main() -> int:
             (APPROVE_TEXT,      "sid-3"),  # holistic
         ])
         try:
-            r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root)
+            r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root)
             assert r.verdict == "APPROVE", f"expected APPROVE, got {r.verdict}"
             rv_alpha = next(rv for rv in r.reviews if rv["scope"] == "01-alpha")
             assert rv_alpha["verdict"] == "APPROVE", (
@@ -490,7 +486,7 @@ def main() -> int:
             (APPROVE_TEXT,      "sid-3"),  # holistic retry
         ])
         try:
-            r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root)
+            r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root)
             assert r.verdict == "APPROVE", f"expected APPROVE, got {r.verdict}"
             rv_hol = next(rv for rv in r.reviews if rv["scope"] == "holistic")
             assert rv_hol["verdict"] == "APPROVE", (
@@ -555,7 +551,7 @@ def main() -> int:
 
             # Stub: 1 for 02-b + 1 for holistic = 2 responses
             stub.seed([(APPROVE_TEXT, "sid-fresh-b"), (APPROVE_TEXT, "sid-fresh-hol")])
-            r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root)
+            r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root)
 
             prompts = stub.captured_prompts()
             assert len(prompts) == 2, (
@@ -619,7 +615,7 @@ def main() -> int:
 
             # Only holistic fires
             stub.seed([(APPROVE_TEXT, "sid-hol")])
-            r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root)
+            r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root)
 
             prompts = stub.captured_prompts()
             assert len(prompts) == 1, (
@@ -667,7 +663,7 @@ def main() -> int:
 
             # All four scopes fire: 01-a, 02-b, 03-c, holistic
             _seed_approve(4)
-            r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root)
+            r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root)
 
             prompts = stub.captured_prompts()
             assert len(prompts) == 4, (
@@ -697,7 +693,7 @@ def main() -> int:
         os.chdir(project_root)
         try:
             stub.seed([(APPROVE_TEXT, "sid-hol-only")])
-            r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root, holistic_only=True)
+            r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, holistic_only=True)
             prompts = stub.captured_prompts()
             assert len(prompts) == 1, (
                 f"holistic_only: expected exactly 1 prompt (holistic), got {len(prompts)}"
@@ -727,7 +723,7 @@ def main() -> int:
         os.chdir(project_root)
         try:
             _seed_approve(2)
-            r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root, no_holistic=True)
+            r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, no_holistic=True)
             prompts = stub.captured_prompts()
             assert len(prompts) == 2, (
                 f"no_holistic: expected 2 prompts (per-batch only), got {len(prompts)}"
@@ -755,7 +751,7 @@ def main() -> int:
         os.chdir(project_root)
         try:
             try:
-                plan_run(cfg, SLUG, mill_dir, wiki_root, project_root,
+                plan_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root,
                          holistic_only=True, no_holistic=True)
                 errors += 1
                 print("FAIL test13: expected ReviewError for mutually exclusive flags", file=sys.stderr)
@@ -801,7 +797,7 @@ def main() -> int:
                 (one_blocking,  "sid-b"),
                 (APPROVE_TEXT,  "sid-hol"),
             ])
-            r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root)
+            r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root)
             assert r.blocking_count == 3, f"expected aggregate blocking_count=3, got {r.blocking_count}"
             print("PASS test14: aggregate blocking_count == 3 (2 + 1 + 0)")
         except AssertionError as exc:
@@ -842,7 +838,7 @@ def main() -> int:
             # Without kwarg: round 4 exceeds cfg max=3 -> ReviewError
             try:
                 stub.seed([(APPROVE_TEXT, "sid-x")])
-                plan_run(cfg, SLUG, mill_dir, wiki_root, project_root)
+                plan_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root)
                 errors += 1
                 print("FAIL test15a: expected ReviewError for round 4 with cfg max=3", file=sys.stderr)
             except Exception as exc:
@@ -854,7 +850,7 @@ def main() -> int:
 
             # With max_rounds=5: succeeds (alpha carryforward, holistic fresh r4)
             stub.seed([(APPROVE_TEXT, "sid-hol4")])
-            r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root, max_rounds=5)
+            r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, max_rounds=5)
             rv_hol = next((rv for rv in r.reviews if rv["scope"] == "holistic"), None)
             assert rv_hol is not None, "holistic entry missing"
             fname = Path(rv_hol["file"]).name
@@ -887,7 +883,7 @@ def main() -> int:
 
         stub.run = _raises_llmerror
         try:
-            r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root)
+            r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root)
             assert r.verdict == "ERROR", (
                 f"expected ERROR for all-ERROR run, got {r.verdict}"
             )
@@ -933,7 +929,7 @@ def main() -> int:
             )
 
             stub.seed([(APPROVE_TEXT, "sid-hol-resume")])
-            r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root)
+            r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root)
 
             prompts = stub.captured_prompts()
             assert len(prompts) == 1, (
@@ -975,7 +971,7 @@ def main() -> int:
             )
 
             _seed_approve(2)  # per-batch + holistic
-            plan_run(cfg, SLUG, mill_dir, wiki_root, project_root)
+            plan_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root)
 
             prompts = stub.captured_prompts()
             per_batch_prompt = prompts[0][0]
@@ -1008,7 +1004,7 @@ def main() -> int:
         os.chdir(project_root)
         try:
             _seed_approve(2)  # per-batch + holistic
-            plan_run(cfg, SLUG, mill_dir, wiki_root, project_root)
+            plan_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root)
 
             prompts = stub.captured_prompts()
             assert len(prompts) == 2, f"expected 2 prompts, got {len(prompts)}"
@@ -1045,7 +1041,7 @@ def main() -> int:
                 (APPROVE_TEXT, "sid-batch"),
                 ("# Raw prose without any yaml block\n\nThe plan looks fine.", "sid-hol"),
             ])
-            r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root)
+            r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root)
             assert r.verdict == "REQUEST_CHANGES", (
                 f"expected REQUEST_CHANGES (APPROVE + ERROR), got {r.verdict}"
             )
@@ -1080,7 +1076,7 @@ def main() -> int:
         os.chdir(project_root)
         try:
             stub.seed([(APPROVE_TEXT, "sid-null-1")])
-            r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root)
+            r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root)
             assert r.verdict == "APPROVE", f"expected APPROVE, got {r.verdict}"
             assert len(r.reviews) == 1, f"expected 1 review, got {len(r.reviews)}"
             assert r.reviews[0]["scope"] == "holistic", (
@@ -1110,7 +1106,7 @@ def main() -> int:
         os.chdir(project_root)
         try:
             try:
-                plan_run(cfg, SLUG, mill_dir, wiki_root, project_root)
+                plan_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root)
                 errors += 1
                 print("FAIL test6b: expected ReviewError", file=sys.stderr)
             except ReviewError as exc:
@@ -1142,7 +1138,7 @@ def main() -> int:
             stub.seed([
                 ("# Raw prose without yaml block\n\nPlan looks good.", "sid-hol"),
             ])
-            r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root)
+            r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root)
             assert r.verdict == "ERROR", (
                 f"expected ERROR for all-ERROR run, got {r.verdict}"
             )
@@ -1178,7 +1174,7 @@ def main() -> int:
         orig_dir = os.getcwd()
         os.chdir(project_root)
         try:
-            r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root, max_rounds=0)
+            r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, max_rounds=0)
             assert r.verdict == "APPROVE", f"expected APPROVE for max_rounds=0, got {r.verdict}"
             assert r.blocking_count == 0, f"expected blocking_count=0, got {r.blocking_count}"
             print("PASS test22: max_rounds=0 kwarg -> holistic APPROVE stub")

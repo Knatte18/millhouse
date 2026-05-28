@@ -156,7 +156,7 @@ def _resolve_reuse_idle_timeout_s() -> float:
     """Load reuse_idle_timeout_s from config, defaulting to REUSE_IDLE_TIMEOUT_S_DEFAULT."""
     try:
         git_root = _paths.resolve_git_root()
-        cfg = _config.load_config(git_root, git_root)
+        cfg = _config.load_config(_paths.resolve_hub_path(), _paths.resolve_hub_path())
         return float(
             cfg.get("llm", {})
             .get("claude", {})

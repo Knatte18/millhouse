@@ -11,9 +11,6 @@ One-shot. Finds an `[active]` task in `Home.md` that has no local worktree, then
 
 **Cross-machine resume:** on a machine that has never checked out the task branch, run `git fetch origin` first to make the remote-tracking ref available. `git worktree add` will then check out the branch automatically.
 
-**Sync invariant:** mill-resume MUST call `_wiki.sync_pull(wiki_path, slug="mill-resume")` on entry before reading any wiki state, where `wiki_path = _paths.resolve_wiki_path(_paths.resolve_git_root())`.
-`signature: _wiki.sync_pull(wiki_path: Path, *, slug: str) -> None`
-
 ---
 
 ## Usage
@@ -35,11 +32,7 @@ If `.millhouse/config.local.yaml` (or the legacy `.millhouse/config.yaml`) does 
 
 If the `.wiki` junction does not exist at cwd, stop and tell the user to run `mill-setup` first (the wiki junction is required to read task state).
 
-### Phase 2: Sync wiki
-
-Call `_wiki.sync_pull(wiki_path, slug="mill-resume")` (where `wiki_path = _paths.resolve_wiki_path(_paths.resolve_git_root())`) to refresh the local wiki clone from remote. This ensures the task list reflects the current state across all machines and worktrees.
-
-### Phase 3: Resolve the slug
+### Phase 2: Resolve the slug
 
 **If a slug argument was passed:** use it directly. Skip to Phase 4.
 
@@ -140,17 +133,7 @@ junction_create(wiki_clone_path, new_worktree / ".wiki")
 
 Read `<container>/wts/<slug>/_mill/status.md` from the newly added worktree. Parse the `phase:` field from the YAML block.
 
-### Phase 10: Regenerate sidebar
-
-Invoke the `regenerate_sidebar` entrypoint to keep `_Sidebar.md` in sync:
-
-```bash
-PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "from pathlib import Path; import _sidebar; _sidebar.regenerate(Path(r'<wiki-dir>').resolve())"
-```
-
-The `[active]` entry is already present in `Home.md` — regenerating the sidebar ensures any proposals added while the task was paused are reflected.
-
-### Phase 11: Report
+### Phase 10: Report
 
 Print:
 
@@ -174,7 +157,7 @@ Note: task is mid-review. mill-go will re-enter the current phase from its start
 |---|---|
 | `.millhouse/config.local.yaml` missing | Stop, tell user to run `mill-setup` |
 | `.wiki` junction missing | Stop, tell user to run `mill-setup` |
-| `_wiki.sync_pull` raises `WikiPushError` | Report error; do not proceed (stale state risk) |
+| `_client` mutation raises `WikiPushError` | Report error; daemon failed to push to wiki remote — do not proceed (stale state risk) |
 | No remote branch for slug | Halt with manual-resolution message |
 | Remote branch has no status.md | Halt with manual-resolution message (pre-migration task) |
 | `git worktree add` fails | Report error with stderr |

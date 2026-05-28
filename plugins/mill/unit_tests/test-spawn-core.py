@@ -1,9 +1,16 @@
 """Unit tests for plugins/mill/scripts/_spawn_core.py."""
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from pathlib import Path
+
+# This test verifies commit-log contents (e.g. "wiki: merged-task"), so it
+# cannot use the default _test_helpers WIKI_DAEMON_SKIP_GIT mode. Set
+# WIKI_DAEMON_SKIP_PUSH=1 instead: commits still happen, just no network push.
+os.environ["WIKI_DAEMON_SKIP_GIT"] = ""
+os.environ.setdefault("WIKI_DAEMON_SKIP_PUSH", "1")
 
 HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))

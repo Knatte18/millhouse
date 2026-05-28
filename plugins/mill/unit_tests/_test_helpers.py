@@ -28,10 +28,58 @@ if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 
 os.environ.setdefault("WIKI_DAEMON_IDLE_TIMEOUT", "1")
+# Test mode (cheap):
+# - SKIP_GIT: no pull/commit/push at all. Renders files in-place; no git history.
+#   Use this default — most tests don't assert on git state.
+# - INPROCESS: route every wiki._client op to an in-process WikiServer instead
+#   of spawning a Python subprocess. Saves ~1.5 s of interpreter startup per test.
+# A test that needs commit log behaviour overrides SKIP_GIT before importing
+# this module and sets WIKI_DAEMON_SKIP_PUSH=1 instead (commits, no push).
+os.environ.setdefault("WIKI_DAEMON_SKIP_GIT", "1")
+os.environ.setdefault("WIKI_DAEMON_INPROCESS", "1")
 
+import pygit2  # noqa: E402
 import _safe_rmtree  # noqa: E402
 from wiki import _client as wiki  # noqa: E402
 from wiki._parse import parse_home_md  # noqa: E402
+
+
+def init_minimal_git_repo(path: Path, *, branch: str = "main") -> "pygit2.Repository":
+    """Create a git repo at ``path`` with an empty initial commit on ``branch``.
+
+    Uses pygit2 directly (no subprocess) — ~60 ms vs ~600 ms for the
+    equivalent subprocess git init + config + add + commit chain on
+    Windows. Drop-in replacement for the four-or-five-call subprocess
+    pattern that pre-dates this helper.
+
+    Args:
+        path: Repo root. Created if missing.
+        branch: Initial branch name (default ``"main"``).
+
+    Returns:
+        pygit2.Repository object for the new repo.
+    """
+    path.mkdir(parents=True, exist_ok=True)
+    repo = pygit2.init_repository(str(path), initial_head=f"refs/heads/{branch}")
+    cfg = repo.config
+    cfg["user.email"] = "test@test.com"
+    cfg["user.name"] = "Test"
+    (path / ".keep").write_text("", encoding="utf-8")
+    index = repo.index
+    index.add(".keep")
+    index.write()
+    tree = index.write_tree()
+    sig = pygit2.Signature("Test", "test@test.com")
+    repo.create_commit(f"refs/heads/{branch}", sig, sig, "init", tree, [])
+    return repo
+
+
+def checkout_new_branch(repo: "pygit2.Repository", branch: str) -> None:
+    """Create and check out ``branch`` from the current HEAD via pygit2."""
+    head = repo.head
+    commit = repo[head.target]
+    ref = repo.branches.local.create(branch, commit)
+    repo.set_head(ref.name)
 
 
 def wait_for_daemon_exit(wiki_path: Path, *, timeout: float = 5.0) -> None:
@@ -54,10 +102,17 @@ def wait_for_daemon_exit(wiki_path: Path, *, timeout: float = 5.0) -> None:
 def init_wiki_repo(wiki_path: Path) -> None:
     """Initialize a git repo with bare origin.
 
+    Under WIKI_DAEMON_SKIP_GIT (test mode default), the wiki server never
+    invokes git, so the init/remote/commit/push dance is dead weight (~1 s
+    per test on Windows). Just create the directory and return.
+
     Args:
         wiki_path: Path where wiki repo will be created.
     """
     wiki_path.mkdir(parents=True, exist_ok=True)
+
+    if os.environ.get("WIKI_DAEMON_SKIP_GIT") == "1":
+        return
 
     result = subprocess.run(
         ["git", "init", "--initial-branch=main", str(wiki_path)],
@@ -151,53 +206,10 @@ def _make_task_worktree(
         worktree_path = tmp / "worktree"
     wiki_path = tmp / "wiki"
 
-    worktree_path.mkdir(parents=True, exist_ok=True)
-
-    result = subprocess.run(
-        ["git", "init", "--initial-branch=main", str(worktree_path)],
-        capture_output=True,
-        text=True,
-    )
-    if result.returncode != 0:
-        subprocess.run(
-            ["git", "init", str(worktree_path)],
-            check=True,
-            capture_output=True,
-        )
-        subprocess.run(
-            ["git", "-C", str(worktree_path), "checkout", "-b", "main"],
-            capture_output=True,
-        )
-
-    subprocess.run(
-        ["git", "-C", str(worktree_path), "config", "user.email", "test@test.com"],
-        check=True,
-        capture_output=True,
-    )
-    subprocess.run(
-        ["git", "-C", str(worktree_path), "config", "user.name", "Test"],
-        check=True,
-        capture_output=True,
-    )
-
-    (worktree_path / ".keep").write_text("", encoding="utf-8")
-    subprocess.run(
-        ["git", "-C", str(worktree_path), "add", ".keep"],
-        check=True,
-        capture_output=True,
-    )
-    subprocess.run(
-        ["git", "-C", str(worktree_path), "commit", "-m", "init"],
-        check=True,
-        capture_output=True,
-    )
-
+    # Build worktree git repo via pygit2 (no subprocess overhead).
+    repo = init_minimal_git_repo(worktree_path, branch="main")
     task_branch = f"{branch_prefix}{slug}"
-    subprocess.run(
-        ["git", "-C", str(worktree_path), "checkout", "-b", task_branch],
-        check=True,
-        capture_output=True,
-    )
+    checkout_new_branch(repo, task_branch)
 
     if seed_task:
         init_wiki_repo(wiki_path)
@@ -270,6 +282,15 @@ def safe_temp_dir():
     try:
         yield tmp
     finally:
+        try:
+            import wiki._client as _wc
+
+            tmp_resolved = str(tmp.resolve()).lower()
+            for key in list(_wc._INPROCESS_SERVERS.keys()):
+                if key.lower().startswith(tmp_resolved):
+                    _wc.stop_inprocess(Path(key))
+        except Exception:
+            pass
         try:
             for state_file in list(tmp.rglob(".wiki-daemon.json")):
                 wait_for_daemon_exit(state_file.parent, timeout=5.0)

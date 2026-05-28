@@ -34,13 +34,12 @@ You are an integration engineer. Your job is to merge a completed task branch ba
 
 1.5. **Path Setup.** `cfg` was loaded in step 1; `worktree_root = git_root` from step 1. Derive `status_path = _paths.resolve_task_path(worktree_root, cfg['paths']['status_md'])` and `task_dir = status_path.parent`. Use these variables for all subsequent path references.
 
-2. `_wiki.sync_pull(<WIKI_PATH>, slug=slug)`.
-3. Slug already resolved in Step 1; reuse `active_data['slug']` — no second read needed.
-4. *(Config already loaded in Step 1.)*
-5. Resolve parent branch via `_parent_branch.resolve(status_path, interactive=<True unless called non-interactively>)`. `status_path` is resolved via `_paths.resolve_task_path(worktree_root, cfg['paths']['status_md'])` (set in Path Setup step 1.5) and `task_dir = status_path.parent` — state lives in `task_dir` on the task branch, not in the wiki.
-6. **Phase gate — also the re-entry point for PR-path recovery.**
+2. Slug already resolved in Step 1; reuse `active_data['slug']` — no second read needed.
+3. *(Config already loaded in Step 1.)*
+4. Resolve parent branch via `_parent_branch.resolve(status_path, interactive=<True unless called non-interactively>)`. `status_path` is resolved via `_paths.resolve_task_path(worktree_root, cfg['paths']['status_md'])` (set in Path Setup step 1.5) and `task_dir = status_path.parent` — state lives in `task_dir` on the task branch, not in the wiki.
+5. **Phase gate — also the re-entry point for PR-path recovery.**
 
-   **Try `_mill/status.md` first.** If `status_path.exists()`, read `phase:` from it and apply the table below. If `status_path` is absent (the PR-path cleanup commit already removed `<task_dir>/`), read `Home.md` instead: call `_wiki.sync_pull(wiki_path, slug=slug)`, read `home_text = (wiki_path / "Home.md").read_text(encoding="utf-8")`, parse with `tasks = _tasks_md.parse(home_text)` (`signature: _tasks_md.parse(text: str) -> list[Task]` — Task has `.slug: str` and `.phase: str | None` attributes), then `task = next((t for t in tasks if t.slug == slug), None)`. Guard: `if task is None: halt("_mill/status.md absent and slug '<slug>' not found in Home.md; cannot determine merge state.")`. Otherwise: if `task.phase == "pr-pending"` → treat as `pr-pending` below. Otherwise → halt with "_mill/status.md absent and Home.md does not show pr-pending for '<slug>'; cannot determine merge state."
+   **Try `_mill/status.md` first.** If `status_path.exists()`, read `phase:` from it and apply the table below. If `status_path` is absent: call `task = _client.get_task(wiki_path, slug)` (where `from wiki import _client`). Guard: `if task is None: halt("_mill/status.md absent and slug '<slug>' not found in wiki; cannot determine merge state.")`. If `task["status"] == "pr-pending"` → treat as `pr-pending` below. Otherwise → halt with "_mill/status.md absent and wiki does not show pr-pending for '<slug>'; cannot determine merge state."
 
    | phase | action |
    | --- | --- |
@@ -159,12 +158,13 @@ PR dispatch lives in mill-finalize. This step is direct path only.
 
   7. Flip Home.md to `[pr-pending]`:
 
-     ```python
-     with _wiki.wiki_lock(<WIKI_PATH>, slug):
-         home_text = (wiki_path / "Home.md").read_text(encoding="utf-8")
-         new_text = _tasks_md.set_phase(home_text, slug, "pr-pending")
-         (wiki_path / "Home.md").write_text(new_text, encoding="utf-8")
-         _wiki.write_commit_push(<WIKI_PATH>, ["Home.md"], f"task: pr-pending {slug}", slug=slug)
+     ```bash
+     PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
+     from pathlib import Path; import _paths
+     from wiki import _client
+     wiki_path = _paths.resolve_wiki_path(_paths.resolve_git_root())
+     _client.set_phase(wiki_path, '<slug>', 'pr-pending')
+     "
      ```
 
   8. Report to the user:
@@ -180,29 +180,33 @@ PR dispatch lives in mill-finalize. This step is direct path only.
 ### 6. Archive tag
 
 ```bash
-git tag archive/<slug> "$CHILD_BRANCH"
-git push origin "archive/<slug>"
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
+from pathlib import Path
+import _paths, _archive_tag
+worktree = _paths.resolve_git_root()
+result = _archive_tag.create_or_resolve(worktree, '<slug>', '$CHILD_BRANCH')
+print(f'[mill-merge] archive-tag action: {result[\"action\"]} -- tag: {result[\"tag\"]}')
+if result['moved_aside_to']:
+    print(f'[mill-merge] prior tag preserved as {result[\"moved_aside_to\"]}')
+"
 ```
 
-Tags the cleanup-commit tip of the task branch before the branch is deleted. The tag is cheap, persistent, and lets any operator recover the full task history via `git checkout archive/<slug>`.
+Idempotently tags the cleanup-commit tip of the task branch. The helper handles the three conflict cases — same-SHA no-op, ancestor force-update, divergent move-aside — so re-running `/mill-merge` after a partial teardown never fails at this step. See `_archive_tag.py` for the resolution logic.
 
 ### 7. Home.md — mark [done]
 
-Under the wiki shared lock so no concurrent task writes Home.md mid-flip.
-
-```python
-with _wiki.wiki_lock(<WIKI_PATH>, slug):
-    home_text = home_path.read_text(encoding="utf-8")
-    new_text = _tasks_md.set_phase(home_text, slug, "done")
-    home_path.write_text(new_text, encoding="utf-8")
-    _wiki.write_commit_push(<WIKI_PATH>, ["Home.md"], f"task: complete and merge {slug}", slug=slug)
+```bash
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
+from pathlib import Path; import _paths
+from wiki import _client
+wiki_path = _paths.resolve_wiki_path(_paths.resolve_git_root())
+_client.set_phase(wiki_path, '<slug>', 'done')
+"
 ```
 
 **Failure handling after the squash landed on parent:** do NOT roll back the merge. Report the error, release all locks, tell the user "Merge landed on <parent> but <step> failed: <err>. Re-run `/mill-merge` to retry — Step 5's idempotency check will skip the squash." This is the non-destructive boundary: once the parent has the squash, it stays.
 
-### 8. Regenerate sidebar + release merge lock
-
-`_sidebar.regenerate(<WIKI_PATH>)` (re-acquires its own wiki lock internally). Pushes a `_Sidebar.md` update.
+### 8. Release merge lock
 
 Delete `<parent-path>/.scratch/merge.lock`. Run this in a `finally:` equivalent so the lock is released on every exit path.
 
@@ -251,7 +255,7 @@ Post-Step-5 failures (archive tag, Home.md, sidebar) are **not** rolled back —
 
 ## Board discipline
 
-- Home.md writes go through `_wiki.write_commit_push` (which acquires the wiki lock internally). For multi-operation windows use `with _wiki.wiki_lock(wiki_path, slug):`.
+- Wiki mutations go through `_client` calls (`set_phase`, `upsert_task`, `merge_tasks`); the daemon serializes all writes and pushes automatically. For multi-step atomic operations use `_client.merge_tasks`.
 - Task state (status file, discussion file, plan dir, reviews dir) lives in the task directory (`_mill/` for current worktrees, `task/` for legacy) on the task branch — never in the wiki. The cleanup commit removes the entire `task_dir` directory from the branch tip before squash.
 - Phase transitions via `_status.append_phase`; hand-editing `_mill/status.md` is banned.
 - Merge-lock file lives at `<parent-path>/.scratch/merge.lock`. Never placed anywhere else — other skills expect it there.

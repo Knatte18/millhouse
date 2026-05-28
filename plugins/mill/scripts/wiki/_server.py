@@ -58,20 +58,28 @@ class WikiServer(DaemonBase):
         self._store = Store(wiki_path / "tasks.json")
         self._last_pull: float = 0.0
 
-        # Set up rotating file logger
-        handler = logging.handlers.RotatingFileHandler(
-            wiki_path / ".wiki-daemon.log",
-            maxBytes=1_000_000,
-            backupCount=2,
-            mode="w",
-        )
-        handler.setFormatter(
-            logging.Formatter("%(asctime)s %(levelname)s %(message)s")
-        )
         self._log = logging.getLogger("wiki-server")
-        self._log.addHandler(handler)
+        for h in list(self._log.handlers):
+            try:
+                h.close()
+            except Exception:
+                pass
+            self._log.removeHandler(h)
         self._log.setLevel(logging.INFO)
         self._log.propagate = False
+        if os.environ.get("WIKI_DAEMON_SKIP_GIT") == "1":
+            self._log.addHandler(logging.NullHandler())
+        else:
+            handler = logging.handlers.RotatingFileHandler(
+                wiki_path / ".wiki-daemon.log",
+                maxBytes=1_000_000,
+                backupCount=2,
+                mode="w",
+            )
+            handler.setFormatter(
+                logging.Formatter("%(asctime)s %(levelname)s %(message)s")
+            )
+            self._log.addHandler(handler)
 
     def on_start(self, port: int, token: str) -> None:
         """Log startup and ensure gitignore."""
@@ -79,8 +87,12 @@ class WikiServer(DaemonBase):
         self._ensure_gitignore()
 
     def on_stop(self) -> None:
-        """Log shutdown and release log handlers."""
+        """Log shutdown, close the store, release log handlers."""
         self._log.info("wiki-server stopping")
+        try:
+            self._store.close()
+        except Exception:
+            pass
         for handler in list(self._log.handlers):
             try:
                 handler.close()
@@ -306,14 +318,26 @@ class WikiServer(DaemonBase):
         """Pull, reload, render, write, and commit all files.
 
         This is the canonical sequence for all mutating operations.
+
+        Two test-only env vars trim the git workload:
+        - ``WIKI_DAEMON_SKIP_GIT=1`` — skip pull, commit, and push entirely.
+          Renders + writes files only. Use when no test asserts on git state.
+        - ``WIKI_DAEMON_SKIP_PUSH=1`` — pull + commit run, push is skipped.
+          Use when a test asserts on commit log content.
+
+        SKIP_GIT takes precedence. Production callers leave both unset.
         """
+        skip_git = os.environ.get("WIKI_DAEMON_SKIP_GIT") == "1"
+        skip_push = os.environ.get("WIKI_DAEMON_SKIP_PUSH") == "1"
+
         # Pull before render
-        try:
-            pull(self._wiki_path)
-            self._store.reload()
-            self._last_pull = time.monotonic()
-        except WikiPushError:
-            pass
+        if not skip_git and not skip_push:
+            try:
+                pull(self._wiki_path)
+                self._store.reload()
+                self._last_pull = time.monotonic()
+            except WikiPushError:
+                pass
 
         # Render all tasks
         rendered = render(self._store.all_tasks())
@@ -328,6 +352,9 @@ class WikiServer(DaemonBase):
         # Atomic write each rendered file
         for rel_path, content in rendered.items():
             atomic_write(self._wiki_path, rel_path, content)
+
+        if skip_git:
+            return
 
         # Commit and push
         commit_paths = list(rendered.keys()) + orphans + ["tasks.json"]
@@ -369,7 +396,12 @@ class WikiServer(DaemonBase):
         new_content = "\n".join(lines) + "\n"
         gitignore_path.write_text(new_content, "utf-8")
 
-        # Try to commit (non-fatal on failure)
+        # Skip the commit entirely under WIKI_DAEMON_SKIP_GIT (test mode).
+        if os.environ.get("WIKI_DAEMON_SKIP_GIT") == "1":
+            return
+
+        # Try to commit (non-fatal on failure). commit_push internally honors
+        # WIKI_DAEMON_SKIP_PUSH and stops after the local commit when set.
         try:
             commit_push(self._wiki_path, [".gitignore"], "chore(wiki): gitignore daemon artifacts")
         except Exception as e:

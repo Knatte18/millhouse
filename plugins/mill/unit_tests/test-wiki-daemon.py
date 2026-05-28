@@ -180,7 +180,15 @@ def main() -> int:
             wiki_path = tmp / "wiki"
             wiki_path.mkdir(parents=True, exist_ok=True)
             (wiki_path / "tasks.json").write_text('{"_default": {}}', encoding="utf-8")
-            wiki_server = WikiServer(wiki_path, idle_timeout=1)
+            # Force the production code path: SKIP_GIT=1 swaps RotatingFileHandler
+            # for NullHandler (see _server.py), which is what the rest of the
+            # suite uses but not what this test asserts on.
+            prev_skip = os.environ.pop("WIKI_DAEMON_SKIP_GIT", None)
+            try:
+                wiki_server = WikiServer(wiki_path, idle_timeout=1)
+            finally:
+                if prev_skip is not None:
+                    os.environ["WIKI_DAEMON_SKIP_GIT"] = prev_skip
 
             our_handlers = [
                 h for h in wiki_server._log.handlers

@@ -9,10 +9,9 @@ Merge the parent branch into the current branch. Creates a rollback checkpoint f
 
 ## Entry
 
-1. `_wiki.sync_pull(<WIKI_PATH>, slug="mill-merge-in")` — refresh the wiki clone before reading any task state.
-2. Read the slug via `_marker.slug_from_branch(git_root, wiki_path, cfg)`. On `MarkerError` → halt with "this worktree was not created by mill-spawn".
-3. Resolve the parent branch. **Source of truth is `_mill/status.md`'s `parent:` row** — call `_parent_branch.resolve(status_path, interactive=True)` where `status_path = Path("_mill/status.md").resolve()`. Config does not carry a parent-branch override (YAGNI as of v2.0). If `mill-merge-in` is being called from `mill-merge`'s auto-merge path, pass `interactive=False` and propagate the raised `ParentBranchError`.
-4. Optional positional argument: `<branch>` from the user's invocation overrides both status.md and the prompt. This is for ad-hoc syncing from some other branch than the task's declared parent.
+1. Read the slug via `_marker.slug_from_branch(git_root, wiki_path, cfg)`. On `MarkerError` → halt with "this worktree was not created by mill-spawn".
+2. Resolve the parent branch. **Source of truth is `_mill/status.md`'s `parent:` row** — call `_parent_branch.resolve(status_path, interactive=True)` where `status_path = Path("_mill/status.md").resolve()`. Config does not carry a parent-branch override (YAGNI as of v2.0). If `mill-merge-in` is being called from `mill-merge`'s auto-merge path, pass `interactive=False` and propagate the raised `ParentBranchError`.
+3. Optional positional argument: `<branch>` from the user's invocation overrides both status.md and the prompt. This is for ad-hoc syncing from some other branch than the task's declared parent.
 
 ## Steps
 
@@ -46,7 +45,7 @@ git merge <parent-branch>
 | Whitespace- / formatting-only differences | Accept current branch version. |
 | Package lock files (`package-lock.json`, `yarn.lock`, `pnpm-lock.yaml`, `poetry.lock`, `Cargo.lock`) | Accept current branch version, then regenerate via the project's install command (`npm install`, `yarn`, `pnpm install`, `poetry lock --no-update`, `cargo build`, etc.). Commit the regenerated file. |
 | Build artefacts (dist/, build/, *.min.*) | Accept current branch version. |
-| Real code conflicts | Enumerate unresolved files via `git diff --name-only --diff-filter=U`. Call: `PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-merge-in-subagent.py" --mode conflicts --files <file1> <file2> ...` On `{"status":"success"}`: run `git merge --continue` to create the merge commit. On `{"status":"stuck"}`: roll back → `git reset --hard "$CHK"` — preserve checkpoint, report to caller. |
+| Real code conflicts | Enumerate unresolved files via `git diff --name-only --diff-filter=U`. Call: `PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-merge-in-subagent.py" --mode conflicts --files <file1> <file2> ...` On `{"status":"success"}`: run `git -c core.editor=true merge --continue` to create the merge commit. `-c core.editor=true` scopes the editor suppression to this one command -- no env-var leak into subsequent operations. On `{"status":"stuck"}`: roll back → `git reset --hard "$CHK"` — preserve checkpoint, report to caller. |
 
 On `{"status":"stuck"}` from the sub-agent → roll back to checkpoint (`git reset --hard "$CHK"`), preserve the checkpoint, report to the caller.
 
@@ -54,7 +53,7 @@ On `{"status":"stuck"}` from the sub-agent → roll back to checkpoint (`git res
 
 Replay exactly the tests that ran during implementation. Call `_plan_dag.iter_batch_verifies(plan_dir)` where `plan_dir = Path("_mill/plan/").resolve()`. That yields `(batch_name, verify_cmd)` pairs in DAG order, skipping batches with `verify: null`.
 
-Before the loop, load config and read the allowlist: call `cfg = _config.load_config(wiki_path, git_root)`, then read `skip_list = (cfg.get("verify") or {}).get("skip_known_broken") or []`. `skip_list` is the empty list when the key is absent (the default for all existing hubs). Initialise counters `ran = 0` and `skipped = 0`.
+Before the loop, load config and read the allowlist: call `cfg = _config.load_config(_paths.resolve_hub_path(), git_root)`, then read `skip_list = (cfg.get("verify") or {}).get("skip_known_broken") or []`. `skip_list` is the empty list when the key is absent (the default for all existing hubs). Initialise counters `ran = 0` and `skipped = 0`.
 
 For each `(name, cmd)`:
 - Plugin-root substitution: compute `local_plugin_root = str(git_root / "plugins" / "mill")`; if `(git_root / "plugins" / "mill").is_dir()`, rewrite `cmd = cmd.replace("${PLUGIN_ROOT}", local_plugin_root)`. If `plugins/mill` does not exist in the current git root (non-millhouse repos), this is a no-op.

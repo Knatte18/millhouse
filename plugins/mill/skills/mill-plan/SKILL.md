@@ -11,13 +11,12 @@ You are an autonomous planner running on Opus. Your job is to turn `discussion.m
 
 ## Entry
 
-1. Resolve the wiki path via `_paths.resolve_wiki_path(_paths.resolve_git_root())` and call `_wiki.sync_pull(wiki_path, slug="mill-plan")`.
-   `signature: _wiki.sync_pull(wiki_path: Path, *, slug: str) -> None`
+1. Resolve the wiki path via `_paths.resolve_wiki_path(_paths.resolve_git_root())`.
    `signature: _paths.resolve_git_root(start: Path | None = None) -> Path`
    `signature: _paths.resolve_wiki_path(git_toplevel: Path) -> Path`
 2. Read the slug via `_marker.slug_from_branch(git_root, wiki_path, cfg)`. On `MarkerError` → halt with "this worktree was not created by mill-spawn".
-3. Load config — deep-merge `<WIKI_PATH>/config.yaml` with `.millhouse/config.local.yaml`. Read `roles.plan-review.holistic.rounds` as `max_review_rounds`.
-   `signature: _config.load_config(wiki_path: Path, worktree_root: Path) -> dict`
+3. Load config — deep-merge `<hub_root>/mill-config.yaml` with `.millhouse/config.local.yaml`. Read `roles.plan-review.holistic.rounds` as `max_review_rounds`.
+   `signature: _config.load_config(hub_root: Path, worktree_root: Path) -> dict`
 
 **Path Setup.** Derive from config: `status_path = _paths.resolve_task_path(worktree_root, cfg['paths']['status_md'])`. `plan_dir` and `reviews_dir` will be derived during Phase: Plan (writes) or Phase: Plan Review (reads) as appropriate — see those phases for details.
 
@@ -70,7 +69,13 @@ tokens["BATCH_SLUG"]      = batch_slug
 
 **Card numbering is global across batches**: card 1 lives in batch 01, card 7 might live in batch 02, etc. Never restart at 1 inside each batch — the reviewer and implementer cite cards by number and need uniqueness.
 
-**Verify command shape.** Every non-null `verify:` in a per-batch file's frontmatter MUST start with the literal token `PYTHONPATH=` followed by a single space and then the command -- e.g. `verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py`. The empty value on the same line scopes the `PYTHONPATH` reset to that one command, so the test subprocess does not inherit the mill cache scripts dir from the parent shell and tests load worktree modules instead of stale cache modules. The validator check `verify-not-isolated` enforces this; see the Step 1.5 fix table.
+**Verify command shape.** Every non-null `verify:` in a per-batch file's frontmatter MUST start with the literal token `PYTHONPATH=` followed by a single space and then the command. The empty value on the same line scopes the `PYTHONPATH` reset to that one command, so the test subprocess does not inherit the mill cache scripts dir from the parent shell and tests load worktree modules instead of stale cache modules. The validator check `verify-not-isolated` enforces this; see the Step 1.5 fix table.
+
+**Verify command scope.** `verify:` runs after every implementer round and every fixer round — many times per batch. Target only the tests affected by this batch's `Edits:` + `Creates:` — DO NOT use `run-all.py` without `--only` for a focused batch (the full 77-file suite is multiple minutes). Patterns:
+- **Single test file:** `verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/test-fold.py`
+- **Multiple files:** `verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-fold.py test-marker.py` — `run-all.py --only <basenames...>` runs only the named files (unknown names error out).
+
+A batch that legitimately touches a cross-cutting helper that every test imports MAY use the unbounded `run-all.py` — but state the justification in `## Batch Tests` so the plan reviewer can validate the scope choice. The default expectation is per-batch scoping.
 
 **Self-validate the DAG** before committing: call `_plan_dag.extract_batch_index(overview_text)` then `_plan_dag.validate(batches, sorted(p.name for p in plan_dir.glob("??-*.md") if p.name != "00-overview.md"))`. Any `PlanDAGError` → fix the plan files, then re-validate. Do not commit a plan that fails this check.
 

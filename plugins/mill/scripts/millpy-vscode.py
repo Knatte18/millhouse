@@ -31,7 +31,7 @@ import _spawn_core
 import _vscode_processes
 from wiki import _client as wiki
 from _config import load_config as _load_config
-from _paths import resolve_git_root, resolve_hub_relative_path, resolve_wiki_path, resolve_worktrees_dir
+from _paths import resolve_git_root, resolve_hub_path, resolve_hub_relative_path, resolve_wiki_path, resolve_worktrees_dir
 
 
 def _build_code_argv(worktree_path: Path) -> list[str]:
@@ -180,7 +180,7 @@ def main(argv: list[str] | None = None) -> int:
     home_tasks: list = []
     try:
         wiki_path = resolve_wiki_path(git_root)
-        cfg = _load_config(git_root, git_root)
+        cfg = _load_config(resolve_hub_path(), resolve_hub_path())
         home_tasks = wiki.list_tasks_brief(wiki_path)
     except (SystemExit, Exception):
         cfg = {}

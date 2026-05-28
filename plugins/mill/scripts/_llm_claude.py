@@ -77,6 +77,16 @@ def _claude_argv_prefix() -> list[str]:
 
 _MUTATING_TOOLS = {"Edit", "Write", "Bash", "NotebookEdit"}
 _MODE_BY_ALLOWED_TOOLS: dict[str, str] = {"": "bulk", "Read,Grep,Glob": "tool-use", "Read,Edit,Write,Bash,Grep,Glob,Skill": "implementer"}
+# Git env vars that must NOT be inherited by spawned Claude sessions (see #367).
+STRIP_VARS = frozenset({
+    "GIT_DIR",
+    "GIT_WORK_TREE",
+    "GIT_INDEX_FILE",
+    "GIT_AUTHOR_NAME",
+    "GIT_AUTHOR_EMAIL",
+    "GIT_COMMITTER_NAME",
+    "GIT_COMMITTER_EMAIL",
+})
 
 
 def _has_mutating_tool(allowed_tools: str) -> bool:
@@ -96,7 +106,7 @@ def _get_via_psmux_flag() -> bool:
         import _config
 
         git_root = _paths.resolve_git_root(Path.cwd())
-        cfg = _config.load_config(git_root, git_root)
+        cfg = _config.load_config(_paths.resolve_hub_path(), _paths.resolve_hub_path())
         return bool(cfg.get("llm", {}).get("claude", {}).get("psmux", {}).get("via_psmux", False))
     except (Exception, SystemExit):
         return False
@@ -311,11 +321,13 @@ def _invoke(
             keep_alive=caller_provided_session_id,
         )
         try:
+            child_env = {k: v for k, v in os.environ.items() if k not in STRIP_VARS}
             result = _subprocess_util.run(
                 argv,
                 input=prompt_text,
                 timeout=float(timeout),
                 cwd=cwd,
+                env=child_env,
             )
         except Exception as exc:
             if "TimeoutExpired" in type(exc).__name__ or "Timeout" in type(exc).__name__:
@@ -335,11 +347,13 @@ def _invoke(
     argv = _build_argv(model, effort, allowed_tools, session_id, resume)
 
     try:
+        child_env = {k: v for k, v in os.environ.items() if k not in STRIP_VARS}
         result = _subprocess_util.run(
             argv,
             input=prompt_text,
             timeout=float(timeout),
             cwd=cwd,
+            env=child_env,
         )
     except Exception as exc:  # subprocess.TimeoutExpired or similar
         if "TimeoutExpired" in type(exc).__name__ or "Timeout" in type(exc).__name__:
@@ -359,7 +373,8 @@ def _invoke(
             f"[_llm_claude] fast-fail retry (duration={dt:.2f}s exit={result.returncode})",
             file=sys.stderr,
         )
-        result = _subprocess_util.run(argv, input=prompt_text, timeout=float(timeout), cwd=cwd)
+        child_env = {k: v for k, v in os.environ.items() if k not in STRIP_VARS}
+        result = _subprocess_util.run(argv, input=prompt_text, timeout=float(timeout), cwd=cwd, env=child_env)
         rate_limited = _scan_rate_limit(result.stdout or "")
 
     if result.returncode != 0:
