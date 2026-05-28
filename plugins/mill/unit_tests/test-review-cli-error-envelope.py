@@ -319,6 +319,31 @@ class TestReviewCliErrorEnvelope(unittest.TestCase):
         result = json.loads(stdout)
         self.assertEqual(result["verdict"], "APPROVE")
 
+    def test_plan_uncaught_exception(self):
+        """Plan CLI: uncaught exception from backend returns exit 1 with ERROR envelope."""
+        cli_module = _load_cli_module("plan")
+        argv = ["--skip-validate"]
+        captured_stdout = io.StringIO()
+        captured_stderr = io.StringIO()
+
+        with patch("sys.stdout", captured_stdout), \
+             patch("sys.stderr", captured_stderr), \
+             patch("_paths.resolve_wiki_path", return_value=self.tempdir_path), \
+             patch("_paths.resolve_git_root", return_value=self.tempdir_path), \
+             patch("_review_common.load_config", return_value={"paths": {}, "roles": {}}), \
+             patch("_reviewers.load", return_value={}), \
+             patch("_reviewers.validate_role_refs", return_value=None), \
+             patch("pathlib.Path.cwd", return_value=self.tempdir_path), \
+             patch("_review_common.find_active_slug", return_value="test-slug"), \
+             patch("_review_plan.run", side_effect=RuntimeError("backend failure")):
+            exit_code = cli_module.main(argv)
+
+        self.assertEqual(exit_code, 1)
+        result = json.loads(captured_stdout.getvalue())
+        self.assertEqual(result["verdict"], "ERROR")
+        self.assertEqual(result["type"], "plan")
+        self.assertIn("unhandled review error", result["reviews"][0]["error"])
+
 
 if __name__ == "__main__":
     unittest.main()
