@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-codeguide-skills
+phase: holistic-reviewing
 slug: codeguide-jupyter-support
 branch: codeguide-jupyter-support
 plan: _mill/plan
@@ -24,6 +24,7 @@ implementing  '2026-05-28T22:10:02Z'
 approved-nb-digest-helper  '2026-05-28T22:13:18Z'
 approved-codeguide-templates  '2026-05-28T22:15:35Z'
 approved-codeguide-skills  '2026-05-28T22:18:21Z'
+holistic-reviewing  '2026-05-28T22:18:45Z'
 ```
 
 ## Batches
