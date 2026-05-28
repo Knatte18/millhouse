@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-fix-r1
+phase: planned
 slug: codeguide-jupyter-support
 branch: codeguide-jupyter-support
 plan: _mill/plan
@@ -19,4 +19,5 @@ discussion-fix-r1  '2026-05-28T21:54:14Z'
 discussed  '2026-05-28T21:54:34Z'
 planning  '2026-05-28T22:00:58Z'
 plan-fix-r1  '2026-05-28T22:04:30Z'
+planned  '2026-05-28T22:04:48Z'
 ```
