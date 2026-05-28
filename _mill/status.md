@@ -49,5 +49,7 @@ batches:
     start_sha: 5aabbf207c1149ea36c5695c263f9a71ba9efd04
     commit_sha: 01f71bc585d628ccfcfd58921228639a98928659
   - name: integration-test
-    state: pending
+    state: running
+    implementer_session: 184dbba6-650e-4353-9fe3-b5a1ca5b9237
+    start_sha: 496de12e4eb2a558b64d1103618b722d0e507339
 ```
