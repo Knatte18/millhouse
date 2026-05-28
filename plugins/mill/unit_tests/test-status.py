@@ -17,6 +17,7 @@ from _status import (  # noqa: E402
     read,
     append_phase,
     init_batches,
+    phase_entry_timestamp,
     read,
     read_batches,
     read_branch,
@@ -680,6 +681,59 @@ def main() -> int:
             except ValueError as exc:
                 assert "status file not found" in str(exc), f"unexpected error message: {str(exc)!r}"
         print("PASS: read() raises ValueError on missing file")
+
+        # --- phase_entry_timestamp tests ---
+        # Test 1: Single occurrence returns its timestamp
+        with tempfile.TemporaryDirectory() as tmp:
+            sp = Path(tmp) / "status.md"
+            initial = render_initial(
+                "Task", "Desc", "2026-05-28T20:00:00Z", "main", slug="t-slug", branch="hanf/t-slug"
+            )
+            sp.write_text(initial, encoding="utf-8")
+            append_phase(sp, "discussed", "2026-05-28T21:00:00Z")
+            ts = phase_entry_timestamp(sp, "discussed")
+            assert ts == "2026-05-28T21:00:00Z", f"expected timestamp, got {ts!r}"
+            print("PASS: phase_entry_timestamp single occurrence returns its timestamp")
+
+        # Test 2: 2nd occurrence of repeated phase returns 2nd timestamp
+        with tempfile.TemporaryDirectory() as tmp:
+            sp = Path(tmp) / "status.md"
+            initial = render_initial(
+                "Task", "Desc", "2026-05-28T20:00:00Z", "main", slug="t-slug", branch="hanf/t-slug"
+            )
+            sp.write_text(initial, encoding="utf-8")
+            append_phase(sp, "holistic-reviewing", "2026-05-28T21:00:00Z")
+            append_phase(sp, "plan-review-r1", "2026-05-28T21:30:00Z")
+            append_phase(sp, "holistic-reviewing", "2026-05-28T22:00:00Z")
+            ts1 = phase_entry_timestamp(sp, "holistic-reviewing", occurrence=1)
+            ts2 = phase_entry_timestamp(sp, "holistic-reviewing", occurrence=2)
+            assert ts1 == "2026-05-28T21:00:00Z", f"expected 1st occurrence, got {ts1!r}"
+            assert ts2 == "2026-05-28T22:00:00Z", f"expected 2nd occurrence, got {ts2!r}"
+            print("PASS: phase_entry_timestamp 2nd occurrence of repeated phase returns 2nd timestamp")
+
+        # Test 3: occurrence beyond match count returns None
+        with tempfile.TemporaryDirectory() as tmp:
+            sp = Path(tmp) / "status.md"
+            initial = render_initial(
+                "Task", "Desc", "2026-05-28T20:00:00Z", "main", slug="t-slug", branch="hanf/t-slug"
+            )
+            sp.write_text(initial, encoding="utf-8")
+            append_phase(sp, "discussed", "2026-05-28T21:00:00Z")
+            ts = phase_entry_timestamp(sp, "discussed", occurrence=5)
+            assert ts is None, f"expected None for out-of-range occurrence, got {ts!r}"
+            print("PASS: phase_entry_timestamp occurrence beyond match count returns None")
+
+        # Test 4: Absent phase returns None
+        with tempfile.TemporaryDirectory() as tmp:
+            sp = Path(tmp) / "status.md"
+            initial = render_initial(
+                "Task", "Desc", "2026-05-28T20:00:00Z", "main", slug="t-slug", branch="hanf/t-slug"
+            )
+            sp.write_text(initial, encoding="utf-8")
+            append_phase(sp, "discussed", "2026-05-28T21:00:00Z")
+            ts = phase_entry_timestamp(sp, "nonexistent-phase")
+            assert ts is None, f"expected None for absent phase, got {ts!r}"
+            print("PASS: phase_entry_timestamp absent phase returns None")
 
         print("All _status unit tests passed.")
         return 0
