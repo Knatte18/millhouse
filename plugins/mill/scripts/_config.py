@@ -3,14 +3,13 @@ _config — shared config-loading helpers for mill entrypoints.
 
 Exports
 -------
-load_config(wiki_path, worktree_root) -> dict
-    Load ``wiki/config.yaml`` deep-merged with
-    ``~/.millhouse/config.machine.yaml`` and
-    ``.millhouse/config.local.yaml``.  Machine layer (read via
-    ``_machine.load_layer``) lands between wiki and worktree layers;
-    later layers win on key conflicts.  Returns an empty dict when
-    ``wiki/config.yaml`` does not exist (lenient form used by
-    mill-color, mill-terminal, mill-vscode, and mill-spawn).
+load_config(hub_root, worktree_root) -> dict
+    Load mill config deep-merged from plugin template, hub-root layer,
+    local-stub layer, real config, and environment overrides. Merge order
+    (lowest to highest precedence): plugin template -> hub overlay (if
+    present) -> local stub -> real config -> env overrides. Returns the
+    merged dict. Each layer is optional except the plugin template which
+    is always present.
 
 deep_merge(base, overlay) -> dict
     Shallow-recursive deep merge; overlay wins on scalar conflicts.
