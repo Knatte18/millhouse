@@ -30,7 +30,9 @@ implementing  '2026-05-28T22:10:21Z'
 ```yaml
 batches:
   - name: review-guard-overstep
-    state: pending
+    state: running
+    implementer_session: baf4c91b-fb7e-4dfc-8e68-4d247c49f3cf
+    start_sha: 1eb46ec7d72ec2fca627798584b72eaff1264544
   - name: plan-review-cli-and-validator
     state: pending
   - name: status-phase-timestamp
