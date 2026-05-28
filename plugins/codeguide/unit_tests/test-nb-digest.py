@@ -72,7 +72,7 @@ def main() -> int:
         ])
         digest = build_digest(nb, "test.ipynb")
         assert "print('hello')" in digest, "Code should be present"
-        assert "[1 output(s) omitted]" in digest, "Should have output marker"
+        assert "[3 output(s) omitted]" in digest, "Should have output marker"
         assert "iVBORw0KGgoAAAANS" not in digest, "Base64 image data should not be in digest"
         assert "hello" not in digest or "print('hello')" in digest, "Stdout should not be in digest"
         print("PASS: outputs stripped from digest")

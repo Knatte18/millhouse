@@ -82,7 +82,7 @@ def build_digest(nb: dict, source_name: str) -> str:
     lines.append(f"# cells: {len(cells)}")
 
     for idx, cell in enumerate(cells, start=1):
-        cell_type = cell.get("type", "raw")
+        cell_type = cell.get("cell_type", "raw")
 
         if cell_type == "markdown":
             lines.append(f"# [markdown cell {idx}]")
