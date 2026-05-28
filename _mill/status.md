@@ -36,7 +36,9 @@ batches:
     start_sha: 1eb46ec7d72ec2fca627798584b72eaff1264544
     commit_sha: e6be3e098e7c73ebabc99da123a32fa4aee6c126
   - name: plan-review-cli-and-validator
-    state: pending
+    state: running
+    implementer_session: 378ce620-78e8-4739-a6f1-7d0685695974
+    start_sha: 5aa635a3aacc39e572ba014694a4c1bd13f7e15f
   - name: status-phase-timestamp
     state: pending
   - name: mill-start-skill
