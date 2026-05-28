@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-reviewing
+phase: holistic-approved
 slug: mill-merge-teardown-recovery
 branch: hanf/mill-merge-teardown-recovery
 plan: _mill/plan
@@ -28,6 +28,7 @@ approved-merge-continue  '2026-05-27T09:34:08Z'
 approved-status-gate  '2026-05-27T10:40:16Z'
 approved-fixer-isolation  '2026-05-27T11:16:10Z'
 holistic-reviewing  '2026-05-27T11:17:22Z'
+holistic-approved  '2026-05-28T20:43:11Z'
 ```
 
 ## Batches
