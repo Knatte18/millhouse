@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussion-fix-r1
+phase: discussed
 slug: mill-orchestration-loop-hardening
 branch: mill-orchestration-loop-hardening
 plan: null
@@ -16,4 +16,5 @@ task_description: |
 ```text
 discussing  '2026-05-28T21:13:36Z'
 discussion-fix-r1  '2026-05-28T21:38:54Z'
+discussed  '2026-05-28T21:39:29Z'
 ```
