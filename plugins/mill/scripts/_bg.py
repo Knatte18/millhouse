@@ -1,8 +1,11 @@
 """Liveness probe for millpy-bg worker subprocesses; used by orchestrators after resume to decide whether to wait or re-fire."""
+import logging
 import os
 import re
 import time
 from pathlib import Path
+
+_logger = logging.getLogger(__name__)
 
 _PID_RE = re.compile(r"\[mill-bg\] WORKER PID=(\d+) START")
 _EXIT_RE = re.compile(r"\[mill-bg\] EXIT \d+")
@@ -42,8 +45,9 @@ def is_bg_worker_alive(log_path: Path) -> tuple[bool, int | None]:
         return (False, pid)
     except PermissionError:
         return (True, pid)
-    except OSError:
+    except OSError as exc:
         # Unknown errno from os.kill (Windows-specific or transient) -- fall through to mtime fallback.
+        _logger.debug("is_bg_worker_alive: os.kill(%s, 0) raised %r -- falling back to log-mtime staleness", pid, exc)
         pass
     mtime = log_path.stat().st_mtime
     if (time.time() - mtime) > _STALE_LOG_SECONDS:
