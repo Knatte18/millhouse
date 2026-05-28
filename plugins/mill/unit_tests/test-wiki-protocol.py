@@ -233,69 +233,69 @@ def main() -> int:
 
     # --- (18) Remove-missing-rerenders case ---
     try:
-        tmp = Path(tempfile.mkdtemp())
-        wiki_path = tmp / "wiki"
-        wiki_path.mkdir(parents=True, exist_ok=True)
-        (wiki_path / "tasks.json").write_text('{"_default": {}}', encoding="utf-8")
+        with safe_temp_dir() as tmp:
+            wiki_path = tmp / "wiki"
+            wiki_path.mkdir(parents=True, exist_ok=True)
+            (wiki_path / "tasks.json").write_text('{"_default": {}}', encoding="utf-8")
 
-        wiki_server = WikiServer(wiki_path, idle_timeout=1)
-        wiki_server._store.upsert_task({"slug": "x", "title": "Task X"})
+            wiki_server = WikiServer(wiki_path, idle_timeout=1)
+            wiki_server._store.upsert_task({"slug": "x", "title": "Task X"})
 
-        with patch.object(wiki_server, "_render_and_commit_all") as mock_render:
-            payload = {"id_or_slug": "nonexistent-slug"}
-            resp = wiki_server._handle_remove_task(payload)
+            with patch.object(wiki_server, "_render_and_commit_all") as mock_render:
+                payload = {"id_or_slug": "nonexistent-slug"}
+                resp = wiki_server._handle_remove_task(payload)
 
-            assert mock_render.call_count == 1, f"_render_and_commit_all called {mock_render.call_count} times, expected 1"
-            assert resp[FIELD_OK] is False, f"response ok should be False, got {resp.get(FIELD_OK)}"
-            assert resp[FIELD_ERROR_TYPE] == ERR_NOT_FOUND, f"error_type should be not_found, got {resp.get(FIELD_ERROR_TYPE)}"
-            ok("Remove-missing-rerenders case")
+                assert mock_render.call_count == 1, f"_render_and_commit_all called {mock_render.call_count} times, expected 1"
+                assert resp[FIELD_OK] is False, f"response ok should be False, got {resp.get(FIELD_OK)}"
+                assert resp[FIELD_ERROR_TYPE] == ERR_NOT_FOUND, f"error_type should be not_found, got {resp.get(FIELD_ERROR_TYPE)}"
+                ok("Remove-missing-rerenders case")
     except Exception as exc:
         fail("Remove-missing-rerenders case", exc)
 
     # --- (19) Remove-existing-rerenders case ---
     try:
-        tmp = Path(tempfile.mkdtemp())
-        wiki_path = tmp / "wiki"
-        wiki_path.mkdir(parents=True, exist_ok=True)
-        (wiki_path / "tasks.json").write_text('{"_default": {}}', encoding="utf-8")
+        with safe_temp_dir() as tmp:
+            wiki_path = tmp / "wiki"
+            wiki_path.mkdir(parents=True, exist_ok=True)
+            (wiki_path / "tasks.json").write_text('{"_default": {}}', encoding="utf-8")
 
-        wiki_server = WikiServer(wiki_path, idle_timeout=1)
-        wiki_server._store.upsert_task({"slug": "x", "title": "Task X"})
+            wiki_server = WikiServer(wiki_path, idle_timeout=1)
+            wiki_server._store.upsert_task({"slug": "x", "title": "Task X"})
 
-        with patch.object(wiki_server, "_render_and_commit_all") as mock_render:
-            payload = {"id_or_slug": "x"}
-            resp = wiki_server._handle_remove_task(payload)
+            with patch.object(wiki_server, "_render_and_commit_all") as mock_render:
+                payload = {"id_or_slug": "x"}
+                resp = wiki_server._handle_remove_task(payload)
 
-            assert mock_render.call_count == 1, f"_render_and_commit_all called {mock_render.call_count} times, expected 1"
-            assert resp[FIELD_OK] is True, f"response ok should be True, got {resp.get(FIELD_OK)}"
-            ok("Remove-existing-rerenders case")
+                assert mock_render.call_count == 1, f"_render_and_commit_all called {mock_render.call_count} times, expected 1"
+                assert resp[FIELD_OK] is True, f"response ok should be True, got {resp.get(FIELD_OK)}"
+                ok("Remove-existing-rerenders case")
     except Exception as exc:
         fail("Remove-existing-rerenders case", exc)
 
     # --- (20) Orphan-deletion case ---
     try:
-        tmp = Path(tempfile.mkdtemp())
-        wiki_path = tmp / "wiki"
-        wiki_path.mkdir(parents=True, exist_ok=True)
-        (wiki_path / "tasks.json").write_text('{"_default": {}}', encoding="utf-8")
+        with safe_temp_dir() as tmp:
+            wiki_path = tmp / "wiki"
+            wiki_path.mkdir(parents=True, exist_ok=True)
+            (wiki_path / "tasks.json").write_text('{"_default": {}}', encoding="utf-8")
 
-        wiki_server = WikiServer(wiki_path, idle_timeout=1)
-        wiki_server._store.upsert_task({"slug": "new-slug", "title": "New Task"})
+            wiki_server = WikiServer(wiki_path, idle_timeout=1)
+            wiki_server._store.upsert_task({"slug": "new-slug", "title": "New Task"})
 
-        orphan_file = wiki_path / "proposal-old-slug.md"
-        orphan_file.write_text("old proposal", encoding="utf-8")
+            orphan_file = wiki_path / "proposal-old-slug.md"
+            orphan_file.write_text("old proposal", encoding="utf-8")
 
-        with patch("wiki._server.commit_push") as mock_commit_push:
-            payload = {}
-            wiki_server._handle_rerender(payload)
+            with patch("wiki._server.commit_push") as mock_commit_push:
+                payload = {}
+                wiki_server._handle_rerender(payload)
 
-            assert not orphan_file.exists(), "orphan file proposal-old-slug.md should be deleted"
-            assert mock_commit_push.call_count == 1, f"commit_push called {mock_commit_push.call_count} times, expected 1"
+                assert not orphan_file.exists(), "orphan file proposal-old-slug.md should be deleted"
+                assert mock_commit_push.call_count == 1, f"commit_push called {mock_commit_push.call_count} times, expected 1"
 
-            call_args = mock_commit_push.call_args[0]
-            commit_paths = call_args[1]
-            assert "proposal-old-slug.md" in commit_paths, f"proposal-old-slug.md not in commit_paths: {commit_paths}"
-            ok("Orphan-deletion case")
+                call_args = mock_commit_push.call_args[0]
+                commit_paths = call_args[1]
+                assert "proposal-old-slug.md" in commit_paths, f"proposal-old-slug.md not in commit_paths: {commit_paths}"
+                ok("Orphan-deletion case")
     except Exception as exc:
         fail("Orphan-deletion case", exc)
 

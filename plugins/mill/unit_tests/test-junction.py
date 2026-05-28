@@ -115,7 +115,8 @@ def main() -> int:
 
             stripped = _junction.strip_all_in_worktree(wt, junctions_cfg={})
 
-            assert wiki_link not in [p for p in stripped if p.name == ".wiki"] or not wiki_link.exists(), "junction should be removed"
+            assert wiki_link in stripped, "junction should be in stripped list"
+            assert not wiki_link.exists(), "junction should be removed"
             assert mill_dir.exists(), "_mill directory was removed (should not be touched)"
             assert claude_file.exists(), "CLAUDE.md file was removed (should not be touched)"
             ok("non-junction-untouched case")
@@ -138,8 +139,12 @@ def main() -> int:
     except Exception as exc:
         fail("missing-worktree case", exc)
 
-    print(f"\n{passed} passed, {failed} failed")
-    return 0 if failed == 0 else 1
+    print("", file=sys.stderr)
+    if failed:
+        print(f"FAIL -- {failed} of {passed + failed}", file=sys.stderr)
+        return 1
+    print(f"PASS -- all {passed} tests", file=sys.stderr)
+    return 0
 
 
 if __name__ == "__main__":
