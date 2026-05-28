@@ -176,6 +176,13 @@ def build_plan(
             to_report.append(f"{slug} -- unknown phase {phase!r}, skipping")
 
     # Orphan worktree detection: wts/ dirs without active markers.
+    # CRITICAL: cross-reference Home.md before recommending deletion. A slug
+    # that is [active]/[ready-to-merge]/[pr-pending] is IN USE -- the .active
+    # junction may be stale or pointing elsewhere, but the worktree is live.
+    # Recommending 'git worktree remove --force' on a live worktree partially
+    # succeeds on Windows (admin dir deleted, working tree files truncated
+    # while session holds others open), corrupting the user's session.
+    _IN_USE_MARKERS = {"active", "ready-to-merge", "pr-pending"}
     if container_path is not None:
         wts_dir = container_path / "wts"
         if wts_dir.is_dir():
@@ -186,10 +193,20 @@ def build_plan(
                 if entry.resolve() == hub_root.resolve():
                     continue
                 if entry.name not in active_slugs:
-                    to_report.append(
-                        f"orphan worktree: {entry} (no active marker;"
-                        f" run 'git worktree remove --force {entry}' to clean up)"
-                    )
+                    home_marker = marker_by_slug.get(entry.name)
+                    if home_marker in _IN_USE_MARKERS:
+                        to_report.append(
+                            f"WARNING in-use worktree {entry} -- .active junction"
+                            f" does not point here but Home.md marks slug"
+                            f" {entry.name!r} as [{home_marker}]. DO NOT delete;"
+                            f" reconcile state manually (likely repair the .active"
+                            f" junction or run mill-claim)."
+                        )
+                    else:
+                        to_report.append(
+                            f"orphan worktree: {entry} (no active marker;"
+                            f" run 'git worktree remove --force {entry}' to clean up)"
+                        )
 
     orphan_portals: list[Path] = []
     if container_path is not None:
@@ -197,10 +214,29 @@ def build_plan(
             container_path / "portals", active_slugs
         )
 
-    # Orphan Home.md marker: [active]/[ready-to-merge]/[pr-pending] slug with no active worktree.
+    # Orphan Home.md marker: [active]/[ready-to-merge]/[pr-pending] slug with no
+    # worktree on disk. active_slugs is keyed off the .active junction, so a
+    # slug whose junction has drifted but whose worktree dir still exists is
+    # NOT truly orphaned -- only the junction is. Cross-reference container/wts/
+    # to avoid false positives that would mislead callers into "fixing" a
+    # healthy worktree.
+    wts_slugs_on_disk: set[str] = set()
+    if container_path is not None:
+        wts_dir = container_path / "wts"
+        if wts_dir.is_dir():
+            for entry in wts_dir.iterdir():
+                if not entry.is_dir():
+                    continue
+                if entry.resolve() == hub_root.resolve():
+                    continue
+                wts_slugs_on_disk.add(entry.name)
+
     for task in home_tasks:
         marker = task.get("status")
         if marker in ("active", "ready-to-merge", "pr-pending") and task["slug"] not in active_slugs:
+            if task["slug"] in wts_slugs_on_disk:
+                # Already reported under the in-use-worktree warning above.
+                continue
             to_report.append(
                 f"orphan Home.md marker: {task["slug"]} is [{marker}] but has no "
                 f"active worktree"

@@ -39,6 +39,22 @@ import _timestamp
 from _implementer_common import _forward_output
 
 
+def _is_windows_lock_error(e: Exception) -> bool:
+    """Check if exception is a Windows file-locking error.
+
+    Returns True if the exception is caused by a Windows file-locking issue:
+    - OSError with winerror == 32 (process cannot access the file)
+    - Error message contains 'winerror 32', 'process cannot access', or
+      'being used by another process'
+    """
+    cause = getattr(e, "__cause__", None)
+    if isinstance(cause, OSError) and getattr(cause, "winerror", None) == 32:
+        return True
+
+    msg = str(e).lower()
+    return any(s in msg for s in ["winerror 32", "process cannot access", "being used by another process"])
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(
         description="Dispatch a fixer session for code review findings."
@@ -272,7 +288,8 @@ def main(argv=None) -> int:
             timeout=timeout,
         )
     except _llm_claude.LLMError as e:
-        print(json.dumps({"status": "stuck", "stuck_type": "transient", "reason": str(e)}))
+        stuck_type = "verify" if _is_windows_lock_error(e) else "transient"
+        print(json.dumps({"status": "stuck", "stuck_type": stuck_type, "reason": str(e)}))
         print(str(e), file=sys.stderr)
         return 1
 

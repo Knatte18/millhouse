@@ -199,17 +199,16 @@ def main() -> int:
             "resolve_path must be re-exported identity from _sibling, not duplicated"
         print("PASS: _paths.resolve_path is _sibling.resolve_path (no duplication)")
 
-        # resolve_hub_path
-
-        got = _paths.resolve_hub_path()
-        assert got == Path.cwd().resolve(), f"no-arg: got {got}"
-        print("PASS: resolve_hub_path() with no argument returns Path.cwd().resolve()")
+        # resolve_hub_path -- since the refactor, resolves via git common dir
+        # rather than trusting cwd. Outside a git repo, falls back to the
+        # provided/cwd path resolved (preserves the original behaviour for
+        # pre-init callers like mill-setup).
 
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp).resolve()
             got = _paths.resolve_hub_path(tmp_path)
-            assert got == tmp_path, f"explicit absolute: got {got}"
-        print("PASS: resolve_hub_path(absolute_path) returns it resolved")
+            assert got == tmp_path, f"non-git absolute: got {got}"
+        print("PASS: resolve_hub_path(absolute_path) outside git -> falls back to path resolved")
 
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp).resolve()
@@ -218,7 +217,22 @@ def main() -> int:
             got = _paths.resolve_hub_path(parent / rel)
             assert got == tmp_path, f"relative-like path: got {got}"
             assert got.is_absolute(), f"result must be absolute: got {got}"
-        print("PASS: resolve_hub_path(relative-style path) returns an absolute path")
+        print("PASS: resolve_hub_path(relative-style path) outside git -> falls back to absolute")
+
+        # Inside a git repo: returns the main worktree root regardless of
+        # whether cwd is the hub, a hub subdir, or a child worktree.
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp).resolve()
+            hub = tmp_path / "hub"
+            hub.mkdir()
+            import _test_helpers
+            _test_helpers.init_minimal_git_repo(hub, branch="main")
+            sub = hub / ".millhouse"
+            sub.mkdir()
+            assert _paths.resolve_hub_path(hub) == hub
+            assert _paths.resolve_hub_path(sub) == hub, \
+                f"hub subdir should resolve to hub, got {_paths.resolve_hub_path(sub)}"
+        print("PASS: resolve_hub_path inside git resolves subdirs to hub")
 
         # resolve_wiki_path — container-form default (main_root under wts/)
 

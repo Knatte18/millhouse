@@ -49,6 +49,8 @@ Before doing anything else, run `python ${CLAUDE_PLUGIN_ROOT}/scripts/resolve.py
    a. **Read the existing doc.**
 
    b. *(full mode only)* **Read the corresponding source file(s)** to check if behavior, interfaces, or relationships have changed.
+   
+      When the source for a doc is a `.ipynb`, read it via `python ${CLAUDE_PLUGIN_ROOT}/scripts/nb_digest.py <abs-path>` (stdout), never the Read tool. A non-zero exit means skip the accuracy check for that file and flag it. The Step 6c `## Source` link validation and Step 6e structure checks already work for notebook docs (relative-path link + Notebooks doc shape) — notebook docs are validated against the Notebooks shape in `DocumentationGuide.md`.
 
    c. *(full mode only)* **Check the Source section:** Verify that the relative paths in the `## Source` section resolve to existing files. If a path is broken, search for the file by name and update the path. If the Source section is missing, add it.
 
@@ -92,3 +94,4 @@ Include the relevant `_codeguide/Overview.md` in every subagent prompt.
 - Do not delete docs. If a doc has no corresponding source, flag it to the user.
 - Preserve accurate existing content. Only modify what is structurally wrong or factually stale.
 - When updating structure to match the guide, keep the existing content's meaning intact.
+- Never read a raw `.ipynb` — obtain its content via `nb_digest.py` (see the Documentation Guide's Notebooks rules).

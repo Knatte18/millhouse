@@ -143,8 +143,30 @@ def resolve_git_root(start: Path | None = None) -> Path:
 
 
 def resolve_hub_path(cwd: Path | None = None) -> Path:
-    """Return the hub directory — assumes CC's cwd equals the hub when mill scripts run."""
-    return (cwd or Path.cwd()).resolve()
+    """Return the hub directory (the main worktree, where mill-config.yaml lives).
+
+    Uses ``resolve_git_root`` + ``resolve_main_worktree_root`` so the lookup
+    works regardless of the caller's cwd:
+
+    - Hub-root cwd → the hub itself.
+    - Hub subdirectory cwd (e.g. ``.millhouse/`` where the .cmd wrappers live)
+      → walks up to the git root, which is the hub.
+    - Task worktree cwd → walks up to the git root (the task worktree), then
+      collapses through the common gitdir to the main worktree (the hub).
+
+    Previously this returned ``Path.cwd().resolve()`` and silently misbehaved
+    when the user invoked a wrapper from ``.millhouse/`` -- ``_load_config``
+    looked for ``.millhouse/mill-config.yaml`` (not present), fell back to
+    the plugin template (where ``spawn.branch_prefix`` is empty), and tasks
+    got spawned on branches without the configured prefix. Falling back to
+    cwd here when git lookup fails preserves the historical behaviour for
+    callers running outside a git repo (mill-setup pre-init).
+    """
+    try:
+        git_root = resolve_git_root(cwd)
+        return resolve_main_worktree_root(git_root)
+    except (SystemExit, _pygit2_util.GitOpsError):
+        return (cwd or Path.cwd()).resolve()
 
 
 def resolve_main_worktree_root(git_root: Path) -> Path:

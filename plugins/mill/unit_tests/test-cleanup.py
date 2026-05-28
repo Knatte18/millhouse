@@ -319,6 +319,46 @@ def main() -> int:
             assert "git worktree remove --force" in orphan_lines[0]
             print("PASS build_plan — orphan worktree (no active marker) -> reported")
 
+        # --- in-use worktree dir on disk + Home.md [active]: WARNING, not delete ---
+        # A live worktree whose .active junction has drifted: the slug is
+        # [active] in Home.md AND a directory exists at container/wts/<slug>.
+        # mill-cleanup must NOT recommend 'git worktree remove --force' here --
+        # that command partially succeeds on Windows and corrupts the live
+        # session. Single consolidated WARNING in the report instead.
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            container = tmp
+            wts_dir = container / "wts"
+            hub = wts_dir / "my-repo"
+            hub.mkdir(parents=True)
+            _make_git_repo(hub)
+            in_use = wts_dir / "live-slug"
+            in_use.mkdir()
+
+            wiki_path = container / "wiki"
+            wiki_path.mkdir()
+
+            home_tasks = [_make_task("live-slug", "active")]
+            with patch("mill_cleanup._paths.resolve_container_path", return_value=container):
+                plan = build_plan(
+                    [], home_tasks, wiki_path, hub_root=hub, container_path=container
+                )
+
+            warn_lines = [line for line in plan.to_report if "live-slug" in line]
+            assert len(warn_lines) == 1, (
+                f"expected single WARNING line, got {plan.to_report}"
+            )
+            assert "WARNING" in warn_lines[0], (
+                f"expected WARNING marker, got {warn_lines[0]!r}"
+            )
+            assert "DO NOT delete" in warn_lines[0], (
+                f"expected explicit DO NOT delete, got {warn_lines[0]!r}"
+            )
+            assert "git worktree remove --force" not in warn_lines[0], (
+                f"WARNING must not include the dangerous remove command, got {warn_lines[0]!r}"
+            )
+            print("PASS build_plan — in-use orphan worktree -> WARNING, not delete suggestion")
+
         # --- orphan Home.md marker ([active] with no active worktree) ---
         with tempfile.TemporaryDirectory() as tmp:
             tmp = Path(tmp)

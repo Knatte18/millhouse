@@ -6,6 +6,7 @@ source_extensions: []
 #   - .ts
 #   - .cs
 #   - .go
+#   - .ipynb
 
 # Block search tools until _codeguide/Overview.md has been read.
 # Recommended: keeps Claude from bypassing the routing system.
