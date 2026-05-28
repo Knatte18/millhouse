@@ -14,6 +14,9 @@ from unittest.mock import MagicMock, call, patch
 
 HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
+sys.path.insert(0, str(HUB / "plugins" / "mill" / "unit_tests"))
+
+import _test_helpers  # noqa: E402,F401  (sets WIKI_DAEMON env defaults)
 
 # Load millpy-terminal.py via importlib (hyphenated name).
 _SCRIPT = HUB / "plugins" / "mill" / "scripts" / "millpy-terminal.py"

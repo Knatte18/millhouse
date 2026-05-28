@@ -895,11 +895,69 @@ def main() -> int:
         errors += 1
         print(f"FAIL: empty config case expected False, got {result}", file=sys.stderr)
 
+    # --- argv-shape regression tests (merged from test-llm-claude-argv.py) ---
+    errors += _test_build_argv_shape()
+
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)
         return 1
     print("All _llm_claude unit tests passed.")
     return 0
+
+
+def _test_build_argv_shape() -> int:
+    """Argv-shape regression tests for _build_argv (issue #335).
+
+    Merged 2026-05-28 from test-llm-claude-argv.py.
+    """
+    from _llm_claude import _build_argv
+
+    errors = 0
+
+    # Empty allowed_tools: must emit --allowedTools "" explicitly + deny-list.
+    argv = _build_argv(model="m", effort=None, allowed_tools="")
+    try:
+        assert "--allowedTools" in argv
+        tools_idx = argv.index("--allowedTools")
+        assert argv[tools_idx + 1] == "", "must emit --allowedTools ''"
+        assert "--disallowedTools" in argv
+        deny_idx = argv.index("--disallowedTools")
+        assert argv[deny_idx + 1] == "Edit,Write,Bash,NotebookEdit"
+        print("PASS: _build_argv empty allowed_tools emits explicit '' + deny-list")
+    except AssertionError as exc:
+        print(f"FAIL: _build_argv empty allowed_tools: {exc}", file=sys.stderr)
+        errors += 1
+
+    # Read-only tools: emits both allow and deny lists.
+    argv = _build_argv(model="m", effort=None, allowed_tools="Read,Grep,Glob")
+    try:
+        assert "--allowedTools" in argv
+        tools_idx = argv.index("--allowedTools")
+        assert argv[tools_idx + 1] == "Read,Grep,Glob"
+        assert "--disallowedTools" in argv
+        deny_idx = argv.index("--disallowedTools")
+        assert argv[deny_idx + 1] == "Edit,Write,Bash,NotebookEdit"
+        print("PASS: _build_argv read-only allow-list emits both allow and deny")
+    except AssertionError as exc:
+        print(f"FAIL: _build_argv read-only: {exc}", file=sys.stderr)
+        errors += 1
+
+    # Full tool set: emits allow-list, NOT deny-list.
+    argv = _build_argv(
+        model="m", effort=None,
+        allowed_tools="Read,Edit,Write,Bash,Grep,Glob,Skill",
+    )
+    try:
+        assert "--allowedTools" in argv
+        tools_idx = argv.index("--allowedTools")
+        assert argv[tools_idx + 1] == "Read,Edit,Write,Bash,Grep,Glob,Skill"
+        assert "--disallowedTools" not in argv
+        print("PASS: _build_argv full tool set emits allow-only, no deny-list")
+    except AssertionError as exc:
+        print(f"FAIL: _build_argv full set: {exc}", file=sys.stderr)
+        errors += 1
+
+    return errors
 
 
 if __name__ == "__main__":

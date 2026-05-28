@@ -178,6 +178,7 @@ def run(
     wiki_root: Path,
     project_root: Path,
     *,
+    git_root: Path,
     max_rounds: int | None = None,
     batch_name: str | None = None,
     extra_files: list[Path] | None = None,
@@ -253,7 +254,7 @@ def run(
         deletes_union = compute_deletes_union(plan_dir)
         referenced = resolve_ref_paths(
             list(all_raw_refs.keys()), project_root, root,
-            creates_union=creates_union, deletes_union=deletes_union, wiki_root=wiki_root,
+            creates_union=creates_union, deletes_union=deletes_union, wiki_root=wiki_root, git_root=git_root,
         )
 
         # Deduplicate while preserving order across the two lists.
@@ -276,6 +277,7 @@ def run(
             project_root,
             root,
             wiki_root=wiki_root,
+            git_root=git_root,
         )
         ancestors_on_disk = [p for p in ancestors_on_disk if p not in source_files]
 
@@ -372,7 +374,7 @@ def run(
             if verdict == "NEED_CONTEXT":
                 missing_raw = parse_missing_context(raw)
                 missing_paths = resolve_existing_paths(
-                    missing_raw, project_root, root, wiki_root=wiki_root
+                    missing_raw, project_root, root, wiki_root=wiki_root, git_root=git_root
                 )
                 if missing_paths:
                     retry_prompt = (

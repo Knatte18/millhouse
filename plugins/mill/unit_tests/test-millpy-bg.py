@@ -183,36 +183,41 @@ def main() -> int:
         failures.append(f"FAIL (d) Windows flags ({type(exc).__name__}): {exc}")
 
     # (e) POSIX path forwards pid via popen_detached
-    try:
-        # Keep WindowsPath on Windows when os.name is mocked to "posix".
-        _concrete_path_cls = type(_launcher_mod.Path("."))
-        mocks = _mock_validation_success()
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with unittest.mock.patch.object(_launcher_mod._subprocess_util.os, "name", "posix"), \
-                 unittest.mock.patch.object(_launcher_mod, "Path", _concrete_path_cls), \
-                 unittest.mock.patch.object(
-                     _launcher_mod._subprocess_util, "run",
-                     return_value=_mock_git_run_result(tmpdir),
-                 ), unittest.mock.patch.object(
-                     _launcher_mod._subprocess_util.subprocess, "Popen",
-                     return_value=_mock_popen_instance(pid=2),
-                 ) as mock_popen_cls, \
-                 mocks[0], mocks[1], mocks[2]:
-                buf = io.StringIO()
-                with unittest.mock.patch("sys.stdout", buf):
-                    _launcher_main(["--slug", "posix-test", "--", "echo", "hi"])
+    # Skipped on Windows: patching os.name='posix' globally breaks pathlib.Path.cwd()
+    # because Python 3.13 refuses to instantiate PosixPath on a Windows host.
+    import os as _os
+    if _os.name == "nt":
+        print("SKIP (e): POSIX flags test (Windows host — cannot mock os.name)")
+    else:
+        try:
+            _concrete_path_cls = type(_launcher_mod.Path("."))
+            mocks = _mock_validation_success()
+            with tempfile.TemporaryDirectory() as tmpdir:
+                with unittest.mock.patch.object(_launcher_mod._subprocess_util.os, "name", "posix"), \
+                     unittest.mock.patch.object(_launcher_mod, "Path", _concrete_path_cls), \
+                     unittest.mock.patch.object(
+                         _launcher_mod._subprocess_util, "run",
+                         return_value=_mock_git_run_result(tmpdir),
+                     ), unittest.mock.patch.object(
+                         _launcher_mod._subprocess_util.subprocess, "Popen",
+                         return_value=_mock_popen_instance(pid=2),
+                     ) as mock_popen_cls, \
+                     mocks[0], mocks[1], mocks[2]:
+                    buf = io.StringIO()
+                    with unittest.mock.patch("sys.stdout", buf):
+                        _launcher_main(["--slug", "posix-test", "--", "echo", "hi"])
 
-                assert mock_popen_cls.call_count == 1, (
-                    "popen_detached should call Popen exactly once"
-                )
-                assert "pid=2" in buf.getvalue(), (
-                    f"pid=2 not found in output: {buf.getvalue()!r}"
-                )
-        print("PASS (e): POSIX path forwards pid via popen_detached")
-    except AssertionError as exc:
-        failures.append(f"FAIL (e) POSIX flags: {exc}")
-    except Exception as exc:
-        failures.append(f"FAIL (e) POSIX flags ({type(exc).__name__}): {exc}")
+                    assert mock_popen_cls.call_count == 1, (
+                        "popen_detached should call Popen exactly once"
+                    )
+                    assert "pid=2" in buf.getvalue(), (
+                        f"pid=2 not found in output: {buf.getvalue()!r}"
+                    )
+            print("PASS (e): POSIX path forwards pid via popen_detached")
+        except AssertionError as exc:
+            failures.append(f"FAIL (e) POSIX flags: {exc}")
+        except Exception as exc:
+            failures.append(f"FAIL (e) POSIX flags ({type(exc).__name__}): {exc}")
 
     # (f) missing --slug returns 1
     try:

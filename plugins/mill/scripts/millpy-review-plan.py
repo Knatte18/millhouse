@@ -73,17 +73,19 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
+    import _paths
     import _reviewers
-    from _paths import resolve_wiki_path
+    from _paths import resolve_hub_path, resolve_wiki_path
     from _review_cli import print_error_envelope
     from _review_common import ReviewError, find_active_slug, load_config, resolve_path
     from _review_plan import run
 
     try:
         project_root = Path.cwd()
+        git_root = _paths.resolve_git_root()
         mill_dir = project_root / ".millhouse"
         wiki_root = resolve_wiki_path(project_root)
-        cfg = load_config(project_root, mill_dir)
+        cfg = load_config(resolve_hub_path(), mill_dir)
     except (ReviewError, ValueError, SystemExit) as exc:
         print_error_envelope("plan", str(exc))
         return 1
@@ -113,6 +115,7 @@ def main(argv: list[str] | None = None) -> int:
             mill_dir,
             wiki_root,
             project_root,
+            git_root=git_root,
             max_rounds=args.max_rounds,
             holistic_only=args.holistic_only,
             no_holistic=args.no_holistic,
