@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-reviewing
+phase: holistic-approved
 slug: mill-orchestration-loop-hardening
 branch: mill-orchestration-loop-hardening
 plan: _mill/plan
@@ -31,6 +31,7 @@ approved-code-review-nit-envelope  '2026-05-28T22:26:30Z'
 approved-mill-plan-skill  '2026-05-28T22:29:41Z'
 approved-mill-go-skill  '2026-05-28T22:32:28Z'
 holistic-reviewing  '2026-05-28T22:32:54Z'
+holistic-approved  '2026-05-28T22:37:51Z'
 ```
 
 ## Batches
