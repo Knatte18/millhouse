@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import stat
 import sys
 from pathlib import Path
 
@@ -134,9 +135,20 @@ def safe_rmtree(path: Path, *, allowed_root: Path, ignore_errors: bool = False) 
     # Step 7: strip junctions/symlinks recursively before rmtree.
     _walk_strip_reparse_points(original)
 
-    # Step 8: rmtree with defense-in-depth for ignore_errors.
+    # Step 8: rmtree with chmod+retry for read-only files (e.g. git pack idx/pack on Windows) and defense-in-depth for ignore_errors.
+    def _readonly_handler(func, path, exc):
+        try:
+            os.chmod(path, stat.S_IWRITE)
+            func(path)
+        except OSError:
+            if not ignore_errors:
+                raise
+
     try:
-        shutil.rmtree(str(original), ignore_errors=ignore_errors)
+        if sys.version_info >= (3, 12):
+            shutil.rmtree(str(original), onexc=_readonly_handler)
+        else:
+            shutil.rmtree(str(original), onerror=lambda func, path, exc_info: _readonly_handler(func, path, exc_info[1]))
     except OSError:
         if not ignore_errors:
             raise

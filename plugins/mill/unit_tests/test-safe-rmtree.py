@@ -17,7 +17,7 @@ from unittest.mock import MagicMock, patch
 HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
-import _safe_rmtree  # noqa: E402
+import _safe_rmtree  # noqa: E402, F401
 from _safe_rmtree import safe_rmtree  # noqa: E402
 import _junction  # noqa: E402
 
@@ -258,7 +258,7 @@ def main() -> int:
         assert raised, "expected OSError to propagate when ignore_errors=False"
         print("PASS: ignore_errors=True swallows OSError from rmtree")
 
-    # --- ignore_errors passes through to shutil.rmtree ---
+    # --- ignore_errors contract honoured via outer try/except ---
     with tempfile.TemporaryDirectory() as tmp:
         tmp_path = Path(tmp)
         scratch = tmp_path / "scratch"
@@ -268,8 +268,12 @@ def main() -> int:
             safe_rmtree(scratch, allowed_root=scratch, ignore_errors=True)
         mock.assert_called_once()
         call_kwargs = mock.call_args[1]
-        assert call_kwargs.get("ignore_errors") is True, \
-            f"expected ignore_errors=True, got {call_kwargs}"
+        if sys.version_info >= (3, 12):
+            assert "onexc" in call_kwargs, \
+                f"expected onexc in kwargs on Python 3.12+, got {call_kwargs}"
+        else:
+            assert "onerror" in call_kwargs, \
+                f"expected onerror in kwargs on Python 3.11 and earlier, got {call_kwargs}"
 
         scratch.mkdir(exist_ok=True)
         mock2 = MagicMock()
@@ -277,9 +281,13 @@ def main() -> int:
             safe_rmtree(scratch, allowed_root=scratch, ignore_errors=False)
         mock2.assert_called_once()
         call_kwargs2 = mock2.call_args[1]
-        assert call_kwargs2.get("ignore_errors") is False, \
-            f"expected ignore_errors=False, got {call_kwargs2}"
-        print("PASS: ignore_errors passes through to shutil.rmtree")
+        if sys.version_info >= (3, 12):
+            assert "onexc" in call_kwargs2, \
+                f"expected onexc in kwargs on Python 3.12+, got {call_kwargs2}"
+        else:
+            assert "onerror" in call_kwargs2, \
+                f"expected onerror in kwargs on Python 3.11 and earlier, got {call_kwargs2}"
+        print("PASS: ignore_errors contract honoured via outer try/except")
 
     # --- non-container allowed_root does not crash ---
     with tempfile.TemporaryDirectory() as tmp:
