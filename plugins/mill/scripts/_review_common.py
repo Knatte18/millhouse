@@ -135,6 +135,11 @@ def worktree_snapshot_guard(
     ANY entry in ``expected_paths`` as a substring. HEAD-SHA changes are
     NEVER filtered.
 
+    A fast-forward HEAD advance (where the new HEAD is a descendant of the old
+    HEAD) is tolerated if no new working-tree dirt is introduced and no dirt
+    is removed outside of a fast-forward commit. A stderr warning is emitted
+    when a fast-forward is detected.
+
     If the wrapped block raises AND state was mutated, ``ReviewerOverstepError`` takes priority and chains the inner exception via ``__cause__``; if state was unchanged the inner exception is re-raised unchanged.
     If the post-snapshot capture itself raises (e.g. ``_capture_head_sha`` propagating a ``ReviewError`` from a broken git invocation), that error propagates and the inner exception is NOT chained -- the capture failure indicates the snapshot is untrustworthy, so the typed ``ReviewerOverstepError`` cannot be raised safely. This is an intentional trade-off; the inner exception, if any, is visible in the traceback frames above the capture call.
     """
@@ -149,9 +154,29 @@ def worktree_snapshot_guard(
     after_porcelain = _capture_porcelain(project_root)
     before_filtered = _filter_porcelain(before_porcelain, expected_paths)
     after_filtered = _filter_porcelain(after_porcelain, expected_paths)
-    if before_sha != after_sha or set(before_filtered) != set(after_filtered):
+
+    added = set(after_filtered) - set(before_filtered)
+    removed = set(before_filtered) - set(after_filtered)
+    head_changed = before_sha != after_sha
+    fast_forward = head_changed and _pygit2_util.is_ancestor(project_root, before_sha, after_sha)
+
+    should_raise = (
+        (added)  # New working-tree dirt added
+        or (head_changed and not fast_forward)  # HEAD rewritten/reset to non-descendant
+        or (removed and not fast_forward)  # Dirt removed without a fast-forward commit
+    )
+
+    if should_raise:
         diff = _porcelain_diff(before_filtered, after_filtered)
         raise ReviewerOverstepError(before_sha, after_sha, diff) from inner_exc
+
+    if fast_forward and not added and not (removed and not fast_forward):
+        print(
+            f"[_review_common] HEAD advanced {before_sha[:8]} -> {after_sha[:8]} "
+            f"during review window (fast-forward; allowed)",
+            file=sys.stderr,
+        )
+
     if inner_exc is not None:
         raise inner_exc
 
