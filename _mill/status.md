@@ -50,5 +50,7 @@ batches:
     start_sha: 5802353382010380b23e3066a784bd901c5a8dd5
     commit_sha: 9f892d7ab85d2f66803f9d48fefff1c632d13583
   - name: safe-rmtree-chmod-retry
-    state: pending
+    state: running
+    implementer_session: 13b7bed0-2ecf-4bff-9968-41421136ad14
+    start_sha: 6c61ff547454dcae4fd4bade163ff9402fdf5433
 ```
