@@ -55,7 +55,6 @@ rows), the absent-JSON two-pass retry behaviour, and the `pipeline.max_cards_per
 - **Context:**
   - `mill-config.yaml`
   - `plugins/mill/scripts/_review_common.py`
-  - `plugins/mill/scripts/millpy-review-code.py`
 - **Edits:**
   - `plugins/mill/scripts/_plan_validate.py`
   - `plugins/mill/scripts/millpy-review-plan.py`

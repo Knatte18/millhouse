@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planning
+phase: plan-fix-r1
 slug: mill-orchestration-loop-hardening
 branch: mill-orchestration-loop-hardening
 plan: _mill/plan
@@ -18,4 +18,6 @@ discussing  '2026-05-28T21:13:36Z'
 discussion-fix-r1  '2026-05-28T21:38:54Z'
 discussed  '2026-05-28T21:39:29Z'
 planning  '2026-05-28T21:52:34Z'
+plan-review-r1  '2026-05-28T21:58:55Z'
+plan-fix-r1  '2026-05-28T21:58:55Z'
 ```
