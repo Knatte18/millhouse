@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussion-fix-r1
+phase: discussed
 slug: mill-setup-winreg
 branch: mill-setup-winreg
 plan: null
@@ -16,4 +16,5 @@ task_description: |
 ```text
 discussing  '2026-05-30T14:23:36Z'
 discussion-fix-r1  '2026-05-30T14:56:19Z'
+discussed  '2026-05-30T14:56:46Z'
 ```
