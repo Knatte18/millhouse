@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-fix-r2
+phase: planned
 slug: infra-robustness-windows
 branch: infra-robustness-windows
 plan: _mill/plan
@@ -20,4 +20,5 @@ planning  '2026-05-30T14:57:16Z'
 plan-review-r1  '2026-05-30T15:09:15Z'
 plan-fix-r1  '2026-05-30T15:09:15Z'
 plan-fix-r2  '2026-05-30T15:16:12Z'
+planned  '2026-05-30T15:16:26Z'
 ```
