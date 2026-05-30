@@ -51,13 +51,16 @@ the fast health probe inside `_ensure_daemon`.
 - **Requirements:** In `wiki/_client.py`: (1) add `WikiBusyError` to the
   `from wiki import (...)` import block (lines 13-37). (2) Wrap the op-dispatch
   call to `_connect_send_recv` in `_dispatch` (the call at line 118, inside the
-  daemon-TCP branch after `_ensure_daemon`) in a bounded retry: 3 attempts with
-  `time.sleep` backoff of 2s, 4s, 8s between attempts, catching `TimeoutError`
-  (which since Python 3.10 also covers `socket.timeout`); on the final attempt's
-  timeout raise `WikiBusyError` with a message naming the op. Do NOT retry other
-  `OSError` subtypes — only the timeout. (3) Pass an explicit per-attempt
-  `timeout=3.0` to that `_connect_send_recv` call so a stalled daemon fails fast
-  enough for retries to matter (worst case ~23s before `WikiBusyError`). Leave
+  daemon-TCP branch after `_ensure_daemon`) in a bounded retry: **4 total
+  attempts** (1 initial + 3 retries) with `time.sleep` backoff of 2s, 4s, 8s
+  between the attempts (3 sleeps for 4 attempts), catching `TimeoutError`
+  (which since Python 3.10 also covers `socket.timeout`); after the 4th
+  attempt's timeout raise `WikiBusyError` with a message naming the op (do NOT
+  sleep after the final failed attempt — sleep only *between* attempts). Do NOT
+  retry other `OSError` subtypes — only the timeout. (3) Pass an explicit
+  per-attempt `timeout=3.0` to that `_connect_send_recv` call so a stalled
+  daemon fails fast enough for retries to matter (worst case ~26s before
+  `WikiBusyError`: 4x3s attempts + 2+4+8s sleeps). Leave
   the `_connect_send_recv` default signature and the health-probe call inside
   `_ensure_daemon` (the `timeout=1.0` call) UNCHANGED — the retry must not wrap
   the health probe. Keep all `print`/log strings ASCII.
@@ -99,18 +102,21 @@ the fast health probe inside `_ensure_daemon`.
 - **Deletes:** none
 - **Requirements:** Extend `test-wiki-daemon.py` (follow its existing `main()` +
   `ok()/fail()` + `unittest.mock.patch` style; do NOT convert to unittest
-  classes) with cases: (a) a transient recv `TimeoutError` that clears within 3
-  attempts → op succeeds, `WikiBusyError` NOT raised; (b) persistent recv
-  `TimeoutError` → exactly 3 attempts then `WikiBusyError` raised; (c) backoff
-  sequence is `[2, 4, 8]` — patch `wiki._client.time.sleep` and assert the
-  recorded call args (do not actually sleep); (d) the `_ensure_daemon` health
-  probe is single-shot (NOT wrapped by the busy-retry); (e) `WikiBusyError` is a
-  subclass of `WikiError` and importable from `wiki`; (f)
-  `wait_for_socket_reachable` returns `True` for a bound listening socket and
-  `False` (within budget, no raise) for a closed/refused port; (g)
-  `SPAWN_TIMEOUT` is 20 under a patched `sys.platform == "win32"`. Mock sockets
-  / `create_connection` as the existing daemon tests do; spawn no real
-  processes.
+  classes) with cases: (a) a transient recv `TimeoutError` that clears within
+  the 4 attempts → op succeeds, `WikiBusyError` NOT raised; (b) persistent recv
+  `TimeoutError` → exactly 4 attempts attempted, then `WikiBusyError` raised;
+  (c) backoff sequence recorded is exactly `[2, 4, 8]` (3 sleeps between 4
+  attempts) — patch `wiki._client.time.sleep` and assert the recorded call args
+  (do not actually sleep); (d) the `_ensure_daemon` health probe is single-shot
+  (NOT wrapped by the busy-retry); (e) `WikiBusyError` is a subclass of
+  `WikiError` and importable from `wiki`; (f) `wait_for_socket_reachable`
+  returns `True` for a bound listening socket and `False` (within budget, no
+  raise) for a closed/refused port; (g) `assert _client.SPAWN_TIMEOUT == 20`
+  directly (valid on the Windows target where the suite runs — the constant is
+  import-time, so patching `sys.platform` post-import cannot change it; for
+  optional cross-platform coverage `importlib.reload(_client)` inside a
+  `sys.platform` patch context is acceptable). Mock sockets / `create_connection`
+  as the existing daemon tests do; spawn no real processes.
 - **Commit:** `test(wiki): cover WikiBusyError retry and wait_for_socket_reachable`
 
 ## Batch Tests

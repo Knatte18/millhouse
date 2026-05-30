@@ -77,8 +77,9 @@ batches:
 ### Decision: infrastructure-stuck-is-orchestrator-inferred
 
 - **Decision:** `stuck_type: infrastructure` is inferred by the orchestrator
-  (mill-go) from a `("dead", pid)` return of `_bg.wait_for_bg_terminal` — it is
-  NOT emitted by any CLI. Recovery is a plain **fresh re-fire** of the CLI (no
+  (mill-go) from a `("dead", pid)` return of the single-shot `_bg.check_bg_status`
+  helper (called once per incremental poll iteration; never a blocking wait) —
+  it is NOT emitted by any CLI. Recovery is a plain **fresh re-fire** of the CLI (no
   `--resume`; the killed session is dead, matching the existing `running`-state
   Resume). mill-start, being always-interactive, surfaces an error and halts
   instead of inferring a stuck_type.

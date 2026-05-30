@@ -14,12 +14,17 @@ depends-on: []
 Delivers the two `_bg.py` fixes (#393, #391-helper), both in one ~80-line module
 tested by `test-bg-liveness.py`. #393 broadens the `os.kill` probe's `except` so
 a chained Windows `SystemError` no longer escapes `is_bg_worker_alive`. #391
-adds a new `wait_for_bg_terminal` helper that encapsulates the
-"poll-until-EXIT-or-dead" loop with a race guard. The external interface
-consumed by batch 3 (orchestrator-integration) is the new
-`wait_for_bg_terminal(log_path, *, poll_interval) -> ("exit", code) | ("dead", pid)`
-function — batch 3 only edits SKILL.md prose to call it, so it must land here
-first (batch 3 `depends-on: [2]`).
+adds a new `check_bg_status` helper — a **single-shot, non-blocking** status
+probe (it returns immediately; it does NOT loop or sleep) with a one-time
+re-read race guard. It is single-shot by design: the orchestrator keeps its
+existing incremental `cat` poll loop and calls this helper once per iteration,
+so no call ever blocks past the Bash 600s cap on a normal-length workload. The
+external interface consumed by batch 3 (orchestrator-integration) is the new
+`check_bg_status(log_path) -> tuple[str, int | None]` function, where the first
+element is `"exit"` / `"running"` / `"dead"` and the second is the exit code
+(for `"exit"`) or the worker pid (for `"running"` / `"dead"`, or `None` if the
+log is missing). Batch 3 only edits SKILL.md prose to call it, so it must land
+here first (batch 3 `depends-on: [2]`).
 
 ## Cards
 
@@ -42,7 +47,7 @@ first (batch 3 `depends-on: [2]`).
   debug-log string ASCII.
 - **Commit:** `fix(bg): catch chained SystemError in is_bg_worker_alive probe`
 
-### Card 6: Add `wait_for_bg_terminal` poll helper
+### Card 6: Add `check_bg_status` single-shot status helper
 
 - **Context:**
   - `plugins/mill/scripts/millpy-bg.py`
@@ -50,25 +55,24 @@ first (batch 3 `depends-on: [2]`).
   - `plugins/mill/scripts/_bg.py`
 - **Creates:** none
 - **Deletes:** none
-- **Requirements:** Add a new function
-  `wait_for_bg_terminal(log_path: Path, *, poll_interval: float = 2.0) -> tuple[str, int | None]`
-  to `_bg.py` that blocks until the bg worker reaches a terminal state and
-  returns either `("exit", <exit_code>)` or `("dead", <pid>)`. Loop body, each
-  iteration: (1) read the log; if it contains the `[mill-bg] EXIT <code>`
-  sentinel (reuse the existing `_EXIT_RE`), parse the integer code and return
-  `("exit", code)`. (2) Otherwise call `is_bg_worker_alive(log_path)`; if alive,
-  `time.sleep(poll_interval)` and continue. (3) If `is_bg_worker_alive` reports
-  dead (`alive is False`), perform the **race guard**: re-read the log once more
-  and re-check for the EXIT sentinel — if EXIT is now present return
-  `("exit", code)`, else return `("dead", pid)`. Use the module's existing
-  `_EXIT_RE` for EXIT detection and a new local regex (or reuse `_EXIT_RE`'s
-  capture) to extract the exit code integer; if the worker log is missing
-  entirely treat it as dead (`("dead", None)`). All log reads use
-  `read_text(encoding="utf-8", errors="replace")` like `is_bg_worker_alive`.
+- **Requirements:** Add a new **single-shot, non-blocking** function
+  `check_bg_status(log_path: Path) -> tuple[str, int | None]` to `_bg.py`. It
+  must NOT loop or sleep — it performs exactly one status determination and
+  returns immediately (the orchestrator owns the poll cadence). Logic: (1) read
+  the log; if it contains the `[mill-bg] EXIT <code>` sentinel, parse the
+  integer code with a new module-level regex `_EXIT_CODE_RE =
+  re.compile(r"\[mill-bg\] EXIT (\d+)")` (do NOT reuse `_EXIT_RE`, which has no
+  capture group; leave `_EXIT_RE` unchanged) and return `("exit", code)`. (2)
+  Else call `is_bg_worker_alive(log_path)`; if it reports alive, return
+  `("running", pid)`. (3) If it reports dead (`alive is False`), perform the
+  **race guard**: re-read the log once more and re-check for the EXIT sentinel —
+  if EXIT is now present return `("exit", code)`, else return `("dead", pid)`.
+  If the log file is missing entirely, return `("dead", None)`. All log reads
+  use `read_text(encoding="utf-8", errors="replace")` like `is_bg_worker_alive`.
   Keep any added strings ASCII.
-- **Commit:** `feat(bg): add wait_for_bg_terminal poll-until-exit-or-dead helper`
+- **Commit:** `feat(bg): add check_bg_status single-shot worker status helper`
 
-### Card 7: Tests for `SystemError` widening and `wait_for_bg_terminal`
+### Card 7: Tests for `SystemError` widening and `check_bg_status`
 
 - **Context:**
   - `plugins/mill/scripts/_bg.py`
@@ -82,15 +86,17 @@ first (batch 3 `depends-on: [2]`).
   via the mtime fallback without propagating — fresh-mtime log → `(True, pid)`,
   stale-mtime log → `(False, pid)`; existing cases (EXIT present,
   `ProcessLookupError`, `PermissionError`, unknown `OSError`) must remain green.
-  (#391 `wait_for_bg_terminal`) cases: (a) log already has `EXIT 0` →
-  `("exit", 0)`; (b) worker alive then EXIT appears on a later poll → `("exit",
-  code)` (patch `is_bg_worker_alive` and/or rewrite the log between polls; patch
-  `_bg.time.sleep` so the test does not really sleep); (c) probe reports dead and
-  re-read still has no EXIT → `("dead", pid)`; (d) **race guard** — probe reports
-  dead but the re-read now shows `EXIT 0` → `("exit", 0)`, NOT dead; (e) missing
-  log file → `("dead", None)`. Patch liveness/log reads; spawn no real
-  processes.
-- **Commit:** `test(bg): cover SystemError widening and wait_for_bg_terminal`
+  (#391 `check_bg_status`) cases — each is a single call (no sleeping, no
+  looping): (a) log has `[mill-bg] EXIT 0` → `("exit", 0)`; (b) log has a WORKER
+  PID line, no EXIT, `is_bg_worker_alive` patched to report alive →
+  `("running", pid)`; (c) no EXIT, `is_bg_worker_alive` patched to report dead,
+  re-read still has no EXIT → `("dead", pid)`; (d) **race guard** —
+  `is_bg_worker_alive` patched to report dead but the log content swapped so the
+  re-read now shows `[mill-bg] EXIT 0` → `("exit", 0)`, NOT dead (drive the
+  swap by patching `Path.read_text` / the log read to return no-EXIT then
+  with-EXIT on successive calls); (e) missing log file → `("dead", None)`. Patch
+  liveness/log reads; spawn no real processes.
+- **Commit:** `test(bg): cover SystemError widening and check_bg_status`
 
 ## Batch Tests
 
