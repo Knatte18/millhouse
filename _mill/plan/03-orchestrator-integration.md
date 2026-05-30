@@ -40,8 +40,9 @@ batch 2). It `depends-on: [2]` because the SKILL prose references
   (1) **Poll augmentation (NOT replacement).** Every place that currently
   instructs "Poll the log file with `cat <log-path>` until `[mill-bg] EXIT`
   appears" (the per-batch implement step, the per-batch review step, the
-  per-batch NIT-fix step, the fix step, the holistic review step, and the
-  holistic NIT-fix step) keeps its incremental poll loop, but each iteration
+  per-batch NIT-fix step, the fix step, the per-batch ERROR-only retry at step
+  4.5, the holistic review step, the holistic ERROR-only retry at step 3.5, and
+  the holistic NIT-fix step) keeps its incremental poll loop, but each iteration
   now also runs a fast, non-blocking liveness check via a documented Bash
   one-liner of the form
   `PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "import _bg, json; print(json.dumps(_bg.check_bg_status(...)))"`

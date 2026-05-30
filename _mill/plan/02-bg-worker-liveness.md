@@ -58,8 +58,11 @@ here first (batch 3 `depends-on: [2]`).
 - **Requirements:** Add a new **single-shot, non-blocking** function
   `check_bg_status(log_path: Path) -> tuple[str, int | None]` to `_bg.py`. It
   must NOT loop or sleep — it performs exactly one status determination and
-  returns immediately (the orchestrator owns the poll cadence). Logic: (1) read
-  the log; if it contains the `[mill-bg] EXIT <code>` sentinel, parse the
+  returns immediately (the orchestrator owns the poll cadence). Logic: (0)
+  existence guard FIRST — `if not log_path.exists(): return ("dead", None)`
+  (mirrors `is_bg_worker_alive`'s opening, so the later `read_text` never hits a
+  missing file). (1) read the log; if it contains the `[mill-bg] EXIT <code>`
+  sentinel, parse the
   integer code with a new module-level regex `_EXIT_CODE_RE =
   re.compile(r"\[mill-bg\] EXIT (\d+)")` (do NOT reuse `_EXIT_RE`, which has no
   capture group; leave `_EXIT_RE` unchanged) and return `("exit", code)`. (2)

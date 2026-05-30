@@ -3,7 +3,7 @@
 ```yaml
 task: Wiki-daemon + bg-worker + test-suite robustness on Windows
 slug: infra-robustness-windows
-approved: false
+approved: true
 started: 20260530-145439
 parent: main
 root: ""

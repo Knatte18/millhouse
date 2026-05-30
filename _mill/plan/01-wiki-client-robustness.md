@@ -83,7 +83,9 @@ the fast health probe inside `_ensure_daemon`.
   521-535) to use it: because host/port are only known after the daemon writes
   `.wiki-daemon.json`, keep the outer loop that re-reads the state file via
   `_read_state_file()` and call `wait_for_socket_reachable(state["host"],
-  state["port"], timeout=...)` once a state dict with host/port is available;
+  state["port"], timeout=deadline - time.monotonic())` (the remaining
+  `SPAWN_TIMEOUT` budget from the outer loop's `deadline`) once a state dict with
+  host/port is available;
   return `(host, port, token)` on reachable, fall through to the existing
   `WikiStartupError("daemon did not start within timeout")` on budget
   exhaustion. Preserve existing behavior exactly otherwise. (3) Change
@@ -111,11 +113,12 @@ the fast health probe inside `_ensure_daemon`.
   (NOT wrapped by the busy-retry); (e) `WikiBusyError` is a subclass of
   `WikiError` and importable from `wiki`; (f) `wait_for_socket_reachable`
   returns `True` for a bound listening socket and `False` (within budget, no
-  raise) for a closed/refused port; (g) `assert _client.SPAWN_TIMEOUT == 20`
-  directly (valid on the Windows target where the suite runs — the constant is
-  import-time, so patching `sys.platform` post-import cannot change it; for
-  optional cross-platform coverage `importlib.reload(_client)` inside a
-  `sys.platform` patch context is acceptable). Mock sockets / `create_connection`
+  raise) for a closed/refused port; (g) platform-guarded assertion:
+  `if sys.platform == "win32": assert _client.SPAWN_TIMEOUT == 20` else
+  `assert _client.SPAWN_TIMEOUT == 10` (the constant is import-time, so this
+  matches its own definition on whichever platform the suite runs — green on
+  both the Windows target and Linux CI; no `sys.platform` patch attempted since
+  it cannot change an import-time constant). Mock sockets / `create_connection`
   as the existing daemon tests do; spawn no real processes.
 - **Commit:** `test(wiki): cover WikiBusyError retry and wait_for_socket_reachable`
 
