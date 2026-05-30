@@ -59,8 +59,10 @@ Q&A so mill-plan does not re-derive a fix for something already done:
   check to the in-session "poll log until `[mill-bg] EXIT`" loop so a worker
   that dies without writing EXIT (logout) is detected instead of hung on
   forever. Introduce `stuck_type: infrastructure`. Recovery reuses the existing
-  crash-recovery re-fire path (re-fire CLI; `--resume` for the warm implementer
-  session). Encapsulate the poll loop in a tested `_bg` helper.
+  crash-recovery re-fire path: a plain **fresh re-fire** of the CLI (no
+  `--resume`) — the killed session is dead and cannot be re-attached, exactly as
+  the existing `running`-state Resume path documents. Encapsulate the poll loop
+  in a tested `_bg` helper.
 
 **Out:**
 
@@ -149,30 +151,39 @@ Q&A so mill-plan does not re-derive a fix for something already done:
   absent, **re-read the log once** to close the EXIT-write-in-flight window, and
   only then return `("dead", pid)`. The orchestrator treats `("dead", …)` as a
   new `stuck_type: infrastructure`. Recovery reuses the existing crash-recovery
-  re-fire path (re-fire the CLI; pass `--resume` for the implementer so the warm
-  session is reused).
+  re-fire path: a plain **fresh re-fire** of the CLI — no `--resume`, no
+  warm-session re-attach. The killed session is dead and cannot be re-attached;
+  the CLI re-initialises `state -> running`, captures a new snapshot, and spawns
+  a fresh implementer session. This is byte-identical to the existing
+  `running`-state Resume recovery (`mill-go/SKILL.md:318`).
 - Rationale: The in-session loop ("`cat` until EXIT", repeated ~6× across
   mill-go/mill-start) has no liveness check and hangs forever when a worker is
   killed by logout. `is_bg_worker_alive` already short-circuits to `(False, pid)`
   when EXIT is present, so the only extra race guard needed is one re-read.
   Centralizing in a helper means the new logic is written and tested once.
+  `millpy-implement.py` hardcodes `resume=False` (`:186`) and has no `--resume`
+  flag, and the documented design treats an interrupted session as dead — so a
+  fresh re-fire is both the simplest and the only consistent recovery.
 - Rejected: detection-only with immediate halt (no auto-recovery); adding a
   dedicated `mill-go resume --from-killed` CLI flag (the existing Resume / branch
-  (c) machinery already re-fires on a dead worker).
+  (c) machinery already re-fires on a dead worker); building a new warm-session
+  `--resume-session <id>` mechanism on `millpy-implement.py` (contradicts the
+  "session is dead" design and is unneeded surface).
 
 ### 391-infrastructure-stuck-policy
 
 - Decision: On detected infrastructure death — **interactive mode:** surface to
-  the user with retry (`--resume`) / block options. **`autonomous_mode`:**
-  auto-retry **once** via `--resume`; if the re-fire also dies, block with
+  the user with re-fire (fresh) / block options. **`autonomous_mode`:**
+  auto-retry **once** with a fresh re-fire; if the re-fire also dies, block with
   `blocked_reason: "infrastructure: bg worker died (logout?)"`.
-- Rationale: Logout is a transient external event and the warm session likely
-  checkpointed, so one silent resume is the right reflex under autonomous mode;
+- Rationale: Logout is a transient external event, so one silent fresh re-fire
+  is the right reflex under autonomous mode;
   bounding it at one retry prevents an unbounded re-fire loop if the machine is
   genuinely down. Interactive mode keeps the "never guess when stuck — surface
   options" principle.
-- Rejected: always block immediately even in autonomous mode (wastes a warm,
-  recoverable session); unbounded auto-retry (spins if the machine stays down).
+- Rejected: always block immediately even in autonomous mode (wastes a cheap,
+  recoverable re-fire when the machine is back); unbounded auto-retry (spins if
+  the machine stays down).
 
 ## Technical context
 
@@ -189,6 +200,14 @@ live under `plugins/mill/scripts/`):
     busy-retry here. The inline spawn poll (`:521-533`) is the code to extract
     into `wait_for_socket_reachable`. `SPAWN_TIMEOUT` is the module constant at
     `:39`.
+    - **Loop-shape caveat (mill-plan's call):** the current poll reads the
+      state file *inside* the loop to discover `host`/`port` (the daemon writes
+      `.wiki-daemon.json` on startup), so a `wait_for_socket_reachable(host,
+      port, ...)` helper that assumes host/port are known up front cannot be
+      mechanically split out. mill-plan must either (a) keep the state-file read
+      in an outer loop and call the helper once host/port are known, or (b) give
+      the helper a state-file-aware signature. Either is acceptable; this is a
+      deliberate design choice for the plan writer, not a mechanical extraction.
 - `plugins/mill/scripts/wiki/__init__.py` — error hierarchy at `:45-75`
   (`WikiError` base, then `WikiNotFoundError`, `WikiConflictError`,
   `WikiPushError`, `WikiProtocolError`, `WikiStartupError`, `WikiPathError`).
@@ -200,6 +219,13 @@ live under `plugins/mill/scripts/`):
 - `plugins/mill/scripts/_subprocess_util.py` — `popen_detached` (`:296`) already
   uses `start /B` + `CREATE_BREAKAWAY_FROM_JOB` (`:334-339`); **no change** for
   prevention. Reference only.
+- `plugins/mill/scripts/millpy-implement.py` — the recovery target. Accepts only
+  a positional `batch_name` and hardcodes `resume=False` (`:186`); it has **no**
+  `--resume` flag and the documented design treats an interrupted session as
+  dead. The `infrastructure`-death recovery therefore re-fires it exactly as the
+  existing `running`-state Resume does (`millpy-bg ... millpy-implement.py
+  <batch_name>`, no resume flag). **No change to this CLI** — referenced so
+  mill-plan does not invent a warm-resume flag.
 - `plugins/mill/skills/mill-go/SKILL.md` — the in-session poll instruction
   ("Poll the log file with `cat <log-path>` until `[mill-bg] EXIT` appears")
   appears at `:167`, `:239`, `:250`, `:262`, `:279`, `:445`. Crash-recovery
@@ -270,7 +296,8 @@ git/LLM). TDD candidates are the pure helpers (#400 retry, #393 widening,
 - **Un-automatable parts** — document a manual verification checklist in the
   task result rather than gating on OS events: (i) actual Windows logout/login
   with a mill-go batch running → orchestrator surfaces `infrastructure` stuck
-  and `--resume` recovers; (ii) the #395 "10 consecutive green runs" loop under
+  and a fresh re-fire recovers; (ii) the #395 "10 consecutive green runs" loop
+  under
   cold cache + CPU load. No integration test that spawns+kills a real daemon
   (rejected as heavier than the value here).
 
@@ -285,7 +312,8 @@ git/LLM). TDD candidates are the pure helpers (#400 retry, #393 widening,
   logout is unpreventable; what's the deliverable? **A:** Detect + recover via
   existing machinery — add a liveness check to the in-session poll loop, surface
   a new `stuck_type: infrastructure`, route recovery through the existing
-  crash-recovery re-fire path (`--resume` for the warm session). No new CLI flag.
+  crash-recovery re-fire path — a plain fresh re-fire (no `--resume`; the killed
+  session is dead, matching the existing `running`-state Resume). No new CLI flag.
 - **Q:** #400 — where does the busy-retry live? **A:** Centralize in the client
   dispatch path (wrap the op's `_connect_send_recv`, not the health probe);
   3 attempts at 2s/4s/8s; raise `WikiBusyError(WikiError)` on exhaustion.
@@ -295,7 +323,7 @@ git/LLM). TDD candidates are the pure helpers (#400 retry, #393 widening,
   Add a small `_bg` helper (`wait_for_bg_terminal`) that encapsulates
   poll-until-EXIT-or-dead, called from each site.
 - **Q:** `infrastructure` stuck behaviour under `autonomous_mode`? **A:**
-  Auto-retry once via `--resume`, then block if still dead; interactive mode
+  Auto-retry once via a fresh re-fire, then block if still dead; interactive mode
   surfaces retry/block options.
 - **Q:** #400 per-attempt timeout budget? **A:** Lower per-attempt recv timeout
   to ~3s and keep 2s/4s/8s backoff (worst case ~23s before `WikiBusyError`).
@@ -306,3 +334,14 @@ git/LLM). TDD candidates are the pure helpers (#400 retry, #393 widening,
 - **Q:** How to verify #391/#395 given un-automatable OS events? **A:**
   Unit-test the mechanisms; document a manual checklist for the logout repro and
   the 10× green-run loop. No real-daemon kill integration test.
+- **Q:** (review r1 gap) How does `infrastructure`-death recovery re-fire — warm
+  `--resume` or fresh start? **A:** Fresh re-fire, no `--resume`. `millpy-implement.py`
+  has no `--resume` flag (`resume=False` hardcoded at `:186`) and the documented
+  `running`-state Resume already treats an interrupted session as dead; warm
+  re-attach would contradict that design. All `--resume`/warm-session language
+  removed from the #391 decisions.
+- **Q:** (review r1 note) Can `wait_for_socket_reachable(host, port, ...)` be
+  mechanically extracted from `_ensure_daemon`'s spawn poll? **A:** No — the loop
+  reads host/port from the state file *inside* the loop, so extraction needs a
+  design choice (outer state-file read, or a state-file-aware helper signature).
+  Flagged as mill-plan's call in Technical context.
