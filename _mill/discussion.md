@@ -158,11 +158,15 @@ backlog rather than a genuine dependency layer; `deferred` gives it a home.
   **A..Z (active/isolated) tasks only**. Deferred and done tasks render under
   their section header with **no** bracket suffix (the section is the
   classifier; this changes the current "done retains its `[A]`/`[Z]` suffix"
-  behaviour — the pinned `test-wiki-render` case is updated). A task with a
-  non-empty effective `depends_on` gets a `Depends on: #NNN, #MMM` line (deps
-  shown by **task number**, translated from slug at render time) placed directly
-  under the `[slug](proposal-...)` line. The line is omitted when there are no
-  deps. Isolated and deferred tasks that carry deps still show the line.
+  behaviour — the pinned `test-wiki-render` case is updated). A task whose
+  **raw** `depends_on` is non-empty gets a `Depends on: #NNN, #MMM` line: it
+  lists **every declared dependency** by task number (translated from slug at
+  render time), placed directly under the `[slug](proposal-...)` line. This is
+  the raw stored list, **not** the done-filtered `effective_deps` used for layer
+  math — done targets are still shown (a done task keeps its number under
+  `# Done`). Display documents the declared graph; layering computes scheduling;
+  the two intentionally differ. The line is omitted only when `depends_on` is
+  empty. Isolated and deferred tasks that carry deps still show the line.
 - Decision: A dep slug that is not present in the task set (a target removed
   after the edge was created) renders as `#???: <slug> (missing)` and is ignored
   for layering. Write-time validation prevents *creating* a dangling edge;
@@ -191,6 +195,16 @@ backlog rather than a genuine dependency layer; `deferred` gives it a home.
     *non-deferred* task depends on. Error names the dependents. (Both reverse
     guards reject — no cascade; the operator defers/isolates dependents first or
     removes the edge.)
+- Decision: `upsert_tasks_batch` validates against the **projected post-batch
+  state** — the current store tasks unioned with every incoming record (merged
+  by slug) — so intra-batch dependencies (task A `depends_on: ["B"]` with A and
+  B both new in the same call) resolve correctly and batch-internal cycles are
+  caught. Validation runs over that projection before any insert; on any
+  failure nothing is written (same all-or-nothing guarantee as `merge_tasks`).
+  Naive per-record serial validation is rejected — it would false-reject A
+  because B is not yet inserted. (Today's only batch caller, the legacy
+  `millpy-wiki-migrate.py` bootstrap, sends `depends_on = []`, so this is
+  forward-proofing — but it closes the false-reject hole.)
 - Decision: `_server` maps `ValueError` from the store to a new
   `ERR_VALIDATION` error type; `_client` raises a new `WikiValidationError`
   (subclass of `WikiError`) so callers distinguish bad input from protocol
@@ -356,8 +370,11 @@ Gotchas:
 - Slugs in storage, numbers in display — the slug->id map only exists at render
   time (it needs the full task set), which is why `Depends on:` numbers are a
   render concern, not a store concern.
-- TinyDB `update` merges keys and cannot delete `group`; the migration must
-  rewrite records wholesale (see migration decision).
+- To drop the `group` key without re-keying doc_ids, use
+  `tinydb.operations.delete("group")` inside `db.update(...)`; plain
+  `db.update(dict)` merges and cannot delete a key (so a wholesale
+  clear-and-reinsert would be needed instead — which the migration deliberately
+  avoids because it re-keys doc_ids). See the migration decision.
 - Daemon auto-respawns on protocol mismatch — after the bump, the first client
   call kills the running daemon and starts a v3 one; expect one respawn.
 
@@ -384,16 +401,20 @@ TDD candidates (write tests first):
   invalid input" (extend the existing empty-`merge_tasks` guard test). New-field
   defaults (`depends_on []`, `isolated`/`deferred` `False`). Updated
   `list_tasks_brief` **raw** key set (no `layer`). `set_deps` happy-path +
-  validation.
+  validation. **Batch projection**: `upsert_tasks_batch` with an intra-batch dep
+  (A `depends_on ["B"]`, A and B both new in one call) succeeds; a batch with an
+  internal cycle is rejected with nothing written.
 - **`wiki/_render.py` / `compute_layers`** (`test-wiki-render`): topo levels
   (A/B/C by depth); done-dep promotion (dep done -> dependent moves toward A);
   isolated -> Z (shared); deferred -> `# Someday`; precedence
   done>deferred>isolated>topo; A..Y cap overflow raises; cycle raises; dangling
   dep -> `#???: <slug> (missing)` and ignored for layering; render order
   `A..Z -> Someday -> Done`; `# Unspecified` no longer emitted;
-  `Depends on: #NNN` shows numbers and is omitted when empty; done/deferred
-  carry no `[letter]` suffix. Direct unit tests for `extended_title` and
-  `render_order` in isolation. Keep the byte-identical-double-render test.
+  `Depends on: #NNN` shows numbers and is omitted only when `depends_on` is
+  empty; **all-deps-done -> the `Depends on:` line is still shown** (raw list,
+  not done-filtered); done/deferred carry no `[letter]` suffix. Direct unit
+  tests for `extended_title` and `render_order` in isolation. Keep the
+  byte-identical-double-render test.
 - **`wiki/_server.py`** (`test-wiki-daemon` or a focused new test):
   `OP_SET_DEPS` round-trips; `OP_MIGRATE_DEPS` round-trips; store `ValueError`
   surfaces as `ERR_VALIDATION`; `_handle_list_tasks_brief` returns rows
