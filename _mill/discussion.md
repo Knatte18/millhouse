@@ -226,17 +226,27 @@ backlog rather than a genuine dependency layer; `deferred` gives it a home.
 
 ### brief-shape
 
-- Decision: `list_tasks_brief` rows change from
+- Decision: The **client-observed** `list_tasks_brief` row changes from
   `{id, slug, title, group, brief, status, has_proposal}` to
   `{id, slug, title, depends_on, isolated, deferred, layer, brief, status,
-  has_proposal}`. `layer` is the **derived** bucket label (read-only;
-  `compute_layers` output). The pinned key-set assertion in `test-wiki-store`
-  is updated.
+  has_proposal}`. Ownership is **split** to respect `derivation-single-source`:
+  `Store.list_tasks_brief` returns only the **raw stored** fields
+  (`depends_on`, `isolated`, `deferred`) and never imports `_render`;
+  `_server._handle_list_tasks_brief` calls
+  `compute_layers(self._store.all_tasks())` once and merges the derived `layer`
+  key into each row before returning. The store stays storage-only and `layer`
+  is computed exactly once, by the same `_render` function Home.md uses.
+- Decision: The pinned key-set assertion in `test-wiki-store` asserts the
+  **raw** store set (no `layer`); a separate server/client-level test asserts
+  the **enriched** set (with `layer`).
 - Rationale: Consumers (`millpy-spawn`/status/inspect) need the derived letter
-  for display and the raw flags for any future filtering. Exposing the derived
-  `layer` keeps consumers from re-implementing topo.
-- Rejected: Keeping the key named `group` but holding the derived letter
-  (misleading name); not exposing the raw flags (forecloses filtering).
+  for display and the raw flags for any future filtering. Enriching at the
+  server handler — which already imports `_render` — gives consumers `layer`
+  for free without coupling `_store` to presentation.
+- Rejected: Computing `layer` inside `Store.list_tasks_brief` (couples storage
+  to `_render`, contradicts `derivation-single-source`); keeping the key named
+  `group` but holding the derived letter (misleading name); not exposing the
+  raw flags (forecloses filtering).
 
 ### migration
 
@@ -302,8 +312,10 @@ Files and what changes:
   False`. Add validation (a private helper run by all write paths, given the
   full task set via `self._db.all()`), `set_deps`, `migrate_group_to_deps`
   (drops `group` via TinyDB `delete("group")` + sets new fields in place,
-  preserving doc_id/`id`, idempotent), and update `list_tasks_brief`'s returned
-  dict. `merge_tasks` already validates the upsert payload before mutating —
+  preserving doc_id/`id`, idempotent), and change `list_tasks_brief`'s returned
+  dict to the **raw** field set (drop `group`; add `depends_on`/`isolated`/
+  `deferred`; no derived `layer` here — the server enriches that, see
+  `brief-shape`). `merge_tasks` already validates the upsert payload before mutating —
   extend that pattern; keep the "nothing removed on invalid input" guarantee
   (pinned by an existing test).
 - `wiki/_render.py` (`render`, currently 100 lines) — replace the `group`-based
@@ -318,8 +330,11 @@ Files and what changes:
   `Store.migrate_group_to_deps()` then `_render_and_commit_all`); map store
   `ValueError` -> `ERR_VALIDATION` in the `except` arms of the mutating handlers
   (`_handle_upsert_task`, `_handle_upsert_tasks_batch`, `_handle_merge_tasks`,
-  `_handle_set_deps`); set `_protocol_version = 3`. The render call
-  (`render(self._store.all_tasks())`) and orphan-cleanup block are unchanged.
+  `_handle_set_deps`); set `_protocol_version = 3`. Enrich
+  `_handle_list_tasks_brief`: call `compute_layers(self._store.all_tasks())`
+  (imported from `wiki._render`) and merge the derived `layer` into each row
+  before returning. The render call (`render(self._store.all_tasks())`) and
+  orphan-cleanup block are unchanged.
 - `wiki/_client.py` — `upsert_task`: drop `group=`, add `depends_on=`,
   `isolated=`, `deferred=` (only attach to payload when not `None`). Add
   `set_deps(wiki_path, slug, depends_on)` and `migrate_deps(wiki_path)`. Add an
@@ -368,7 +383,8 @@ TDD candidates (write tests first):
   `depends_on`/`isolated`/`deferred`, stray `group`). Assert "no mutation on
   invalid input" (extend the existing empty-`merge_tasks` guard test). New-field
   defaults (`depends_on []`, `isolated`/`deferred` `False`). Updated
-  `list_tasks_brief` key set. `set_deps` happy-path + validation.
+  `list_tasks_brief` **raw** key set (no `layer`). `set_deps` happy-path +
+  validation.
 - **`wiki/_render.py` / `compute_layers`** (`test-wiki-render`): topo levels
   (A/B/C by depth); done-dep promotion (dep done -> dependent moves toward A);
   isolated -> Z (shared); deferred -> `# Someday`; precedence
@@ -379,7 +395,9 @@ TDD candidates (write tests first):
   carry no `[letter]` suffix. Direct unit tests for `extended_title` and
   `render_order` in isolation. Keep the byte-identical-double-render test.
 - **`wiki/_server.py`** (`test-wiki-daemon` or a focused new test):
-  `OP_SET_DEPS` round-trips; store `ValueError` surfaces as `ERR_VALIDATION`;
+  `OP_SET_DEPS` round-trips; `OP_MIGRATE_DEPS` round-trips; store `ValueError`
+  surfaces as `ERR_VALIDATION`; `_handle_list_tasks_brief` returns rows
+  **enriched** with the derived `layer` (key set includes `layer`);
   **orphan-cleanup regression** — `remove_task` on a task with a proposal
   deletes and stages `proposal-<slug>.md`.
 - **`wiki/_client.py`** (`test-wiki-protocol` / client test): new kwargs reach
@@ -443,3 +461,9 @@ forbidden write (each rejected, store unchanged).
   TinyDB's `delete("group")` operation plus a field-set update to drop `group`
   and add the new fields in place — `doc_id` and `id` preserved, no external
   rewrite, idempotent.
+- **Q:** (review r2 GAP) Who enriches the derived `layer` onto
+  `list_tasks_brief` rows without coupling `_store` to `_render`? **A:**
+  `_server._handle_list_tasks_brief` calls `compute_layers(self._store.all_tasks())`
+  and merges `layer` into each row; `Store.list_tasks_brief` returns only the
+  raw stored fields. Store-level test asserts the raw key set; server-level test
+  asserts the enriched set.
