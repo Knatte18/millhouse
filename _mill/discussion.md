@@ -49,9 +49,12 @@ mill-setup's environment-variable handling.
 - Phase 4.8 (`MILL_PYTHON`) — already pure Python writing
   `~/.claude/settings.json`; **not** touched. It is **not** promoted to a real
   Windows env var; the settings.json design is deliberate and stays.
-- The PS1 shortcut wrappers themselves (Phase 4.7's `_shortcuts.write_all`
-  step). Those generate `.ps1` forwarder files — that is file generation, not a
-  PowerShell subprocess invocation, and is unchanged.
+- The command shortcut wrappers themselves (Phase 4.7's `_shortcuts.write_all`
+  step). `_shortcuts.py` generates Windows `.cmd` batch forwarders (and prunes
+  legacy `.ps1` wrappers) — that is file generation, not a PowerShell subprocess
+  invocation, and is unchanged. (Note: SKILL.md Phase 4.7's header "PS1 shortcut
+  wrappers" and its `.ps1` wording are pre-existing doc staleness, not introduced
+  by this task; the env-var rewrite does not depend on the wrapper extension.)
 - The unrelated PowerShell mention at SKILL.md line 103 (the `uv` install hint
   `irm https://astral.sh/uv/install.ps1 | iex`) — that is operator guidance
   text, not a subprocess mill-setup runs. Left as-is.
@@ -126,7 +129,8 @@ mill-setup's environment-variable handling.
   so it never raises `FileNotFoundError` on a pristine profile where the
   `Environment` subkey has not yet been created. `OpenKey` with `KEY_WRITE` would
   raise in that edge case. Happy-path behaviour is identical (the subkey normally
-  already exists). Source: discussion-review r1 [NOTE].
+  already exists). (Self-initiated robustness choice during design — not from the
+  discussion review.)
 - Rejected: `OpenKey` — fragile on a never-customised profile.
 
 ### idempotent-skip
