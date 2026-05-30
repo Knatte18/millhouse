@@ -43,7 +43,9 @@ backlog rather than a genuine dependency layer; `deferred` gives it a home.
   `WikiValidationError` raised for all validation failures.
 - `PROTOCOL_VERSION` bump `2 -> 3` (`wiki/__init__.py` + `_server._protocol_version`).
 - `list_tasks_brief` key-set change (see Decisions) and its pinned unit test.
-- A one-shot, idempotent migration script that rewrites the live `tasks.json`.
+- A one-shot, idempotent migration performed **server-side** by the daemon: a
+  new `OP_MIGRATE_DEPS` op + `Store` migration method + `_client.migrate_deps`
+  wrapper + a thin `millpy-wiki-migrate-deps.py` runner.
 - **Folded scope (#14):** extract `extended_title(task)` and
   `render_order(tasks)` helpers in `wiki/_render.py`; adopt them in
   `millpy-spawn`/`_spawn_core.py`, `millpy-status.py`, `millpy-inspect.py` so
@@ -238,28 +240,36 @@ backlog rather than a genuine dependency layer; `deferred` gives it a home.
 
 ### migration
 
-- Decision: A one-shot, idempotent script (e.g.
-  `plugins/mill/scripts/millpy-wiki-migrate-deps.py`) migrates the live
-  `tasks.json`: for every record set `depends_on = []`, `isolated = (group ==
-  "Z")`, `deferred = False`, and **remove** the `group` key. The operator
-  re-curates real dependency edges and marks the genuinely low-priority tasks
-  `deferred` afterward.
-- Decision: Because TinyDB's `update` merges and cannot drop a key, the
-  migration must rewrite records wholesale. It runs as a one-shot bootstrap
-  (like the existing `millpy-wiki-migrate.py` direct-git exception): call
-  `_client.shutdown(wiki_path)` to stop the daemon, rewrite `tasks.json` in
-  place (preserving each record's `id`/`slug`/`title`/`brief`/`body`/`status`,
-  dropping `group`, adding the three new fields), then call `_client.rerender`
-  to regenerate `Home.md`/`_Sidebar.md` from the migrated store. Idempotent: a
-  re-run on already-migrated records (no `group` key) is a no-op.
-- Rationale: `depends_on = []` for everyone because letters cannot be reversed
-  into edges. `isolated = (group == "Z")` is the one mapping that *is*
-  recoverable. Auto-setting `deferred = (group == "D")` was rejected (QD): "much
-  of" Layer D is low-pri, not all — auto-tagging would mis-classify the genuine
-  dependency tasks.
-- Rejected: Lazy auto-migration inside `Store` on load (puts a one-time rewrite
-  in the hot daemon path and complicates every read); a manual hand-edit (error
-  prone, not repeatable).
+- Decision: The migration runs **server-side, inside the daemon**, as a new
+  one-shot op `OP_MIGRATE_DEPS` (client wrapper `_client.migrate_deps(wiki_path)`,
+  triggered by a thin `plugins/mill/scripts/millpy-wiki-migrate-deps.py`
+  runner). The daemon is the single serialised owner of `tasks.json`, so doing
+  the migration as a daemon op removes the respawn race entirely — no external
+  process rewrites the file, and the normal pull -> migrate -> render -> commit
+  cycle applies. The handler calls `Store.migrate_group_to_deps()` and then the
+  existing `_render_and_commit_all`.
+- Decision: `Store.migrate_group_to_deps()` rewrites every record **in place via
+  the TinyDB API**, preserving both the internal `doc_id` and the task `id`
+  field: for each record apply TinyDB's `delete("group")` operation to drop the
+  key plus a field-set update adding `depends_on = []`, `isolated = (group ==
+  "Z")`, `deferred = False`. Records that already lack `group` are skipped, so a
+  re-run is a no-op (idempotent). No clear-and-reinsert (that would re-key
+  doc_ids); `id` is never recomputed.
+- Rationale: A daemon-owned op is race-free by construction and keeps the
+  "daemon owns all wiki writes" invariant intact — no daemon-shutdown /
+  direct-rewrite dance (the round-1 review flagged that as a correctness hole:
+  `_client` auto-respawns on the next call, leaving the rewrite window
+  unprotected and doc_id/id preservation ambiguous). TinyDB's `delete` operation
+  is the precise tool for dropping a key while leaving doc_id/id untouched.
+  `depends_on = []` for everyone (letters cannot be reversed into edges);
+  `isolated = (group == "Z")` is the one recoverable mapping; `deferred = False`
+  for everyone — auto-setting `deferred = (group == "D")` was rejected (QD):
+  "much of" Layer D is low-pri, not all. Operator re-curates edges and marks
+  low-pri tasks afterward.
+- Rejected: Shutting the daemon down and rewriting `tasks.json` from an external
+  process (the round-1 GAP — unprotected respawn window, ambiguous id handling);
+  rewriting records wholesale via clear-and-reinsert (re-keys TinyDB doc_ids);
+  lazy auto-migration on every `Store` load (hot-path cost); a manual hand-edit.
 
 ### folded-orphan-cleanup
 
@@ -284,16 +294,18 @@ of truth; the daemon renders derived files (`Home.md`, `_Sidebar.md`,
 Files and what changes:
 
 - `wiki/__init__.py` — protocol constants and exceptions. Add `OP_SET_DEPS`,
-  `ERR_VALIDATION`, `class WikiValidationError(WikiError)`. Bump
-  `PROTOCOL_VERSION` 2 -> 3.
+  `OP_MIGRATE_DEPS`, `ERR_VALIDATION`, `class WikiValidationError(WikiError)`.
+  Bump `PROTOCOL_VERSION` 2 -> 3.
 - `wiki/_store.py` (`class Store`) — new-task default dicts currently seed
   `group: None` in three places (`upsert_task`, `upsert_tasks_batch`,
   `merge_tasks`); replace with `depends_on: []`, `isolated: False`, `deferred:
   False`. Add validation (a private helper run by all write paths, given the
-  full task set via `self._db.all()`), `set_deps`, and update
-  `list_tasks_brief`'s returned dict. `merge_tasks` already validates the upsert
-  payload before mutating — extend that pattern; keep the "nothing removed on
-  invalid input" guarantee (pinned by an existing test).
+  full task set via `self._db.all()`), `set_deps`, `migrate_group_to_deps`
+  (drops `group` via TinyDB `delete("group")` + sets new fields in place,
+  preserving doc_id/`id`, idempotent), and update `list_tasks_brief`'s returned
+  dict. `merge_tasks` already validates the upsert payload before mutating —
+  extend that pattern; keep the "nothing removed on invalid input" guarantee
+  (pinned by an existing test).
 - `wiki/_render.py` (`render`, currently 100 lines) — replace the `group`-based
   bucketing with `compute_layers`. Add `extended_title(task)` and
   `render_order(tasks)`. Render order: `A..Z` (letters sorted) -> `# Someday`
@@ -301,16 +313,18 @@ Files and what changes:
   from each task's effective deps, mapping slug -> id via the task map, with the
   `#???: <slug> (missing)` fallback. `render()` stays a thin orchestrator over
   the three helpers.
-- `wiki/_server.py` (`WikiServer`) — add `OP_SET_DEPS` dispatch +
-  `_handle_set_deps`; map store `ValueError` -> `ERR_VALIDATION` in the
-  `except` arms of the mutating handlers (`_handle_upsert_task`,
-  `_handle_upsert_tasks_batch`, `_handle_merge_tasks`, `_handle_set_deps`); set
-  `_protocol_version = 3`. The render call (`render(self._store.all_tasks())`)
-  and orphan-cleanup block are unchanged.
+- `wiki/_server.py` (`WikiServer`) — add `OP_SET_DEPS` and `OP_MIGRATE_DEPS`
+  dispatch + `_handle_set_deps` / `_handle_migrate_deps` (the latter calls
+  `Store.migrate_group_to_deps()` then `_render_and_commit_all`); map store
+  `ValueError` -> `ERR_VALIDATION` in the `except` arms of the mutating handlers
+  (`_handle_upsert_task`, `_handle_upsert_tasks_batch`, `_handle_merge_tasks`,
+  `_handle_set_deps`); set `_protocol_version = 3`. The render call
+  (`render(self._store.all_tasks())`) and orphan-cleanup block are unchanged.
 - `wiki/_client.py` — `upsert_task`: drop `group=`, add `depends_on=`,
   `isolated=`, `deferred=` (only attach to payload when not `None`). Add
-  `set_deps(wiki_path, slug, depends_on)`. Add an `ERR_VALIDATION ->
-  WikiValidationError` branch to every mutating wrapper's error handling.
+  `set_deps(wiki_path, slug, depends_on)` and `migrate_deps(wiki_path)`. Add an
+  `ERR_VALIDATION -> WikiValidationError` branch to every mutating wrapper's
+  error handling.
 - `wiki/_parse.py` — parses the legacy hand-written `# Layer X` board; used only
   by the *original* `millpy-wiki-migrate.py` bootstrap. Unchanged by this task
   (the new migration operates on already-parsed `tasks.json` records).
@@ -335,9 +349,9 @@ Gotchas:
 ## Constraints
 
 - All wiki mutations go through the daemon (`_client` ops) which serialises
-  writes and pushes. The single sanctioned exception is the one-shot migration
-  bootstrap, which may shut the daemon down and rewrite `tasks.json` directly
-  before re-rendering — mirroring the existing `millpy-wiki-migrate.py` pattern.
+  writes and pushes — including this task's migration, which is a daemon op
+  (`OP_MIGRATE_DEPS`), not an external rewrite. There is no daemon-shutdown /
+  direct-`tasks.json` exception (the round-1 review rejected that approach).
 - Working state (`_mill/`) never goes to the wiki; this task touches only the
   wiki package code + tests, not wiki *content* (beyond the migration the
   operator runs).
@@ -370,9 +384,12 @@ TDD candidates (write tests first):
   deletes and stages `proposal-<slug>.md`.
 - **`wiki/_client.py`** (`test-wiki-protocol` / client test): new kwargs reach
   the payload; `ERR_VALIDATION` -> `WikiValidationError`; `set_deps` wrapper.
-- **migration script**: maps `group == "Z"` -> `isolated`, everything else ->
-  `isolated False`, `deferred False`, `depends_on []`, drops `group`;
-  idempotent on a second run; `id`/`slug`/`body` preserved.
+- **migration** (`test-wiki-store` for `Store.migrate_group_to_deps`, plus a
+  daemon/op round-trip test): maps `group == "Z"` -> `isolated`, everything else
+  -> `isolated False`; sets `deferred False`, `depends_on []`; drops the `group`
+  key; preserves TinyDB `doc_id` **and** the `id` field (and `slug`/`body`);
+  idempotent on a second run (records without `group` untouched). The
+  `OP_MIGRATE_DEPS` round-trip re-renders Home.md from the migrated store.
 - **consumers**: `test-millpy-spawn`, `test-status`, `test-inspect` (whichever
   exist) — list output uses `render_order` + `extended_title` and matches
   Home.md ordering/titles.
@@ -420,3 +437,9 @@ forbidden write (each rejected, store unchanged).
 - **Q:** Migrate existing Layer D to `deferred`? **A:** No — set `deferred=False`
   for all; operator marks the real low-pri ones afterward ("much of" D is
   low-pri, not all).
+- **Q:** (review r1 GAP) How does the migration avoid the daemon-respawn race
+  and preserve ids? **A:** Run it server-side as a daemon op
+  (`OP_MIGRATE_DEPS`) calling `Store.migrate_group_to_deps()`, which uses
+  TinyDB's `delete("group")` operation plus a field-set update to drop `group`
+  and add the new fields in place — `doc_id` and `id` preserved, no external
+  rewrite, idempotent.
