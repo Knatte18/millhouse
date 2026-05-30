@@ -118,6 +118,17 @@ mill-setup's environment-variable handling.
 - Rejected: `REG_EXPAND_SZ` — unnecessary; only matters when the value embeds
   `%USERPROFILE%`-style tokens.
 
+### createkeyex-not-openkey
+
+- Decision: Open the `HKCU\Environment` subkey with `winreg.CreateKeyEx`, not
+  `winreg.OpenKey`.
+- Rationale: `CreateKeyEx` opens the subkey if present and creates it if absent,
+  so it never raises `FileNotFoundError` on a pristine profile where the
+  `Environment` subkey has not yet been created. `OpenKey` with `KEY_WRITE` would
+  raise in that edge case. Happy-path behaviour is identical (the subkey normally
+  already exists). Source: discussion-review r1 [NOTE].
+- Rejected: `OpenKey` — fragile on a never-customised profile.
+
 ### idempotent-skip
 
 - Decision: `set_user_env_var` reads the current value first; if it already
@@ -176,11 +187,14 @@ mill-setup's environment-variable handling.
   `_config.py`); ASCII-only `print()`/`_log()` output (Windows cp1252 — use
   ` -- ` not `—`, ` -> ` not `->`).
 - **`winreg`** is Python stdlib, Windows-only. Key path: `HKEY_CURRENT_USER\
-  Environment`. Open with `winreg.OpenKey(winreg.HKEY_CURRENT_USER,
-  "Environment", 0, winreg.KEY_READ | winreg.KEY_WRITE)` (or read then write);
-  read via `winreg.QueryValueEx(key, name)` (raises `FileNotFoundError` when the
-  value is absent — treat as "no current value"); write via
-  `winreg.SetValueEx(key, name, 0, winreg.REG_SZ, value)`.
+  Environment`. Open the subkey with **`winreg.CreateKeyEx(winreg.HKEY_CURRENT_USER,
+  "Environment", 0, winreg.KEY_READ | winreg.KEY_WRITE)`** rather than `OpenKey`:
+  `CreateKeyEx` opens the subkey if it exists and creates it if absent, so it does
+  not raise `FileNotFoundError` on a pristine profile where the `Environment`
+  subkey has not yet been materialised (`OpenKey` with `KEY_WRITE` would raise
+  there). Read the current value via `winreg.QueryValueEx(key, name)` (raises
+  `FileNotFoundError` when the *value* is absent — treat as "no current value");
+  write via `winreg.SetValueEx(key, name, 0, winreg.REG_SZ, value)`.
 - **Broadcast:** `ctypes.windll.user32.SendMessageTimeoutW` with
   `HWND_BROADCAST = 0xFFFF`, `WM_SETTINGCHANGE = 0x001A`, `lParam = "Environment"`,
   a flag like `SMTO_ABORTIFHUNG = 0x0002`, and a short timeout. Wrap in
