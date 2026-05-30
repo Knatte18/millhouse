@@ -235,7 +235,13 @@ live under `plugins/mill/scripts/`):
   `:491-492`; add the `infrastructure` `stuck_type` handling there.
 - `plugins/mill/skills/mill-start/SKILL.md` — also contains the "`cat` until
   EXIT" poll pattern (Discussion Review step 2) and should adopt the helper /
-  liveness check for consistency.
+  liveness check for consistency. **Dead-worker recovery policy:** mill-start is
+  always interactive and has no `stuck_type` / autonomous machinery, so on
+  `wait_for_bg_terminal` returning `("dead", pid)` it surfaces a clear message
+  to the operator ("discussion-review worker died (logout?); re-run the
+  discussion-review step") and **halts** — no auto-re-fire. The operator
+  re-invokes the step. This differs from mill-go, which has the
+  `infrastructure` `stuck_type` + autonomous one-retry path.
 - Existing `stuck_type` values are `transient` / `verify` / `logic`
   (`_implementer_common.py:53,59`, `millpy-fix.py:291`, `millpy-implement.py`).
   `infrastructure` is the new fourth value — keep the JSON envelope shape
@@ -345,3 +351,8 @@ git/LLM). TDD candidates are the pure helpers (#400 retry, #393 widening,
   reads host/port from the state file *inside* the loop, so extraction needs a
   design choice (outer state-file read, or a state-file-aware helper signature).
   Flagged as mill-plan's call in Technical context.
+- **Q:** (review r2 gap) What does mill-start do when `wait_for_bg_terminal`
+  returns `("dead", pid)` for a discussion-review worker? **A:** Surface a clear
+  error and halt — no auto-re-fire. mill-start is always interactive with no
+  `stuck_type`/autonomous machinery; the operator re-runs the discussion-review
+  step. (mill-go, by contrast, has the `infrastructure` stuck + one-retry path.)
