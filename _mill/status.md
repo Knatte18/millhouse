@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planning
+phase: plan-fix-r1
 slug: mill-setup-winreg
 branch: mill-setup-winreg
 plan: _mill/plan
@@ -19,4 +19,5 @@ discussion-fix-r1  '2026-05-30T14:56:19Z'
 discussed  '2026-05-30T14:56:46Z'
 planning  '2026-05-30T15:04:40Z'
 planning  '2026-05-30T15:04:45Z'
+plan-fix-r1  '2026-05-30T15:13:54Z'
 ```

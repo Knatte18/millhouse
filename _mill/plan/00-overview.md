@@ -3,7 +3,7 @@
 ```yaml
 task: "Replace powershell subprocess with winreg in mill-setup"
 slug: "mill-setup-winreg"
-approved: false
+approved: true
 started: "20260530-150552"
 parent: "main"
 root: ""
