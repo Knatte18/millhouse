@@ -1,10 +1,10 @@
 # Status
 
 ```yaml
-phase: discussed
+phase: planning
 slug: infra-robustness-windows
 branch: infra-robustness-windows
-plan: null
+plan: _mill/plan
 parent: main
 task: Wiki-daemon + bg-worker + test-suite robustness on Windows
 task_description: |
@@ -16,4 +16,5 @@ task_description: |
 ```text
 discussing  '2026-05-30T14:25:04Z'
 discussed  '2026-05-30T14:50:23Z'
+planning  '2026-05-30T14:57:16Z'
 ```
