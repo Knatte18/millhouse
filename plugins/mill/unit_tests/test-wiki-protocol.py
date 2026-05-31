@@ -251,7 +251,7 @@ def main() -> int:
         resp = {
             FIELD_OK: True,
             "tasks": [
-                {"id": 0, "slug": "task1", "title": "Task 1", "group": None, "brief": "", "status": None, "has_proposal": False},
+                {"id": 0, "slug": "task1", "title": "Task 1", "layer": "A", "brief": "", "status": None, "has_proposal": False},
             ],
         }
         assert resp[FIELD_OK] is True
