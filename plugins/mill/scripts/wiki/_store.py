@@ -173,6 +173,25 @@ class Store:
     def list_tasks_full(self) -> list[dict]:
         return self._db.all()
 
+    def set_deps(self, slug: str, depends_on: list[str]) -> None:
+        query = Query()
+        existing = self._db.get(query.slug == slug)
+        if not existing:
+            raise ValueError(f"task not found: {slug!r}")
+
+        # Build incoming record with updated depends_on
+        incoming = {**existing, "depends_on": depends_on}
+
+        # Build snapshot: all records with this one replaced
+        all_records = self._db.all()
+        snapshot = [r for r in all_records if r["slug"] != slug] + [incoming]
+
+        # Validate before mutation
+        self._validate_write(snapshot, incoming)
+
+        # Update the database
+        self._db.update({"depends_on": depends_on}, query.slug == slug)
+
     def upsert_tasks_batch(self, tasks: list[dict]) -> None:
         # Build full projected snapshot first: current store merged with all incoming tasks
         all_records = self._db.all()
