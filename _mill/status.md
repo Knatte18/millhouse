@@ -34,7 +34,9 @@ batches:
     implementer_session: 0202c2d3-3a70-462e-b31a-101a1472627c
     start_sha: 0a859fecd9a5adba477cf30c3011095de33a3bd2
   - name: bg-worker-liveness
-    state: pending
+    state: running
+    implementer_session: 2d401bcb-e64f-4747-8532-a1255598a831
+    start_sha: 1197decb6dbef95da0aeff5ed3034690aa3044dc
   - name: orchestrator-integration
     state: pending
 ```
