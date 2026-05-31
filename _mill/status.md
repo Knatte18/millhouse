@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-approved
+phase: done
 slug: replace-claude-p-with-psmux
 branch: hanf/replace-claude-p-with-psmux
 plan: _mill/plan
@@ -29,6 +29,7 @@ approved-Tests  '2026-05-31T16:05:21Z'
 holistic-reviewing  '2026-05-31T16:06:09Z'
 holistic-fixing  '2026-05-31T16:14:59Z'
 holistic-approved  '2026-05-31T16:22:08Z'
+done  '2026-05-31T16:22:18Z'
 ```
 
 ## Batches
