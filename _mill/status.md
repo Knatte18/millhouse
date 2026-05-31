@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-timeout-and-brief-size-guard
+phase: approved-scope-violations-and-brief
 slug: haiku-implementer-reliability
 branch: hanf/haiku-implementer-reliability
 plan: _mill/plan
@@ -23,6 +23,7 @@ plan-fix-r1  '2026-05-31T09:31:15Z'
 planned  '2026-05-31T09:31:32Z'
 implementing  '2026-05-31T09:34:16Z'
 approved-timeout-and-brief-size-guard  '2026-05-31T09:42:40Z'
+approved-scope-violations-and-brief  '2026-05-31T09:50:04Z'
 ```
 
 ## Batches
@@ -34,7 +35,7 @@ batches:
     implementer_session: ea83e81e-1c50-477d-ba44-5d04ae651b27
     start_sha: 11980545e58b37ba5af182e3e077999301e5cad8
   - name: scope-violations-and-brief
-    state: running
+    state: approved
     implementer_session: 0d983043-d521-4183-a90e-d68f67f0bbe8
     start_sha: fb6360cb8deed6e3c52fffd68212b86e9607ebca
   - name: unit-tests
