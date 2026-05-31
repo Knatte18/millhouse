@@ -453,7 +453,7 @@ def main() -> int:
 
     # --- (o) transient recv TimeoutError clears within 4 attempts -> op succeeds ---
     try:
-        from wiki import _client, WikiBusyError, WikiError, FIELD_OP, FIELD_TOKEN, FIELD_OK
+        from wiki import _client, WikiBusyError, WikiError, FIELD_TOKEN
         tmp = Path(tempfile.mkdtemp())
         try:
             wiki_path = tmp / "wiki"
