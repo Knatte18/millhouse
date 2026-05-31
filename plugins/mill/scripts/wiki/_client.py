@@ -30,13 +30,14 @@ from wiki import (
     FIELD_ERROR,
     ERR_NOT_FOUND,
     ERR_PUSH_FAILED,
+    WikiBusyError,
     WikiNotFoundError,
     WikiPushError,
     WikiProtocolError,
     WikiStartupError,
 )
 
-SPAWN_TIMEOUT: int = 10
+SPAWN_TIMEOUT: int = 20 if sys.platform == "win32" else 10
 _SERVER_MODULE: str = "wiki._server"
 
 # Registry of in-process WikiServer instances, keyed by resolved wiki_path.
@@ -88,6 +89,33 @@ def _inprocess_server(wiki_path: Path):
     return _INPROCESS_SERVERS.get(str(Path(wiki_path).resolve()))
 
 
+def wait_for_socket_reachable(host: str, port: int, *, timeout: float, interval: float = 0.1) -> bool:
+    """Poll for socket reachability until timeout expires.
+
+    Polls socket.create_connection every interval seconds until success or timeout.
+    Does not raise on OSError or socket.timeout during polling.
+
+    Args:
+        host: Server host.
+        port: Server port.
+        timeout: Total timeout budget in seconds.
+        interval: Poll interval in seconds (default 0.1).
+
+    Returns:
+        True if socket became reachable, False if timeout expired.
+    """
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            per_attempt_timeout = min(0.5, max(0, deadline - time.monotonic()))
+            sock = socket.create_connection((host, port), timeout=per_attempt_timeout)
+            sock.close()
+            return True
+        except (OSError, socket.timeout):
+            time.sleep(interval)
+    return False
+
+
 def _dispatch(wiki_path: Path, op: str, payload: dict) -> dict:
     """Route an op to either the in-process server or the daemon over TCP.
 
@@ -115,7 +143,17 @@ def _dispatch(wiki_path: Path, op: str, payload: dict) -> dict:
                 pass
     host, port, token = _ensure_daemon(wiki_path)
     req = {FIELD_OP: op, FIELD_TOKEN: token, "payload": payload}
-    return _connect_send_recv(host, port, req)
+
+    backoff_sleeps = [2, 4, 8]
+    for attempt in range(4):
+        try:
+            return _connect_send_recv(host, port, req, timeout=3.0)
+        except TimeoutError:
+            if attempt < 3:
+                time.sleep(backoff_sleeps[attempt])
+            else:
+                raise WikiBusyError(f"daemon stayed busy past retry budget for op: {op}")
+    assert False, "unreachable: loop always exits via return or raise"
 
 
 def upsert_task(
@@ -523,14 +561,8 @@ def _ensure_daemon(wiki_path: Path) -> tuple[str, int, str]:
         time.sleep(0.1)
         state = _read_state_file()
         if state:
-            try:
-                sock = socket.create_connection(
-                    (state["host"], state["port"]), timeout=0.5
-                )
-                sock.close()
+            if wait_for_socket_reachable(state["host"], state["port"], timeout=deadline - time.monotonic()):
                 return (state["host"], state["port"], state["token"])
-            except Exception:
-                pass
 
     raise WikiStartupError("daemon did not start within timeout")
 

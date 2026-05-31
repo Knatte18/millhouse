@@ -327,6 +327,195 @@ def main() -> int:
     except Exception as exc:
         fail("_ensure_daemon successful-health: returns tuple without respawn", exc)
 
+    # --- (k) transient recv TimeoutError clears within 4 attempts -> op succeeds ---
+    try:
+        from wiki import _client, WikiBusyError, WikiError, FIELD_OP, FIELD_TOKEN, FIELD_OK
+        tmp = Path(tempfile.mkdtemp())
+        try:
+            wiki_path = tmp / "wiki"
+            wiki_path.mkdir(parents=True, exist_ok=True)
+            (wiki_path / "tasks.json").write_text('{"_default": {}}', encoding="utf-8")
+
+            with patch("wiki._client.os.environ.get") as mock_get_env, \
+                 patch("wiki._client._ensure_daemon") as mock_ensure, \
+                 patch("wiki._client._connect_send_recv") as mock_send_recv, \
+                 patch("wiki._client.time.sleep"):
+
+                mock_get_env.return_value = None
+                mock_ensure.return_value = ("127.0.0.1", 9999, "test-token")
+                # Fail twice with TimeoutError, succeed on third attempt
+                mock_send_recv.side_effect = [
+                    TimeoutError("timeout"),
+                    TimeoutError("timeout"),
+                    {FIELD_OK: True}
+                ]
+
+                result = _client._dispatch(wiki_path, "health", {})
+                assert result == {FIELD_OK: True}, f"unexpected result: {result}"
+                assert mock_send_recv.call_count == 3, f"expected 3 attempts, got {mock_send_recv.call_count}"
+                ok("transient recv TimeoutError clears within 4 attempts -> op succeeds")
+        finally:
+            _safe_rmtree.safe_rmtree(tmp, allowed_root=tmp, ignore_errors=True)
+    except Exception as exc:
+        fail("transient recv TimeoutError clears within 4 attempts -> op succeeds", exc)
+
+    # --- (l) persistent recv TimeoutError -> exactly 4 attempts, then WikiBusyError ---
+    try:
+        from wiki import _client, WikiBusyError
+        tmp = Path(tempfile.mkdtemp())
+        try:
+            wiki_path = tmp / "wiki"
+            wiki_path.mkdir(parents=True, exist_ok=True)
+            (wiki_path / "tasks.json").write_text('{"_default": {}}', encoding="utf-8")
+
+            with patch("wiki._client.os.environ.get") as mock_get_env, \
+                 patch("wiki._client._ensure_daemon") as mock_ensure, \
+                 patch("wiki._client._connect_send_recv") as mock_send_recv, \
+                 patch("wiki._client.time.sleep"):
+
+                mock_get_env.return_value = None
+                mock_ensure.return_value = ("127.0.0.1", 9999, "test-token")
+                mock_send_recv.side_effect = TimeoutError("timeout")
+
+                raised = False
+                try:
+                    _client._dispatch(wiki_path, "health", {})
+                except WikiBusyError:
+                    raised = True
+
+                assert raised, "expected WikiBusyError to be raised"
+                assert mock_send_recv.call_count == 4, f"expected 4 attempts, got {mock_send_recv.call_count}"
+                ok("persistent recv TimeoutError -> exactly 4 attempts, then WikiBusyError")
+        finally:
+            _safe_rmtree.safe_rmtree(tmp, allowed_root=tmp, ignore_errors=True)
+    except Exception as exc:
+        fail("persistent recv TimeoutError -> exactly 4 attempts, then WikiBusyError", exc)
+
+    # --- (m) backoff sequence is exactly [2, 4, 8] ---
+    try:
+        from wiki import _client, WikiBusyError
+        tmp = Path(tempfile.mkdtemp())
+        try:
+            wiki_path = tmp / "wiki"
+            wiki_path.mkdir(parents=True, exist_ok=True)
+            (wiki_path / "tasks.json").write_text('{"_default": {}}', encoding="utf-8")
+
+            with patch("wiki._client.os.environ.get") as mock_get_env, \
+                 patch("wiki._client._ensure_daemon") as mock_ensure, \
+                 patch("wiki._client._connect_send_recv") as mock_send_recv, \
+                 patch("wiki._client.time.sleep") as mock_sleep:
+
+                mock_get_env.return_value = None
+                mock_ensure.return_value = ("127.0.0.1", 9999, "test-token")
+                mock_send_recv.side_effect = TimeoutError("timeout")
+
+                try:
+                    _client._dispatch(wiki_path, "health", {})
+                except WikiBusyError:
+                    pass
+
+                sleep_calls = [call[0][0] for call in mock_sleep.call_args_list]
+                assert sleep_calls == [2, 4, 8], f"expected [2, 4, 8], got {sleep_calls}"
+                ok("backoff sequence is exactly [2, 4, 8]")
+        finally:
+            _safe_rmtree.safe_rmtree(tmp, allowed_root=tmp, ignore_errors=True)
+    except Exception as exc:
+        fail("backoff sequence is exactly [2, 4, 8]", exc)
+
+    # --- (n) health probe is single-shot (NOT wrapped by busy-retry) ---
+    try:
+        from wiki import _client
+        tmp = Path(tempfile.mkdtemp())
+        try:
+            wiki_path = tmp / "wiki"
+            wiki_path.mkdir(parents=True, exist_ok=True)
+            (wiki_path / "tasks.json").write_text('{"_default": {}}', encoding="utf-8")
+
+            state_file = wiki_path / ".wiki-daemon.json"
+            state = {
+                "protocol_version": PROTOCOL_VERSION,
+                "pid": os.getpid() + 999999,
+                "host": "127.0.0.1",
+                "port": 9999,
+                "token": "test-token",
+            }
+            state_file.write_text(json.dumps(state), encoding="utf-8")
+
+            with patch("wiki._client.socket.create_connection") as mock_create_conn, \
+                 patch("wiki._client._connect_send_recv") as mock_send_recv, \
+                 patch("wiki._client._spawn_server"), \
+                 patch("wiki._client.SPAWN_TIMEOUT", 0.01), \
+                 patch("wiki._client._is_stale"):
+
+                mock_create_conn.return_value = MagicMock(close=MagicMock())
+                timeout_error = TimeoutError("health probe timeout")
+                mock_send_recv.side_effect = timeout_error
+
+                try:
+                    _client._ensure_daemon(wiki_path)
+                except Exception:
+                    pass
+
+                # The health probe should be called exactly once, not retried
+                health_calls = [c for c in mock_send_recv.call_args_list if c[1].get('timeout') == 1.0]
+                assert len(health_calls) == 1, f"health probe should be called once, got {len(health_calls)} calls with timeout=1.0"
+                ok("health probe is single-shot (NOT wrapped by busy-retry)")
+        finally:
+            _safe_rmtree.safe_rmtree(tmp, allowed_root=tmp, ignore_errors=True)
+    except Exception as exc:
+        fail("health probe is single-shot (NOT wrapped by busy-retry)", exc)
+
+    # --- (o) WikiBusyError is subclass of WikiError and importable from wiki ---
+    try:
+        from wiki import WikiBusyError, WikiError
+        assert issubclass(WikiBusyError, WikiError), "WikiBusyError should be subclass of WikiError"
+        ok("WikiBusyError is subclass of WikiError and importable from wiki")
+    except Exception as exc:
+        fail("WikiBusyError is subclass of WikiError and importable from wiki", exc)
+
+    # --- (p) wait_for_socket_reachable returns True for listening socket ---
+    try:
+        import socket
+        from wiki import _client
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.bind(("127.0.0.1", 0))
+        port = sock.getsockname()[1]
+        sock.listen(1)
+        try:
+            result = _client.wait_for_socket_reachable("127.0.0.1", port, timeout=1.0)
+            assert result is True, f"expected True for listening socket, got {result}"
+            ok("wait_for_socket_reachable returns True for listening socket")
+        finally:
+            sock.close()
+    except Exception as exc:
+        fail("wait_for_socket_reachable returns True for listening socket", exc)
+
+    # --- (q) wait_for_socket_reachable returns False for refused port ---
+    try:
+        import socket
+        from wiki import _client
+        # Find an unbound high-numbered port (privileged port 1 can timeout on some Windows configs)
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.bind(("127.0.0.1", 0))
+        unused_port = sock.getsockname()[1]
+        sock.close()
+        result = _client.wait_for_socket_reachable("127.0.0.1", unused_port, timeout=0.1)
+        assert result is False, f"expected False for refused port, got {result}"
+        ok("wait_for_socket_reachable returns False for refused port")
+    except Exception as exc:
+        fail("wait_for_socket_reachable returns False for refused port", exc)
+
+    # --- (r) SPAWN_TIMEOUT platform-guarded assertion ---
+    try:
+        from wiki import _client
+        if sys.platform == "win32":
+            assert _client.SPAWN_TIMEOUT == 20, f"expected SPAWN_TIMEOUT=20 on Windows, got {_client.SPAWN_TIMEOUT}"
+        else:
+            assert _client.SPAWN_TIMEOUT == 10, f"expected SPAWN_TIMEOUT=10 on Unix, got {_client.SPAWN_TIMEOUT}"
+        ok("SPAWN_TIMEOUT platform-guarded assertion")
+    except Exception as exc:
+        fail("SPAWN_TIMEOUT platform-guarded assertion", exc)
+
     print("", file=sys.stderr)
     if failed:
         print(f"FAIL -- {failed} of {passed + failed}", file=sys.stderr)
