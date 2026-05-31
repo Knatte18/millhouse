@@ -46,7 +46,7 @@ If haiku is to remain a supported implementer tier (cheap-tier dispatch, mass-ba
 
 ### brief-size guard in millpy-implement.py
 
-- Decision: After rendering `prompt_text` and before calling `_implementer_claude.run()`, check `len(prompt_text) > cfg.get("llm", {}).get("max_implementer_prompt_chars", 0)`. If the guard fires (and `max_implementer_prompt_chars > 0`), print `{"status": "stuck", "stuck_type": "transient", "reason": "brief exceeds max_implementer_prompt_chars (N chars)"}` and return 0. Default `0` means the guard is disabled unless explicitly configured. Add `max_implementer_prompt_chars: 0` to `mill-config.yaml` hub template at the `llm:` block.
+- Decision: After rendering `prompt_text` and before calling `_implementer_claude.run()`, apply a compound guard: `max_chars = cfg.get("llm", {}).get("max_implementer_prompt_chars", 0); if max_chars > 0 and len(prompt_text) > max_chars:` — print `{"status": "stuck", "stuck_type": "transient", "reason": "brief exceeds max_implementer_prompt_chars (N chars)"}` and return 0. When `max_implementer_prompt_chars` is absent or 0, the `max_chars > 0` check short-circuits and the guard never fires. Add `max_implementer_prompt_chars: 0` to `mill-config.yaml` hub template at the `llm:` block.
 - Rationale: haiku's effective context is 200K tokens (~800K chars). A batch brief embedding large file content can exceed this silently, causing the subprocess to hang. Character count is a cheap proxy that avoids a tokeniser dependency. The guard emits `stuck/transient` so mill-go retries; if the retry hits the same brief, the operator sees a repeated transient and can intervene.
 - Rejected: Model-specific character limit in `mill-agents.yaml` (e.g. `max_prompt_chars: 800000` on haiku) — adds a second dimension to the agent spec before there's evidence the issue is actually brief size; the global config key is sufficient for now and can be per-reviewer if needed later.
 - Rejected: Truncating the brief automatically — changes semantics (the implementer would receive an incomplete plan) and could cause correctness failures for any model.
@@ -107,8 +107,8 @@ Both already pass `project_root`. No signature change needed — `compute_scope_
 
 ### Existing unit test coverage
 
-- `test-cleanliness.py` — 6 cases for `compute_new_dirt`. Does not test `compute_scope_violations` (new).
-- `test-implementer-common.py` — 5 cases for the inferred-success paths. Does not test scope violations (new) or brief-size guard (in a different module).
+- `test-cleanliness.py` — 8 cases for `compute_new_dirt` + 1 for `capture_snapshot` (9 total). Does not test `compute_scope_violations` (new).
+- `test-implementer-common.py` — 6 cases (1, 2, 3, 3b, 4, 5) for the inferred-success paths. Does not test scope violations (new) or brief-size guard (in a different module).
 - `test-millpy-implement.py` — 8 cases (`TestMillpyImplement`) + 8 cases (`TestForwardOutput`). Does not test oversized prompt (new).
 - `test-llm-claude.py` — argv construction, stream-json parsing, rate-limit, session reuse. Not affected.
 
