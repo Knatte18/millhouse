@@ -70,6 +70,7 @@ import _paths
 import _status
 import _subprocess_util
 from wiki import _client as wiki
+from wiki._render import extended_title, render_order
 
 _SLUG_PATTERN = re.compile(r"^[a-z][a-z0-9-]*$")
 
@@ -231,7 +232,7 @@ def _prompt_numbered(candidates: list[dict]) -> Optional[dict]:
     print("Pick a task:", file=sys.stderr)
     for i, t in enumerate(candidates, start=1):
         marker = " (proposal)" if t["has_proposal"] else ""
-        print(f"  {i}) {t["title"]} [{t["slug"]}]{marker}", file=sys.stderr)
+        print(f"  {i}) {extended_title(t)} [{t["slug"]}]{marker}", file=sys.stderr)
     try:
         raw = input("Pick a task number: ")
     except EOFError:
@@ -294,8 +295,9 @@ def pick_task_single(
             )
         return matched
 
-    # Numbered picker: unmarked tasks only.
-    unmarked = [t for t in tasks if t["status"] is None]
+    # Numbered picker: unmarked tasks only, in render_order.
+    ordered = render_order(tasks)
+    unmarked = [t for t in ordered if t["status"] is None]
     if not unmarked:
         raise BacklogEmpty(
             "No pickable tasks. Leave one unmarked "
@@ -333,7 +335,7 @@ def _prompt_numbered_multi(
     )
     for i, t in enumerate(candidates, start=1):
         marker = " (proposal)" if t["has_proposal"] else ""
-        print(f"  {i}) {t["title"]} [{t["slug"]}]{marker}", file=sys.stderr)
+        print(f"  {i}) {extended_title(t)} [{t["slug"]}]{marker}", file=sys.stderr)
 
     for _ in range(3):
         try:
@@ -418,8 +420,9 @@ def pick_task_single_or_multi(
             )
         return ("single", matched, [])
 
-    # Numbered multi-select: unmarked tasks only.
-    candidates = [t for t in tasks if t["status"] is None]
+    # Numbered multi-select: unmarked tasks only, in render_order.
+    ordered = render_order(tasks)
+    candidates = [t for t in ordered if t["status"] is None]
     if not candidates:
         return ("empty", None, [])
 

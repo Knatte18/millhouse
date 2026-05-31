@@ -1,7 +1,7 @@
 """mill-status — print a status table for all active tasks.
 
 Usage:
-    python mill-status.py [--json] [--no-color] [--sort {slug,phase}]
+    python mill-status.py [--json] [--no-color] [--sort {slug,phase,layer}]
 """
 from __future__ import annotations
 
@@ -102,6 +102,8 @@ def _build_rows(git_root: Path) -> list[dict]:
             "current_batch": sd["current_batch"] if sd else None,
             "last_timeline_entry": sd["last_timeline_entry"] if sd else None,
             "blocked_reason": sd["blocked_reason"] if sd else None,
+            "layer": home_tasks[slug].get("layer") if slug in home_tasks else None,
+            "id": home_tasks[slug].get("id") if slug in home_tasks else None,
         })
 
     return rows
@@ -111,7 +113,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Print mill task status table.")
     parser.add_argument("--json", action="store_true", dest="json_mode")
     parser.add_argument("--no-color", action="store_true")
-    parser.add_argument("--sort", choices=["slug", "phase"], default="slug")
+    parser.add_argument("--sort", choices=["slug", "phase", "layer"], default="slug")
     args = parser.parse_args()
 
     git_root = _paths.resolve_git_root()
@@ -144,6 +146,18 @@ def _sort_key_phase(row: dict):
     return ("z", p or "")
 
 
+def _layer_sort_key(row: dict):
+    layer = row.get("layer")
+    letter_order = "ABCDEFGHIJKLMNOPQRSTUVWXY"
+    bucket_order = list(letter_order) + ["Z", "__deferred__", "__done__", None]
+    try:
+        bucket_index = bucket_order.index(layer)
+    except ValueError:
+        bucket_index = len(bucket_order)
+    task_id = row.get("id") or 0
+    return (bucket_index, task_id)
+
+
 def _truncate(text: str | None, max_len: int = 40) -> str:
     if text is None:
         return "-"
@@ -166,6 +180,8 @@ _RESET = "\033[0m"
 def _render_table(rows: list[dict], no_color: bool, sort_by: str) -> None:
     if sort_by == "phase":
         rows = sorted(rows, key=_sort_key_phase)
+    elif sort_by == "layer":
+        rows = sorted(rows, key=_layer_sort_key)
     else:
         rows = sorted(rows, key=lambda r: r["slug"])
 
@@ -178,9 +194,13 @@ def _render_table(rows: list[dict], no_color: bool, sort_by: str) -> None:
     for row in rows:
         marker_cell = row["marker"] + (" " + row["marker_flag"] if row["marker_flag"] else "")
         phase_plain = row["phase"] if row["phase"] is not None else "\u2014"
+        title_text = row["title"]
+        layer = row.get("layer")
+        if layer and layer not in ("__deferred__", "__done__"):
+            title_text = f"{title_text} [{layer}]"
         rendered.append({
             "SLUG": row["slug"],
-            "TITLE": _truncate(row["title"]),
+            "TITLE": _truncate(title_text),
             "PHASE": phase_plain,
             "MARKER": marker_cell,
             "WORKTREE": row["worktree_path"],

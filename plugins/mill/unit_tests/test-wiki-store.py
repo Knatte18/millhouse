@@ -183,7 +183,7 @@ def main() -> int:
 
             for row in brief_list:
                 key_set = set(row.keys())
-                expected = {"id", "slug", "title", "group", "brief", "status", "has_proposal"}
+                expected = {"id", "slug", "title", "depends_on", "isolated", "deferred", "brief", "status", "has_proposal"}
                 assert key_set == expected, f"Key set mismatch: {key_set} vs {expected}"
                 assert "body" not in row, "body should not be in brief dict"
 
@@ -323,6 +323,377 @@ def main() -> int:
             _safe_rmtree.safe_rmtree(Path(tmp_dir), allowed_root=Path(tmp_dir), ignore_errors=True)
     except Exception as exc:
         fail("reload discards in-memory state", exc)
+
+    # --- (4a) New-field defaults ---
+    try:
+        tmp_dir = tempfile.mkdtemp()
+        try:
+            db_path = Path(tmp_dir) / "tasks.json"
+            store = Store(db_path)
+            task = store.upsert_task({"slug": "a"})
+            assert task.get("depends_on") == [], f"depends_on should default to [], got {task.get('depends_on')}"
+            assert task.get("isolated") is False, f"isolated should default to False, got {task.get('isolated')}"
+            assert task.get("deferred") is False, f"deferred should default to False, got {task.get('deferred')}"
+            assert "group" not in task, f"group key should not be present, but got {task}"
+            ok("New-field defaults")
+        finally:
+            _safe_rmtree.safe_rmtree(Path(tmp_dir), allowed_root=Path(tmp_dir), ignore_errors=True)
+    except Exception as exc:
+        fail("New-field defaults", exc)
+
+    # --- (4b) Validation -- dangling dep ---
+    try:
+        tmp_dir = tempfile.mkdtemp()
+        try:
+            db_path = Path(tmp_dir) / "tasks.json"
+            store = Store(db_path)
+            raised = False
+            try:
+                store.upsert_task({"slug": "a", "depends_on": ["nonexistent"]})
+            except ValueError:
+                raised = True
+            assert raised, "Should raise ValueError for dangling dep"
+            assert len(store.list_tasks_brief()) == 0, "Store should be unchanged after failed upsert"
+            ok("Validation -- dangling dep")
+        finally:
+            _safe_rmtree.safe_rmtree(Path(tmp_dir), allowed_root=Path(tmp_dir), ignore_errors=True)
+    except Exception as exc:
+        fail("Validation -- dangling dep", exc)
+
+    # --- (4c) Validation -- cycle ---
+    try:
+        tmp_dir = tempfile.mkdtemp()
+        try:
+            db_path = Path(tmp_dir) / "tasks.json"
+            store = Store(db_path)
+            store.upsert_task({"slug": "A"})
+            store.upsert_task({"slug": "B", "depends_on": ["A"]})
+            raised = False
+            error_msg = ""
+            try:
+                store.upsert_task({"slug": "A", "depends_on": ["B"]})
+            except ValueError as e:
+                raised = True
+                error_msg = str(e)
+            assert raised, "Should raise ValueError for cycle"
+            assert "A" in error_msg and "B" in error_msg, f"Error should mention both slugs, got: {error_msg}"
+            ok("Validation -- cycle")
+        finally:
+            _safe_rmtree.safe_rmtree(Path(tmp_dir), allowed_root=Path(tmp_dir), ignore_errors=True)
+    except Exception as exc:
+        fail("Validation -- cycle", exc)
+
+    # --- (4d) Validation -- target-isolated ---
+    try:
+        tmp_dir = tempfile.mkdtemp()
+        try:
+            db_path = Path(tmp_dir) / "tasks.json"
+            store = Store(db_path)
+            store.upsert_task({"slug": "iso", "isolated": True})
+            raised = False
+            try:
+                store.upsert_task({"slug": "x", "depends_on": ["iso"]})
+            except ValueError:
+                raised = True
+            assert raised, "Should raise ValueError for depending on isolated task"
+            ok("Validation -- target-isolated")
+        finally:
+            _safe_rmtree.safe_rmtree(Path(tmp_dir), allowed_root=Path(tmp_dir), ignore_errors=True)
+    except Exception as exc:
+        fail("Validation -- target-isolated", exc)
+
+    # --- (4e) Validation -- target-deferred ---
+    try:
+        tmp_dir = tempfile.mkdtemp()
+        try:
+            db_path = Path(tmp_dir) / "tasks.json"
+            store = Store(db_path)
+            store.upsert_task({"slug": "def", "deferred": True})
+            raised = False
+            try:
+                store.upsert_task({"slug": "x", "depends_on": ["def"]})
+            except ValueError:
+                raised = True
+            assert raised, "Should raise ValueError for depending on deferred task"
+            ok("Validation -- target-deferred")
+        finally:
+            _safe_rmtree.safe_rmtree(Path(tmp_dir), allowed_root=Path(tmp_dir), ignore_errors=True)
+    except Exception as exc:
+        fail("Validation -- target-deferred", exc)
+
+    # --- (4f) Validation -- reverse-isolate ---
+    try:
+        tmp_dir = tempfile.mkdtemp()
+        try:
+            db_path = Path(tmp_dir) / "tasks.json"
+            store = Store(db_path)
+            store.upsert_task({"slug": "A"})
+            store.upsert_task({"slug": "B", "depends_on": ["A"]})
+            raised = False
+            error_msg = ""
+            try:
+                store.upsert_task({"slug": "A", "isolated": True})
+            except ValueError as e:
+                raised = True
+                error_msg = str(e)
+            assert raised, "Should raise ValueError for reverse-isolate"
+            assert "B" in error_msg, f"Error should mention dependent slug B, got: {error_msg}"
+            ok("Validation -- reverse-isolate")
+        finally:
+            _safe_rmtree.safe_rmtree(Path(tmp_dir), allowed_root=Path(tmp_dir), ignore_errors=True)
+    except Exception as exc:
+        fail("Validation -- reverse-isolate", exc)
+
+    # --- (4g) Validation -- reverse-defer ---
+    try:
+        tmp_dir = tempfile.mkdtemp()
+        try:
+            db_path = Path(tmp_dir) / "tasks.json"
+            store = Store(db_path)
+            store.upsert_task({"slug": "A"})
+            store.upsert_task({"slug": "B", "depends_on": ["A"]})
+            raised = False
+            error_msg = ""
+            try:
+                store.upsert_task({"slug": "A", "deferred": True})
+            except ValueError as e:
+                raised = True
+                error_msg = str(e)
+            assert raised, "Should raise ValueError for reverse-defer"
+            assert "B" in error_msg, f"Error should mention dependent slug B, got: {error_msg}"
+            ok("Validation -- reverse-defer")
+        finally:
+            _safe_rmtree.safe_rmtree(Path(tmp_dir), allowed_root=Path(tmp_dir), ignore_errors=True)
+    except Exception as exc:
+        fail("Validation -- reverse-defer", exc)
+
+    # --- (4h) Validation -- type errors ---
+    try:
+        tmp_dir = tempfile.mkdtemp()
+        try:
+            db_path = Path(tmp_dir) / "tasks.json"
+            store = Store(db_path)
+
+            # depends_on not a list
+            raised = False
+            try:
+                store.upsert_task({"slug": "a", "depends_on": "not-a-list"})
+            except ValueError:
+                raised = True
+            assert raised, "Should raise ValueError for depends_on not a list"
+
+            # isolated not a bool
+            raised = False
+            try:
+                store.upsert_task({"slug": "b", "isolated": "not-a-bool"})
+            except ValueError:
+                raised = True
+            assert raised, "Should raise ValueError for isolated not a bool"
+
+            # deferred not a bool
+            raised = False
+            try:
+                store.upsert_task({"slug": "c", "deferred": "not-a-bool"})
+            except ValueError:
+                raised = True
+            assert raised, "Should raise ValueError for deferred not a bool"
+
+            # stray group key
+            raised = False
+            try:
+                store.upsert_task({"slug": "d", "group": "A"})
+            except ValueError:
+                raised = True
+            assert raised, "Should raise ValueError for stray group key"
+
+            ok("Validation -- type errors")
+        finally:
+            _safe_rmtree.safe_rmtree(Path(tmp_dir), allowed_root=Path(tmp_dir), ignore_errors=True)
+    except Exception as exc:
+        fail("Validation -- type errors", exc)
+
+    # --- (4i) No mutation on invalid input ---
+    try:
+        tmp_dir = tempfile.mkdtemp()
+        try:
+            db_path = Path(tmp_dir) / "tasks.json"
+            store = Store(db_path)
+            store.upsert_task({"slug": "a"})
+            store.upsert_task({"slug": "b"})
+            raised = False
+            try:
+                store.upsert_task({"slug": "c", "depends_on": ["nonexistent"]})
+            except ValueError:
+                raised = True
+            assert raised, "Should raise ValueError"
+            # Both original tasks should still exist
+            assert store.get_task("a") is not None, "Task a should still exist"
+            assert store.get_task("b") is not None, "Task b should still exist"
+            assert store.get_task("c") is None, "Task c should not exist"
+            ok("No mutation on invalid input")
+        finally:
+            _safe_rmtree.safe_rmtree(Path(tmp_dir), allowed_root=Path(tmp_dir), ignore_errors=True)
+    except Exception as exc:
+        fail("No mutation on invalid input", exc)
+
+    # --- (4j) set_deps happy path ---
+    try:
+        tmp_dir = tempfile.mkdtemp()
+        try:
+            db_path = Path(tmp_dir) / "tasks.json"
+            store = Store(db_path)
+            store.upsert_task({"slug": "A"})
+            store.upsert_task({"slug": "B"})
+            store.set_deps("A", ["B"])
+            task_a = store.get_task("A")
+            assert task_a.get("depends_on") == ["B"], f"A's depends_on should be ['B'], got {task_a.get('depends_on')}"
+            ok("set_deps happy path")
+        finally:
+            _safe_rmtree.safe_rmtree(Path(tmp_dir), allowed_root=Path(tmp_dir), ignore_errors=True)
+    except Exception as exc:
+        fail("set_deps happy path", exc)
+
+    # --- (4k) set_deps validation ---
+    try:
+        tmp_dir = tempfile.mkdtemp()
+        try:
+            db_path = Path(tmp_dir) / "tasks.json"
+            store = Store(db_path)
+            store.upsert_task({"slug": "A"})
+            raised = False
+            try:
+                store.set_deps("A", ["nonexistent"])
+            except ValueError:
+                raised = True
+            assert raised, "Should raise ValueError for dangling dep in set_deps"
+            task_a = store.get_task("A")
+            assert task_a.get("depends_on") == [], "A's depends_on should remain unchanged"
+            ok("set_deps validation")
+        finally:
+            _safe_rmtree.safe_rmtree(Path(tmp_dir), allowed_root=Path(tmp_dir), ignore_errors=True)
+    except Exception as exc:
+        fail("set_deps validation", exc)
+
+    # --- (4l) Batch projection -- intra-batch dep succeeds ---
+    try:
+        tmp_dir = tempfile.mkdtemp()
+        try:
+            db_path = Path(tmp_dir) / "tasks.json"
+            store = Store(db_path)
+            store.upsert_tasks_batch([
+                {"slug": "X"},
+                {"slug": "Y", "depends_on": ["X"]}
+            ])
+            task_y = store.get_task("Y")
+            assert task_y.get("depends_on") == ["X"], "Y should depend on X"
+            ok("Batch projection -- intra-batch dep succeeds")
+        finally:
+            _safe_rmtree.safe_rmtree(Path(tmp_dir), allowed_root=Path(tmp_dir), ignore_errors=True)
+    except Exception as exc:
+        fail("Batch projection -- intra-batch dep succeeds", exc)
+
+    # --- (4m) Batch projection -- internal cycle rejected ---
+    try:
+        tmp_dir = tempfile.mkdtemp()
+        try:
+            db_path = Path(tmp_dir) / "tasks.json"
+            store = Store(db_path)
+            raised = False
+            try:
+                store.upsert_tasks_batch([
+                    {"slug": "P", "depends_on": ["Q"]},
+                    {"slug": "Q", "depends_on": ["P"]}
+                ])
+            except ValueError:
+                raised = True
+            assert raised, "Should raise ValueError for internal cycle"
+            assert store.get_task("P") is None, "P should not be written"
+            assert store.get_task("Q") is None, "Q should not be written"
+            ok("Batch projection -- internal cycle rejected")
+        finally:
+            _safe_rmtree.safe_rmtree(Path(tmp_dir), allowed_root=Path(tmp_dir), ignore_errors=True)
+    except Exception as exc:
+        fail("Batch projection -- internal cycle rejected", exc)
+
+    # --- (4n) migrate_group_to_deps -- Z becomes isolated ---
+    try:
+        tmp_dir = tempfile.mkdtemp()
+        try:
+            db_path = Path(tmp_dir) / "tasks.json"
+            store = Store(db_path)
+            # Bypass upsert_task validation to insert a group key
+            store._db.insert({"id": 0, "slug": "z-task", "title": "", "group": "Z", "brief": "", "body": "", "status": None})
+            store.migrate_group_to_deps()
+            task = store.get_task("z-task")
+            assert task.get("isolated") is True, f"Z task should have isolated=True, got {task.get('isolated')}"
+            assert task.get("depends_on") == [], f"Z task should have empty depends_on, got {task.get('depends_on')}"
+            assert task.get("deferred") is False, f"Z task should have deferred=False, got {task.get('deferred')}"
+            assert "group" not in task, f"Z task should not have group key, got {task}"
+            assert task.get("id") == 0, "Task id should be preserved"
+            assert task.get("slug") == "z-task", "Task slug should be preserved"
+            ok("migrate_group_to_deps -- Z becomes isolated")
+        finally:
+            _safe_rmtree.safe_rmtree(Path(tmp_dir), allowed_root=Path(tmp_dir), ignore_errors=True)
+    except Exception as exc:
+        fail("migrate_group_to_deps -- Z becomes isolated", exc)
+
+    # --- (4o) migrate_group_to_deps -- non-Z becomes not-isolated ---
+    try:
+        tmp_dir = tempfile.mkdtemp()
+        try:
+            db_path = Path(tmp_dir) / "tasks.json"
+            store = Store(db_path)
+            store._db.insert({"id": 0, "slug": "a-task", "title": "", "group": "A", "brief": "", "body": "", "status": None})
+            store.migrate_group_to_deps()
+            task = store.get_task("a-task")
+            assert task.get("isolated") is False, f"A task should have isolated=False, got {task.get('isolated')}"
+            ok("migrate_group_to_deps -- non-Z becomes not-isolated")
+        finally:
+            _safe_rmtree.safe_rmtree(Path(tmp_dir), allowed_root=Path(tmp_dir), ignore_errors=True)
+    except Exception as exc:
+        fail("migrate_group_to_deps -- non-Z becomes not-isolated", exc)
+
+    # --- (4p) migrate_group_to_deps -- idempotent ---
+    try:
+        tmp_dir = tempfile.mkdtemp()
+        try:
+            db_path = Path(tmp_dir) / "tasks.json"
+            store = Store(db_path)
+            store._db.insert({"id": 0, "slug": "task", "title": "", "group": "Z", "brief": "", "body": "", "status": None})
+            store.migrate_group_to_deps()
+            task_after_first = store.get_task("task")
+            store.migrate_group_to_deps()
+            task_after_second = store.get_task("task")
+            assert task_after_first == task_after_second, "Task should be unchanged after second migration"
+            ok("migrate_group_to_deps -- idempotent")
+        finally:
+            _safe_rmtree.safe_rmtree(Path(tmp_dir), allowed_root=Path(tmp_dir), ignore_errors=True)
+    except Exception as exc:
+        fail("migrate_group_to_deps -- idempotent", exc)
+
+    # --- (4q) migrate_group_to_deps -- preserves doc_id and id ---
+    try:
+        tmp_dir = tempfile.mkdtemp()
+        try:
+            db_path = Path(tmp_dir) / "tasks.json"
+            store = Store(db_path)
+            store._db.insert({"id": 0, "slug": "task", "title": "", "group": "Z", "brief": "", "body": "", "status": None})
+            task_before = store._db.all()[0]
+            doc_id_before = task_before.doc_id
+            id_before = task_before.get("id")
+
+            store.migrate_group_to_deps()
+            task_after = store.get_task("task")
+            doc_id_after = store._db.get(lambda d: d["slug"] == "task").doc_id
+            id_after = task_after.get("id")
+
+            assert doc_id_after == doc_id_before, f"doc_id should be preserved: {doc_id_before} vs {doc_id_after}"
+            assert id_after == id_before, f"id should be preserved: {id_before} vs {id_after}"
+            ok("migrate_group_to_deps -- preserves doc_id and id")
+        finally:
+            _safe_rmtree.safe_rmtree(Path(tmp_dir), allowed_root=Path(tmp_dir), ignore_errors=True)
+    except Exception as exc:
+        fail("migrate_group_to_deps -- preserves doc_id and id", exc)
 
     print("", file=sys.stderr)
     if failed:

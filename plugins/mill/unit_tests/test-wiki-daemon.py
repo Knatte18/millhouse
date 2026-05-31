@@ -24,7 +24,7 @@ import _safe_rmtree  # noqa: E402
 from unittest.mock import patch, MagicMock  # noqa: E402
 from _daemon import DaemonBase  # noqa: E402
 from wiki._server import WikiServer  # noqa: E402
-from wiki import PROTOCOL_VERSION, WikiStartupError  # noqa: E402
+from wiki import PROTOCOL_VERSION, WikiStartupError, OP_SET_DEPS, OP_MIGRATE_DEPS, OP_LIST_TASKS_BRIEF, OP_REMOVE_TASK, FIELD_OK, FIELD_OP  # noqa: E402
 from _test_helpers import safe_temp_dir  # noqa: E402
 
 
@@ -327,9 +327,133 @@ def main() -> int:
     except Exception as exc:
         fail("_ensure_daemon successful-health: returns tuple without respawn", exc)
 
-    # --- (k) transient recv TimeoutError clears within 4 attempts -> op succeeds ---
+    # --- (k) OP_SET_DEPS round-trip via handle_request ---
     try:
-        from wiki import _client, WikiBusyError, WikiError, FIELD_OP, FIELD_TOKEN, FIELD_OK
+        with safe_temp_dir() as tmp:
+            wiki_path = tmp / "wiki"
+            wiki_path.mkdir(parents=True, exist_ok=True)
+            (wiki_path / "tasks.json").write_text('{"_default": {}}', encoding="utf-8")
+
+            wiki_server = WikiServer(wiki_path, idle_timeout=1)
+            wiki_server._store.upsert_task({"slug": "task-a", "title": "Task A"})
+            wiki_server._store.upsert_task({"slug": "task-b", "title": "Task B"})
+
+            payload = {"slug": "task-b", "depends_on": ["task-a"]}
+            resp = wiki_server.handle_request({FIELD_OP: OP_SET_DEPS, "payload": payload})
+
+            assert resp.get(FIELD_OK) is True, f"response ok should be True, got {resp.get(FIELD_OK)}"
+            task = wiki_server._store.get_task("task-b")
+            assert task.get("depends_on") == ["task-a"], f"depends_on should be ['task-a'], got {task.get('depends_on')}"
+            ok("OP_SET_DEPS round-trip via handle_request")
+    except Exception as exc:
+        fail("OP_SET_DEPS round-trip via handle_request", exc)
+
+    # --- (l) OP_MIGRATE_DEPS round-trip ---
+    try:
+        from tinydb import TinyDB, Query
+        with safe_temp_dir() as tmp:
+            wiki_path = tmp / "wiki"
+            wiki_path.mkdir(parents=True, exist_ok=True)
+            (wiki_path / "tasks.json").write_text('{"_default": {}}', encoding="utf-8")
+
+            wiki_server = WikiServer(wiki_path, idle_timeout=1)
+
+            # Insert a task with group="Z" by directly calling _db.insert
+            # (bypassing upsert_task validation which rejects group keys)
+            task_with_group = {
+                "id": 0,
+                "slug": "task-z",
+                "title": "Task Z",
+                "group": "Z",
+                "depends_on": [],
+                "isolated": False,
+                "deferred": False,
+                "brief": "",
+                "body": "",
+                "status": None,
+            }
+            wiki_server._store._db.insert(task_with_group)
+
+            payload = {}
+            resp = wiki_server.handle_request({FIELD_OP: OP_MIGRATE_DEPS, "payload": payload})
+
+            assert resp.get(FIELD_OK) is True, f"response ok should be True, got {resp.get(FIELD_OK)}"
+            task = wiki_server._store.get_task("task-z")
+            assert task is not None, "task-z should exist"
+            assert task.get("isolated") is True, f"isolated should be True, got {task.get('isolated')}"
+            assert "group" not in task, f"group key should not exist, but found: {task.get('group')}"
+            ok("OP_MIGRATE_DEPS round-trip")
+    except Exception as exc:
+        fail("OP_MIGRATE_DEPS round-trip", exc)
+
+    # --- (m) list_tasks_brief enriched with layer ---
+    try:
+        with safe_temp_dir() as tmp:
+            wiki_path = tmp / "wiki"
+            wiki_path.mkdir(parents=True, exist_ok=True)
+            (wiki_path / "tasks.json").write_text('{"_default": {}}', encoding="utf-8")
+
+            wiki_server = WikiServer(wiki_path, idle_timeout=1)
+            wiki_server._store.upsert_task({"slug": "task-a", "title": "Task A"})
+            wiki_server._store.upsert_task({"slug": "task-b", "title": "Task B", "depends_on": ["task-a"]})
+
+            payload = {}
+            resp = wiki_server.handle_request({FIELD_OP: OP_LIST_TASKS_BRIEF, "payload": payload})
+
+            assert resp.get(FIELD_OK) is True, f"response ok should be True, got {resp.get(FIELD_OK)}"
+            tasks = resp.get("tasks", [])
+            assert len(tasks) == 2, f"expected 2 tasks, got {len(tasks)}"
+
+            task_a = next((t for t in tasks if t["slug"] == "task-a"), None)
+            task_b = next((t for t in tasks if t["slug"] == "task-b"), None)
+
+            assert task_a is not None, "task-a should be in response"
+            assert task_b is not None, "task-b should be in response"
+            assert "layer" in task_a, "task-a should have layer key"
+            assert "layer" in task_b, "task-b should have layer key"
+            assert task_a["layer"] == "A", f"task-a layer should be 'A', got {task_a['layer']}"
+            assert task_b["layer"] == "B", f"task-b layer should be 'B', got {task_b['layer']}"
+            ok("list_tasks_brief enriched with layer")
+    except Exception as exc:
+        fail("list_tasks_brief enriched with layer", exc)
+
+    # --- (n) Orphan cleanup regression ---
+    try:
+        import os as _os
+        with safe_temp_dir() as tmp:
+            wiki_path = tmp / "wiki"
+            wiki_path.mkdir(parents=True, exist_ok=True)
+            (wiki_path / "tasks.json").write_text('{"_default": {}}', encoding="utf-8")
+
+            wiki_server = WikiServer(wiki_path, idle_timeout=1)
+
+            # Insert task with body (proposal)
+            wiki_server._store.upsert_task({"slug": "task-with-body", "title": "Task", "body": "proposal content"})
+
+            # Call rerender with SKIP_PUSH=1 to commit but not push
+            with patch.dict(_os.environ, {"WIKI_DAEMON_SKIP_PUSH": "1"}):
+                wiki_server._render_and_commit_all(slug_for_msg="test")
+
+            # Verify proposal file exists
+            proposal_file = wiki_path / "proposal-task-with-body.md"
+            assert proposal_file.exists(), "proposal file should exist after render"
+
+            # Remove the task
+            wiki_server._store.remove_task("task-with-body")
+
+            # Rerender again
+            with patch.dict(_os.environ, {"WIKI_DAEMON_SKIP_PUSH": "1"}):
+                wiki_server._render_and_commit_all(slug_for_msg="test-remove")
+
+            # Verify proposal file is deleted (orphan cleanup)
+            assert not proposal_file.exists(), "proposal file should be deleted after task removal"
+            ok("Orphan cleanup regression")
+    except Exception as exc:
+        fail("Orphan cleanup regression", exc)
+
+    # --- (o) transient recv TimeoutError clears within 4 attempts -> op succeeds ---
+    try:
+        from wiki import _client, WikiBusyError, WikiError, FIELD_TOKEN
         tmp = Path(tempfile.mkdtemp())
         try:
             wiki_path = tmp / "wiki"
@@ -359,7 +483,7 @@ def main() -> int:
     except Exception as exc:
         fail("transient recv TimeoutError clears within 4 attempts -> op succeeds", exc)
 
-    # --- (l) persistent recv TimeoutError -> exactly 4 attempts, then WikiBusyError ---
+    # --- (p) persistent recv TimeoutError -> exactly 4 attempts, then WikiBusyError ---
     try:
         from wiki import _client, WikiBusyError
         tmp = Path(tempfile.mkdtemp())
@@ -391,7 +515,7 @@ def main() -> int:
     except Exception as exc:
         fail("persistent recv TimeoutError -> exactly 4 attempts, then WikiBusyError", exc)
 
-    # --- (m) backoff sequence is exactly [2, 4, 8] ---
+    # --- (q) backoff sequence is exactly [2, 4, 8] ---
     try:
         from wiki import _client, WikiBusyError
         tmp = Path(tempfile.mkdtemp())
@@ -422,7 +546,7 @@ def main() -> int:
     except Exception as exc:
         fail("backoff sequence is exactly [2, 4, 8]", exc)
 
-    # --- (n) health probe is single-shot (NOT wrapped by busy-retry) ---
+    # --- (r) health probe is single-shot (NOT wrapped by busy-retry) ---
     try:
         from wiki import _client
         tmp = Path(tempfile.mkdtemp())
@@ -465,7 +589,7 @@ def main() -> int:
     except Exception as exc:
         fail("health probe is single-shot (NOT wrapped by busy-retry)", exc)
 
-    # --- (o) WikiBusyError is subclass of WikiError and importable from wiki ---
+    # --- (s) WikiBusyError is subclass of WikiError and importable from wiki ---
     try:
         from wiki import WikiBusyError, WikiError
         assert issubclass(WikiBusyError, WikiError), "WikiBusyError should be subclass of WikiError"
@@ -473,7 +597,7 @@ def main() -> int:
     except Exception as exc:
         fail("WikiBusyError is subclass of WikiError and importable from wiki", exc)
 
-    # --- (p) wait_for_socket_reachable returns True for listening socket ---
+    # --- (t) wait_for_socket_reachable returns True for listening socket ---
     try:
         import socket
         from wiki import _client
@@ -490,7 +614,7 @@ def main() -> int:
     except Exception as exc:
         fail("wait_for_socket_reachable returns True for listening socket", exc)
 
-    # --- (q) wait_for_socket_reachable returns False for refused port ---
+    # --- (u) wait_for_socket_reachable returns False for refused port ---
     try:
         import socket
         from wiki import _client
@@ -505,7 +629,7 @@ def main() -> int:
     except Exception as exc:
         fail("wait_for_socket_reachable returns False for refused port", exc)
 
-    # --- (r) SPAWN_TIMEOUT platform-guarded assertion ---
+    # --- (v) SPAWN_TIMEOUT platform-guarded assertion ---
     try:
         from wiki import _client
         if sys.platform == "win32":

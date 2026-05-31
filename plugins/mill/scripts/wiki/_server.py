@@ -20,15 +20,18 @@ from wiki import (
     OP_HEALTH,
     OP_RERENDER,
     OP_SHUTDOWN,
+    OP_SET_DEPS,
+    OP_MIGRATE_DEPS,
     FIELD_OK,
     FIELD_ERROR_TYPE,
     FIELD_ERROR,
     ERR_NOT_FOUND,
     ERR_PUSH_FAILED,
     ERR_PROTOCOL,
+    ERR_VALIDATION,
     WikiPushError,
 )
-from wiki._render import render
+from wiki._render import render, compute_layers
 from wiki._store import Store
 from wiki._sync import pull, atomic_write, commit_push
 
@@ -36,7 +39,7 @@ from wiki._sync import pull, atomic_write, commit_push
 class WikiServer(DaemonBase):
     """Wiki daemon server — structured task operations with TinyDB."""
 
-    _protocol_version = 2
+    _protocol_version = 3
 
     def __init__(
         self,
@@ -125,6 +128,10 @@ class WikiServer(DaemonBase):
             return self._handle_health(payload)
         elif op == OP_RERENDER:
             return self._handle_rerender(payload)
+        elif op == OP_SET_DEPS:
+            return self._handle_set_deps(payload)
+        elif op == OP_MIGRATE_DEPS:
+            return self._handle_migrate_deps(payload)
         elif op == OP_SHUTDOWN:
             return self._handle_shutdown(payload)
         else:
@@ -140,6 +147,12 @@ class WikiServer(DaemonBase):
             task = self._store.upsert_task(payload)
             self._render_and_commit_all(slug_for_msg=payload.get("slug", "task"))
             return {FIELD_OK: True, "task": task}
+        except ValueError as e:
+            return {
+                FIELD_OK: False,
+                FIELD_ERROR_TYPE: ERR_VALIDATION,
+                FIELD_ERROR: str(e),
+            }
         except WikiPushError as e:
             return {
                 FIELD_OK: False,
@@ -162,6 +175,12 @@ class WikiServer(DaemonBase):
             msg = message if message else "batch"
             self._render_and_commit_all(slug_for_msg=msg)
             return {FIELD_OK: True, "count": len(tasks)}
+        except ValueError as e:
+            return {
+                FIELD_OK: False,
+                FIELD_ERROR_TYPE: ERR_VALIDATION,
+                FIELD_ERROR: str(e),
+            }
         except WikiPushError as e:
             return {
                 FIELD_OK: False,
@@ -236,6 +255,9 @@ class WikiServer(DaemonBase):
         """Handle list_tasks_brief operation."""
         try:
             tasks = self._store.list_tasks_brief()
+            layer_map = compute_layers(self._store.all_tasks())
+            for row in tasks:
+                row["layer"] = layer_map.get(row["slug"], "A")
             return {FIELD_OK: True, "tasks": tasks}
         except Exception as e:
             return {
@@ -301,6 +323,58 @@ class WikiServer(DaemonBase):
             )
             self._render_and_commit_all(slug_for_msg=upsert.get("slug", "merge"))
             return {FIELD_OK: True, "task": task}
+        except ValueError as e:
+            return {
+                FIELD_OK: False,
+                FIELD_ERROR_TYPE: ERR_VALIDATION,
+                FIELD_ERROR: str(e),
+            }
+        except WikiPushError as e:
+            return {
+                FIELD_OK: False,
+                FIELD_ERROR_TYPE: ERR_PUSH_FAILED,
+                FIELD_ERROR: str(e),
+            }
+        except Exception as e:
+            return {
+                FIELD_OK: False,
+                FIELD_ERROR_TYPE: ERR_PROTOCOL,
+                FIELD_ERROR: str(e),
+            }
+
+    def _handle_set_deps(self, payload: dict) -> dict:
+        """Handle set_deps operation."""
+        try:
+            slug = payload.get("slug")
+            depends_on = payload.get("depends_on", [])
+            self._store.set_deps(slug, depends_on)
+            self._render_and_commit_all(slug_for_msg=slug)
+            return {FIELD_OK: True}
+        except ValueError as e:
+            return {
+                FIELD_OK: False,
+                FIELD_ERROR_TYPE: ERR_VALIDATION,
+                FIELD_ERROR: str(e),
+            }
+        except WikiPushError as e:
+            return {
+                FIELD_OK: False,
+                FIELD_ERROR_TYPE: ERR_PUSH_FAILED,
+                FIELD_ERROR: str(e),
+            }
+        except Exception as e:
+            return {
+                FIELD_OK: False,
+                FIELD_ERROR_TYPE: ERR_PROTOCOL,
+                FIELD_ERROR: str(e),
+            }
+
+    def _handle_migrate_deps(self, payload: dict) -> dict:
+        """Handle migrate_deps operation."""
+        try:
+            self._store.migrate_group_to_deps()
+            self._render_and_commit_all(slug_for_msg="migrate-deps")
+            return {FIELD_OK: True}
         except WikiPushError as e:
             return {
                 FIELD_OK: False,

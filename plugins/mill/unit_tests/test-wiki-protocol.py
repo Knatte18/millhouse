@@ -25,6 +25,8 @@ from wiki import (
     OP_LIST_TASKS_BRIEF,
     OP_LIST_TASKS_FULL,
     OP_HEALTH,
+    OP_SET_DEPS,
+    OP_MIGRATE_DEPS,
     FIELD_OP,
     FIELD_TOKEN,
     FIELD_OK,
@@ -32,8 +34,12 @@ from wiki import (
     FIELD_ERROR,
     ERR_NOT_FOUND,
     ERR_PROTOCOL,
+    ERR_VALIDATION,
+    WikiError,
+    WikiValidationError,
 )  # noqa: E402
 from wiki._server import WikiServer  # noqa: E402
+from wiki import _client  # noqa: E402
 from _test_helpers import safe_temp_dir  # noqa: E402
 
 
@@ -114,6 +120,44 @@ def main() -> int:
     except Exception as exc:
         fail("OP_HEALTH constant", exc)
 
+    # --- (9a) OP_SET_DEPS constant ---
+    try:
+        assert OP_SET_DEPS == "set_deps", f"OP_SET_DEPS should be 'set_deps', got {OP_SET_DEPS!r}"
+        ok("OP_SET_DEPS constant")
+    except Exception as exc:
+        fail("OP_SET_DEPS constant", exc)
+
+    # --- (9b) OP_MIGRATE_DEPS constant ---
+    try:
+        assert OP_MIGRATE_DEPS == "migrate_deps", f"OP_MIGRATE_DEPS should be 'migrate_deps', got {OP_MIGRATE_DEPS!r}"
+        ok("OP_MIGRATE_DEPS constant")
+    except Exception as exc:
+        fail("OP_MIGRATE_DEPS constant", exc)
+
+    # --- (9c) ERR_VALIDATION constant ---
+    try:
+        assert ERR_VALIDATION == "validation_error", f"ERR_VALIDATION should be 'validation_error', got {ERR_VALIDATION!r}"
+        ok("ERR_VALIDATION constant")
+    except Exception as exc:
+        fail("ERR_VALIDATION constant", exc)
+
+    # --- (9d) WikiValidationError is subclass of WikiError ---
+    try:
+        assert issubclass(WikiValidationError, WikiError), f"WikiValidationError should be subclass of WikiError"
+        ok("WikiValidationError is subclass of WikiError")
+    except Exception as exc:
+        fail("WikiValidationError is subclass of WikiError", exc)
+
+    # --- (9e) WikiValidationError can be raised and caught ---
+    try:
+        try:
+            raise WikiValidationError("test error")
+        except WikiError:
+            pass
+        ok("WikiValidationError can be caught as WikiError")
+    except Exception as exc:
+        fail("WikiValidationError can be caught as WikiError", exc)
+
     # --- (10) Upsert task request round-trip ---
     try:
         req = {
@@ -189,13 +233,13 @@ def main() -> int:
     except Exception as exc:
         fail("old OP_WRITE is rejected", exc)
 
-    # --- (15) PROTOCOL_VERSION is 2 (integer) ---
+    # --- (15) PROTOCOL_VERSION is 3 (integer) ---
     try:
-        assert PROTOCOL_VERSION == 2, f"expected 2, got {PROTOCOL_VERSION!r}"
+        assert PROTOCOL_VERSION == 3, f"expected 3, got {PROTOCOL_VERSION!r}"
         assert isinstance(PROTOCOL_VERSION, int), f"expected int, got {type(PROTOCOL_VERSION)}"
-        ok("PROTOCOL_VERSION is 2 (integer)")
+        ok("PROTOCOL_VERSION is 3 (integer)")
     except Exception as exc:
-        fail("PROTOCOL_VERSION is 2 (integer)", exc)
+        fail("PROTOCOL_VERSION is 3 (integer)", exc)
 
     # --- (16) List tasks brief request ---
     try:
@@ -207,7 +251,7 @@ def main() -> int:
         resp = {
             FIELD_OK: True,
             "tasks": [
-                {"id": 0, "slug": "task1", "title": "Task 1", "group": None, "brief": "", "status": None, "has_proposal": False},
+                {"id": 0, "slug": "task1", "title": "Task 1", "layer": "A", "brief": "", "status": None, "has_proposal": False},
             ],
         }
         assert resp[FIELD_OK] is True
@@ -302,6 +346,70 @@ def main() -> int:
                 ok("Orphan-deletion case")
     except Exception as exc:
         fail("Orphan-deletion case", exc)
+
+    # --- (21a) ERR_VALIDATION -> WikiValidationError via WIKI_DAEMON_INPROCESS ---
+    try:
+        import os as _os
+        with safe_temp_dir() as tmp:
+            wiki_path = tmp / "wiki"
+            wiki_path.mkdir(parents=True, exist_ok=True)
+            (wiki_path / "tasks.json").write_text('{"_default": {}}', encoding="utf-8")
+
+            with patch.dict(_os.environ, {"WIKI_DAEMON_INPROCESS": "1"}):
+                # Insert task A first
+                _client.upsert_task(wiki_path, "task-a", title="Task A")
+
+                # Try to upsert task B with dangling depends_on
+                try:
+                    _client.upsert_task(wiki_path, "task-b", title="Task B", depends_on=["nonexistent"])
+                    fail("ERR_VALIDATION -> WikiValidationError via WIKI_DAEMON_INPROCESS",
+                         Exception("expected WikiValidationError"))
+                except WikiValidationError:
+                    ok("ERR_VALIDATION -> WikiValidationError via WIKI_DAEMON_INPROCESS")
+    except Exception as exc:
+        fail("ERR_VALIDATION -> WikiValidationError via WIKI_DAEMON_INPROCESS", exc)
+
+    # --- (21b) set_deps wrapper round-trip ---
+    try:
+        import os as _os
+        with safe_temp_dir() as tmp:
+            wiki_path = tmp / "wiki"
+            wiki_path.mkdir(parents=True, exist_ok=True)
+            (wiki_path / "tasks.json").write_text('{"_default": {}}', encoding="utf-8")
+
+            with patch.dict(_os.environ, {"WIKI_DAEMON_INPROCESS": "1"}):
+                # Insert two tasks
+                _client.upsert_task(wiki_path, "task-a", title="Task A")
+                _client.upsert_task(wiki_path, "task-b", title="Task B")
+
+                # Call set_deps
+                _client.set_deps(wiki_path, "task-b", ["task-a"])
+
+                # Verify the change
+                task = _client.get_task(wiki_path, "task-b")
+                assert task is not None, "task-b should exist"
+                assert task.get("depends_on") == ["task-a"], f"depends_on should be ['task-a'], got {task.get('depends_on')}"
+                ok("set_deps wrapper round-trip")
+    except Exception as exc:
+        fail("set_deps wrapper round-trip", exc)
+
+    # --- (21c) OP_SET_DEPS unknown slug raises WikiValidationError ---
+    try:
+        import os as _os
+        with safe_temp_dir() as tmp:
+            wiki_path = tmp / "wiki"
+            wiki_path.mkdir(parents=True, exist_ok=True)
+            (wiki_path / "tasks.json").write_text('{"_default": {}}', encoding="utf-8")
+
+            with patch.dict(_os.environ, {"WIKI_DAEMON_INPROCESS": "1"}):
+                try:
+                    _client.set_deps(wiki_path, "nonexistent-task", [])
+                    fail("OP_SET_DEPS unknown slug raises WikiValidationError",
+                         Exception("expected WikiValidationError"))
+                except WikiValidationError:
+                    ok("OP_SET_DEPS unknown slug raises WikiValidationError")
+    except Exception as exc:
+        fail("OP_SET_DEPS unknown slug raises WikiValidationError", exc)
 
     print("", file=sys.stderr)
     if failed:
