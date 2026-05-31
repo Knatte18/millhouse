@@ -1,6 +1,81 @@
 from __future__ import annotations
 
 
+def compute_layers(tasks: list[dict]) -> dict[str, str]:
+    task_map = {t["slug"]: t for t in tasks}
+    result: dict[str, str] = {}
+
+    for task in tasks:
+        slug = task["slug"]
+        status = task.get("status")
+        deferred = task.get("deferred", False)
+        isolated = task.get("isolated", False)
+
+        if status == "done":
+            result[slug] = "__done__"
+        elif deferred:
+            result[slug] = "__deferred__"
+        elif isolated:
+            result[slug] = "Z"
+        else:
+            result[slug] = None
+
+    if None not in result.values():
+        return result
+
+    color = {slug: "white" for slug in task_map}
+
+    def visit(slug: str, path: list[str]) -> None:
+        if color[slug] == "black":
+            return
+        if color[slug] == "gray":
+            raise ValueError(f"cycle detected: {' -> '.join(path)}")
+
+        color[slug] = "gray"
+        path_with_current = path + [slug]
+        task = task_map[slug]
+        depends_on = task.get("depends_on", [])
+        for dep_slug in depends_on:
+            if dep_slug not in task_map:
+                continue
+            dep_task = task_map[dep_slug]
+            if dep_task.get("status") == "done":
+                continue
+            visit(dep_slug, path_with_current)
+        color[slug] = "black"
+
+    for slug in task_map:
+        if color[slug] == "white" and result[slug] is None:
+            visit(slug, [])
+
+    def get_topo_level(slug: str, memo: dict[str, int]) -> int:
+        if slug in memo:
+            return memo[slug]
+        task = task_map[slug]
+        depends_on = task.get("depends_on", [])
+        effective_deps = [
+            d for d in depends_on
+            if d in task_map and task_map[d].get("status") != "done"
+        ]
+        if not effective_deps:
+            level = 0
+        else:
+            level = 1 + max(get_topo_level(d, memo) for d in effective_deps)
+        memo[slug] = level
+        return level
+
+    memo: dict[str, int] = {}
+    for task in tasks:
+        slug = task["slug"]
+        if result[slug] is None:
+            level = get_topo_level(slug, memo)
+            if level >= 25:
+                raise ValueError("layer depth exceeds A..Y cap")
+            result[slug] = chr(ord("A") + level)
+
+    return result
+
+
 def render(tasks: list[dict]) -> dict[str, str]:
     result: dict[str, str] = {}
 
