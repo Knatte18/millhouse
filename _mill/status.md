@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-reviewing
+phase: holistic-fixing
 slug: mill-orchestration-hardening-r2
 branch: hanf/mill-orchestration-hardening-r2
 plan: _mill/plan
@@ -26,6 +26,7 @@ approved-text-and-template  '2026-05-31T09:03:45Z'
 approved-fixer-inferred-success  '2026-05-31T09:12:28Z'
 approved-validate-and-config  '2026-05-31T09:21:20Z'
 holistic-reviewing  '2026-05-31T09:21:50Z'
+holistic-fixing  '2026-05-31T09:32:36Z'
 ```
 
 ## Batches
