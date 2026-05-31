@@ -236,7 +236,7 @@ class TestCheckBgStatus(unittest.TestCase):
             call_count = [0]
 
             def read_text_side_effect(self, *args, **kwargs):
-                """On first call (from is_bg_worker_alive), return no EXIT. On re-read (race guard), return with EXIT."""
+                """On first call (from check_bg_status initial read), no EXIT. On re-read (race guard), EXIT present."""
                 call_count[0] += 1
                 if call_count[0] == 1:
                     return f"[mill-bg] WORKER PID={pid_value} START 2026-05-17T15:00:00Z\nsome output\n"
