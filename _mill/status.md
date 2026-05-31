@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-setup-winreg
 branch: mill-setup-winreg
 plan: _mill/plan
@@ -21,4 +21,13 @@ planning  '2026-05-30T15:04:40Z'
 planning  '2026-05-30T15:04:45Z'
 plan-fix-r1  '2026-05-30T15:13:54Z'
 planned  '2026-05-30T15:14:55Z'
+implementing  '2026-05-31T07:46:40Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: winreg-env-helper
+    state: pending
 ```
