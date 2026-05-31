@@ -54,6 +54,16 @@ def _forward_output(
                         return 0
                     print(json.dumps({"status": "success", "commit_sha": head, "session_id": session_id or "unknown", "inferred": True}))
                     return 0
+        elif start_sha is not None and snapshot_path is None:
+            result = _subprocess_util.run(["git", "rev-parse", "HEAD"], cwd=project_root)
+            if result.returncode == 0 and result.stdout.strip() != start_sha:
+                head = result.stdout.strip()
+                result_full = _subprocess_util.run(
+                    ["git", "-C", str(project_root), "status", "--porcelain", "--untracked-files=no"],
+                )
+                if not result_full.stdout.strip():
+                    print(json.dumps({"status": "success", "commit_sha": head, "session_id": session_id or "unknown", "inferred": True}))
+                    return 0
     except Exception:
         pass
     print(json.dumps({"status": "stuck", "stuck_type": "logic", "reason": "no structured report"}))
