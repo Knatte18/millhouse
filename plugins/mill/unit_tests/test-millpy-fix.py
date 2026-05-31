@@ -442,5 +442,132 @@ class TestMillpyFix(unittest.TestCase):
             self.assertEqual(resume_values, [False, False])
 
 
+class TestMillpyFixBriefSizeGuard(unittest.TestCase):
+
+    def setUp(self):
+        self.tmp_path = Path(tempfile.mkdtemp())
+        self.addCleanup(_safe_rmtree.safe_rmtree, self.tmp_path, allowed_root=self.tmp_path, ignore_errors=True)
+
+        self.review_file = _make_fixture(self.tmp_path)
+
+        self.original_cwd = os.getcwd()
+        os.chdir(self.tmp_path)
+        self.addCleanup(os.chdir, self.original_cwd)
+
+        def _p(target, attr, **kwargs):
+            patcher = unittest.mock.patch.object(target, attr, **kwargs)
+            mock_obj = patcher.start()
+            self.addCleanup(patcher.stop)
+            return mock_obj
+
+        self.mock_resolve_git_root = _p(
+            millpy_fix._paths, "resolve_git_root",
+            return_value=self.tmp_path,
+        )
+        self.mock_resolve_wiki = _p(
+            millpy_fix._paths, "resolve_wiki_path",
+            return_value=self.tmp_path / "wiki",
+        )
+        self.mock_load_config = _p(
+            millpy_fix._review_common, "load_config",
+            return_value={
+                "paths": {"status_md": "_mill/status.md"},
+                "roles": {
+                    "implementer": {"self_fix_rounds": 2, "model": "sonnethigh"},
+                    "fixer": {"model": "haiku"},
+                },
+                "llm": {"implementer_timeout": 1800},
+            },
+        )
+        self.mock_slug_from_branch = _p(
+            millpy_fix._marker, "slug_from_branch",
+            return_value="test-slug",
+        )
+        self.mock_read_branch = _p(
+            millpy_fix._status, "read_branch",
+            return_value="test-branch",
+        )
+        self.mock_subprocess_run = _p(
+            millpy_fix._subprocess_util, "run",
+            return_value=subprocess.CompletedProcess(
+                args=[], returncode=0, stdout="abc1234\n", stderr=""
+            ),
+        )
+        self.mock_uuid4 = _p(
+            millpy_fix.uuid, "uuid4",
+            return_value=uuid.UUID("00000000-0000-0000-0000-000000000001"),
+        )
+        self.mock_reviewers_load = _p(
+            millpy_fix._reviewers, "load",
+            return_value={
+                "haiku": {
+                    "type": "single",
+                    "provider": "claude",
+                    "model": "claude-haiku-4-5-20251001",
+                }
+            },
+        )
+        self.mock_reviewers_resolve = _p(
+            millpy_fix._reviewers, "resolve",
+            return_value={
+                "type": "single",
+                "provider": "claude",
+                "model": "claude-haiku-4-5-20251001",
+            },
+        )
+
+    def _run_main(self, argv):
+        """Run main(argv) with stdout captured. Returns (rc, captured_stdout)."""
+        buf = io.StringIO()
+        with unittest.mock.patch("sys.stdout", buf):
+            rc = millpy_fix.main(argv)
+        return rc, buf.getvalue()
+
+    def test_1_brief_size_guard_fires(self):
+        """Brief exceeds max_implementer_prompt_chars -> stuck/transient, no LLM call."""
+        self.mock_load_config.return_value = {
+            "paths": {"status_md": "_mill/status.md"},
+            "roles": {
+                "implementer": {"self_fix_rounds": 2, "model": "sonnethigh"},
+                "fixer": {"self_fix_rounds": 2, "model": "haiku"},
+            },
+            "llm": {"implementer_timeout": 1800, "max_implementer_prompt_chars": 10},
+        }
+        with unittest.mock.patch.object(millpy_fix._render, "render", return_value="x" * 20):
+            with unittest.mock.patch.object(millpy_fix._implementer_claude, "run") as mock_run:
+                rc, out = self._run_main(["--scope", "batch", "--batch-name", "test-batch", "--round", "1", "--review-file", str(self.review_file)])
+
+        self.assertEqual(rc, 0)
+        data = json.loads(out.strip().splitlines()[-1])
+        self.assertEqual(data["status"], "stuck")
+        self.assertEqual(data["stuck_type"], "transient")
+        self.assertIn("max_implementer_prompt_chars", data["reason"])
+        mock_run.assert_not_called()
+
+    def test_2_brief_size_guard_disabled(self):
+        """max_implementer_prompt_chars = 0 (disabled) -> guard does not fire."""
+        self.mock_load_config.return_value = {
+            "paths": {"status_md": "_mill/status.md"},
+            "roles": {
+                "implementer": {"self_fix_rounds": 2, "model": "sonnethigh"},
+                "fixer": {"self_fix_rounds": 2, "model": "haiku"},
+            },
+            "llm": {"implementer_timeout": 1800, "max_implementer_prompt_chars": 0},
+        }
+        with unittest.mock.patch.object(millpy_fix._render, "render", return_value="x" * 20):
+            with unittest.mock.patch.object(
+                millpy_fix._implementer_claude, "run",
+                return_value=(
+                    '{"status":"success","commit_sha":"abc","session_id":"fake"}\n',
+                    "fake-session",
+                ),
+            ) as mock_run:
+                rc, out = self._run_main(["--scope", "batch", "--batch-name", "test-batch", "--round", "1", "--review-file", str(self.review_file)])
+
+        self.assertEqual(rc, 0)
+        # Verify that _implementer_claude.run was called (the guard did not fire)
+        mock_run.assert_called_once()
+
+
 if __name__ == "__main__":
     unittest.main()
