@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-fix-r2
+phase: plan-fix-r3
 slug: task-deps-and-isolation
 branch: task-deps-and-isolation
 plan: _mill/plan
@@ -22,4 +22,6 @@ plan-review-r1  '2026-05-31T08:05:03Z'
 plan-fix-r1  '2026-05-31T08:05:03Z'
 plan-review-r2  '2026-05-31T08:17:43Z'
 plan-fix-r2  '2026-05-31T08:17:43Z'
+plan-review-r3  '2026-05-31T08:27:04Z'
+plan-fix-r3  '2026-05-31T08:27:04Z'
 ```
