@@ -83,3 +83,8 @@ class WikiPathError(WikiError):
 class WikiValidationError(WikiError):
     """Invalid task data rejected by the store."""
     pass
+
+
+class WikiBusyError(WikiError):
+    """Daemon was alive but stayed busy past the retry budget."""
+    pass
