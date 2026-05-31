@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: haiku-implementer-reliability
 branch: hanf/haiku-implementer-reliability
 plan: _mill/plan
@@ -21,4 +21,17 @@ planning  '2026-05-31T09:22:42Z'
 plan-review-r1  '2026-05-31T09:30:59Z'
 plan-fix-r1  '2026-05-31T09:31:15Z'
 planned  '2026-05-31T09:31:32Z'
+implementing  '2026-05-31T09:34:16Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: timeout-and-brief-size-guard
+    state: pending
+  - name: scope-violations-and-brief
+    state: pending
+  - name: unit-tests
+    state: pending
 ```
