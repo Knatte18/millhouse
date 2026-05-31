@@ -665,9 +665,9 @@ def main() -> int:
         mod = _load_claude_sub_module()
         _wait_for_idle_stable = mod._wait_for_idle_stable
 
-        # Scenario (a): capture returns idle for first two polls; monotonic starts at 0.0
+        # Scenario (a): first two captures return "? for shortcuts"; return True
         try:
-            with mock.patch("_psmux.capture_pane", side_effect=["❯ idle\n", "❯ idle\n"]), \
+            with mock.patch("_psmux.capture_pane", side_effect=["? for shortcuts\n", "? for shortcuts\n"]), \
                  mock.patch("time.sleep"), \
                  mock.patch("time.monotonic", side_effect=[0.0, 0.0, 1.0, 1.0]):
                 result = _wait_for_idle_stable(session_name="s", timeout_s=5.0)
@@ -677,9 +677,9 @@ def main() -> int:
             print(f"[FAIL] _wait_for_idle_stable scenario (a): {e}")
             errors += 1
 
-        # Scenario (b): captures return varied idle state; finally stable
+        # Scenario (b): first two captures return "esc to interrupt", next two return "? for shortcuts" twice → True after phase 2 stabilises
         try:
-            with mock.patch("_psmux.capture_pane", side_effect=["❯ idle\n", "no idle\n", "❯ idle\n", "❯ idle\n"]), \
+            with mock.patch("_psmux.capture_pane", side_effect=["esc to interrupt\n", "esc to interrupt\n", "? for shortcuts\n", "? for shortcuts\n"]), \
                  mock.patch("time.sleep"), \
                  mock.patch("time.monotonic", side_effect=[0.0, 0.0, 1.0, 1.0, 2.0, 2.0, 3.0, 3.0]):
                 result = _wait_for_idle_stable(session_name="s", timeout_s=5.0)
@@ -689,11 +689,11 @@ def main() -> int:
             print(f"[FAIL] _wait_for_idle_stable scenario (b): {e}")
             errors += 1
 
-        # Scenario (c): all captures return no idle; timeout fires
+        # Scenario (c): all captures return "esc to interrupt" or empty (never "for shortcuts"), timeout fires → returns False
         try:
-            with mock.patch("_psmux.capture_pane", return_value="no idle"), \
+            with mock.patch("_psmux.capture_pane", side_effect=["esc to interrupt\n", "esc to interrupt\n", "", ""]), \
                  mock.patch("time.sleep"), \
-                 mock.patch("time.monotonic", side_effect=[0.0, 0.0, 6.0, 6.0]):
+                 mock.patch("time.monotonic", side_effect=[0.0, 0.0, 1.0, 1.0, 6.0, 6.0]):
                 result = _wait_for_idle_stable(session_name="s", timeout_s=5.0)
                 assert result is False, f"Scenario (c): expected False, got {result}"
             print("[OK] _wait_for_idle_stable scenario (c)")

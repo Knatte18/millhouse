@@ -129,23 +129,41 @@ def _wait_for_idle_prompt(session_name: str, timeout_s: float) -> bool:
 
 
 def _wait_for_idle_stable(session_name: str, timeout_s: float) -> bool:
-    """Return True when idle char appears in two consecutive captures 1s apart."""
-    idle_prompt = "❯"
-    start = time.monotonic()
+    """Two-phase status-bar wait: Phase 1 waits for processing marker, Phase 2 waits for stable idle.
+
+    Phase 1: Poll up to BOOT_READY_TIMEOUT_S for "esc to interrupt" or "esctointerrupt" marker.
+    Phase 2: Poll up to timeout_s for "for shortcuts" marker appearing in two consecutive polls.
+    Falls through Phase 1 on timeout; returns False from Phase 2 on timeout.
+    """
+    # Phase 1: Wait for processing marker
+    phase1_start = time.monotonic()
+    while True:
+        try:
+            capture = _psmux.capture_pane(session_name, alternate=True)
+            if "esc to interrupt" in capture or "esctointerrupt" in capture:
+                break
+        except _psmux.PsmuxError:
+            pass
+
+        if time.monotonic() - phase1_start >= BOOT_READY_TIMEOUT_S:
+            break
+        time.sleep(POLL_INTERVAL_S)
+
+    # Phase 2: Wait for stable idle (two consecutive polls show "for shortcuts")
+    phase2_start = time.monotonic()
     prev_idle = False
     while True:
         try:
             capture = _psmux.capture_pane(session_name, alternate=True)
-            curr_idle = any(
-                line.strip().startswith(idle_prompt)
-                for line in capture.splitlines()
-            )
         except _psmux.PsmuxError:
-            curr_idle = False
+            capture = ""
+
+        curr_idle = "for shortcuts" in capture
         if prev_idle and curr_idle:
             return True
         prev_idle = curr_idle
-        if time.monotonic() - start >= timeout_s:
+
+        if time.monotonic() - phase2_start >= timeout_s:
             return False
         time.sleep(POLL_INTERVAL_S)
 
