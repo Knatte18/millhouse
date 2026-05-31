@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-Protocol Constants
 slug: task-deps-and-isolation
 branch: task-deps-and-isolation
 plan: _mill/plan
@@ -31,6 +31,7 @@ plan-fix-r5  '2026-05-31T08:44:51Z'
 plan-review-r6  '2026-05-31T08:53:26Z'
 planned  '2026-05-31T08:53:26Z'
 implementing  '2026-05-31T08:55:48Z'
+approved-Protocol Constants  '2026-05-31T09:04:58Z'
 ```
 
 ## Batches
@@ -38,7 +39,7 @@ implementing  '2026-05-31T08:55:48Z'
 ```yaml
 batches:
   - name: Protocol Constants
-    state: running
+    state: approved
     implementer_session: c4e5f122-4cd1-40d8-abe4-3199c76c165c
     start_sha: 0f13c9a7fb3e11958fb2e4491c99908f12b3eb76
   - name: Store Schema and Validation
