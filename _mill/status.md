@@ -48,7 +48,9 @@ batches:
     implementer_session: 300ba1ee-af34-45e1-afba-98aff3b7eb3e
     start_sha: 6a7497987c1fb7d60d1ac7f21225b5859ab1010c
   - name: Render compute_layers and Helpers
-    state: pending
+    state: running
+    implementer_session: bad48813-796a-4905-a7ff-f8019ca6a792
+    start_sha: 877be2a04dc2bae58c75baf4f8b95e4447f8af97
   - name: Server and Client Protocol
     state: pending
   - name: Consumer Scripts
