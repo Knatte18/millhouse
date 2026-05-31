@@ -15,6 +15,8 @@ OP_LIST_TASKS_FULL = "list_tasks_full"
 OP_HEALTH = "health"
 OP_RERENDER = "rerender"
 OP_SHUTDOWN = "shutdown"
+OP_SET_DEPS = "set_deps"
+OP_MIGRATE_DEPS = "migrate_deps"
 
 # Locked fold phases - phases where tasks cannot be folded into other tasks
 LOCKED_FOLD_PHASES = ("active", "ready-to-merge", "pr-pending")
@@ -40,6 +42,7 @@ ERR_PUSH_FAILED = "push_failed"
 ERR_PROTOCOL = "protocol_error"
 ERR_AUTH = "auth_error"
 ERR_PATH = "path_error"
+ERR_VALIDATION = "validation_error"
 
 
 class WikiError(Exception):
