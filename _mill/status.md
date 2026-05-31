@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-Store Schema and Validation
+phase: approved-Render compute_layers and Helpers
 slug: task-deps-and-isolation
 branch: task-deps-and-isolation
 plan: _mill/plan
@@ -33,6 +33,7 @@ planned  '2026-05-31T08:53:26Z'
 implementing  '2026-05-31T08:55:48Z'
 approved-Protocol Constants  '2026-05-31T09:04:58Z'
 approved-Store Schema and Validation  '2026-05-31T09:13:57Z'
+approved-Render compute_layers and Helpers  '2026-05-31T09:24:27Z'
 ```
 
 ## Batches
@@ -48,7 +49,7 @@ batches:
     implementer_session: 300ba1ee-af34-45e1-afba-98aff3b7eb3e
     start_sha: 6a7497987c1fb7d60d1ac7f21225b5859ab1010c
   - name: Render compute_layers and Helpers
-    state: running
+    state: approved
     implementer_session: bad48813-796a-4905-a7ff-f8019ca6a792
     start_sha: 877be2a04dc2bae58c75baf4f8b95e4447f8af97
   - name: Server and Client Protocol
