@@ -3,7 +3,7 @@
 ```yaml
 task: Replace manual layer letters with depends_on + isolated flags
 slug: task-deps-and-isolation
-approved: false
+approved: true
 started: 20260531-075409
 parent: main
 root: ""
