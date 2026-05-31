@@ -335,19 +335,23 @@ print(f'wrote {len(written)} wrappers' if written else 'wrappers up to date')
 
 Log `wrote N wrappers` or `wrappers up to date` based on the returned list.
 
-Then set the `PYTHONPATH` Windows user environment variable to the scripts directory of the latest installed plugin version. Use `powershell` (PS5 — guaranteed on Windows 11; `pwsh` is not):
+Then set the `PYTHONPATH` Windows user environment variable to the scripts directory of the latest installed plugin version via Python `winreg`:
 
 ```bash
-powershell -Command "
-\$cache = \"\$env:USERPROFILE\\.claude\\plugins\\cache\\millhouse\\mill\";
-\$latest = (Get-ChildItem \$cache -Directory | Sort-Object Name -Descending | Select-Object -First 1).FullName;
-\$scripts = Join-Path \$latest 'scripts';
-[System.Environment]::SetEnvironmentVariable('PYTHONPATH', \$scripts, 'User');
-Write-Host \"Set PYTHONPATH (User) = \$scripts\"
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "
+import os
+import _winenv
+from pathlib import Path
+
+cache = Path(os.environ['USERPROFILE']) / '.claude' / 'plugins' / 'cache' / 'millhouse' / 'mill'
+latest_path = max((p for p in cache.iterdir() if p.is_dir()), key=lambda p: p.name)
+scripts = str(latest_path / 'scripts')
+changed = _winenv.set_user_env_var('PYTHONPATH', scripts)
+print(f'Set PYTHONPATH (User) = {scripts}' if changed else f'PYTHONPATH (User) already correct: {scripts}')
 "
 ```
 
-Log: `Set PYTHONPATH (User) = <scripts>. Note: takes effect in NEW shell sessions; current mill-setup session must keep using the inline PYTHONPATH prefix above.`
+Log: `Set PYTHONPATH (User) = <scripts> or PYTHONPATH (User) already correct: <scripts>. Note: takes effect in NEW shell sessions; current mill-setup session must keep using the inline PYTHONPATH prefix above.`
 
 **Note:** After running `update-plugins.ps1` to install a new plugin version, re-run `/mill-setup` to refresh PYTHONPATH and the PS1 wrappers to the new version. If upgrading from a pre-PS1 hub (one where `.millhouse/` still contains `.py` wrappers), re-run `/mill-setup` — Phase 4.7 is idempotent and will replace the `.py` wrappers with `.ps1` wrappers in a single pass, and Phase 8 will verify their absence.
 
@@ -471,7 +475,7 @@ Check every invariant; halt with a specific error if any fails:
 - `.gitignore` contains the mill-managed marker block with glob entries
 - `hub_relative_path:` is set in `.millhouse/config.local.yaml`
 - Every script in `_shortcuts.SHORTCUT_SCRIPTS` has a wrapper at `.millhouse/<script>.ps1` (and no legacy `.millhouse/<script>.py` exists)
-- `PYTHONPATH` user env var contains `<CLAUDE_PLUGIN_ROOT>/scripts` (verify via `[System.Environment]::GetEnvironmentVariable('PYTHONPATH', 'User')`)
+- `PYTHONPATH` user env var contains `<CLAUDE_PLUGIN_ROOT>/scripts` (verify via `PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "import _winenv; v=_winenv.get_user_env_var('PYTHONPATH'); assert v and '${CLAUDE_PLUGIN_ROOT}/scripts' in v, f'PYTHONPATH missing or incorrect: {v}'; print(f'OK: PYTHONPATH={v}')")`)
 - `.env.MILL_PYTHON` in `~/.claude/settings.json` equals `${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe` (runtime-expanded value); verify via: `PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "import json; from pathlib import Path; d=json.loads((Path.home()/'.claude'/'settings.json').read_text(encoding='utf-8')); print(d['env']['MILL_PYTHON'])"`
 - `.millhouse/config.local.yaml` exists
 - Wiki daemon starts successfully: `_client.list_tasks_brief(wiki_path)` returns without error and Home.md exists in the wiki clone.
