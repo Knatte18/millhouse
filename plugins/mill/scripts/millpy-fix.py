@@ -277,6 +277,9 @@ def main(argv=None) -> int:
         )
 
     # Shared dispatch tail for both scopes
+    _sha_result = _subprocess_util.run(["git", "rev-parse", "HEAD"], cwd=project_root)
+    start_sha = _sha_result.stdout.strip() if _sha_result.returncode == 0 else None
+
     try:
         output, _ = _implementer_claude.run(
             prompt_text,
@@ -293,7 +296,7 @@ def main(argv=None) -> int:
         print(str(e), file=sys.stderr)
         return 1
 
-    return _forward_output(output, project_root, session_id=session_id)
+    return _forward_output(output, project_root, start_sha=start_sha, session_id=session_id)
 
 
 if __name__ == "__main__":
