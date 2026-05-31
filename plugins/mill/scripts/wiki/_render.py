@@ -76,6 +76,36 @@ def compute_layers(tasks: list[dict]) -> dict[str, str]:
     return result
 
 
+def extended_title(task: dict) -> str:
+    title = task.get("title", "")
+    if task.get("status") == "done" or task.get("deferred", False):
+        return title
+    layer = task.get("layer")
+    if layer and layer not in ("__deferred__", "__done__"):
+        return f"{title} [{layer}]"
+    return title
+
+
+def render_order(tasks: list[dict]) -> list[dict]:
+    layers = compute_layers(tasks)
+    for task in tasks:
+        task["layer"] = layers[task["slug"]]
+
+    letter_order = "ABCDEFGHIJKLMNOPQRSTUVWXY"
+    bucket_order = list(letter_order) + ["Z", "__deferred__", "__done__"]
+
+    def sort_key(task: dict) -> tuple:
+        layer = task.get("layer", "")
+        try:
+            bucket_index = bucket_order.index(layer)
+        except ValueError:
+            bucket_index = len(bucket_order)
+        task_id = task.get("id", 0)
+        return (bucket_index, task_id)
+
+    return sorted(tasks, key=sort_key)
+
+
 def render(tasks: list[dict]) -> dict[str, str]:
     result: dict[str, str] = {}
 
