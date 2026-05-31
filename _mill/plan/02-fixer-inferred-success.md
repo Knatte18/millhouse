@@ -99,7 +99,7 @@ This batch fixes #398: when `millpy-fix.py` dispatches a holistic fixer session 
 
   The test must mock `_subprocess_util.run` (or the relevant git subprocess) to return a known SHA for `git rev-parse HEAD` and also intercept the `_forward_output` call to assert that `start_sha` equals that known SHA. Use `unittest.mock.patch` if the existing file already uses it; otherwise follow the existing mocking pattern.
 
-  If `test-millpy-fix.py` does not have an existing fixture for running `main()`, create a minimal one that covers only the `start_sha` capture: mock out the expensive calls (`_implementer_claude.run`, config loading, slug resolution) and assert that `_forward_output` receives a non-None `start_sha` keyword argument.
+  If `test-millpy-fix.py` does not have an existing fixture for running `main()`, create a minimal one that covers only the `start_sha` capture: mock out the expensive calls (`_implementer_claude.run`, config loading, slug resolution) and assert that `_forward_output` receives a non-None `start_sha` keyword argument. Because `millpy-fix.py` imports `_forward_output` via `from _implementer_common import _forward_output`, patch the local binding: `unittest.mock.patch.object(millpy_fix, "_forward_output", side_effect=...)` to capture the `start_sha` kwarg — do NOT patch `_implementer_common._forward_output`, which would leave the local binding unaffected.
 
   Increment `errors` on failure, return 0 on success.
 - **Commit:** `test(millpy-fix): verify start_sha is captured and passed to _forward_output (#398)`

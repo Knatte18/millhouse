@@ -3,7 +3,7 @@
 ```yaml
 task: mill-go / mill-merge / plan-validator follow-up bugs (round 2)
 slug: mill-orchestration-hardening-r2
-approved: false
+approved: true
 started: 20260531-083617
 parent: main
 root: ""
