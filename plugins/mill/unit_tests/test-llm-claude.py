@@ -760,6 +760,25 @@ def main() -> int:
             errors += 1
             print("FAIL: K5(iv) cleanup_session(\"\") should not call list_sessions", file=sys.stderr)
 
+    # K6: cwd is passed through on psmux path
+    _psmux_cwd_captured: list[str | None] = []
+    def _capture_cwd_run(argv: list[str], **kwargs: object) -> _FakePsmuxResult:
+        _psmux_cwd_captured.clear()
+        _psmux_cwd_captured.append(kwargs.get("cwd"))
+        return _FakePsmuxResult(returncode=0, stdout='{"type":"result","result":"cwd test","session_id":"cwd-sid"}\n')
+
+    _psmux_cwd_captured.clear()
+    with mock.patch.object(_llm_claude_mod, "_get_via_psmux_flag", return_value=True):
+        with mock.patch.object(_llm_claude_mod.shutil, "which", return_value="/usr/bin/psmux"):
+            with mock.patch.object(_subprocess_util_mod, "run", _capture_cwd_run):
+                run_implementer("prompt", model="m", session_id="abc", cwd="/some/path")
+
+    if len(_psmux_cwd_captured) > 0 and _psmux_cwd_captured[0] == "/some/path":
+        print("PASS: K6 (cwd is passed through on psmux path)")
+    else:
+        errors += 1
+        print(f"FAIL: K6 expected cwd='/some/path', got {_psmux_cwd_captured}", file=sys.stderr)
+
     # Test 7: via_psmux=True, shutil.which("psmux") is None raises before subprocess
     _psmux_run_call_count[0] = 0
     def _should_not_be_called(argv, **kwargs):
