@@ -37,7 +37,7 @@ from wiki import (
     WikiStartupError,
 )
 
-SPAWN_TIMEOUT: int = 10
+SPAWN_TIMEOUT: int = 20 if sys.platform == "win32" else 10
 _SERVER_MODULE: str = "wiki._server"
 
 # Registry of in-process WikiServer instances, keyed by resolved wiki_path.
@@ -87,6 +87,32 @@ def stop_inprocess(wiki_path: Path) -> None:
 
 def _inprocess_server(wiki_path: Path):
     return _INPROCESS_SERVERS.get(str(Path(wiki_path).resolve()))
+
+
+def wait_for_socket_reachable(host: str, port: int, *, timeout: float, interval: float = 0.1) -> bool:
+    """Poll for socket reachability until timeout expires.
+
+    Polls socket.create_connection every interval seconds until success or timeout.
+    Does not raise on OSError or socket.timeout during polling.
+
+    Args:
+        host: Server host.
+        port: Server port.
+        timeout: Total timeout budget in seconds.
+        interval: Poll interval in seconds (default 0.1).
+
+    Returns:
+        True if socket became reachable, False if timeout expired.
+    """
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            sock = socket.create_connection((host, port), timeout=0.5)
+            sock.close()
+            return True
+        except (OSError, socket.timeout):
+            time.sleep(interval)
+    return False
 
 
 def _dispatch(wiki_path: Path, op: str, payload: dict) -> dict:
@@ -533,14 +559,8 @@ def _ensure_daemon(wiki_path: Path) -> tuple[str, int, str]:
         time.sleep(0.1)
         state = _read_state_file()
         if state:
-            try:
-                sock = socket.create_connection(
-                    (state["host"], state["port"]), timeout=0.5
-                )
-                sock.close()
+            if wait_for_socket_reachable(state["host"], state["port"], timeout=deadline - time.monotonic()):
                 return (state["host"], state["port"], state["token"])
-            except Exception:
-                pass
 
     raise WikiStartupError("daemon did not start within timeout")
 
