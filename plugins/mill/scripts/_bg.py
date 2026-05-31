@@ -45,7 +45,7 @@ def is_bg_worker_alive(log_path: Path) -> tuple[bool, int | None]:
         return (False, pid)
     except PermissionError:
         return (True, pid)
-    except OSError as exc:
+    except (OSError, SystemError) as exc:
         # Unknown errno from os.kill (Windows-specific or transient) -- fall through to mtime fallback.
         _logger.debug("is_bg_worker_alive: os.kill(%s, 0) raised %r -- falling back to log-mtime staleness", pid, exc)
         pass
