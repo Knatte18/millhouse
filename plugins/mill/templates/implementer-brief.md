@@ -96,6 +96,10 @@ If mill-go resumes this session with a new message pointing you at a code-review
 
 Available: Read, Edit, Write, Bash, Grep, Glob. Banned: TodoWrite, WebFetch, WebSearch. Use `git -C <PROJECT_ROOT>` for commits; do not `cd`.
 
+## Path format
+
+**File paths are POSIX-style relative paths from `<PROJECT_ROOT>`.** Never flatten path separators into underscores. `plugins/mill/scripts/_config.py` is a file at `plugins/mill/scripts/` named `_config.py` -- not a file named `plugins_mill_scripts_config.py` at the worktree root. When in doubt, verify with `Read` before writing.
+
 ## Cross-worktree isolation
 
 You run inside a task worktree. The parent worktree (the repo's main branch checkout) is a sibling directory — do NOT change directory into it.
