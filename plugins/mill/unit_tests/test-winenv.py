@@ -171,3 +171,38 @@ def test_get_user_env_var_absent() -> None:
         mock_winreg.CloseKey.assert_called_once_with(mock_key)
 
     print("PASS: get_user_env_var-absent")
+
+
+def main() -> int:
+    tests = [
+        test_write_when_absent,
+        test_write_when_different,
+        test_idempotent_skip,
+        test_correct_key_and_args,
+        test_broadcast_best_effort,
+        test_broadcast_invoked_on_write_not_on_skip,
+        test_get_user_env_var_present,
+        test_get_user_env_var_absent,
+    ]
+
+    failures: list[str] = []
+    for test_fn in tests:
+        try:
+            test_fn()
+        except AssertionError as exc:
+            print(f"FAIL [{test_fn.__name__}]: {exc}", file=sys.stderr)
+            failures.append(test_fn.__name__)
+        except Exception as exc:  # noqa: BLE001
+            print(f"ERROR [{test_fn.__name__}]: {exc}", file=sys.stderr)
+            failures.append(test_fn.__name__)
+
+    print()
+    if failures:
+        print(f"FAIL -- {len(failures)} of {len(tests)} tests: {failures}", file=sys.stderr)
+        return 1
+    print(f"All {len(tests)} _winenv unit tests passed.")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
