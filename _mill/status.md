@@ -1,10 +1,10 @@
 # Status
 
 ```yaml
-phase: discussed
+phase: planning
 slug: replace-claude-p-with-psmux
 branch: hanf/replace-claude-p-with-psmux
-plan: null
+plan: _mill/plan
 parent: main
 task: Replace claude -p with psmux-routed LLM dispatch
 task_description: |
@@ -17,4 +17,5 @@ task_description: |
 discussing  '2026-05-31T10:58:21Z'
 discussion-fix-r1  '2026-05-31T14:43:07Z'
 discussed  '2026-05-31T14:43:19Z'
+planning  '2026-05-31T14:52:40Z'
 ```
