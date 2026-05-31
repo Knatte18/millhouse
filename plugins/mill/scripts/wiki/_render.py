@@ -109,38 +109,34 @@ def render_order(tasks: list[dict]) -> list[dict]:
 def render(tasks: list[dict]) -> dict[str, str]:
     result: dict[str, str] = {}
 
-    home_lines: list[str] = ["# Tasks", ""]
-    sidebar_groups: list[list[str]] = []
+    layers = compute_layers(tasks)
+    id_map = {t["slug"]: t.get("id") for t in tasks}
 
-    # Bucket tasks: done tasks go to a separate "done" pseudo-group regardless of
-    # their original layer; everything else is bucketed by `group` (None = unspecified).
-    tasks_by_bucket: dict[str | None, list[dict]] = {}
+    tasks_by_bucket: dict[str, list[dict]] = {}
     for task in tasks:
-        bucket = "__done__" if task.get("status") == "done" else task.get("group")
+        bucket = layers[task["slug"]]
         if bucket not in tasks_by_bucket:
             tasks_by_bucket[bucket] = []
         tasks_by_bucket[bucket].append(task)
 
-    # Render order: letter layers (A-Z) first, then Unspecified, then Done.
     letter_buckets = sorted(
-        b for b in tasks_by_bucket if b is not None and b != "__done__"
+        b for b in tasks_by_bucket if b not in ("__deferred__", "__done__")
     )
-    bucket_order: list[str | None] = list(letter_buckets)
-    if None in tasks_by_bucket:
-        bucket_order.append(None)
-    if "__done__" in tasks_by_bucket:
-        bucket_order.append("__done__")
+    bucket_order: list[str] = list(letter_buckets) + ["__deferred__", "__done__"]
+    bucket_order = [b for b in bucket_order if b in tasks_by_bucket]
+
+    home_lines: list[str] = ["# Tasks", ""]
+    sidebar_groups: list[list[str]] = []
 
     for bucket in bucket_order:
         bucket_tasks = tasks_by_bucket[bucket]
-        # Sort tasks within bucket by id ascending for deterministic output
         bucket_tasks = sorted(bucket_tasks, key=lambda t: t.get("id", 0))
 
         if bucket == "__done__":
             home_lines.append("# Done")
             home_lines.append("")
-        elif bucket is None:
-            home_lines.append("# Unspecified")
+        elif bucket == "__deferred__":
+            home_lines.append("# Someday")
             home_lines.append("")
         else:
             home_lines.append(f"# Layer {bucket}")
@@ -154,17 +150,17 @@ def render(tasks: list[dict]) -> dict[str, str]:
             status = task.get("status")
             body = task.get("body", "")
             task_id = task.get("id")
-            task_group = task.get("group")
+            depends_on = task.get("depends_on", [])
 
-            # Drop [s] status - treat as None
             if status == "s":
                 status = None
 
-            # Format: "**#<zero-padded-id>:** <title> [<group>]". Group uses the
-            # task's own group, not the bucket, so done-tasks keep their origin marker.
             id_prefix = f"**#{task_id:03d}:**" if task_id is not None else ""
-            group_suffix = f"[{task_group}]" if task_group is not None else ""
-            display_title = " ".join(p for p in (id_prefix, title, group_suffix) if p)
+            if bucket in ("__done__", "__deferred__"):
+                layer_suffix = ""
+            else:
+                layer_suffix = f"[{bucket}]"
+            display_title = " ".join(p for p in (id_prefix, title, layer_suffix) if p)
 
             home_lines.append(f"## {display_title}")
 
@@ -175,6 +171,16 @@ def render(tasks: list[dict]) -> dict[str, str]:
             if status in ("active", "done", "pr-pending", "ready-to-merge", "abandoned"):
                 slug_line += f" [{status}]"
             home_lines.append(slug_line)
+
+            if depends_on:
+                dep_list = []
+                for dep_slug in depends_on:
+                    if dep_slug in id_map:
+                        dep_id = id_map[dep_slug]
+                        dep_list.append(f"#{dep_id:03d}")
+                    else:
+                        dep_list.append(f"#???: {dep_slug} (missing)")
+                home_lines.append(f"Depends on: {', '.join(dep_list)}")
 
             if brief:
                 home_lines.append("")
