@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-winreg-env-helper
 slug: mill-setup-winreg
 branch: mill-setup-winreg
 plan: _mill/plan
@@ -22,6 +22,7 @@ planning  '2026-05-30T15:04:45Z'
 plan-fix-r1  '2026-05-30T15:13:54Z'
 planned  '2026-05-30T15:14:55Z'
 implementing  '2026-05-31T07:46:40Z'
+approved-winreg-env-helper  '2026-05-31T07:49:39Z'
 ```
 
 ## Batches
@@ -29,7 +30,7 @@ implementing  '2026-05-31T07:46:40Z'
 ```yaml
 batches:
   - name: winreg-env-helper
-    state: running
+    state: approved
     implementer_session: c1bb78fd-c4de-42ac-ba82-8beee0486066
     start_sha: e42ae3b7527cc453909480fd5a0a96ccdd03cbd6
 ```
