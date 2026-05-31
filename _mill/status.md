@@ -29,5 +29,7 @@ implementing  '2026-05-31T07:46:40Z'
 ```yaml
 batches:
   - name: winreg-env-helper
-    state: pending
+    state: running
+    implementer_session: c1bb78fd-c4de-42ac-ba82-8beee0486066
+    start_sha: e42ae3b7527cc453909480fd5a0a96ccdd03cbd6
 ```
