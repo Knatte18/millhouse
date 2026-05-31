@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-fix-r2
+phase: planned
 slug: replace-claude-p-with-psmux
 branch: hanf/replace-claude-p-with-psmux
 plan: _mill/plan
@@ -20,4 +20,5 @@ discussed  '2026-05-31T14:43:19Z'
 planning  '2026-05-31T14:52:40Z'
 plan-fix-r1  '2026-05-31T14:59:18Z'
 plan-fix-r2  '2026-05-31T15:34:51Z'
+planned  '2026-05-31T15:36:28Z'
 ```
