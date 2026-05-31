@@ -34,7 +34,9 @@ batches:
     implementer_session: 0c893d9d-d999-40e7-bcae-efaffba8cfac
     start_sha: 0db1859df50147cff7b371c3a0e92af70a1c6b64
   - name: fixer-inferred-success
-    state: pending
+    state: running
+    implementer_session: dfaffd40-cecc-454b-8cbc-ad9ff6f78b3e
+    start_sha: 06ecc9d90205244e0678d01b66f216df8d1c256a
   - name: validate-and-config
     state: pending
 ```
