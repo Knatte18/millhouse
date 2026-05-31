@@ -155,7 +155,6 @@ def _wait_for_idle_stable(session_name: str, timeout_s: float) -> bool:
 def _resolve_reuse_idle_timeout_s() -> float:
     """Load reuse_idle_timeout_s from config, defaulting to REUSE_IDLE_TIMEOUT_S_DEFAULT."""
     try:
-        git_root = _paths.resolve_git_root()
         cfg = _config.load_config(_paths.resolve_hub_path(), _paths.resolve_hub_path())
         return float(
             cfg.get("llm", {})
@@ -165,6 +164,15 @@ def _resolve_reuse_idle_timeout_s() -> float:
         )
     except (Exception, SystemExit):
         return float(REUSE_IDLE_TIMEOUT_S_DEFAULT)
+
+
+def _resolve_shell_path() -> str:
+    """Load shell_path from config, defaulting to 'pwsh'."""
+    try:
+        cfg = _config.load_config(_paths.resolve_hub_path(), _paths.resolve_hub_path())
+        return cfg.get("llm", {}).get("claude", {}).get("psmux", {}).get("shell_path", "pwsh")
+    except (Exception, SystemExit):
+        return "pwsh"
 
 
 def main() -> int:
@@ -210,7 +218,7 @@ def main() -> int:
                 # Session doesn't exist; create it
                 try:
                     _psmux.new_session(
-                        session_name, shell_argv=["pwsh", "-NoLogo", "-NoProfile"]
+                        session_name, shell_argv=[_resolve_shell_path(), "-NoLogo", "-NoProfile"], rows=100
                     )
                     time.sleep(POLL_INTERVAL_S)
                     _psmux.set_history_limit(session_name, 50000)
@@ -234,7 +242,7 @@ def main() -> int:
         else:
             # Auto-generated session name; always create
             try:
-                _psmux.new_session(session_name, shell_argv=["pwsh", "-NoLogo", "-NoProfile"])
+                _psmux.new_session(session_name, shell_argv=[_resolve_shell_path(), "-NoLogo", "-NoProfile"], rows=100)
                 time.sleep(POLL_INTERVAL_S)
                 _psmux.set_history_limit(session_name, 50000)
             except _psmux.PsmuxError as exc:
