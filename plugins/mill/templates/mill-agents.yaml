@@ -48,6 +48,7 @@ g3flash_preview_tool:
 haiku:
   model: claude-haiku-4-5-20251001
   provider: claude
+  timeout: 600
   type: single
 
 opushigh:
