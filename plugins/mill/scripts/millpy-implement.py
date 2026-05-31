@@ -90,7 +90,6 @@ def main(argv=None) -> int:
         print("detached HEAD: no current branch", file=sys.stderr)
         return 1
     self_fix_rounds = cfg.get("roles", {}).get("implementer", {}).get("self_fix_rounds", 2)
-    timeout = cfg.get("llm", {}).get("implementer_timeout", 1800)
     implementer_cfg = cfg.get("roles", {}).get("implementer", {})
     model_name = implementer_cfg.get("model", "sonnethigh")
     try:
@@ -101,6 +100,7 @@ def main(argv=None) -> int:
         return 1
     impl_model = impl_spec["model"]
     impl_effort = impl_spec.get("effort")
+    timeout = impl_spec.get("timeout") or cfg.get("llm", {}).get("implementer_timeout", 1800)
 
     plan_base = _paths.resolve_task_path(project_root, plan_dir)
     overview_path = plan_base / "00-overview.md"
@@ -176,6 +176,11 @@ def main(argv=None) -> int:
         "ROUND": "1",
         "SESSION_ID": session_id,
     })
+
+    max_chars = cfg.get("llm", {}).get("max_implementer_prompt_chars", 0)
+    if max_chars > 0 and len(prompt_text) > max_chars:
+        print(json.dumps({"status": "stuck", "stuck_type": "transient", "reason": f"brief exceeds max_implementer_prompt_chars ({len(prompt_text)} chars)"}))
+        return 0
 
     try:
         output, _ = _implementer_claude.run(

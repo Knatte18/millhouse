@@ -45,3 +45,20 @@ def compute_new_dirt(worktree: Path, snapshot_path: Path) -> list[str]:
     pre_set = {line for line in pre_text.splitlines() if line}
     post_set = {line for line in post_text.splitlines() if line}
     return sorted(post_set - pre_set)
+
+
+def compute_scope_violations(worktree: Path) -> list[str]:
+    """Return untracked files outside _mill/ that appeared at batch end.
+
+    Uses _pygit2_util.status_porcelain with include_untracked=True so
+    gitignored files are excluded automatically. Returns bare path strings
+    (no '?? ' prefix), sorted. Empty list means no violations.
+    """
+    lines = _pygit2_util.status_porcelain(worktree, include_untracked=True)
+    violations = []
+    for line in lines:
+        if line.startswith("?? "):
+            path = line[3:]
+            if not path.startswith("_mill/"):
+                violations.append(path)
+    return sorted(violations)

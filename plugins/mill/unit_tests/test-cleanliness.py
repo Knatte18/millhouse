@@ -10,7 +10,7 @@ from pathlib import Path
 HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
-from _cleanliness import capture_snapshot, compute_new_dirt  # noqa: E402
+from _cleanliness import capture_snapshot, compute_new_dirt, compute_scope_violations  # noqa: E402
 
 
 def main() -> int:
@@ -161,6 +161,54 @@ def main() -> int:
         failures.append(f"FAIL: capture_snapshot: {exc}")
     except Exception as exc:
         failures.append(f"FAIL: capture_snapshot ({type(exc).__name__}): {exc}")
+
+    # CV-1. compute_scope_violations: clean worktree returns []
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            with unittest.mock.patch("_cleanliness._pygit2_util.status_porcelain", return_value=[]):
+                result = compute_scope_violations(Path(tmp))
+            assert result == [], f"expected [], got {result!r}"
+        print("PASS: compute_scope_violations: clean worktree -> []")
+    except AssertionError as exc:
+        failures.append(f"FAIL: compute_scope_violations clean: {exc}")
+    except Exception as exc:
+        failures.append(f"FAIL: compute_scope_violations clean ({type(exc).__name__}): {exc}")
+
+    # CV-2. compute_scope_violations: untracked file at root returned
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            with unittest.mock.patch("_cleanliness._pygit2_util.status_porcelain", return_value=["?? plugins_mill_scripts_foo.py"]):
+                result = compute_scope_violations(Path(tmp))
+            assert result == ["plugins_mill_scripts_foo.py"], f"expected ['plugins_mill_scripts_foo.py'], got {result!r}"
+        print("PASS: compute_scope_violations: untracked at root -> path returned")
+    except AssertionError as exc:
+        failures.append(f"FAIL: compute_scope_violations untracked root: {exc}")
+    except Exception as exc:
+        failures.append(f"FAIL: compute_scope_violations untracked root ({type(exc).__name__}): {exc}")
+
+    # CV-3. compute_scope_violations: untracked file under _mill/ filtered out
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            with unittest.mock.patch("_cleanliness._pygit2_util.status_porcelain", return_value=["?? _mill/some-scratch.txt"]):
+                result = compute_scope_violations(Path(tmp))
+            assert result == [], f"expected [], got {result!r}"
+        print("PASS: compute_scope_violations: untracked under _mill/ -> filtered")
+    except AssertionError as exc:
+        failures.append(f"FAIL: compute_scope_violations _mill filter: {exc}")
+    except Exception as exc:
+        failures.append(f"FAIL: compute_scope_violations _mill filter ({type(exc).__name__}): {exc}")
+
+    # CV-4. compute_scope_violations: untracked file in subdirectory outside _mill/ returned
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            with unittest.mock.patch("_cleanliness._pygit2_util.status_porcelain", return_value=["?? plugins/mill/scripts/new_file.py"]):
+                result = compute_scope_violations(Path(tmp))
+            assert result == ["plugins/mill/scripts/new_file.py"], f"expected ['plugins/mill/scripts/new_file.py'], got {result!r}"
+        print("PASS: compute_scope_violations: untracked in subdir -> path returned")
+    except AssertionError as exc:
+        failures.append(f"FAIL: compute_scope_violations untracked subdir: {exc}")
+    except Exception as exc:
+        failures.append(f"FAIL: compute_scope_violations untracked subdir ({type(exc).__name__}): {exc}")
 
     if failures:
         for msg in failures:

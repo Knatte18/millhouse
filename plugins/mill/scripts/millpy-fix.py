@@ -127,7 +127,6 @@ def main(argv=None) -> int:
     task_title = full["yaml"].get("task", slug)
     branch = _status.read_branch(status_path, cfg=cfg, slug=slug)
     self_fix_rounds = cfg.get("roles", {}).get("implementer", {}).get("self_fix_rounds", 2)
-    timeout = cfg.get("llm", {}).get("implementer_timeout", 1800)
     fixer_cfg = cfg.get("roles", {}).get("fixer", {})
     model_name = fixer_cfg.get("model", "haiku")
     try:
@@ -138,6 +137,7 @@ def main(argv=None) -> int:
         return 1
     fixer_model = fixer_spec["model"]
     fixer_effort = fixer_spec.get("effort")
+    timeout = fixer_spec.get("timeout") or cfg.get("llm", {}).get("implementer_timeout", 1800)
 
     review_file = Path(args.review_file)
     if not review_file.is_absolute():
@@ -279,6 +279,11 @@ def main(argv=None) -> int:
     # Shared dispatch tail for both scopes
     _sha_result = _subprocess_util.run(["git", "rev-parse", "HEAD"], cwd=project_root)
     start_sha = _sha_result.stdout.strip() if _sha_result.returncode == 0 else None
+
+    max_chars = cfg.get("llm", {}).get("max_implementer_prompt_chars", 0)
+    if max_chars > 0 and len(prompt_text) > max_chars:
+        print(json.dumps({"status": "stuck", "stuck_type": "transient", "reason": f"brief exceeds max_implementer_prompt_chars ({len(prompt_text)} chars)"}))
+        return 0
 
     try:
         output, _ = _implementer_claude.run(

@@ -32,6 +32,9 @@ def _forward_output(
             )
             if result.returncode == 0:
                 parsed["commit_sha"] = result.stdout.strip()
+                violations = _cleanliness.compute_scope_violations(project_root)
+                if violations:
+                    parsed["scope_violations"] = violations
                 print(json.dumps(parsed))
             else:
                 print(last)
@@ -52,7 +55,11 @@ def _forward_output(
                     if result_full.stdout.strip():
                         print(json.dumps({"status": "stuck", "stuck_type": "logic", "reason": "inferred success but working tree dirty -- implementer likely skipped git-commit on modified files"}))
                         return 0
-                    print(json.dumps({"status": "success", "commit_sha": head, "session_id": session_id or "unknown", "inferred": True}))
+                    violations = _cleanliness.compute_scope_violations(project_root)
+                    if violations:
+                        print(json.dumps({"status": "stuck", "stuck_type": "logic", "reason": f"untracked files outside scope: {violations}", "scope_violations": violations, "inferred": True}))
+                    else:
+                        print(json.dumps({"status": "success", "commit_sha": head, "session_id": session_id or "unknown", "inferred": True}))
                     return 0
         elif start_sha is not None and snapshot_path is None:
             result = _subprocess_util.run(["git", "rev-parse", "HEAD"], cwd=project_root)
@@ -67,5 +74,9 @@ def _forward_output(
                     return 0
     except Exception:
         pass
-    print(json.dumps({"status": "stuck", "stuck_type": "logic", "reason": "no structured report"}))
+    violations = _cleanliness.compute_scope_violations(project_root)
+    result = {"status": "stuck", "stuck_type": "logic", "reason": "no structured report"}
+    if violations:
+        result["scope_violations"] = violations
+    print(json.dumps(result))
     return 0
