@@ -41,7 +41,9 @@ batches:
     start_sha: aa3ccc82959c897bbc7cd60b547224a5ce2a916f
     commit_sha: 7dd3c09e6f30d50c3cef711bb24c44d9276b20c0
   - name: Config shell_path key
-    state: pending
+    state: running
+    implementer_session: 14a71b3a-b7dd-4027-a616-efd6713602d7
+    start_sha: d9b2238cbf4d6c2b84fcce2c2f889cf58edd2016
   - name: Tests
     state: pending
 ```
