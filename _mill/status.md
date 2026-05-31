@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-Protocol Constants
+phase: approved-Store Schema and Validation
 slug: task-deps-and-isolation
 branch: task-deps-and-isolation
 plan: _mill/plan
@@ -32,6 +32,7 @@ plan-review-r6  '2026-05-31T08:53:26Z'
 planned  '2026-05-31T08:53:26Z'
 implementing  '2026-05-31T08:55:48Z'
 approved-Protocol Constants  '2026-05-31T09:04:58Z'
+approved-Store Schema and Validation  '2026-05-31T09:13:57Z'
 ```
 
 ## Batches
@@ -43,7 +44,7 @@ batches:
     implementer_session: c4e5f122-4cd1-40d8-abe4-3199c76c165c
     start_sha: 0f13c9a7fb3e11958fb2e4491c99908f12b3eb76
   - name: Store Schema and Validation
-    state: running
+    state: approved
     implementer_session: 300ba1ee-af34-45e1-afba-98aff3b7eb3e
     start_sha: 6a7497987c1fb7d60d1ac7f21225b5859ab1010c
   - name: Render compute_layers and Helpers
