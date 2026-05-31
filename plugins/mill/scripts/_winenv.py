@@ -17,7 +17,7 @@ import winreg
 
 
 def set_user_env_var(name: str, value: str) -> bool:
-    """Set a user-level environment variable via Windows registry.
+    r"""Set a user-level environment variable via Windows registry.
 
     Opens HKEY_CURRENT_USER\Environment, checks if the value already equals
     the target; if so, returns False (idempotent skip). Otherwise writes the
@@ -92,7 +92,7 @@ def _broadcast_setting_change() -> None:
 
 
 def get_user_env_var(name: str) -> str | None:
-    """Read a user-level environment variable via Windows registry.
+    r"""Read a user-level environment variable via Windows registry.
 
     Opens HKEY_CURRENT_USER\Environment read-only, retrieves the value,
     and returns it. Returns None if the variable is not set (FileNotFoundError).
