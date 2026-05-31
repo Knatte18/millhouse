@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: task-deps-and-isolation
 branch: task-deps-and-isolation
 plan: _mill/plan
@@ -30,4 +30,21 @@ plan-review-r5  '2026-05-31T08:44:51Z'
 plan-fix-r5  '2026-05-31T08:44:51Z'
 plan-review-r6  '2026-05-31T08:53:26Z'
 planned  '2026-05-31T08:53:26Z'
+implementing  '2026-05-31T08:55:48Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: Protocol Constants
+    state: pending
+  - name: Store Schema and Validation
+    state: pending
+  - name: Render compute_layers and Helpers
+    state: pending
+  - name: Server and Client Protocol
+    state: pending
+  - name: Consumer Scripts
+    state: pending
 ```
