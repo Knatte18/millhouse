@@ -99,15 +99,17 @@ class Store:
         query = Query()
         existing = self._db.get(query.slug == slug)
 
-        if existing:
-            existing.update(task)
-            self._db.update(existing, query.slug == slug)
-            return self._db.get(doc_id=existing.doc_id)
-        else:
-            max_id = max([t["id"] for t in self._db.all()], default=-1)
-            next_id = max_id + 1
+        # Build snapshot: all current records, merged with the incoming task
+        all_records = self._db.all()
+        snapshot = [r for r in all_records if r["slug"] != slug]  # exclude existing
 
-            new_task = {
+        # Prepare the incoming task with defaults
+        if existing:
+            incoming = {**existing, **task}
+        else:
+            max_id = max([t["id"] for t in all_records], default=-1)
+            next_id = max_id + 1
+            incoming = {
                 "id": next_id,
                 "slug": slug,
                 "depends_on": [],
@@ -116,9 +118,18 @@ class Store:
                 "brief": "",
                 "body": "",
                 "status": None,
+                **task
             }
-            new_task.update(task)
-            doc_id = self._db.insert(new_task)
+
+        # Validate before any mutation
+        self._validate_write(snapshot + [incoming], incoming)
+
+        if existing:
+            existing.update(task)
+            self._db.update(existing, query.slug == slug)
+            return self._db.get(doc_id=existing.doc_id)
+        else:
+            doc_id = self._db.insert(incoming)
             return self._db.get(doc_id=doc_id)
 
     def get_task(self, identifier: int | str) -> dict | None:
@@ -161,6 +172,49 @@ class Store:
         return self._db.all()
 
     def upsert_tasks_batch(self, tasks: list[dict]) -> None:
+        # Build full projected snapshot first: current store merged with all incoming tasks
+        all_records = self._db.all()
+        incoming_slugs = {t["slug"] for t in tasks}
+
+        # Start with current records not being upserted
+        base = [r for r in all_records if r["slug"] not in incoming_slugs]
+
+        # Project incoming tasks with defaults
+        max_id = max([t["id"] for t in all_records], default=-1)
+        projected_incoming = []
+        next_id = max_id + 1
+
+        for task in tasks:
+            slug = task["slug"]
+            query = Query()
+            existing = self._db.get(query.slug == slug)
+
+            if existing:
+                incoming_task = {**existing, **task}
+            else:
+                incoming_task = {
+                    "id": next_id,
+                    "slug": slug,
+                    "depends_on": [],
+                    "isolated": False,
+                    "deferred": False,
+                    "brief": "",
+                    "body": "",
+                    "status": None,
+                    **task
+                }
+                next_id += 1
+
+            projected_incoming.append(incoming_task)
+
+        # Build full snapshot
+        snapshot = base + projected_incoming
+
+        # Validate each incoming task
+        for incoming in projected_incoming:
+            self._validate_write(snapshot, incoming)
+
+        # All validations passed, perform mutations
         for task in tasks:
             slug = task["slug"]
             query = Query()
@@ -192,30 +246,27 @@ class Store:
         upsert: dict,
         set_phase: tuple[str, str | None] | None = None,
     ) -> dict:
-        # Validate upsert payload BEFORE any mutation so partial-failure cannot
-        # leave the store in an inconsistent state with the rendered files.
+        # Validate upsert payload BEFORE any mutation
         if not isinstance(upsert, dict) or not upsert.get("slug"):
             raise ValueError("merge_tasks requires upsert with non-empty 'slug'")
 
-        for slug in remove_slugs:
-            query = Query()
-            doc = self._db.get(query.slug == slug)
-            if doc:
-                self._db.remove(doc_ids=[doc.doc_id])
-
+        # Build projected snapshot: current records minus removals, merged with upsert
+        all_records = self._db.all()
         upserting_slug = upsert["slug"]
+
+        # Remove records that will be deleted
+        base = [t for t in all_records if t["slug"] not in set(remove_slugs)]
+
+        # Prepare the upserted record
         query = Query()
         existing = self._db.get(query.slug == upserting_slug)
 
         if existing:
-            existing.update(upsert)
-            self._db.update(existing, query.slug == upserting_slug)
-            upserted_doc = self._db.get(doc_id=existing.doc_id)
+            incoming = {**existing, **upsert}
         else:
-            max_id = max([t["id"] for t in self._db.all()], default=-1)
+            max_id = max([t["id"] for t in all_records], default=-1)
             next_id = max_id + 1
-
-            new_task = {
+            incoming = {
                 "id": next_id,
                 "slug": upserting_slug,
                 "depends_on": [],
@@ -224,9 +275,29 @@ class Store:
                 "brief": "",
                 "body": "",
                 "status": None,
+                **upsert
             }
-            new_task.update(upsert)
-            doc_id = self._db.insert(new_task)
+
+        # Build snapshot: base + incoming (incoming replaces any existing with same slug)
+        snapshot = [r for r in base if r["slug"] != upserting_slug] + [incoming]
+
+        # Validate before any mutation
+        self._validate_write(snapshot, incoming)
+
+        # All validations passed, perform mutations
+        remove_slugs_set = set(remove_slugs)
+        for slug in remove_slugs_set:
+            query = Query()
+            doc = self._db.get(query.slug == slug)
+            if doc:
+                self._db.remove(doc_ids=[doc.doc_id])
+
+        if existing:
+            existing.update(upsert)
+            self._db.update(existing, query.slug == upserting_slug)
+            upserted_doc = self._db.get(doc_id=existing.doc_id)
+        else:
+            doc_id = self._db.insert(incoming)
             upserted_doc = self._db.get(doc_id=doc_id)
 
         if set_phase is not None:
