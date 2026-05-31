@@ -153,6 +153,7 @@ def _dispatch(wiki_path: Path, op: str, payload: dict) -> dict:
                 time.sleep(backoff_sleeps[attempt])
             else:
                 raise WikiBusyError(f"daemon stayed busy past retry budget for op: {op}")
+    assert False, "unreachable: loop always exits via return or raise"
 
 
 def upsert_task(
