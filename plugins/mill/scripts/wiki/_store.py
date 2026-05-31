@@ -72,6 +72,7 @@ class Store:
                         return True
 
             rec_stack.remove(current_slug)
+            path.pop()
             return False
 
         # Check for cycles starting from incoming task's dependencies
