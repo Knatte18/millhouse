@@ -84,9 +84,14 @@ def main() -> int:
                     assert m_new_session.call_count == 0, "new_session should not be called on reuse"
                     # Should return 0 on success
                     assert ret == 0, f"S1: expected 0, got {ret}"
-                    # Should call _wait_for_idle_prompt exactly once (reuse check only, not Step 9 boot wait)
-                    assert m_send_keys.call_count == 3, \
-                        f"send_keys should be called 3 times (Step 10 bracketed paste + Enter), got {m_send_keys.call_count}"
+                    # Should call send_keys 4 times: Escape (reuse clear), then Step 10 bracketed paste (3 calls) + Enter
+                    assert m_send_keys.call_count == 4, \
+                        f"send_keys should be called 4 times (Escape + bracketed paste + Enter), got {m_send_keys.call_count}"
+                    # Verify the first call is Escape
+                    assert m_send_keys.call_args_list[0][0][1] == "Escape", \
+                        f"send_keys first call should be 'Escape', got {m_send_keys.call_args_list[0][0][1]}"
+                    assert m_send_keys.call_args_list[0][1].get("enter") is False, \
+                        f"send_keys first call should have enter=False, got {m_send_keys.call_args_list[0][1]}"
                     # Verify the last call is the Enter key
                     assert m_send_keys.call_args[0][1] == "Enter", \
                         f"send_keys last call should be with 'Enter', got {m_send_keys.call_args[0][1]}"

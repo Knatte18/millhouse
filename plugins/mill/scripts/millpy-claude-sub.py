@@ -300,6 +300,10 @@ def main() -> int:
                     print(f"[millpy-claude-sub] boot-debug line: {ln.encode('ascii','replace').decode()!r}", file=sys.stderr)
                 raise RuntimeError("claude TUI did not reach idle prompt within boot timeout")
 
+        if session_reused:
+            _psmux.send_keys(session_name, "Escape", enter=False)
+            time.sleep(POLL_INTERVAL_S)
+
         # Step 10: Submit prompt via bracketed paste (preserves multi-line text).
         # paste-buffer converts \n to \r, but within \e[200~...\e[201~] the TUI
         # buffers all content without treating \r as Enter. Enter submits after.
