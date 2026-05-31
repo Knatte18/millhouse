@@ -47,5 +47,7 @@ batches:
     start_sha: d9b2238cbf4d6c2b84fcce2c2f889cf58edd2016
     commit_sha: fcc7f1b980a5d5c3c1001cf9fa62bad290729c27
   - name: Tests
-    state: pending
+    state: running
+    implementer_session: 95f3c10a-a51f-427d-ad90-d2cb1b6beb77
+    start_sha: 3f3497205a67d86ecc9a7b48177a72ea49532c31
 ```
