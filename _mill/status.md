@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-Fix millpy-claude-sub
+phase: approved-Config shell_path key
 slug: replace-claude-p-with-psmux
 branch: hanf/replace-claude-p-with-psmux
 plan: _mill/plan
@@ -24,6 +24,7 @@ planned  '2026-05-31T15:36:28Z'
 implementing  '2026-05-31T15:36:49Z'
 approved-Fix extract_response  '2026-05-31T15:44:01Z'
 approved-Fix millpy-claude-sub  '2026-05-31T15:50:11Z'
+approved-Config shell_path key  '2026-05-31T15:56:59Z'
 ```
 
 ## Batches
@@ -41,9 +42,10 @@ batches:
     start_sha: aa3ccc82959c897bbc7cd60b547224a5ce2a916f
     commit_sha: 7dd3c09e6f30d50c3cef711bb24c44d9276b20c0
   - name: Config shell_path key
-    state: running
+    state: approved
     implementer_session: 14a71b3a-b7dd-4027-a616-efd6713602d7
     start_sha: d9b2238cbf4d6c2b84fcce2c2f889cf58edd2016
+    commit_sha: fcc7f1b980a5d5c3c1001cf9fa62bad290729c27
   - name: Tests
     state: pending
 ```
