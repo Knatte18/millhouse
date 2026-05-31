@@ -9,6 +9,7 @@ llm:
   claude:
     psmux:
       via_psmux: false
+      shell_path: "C:/Code/tools/powershell7/pwsh.exe"
       reuse_idle_timeout_s: 10
 pipeline:
   auto_merge: true
