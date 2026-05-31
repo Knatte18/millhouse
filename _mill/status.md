@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-reviewing
+phase: holistic-approved
 slug: mill-setup-winreg
 branch: mill-setup-winreg
 plan: _mill/plan
@@ -26,6 +26,7 @@ approved-winreg-env-helper  '2026-05-31T07:49:39Z'
 holistic-reviewing  '2026-05-31T07:50:11Z'
 holistic-fixing  '2026-05-31T07:53:01Z'
 holistic-reviewing  '2026-05-31T07:54:44Z'
+holistic-approved  '2026-05-31T07:57:39Z'
 ```
 
 ## Batches
