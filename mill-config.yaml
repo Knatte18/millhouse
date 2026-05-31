@@ -5,6 +5,7 @@ spawn:
 llm:
   bulk_timeout: 900
   implementer_timeout: 1800
+  max_implementer_prompt_chars: 0
   claude:
     psmux:
       via_psmux: false
