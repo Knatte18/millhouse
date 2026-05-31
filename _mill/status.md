@@ -29,7 +29,9 @@ implementing  '2026-05-31T08:55:33Z'
 ```yaml
 batches:
   - name: text-and-template
-    state: pending
+    state: running
+    implementer_session: 0c893d9d-d999-40e7-bcae-efaffba8cfac
+    start_sha: 0db1859df50147cff7b371c3a0e92af70a1c6b64
   - name: fixer-inferred-success
     state: pending
   - name: validate-and-config
