@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import tinydb.operations
 from tinydb import TinyDB, Query
 
 
@@ -191,6 +192,22 @@ class Store:
 
         # Update the database
         self._db.update({"depends_on": depends_on}, query.slug == slug)
+
+    def migrate_group_to_deps(self) -> None:
+        for doc in self._db.all():
+            if "group" in doc:
+                # Drop the group key
+                self._db.update(tinydb.operations.delete("group"), doc_ids=[doc.doc_id])
+                # Set the new fields
+                is_isolated = doc.get("group") == "Z"
+                self._db.update(
+                    {
+                        "depends_on": [],
+                        "isolated": is_isolated,
+                        "deferred": False
+                    },
+                    doc_ids=[doc.doc_id]
+                )
 
     def upsert_tasks_batch(self, tasks: list[dict]) -> None:
         # Build full projected snapshot first: current store merged with all incoming tasks
