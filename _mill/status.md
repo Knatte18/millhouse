@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-wiki-client-robustness
 slug: infra-robustness-windows
 branch: infra-robustness-windows
 plan: _mill/plan
@@ -22,6 +22,7 @@ plan-fix-r1  '2026-05-30T15:09:15Z'
 plan-fix-r2  '2026-05-30T15:16:12Z'
 planned  '2026-05-30T15:16:26Z'
 implementing  '2026-05-31T07:45:53Z'
+approved-wiki-client-robustness  '2026-05-31T07:49:01Z'
 ```
 
 ## Batches
@@ -29,7 +30,7 @@ implementing  '2026-05-31T07:45:53Z'
 ```yaml
 batches:
   - name: wiki-client-robustness
-    state: running
+    state: approved
     implementer_session: 0202c2d3-3a70-462e-b31a-101a1472627c
     start_sha: 0a859fecd9a5adba477cf30c3011095de33a3bd2
   - name: bg-worker-liveness
