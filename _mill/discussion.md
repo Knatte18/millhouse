@@ -23,8 +23,9 @@ hands-on testing (see `doc/psmux-tui-behavior.md`).
 ## Scope
 
 **In:**
-- Fix `millpy-claude-sub.py`: shell path config, idle detection, input-area
-  clear on reuse
+- Fix `millpy-claude-sub.py`: shell path config, idle detection (all three
+  call sites: boot, reuse-path pre-submit, response wait), input-area clear
+  on reuse, bump `rows` from 50 to 100 in `new_session` calls
 - Fix `_psmux_capture.py`: `extract_response` strips trailing garbage
 - Add `llm.claude.psmux.shell_path` config key to template and hub
   `mill-config.yaml`
@@ -63,12 +64,18 @@ hands-on testing (see `doc/psmux-tui-behavior.md`).
   (both check for `❯` which is present in ALL states) with status-bar checks.
   Idle state: status bar contains `for shortcuts`. Processing state: status bar
   contains `esc to interrupt` (captured as `esctointerrupt` without spaces).
-  Use a two-phase wait after prompt submission:
-  1. Phase 1: wait up to 10s for processing to START (`esc to interrupt` appears)
-  2. Phase 2: wait (long timeout) for processing to END (`for shortcuts` appears
-     for two consecutive polls 1s apart)
-  Boot wait reuses the same `for shortcuts` check — the boot screen shows it
-  immediately.
+  Three call sites all updated:
+  1. Boot wait (`_wait_for_idle_prompt` after `new_session`) — check for
+     `for shortcuts`; boot screen shows it immediately.
+  2. Reuse-path pre-submit idle check (line 200, before bracketed paste) —
+     same `for shortcuts` check; ensures previous response is complete before
+     injecting the next prompt.
+  3. Response wait (`_wait_for_idle_stable` after Enter) — two-phase:
+     - Phase 1: wait up to 10s for `esc to interrupt` to appear (processing
+       started). If Phase 1 times out, fall through to Phase 2 rather than
+       failing — a very fast response may have completed before the first poll.
+     - Phase 2: wait (long timeout per mode) for `for shortcuts` to appear
+       for two consecutive polls 1s apart (processing done).
 - **Rationale:** Empirically confirmed: `❯` appears in the separator sandwich
   in all three states (boot, processing, idle). The current function returns
   True on the second poll regardless of state, so responses are read before
@@ -188,8 +195,11 @@ Current `new_session` calls use `rows=50` — bump to 100 for safety.
 - Boot idle detection uses `for shortcuts` status bar check, not `❯`
 - Processing detection uses `esc to interrupt` check
 - Two-phase wait: phase 1 waits for processing start, phase 2 for end
+- Phase 1 timeout falls through to phase 2 (not a hard failure)
+- Reuse-path pre-submit idle check also uses `for shortcuts` (not `❯`)
 - Reuse path sends Escape before prompt submission
 - `shell_path` config key is read and passed to `new_session`
+- `new_session` called with `rows=100`
 - Existing S1-S11 tests updated where idle-detection mock changes
 
 **`test-llm-claude.py`** — existing psmux branch tests (K1-K5, Tests 2-10)
