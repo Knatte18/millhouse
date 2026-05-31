@@ -29,7 +29,9 @@ implementing  '2026-05-31T15:36:49Z'
 ```yaml
 batches:
   - name: Fix extract_response
-    state: pending
+    state: running
+    implementer_session: 17a879b6-b6b1-412d-a76e-f6e29c48da1d
+    start_sha: 2d026703873f2d1ce3a9f099e65d940f0c37fddb
   - name: Fix millpy-claude-sub
     state: pending
   - name: Config shell_path key
