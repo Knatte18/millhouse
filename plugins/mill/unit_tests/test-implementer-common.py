@@ -229,6 +229,90 @@ def main() -> int:
             print(f"FAIL: case 5 ({exc}) captured={captured!r}", file=sys.stderr)
             errors += 1
 
+    # Case 6: stuck/logic output + violations -> scope_violations in JSON
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        base_sha = _setup_fixture(project_root)
+        snapshot_path = project_root / "_mill" / ".cleanliness-snapshot-test.txt"
+        _cleanliness.capture_snapshot(project_root, snapshot_path)
+        try:
+            with unittest.mock.patch.object(_cleanliness, "compute_scope_violations", return_value=["plugins_mill_scripts_foo.py"]):
+                rc, captured = _capture_stdout(
+                    lambda: _forward_output(
+                        "garbage",
+                        project_root,
+                        start_sha=base_sha,
+                        snapshot_path=snapshot_path,
+                    )
+                )
+            data = json.loads(captured.strip())
+            assert data["status"] == "stuck", f"expected status=stuck, got {data}"
+            assert data["stuck_type"] == "logic", f"expected stuck_type=logic, got {data}"
+            assert data.get("scope_violations") == ["plugins_mill_scripts_foo.py"], f"expected scope_violations, got {data}"
+            print("PASS: stuck/logic + violations -> scope_violations in JSON")
+        except Exception as exc:
+            print(f"FAIL: case 6 ({exc}) captured={captured!r}", file=sys.stderr)
+            errors += 1
+
+    # Case 7: inferred-success scenario + violations -> status downgraded to stuck/logic
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        base_sha = _setup_fixture(project_root)
+        snapshot_path = project_root / "_mill" / ".cleanliness-snapshot-test.txt"
+        _cleanliness.capture_snapshot(project_root, snapshot_path)
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "--allow-empty", "-m", "second"],
+            check=True, capture_output=True,
+        )
+        try:
+            with unittest.mock.patch.object(_cleanliness, "compute_scope_violations", return_value=["bad_file.py"]):
+                rc, captured = _capture_stdout(
+                    lambda: _forward_output(
+                        "garbage",
+                        project_root,
+                        start_sha=base_sha,
+                        snapshot_path=snapshot_path,
+                    )
+                )
+            data = json.loads(captured.strip())
+            assert data["status"] == "stuck", f"expected status=stuck, got {data}"
+            assert data["stuck_type"] == "logic", f"expected stuck_type=logic, got {data}"
+            assert data.get("inferred") is True, f"expected inferred=True, got {data}"
+            assert data.get("scope_violations") == ["bad_file.py"], f"expected scope_violations, got {data}"
+            print("PASS: inferred-success + violations -> stuck/logic with scope_violations")
+        except Exception as exc:
+            print(f"FAIL: case 7 ({exc}) captured={captured!r}", file=sys.stderr)
+            errors += 1
+
+    # Case 8: no violations -> output unchanged
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        base_sha = _setup_fixture(project_root)
+        snapshot_path = project_root / "_mill" / ".cleanliness-snapshot-test.txt"
+        _cleanliness.capture_snapshot(project_root, snapshot_path)
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "--allow-empty", "-m", "second"],
+            check=True, capture_output=True,
+        )
+        try:
+            with unittest.mock.patch.object(_cleanliness, "compute_scope_violations", return_value=[]):
+                rc, captured = _capture_stdout(
+                    lambda: _forward_output(
+                        "garbage",
+                        project_root,
+                        start_sha=base_sha,
+                        snapshot_path=snapshot_path,
+                    )
+                )
+            data = json.loads(captured.strip())
+            assert data["status"] == "success", f"expected status=success, got {data}"
+            assert data.get("inferred") is True, f"expected inferred=True, got {data}"
+            assert "scope_violations" not in data, f"expected no scope_violations in {data}"
+            print("PASS: inferred-success + no violations -> success unchanged")
+        except Exception as exc:
+            print(f"FAIL: case 8 ({exc}) captured={captured!r}", file=sys.stderr)
+            errors += 1
+
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)
         return 1
