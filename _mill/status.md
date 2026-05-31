@@ -35,7 +35,9 @@ batches:
     start_sha: 2d026703873f2d1ce3a9f099e65d940f0c37fddb
     commit_sha: f3f50ff58e1344416b43b2043a9c812a50b77bb2
   - name: Fix millpy-claude-sub
-    state: pending
+    state: running
+    implementer_session: 070a809c-5d0f-4f13-bd60-877f201e5b76
+    start_sha: aa3ccc82959c897bbc7cd60b547224a5ce2a916f
   - name: Config shell_path key
     state: pending
   - name: Tests
