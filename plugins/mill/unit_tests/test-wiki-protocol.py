@@ -39,6 +39,7 @@ from wiki import (
     WikiValidationError,
 )  # noqa: E402
 from wiki._server import WikiServer  # noqa: E402
+from wiki import _client  # noqa: E402
 from _test_helpers import safe_temp_dir  # noqa: E402
 
 
@@ -345,6 +346,70 @@ def main() -> int:
                 ok("Orphan-deletion case")
     except Exception as exc:
         fail("Orphan-deletion case", exc)
+
+    # --- (21a) ERR_VALIDATION -> WikiValidationError via WIKI_DAEMON_INPROCESS ---
+    try:
+        import os as _os
+        with safe_temp_dir() as tmp:
+            wiki_path = tmp / "wiki"
+            wiki_path.mkdir(parents=True, exist_ok=True)
+            (wiki_path / "tasks.json").write_text('{"_default": {}}', encoding="utf-8")
+
+            with patch.dict(_os.environ, {"WIKI_DAEMON_INPROCESS": "1"}):
+                # Insert task A first
+                _client.upsert_task(wiki_path, "task-a", title="Task A")
+
+                # Try to upsert task B with dangling depends_on
+                try:
+                    _client.upsert_task(wiki_path, "task-b", title="Task B", depends_on=["nonexistent"])
+                    fail("ERR_VALIDATION -> WikiValidationError via WIKI_DAEMON_INPROCESS",
+                         Exception("expected WikiValidationError"))
+                except WikiValidationError:
+                    ok("ERR_VALIDATION -> WikiValidationError via WIKI_DAEMON_INPROCESS")
+    except Exception as exc:
+        fail("ERR_VALIDATION -> WikiValidationError via WIKI_DAEMON_INPROCESS", exc)
+
+    # --- (21b) set_deps wrapper round-trip ---
+    try:
+        import os as _os
+        with safe_temp_dir() as tmp:
+            wiki_path = tmp / "wiki"
+            wiki_path.mkdir(parents=True, exist_ok=True)
+            (wiki_path / "tasks.json").write_text('{"_default": {}}', encoding="utf-8")
+
+            with patch.dict(_os.environ, {"WIKI_DAEMON_INPROCESS": "1"}):
+                # Insert two tasks
+                _client.upsert_task(wiki_path, "task-a", title="Task A")
+                _client.upsert_task(wiki_path, "task-b", title="Task B")
+
+                # Call set_deps
+                _client.set_deps(wiki_path, "task-b", ["task-a"])
+
+                # Verify the change
+                task = _client.get_task(wiki_path, "task-b")
+                assert task is not None, "task-b should exist"
+                assert task.get("depends_on") == ["task-a"], f"depends_on should be ['task-a'], got {task.get('depends_on')}"
+                ok("set_deps wrapper round-trip")
+    except Exception as exc:
+        fail("set_deps wrapper round-trip", exc)
+
+    # --- (21c) OP_SET_DEPS unknown slug raises WikiValidationError ---
+    try:
+        import os as _os
+        with safe_temp_dir() as tmp:
+            wiki_path = tmp / "wiki"
+            wiki_path.mkdir(parents=True, exist_ok=True)
+            (wiki_path / "tasks.json").write_text('{"_default": {}}', encoding="utf-8")
+
+            with patch.dict(_os.environ, {"WIKI_DAEMON_INPROCESS": "1"}):
+                try:
+                    _client.set_deps(wiki_path, "nonexistent-task", [])
+                    fail("OP_SET_DEPS unknown slug raises WikiValidationError",
+                         Exception("expected WikiValidationError"))
+                except WikiValidationError:
+                    ok("OP_SET_DEPS unknown slug raises WikiValidationError")
+    except Exception as exc:
+        fail("OP_SET_DEPS unknown slug raises WikiValidationError", exc)
 
     print("", file=sys.stderr)
     if failed:
