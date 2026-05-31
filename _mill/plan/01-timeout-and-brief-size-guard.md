@@ -53,7 +53,9 @@ Adds two hang-mitigation mechanisms: (a) per-reviewer timeout override via a new
 - **Creates:** none
 - **Deletes:** none
 - **Requirements:**
-  Add `max_implementer_prompt_chars: 0` to the `llm:` block in both files. In both files, the `llm:` block currently contains `implementer_timeout: 1800` and the `claude:` sub-block. Add the new key on the line immediately after `implementer_timeout: 1800`:
+  Add `max_implementer_prompt_chars: 0` to the `llm:` block in both files, immediately after the `implementer_timeout:` line in each file.
+
+  In `mill-config.yaml` (hub), the `llm:` block has `implementer_timeout: 1800` followed by the `claude:` sub-block. Add the new key after `implementer_timeout: 1800`:
   ```yaml
   llm:
     implementer_timeout: 1800
@@ -61,6 +63,19 @@ Adds two hang-mitigation mechanisms: (a) per-reviewer timeout override via a new
     claude:
       ...
   ```
+
+  In `plugins/mill/templates/mill-config.yaml`, the `llm:` block has `bulk_timeout: 600`, `holistic_timeout: 1800`, `tool_use_timeout: 900`, then `implementer_timeout: 3600`, followed by the `claude:` sub-block. Add the new key after `implementer_timeout: 3600`:
+  ```yaml
+  llm:
+    bulk_timeout: 600
+    holistic_timeout: 1800
+    tool_use_timeout: 900
+    implementer_timeout: 3600
+    max_implementer_prompt_chars: 0
+    claude:
+      ...
+  ```
+
   The value `0` means the guard is disabled by default. Both files must receive the identical key-value pair (CLAUDE.md: hub file and plugin template must stay in sync). No other changes to either file.
 - **Commit:** `feat(config): add max_implementer_prompt_chars: 0 to llm block`
 

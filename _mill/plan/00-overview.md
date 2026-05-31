@@ -3,7 +3,7 @@
 ```yaml
 task: haiku-4-5 implementer reliability (hang + path mangle)
 slug: haiku-implementer-reliability
-approved: false
+approved: true
 started: 20260531-092022
 parent: main
 root: ""
@@ -28,7 +28,7 @@ batches:
     name: unit-tests
     file: 03-unit-tests.md
     depends-on: [1, 2]
-    verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-cleanliness.py test-implementer-common.py test-millpy-implement.py
+    verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-cleanliness.py test-implementer-common.py test-millpy-implement.py test-millpy-fix.py
 ```
 
 ## Shared Decisions
@@ -69,4 +69,5 @@ batches:
 - `plugins/mill/templates/mill-config.yaml`
 - `plugins/mill/unit_tests/test-cleanliness.py`
 - `plugins/mill/unit_tests/test-implementer-common.py`
+- `plugins/mill/unit_tests/test-millpy-fix.py`
 - `plugins/mill/unit_tests/test-millpy-implement.py`

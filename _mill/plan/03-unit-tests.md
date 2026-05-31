@@ -4,8 +4,8 @@
 task: haiku-4-5 implementer reliability (hang + path mangle)
 batch: unit-tests
 number: 3
-cards: 3
-verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-cleanliness.py test-implementer-common.py test-millpy-implement.py
+cards: 4
+verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-cleanliness.py test-implementer-common.py test-millpy-implement.py test-millpy-fix.py
 depends-on: [1, 2]
 ```
 
@@ -109,13 +109,35 @@ Adds unit tests for all code added in batches 1 and 2: `compute_scope_violations
   Use `unittest.mock.patch.object(millpy_implement._render, "render", return_value="x" * 20)` as a context manager inside the test method. Access `_implementer_claude.run` via `unittest.mock.patch.object(millpy_implement._implementer_claude, "run")`.
 
   **test_12_brief_size_guard_disabled:**
-  Override `self.mock_load_config.return_value` to include `"max_implementer_prompt_chars": 0` in the `"llm"` key (the disabled default). Patch `millpy_implement._render.render` to return a string of 20 characters. Assert `_implementer_claude.run` IS called (the guard did not fire).
+  Override `self.mock_load_config.return_value` to include `"max_implementer_prompt_chars": 0` in the `"llm"` key (the disabled default). Patch `millpy_implement._render.render` to return a string of 20 characters. Also patch `millpy_implement._implementer_claude.run` to return a success tuple (same as test_11's approach, to prevent the real LLM from being called). Assert `_implementer_claude.run` IS called (the guard did not fire).
 
   The `mock_load_config.return_value` in setUp has `"llm": {"implementer_timeout": 1800}` — both new tests override this return value locally for their duration (use `self.mock_load_config.return_value = {...}` inside the test method body, scoped to that test).
 
   All existing `TestMillpyImplement` and `TestForwardOutput` test methods must still pass.
 - **Commit:** `test(millpy-implement): add brief-size guard test cases`
 
+### Card 11: Create test-millpy-fix.py with brief-size guard test
+
+- **Context:**
+  - `plugins/mill/scripts/millpy-fix.py`
+- **Edits:** none
+- **Creates:**
+  - `plugins/mill/unit_tests/test-millpy-fix.py`
+- **Deletes:** none
+- **Requirements:**
+  Create a new minimal test file `plugins/mill/unit_tests/test-millpy-fix.py`. The file must import `millpy_fix` via `importlib.util` (same pattern as `test-millpy-implement.py`). Set up mocks for `_paths.resolve_git_root`, `_paths.resolve_wiki_path`, `_review_common.load_config`, `_marker.slug_from_branch`, and `_subprocess_util.run` (returning success stubs). The file path for `millpy-fix.py` is `HUB / "plugins" / "mill" / "scripts" / "millpy-fix.py"` where `HUB = Path(__file__).resolve().parent.parent.parent.parent`.
+
+  Add one test class `TestMillpyFixBriefSizeGuard(unittest.TestCase)` with two methods:
+
+  **test_1_brief_size_guard_fires:**
+  Mock `load_config` to return a config with `"llm": {"implementer_timeout": 1800, "max_implementer_prompt_chars": 10}` plus minimal required fields (`"paths": {"status_md": "_mill/status.md"}`, `"roles": {"fixer": {"self_fix_rounds": 2, "model": "haiku"}}`). Mock `_reviewers.load` and `_reviewers.resolve` to return a haiku spec with no `timeout` key (so the per-reviewer timeout falls back to config). Mock `_render.render` to return `"x" * 20`. Mock `_implementer_claude.run` (must NOT be called). Call `main(["--scope", "batch", "--batch-name", "test-batch", "--round", "1", "--review-file", "fake-review.md"])`. Assert `rc == 0`, JSON has `status == "stuck"`, `stuck_type == "transient"`, `reason` contains `"max_implementer_prompt_chars"`, and `_implementer_claude.run` was not called.
+
+  **test_2_brief_size_guard_disabled:**
+  Same setup but `max_implementer_prompt_chars: 0`. Mock `_implementer_claude.run` to return a success tuple `('{"status":"success","commit_sha":"abc"}\n', "sess")`. Assert `_implementer_claude.run` IS called.
+
+  The test class uses `unittest.TestCase` setUp/tearDown with `addCleanup` for mock cleanup (same pattern as `test-millpy-implement.py`). The `_run_main` helper captures stdout and calls `millpy_fix.main(argv)`. Follow the existing ASCII-only output constraint. The test file must be runnable via `uv run --project plugins/mill python plugins/mill/unit_tests/test-millpy-fix.py`.
+- **Commit:** `test(millpy-fix): add brief-size guard test cases`
+
 ## Batch Tests
 
-Verify runs `test-cleanliness.py`, `test-implementer-common.py`, and `test-millpy-implement.py` in full. All 9 existing cleanliness cases + 4 new cases, all 6 existing implementer-common cases + 3 new cases, all 16 existing millpy-implement cases + 2 new cases must pass.
+Verify runs `test-cleanliness.py`, `test-implementer-common.py`, `test-millpy-implement.py`, and `test-millpy-fix.py` in full. All 9 existing cleanliness cases + 4 new cases, all 6 existing implementer-common cases + 3 new cases, all 16 existing millpy-implement cases + 2 new cases, and 2 new millpy-fix cases must pass.
