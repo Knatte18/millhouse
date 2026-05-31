@@ -171,12 +171,18 @@ def load_config(hub_root: Path, worktree_root: Path) -> dict:
         cfg = {}
     template_cfg = copy.deepcopy(cfg)
 
-    # Augment template_cfg with the worktree-local template when it exists and
-    # differs from the resolved cache template (handles cache-lag in self-modifying repos).
-    _worktree_template = worktree_root / "plugins" / "mill" / "templates" / "mill-config.yaml"
-    if _worktree_template.exists() and _worktree_template.resolve() != template_path.resolve():
-        _wt_cfg = yaml.safe_load(_worktree_template.read_text(encoding="utf-8")) or {}
-        template_cfg = deep_merge(template_cfg, _wt_cfg)
+    # Augment template_cfg with the source-tree template when it differs from the cache
+    # template (handles cache-lag: new keys in source not yet in the installed cache).
+    # Check both the current worktree and the hub root — task worktrees don't carry
+    # plugins/mill/, so only the hub check fires for non-self-modifying task branches.
+    for _candidate in (
+        worktree_root / "plugins" / "mill" / "templates" / "mill-config.yaml",
+        hub_root / "plugins" / "mill" / "templates" / "mill-config.yaml",
+    ):
+        if _candidate.exists() and _candidate.resolve() != template_path.resolve():
+            _cand_cfg = yaml.safe_load(_candidate.read_text(encoding="utf-8")) or {}
+            template_cfg = deep_merge(template_cfg, _cand_cfg)
+            break
 
     # 2. Resolve repo-layer sources
     mill_cfg_path = _paths.resolve_mill_config_path(hub_root)
