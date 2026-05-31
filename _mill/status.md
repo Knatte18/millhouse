@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-text-and-template
+phase: approved-fixer-inferred-success
 slug: mill-orchestration-hardening-r2
 branch: hanf/mill-orchestration-hardening-r2
 plan: _mill/plan
@@ -23,6 +23,7 @@ plan-review-r2  '2026-05-31T08:52:20Z'
 planned  '2026-05-31T08:52:31Z'
 implementing  '2026-05-31T08:55:33Z'
 approved-text-and-template  '2026-05-31T09:03:45Z'
+approved-fixer-inferred-success  '2026-05-31T09:12:28Z'
 ```
 
 ## Batches
@@ -34,7 +35,7 @@ batches:
     implementer_session: 0c893d9d-d999-40e7-bcae-efaffba8cfac
     start_sha: 0db1859df50147cff7b371c3a0e92af70a1c6b64
   - name: fixer-inferred-success
-    state: running
+    state: approved
     implementer_session: dfaffd40-cecc-454b-8cbc-ad9ff6f78b3e
     start_sha: 06ecc9d90205244e0678d01b66f216df8d1c256a
   - name: validate-and-config
