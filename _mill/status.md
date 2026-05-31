@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-fixing
+phase: holistic-approved
 slug: task-deps-and-isolation
 branch: task-deps-and-isolation
 plan: _mill/plan
@@ -38,6 +38,7 @@ approved-Server and Client Protocol  '2026-05-31T09:34:03Z'
 approved-Consumer Scripts  '2026-05-31T09:43:51Z'
 holistic-reviewing  '2026-05-31T09:44:28Z'
 holistic-fixing  '2026-05-31T09:54:45Z'
+holistic-approved  '2026-05-31T10:02:53Z'
 ```
 
 ## Batches
