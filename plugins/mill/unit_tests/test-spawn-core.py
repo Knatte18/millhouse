@@ -1007,13 +1007,17 @@ def test_pick_task_single_numbered_path_extended_title() -> None:
     tasks_text = """\
 # Home
 
+## Setup foundation
+[setup-foundation]
+
 ## Fix bug
 [fix-bug]
 """
     tasks = parse_home_md(tasks_text)
     tasks[0]["depends_on"] = []
     tasks[0]["isolated"] = False
-    tasks[0]["layer"] = "B"
+    tasks[1]["depends_on"] = [tasks[0]["slug"]]
+    tasks[1]["isolated"] = False
 
     import io
     original_stderr = sys.stderr
