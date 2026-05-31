@@ -48,6 +48,7 @@ diffs within the same file; apply them sequentially.
   - `doc/psmux-tui-behavior.md`
 - **Edits:**
   - `plugins/mill/scripts/millpy-claude-sub.py`
+  - `plugins/mill/unit_tests/test-claude-sub.py`
 - **Creates:** none
 - **Deletes:** none
 - **Requirements:**
@@ -60,6 +61,15 @@ diffs within the same file; apply them sequentially.
   `start/timeout/sleep` structure. Update the docstring: "Poll capture-pane
   status bar for the idle marker ('for shortcuts'). Return True on match, False
   on timeout."
+
+  Also add a 2-case direct unit test for `_wait_for_idle_prompt` in
+  `test-claude-sub.py` alongside the existing Scenarios (a)/(b)/(c):
+  - Scenario (d): mock `_psmux.capture_pane` to return `"? for shortcuts"` on
+    the first call. Assert `_wait_for_idle_prompt(session_name, timeout_s=5)`
+    returns `True`.
+  - Scenario (e): mock `_psmux.capture_pane` to always return `"❯ "` (never
+    contains `"for shortcuts"`), mock `time.monotonic` to advance past
+    `timeout_s`. Assert returns `False`.
 - **Commit:** `fix(millpy-claude-sub): replace ❯ check with status-bar check in _wait_for_idle_prompt`
 
 ### Card 4: Rewrite _wait_for_idle_stable as two-phase status-bar wait
@@ -80,9 +90,10 @@ diffs within the same file; apply them sequentially.
   capture`, `break` out of the loop. Sleep `POLL_INTERVAL_S` between polls.
   Fall through on timeout (do NOT raise). Phase 2: record
   `phase2_start = time.monotonic()`. `prev_idle = False`. Poll in a loop;
-  on each iteration: `curr_idle = "for shortcuts" in capture` (swallow
-  `PsmuxError` → `curr_idle = False`); if `prev_idle and curr_idle` return
-  `True`; set `prev_idle = curr_idle`; if
+  on each iteration: call `capture = _psmux.capture_pane(session_name,
+  alternate=True)` in a try/except `PsmuxError` — on error set `capture = ""`.
+  Then `curr_idle = "for shortcuts" in capture`; if `prev_idle and curr_idle`
+  return `True`; set `prev_idle = curr_idle`; if
   `time.monotonic() - phase2_start >= timeout_s` return `False`; sleep
   `POLL_INTERVAL_S`. Keep the same signature
   `(session_name: str, timeout_s: float) -> bool`. Update the docstring to

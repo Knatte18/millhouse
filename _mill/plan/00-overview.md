@@ -3,7 +3,7 @@
 ```yaml
 task: Replace claude -p with psmux-routed LLM dispatch
 slug: replace-claude-p-with-psmux
-approved: false
+approved: true
 started: 20260531-145020
 parent: main
 root: ""

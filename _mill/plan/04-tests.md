@@ -101,7 +101,12 @@ requires real psmux and claude at runtime.
 - **Deletes:** none
 - **Requirements:**
   Add `test_keep_alive_reuse() -> int` following the pattern of the existing
-  tests. Prerequisites: same `_check_prerequisites()` check. The test:
+  tests. Prerequisites: same `_check_prerequisites()` check, but remove the
+  `shutil.which("pwsh")` call from `_check_prerequisites()` — after Card 2 the
+  shell path is resolved from config (may be an absolute path not on `PATH`), so
+  the `which` check would falsely skip the test on machines using the configured
+  full path. The test already depends on `millpy-claude-sub.py` which handles
+  shell resolution internally; no separate `pwsh` check is needed. The test:
   1. First call: run `millpy-claude-sub.py` with `--mode bulk --model
      claude-sonnet-4-6 --psmux-session mill-test-reuse --keep-alive`, prompt
      `"Reply with the single word FIRST and nothing else."`. Assert returncode 0
