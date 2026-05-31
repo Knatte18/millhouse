@@ -492,8 +492,14 @@ def main() -> int:
 
     # --- (q) wait_for_socket_reachable returns False for refused port ---
     try:
+        import socket
         from wiki import _client
-        result = _client.wait_for_socket_reachable("127.0.0.1", 1, timeout=0.1)
+        # Find an unbound high-numbered port (privileged port 1 can timeout on some Windows configs)
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.bind(("127.0.0.1", 0))
+        unused_port = sock.getsockname()[1]
+        sock.close()
+        result = _client.wait_for_socket_reachable("127.0.0.1", unused_port, timeout=0.1)
         assert result is False, f"expected False for refused port, got {result}"
         ok("wait_for_socket_reachable returns False for refused port")
     except Exception as exc:
