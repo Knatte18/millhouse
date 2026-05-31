@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-Tests
+phase: holistic-reviewing
 slug: replace-claude-p-with-psmux
 branch: hanf/replace-claude-p-with-psmux
 plan: _mill/plan
@@ -26,6 +26,7 @@ approved-Fix extract_response  '2026-05-31T15:44:01Z'
 approved-Fix millpy-claude-sub  '2026-05-31T15:50:11Z'
 approved-Config shell_path key  '2026-05-31T15:56:59Z'
 approved-Tests  '2026-05-31T16:05:21Z'
+holistic-reviewing  '2026-05-31T16:06:09Z'
 ```
 
 ## Batches
