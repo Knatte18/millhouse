@@ -741,6 +741,122 @@ def test_load_config_sub_project_hub_overlay() -> None:
     print("PASS load_config -- sub-project hub overlay: hub value wins over template")
 
 
+def test_worktree_template_augments_template_cfg() -> None:
+    """load_config augments template_cfg with worktree-local template to avoid unknown-key warnings."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+
+        # Set up cache template without pipeline.max_cards_per_batch
+        cache_template_dir = tmp_path / "cache_templates"
+        cache_template_dir.mkdir(parents=True, exist_ok=True)
+        cache_template_path = cache_template_dir / "mill-config.yaml"
+        cache_template_path.write_text(
+            "spawn:\n  branch_prefix: ''\n"
+            "roles:\n"
+            "  discussion-review:\n"
+            "    holistic:\n"
+            "      reviewer: sonnetmax_tool\n"
+            "  plan-review:\n"
+            "    holistic:\n"
+            "      reviewer: sonnetmax\n"
+            "    batch:\n"
+            "      reviewer: sonnetmedium\n"
+            "  code-review:\n"
+            "    holistic:\n"
+            "      reviewer: sonnetmedium\n"
+            "    batch:\n"
+            "      reviewer: sonnetmedium\n"
+            "  implementer:\n"
+            "    model: sonnethigh\n",
+            encoding="utf-8",
+        )
+
+        # Set up worktree with its own template that includes pipeline.max_cards_per_batch
+        wt_root = tmp_path / "wt"
+        wt_root.mkdir()
+        wt_template_dir = wt_root / "plugins" / "mill" / "templates"
+        wt_template_dir.mkdir(parents=True, exist_ok=True)
+        wt_template_path = wt_template_dir / "mill-config.yaml"
+        wt_template_path.write_text(
+            "spawn:\n  branch_prefix: ''\n"
+            "pipeline:\n  max_cards_per_batch: 10\n"
+            "roles:\n"
+            "  discussion-review:\n"
+            "    holistic:\n"
+            "      reviewer: sonnetmax_tool\n"
+            "  plan-review:\n"
+            "    holistic:\n"
+            "      reviewer: sonnetmax\n"
+            "    batch:\n"
+            "      reviewer: sonnetmedium\n"
+            "  code-review:\n"
+            "    holistic:\n"
+            "      reviewer: sonnetmedium\n"
+            "    batch:\n"
+            "      reviewer: sonnetmedium\n"
+            "  implementer:\n"
+            "    model: sonnethigh\n",
+            encoding="utf-8",
+        )
+
+        # Set up hub config with pipeline.max_cards_per_batch
+        hub_config_path = wt_root / "mill-config.yaml"
+        hub_config_path.write_text(
+            "pipeline:\n  max_cards_per_batch: 10\n",
+            encoding="utf-8",
+        )
+        _git_init(wt_root)
+
+        # Capture stderr to check for unknown-key warnings
+        with patch("sys.stderr", new=io.StringIO()) as mock_stderr:
+            with patch.object(_paths, "resolve_wiki_path", side_effect=SystemExit):
+                with patch.object(
+                    _config, "resolve_plugin_template_path",
+                    return_value=cache_template_path
+                ):
+                    cfg = _config.load_config(wt_root, wt_root)
+
+            stderr_output = mock_stderr.getvalue()
+            # Check that pipeline.max_cards_per_batch doesn't generate unknown-key warning
+            assert "unknown key: pipeline.max_cards_per_batch" not in stderr_output, (
+                f"Unexpected unknown-key warning; stderr: {stderr_output!r}"
+            )
+            # And verify the key is in the result
+            assert cfg.get("pipeline", {}).get("max_cards_per_batch") == 10, (
+                f"Expected pipeline.max_cards_per_batch in result; got {cfg.get('pipeline')!r}"
+            )
+    print("PASS load_config -- worktree template augments template_cfg, no unknown-key warning")
+
+
+def test_same_template_path_skips_augmentation() -> None:
+    """load_config skips augmentation when worktree template path resolves to same path."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        _setup_plugin_template(tmp_path)
+        wt_root = tmp_path / "wt"
+        wt_root.mkdir()
+
+        # Create a worktree but DON'T create plugins/mill/templates/mill-config.yaml
+        # (or create it with identical content)
+        # This tests the guard: if _worktree_template.exists() is False
+        _git_init(wt_root)
+        _write_yaml(wt_root / "mill-config.yaml", "spawn:\n  branch_prefix: test\n")
+
+        # When worktree template doesn't exist, augmentation is skipped
+        with patch.object(_paths, "resolve_wiki_path", side_effect=SystemExit):
+            with patch.object(
+                _config, "resolve_plugin_template_path",
+                return_value=tmp_path / "templates" / "mill-config.yaml"
+            ):
+                cfg = _config.load_config(wt_root, wt_root)
+
+        # Result should still have the template and repo config merged
+        assert cfg.get("spawn", {}).get("branch_prefix") == "test", (
+            f"Repo config should be present; got {cfg.get('spawn')!r}"
+        )
+    print("PASS load_config -- same/missing template path skips augmentation")
+
+
 def main() -> int:
     tests = [
         test_load_config_shared_present,
@@ -774,6 +890,8 @@ def main() -> int:
         test_idempotent_when_already_correct,
         test_partial_update_branch_only_preserves_repo_url,
         test_preserves_other_top_level_keys,
+        test_worktree_template_augments_template_cfg,
+        test_same_template_path_skips_augmentation,
     ]
     failures: list[str] = []
     for fn in tests:

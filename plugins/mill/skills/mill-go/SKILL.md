@@ -185,8 +185,6 @@ The implementer's last output line must be JSON:
 - `status: stuck, stuck_type: verify | logic` → **ask user** per *Stuck escalation*.
 - Malformed / missing JSON line → treat as `stuck_type: logic` reason "no structured report".
 
-Record `commit_sha` from a successful report on the batch entry.
-
 ### 2b. Cleanliness gate
 
 After a `success` report: compute new dirt via `_cleanliness.compute_new_dirt(<worktree>, <worktree>/_mill/.cleanliness-snapshot-<batch_name>.txt)`. If the returned list is non-empty (genuine implementer-introduced dirt that did not pre-date the batch):
@@ -199,7 +197,7 @@ After a `success` report: compute new dirt via `_cleanliness.compute_new_dirt(<w
 
 `signature: _cleanliness.compute_new_dirt(worktree: Path, snapshot_path: Path) -> list[str]`
 
-If the returned list is empty, invoke the per-batch cleanup block (after a `success` report, before the cleanliness gate at step 2b) — the cold-start fixer used in step 4 REQUEST_CHANGES does not need the warm session. Then continue to "3. Code Review loop" as normal.
+If the returned list is empty, invoke the per-batch cleanup block (after a `success` report, before the cleanliness gate at step 2b) — the cold-start fixer used in step 4 REQUEST_CHANGES does not need the warm session. Record `commit_sha` via `_status.set_batch_field(status_path, batch_name, "commit_sha", <sha from JSON report>)`. Then continue to "3. Code Review loop" as normal.
 
 ### 3. Code Review loop
 
