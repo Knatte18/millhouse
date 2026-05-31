@@ -43,7 +43,9 @@ batches:
     implementer_session: c4e5f122-4cd1-40d8-abe4-3199c76c165c
     start_sha: 0f13c9a7fb3e11958fb2e4491c99908f12b3eb76
   - name: Store Schema and Validation
-    state: pending
+    state: running
+    implementer_session: 300ba1ee-af34-45e1-afba-98aff3b7eb3e
+    start_sha: 6a7497987c1fb7d60d1ac7f21225b5859ab1010c
   - name: Render compute_layers and Helpers
     state: pending
   - name: Server and Client Protocol
