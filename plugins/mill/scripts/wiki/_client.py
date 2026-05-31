@@ -30,6 +30,7 @@ from wiki import (
     FIELD_ERROR,
     ERR_NOT_FOUND,
     ERR_PUSH_FAILED,
+    WikiBusyError,
     WikiNotFoundError,
     WikiPushError,
     WikiProtocolError,
@@ -115,7 +116,16 @@ def _dispatch(wiki_path: Path, op: str, payload: dict) -> dict:
                 pass
     host, port, token = _ensure_daemon(wiki_path)
     req = {FIELD_OP: op, FIELD_TOKEN: token, "payload": payload}
-    return _connect_send_recv(host, port, req)
+
+    backoff_sleeps = [2, 4, 8]
+    for attempt in range(4):
+        try:
+            return _connect_send_recv(host, port, req, timeout=3.0)
+        except TimeoutError:
+            if attempt < 3:
+                time.sleep(backoff_sleeps[attempt])
+            else:
+                raise WikiBusyError(f"daemon stayed busy past retry budget for op: {op}")
 
 
 def upsert_task(
