@@ -247,3 +247,46 @@ In `mill-config.yaml` / template, under `llm.claude.psmux`:
   Confirmed working.
 - Unicode `❯` codec: `capture_pane` returns UTF-8 on this machine; `❯`
   compares correctly. No cp1252 issue observed.
+
+---
+
+## pipe-pane: does NOT work on Windows (psmux 3.3.4 / tmux 3.3.4)
+
+`psmux pipe-pane -t session "cat >> logfile"` and the equivalent tmux command
+both return exit 0 but pipe no data. Tested with psmux and tmux, with bash
+session and pwsh session, with multiple path formats and shell wrappers. Files
+are created (0 bytes) or not created at all. This is a known limitation of
+Windows ports of tmux -- the pipe mechanism requires OS-level pty forking that
+these ports do not fully implement.
+
+**Architectural implication:** streaming output to file via `pipe-pane` is not
+available on this machine. The "stream to file then framework reads it"
+architecture described in the long-term vision requires an alternative
+implementation.
+
+**Working alternative -- polling differ:**
+A background Python process polls `capture-pane` every ~0.5s, diffs each
+capture against the previous one, and appends genuinely new lines to a log
+file. Any downstream consumer (Slack bot, file watcher) tails that file.
+
+```python
+# Sketch of polling differ
+prev_lines = set()
+while True:
+    capture = _psmux.capture_pane(session, alternate=True)
+    new_lines = [l for l in capture.splitlines() if l.strip() and l not in prev_lines]
+    if new_lines:
+        with open(logfile, "a") as f:
+            f.write("\n".join(new_lines) + "\n")
+    prev_lines = set(capture.splitlines())
+    time.sleep(0.5)
+```
+
+Caveats: does not capture lines that scroll off the visible viewport between
+polls; may have ordering issues for rapid output. Suitable for the current
+mill use case (responses complete before the next poll cycle) but not for
+true real-time streaming.
+
+**Longer-term option:** run the session inside WSL where real tmux `pipe-pane`
+works. Then the log file is a genuine VT100 byte stream that requires
+ANSI-stripping before use.
