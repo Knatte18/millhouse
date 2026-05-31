@@ -46,7 +46,7 @@ Create the `millpy-wiki-migrate-deps.py` runner and update the three consumer sc
   - `plugins/mill/scripts/millpy-status.py`
 - **Creates:** none
 - **Deletes:** none
-- **Requirements:** Import `extended_title` from `wiki._render` at the top. In `_build_rows`, add a `layer` field to each row: when `slug in home_tasks`, set `layer = home_tasks[slug].get("layer")`, otherwise `layer = None`. Add `"layer": layer` to each `rows.append({...})` dict. In `_render_table`, update the TITLE column to show the layer suffix: replace the plain `title` cell value with `f"{title} [{layer}]"` when `layer` is set and `layer` is not `"__deferred__"` and `layer` is not `"__done__"`. When `layer` is `None`, `"__deferred__"`, or `"__done__"`, show the plain `title`. Add `"layer"` as a valid `--sort` choice: `parser.add_argument("--sort", choices=["slug", "phase", "layer"], default="slug")`. When `sort_by == "layer"`, sort rows by `render_order` key order: define a helper `_layer_sort_key(row)` that maps `layer` to a tuple `(bucket_index, row["id"])` using the canonical order `A < B < ... < Y < Z < __deferred__ < __done__ < None`.
+- **Requirements:** In `_build_rows`, add a `layer` field to each row: when `slug in home_tasks`, set `layer = home_tasks[slug].get("layer")`, otherwise `layer = None`. Add `"layer": layer` to each `rows.append({...})` dict. In `_render_table`, update the TITLE column to show the layer suffix: replace the plain `title` cell value with `f"{title} [{layer}]"` when `layer` is set and `layer` is not `"__deferred__"` and `layer` is not `"__done__"`. When `layer` is `None`, `"__deferred__"`, or `"__done__"`, show the plain `title`. Add `"layer"` as a valid `--sort` choice: `parser.add_argument("--sort", choices=["slug", "phase", "layer"], default="slug")`. When `sort_by == "layer"`, sort rows by `render_order` key order: define a helper `_layer_sort_key(row)` that maps `layer` to a tuple `(bucket_index, row["id"])` using the canonical order `A < B < ... < Y < Z < __deferred__ < __done__ < None`.
 - **Commit:** `feat(status): display layer suffix in TITLE column, add --sort layer option`
 
 ### Card 25: millpy-inspect.py: add home_layer to output
@@ -57,7 +57,7 @@ Create the `millpy-wiki-migrate-deps.py` runner and update the three consumer sc
   - `plugins/mill/scripts/millpy-inspect.py`
 - **Creates:** none
 - **Deletes:** none
-- **Requirements:** Import `extended_title` from `wiki._render` at the top. In `_collect`, build `home_layer_map = {t["slug"]: t.get("layer") for t in home_tasks_list}` alongside the existing `home_marker_map`. Add `"home_layer": home_layer_map.get(slug)` to each `records.append(...)` dict. In `_render_markdown`, add a `home_layer: <value>` line immediately after the `home_marker:` line, only when `rec.get("home_layer")` is set. In `_render_json`, include `"home_layer": rec["home_layer"]` in the per-slug output dict.
+- **Requirements:** In `_collect`, build `home_layer_map = {t["slug"]: t.get("layer") for t in home_tasks_list}` alongside the existing `home_marker_map`. Add `"home_layer": home_layer_map.get(slug)` to each `records.append(...)` dict. In `_render_markdown`, add a `home_layer: <value>` line immediately after the `home_marker:` line, only when `rec.get("home_layer")` is set. In `_render_json`, include `"home_layer": rec["home_layer"]` in the per-slug output dict.
 - **Commit:** `feat(inspect): include home_layer in task output`
 
 ### Card 26: Update test fixtures and add new consumer tests
