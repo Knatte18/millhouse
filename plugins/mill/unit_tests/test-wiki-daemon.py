@@ -443,6 +443,8 @@ def main() -> int:
 
             with patch("wiki._client.socket.create_connection") as mock_create_conn, \
                  patch("wiki._client._connect_send_recv") as mock_send_recv, \
+                 patch("wiki._client._spawn_server"), \
+                 patch("wiki._client.SPAWN_TIMEOUT", 0.01), \
                  patch("wiki._client._is_stale"):
 
                 mock_create_conn.return_value = MagicMock(close=MagicMock())
