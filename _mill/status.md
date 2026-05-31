@@ -38,7 +38,9 @@ implementing  '2026-05-31T08:55:48Z'
 ```yaml
 batches:
   - name: Protocol Constants
-    state: pending
+    state: running
+    implementer_session: c4e5f122-4cd1-40d8-abe4-3199c76c165c
+    start_sha: 0f13c9a7fb3e11958fb2e4491c99908f12b3eb76
   - name: Store Schema and Validation
     state: pending
   - name: Render compute_layers and Helpers
