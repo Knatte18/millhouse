@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-fix-r1
+phase: planned
 slug: haiku-implementer-reliability
 branch: hanf/haiku-implementer-reliability
 plan: _mill/plan
@@ -20,4 +20,5 @@ discussed  '2026-05-31T09:15:22Z'
 planning  '2026-05-31T09:22:42Z'
 plan-review-r1  '2026-05-31T09:30:59Z'
 plan-fix-r1  '2026-05-31T09:31:15Z'
+planned  '2026-05-31T09:31:32Z'
 ```
