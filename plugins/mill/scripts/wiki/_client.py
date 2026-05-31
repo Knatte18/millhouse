@@ -323,7 +323,7 @@ def list_tasks_brief(wiki_path: Path) -> list[dict]:
         wiki_path: Path to wiki clone root.
 
     Returns:
-        List of task dicts with keys {id, slug, title, group, brief, status, has_proposal}.
+        List of task dicts with keys {id, slug, title, layer, brief, status, has_proposal}.
 
     Raises:
         WikiProtocolError: Protocol or message error.
