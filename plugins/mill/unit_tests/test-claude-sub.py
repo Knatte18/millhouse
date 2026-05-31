@@ -665,6 +665,91 @@ def main() -> int:
         print(f"FAIL: S11 - {e}")
         errors += 1
 
+    # ── S12: _resolve_shell_path reads config value ─────────────────────────
+    try:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            mod = _load_claude_sub_module()
+
+            with mock.patch("_config.load_config", return_value={"llm": {"claude": {"psmux": {"shell_path": "C:/my/pwsh.exe"}}}}):
+                result = mod._resolve_shell_path()
+                assert result == "C:/my/pwsh.exe", f"S12: expected 'C:/my/pwsh.exe', got {result}"
+                print("PASS: S12 (_resolve_shell_path reads config value)")
+    except Exception as e:
+        print(f"FAIL: S12 - {e}")
+        errors += 1
+
+    # ── S13: _resolve_shell_path defaults to pwsh ──────────────────────────
+    try:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            mod = _load_claude_sub_module()
+
+            with mock.patch("_config.load_config", return_value={}):
+                result = mod._resolve_shell_path()
+                assert result == "pwsh", f"S13: expected 'pwsh', got {result}"
+                print("PASS: S13 (_resolve_shell_path defaults to pwsh)")
+    except Exception as e:
+        print(f"FAIL: S13 - {e}")
+        errors += 1
+
+    # ── S14: new_session called with rows=100 ────────────────────────────────
+    try:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            mod = _load_claude_sub_module()
+            tmpdir_path = Path(tmpdir)
+            scratch_dir = tmpdir_path / ".scratch"
+            scratch_dir.mkdir(exist_ok=True)
+
+            def mock_list_sessions():
+                return []
+
+            def mock_capture_pane(session_name, **kwargs):
+                return "  ❯ \n● ok\n  ❯ "
+
+            def mock_extract_response(snapshot):
+                return "ok"
+
+            saved_argv = sys.argv[:]
+            saved_stdin = sys.stdin
+            try:
+                sys.argv = [
+                    str(_CLAUDE_SUB_PY),
+                    "--mode", "bulk",
+                    "--model", "claude-opus",
+                ]
+                sys.stdin = io.StringIO("test prompt")
+
+                with mock.patch("_psmux.new_session") as m_new_session, \
+                     mock.patch("_psmux.set_history_limit"), \
+                     mock.patch("_psmux.list_sessions", side_effect=mock_list_sessions), \
+                     mock.patch("_psmux.send_keys"), \
+                     mock.patch("_psmux.load_buffer"), \
+                     mock.patch("_psmux.paste_buffer"), \
+                     mock.patch("_psmux.capture_pane", side_effect=mock_capture_pane), \
+                     mock.patch("_psmux.kill_session"), \
+                     mock.patch("_psmux_capture.extract_response", side_effect=mock_extract_response), \
+                     mock.patch.object(mod, "_wait_for_marker_in_pane", return_value=True), \
+                     mock.patch.object(mod, "_wait_for_idle_prompt", return_value=True), \
+                     mock.patch.object(mod, "_wait_for_idle_stable", return_value=True), \
+                     mock.patch("_paths.resolve_git_root", return_value=tmpdir_path), \
+                     mock.patch("_config.load_config", return_value={}), \
+                     mock.patch("sys.stdout", new_callable=io.StringIO):
+
+                    ret = mod.main()
+
+                    # Check that new_session was called
+                    m_new_session.assert_called_once()
+                    call_kwargs = m_new_session.call_args[1]
+                    assert call_kwargs.get("rows") == 100, \
+                        f"S14: expected rows=100, got {call_kwargs.get('rows')}"
+                    assert ret == 0, f"S14: expected 0, got {ret}"
+                    print("PASS: S14 (new_session called with rows=100)")
+            finally:
+                sys.argv = saved_argv
+                sys.stdin = saved_stdin
+    except Exception as e:
+        print(f"FAIL: S14 - {e}")
+        errors += 1
+
     # ── Direct unit tests for _wait_for_idle_stable ──────────────────────────
     try:
         mod = _load_claude_sub_module()
