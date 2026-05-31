@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-scope-violations-and-brief
+phase: approved-unit-tests
 slug: haiku-implementer-reliability
 branch: hanf/haiku-implementer-reliability
 plan: _mill/plan
@@ -24,6 +24,7 @@ planned  '2026-05-31T09:31:32Z'
 implementing  '2026-05-31T09:34:16Z'
 approved-timeout-and-brief-size-guard  '2026-05-31T09:42:40Z'
 approved-scope-violations-and-brief  '2026-05-31T09:50:04Z'
+approved-unit-tests  '2026-05-31T10:08:04Z'
 ```
 
 ## Batches
@@ -39,7 +40,7 @@ batches:
     implementer_session: 0d983043-d521-4183-a90e-d68f67f0bbe8
     start_sha: fb6360cb8deed6e3c52fffd68212b86e9607ebca
   - name: unit-tests
-    state: running
+    state: approved
     implementer_session: 6905f329-010a-48ae-b1e0-c9e27a7e22fc
     start_sha: e166c510537ae1da38184662f2f16c309e4d3e0f
 ```
