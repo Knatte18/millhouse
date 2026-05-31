@@ -34,7 +34,9 @@ batches:
     implementer_session: ea83e81e-1c50-477d-ba44-5d04ae651b27
     start_sha: 11980545e58b37ba5af182e3e077999301e5cad8
   - name: scope-violations-and-brief
-    state: pending
+    state: running
+    implementer_session: 0d983043-d521-4183-a90e-d68f67f0bbe8
+    start_sha: fb6360cb8deed6e3c52fffd68212b86e9607ebca
   - name: unit-tests
     state: pending
 ```
