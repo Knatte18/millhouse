@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: replace-claude-p-with-psmux
 branch: hanf/replace-claude-p-with-psmux
 plan: _mill/plan
@@ -21,4 +21,19 @@ planning  '2026-05-31T14:52:40Z'
 plan-fix-r1  '2026-05-31T14:59:18Z'
 plan-fix-r2  '2026-05-31T15:34:51Z'
 planned  '2026-05-31T15:36:28Z'
+implementing  '2026-05-31T15:36:49Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: Fix extract_response
+    state: pending
+  - name: Fix millpy-claude-sub
+    state: pending
+  - name: Config shell_path key
+    state: pending
+  - name: Tests
+    state: pending
 ```
