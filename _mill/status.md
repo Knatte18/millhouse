@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-Fix extract_response
 slug: replace-claude-p-with-psmux
 branch: hanf/replace-claude-p-with-psmux
 plan: _mill/plan
@@ -22,6 +22,7 @@ plan-fix-r1  '2026-05-31T14:59:18Z'
 plan-fix-r2  '2026-05-31T15:34:51Z'
 planned  '2026-05-31T15:36:28Z'
 implementing  '2026-05-31T15:36:49Z'
+approved-Fix extract_response  '2026-05-31T15:44:01Z'
 ```
 
 ## Batches
@@ -29,9 +30,10 @@ implementing  '2026-05-31T15:36:49Z'
 ```yaml
 batches:
   - name: Fix extract_response
-    state: running
+    state: approved
     implementer_session: 17a879b6-b6b1-412d-a76e-f6e29c48da1d
     start_sha: 2d026703873f2d1ce3a9f099e65d940f0c37fddb
+    commit_sha: f3f50ff58e1344416b43b2043a9c812a50b77bb2
   - name: Fix millpy-claude-sub
     state: pending
   - name: Config shell_path key
