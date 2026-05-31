@@ -143,6 +143,72 @@ Second line
         print(f"[FAIL] Test 7: raised {e!r}")
         errors += 1
 
+    # Test 8: Completion marker stripped
+    try:
+        snapshot = r"""  ❯
+● PONG
+
+✻ Cogitated for 5s
+
+────────────
+❯
+────────────
+? for shortcuts"""
+        result = _psmux_capture_mod.extract_response(snapshot)
+        expected = "PONG"
+        if result == expected:
+            print("[OK] Test 8: Completion marker stripped")
+        else:
+            print(f"[FAIL] Test 8: expected {expected!r}, got {result!r}")
+            errors += 1
+    except Exception as e:
+        print(f"[FAIL] Test 8: raised {e!r}")
+        errors += 1
+
+    # Test 9: Auto-suggest not included
+    try:
+        snapshot = r"""  ❯
+● Hello world
+
+✻ Cooked for 2s
+
+────────────
+❯ show an example
+────────────
+? for shortcuts"""
+        result = _psmux_capture_mod.extract_response(snapshot)
+        expected = "Hello world"
+        if result == expected:
+            print("[OK] Test 9: Auto-suggest not included")
+        else:
+            print(f"[FAIL] Test 9: expected {expected!r}, got {result!r}")
+            errors += 1
+    except Exception as e:
+        print(f"[FAIL] Test 9: raised {e!r}")
+        errors += 1
+
+    # Test 10: Multi-line response stripped cleanly
+    try:
+        snapshot = r"""  ❯
+● Line one
+Line two
+
+✻ Brewed for 3s
+
+────────────
+❯
+────────────"""
+        result = _psmux_capture_mod.extract_response(snapshot)
+        expected = "Line one\nLine two"
+        if result.strip() == expected.strip():
+            print("[OK] Test 10: Multi-line response stripped cleanly")
+        else:
+            print(f"[FAIL] Test 10: expected {expected!r}, got {result!r}")
+            errors += 1
+    except Exception as e:
+        print(f"[FAIL] Test 10: raised {e!r}")
+        errors += 1
+
     return errors
 
 
