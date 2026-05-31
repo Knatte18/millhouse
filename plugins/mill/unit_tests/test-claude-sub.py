@@ -12,7 +12,6 @@ import importlib.util
 import io
 import sys
 import tempfile
-import time
 import unittest.mock as mock
 from pathlib import Path
 
@@ -704,6 +703,39 @@ def main() -> int:
 
     except Exception as e:
         print(f"FAIL: _wait_for_idle_stable unit tests - {e}")
+        errors += 1
+
+    # ── Direct unit tests for _wait_for_idle_prompt ──────────────────────────
+    try:
+        mod = _load_claude_sub_module()
+        _wait_for_idle_prompt = mod._wait_for_idle_prompt
+
+        # Scenario (d): capture returns "? for shortcuts" on the first call; return True
+        try:
+            with mock.patch("_psmux.capture_pane", return_value="? for shortcuts"), \
+                 mock.patch("time.sleep"), \
+                 mock.patch("time.monotonic", side_effect=[0.0, 0.0]):
+                result = _wait_for_idle_prompt(session_name="s", timeout_s=5.0)
+                assert result is True, f"Scenario (d): expected True, got {result}"
+            print("[OK] _wait_for_idle_prompt scenario (d)")
+        except Exception as e:
+            print(f"[FAIL] _wait_for_idle_prompt scenario (d): {e}")
+            errors += 1
+
+        # Scenario (e): capture always returns "❯ " (never contains "for shortcuts"), timeout fires
+        try:
+            with mock.patch("_psmux.capture_pane", return_value="❯ "), \
+                 mock.patch("time.sleep"), \
+                 mock.patch("time.monotonic", side_effect=[0.0, 0.0, 6.0, 6.0]):
+                result = _wait_for_idle_prompt(session_name="s", timeout_s=5.0)
+                assert result is False, f"Scenario (e): expected False, got {result}"
+            print("[OK] _wait_for_idle_prompt scenario (e)")
+        except Exception as e:
+            print(f"[FAIL] _wait_for_idle_prompt scenario (e): {e}")
+            errors += 1
+
+    except Exception as e:
+        print(f"FAIL: _wait_for_idle_prompt unit tests - {e}")
         errors += 1
 
     return errors

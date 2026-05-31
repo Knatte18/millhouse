@@ -113,15 +113,13 @@ def _wait_for_marker_in_pane(
 
 
 def _wait_for_idle_prompt(session_name: str, timeout_s: float) -> bool:
-    """Poll capture-pane for the idle prompt character. Return True on match, False on timeout."""
-    idle_prompt = "❯"
+    """Poll capture-pane status bar for the idle marker ('for shortcuts'). Return True on match, False on timeout."""
     start = time.monotonic()
     while True:
         try:
             capture = _psmux.capture_pane(session_name, alternate=True)
-            for line in capture.splitlines():
-                if line.strip().startswith(idle_prompt):
-                    return True
+            if "for shortcuts" in capture:
+                return True
         except _psmux.PsmuxError:
             return False
 
