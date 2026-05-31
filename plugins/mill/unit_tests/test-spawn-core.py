@@ -941,6 +941,105 @@ def test_discover_active_worktrees_subfolder_install() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Picker order and display
+# ---------------------------------------------------------------------------
+
+
+def test_pick_task_single_numbered_path_render_order() -> None:
+    """Picker order matches render_order: A/B/Z tasks presented in correct sequence."""
+    tasks_text = """\
+# Home
+
+## Task Alpha
+[task-alpha]
+
+## Task Beta
+[task-beta]
+
+## Task Zulu
+[task-zulu]
+"""
+    tasks = parse_home_md(tasks_text)
+    # Manually assign layer values to set up A/B/Z ordering
+    tasks[0]["depends_on"] = []
+    tasks[0]["isolated"] = False
+    tasks[0]["layer"] = "A"
+    tasks[1]["depends_on"] = [tasks[0]["slug"]]
+    tasks[1]["isolated"] = False
+    tasks[1]["layer"] = "B"
+    tasks[2]["depends_on"] = []
+    tasks[2]["isolated"] = True
+    tasks[2]["layer"] = "Z"
+
+    import io
+    # Capture stderr to verify order of printed task display
+    original_stderr = sys.stderr
+    original_stdin = sys.stdin
+    sys.stderr = io.StringIO()
+    sys.stdin = io.StringIO("1\n")
+    try:
+        picked = pick_task_single(tasks)
+        stderr_output = sys.stderr.getvalue()
+    finally:
+        sys.stderr = original_stderr
+        sys.stdin = original_stdin
+
+    # Verify task order in stderr output: A before B before Z
+    if "task-alpha" not in stderr_output:
+        raise AssertionError(f"task-alpha not in stderr: {stderr_output}")
+    if "task-beta" not in stderr_output:
+        raise AssertionError(f"task-beta not in stderr: {stderr_output}")
+    if "task-zulu" not in stderr_output:
+        raise AssertionError(f"task-zulu not in stderr: {stderr_output}")
+
+    alpha_idx = stderr_output.index("task-alpha")
+    beta_idx = stderr_output.index("task-beta")
+    zulu_idx = stderr_output.index("task-zulu")
+    if not (alpha_idx < beta_idx < zulu_idx):
+        raise AssertionError(
+            f"Task order should be A < B < Z; indices were alpha={alpha_idx}, beta={beta_idx}, zulu={zulu_idx}"
+        )
+    print("PASS: pick_task_single numbered-picker presents tasks in render_order sequence")
+
+
+def test_pick_task_single_numbered_path_extended_title() -> None:
+    """Picker title uses extended_title: displays [B] suffix for layer B task."""
+    tasks_text = """\
+# Home
+
+## Setup foundation
+[setup-foundation]
+
+## Fix bug
+[fix-bug]
+"""
+    tasks = parse_home_md(tasks_text)
+    tasks[0]["depends_on"] = []
+    tasks[0]["isolated"] = False
+    tasks[1]["depends_on"] = [tasks[0]["slug"]]
+    tasks[1]["isolated"] = False
+
+    import io
+    original_stderr = sys.stderr
+    original_stdin = sys.stdin
+    sys.stderr = io.StringIO()
+    sys.stdin = io.StringIO("1\n")
+    try:
+        picked = pick_task_single(tasks)
+        stderr_output = sys.stderr.getvalue()
+    finally:
+        sys.stderr = original_stderr
+        sys.stdin = original_stdin
+
+    # Verify that stderr output contains "Fix bug [B]" (extended_title format)
+    if "Fix bug [B]" not in stderr_output:
+        raise AssertionError(
+            f"Expected 'Fix bug [B]' in stderr output (extended_title format), got:\n{stderr_output}"
+        )
+    print("PASS: pick_task_single numbered-picker displays extended_title with layer suffix")
+
+
+# ---------------------------------------------------------------------------
 # Main runner
 # ---------------------------------------------------------------------------
 
@@ -953,6 +1052,8 @@ def main() -> int:
         test_pick_task_single_empty_backlog_raises,
         test_pick_task_single_numbered_path,
         test_pick_task_single_numbered_path_invalid_choice,
+        test_pick_task_single_numbered_path_render_order,
+        test_pick_task_single_numbered_path_extended_title,
         test_pick_task_single_or_multi_single_number,
         test_pick_task_single_or_multi_multi_numbers,
         test_pick_task_single_or_multi_dedup,

@@ -23,6 +23,8 @@ from wiki import (
     OP_HEALTH,
     OP_RERENDER,
     OP_SHUTDOWN,
+    OP_SET_DEPS,
+    OP_MIGRATE_DEPS,
     FIELD_OP,
     FIELD_TOKEN,
     FIELD_OK,
@@ -30,11 +32,13 @@ from wiki import (
     FIELD_ERROR,
     ERR_NOT_FOUND,
     ERR_PUSH_FAILED,
+    ERR_VALIDATION,
     WikiBusyError,
     WikiNotFoundError,
     WikiPushError,
     WikiProtocolError,
     WikiStartupError,
+    WikiValidationError,
 )
 
 SPAWN_TIMEOUT: int = 20 if sys.platform == "win32" else 10
@@ -163,8 +167,10 @@ def upsert_task(
     title: str | None = None,
     brief: str | None = None,
     body: str | None = None,
-    group: str | None = None,
     status: str | None = None,
+    depends_on: list[str] | None = None,
+    isolated: bool | None = None,
+    deferred: bool | None = None,
 ) -> dict:
     """Upsert a task in the wiki.
 
@@ -174,13 +180,16 @@ def upsert_task(
         title: Task title.
         brief: Task brief.
         body: Task body (proposal content).
-        group: Task group.
         status: Task status.
+        depends_on: List of task slugs this task depends on.
+        isolated: Whether task is isolated (runs alone).
+        deferred: Whether task is deferred.
 
     Returns:
         The upserted task dict.
 
     Raises:
+        WikiValidationError: Invalid task data.
         WikiPushError: Git push failed.
         WikiProtocolError: Protocol or message error.
         WikiStartupError: Daemon failed to start.
@@ -192,10 +201,14 @@ def upsert_task(
         payload["brief"] = brief
     if body is not None:
         payload["body"] = body
-    if group is not None:
-        payload["group"] = group
     if status is not None:
         payload["status"] = status
+    if depends_on is not None:
+        payload["depends_on"] = depends_on
+    if isolated is not None:
+        payload["isolated"] = isolated
+    if deferred is not None:
+        payload["deferred"] = deferred
 
     resp = _dispatch(wiki_path, OP_UPSERT_TASK, payload)
 
@@ -203,6 +216,8 @@ def upsert_task(
         return resp.get("task", {})
 
     error_type = resp.get(FIELD_ERROR_TYPE)
+    if error_type == ERR_VALIDATION:
+        raise WikiValidationError(resp.get(FIELD_ERROR, ""))
     if error_type == ERR_PUSH_FAILED:
         raise WikiPushError(resp.get(FIELD_ERROR, ""))
 
@@ -223,6 +238,7 @@ def upsert_tasks_batch(
         message: Optional commit message tail.
 
     Raises:
+        WikiValidationError: Invalid task data.
         WikiPushError: Git push failed.
         WikiProtocolError: Protocol or message error.
         WikiStartupError: Daemon failed to start.
@@ -237,6 +253,8 @@ def upsert_tasks_batch(
         return
 
     error_type = resp.get(FIELD_ERROR_TYPE)
+    if error_type == ERR_VALIDATION:
+        raise WikiValidationError(resp.get(FIELD_ERROR, ""))
     if error_type == ERR_PUSH_FAILED:
         raise WikiPushError(resp.get(FIELD_ERROR, ""))
 
@@ -343,7 +361,7 @@ def list_tasks_brief(wiki_path: Path) -> list[dict]:
         wiki_path: Path to wiki clone root.
 
     Returns:
-        List of task dicts with keys {id, slug, title, group, brief, status, has_proposal}.
+        List of task dicts with keys {id, slug, title, layer, brief, status, has_proposal}.
 
     Raises:
         WikiProtocolError: Protocol or message error.
@@ -397,6 +415,7 @@ def merge_tasks(
         The upserted task dict.
 
     Raises:
+        WikiValidationError: Invalid task data.
         WikiPushError: Git push failed.
         WikiProtocolError: Protocol or message error.
         WikiStartupError: Daemon failed to start.
@@ -411,6 +430,61 @@ def merge_tasks(
 
     if resp.get(FIELD_OK):
         return resp.get("task", {})
+
+    error_type = resp.get(FIELD_ERROR_TYPE)
+    if error_type == ERR_VALIDATION:
+        raise WikiValidationError(resp.get(FIELD_ERROR, ""))
+    if error_type == ERR_PUSH_FAILED:
+        raise WikiPushError(resp.get(FIELD_ERROR, ""))
+
+    raise WikiProtocolError(resp.get(FIELD_ERROR, ""))
+
+
+def set_deps(wiki_path: Path, slug: str, depends_on: list[str]) -> None:
+    """Set dependencies for a task.
+
+    Args:
+        wiki_path: Path to wiki clone root.
+        slug: Task slug.
+        depends_on: List of task slugs this task depends on.
+
+    Raises:
+        WikiValidationError: Invalid task data.
+        WikiPushError: Git push failed.
+        WikiProtocolError: Protocol or message error.
+        WikiStartupError: Daemon failed to start.
+    """
+    payload = {"slug": slug, "depends_on": depends_on}
+
+    resp = _dispatch(wiki_path, OP_SET_DEPS, payload)
+
+    if resp.get(FIELD_OK):
+        return
+
+    error_type = resp.get(FIELD_ERROR_TYPE)
+    if error_type == ERR_VALIDATION:
+        raise WikiValidationError(resp.get(FIELD_ERROR, ""))
+    if error_type == ERR_PUSH_FAILED:
+        raise WikiPushError(resp.get(FIELD_ERROR, ""))
+
+    raise WikiProtocolError(resp.get(FIELD_ERROR, ""))
+
+
+def migrate_deps(wiki_path: Path) -> None:
+    """Migrate old 'group' field to new 'depends_on/isolated/deferred' fields.
+
+    Args:
+        wiki_path: Path to wiki clone root.
+
+    Raises:
+        WikiPushError: Git push failed.
+        WikiProtocolError: Protocol or message error.
+        WikiStartupError: Daemon failed to start.
+    """
+    resp = _dispatch(wiki_path, OP_MIGRATE_DEPS, {})
+
+    if resp.get(FIELD_OK):
+        return
 
     error_type = resp.get(FIELD_ERROR_TYPE)
     if error_type == ERR_PUSH_FAILED:

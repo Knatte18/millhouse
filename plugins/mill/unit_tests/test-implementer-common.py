@@ -316,6 +316,82 @@ def main() -> int:
             print(f"FAIL: case 8 ({exc}) captured={captured!r}", file=sys.stderr)
             errors += 1
 
+    # Case 9: no-snapshot inferred success — HEAD advanced + clean tree
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        base_sha = _setup_fixture(project_root)
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "--allow-empty", "-m", "second"],
+            check=True, capture_output=True,
+        )
+        new_head = subprocess.run(
+            ["git", "-C", str(project_root), "rev-parse", "HEAD"],
+            check=True, capture_output=True, text=True,
+        ).stdout.strip()
+        rc, captured = _capture_stdout(
+            lambda: _forward_output(
+                "",
+                project_root,
+                start_sha=base_sha,
+            )
+        )
+        try:
+            data = json.loads(captured.strip())
+            assert data["status"] == "success", f"expected status=success, got {data}"
+            assert data.get("inferred") is True, f"expected inferred=True, got {data}"
+            assert data["commit_sha"] == new_head, f"expected commit_sha={new_head}, got {data}"
+            print("PASS: no-snapshot inferred success - HEAD advanced + clean tree -> success with inferred=True")
+        except Exception as exc:
+            print(f"FAIL: case 9 ({exc}) captured={captured!r}", file=sys.stderr)
+            errors += 1
+
+    # Case 10: no-snapshot, HEAD unchanged
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        base_sha = _setup_fixture(project_root)
+        # NO new commit — HEAD == start_sha
+        rc, captured = _capture_stdout(
+            lambda: _forward_output(
+                "",
+                project_root,
+                start_sha=base_sha,
+            )
+        )
+        try:
+            data = json.loads(captured.strip())
+            assert data["status"] == "stuck", f"expected status=stuck, got {data}"
+            assert data["stuck_type"] == "logic", f"expected stuck_type=logic, got {data}"
+            print("PASS: no-snapshot, HEAD unchanged -> stuck/logic")
+        except Exception as exc:
+            print(f"FAIL: case 10 ({exc}) captured={captured!r}", file=sys.stderr)
+            errors += 1
+
+    # Case 11: no-snapshot, HEAD advanced but dirty tree
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        base_sha = _setup_fixture(project_root)
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "--allow-empty", "-m", "second"],
+            check=True, capture_output=True,
+        )
+        # Dirty already-tracked README.md without committing
+        (project_root / "README.md").write_text("dirty", encoding="utf-8")
+        rc, captured = _capture_stdout(
+            lambda: _forward_output(
+                "",
+                project_root,
+                start_sha=base_sha,
+            )
+        )
+        try:
+            data = json.loads(captured.strip())
+            assert data["status"] == "stuck", f"expected status=stuck, got {data}"
+            assert data["stuck_type"] == "logic", f"expected stuck_type=logic, got {data}"
+            print("PASS: no-snapshot, HEAD advanced but dirty tree -> stuck/logic")
+        except Exception as exc:
+            print(f"FAIL: case 11 ({exc}) captured={captured!r}", file=sys.stderr)
+            errors += 1
+
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)
         return 1

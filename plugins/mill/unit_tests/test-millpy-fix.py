@@ -446,6 +446,41 @@ class TestMillpyFix(unittest.TestCase):
             # Verify both passed resume=False
             self.assertEqual(resume_values, [False, False])
 
+    def test_start_sha_captured_and_passed_to_forward_output(self):
+        """start_sha is captured from git rev-parse HEAD and passed to _forward_output."""
+        known_sha = "deadbeef1234567890abcdef1234567890abcdef"
+        captured_kwargs = {}
+
+        def mock_forward_output(output, project_root, **kwargs):
+            captured_kwargs.update(kwargs)
+            return 0
+
+        def mock_run(argv, **kwargs):
+            if argv[0:2] == ["git", "rev-parse"]:
+                return subprocess.CompletedProcess(
+                    args=argv, returncode=0, stdout=f"{known_sha}\n", stderr=""
+                )
+            return self.mock_subprocess_run.return_value
+
+        with unittest.mock.patch.object(millpy_fix, "_forward_output", side_effect=mock_forward_output):
+            with unittest.mock.patch.object(
+                millpy_fix._subprocess_util, "run",
+                side_effect=mock_run,
+            ):
+                with unittest.mock.patch.object(
+                    millpy_fix._implementer_claude, "run",
+                    return_value=('{"status":"success","commit_sha":"abc","session_id":"fake"}\n', "fake"),
+                ):
+                    rc, _ = self._run_main([
+                        "--scope", "batch",
+                        "--batch-name", "test-batch",
+                        "--review-file", str(self.review_file),
+                    ])
+
+        self.assertEqual(rc, 0)
+        self.assertIn("start_sha", captured_kwargs, "start_sha must be passed to _forward_output")
+        self.assertEqual(captured_kwargs["start_sha"], known_sha, f"expected start_sha={known_sha}, got {captured_kwargs.get('start_sha')}")
+
 
 class TestMillpyFixBriefSizeGuard(unittest.TestCase):
 

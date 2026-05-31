@@ -49,10 +49,12 @@ def _collect(git_root: Path, slug_filter: str | None) -> list[dict]:
 
     home_tasks_list: list = []
     home_marker_map: dict[str, str] = {}
+    home_layer_map: dict[str, str] = {}
     try:
         home_tasks_list = wiki.list_tasks_brief(wiki_path)
         for task in home_tasks_list:
             home_marker_map[task["slug"]] = task["status"] if task["status"] is not None else "unclaimed"
+            home_layer_map[task["slug"]] = task.get("layer")
     except Exception:
         pass
 
@@ -83,6 +85,7 @@ def _collect(git_root: Path, slug_filter: str | None) -> list[dict]:
             continue
 
         marker = home_marker_map.get(slug, "unclaimed")
+        layer = home_layer_map.get(slug)
 
         records.append({
             "slug": slug,
@@ -90,6 +93,7 @@ def _collect(git_root: Path, slug_filter: str | None) -> list[dict]:
             "timeline": full["timeline"],
             "worktree": str(wt_path),
             "home_marker": marker,
+            "home_layer": layer,
         })
 
     return records
@@ -129,6 +133,10 @@ def _render_markdown(records: list[dict]) -> str:
         else:
             parts.append(f"[WARN] home_marker: {marker}")
 
+        layer = rec.get("home_layer")
+        if layer is not None:
+            parts.append(f"home_layer: {layer}")
+
         parts.append("")
 
     return "\n".join(parts)
@@ -142,6 +150,7 @@ def _render_json(records: list[dict]) -> str:
             "timeline": rec["timeline"],
             "worktree": rec["worktree"],
             "home_marker": rec["home_marker"],
+            "home_layer": rec["home_layer"],
         }
     return json.dumps(out, indent=2)
 

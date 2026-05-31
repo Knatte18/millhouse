@@ -180,9 +180,19 @@ PR dispatch lives in mill-finalize. This step is direct path only.
 ### 6. Archive tag
 
 ```bash
-PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
+# Prefer worktree scripts when available (handles cache-lag in self-modifying repos)
+if [ -f "$(git rev-parse --show-toplevel)/plugins/mill/scripts/_archive_tag.py" ]; then
+    MILL_SCRIPTS="$(git rev-parse --show-toplevel)/plugins/mill/scripts"
+else
+    MILL_SCRIPTS="${CLAUDE_PLUGIN_ROOT}/scripts"
+fi
+PYTHONPATH="$MILL_SCRIPTS" "$MILL_PYTHON" -c "
 from pathlib import Path
-import _paths, _archive_tag
+import _paths
+try:
+    import _archive_tag
+except ImportError as e:
+    raise SystemExit(f'[mill-merge] step 6 failed: {e}. Cache may be stale -- run: uv sync --project plugins/mill')
 worktree = _paths.resolve_git_root()
 result = _archive_tag.create_or_resolve(worktree, '<slug>', '$CHILD_BRANCH')
 print(f'[mill-merge] archive-tag action: {result[\"action\"]} -- tag: {result[\"tag\"]}')

@@ -1887,6 +1887,120 @@ def test_batch_oversized_defaults_applied() -> int:
 
 
 # ---------------------------------------------------------------------------
+# verify-full-suite check
+# ---------------------------------------------------------------------------
+
+def test_check_verify_full_suite_run_all_py_without_filter_is_error() -> int:
+    """Dirty: verify invokes run-all.py without -k or --only filter -> one verify-full-suite error."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = (
+            "# Batch: alpha\n\n"
+            "```yaml\n"
+            "task: test\nbatch: alpha\ncards: 1\nverify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py\ndepends-on: []\n"
+            "```\n\n"
+            "## Cards\n\n"
+            "### Card 1: card 1\n\n"
+            "- **Context:** none\n"
+            "- **Edits:** none\n"
+            "- **Creates:** none\n"
+            "- **Deletes:** none\n"
+            "- **Requirements:**\n  See scope.\n"
+            "- **Commit:** feat(alpha): card 1\n"
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_full_suite = [e for e in result if e["check"] == "verify-full-suite"]
+        try:
+            assert len(check_full_suite) == 1, f"expected 1 error, got {len(check_full_suite)}: {check_full_suite}"
+            assert check_full_suite[0]["batch"] == "01-alpha", f"wrong batch: {check_full_suite[0]['batch']!r}"
+            assert "run-all.py" in check_full_suite[0]["message"], (
+                f"message should mention run-all.py: {check_full_suite[0]['message']!r}"
+            )
+            print("PASS test_check_verify_full_suite_run_all_py_without_filter_is_error")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_check_verify_full_suite_run_all_py_without_filter_is_error: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_check_verify_full_suite_run_all_py_with_k_filter_is_ok() -> int:
+    """Clean: verify invokes run-all.py with -k filter -> no verify-full-suite error."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = (
+            "# Batch: alpha\n\n"
+            "```yaml\n"
+            "task: test\nbatch: alpha\ncards: 1\nverify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py -k test_foo\ndepends-on: []\n"
+            "```\n\n"
+            "## Cards\n\n"
+            "### Card 1: card 1\n\n"
+            "- **Context:** none\n"
+            "- **Edits:** none\n"
+            "- **Creates:** none\n"
+            "- **Deletes:** none\n"
+            "- **Requirements:**\n  See scope.\n"
+            "- **Commit:** feat(alpha): card 1\n"
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_full_suite = [e for e in result if e["check"] == "verify-full-suite"]
+        if check_full_suite:
+            print(f"FAIL test_check_verify_full_suite_run_all_py_with_k_filter_is_ok: unexpected error: {check_full_suite}",
+                  file=sys.stderr)
+            return 1
+        print("PASS test_check_verify_full_suite_run_all_py_with_k_filter_is_ok")
+        return 0
+
+
+def test_check_verify_full_suite_run_all_py_with_only_is_ok() -> int:
+    """Clean: verify invokes run-all.py with --only flag -> no verify-full-suite error."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = (
+            "# Batch: alpha\n\n"
+            "```yaml\n"
+            "task: test\nbatch: alpha\ncards: 1\nverify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-foo.py\ndepends-on: []\n"
+            "```\n\n"
+            "## Cards\n\n"
+            "### Card 1: card 1\n\n"
+            "- **Context:** none\n"
+            "- **Edits:** none\n"
+            "- **Creates:** none\n"
+            "- **Deletes:** none\n"
+            "- **Requirements:**\n  See scope.\n"
+            "- **Commit:** feat(alpha): card 1\n"
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_full_suite = [e for e in result if e["check"] == "verify-full-suite"]
+        if check_full_suite:
+            print(f"FAIL test_check_verify_full_suite_run_all_py_with_only_is_ok: unexpected error: {check_full_suite}",
+                  file=sys.stderr)
+            return 1
+        print("PASS test_check_verify_full_suite_run_all_py_with_only_is_ok")
+        return 0
+
+
+# ---------------------------------------------------------------------------
 # Runner
 # ---------------------------------------------------------------------------
 
@@ -1952,6 +2066,10 @@ def main() -> int:
         test_batch_oversized_context_tokens_clean,
         test_batch_oversized_context_tokens_dirty,
         test_batch_oversized_defaults_applied,
+        # verify-full-suite check
+        test_check_verify_full_suite_run_all_py_without_filter_is_error,
+        test_check_verify_full_suite_run_all_py_with_k_filter_is_ok,
+        test_check_verify_full_suite_run_all_py_with_only_is_ok,
     ]
 
     errors = 0

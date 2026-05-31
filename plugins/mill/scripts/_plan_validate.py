@@ -842,6 +842,47 @@ def _check_verify_not_isolated(batch_files: list[Path]) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
+# verify-full-suite check
+# ---------------------------------------------------------------------------
+
+def _check_verify_full_suite(batch_files: list[Path]) -> list[dict]:
+    errors: list[dict] = []
+    for batch_path in batch_files:
+        text = batch_path.read_text(encoding="utf-8")
+        lines = text.splitlines()
+        start_idx = None
+        end_idx = None
+        for i, line in enumerate(lines):
+            if line.strip() == "```yaml":
+                start_idx = i
+            elif start_idx is not None and line.strip() == "```":
+                end_idx = i
+                break
+        if start_idx is None or end_idx is None:
+            continue
+        yaml_text = "\n".join(lines[start_idx + 1:end_idx])
+        try:
+            parsed = yaml.safe_load(yaml_text) or {}
+        except Exception:
+            continue
+        verify = parsed.get("verify")
+        if verify is None or not isinstance(verify, str):
+            continue
+        verify_stripped = verify.strip()
+        if not verify_stripped:
+            continue
+        if "run-all.py" in verify_stripped and "-k " not in verify_stripped and "--only " not in verify_stripped:
+            errors.append({
+                "check": "verify-full-suite",
+                "batch": batch_path.stem,
+                "card": None,
+                "path": verify,
+                "message": "verify command invokes run-all.py without a filter (-k pattern); use '-k <pattern>' or '--only <files>' to scope the run",
+            })
+    return errors
+
+
+# ---------------------------------------------------------------------------
 # Check 9 — out-of-worktree-target
 # ---------------------------------------------------------------------------
 
@@ -1002,6 +1043,7 @@ def run(
     errors.extend(_check_parallel_modifies_overlap(batch_files, overview_text))
     errors.extend(_check_ref_not_backtick_path(batch_files))
     errors.extend(_check_verify_not_isolated(batch_files))
+    errors.extend(_check_verify_full_suite(batch_files))
     errors.extend(_check_wiki_config_mutation(batch_files))
     errors.extend(_check_all_files_touched_mismatch(overview_path, batch_files))
     errors.extend(_check_out_of_worktree_target(batch_files, project_root))
