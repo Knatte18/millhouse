@@ -317,9 +317,9 @@ print('hub .gitignore:', 'updated' if changed else 'already up to date')
 
 Log the result.
 
-### Phase 4.7 — PS1 shortcut wrappers
+### Phase 4.7 — CMD shortcut wrappers
 
-Creates `.millhouse/<script>.ps1` forwarders for every user-callable mill script. Each wrapper hardcodes the path of the currently-latest plugin cache entry and delegates to the real script via `uv run --active`.
+Creates `.millhouse/<script>.cmd` forwarders for every user-callable mill script. Each wrapper hardcodes the path of the currently-latest plugin cache entry and delegates to the real script via `uv run --active`.
 
 ```bash
 PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "
@@ -353,7 +353,7 @@ print(f'Set PYTHONPATH (User) = {scripts}' if changed else f'PYTHONPATH (User) a
 
 Log: `Set PYTHONPATH (User) = <scripts> or PYTHONPATH (User) already correct: <scripts>. Note: takes effect in NEW shell sessions; current mill-setup session must keep using the inline PYTHONPATH prefix above.`
 
-**Note:** After running `update-plugins.ps1` to install a new plugin version, re-run `/mill-setup` to refresh PYTHONPATH and the PS1 wrappers to the new version. If upgrading from a pre-PS1 hub (one where `.millhouse/` still contains `.py` wrappers), re-run `/mill-setup` — Phase 4.7 is idempotent and will replace the `.py` wrappers with `.ps1` wrappers in a single pass, and Phase 8 will verify their absence.
+**Note:** After running `update-plugins.ps1` to install a new plugin version, re-run `/mill-setup` to refresh PYTHONPATH and the `.cmd` wrappers to the new version. If upgrading from a pre-CMD hub (one where `.millhouse/` still contains `.py` or `.ps1` wrappers), re-run `/mill-setup` — Phase 4.7 is idempotent and will replace legacy wrappers with `.cmd` wrappers in a single pass, and Phase 8 will verify their absence.
 
 
 ### Phase 4.8 — Write `MILL_PYTHON` to `~/.claude/settings.json`
@@ -474,7 +474,7 @@ Check every invariant; halt with a specific error if any fails:
 - Every hub junction (entries without `<SLUG>` from `wiki/config.yaml`) exists and resolves to its expected target
 - `.gitignore` contains the mill-managed marker block with glob entries
 - `hub_relative_path:` is set in `.millhouse/config.local.yaml`
-- Every script in `_shortcuts.SHORTCUT_SCRIPTS` has a wrapper at `.millhouse/<script>.ps1` (and no legacy `.millhouse/<script>.py` exists)
+- Every script in `_shortcuts.SHORTCUT_SCRIPTS` has a wrapper at `.millhouse/<script>.cmd` (and no legacy `.millhouse/<script>.py` or `.millhouse/<script>.ps1` exists)
 - `PYTHONPATH` user env var contains `<CLAUDE_PLUGIN_ROOT>/scripts` (verify via `PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "import _winenv; v=_winenv.get_user_env_var('PYTHONPATH'); assert v and '${CLAUDE_PLUGIN_ROOT}/scripts' in v, f'PYTHONPATH missing or incorrect: {v}'; print(f'OK: PYTHONPATH={v}')")`)
 - `.env.MILL_PYTHON` in `~/.claude/settings.json` equals `${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe` (runtime-expanded value); verify via: `PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "import json; from pathlib import Path; d=json.loads((Path.home()/'.claude'/'settings.json').read_text(encoding='utf-8')); print(d['env']['MILL_PYTHON'])"`
 - `.millhouse/config.local.yaml` exists
@@ -495,7 +495,7 @@ mill-setup complete.
   Tasks (Home):      <WIKI_PATH>/Home.md  (hardlinked as tasks.md)
   Sidebar:           <WIKI_PATH>/_Sidebar.md
   VS Code:           .vscode/settings.json (titleBar = #2d7d46 green)
-  Shortcut wrappers: N PS1 scripts under .millhouse/
+  Shortcut wrappers: N .cmd scripts under .millhouse/
   PYTHONPATH (User): <scripts>
   MILL_PYTHON:       <python-path>
 
