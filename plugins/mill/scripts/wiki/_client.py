@@ -107,7 +107,8 @@ def wait_for_socket_reachable(host: str, port: int, *, timeout: float, interval:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         try:
-            sock = socket.create_connection((host, port), timeout=0.5)
+            per_attempt_timeout = min(0.5, max(0, deadline - time.monotonic()))
+            sock = socket.create_connection((host, port), timeout=per_attempt_timeout)
             sock.close()
             return True
         except (OSError, socket.timeout):
