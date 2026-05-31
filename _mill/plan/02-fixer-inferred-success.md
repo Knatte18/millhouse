@@ -29,7 +29,7 @@ This batch fixes #398: when `millpy-fix.py` dispatches a holistic fixer session 
   ```python
   if start_sha is not None and snapshot_path is not None and snapshot_path.exists():
   ```
-  Change this condition to `if start_sha is not None and snapshot_path is not None and snapshot_path.exists():` (unchanged) for the existing snapshot-based path, and add a new `elif start_sha is not None:` branch immediately after the existing `if` block's closing logic (still inside the same `try/except Exception: pass` wrapper). The new `elif` branch must:
+  Change this condition to `if start_sha is not None and snapshot_path is not None and snapshot_path.exists():` (unchanged) for the existing snapshot-based path, and add a new `elif start_sha is not None and snapshot_path is None:` branch immediately after the existing `if` block's closing logic (still inside the same `try/except Exception: pass` wrapper). The new `elif` branch must:
   1. Run `_subprocess_util.run(["git", "rev-parse", "HEAD"], cwd=project_root)`.
   2. If returncode == 0 and `result.stdout.strip() != start_sha` (HEAD advanced):
      a. Run `_subprocess_util.run(["git", "-C", str(project_root), "status", "--porcelain", "--untracked-files=no"])`.
@@ -79,7 +79,7 @@ This batch fixes #398: when `millpy-fix.py` dispatches a holistic fixer session 
 
   **Test B — no-snapshot, HEAD unchanged:** Call `_forward_output("", project_root, start_sha=base_sha)` immediately after `_setup_fixture` (no new commit). Assert return code is 0 and stdout JSON has `status == "stuck"` and `stuck_type == "logic"`.
 
-  **Test C — no-snapshot, HEAD advanced but dirty tree:** After `_setup_fixture`, write and commit a new file (HEAD advances). Then write another file WITHOUT committing (dirty tree). Call `_forward_output("", project_root, start_sha=base_sha)`. Assert return code is 0 and stdout JSON has `status == "stuck"` and `stuck_type == "logic"`.
+  **Test C — no-snapshot, HEAD advanced but dirty tree:** After `_setup_fixture`, write and commit a new file (HEAD advances). Then modify an already-tracked file WITHOUT committing — specifically `(project_root / "README.md").write_text("dirty", encoding="utf-8")` — so the modification appears under `git status --porcelain --untracked-files=no`. Call `_forward_output("", project_root, start_sha=base_sha)`. Assert return code is 0 and stdout JSON has `status == "stuck"` and `stuck_type == "logic"`.
 
   Each test increments `errors` on assertion failure and prints a descriptive message. Follow the exact error-counting pattern used in existing tests.
 - **Commit:** `test(_implementer_common): cover no-snapshot inferred-success paths (#398)`

@@ -28,7 +28,7 @@ This batch fixes two independent bugs that both live in the Python layer: (1) `_
   1. Iterate `batch_files`.
   2. For each file, parse the frontmatter yaml block using the same pattern as `_check_verify_not_isolated` (find the first ` ```yaml ` / ` ``` ` fenced block, `yaml.safe_load` it).
   3. Extract `verify`; skip if None, not a string, or empty.
-  4. If `"run-all.py"` is in the `verify` string AND `"-k "` is NOT in the `verify` string, append:
+  4. If `"run-all.py"` is in the `verify` string AND `"-k "` is NOT in the `verify` string AND `"--only "` is NOT in the `verify` string, append:
      ```python
      {
          "check": "verify-full-suite",
@@ -40,7 +40,7 @@ This batch fixes two independent bugs that both live in the Python layer: (1) `_
      ```
   5. Return the errors list.
 
-  Then, in `validate_plan()`, add `errors.extend(_check_verify_full_suite(batch_files))` immediately after the `errors.extend(_check_verify_not_isolated(batch_files))` call (currently line 1004).
+  Then, in `run()`, add `errors.extend(_check_verify_full_suite(batch_files))` immediately after the `errors.extend(_check_verify_not_isolated(batch_files))` call (currently line 1004).
 
   The check name `"verify-full-suite"` must be used exactly (the mill-plan SKILL.md's fix table will reference it by this name).
 - **Commit:** `fix(_plan_validate): add verify-full-suite ERROR check for unbounded run-all.py (#392)`
