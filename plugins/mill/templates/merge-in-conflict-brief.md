@@ -27,6 +27,11 @@ For each file listed above:
 3. Write a resolution that preserves the intent of both sides.
 4. Run `git -C <PROJECT_ROOT> add <file>` to stage the resolved file.
 5. For modify/delete (DU) conflicts: if Task intent above lists this file under a batch's `Deletes:`, run `git -C <PROJECT_ROOT> rm <file>` instead of editing; that stages the intentional deletion.
+6. For UD conflicts — files this branch **modified** that the parent branch **deleted**: do not silently keep the modification. Instead:
+   a. Run `git log --diff-filter=D --oneline MERGE_HEAD -- <file>` to find the deletion commit on the parent.
+   b. Run `git show <deletion-commit>` to inspect context.
+   c. If the deletion commit message mentions a replacement file (e.g. "replaced by", "moved to", "consolidated into"), or the commit also adds a file in the same directory with overlapping content: stage the deletion — `git -C <PROJECT_ROOT> rm <file>`.
+   d. If detection is inconclusive: report `{"status":"stuck","stuck_type":"logic","reason":"modify/delete conflict on <file>: cannot determine if parent deletion is a replacement -- operator must decide"}` and halt. Do NOT silently keep the modification.
 
 Never use `git checkout --ours` or `git checkout --theirs` — they silently discard one side of the conflict.
 
