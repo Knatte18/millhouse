@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-approved
+phase: done
 slug: haiku-implementer-reliability
 branch: hanf/haiku-implementer-reliability
 plan: _mill/plan
@@ -28,6 +28,7 @@ approved-unit-tests  '2026-05-31T10:08:04Z'
 holistic-reviewing  '2026-05-31T10:08:28Z'
 holistic-fixing  '2026-05-31T10:18:18Z'
 holistic-approved  '2026-05-31T10:25:15Z'
+done  '2026-05-31T10:25:30Z'
 ```
 
 ## Batches
