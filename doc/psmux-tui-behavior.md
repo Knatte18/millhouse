@@ -233,3 +233,17 @@ In `mill-config.yaml` / template, under `llm.claude.psmux`:
 | 2 | `millpy-claude-sub.py:115-152` | `_wait_for_idle_prompt` and `_wait_for_idle_stable` use `❯` which is ALWAYS present | Use status bar text instead |
 | 3 | `_psmux_capture.py:extract_response` | Extracted text includes `✻ Verb for Ns` and separator line | Stop extraction before separator/`✻` |
 | 4 | `millpy-claude-sub.py` | No input-area clear before reuse; auto-suggest text from previous response leaks into next prompt | Send Escape before submitting on reuse path |
+
+---
+
+## Verified non-issues (from proposal's secondary suspects)
+
+- `--tools ""` flag: valid. `millpy-claude-sub.py` uses `["--tools", ""]` for
+  bulk mode; the claude CLI accepts both `--tools` and `--allowedTools`.
+- Boot sleep (1s after `new_session`): sufficient on this machine even with
+  Cortex XDR scanning. `CLAUDE_READY` probe returned within 1s.
+- `send_keys("Enter", enter=False)`: sends `psmux send-keys -t session Enter`
+  which psmux interprets as the Enter key (special key name, not literal text).
+  Confirmed working.
+- Unicode `❯` codec: `capture_pane` returns UTF-8 on this machine; `❯`
+  compares correctly. No cp1252 issue observed.
