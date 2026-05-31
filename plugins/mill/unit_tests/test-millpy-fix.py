@@ -21,6 +21,7 @@ HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
 import _safe_rmtree  # noqa: E402
+import _implementer_common  # noqa: E402
 
 _FIX_PATH = HUB / "plugins" / "mill" / "scripts" / "millpy-fix.py"
 
@@ -168,6 +169,10 @@ class TestMillpyFix(unittest.TestCase):
                 "provider": "claude",
                 "model": "claude-haiku-4-5-20251001",
             },
+        )
+        self.mock_compute_scope_violations = _p(
+            _implementer_common._cleanliness, "compute_scope_violations",
+            return_value=[],
         )
 
     def _run_main(self, argv):
@@ -514,6 +519,10 @@ class TestMillpyFixBriefSizeGuard(unittest.TestCase):
                 "provider": "claude",
                 "model": "claude-haiku-4-5-20251001",
             },
+        )
+        self.mock_compute_scope_violations = _p(
+            _implementer_common._cleanliness, "compute_scope_violations",
+            return_value=[],
         )
 
     def _run_main(self, argv):

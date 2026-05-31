@@ -7,6 +7,7 @@ import json
 import subprocess
 import sys
 import tempfile
+import unittest.mock
 from pathlib import Path
 
 HUB = Path(__file__).resolve().parent.parent.parent.parent
@@ -236,7 +237,9 @@ def main() -> int:
         snapshot_path = project_root / "_mill" / ".cleanliness-snapshot-test.txt"
         _cleanliness.capture_snapshot(project_root, snapshot_path)
         try:
-            with unittest.mock.patch.object(_cleanliness, "compute_scope_violations", return_value=["plugins_mill_scripts_foo.py"]):
+            with unittest.mock.patch.object(
+                _cleanliness, "compute_scope_violations", return_value=["plugins_mill_scripts_foo.py"]
+            ):
                 rc, captured = _capture_stdout(
                     lambda: _forward_output(
                         "garbage",

@@ -163,6 +163,10 @@ class TestMillpyImplement(unittest.TestCase):
                 "effort": "high",
             },
         )
+        self.mock_compute_scope_violations = _p(
+            _implementer_common._cleanliness, "compute_scope_violations",
+            return_value=[],
+        )
 
     def _run_main(self, argv):
         """Run main(argv) with stdout captured. Returns (rc, captured_stdout)."""
@@ -331,8 +335,12 @@ class TestForwardOutput(unittest.TestCase):
             _implementer_common._subprocess_util, "run",
             return_value=unittest.mock.MagicMock(returncode=1, stdout=""),
         ):
-            with unittest.mock.patch("sys.stdout", buf):
-                rc = millpy_implement._forward_output(output, Path("/fake"))
+            with unittest.mock.patch.object(
+                _implementer_common._cleanliness, "compute_scope_violations",
+                return_value=[],
+            ):
+                with unittest.mock.patch("sys.stdout", buf):
+                    rc = millpy_implement._forward_output(output, Path("/fake"))
         return rc, buf.getvalue()
 
     def test_fo_1_bare_json_on_last_line(self):
@@ -391,11 +399,15 @@ class TestForwardOutput(unittest.TestCase):
             _implementer_common._subprocess_util, "run",
             return_value=unittest.mock.MagicMock(returncode=0, stdout=sha + "\n"),
         ):
-            with unittest.mock.patch("sys.stdout", buf):
-                rc = millpy_implement._forward_output(
-                    '{"status":"success","commit_sha":"abc1234","session_id":"x"}',
-                    Path("/fake"),
-                )
+            with unittest.mock.patch.object(
+                _implementer_common._cleanliness, "compute_scope_violations",
+                return_value=[],
+            ):
+                with unittest.mock.patch("sys.stdout", buf):
+                    rc = millpy_implement._forward_output(
+                        '{"status":"success","commit_sha":"abc1234","session_id":"x"}',
+                        Path("/fake"),
+                    )
         self.assertEqual(rc, 0)
         self.assertEqual(json.loads(buf.getvalue().strip())["commit_sha"], sha)
 
@@ -406,11 +418,15 @@ class TestForwardOutput(unittest.TestCase):
             _implementer_common._subprocess_util, "run",
             return_value=unittest.mock.MagicMock(returncode=1, stdout=""),
         ):
-            with unittest.mock.patch("sys.stdout", buf):
-                rc = millpy_implement._forward_output(
-                    '{"status":"success","commit_sha":"abc1234","session_id":"x"}',
-                    Path("/fake"),
-                )
+            with unittest.mock.patch.object(
+                _implementer_common._cleanliness, "compute_scope_violations",
+                return_value=[],
+            ):
+                with unittest.mock.patch("sys.stdout", buf):
+                    rc = millpy_implement._forward_output(
+                        '{"status":"success","commit_sha":"abc1234","session_id":"x"}',
+                        Path("/fake"),
+                    )
         self.assertEqual(rc, 0)
         self.assertEqual(json.loads(buf.getvalue().strip())["commit_sha"], "abc1234")
 
