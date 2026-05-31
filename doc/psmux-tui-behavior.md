@@ -290,3 +290,23 @@ true real-time streaming.
 **Longer-term option:** run the session inside WSL where real tmux `pipe-pane`
 works. Then the log file is a genuine VT100 byte stream that requires
 ANSI-stripping before use.
+
+---
+
+## capture-pane latency
+
+Measured on this machine (20 consecutive calls, claude TUI active in session):
+
+```
+min:  19.6ms
+max:  26.9ms
+avg:  22.9ms
+```
+
+At a 0.5s polling interval, capture-pane overhead is ~4-5% of wall-clock.
+Not a bottleneck. A poller daemon running at 500ms intervals is practical.
+
+**Go implementation note:** for the long-term Slack streaming framework, Go
+is the right language. One goroutine per psmux session, ticker at 500ms,
+`exec.Command("psmux", "capture-pane", ...)`, diff logic, Slack webhook push.
+23ms per call is negligible. This is a separate submodule/repo from mill.
