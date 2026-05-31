@@ -60,6 +60,7 @@ def _forward_output(
                 head = result.stdout.strip()
                 result_full = _subprocess_util.run(
                     ["git", "-C", str(project_root), "status", "--porcelain", "--untracked-files=no"],
+                    check=True,
                 )
                 if not result_full.stdout.strip():
                     print(json.dumps({"status": "success", "commit_sha": head, "session_id": session_id or "unknown", "inferred": True}))

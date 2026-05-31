@@ -808,10 +808,7 @@ def test_worktree_template_augments_template_cfg() -> None:
         _git_init(wt_root)
 
         # Capture stderr to check for unknown-key warnings
-        stderr_capture = io.StringIO()
-        original_stderr = sys.stderr
-        try:
-            sys.stderr = stderr_capture
+        with patch("sys.stderr", new=io.StringIO()) as mock_stderr:
             with patch.object(_paths, "resolve_wiki_path", side_effect=SystemExit):
                 with patch.object(
                     _config, "resolve_plugin_template_path",
@@ -819,7 +816,7 @@ def test_worktree_template_augments_template_cfg() -> None:
                 ):
                     cfg = _config.load_config(wt_root, wt_root)
 
-            stderr_output = stderr_capture.getvalue()
+            stderr_output = mock_stderr.getvalue()
             # Check that pipeline.max_cards_per_batch doesn't generate unknown-key warning
             assert "unknown key: pipeline.max_cards_per_batch" not in stderr_output, (
                 f"Unexpected unknown-key warning; stderr: {stderr_output!r}"
@@ -828,8 +825,6 @@ def test_worktree_template_augments_template_cfg() -> None:
             assert cfg.get("pipeline", {}).get("max_cards_per_batch") == 10, (
                 f"Expected pipeline.max_cards_per_batch in result; got {cfg.get('pipeline')!r}"
             )
-        finally:
-            sys.stderr = original_stderr
     print("PASS load_config -- worktree template augments template_cfg, no unknown-key warning")
 
 
