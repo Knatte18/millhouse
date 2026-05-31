@@ -75,3 +75,8 @@ class WikiStartupError(WikiError):
 class WikiPathError(WikiError):
     """Invalid or problematic file path."""
     pass
+
+
+class WikiBusyError(WikiError):
+    """Daemon was alive but stayed busy past the retry budget."""
+    pass
