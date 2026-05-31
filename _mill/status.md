@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-Server and Client Protocol
+phase: approved-Consumer Scripts
 slug: task-deps-and-isolation
 branch: task-deps-and-isolation
 plan: _mill/plan
@@ -35,6 +35,7 @@ approved-Protocol Constants  '2026-05-31T09:04:58Z'
 approved-Store Schema and Validation  '2026-05-31T09:13:57Z'
 approved-Render compute_layers and Helpers  '2026-05-31T09:24:27Z'
 approved-Server and Client Protocol  '2026-05-31T09:34:03Z'
+approved-Consumer Scripts  '2026-05-31T09:43:51Z'
 ```
 
 ## Batches
@@ -58,7 +59,7 @@ batches:
     implementer_session: 90498c7a-31c8-481f-a312-451aa350e08b
     start_sha: a6ed87e8c865adfed6cff6243d68d5e409929b09
   - name: Consumer Scripts
-    state: running
+    state: approved
     implementer_session: 0b50b383-e1d7-46a9-9a2b-80214efeccf7
     start_sha: 35bfcb239428294575d01439b927d0f352b9b86e
 ```
