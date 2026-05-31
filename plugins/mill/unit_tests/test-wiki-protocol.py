@@ -25,6 +25,8 @@ from wiki import (
     OP_LIST_TASKS_BRIEF,
     OP_LIST_TASKS_FULL,
     OP_HEALTH,
+    OP_SET_DEPS,
+    OP_MIGRATE_DEPS,
     FIELD_OP,
     FIELD_TOKEN,
     FIELD_OK,
@@ -32,6 +34,9 @@ from wiki import (
     FIELD_ERROR,
     ERR_NOT_FOUND,
     ERR_PROTOCOL,
+    ERR_VALIDATION,
+    WikiError,
+    WikiValidationError,
 )  # noqa: E402
 from wiki._server import WikiServer  # noqa: E402
 from _test_helpers import safe_temp_dir  # noqa: E402
@@ -114,6 +119,44 @@ def main() -> int:
     except Exception as exc:
         fail("OP_HEALTH constant", exc)
 
+    # --- (9a) OP_SET_DEPS constant ---
+    try:
+        assert OP_SET_DEPS == "set_deps", f"OP_SET_DEPS should be 'set_deps', got {OP_SET_DEPS!r}"
+        ok("OP_SET_DEPS constant")
+    except Exception as exc:
+        fail("OP_SET_DEPS constant", exc)
+
+    # --- (9b) OP_MIGRATE_DEPS constant ---
+    try:
+        assert OP_MIGRATE_DEPS == "migrate_deps", f"OP_MIGRATE_DEPS should be 'migrate_deps', got {OP_MIGRATE_DEPS!r}"
+        ok("OP_MIGRATE_DEPS constant")
+    except Exception as exc:
+        fail("OP_MIGRATE_DEPS constant", exc)
+
+    # --- (9c) ERR_VALIDATION constant ---
+    try:
+        assert ERR_VALIDATION == "validation_error", f"ERR_VALIDATION should be 'validation_error', got {ERR_VALIDATION!r}"
+        ok("ERR_VALIDATION constant")
+    except Exception as exc:
+        fail("ERR_VALIDATION constant", exc)
+
+    # --- (9d) WikiValidationError is subclass of WikiError ---
+    try:
+        assert issubclass(WikiValidationError, WikiError), f"WikiValidationError should be subclass of WikiError"
+        ok("WikiValidationError is subclass of WikiError")
+    except Exception as exc:
+        fail("WikiValidationError is subclass of WikiError", exc)
+
+    # --- (9e) WikiValidationError can be raised and caught ---
+    try:
+        try:
+            raise WikiValidationError("test error")
+        except WikiError:
+            pass
+        ok("WikiValidationError can be caught as WikiError")
+    except Exception as exc:
+        fail("WikiValidationError can be caught as WikiError", exc)
+
     # --- (10) Upsert task request round-trip ---
     try:
         req = {
@@ -189,13 +232,13 @@ def main() -> int:
     except Exception as exc:
         fail("old OP_WRITE is rejected", exc)
 
-    # --- (15) PROTOCOL_VERSION is 2 (integer) ---
+    # --- (15) PROTOCOL_VERSION is 3 (integer) ---
     try:
-        assert PROTOCOL_VERSION == 2, f"expected 2, got {PROTOCOL_VERSION!r}"
+        assert PROTOCOL_VERSION == 3, f"expected 3, got {PROTOCOL_VERSION!r}"
         assert isinstance(PROTOCOL_VERSION, int), f"expected int, got {type(PROTOCOL_VERSION)}"
-        ok("PROTOCOL_VERSION is 2 (integer)")
+        ok("PROTOCOL_VERSION is 3 (integer)")
     except Exception as exc:
-        fail("PROTOCOL_VERSION is 2 (integer)", exc)
+        fail("PROTOCOL_VERSION is 3 (integer)", exc)
 
     # --- (16) List tasks brief request ---
     try:
