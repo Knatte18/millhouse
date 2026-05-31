@@ -39,5 +39,7 @@ batches:
     implementer_session: 2d401bcb-e64f-4747-8532-a1255598a831
     start_sha: 1197decb6dbef95da0aeff5ed3034690aa3044dc
   - name: orchestrator-integration
-    state: pending
+    state: running
+    implementer_session: 784fb949-22dc-4f71-9afa-d07b37082ce4
+    start_sha: 118bb4436991b55012dc2f33185f9922d467800d
 ```
