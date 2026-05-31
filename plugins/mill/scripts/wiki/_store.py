@@ -36,7 +36,9 @@ class Store:
             new_task = {
                 "id": next_id,
                 "slug": slug,
-                "group": None,
+                "depends_on": [],
+                "isolated": False,
+                "deferred": False,
                 "brief": "",
                 "body": "",
                 "status": None,
@@ -100,7 +102,9 @@ class Store:
                 new_task = {
                     "id": next_id,
                     "slug": slug,
-                    "group": None,
+                    "depends_on": [],
+                    "isolated": False,
+                    "deferred": False,
                     "brief": "",
                     "body": "",
                     "status": None,
@@ -140,7 +144,9 @@ class Store:
             new_task = {
                 "id": next_id,
                 "slug": upserting_slug,
-                "group": None,
+                "depends_on": [],
+                "isolated": False,
+                "deferred": False,
                 "brief": "",
                 "body": "",
                 "status": None,
