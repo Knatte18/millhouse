@@ -283,6 +283,45 @@ class TestMillpyImplement(unittest.TestCase):
             self.mock_reviewers_load.return_value, "sonnethigh"
         )
 
+    def test_11_brief_size_guard_fires(self):
+        """Brief exceeds max_implementer_prompt_chars -> stuck/transient, no LLM call."""
+        self.mock_load_config.return_value = {
+            "paths": {"status_md": "_mill/status.md"},
+            "roles": {"implementer": {"self_fix_rounds": 2, "model": "haiku"}},
+            "llm": {"implementer_timeout": 1800, "max_implementer_prompt_chars": 10},
+        }
+        with unittest.mock.patch.object(millpy_implement._render, "render", return_value="x" * 20):
+            with unittest.mock.patch.object(millpy_implement._implementer_claude, "run") as mock_run:
+                rc, out = self._run_main(["test-batch"])
+
+        self.assertEqual(rc, 0)
+        data = json.loads(out.strip().splitlines()[-1])
+        self.assertEqual(data["status"], "stuck")
+        self.assertEqual(data["stuck_type"], "transient")
+        self.assertIn("max_implementer_prompt_chars", data["reason"])
+        mock_run.assert_not_called()
+
+    def test_12_brief_size_guard_disabled(self):
+        """max_implementer_prompt_chars = 0 (disabled) -> guard does not fire."""
+        self.mock_load_config.return_value = {
+            "paths": {"status_md": "_mill/status.md"},
+            "roles": {"implementer": {"self_fix_rounds": 2, "model": "haiku"}},
+            "llm": {"implementer_timeout": 1800, "max_implementer_prompt_chars": 0},
+        }
+        with unittest.mock.patch.object(millpy_implement._render, "render", return_value="x" * 20):
+            with unittest.mock.patch.object(
+                millpy_implement._implementer_claude, "run",
+                return_value=(
+                    '{"status":"success","commit_sha":"abc","session_id":"fake"}\n',
+                    "fake-session",
+                ),
+            ) as mock_run:
+                rc, out = self._run_main(["test-batch"])
+
+        self.assertEqual(rc, 0)
+        # Verify that _implementer_claude.run was called (the guard did not fire)
+        mock_run.assert_called_once()
+
 
 class TestForwardOutput(unittest.TestCase):
 
