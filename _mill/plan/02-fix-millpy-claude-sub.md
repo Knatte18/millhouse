@@ -105,8 +105,8 @@ diffs within the same file; apply them sequentially.
   `"for shortcuts"` and `"esc to interrupt"`, not `"❯"`. Rewrite the scenarios:
   - Scenario (a): first two captures return `"? for shortcuts"`. Assert returns
     `True`.
-  - Scenario (b): first two captures return `"esc to interrupt"`, next two
-    return `"? for shortcuts"` twice → True after phase 2 stabilises.
+  - Scenario (b): first capture returns `"esc to interrupt"`, next two return
+    `"? for shortcuts"` twice → True after phase 2 stabilises.
   - Scenario (c): all captures return `"esc to interrupt"` or empty (never
     `"for shortcuts"`), timeout fires → returns `False`.
   (The `time.monotonic` side_effect lists in Scenarios a/b/c must account for
