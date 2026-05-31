@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-orchestration-hardening-r2
 branch: hanf/mill-orchestration-hardening-r2
 plan: _mill/plan
@@ -21,4 +21,17 @@ plan-review-r1  '2026-05-31T08:45:44Z'
 plan-fix-r1  '2026-05-31T08:45:44Z'
 plan-review-r2  '2026-05-31T08:52:20Z'
 planned  '2026-05-31T08:52:31Z'
+implementing  '2026-05-31T08:55:33Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: text-and-template
+    state: pending
+  - name: fixer-inferred-success
+    state: pending
+  - name: validate-and-config
+    state: pending
 ```
