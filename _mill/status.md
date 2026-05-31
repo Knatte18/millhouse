@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-bg-worker-liveness
+phase: approved-orchestrator-integration
 slug: infra-robustness-windows
 branch: infra-robustness-windows
 plan: _mill/plan
@@ -24,6 +24,7 @@ planned  '2026-05-30T15:16:26Z'
 implementing  '2026-05-31T07:45:53Z'
 approved-wiki-client-robustness  '2026-05-31T07:49:01Z'
 approved-bg-worker-liveness  '2026-05-31T07:51:29Z'
+approved-orchestrator-integration  '2026-05-31T07:56:11Z'
 ```
 
 ## Batches
@@ -39,7 +40,7 @@ batches:
     implementer_session: 2d401bcb-e64f-4747-8532-a1255598a831
     start_sha: 1197decb6dbef95da0aeff5ed3034690aa3044dc
   - name: orchestrator-integration
-    state: running
+    state: approved
     implementer_session: 784fb949-22dc-4f71-9afa-d07b37082ce4
     start_sha: 118bb4436991b55012dc2f33185f9922d467800d
 ```
