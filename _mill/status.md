@@ -29,7 +29,9 @@ implementing  '2026-05-31T09:34:16Z'
 ```yaml
 batches:
   - name: timeout-and-brief-size-guard
-    state: pending
+    state: running
+    implementer_session: ea83e81e-1c50-477d-ba44-5d04ae651b27
+    start_sha: 11980545e58b37ba5af182e3e077999301e5cad8
   - name: scope-violations-and-brief
     state: pending
   - name: unit-tests
