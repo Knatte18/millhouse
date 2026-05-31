@@ -29,7 +29,9 @@ implementing  '2026-05-31T07:45:53Z'
 ```yaml
 batches:
   - name: wiki-client-robustness
-    state: pending
+    state: running
+    implementer_session: 0202c2d3-3a70-462e-b31a-101a1472627c
+    start_sha: 0a859fecd9a5adba477cf30c3011095de33a3bd2
   - name: bg-worker-liveness
     state: pending
   - name: orchestrator-integration
