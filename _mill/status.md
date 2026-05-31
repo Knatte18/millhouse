@@ -40,6 +40,6 @@ batches:
     start_sha: fb6360cb8deed6e3c52fffd68212b86e9607ebca
   - name: unit-tests
     state: running
-    implementer_session: 4014b154-4cb6-40d4-80ca-87c12b70674a
-    start_sha: 0c897b8b45614a6b2346e49d4ddedba544c86618
+    implementer_session: 6905f329-010a-48ae-b1e0-c9e27a7e22fc
+    start_sha: e166c510537ae1da38184662f2f16c309e4d3e0f
 ```
