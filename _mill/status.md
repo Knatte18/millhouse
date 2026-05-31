@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-reviewing
+phase: holistic-fixing
 slug: infra-robustness-windows
 branch: infra-robustness-windows
 plan: _mill/plan
@@ -28,6 +28,7 @@ approved-orchestrator-integration  '2026-05-31T07:56:11Z'
 holistic-reviewing  '2026-05-31T07:56:37Z'
 holistic-fixing  '2026-05-31T08:05:26Z'
 holistic-reviewing  '2026-05-31T08:08:26Z'
+holistic-fixing  '2026-05-31T08:14:54Z'
 ```
 
 ## Batches
