@@ -88,8 +88,7 @@ def extended_title(task: dict) -> str:
 
 def render_order(tasks: list[dict]) -> list[dict]:
     layers = compute_layers(tasks)
-    for task in tasks:
-        task["layer"] = layers[task["slug"]]
+    tasks_with_layer = [{**task, "layer": layers[task["slug"]]} for task in tasks]
 
     letter_order = "ABCDEFGHIJKLMNOPQRSTUVWXY"
     bucket_order = list(letter_order) + ["Z", "__deferred__", "__done__"]
@@ -103,7 +102,7 @@ def render_order(tasks: list[dict]) -> list[dict]:
         task_id = task.get("id", 0)
         return (bucket_index, task_id)
 
-    return sorted(tasks, key=sort_key)
+    return sorted(tasks_with_layer, key=sort_key)
 
 
 def render(tasks: list[dict]) -> dict[str, str]:
