@@ -26,6 +26,7 @@ If haiku is to remain a supported implementer tier (cheap-tier dispatch, mass-ba
 - `plugins/mill/unit_tests/test-implementer-common.py` — tests for scope-violations field in `_forward_output` output.
 - `plugins/mill/unit_tests/test-millpy-implement.py` — test for oversized-prompt → `stuck/transient`.
 - `mill-config.yaml` (hub config) — add `llm.max_implementer_prompt_chars` default.
+- `plugins/mill/templates/mill-config.yaml` — add matching `max_implementer_prompt_chars: 0` to keep hub file and plugin template in sync (CLAUDE.md requirement).
 
 **Out:**
 - No changes to `_llm_claude.py` or `_subprocess_util.py` — the per-reviewer timeout is consumed at the `millpy-implement.py` layer before the LLM call, and the brief-size guard fires before the subprocess is spawned.
@@ -43,6 +44,7 @@ If haiku is to remain a supported implementer tier (cheap-tier dispatch, mass-ba
 - Rationale: haiku is faster than Sonnet when it works; 1800s is appropriate for Sonnet but silently wastes 30 min for haiku. A 600s timeout surfaces the hang as `stuck/transient` (retryable) in one-third of the time. Per-reviewer override keeps the config co-located with the model spec rather than duplicating it in `mill-config.yaml`.
 - Rejected: A separate `llm.haiku_timeout` key in `mill-config.yaml` — splits the haiku config across two files.
 - Rejected: No-progress monitor in `_subprocess_util` that kills on empty stdout — complex on Windows (the watchdog accumulates lines in a buffer; detecting "no new lines in N seconds" requires threading changes) and would affect all models.
+- Note on `_reviewers.py` validation: `_validate_and_return` checks required fields (`type`, `provider`, `model`) but does not reject unknown extra keys, so adding `timeout:` to the template entry passes validation silently with no warning or error. No validator changes needed.
 
 ### brief-size guard in millpy-implement.py
 
@@ -57,6 +59,8 @@ If haiku is to remain a supported implementer tier (cheap-tier dispatch, mass-ba
 - Decision: Add `compute_scope_violations(worktree: Path) -> list[str]` to `_cleanliness.py`. It runs `git -C <worktree> status --porcelain --untracked-files=normal`, collects `?? ` lines, and returns those whose paths do NOT start with `_mill/`. In `_forward_output`, call this after the main status determination. If violations is non-empty, merge it into the JSON output as `"scope_violations": [...]`. For the inferred-success path specifically, if violations exist, downgrade the result to `{"status": "stuck", "stuck_type": "logic", "reason": "untracked files outside scope: ...", "scope_violations": [...]}`. For the explicit-JSON path (LLM-emitted JSON), add `scope_violations` as an extra field without changing `status`.
 - Rationale: The path-mangle scenario (haiku writes 6 files at root, none committed) is invisible to `compute_new_dirt` which uses `--untracked-files=no`. `compute_scope_violations` uses `--untracked-files=normal` (ignores `.gitignore`d files automatically) and filters to files outside `_mill/`, which is the only writable per-batch directory. The function is separate rather than extending `compute_new_dirt` to avoid breaking its existing API and tests.
 - Inferred-success downgrade: if haiku committed AND wrote untracked mangled files at root, the inferred-success path would otherwise report success. Downgrading to `stuck/logic` when violations exist is conservative but correct — if the implementer wrote outside scope, the operator must verify.
+- `compute_scope_violations` implementation: use `_pygit2_util.status_porcelain(worktree, include_untracked=True)` (consistent with `_cleanliness.py`'s existing pattern, mock-testable without a real git repo). Filter the returned lines to those starting with `?? ` and whose paths do not start with `_mill/`. `_pygit2_util` already excludes `.gitignore`d files from its untracked output.
+- `scope_violations` on the `no structured report` fallback path: when the final `{"status":"stuck","stuck_type":"logic","reason":"no structured report"}` fallback fires AND violations is non-empty, merge `scope_violations` into that JSON so the operator has full context.
 - Rejected: Extending `compute_new_dirt` to include untracked — breaks the API contract relied on by `test-cleanliness.py` (all cases assume tracked-only output).
 - Rejected: Checking only in `millpy-implement.py` post-run — misses the fixer path (`millpy-fix.py` also calls `_forward_output`).
 
@@ -128,7 +132,7 @@ Both already pass `project_root`. No signature change needed — `compute_scope_
 - Untracked file at worktree root (e.g. `plugins_mill_scripts_foo.py`) → returned in list.
 - Untracked file under `_mill/` (e.g. `_mill/some-scratch.txt`) → NOT returned (filtered out).
 - Untracked file in a subdirectory outside `_mill/` (e.g. `plugins/mill/scripts/new_file.py`) → returned.
-- Uses a real `git init` fixture (same pattern as `test-implementer-common.py`) since `compute_scope_violations` calls `git status`.
+- Uses `unittest.mock.patch("_cleanliness._pygit2_util.status_porcelain", ...)` to control returned lines — no real git repo needed (consistent with existing `test-cleanliness.py` mock pattern).
 
 ### test-implementer-common.py — new cases for scope violations in _forward_output
 
