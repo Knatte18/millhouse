@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 
-PROTOCOL_VERSION: int = 2
+PROTOCOL_VERSION: int = 3
 
 # Operations
 OP_UPSERT_TASK = "upsert_task"
@@ -77,4 +77,9 @@ class WikiStartupError(WikiError):
 
 class WikiPathError(WikiError):
     """Invalid or problematic file path."""
+    pass
+
+
+class WikiValidationError(WikiError):
+    """Invalid task data rejected by the store."""
     pass
