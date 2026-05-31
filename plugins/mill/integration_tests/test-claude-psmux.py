@@ -22,14 +22,12 @@ import _psmux  # noqa: E402
 
 
 def _check_prerequisites() -> bool:
-    """Check if psmux, claude, and pwsh are available. Print skip message if not."""
+    """Check if psmux and claude are available. Print skip message if not."""
     missing = []
     if shutil.which("psmux") is None:
         missing.append("psmux")
     if shutil.which("claude") is None:
         missing.append("claude")
-    if shutil.which("pwsh") is None:
-        missing.append("pwsh")
 
     if missing:
         print(f"[skip] missing prerequisites: {', '.join(missing)}", file=sys.stderr)
@@ -240,6 +238,76 @@ def test_implementer() -> int:
         return 1 if isinstance(exc, AssertionError) else 1
 
 
+def test_keep_alive_reuse() -> int:
+    """Test keep-alive reuse: run with --keep-alive, then reuse the session."""
+    try:
+        # First call: run with --keep-alive
+        result1 = subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPTS / "millpy-claude-sub.py"),
+                "--mode", "bulk",
+                "--model", "claude-sonnet-4-6",
+                "--psmux-session", "mill-test-reuse",
+                "--keep-alive",
+            ],
+            input="Reply with the single word FIRST and nothing else.",
+            capture_output=True,
+            text=True,
+            timeout=400,
+        )
+
+        # Assertion: first call returncode must be 0
+        if result1.returncode != 0:
+            raise AssertionError(
+                f"first call exited with code {result1.returncode}\n"
+                f"stderr: {result1.stderr}"
+            )
+
+        # Assertion: response must contain FIRST
+        if "FIRST" not in result1.stdout:
+            raise AssertionError(f"first response does not contain FIRST:\n{result1.stdout}")
+
+        # Second call: reuse the session without --keep-alive
+        result2 = subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPTS / "millpy-claude-sub.py"),
+                "--mode", "bulk",
+                "--model", "claude-sonnet-4-6",
+                "--psmux-session", "mill-test-reuse",
+            ],
+            input="Reply with the single word SECOND and nothing else.",
+            capture_output=True,
+            text=True,
+            timeout=400,
+        )
+
+        # Assertion: second call returncode must be 0
+        if result2.returncode != 0:
+            raise AssertionError(
+                f"second call exited with code {result2.returncode}\n"
+                f"stderr: {result2.stderr}"
+            )
+
+        # Assertion: second response must contain SECOND
+        if "SECOND" not in result2.stdout:
+            raise AssertionError(f"second response does not contain SECOND:\n{result2.stdout}")
+
+        # Assertion: FIRST must NOT appear in second response (no bleed-through)
+        if "FIRST" in result2.stdout:
+            raise AssertionError(
+                f"second response contains FIRST (auto-suggest bleed-through):\n{result2.stdout}"
+            )
+
+        # Cleanup assertion
+        _assert_cleanup()
+        return 0
+
+    except Exception as exc:
+        return 1 if isinstance(exc, AssertionError) else 1
+
+
 def main() -> int:
     """Run all tests and report results."""
     # Check prerequisites
@@ -250,6 +318,7 @@ def main() -> int:
         ("test_bulk", test_bulk),
         ("test_tool_use", test_tool_use),
         ("test_implementer", test_implementer),
+        ("test_keep_alive_reuse", test_keep_alive_reuse),
     ]
 
     failures = []

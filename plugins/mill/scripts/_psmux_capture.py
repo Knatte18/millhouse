@@ -15,17 +15,24 @@ class MarkerNotFoundError(Exception):
 def extract_response(snapshot: str) -> str:
     """Extract response from a psmux capture-pane snapshot.
 
-    Finds the idle prompt character (❯) at the end and the bullet prefix (● )
-    at the start, extracts the response between them, and returns it stripped.
+    Finds the response text between a bullet-prefixed first line (● ) and the
+    last line before the idle prompt (❯), excluding the completion marker
+    (✻ Verb for Ns) and separator line (────) that appear after the response.
+
+    Walks backwards from the idle prompt, skipping empty lines, lines starting
+    with the completion marker (✻), and separator lines (all ─ characters).
+    The first non-skipped line is the end of response content. Then searches
+    backwards from that point to find the bullet prefix (● ).
 
     Args:
         snapshot: Full psmux capture-pane snapshot.
 
     Returns:
-        Text from the bullet-prefixed first line through the line before idle.
+        Text from the bullet-prefixed first line through the last line of
+        actual response content (before separator/completion marker).
 
     Raises:
-        MarkerNotFoundError: If idle char or bullet prefix is missing.
+        MarkerNotFoundError: If idle char, content boundary, or bullet prefix is missing.
     """
     lines = snapshot.split("\n")
 
@@ -40,10 +47,37 @@ def extract_response(snapshot: str) -> str:
     if idle_idx is None:
         raise MarkerNotFoundError("idle char not found in snapshot")
 
-    # Find the first line (searching backwards) starting with bullet prefix
+    # Walk backwards from idle_idx - 1, skipping:
+    # (a) empty lines
+    # (b) lines starting with ✻ (completion marker)
+    # (c) separator lines (all ─ characters when stripped)
+    content_end_idx = None
+    for i in range(idle_idx - 1, -1, -1):
+        stripped = lines[i].strip()
+
+        # Skip empty lines
+        if not stripped:
+            continue
+
+        # Skip completion marker lines
+        if stripped.startswith("✻"):
+            continue
+
+        # Skip separator lines (all ─ characters)
+        if stripped and all(c == "─" for c in stripped):
+            continue
+
+        # Found the last line of actual content
+        content_end_idx = i
+        break
+
+    if content_end_idx is None:
+        raise MarkerNotFoundError("no response content found before idle char")
+
+    # Find the first line (searching backwards from content_end_idx) starting with bullet prefix
     bullet_prefix = "● "
     bullet_idx = None
-    for i in range(idle_idx - 1, -1, -1):
+    for i in range(content_end_idx, -1, -1):
         if lines[i].strip().startswith(bullet_prefix):
             bullet_idx = i
             break
@@ -52,7 +86,7 @@ def extract_response(snapshot: str) -> str:
         raise MarkerNotFoundError("bullet prefix not found before idle char in snapshot")
 
     # Extract and process the response lines
-    response_lines = lines[bullet_idx:idle_idx]
+    response_lines = lines[bullet_idx:content_end_idx + 1]
 
     # Strip bullet prefix from the first line
     first_line = response_lines[0].strip()[2:]  # [2:] removes "● "

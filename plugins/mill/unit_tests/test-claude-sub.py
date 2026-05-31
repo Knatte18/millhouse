@@ -12,7 +12,6 @@ import importlib.util
 import io
 import sys
 import tempfile
-import time
 import unittest.mock as mock
 from pathlib import Path
 
@@ -85,9 +84,14 @@ def main() -> int:
                     assert m_new_session.call_count == 0, "new_session should not be called on reuse"
                     # Should return 0 on success
                     assert ret == 0, f"S1: expected 0, got {ret}"
-                    # Should call _wait_for_idle_prompt exactly once (reuse check only, not Step 9 boot wait)
-                    assert m_send_keys.call_count == 3, \
-                        f"send_keys should be called 3 times (Step 10 bracketed paste + Enter), got {m_send_keys.call_count}"
+                    # Should call send_keys 4 times: Escape (reuse clear), then Step 10 bracketed paste (3 calls) + Enter
+                    assert m_send_keys.call_count == 4, \
+                        f"send_keys should be called 4 times (Escape + bracketed paste + Enter), got {m_send_keys.call_count}"
+                    # Verify the first call is Escape
+                    assert m_send_keys.call_args_list[0][0][1] == "Escape", \
+                        f"send_keys first call should be 'Escape', got {m_send_keys.call_args_list[0][0][1]}"
+                    assert m_send_keys.call_args_list[0][1].get("enter") is False, \
+                        f"send_keys first call should have enter=False, got {m_send_keys.call_args_list[0][1]}"
                     # Verify the last call is the Enter key
                     assert m_send_keys.call_args[0][1] == "Enter", \
                         f"send_keys last call should be with 'Enter', got {m_send_keys.call_args[0][1]}"
@@ -661,16 +665,101 @@ def main() -> int:
         print(f"FAIL: S11 - {e}")
         errors += 1
 
+    # ── S12: _resolve_shell_path reads config value ─────────────────────────
+    try:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            mod = _load_claude_sub_module()
+
+            with mock.patch("_config.load_config", return_value={"llm": {"claude": {"psmux": {"shell_path": "C:/my/pwsh.exe"}}}}):
+                result = mod._resolve_shell_path()
+                assert result == "C:/my/pwsh.exe", f"S12: expected 'C:/my/pwsh.exe', got {result}"
+                print("PASS: S12 (_resolve_shell_path reads config value)")
+    except Exception as e:
+        print(f"FAIL: S12 - {e}")
+        errors += 1
+
+    # ── S13: _resolve_shell_path defaults to pwsh ──────────────────────────
+    try:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            mod = _load_claude_sub_module()
+
+            with mock.patch("_config.load_config", return_value={}):
+                result = mod._resolve_shell_path()
+                assert result == "pwsh", f"S13: expected 'pwsh', got {result}"
+                print("PASS: S13 (_resolve_shell_path defaults to pwsh)")
+    except Exception as e:
+        print(f"FAIL: S13 - {e}")
+        errors += 1
+
+    # ── S14: new_session called with rows=100 ────────────────────────────────
+    try:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            mod = _load_claude_sub_module()
+            tmpdir_path = Path(tmpdir)
+            scratch_dir = tmpdir_path / ".scratch"
+            scratch_dir.mkdir(exist_ok=True)
+
+            def mock_list_sessions():
+                return []
+
+            def mock_capture_pane(session_name, **kwargs):
+                return "  ❯ \n● ok\n  ❯ "
+
+            def mock_extract_response(snapshot):
+                return "ok"
+
+            saved_argv = sys.argv[:]
+            saved_stdin = sys.stdin
+            try:
+                sys.argv = [
+                    str(_CLAUDE_SUB_PY),
+                    "--mode", "bulk",
+                    "--model", "claude-opus",
+                ]
+                sys.stdin = io.StringIO("test prompt")
+
+                with mock.patch("_psmux.new_session") as m_new_session, \
+                     mock.patch("_psmux.set_history_limit"), \
+                     mock.patch("_psmux.list_sessions", side_effect=mock_list_sessions), \
+                     mock.patch("_psmux.send_keys"), \
+                     mock.patch("_psmux.load_buffer"), \
+                     mock.patch("_psmux.paste_buffer"), \
+                     mock.patch("_psmux.capture_pane", side_effect=mock_capture_pane), \
+                     mock.patch("_psmux.kill_session"), \
+                     mock.patch("_psmux_capture.extract_response", side_effect=mock_extract_response), \
+                     mock.patch.object(mod, "_wait_for_marker_in_pane", return_value=True), \
+                     mock.patch.object(mod, "_wait_for_idle_prompt", return_value=True), \
+                     mock.patch.object(mod, "_wait_for_idle_stable", return_value=True), \
+                     mock.patch("_paths.resolve_git_root", return_value=tmpdir_path), \
+                     mock.patch("_config.load_config", return_value={}), \
+                     mock.patch("sys.stdout", new_callable=io.StringIO):
+
+                    ret = mod.main()
+
+                    # Check that new_session was called
+                    m_new_session.assert_called_once()
+                    call_kwargs = m_new_session.call_args[1]
+                    assert call_kwargs.get("rows") == 100, \
+                        f"S14: expected rows=100, got {call_kwargs.get('rows')}"
+                    assert ret == 0, f"S14: expected 0, got {ret}"
+                    print("PASS: S14 (new_session called with rows=100)")
+            finally:
+                sys.argv = saved_argv
+                sys.stdin = saved_stdin
+    except Exception as e:
+        print(f"FAIL: S14 - {e}")
+        errors += 1
+
     # ── Direct unit tests for _wait_for_idle_stable ──────────────────────────
     try:
         mod = _load_claude_sub_module()
         _wait_for_idle_stable = mod._wait_for_idle_stable
 
-        # Scenario (a): capture returns idle for first two polls; monotonic starts at 0.0
+        # Scenario (a): Phase 1 times out (no "esc to interrupt"), Phase 2 finds "for shortcuts" twice; return True
         try:
-            with mock.patch("_psmux.capture_pane", side_effect=["❯ idle\n", "❯ idle\n"]), \
+            with mock.patch("_psmux.capture_pane", side_effect=["? for shortcuts\n", "? for shortcuts\n", "? for shortcuts\n"]), \
                  mock.patch("time.sleep"), \
-                 mock.patch("time.monotonic", side_effect=[0.0, 0.0, 1.0, 1.0]):
+                 mock.patch("time.monotonic", side_effect=[0.0, 61.0, 0.0, 1.0]):
                 result = _wait_for_idle_stable(session_name="s", timeout_s=5.0)
                 assert result is True, f"Scenario (a): expected True, got {result}"
             print("[OK] _wait_for_idle_stable scenario (a)")
@@ -678,11 +767,11 @@ def main() -> int:
             print(f"[FAIL] _wait_for_idle_stable scenario (a): {e}")
             errors += 1
 
-        # Scenario (b): captures return varied idle state; finally stable
+        # Scenario (b): Phase 1 finds "esc to interrupt", Phase 2 finds "? for shortcuts" twice → True
         try:
-            with mock.patch("_psmux.capture_pane", side_effect=["❯ idle\n", "no idle\n", "❯ idle\n", "❯ idle\n"]), \
+            with mock.patch("_psmux.capture_pane", side_effect=["esc to interrupt\n", "? for shortcuts\n", "? for shortcuts\n"]), \
                  mock.patch("time.sleep"), \
-                 mock.patch("time.monotonic", side_effect=[0.0, 0.0, 1.0, 1.0, 2.0, 2.0, 3.0, 3.0]):
+                 mock.patch("time.monotonic", side_effect=[0.0, 1.0, 0.0, 1.0, 2.0]):
                 result = _wait_for_idle_stable(session_name="s", timeout_s=5.0)
                 assert result is True, f"Scenario (b): expected True, got {result}"
             print("[OK] _wait_for_idle_stable scenario (b)")
@@ -690,11 +779,11 @@ def main() -> int:
             print(f"[FAIL] _wait_for_idle_stable scenario (b): {e}")
             errors += 1
 
-        # Scenario (c): all captures return no idle; timeout fires
+        # Scenario (c): Phase 1 finds marker quickly, Phase 2 never finds "for shortcuts", timeout fires → returns False
         try:
-            with mock.patch("_psmux.capture_pane", return_value="no idle"), \
+            with mock.patch("_psmux.capture_pane", side_effect=["esc to interrupt\n", ""]), \
                  mock.patch("time.sleep"), \
-                 mock.patch("time.monotonic", side_effect=[0.0, 0.0, 6.0, 6.0]):
+                 mock.patch("time.monotonic", side_effect=[0.0, 0.0, 6.0]):
                 result = _wait_for_idle_stable(session_name="s", timeout_s=5.0)
                 assert result is False, f"Scenario (c): expected False, got {result}"
             print("[OK] _wait_for_idle_stable scenario (c)")
@@ -704,6 +793,39 @@ def main() -> int:
 
     except Exception as e:
         print(f"FAIL: _wait_for_idle_stable unit tests - {e}")
+        errors += 1
+
+    # ── Direct unit tests for _wait_for_idle_prompt ──────────────────────────
+    try:
+        mod = _load_claude_sub_module()
+        _wait_for_idle_prompt = mod._wait_for_idle_prompt
+
+        # Scenario (d): capture returns "? for shortcuts" on the first call; return True
+        try:
+            with mock.patch("_psmux.capture_pane", return_value="? for shortcuts"), \
+                 mock.patch("time.sleep"), \
+                 mock.patch("time.monotonic", side_effect=[0.0, 0.0]):
+                result = _wait_for_idle_prompt(session_name="s", timeout_s=5.0)
+                assert result is True, f"Scenario (d): expected True, got {result}"
+            print("[OK] _wait_for_idle_prompt scenario (d)")
+        except Exception as e:
+            print(f"[FAIL] _wait_for_idle_prompt scenario (d): {e}")
+            errors += 1
+
+        # Scenario (e): capture always returns "❯ " (never contains "for shortcuts"), timeout fires
+        try:
+            with mock.patch("_psmux.capture_pane", return_value="❯ "), \
+                 mock.patch("time.sleep"), \
+                 mock.patch("time.monotonic", side_effect=[0.0, 0.0, 6.0, 6.0]):
+                result = _wait_for_idle_prompt(session_name="s", timeout_s=5.0)
+                assert result is False, f"Scenario (e): expected False, got {result}"
+            print("[OK] _wait_for_idle_prompt scenario (e)")
+        except Exception as e:
+            print(f"[FAIL] _wait_for_idle_prompt scenario (e): {e}")
+            errors += 1
+
+    except Exception as e:
+        print(f"FAIL: _wait_for_idle_prompt unit tests - {e}")
         errors += 1
 
     return errors

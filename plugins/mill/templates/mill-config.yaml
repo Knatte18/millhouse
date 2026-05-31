@@ -104,6 +104,7 @@ llm:
   claude:
     psmux:
       via_psmux: false  # Route claude calls through psmux for subscription billing (requires psmux on PATH; mill-go reaps sessions automatically after each implement-review-fix loop)
+      shell_path: pwsh  # Shell binary passed to new_session. Use the full path if pwsh on PATH is a broken stub (e.g. C:/Code/tools/powershell7/pwsh.exe on Windows machines with App Execution Alias disabled).
       reuse_idle_timeout_s: 10  # Seconds to wait for an existing psmux session to return to its idle prompt before reuse fails
 
 # ---------------------------------------------------------------------------
