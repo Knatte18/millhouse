@@ -44,36 +44,18 @@ requires real psmux and claude at runtime.
   continue to pass — do not modify them.
 - **Commit:** `test(_psmux_capture): cover ✻ stripping and separator boundary`
 
-### Card 9: Update test-claude-sub.py for new idle detection, Escape, shell_path, rows
+### Card 9: Add shell_path and rows=100 tests to test-claude-sub.py
 
 - **Context:**
   - `plugins/mill/scripts/millpy-claude-sub.py`
-  - `plugins/mill/scripts/_psmux.py`
 - **Edits:**
   - `plugins/mill/unit_tests/test-claude-sub.py`
 - **Creates:** none
 - **Deletes:** none
 - **Requirements:**
-  The S1-S11 tests mock `_wait_for_idle_prompt` and `_wait_for_idle_stable` at
-  the module level — their `side_effect` / `return_value` shapes don't change.
-  These tests need no structural changes EXCEPT: S1 asserts
-  `m_send_keys.call_count == 3` for the reuse path (before the Escape fix). After
-  Card 5, the reuse path sends one extra `send_keys("Escape", enter=False)` call
-  before the Step 10 bracketed paste sequence. Update S1's assertion to
-  `m_send_keys.call_count == 4` and verify the first call is `Escape`.
-
-  Fix the three direct `_wait_for_idle_stable` unit tests (Scenarios a/b/c at
-  the bottom of the file). They currently mock `_psmux.capture_pane` to return
-  `"❯ idle\n"`. After Card 4's rewrite, the function checks for
-  `"for shortcuts"` and `"esc to interrupt"`, not `"❯"`. Rewrite the scenarios:
-  - Scenario (a): first two captures return `"? for shortcuts"`. Assert returns
-    `True`.
-  - Scenario (b): first two captures return `"esc to interrupt"`, next two
-    return `"? for shortcuts"` twice → True after phase 2 stabilises.
-  - Scenario (c): all captures return `"esc to interrupt"` or empty (never
-    `"for shortcuts"`), timeout fires → returns `False`.
-  (The `time.monotonic` side_effect lists in Scenarios a/b/c must account for
-  Phase 1 polls as well — adjust as needed so the loops terminate correctly.)
+  The S1 assertion update (call_count 3→4, Escape as first call) and Scenarios
+  a/b/c rewrites were already applied in Batch 2 Cards 4 and 5. This card adds
+  only the three new tests covering the Batch 2 Card 2 changes.
 
   Add new test **S12: `_resolve_shell_path` reads config value**: mock
   `_config.load_config` to return
@@ -86,7 +68,7 @@ requires real psmux and claude at runtime.
   Add new test **S14: `new_session` called with `rows=100`**: run through the
   new-session path (auto-generated session name, success). Assert the
   `rows` kwarg passed to `_psmux.new_session` equals 100.
-- **Commit:** `test(claude-sub): cover idle detection rewrite, Escape on reuse, shell_path, rows=100`
+- **Commit:** `test(claude-sub): cover shell_path config and rows=100`
 
 ### Card 10: Add cwd psmux test to test-llm-claude.py
 
@@ -143,4 +125,7 @@ after deploying to confirm end-to-end behaviour.
 
 The three unit test files were selected because this batch edits exactly them.
 `run-all.py --only` with these three names is narrow; it does not run the full
-77-file suite. This is the correct scope for this batch.
+77-file suite. Note: `test-claude-sub.py` was already fully updated by Batch 2
+(S1 + Scenarios a/b/c); this batch only adds S12/S13/S14. The `verify:` here
+confirms the full `test-claude-sub.py` suite remains green after adding those
+three tests.

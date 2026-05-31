@@ -68,6 +68,7 @@ diffs within the same file; apply them sequentially.
   - `doc/psmux-tui-behavior.md`
 - **Edits:**
   - `plugins/mill/scripts/millpy-claude-sub.py`
+  - `plugins/mill/unit_tests/test-claude-sub.py`
 - **Creates:** none
 - **Deletes:** none
 - **Requirements:**
@@ -86,6 +87,19 @@ diffs within the same file; apply them sequentially.
   `POLL_INTERVAL_S`. Keep the same signature
   `(session_name: str, timeout_s: float) -> bool`. Update the docstring to
   describe the two-phase approach and the fall-through behaviour.
+
+  Also update the three direct `_wait_for_idle_stable` unit tests (Scenarios
+  a/b/c) in `test-claude-sub.py`. They currently mock `_psmux.capture_pane`
+  to return `"❯ idle\n"` — after this rewrite the function checks for
+  `"for shortcuts"` and `"esc to interrupt"`, not `"❯"`. Rewrite the scenarios:
+  - Scenario (a): first two captures return `"? for shortcuts"`. Assert returns
+    `True`.
+  - Scenario (b): first two captures return `"esc to interrupt"`, next two
+    return `"? for shortcuts"` twice → True after phase 2 stabilises.
+  - Scenario (c): all captures return `"esc to interrupt"` or empty (never
+    `"for shortcuts"`), timeout fires → returns `False`.
+  (The `time.monotonic` side_effect lists in Scenarios a/b/c must account for
+  Phase 1 polls as well — adjust as needed so the loops terminate correctly.)
 - **Commit:** `fix(millpy-claude-sub): rewrite _wait_for_idle_stable as two-phase status-bar wait`
 
 ### Card 5: Send Escape on reuse path before bracketed paste
@@ -93,6 +107,7 @@ diffs within the same file; apply them sequentially.
 - **Context:** none
 - **Edits:**
   - `plugins/mill/scripts/millpy-claude-sub.py`
+  - `plugins/mill/unit_tests/test-claude-sub.py`
 - **Creates:** none
 - **Deletes:** none
 - **Requirements:**
@@ -106,18 +121,20 @@ diffs within the same file; apply them sequentially.
   This clears any auto-suggest text the TUI may have pre-filled in the input
   area after a previous response. The new-session path never has auto-suggest
   (session is freshly started), so the guard is inside `if session_reused:`.
-  No other changes in this card.
+
+  Also update S1 in `test-claude-sub.py`. S1 tests the reuse path and currently
+  asserts `m_send_keys.call_count == 3`. After adding the Escape call, the reuse
+  path sends one extra `send_keys("Escape", enter=False)` before the Step 10
+  bracketed paste sequence. Update S1's assertion to `m_send_keys.call_count == 4`
+  and assert the first call is `Escape` (i.e., `m_send_keys.call_args_list[0]`
+  has `"Escape"` as its first positional arg and `enter=False`).
 - **Commit:** `fix(millpy-claude-sub): send Escape before reuse prompt submission`
 
 ## Batch Tests
 
 `test-claude-sub.py` — S1-S11 mock `_wait_for_idle_prompt` and
 `_wait_for_idle_stable` at the module level, so the mock signatures survive the
-rewrite. However, the direct unit tests for `_wait_for_idle_stable` at the
-bottom of the file (Scenarios a/b/c) mock `_psmux.capture_pane` to return
-`"❯ idle\n"` — these will fail after Card 4's rewrite because the new code
-checks for `"for shortcuts"`, not `"❯"`. Those direct tests are updated in
-Batch 4 (Card 10). The `verify:` here runs the current test suite; Card 4's
-changes will cause the Scenario tests to fail until Batch 4 lands. If the
-implementer runs verify after each card, this is expected — the fix is
-incomplete until Batch 4.
+rewrite. Cards 4 and 5 each also update their companion direct tests (Scenarios
+a/b/c and S1 respectively) in `test-claude-sub.py`, so `verify:` is green after
+this batch completes. The implementer should apply both the production code change
+and the companion test update within the same card before running verify.
