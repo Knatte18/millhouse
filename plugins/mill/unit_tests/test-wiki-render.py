@@ -285,27 +285,27 @@ def main() -> int:
     except Exception as exc:
         fail("done-dep promotion", exc)
 
-    # (b) Isolated → Z
+    # (b) Isolated -> Z
     try:
         tasks = [
             {"slug": "iso-task", "id": 0, "title": "Isolated Task", "depends_on": [], "isolated": True, "deferred": False, "brief": "", "body": "", "status": None},
         ]
         layers = compute_layers(tasks)
         assert layers["iso-task"] == "Z", f"Isolated task should be Z, got {layers['iso-task']}"
-        ok("isolated → Z")
+        ok("isolated -> Z")
     except Exception as exc:
-        fail("isolated → Z", exc)
+        fail("isolated -> Z", exc)
 
-    # (c) Deferred → __deferred__
+    # (c) Deferred -> __deferred__
     try:
         tasks = [
             {"slug": "deferred-task", "id": 0, "title": "Deferred Task", "depends_on": [], "isolated": False, "deferred": True, "brief": "", "body": "", "status": None},
         ]
         layers = compute_layers(tasks)
         assert layers["deferred-task"] == "__deferred__", f"Deferred task should be __deferred__, got {layers['deferred-task']}"
-        ok("deferred → __deferred__")
+        ok("deferred -> __deferred__")
     except Exception as exc:
-        fail("deferred → __deferred__", exc)
+        fail("deferred -> __deferred__", exc)
 
     # (d) Precedence: done > deferred > isolated > topo
     try:
@@ -380,7 +380,7 @@ def main() -> int:
     except Exception as exc:
         fail("render() dangling dep display", exc)
 
-    # (i) Render order A..Z→Someday→Done
+    # (i) Render order A..Z -> Someday -> Done
     try:
         tasks = [
             {"slug": "layer-a", "id": 0, "title": "Layer A", "depends_on": [], "isolated": False, "deferred": False, "brief": "", "body": "", "status": None},
@@ -395,9 +395,9 @@ def main() -> int:
         someday_pos = home_content.find("# Someday")
         done_pos = home_content.find("# Done")
         assert a_pos < z_pos < someday_pos < done_pos, f"Order incorrect: A at {a_pos}, Z at {z_pos}, Someday at {someday_pos}, Done at {done_pos}"
-        ok("render order A..Z → Someday → Done")
+        ok("render order A..Z -> Someday -> Done")
     except Exception as exc:
-        fail("render order A..Z → Someday → Done", exc)
+        fail("render order A..Z -> Someday -> Done", exc)
 
     # (j) # Unspecified not emitted
     try:
