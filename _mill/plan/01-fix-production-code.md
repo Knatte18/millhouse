@@ -41,7 +41,7 @@ After this batch, all existing unit tests must still pass — the fixes are back
 - **Deletes:** none
 - **Requirements:**
   - In `extract_response`, change `bullet_prefix = "● "` to `bullet_prefix = "●"` (remove the trailing space).
-  - Change the line `first_line = response_lines[0].strip()[2:]  # [2:] removes "● "` to `first_line = response_lines[0].strip()[1:].lstrip()`. The `[1:]` removes the bullet character `●`, and `.lstrip()` removes any following whitespace (ASCII or non-ASCII), leaving only the response text.
+  - Change the line `first_line = response_lines[0].strip()[2:]  # [2:] removes "● "` to `first_line = response_lines[0].strip()[1:].lstrip('�').lstrip()`. The `[1:]` removes the bullet character `●`; `.lstrip('�')` removes any leading U+FFFD replacement characters (produced when the post-bullet separator is an invalid-UTF-8 byte decoded via `errors="replace"`); `.lstrip()` removes any remaining standard whitespace (ASCII space, U+00A0, etc.). This handles all three known separator variants: ASCII space, U+00A0, and U+FFFD.
   - The `startswith(bullet_prefix)` check in the search loop does not need changing — it now matches `"●"` alone which is correct.
   - No other changes to the file.
 - **Commit:** `fix(_psmux_capture): match bullet on "●" alone, strip trailing whitespace`
@@ -63,4 +63,4 @@ After this batch, all existing unit tests must still pass — the fixes are back
 
 `test-claude-sub.py` exercises `_wait_for_idle_prompt` and `_wait_for_idle_stable` via mocked captures — all existing scenarios use ASCII-space captures such as `"? for shortcuts"` which contain `"shortcuts"` as a substring, so they pass unchanged.
 
-`test-psmux-capture.py` exercises `extract_response` with inline snapshots — existing tests use `"● "` (ASCII space) which `[1:].lstrip()` handles identically to the old `[2:]`.
+`test-psmux-capture.py` exercises `extract_response` with inline snapshots — existing tests use `"● "` (ASCII space after bullet) which `[1:].lstrip('…').lstrip()` (where `…` is U+FFFD) handles identically to the old `[2:]`: `[1:]` yields `" First line"`, `.lstrip('…')` is a no-op (no U+FFFD present), `.lstrip()` strips the ASCII space to give `"First line"`.

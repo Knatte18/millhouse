@@ -3,7 +3,7 @@
 ```yaml
 task: Smoke-test the psmux implementer end-to-end
 slug: smoke-test-psmux
-approved: false
+approved: true
 started: 20260601-083257
 parent: main
 root: ""
