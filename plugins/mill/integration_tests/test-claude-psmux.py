@@ -110,6 +110,7 @@ def test_bulk() -> int:
         return 0
 
     except Exception as exc:
+        print(f"[FAIL] {type(exc).__name__}: {exc}", file=sys.stderr)
         return 1 if isinstance(exc, AssertionError) else 1
 
 
@@ -172,6 +173,7 @@ def test_tool_use() -> int:
         return 0
 
     except Exception as exc:
+        print(f"[FAIL] {type(exc).__name__}: {exc}", file=sys.stderr)
         return 1 if isinstance(exc, AssertionError) else 1
 
 
@@ -235,6 +237,7 @@ def test_implementer() -> int:
         return 0
 
     except Exception as exc:
+        print(f"[FAIL] {type(exc).__name__}: {exc}", file=sys.stderr)
         return 1 if isinstance(exc, AssertionError) else 1
 
 
@@ -305,6 +308,7 @@ def test_keep_alive_reuse() -> int:
         return 0
 
     except Exception as exc:
+        print(f"[FAIL] {type(exc).__name__}: {exc}", file=sys.stderr)
         return 1 if isinstance(exc, AssertionError) else 1
 
 
