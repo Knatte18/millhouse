@@ -113,7 +113,7 @@ def _wait_for_marker_in_pane(
 
 
 def _wait_for_idle_prompt(session_name: str, timeout_s: float) -> bool:
-    """Poll capture-pane status bar for the idle marker ('for shortcuts'). Return True on match, False on timeout."""
+    """Poll capture-pane status bar for the idle marker ('shortcuts'). Return True on match, False on timeout."""
     start = time.monotonic()
     while True:
         try:
