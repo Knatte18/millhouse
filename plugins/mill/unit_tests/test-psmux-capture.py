@@ -209,6 +209,48 @@ Line two
         print(f"[FAIL] Test 10: raised {e!r}")
         errors += 1
 
+    # Test 11: U+FFFD (replacement char) after bullet
+    try:
+        snapshot = "  ❯\n●�First line\n  ❯ "
+        result = _psmux_capture_mod.extract_response(snapshot)
+        expected = "First line"
+        if result == expected:
+            print("[OK] Test 11: U+FFFD after bullet (replacement char)")
+        else:
+            print(f"[FAIL] Test 11: expected {expected!r}, got {result!r}")
+            errors += 1
+    except Exception as e:
+        print(f"[FAIL] Test 11: raised {e!r}")
+        errors += 1
+
+    # Test 12: U+00A0 (non-breaking space) after bullet
+    try:
+        snapshot = "  ❯\n● First line\n  ❯ "
+        result = _psmux_capture_mod.extract_response(snapshot)
+        expected = "First line"
+        if result == expected:
+            print("[OK] Test 12: U+00A0 after bullet (NBSP)")
+        else:
+            print(f"[FAIL] Test 12: expected {expected!r}, got {result!r}")
+            errors += 1
+    except Exception as e:
+        print(f"[FAIL] Test 12: raised {e!r}")
+        errors += 1
+
+    # Test 13: ASCII space after bullet (regression guard)
+    try:
+        snapshot = "  ❯\n● First line\n  ❯ "
+        result = _psmux_capture_mod.extract_response(snapshot)
+        expected = "First line"
+        if result == expected:
+            print("[OK] Test 13: ASCII space after bullet (regression guard)")
+        else:
+            print(f"[FAIL] Test 13: expected {expected!r}, got {result!r}")
+            errors += 1
+    except Exception as e:
+        print(f"[FAIL] Test 13: raised {e!r}")
+        errors += 1
+
     return errors
 
 

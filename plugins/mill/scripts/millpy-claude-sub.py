@@ -113,12 +113,12 @@ def _wait_for_marker_in_pane(
 
 
 def _wait_for_idle_prompt(session_name: str, timeout_s: float) -> bool:
-    """Poll capture-pane status bar for the idle marker ('for shortcuts'). Return True on match, False on timeout."""
+    """Poll capture-pane status bar for the idle marker ('shortcuts'). Return True on match, False on timeout."""
     start = time.monotonic()
     while True:
         try:
             capture = _psmux.capture_pane(session_name, alternate=True)
-            if "for shortcuts" in capture:
+            if "shortcuts" in capture:
                 return True
         except _psmux.PsmuxError:
             return False
@@ -132,7 +132,7 @@ def _wait_for_idle_stable(session_name: str, timeout_s: float) -> bool:
     """Two-phase status-bar wait: Phase 1 waits for processing marker, Phase 2 waits for stable idle.
 
     Phase 1: Poll up to BOOT_READY_TIMEOUT_S for "esc to interrupt" or "esctointerrupt" marker.
-    Phase 2: Poll up to timeout_s for "for shortcuts" marker appearing in two consecutive polls.
+    Phase 2: Poll up to timeout_s for "shortcuts" marker appearing in two consecutive polls.
     Falls through Phase 1 on timeout; returns False from Phase 2 on timeout.
     """
     # Phase 1: Wait for processing marker
@@ -149,7 +149,7 @@ def _wait_for_idle_stable(session_name: str, timeout_s: float) -> bool:
             break
         time.sleep(POLL_INTERVAL_S)
 
-    # Phase 2: Wait for stable idle (two consecutive polls show "for shortcuts")
+    # Phase 2: Wait for stable idle ("shortcuts" marker appearing in two consecutive polls)
     phase2_start = time.monotonic()
     prev_idle = False
     while True:
@@ -158,7 +158,7 @@ def _wait_for_idle_stable(session_name: str, timeout_s: float) -> bool:
         except _psmux.PsmuxError:
             capture = ""
 
-        curr_idle = "for shortcuts" in capture
+        curr_idle = "shortcuts" in capture
         if prev_idle and curr_idle:
             return True
         prev_idle = curr_idle

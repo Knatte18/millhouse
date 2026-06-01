@@ -1,8 +1,9 @@
 # psmux + claude TUI behavior -- empirical findings
 
 Observed 2026-05-31. Session: `replace-claude-p-with-psmux`.
+Updated 2026-06-01. Session: `smoke-test-psmux`.
 Terminal: `psmux new-session -x 220 -y 60 -- C:/Code/tools/powershell7/pwsh.exe`
-Claude version: 2.1.158, Sonnet 4.6.
+Claude version: 2.1.158 (initial), 2.1.159 (smoke-test run), Sonnet 4.6.
 
 ---
 
@@ -86,6 +87,10 @@ poll -- it never actually waits for the response to finish.
 
 Key markers:
 - `● ` (bullet + space): prefix on the FIRST line of Claude's response.
+  **Note (2026-06-01):** the space after `●` may be non-ASCII on this machine
+  (same non-ASCII-space issue as the status bar). Use `startswith("●")` rather
+  than `startswith("● ")` when detecting the bullet in capture output, then
+  strip the bullet char and any following whitespace with `.lstrip()`.
 - Completion marker: `✻ Verb for Ns` where Verb varies (`Cogitated`,
   `Crunched`, `Brewed`, `Churned`, `Cooked`, etc.).
 - Separator line: a row of `─` characters (`─`).
@@ -110,7 +115,7 @@ Replace `_wait_for_idle_prompt` and `_wait_for_idle_stable` with status-bar chec
 def _is_idle(capture: str) -> bool:
     """Return True if the capture shows the idle status bar."""
     for line in capture.splitlines():
-        if "for shortcuts" in line:
+        if "shortcuts" in line:
             return True
     return False
 
@@ -121,6 +126,20 @@ def _is_processing(capture: str) -> bool:
             return True
     return False
 ```
+
+**IMPORTANT -- non-ASCII spaces (discovered 2026-06-01):** psmux alternate-screen
+capture on Windows emits the status bar with non-ASCII space characters between
+words (not U+0020 ASCII spaces). When decoded with `encoding="utf-8", errors="replace"`,
+these become U+FFFD replacement chars. The result in Python is `"?forshortcuts??foragents"`,
+NOT `"? for shortcuts · <- for agents"`. ASCII word tokens (`forshortcuts`,
+`shortcuts`, `foragents`) are preserved intact.
+
+Consequence: `"for shortcuts"` (ASCII space) NEVER matches. Use `"shortcuts"` as
+the sole idle marker -- it is unique to the idle status bar, absent from
+processing-screen text and response content.
+
+The `_is_processing` fallback `"esctointerrupt"` was already added for the same
+reason; the pattern is now consistent across both functions.
 
 Two-phase response wait:
 
@@ -133,7 +152,7 @@ Both phases use `capture_pane(..., alternate=True)`. No `-S` scrollback needed
 for alternate screen -- psmux always returns exactly `rows` lines for it.
 
 Boot wait (`_wait_for_idle_prompt`): same `_is_idle()` check works, since the
-boot screen shows `? for shortcuts` immediately.
+boot screen shows the shortcuts status bar immediately.
 
 ---
 
@@ -227,12 +246,17 @@ In `mill-config.yaml` / template, under `llm.claude.psmux`:
 
 ## Summary of bugs in current implementation
 
-| # | Location | Bug | Fix |
-|---|----------|-----|-----|
-| 1 | `millpy-claude-sub.py:213,237` | `shell_argv=["pwsh", ...]` resolves broken PATH stub | Read `shell_path` from config |
-| 2 | `millpy-claude-sub.py:115-152` | `_wait_for_idle_prompt` and `_wait_for_idle_stable` use `❯` which is ALWAYS present | Use status bar text instead |
-| 3 | `_psmux_capture.py:extract_response` | Extracted text includes `✻ Verb for Ns` and separator line | Stop extraction before separator/`✻` |
-| 4 | `millpy-claude-sub.py` | No input-area clear before reuse; auto-suggest text from previous response leaks into next prompt | Send Escape before submitting on reuse path |
+Bugs 1-4 were identified and fixed in commit `baff371f` (`replace-claude-p-with-psmux`).
+Bug 5 was discovered during `smoke-test-psmux` (2026-06-01).
+
+| # | Location | Bug | Fix | Status |
+|---|----------|-----|-----|--------|
+| 1 | `millpy-claude-sub.py:213,237` | `shell_argv=["pwsh", ...]` resolves broken PATH stub | Read `shell_path` from config | Fixed (baff371f) |
+| 2 | `millpy-claude-sub.py:115-152` | `_wait_for_idle_prompt` and `_wait_for_idle_stable` use `❯` which is ALWAYS present | Use status bar text `"for shortcuts"` instead | Partially fixed -- see bug #5 |
+| 3 | `_psmux_capture.py:extract_response` | Extracted text includes `✻ Verb for Ns` and separator line | Walk backwards from idle prompt, skip `✻` and separator lines | Fixed (baff371f) |
+| 4 | `millpy-claude-sub.py` | No input-area clear before reuse; auto-suggest text from previous response leaks into next prompt | Send Escape before submitting on reuse path | Fixed (baff371f) |
+| 5 | `millpy-claude-sub.py:_wait_for_idle_prompt,_wait_for_idle_stable` | Status bar captured with non-ASCII spaces; `"for shortcuts"` (ASCII space) never matches | Use `"shortcuts"` (no space) as idle marker | Fixed (smoke-test-psmux) |
+| 6 | `_psmux_capture.py:extract_response` | `bullet_prefix = "● "` may fail if non-ASCII space follows `●` in capture | Use `startswith("●")` and strip bullet + whitespace separately | Fixed (smoke-test-psmux) |
 
 ---
 
@@ -245,8 +269,13 @@ In `mill-config.yaml` / template, under `llm.claude.psmux`:
 - `send_keys("Enter", enter=False)`: sends `psmux send-keys -t session Enter`
   which psmux interprets as the Enter key (special key name, not literal text).
   Confirmed working.
-- Unicode `❯` codec: `capture_pane` returns UTF-8 on this machine; `❯`
-  compares correctly. No cp1252 issue observed.
+- Unicode `❯` codec (2026-06-01 clarification): `capture_pane` returns UTF-8;
+  `❯` (U+276F) decodes correctly and `startswith("❯")` compares correctly.
+  However, the CHARACTER AFTER `❯` (the space before the suggestion text) is a
+  non-ASCII Unicode space that decodes as `?` (U+FFFD). The ASCII-encoded debug
+  output showed `??Try...` -- the first `?` is the non-ASCII space, NOT `❯`
+  being garbled. `❯` itself is fine. The non-ASCII-space problem is specific to
+  status bar text between words (see bug #5).
 
 ---
 

@@ -8,7 +8,7 @@ llm:
   max_implementer_prompt_chars: 0
   claude:
     psmux:
-      via_psmux: false
+      via_psmux: true
       shell_path: "C:/Code/tools/powershell7/pwsh.exe"
       reuse_idle_timeout_s: 10
 pipeline:

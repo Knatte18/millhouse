@@ -7,6 +7,8 @@ first line and the idle prompt character (❯).
 """
 from __future__ import annotations
 
+import sys
+
 
 class MarkerNotFoundError(Exception):
     """Raised when idle prompt or bullet prefix is missing in capture text."""
@@ -75,7 +77,7 @@ def extract_response(snapshot: str) -> str:
         raise MarkerNotFoundError("no response content found before idle char")
 
     # Find the first line (searching backwards from content_end_idx) starting with bullet prefix
-    bullet_prefix = "● "
+    bullet_prefix = "●"
     bullet_idx = None
     for i in range(content_end_idx, -1, -1):
         if lines[i].strip().startswith(bullet_prefix):
@@ -83,13 +85,19 @@ def extract_response(snapshot: str) -> str:
             break
 
     if bullet_idx is None:
+        # Debug output: show the lines that were searched
+        debug_lines = [(i, repr(lines[i])) for i in range(max(0, content_end_idx - 5), min(len(lines), content_end_idx + 5))]
+        debug_output = f"DEBUG: idle_idx={idle_idx}, content_end_idx={content_end_idx}, searched lines {max(0, content_end_idx - 5)}-{min(len(lines) - 1, content_end_idx + 4)}:\n"
+        for line_idx, line_repr in debug_lines:
+            debug_output += f"  {line_idx}: {line_repr}\n"
+        print(debug_output, file=sys.stderr)
         raise MarkerNotFoundError("bullet prefix not found before idle char in snapshot")
 
     # Extract and process the response lines
     response_lines = lines[bullet_idx:content_end_idx + 1]
 
     # Strip bullet prefix from the first line
-    first_line = response_lines[0].strip()[2:]  # [2:] removes "● "
+    first_line = response_lines[0].strip()[1:].lstrip('�').lstrip()  # [1:] removes "●"; .lstrip('�') removes U+FFFD; .lstrip() removes whitespace
 
     # Reassemble: first line + remaining lines verbatim
     if len(response_lines) > 1:
