@@ -132,7 +132,7 @@ def _wait_for_idle_stable(session_name: str, timeout_s: float) -> bool:
     """Two-phase status-bar wait: Phase 1 waits for processing marker, Phase 2 waits for stable idle.
 
     Phase 1: Poll up to BOOT_READY_TIMEOUT_S for "esc to interrupt" or "esctointerrupt" marker.
-    Phase 2: Poll up to timeout_s for "for shortcuts" marker appearing in two consecutive polls.
+    Phase 2: Poll up to timeout_s for "shortcuts" marker appearing in two consecutive polls.
     Falls through Phase 1 on timeout; returns False from Phase 2 on timeout.
     """
     # Phase 1: Wait for processing marker
