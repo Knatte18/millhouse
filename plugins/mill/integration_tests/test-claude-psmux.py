@@ -67,6 +67,8 @@ def test_bulk() -> int:
             input=prompt,
             capture_output=True,
             text=True,
+            encoding='utf-8',
+            errors='replace',
             timeout=400,
         )
 
@@ -128,6 +130,8 @@ def test_tool_use() -> int:
             input=prompt,
             capture_output=True,
             text=True,
+            encoding='utf-8',
+            errors='replace',
             timeout=700,
         )
 
@@ -196,6 +200,8 @@ def test_implementer() -> int:
             input=prompt,
             capture_output=True,
             text=True,
+            encoding='utf-8',
+            errors='replace',
             timeout=1900,
         )
 
@@ -257,6 +263,8 @@ def test_keep_alive_reuse() -> int:
             input="Reply with the single word FIRST and nothing else.",
             capture_output=True,
             text=True,
+            encoding='utf-8',
+            errors='replace',
             timeout=400,
         )
 
@@ -283,6 +291,8 @@ def test_keep_alive_reuse() -> int:
             input="Reply with the single word SECOND and nothing else.",
             capture_output=True,
             text=True,
+            encoding='utf-8',
+            errors='replace',
             timeout=400,
         )
 
