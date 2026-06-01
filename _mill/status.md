@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-fixing
+phase: holistic-approved
 slug: smoke-test-psmux
 branch: hanf/smoke-test-psmux
 plan: _mill/plan
@@ -28,6 +28,7 @@ approved-Integration gate  '2026-06-01T09:26:57Z'
 holistic-reviewing  '2026-06-01T09:27:27Z'
 holistic-fixing  '2026-06-01T09:31:43Z'
 holistic-fixing  '2026-06-01T10:06:06Z'
+holistic-approved  '2026-06-01T10:18:07Z'
 ```
 
 ## Batches
