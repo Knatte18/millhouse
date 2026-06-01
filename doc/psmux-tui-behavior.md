@@ -176,30 +176,37 @@ use the first non-skip line as `content_end_idx`.
 
 ---
 
-## Multi-line prompt submission (bracketed paste)
+## Multi-line prompt submission
 
-Verified working:
+**`psmux paste-buffer` does NOT work with Claude's TUI on Windows (psmux 3.3.4).**
+The buffer is loaded correctly (`psmux load-buffer` succeeds and `psmux show-buffer`
+shows the content), but `psmux paste-buffer -t session -b buf` silently discards
+the content -- Claude's input area is never updated. This was previously documented
+as "Verified working" which was incorrect.
 
+Bracketed paste mode (`\e[200~`...`\e[201~`) via `send-keys -l` also does not work:
+Claude's TUI does not support bracketed paste mode, so embedded `\n` characters
+still trigger submission even within the paste markers.
+
+**Working approach for fresh sessions (multi-line)**: Write a PowerShell script
+that reads the prompt from a file and passes it as a positional argument to claude.
+PowerShell passes the multi-line string (including newlines) as a single argument.
+Claude Code CLI accepts a `[prompt]` positional argument and processes the full
+text as the initial user message.
+
+```powershell
+# wrapper-SESSION-run.ps1
+$prompt = Get-Content -Raw 'C:\path\to\prompt.txt'
+claude --model MODEL --tools "" --session-id UUID $prompt
 ```
-psmux load-buffer -b p <windows-path-to-prompt-file>
-psmux send-keys -l -t <session> $'\e[200~'
-psmux paste-buffer -t <session> -b p
-psmux send-keys -l -t <session> $'\e[201~'
-sleep 1
-psmux send-keys -t <session> Enter
-```
 
-The input area shows newlines as `\n` in the screen capture (e.g.,
-`❯ Line A.\nLine B.\nReply DONE.`), but Claude receives and correctly
-processes the content as structured multi-line text.
+Execute with: `psmux send-keys -t session ". 'C:\path\to\script.ps1'" Enter`
 
-The bracketed paste START (`\e[200~`) and END (`\e[201~`) must be sent with
-`send-keys -l` (literal flag). Without `-l`, psmux tries to interpret them
-as key names and they are dropped.
-
-Prompt file must be loaded with a Windows-style path
-(`C:\...`) when psmux is running a PowerShell session. POSIX paths
-(`/c/...`) fail on Windows.
+**Working approach for reuse sessions (single-line only)**: Send the prompt via
+`psmux send-keys -l -t session "text"` then `psmux send-keys -t session Enter`.
+Multi-line prompts via the reuse path are NOT supported -- each `\n` triggers
+submission. Reuse is typically used for keep-alive scenarios where subsequent
+prompts tend to be short.
 
 ---
 
@@ -247,7 +254,8 @@ In `mill-config.yaml` / template, under `llm.claude.psmux`:
 ## Summary of bugs in current implementation
 
 Bugs 1-4 were identified and fixed in commit `baff371f` (`replace-claude-p-with-psmux`).
-Bug 5 was discovered during `smoke-test-psmux` (2026-06-01).
+Bugs 5-6 were discovered and fixed during `smoke-test-psmux` (2026-06-01).
+Bugs 7-8 were discovered during integration test verification (2026-06-01).
 
 | # | Location | Bug | Fix | Status |
 |---|----------|-----|-----|--------|
@@ -257,6 +265,8 @@ Bug 5 was discovered during `smoke-test-psmux` (2026-06-01).
 | 4 | `millpy-claude-sub.py` | No input-area clear before reuse; auto-suggest text from previous response leaks into next prompt | Send Escape before submitting on reuse path | Fixed (baff371f) |
 | 5 | `millpy-claude-sub.py:_wait_for_idle_prompt,_wait_for_idle_stable` | Status bar captured with non-ASCII spaces; `"for shortcuts"` (ASCII space) never matches | Use `"shortcuts"` (no space) as idle marker | Fixed (smoke-test-psmux) |
 | 6 | `_psmux_capture.py:extract_response` | `bullet_prefix = "● "` may fail if non-ASCII space follows `●` in capture | Use `startswith("●")` and strip bullet + whitespace separately | Fixed (smoke-test-psmux) |
+| 7 | `millpy-claude-sub.py` | `psmux paste-buffer` silently drops content on Windows -- Claude TUI never receives the prompt; Phase 1 detects "esctointerrupt" (no match due to non-ASCII spaces) and times out after 60s; Phase 2 finds boot-screen "shortcuts" and returns prematurely, capturing boot state without `●` bullet | Use PS script (`Get-Content` + positional arg) for fresh sessions; `send_keys` for reuse; fix Phase 1 marker to `"interrupt"`; reduce Phase 1 timeout to 15s | Fixed (2026-06-01) |
+| 8 | `doc/psmux-tui-behavior.md` | "Verified working" claim for `psmux paste-buffer` bracketed paste was incorrect: `paste-buffer` silently discards content on Windows psmux 3.3.4; Claude TUI does not receive it | Document the limitation; use PS script instead | Fixed (2026-06-01) |
 
 ---
 

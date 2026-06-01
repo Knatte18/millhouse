@@ -24,6 +24,7 @@ import _psmux_capture
 
 # Boot and polling constants
 BOOT_READY_TIMEOUT_S = 60
+PROCESSING_WAIT_TIMEOUT_S = 15  # Phase 1 of _wait_for_idle_stable: wait up to this long for processing to start
 PSMUX_COMMAND_TIMEOUT_S = 30  # Synchronized with _psmux.py; keep in sync
 POLL_INTERVAL_S = 1.0
 REUSE_IDLE_TIMEOUT_S_DEFAULT = 10
@@ -131,21 +132,25 @@ def _wait_for_idle_prompt(session_name: str, timeout_s: float) -> bool:
 def _wait_for_idle_stable(session_name: str, timeout_s: float) -> bool:
     """Two-phase status-bar wait: Phase 1 waits for processing marker, Phase 2 waits for stable idle.
 
-    Phase 1: Poll up to BOOT_READY_TIMEOUT_S for "esc to interrupt" or "esctointerrupt" marker.
+    Phase 1: Poll up to PROCESSING_WAIT_TIMEOUT_S for "interrupt" in the status bar.
     Phase 2: Poll up to timeout_s for "shortcuts" marker appearing in two consecutive polls.
     Falls through Phase 1 on timeout; returns False from Phase 2 on timeout.
+
+    Note: "interrupt" (substring) is used instead of "esc to interrupt" or "esctointerrupt"
+    because psmux capture on Windows emits non-ASCII spaces between words, making the
+    multi-word forms unreliable. "interrupt" is unique to the processing status bar.
     """
     # Phase 1: Wait for processing marker
     phase1_start = time.monotonic()
     while True:
         try:
             capture = _psmux.capture_pane(session_name, alternate=True)
-            if "esc to interrupt" in capture or "esctointerrupt" in capture:
+            if "interrupt" in capture:
                 break
         except _psmux.PsmuxError:
             pass
 
-        if time.monotonic() - phase1_start >= BOOT_READY_TIMEOUT_S:
+        if time.monotonic() - phase1_start >= PROCESSING_WAIT_TIMEOUT_S:
             break
         time.sleep(POLL_INTERVAL_S)
 
@@ -209,6 +214,7 @@ def main() -> int:
     scratch_dir.mkdir(exist_ok=True)
     prompt_path = scratch_dir / f"wrapper-{session_name}-prompt.txt"
     prompt_path.write_text(prompt_body, encoding="utf-8")
+    script_path = scratch_dir / f"wrapper-{session_name}-run.ps1"
 
     # Step 5-12: Try/finally block for cleanup
     try:
@@ -277,7 +283,7 @@ def main() -> int:
                     f"claude not found in psmux pane PATH (expected at ~/.local/bin/claude.exe). Pane tail: {tail}"
                 )
 
-        # Step 8: Build claude launch command
+        # Step 8: Build claude launch command and submit prompt
         if not session_reused:
             claude_cmd_parts = [
                 "claude",
@@ -289,30 +295,30 @@ def main() -> int:
                 claude_cmd_parts += ["--effort", args.effort]
             claude_cmd_str = _ps_join(claude_cmd_parts)
 
-            # Step 9: Launch claude and wait for idle prompt
-            print(f"[millpy-claude-sub] launching: {claude_cmd_str!r}", file=sys.stderr)
-            _psmux.send_keys(session_name, claude_cmd_str, enter=True)
-            if not _wait_for_idle_prompt(session_name, BOOT_READY_TIMEOUT_S):
-                tail = _psmux.capture_pane(session_name, alternate=True)
-                tail_lines = [ln for ln in tail.splitlines() if ln.strip()]
-                print(f"[millpy-claude-sub] boot-debug: {len(tail_lines)} nonempty lines in alt screen", file=sys.stderr)
-                for ln in tail_lines[:20]:
-                    print(f"[millpy-claude-sub] boot-debug line: {ln.encode('ascii','replace').decode()!r}", file=sys.stderr)
-                raise RuntimeError("claude TUI did not reach idle prompt within boot timeout")
+            # Step 9: Launch claude via a PS script that reads the prompt from the prompt
+            # file and passes it as a positional argument. This handles multi-line prompts
+            # correctly: the PS script uses Get-Content to read the file, and PowerShell
+            # passes the string (including newlines) as a single argument to claude.
+            # psmux paste-buffer does not work with Claude's TUI on Windows (content is
+            # silently dropped), so this script-based approach is used instead.
+            script_content = (
+                f"$prompt = Get-Content -Raw '{str(prompt_path)}'\n"
+                f"{claude_cmd_str} $prompt\n"
+            )
+            script_path.write_text(script_content, encoding="utf-8")
+            print(f"[millpy-claude-sub] launching: '{claude_cmd_str} <prompt>'", file=sys.stderr)
+            _psmux.send_keys(session_name, f". '{str(script_path)}'", enter=True)
 
         if session_reused:
+            # Clear any ghost text suggestion from the input area
             _psmux.send_keys(session_name, "Escape", enter=False)
-            time.sleep(POLL_INTERVAL_S)
-
-        # Step 10: Submit prompt via bracketed paste (preserves multi-line text).
-        # paste-buffer converts \n to \r, but within \e[200~...\e[201~] the TUI
-        # buffers all content without treating \r as Enter. Enter submits after.
-        _psmux.load_buffer(session_name, "p", prompt_path)
-        _psmux.send_keys(session_name, "\x1b[200~", literal=True)
-        _psmux.paste_buffer(session_name, "p")
-        _psmux.send_keys(session_name, "\x1b[201~", literal=True)
-        time.sleep(POLL_INTERVAL_S)
-        _psmux.send_keys(session_name, "Enter", enter=False)
+            time.sleep(0.3)
+            # Submit prompt via send_keys. Note: multi-line prompts are NOT supported
+            # via the reuse path (each \n is treated as Enter by Claude's TUI).
+            # psmux paste-buffer does not work with Claude's TUI on Windows.
+            _psmux.send_keys(session_name, prompt_body, literal=True)
+            time.sleep(0.3)
+            _psmux.send_keys(session_name, "Enter", enter=False)
 
         # Step 11: Wait for stable idle prompt, then capture and extract response
         start = time.monotonic()
@@ -324,7 +330,12 @@ def main() -> int:
         snapshot_b = _psmux.capture_pane(session_name, alternate=True)
         elapsed = time.monotonic() - start
         response = _psmux_capture.extract_response(snapshot_b)
-        print(response, end="")
+        if hasattr(sys.stdout, "buffer"):
+            sys.stdout.buffer.write(response.encode("utf-8"))
+            sys.stdout.buffer.flush()
+        else:
+            sys.stdout.write(response)
+            sys.stdout.flush()
         print(
             json.dumps({
                 "session_id": args.session_id,
@@ -361,6 +372,7 @@ def main() -> int:
         return 1
     finally:
         prompt_path.unlink(missing_ok=True)
+        script_path.unlink(missing_ok=True)
 
 
 if __name__ == "__main__":
