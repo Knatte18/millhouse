@@ -149,7 +149,7 @@ def _wait_for_idle_stable(session_name: str, timeout_s: float) -> bool:
             break
         time.sleep(POLL_INTERVAL_S)
 
-    # Phase 2: Wait for stable idle (two consecutive polls show "for shortcuts")
+    # Phase 2: Wait for stable idle ("shortcuts" marker appearing in two consecutive polls)
     phase2_start = time.monotonic()
     prev_idle = False
     while True:
