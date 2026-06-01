@@ -41,5 +41,7 @@ batches:
     start_sha: c59e01024b5ce7acb43c7f541b0db6036ff4b04c
     commit_sha: 4a8ffba8892c0bcf173548c81f04f90729512939
   - name: Integration gate
-    state: pending
+    state: running
+    implementer_session: 9dd9f207-211c-43b4-b348-e70a35397f18
+    start_sha: c7eeefb74720f71a38a5d060a0ec8e82ae183e57
 ```
