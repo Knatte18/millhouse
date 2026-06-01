@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussion-fix-r1
+phase: discussed
 slug: smoke-test-psmux
 branch: hanf/smoke-test-psmux
 plan: null
@@ -16,4 +16,5 @@ task_description: |
 ```text
 discussing  '2026-06-01T06:15:44Z'
 discussion-fix-r1  '2026-06-01T08:23:56Z'
+discussed  '2026-06-01T08:25:21Z'
 ```
