@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-Extend unit tests
+phase: approved-Integration gate
 slug: smoke-test-psmux
 branch: hanf/smoke-test-psmux
 plan: _mill/plan
@@ -24,6 +24,7 @@ planned  '2026-06-01T08:46:47Z'
 implementing  '2026-06-01T08:49:51Z'
 approved-Fix production code  '2026-06-01T09:00:54Z'
 approved-Extend unit tests  '2026-06-01T09:03:39Z'
+approved-Integration gate  '2026-06-01T09:26:57Z'
 ```
 
 ## Batches
@@ -41,7 +42,8 @@ batches:
     start_sha: c59e01024b5ce7acb43c7f541b0db6036ff4b04c
     commit_sha: 4a8ffba8892c0bcf173548c81f04f90729512939
   - name: Integration gate
-    state: running
+    state: approved
     implementer_session: d7332485-c841-4bb1-bdc4-dc46147bd94c
     start_sha: 02a78efb7c3f88b20e497aa93197e1c5dde1ffb4
+    commit_sha: 2252700ddc257e04ca2d658dc11d3e547e058d4e
 ```
