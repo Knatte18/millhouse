@@ -75,7 +75,7 @@ def extract_response(snapshot: str) -> str:
         raise MarkerNotFoundError("no response content found before idle char")
 
     # Find the first line (searching backwards from content_end_idx) starting with bullet prefix
-    bullet_prefix = "● "
+    bullet_prefix = "●"
     bullet_idx = None
     for i in range(content_end_idx, -1, -1):
         if lines[i].strip().startswith(bullet_prefix):
@@ -89,7 +89,7 @@ def extract_response(snapshot: str) -> str:
     response_lines = lines[bullet_idx:content_end_idx + 1]
 
     # Strip bullet prefix from the first line
-    first_line = response_lines[0].strip()[2:]  # [2:] removes "● "
+    first_line = response_lines[0].strip()[1:].lstrip('�').lstrip()  # [1:] removes "●"; .lstrip('�') removes U+FFFD; .lstrip() removes whitespace
 
     # Reassemble: first line + remaining lines verbatim
     if len(response_lines) > 1:
