@@ -90,7 +90,7 @@ During exploration, one confirmed bug was found: `_wait_for_idle_prompt` and `_w
 - `test-claude-psmux.py` — all 4 tests must pass: `test_bulk`, `test_tool_use`, `test_implementer`, `test_keep_alive_reuse`. These run real Claude through real psmux. Timeouts are 400s (bulk/reuse) and 1900s (implementer).
 
 **Config validation:**
-- After flipping `via_psmux: true`, run `test_bulk` again in isolation (or the full suite) to confirm `_llm_claude._invoke` routes through psmux when called from the real dispatch path.
+- After flipping `via_psmux: true`, run `test_bulk` again in isolation (or the full suite) to confirm psmux still works end-to-end. Note: `test-claude-psmux.py` invokes `millpy-claude-sub.py` directly; dispatch routing through `_llm_claude._invoke` is separately covered by the existing `test-llm-claude.py` unit tests.
 
 ## Q&A log
 
