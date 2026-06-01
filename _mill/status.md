@@ -29,7 +29,9 @@ implementing  '2026-06-01T08:49:51Z'
 ```yaml
 batches:
   - name: Fix production code
-    state: pending
+    state: running
+    implementer_session: af9027b2-ea34-4566-9eaa-2bfa0a7c09fe
+    start_sha: 239d3640181f0fd74758b50d626541b9efb9f499
   - name: Extend unit tests
     state: pending
   - name: Integration gate
