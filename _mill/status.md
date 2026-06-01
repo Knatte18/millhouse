@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: smoke-test-psmux
 branch: hanf/smoke-test-psmux
 plan: _mill/plan
@@ -21,4 +21,17 @@ planning  '2026-06-01T08:35:38Z'
 plan-review-r1  '2026-06-01T08:46:21Z'
 plan-fix-r1  '2026-06-01T08:46:21Z'
 planned  '2026-06-01T08:46:47Z'
+implementing  '2026-06-01T08:49:51Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: Fix production code
+    state: pending
+  - name: Extend unit tests
+    state: pending
+  - name: Integration gate
+    state: pending
 ```
