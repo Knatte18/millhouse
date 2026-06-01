@@ -35,7 +35,9 @@ batches:
     start_sha: 239d3640181f0fd74758b50d626541b9efb9f499
     commit_sha: 60d06f8c25a0b83bb52733685103b6d17b1219a5
   - name: Extend unit tests
-    state: pending
+    state: running
+    implementer_session: 917628a4-cd2a-452e-a2ee-8e3d6382e2e2
+    start_sha: c59e01024b5ce7acb43c7f541b0db6036ff4b04c
   - name: Integration gate
     state: pending
 ```
