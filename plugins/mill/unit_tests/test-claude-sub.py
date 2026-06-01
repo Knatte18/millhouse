@@ -791,6 +791,30 @@ def main() -> int:
             print(f"[FAIL] _wait_for_idle_stable scenario (c): {e}")
             errors += 1
 
+        # Scenario (g): Phase 1 times out (no "esc to interrupt"), Phase 2 finds "shortcuts" (no ASCII space) twice; return True
+        try:
+            with mock.patch("_psmux.capture_pane", side_effect=["?forshortcuts", "?forshortcuts", "?forshortcuts"]), \
+                 mock.patch("time.sleep"), \
+                 mock.patch("time.monotonic", side_effect=[0.0, 61.0, 0.0, 1.0]):
+                result = _wait_for_idle_stable(session_name="s", timeout_s=5.0)
+                assert result is True, f"Scenario (g): expected True, got {result}"
+            print("[OK] _wait_for_idle_stable scenario (g)")
+        except Exception as e:
+            print(f"[FAIL] _wait_for_idle_stable scenario (g): {e}")
+            errors += 1
+
+        # Scenario (h): Phase 1 finds "esc to interrupt", Phase 2 finds "shortcuts" (no ASCII space) twice; return True
+        try:
+            with mock.patch("_psmux.capture_pane", side_effect=["esc to interrupt", "shortcuts", "shortcuts"]), \
+                 mock.patch("time.sleep"), \
+                 mock.patch("time.monotonic", side_effect=[0.0, 1.0, 0.0, 1.0, 2.0]):
+                result = _wait_for_idle_stable(session_name="s", timeout_s=5.0)
+                assert result is True, f"Scenario (h): expected True, got {result}"
+            print("[OK] _wait_for_idle_stable scenario (h)")
+        except Exception as e:
+            print(f"[FAIL] _wait_for_idle_stable scenario (h): {e}")
+            errors += 1
+
     except Exception as e:
         print(f"FAIL: _wait_for_idle_stable unit tests - {e}")
         errors += 1
@@ -822,6 +846,18 @@ def main() -> int:
             print("[OK] _wait_for_idle_prompt scenario (e)")
         except Exception as e:
             print(f"[FAIL] _wait_for_idle_prompt scenario (e): {e}")
+            errors += 1
+
+        # Scenario (f): capture contains "forshortcuts" (no ASCII space) on the first call; return True
+        try:
+            with mock.patch("_psmux.capture_pane", return_value="?forshortcuts"), \
+                 mock.patch("time.sleep"), \
+                 mock.patch("time.monotonic", side_effect=[0.0, 0.0]):
+                result = _wait_for_idle_prompt(session_name="s", timeout_s=5.0)
+                assert result is True, f"Scenario (f): expected True, got {result}"
+            print("[OK] _wait_for_idle_prompt scenario (f)")
+        except Exception as e:
+            print(f"[FAIL] _wait_for_idle_prompt scenario (f): {e}")
             errors += 1
 
     except Exception as e:
