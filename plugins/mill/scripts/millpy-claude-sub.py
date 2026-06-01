@@ -118,7 +118,7 @@ def _wait_for_idle_prompt(session_name: str, timeout_s: float) -> bool:
     while True:
         try:
             capture = _psmux.capture_pane(session_name, alternate=True)
-            if "for shortcuts" in capture:
+            if "shortcuts" in capture:
                 return True
         except _psmux.PsmuxError:
             return False
@@ -158,7 +158,7 @@ def _wait_for_idle_stable(session_name: str, timeout_s: float) -> bool:
         except _psmux.PsmuxError:
             capture = ""
 
-        curr_idle = "for shortcuts" in capture
+        curr_idle = "shortcuts" in capture
         if prev_idle and curr_idle:
             return True
         prev_idle = curr_idle
