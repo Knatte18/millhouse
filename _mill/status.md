@@ -1,10 +1,10 @@
 # Status
 
 ```yaml
-phase: discussed
+phase: planning
 slug: millpy-bg-and-implement-fixes
 branch: hanf/millpy-bg-and-implement-fixes
-plan: null
+plan: _mill/plan
 parent: main
 task: Fix millpy-bg EXIT marker and implementer reliability
 task_description: |
@@ -17,4 +17,5 @@ task_description: |
 discussing  '2026-06-04T12:07:30Z'
 discussion-fix-r1  '2026-06-04T16:35:55Z'
 discussed  '2026-06-04T16:36:09Z'
+planning  '2026-06-04T16:42:38Z'
 ```
