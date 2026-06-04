@@ -180,13 +180,7 @@ PR dispatch lives in mill-finalize. This step is direct path only.
 ### 6. Archive tag
 
 ```bash
-# Prefer worktree scripts when available (handles cache-lag in self-modifying repos)
-if [ -f "$(git rev-parse --show-toplevel)/plugins/mill/scripts/_archive_tag.py" ]; then
-    MILL_SCRIPTS="$(git rev-parse --show-toplevel)/plugins/mill/scripts"
-else
-    MILL_SCRIPTS="${CLAUDE_PLUGIN_ROOT}/scripts"
-fi
-PYTHONPATH="$MILL_SCRIPTS" "$MILL_PYTHON" -c "
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
 from pathlib import Path
 import _paths
 try:

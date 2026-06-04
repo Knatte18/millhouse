@@ -31,19 +31,22 @@ print(json.dumps(issues, indent=2))
 
 Read `.scratch/issues.json`. Record the repo name (`_gh_issues.detect_repo(git_root=_paths.resolve_git_root())`) for the close step.
 
-## Step 2 — Read the current Home.md
+## Step 2 — Read the current task list
 
-Resolve the wiki path:
+Resolve the wiki path and load all tasks via the client API:
 
 ```bash
 PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
-import _paths; print(_paths.resolve_wiki_path(_paths.resolve_git_root()))
-"
+import json, _paths
+from wiki import _client
+wiki_path = _paths.resolve_wiki_path(_paths.resolve_git_root())
+print(_paths.resolve_git_root())  # for repo name detection below
+tasks = _client.list_tasks_brief(wiki_path)
+print(json.dumps(tasks, indent=2))
+" > .scratch/wiki-tasks.json
 ```
 
-Store as `<WIKI_PATH>`. Read `<WIKI_PATH>/Home.md` and parse task entries — headings matching `## <Title> [<slug>]` or `## <Title> [[<slug>]](proposal-<slug>)`.
-
-You don't need a parser helper; a targeted regex is fine — this skill is interactive and the user is in the loop.
+Store `wiki_path` for later `_client` calls. Parse `.scratch/wiki-tasks.json` — each task dict has keys `{id, slug, title, layer, brief, status, has_proposal}`.
 
 ## Step 3 — Interactive decisions (per issue)
 
@@ -66,7 +69,7 @@ If the issue does not overlap with any current Home.md task, present: `1) New ta
 
 **On selection 2 (Fold into existing):**
 - Prompt for target slug (free text).
-- Validate against the parsed Home.md slug list; re-prompt if not found.
+- Validate against the task slug list from Step 2; re-prompt if not found.
 - Phase check: call `task = _client.get_task(wiki_path, target_slug)` and inspect `task["status"]`. When the status is in the locked set (`"active"`, `"ready-to-merge"`, `"pr-pending"`), refuse the fold for this issue: print `"Cannot fold #<N> into <slug>: task is [<status>]. Plan is frozen — scope additions silently invalidate it. Pick a different action for this issue."` and re-present the decision menu with option 2 omitted (struck-through or disabled). Use the locked set `{"active", "ready-to-merge", "pr-pending"}` as the source of truth.
 - Record the decision.
 

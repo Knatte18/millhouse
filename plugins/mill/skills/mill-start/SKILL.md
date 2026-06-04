@@ -60,7 +60,22 @@ Read `.vscode/settings.json`; extract `titleBar.activeBackground`. Map to a Clau
 
 ### Phase: Select
 
-Read `<WIKI_PATH>/Home.md`, find the task heading whose slug matches the slug derived from the current branch. The entry's phase marker must be `[active]`. If not, halt with a message explaining what `mill-spawn` should have done.
+Query the wiki database for the task:
+
+```bash
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
+from pathlib import Path
+from wiki import _client
+import _paths
+wiki_path = _paths.resolve_wiki_path(_paths.resolve_git_root())
+task = _client.get_task(wiki_path, '<slug>')
+if task is None:
+    raise SystemExit('[mill-start] slug not found in wiki -- was this worktree created by mill-spawn?')
+print(task.get('status', ''))
+"
+```
+
+The task's `status` field must be `"active"`. If the task is missing or has any other status, halt with a message explaining what `mill-spawn` should have done.
 
 ### Phase: Active
 

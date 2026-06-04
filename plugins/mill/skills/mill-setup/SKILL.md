@@ -1,6 +1,6 @@
 ---
 name: mill-setup
-description: Initialise mill in a fresh primary-clone directory. Creates the wiki clone, seeds wiki/config.yaml, creates hub junctions and hardlinks, seeds config.local.yaml, and sets VS Code window colour. Idempotent — safe to re-run after a partial setup.
+description: Initialise mill in a fresh primary-clone directory. Creates the wiki clone, seeds mill-config.yaml at hub, creates hub junctions and hardlinks, seeds config.local.yaml, and sets VS Code window colour. Idempotent — safe to re-run after a partial setup.
 argument-hint: "[--from-url <url>] [--branch <name>]"
 ---
 
@@ -153,26 +153,6 @@ When rendering the command, substitute `<wiki-url>` and `<wiki-dir>` with their 
 If the helper raises `WikiSetupError` (dest is not a git repo, URL mismatch, branch mismatch, clone or init failure): halt and surface the exception message verbatim. The message names the offending paths so the user can fix manually.
 
 If the helper raises `WikiPushError` (from the pull path — `git pull --ff-only` failed due to network failure, credentials, or non-fast-forward / local divergence): halt and instruct the user to inspect and fix the wiki dir manually.
-
-### Phase 3.0b — Migrate wiki config and agents to hub/plugin
-
-This phase invokes `millpy-migrate-config.py` to migrate existing wiki-based config to the hub worktree and plugin templates. The script handles three concerns: (a) copy `wiki/config.yaml` to the hub root if not yet present, (b) delete the wiki copy and push the change, (c) diff `wiki/agents.yaml` against the plugin template and either delete (identical) or warn-and-skip (different).
-
-**Ordering constraint:** Phase 3.0b MUST execute before Phase 3.1. If Phase 3.1 ran first against a hub with an existing `wiki/config.yaml`, the operator's custom config would be overwritten by the plugin template's defaults and then silently deleted from the wiki. Do NOT reorder these phases.
-
-Run the migration script:
-
-```bash
-PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-migrate-config.py"
-```
-
-The operator should expect to see in the output:
-- One of: `[migrate] mill-config.yaml staged` (copy happened), `[migrate] mill-config.yaml already exists` (skipped), or `[migrate] no wiki/config.yaml` (nothing to migrate).
-- Wiki-side cleanup: `[migrate] wiki/config.yaml deleted and pushed` (after copying) or `[migrate] no wiki/config.yaml` (nothing to delete).
-- One of: `[migrate] wiki/agents.yaml identical to plugin template -- deleted and pushed`, `[migrate] wiki/agents.yaml NOT deleted` (warn case with diffs listed), or `[migrate] no wiki/agents.yaml` (nothing to migrate).
-- A notice about the removed machine-config layer.
-
-Idempotency: re-running mill-setup after a successful migration is a no-op for this phase. If the agents migration warned with diffs, copy the unique entries from the printed list into `.millhouse/agents.local.yaml` and re-run mill-setup to retry the agents step.
 
 ### Phase 3.1 — Seed mill-config.yaml at hub directory from template
 
@@ -471,7 +451,7 @@ Check every invariant; halt with a specific error if any fails:
 - `<container>/wts/` exists (container-form) or `<container>/` exists (prefix-form)
 - `<container>/portals/` exists (container-form)
 - `hub/.portals` exists and resolves to `<container>/portals/`
-- Every hub junction (entries without `<SLUG>` from `wiki/config.yaml`) exists and resolves to its expected target
+- Every hub junction (entries without `<SLUG>` from `mill-config.yaml`) exists and resolves to its expected target
 - `.gitignore` contains the mill-managed marker block with glob entries
 - `hub_relative_path:` is set in `.millhouse/config.local.yaml`
 - Every script in `_shortcuts.SHORTCUT_SCRIPTS` has a wrapper at `.millhouse/<script>.cmd` (and no legacy `.millhouse/<script>.py` or `.millhouse/<script>.ps1` exists)
@@ -526,7 +506,7 @@ Next: /mill-add <slug> --title "..." [--summary "..."] [--proposal-body "..."] t
 Every phase checks current state before acting. Re-running after a partial or complete setup is always safe:
 
 - Wiki already cloned → pulls latest.
-- `wiki/config.yaml` present → block-level upsert run; commit only if missing blocks were added (Phase 3.1).
+- `mill-config.yaml` present → block-level upsert run; commit only if missing blocks were added (Phase 3.1).
 - `portals/` dir present → created by Phase 4 via `_setup.create_hub_links` (idempotent via `exist_ok=True` on the junction target).
 - `create_hub_links` re-checks each junction and hardlink — skips already-correct ones (Phase 4).
 - `.gitignore` marker block already up-to-date → not rewritten (Phase 4.5b).

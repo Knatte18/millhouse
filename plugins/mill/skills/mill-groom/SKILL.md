@@ -59,9 +59,7 @@ Note: V3 task dicts have `"status"` (not `"phase"`), `"slug"`, `"title"`, `"brie
 | `"done"` | Yes | drop only |
 | (protected) | Yes (listed, read-only) | none |
 
-To read the body of a task, read the lines in `Home.md` between its heading
-and the next `##` heading (or end of file). A task is protected if its body
-contains `<!-- protected -->`.
+To read the body of a task, use `_client.list_tasks_full(wiki)` — each dict includes a `"body"` field. A task is protected if its body contains `<!-- protected -->`.
 
 ## Step 3 — List all tasks
 
@@ -169,12 +167,11 @@ On `reject`: ask what to change, revise decisions, rewrite the proposal, and ask
 
 ## Step 6 — Apply (on approve)
 
-1. Read `<WIKI_PATH>/Home.md` again (in case of concurrent edits since Step 2).
-2. For each **extract** decision: check whether `<WIKI_PATH>/proposal-<slug>.md`
+1. For each **extract** decision: check whether `<WIKI_PATH>/proposal-<slug>.md`
    already exists. If it does, **stop** and ask the user:
    > `proposal-<slug>.md` already exists in the wiki. Overwrite, skip, or rename?
    Wait for instruction before proceeding.
-3. Build the new `Home.md` content in memory:
+2. Build the updated task data in memory:
    - **Shorten**: replace the entry body with the approved shorter text.
    - **Fold**: remove the entry; leave the target entry unchanged unless the
      user asked to append a note.

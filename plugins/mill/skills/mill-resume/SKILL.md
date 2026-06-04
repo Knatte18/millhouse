@@ -36,12 +36,19 @@ If the `.wiki` junction does not exist at cwd, stop and tell the user to run `mi
 
 **If a slug argument was passed:** use it directly. Skip to Phase 4.
 
-**If no argument was passed:** read `Home.md` from `.millhouse/wiki/Home.md` and find resume candidates.
+**If no argument was passed:** query the wiki for resume candidates:
 
-A resume candidate is an entry that:
+```bash
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
+import json, _paths
+from wiki import _client
+wiki_path = _paths.resolve_wiki_path(_paths.resolve_git_root())
+tasks = _client.list_tasks_brief(wiki_path)
+print(json.dumps([t for t in tasks if t.get('status') == 'active'], indent=2))
+"
+```
 
-1. Has an `[active]` phase marker in `Home.md`.
-2. Does NOT already have a local worktree at `<container>/wts/<slug>/` with a matching branch (`git branch --list <branch_name>` returns output).
+A resume candidate is a task with `status == "active"` that does NOT already have a local worktree at `<container>/wts/<slug>/` with a matching branch (`git branch --list <branch_name>` returns output).
 
 `<container>` is `_paths.resolve_container_path(git_root)`. Read `repo.branch-prefix` from config (if set). Derive `branch_name` for each slug: if prefix is set and non-empty, `branch_name = f"{prefix}/{slug}"`; otherwise `branch_name = slug`.
 
