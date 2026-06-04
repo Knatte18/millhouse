@@ -297,7 +297,15 @@ def main(argv=None) -> int:
         )
     except _llm_claude.LLMError as e:
         stuck_type = "verify" if _is_windows_lock_error(e) else "transient"
-        print(json.dumps({"status": "stuck", "stuck_type": stuck_type, "reason": str(e)}))
+        if start_sha is None:
+            commits_made = 0
+        else:
+            result = _subprocess_util.run(["git", "rev-list", "--count", f"{start_sha}..HEAD"], cwd=project_root)
+            if result.returncode == 0:
+                commits_made = int(result.stdout.strip())
+            else:
+                commits_made = 0
+        print(json.dumps({"status": "stuck", "stuck_type": stuck_type, "reason": str(e), "commits_made": commits_made}))
         print(str(e), file=sys.stderr)
         return 1
 
