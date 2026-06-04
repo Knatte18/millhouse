@@ -40,7 +40,9 @@ batches:
     start_sha: 6c4604d02f915b790b5e8cb22c7377ccfe4c31b6
     commit_sha: 4fe3b24aed771f388e1d27f104e7cc3af98cad64
   - name: psmux-timeout-config
-    state: pending
+    state: running
+    implementer_session: a9758621-d1ba-4f46-bb36-8bd74d881ee6
+    start_sha: 1a1dd942559dadc0e8188b753f84e094931ca754
   - name: mill-go-skill-update
     state: pending
 ```
