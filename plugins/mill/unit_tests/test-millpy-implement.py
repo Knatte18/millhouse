@@ -445,7 +445,10 @@ class TestMillpyImplement(unittest.TestCase):
             ),
         ):
             with unittest.mock.patch.object(
-                millpy_implement._subprocess_util, "git_commit"
+                millpy_implement._subprocess_util, "git_commit",
+                return_value=subprocess.CompletedProcess(
+                    args=[], returncode=0, stdout="", stderr=""
+                ),
             ) as mock_git_commit:
                 rc, out = self._run_main(["test-batch"])
 
