@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussion-fix-r1
+phase: discussed
 slug: millpy-bg-and-implement-fixes
 branch: hanf/millpy-bg-and-implement-fixes
 plan: null
@@ -16,4 +16,5 @@ task_description: |
 ```text
 discussing  '2026-06-04T12:07:30Z'
 discussion-fix-r1  '2026-06-04T16:35:55Z'
+discussed  '2026-06-04T16:36:09Z'
 ```
