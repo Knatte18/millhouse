@@ -28,7 +28,9 @@ implementing  '2026-06-04T17:15:53Z'
 ```yaml
 batches:
   - name: bg-json-fallback
-    state: pending
+    state: running
+    implementer_session: fafa5da8-5b97-4850-9b8a-5411e7fdcbb5
+    start_sha: 74a9757767d9afa36da834c280338089f0d424fb
   - name: implementer-stuck-fields
     state: pending
   - name: psmux-timeout-config
