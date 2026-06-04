@@ -193,7 +193,12 @@ def main(argv=None) -> int:
             timeout=timeout,
         )
     except _llm_claude.LLMError as e:
-        print(json.dumps({"status": "stuck", "stuck_type": "transient", "reason": str(e)}))
+        result = _subprocess_util.run(["git", "rev-list", "--count", f"{start_sha}..HEAD"], cwd=project_root)
+        if result.returncode == 0:
+            commits_made = int(result.stdout.strip())
+        else:
+            commits_made = 0
+        print(json.dumps({"status": "stuck", "stuck_type": "transient", "reason": str(e), "commits_made": commits_made}))
         print(str(e), file=sys.stderr)
         return 1
     return _forward_output(output, project_root, start_sha=start_sha, snapshot_path=snapshot_path, session_id=session_id)
