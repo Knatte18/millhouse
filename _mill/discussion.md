@@ -95,7 +95,9 @@ description of the same EXIT-marker root cause.
 
 - **Decision:** Before the "mill-go: start batch `<batch>`" commit in `millpy-implement.py`,
   check if `git log -1 --pretty=%s` already equals `mill-go: start batch <batch>`. If so, skip
-  the commit+push step (batch already started; this is a re-fire).
+  the entire `git add` + commit + push block (batch already started; this is a re-fire). The
+  `git add` is part of the same conditional block — staged-but-uncommitted files must not be
+  left when the implementer session starts.
 - **Rationale:** The first-fire crash happens after the git commit in the rare psmux-race case;
   re-fire without this guard creates a duplicate commit. The actual psmux race is transient and
   handled by the existing stuck_type: transient auto-retry.
@@ -142,7 +144,9 @@ description of the same EXIT-marker root cause.
 - "start batch" commit is at lines 148–156. Add last-commit check before it.
 
 **`millpy-fix.py`** (`plugins/mill/scripts/millpy-fix.py`)
-- `start_sha` captured at line 281. `LLMError` caught at line 298–300. Same `commits_made` injection.
+- `start_sha` captured at line 281; assigned `None` when `git rev-parse HEAD` returns non-zero.
+  `LLMError` caught at line 298–300. Same `commits_made` injection, but guard: when
+  `start_sha is None`, set `commits_made = 0` (do not call `git rev-list` with a `None` ref).
 
 **`millpy-claude-sub.py`** (`plugins/mill/scripts/millpy-claude-sub.py`)
 - `RESPONSE_POLL_TIMEOUT_S` dict at lines 31–35. Single call site at line 325.
