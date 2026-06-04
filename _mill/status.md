@@ -34,7 +34,9 @@ batches:
     start_sha: 74a9757767d9afa36da834c280338089f0d424fb
     commit_sha: f93009d76dde104136b59084c9a154b5430c7ed2
   - name: implementer-stuck-fields
-    state: pending
+    state: running
+    implementer_session: 75f72680-fa37-44e3-b5b5-5df8e145f3ac
+    start_sha: 6c4604d02f915b790b5e8cb22c7377ccfe4c31b6
   - name: psmux-timeout-config
     state: pending
   - name: mill-go-skill-update
