@@ -96,7 +96,7 @@ cover all three behaviours.
   - Add test `test_commits_made_zero_on_rev_list_failure`: `rev-list --count` returns returncode=1. Assert `"commits_made": 0`.
   - Add test `test_skip_start_commit_on_refire`: mock `git log -1 --pretty=%s` to return the batch-name message. Assert `git_commit` (or the subprocess call for `git commit`) is NOT invoked. Assert the implementer still launches (i.e., `_implementer_claude.run` IS called).
   - Add test `test_no_skip_start_commit_on_fresh_fire`: mock `git log -1 --pretty=%s` to return a different message. Assert `git_commit` IS invoked once.
-  - Use the existing mock infrastructure in the file (look at the `_make_default_run_side_effect` or equivalent helper pattern to route subprocess call mocks by argv prefix).
+  - For tests that need per-command `_subprocess_util.run` routing: add a `side_effect` function to the mock keyed on `argv[1]` (the second element of the command list). For example: `"rev-list"` → `CompletedProcess(returncode=0, stdout="3\n", stderr="")`, `"log"` → `CompletedProcess(returncode=0, stdout=f"mill-go: start batch {batch_name}\n", stderr="")`, all other commands → the existing default return value. Attach via `mock_run.side_effect = lambda argv, **kw: routing_fn(argv)`.
 - **Commit:** `test(millpy-implement): add commits_made and skip-commit test cases`
 
 ## Batch Tests

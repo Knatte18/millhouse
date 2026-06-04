@@ -32,8 +32,8 @@ run of the existing `test-millpy-bg.py` EXIT-writing tests.
 - **Deletes:** none
 - **Requirements:**
   - Add `import json` at the top of `_bg.py` (after existing stdlib imports, before `logging`).
-  - Add a module-level helper `_last_json_line(text: str) -> bool` that scans `text.splitlines()` in reverse, finds the first line where `line.strip().startswith("{")`, tries `json.loads(line.strip())`, and returns `True` on success or `False` if no such line is found or if the parse raises `json.JSONDecodeError`. The function must not raise.
-  - In `check_bg_status`, in the dead-path after the race-guard re-read block (the section that ends with `return ("dead", pid)`): after the `_EXIT_CODE_RE.search(text)` check on the re-read text, add: `if _last_json_line(text): return ("exit", 0)`. This replaces the bare `return ("dead", pid)` as the final else. The dead path now only returns `("dead", pid)` when truly no valid JSON is present.
+  - Add a module-level helper `_has_valid_json_result(text: str) -> bool` that scans `text.splitlines()` in reverse, finds the first line where `line.strip().startswith("{")`, tries `json.loads(line.strip())`, and returns `True` on success or `False` if no such line is found or if the parse raises `json.JSONDecodeError`. The function must not raise.
+  - In `check_bg_status`, in the dead-path after the race-guard re-read block (the section that ends with `return ("dead", pid)`): after the `_EXIT_CODE_RE.search(text)` check on the re-read text, add: `if _has_valid_json_result(text): return ("exit", 0)`. This replaces the bare `return ("dead", pid)` as the final else. The dead path now only returns `("dead", pid)` when truly no valid JSON is present.
   - Do not change `is_bg_worker_alive`, `_EXIT_RE`, `_EXIT_CODE_RE`, or the `_PID_RE` constants.
 - **Commit:** `fix(_bg): return ("exit", 0) when dead+no-EXIT but JSON result present`
 
@@ -53,8 +53,7 @@ run of the existing `test-millpy-bg.py` EXIT-writing tests.
     3. `test_dead_no_exit_no_json`: log has only the PID START line and some non-JSON output. Assert returns `("dead", 99999999)`.
     4. `test_dead_exit_present_unaffected`: log has PID START + `[mill-bg] EXIT 0`. Assert returns `("exit", 0)` (existing path unaffected).
     5. `test_dead_no_exit_json_mid_log_only`: JSON line appears mid-log but the last `{`-prefixed line is NOT valid JSON (e.g. `{"partial`). Assert returns `("dead", 99999999)`.
-  - For tests 1-3 and 5: use PID 99999999 (assumed non-existent) so `os.kill` raises `ProcessLookupError`. Set the log file's mtime via `os.utime` to be stale so the fallback resolves to dead.
-  - Use `unittest.mock.patch` for `time.time` where needed to control mtime staleness detection without relying on real clock.
+  - For tests 1-3 and 5: use PID 99999999 (assumed non-existent) so `os.kill` raises `ProcessLookupError`. Set the log file's mtime via `os.utime(log_path, (stale_ts, stale_ts))` where `stale_ts = time.time() - _bg._STALE_LOG_SECONDS - 10` so the mtime fallback in `is_bg_worker_alive` treats the log as stale. Do NOT use `unittest.mock.patch` on `time.time` — use the same `os.utime` backdating approach as the existing `test_log_dead_pid_no_exit` test in the file.
 - **Commit:** `test(_bg): add check_bg_status JSON fallback test cases`
 
 ## Batch Tests

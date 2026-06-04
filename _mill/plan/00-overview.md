@@ -3,7 +3,7 @@
 ```yaml
 task: Fix millpy-bg EXIT marker and implementer reliability
 slug: millpy-bg-and-implement-fixes
-approved: false
+approved: true
 started: 20260604-164011
 parent: main
 root: ""
