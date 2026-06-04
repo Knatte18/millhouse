@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-bg-json-fallback
+phase: approved-implementer-stuck-fields
 slug: millpy-bg-and-implement-fixes
 branch: hanf/millpy-bg-and-implement-fixes
 plan: _mill/plan
@@ -22,6 +22,7 @@ plan-fix-r1  '2026-06-04T17:09:14Z'
 planned  '2026-06-04T17:09:38Z'
 implementing  '2026-06-04T17:15:53Z'
 approved-bg-json-fallback  '2026-06-04T17:24:13Z'
+approved-implementer-stuck-fields  '2026-06-04T17:33:07Z'
 ```
 
 ## Batches
@@ -34,9 +35,10 @@ batches:
     start_sha: 74a9757767d9afa36da834c280338089f0d424fb
     commit_sha: f93009d76dde104136b59084c9a154b5430c7ed2
   - name: implementer-stuck-fields
-    state: running
+    state: approved
     implementer_session: 75f72680-fa37-44e3-b5b5-5df8e145f3ac
     start_sha: 6c4604d02f915b790b5e8cb22c7377ccfe4c31b6
+    commit_sha: 4fe3b24aed771f388e1d27f104e7cc3af98cad64
   - name: psmux-timeout-config
     state: pending
   - name: mill-go-skill-update
