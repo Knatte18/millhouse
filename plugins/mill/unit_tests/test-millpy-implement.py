@@ -326,6 +326,133 @@ class TestMillpyImplement(unittest.TestCase):
         # Verify that _implementer_claude.run was called (the guard did not fire)
         mock_run.assert_called_once()
 
+    def test_commits_made_nonzero_on_llm_error(self):
+        """LLMError with commits made: rev-list returns 3 -> stuck JSON includes commits_made=3."""
+        def routing_fn(argv, **kw):
+            if argv[1] == "rev-list":
+                return subprocess.CompletedProcess(
+                    args=argv, returncode=0, stdout="3\n", stderr=""
+                )
+            return subprocess.CompletedProcess(args=argv, returncode=0, stdout="abc1234\n", stderr="")
+
+        self.mock_subprocess_run.side_effect = routing_fn
+
+        with unittest.mock.patch.object(
+            millpy_implement._implementer_claude, "run",
+            side_effect=millpy_implement._llm_claude.LLMError("timeout"),
+        ):
+            rc, out = self._run_main(["test-batch"])
+
+        self.assertEqual(rc, 1)
+        data = json.loads(out.strip().splitlines()[-1])
+        self.assertEqual(data["status"], "stuck")
+        self.assertEqual(data["stuck_type"], "transient")
+        self.assertEqual(data["commits_made"], 3)
+
+    def test_commits_made_zero_on_llm_error_no_commits(self):
+        """LLMError with no commits made: rev-list returns 0 -> stuck JSON includes commits_made=0."""
+        def routing_fn(argv, **kw):
+            if argv[1] == "rev-list":
+                return subprocess.CompletedProcess(
+                    args=argv, returncode=0, stdout="0\n", stderr=""
+                )
+            return subprocess.CompletedProcess(args=argv, returncode=0, stdout="abc1234\n", stderr="")
+
+        self.mock_subprocess_run.side_effect = routing_fn
+
+        with unittest.mock.patch.object(
+            millpy_implement._implementer_claude, "run",
+            side_effect=millpy_implement._llm_claude.LLMError("timeout"),
+        ):
+            rc, out = self._run_main(["test-batch"])
+
+        self.assertEqual(rc, 1)
+        data = json.loads(out.strip().splitlines()[-1])
+        self.assertEqual(data["status"], "stuck")
+        self.assertEqual(data["stuck_type"], "transient")
+        self.assertEqual(data["commits_made"], 0)
+
+    def test_commits_made_zero_on_rev_list_failure(self):
+        """LLMError with rev-list failure: returncode=1 -> commits_made defaults to 0."""
+        def routing_fn(argv, **kw):
+            if argv[1] == "rev-list":
+                return subprocess.CompletedProcess(
+                    args=argv, returncode=1, stdout="", stderr="error"
+                )
+            return subprocess.CompletedProcess(args=argv, returncode=0, stdout="abc1234\n", stderr="")
+
+        self.mock_subprocess_run.side_effect = routing_fn
+
+        with unittest.mock.patch.object(
+            millpy_implement._implementer_claude, "run",
+            side_effect=millpy_implement._llm_claude.LLMError("timeout"),
+        ):
+            rc, out = self._run_main(["test-batch"])
+
+        self.assertEqual(rc, 1)
+        data = json.loads(out.strip().splitlines()[-1])
+        self.assertEqual(data["status"], "stuck")
+        self.assertEqual(data["stuck_type"], "transient")
+        self.assertEqual(data["commits_made"], 0)
+
+    def test_skip_start_commit_on_refire(self):
+        """Re-fire with matching last commit: start-batch commit block is skipped."""
+        batch_name = "test-batch"
+
+        def routing_fn(argv, **kw):
+            if argv[1] == "log":
+                return subprocess.CompletedProcess(
+                    args=argv, returncode=0, stdout=f"mill-go: start batch {batch_name}\n", stderr=""
+                )
+            return subprocess.CompletedProcess(args=argv, returncode=0, stdout="abc1234\n", stderr="")
+
+        self.mock_subprocess_run.side_effect = routing_fn
+
+        with unittest.mock.patch.object(
+            millpy_implement._implementer_claude, "run",
+            return_value=(
+                '{"status":"success","commit_sha":"abc","session_id":"fake"}\n',
+                "fake-session",
+            ),
+        ) as mock_impl_run:
+            with unittest.mock.patch.object(
+                millpy_implement._subprocess_util, "git_commit"
+            ) as mock_git_commit:
+                rc, out = self._run_main(["test-batch"])
+
+        self.assertEqual(rc, 0)
+        # git_commit should NOT be called
+        mock_git_commit.assert_not_called()
+        # But _implementer_claude.run should still be called
+        mock_impl_run.assert_called_once()
+
+    def test_no_skip_start_commit_on_fresh_fire(self):
+        """Fresh fire with different last commit: start-batch commit block is executed."""
+        def routing_fn(argv, **kw):
+            if argv[1] == "log":
+                return subprocess.CompletedProcess(
+                    args=argv, returncode=0, stdout="some other commit message\n", stderr=""
+                )
+            return subprocess.CompletedProcess(args=argv, returncode=0, stdout="abc1234\n", stderr="")
+
+        self.mock_subprocess_run.side_effect = routing_fn
+
+        with unittest.mock.patch.object(
+            millpy_implement._implementer_claude, "run",
+            return_value=(
+                '{"status":"success","commit_sha":"abc","session_id":"fake"}\n',
+                "fake-session",
+            ),
+        ):
+            with unittest.mock.patch.object(
+                millpy_implement._subprocess_util, "git_commit"
+            ) as mock_git_commit:
+                rc, out = self._run_main(["test-batch"])
+
+        self.assertEqual(rc, 0)
+        # git_commit should be called exactly once
+        mock_git_commit.assert_called_once()
+
 
 class TestForwardOutput(unittest.TestCase):
 
