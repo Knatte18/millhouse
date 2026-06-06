@@ -142,8 +142,21 @@ class TestMillpyFix(unittest.TestCase):
             millpy_fix._status, "read_branch",
             return_value="test-branch",
         )
+        def _subprocess_routing(argv, *a, **kw):
+            # `git rev-list --count` must yield a parseable int (commits_made
+            # counting added in main's reliability fix); other git calls return
+            # a SHA-like stub as before.
+            if len(argv) > 1 and argv[1] == "rev-list":
+                return subprocess.CompletedProcess(
+                    args=argv, returncode=0, stdout="0\n", stderr=""
+                )
+            return subprocess.CompletedProcess(
+                args=argv, returncode=0, stdout="abc1234\n", stderr=""
+            )
+
         self.mock_subprocess_run = _p(
             millpy_fix._subprocess_util, "run",
+            side_effect=_subprocess_routing,
             return_value=subprocess.CompletedProcess(
                 args=[], returncode=0, stdout="abc1234\n", stderr=""
             ),
@@ -595,8 +608,21 @@ class TestMillpyFixBriefSizeGuard(unittest.TestCase):
             millpy_fix._status, "read_branch",
             return_value="test-branch",
         )
+        def _subprocess_routing(argv, *a, **kw):
+            # `git rev-list --count` must yield a parseable int (commits_made
+            # counting added in main's reliability fix); other git calls return
+            # a SHA-like stub as before.
+            if len(argv) > 1 and argv[1] == "rev-list":
+                return subprocess.CompletedProcess(
+                    args=argv, returncode=0, stdout="0\n", stderr=""
+                )
+            return subprocess.CompletedProcess(
+                args=argv, returncode=0, stdout="abc1234\n", stderr=""
+            )
+
         self.mock_subprocess_run = _p(
             millpy_fix._subprocess_util, "run",
+            side_effect=_subprocess_routing,
             return_value=subprocess.CompletedProcess(
                 args=[], returncode=0, stdout="abc1234\n", stderr=""
             ),
