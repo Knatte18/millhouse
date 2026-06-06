@@ -60,6 +60,7 @@ import _pygit2_util
 import _render
 import _reviewers
 from _config import (
+    _apply_dispatch_shim,
     apply_env_overrides,
     warn_unknown_keys,
     resolve_plugin_template_path,
@@ -1230,24 +1231,6 @@ def write_review_file(
     return out_path.resolve()
 
 
-def brief_path_for(briefs_dir: Path, role: str, scope: str, round_n: int) -> Path:
-    """Return the brief file path for a given role, scope, and round.
-
-    Mirrors _agent_dispatch.write_brief's naming convention so prepare and
-    finalize agree on the path. Does not create directories or write the file.
-
-    Args:
-        briefs_dir: Parent directory for briefs.
-        role: Role name (e.g., "review-discussion").
-        scope: Scope name (e.g., "holistic" or batch name).
-        round_n: Round number (integer).
-
-    Returns:
-        Path to the brief file (not yet created).
-    """
-    return Path(briefs_dir) / f"{role}-{scope}-r{round_n}.md"
-
-
 def finalize_scope(
     reviews_dir: Path,
     review_type: str,
@@ -1402,6 +1385,9 @@ def load_config(hub_root: Path, mill_dir: Path) -> dict:
 
     # 7. Apply environment overrides
     cfg = apply_env_overrides(cfg)
+
+    # 8. Apply dispatch enum back-compat shim for legacy via_psmux
+    _apply_dispatch_shim(cfg)
 
     return cfg
 
