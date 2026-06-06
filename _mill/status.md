@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-wiki-client-retry
 slug: mill-infra-bug-fixes
 branch: hanf/mill-infra-bug-fixes
 plan: _mill/plan
@@ -22,6 +22,7 @@ plan-fix-r1  '2026-06-06T19:18:34Z'
 plan-fix-r2  '2026-06-06T19:24:13Z'
 planned  '2026-06-06T19:24:27Z'
 implementing  '2026-06-06T19:28:04Z'
+approved-wiki-client-retry  '2026-06-06T19:31:53Z'
 ```
 
 ## Batches
@@ -29,9 +30,10 @@ implementing  '2026-06-06T19:28:04Z'
 ```yaml
 batches:
   - name: wiki-client-retry
-    state: running
+    state: approved
     implementer_session: b165f4e6-df50-4744-8cd2-f3545b642638
     start_sha: bc428a8cc95e6beacda778b65b7da1de9bda1ca4
+    commit_sha: f5fba7adc160ab6de3939e25299b874c435d5f04
   - name: review-backend
     state: pending
   - name: plan-verify-language-aware
