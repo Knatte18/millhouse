@@ -128,7 +128,7 @@ def main(argv=None) -> int:
     parser.add_argument(
         "--checkpoint",
         default=None,
-        help="(verify-fix mode) Git SHA of the merge commit.",
+        help="(verify-fix mode, full stage only) Git SHA of the merge commit; used in full mode to diff what the merge changed.",
     )
     parser.add_argument(
         "--stage",
@@ -264,8 +264,10 @@ def _run_verify_fix(args, project_root: Path, plugin_root: Path, cfg: dict, time
     if args.cmd is None:
         print("--cmd is required for verify-fix mode", file=sys.stderr)
         return 1
-    if args.checkpoint is None:
-        print("--checkpoint is required for verify-fix mode", file=sys.stderr)
+    # Note: --checkpoint is only consumed by full mode (line 299) for git diff.
+    # prepare and finalize stages do not require it.
+    if args.checkpoint is None and stage == "full":
+        print("--checkpoint is required for verify-fix full mode", file=sys.stderr)
         return 1
 
     # Shell-escaped user verify command — _subprocess_util.run does not support shell=True.
