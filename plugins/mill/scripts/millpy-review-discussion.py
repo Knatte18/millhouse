@@ -61,7 +61,11 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     try:
-        slug = args.slug or find_active_slug(project_root, wiki_root, cfg)
+        # Detect the slug from the task worktree branch (git_root), NOT the hub
+        # (project_root). Passing the hub makes branch detection fail and fall
+        # back to globbing stale hub _mill/*.active markers (e.g. "17 tasks
+        # active"). Matches millpy-review-code/-plan, which pass the worktree.
+        slug = args.slug or find_active_slug(git_root, wiki_root, cfg)
         result = run(cfg, slug, mill_dir, project_root, wiki_root, max_rounds=args.max_rounds)
         print(json.dumps(result.to_dict()))
         return 0
