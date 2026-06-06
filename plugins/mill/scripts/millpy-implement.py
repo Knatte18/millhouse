@@ -36,6 +36,34 @@ import _status
 from _implementer_common import _forward_output, emit_prepare, finalize_from_output
 
 
+def classify_stuck_type(reason: str) -> str:
+    """Classify an LLMError reason into stuck_type: verify or transient.
+
+    Args:
+        reason: Error message from LLMError.
+
+    Returns:
+        "verify" if the error indicates a missing binary / command not found;
+        "transient" otherwise (timeout, dead session, rate limit, etc.).
+    """
+    reason_lower = reason.lower()
+    # Command-not-found / missing-binary indicators
+    missing_binary_signals = [
+        "command not found",
+        "no such file",
+        "not found",
+        "cannot find",
+        "[errno 2]",  # ENOENT on POSIX
+        "winerror 2",  # Windows equivalent
+        "cannot run program",
+    ]
+    for signal in missing_binary_signals:
+        if signal in reason_lower:
+            return "verify"
+    # If none of the missing-binary signals are found, treat as transient
+    return "transient"
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(
         description="Dispatch or resume a per-batch implementer session."
@@ -248,8 +276,10 @@ def main(argv=None) -> int:
             commits_made = int(result.stdout.strip())
         else:
             commits_made = 0
-        print(json.dumps({"status": "stuck", "stuck_type": "transient", "reason": str(e), "commits_made": commits_made}))
-        print(str(e), file=sys.stderr)
+        error_reason = str(e)
+        stuck_type = classify_stuck_type(error_reason)
+        print(json.dumps({"status": "stuck", "stuck_type": stuck_type, "reason": error_reason, "commits_made": commits_made}))
+        print(error_reason, file=sys.stderr)
         return 1
     return _forward_output(output, project_root, start_sha=start_sha, snapshot_path=snapshot_path, session_id=session_id)
 
