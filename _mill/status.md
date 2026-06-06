@@ -29,7 +29,9 @@ implementing  '2026-06-06T19:28:04Z'
 ```yaml
 batches:
   - name: wiki-client-retry
-    state: pending
+    state: running
+    implementer_session: b165f4e6-df50-4744-8cd2-f3545b642638
+    start_sha: bc428a8cc95e6beacda778b65b7da1de9bda1ca4
   - name: review-backend
     state: pending
   - name: plan-verify-language-aware
