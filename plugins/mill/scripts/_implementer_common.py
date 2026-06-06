@@ -187,6 +187,37 @@ def finalize_from_output(
     )
 
 
+def _extract_status_json(output: str) -> dict | None:
+    """Extract the last JSON object containing a 'status' key from output.
+
+    Iterates through balanced-brace spans and attempts json.loads on each.
+    Returns the parsed JSON dict if a valid status object is found; None otherwise.
+    """
+    # Find all potential JSON spans by tracking balanced braces
+    candidates = []
+    depth = 0
+    start = None
+    for i, char in enumerate(output):
+        if char == '{':
+            if depth == 0:
+                start = i
+            depth += 1
+        elif char == '}':
+            depth -= 1
+            if depth == 0 and start is not None:
+                candidates.append(output[start:i + 1])
+                start = None
+    # Try to parse candidates in reverse order (last first)
+    for candidate in reversed(candidates):
+        try:
+            parsed = json.loads(candidate)
+            if isinstance(parsed, dict) and "status" in parsed:
+                return parsed
+        except json.JSONDecodeError:
+            pass
+    return None
+
+
 def _forward_output(
     output: str,
     project_root: Path,
@@ -195,33 +226,28 @@ def _forward_output(
     snapshot_path: Path | None = None,
     session_id: str | None = None,
 ) -> int:
-    """Extract the last JSON object containing a 'status' key from output using regex.
+    """Extract the last JSON object containing a 'status' key from output.
 
     Returns 0 in both success and fallback cases — the JSON on stdout is how the caller reads state.
     When no valid JSON is found, emits a stuck/logic sentinel.
     When the inferred-success fallback fires, the emitted JSON uses ``session_id`` if supplied,
     falling back to the literal ``"unknown"`` for backwards compatibility with callers that don't pass it.
     """
-    matches = re.findall(r'\{[^{}]*"status"[^{}]*\}', output)
-    if matches:
-        last = matches[-1]
-        try:
-            parsed = json.loads(last)
-            result = _subprocess_util.run(
-                ["git", "rev-parse", "HEAD"],
-                cwd=project_root,
-            )
-            if result.returncode == 0:
-                parsed["commit_sha"] = result.stdout.strip()
-                violations = _cleanliness.compute_scope_violations(project_root)
-                if violations:
-                    parsed["scope_violations"] = violations
-                print(json.dumps(parsed))
-            else:
-                print(last)
-            return 0
-        except json.JSONDecodeError:
-            pass
+    parsed = _extract_status_json(output)
+    if parsed is not None:
+        result = _subprocess_util.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=project_root,
+        )
+        if result.returncode == 0:
+            parsed["commit_sha"] = result.stdout.strip()
+            violations = _cleanliness.compute_scope_violations(project_root)
+            if violations:
+                parsed["scope_violations"] = violations
+            print(json.dumps(parsed))
+        else:
+            print(json.dumps(parsed))
+        return 0
     try:
         if start_sha is not None and snapshot_path is not None and snapshot_path.exists():
             new_dirt = _cleanliness.compute_new_dirt(project_root, snapshot_path)
