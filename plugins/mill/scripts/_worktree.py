@@ -24,6 +24,8 @@ Public API:
     copy_millhouse(src, dst, exclude)      — copy .millhouse/ minus exclude.
     list_worktrees(cwd) -> list[dict]      — enumerate all worktrees for the repo at cwd.
     remove(path, cwd, force=True) -> None  — remove a registered worktree.
+    processes_holding_path(worktree, process_records) -> list[int]  — pure matcher for pids referencing worktree.
+    kill_stale_holders(worktree) -> None   — kill processes holding worktree handles.
 """
 from __future__ import annotations
 
@@ -190,12 +192,15 @@ def remove_safe(
            recursive removal would otherwise follow `.millhouse/wiki`,
            `.others`, and `.active` and wipe the wiki, the portals dir,
            or sibling worktrees.
-        2. Try ``git worktree remove --force``. Junction-safe by design.
-        3. If git fails with a long-path error (Windows, common when
+        2. Kill stale processes holding handles into the worktree
+           (e.g. bash poll-loops) via ``kill_stale_holders``. Best-effort,
+           all errors swallowed.
+        3. Try ``git worktree remove --force``. Junction-safe by design.
+        4. If git fails with a long-path error (Windows, common when
            ``.scratch/`` has deep claude session JSONs), fall back to
            ``_safe_rmtree.safe_rmtree`` — safe NOW because junctions are already gone —
            then ``git worktree prune`` to clear git's internal registry.
-        4. Any other git failure is re-raised; callers handle "in use"
+        5. Any other git failure is re-raised; callers handle "in use"
            messages etc.
 
     See GitHub issue #100 for the data-loss incident this guards against.
@@ -217,6 +222,8 @@ def remove_safe(
         stripped = _junction.strip_all_in_worktree(path, junctions_cfg)
         for abs_link in stripped:
             print(f"[worktree] stripped junction: {abs_link}", file=sys.stderr)
+
+    kill_stale_holders(path)
 
     cmd = ["git", "-C", str(cwd), "worktree", "remove"]
     if force:
@@ -285,3 +292,120 @@ def _is_windows_junction(path: Path) -> bool:
         return bool(path.lstat().st_file_attributes & _stat.FILE_ATTRIBUTE_REPARSE_POINT)  # type: ignore[attr-defined]
     except (OSError, AttributeError):
         return False
+
+
+def processes_holding_path(worktree: Path, process_records: list[dict]) -> list[int]:
+    """
+    Return pids whose command line references the given worktree path.
+
+    Pure matcher: takes an injected list of process records (each with
+    'pid' and 'command_line' keys) and returns pids whose command line
+    contains the normalized worktree path.
+
+    Records with command_line=None or empty are silently skipped
+    (elevated processes queried from non-elevated shell may have None
+    command line). Guards against TypeError before substring check.
+
+    Args:
+        worktree: Absolute path to the worktree being checked.
+        process_records: List of dicts with 'pid' and 'command_line' keys.
+
+    Returns:
+        List of pids whose command line references the worktree path.
+    """
+    worktree_normalized = str(worktree.resolve()).lower()
+    matching_pids: list[int] = []
+
+    for record in process_records:
+        cmdline = record.get("command_line")
+        if not cmdline:
+            continue
+        try:
+            cmdline_normalized = str(cmdline).lower()
+        except (TypeError, ValueError):
+            continue
+        if worktree_normalized in cmdline_normalized:
+            matching_pids.append(record["pid"])
+
+    return matching_pids
+
+
+def kill_stale_holders(
+    worktree: Path,
+    *,
+    enumerate_processes=None,
+) -> None:
+    """
+    Kill processes holding handles into the worktree.
+
+    Best-effort, failure-swallowing helper that enumerates processes,
+    filters for those referencing the worktree path, and terminates them
+    (taskkill /PID <pid> /F on Windows, no-op on non-Windows).
+
+    The enumerator is injected for testability. The default real enumerator
+    uses PowerShell Get-CimInstance on Windows to obtain command-line text.
+
+    All errors are swallowed: failures to enumerate or kill never raise.
+    ASCII-only messages.
+
+    Args:
+        worktree: Absolute path to the worktree directory.
+        enumerate_processes: Optional callable that returns list of dicts
+            with 'pid' and 'command_line' keys. Default uses PowerShell
+            on Windows and returns empty list on non-Windows.
+    """
+    if enumerate_processes is None:
+        def _default_enumerate_processes() -> list[dict]:
+            if sys.platform != "win32":
+                return []
+            try:
+                result = _subprocess_util.run(
+                    [
+                        "powershell",
+                        "-Command",
+                        "Get-CimInstance Win32_Process | "
+                        "Select-Object ProcessId, CommandLine | "
+                        "ConvertTo-Json -AsArray",
+                    ],
+                )
+                if result.returncode != 0:
+                    return []
+                import json
+                data = json.loads(result.stdout.strip())
+                if not isinstance(data, list):
+                    data = [data] if data else []
+                records: list[dict] = []
+                for item in data:
+                    if isinstance(item, dict):
+                        records.append({
+                            "pid": item.get("ProcessId"),
+                            "command_line": item.get("CommandLine"),
+                        })
+                return records
+            except Exception:
+                return []
+
+        enumerate_processes = _default_enumerate_processes
+
+    try:
+        process_records = enumerate_processes()
+    except Exception:
+        return
+
+    try:
+        pids_to_kill = processes_holding_path(worktree, process_records)
+    except Exception:
+        return
+
+    for pid in pids_to_kill:
+        try:
+            _subprocess_util.run(
+                ["taskkill", "/PID", str(pid), "/F"],
+                check=False,
+            )
+            print(
+                f"[worktree] killed stale process {pid} holding {worktree}",
+                file=sys.stderr,
+            )
+        except Exception:
+            pass
