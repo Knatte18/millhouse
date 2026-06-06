@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: discussed
 slug: mill-bg-exit-marker
 branch: hanf/mill-bg-exit-marker
 plan: null
@@ -15,4 +15,5 @@ task_description: |
 
 ```text
 discussing  '2026-06-06T17:47:08Z'
+discussed  '2026-06-06T18:49:34Z'
 ```
