@@ -158,6 +158,7 @@ def _build_psmux_argv(
     *,
     psmux_session_name: str | None = None,
     keep_alive: bool = False,
+    timeout: int | None = None,
 ) -> list[str]:
     """Build argv for a psmux subprocess call.
 
@@ -170,6 +171,7 @@ def _build_psmux_argv(
                             falls back to auto-generated 'mill-<uuid8>' name
         keep_alive: If True, pass --keep-alive to wrapper to leave session running
                     on success
+        timeout: Optional response-poll timeout in seconds (overrides mode-specific default)
 
     Returns:
         argv list starting with [sys.executable, wrapper_script, ...]
@@ -188,6 +190,8 @@ def _build_psmux_argv(
         argv += ["--psmux-session", psmux_session_name]
     if keep_alive:
         argv += ["--keep-alive"]
+    if timeout is not None:
+        argv += ["--response-poll-timeout", str(timeout)]
     return argv
 
 
@@ -322,6 +326,7 @@ def _invoke(
             session_id,
             psmux_session_name=psmux_name,
             keep_alive=caller_provided_session_id,
+            timeout=timeout,
         )
         try:
             child_env = {k: v for k, v in os.environ.items() if k not in STRIP_VARS}
