@@ -40,7 +40,9 @@ batches:
     start_sha: 250202504d01bfaed20dc9479dea878e4e2becfb
     commit_sha: 59477ff02230fc00dcdd1b483d7ed11b9b4f507d
   - name: impl-fix-merge-seam
-    state: pending
+    state: running
+    implementer_session: e6026afd-a7c4-4fce-b857-a8898d99e324
+    start_sha: 368f4ed0b7d19e74c5399bfa78a1d84af933a856
   - name: review-seam
     state: pending
   - name: skill-mill-go
