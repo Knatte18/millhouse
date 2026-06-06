@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: revise-ghissues-to-tasks
 branch: hanf/revise-ghissues-to-tasks
 plan: _mill/plan
@@ -19,4 +19,13 @@ discussed  '2026-06-06T18:57:18Z'
 planning  '2026-06-06T19:02:46Z'
 plan-review-r1  '2026-06-06T19:03:48Z'
 planned  '2026-06-06T19:04:02Z'
+implementing  '2026-06-06T19:09:32Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: rewrite-skill
+    state: pending
 ```
