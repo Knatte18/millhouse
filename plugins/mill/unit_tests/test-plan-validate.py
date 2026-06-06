@@ -1222,12 +1222,15 @@ def test_check_verify_not_isolated_missing_key() -> int:
 
 
 def test_check_verify_not_isolated_dirty_no_prefix() -> int:
-    """Dirty: per-batch frontmatter verify: without PYTHONPATH= prefix -> one error."""
+    """Dirty: Python project + per-batch frontmatter verify: without PYTHONPATH= prefix -> one error."""
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
         plan_dir = tmp / "plan"
         project_root = tmp / "project"
         project_root.mkdir()
+
+        # Add Python marker to make this a Python project
+        (project_root / "pyproject.toml").write_text("[project]\n", encoding="utf-8")
 
         overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
         batch_text = (
@@ -1303,12 +1306,15 @@ def test_check_verify_not_isolated_clean_with_prefix() -> int:
 
 
 def test_check_verify_not_isolated_two_batches_dirty() -> int:
-    """Dirty: two batch files both unprefixed -> exactly two verify-not-isolated errors."""
+    """Dirty: Python project + two batch files both unprefixed -> exactly two verify-not-isolated errors."""
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
         plan_dir = tmp / "plan"
         project_root = tmp / "project"
         project_root.mkdir()
+
+        # Add Python marker to make this a Python project
+        (project_root / "pyproject.toml").write_text("[project]\n", encoding="utf-8")
 
         overview = _make_overview([
             {"name": "alpha", "file": "01-alpha.md"},
@@ -1430,12 +1436,15 @@ def test_check_verify_not_isolated_non_empty_pythonpath_value() -> int:
 
 
 def test_check_verify_not_isolated_run_integration() -> int:
-    """Integration: invoke _plan_validate.run() with unprefixed batch, verify 5-key envelope."""
+    """Integration: Python project + unprefixed batch, verify 5-key envelope."""
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
         plan_dir = tmp / "plan"
         project_root = tmp / "project"
         project_root.mkdir()
+
+        # Add Python marker to make this a Python project
+        (project_root / "pyproject.toml").write_text("[project]\n", encoding="utf-8")
 
         overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
         batch_text = (
