@@ -18,7 +18,12 @@ Worker mode (internal — spawned by launcher):
     millpy-bg.py --_worker --log <abs-path> -- <cmd> [args...]
 
     Runs <cmd> with stdout+stderr redirected to <abs-path> and
-    appends "[mill-bg] EXIT <code>" when the process exits.
+    attempts to append "[mill-bg] EXIT <code>" when the process exits.
+    The EXIT write is best-effort: it covers clean exit and in-process
+    exception paths but does NOT survive a hard process kill (e.g., psmux
+    session teardown / TerminateProcess on Windows). The kill-resilient
+    backstop is the trailing-JSON completion sentinel consumed by
+    _bg.check_bg_status.
     Not intended to be called directly.
 """
 import sys
@@ -76,6 +81,9 @@ if "--_worker" in sys.argv:
             exit_code = -1
             return 1
         finally:
+            # Best-effort EXIT write: covers normal exit and in-process exceptions.
+            # Does NOT survive hard process kill (e.g., psmux TerminateProcess).
+            # Orchestrator uses trailing-JSON sentinel as kill-resilient completion fallback.
             try:
                 with open(log_path, "a", encoding="utf-8") as log_f:
                     log_f.write(f"[mill-bg] EXIT {exit_code}\n")

@@ -1,15 +1,22 @@
 """Liveness probe for millpy-bg worker subprocesses; used by orchestrators after resume to decide whether to wait or re-fire.
 
-check_bg_status determines completion via a three-tier resolution:
+Completion detection (agent-mode dispatch preferred):
+  - Agent-mode dispatch (no subprocess) is the structural solution — no process
+    to lose and no detection needed.
+  - Subprocess mode (millpy-bg dispatch) relies on two mechanisms:
+    * EXIT sentinel write (best-effort, killed by hard termination).
+    * Trailing-JSON completion sentinel (kill-resilient backstop).
+
+check_bg_status determines completion via this resolution order:
   (1) log missing -> dead
   (2) [mill-bg] EXIT <code> present -> exit
   (3) liveness probe (affirmative kill-signal response) -> running
-  (4) trailing-JSON completion sentinel present -> exit (kill-resilient backstop)
+  (4) trailing-JSON completion sentinel present -> exit
   (5) liveness probe (assumed-alive mtime-fresh fallback) -> running
   (6) otherwise -> dead
 
-The trailing-JSON sentinel is the fallback for workers hard-killed before writing EXIT.
-Every millpy-bg-dispatched CLI MUST emit a single parseable JSON line as its final stdout.
+Trailing-JSON contract: every millpy-bg-dispatched CLI MUST emit a single
+parseable JSON line as its final stdout (used by step 4 above).
 """
 import json
 import logging
