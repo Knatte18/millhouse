@@ -830,7 +830,23 @@ def _check_verify_not_isolated(batch_files: list[Path]) -> list[dict]:
         verify_stripped = verify.strip()
         if not verify_stripped:
             continue
-        if not verify_stripped.startswith("PYTHONPATH="):
+
+        # Determine the worktree root from the batch file location.
+        # batch_path is in <worktree>/_mill/plan/NN-*.md, so the worktree root
+        # is batch_path.parent.parent.parent (project_root).
+        worktree_root = batch_path.parent.parent.parent
+
+        # Check if this is a Python project by looking for markers at worktree root
+        # or in plugins/mill/ subdirectory.
+        is_python_project = (
+            (worktree_root / "pyproject.toml").exists()
+            or (worktree_root / "setup.py").exists()
+            or (worktree_root / "setup.cfg").exists()
+            or (worktree_root / "plugins" / "mill" / "pyproject.toml").exists()
+        )
+
+        # Only require PYTHONPATH= prefix for Python projects.
+        if is_python_project and not verify_stripped.startswith("PYTHONPATH="):
             errors.append({
                 "check": "verify-not-isolated",
                 "batch": batch_path.stem,
