@@ -28,8 +28,10 @@ import re
 import subprocess
 import _subprocess_util
 import sys
+import uuid
 from pathlib import Path
 
+import _agent_dispatch
 import _implementer_claude
 import _llm_claude
 import _marker
@@ -37,7 +39,7 @@ import _paths
 import _render
 import _review_common
 import _reviewers
-from _implementer_common import _forward_output
+from _implementer_common import _forward_output, emit_prepare, emit_prepare_no_dispatch, finalize_from_output
 
 
 # DU-conflict resolution needs branch intent; the resolver had no signal before #314.
@@ -128,6 +130,16 @@ def main(argv=None) -> int:
         default=None,
         help="(verify-fix mode) Git SHA of the merge commit.",
     )
+    parser.add_argument(
+        "--stage",
+        choices=["prepare", "finalize", "full"],
+        default="full",
+        help="Stage of execution: prepare (render brief), finalize (process output), or full (default, unchanged behavior).",
+    )
+    parser.add_argument(
+        "--agent-output",
+        help="Path to agent output file (required when --stage finalize).",
+    )
     args = parser.parse_args(argv)
 
     # Common setup
@@ -150,6 +162,39 @@ def main(argv=None) -> int:
         print(str(e), file=sys.stderr)
         return 1
 
+    # Stage: finalize (early exit before mode-specific logic)
+    if args.stage == "finalize":
+        if not args.agent_output:
+            print("--agent-output is required when --stage finalize", file=sys.stderr)
+            return 1
+        if args.mode == "verify-fix":
+            if args.cmd is None:
+                print("--cmd is required for verify-fix mode", file=sys.stderr)
+                return 1
+            # Re-run verify command before finalizing
+            post_verify_result = subprocess.run(
+                args.cmd,
+                shell=True,
+                capture_output=True,
+                text=True,
+                cwd=project_root,
+            )
+            if post_verify_result.returncode == 0:
+                sha_result = _subprocess_util.run(
+                    ["git", "rev-parse", "HEAD"],
+                    cwd=project_root,
+                )
+                sha = sha_result.stdout.strip() if sha_result.returncode == 0 else ""
+                print(json.dumps({"status": "success", "commit_sha": sha}))
+                return 0
+        return finalize_from_output(
+            Path(args.agent_output),
+            project_root,
+            start_sha=None,
+            snapshot_path=None,
+            session_id=None,
+        )
+
     timeout = cfg.get("llm", {}).get("implementer_timeout", 1800)
     implementer_cfg = cfg.get("roles", {}).get("implementer", {})
     model_name = cfg.get("merge", {}).get("model") or implementer_cfg.get("model", "haiku")
@@ -163,12 +208,12 @@ def main(argv=None) -> int:
     impl_effort = impl_spec.get("effort")
 
     if args.mode == "conflicts":
-        return _run_conflicts(args, project_root, plugin_root, cfg, timeout, impl_model, impl_effort)
+        return _run_conflicts(args, project_root, plugin_root, cfg, timeout, impl_model, impl_effort, stage=args.stage)
     else:
-        return _run_verify_fix(args, project_root, plugin_root, cfg, timeout, impl_model, impl_effort)
+        return _run_verify_fix(args, project_root, plugin_root, cfg, timeout, impl_model, impl_effort, stage=args.stage)
 
 
-def _run_conflicts(args, project_root: Path, plugin_root: Path, cfg: dict, timeout: int, impl_model: str, impl_effort: str | None) -> int:
+def _run_conflicts(args, project_root: Path, plugin_root: Path, cfg: dict, timeout: int, impl_model: str, impl_effort: str | None, stage: str = "full") -> int:
     if not args.files:
         print("--files is required for conflicts mode", file=sys.stderr)
         return 1
@@ -183,6 +228,14 @@ def _run_conflicts(args, project_root: Path, plugin_root: Path, cfg: dict, timeo
         "TASK_INTENT": task_intent,
     })
 
+    # Stage: prepare
+    if stage == "prepare":
+        briefs_dir = _paths.resolve_task_path(project_root, "_mill/briefs/")
+        model_tier = _agent_dispatch.model_to_tier(impl_model)
+        session_id = str(uuid.uuid4())
+        return emit_prepare(briefs_dir, "merge", "conflicts", 1, prompt_text, model_tier, session_id)
+
+    # Stage: full (default)
     try:
         output, _ = _implementer_claude.run(
             prompt_text,
@@ -201,7 +254,7 @@ def _run_conflicts(args, project_root: Path, plugin_root: Path, cfg: dict, timeo
     return _forward_output(output, project_root)
 
 
-def _run_verify_fix(args, project_root: Path, plugin_root: Path, cfg: dict, timeout: int, impl_model: str, impl_effort: str | None) -> int:
+def _run_verify_fix(args, project_root: Path, plugin_root: Path, cfg: dict, timeout: int, impl_model: str, impl_effort: str | None, stage: str = "full") -> int:
     if args.cmd is None:
         print("--cmd is required for verify-fix mode", file=sys.stderr)
         return 1
@@ -217,6 +270,13 @@ def _run_verify_fix(args, project_root: Path, plugin_root: Path, cfg: dict, time
         text=True,
         cwd=project_root,
     )
+
+    # Stage: prepare (special case: verify passes)
+    if stage == "prepare" and result.returncode == 0:
+        briefs_dir = _paths.resolve_task_path(project_root, "_mill/briefs/")
+        model_tier = _agent_dispatch.model_to_tier(impl_model)
+        session_id = str(uuid.uuid4())
+        return emit_prepare_no_dispatch(model_tier, session_id, "merge", "verify-fix", 1, project_root)
 
     if result.returncode == 0:
         sha_result = _subprocess_util.run(
@@ -246,6 +306,14 @@ def _run_verify_fix(args, project_root: Path, plugin_root: Path, cfg: dict, time
         "PROJECT_ROOT": str(project_root),
     })
 
+    # Stage: prepare (verify failed, need to dispatch)
+    if stage == "prepare":
+        briefs_dir = _paths.resolve_task_path(project_root, "_mill/briefs/")
+        model_tier = _agent_dispatch.model_to_tier(impl_model)
+        session_id = str(uuid.uuid4())
+        return emit_prepare(briefs_dir, "merge", "verify-fix", 1, prompt_text, model_tier, session_id)
+
+    # Stage: full (default)
     try:
         output, _ = _implementer_claude.run(
             prompt_text,
@@ -261,7 +329,7 @@ def _run_verify_fix(args, project_root: Path, plugin_root: Path, cfg: dict, time
         print(str(e), file=sys.stderr)
         return 1
 
-    # Post-sub-agent re-verification
+    # Post-sub-agent re-verification (only in full mode)
     post_verify_result = subprocess.run(
         args.cmd,
         shell=True,
