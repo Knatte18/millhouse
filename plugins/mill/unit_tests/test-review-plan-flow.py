@@ -1196,6 +1196,7 @@ def main() -> int:
         cfg["roles"]["plan-review"]["holistic"]["reviewer"] = "test_stub"
         cfg["roles"]["plan-review"]["holistic"]["rounds"] = 1
         cfg["roles"]["plan-review"]["batch"]["reviewer"] = None
+        cfg["llm"]["holistic_timeout"] = 1800  # default
         # Add large_prompt timeout override
         cfg["roles"]["plan-review"]["holistic"]["large_prompt"] = {
             "threshold_ktok": 1,  # low threshold to trigger override with normal prompt
@@ -1204,23 +1205,18 @@ def main() -> int:
         orig_dir = os.getcwd()
         os.chdir(project_root)
         try:
-            from unittest.mock import patch
+            from unittest.mock import patch, MagicMock
             # Capture the timeout kwarg passed to _reviewer_single.run
             captured_timeout = None
-            original_run = None
             def mock_run(spec, prompt_text, timeout=None, session_id=None, resume=False):
                 nonlocal captured_timeout
                 captured_timeout = timeout
-                return original_run(spec, prompt_text, timeout=timeout, session_id=session_id, resume=resume)
+                # Return APPROVE_TEXT and a session_id like the test stub does
+                return (APPROVE_TEXT, "test-session-id")
 
-            _seed_approve(1)
-            with patch("_reviewer_single.run", side_effect=mock_run) as mock:
-                # Store the original run function before patching
-                import _reviewer_single
-                original_run = _reviewer_single.run
-                mock.side_effect = None  # Reset so we can use the actual function
-                with patch("_reviewer_single.run", side_effect=mock_run):
-                    r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root)
+            _seed_approve(1)  # seed the test_stub just in case
+            with patch("_review_plan._reviewer_single.run", side_effect=mock_run):
+                r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root)
 
             # The captured_timeout should be the override (7200) because the prompt is over threshold
             assert captured_timeout == 7200, (
