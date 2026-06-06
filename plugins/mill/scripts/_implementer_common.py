@@ -244,12 +244,21 @@ def _forward_output(
                                     check=False,
                                 )
                                 if result_check.returncode == 0 and not result_check.stdout.strip():
-                                    # Tree is now clean; emit success
+                                    # Tree is now clean; get the new HEAD after drift commit
+                                    result_head = _subprocess_util.run(
+                                        ["git", "rev-parse", "HEAD"],
+                                        cwd=project_root,
+                                    )
+                                    if result_head.returncode == 0:
+                                        new_head = result_head.stdout.strip()
+                                    else:
+                                        new_head = head
+                                    # Emit success
                                     violations = _cleanliness.compute_scope_violations(project_root)
                                     if violations:
                                         print(json.dumps({"status": "stuck", "stuck_type": "logic", "reason": f"untracked files outside scope: {violations}", "scope_violations": violations, "inferred": True}))
                                     else:
-                                        print(json.dumps({"status": "success", "commit_sha": head, "session_id": session_id or "unknown", "inferred": True}))
+                                        print(json.dumps({"status": "success", "commit_sha": new_head, "session_id": session_id or "unknown", "inferred": True}))
                                     return 0
                         # Not formatter drift, or commit failed
                         print(json.dumps({"status": "stuck", "stuck_type": "logic", "reason": "inferred success but working tree dirty -- implementer likely skipped git-commit on modified files"}))

@@ -612,10 +612,6 @@ def main() -> int:
         )
         # Add whitespace-only change to tracked file
         (project_root / "README.md").write_text("seed   \n", encoding="utf-8")
-        new_head = subprocess.run(
-            ["git", "-C", str(project_root), "rev-parse", "HEAD"],
-            check=True, capture_output=True, text=True,
-        ).stdout.strip()
         rc, captured = _capture_stdout(
             lambda: _forward_output(
                 "garbage with no json",
@@ -634,6 +630,12 @@ def main() -> int:
                 check=True, capture_output=True, text=True,
             )
             assert not status_result.stdout.strip(), f"expected clean tree after auto-commit, got {status_result.stdout}"
+            # Verify the formatter drift commit was made
+            log_result = subprocess.run(
+                ["git", "-C", str(project_root), "log", "--oneline"],
+                check=True, capture_output=True, text=True,
+            )
+            assert "chore(format)" in log_result.stdout, f"expected chore(format) commit in log, got {log_result.stdout}"
             print("PASS: inferred success with formatter drift -> drift auto-committed, success emitted")
         except Exception as exc:
             print(f"FAIL: case 19 ({exc}) captured={captured!r}", file=sys.stderr)
