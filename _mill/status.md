@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-reviewing
+phase: holistic-approved
 slug: subprocess-to-agents
 branch: hanf/subprocess-to-agents
 plan: _mill/plan
@@ -31,6 +31,7 @@ approved-agent-mode-parity-test  '2026-06-06T15:14:54Z'
 holistic-reviewing  '2026-06-06T15:15:22Z'
 holistic-fixing  '2026-06-06T16:07:21Z'
 holistic-reviewing  '2026-06-06T16:32:11Z'
+holistic-approved  '2026-06-06T16:51:26Z'
 ```
 
 ## Batches
