@@ -71,5 +71,7 @@ batches:
     start_sha: 34f87db376621a8270072afa32557e0742782feb
     commit_sha: 8625666a82c7074630740419a097fbbeb7c24d11
   - name: merge-in-verify-gate
-    state: pending
+    state: running
+    implementer_session: 5397e85a-d984-4780-8399-d534a3d9e922
+    start_sha: dbfaa26b57764db9c1ac486db7d5073bb554dfb5
 ```
