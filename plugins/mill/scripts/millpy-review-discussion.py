@@ -86,7 +86,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.stage == "prepare":
         try:
-            prepare_result = prepare(cfg, slug, mill_dir, project_root, wiki_root)
+            prepare_result = prepare(cfg, slug, mill_dir, project_root, wiki_root, max_rounds=args.max_rounds)
             briefs_dir = _paths.resolve_task_path(project_root, "_mill/briefs/")
             brief_path = _agent_dispatch.write_brief(
                 briefs_dir, "review-discussion", prepare_result["scope"],
@@ -115,7 +115,7 @@ def main(argv: list[str] | None = None) -> int:
             agent_output_path = Path(args.agent_output)
             raw_text = agent_output_path.read_text(encoding="utf-8")
             # We need round_n and reviews_dir; get them via prepare() first
-            prepare_result = prepare(cfg, slug, mill_dir, project_root, wiki_root)
+            prepare_result = prepare(cfg, slug, mill_dir, project_root, wiki_root, max_rounds=args.max_rounds)
             result = finalize(
                 cfg, slug, raw_text, round_n=prepare_result["round"],
                 reviews_dir=prepare_result["reviews_dir"], mill_dir=mill_dir,

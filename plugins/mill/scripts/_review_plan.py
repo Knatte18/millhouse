@@ -384,7 +384,7 @@ def prepare(
 
         return {
             "prompt_text": prompt_text,
-            "model": batch_spec["model"],
+            "model": batch_spec.get("model"),
             "round": round_n,
             "reviews_dir": reviews_dir,
             "scope": scope,
@@ -461,7 +461,7 @@ def prepare(
 
         return {
             "prompt_text": prompt_text,
-            "model": holistic_spec["model"],
+            "model": holistic_spec.get("model"),
             "round": round_n,
             "reviews_dir": reviews_dir,
             "scope": "holistic",

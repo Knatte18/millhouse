@@ -120,7 +120,8 @@ def main(argv: list[str] | None = None) -> int:
             scope = args.batch or "holistic"
             prepare_result = prepare(
                 cfg, slug, scope=args.batch, mill_dir=mill_dir, project_root=project_root,
-                wiki_root=wiki_root, git_root=git_root, extra_files=extra_files
+                wiki_root=wiki_root, git_root=git_root, extra_files=extra_files,
+                max_rounds=args.max_rounds,
             )
             briefs_dir = _paths.resolve_task_path(project_root, "_mill/briefs/")
             brief_path = _agent_dispatch.write_brief(
@@ -151,7 +152,8 @@ def main(argv: list[str] | None = None) -> int:
             raw_text = agent_output_path.read_text(encoding="utf-8")
             prepare_result = prepare(
                 cfg, slug, scope=args.batch, mill_dir=mill_dir, project_root=project_root,
-                wiki_root=wiki_root, git_root=git_root, extra_files=extra_files
+                wiki_root=wiki_root, git_root=git_root, extra_files=extra_files,
+                max_rounds=args.max_rounds,
             )
             result = finalize(
                 cfg, slug, raw_text, scope=args.batch, round_n=prepare_result["round"],

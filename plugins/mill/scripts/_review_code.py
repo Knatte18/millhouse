@@ -187,12 +187,14 @@ def prepare(
     wiki_root: Path,
     git_root: Path,
     extra_files: list[Path] | None = None,
+    max_rounds: int | None = None,
 ) -> dict:
     """Prepare a code review by rendering the prompt for a single scope.
 
     Args:
         scope: Batch name (e.g., "01-setup") or None for holistic.
         extra_files: Additional source files to include in the bulk.
+        max_rounds: Override the configured round cap for this scope.
 
     Returns:
         Dict with keys: prompt_text, model, round, reviews_dir, scope.
@@ -202,6 +204,19 @@ def prepare(
     reviews_dir = resolve_path(cfg["paths"]["reviews_dir"], slug)
     scope_label = scope or "holistic"
     round_n = discover_round(reviews_dir, "code", scope_label)
+
+    # Round cap check. The max_rounds kwarg overrides the configured cap
+    # (mirrors run()'s pre-refactor behaviour); enforcing here covers both the
+    # full path and the agent-mode CLI prepare stage.
+    if scope is not None:
+        configured_max = cfg["roles"]["code-review"]["batch"]["rounds"]
+    else:
+        configured_max = cfg["roles"]["code-review"]["holistic"]["rounds"]
+    effective_max = max_rounds if max_rounds is not None else configured_max
+    if round_n > effective_max:
+        raise ReviewError(
+            f"Round {round_n} exceeds max {effective_max} for code review"
+        )
 
     # 2. Overview (required)
     overview_path = plan_dir / "00-overview.md"
@@ -312,7 +327,7 @@ def prepare(
 
     return {
         "prompt_text": prompt_text,
-        "model": spec["model"],
+        "model": spec.get("model"),
         "round": round_n,
         "reviews_dir": reviews_dir,
         "scope": scope_label,
@@ -427,7 +442,8 @@ def run(
         # Prepare
         prepare_result = prepare(
             cfg, slug, scope=batch_name, mill_dir=mill_dir, project_root=project_root,
-            wiki_root=wiki_root, git_root=git_root, extra_files=extra_files
+            wiki_root=wiki_root, git_root=git_root, extra_files=extra_files,
+            max_rounds=max_rounds,
         )
         prompt_text = prepare_result["prompt_text"]
         round_n = prepare_result["round"]

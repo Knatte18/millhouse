@@ -47,6 +47,8 @@ def prepare(
     mill_dir: Path,
     project_root: Path,
     wiki_root: Path,
+    *,
+    max_rounds: int | None = None,
 ) -> dict:
     """Prepare a holistic discussion review by rendering the prompt.
 
@@ -57,14 +59,16 @@ def prepare(
     discussion_path = resolve_path(cfg["paths"]["discussion_file"], slug)
     reviews_dir = resolve_path(cfg["paths"]["reviews_dir"], slug)
 
-    # 2. Round discovery and cap check
+    # 2. Round discovery and cap check. The max_rounds kwarg overrides the
+    # configured cap (mirrors run()'s pre-refactor behaviour); enforcing here
+    # covers both the full path and the agent-mode CLI prepare stage.
     round_n = discover_round(reviews_dir, "discussion", "holistic")
-    max_rounds = cfg["roles"]["discussion-review"]["holistic"]["rounds"]
-    if max_rounds == 0:
+    effective_max = max_rounds if max_rounds is not None else cfg["roles"]["discussion-review"]["holistic"]["rounds"]
+    if effective_max == 0:
         raise ReviewError("discussion-review rounds=0 -- review disabled")
-    if round_n > max_rounds:
+    if round_n > effective_max:
         raise ReviewError(
-            f"Round {round_n} exceeds max {max_rounds} for discussion review"
+            f"Round {round_n} exceeds max {effective_max} for discussion review"
         )
 
     # 3. Resolve reviewer spec via registry
@@ -108,7 +112,7 @@ def prepare(
 
     return {
         "prompt_text": prompt_text,
-        "model": spec["model"],
+        "model": spec.get("model"),
         "round": round_n,
         "reviews_dir": reviews_dir,
         "scope": "holistic",
@@ -207,7 +211,7 @@ def run(
             )
 
         # Prepare
-        prepare_result = prepare(cfg, slug, mill_dir, project_root, wiki_root)
+        prepare_result = prepare(cfg, slug, mill_dir, project_root, wiki_root, max_rounds=max_rounds)
         prompt_text = prepare_result["prompt_text"]
         round_n = prepare_result["round"]
         reviews_dir = prepare_result["reviews_dir"]

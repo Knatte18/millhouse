@@ -1278,8 +1278,16 @@ def finalize_scope(
     review_path = write_review_file(
         reviews_dir, review_type, round_n, raw_text, scope=scope
     )
-    blocking_count = parse_blocking_count(raw_text, severity="blocking")
-    nit_count = parse_blocking_count(raw_text, severity="nit")
+    # Severity labels are per-review-type: discussion uses GAP/NOTE; plan and
+    # code use BLOCKING/NIT. The old inline finalize paths counted the matching
+    # type-specific label, so finalize_scope must mirror that mapping rather
+    # than a single hardcoded severity.
+    if review_type == "discussion":
+        blocking_severity, nit_severity = "GAP", "NOTE"
+    else:
+        blocking_severity, nit_severity = "BLOCKING", "NIT"
+    blocking_count = parse_blocking_count(raw_text, severity=blocking_severity)
+    nit_count = parse_blocking_count(raw_text, severity=nit_severity)
 
     effective_scope = scope if scope else "holistic"
 
