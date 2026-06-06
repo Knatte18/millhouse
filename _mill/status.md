@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-skill-others
+phase: approved-agent-mode-parity-test
 slug: subprocess-to-agents
 branch: hanf/subprocess-to-agents
 plan: _mill/plan
@@ -27,6 +27,7 @@ approved-impl-fix-merge-seam  '2026-06-06T14:49:20Z'
 approved-review-seam  '2026-06-06T14:58:23Z'
 approved-skill-mill-go  '2026-06-06T15:03:28Z'
 approved-skill-others  '2026-06-06T15:07:34Z'
+approved-agent-mode-parity-test  '2026-06-06T15:14:54Z'
 ```
 
 ## Batches
@@ -64,7 +65,8 @@ batches:
     start_sha: e5fc55cedd7661297df30c3297a6343b9eff5449
     commit_sha: 50ddf14158bca55673e915c3a4f55ae47d8c5621
   - name: agent-mode-parity-test
-    state: running
+    state: approved
     implementer_session: dd607c34-b48e-4c0f-8b16-e32d621871f1
     start_sha: a5ab42553b92c0f90948be066ffbfa8e84a47a8f
+    commit_sha: fbccb735809942a56bf675275bad7a6e6491be9d
 ```
