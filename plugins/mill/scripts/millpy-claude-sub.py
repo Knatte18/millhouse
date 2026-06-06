@@ -91,6 +91,12 @@ def _make_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="On success, leave the psmux session running for reuse by a later call.",
     )
+    parser.add_argument(
+        "--response-poll-timeout",
+        type=int,
+        default=None,
+        help="Optional response-poll timeout in seconds (overrides mode-specific default)",
+    )
     return parser
 
 
@@ -311,18 +317,17 @@ def main() -> int:
                 claude_cmd_parts += ["--effort", args.effort]
             claude_cmd_str = _ps_join(claude_cmd_parts)
 
-            # Step 9: Launch claude via a PS script that reads the prompt from the prompt
-            # file and passes it as a positional argument. This handles multi-line prompts
-            # correctly: the PS script uses Get-Content to read the file, and PowerShell
-            # passes the string (including newlines) as a single argument to claude.
-            # psmux paste-buffer does not work with Claude's TUI on Windows (content is
-            # silently dropped), so this script-based approach is used instead.
+            # Step 9: Launch claude via a PS script that pipes the prompt from the prompt
+            # file via stdin. This avoids expanding the prompt on the command line (Windows
+            # has a ~32767-char limit). The script reads the prompt file and pipes it to
+            # claude, preserving multi-line prompt fidelity. psmux paste-buffer does not
+            # work with Claude's TUI on Windows (content is silently dropped), so this
+            # script-based approach is used instead.
             script_content = (
-                f"$prompt = Get-Content -Raw '{str(prompt_path)}'\n"
-                f"{claude_cmd_str} $prompt\n"
+                f"Get-Content -Raw '{str(prompt_path)}' | & {claude_cmd_str}\n"
             )
             script_path.write_text(script_content, encoding="utf-8")
-            print(f"[millpy-claude-sub] launching: '{claude_cmd_str} <prompt>'", file=sys.stderr)
+            print(f"[millpy-claude-sub] launching: '{claude_cmd_str} <prompt_file>'", file=sys.stderr)
             _psmux.send_keys(session_name, f". '{str(script_path)}'", enter=True)
 
         if session_reused:
@@ -338,7 +343,8 @@ def main() -> int:
 
         # Step 11: Wait for stable idle prompt, then capture and extract response
         start = time.monotonic()
-        if not _wait_for_idle_stable(session_name, _resolve_response_poll_timeout_s(args.mode)):
+        poll_timeout_s = args.response_poll_timeout if args.response_poll_timeout is not None else _resolve_response_poll_timeout_s(args.mode)
+        if not _wait_for_idle_stable(session_name, float(poll_timeout_s)):
             elapsed = time.monotonic() - start
             raise RuntimeError(
                 f"response-poll timeout: mode={args.mode} elapsed={elapsed:.1f}s"
