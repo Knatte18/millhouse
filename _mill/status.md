@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-cache-preflight
+phase: approved-merge-in-verify-gate
 slug: mill-infra-bug-fixes
 branch: hanf/mill-infra-bug-fixes
 plan: _mill/plan
@@ -29,6 +29,7 @@ approved-cleanup-robustness  '2026-06-06T19:51:54Z'
 approved-implementer-correctness  '2026-06-06T19:58:34Z'
 approved-psmux-dispatch  '2026-06-06T20:14:14Z'
 approved-cache-preflight  '2026-06-06T20:16:54Z'
+approved-merge-in-verify-gate  '2026-06-06T20:20:23Z'
 ```
 
 ## Batches
@@ -71,7 +72,8 @@ batches:
     start_sha: 34f87db376621a8270072afa32557e0742782feb
     commit_sha: 8625666a82c7074630740419a097fbbeb7c24d11
   - name: merge-in-verify-gate
-    state: running
+    state: approved
     implementer_session: 5397e85a-d984-4780-8399-d534a3d9e922
     start_sha: dbfaa26b57764db9c1ac486db7d5073bb554dfb5
+    commit_sha: 343fc9441140453e9b0f63aad256e08f78e78c70
 ```
