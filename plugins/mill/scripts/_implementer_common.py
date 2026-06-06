@@ -7,6 +7,96 @@ import _subprocess_util
 from pathlib import Path
 
 
+def _is_formatter_drift_only(project_root: Path) -> bool:
+    """Check if the only remaining dirt is whitespace-only formatter drift.
+
+    Heuristic (deterministic): residual dirt is formatter drift ONLY when:
+      - git diff (tracked files) is non-empty
+      - git diff -w (ignore-all-space) is empty
+      - no untracked files exist
+
+    If either git diff subprocess returns non-zero or raises, treat as
+    "not formatter drift" (skip auto-commit, proceed normally).
+
+    Args:
+        project_root: Path to the worktree root.
+
+    Returns:
+        True if all remaining changes are pure whitespace; False otherwise.
+    """
+    try:
+        # Check if there are any untracked files
+        result_untracked = _subprocess_util.run(
+            ["git", "-C", str(project_root), "status", "--porcelain", "--untracked-files=all"],
+            check=False,
+        )
+        if result_untracked.returncode != 0:
+            return False
+        # Any line starting with ?? means untracked files exist
+        for line in result_untracked.stdout.strip().split("\n"):
+            if line.startswith("??"):
+                return False
+
+        # Check if tracked files have changes
+        result_diff = _subprocess_util.run(
+            ["git", "-C", str(project_root), "diff"],
+            check=False,
+        )
+        if result_diff.returncode != 0:
+            return False
+        if not result_diff.stdout.strip():
+            # No tracked-file changes at all
+            return False
+
+        # Check if those changes are purely whitespace
+        result_diff_w = _subprocess_util.run(
+            ["git", "-C", str(project_root), "diff", "-w"],
+            check=False,
+        )
+        if result_diff_w.returncode != 0:
+            return False
+        if result_diff_w.stdout.strip():
+            # -w still shows changes, so there's non-whitespace content
+            return False
+
+        # All conditions met: it's formatter drift
+        return True
+    except Exception:
+        # On any error, treat as "not formatter drift"
+        return False
+
+
+def _commit_formatter_drift(project_root: Path) -> bool:
+    """Auto-commit formatter drift changes.
+
+    Stages all changes and commits with message "chore(format): commit formatter drift".
+    Returns True if commit succeeded; False on any error.
+
+    Args:
+        project_root: Path to the worktree root.
+
+    Returns:
+        True if the commit succeeded; False otherwise.
+    """
+    try:
+        # Stage all changes
+        result_add = _subprocess_util.run(
+            ["git", "-C", str(project_root), "add", "-A"],
+            check=False,
+        )
+        if result_add.returncode != 0:
+            return False
+
+        # Commit with ASCII-only message
+        result_commit = _subprocess_util.run(
+            ["git", "-C", str(project_root), "commit", "-m", "chore(format): commit formatter drift"],
+            check=False,
+        )
+        return result_commit.returncode == 0
+    except Exception:
+        return False
+
+
 def emit_prepare(
     briefs_dir: Path,
     role: str,
@@ -144,6 +234,24 @@ def _forward_output(
                         check=True,
                     )
                     if result_full.stdout.strip():
+                        # Check if the remaining dirt is only formatter drift
+                        if _is_formatter_drift_only(project_root):
+                            # Auto-commit formatter drift
+                            if _commit_formatter_drift(project_root):
+                                # Re-check that tree is now clean
+                                result_check = _subprocess_util.run(
+                                    ["git", "-C", str(project_root), "status", "--porcelain", "--untracked-files=no"],
+                                    check=False,
+                                )
+                                if result_check.returncode == 0 and not result_check.stdout.strip():
+                                    # Tree is now clean; emit success
+                                    violations = _cleanliness.compute_scope_violations(project_root)
+                                    if violations:
+                                        print(json.dumps({"status": "stuck", "stuck_type": "logic", "reason": f"untracked files outside scope: {violations}", "scope_violations": violations, "inferred": True}))
+                                    else:
+                                        print(json.dumps({"status": "success", "commit_sha": head, "session_id": session_id or "unknown", "inferred": True}))
+                                    return 0
+                        # Not formatter drift, or commit failed
                         print(json.dumps({"status": "stuck", "stuck_type": "logic", "reason": "inferred success but working tree dirty -- implementer likely skipped git-commit on modified files"}))
                         return 0
                     violations = _cleanliness.compute_scope_violations(project_root)
