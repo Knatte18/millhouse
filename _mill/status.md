@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-agent-mode-parity-test
+phase: holistic-reviewing
 slug: subprocess-to-agents
 branch: hanf/subprocess-to-agents
 plan: _mill/plan
@@ -28,6 +28,7 @@ approved-review-seam  '2026-06-06T14:58:23Z'
 approved-skill-mill-go  '2026-06-06T15:03:28Z'
 approved-skill-others  '2026-06-06T15:07:34Z'
 approved-agent-mode-parity-test  '2026-06-06T15:14:54Z'
+holistic-reviewing  '2026-06-06T15:15:22Z'
 ```
 
 ## Batches
