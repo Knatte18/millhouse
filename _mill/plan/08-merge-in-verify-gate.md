@@ -49,8 +49,11 @@ unaffected).
   `_run_verify_fix` (the branch that currently calls `_forward_output`).
   Do NOT use HEAD-vs-checkpoint as the success signal -- the verify result
   is the gate. `millpy-merge-in-subagent.py` is this card's Edits target
-  and is implicitly read; no separate Context entry is needed. ASCII-only
-  messages.
+  and is implicitly read; no separate Context entry is needed. Additionally,
+  clarify the `--checkpoint` flag handling by (1) updating the argparse help
+  text to note that `--checkpoint` is only consumed in full mode, not finalize
+  mode, and (2) adding an inline comment in `_run_verify_fix` explaining that
+  the flag is not required for prepare/finalize stages. ASCII-only messages.
 - **Commit:** `fix(merge-in): gate verify-fix success on post-fix verify passing`
 
 ### Card 24: Test merge-in verify-fix success gating
