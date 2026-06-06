@@ -102,6 +102,36 @@ On a fresh run only (no `## Batches` section in status.md):
 
 For each batch in `order`:
 
+## Agent-mode dispatch
+
+When `dispatch == agent`, follow this three-step pattern at each dispatch point:
+
+1. **Resolve dispatch mode:** `dispatch = _agent_dispatch.resolve_dispatch_mode(cfg)`. This reads `cfg["llm"]["claude"]["dispatch"]` and returns one of `"subprocess"`, `"psmux"`, or `"agent"`. If the mode is not `agent`, skip this entire section and use the existing `subprocess`/`psmux` flow unchanged (documented below in each dispatch subsection).
+
+2. **Run prepare stage:** Invoke the CLI with `--stage prepare` and the standard arguments (see each subsection for the exact CLI invocation). Parse the returned JSON line to extract:
+   - `brief_path`: absolute file path to the rendered brief
+   - `subagent_type`: one of `"mill-implementer"` or `"mill-reviewer"`
+   - `model`: Agent-tool tier (`"sonnet"`, `"opus"`, or `"haiku"`)
+
+3. **Call Agent tool:** Synchronously invoke the Agent tool with:
+   - `subagent_type`: the value from step 2
+   - `model`: the value from step 2
+   - `prompt`: `"Read this file and follow the instructions exactly: <brief_path>"`
+   
+   The Agent returns its final message text.
+
+4. **Capture output:** Write the Agent's returned final message to `<brief_path>.out` (utf-8).
+
+5. **Run finalize stage:** Invoke the CLI with `--stage finalize`, the same standard arguments, and `--agent-output <brief_path>.out`. Parse the returned JSON envelope.
+
+6. **Branch on verdict:** Use the JSON envelope to branch identically to the existing `subprocess`/`psmux` flow — the `status`, `verdict`, `stuck_type` handling is identical.
+
+**Agent-mode properties:**
+- No log-polling or liveness check required (the Agent tool is synchronous).
+- No `infrastructure` stuck path (no detached worker).
+- `transient` stuck errors can still be emitted by `finalize` as synthetic JSON (e.g., if the brief write fails).
+- The one-retry transient policy still applies.
+
 **Per-batch session cleanup.** Every time the per-batch implementer reports `success` (immediately after step 2 parse, before step 2b cleanliness gate), AND on every loop terminus (APPROVE, max-rounds blocked, cleanliness-blocked, stuck-blocked), AND when the Builder is about to re-dispatch the implementer with a fresh session (transient-retry-once), invoke the *per-batch cleanup block* defined below — it reaps the psmux TUI session associated with the batch's `implementer_session`, idempotent and failure-swallowing. The post-success invocation is the primary cleanup point now that fix dispatch is cold-start; the terminal invocations remain for defence-in-depth and are idempotent no-ops when the session is already gone.
 
 The per-batch cleanup block:
@@ -157,6 +187,10 @@ if [ ! -f "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" ]; then
     fi
 fi
 ```
+
+If `dispatch == agent`: follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" above) with `<cli> = millpy-implement.py` and `<args> = <batch_name>`.
+
+If `dispatch == subprocess` or `psmux`: background via millpy-bg:
 
 ```bash
 PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-bg.py" \
@@ -227,7 +261,9 @@ For each round `N` from 1 to `roles.code-review.batch.rounds`:
    `signature: _review_common.parse_verdict(text: str) -> str`
    `signature: _status.phase_entry_timestamp(status_path: Path, phase: str, *, occurrence: int = 1) -> str | None`
 
-2. Background via `millpy-bg`:
+2. If `dispatch == agent`: follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" above) with `<cli> = millpy-review-code.py` and `<args> = --batch <batch_name> [--extra-file <p> ...]`.
+
+   If `dispatch == subprocess` or `psmux`: background via `millpy-bg`:
 
    > **Before invoking `millpy-bg`**: verify `pwd` in the Bash terminal matches the task worktree. If `millpy-bg` rejects cwd with the parent-worktree error (`mill-bg: cwd appears to be a non-task worktree`), halt and instruct the operator to switch to the task-worktree terminal.
 
@@ -247,7 +283,11 @@ For each round `N` from 1 to `roles.code-review.batch.rounds`:
 3. **Builder reads only the JSON envelope verdict, never the findings.** Loading `mill-receiving-review` is the dispatched implementer's job (see Principles below). Builder does not load the skill.
 
 4. Branch on verdict:
-   - `APPROVE` — If `nit_count > 0` in the envelope, dispatch one cold-start NIT-only fix pass via `millpy-bg`:
+   - `APPROVE` — If `nit_count > 0` in the envelope, dispatch one cold-start NIT-only fix pass:
+   
+     If `dispatch == agent`: follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" above) with `<cli> = millpy-fix.py` and `<args> = --scope batch --batch-name <batch_name> --review-file <review-file-abs-path> --round <N>`.
+     
+     If `dispatch == subprocess` or `psmux`: via `millpy-bg`:
      ```bash
      PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-bg.py" \
          --slug fix-<batch_name>-r<N>-nits -- \
@@ -260,7 +300,9 @@ For each round `N` from 1 to `roles.code-review.batch.rounds`:
      Parse the JSON result as `(status, pid_or_code)` and branch: `"running"` -> keep polling; `"exit"` -> proceed as today (extract JSON); `"dead"` -> classify as `stuck_type: infrastructure` and route to Stuck escalation. Once `[mill-bg] EXIT` appears or dead status is detected, run `grep '^{' <log-path> | tail -1` to extract the JSON summary line. The fixer loads `mill-receiving-review` and applies the NITs from the APPROVE'd review file. Parse the JSON report the same way as step 2 — including the exit-code-1-with-stuck-JSON behavior. Do NOT re-review — the NIT fix is trusted. The NIT-fix session commits its own source-file changes atomically; on stuck → escalate via the existing Stuck escalation path. After the NIT-fix completes successfully (or is skipped because `nit_count = 0`): set batch state → `approved`, `review_file: <path>`. `_status.append_phase(status_path, f"approved-{batch_name}", _timestamp.now_utc_iso())`. Use the `file` field from `reviews[0]` in the JSON summary (or the crash-recovery scan path) as `<review_file_path>`. Commit on the task branch: `git -C <worktree> add <status_path> <review_file_path> && git -C <worktree> commit -m "mill-go: approve batch {batch_name}"`. Invoke the per-batch cleanup block. Break out of the loop → next batch.
    - `NEED_CONTEXT` — read the `## Missing context` bullets from the review file. For each listed path, if it exists under the worktree, append to `extra_files` for the NEXT round. `_notify.notify("mill-go.review-need-context", f"batch {batch_name} round {N}", slug=slug, files=len(missing))`. Record this gap for mill-self-report (see Handoff). Increment round and continue the loop. If ALL the missing files are paths already in `extra_files` from a prior round (no new info), treat as a stuck-logic failure and break. Reading the structured `## Missing context` bullet list does not require `mill-receiving-review` -- only finding-handling does.
      `signature: _notify.notify(event: str, detail: str, **context) -> None`
-   - `REQUEST_CHANGES` — Background via millpy-bg:
+   - `REQUEST_CHANGES` — If `dispatch == agent`: follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" above) with `<cli> = millpy-fix.py` and `<args> = --scope batch --batch-name <batch_name> --review-file <review-file-abs-path> --round <N>`.
+
+     If `dispatch == subprocess` or `psmux`: background via millpy-bg:
 
      > **Before invoking `millpy-bg`**: verify `pwd` in the Bash terminal matches the task worktree. If `millpy-bg` rejects cwd with the parent-worktree error (`mill-bg: cwd appears to be a non-task worktree`), halt and instruct the operator to switch to the task-worktree terminal.
 
@@ -280,6 +322,10 @@ For each round `N` from 1 to `roles.code-review.batch.rounds`:
 4.5. **Step 4.5: ERROR-only-aggregate retry (no round consumed)**
 
    When the JSON envelope from sub-step 2 has top-level `verdict: "ERROR"` (or, equivalently, every entry in `reviews[]` has `verdict: "ERROR"`), skip sub-step 4 entirely and immediately re-run:
+
+   If `dispatch == agent`: follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" above) with `<cli> = millpy-review-code.py` and `<args> = --batch <batch_name> [--extra-file <p> ...]`.
+
+   If `dispatch == subprocess` or `psmux`:
 
    > **Before invoking `millpy-bg`**: verify `pwd` in the Bash terminal matches the task worktree. If `millpy-bg` rejects cwd with the parent-worktree error (`mill-bg: cwd appears to be a non-task worktree`), halt and instruct the operator to switch to the task-worktree terminal.
 
@@ -325,7 +371,11 @@ When mill-go's Entry-step 5 phase gate routes here (phase is `implementing`, `re
 
 1. Read `_mill/status.md`; locate the current batch entry (the single entry whose `state` is non-terminal: `running`, `reviewing`, or `fixing`).
 2. Branch on the batch's `state`:
-   - **`running`** — the implementer was mid-implementation. Re-invoke (via `millpy-bg`):
+   - **`running`** — the implementer was mid-implementation. Re-invoke:
+
+     If `dispatch == agent`: in agent mode the SKILL re-runs the same prepare -> Agent -> finalize flow for the current on-disk state. The prepare-stage pre-commit makes this idempotent; the brief at `_mill/briefs/<role>-<scope>-r<round>.md` is reused/re-rendered. Follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" above) with `<cli> = millpy-implement.py` and `<args> = <batch_name>`.
+
+     If `dispatch == subprocess` or `psmux` (via `millpy-bg`):
 
      > **Before invoking `millpy-bg`**: verify `pwd` in the Bash terminal matches the task worktree. If `millpy-bg` rejects cwd with the parent-worktree error (`mill-bg: cwd appears to be a non-task worktree`), halt and instruct the operator to switch to the task-worktree terminal.
 
@@ -337,6 +387,10 @@ When mill-go's Entry-step 5 phase gate routes here (phase is `implementing`, `re
      The interrupted implementer session is dead and cannot be re-attached. A fresh batch start is the correct recovery: the CLI re-initialises state -> running, captures a new snapshot, and spawns a fresh implementer session. After parsing the report, continue at Execute step 2b (cleanliness gate).
    - **`reviewing`** — the implementer report was already consumed; the reviewer was running. Re-invoke the per-batch code-review CLI from the start of round `review_round` (read this field from the batch entry):
 
+     If `dispatch == agent`: in agent mode the SKILL re-runs the same prepare -> Agent -> finalize flow for the current on-disk state. Follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" above) with `<cli> = millpy-review-code.py` and `<args> = --batch <batch_name>`.
+
+     If `dispatch == subprocess` or `psmux` (via `millpy-bg`):
+
      > **Before invoking `millpy-bg`**: verify `pwd` in the Bash terminal matches the task worktree. If `millpy-bg` rejects cwd with the parent-worktree error (`mill-bg: cwd appears to be a non-task worktree`), halt and instruct the operator to switch to the task-worktree terminal.
 
      ```bash
@@ -346,6 +400,10 @@ When mill-go's Entry-step 5 phase gate routes here (phase is `implementing`, `re
      ```
      The CLI's crash-recovery scan handles a written-but-uncommitted review file. After parsing the JSON verdict, continue at Execute step 3 sub-step 3 (load `mill-receiving-review`) and step 4 (branch on verdict).
    - **`fixing`** — the reviewer returned `REQUEST_CHANGES`; the fix-implementer was running. Re-invoke:
+
+     If `dispatch == agent`: in agent mode the SKILL re-runs the same prepare -> Agent -> finalize flow for the current on-disk state. Follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" above) with `<cli> = millpy-fix.py` and `<args> = --scope batch --batch-name <batch_name> --review-file <review-file-abs-path> --round <review_round>`.
+
+     If `dispatch == subprocess` or `psmux` (via `millpy-bg`):
 
      > **Before invoking `millpy-bg`**: verify `pwd` in the Bash terminal matches the task worktree. If `millpy-bg` rejects cwd with the parent-worktree error (`mill-bg: cwd appears to be a non-task worktree`), halt and instruct the operator to switch to the task-worktree terminal.
 
