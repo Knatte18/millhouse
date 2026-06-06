@@ -52,7 +52,9 @@ batches:
     start_sha: 0728a5c387e427d51fd40b5ad9cd6552ea12a7c4
     commit_sha: 74f2210b43b8acf819c6b18d6840b200dacd3638
   - name: skill-mill-go
-    state: pending
+    state: running
+    implementer_session: 8896b8bc-ea7c-4f95-aa85-bb808cecd93c
+    start_sha: e0b09114d69e5a3c3a7397eaa584859ffeb2ff70
   - name: skill-others
     state: pending
   - name: agent-mode-parity-test
