@@ -74,7 +74,8 @@ paths keep working. External interface consumed by batches 3-6:
 
 ### Card 3: Replace `via_psmux` with `dispatch` in config files
 
-- **Context:** none
+- **Context:**
+  - `plugins/mill/scripts/_config.py`
 - **Edits:**
   - `plugins/mill/templates/mill-config.yaml`
   - `mill-config.yaml`

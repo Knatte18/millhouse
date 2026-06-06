@@ -3,7 +3,7 @@
 ```yaml
 task: "Replace subprocess LLM dispatch with the Claude Code Agent tool"
 slug: subprocess-to-agents
-approved: false
+approved: true
 started: "20260606-134500"
 parent: main
 root: ""
