@@ -35,7 +35,9 @@ batches:
     start_sha: bc428a8cc95e6beacda778b65b7da1de9bda1ca4
     commit_sha: f5fba7adc160ab6de3939e25299b874c435d5f04
   - name: review-backend
-    state: pending
+    state: running
+    implementer_session: e9f6628e-ef7b-4ec3-947e-b30a94c3e70a
+    start_sha: a1e7e4c40fb16f0f8cc50d455642be8de643e81a
   - name: plan-verify-language-aware
     state: pending
   - name: cleanup-robustness
