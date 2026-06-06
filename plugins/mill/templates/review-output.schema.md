@@ -48,8 +48,8 @@ The fenced ` ```yaml ` block placed immediately after the `# Review: ...` headin
 | `reviewed_file` | string | yes | path to the artefact reviewed (discussion file, batch file, or `plan/`) |
 | `date` | string | yes | UTC date in `YYYY-MM-DD` format |
 
-`parse_verdict()` scans for the first fenced ` ```yaml ` block in the document and returns the `verdict` value. It raises `ReviewError` if:
-- No ` ```yaml ` opening fence is found.
+`parse_verdict()` scans for the first fenced ` ```yaml ` block in the document and returns the `verdict` value. If no fenced block is found, it falls back to scanning for an unfenced `verdict:` line (case-sensitive, with leading whitespace allowed). It raises `ReviewError` if:
+- No ` ```yaml ` opening fence is found AND no unfenced `verdict:` line is found.
 - The yaml block is not closed by a ` ``` ` line.
 - The `verdict:` field is absent from the block.
 - The `verdict:` value is not one of the four listed above.
