@@ -75,7 +75,10 @@ Batch-local decisions: none beyond `## Shared Decisions` in the overview.
   once EXIT is checked first and the probe is single-shot, but a valid-JSON / EXIT result must
   still win over a stale verdict — verify against the retained `test_check_bg_status_*` cases).
   A genuinely-running worker (`"affirmative-alive"`) that happens to have emitted a JSON-looking
-  line mid-stream MUST still return `("running", pid)` — step 3 precedes step 4.
+  line mid-stream MUST still return `("running", pid)` — step 3 precedes step 4. Note on the
+  EXIT code: `_probe_liveness` returns the `pid` (not the exit code) in the `"exit"` case;
+  `check_bg_status` extracts the numeric code via `_EXIT_CODE_RE` from the already-read log text
+  before returning `("exit", code)`.
 - **Commit:** `fix(bg): recognize completed-but-killed worker via JSON sentinel before mtime`
 
 ### Card 3: Correct the EXIT-marker framing in comments and docstrings
@@ -103,6 +106,7 @@ Batch-local decisions: none beyond `## Shared Decisions` in the overview.
 ### Card 4: Regression and behaviour tests for completion detection
 
 - **Context:**
+  - `plugins/mill/scripts/_bg.py`
   - `plugins/mill/scripts/millpy-bg.py`
 - **Edits:**
   - `plugins/mill/unit_tests/test-bg-liveness.py`
@@ -123,12 +127,21 @@ Batch-local decisions: none beyond `## Shared Decisions` in the overview.
   `_STALE_LOG_SECONDS`; assert `("dead", pid)`. (5) confirm `EXIT` present still wins over a
   present JSON line (extend or keep `test_check_bg_status_exit_found`). Keep every existing
   `test-bg-liveness.py` case green; if the Card 1 refactor renames internals, update only the
-  references, not the asserted outcomes.
+  references, not the asserted outcomes. **Mock-target migration (required):** because Card 2
+  rewrites `check_bg_status` to call `_probe_liveness` directly instead of `is_bg_worker_alive`,
+  the three existing `TestCheckBgStatus` cases that patch `_bg.is_bg_worker_alive` —
+  `test_check_bg_status_running`, `test_check_bg_status_dead_no_exit`, and
+  `test_check_bg_status_race_guard_exit_appears` — must be repointed to mock the real stimulus
+  `_probe_liveness` keys on (`unittest.mock.patch.object(_bg.os, "kill", ...)` plus `os.utime`
+  mtime control, in the `test_log_oserror_fallback_to_mtime` style) so they exercise the intended
+  path rather than a now-inert patch. Preserve each test's asserted outcome
+  (`running`/`dead`/`exit`).
 - **Commit:** `test(bg): cover JSON-sentinel completion detection for killed workers`
 
 ### Card 5: Trailing-JSON contract guard test
 
 - **Context:**
+  - `plugins/mill/scripts/_bg.py`
   - `plugins/mill/scripts/_implementer_common.py`
   - `plugins/mill/scripts/millpy-review-discussion.py`
   - `plugins/mill/scripts/millpy-implement.py`
