@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-infra-bug-fixes
 branch: hanf/mill-infra-bug-fixes
 plan: _mill/plan
@@ -21,4 +21,27 @@ plan-review-r1  '2026-06-06T19:18:34Z'
 plan-fix-r1  '2026-06-06T19:18:34Z'
 plan-fix-r2  '2026-06-06T19:24:13Z'
 planned  '2026-06-06T19:24:27Z'
+implementing  '2026-06-06T19:28:04Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: wiki-client-retry
+    state: pending
+  - name: review-backend
+    state: pending
+  - name: plan-verify-language-aware
+    state: pending
+  - name: cleanup-robustness
+    state: pending
+  - name: implementer-correctness
+    state: pending
+  - name: psmux-dispatch
+    state: pending
+  - name: cache-preflight
+    state: pending
+  - name: merge-in-verify-gate
+    state: pending
 ```
