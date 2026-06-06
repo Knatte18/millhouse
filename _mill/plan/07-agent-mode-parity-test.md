@@ -57,7 +57,6 @@ finalize-stage implementer commit lands on the task branch, not the hub.
 - **Context:**
   - `plugins/mill/scripts/millpy-implement.py`
   - `plugins/mill/scripts/_implementer_common.py`
-  - `plugins/mill/integration_tests/`
 - **Edits:** none
 - **Creates:**
   - `plugins/mill/integration_tests/test-agent-mode-commit-target.py`
