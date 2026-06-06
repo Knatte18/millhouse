@@ -6,8 +6,17 @@ An optional holistic review follows (also bulk). Results are aggregated
 worst-case; all-ERROR runs return ERROR (no raise) so the caller
 receives valid JSON even when every sub-review fails (#84, #228).
 
+Agent mode drives one scope per cycle (this hub disables plan batch review via
+`roles.plan-review.batch.reviewer: null`, so holistic is the only enabled
+scope in practice).
+
 Public API:
-    run(cfg, slug, mill_dir, wiki_root, project_root) -> ReviewResult
+    prepare(cfg, slug, *, scope, mill_dir, project_root, wiki_root, git_root) -> dict
+        Render prompt and resolve spec for a single scope; return prepare dict.
+    finalize(cfg, slug, raw_text, *, scope, round_n, reviews_dir, mill_dir, project_root, wiki_root, git_root) -> dict
+        Parse verdict and write review file for a single scope; return review entry dict.
+    run(cfg, slug, mill_dir, wiki_root, project_root, *, ...) -> ReviewResult
+        Legacy API; orchestrates parallel per-batch + holistic reviews.
 
 resolve_ref_paths is the canonical version from _review_common; no local
 shadow is defined here.
@@ -37,6 +46,7 @@ from _review_common import (
     compute_deletes_union,
     detect_resume_round,
     discover_round,
+    finalize_scope,
     load_task_title,
     maybe_switch_spec_for_large_prompt,
     parse_batch_refs,
@@ -264,6 +274,252 @@ def _review_one_batch(
             "error": str(exc),
             "session_id": None,
         }
+
+
+def prepare(
+    cfg: dict,
+    slug: str,
+    *,
+    scope: str | None,
+    mill_dir: Path,
+    project_root: Path,
+    wiki_root: Path,
+    git_root: Path,
+) -> dict:
+    """Prepare a plan review by rendering the prompt for a single scope.
+
+    Args:
+        scope: Batch name (e.g., "01-setup") or None for holistic.
+
+    Returns:
+        Dict with keys: prompt_text, model, round, reviews_dir, scope.
+    """
+    plan_dir = resolve_path(cfg["paths"]["plan_dir"], slug)
+    reviews_dir = resolve_path(cfg["paths"]["reviews_dir"], slug)
+
+    batch_files = sorted(
+        p for p in plan_dir.glob("??-*.md") if p.name != "00-overview.md"
+    )
+    overview_path = plan_dir / "00-overview.md"
+    if not overview_path.exists():
+        raise ReviewError(f"Plan overview not found: {overview_path}")
+
+    root = _load_root_from_overview(overview_path)
+    creates_union = compute_creates_union(plan_dir)
+    deletes_union = compute_deletes_union(plan_dir)
+
+    hub_dir = project_root
+    registry = _reviewers.load(hub_dir)
+
+    task_title = load_task_title(project_root, wiki_root, cfg, slug)
+    constraints = read_constraints_md(project_root)
+
+    if scope is not None:
+        # Per-batch scope
+        batch_path = next((b for b in batch_files if b.stem == scope), None)
+        if batch_path is None:
+            raise ReviewError(f"Batch {scope!r} not found in plan directory")
+
+        round_n = discover_round(reviews_dir, "plan", scope)
+
+        raw_refs = parse_batch_refs(batch_path)
+        reads = resolve_ref_paths(
+            raw_refs, project_root, root,
+            creates_union=creates_union, deletes_union=deletes_union,
+            wiki_root=wiki_root, git_root=git_root, caller_label="_review_plan",
+        )
+
+        ancestors_on_disk = resolve_existing_paths(
+            [raw for raw in creates_union if raw not in raw_refs],
+            project_root,
+            root,
+            wiki_root=wiki_root,
+            git_root=git_root,
+        )
+        reads_set = {*reads, overview_path, batch_path}
+        ancestors_on_disk = [p for p in ancestors_on_disk if p not in reads_set]
+
+        batch_reviewer_name = cfg["roles"]["plan-review"]["batch"]["reviewer"]
+        if batch_reviewer_name is None:
+            raise ReviewError(f"plan-review batch reviewer is null")
+        batch_spec = _reviewers.resolve(registry, batch_reviewer_name)
+
+        mode = "tool-use" if batch_spec.get("tooluse") else "bulk"
+        tool_rule = build_tool_rule(mode)
+
+        all_bulked = [overview_path, batch_path, *reads, *ancestors_on_disk]
+        manifest = build_manifest_section(all_bulked)
+
+        if mode == "tool-use":
+            read_list = "\n".join(f"- {p}" for p in [*reads, *ancestors_on_disk]) or "(none)"
+            artefact_section = (
+                f"{manifest}\n\n"
+                f"## Plan files to review\n"
+                f"- Overview: `{overview_path}`\n"
+                f"- Batch:    `{batch_path}`\n\n"
+                f"Read both files above. Then read the source files listed under "
+                f"`Context:` / `Edits:` / `Creates:` in the batch + cross-batch creates "
+                f"that exist on disk:\n{read_list}"
+            )
+        else:
+            bulked = bulk_files(all_bulked)
+            artefact_section = (
+                f"{manifest}\n\n"
+                f"## Plan content (overview + batch + Context/Edits/Creates files + cross-batch ancestor creates)\n"
+                f"{bulked}"
+            )
+        if deletes_union:
+            artefact_section += "\n\n" + build_deletes_section(sorted(deletes_union))
+
+        prompt_text = render_prompt(
+            "review-plan-batch",
+            task_title=task_title,
+            batch_name=scope,
+            tool_rule=tool_rule,
+            artefact_section=artefact_section,
+            constraints=constraints,
+            round=round_n,
+            reviewer_model=batch_reviewer_name,
+        )
+
+        return {
+            "prompt_text": prompt_text,
+            "model": batch_spec["model"],
+            "round": round_n,
+            "reviews_dir": reviews_dir,
+            "scope": scope,
+        }
+    else:
+        # Holistic scope
+        round_n = discover_round(reviews_dir, "plan", "holistic")
+
+        holistic_name = cfg["roles"]["plan-review"]["holistic"]["reviewer"]
+        if holistic_name is None:
+            raise ReviewError("plan-review holistic reviewer is null")
+        holistic_spec = _reviewers.resolve(registry, holistic_name)
+
+        # Union all Context:/Edits:/Creates: across all batch files
+        all_raw_refs: dict[str, None] = {}
+        for batch_path in batch_files:
+            for ref in parse_batch_refs(batch_path):
+                all_raw_refs[ref] = None
+        all_reads = resolve_ref_paths(
+            list(all_raw_refs.keys()), project_root, root,
+            creates_union=creates_union, deletes_union=deletes_union,
+            wiki_root=wiki_root, git_root=git_root, caller_label="_review_plan",
+        )
+
+        all_creates_on_disk = resolve_existing_paths(
+            [r for r in creates_union if r not in all_raw_refs],
+            project_root,
+            root,
+            wiki_root=wiki_root,
+            git_root=git_root,
+        )
+        reads_set = {*all_reads, overview_path, *batch_files}
+        all_creates_on_disk = [p for p in all_creates_on_disk if p not in reads_set]
+
+        holistic_mode = "tool-use" if holistic_spec.get("tooluse") else "bulk"
+        tool_rule = build_tool_rule(holistic_mode)
+
+        manifest = build_manifest_section([overview_path, *batch_files, *all_reads, *all_creates_on_disk])
+
+        if holistic_mode == "tool-use":
+            batch_list = "\n".join(f"- `{p}`" for p in batch_files) or "(none)"
+            read_list = "\n".join(f"- `{p}`" for p in [*all_reads, *all_creates_on_disk]) or "(none)"
+            artefact_section = (
+                f"{manifest}\n\n"
+                f"## Plan files to review\n"
+                f"- Overview: `{overview_path}`\n"
+                f"- Batches:\n{batch_list}\n\n"
+                f"Read the overview and every batch listed above. Then read the "
+                f"source files referenced across all batches:\n{read_list}"
+            )
+        else:
+            bulked_all = bulk_files([overview_path, *batch_files, *all_reads, *all_creates_on_disk])
+            artefact_section = (
+                f"{manifest}\n\n"
+                f"## Plan content (overview + all batches + referenced files + cross-batch ancestor creates)\n"
+                f"{bulked_all}"
+            )
+        if deletes_union:
+            artefact_section += "\n\n" + build_deletes_section(sorted(deletes_union))
+
+        prompt_text = render_prompt(
+            "review-plan-holistic",
+            task_title=task_title,
+            tool_rule=tool_rule,
+            artefact_section=artefact_section,
+            constraints=constraints,
+            round=round_n,
+            reviewer_model=holistic_name,
+        )
+
+        holistic_spec, holistic_name = maybe_switch_spec_for_large_prompt(
+            prompt_text, holistic_spec, holistic_name, cfg, "plan-review", "holistic", registry
+        )
+
+        return {
+            "prompt_text": prompt_text,
+            "model": holistic_spec["model"],
+            "round": round_n,
+            "reviews_dir": reviews_dir,
+            "scope": "holistic",
+        }
+
+
+def finalize(
+    cfg: dict,
+    slug: str,
+    raw_text: str,
+    *,
+    scope: str | None,
+    round_n: int,
+    reviews_dir: Path,
+    mill_dir: Path,
+    project_root: Path,
+    wiki_root: Path,
+    git_root: Path,
+) -> dict:
+    """Finalize a plan review for a single scope; return a review entry dict.
+
+    Args:
+        raw_text: Raw review output from the reviewer.
+        scope: Batch name or None for holistic.
+        round_n: Round number.
+        reviews_dir: Directory where review files are stored.
+
+    Returns:
+        Review entry dict for aggregation: {"scope", "round", "verdict", "blocking_count", "file", "session_id"}.
+    """
+    scope_label = scope or "holistic"
+
+    try:
+        review_entry = finalize_scope(
+            reviews_dir, "plan", round_n, raw_text, scope=scope
+        )
+    except ReviewError as exc:
+        path = write_review_file(
+            reviews_dir, "plan", round_n, raw_text, scope=scope
+        )
+        return {
+            "scope": scope_label,
+            "round": round_n,
+            "verdict": "ERROR",
+            "blocking_count": 0,
+            "file": str(path),
+            "error": f"parse_verdict failed: {exc}",
+            "session_id": None,
+        }
+
+    return {
+        "scope": scope_label,
+        "round": round_n,
+        "verdict": review_entry["verdict"],
+        "blocking_count": review_entry["blocking_count"],
+        "file": review_entry["file"],
+        "session_id": None,
+    }
 
 
 def run(
