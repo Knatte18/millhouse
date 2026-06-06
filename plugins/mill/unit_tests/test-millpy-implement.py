@@ -500,6 +500,64 @@ class TestMillpyImplement(unittest.TestCase):
         mock_git_commit.assert_called_once()
 
 
+class TestClassifyStuckType(unittest.TestCase):
+
+    def test_classify_command_not_found(self):
+        """'command not found' in reason -> stuck_type=verify."""
+        stuck_type = millpy_implement.classify_stuck_type("command not found: go")
+        self.assertEqual(stuck_type, "verify")
+
+    def test_classify_no_such_file(self):
+        """'no such file' in reason -> stuck_type=verify."""
+        stuck_type = millpy_implement.classify_stuck_type("No such file or directory")
+        self.assertEqual(stuck_type, "verify")
+
+    def test_classify_not_found(self):
+        """'not found' in reason -> stuck_type=verify."""
+        stuck_type = millpy_implement.classify_stuck_type("Binary not found")
+        self.assertEqual(stuck_type, "verify")
+
+    def test_classify_cannot_find(self):
+        """'cannot find' in reason -> stuck_type=verify."""
+        stuck_type = millpy_implement.classify_stuck_type("cannot find the specified file")
+        self.assertEqual(stuck_type, "verify")
+
+    def test_classify_errno_2(self):
+        """'[errno 2]' in reason -> stuck_type=verify."""
+        stuck_type = millpy_implement.classify_stuck_type("[Errno 2] No such file")
+        self.assertEqual(stuck_type, "verify")
+
+    def test_classify_winerror_2(self):
+        """'winerror 2' in reason -> stuck_type=verify."""
+        stuck_type = millpy_implement.classify_stuck_type("WinError 2: The system cannot find")
+        self.assertEqual(stuck_type, "verify")
+
+    def test_classify_cannot_run_program(self):
+        """'cannot run program' in reason -> stuck_type=verify."""
+        stuck_type = millpy_implement.classify_stuck_type("cannot run program go")
+        self.assertEqual(stuck_type, "verify")
+
+    def test_classify_timeout(self):
+        """'timeout' in reason -> stuck_type=transient."""
+        stuck_type = millpy_implement.classify_stuck_type("Claude CLI timed out after 1800s")
+        self.assertEqual(stuck_type, "transient")
+
+    def test_classify_dead_session(self):
+        """'dead session' in reason -> stuck_type=transient."""
+        stuck_type = millpy_implement.classify_stuck_type("claude --resume abc exited 1: dead session")
+        self.assertEqual(stuck_type, "transient")
+
+    def test_classify_rate_limit(self):
+        """'rate limit' in reason -> stuck_type=transient."""
+        stuck_type = millpy_implement.classify_stuck_type("claude rate-limited (exit 429)")
+        self.assertEqual(stuck_type, "transient")
+
+    def test_classify_generic_error(self):
+        """Generic error with no known signal -> stuck_type=transient."""
+        stuck_type = millpy_implement.classify_stuck_type("claude exited 1: unknown error")
+        self.assertEqual(stuck_type, "transient")
+
+
 class TestForwardOutput(unittest.TestCase):
 
     def _call(self, output: str) -> tuple[int, str]:

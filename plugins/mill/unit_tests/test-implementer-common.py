@@ -13,8 +13,9 @@ from pathlib import Path
 HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
-from _implementer_common import _forward_output, emit_prepare, emit_prepare_no_dispatch, finalize_from_output  # noqa: E402
+from _implementer_common import _forward_output, emit_prepare, emit_prepare_no_dispatch, finalize_from_output, _is_formatter_drift_only, _commit_formatter_drift  # noqa: E402
 import _cleanliness  # noqa: E402
+import _subprocess_util  # noqa: E402
 
 
 def _capture_stdout(fn):
@@ -487,6 +488,155 @@ def main() -> int:
             print("PASS: emit_prepare_no_dispatch prints prepare with dispatch_needed:false and embedded envelope")
         except Exception as exc:
             print(f"FAIL: case 14 ({exc}) captured={captured!r}", file=sys.stderr)
+            errors += 1
+
+    # Case 15: _is_formatter_drift_only - whitespace-only changes
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        _setup_fixture(project_root)
+        # Stage and commit a file
+        (project_root / "README.md").write_text("seed\n", encoding="utf-8")
+        subprocess.run(
+            ["git", "-C", str(project_root), "add", "README.md"],
+            check=True, capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "-m", "whitespace change"],
+            check=True, capture_output=True,
+        )
+        # Make a whitespace-only change (add trailing spaces)
+        (project_root / "README.md").write_text("seed   \n", encoding="utf-8")
+        try:
+            result = _is_formatter_drift_only(project_root)
+            assert result is True, f"expected True (formatter drift detected), got {result}"
+            print("PASS: _is_formatter_drift_only detects whitespace-only changes")
+        except Exception as exc:
+            print(f"FAIL: case 15 ({exc})", file=sys.stderr)
+            errors += 1
+
+    # Case 16: _is_formatter_drift_only - non-whitespace changes not detected as drift
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        _setup_fixture(project_root)
+        # Stage and commit a file
+        (project_root / "README.md").write_text("seed\n", encoding="utf-8")
+        subprocess.run(
+            ["git", "-C", str(project_root), "add", "README.md"],
+            check=True, capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "-m", "content change"],
+            check=True, capture_output=True,
+        )
+        # Make a content change
+        (project_root / "README.md").write_text("modified\n", encoding="utf-8")
+        try:
+            result = _is_formatter_drift_only(project_root)
+            assert result is False, f"expected False (content changes, not drift), got {result}"
+            print("PASS: _is_formatter_drift_only does not detect content changes as drift")
+        except Exception as exc:
+            print(f"FAIL: case 16 ({exc})", file=sys.stderr)
+            errors += 1
+
+    # Case 17: _is_formatter_drift_only - untracked files present not detected as drift
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        _setup_fixture(project_root)
+        # Stage and commit a file
+        (project_root / "README.md").write_text("seed\n", encoding="utf-8")
+        subprocess.run(
+            ["git", "-C", str(project_root), "add", "README.md"],
+            check=True, capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "-m", "first commit"],
+            check=True, capture_output=True,
+        )
+        # Add untracked file and whitespace change
+        (project_root / "untracked.py").write_text("code\n", encoding="utf-8")
+        (project_root / "README.md").write_text("seed   \n", encoding="utf-8")
+        try:
+            result = _is_formatter_drift_only(project_root)
+            assert result is False, f"expected False (untracked files present), got {result}"
+            print("PASS: _is_formatter_drift_only returns False when untracked files exist")
+        except Exception as exc:
+            print(f"FAIL: case 17 ({exc})", file=sys.stderr)
+            errors += 1
+
+    # Case 18: _commit_formatter_drift auto-commits drift
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        _setup_fixture(project_root)
+        # Stage and commit a file
+        (project_root / "README.md").write_text("seed\n", encoding="utf-8")
+        subprocess.run(
+            ["git", "-C", str(project_root), "add", "README.md"],
+            check=True, capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "-m", "first"],
+            check=True, capture_output=True,
+        )
+        # Make a whitespace change
+        (project_root / "README.md").write_text("seed   \n", encoding="utf-8")
+        try:
+            result = _commit_formatter_drift(project_root)
+            assert result is True, f"expected True (commit succeeded), got {result}"
+            # Verify commit was made
+            log_result = subprocess.run(
+                ["git", "-C", str(project_root), "log", "-1", "--pretty=%s"],
+                check=True, capture_output=True, text=True,
+            )
+            assert "chore(format)" in log_result.stdout, f"expected chore(format) in log, got {log_result.stdout}"
+            # Verify tree is clean
+            status_result = subprocess.run(
+                ["git", "-C", str(project_root), "status", "--porcelain"],
+                check=True, capture_output=True, text=True,
+            )
+            assert not status_result.stdout.strip(), f"expected clean tree, got {status_result.stdout}"
+            print("PASS: _commit_formatter_drift commits drift and cleans tree")
+        except Exception as exc:
+            print(f"FAIL: case 18 ({exc})", file=sys.stderr)
+            errors += 1
+
+    # Case 19: inferred success with formatter drift auto-committed
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        base_sha = _setup_fixture(project_root)
+        snapshot_path = project_root / "_mill" / ".cleanliness-snapshot-test.txt"
+        _cleanliness.capture_snapshot(project_root, snapshot_path)
+        # New commit so HEAD != start_sha
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "--allow-empty", "-m", "second"],
+            check=True, capture_output=True,
+        )
+        # Add whitespace-only change to tracked file
+        (project_root / "README.md").write_text("seed   \n", encoding="utf-8")
+        new_head = subprocess.run(
+            ["git", "-C", str(project_root), "rev-parse", "HEAD"],
+            check=True, capture_output=True, text=True,
+        ).stdout.strip()
+        rc, captured = _capture_stdout(
+            lambda: _forward_output(
+                "garbage with no json",
+                project_root,
+                start_sha=base_sha,
+                snapshot_path=snapshot_path,
+            )
+        )
+        try:
+            data = json.loads(captured.strip())
+            assert data["status"] == "success", f"expected status=success, got {data}"
+            assert data.get("inferred") is True, f"expected inferred=True, got {data}"
+            # Verify tree is clean now (drift was auto-committed)
+            status_result = subprocess.run(
+                ["git", "-C", str(project_root), "status", "--porcelain"],
+                check=True, capture_output=True, text=True,
+            )
+            assert not status_result.stdout.strip(), f"expected clean tree after auto-commit, got {status_result.stdout}"
+            print("PASS: inferred success with formatter drift -> drift auto-committed, success emitted")
+        except Exception as exc:
+            print(f"FAIL: case 19 ({exc}) captured={captured!r}", file=sys.stderr)
             errors += 1
 
     if errors:
