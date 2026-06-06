@@ -58,7 +58,9 @@ batches:
     start_sha: e0b09114d69e5a3c3a7397eaa584859ffeb2ff70
     commit_sha: 478bde221683d3178c7a406959ba22d3cf0d2e31
   - name: skill-others
-    state: pending
+    state: running
+    implementer_session: 780d0dc8-854b-48ae-b04f-7825f1c3bf09
+    start_sha: e5fc55cedd7661297df30c3297a6343b9eff5449
   - name: agent-mode-parity-test
     state: pending
 ```
