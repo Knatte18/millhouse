@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-fixing
+phase: holistic-reviewing
 slug: revise-ghissues-to-tasks
 branch: hanf/revise-ghissues-to-tasks
 plan: _mill/plan
@@ -23,6 +23,7 @@ implementing  '2026-06-06T19:09:32Z'
 approved-rewrite-skill  '2026-06-06T19:12:39Z'
 holistic-reviewing  '2026-06-06T19:13:06Z'
 holistic-fixing  '2026-06-06T19:14:56Z'
+holistic-reviewing  '2026-06-06T19:16:30Z'
 ```
 
 ## Batches
