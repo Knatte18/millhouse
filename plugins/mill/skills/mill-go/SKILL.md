@@ -132,6 +132,8 @@ When `dispatch == agent`, follow this three-step pattern at each dispatch point:
 - `transient` stuck errors can still be emitted by `finalize` as synthetic JSON (e.g., if the brief write fails).
 - The one-retry transient policy still applies.
 
+**Subprocess/psmux poll-loop max-wait.** When `dispatch == subprocess` or `psmux`, all poll loops that wait for `[mill-bg] EXIT` must have a bounded max-wait (~3600s) to self-terminate if the worker dies without writing the exit marker. Exceedance of the max-wait is a fatal `infrastructure` stuck escalation. The explicit timeout guard prevents infinite polling when the worker session is killed (e.g., logout or crash). This applies to implementer, reviewer, and fixer dispatch in all scopes (per-batch and holistic), and to ERROR-only retries. See individual subsections for the loop structure; all follow the same time-bounded poll-until-EXIT pattern.
+
 **Per-batch session cleanup.** Every time the per-batch implementer reports `success` (immediately after step 2 parse, before step 2b cleanliness gate), AND on every loop terminus (APPROVE, max-rounds blocked, cleanliness-blocked, stuck-blocked), AND when the Builder is about to re-dispatch the implementer with a fresh session (transient-retry-once), invoke the *per-batch cleanup block* defined below — it reaps the psmux TUI session associated with the batch's `implementer_session`, idempotent and failure-swallowing. The post-success invocation is the primary cleanup point now that fix dispatch is cold-start; the terminal invocations remain for defence-in-depth and are idempotent no-ops when the session is already gone.
 
 The per-batch cleanup block:
@@ -198,11 +200,22 @@ PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}
     "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-implement.py" <batch_name>
 ```
 
-Returns immediately with `pid=<N> log=<abs-path>`. Do not use `run_in_background: true` on the Bash tool — that routes output to CC's temp dir. Poll `cat <log-path>` until `[mill-bg] EXIT` appears, but on each iteration also run a liveness check:
+Returns immediately with `pid=<N> log=<abs-path>`. Do not use `run_in_background: true` on the Bash tool — that routes output to CC's temp dir. Poll `cat <log-path>` until `[mill-bg] EXIT` appears, but on each iteration also run a liveness check with a bounded max-wait (~3600s):
 ```bash
-PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "import _bg, json; from pathlib import Path; print(json.dumps(_bg.check_bg_status(Path('<log-path>'))))"
+start_time=$(date +%s)
+max_wait=3600
+while true; do
+  current_time=$(date +%s)
+  elapsed=$((current_time - start_time))
+  if [ $elapsed -ge $max_wait ]; then
+    echo "[mill-go] HALT: subprocess poll loop timeout (max_wait=$max_wait exceeded) — worker died without writing [mill-bg] EXIT. Escalate to infrastructure stuck." >&2
+    exit 1
+  fi
+  PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "import _bg, json; from pathlib import Path; print(json.dumps(_bg.check_bg_status(Path('<log-path>'))))"
+  # parse JSON result and branch: "running" -> sleep; "exit"/"dead" -> exit loop
+done
 ```
-Parse the JSON result as `(status, pid_or_code)` and branch: `"running"` -> keep polling; `"exit"` -> proceed as today (extract JSON); `"dead"` -> classify as `stuck_type: infrastructure` and route to Stuck escalation. Note: `"dead"` only fires when the log has no parseable JSON result line — if EXIT was missing but the worker wrote a valid JSON line, `check_bg_status` returns `("exit", 0)` instead (see `_bg.py` JSON fallback). Once `[mill-bg] EXIT` appears or dead status is detected, run `grep '^{' <log-path> | tail -1` to extract the JSON summary line.
+Parse the JSON result as `(status, pid_or_code)` and branch: `"running"` -> sleep briefly then continue polling; `"exit"` -> proceed as today (extract JSON); `"dead"` -> classify as `stuck_type: infrastructure` and route to Stuck escalation. Note: `"dead"` only fires when the log has no parseable JSON result line — if EXIT was missing but the worker wrote a valid JSON line, `check_bg_status` returns `("exit", 0)` instead (see `_bg.py` JSON fallback). Once `[mill-bg] EXIT` appears or dead status is detected, run `grep '^{' <log-path> | tail -1` to extract the JSON summary line. If max-wait is exceeded, halt with infrastructure escalation (worker died without EXIT).
 
 The CLI atomically: resolves paths and config, renders the implementer brief, generates a `session_id`, sets batch state → `running`, records `start_sha` and `implementer_session` in status.md, commits and pushes on the task branch, and spawns the implementer. The Builder reads the JSON summary from the log file. Note: the CLI exits 0 when the implementer produced JSON (success or stuck). On exit code 1 the JSON line in the log file still carries a `{"status":"stuck","stuck_type":"transient",...}` line if an LLM-layer failure (timeout, dead session, etc.) occurred — parse it the same way and route through Stuck escalation. Only treat exit 1 as an unrecoverable pre-launch error when the JSON line in the log file is absent.
 
@@ -274,11 +287,22 @@ For each round `N` from 1 to `roles.code-review.batch.rounds`:
            --batch <batch_name> [--extra-file <p> ...]
    ```
 
-   Returns immediately with `pid=<N> log=<abs-path>`. Do **not** use `run_in_background: true`. Poll `cat <log-path>` until `[mill-bg] EXIT` appears, but on each iteration also run a liveness check:
+   Returns immediately with `pid=<N> log=<abs-path>`. Do **not** use `run_in_background: true`. Poll `cat <log-path>` until `[mill-bg] EXIT` appears with a bounded max-wait (~3600s), but on each iteration also run a liveness check:
    ```bash
-   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "import _bg, json; from pathlib import Path; print(json.dumps(_bg.check_bg_status(Path('<log-path>'))))"
+   start_time=$(date +%s)
+   max_wait=3600
+   while true; do
+     current_time=$(date +%s)
+     elapsed=$((current_time - start_time))
+     if [ $elapsed -ge $max_wait ]; then
+       echo "[mill-go] HALT: code-review poll loop timeout (max_wait=$max_wait exceeded) — worker died without writing [mill-bg] EXIT. Escalate to infrastructure stuck." >&2
+       exit 1
+     fi
+     PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "import _bg, json; from pathlib import Path; print(json.dumps(_bg.check_bg_status(Path('<log-path>'))))"
+     # parse JSON result and branch: "running" -> sleep; "exit"/"dead" -> exit loop
+   done
    ```
-   Parse the JSON result as `(status, pid_or_code)` and branch: `"running"` -> keep polling; `"exit"` -> proceed as today (extract JSON); `"dead"` -> classify as `stuck_type: infrastructure` and route to Stuck escalation. Note: `"dead"` only fires when the log has no parseable JSON result line — if EXIT was missing but the worker wrote a valid JSON line, `check_bg_status` returns `("exit", 0)` instead (see `_bg.py` JSON fallback). Once `[mill-bg] EXIT` appears or dead status is detected, run `grep '^{' <log-path> | tail -1` to extract the JSON summary line. The CLI prints one JSON line `{"type":"code","round":N,"verdict":"...","reviews":[...]}`.
+   Parse the JSON result as `(status, pid_or_code)` and branch: `"running"` -> sleep briefly then continue polling; `"exit"` -> proceed as today (extract JSON); `"dead"` -> classify as `stuck_type: infrastructure` and route to Stuck escalation. Note: `"dead"` only fires when the log has no parseable JSON result line — if EXIT was missing but the worker wrote a valid JSON line, `check_bg_status` returns `("exit", 0)` instead (see `_bg.py` JSON fallback). Once `[mill-bg] EXIT` appears or dead status is detected, run `grep '^{' <log-path> | tail -1` to extract the JSON summary line. If max-wait is exceeded, halt with infrastructure escalation. The CLI prints one JSON line `{"type":"code","round":N,"verdict":"...","reviews":[...]}`.
 
 3. **Builder reads only the JSON envelope verdict, never the findings.** Loading `mill-receiving-review` is the dispatched implementer's job (see Principles below). Builder does not load the skill.
 

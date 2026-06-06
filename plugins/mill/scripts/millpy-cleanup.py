@@ -175,15 +175,33 @@ def build_plan(
         else:
             to_report.append(f"{slug} -- unknown phase {phase!r}, skipping")
 
-    # Orphan worktree detection: wts/ dirs without active markers.
-    # CRITICAL: cross-reference Home.md before recommending deletion. A slug
-    # that is [active]/[ready-to-merge]/[pr-pending] is IN USE -- the .active
-    # junction may be stale or pointing elsewhere, but the worktree is live.
-    # Recommending 'git worktree remove --force' on a live worktree partially
-    # succeeds on Windows (admin dir deleted, working tree files truncated
-    # while session holds others open), corrupting the user's session.
+    # Orphan worktree detection: git registry worktrees without active markers.
+    # Use git worktree list --porcelain instead of raw directory scan.
+    # Only report wts/ entries that ARE registered git worktrees AND lack an
+    # active marker. Plain directories (not in the git registry) are silently
+    # ignored. CRITICAL: cross-reference Home.md before recommending deletion.
+    # A slug that is [active]/[ready-to-merge]/[pr-pending] is IN USE -- the
+    # .active junction may be stale or pointing elsewhere, but the worktree is
+    # live. Recommending 'git worktree remove --force' on a live worktree
+    # partially succeeds on Windows (admin dir deleted, working tree files
+    # truncated while session holds others open), corrupting the user's session.
     _IN_USE_MARKERS = {"active", "ready-to-merge", "pr-pending"}
     if container_path is not None:
+        registered_worktrees = []
+        try:
+            registered_worktrees = _worktree.list_worktrees(hub_root)
+        except Exception:
+            # Silent failure: list_worktrees unavailable, fall back to empty list
+            pass
+        registered_paths: set[Path] = set()
+        for wt_entry in registered_worktrees:
+            try:
+                wt_path = Path(wt_entry["path"]).resolve()
+                if wt_path != hub_root.resolve():
+                    registered_paths.add(wt_path)
+            except (OSError, ValueError):
+                pass
+
         wts_dir = container_path / "wts"
         if wts_dir.is_dir():
             for entry in wts_dir.iterdir():
@@ -191,6 +209,9 @@ def build_plan(
                     continue
                 # Skip the hub itself (resolved to avoid symlink confusion).
                 if entry.resolve() == hub_root.resolve():
+                    continue
+                # Only report if this dir IS a registered git worktree.
+                if entry.resolve() not in registered_paths:
                     continue
                 if entry.name not in active_slugs:
                     home_marker = marker_by_slug.get(entry.name)

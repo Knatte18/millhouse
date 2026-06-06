@@ -804,7 +804,7 @@ def _check_all_files_touched_mismatch(
 # verify-not-isolated check
 # ---------------------------------------------------------------------------
 
-def _check_verify_not_isolated(batch_files: list[Path]) -> list[dict]:
+def _check_verify_not_isolated(batch_files: list[Path], project_root: Path) -> list[dict]:
     errors: list[dict] = []
     for batch_path in batch_files:
         text = batch_path.read_text(encoding="utf-8")
@@ -830,7 +830,18 @@ def _check_verify_not_isolated(batch_files: list[Path]) -> list[dict]:
         verify_stripped = verify.strip()
         if not verify_stripped:
             continue
-        if not verify_stripped.startswith("PYTHONPATH="):
+
+        # Check if this is a Python project by looking for markers at the project root
+        # or in plugins/mill/ subdirectory.
+        is_python_project = (
+            (project_root / "pyproject.toml").exists()
+            or (project_root / "setup.py").exists()
+            or (project_root / "setup.cfg").exists()
+            or (project_root / "plugins" / "mill" / "pyproject.toml").exists()
+        )
+
+        # Only require PYTHONPATH= prefix for Python projects.
+        if is_python_project and not verify_stripped.startswith("PYTHONPATH="):
             errors.append({
                 "check": "verify-not-isolated",
                 "batch": batch_path.stem,
@@ -1042,7 +1053,7 @@ def run(
     errors.extend(_check_depends_on_batch_mismatch(batch_files, overview_text))
     errors.extend(_check_parallel_modifies_overlap(batch_files, overview_text))
     errors.extend(_check_ref_not_backtick_path(batch_files))
-    errors.extend(_check_verify_not_isolated(batch_files))
+    errors.extend(_check_verify_not_isolated(batch_files, project_root))
     errors.extend(_check_verify_full_suite(batch_files))
     errors.extend(_check_wiki_config_mutation(batch_files))
     errors.extend(_check_all_files_touched_mismatch(overview_path, batch_files))

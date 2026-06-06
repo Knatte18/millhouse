@@ -6,6 +6,9 @@ from pathlib import Path
 
 import _pygit2_util
 
+# Junction directory names that are gitignored and should be excluded from scope violations
+_JUNCTION_SKIP_SET = frozenset({".active", ".portals", ".wiki", ".others"})
+
 
 def capture_snapshot(worktree: Path, snapshot_path: Path) -> None:
     """Capture a pre-batch git status snapshot to disk.
@@ -51,8 +54,9 @@ def compute_scope_violations(worktree: Path) -> list[str]:
     """Return untracked files outside _mill/ that appeared at batch end.
 
     Uses _pygit2_util.status_porcelain with include_untracked=True so
-    gitignored files are excluded automatically. Returns bare path strings
-    (no '?? ' prefix), sorted. Empty list means no violations.
+    gitignored files are excluded automatically. Excludes junction directories
+    (.active, .portals, .wiki, .others) even though they appear in status.
+    Returns bare path strings (no '?? ' prefix), sorted. Empty list means no violations.
     """
     lines = _pygit2_util.status_porcelain(worktree, include_untracked=True)
     violations = []
@@ -60,5 +64,8 @@ def compute_scope_violations(worktree: Path) -> list[str]:
         if line.startswith("?? "):
             path = line[3:]
             if not path.startswith("_mill/"):
-                violations.append(path)
+                # Extract the first path segment and check if it's a junction
+                first_segment = path.split("/")[0]
+                if first_segment not in _JUNCTION_SKIP_SET:
+                    violations.append(path)
     return sorted(violations)

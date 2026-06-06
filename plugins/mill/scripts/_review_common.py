@@ -38,6 +38,8 @@ Public API:
     resolve_ref_paths()  — resolve raw ref strings against project_root; hard-fails on missing paths not in creates_union or deletes_union
     resolve_existing_paths() — resolve raw paths and return only those that already exist on disk (silent drop, no creates_union check)
     _load_root_from_overview() — read root: field from overview's fenced-yaml block
+    _check_large_prompt()    — check if prompt exceeds large_prompt threshold; return (is_over_threshold, estimated_ktok)
+    resolve_large_prompt_timeout() — return large_prompt.timeout when prompt is over threshold and key is set
     maybe_switch_spec_for_large_prompt() — check prompt size; return (spec, reviewer_name), possibly overridden for large prompts
 """
 from __future__ import annotations
@@ -771,7 +773,13 @@ def _read_for_bulk(p: Path) -> str:
 
     On JSON parse error for .ipynb: prints warning to stderr and returns
     empty string so the file still appears in bulk output as an empty section.
+
+    If p is a directory: prints warning to stderr and returns empty string.
     """
+    if p.is_dir():
+        print(f"[_read_for_bulk] warning: {p} is a directory, skipping", file=sys.stderr)
+        return ""
+
     if p.suffix == ".ipynb":
         try:
             content = p.read_text(encoding="utf-8")
@@ -805,8 +813,8 @@ def bulk_files(file_paths: list[Path]) -> str:
     for p in file_paths:
         try:
             contents = _read_for_bulk(p)
-        except FileNotFoundError:
-            print(f"[bulk_files] warning: {p} not found, skipping", file=sys.stderr)
+        except (FileNotFoundError, PermissionError):
+            print(f"[bulk_files] warning: {p} not found or not readable, skipping", file=sys.stderr)
             continue
         parts.append(f"--- FILE: {p} ---\n{contents}\n--- END FILE: {p} ---")
     return "\n\n".join(parts)
@@ -829,8 +837,8 @@ def bulk_files_with_diff(
     for p in file_paths:
         try:
             file_content = _read_for_bulk(p)
-        except FileNotFoundError:
-            print(f"[bulk_files_with_diff] warning: {p} not found, skipping", file=sys.stderr)
+        except (FileNotFoundError, PermissionError):
+            print(f"[bulk_files_with_diff] warning: {p} not found or not readable, skipping", file=sys.stderr)
             continue
 
         try:
@@ -1011,6 +1019,52 @@ def build_tool_rule(mode: str) -> str:
     raise ValueError(f"Unknown reviewer mode: {mode!r} (expected 'bulk' or 'tool-use')")
 
 
+def _check_large_prompt(
+    prompt_text: str,
+    cfg: dict,
+    role: str,
+    scope: str,
+) -> tuple[bool, int]:
+    """Check if prompt exceeds large_prompt threshold.
+
+    Returns (is_over_threshold, estimated_ktok) where estimated_ktok is computed as
+    len(prompt_text) // 4000 and threshold_ktok is read from
+    cfg["roles"][role][scope]["large_prompt"]["threshold_ktok"] (default 100).
+    """
+    large_prompt_cfg = cfg.get("roles", {}).get(role, {}).get(scope, {}).get("large_prompt")
+    if not large_prompt_cfg:
+        return (False, len(prompt_text) // 4000)
+    threshold_ktok = large_prompt_cfg.get("threshold_ktok", 100)
+    estimated_ktok = len(prompt_text) // 4000
+    is_over_threshold = estimated_ktok >= threshold_ktok
+    return (is_over_threshold, estimated_ktok)
+
+
+def resolve_large_prompt_timeout(
+    prompt_text: str,
+    cfg: dict,
+    role: str,
+    scope: str,
+    default_timeout: int,
+) -> int:
+    """Return large_prompt.timeout when prompt is over threshold and key is set, else default_timeout.
+
+    Uses _check_large_prompt to compute size check; returns the override value from
+    cfg["roles"][role][scope]["large_prompt"]["timeout"] if the prompt exceeds the
+    threshold and the timeout key is set, otherwise returns default_timeout.
+    """
+    is_over_threshold, _ = _check_large_prompt(prompt_text, cfg, role, scope)
+    if not is_over_threshold:
+        return default_timeout
+    large_prompt_cfg = cfg.get("roles", {}).get(role, {}).get(scope, {}).get("large_prompt")
+    if not large_prompt_cfg:
+        return default_timeout
+    override_timeout = large_prompt_cfg.get("timeout")
+    if override_timeout is None:
+        return default_timeout
+    return override_timeout
+
+
 def maybe_switch_spec_for_large_prompt(
     prompt_text: str,
     spec: dict,
@@ -1021,15 +1075,12 @@ def maybe_switch_spec_for_large_prompt(
     registry: dict,
 ) -> tuple[dict, str]:
     """Check prompt size; return (spec, reviewer_name), possibly overridden for large prompts."""
+    is_over_threshold, estimated_ktok = _check_large_prompt(prompt_text, cfg, role, scope)
     large_prompt_cfg = cfg.get("roles", {}).get(role, {}).get(scope, {}).get("large_prompt")
-    if not large_prompt_cfg:
+    if not large_prompt_cfg or not is_over_threshold:
         return (spec, reviewer_name)
     override_name = large_prompt_cfg.get("reviewer")
     if override_name is None:
-        return (spec, reviewer_name)
-    threshold_ktok = large_prompt_cfg.get("threshold_ktok", 100)
-    estimated_ktok = len(prompt_text) // 4000
-    if estimated_ktok < threshold_ktok:
         return (spec, reviewer_name)
     override_spec = _reviewers.resolve(registry, override_name)
     if override_spec.get("type") == "cluster":
@@ -1077,11 +1128,15 @@ def render_prompt(template_name: str, **tokens) -> str:
 
 
 def parse_verdict(raw_output: str) -> str:
-    """Extract a valid verdict value from a fenced yaml block.
+    """Extract a valid verdict value from a fenced yaml block, or unfenced fallback.
 
     Scans raw_output for the first fenced ```yaml block (on its own line,
     possibly with trailing whitespace). Extracts the 'verdict:' field from
     inside the block (between the opening ```yaml and closing ``` fences).
+
+    If no fenced block is found, attempts a fallback: scans lines for an
+    unfenced 'verdict: <VALUE>' line (allowing leading whitespace; strips quotes).
+    If <VALUE> is one of the valid verdicts, returns it.
 
     Valid verdict values:
     - 'APPROVE'          — any review type
@@ -1095,7 +1150,7 @@ def parse_verdict(raw_output: str) -> str:
                            self-report entry.
 
     Raises ReviewError if:
-    - No ```yaml opening fence is found.
+    - No ```yaml opening fence is found AND no unfenced verdict line is found.
     - The yaml block is not closed by a ``` line.
     - The 'verdict:' field is absent from the block.
     - The verdict value is not one of the four above.
@@ -1113,40 +1168,48 @@ def parse_verdict(raw_output: str) -> str:
             open_idx = i
             break
 
-    if open_idx is None:
+    if open_idx is not None:
+        # Find the closing ``` fence after the opening.
+        close_idx = None
+        for i, line in enumerate(lines[open_idx + 1:], start=open_idx + 1):
+            if line.rstrip() == "```":
+                close_idx = i
+                break
+
+        if close_idx is None:
+            raise ReviewError(
+                f"Could not parse verdict: ```yaml block not closed.\n"
+                f"Raw output preview:\n{preview}"
+            )
+
+        # Scan block body for verdict: field.
+        for line in lines[open_idx + 1:close_idx]:
+            stripped = line.strip()
+            if stripped.startswith("verdict:"):
+                value = stripped[len("verdict:"):].strip().strip('"').strip("'")
+                if value in ("APPROVE", "REQUEST_CHANGES", "GAPS_FOUND", "NEED_CONTEXT"):
+                    return value
+                raise ReviewError(
+                    f"Could not parse verdict: invalid value {value!r}; "
+                    f"expected APPROVE, REQUEST_CHANGES, GAPS_FOUND, or NEED_CONTEXT.\n"
+                    f"Raw output preview:\n{preview}"
+                )
+
         raise ReviewError(
-            f"Could not parse verdict: no ```yaml block found.\n"
+            f"Could not parse verdict: 'verdict:' key not found in ```yaml block.\n"
             f"Raw output preview:\n{preview}"
         )
 
-    # Find the closing ``` fence after the opening.
-    close_idx = None
-    for i, line in enumerate(lines[open_idx + 1:], start=open_idx + 1):
-        if line.rstrip() == "```":
-            close_idx = i
-            break
-
-    if close_idx is None:
-        raise ReviewError(
-            f"Could not parse verdict: ```yaml block not closed.\n"
-            f"Raw output preview:\n{preview}"
-        )
-
-    # Scan block body for verdict: field.
-    for line in lines[open_idx + 1:close_idx]:
+    # Fallback: scan for unfenced verdict line.
+    for line in lines:
         stripped = line.strip()
         if stripped.startswith("verdict:"):
             value = stripped[len("verdict:"):].strip().strip('"').strip("'")
             if value in ("APPROVE", "REQUEST_CHANGES", "GAPS_FOUND", "NEED_CONTEXT"):
                 return value
-            raise ReviewError(
-                f"Could not parse verdict: invalid value {value!r}; "
-                f"expected APPROVE, REQUEST_CHANGES, GAPS_FOUND, or NEED_CONTEXT.\n"
-                f"Raw output preview:\n{preview}"
-            )
 
     raise ReviewError(
-        f"Could not parse verdict: 'verdict:' key not found in ```yaml block.\n"
+        f"Could not parse verdict: no ```yaml block found and no unfenced verdict line found.\n"
         f"Raw output preview:\n{preview}"
     )
 

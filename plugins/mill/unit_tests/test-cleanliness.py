@@ -177,9 +177,9 @@ def main() -> int:
     # CV-2. compute_scope_violations: untracked file at root returned
     try:
         with tempfile.TemporaryDirectory() as tmp:
-            with unittest.mock.patch("_cleanliness._pygit2_util.status_porcelain", return_value=["?? plugins_mill_scripts_foo.py"]):
+            with unittest.mock.patch("_cleanliness._pygit2_util.status_porcelain", return_value=["?? plugins/mill/scripts/foo.py"]):
                 result = compute_scope_violations(Path(tmp))
-            assert result == ["plugins_mill_scripts_foo.py"], f"expected ['plugins_mill_scripts_foo.py'], got {result!r}"
+            assert result == ["plugins/mill/scripts/foo.py"], f"expected ['plugins/mill/scripts/foo.py'], got {result!r}"
         print("PASS: compute_scope_violations: untracked at root -> path returned")
     except AssertionError as exc:
         failures.append(f"FAIL: compute_scope_violations untracked root: {exc}")
@@ -209,6 +209,36 @@ def main() -> int:
         failures.append(f"FAIL: compute_scope_violations untracked subdir: {exc}")
     except Exception as exc:
         failures.append(f"FAIL: compute_scope_violations untracked subdir ({type(exc).__name__}): {exc}")
+
+    # CV-5. compute_scope_violations: junctions (.wiki, .portals, .active, .others) filtered
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            with unittest.mock.patch(
+                "_cleanliness._pygit2_util.status_porcelain",
+                return_value=["?? .wiki", "?? .portals", "?? .active", "?? .others", "?? bad_file.py"]
+            ):
+                result = compute_scope_violations(Path(tmp))
+            assert result == ["bad_file.py"], f"expected ['bad_file.py'], got {result!r}"
+        print("PASS: compute_scope_violations: junctions filtered, genuine file returned")
+    except AssertionError as exc:
+        failures.append(f"FAIL: compute_scope_violations junction filter: {exc}")
+    except Exception as exc:
+        failures.append(f"FAIL: compute_scope_violations junction filter ({type(exc).__name__}): {exc}")
+
+    # CV-6. compute_scope_violations: files under junction dirs filtered
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            with unittest.mock.patch(
+                "_cleanliness._pygit2_util.status_porcelain",
+                return_value=["?? .wiki/foo", "?? .portals/bar", "?? plugins/foo.py"]
+            ):
+                result = compute_scope_violations(Path(tmp))
+            assert result == ["plugins/foo.py"], f"expected ['plugins/foo.py'], got {result!r}"
+        print("PASS: compute_scope_violations: files under junctions filtered")
+    except AssertionError as exc:
+        failures.append(f"FAIL: compute_scope_violations files under junctions: {exc}")
+    except Exception as exc:
+        failures.append(f"FAIL: compute_scope_violations files under junctions ({type(exc).__name__}): {exc}")
 
     if failures:
         for msg in failures:

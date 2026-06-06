@@ -128,7 +128,7 @@ def main(argv=None) -> int:
     parser.add_argument(
         "--checkpoint",
         default=None,
-        help="(verify-fix mode) Git SHA of the merge commit.",
+        help="(verify-fix mode, full stage only) Git SHA of the merge commit; used in full mode to diff what the merge changed.",
     )
     parser.add_argument(
         "--stage",
@@ -179,6 +179,8 @@ def main(argv=None) -> int:
                 text=True,
                 cwd=project_root,
             )
+            # Case A: verify passes with no fixer needed (initial verify was 0)
+            # Case B: fixer ran, post-fix verify passes
             if post_verify_result.returncode == 0:
                 sha_result = _subprocess_util.run(
                     ["git", "rev-parse", "HEAD"],
@@ -187,6 +189,10 @@ def main(argv=None) -> int:
                 sha = sha_result.stdout.strip() if sha_result.returncode == 0 else ""
                 print(json.dumps({"status": "success", "commit_sha": sha}))
                 return 0
+            # Case C: fixer ran, post-fix verify still fails
+            verify_output = (post_verify_result.stdout + post_verify_result.stderr).strip()
+            print(json.dumps({"status": "stuck", "stuck_type": "verify", "reason": verify_output}))
+            return 0
         return finalize_from_output(
             Path(args.agent_output),
             project_root,
@@ -258,8 +264,10 @@ def _run_verify_fix(args, project_root: Path, plugin_root: Path, cfg: dict, time
     if args.cmd is None:
         print("--cmd is required for verify-fix mode", file=sys.stderr)
         return 1
-    if args.checkpoint is None:
-        print("--checkpoint is required for verify-fix mode", file=sys.stderr)
+    # Note: --checkpoint is only consumed by full mode (line 299) for git diff.
+    # prepare and finalize stages do not require it.
+    if args.checkpoint is None and stage == "full":
+        print("--checkpoint is required for verify-fix full mode", file=sys.stderr)
         return 1
 
     # Shell-escaped user verify command — _subprocess_util.run does not support shell=True.
@@ -338,6 +346,7 @@ def _run_verify_fix(args, project_root: Path, plugin_root: Path, cfg: dict, time
         cwd=project_root,
     )
 
+    # Case B: fixer ran, post-fix verify passes
     if post_verify_result.returncode == 0:
         sha_result = _subprocess_util.run(
             ["git", "rev-parse", "HEAD"],
@@ -347,7 +356,10 @@ def _run_verify_fix(args, project_root: Path, plugin_root: Path, cfg: dict, time
         print(json.dumps({"status": "success", "commit_sha": sha}))
         return 0
 
-    return _forward_output(output, project_root)
+    # Case C: fixer ran, post-fix verify still fails
+    verify_output = (post_verify_result.stdout + post_verify_result.stderr).strip()
+    print(json.dumps({"status": "stuck", "stuck_type": "verify", "reason": verify_output}))
+    return 0
 
 
 if __name__ == "__main__":

@@ -177,16 +177,29 @@ PR dispatch lives in mill-finalize. This step is direct path only.
 
   **Idempotency check:** if `git merge --squash` prints "Already up to date" or `git commit` prints "nothing to commit" → skip `push` and proceed to Step 6.
 
+### 5.5. Preflight check for cache helpers
+
+Before attempting Step 6's archive-tag import, verify that the plugin cache is complete. Run:
+
+```bash
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
+from pathlib import Path
+import _preflight
+exit(_preflight.check_helpers(['_archive_tag']))
+"
+```
+
+If the check returns non-zero (helper missing), the error message to stderr names the missing module(s) and instructs the operator to refresh the plugin cache. The operator must reinstall/update the cache and re-run `/mill-merge`.
+
+**Rationale:** a stale plugin cache (missing `_archive_tag.py`) would otherwise crash at Step 6 with a cryptic `ModuleNotFoundError`. Catching it early provides an actionable message.
+
 ### 6. Archive tag
 
 ```bash
 PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
 from pathlib import Path
 import _paths
-try:
-    import _archive_tag
-except ImportError as e:
-    raise SystemExit(f'[mill-merge] step 6 failed: {e}. Cache may be stale -- run: uv sync --project plugins/mill')
+import _archive_tag
 worktree = _paths.resolve_git_root()
 result = _archive_tag.create_or_resolve(worktree, '<slug>', '$CHILD_BRANCH')
 print(f'[mill-merge] archive-tag action: {result[\"action\"]} -- tag: {result[\"tag\"]}')

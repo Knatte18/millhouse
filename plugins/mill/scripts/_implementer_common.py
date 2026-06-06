@@ -7,6 +7,96 @@ import _subprocess_util
 from pathlib import Path
 
 
+def _is_formatter_drift_only(project_root: Path) -> bool:
+    """Check if the only remaining dirt is whitespace-only formatter drift.
+
+    Heuristic (deterministic): residual dirt is formatter drift ONLY when:
+      - git diff (tracked files) is non-empty
+      - git diff -w (ignore-all-space) is empty
+      - no untracked files exist
+
+    If either git diff subprocess returns non-zero or raises, treat as
+    "not formatter drift" (skip auto-commit, proceed normally).
+
+    Args:
+        project_root: Path to the worktree root.
+
+    Returns:
+        True if all remaining changes are pure whitespace; False otherwise.
+    """
+    try:
+        # Check if there are any untracked files
+        result_untracked = _subprocess_util.run(
+            ["git", "-C", str(project_root), "status", "--porcelain", "--untracked-files=all"],
+            check=False,
+        )
+        if result_untracked.returncode != 0:
+            return False
+        # Any line starting with ?? means untracked files exist
+        for line in result_untracked.stdout.strip().split("\n"):
+            if line.startswith("??"):
+                return False
+
+        # Check if tracked files have changes
+        result_diff = _subprocess_util.run(
+            ["git", "-C", str(project_root), "diff"],
+            check=False,
+        )
+        if result_diff.returncode != 0:
+            return False
+        if not result_diff.stdout.strip():
+            # No tracked-file changes at all
+            return False
+
+        # Check if those changes are purely whitespace
+        result_diff_w = _subprocess_util.run(
+            ["git", "-C", str(project_root), "diff", "-w"],
+            check=False,
+        )
+        if result_diff_w.returncode != 0:
+            return False
+        if result_diff_w.stdout.strip():
+            # -w still shows changes, so there's non-whitespace content
+            return False
+
+        # All conditions met: it's formatter drift
+        return True
+    except Exception:
+        # On any error, treat as "not formatter drift"
+        return False
+
+
+def _commit_formatter_drift(project_root: Path) -> bool:
+    """Auto-commit formatter drift changes.
+
+    Stages all changes and commits with message "chore(format): commit formatter drift".
+    Returns True if commit succeeded; False on any error.
+
+    Args:
+        project_root: Path to the worktree root.
+
+    Returns:
+        True if the commit succeeded; False otherwise.
+    """
+    try:
+        # Stage all changes
+        result_add = _subprocess_util.run(
+            ["git", "-C", str(project_root), "add", "-A"],
+            check=False,
+        )
+        if result_add.returncode != 0:
+            return False
+
+        # Commit with ASCII-only message
+        result_commit = _subprocess_util.run(
+            ["git", "-C", str(project_root), "commit", "-m", "chore(format): commit formatter drift"],
+            check=False,
+        )
+        return result_commit.returncode == 0
+    except Exception:
+        return False
+
+
 def emit_prepare(
     briefs_dir: Path,
     role: str,
@@ -97,6 +187,37 @@ def finalize_from_output(
     )
 
 
+def _extract_status_json(output: str) -> dict | None:
+    """Extract the last JSON object containing a 'status' key from output.
+
+    Iterates through balanced-brace spans and attempts json.loads on each.
+    Returns the parsed JSON dict if a valid status object is found; None otherwise.
+    """
+    # Find all potential JSON spans by tracking balanced braces
+    candidates = []
+    depth = 0
+    start = None
+    for i, char in enumerate(output):
+        if char == '{':
+            if depth == 0:
+                start = i
+            depth += 1
+        elif char == '}':
+            depth -= 1
+            if depth == 0 and start is not None:
+                candidates.append(output[start:i + 1])
+                start = None
+    # Try to parse candidates in reverse order (last first)
+    for candidate in reversed(candidates):
+        try:
+            parsed = json.loads(candidate)
+            if isinstance(parsed, dict) and "status" in parsed:
+                return parsed
+        except json.JSONDecodeError:
+            pass
+    return None
+
+
 def _forward_output(
     output: str,
     project_root: Path,
@@ -105,33 +226,28 @@ def _forward_output(
     snapshot_path: Path | None = None,
     session_id: str | None = None,
 ) -> int:
-    """Extract the last JSON object containing a 'status' key from output using regex.
+    """Extract the last JSON object containing a 'status' key from output.
 
     Returns 0 in both success and fallback cases — the JSON on stdout is how the caller reads state.
     When no valid JSON is found, emits a stuck/logic sentinel.
     When the inferred-success fallback fires, the emitted JSON uses ``session_id`` if supplied,
     falling back to the literal ``"unknown"`` for backwards compatibility with callers that don't pass it.
     """
-    matches = re.findall(r'\{[^{}]*"status"[^{}]*\}', output)
-    if matches:
-        last = matches[-1]
-        try:
-            parsed = json.loads(last)
-            result = _subprocess_util.run(
-                ["git", "rev-parse", "HEAD"],
-                cwd=project_root,
-            )
-            if result.returncode == 0:
-                parsed["commit_sha"] = result.stdout.strip()
-                violations = _cleanliness.compute_scope_violations(project_root)
-                if violations:
-                    parsed["scope_violations"] = violations
-                print(json.dumps(parsed))
-            else:
-                print(last)
-            return 0
-        except json.JSONDecodeError:
-            pass
+    parsed = _extract_status_json(output)
+    if parsed is not None:
+        result = _subprocess_util.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=project_root,
+        )
+        if result.returncode == 0:
+            parsed["commit_sha"] = result.stdout.strip()
+            violations = _cleanliness.compute_scope_violations(project_root)
+            if violations:
+                parsed["scope_violations"] = violations
+            print(json.dumps(parsed))
+        else:
+            print(json.dumps(parsed))
+        return 0
     try:
         if start_sha is not None and snapshot_path is not None and snapshot_path.exists():
             new_dirt = _cleanliness.compute_new_dirt(project_root, snapshot_path)
@@ -144,6 +260,33 @@ def _forward_output(
                         check=True,
                     )
                     if result_full.stdout.strip():
+                        # Check if the remaining dirt is only formatter drift
+                        if _is_formatter_drift_only(project_root):
+                            # Auto-commit formatter drift
+                            if _commit_formatter_drift(project_root):
+                                # Re-check that tree is now clean
+                                result_check = _subprocess_util.run(
+                                    ["git", "-C", str(project_root), "status", "--porcelain", "--untracked-files=no"],
+                                    check=False,
+                                )
+                                if result_check.returncode == 0 and not result_check.stdout.strip():
+                                    # Tree is now clean; get the new HEAD after drift commit
+                                    result_head = _subprocess_util.run(
+                                        ["git", "rev-parse", "HEAD"],
+                                        cwd=project_root,
+                                    )
+                                    if result_head.returncode == 0:
+                                        new_head = result_head.stdout.strip()
+                                    else:
+                                        new_head = head
+                                    # Emit success
+                                    violations = _cleanliness.compute_scope_violations(project_root)
+                                    if violations:
+                                        print(json.dumps({"status": "stuck", "stuck_type": "logic", "reason": f"untracked files outside scope: {violations}", "scope_violations": violations, "inferred": True}))
+                                    else:
+                                        print(json.dumps({"status": "success", "commit_sha": new_head, "session_id": session_id or "unknown", "inferred": True}))
+                                    return 0
+                        # Not formatter drift, or commit failed
                         print(json.dumps({"status": "stuck", "stuck_type": "logic", "reason": "inferred success but working tree dirty -- implementer likely skipped git-commit on modified files"}))
                         return 0
                     violations = _cleanliness.compute_scope_violations(project_root)

@@ -869,6 +869,210 @@ def main() -> int:
         print(f"FAIL: _wait_for_idle_prompt unit tests - {e}")
         errors += 1
 
+    # ── S15: wrapper script feeds prompt via stdin, not command line ─────────
+    try:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            mod = _load_claude_sub_module()
+            tmpdir_path = Path(tmpdir)
+            scratch_dir = tmpdir_path / ".scratch"
+            scratch_dir.mkdir(exist_ok=True)
+
+            def mock_list_sessions():
+                return []
+
+            def mock_capture_pane(session_name, **kwargs):
+                return "  ❯ \n● ok\n  ❯ "
+
+            def mock_extract_response(snapshot):
+                return "ok"
+
+            saved_argv = sys.argv[:]
+            saved_stdin = sys.stdin
+            try:
+                sys.argv = [
+                    str(_CLAUDE_SUB_PY),
+                    "--mode", "bulk",
+                    "--model", "claude-opus",
+                ]
+                sys.stdin = io.StringIO("test prompt with\nmultiple lines")
+
+                with mock.patch("_psmux.new_session"), \
+                     mock.patch("_psmux.set_history_limit"), \
+                     mock.patch("_psmux.list_sessions", side_effect=mock_list_sessions), \
+                     mock.patch("_psmux.send_keys") as m_send_keys, \
+                     mock.patch("_psmux.capture_pane", side_effect=mock_capture_pane), \
+                     mock.patch("_psmux.kill_session"), \
+                     mock.patch("_psmux_capture.extract_response", side_effect=mock_extract_response), \
+                     mock.patch.object(mod, "_wait_for_marker_in_pane", return_value=True), \
+                     mock.patch.object(mod, "_wait_for_idle_prompt", return_value=True), \
+                     mock.patch.object(mod, "_wait_for_idle_stable", return_value=True), \
+                     mock.patch("_paths.resolve_git_root", return_value=tmpdir_path), \
+                     mock.patch("_config.load_config", return_value={}), \
+                     mock.patch("sys.stdout", new_callable=io.StringIO) as m_stdout:
+
+                    ret = mod.main()
+
+                    # Verify wrapper was executed
+                    assert ret == 0, f"S15: expected 0, got {ret}"
+
+                    # Check that the wrapper script content uses stdin pipe
+                    # (send_keys is called to submit the script, not to send the prompt directly)
+                    # The script should be sent to psmux only once during launch
+                    script_sends = [call for call in m_send_keys.call_args_list
+                                   if len(call[0]) > 1 and "wrapper-" in str(call[0][1])]
+                    assert len(script_sends) == 1, f"expected 1 script send, got {len(script_sends)}"
+
+                    # Extract the script path that was sent
+                    script_path_str = script_sends[0][0][1]  # The second positional arg is the script path
+                    assert "wrapper-" in script_path_str, f"expected wrapper path in script send"
+
+                    # Read the generated script to verify it uses stdin pipe
+                    script_path = Path(script_path_str)
+                    if script_path.exists():
+                        script_content = script_path.read_text(encoding="utf-8")
+                        # Should use pipe: Get-Content ... | & claude ...
+                        assert "|" in script_content, f"script should use pipe for stdin: {script_content}"
+                        assert "Get-Content" in script_content, f"script should use Get-Content: {script_content}"
+                        # Should NOT contain the prompt text as a positional argument on the command line
+                        assert "test prompt with" not in script_content, \
+                            f"prompt should not be expanded in command line: {script_content}"
+                        assert "$prompt" not in script_content, \
+                            f"should not use $prompt variable: {script_content}"
+
+                    print("PASS: S15 (wrapper script feeds prompt via stdin, not command line)")
+            finally:
+                sys.argv = saved_argv
+                sys.stdin = saved_stdin
+    except Exception as e:
+        print(f"FAIL: S15 - {e}")
+        errors += 1
+
+    # ── S16: --response-poll-timeout overrides bulk default ─────────────────
+    try:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            mod = _load_claude_sub_module()
+            tmpdir_path = Path(tmpdir)
+            scratch_dir = tmpdir_path / ".scratch"
+            scratch_dir.mkdir(exist_ok=True)
+
+            def mock_list_sessions():
+                return []
+
+            def mock_capture_pane(session_name, **kwargs):
+                return "  ❯ \n● ok\n  ❯ "
+
+            def mock_extract_response(snapshot):
+                return "ok"
+
+            # Capture the timeout passed to _wait_for_idle_stable
+            captured_timeouts = []
+
+            def mock_wait_for_idle_stable_with_capture(session_name, timeout_s):
+                captured_timeouts.append(timeout_s)
+                return True
+
+            saved_argv = sys.argv[:]
+            saved_stdin = sys.stdin
+            try:
+                sys.argv = [
+                    str(_CLAUDE_SUB_PY),
+                    "--mode", "bulk",
+                    "--model", "claude-opus",
+                    "--response-poll-timeout", "777",
+                ]
+                sys.stdin = io.StringIO("test prompt")
+
+                with mock.patch("_psmux.new_session"), \
+                     mock.patch("_psmux.set_history_limit"), \
+                     mock.patch("_psmux.list_sessions", side_effect=mock_list_sessions), \
+                     mock.patch("_psmux.send_keys"), \
+                     mock.patch("_psmux.capture_pane", side_effect=mock_capture_pane), \
+                     mock.patch("_psmux.kill_session"), \
+                     mock.patch("_psmux_capture.extract_response", side_effect=mock_extract_response), \
+                     mock.patch.object(mod, "_wait_for_marker_in_pane", return_value=True), \
+                     mock.patch.object(mod, "_wait_for_idle_prompt", return_value=True), \
+                     mock.patch.object(mod, "_wait_for_idle_stable", side_effect=mock_wait_for_idle_stable_with_capture), \
+                     mock.patch("_paths.resolve_git_root", return_value=tmpdir_path), \
+                     mock.patch("_config.load_config", return_value={}), \
+                     mock.patch("sys.stdout", new_callable=io.StringIO):
+
+                    captured_timeouts.clear()
+                    ret = mod.main()
+
+                    assert ret == 0, f"S16: expected 0, got {ret}"
+                    assert len(captured_timeouts) > 0, "timeout not captured in S16"
+                    assert captured_timeouts[0] == 777.0, f"Expected 777.0, got {captured_timeouts[0]}"
+                    print("PASS: S16 (--response-poll-timeout overrides bulk default)")
+            finally:
+                sys.argv = saved_argv
+                sys.stdin = saved_stdin
+    except Exception as e:
+        print(f"FAIL: S16 - {e}")
+        errors += 1
+
+    # ── S17: without --response-poll-timeout, bulk default (300) applies ────
+    try:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            mod = _load_claude_sub_module()
+            tmpdir_path = Path(tmpdir)
+            scratch_dir = tmpdir_path / ".scratch"
+            scratch_dir.mkdir(exist_ok=True)
+
+            def mock_list_sessions():
+                return []
+
+            def mock_capture_pane(session_name, **kwargs):
+                return "  ❯ \n● ok\n  ❯ "
+
+            def mock_extract_response(snapshot):
+                return "ok"
+
+            # Capture the timeout passed to _wait_for_idle_stable
+            captured_timeouts = []
+
+            def mock_wait_for_idle_stable_with_capture(session_name, timeout_s):
+                captured_timeouts.append(timeout_s)
+                return True
+
+            saved_argv = sys.argv[:]
+            saved_stdin = sys.stdin
+            try:
+                sys.argv = [
+                    str(_CLAUDE_SUB_PY),
+                    "--mode", "bulk",
+                    "--model", "claude-opus",
+                ]
+                sys.stdin = io.StringIO("test prompt")
+
+                with mock.patch("_psmux.new_session"), \
+                     mock.patch("_psmux.set_history_limit"), \
+                     mock.patch("_psmux.list_sessions", side_effect=mock_list_sessions), \
+                     mock.patch("_psmux.send_keys"), \
+                     mock.patch("_psmux.capture_pane", side_effect=mock_capture_pane), \
+                     mock.patch("_psmux.kill_session"), \
+                     mock.patch("_psmux_capture.extract_response", side_effect=mock_extract_response), \
+                     mock.patch.object(mod, "_wait_for_marker_in_pane", return_value=True), \
+                     mock.patch.object(mod, "_wait_for_idle_prompt", return_value=True), \
+                     mock.patch.object(mod, "_wait_for_idle_stable", side_effect=mock_wait_for_idle_stable_with_capture), \
+                     mock.patch("_paths.resolve_git_root", return_value=tmpdir_path), \
+                     mock.patch("_config.load_config", return_value={}), \
+                     mock.patch("sys.stdout", new_callable=io.StringIO):
+
+                    captured_timeouts.clear()
+                    ret = mod.main()
+
+                    assert ret == 0, f"S17: expected 0, got {ret}"
+                    assert len(captured_timeouts) > 0, "timeout not captured in S17"
+                    # Default bulk timeout is 300
+                    assert captured_timeouts[0] == 300.0, f"Expected 300.0 (bulk default), got {captured_timeouts[0]}"
+                    print("PASS: S17 (without --response-poll-timeout, bulk default 300 applies)")
+            finally:
+                sys.argv = saved_argv
+                sys.stdin = saved_stdin
+    except Exception as e:
+        print(f"FAIL: S17 - {e}")
+        errors += 1
+
     return errors
 
 

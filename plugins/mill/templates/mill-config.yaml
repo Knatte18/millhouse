@@ -106,7 +106,7 @@ llm:
     psmux:
       shell_path: pwsh  # Shell binary passed to new_session. Use the full path if pwsh on PATH is a broken stub (e.g. C:/Code/tools/powershell7/pwsh.exe on Windows machines with App Execution Alias disabled).
       reuse_idle_timeout_s: 10  # Seconds to wait for an existing psmux session to return to its idle prompt before reuse fails
-      response_poll_timeout_s:  # Max seconds to wait for psmux Claude TUI to return to idle per mode
+      response_poll_timeout_s:  # Max seconds to wait for psmux Claude TUI to return to idle per mode. Note: review-layer timeout overrides this when invoked via _llm_claude._build_psmux_argv (the --response-poll-timeout flag); this key applies only to direct millpy-claude-sub.py invocations without that flag.
         bulk: 300
         tool-use: 600
         implementer: 1800
@@ -143,9 +143,10 @@ roles:
     holistic:
       rounds: 4
       reviewer: sonnetmax
-      # large_prompt:            # optional: override reviewer for large prompts
+      # large_prompt:            # optional: override reviewer and timeout for large prompts
       #   threshold_ktok: 100    # switch when estimated tok count >= this (char/4000)
       #   reviewer: null         # override reviewer from agents.yaml; null = disabled
+      #   timeout: 3600          # optional: override the default holistic_timeout for large prompts
 
   code-review:
     batch:

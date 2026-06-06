@@ -57,6 +57,7 @@ from _review_common import (
     read_constraints_md,
     render_prompt,
     resolve_existing_paths,
+    resolve_large_prompt_timeout,
     resolve_path,
     resolve_ref_paths,
     worktree_snapshot_guard,
@@ -783,8 +784,12 @@ def run(
                 prompt_text, holistic_spec, holistic_name, cfg, "plan-review", "holistic", registry
             )
 
+            resolved_timeout = resolve_large_prompt_timeout(
+                prompt_text, cfg, "plan-review", "holistic", holistic_timeout
+            )
+
             try:
-                raw, session_id = _reviewer_single.run(holistic_spec, prompt_text, timeout=holistic_timeout)
+                raw, session_id = _reviewer_single.run(holistic_spec, prompt_text, timeout=resolved_timeout)
                 raw = extract_review_content(raw)
             except LLMError as exc:
                 reviews.append({
@@ -819,7 +824,7 @@ def run(
                             )
                             try:
                                 raw, session_id = _reviewer_single.run(
-                                    holistic_spec, retry_prompt, session_id=session_id, resume=True, timeout=holistic_timeout
+                                    holistic_spec, retry_prompt, session_id=session_id, resume=True, timeout=resolved_timeout
                                 )
                                 raw = extract_review_content(raw)
                             except LLMError as exc:

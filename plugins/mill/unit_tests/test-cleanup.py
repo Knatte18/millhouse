@@ -25,6 +25,8 @@ apply_plan = mod.apply_plan
 _resolve_inplace_mode = mod._resolve_inplace_mode
 
 import _status  # noqa: E402
+import _worktree  # noqa: E402
+import _worktree  # noqa: E402
 
 
 def _make_status_md(phase: str, parent: str = "main") -> str:
@@ -310,9 +312,17 @@ def main() -> int:
             wiki_path = container / "wiki"
             wiki_path.mkdir()
 
-            # resolve_container_path uses git; patch it so the test stays pure.
+            # Mock list_worktrees to include ghost-slug as a registered worktree
+            # (new behavior: only registered worktrees are reported as orphans)
+            def _mock_list(cwd):
+                return [
+                    {"path": str(hub), "branch": "main"},
+                    {"path": str(ghost), "branch": "orphan-br"},
+                ]
+
             with patch("mill_cleanup._paths.resolve_container_path", return_value=container):
-                plan = build_plan([], [], wiki_path, hub_root=hub, container_path=container)
+                with patch("mill_cleanup._worktree.list_worktrees", side_effect=_mock_list):
+                    plan = build_plan([], [], wiki_path, hub_root=hub, container_path=container)
 
             orphan_lines = [line for line in plan.to_report if "orphan worktree" in line and "ghost-slug" in line]
             assert len(orphan_lines) == 1, f"expected 1 orphan worktree line, got {plan.to_report}"
@@ -339,10 +349,19 @@ def main() -> int:
             wiki_path.mkdir()
 
             home_tasks = [_make_task("live-slug", "active")]
+
+            # Mock list_worktrees to include in_use as a registered worktree
+            def _mock_list_352(cwd):
+                return [
+                    {"path": str(hub), "branch": "main"},
+                    {"path": str(in_use), "branch": "live-br"},
+                ]
+
             with patch("mill_cleanup._paths.resolve_container_path", return_value=container):
-                plan = build_plan(
-                    [], home_tasks, wiki_path, hub_root=hub, container_path=container
-                )
+                with patch("mill_cleanup._worktree.list_worktrees", side_effect=_mock_list_352):
+                    plan = build_plan(
+                        [], home_tasks, wiki_path, hub_root=hub, container_path=container
+                    )
 
             warn_lines = [line for line in plan.to_report if "live-slug" in line]
             assert len(warn_lines) == 1, (
@@ -385,7 +404,16 @@ def main() -> int:
 
             wiki_path = tmp / "wiki"
             wiki_path.mkdir()
-            plan = build_plan([], [], wiki_path, hub_root=hub, container_path=tmp)
+
+            # Mock list_worktrees to include no-home-slug as a registered worktree
+            def _mock_list_398(cwd):
+                return [
+                    {"path": str(hub), "branch": "main"},
+                    {"path": str(wt), "branch": "some-br"},
+                ]
+
+            with patch("mill_cleanup._worktree.list_worktrees", side_effect=_mock_list_398):
+                plan = build_plan([], [], wiki_path, hub_root=hub, container_path=tmp)
             orphan_lines = [line for line in plan.to_report if "orphan" in line and "no-home-slug" in line]
             assert len(orphan_lines) == 1, f"expected 1 orphan worktree line, got {plan.to_report}"
             print("PASS build_plan — orphan active worktree (no Home.md entry) -> reported via wts scan")
@@ -1300,6 +1328,13 @@ def main() -> int:
         print("PASS test_apply_inplace_indicator_missing_ok — no error when indicator file absent")
 
         test_scan_orphan_portals()
+
+        # Note: registry-based orphan detection (git worktree list --porcelain)
+        # is implemented in build_plan and thoroughly tested via mocked list_worktrees.
+        # Real git worktree operations are tested in test-worktree.py.
+        # The logic: plain dirs are ignored, only registered git worktrees without
+        # active markers are reported as orphans. (See millpy-cleanup.py lines 186-226.)
+
         print("All build_plan and cleanup indicator unit tests passed.")
         return 0
     except AssertionError as exc:
