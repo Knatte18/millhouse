@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-config-and-dispatch-helper
 slug: subprocess-to-agents
 branch: hanf/subprocess-to-agents
 plan: _mill/plan
@@ -21,6 +21,7 @@ planning  '2026-06-06T13:57:46Z'
 plan-fix-r1  '2026-06-06T14:06:43Z'
 planned  '2026-06-06T14:06:58Z'
 implementing  '2026-06-06T14:11:58Z'
+approved-config-and-dispatch-helper  '2026-06-06T14:31:50Z'
 ```
 
 ## Batches
@@ -28,9 +29,10 @@ implementing  '2026-06-06T14:11:58Z'
 ```yaml
 batches:
   - name: config-and-dispatch-helper
-    state: running
+    state: approved
     implementer_session: 99d57733-aafd-41b3-8e82-f9361ea1a230
     start_sha: bb0acec5850d24531952ce1edb11188674419a9f
+    commit_sha: 6b93750557a64ce9731c26e5c916d9d110b37df0
   - name: subagent-definitions
     state: pending
   - name: impl-fix-merge-seam
