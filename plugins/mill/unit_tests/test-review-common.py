@@ -114,6 +114,7 @@ from _review_common import (  # noqa: E402
     parse_verdict,
     render_prompt,
     resolve_existing_paths,
+    resolve_large_prompt_timeout,
     resolve_path,
     resolve_ref_paths,
     write_review_file,
@@ -2035,6 +2036,133 @@ def main() -> int:
     result_dict = result_with_nits.to_dict()
     assert result_dict["nit_count"] == 5, f"Expected to_dict()['nit_count']=5, got {result_dict['nit_count']}"
     print("PASS: ReviewResult nit_count non-default value round-trips through to_dict()")
+
+    # ---------------------------------------------------------------------------
+    # parse_verdict: unfenced fallback line
+    # ---------------------------------------------------------------------------
+
+    # parse_verdict: unfenced verdict line with leading whitespace
+    raw = "  verdict: GAPS_FOUND\n"
+    assert parse_verdict(raw) == "GAPS_FOUND"
+    print("PASS: parse_verdict unfenced verdict line with leading whitespace")
+
+    # parse_verdict: fenced block still works as primary path
+    raw = "# Review: X\n\n```yaml\nverdict: APPROVE\n```\n"
+    assert parse_verdict(raw) == "APPROVE"
+    print("PASS: parse_verdict fenced block (primary path)")
+
+    # parse_verdict: no verdict at all (no fenced, no unfenced) raises ReviewError
+    try:
+        parse_verdict("No verdict anywhere in this text.")
+        print("FAIL: parse_verdict: expected ReviewError for no verdict", file=sys.stderr)
+        errors += 1
+    except ReviewError:
+        print("PASS: parse_verdict no verdict -> ReviewError")
+
+    # parse_verdict: invalid value inside fenced block raises even with unfenced fallback available
+    try:
+        raw = "```yaml\nverdict: INVALID_VALUE\n```\n\nverdict: APPROVE\n"
+        parse_verdict(raw)
+        print("FAIL: parse_verdict: expected ReviewError for invalid fenced value", file=sys.stderr)
+        errors += 1
+    except ReviewError as e:
+        assert "INVALID_VALUE" in str(e)
+        print("PASS: parse_verdict invalid fenced value raises (fallback not used)")
+
+    # ---------------------------------------------------------------------------
+    # _read_for_bulk and bulk_files: directory handling
+    # ---------------------------------------------------------------------------
+
+    # _read_for_bulk: directory path returns empty string with warning
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        import io as _io
+        import contextlib as _cl
+        tmpdir_path = Path(tmpdir)
+        subdir = tmpdir_path / "subdir"
+        subdir.mkdir()
+        _err_buf = _io.StringIO()
+        with _cl.redirect_stderr(_err_buf):
+            result = _read_for_bulk(subdir)
+        assert result == "", f"Expected empty string for directory, got {result!r}"
+        stderr_out = _err_buf.getvalue()
+        assert "is a directory" in stderr_out, f"Expected 'is a directory' warning, got {stderr_out!r}"
+        print("PASS: _read_for_bulk directory path -> empty string + warning")
+
+    # bulk_files: real file and directory in path list -> file included, directory skipped
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        tmpdir_path = Path(tmpdir)
+        real_file = tmpdir_path / "real.py"
+        real_file.write_text("content")
+        subdir = tmpdir_path / "subdir"
+        subdir.mkdir()
+        result = bulk_files([real_file, subdir])
+        assert "real.py" in result and "content" in result, f"File should be bulked: {result!r}"
+        assert "--- FILE:" in result, f"FILE delimiter expected: {result!r}"
+        print("PASS: bulk_files directory skipped, file included")
+
+    # ---------------------------------------------------------------------------
+    # resolve_large_prompt_timeout
+    # ---------------------------------------------------------------------------
+
+    # resolve_large_prompt_timeout: under threshold -> returns default
+    cfg = {
+        "roles": {
+            "plan-review": {
+                "holistic": {
+                    "large_prompt": {
+                        "threshold_ktok": 100,
+                        "timeout": 3600,
+                    }
+                }
+            }
+        }
+    }
+    prompt = "x" * 50000  # ~12 ktok
+    timeout = resolve_large_prompt_timeout(prompt, cfg, "plan-review", "holistic", default_timeout=1800)
+    assert timeout == 1800, f"Expected default 1800, got {timeout}"
+    print("PASS: resolve_large_prompt_timeout under threshold -> default timeout")
+
+    # resolve_large_prompt_timeout: over threshold, key set -> returns override
+    cfg = {
+        "roles": {
+            "plan-review": {
+                "holistic": {
+                    "large_prompt": {
+                        "threshold_ktok": 100,
+                        "timeout": 3600,
+                    }
+                }
+            }
+        }
+    }
+    prompt = "x" * 500000  # ~125 ktok
+    timeout = resolve_large_prompt_timeout(prompt, cfg, "plan-review", "holistic", default_timeout=1800)
+    assert timeout == 3600, f"Expected override 3600, got {timeout}"
+    print("PASS: resolve_large_prompt_timeout over threshold + timeout key set -> override")
+
+    # resolve_large_prompt_timeout: over threshold, key not set -> returns default
+    cfg = {
+        "roles": {
+            "plan-review": {
+                "holistic": {
+                    "large_prompt": {
+                        "threshold_ktok": 100,
+                    }
+                }
+            }
+        }
+    }
+    prompt = "x" * 500000  # ~125 ktok
+    timeout = resolve_large_prompt_timeout(prompt, cfg, "plan-review", "holistic", default_timeout=1800)
+    assert timeout == 1800, f"Expected default 1800, got {timeout}"
+    print("PASS: resolve_large_prompt_timeout over threshold but key not set -> default")
+
+    # resolve_large_prompt_timeout: no large_prompt key -> returns default
+    cfg = {"roles": {"plan-review": {"holistic": {}}}}
+    prompt = "x" * 500000
+    timeout = resolve_large_prompt_timeout(prompt, cfg, "plan-review", "holistic", default_timeout=1800)
+    assert timeout == 1800, f"Expected default 1800, got {timeout}"
+    print("PASS: resolve_large_prompt_timeout no large_prompt key -> default")
 
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)

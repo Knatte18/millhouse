@@ -1187,6 +1187,55 @@ def main() -> int:
         finally:
             os.chdir(orig_dir)
 
+    # ------------------------------------------------------------------
+    # Test 23 — large_prompt.timeout override wires to holistic run call
+    # ------------------------------------------------------------------
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        batch_specs = [("core", "01-core.md", ["src/a.py"], [])]
+        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(tmpdir, batch_specs)
+        cfg["roles"]["plan-review"]["holistic"]["reviewer"] = "test_stub"
+        cfg["roles"]["plan-review"]["holistic"]["rounds"] = 1
+        cfg["roles"]["plan-review"]["batch"]["reviewer"] = None
+        # Add large_prompt timeout override
+        cfg["roles"]["plan-review"]["holistic"]["large_prompt"] = {
+            "threshold_ktok": 1,  # low threshold to trigger override with normal prompt
+            "timeout": 7200,
+        }
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            from unittest.mock import patch
+            # Capture the timeout kwarg passed to _reviewer_single.run
+            captured_timeout = None
+            original_run = None
+            def mock_run(spec, prompt_text, timeout=None, session_id=None, resume=False):
+                nonlocal captured_timeout
+                captured_timeout = timeout
+                return original_run(spec, prompt_text, timeout=timeout, session_id=session_id, resume=resume)
+
+            _seed_approve(1)
+            with patch("_reviewer_single.run", side_effect=mock_run) as mock:
+                # Store the original run function before patching
+                import _reviewer_single
+                original_run = _reviewer_single.run
+                mock.side_effect = None  # Reset so we can use the actual function
+                with patch("_reviewer_single.run", side_effect=mock_run):
+                    r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root)
+
+            # The captured_timeout should be the override (7200) because the prompt is over threshold
+            assert captured_timeout == 7200, (
+                f"Expected resolved timeout=7200 (override), got {captured_timeout}"
+            )
+            print("PASS test23: large_prompt.timeout override wires to holistic run call")
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test23: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test23 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
+
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)
         return 1
