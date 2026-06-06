@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-fix-r2
+phase: planned
 slug: mill-bg-exit-marker
 branch: hanf/mill-bg-exit-marker
 plan: _mill/plan
@@ -20,4 +20,5 @@ planning  '2026-06-06T18:54:49Z'
 plan-review-r1  '2026-06-06T18:58:57Z'
 plan-fix-r1  '2026-06-06T18:58:57Z'
 plan-fix-r2  '2026-06-06T19:02:17Z'
+planned  '2026-06-06T19:02:37Z'
 ```
