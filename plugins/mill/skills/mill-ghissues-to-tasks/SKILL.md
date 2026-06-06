@@ -40,7 +40,6 @@ PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
 import json, _paths
 from wiki import _client
 wiki_path = _paths.resolve_wiki_path(_paths.resolve_git_root())
-print(_paths.resolve_git_root())  # for repo name detection below
 tasks = _client.list_tasks_brief(wiki_path)
 print(json.dumps(tasks, indent=2))
 " > .scratch/wiki-tasks.json
@@ -57,7 +56,7 @@ For each grouped **new** task, draft:
 - A title (free text).
 - A brief theme statement (1–2 sentences).
 
-For each fold-in candidate, the locked-phase guard applies: call `task = _client.get_task(wiki_path, target_slug)` and inspect `task["status"]`. When the status is in the locked set `{"active", "ready-to-merge", "pr-pending"}`, refuse the fold for those issues — route them to a new task or skip instead. The locked set `{"active", "ready-to-merge", "pr-pending"}` is the source of truth.
+For each fold-in candidate, the locked-phase guard applies: from the already-loaded task list, find the task with matching slug and inspect its `status`. When the status is in the locked set `{"active", "ready-to-merge", "pr-pending"}`, refuse the fold for those issues — route them to a new task or skip instead. The locked set `{"active", "ready-to-merge", "pr-pending"}` is the source of truth.
 
 **There is NO per-issue decision menu and NO per-issue prompting.** The assistant makes all grouping decisions at once and presents them in Step 4.
 
