@@ -54,7 +54,7 @@ PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}
 
 Exceptions: unit tests use `uv run --project plugins/mill`; mill-setup keeps the full path (bootstrapper — it writes `MILL_PYTHON` to `~/.claude/settings.json` via Phase 4.8); nested calls after `--` in millpy-bg inherit PYTHONPATH automatically and must not carry the prefix. `$MILL_PYTHON` is now the standard form for all other mill skills.
 
-**Verify command shape.** Plan files' `verify:` commands MUST start with `PYTHONPATH=` (literal, empty value, single space) so the test subprocess does not inherit the cache `PYTHONPATH` and load V2-cache modules instead of worktree code. Enforced by `_plan_validate.py`'s `verify-not-isolated` check; mill-plan auto-prepends the prefix on validator failure.
+**Verify command shape.** For Python/mill projects: Plan files' `verify:` commands MUST start with `PYTHONPATH=` (literal, empty value, single space) so the test subprocess does not inherit the cache `PYTHONPATH` and load V2-cache modules instead of worktree code. For non-Python projects (e.g. Go, C#): use the native test runner directly without the prefix. Enforced conditionally by `_plan_validate.py`'s `verify-not-isolated` check based on the presence of Python markers (`pyproject.toml`, `setup.py`, `setup.cfg`); mill-plan auto-prepends the prefix on validator failure for Python projects.
 
 ## Conventions
 
