@@ -63,7 +63,9 @@ Python package. No new pip dependency is added.
   in the backend per Decision 24, emit the same JSON envelope). The
   subprocess/psmux modes keep running all stages in-process via `millpy-bg`
   exactly as today.
-- Define two custom sub-agent types under `.claude/agents/`:
+- Define two custom sub-agent types, shipped with the mill plugin under
+  `plugins/mill/agents/` (plugin-provided, NOT repo-local `.claude/agents/` --
+  see Decisions / subagent-types for why and for the file format):
   - `mill-reviewer` -- read-only tools only (Read, Grep, Glob). MUST NOT write,
     edit, or run Bash. Faithful port of today's `--disallowedTools
     Edit,Write,Bash,NotebookEdit` for reviewers.
@@ -123,8 +125,10 @@ Python package. No new pip dependency is added.
   it maps to `dispatch: psmux` and emits a one-line deprecation warning;
   `via_psmux: false`/absent maps to `dispatch: subprocess`. When `dispatch` is
   present it always wins and any stray `via_psmux` is ignored with the same
-  deprecation warning (it does NOT trip the unknown-key error -- it is a known,
-  deprecated key). The shim is removed in a later cleanup task.
+  deprecation warning. Note `_config`'s unknown-key check only emits a stderr
+  warning (it never raises), so the shim must (a) suppress the generic
+  `[config] unknown key` warning for `via_psmux` and (b) emit its own one-line
+  deprecation warning instead. The shim is removed in a later cleanup task.
 - Rationale: One knob, no contradictory boolean combinations; the shim keeps
   existing hubs that still carry `via_psmux: true` working without edits.
 - Rejected: Parallel `via_agent` boolean beside `via_psmux` (ambiguous when both
@@ -218,9 +222,12 @@ Python package. No new pip dependency is added.
   per-role `effort`/thinking suffix is **dropped** -- the Agent tool exposes no
   effort knob. Full model+effort control is retained on the `subprocess`/`psmux`
   paths.
-- Model value form: the reviewers registry resolves a role to a concrete model
-  string such as `claude-sonnet-4-6` / `claude-opus-4-7` / `claude-haiku-4-5`.
-  `prepare` maps that string to the Agent tool's `model` value by family tier:
+- Model value form: the registry resolvers return a spec **dict**; `prepare`
+  reads `spec["model"]` (exactly as `millpy-implement.py` reads
+  `impl_spec["model"]`), a concrete model string such as `claude-sonnet-4-6` /
+  `claude-opus-4-7` / `claude-haiku-4-5`. `spec.get("effort")` is read but not
+  used in agent mode. `prepare` maps `spec["model"]` to the Agent tool's
+  `model` value by family tier:
   `claude-sonnet-*` -> `sonnet`, `claude-opus-*` -> `opus`, `claude-haiku-*` ->
   `haiku`. If the deployed Agent tool also accepts a full model id, the resolved
   string may be passed through unchanged; the family->tier map is the
