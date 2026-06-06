@@ -117,9 +117,13 @@ def warn_unknown_keys(actual: dict, template: dict, source_label: str) -> None:
         template: The template configuration dict.
         source_label: Label for the source (e.g., "mill-config.yaml").
     """
+    # Known deprecated keys that should not trigger the generic unknown warning
+    deprecated_keys = {"llm.claude.psmux.via_psmux"}
+
     unknown = walk_unknown_keys(actual, template)
     for path in unknown:
-        print(f"[config] unknown key: {path} (in {source_label})", file=sys.stderr)
+        if path not in deprecated_keys:
+            print(f"[config] unknown key: {path} (in {source_label})", file=sys.stderr)
 
 
 def resolve_plugin_template_path(filename: str) -> Path:
@@ -218,6 +222,9 @@ def load_config(hub_root: Path, worktree_root: Path) -> dict:
 
     # 7. Apply environment variable interpolation
     cfg = _interpolate_env(cfg)
+
+    # 8. Apply dispatch enum back-compat shim for legacy via_psmux
+    _apply_dispatch_shim(cfg)
 
     return cfg
 
@@ -358,3 +365,50 @@ def _interpolate_env(cfg, key_path: str = ""):
         return _substitute_string(cfg, key_path)
     else:
         return cfg
+
+
+def _apply_dispatch_shim(cfg: dict) -> None:
+    """Apply back-compat shim for legacy psmux.via_psmux to dispatch enum.
+
+    Modifies cfg in-place. Handles migration from the deprecated via_psmux boolean
+    to the new dispatch enum. Emits deprecation warnings and validates the final
+    dispatch value.
+
+    Args:
+        cfg: Configuration dict (top-level).
+    """
+    llm_cfg = cfg.get("llm", {})
+    if "llm" not in cfg:
+        return
+
+    claude_cfg = llm_cfg.get("claude", {})
+    if "claude" not in llm_cfg:
+        return
+
+    psmux_cfg = claude_cfg.get("psmux", {})
+    has_via_psmux = "via_psmux" in psmux_cfg
+    has_dispatch = "dispatch" in claude_cfg
+
+    # If via_psmux exists (legacy), emit deprecation warning
+    if has_via_psmux:
+        print(
+            "[config] llm.claude.psmux.via_psmux is deprecated -- "
+            "use llm.claude.dispatch",
+            file=sys.stderr,
+        )
+
+    # If dispatch is absent, migrate from via_psmux
+    if not has_dispatch and has_via_psmux:
+        via_psmux_value = psmux_cfg.get("via_psmux", False)
+        claude_cfg["dispatch"] = "psmux" if via_psmux_value else "subprocess"
+
+    # Validate the final dispatch value
+    dispatch_value = claude_cfg.get("dispatch", "subprocess")
+    valid_modes = {"subprocess", "psmux", "agent"}
+    if dispatch_value not in valid_modes:
+        print(
+            f"[config] invalid llm.claude.dispatch value {dispatch_value!r}, "
+            f"falling back to subprocess",
+            file=sys.stderr,
+        )
+        claude_cfg["dispatch"] = "subprocess"
