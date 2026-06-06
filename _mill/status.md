@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-bg-exit-marker
 branch: hanf/mill-bg-exit-marker
 plan: _mill/plan
@@ -21,4 +21,13 @@ plan-review-r1  '2026-06-06T18:58:57Z'
 plan-fix-r1  '2026-06-06T18:58:57Z'
 plan-fix-r2  '2026-06-06T19:02:17Z'
 planned  '2026-06-06T19:02:37Z'
+implementing  '2026-06-06T19:04:24Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: bg-completion-detection
+    state: pending
 ```
