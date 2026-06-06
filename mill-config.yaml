@@ -7,7 +7,7 @@ llm:
   implementer_timeout: 1800
   max_implementer_prompt_chars: 0
   claude:
-    dispatch: subprocess
+    dispatch: agent
     psmux:
       shell_path: "C:/Code/tools/powershell7/pwsh.exe"
       reuse_idle_timeout_s: 10
