@@ -22,6 +22,7 @@ import sys
 import uuid
 from pathlib import Path
 
+import _agent_dispatch
 import _cleanliness
 import _implementer_claude
 import _llm_claude
@@ -32,7 +33,7 @@ import _render
 import _review_common
 import _reviewers
 import _status
-from _implementer_common import _forward_output
+from _implementer_common import _forward_output, emit_prepare, finalize_from_output
 
 
 def main(argv=None) -> int:
@@ -42,6 +43,16 @@ def main(argv=None) -> int:
     parser.add_argument(
         "batch_name",
         help="Batch name from the plan overview's Batch Index.",
+    )
+    parser.add_argument(
+        "--stage",
+        choices=["prepare", "finalize", "full"],
+        default="full",
+        help="Stage of execution: prepare (render brief), finalize (process output), or full (default, unchanged behavior).",
+    )
+    parser.add_argument(
+        "--agent-output",
+        help="Path to agent output file (required when --stage finalize).",
     )
     args = parser.parse_args(argv)
 
@@ -122,6 +133,28 @@ def main(argv=None) -> int:
     batch_file = plan_base / batch_entry["file"]
     plugin_root = Path(__file__).resolve().parent.parent
 
+    # Stage: finalize
+    if args.stage == "finalize":
+        if not args.agent_output:
+            print("--agent-output is required when --stage finalize", file=sys.stderr)
+            return 1
+        batches = _status.read_batches(status_path)
+        batch_status = next((b for b in batches if b.get("name") == args.batch_name), None)
+        if batch_status is None:
+            print(f"batch {args.batch_name!r} not found in status", file=sys.stderr)
+            return 1
+        start_sha = batch_status.get("start_sha")
+        snapshot_path = project_root / "_mill" / f".cleanliness-snapshot-{args.batch_name}.txt"
+        session_id = batch_status.get("implementer_session")
+        return finalize_from_output(
+            Path(args.agent_output),
+            project_root,
+            start_sha=start_sha,
+            snapshot_path=snapshot_path,
+            session_id=session_id,
+        )
+
+    # Stages: prepare and full (need pre-commit, render, and setup)
     result = _subprocess_util.run(
         ["git", "rev-parse", "HEAD"],
         cwd=project_root,
@@ -192,6 +225,13 @@ def main(argv=None) -> int:
         print(json.dumps({"status": "stuck", "stuck_type": "transient", "reason": f"brief exceeds max_implementer_prompt_chars ({len(prompt_text)} chars)"}))
         return 0
 
+    # Stage: prepare
+    if args.stage == "prepare":
+        briefs_dir = _paths.resolve_task_path(project_root, "_mill/briefs/")
+        model_tier = _agent_dispatch.model_to_tier(impl_model)
+        return emit_prepare(briefs_dir, "implement", args.batch_name, 1, prompt_text, model_tier, session_id)
+
+    # Stage: full (default)
     try:
         output, _ = _implementer_claude.run(
             prompt_text,

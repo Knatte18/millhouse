@@ -61,14 +61,26 @@ def main(argv: list[str] | None = None) -> int:
             "(overrides the active scope) for this invocation. Default: use config values."
         ),
     )
+    parser.add_argument(
+        "--stage",
+        choices=["prepare", "finalize", "full"],
+        default="full",
+        help="Stage to run: prepare (render prompt), finalize (parse output), or full (both). Default: full.",
+    )
+    parser.add_argument(
+        "--agent-output",
+        default=None,
+        help="For finalize stage only; path to the reviewer's output file.",
+    )
     args = parser.parse_args(argv)
 
+    import _agent_dispatch
     import _paths
     import _reviewers
     from _paths import resolve_hub_path, resolve_wiki_path
     from _review_cli import print_error_envelope
     from _review_common import ReviewError, find_active_slug, load_config
-    from _review_code import run
+    from _review_code import prepare, finalize, run
 
     try:
         project_root = Path.cwd()
@@ -99,23 +111,78 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         slug = args.slug or find_active_slug(project_root, wiki_root, cfg)
-        result = run(
-            cfg,
-            slug,
-            mill_dir,
-            wiki_root,
-            project_root,
-            git_root=git_root,
-            max_rounds=args.max_rounds,
-            batch_name=args.batch,
-            extra_files=extra_files,
-        )
-        print(json.dumps(result.to_dict()))
-        return 0
-    # Pre-launch errors only -- engine-internal failures return verdict:ERROR via run() (#338).
     except ReviewError as exc:
         print_error_envelope("code", str(exc))
         return 1
+
+    if args.stage == "prepare":
+        try:
+            scope = args.batch or "holistic"
+            prepare_result = prepare(
+                cfg, slug, scope=args.batch, mill_dir=mill_dir, project_root=project_root,
+                wiki_root=wiki_root, git_root=git_root, extra_files=extra_files,
+                max_rounds=args.max_rounds,
+            )
+            briefs_dir = _paths.resolve_task_path(project_root, "_mill/briefs/")
+            brief_path = _agent_dispatch.write_brief(
+                briefs_dir, "review-code", prepare_result["scope"],
+                prepare_result["round"], prepare_result["prompt_text"]
+            )
+            envelope = {
+                "stage": "prepare",
+                "brief_path": str(brief_path),
+                "subagent_type": _agent_dispatch.SUBAGENT_REVIEWER,
+                "model": _agent_dispatch.model_to_tier(prepare_result["model"]),
+                "session_id": None,
+                "role": "review-code",
+                "scope": prepare_result["scope"],
+                "round": prepare_result["round"],
+            }
+            print(json.dumps(envelope))
+            return 0
+        except ReviewError as exc:
+            print_error_envelope("code", str(exc))
+            return 1
+    elif args.stage == "finalize":
+        if not args.agent_output:
+            print_error_envelope("code", "--agent-output required for finalize stage")
+            return 1
+        try:
+            agent_output_path = Path(args.agent_output)
+            raw_text = agent_output_path.read_text(encoding="utf-8")
+            prepare_result = prepare(
+                cfg, slug, scope=args.batch, mill_dir=mill_dir, project_root=project_root,
+                wiki_root=wiki_root, git_root=git_root, extra_files=extra_files,
+                max_rounds=args.max_rounds,
+            )
+            result = finalize(
+                cfg, slug, raw_text, scope=args.batch, round_n=prepare_result["round"],
+                reviews_dir=prepare_result["reviews_dir"], mill_dir=mill_dir,
+                project_root=project_root, wiki_root=wiki_root, git_root=git_root
+            )
+            print(json.dumps(result.to_dict()))
+            return 0
+        except ReviewError as exc:
+            print_error_envelope("code", str(exc))
+            return 1
+    else:  # full
+        try:
+            result = run(
+                cfg,
+                slug,
+                mill_dir,
+                wiki_root,
+                project_root,
+                git_root=git_root,
+                max_rounds=args.max_rounds,
+                batch_name=args.batch,
+                extra_files=extra_files,
+            )
+            print(json.dumps(result.to_dict()))
+            return 0
+        except ReviewError as exc:
+            print_error_envelope("code", str(exc))
+            return 1
 
 
 if __name__ == "__main__":

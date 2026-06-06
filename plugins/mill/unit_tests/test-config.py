@@ -857,6 +857,143 @@ def test_same_template_path_skips_augmentation() -> None:
     print("PASS load_config -- same/missing template path skips augmentation")
 
 
+def test_dispatch_shim_via_psmux_true_resolves_to_psmux() -> None:
+    """dispatch shim converts via_psmux: true to dispatch: psmux."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        _setup_plugin_template(tmp_path)
+        wt_root = tmp_path / "hub"
+        _git_init(wt_root)
+        _write_yaml(
+            wt_root / "mill-config.yaml",
+            "llm:\n  claude:\n    psmux:\n      via_psmux: true\n"
+        )
+
+        with patch.object(_paths, "resolve_wiki_path", side_effect=SystemExit):
+            with patch.object(
+                _config, "resolve_plugin_template_path",
+                return_value=tmp_path / "templates" / "mill-config.yaml"
+            ):
+                with patch("sys.stderr", new=io.StringIO()) as mock_stderr:
+                    cfg = _config.load_config(wt_root, wt_root)
+                    stderr_output = mock_stderr.getvalue()
+
+        assert cfg.get("llm", {}).get("claude", {}).get("dispatch") == "psmux", (
+            f"Expected dispatch: psmux, got {cfg.get('llm', {}).get('claude', {}).get('dispatch')!r}"
+        )
+        assert "[config] llm.claude.psmux.via_psmux is deprecated" in stderr_output, (
+            f"Expected deprecation warning in stderr, got {stderr_output!r}"
+        )
+    print("PASS dispatch shim -- via_psmux: true -> dispatch: psmux with deprecation warning")
+
+
+def test_dispatch_shim_via_psmux_false_resolves_to_subprocess() -> None:
+    """dispatch shim converts via_psmux: false to dispatch: subprocess."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        _setup_plugin_template(tmp_path)
+        wt_root = tmp_path / "hub"
+        _git_init(wt_root)
+        _write_yaml(
+            wt_root / "mill-config.yaml",
+            "llm:\n  claude:\n    psmux:\n      via_psmux: false\n"
+        )
+
+        with patch.object(_paths, "resolve_wiki_path", side_effect=SystemExit):
+            with patch.object(
+                _config, "resolve_plugin_template_path",
+                return_value=tmp_path / "templates" / "mill-config.yaml"
+            ):
+                cfg = _config.load_config(wt_root, wt_root)
+
+        assert cfg.get("llm", {}).get("claude", {}).get("dispatch") == "subprocess", (
+            f"Expected dispatch: subprocess, got {cfg.get('llm', {}).get('claude', {}).get('dispatch')!r}"
+        )
+    print("PASS dispatch shim -- via_psmux: false -> dispatch: subprocess")
+
+
+def test_dispatch_shim_explicit_dispatch_wins_over_via_psmux() -> None:
+    """Explicit dispatch key wins over legacy via_psmux."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        _setup_plugin_template(tmp_path)
+        wt_root = tmp_path / "hub"
+        _git_init(wt_root)
+        _write_yaml(
+            wt_root / "mill-config.yaml",
+            "llm:\n  claude:\n    dispatch: agent\n    psmux:\n      via_psmux: true\n"
+        )
+
+        with patch.object(_paths, "resolve_wiki_path", side_effect=SystemExit):
+            with patch.object(
+                _config, "resolve_plugin_template_path",
+                return_value=tmp_path / "templates" / "mill-config.yaml"
+            ):
+                cfg = _config.load_config(wt_root, wt_root)
+
+        assert cfg.get("llm", {}).get("claude", {}).get("dispatch") == "agent", (
+            f"Expected dispatch: agent, got {cfg.get('llm', {}).get('claude', {}).get('dispatch')!r}"
+        )
+    print("PASS dispatch shim -- explicit dispatch wins over via_psmux")
+
+
+def test_via_psmux_does_not_trigger_unknown_key_warning() -> None:
+    """via_psmux does not trigger generic unknown-key warning."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        _setup_plugin_template(tmp_path)
+        wt_root = tmp_path / "hub"
+        _git_init(wt_root)
+        _write_yaml(
+            wt_root / "mill-config.yaml",
+            "llm:\n  claude:\n    psmux:\n      via_psmux: false\n"
+        )
+
+        with patch.object(_paths, "resolve_wiki_path", side_effect=SystemExit):
+            with patch.object(
+                _config, "resolve_plugin_template_path",
+                return_value=tmp_path / "templates" / "mill-config.yaml"
+            ):
+                with patch("sys.stderr", new=io.StringIO()) as mock_stderr:
+                    _config.load_config(wt_root, wt_root)
+                    stderr_output = mock_stderr.getvalue()
+
+        assert "unknown key: llm.claude.psmux.via_psmux" not in stderr_output, (
+            f"via_psmux should not trigger unknown-key warning, stderr: {stderr_output!r}"
+        )
+    print("PASS dispatch shim -- via_psmux does not trigger unknown-key warning")
+
+
+def test_dispatch_shim_unknown_value_falls_back_to_subprocess() -> None:
+    """Unknown dispatch value falls back to subprocess with error message."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        _setup_plugin_template(tmp_path)
+        wt_root = tmp_path / "hub"
+        _git_init(wt_root)
+        _write_yaml(
+            wt_root / "mill-config.yaml",
+            "llm:\n  claude:\n    dispatch: invalid_value\n"
+        )
+
+        with patch.object(_paths, "resolve_wiki_path", side_effect=SystemExit):
+            with patch.object(
+                _config, "resolve_plugin_template_path",
+                return_value=tmp_path / "templates" / "mill-config.yaml"
+            ):
+                with patch("sys.stderr", new=io.StringIO()) as mock_stderr:
+                    cfg = _config.load_config(wt_root, wt_root)
+                    stderr_output = mock_stderr.getvalue()
+
+        assert cfg.get("llm", {}).get("claude", {}).get("dispatch") == "subprocess", (
+            f"Expected fallback to subprocess, got {cfg.get('llm', {}).get('claude', {}).get('dispatch')!r}"
+        )
+        assert "invalid_value" in stderr_output and "falling back" in stderr_output, (
+            f"Expected error message in stderr, got {stderr_output!r}"
+        )
+    print("PASS dispatch shim -- unknown dispatch value falls back to subprocess with error")
+
+
 def main() -> int:
     tests = [
         test_load_config_shared_present,
@@ -892,6 +1029,11 @@ def main() -> int:
         test_preserves_other_top_level_keys,
         test_worktree_template_augments_template_cfg,
         test_same_template_path_skips_augmentation,
+        test_dispatch_shim_via_psmux_true_resolves_to_psmux,
+        test_dispatch_shim_via_psmux_false_resolves_to_subprocess,
+        test_dispatch_shim_explicit_dispatch_wins_over_via_psmux,
+        test_via_psmux_does_not_trigger_unknown_key_warning,
+        test_dispatch_shim_unknown_value_falls_back_to_subprocess,
     ]
     failures: list[str] = []
     for fn in tests:

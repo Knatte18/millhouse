@@ -883,28 +883,28 @@ def main() -> int:
         errors += 1
         print(f"FAIL: _get_via_psmux_flag() returned {_get_via_psmux_result}, expected False", file=sys.stderr)
 
-    # Test 12: _get_via_psmux_flag reads nested path
-    # Sub-case (i): nested path exists and is True -> returns True
-    with mock.patch.object(_config_mod, "load_config", return_value={"llm": {"claude": {"psmux": {"via_psmux": True}}}}):
+    # Test 12: _get_via_psmux_flag uses dispatch enum
+    # Sub-case (i): dispatch: psmux -> returns True
+    with mock.patch.object(_config_mod, "load_config", return_value={"llm": {"claude": {"dispatch": "psmux"}}}):
         with mock.patch.object(_paths, "resolve_git_root", return_value=Path(".")):
             result = _llm_claude_mod._get_via_psmux_flag()
     if result is True:
-        print("PASS: _get_via_psmux_flag reads nested llm.claude.psmux.via_psmux=True -> True")
+        print("PASS: _get_via_psmux_flag dispatch: psmux -> True")
     else:
         errors += 1
-        print(f"FAIL: nested path True case expected True, got {result}", file=sys.stderr)
+        print(f"FAIL: dispatch: psmux case expected True, got {result}", file=sys.stderr)
 
-    # Sub-case (ii): old flat layout (legacy key) -> returns False (hard cutover)
-    with mock.patch.object(_config_mod, "load_config", return_value={"llm": {"claude": {"via_psmux": True}}}):
+    # Sub-case (ii): dispatch: subprocess -> returns False
+    with mock.patch.object(_config_mod, "load_config", return_value={"llm": {"claude": {"dispatch": "subprocess"}}}):
         with mock.patch.object(_paths, "resolve_git_root", return_value=Path(".")):
             result = _llm_claude_mod._get_via_psmux_flag()
     if result is False:
-        print("PASS: _get_via_psmux_flag rejects legacy flat key via_psmux=True (hard cutover)")
+        print("PASS: _get_via_psmux_flag dispatch: subprocess -> False")
     else:
         errors += 1
-        print(f"FAIL: legacy flat key case expected False, got {result}", file=sys.stderr)
+        print(f"FAIL: dispatch: subprocess case expected False, got {result}", file=sys.stderr)
 
-    # Sub-case (iii): empty config -> returns False
+    # Sub-case (iii): empty config (defaults to subprocess) -> returns False
     with mock.patch.object(_config_mod, "load_config", return_value={}):
         with mock.patch.object(_paths, "resolve_git_root", return_value=Path(".")):
             result = _llm_claude_mod._get_via_psmux_flag()

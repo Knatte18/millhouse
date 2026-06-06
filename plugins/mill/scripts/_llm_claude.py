@@ -39,6 +39,7 @@ import time
 import uuid
 from pathlib import Path
 
+import _agent_dispatch
 import _subprocess_util
 from _llm_common import LLMError, LLMSessionError, LLMRateLimitError
 
@@ -99,15 +100,17 @@ def _get_via_psmux_flag() -> bool:
     """Check if psmux-based routing is enabled in the mill config.
 
     Returns False on any error (missing config, parse error, or cwd outside a
-    git worktree), so the default direct path is silently used.
+    git worktree), so the default direct path is silently used. If dispatch is
+    set to "agent", treats it as False (agent mode bypasses this code).
     """
     try:
         import _paths
         import _config
 
         git_root = _paths.resolve_git_root(Path.cwd())
-        cfg = _config.load_config(_paths.resolve_hub_path(), _paths.resolve_hub_path())
-        return bool(cfg.get("llm", {}).get("claude", {}).get("psmux", {}).get("via_psmux", False))
+        cfg = _config.load_config(_paths.resolve_hub_path(), git_root)
+        mode = _agent_dispatch.resolve_dispatch_mode(cfg)
+        return mode == "psmux"
     except (Exception, SystemExit):
         return False
 

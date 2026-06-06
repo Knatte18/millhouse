@@ -326,6 +326,49 @@ class TestMillpyImplement(unittest.TestCase):
         # Verify that _implementer_claude.run was called (the guard did not fire)
         mock_run.assert_called_once()
 
+    def test_13_stage_prepare_emits_brief_and_envelope(self):
+        """--stage prepare: renders brief, calls emit_prepare, no LLM call."""
+        with unittest.mock.patch.object(millpy_implement._render, "render", return_value="Brief text"):
+            with unittest.mock.patch.object(
+                millpy_implement._implementer_claude, "run"
+            ) as mock_run:
+                rc, out = self._run_main(["test-batch", "--stage", "prepare"])
+
+        self.assertEqual(rc, 0)
+        # LLM should not be called in prepare stage
+        mock_run.assert_not_called()
+        # Output should be prepare JSON envelope
+        data = json.loads(out.strip())
+        self.assertEqual(data["stage"], "prepare")
+        self.assertEqual(data["role"], "implement")
+        self.assertEqual(data["scope"], "test-batch")
+        self.assertEqual(data["round"], 1)
+        self.assertTrue(data["brief_path"])
+
+    def test_14_stage_finalize_reads_agent_output(self):
+        """--stage finalize: reads agent output file, calls finalize_from_output."""
+        agent_output_path = self.tmp_path / "agent-output.txt"
+        agent_output_path.write_text(
+            '{"status":"success","commit_sha":"xyz","session_id":"fake"}\n',
+            encoding="utf-8"
+        )
+
+        with unittest.mock.patch.object(
+            millpy_implement._implementer_claude, "run"
+        ) as mock_run:
+            rc, out = self._run_main([
+                "test-batch",
+                "--stage", "finalize",
+                "--agent-output", str(agent_output_path),
+            ])
+
+        self.assertEqual(rc, 0)
+        # LLM should not be called in finalize stage
+        mock_run.assert_not_called()
+        # Output should be the agent output processed by _forward_output
+        data = json.loads(out.strip())
+        self.assertEqual(data["status"], "success")
+
     def test_commits_made_nonzero_on_llm_error(self):
         """LLMError with commits made: rev-list returns 3 -> stuck JSON includes commits_made=3."""
         def routing_fn(argv, **kw):

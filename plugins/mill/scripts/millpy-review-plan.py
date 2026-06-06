@@ -71,14 +71,26 @@ def main(argv: list[str] | None = None) -> int:
         metavar="CHECK",
         help="Skip a named validator check (repeatable). Silently ignores unknown names.",
     )
+    parser.add_argument(
+        "--stage",
+        choices=["prepare", "finalize", "full"],
+        default="full",
+        help="Stage to run: prepare (render prompt), finalize (parse output), or full (both). Default: full.",
+    )
+    parser.add_argument(
+        "--agent-output",
+        default=None,
+        help="For finalize stage only; path to the reviewer's output file.",
+    )
     args = parser.parse_args(argv)
 
+    import _agent_dispatch
     import _paths
     import _reviewers
     from _paths import resolve_hub_path, resolve_wiki_path
     from _review_cli import print_error_envelope
     from _review_common import ReviewError, find_active_slug, load_config, resolve_path
-    from _review_plan import run
+    from _review_plan import prepare, finalize, run
 
     try:
         project_root = Path.cwd()
@@ -99,43 +111,104 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         slug = args.slug or find_active_slug(project_root, wiki_root, cfg)
-        if not args.skip_validate:
-            from _plan_validate import run as validate_run
-            plan_dir = resolve_path(cfg["paths"]["plan_dir"], slug)
-            errors = validate_run(
-                plan_dir,
-                project_root,
-                wiki_root=wiki_root,
-                skip_checks=frozenset(args.skip_checks),
-                max_cards_per_batch=cfg.get("pipeline", {}).get("max_cards_per_batch", 10),
-                max_batch_context_tokens=cfg.get("pipeline", {}).get("max_batch_context_tokens", 120000),
-            )
-            if errors:
-                n = len(errors)
-                m = len({e["batch"] for e in errors if e["batch"]})
-                summary = f"{n} finding(s) across {m} batch(es)"
-                print(json.dumps({"errors": errors, "summary": summary}))
-                return 1
-        result = run(
-            cfg,
-            slug,
-            mill_dir,
-            wiki_root,
-            project_root,
-            git_root=git_root,
-            max_rounds=args.max_rounds,
-            holistic_only=args.holistic_only,
-            no_holistic=args.no_holistic,
-        )
-        print(json.dumps(result.to_dict()))
-        return 0
-    # Pre-launch errors only -- engine-internal failures return verdict:ERROR via run() (#338).
     except ReviewError as exc:
         print_error_envelope("plan", str(exc))
         return 1
-    except Exception as exc:
-        print_error_envelope("plan", f"unhandled review error: {exc}")
-        return 1
+
+    if args.stage == "prepare":
+        # Agent mode uses holistic scope only
+        try:
+            prepare_result = prepare(
+                cfg, slug, scope=None, mill_dir=mill_dir, project_root=project_root,
+                wiki_root=wiki_root, git_root=git_root
+            )
+            briefs_dir = _paths.resolve_task_path(project_root, "_mill/briefs/")
+            brief_path = _agent_dispatch.write_brief(
+                briefs_dir, "review-plan", prepare_result["scope"],
+                prepare_result["round"], prepare_result["prompt_text"]
+            )
+            envelope = {
+                "stage": "prepare",
+                "brief_path": str(brief_path),
+                "subagent_type": _agent_dispatch.SUBAGENT_REVIEWER,
+                "model": _agent_dispatch.model_to_tier(prepare_result["model"]),
+                "session_id": None,
+                "role": "review-plan",
+                "scope": prepare_result["scope"],
+                "round": prepare_result["round"],
+            }
+            print(json.dumps(envelope))
+            return 0
+        except ReviewError as exc:
+            print_error_envelope("plan", str(exc))
+            return 1
+    elif args.stage == "finalize":
+        if not args.agent_output:
+            print_error_envelope("plan", "--agent-output required for finalize stage")
+            return 1
+        try:
+            agent_output_path = Path(args.agent_output)
+            raw_text = agent_output_path.read_text(encoding="utf-8")
+            prepare_result = prepare(
+                cfg, slug, scope=None, mill_dir=mill_dir, project_root=project_root,
+                wiki_root=wiki_root, git_root=git_root
+            )
+            review_entry = finalize(
+                cfg, slug, raw_text, scope=None, round_n=prepare_result["round"],
+                reviews_dir=prepare_result["reviews_dir"], mill_dir=mill_dir,
+                project_root=project_root, wiki_root=wiki_root, git_root=git_root
+            )
+            # Build ReviewResult from the single review entry
+            result_dict = {
+                "type": "plan",
+                "round": prepare_result["round"],
+                "verdict": review_entry["verdict"],
+                "blocking_count": review_entry["blocking_count"],
+                "reviews": [review_entry],
+            }
+            print(json.dumps(result_dict))
+            return 0
+        except ReviewError as exc:
+            print_error_envelope("plan", str(exc))
+            return 1
+    else:  # full
+        try:
+            if not args.skip_validate:
+                from _plan_validate import run as validate_run
+                plan_dir = resolve_path(cfg["paths"]["plan_dir"], slug)
+                errors = validate_run(
+                    plan_dir,
+                    project_root,
+                    wiki_root=wiki_root,
+                    skip_checks=frozenset(args.skip_checks),
+                    max_cards_per_batch=cfg.get("pipeline", {}).get("max_cards_per_batch", 10),
+                    max_batch_context_tokens=cfg.get("pipeline", {}).get("max_batch_context_tokens", 120000),
+                )
+                if errors:
+                    n = len(errors)
+                    m = len({e["batch"] for e in errors if e["batch"]})
+                    summary = f"{n} finding(s) across {m} batch(es)"
+                    print(json.dumps({"errors": errors, "summary": summary}))
+                    return 1
+            result = run(
+                cfg,
+                slug,
+                mill_dir,
+                wiki_root,
+                project_root,
+                git_root=git_root,
+                max_rounds=args.max_rounds,
+                holistic_only=args.holistic_only,
+                no_holistic=args.no_holistic,
+            )
+            print(json.dumps(result.to_dict()))
+            return 0
+        except ReviewError as exc:
+            print_error_envelope("plan", str(exc))
+            return 1
+        except Exception as exc:
+            print_error_envelope("plan", f"unhandled review error: {exc}")
+            return 1
 
 
 if __name__ == "__main__":

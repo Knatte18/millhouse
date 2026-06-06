@@ -121,7 +121,11 @@ The new schema has two skip conditions: `rounds: 0` OR `reviewer: null` means "s
 Loop up to `max_review_rounds` rounds. Each round:
 
 1. Report: **"Discussion Review — round N/max_review_rounds"**.
-2. Background the CLI via `millpy-bg`:
+2. **Dispatch mode:** Resolve dispatch mode via `_agent_dispatch.resolve_dispatch_mode(cfg)`. If `agent` (Claude provider only): follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" in `plugins/mill/skills/mill-go/SKILL.md`) with `<cli> = millpy-review-discussion.py` and no additional standard arguments. If `subprocess` or `psmux`: use the subprocess branch below.
+
+   **Agent-mode properties:** mill-start remains interactive and the GAPS_FOUND / APPROVE-with-NOTE branches (steps 4a/4b/5) are unchanged once the envelope is in hand. Preserve `--auto` mode behavior. There is no detached worker, so the dead-worker halt at step 2's subprocess liveness check does not apply in agent mode.
+
+   **Subprocess/psmux branch — Background the CLI via `millpy-bg`:**
 
    > **Before invoking `millpy-bg`**: verify `pwd` in the Bash terminal matches the task worktree. If `millpy-bg` rejects cwd with the parent-worktree error (`mill-bg: cwd appears to be a non-task worktree`), halt and instruct the operator to switch to the task-worktree terminal.
 
@@ -142,6 +146,10 @@ Loop up to `max_review_rounds` rounds. Each round:
 3.5. **Step 3.5: ERROR-only-aggregate retry (no round consumed)**
 
    When the JSON envelope from step 2 has top-level `verdict: "ERROR"` (or, equivalently, every entry in `reviews[]` has `verdict: "ERROR"`), skip steps 4a / 4b / 5 entirely and immediately re-run:
+
+   **Agent-mode:** follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" in `plugins/mill/skills/mill-go/SKILL.md`) with `<cli> = millpy-review-discussion.py` and no additional standard arguments.
+
+   **Subprocess/psmux branch:**
 
    > **Before invoking `millpy-bg`**: verify `pwd` in the Bash terminal matches the task worktree. If `millpy-bg` rejects cwd with the parent-worktree error (`mill-bg: cwd appears to be a non-task worktree`), halt and instruct the operator to switch to the task-worktree terminal.
 

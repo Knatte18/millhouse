@@ -128,7 +128,11 @@ Loop up to `max_review_rounds` rounds. Each round:
 
    Before re-running via millpy-bg for the `plan-validator-fix` slug, verify `pwd` in the Bash terminal matches the task worktree. If `millpy-bg` rejects cwd with the parent-worktree error (`mill-bg: cwd appears to be a non-task worktree`), halt and instruct the operator to switch to the task-worktree terminal.
 
-2. Invoke the CLI as a subprocess:
+2. **Dispatch mode:** Resolve dispatch mode via `_agent_dispatch.resolve_dispatch_mode(cfg)`. If `agent` (Claude provider only): follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" in `plugins/mill/skills/mill-go/SKILL.md`) with `<cli> = millpy-review-plan.py` and `<args> = --holistic-only`. Because plan batch review is disabled in this hub (`roles.plan-review.batch.reviewer: null`), the agent-mode branch targets the holistic scope only. If per-batch plan review is ever enabled, the SKILL loops the three-step flow once per enabled scope. If `subprocess` or `psmux`: use the subprocess branch below.
+
+   **Pre-review validator gate:** The pre-review validator (step 1.5) runs unchanged in BOTH modes — it is a Python-only `_plan_validate` check that never dispatches an LLM, so it is independent of dispatch mode.
+
+   **Subprocess/psmux branch — Invoke the CLI as a subprocess:**
 
    > **Before invoking `millpy-bg`**: verify `pwd` in the Bash terminal matches the task worktree. If `millpy-bg` rejects cwd with the parent-worktree error (`mill-bg: cwd appears to be a non-task worktree`), halt and instruct the operator to switch to the task-worktree terminal.
 
@@ -153,6 +157,10 @@ Loop up to `max_review_rounds` rounds. Each round:
 4.5. **Step 4.5: ERROR-only-aggregate retry (no round consumed)**
 
    When the JSON envelope from step 2 has a non-empty `reviews[]` array AND at least one entry's `verdict` is `"ERROR"`, OR when no JSON line appears in the bg log (no `^{` summary line after `[mill-bg] EXIT`, indicating the worker died before printing — e.g. killed, OOM), skip steps 4a/4b/4c/4d entirely and immediately re-run:
+
+   **Agent-mode:** follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" in `plugins/mill/skills/mill-go/SKILL.md`) with `<cli> = millpy-review-plan.py` and `<args> = --holistic-only`.
+
+   **Subprocess/psmux branch:**
 
    > **Before invoking `millpy-bg`**: verify `pwd` in the Bash terminal matches the task worktree. If `millpy-bg` rejects cwd with the parent-worktree error (`mill-bg: cwd appears to be a non-task worktree`), halt and instruct the operator to switch to the task-worktree terminal.
 

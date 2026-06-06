@@ -89,6 +89,11 @@ class TestMillpyMergeInSubagent(unittest.TestCase):
                 "effort": "high",
             },
         )
+        import _implementer_common  # noqa: F401
+        self.mock_compute_scope_violations = _p(
+            _implementer_common._cleanliness, "compute_scope_violations",
+            return_value=[],
+        )
 
     def _run_main(self, argv):
         """Run main(argv) with stdout captured. Returns (rc, captured_stdout)."""
@@ -348,6 +353,145 @@ class TestMillpyMergeInSubagent(unittest.TestCase):
         ):
             rc, _ = self._run_main(["--mode", "conflicts", "--files", "f.py"])
         self.assertEqual(rc, 1)
+
+    def test_12_stage_prepare_conflicts(self):
+        """--stage prepare conflicts mode: renders brief, calls emit_prepare, no LLM call."""
+        with unittest.mock.patch.object(millpy_merge_in_subagent._render, "render", return_value="Brief text"):
+            with unittest.mock.patch.object(
+                millpy_merge_in_subagent._implementer_claude, "run"
+            ) as mock_run:
+                rc, out = self._run_main(["--mode", "conflicts", "--files", "f.py", "--stage", "prepare"])
+
+        self.assertEqual(rc, 0)
+        # LLM should not be called in prepare stage
+        mock_run.assert_not_called()
+        # Output should be prepare JSON envelope
+        data = json.loads(out.strip())
+        self.assertEqual(data["stage"], "prepare")
+        self.assertEqual(data["role"], "merge")
+        self.assertEqual(data["scope"], "conflicts")
+
+    def test_13_stage_prepare_verify_fix_passes(self):
+        """--stage prepare verify-fix mode: verify passes -> dispatch_needed:false with embedded envelope."""
+        verify_cmd = "exit 0"
+        with unittest.mock.patch("subprocess.run") as mock_subprocess:
+            # Verify passes (returncode=0)
+            mock_subprocess.return_value = unittest.mock.MagicMock(
+                returncode=0, stdout="", stderr=""
+            )
+            with unittest.mock.patch.object(
+                millpy_merge_in_subagent._subprocess_util, "run",
+                return_value=unittest.mock.MagicMock(returncode=0, stdout="abc123\n"),
+            ):
+                with unittest.mock.patch.object(
+                    millpy_merge_in_subagent._implementer_claude, "run"
+                ) as mock_run:
+                    rc, out = self._run_main([
+                        "--mode", "verify-fix",
+                        "--cmd", verify_cmd,
+                        "--checkpoint", "abc123",
+                        "--stage", "prepare",
+                    ])
+
+        self.assertEqual(rc, 0)
+        # LLM should not be called when verify passes in prepare
+        mock_run.assert_not_called()
+        # Output should be prepare JSON with dispatch_needed:false
+        data = json.loads(out.strip())
+        self.assertEqual(data["stage"], "prepare")
+        self.assertEqual(data["dispatch_needed"], False)
+        self.assertIn("envelope", data)
+        self.assertEqual(data["envelope"]["status"], "success")
+
+    def test_14_stage_prepare_verify_fix_fails(self):
+        """--stage prepare verify-fix mode: verify fails -> normal prepare with dispatch_needed:true."""
+        verify_cmd = "exit 1"
+        with unittest.mock.patch("subprocess.run") as mock_subprocess:
+            # Verify fails (returncode=1)
+            mock_subprocess.return_value = unittest.mock.MagicMock(
+                returncode=1, stdout="error", stderr=""
+            )
+            with unittest.mock.patch.object(
+                millpy_merge_in_subagent._subprocess_util, "run",
+                return_value=unittest.mock.MagicMock(returncode=0, stdout="abc123\n"),
+            ):
+                with unittest.mock.patch.object(millpy_merge_in_subagent._render, "render", return_value="Brief text"):
+                    with unittest.mock.patch.object(
+                        millpy_merge_in_subagent._implementer_claude, "run"
+                    ) as mock_run:
+                        rc, out = self._run_main([
+                            "--mode", "verify-fix",
+                            "--cmd", verify_cmd,
+                            "--checkpoint", "abc123",
+                            "--stage", "prepare",
+                        ])
+
+        self.assertEqual(rc, 0)
+        # LLM should not be called in prepare stage
+        mock_run.assert_not_called()
+        # Output should be prepare JSON with normal envelope
+        data = json.loads(out.strip())
+        self.assertEqual(data["stage"], "prepare")
+        self.assertEqual(data["role"], "merge")
+        self.assertEqual(data["scope"], "verify-fix")
+
+    def test_15_stage_finalize_conflicts(self):
+        """--stage finalize conflicts mode: reads agent output, calls finalize_from_output."""
+        agent_output_path = self.tmp_path / "agent-output.txt"
+        agent_output_path.write_text(
+            '{"status":"success","commit_sha":"xyz"}\n',
+            encoding="utf-8"
+        )
+
+        with unittest.mock.patch.object(
+            millpy_merge_in_subagent._implementer_claude, "run"
+        ) as mock_run:
+            rc, out = self._run_main([
+                "--mode", "conflicts",
+                "--files", "f.py",
+                "--stage", "finalize",
+                "--agent-output", str(agent_output_path),
+            ])
+
+        self.assertEqual(rc, 0)
+        # LLM should not be called in finalize stage
+        mock_run.assert_not_called()
+        # Output should be the agent output processed by _forward_output
+        data = json.loads(out.strip())
+        self.assertEqual(data["status"], "success")
+
+    def test_16_stage_finalize_verify_fix_reruns_verify(self):
+        """--stage finalize verify-fix mode: re-runs verify, returns success if it passes."""
+        agent_output_path = self.tmp_path / "agent-output.txt"
+        agent_output_path.write_text("agent output", encoding="utf-8")
+        verify_cmd = "exit 0"
+
+        with unittest.mock.patch("subprocess.run") as mock_subprocess:
+            # Verify passes on re-run (returncode=0)
+            mock_subprocess.return_value = unittest.mock.MagicMock(
+                returncode=0, stdout="", stderr=""
+            )
+            with unittest.mock.patch.object(
+                millpy_merge_in_subagent._subprocess_util, "run",
+                return_value=unittest.mock.MagicMock(returncode=0, stdout="abc123\n"),
+            ):
+                with unittest.mock.patch.object(
+                    millpy_merge_in_subagent._implementer_claude, "run"
+                ) as mock_run:
+                    rc, out = self._run_main([
+                        "--mode", "verify-fix",
+                        "--cmd", verify_cmd,
+                        "--checkpoint", "abc123",
+                        "--stage", "finalize",
+                        "--agent-output", str(agent_output_path),
+                    ])
+
+        self.assertEqual(rc, 0)
+        # LLM should not be called in finalize stage
+        mock_run.assert_not_called()
+        # Output should be success JSON
+        data = json.loads(out.strip())
+        self.assertEqual(data["status"], "success")
 
 
 if __name__ == "__main__":

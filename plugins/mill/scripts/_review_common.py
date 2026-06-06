@@ -60,6 +60,7 @@ import _pygit2_util
 import _render
 import _reviewers
 from _config import (
+    _apply_dispatch_shim,
     apply_env_overrides,
     warn_unknown_keys,
     resolve_plugin_template_path,
@@ -1230,6 +1231,58 @@ def write_review_file(
     return out_path.resolve()
 
 
+def finalize_scope(
+    reviews_dir: Path,
+    review_type: str,
+    round_n: int,
+    raw_text: str,
+    *,
+    scope: str | None = None,
+) -> dict:
+    """Finalize a single review scope by parsing verdict and writing the review file.
+
+    Runs parse_verdict, then write_review_file, and returns a dict
+    with the review entry plus blocking/nit counts for ReviewResult assembly.
+
+    Args:
+        reviews_dir: Directory where review files are stored.
+        review_type: Type of review ("discussion", "code", or "plan").
+        round_n: Round number (integer).
+        raw_text: Raw review output text to parse and write.
+        scope: Optional scope name ("holistic" or batch name); if None defaults to "holistic".
+
+    Returns:
+        Dict with keys: scope, verdict, file, blocking_count, nit_count.
+
+    Raises:
+        ReviewError: from parse_verdict if verdict cannot be extracted.
+    """
+    verdict = parse_verdict(raw_text)
+    review_path = write_review_file(
+        reviews_dir, review_type, round_n, raw_text, scope=scope
+    )
+    # Severity labels are per-review-type: discussion uses GAP/NOTE; plan and
+    # code use BLOCKING/NIT. The old inline finalize paths counted the matching
+    # type-specific label, so finalize_scope must mirror that mapping rather
+    # than a single hardcoded severity.
+    if review_type == "discussion":
+        blocking_severity, nit_severity = "GAP", "NOTE"
+    else:
+        blocking_severity, nit_severity = "BLOCKING", "NIT"
+    blocking_count = parse_blocking_count(raw_text, severity=blocking_severity)
+    nit_count = parse_blocking_count(raw_text, severity=nit_severity)
+
+    effective_scope = scope if scope else "holistic"
+
+    return {
+        "scope": effective_scope,
+        "verdict": verdict,
+        "file": str(review_path),
+        "blocking_count": blocking_count,
+        "nit_count": nit_count,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Dispatch helpers and config loader (Step 8 additions)
 # ---------------------------------------------------------------------------
@@ -1332,6 +1385,9 @@ def load_config(hub_root: Path, mill_dir: Path) -> dict:
 
     # 7. Apply environment overrides
     cfg = apply_env_overrides(cfg)
+
+    # 8. Apply dispatch enum back-compat shim for legacy via_psmux
+    _apply_dispatch_shim(cfg)
 
     return cfg
 

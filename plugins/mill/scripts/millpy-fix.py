@@ -26,6 +26,7 @@ import sys
 import uuid
 from pathlib import Path
 
+import _agent_dispatch
 import _implementer_claude
 import _llm_claude
 import _marker
@@ -36,7 +37,7 @@ import _review_common
 import _reviewers
 import _status
 import _timestamp
-from _implementer_common import _forward_output
+from _implementer_common import _forward_output, emit_prepare, finalize_from_output
 
 
 def _is_windows_lock_error(e: Exception) -> bool:
@@ -80,6 +81,16 @@ def main(argv=None) -> int:
         type=int,
         default=1,
         help="Fix-cycle round number (default 1).",
+    )
+    parser.add_argument(
+        "--stage",
+        choices=["prepare", "finalize", "full"],
+        default="full",
+        help="Stage of execution: prepare (render brief), finalize (process output), or full (default, unchanged behavior).",
+    )
+    parser.add_argument(
+        "--agent-output",
+        help="Path to agent output file (required when --stage finalize).",
     )
     args = parser.parse_args(argv)
 
@@ -168,7 +179,21 @@ def main(argv=None) -> int:
 
     plugin_root = Path(__file__).resolve().parent.parent
 
-    # Branch on scope
+    # Stage: finalize
+    if args.stage == "finalize":
+        if not args.agent_output:
+            print("--agent-output is required when --stage finalize", file=sys.stderr)
+            return 1
+        fixer_snapshot_path = project_root / "_mill" / ".cleanliness-snapshot-fixer.txt"
+        return finalize_from_output(
+            Path(args.agent_output),
+            project_root,
+            start_sha=None,
+            snapshot_path=fixer_snapshot_path if fixer_snapshot_path.exists() else None,
+            session_id=session_id,
+        )
+
+    # Branch on scope (for prepare and full stages)
     if args.scope == "batch":
         # Per-batch fixer dispatch
         batch_entry = next((b for b in batches if b["name"] == args.batch_name), None)
@@ -285,6 +310,14 @@ def main(argv=None) -> int:
         print(json.dumps({"status": "stuck", "stuck_type": "transient", "reason": f"brief exceeds max_implementer_prompt_chars ({len(prompt_text)} chars)"}))
         return 0
 
+    # Stage: prepare
+    if args.stage == "prepare":
+        briefs_dir = _paths.resolve_task_path(project_root, "_mill/briefs/")
+        model_tier = _agent_dispatch.model_to_tier(fixer_model)
+        scope_label = args.batch_name if args.scope == "batch" else "holistic"
+        return emit_prepare(briefs_dir, "fix", scope_label, args.round, prompt_text, model_tier, session_id)
+
+    # Stage: full (default)
     try:
         output, _ = _implementer_claude.run(
             prompt_text,
