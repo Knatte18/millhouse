@@ -29,13 +29,13 @@ single-sweep task.
 **Re-audit result.** During discussion every issue was checked against
 the *current* branch (`hanf/mill-infra-bug-fixes`, which already carries
 substantial hardening commits). Six issues are already fixed and are
-**out of scope** -- see Scope/Out. The remaining **12** are confirmed
+**out of scope** -- see Scope/Out. The remaining **13** are confirmed
 present (most verified by reading current code or by live reproduction)
 and form the work for this task.
 
 ## Scope
 
-**In** -- 12 confirmed-present fixes:
+**In** -- 13 confirmed-present fixes:
 
 - **#404 + #407 -- wiki client transient-error retry.**
   `wiki/_client._dispatch` retries only `TimeoutError`; add
@@ -94,6 +94,16 @@ and form the work for this task.
   `ModuleNotFoundError`. Add a preflight self-check that detects missing
   helper modules in the active `CLAUDE_PLUGIN_ROOT` and emits an
   actionable "refresh your cache" message.
+- **#409 -- merge-in verify-fix reports success without fixing.**
+  `millpy-merge-in-subagent.py` `--mode verify-fix` reports
+  `{"status": "success"}` when it should not: in both the `finalize`
+  stage (~line 182) and the `full` stage (~line 341) success is reported
+  from a passing post-verify OR is inferred from the agent's
+  self-reported status, so a fixer that changed nothing (HEAD ==
+  checkpoint) and left the verify still failing can be reported as
+  success. Gate success strictly on the post-fix verify actually passing;
+  when it still fails, emit `stuck` (`stuck_type: verify`) with the
+  verify output instead of forwarding/inferring success.
 
 **Out** -- already fixed on this branch (verified during discussion; no
 work):
@@ -290,6 +300,27 @@ itself; the wiki daemon server side (the retry fix is client-only).
   repo; cannot be enforced here). Silent dev-tree `PYTHONPATH` fallback
   (masks the staleness and can load wrong-version code).
 
+### merge-in-verify-success-gate (#409)
+
+- Decision: In `millpy-merge-in-subagent.py`, report
+  `{"status": "success"}` for `--mode verify-fix` ONLY when the post-fix
+  verify command actually passes. When the post-fix verify still fails,
+  emit `{"status": "stuck", "stuck_type": "verify", "reason": <verify
+  output>}` instead of routing through `_forward_output` /
+  `finalize_from_output` (which can infer success from the agent's
+  self-reported status). Confine the change to
+  `millpy-merge-in-subagent.py` (the two success-emit sites in the
+  `finalize` stage and the `full` stage's post-sub-agent re-verification).
+- Rationale: The current code trusts a passing post-verify OR the agent's
+  own success claim; a fixer that committed nothing (HEAD == checkpoint)
+  and left the verify failing was reported as success, silently
+  corrupting merge-in state and requiring manual recovery.
+- Rejected: Comparing HEAD against the checkpoint as the success signal
+  (a no-op merge where verify already passes is legitimately success);
+  the verify result is the correct gate. Editing
+  `_implementer_common.finalize_from_output` (would ripple into the
+  implementer batch's behavior -- keep the fix local to merge-in).
+
 ## Technical context
 
 - **Dispatch architecture.** `cfg.llm.claude.dispatch` selects
@@ -319,6 +350,15 @@ itself; the wiki daemon server side (the retry fix is client-only).
   finalized via `_implementer_common._forward_output` /
   `finalize_from_output`. The implementer must reconcile both the brief's
   classification guidance and any deterministic finalize detection.
+- **Merge-in subagent (#409).** `millpy-merge-in-subagent.py`
+  `_run_verify_fix` and the `--stage finalize` block: the `finalize`
+  stage (~lines 175-196) runs the post-verify and prints success on
+  returncode 0, else calls `finalize_from_output(..., start_sha=None)`;
+  the `full` stage (~lines 332-350) runs a post-sub-agent re-verify and
+  prints success on returncode 0, else calls `_forward_output(output,
+  ...)`. Both fall-through paths can yield a success verdict when verify
+  still fails. The fix replaces those fall-throughs with an explicit
+  `stuck`/`verify` emission carrying the verify output.
 - **Cleanup.** `millpy-cleanup.py` builds its plan with `iterdir()` over
   `<container>/wts/` (~lines 186-209) for orphan detection; no
   process-killing exists in `millpy-cleanup.py` or `_worktree.py`.
@@ -398,6 +438,11 @@ Per fix:
   unit-test any extracted "commit residual drift" decision. Document the
   manual repro (verify step that runs a formatter must leave a clean tree
   after success).
+- **#409 (merge-in verify gate):** unit-test `_run_verify_fix` /
+  finalize with `subprocess.run` monkeypatched -- post-fix verify passes
+  -> `status: success`; post-fix verify fails -> `status: stuck`,
+  `stuck_type: verify` (never success), even when the agent output claims
+  success. New test file (`test-merge-in-subagent.py`). TDD candidate.
 
 ## Q&A log
 
@@ -430,3 +475,8 @@ Per fix:
   It is gitignored, but pygit2's `status_porcelain` still reports the
   `.portals`/`.wiki` symlinks (verified live), so an explicit junction
   skip-set is required.
+- **Q:** #409 -- was it dropped? **A:** No. It was inadvertently omitted
+  from the first draft of this discussion (which the round-1 review
+  approved) and added back during mill-plan once the oversight was
+  caught. It is a confirmed-present bug from the task's issue list, so it
+  is in scope (gate verify-fix success on the post-fix verify passing).
