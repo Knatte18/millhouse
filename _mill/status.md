@@ -64,5 +64,7 @@ batches:
     start_sha: e5fc55cedd7661297df30c3297a6343b9eff5449
     commit_sha: 50ddf14158bca55673e915c3a4f55ae47d8c5621
   - name: agent-mode-parity-test
-    state: pending
+    state: running
+    implementer_session: dd607c34-b48e-4c0f-8b16-e32d621871f1
+    start_sha: a5ab42553b92c0f90948be066ffbfa8e84a47a8f
 ```
