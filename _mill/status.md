@@ -34,7 +34,9 @@ batches:
     start_sha: bb0acec5850d24531952ce1edb11188674419a9f
     commit_sha: 6b93750557a64ce9731c26e5c916d9d110b37df0
   - name: subagent-definitions
-    state: pending
+    state: running
+    implementer_session: b4453d23-78b2-4946-8146-624c7bcfd0f7
+    start_sha: 250202504d01bfaed20dc9479dea878e4e2becfb
   - name: impl-fix-merge-seam
     state: pending
   - name: review-seam
