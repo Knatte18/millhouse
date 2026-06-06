@@ -115,9 +115,9 @@ paths keep working. External interface consumed by batches 3-6:
   - `plugins/mill/scripts/_agent_dispatch.py`
   - `plugins/mill/scripts/_config.py`
   - `plugins/mill/scripts/_llm_claude.py`
-  - `plugins/mill/unit_tests/test-llm-claude.py`
 - **Edits:**
   - `plugins/mill/unit_tests/test-config.py`
+  - `plugins/mill/unit_tests/test-llm-claude.py`
 - **Creates:**
   - `plugins/mill/unit_tests/test-agent-dispatch.py`
 - **Deletes:** none

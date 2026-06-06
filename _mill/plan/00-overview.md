@@ -137,6 +137,7 @@ batches:
 - `plugins/mill/.claude-plugin/plugin.json`
 - `plugins/mill/agents/mill-implementer.md`
 - `plugins/mill/agents/mill-reviewer.md`
+- `plugins/mill/integration_tests/test-agent-mode-commit-target.py`
 - `plugins/mill/scripts/_agent_dispatch.py`
 - `plugins/mill/scripts/_config.py`
 - `plugins/mill/scripts/_implementer_common.py`
@@ -145,7 +146,6 @@ batches:
 - `plugins/mill/scripts/_review_common.py`
 - `plugins/mill/scripts/_review_discussion.py`
 - `plugins/mill/scripts/_review_plan.py`
-- `plugins/mill/scripts/_reviewer_single.py`
 - `plugins/mill/scripts/millpy-fix.py`
 - `plugins/mill/scripts/millpy-implement.py`
 - `plugins/mill/scripts/millpy-merge-in-subagent.py`
