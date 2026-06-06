@@ -3,7 +3,7 @@
 ```yaml
 task: "Revise mill-ghissues-to-tasks to present all at once"
 slug: revise-ghissues-to-tasks
-approved: false
+approved: true
 started: "20260606-190057"
 parent: main
 root: ""

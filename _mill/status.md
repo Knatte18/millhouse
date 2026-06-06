@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planning
+phase: plan-review-r1
 slug: revise-ghissues-to-tasks
 branch: hanf/revise-ghissues-to-tasks
 plan: _mill/plan
@@ -17,4 +17,5 @@ task_description: |
 discussing  '2026-06-06T17:46:52Z'
 discussed  '2026-06-06T18:57:18Z'
 planning  '2026-06-06T19:02:46Z'
+plan-review-r1  '2026-06-06T19:03:48Z'
 ```
