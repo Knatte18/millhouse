@@ -59,7 +59,9 @@ batches:
     start_sha: 9ed571747d3961cd6c9ca35ca8769083c592b1cc
     commit_sha: 53206a7f0667b467e29cc5503caa7715c1aca79f
   - name: psmux-dispatch
-    state: pending
+    state: running
+    implementer_session: c3c57417-cb66-4592-9faa-2025964cf998
+    start_sha: 387efec610862a55c5d11d74f68fea746d816a37
   - name: cache-preflight
     state: pending
   - name: merge-in-verify-gate
