@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-reviewing
+phase: holistic-fixing
 slug: mill-infra-bug-fixes
 branch: hanf/mill-infra-bug-fixes
 plan: _mill/plan
@@ -31,6 +31,7 @@ approved-psmux-dispatch  '2026-06-06T20:14:14Z'
 approved-cache-preflight  '2026-06-06T20:16:54Z'
 approved-merge-in-verify-gate  '2026-06-06T20:20:23Z'
 holistic-reviewing  '2026-06-06T20:20:43Z'
+holistic-fixing  '2026-06-06T20:31:05Z'
 ```
 
 ## Batches
