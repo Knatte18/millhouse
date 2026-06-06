@@ -1230,6 +1230,68 @@ def write_review_file(
     return out_path.resolve()
 
 
+def brief_path_for(briefs_dir: Path, role: str, scope: str, round_n: int) -> Path:
+    """Return the brief file path for a given role, scope, and round.
+
+    Mirrors _agent_dispatch.write_brief's naming convention so prepare and
+    finalize agree on the path. Does not create directories or write the file.
+
+    Args:
+        briefs_dir: Parent directory for briefs.
+        role: Role name (e.g., "review-discussion").
+        scope: Scope name (e.g., "holistic" or batch name).
+        round_n: Round number (integer).
+
+    Returns:
+        Path to the brief file (not yet created).
+    """
+    return Path(briefs_dir) / f"{role}-{scope}-r{round_n}.md"
+
+
+def finalize_scope(
+    reviews_dir: Path,
+    review_type: str,
+    round_n: int,
+    raw_text: str,
+    *,
+    scope: str | None = None,
+) -> dict:
+    """Finalize a single review scope by parsing verdict and writing the review file.
+
+    Runs parse_verdict, then write_review_file, and returns a dict
+    with the review entry plus blocking/nit counts for ReviewResult assembly.
+
+    Args:
+        reviews_dir: Directory where review files are stored.
+        review_type: Type of review ("discussion", "code", or "plan").
+        round_n: Round number (integer).
+        raw_text: Raw review output text to parse and write.
+        scope: Optional scope name ("holistic" or batch name); if None defaults to "holistic".
+
+    Returns:
+        Dict with keys: scope, verdict, file, blocking_count, nit_count.
+
+    Raises:
+        ReviewError: from parse_verdict if verdict cannot be extracted.
+    """
+    verdict = parse_verdict(raw_text)
+    review_path = write_review_file(
+        reviews_dir, review_type, round_n, raw_text, scope=scope
+    )
+    blocking_count = parse_blocking_count(raw_text, severity="blocking")
+    nit_count = parse_blocking_count(raw_text, severity="nit")
+
+    effective_scope = scope if scope else "holistic"
+
+    return {
+        "scope": effective_scope,
+        "verdict": verdict,
+        "file": str(review_path),
+        "blocking_count": blocking_count,
+        "nit_count": nit_count,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Dispatch helpers and config loader (Step 8 additions)
 # ---------------------------------------------------------------------------
