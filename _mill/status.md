@@ -65,7 +65,9 @@ batches:
     start_sha: 387efec610862a55c5d11d74f68fea746d816a37
     commit_sha: f6fd49d6a494b23c44439242fd309cbc3fe98e68
   - name: cache-preflight
-    state: pending
+    state: running
+    implementer_session: 898b3679-5235-4fdd-8a69-65752a76bd98
+    start_sha: 34f87db376621a8270072afa32557e0742782feb
   - name: merge-in-verify-gate
     state: pending
 ```
