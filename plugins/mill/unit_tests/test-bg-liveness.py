@@ -121,7 +121,7 @@ class TestBgLiveness(unittest.TestCase):
                     self.assertEqual(pid, pid_value)
                 # Verify debug breadcrumb was emitted
                 self.assertEqual(len(cm.output), 1)
-                self.assertIn("is_bg_worker_alive", cm.output[0])
+                self.assertIn("_probe_liveness", cm.output[0])
                 self.assertIn("os.kill", cm.output[0])
                 self.assertIn("falling back to log-mtime staleness", cm.output[0])
 
@@ -153,7 +153,7 @@ class TestBgLiveness(unittest.TestCase):
                     self.assertEqual(pid, pid_value)
                 # Verify debug breadcrumb was emitted
                 self.assertEqual(len(cm.output), 1)
-                self.assertIn("is_bg_worker_alive", cm.output[0])
+                self.assertIn("_probe_liveness", cm.output[0])
                 self.assertIn("os.kill", cm.output[0])
                 self.assertIn("falling back to log-mtime staleness", cm.output[0])
 
