@@ -152,7 +152,7 @@ def _dispatch(wiki_path: Path, op: str, payload: dict) -> dict:
     for attempt in range(4):
         try:
             return _connect_send_recv(host, port, req, timeout=3.0)
-        except TimeoutError:
+        except (TimeoutError, ConnectionResetError, ConnectionRefusedError):
             if attempt < 3:
                 time.sleep(backoff_sleeps[attempt])
             else:
