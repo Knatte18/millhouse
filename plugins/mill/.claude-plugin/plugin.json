@@ -6,5 +6,8 @@
   "author": {
     "name": "Knatte18"
   },
-  "agents": "agents/"
+  "agents": [
+    "./agents/mill-implementer.md",
+    "./agents/mill-reviewer.md"
+  ]
 }

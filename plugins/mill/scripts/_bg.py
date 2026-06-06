@@ -1,4 +1,23 @@
-"""Liveness probe for millpy-bg worker subprocesses; used by orchestrators after resume to decide whether to wait or re-fire."""
+"""Liveness probe for millpy-bg worker subprocesses; used by orchestrators after resume to decide whether to wait or re-fire.
+
+Completion detection (agent-mode dispatch preferred):
+  - Agent-mode dispatch (no subprocess) is the structural solution — no process
+    to lose and no detection needed.
+  - Subprocess mode (millpy-bg dispatch) relies on two mechanisms:
+    * EXIT sentinel write (best-effort, killed by hard termination).
+    * Trailing-JSON completion sentinel (kill-resilient backstop).
+
+check_bg_status determines completion via this resolution order:
+  (1) log missing -> dead
+  (2) [mill-bg] EXIT <code> present -> exit
+  (3) liveness probe (affirmative kill-signal response) -> running
+  (4) trailing-JSON completion sentinel present -> exit
+  (5) liveness probe (assumed-alive mtime-fresh fallback) -> running
+  (6) otherwise -> dead
+
+Trailing-JSON contract: every millpy-bg-dispatched CLI MUST emit a single
+parseable JSON line as its final stdout (used by step 4 above).
+"""
 import json
 import logging
 import os
@@ -33,12 +52,50 @@ def _has_valid_json_result(text: str) -> bool:
     return False
 
 
+def _probe_liveness(log_path: Path) -> tuple[str, int | None]:
+    """Probe worker liveness without collapsing affirmative vs assumed alive.
+
+    Reads the worker log for [mill-bg] WORKER PID=N and [mill-bg] EXIT sentinel.
+    Probes the PID via os.kill(pid, 0) with fallback to log mtime staleness.
+
+    Returns (state, pid_or_None) where state is one of:
+      - "exit"               -> [mill-bg] EXIT sentinel present
+      - "affirmative-alive"  -> os.kill(pid, 0) succeeded or raised PermissionError
+      - "assumed-alive"      -> os.kill raised inconclusive OSError/SystemError,
+                               mtime is fresh (<=_STALE_LOG_SECONDS)
+      - "dead"               -> no PID line, mtime stale, or no log file
+    """
+    if not log_path.exists():
+        return ("dead", None)
+    text = log_path.read_text(encoding="utf-8", errors="replace")
+    m = _PID_RE.search(text)
+    if not m:
+        return ("dead", None)
+    pid = int(m.group(1))
+    if _EXIT_RE.search(text):
+        return ("exit", pid)
+    try:
+        os.kill(pid, 0)
+        return ("affirmative-alive", pid)
+    except ProcessLookupError:
+        return ("dead", pid)
+    except PermissionError:
+        return ("affirmative-alive", pid)
+    except (OSError, SystemError) as exc:
+        # Unknown errno from os.kill (Windows-specific or transient) -- fall through to mtime fallback.
+        _logger.debug("_probe_liveness: os.kill(%s, 0) raised %r -- falling back to log-mtime staleness", pid, exc)
+        pass
+    mtime = log_path.stat().st_mtime
+    if (time.time() - mtime) > _STALE_LOG_SECONDS:
+        return ("dead", pid)
+    return ("assumed-alive", pid)
+
+
 def is_bg_worker_alive(log_path: Path) -> tuple[bool, int | None]:
     """Check if a millpy-bg worker process is alive based on its log file.
 
-    Reads the worker log header for [mill-bg] WORKER PID=N START, checks
-    for [mill-bg] EXIT sentinel, and probes the PID's liveness via
-    os.kill(pid, 0) with fallback to log mtime staleness on Windows EINVAL.
+    Thin wrapper over _probe_liveness that collapses the four liveness states
+    into a boolean (True for affirmative-alive or assumed-alive; False for exit or dead).
 
     Returns (alive, pid_or_None):
       - log file does not exist                   -> (False, None)
@@ -50,30 +107,10 @@ def is_bg_worker_alive(log_path: Path) -> tuple[bool, int | None]:
         - log mtime > 5 min old                   -> (False, pid)
         - log mtime <= 5 min old                  -> (True, pid)
     """
-    if not log_path.exists():
-        return (False, None)
-    text = log_path.read_text(encoding="utf-8", errors="replace")
-    m = _PID_RE.search(text)
-    if not m:
-        return (False, None)
-    pid = int(m.group(1))
-    if _EXIT_RE.search(text):
-        return (False, pid)
-    try:
-        os.kill(pid, 0)
+    state, pid = _probe_liveness(log_path)
+    if state in ("affirmative-alive", "assumed-alive"):
         return (True, pid)
-    except ProcessLookupError:
-        return (False, pid)
-    except PermissionError:
-        return (True, pid)
-    except (OSError, SystemError) as exc:
-        # Unknown errno from os.kill (Windows-specific or transient) -- fall through to mtime fallback.
-        _logger.debug("is_bg_worker_alive: os.kill(%s, 0) raised %r -- falling back to log-mtime staleness", pid, exc)
-        pass
-    mtime = log_path.stat().st_mtime
-    if (time.time() - mtime) > _STALE_LOG_SECONDS:
-        return (False, pid)
-    return (True, pid)
+    return (False, pid)
 
 
 def check_bg_status(log_path: Path) -> tuple[str, int | None]:
@@ -83,13 +120,21 @@ def check_bg_status(log_path: Path) -> tuple[str, int | None]:
     Performs exactly one status determination without looping or sleeping.
     The orchestrator owns the poll cadence.
 
-    Returns (status_str, pid_or_code_or_None):
-      - log file does not exist                     -> ("dead", None)
-      - log contains [mill-bg] EXIT <code>          -> ("exit", code)
-      - is_bg_worker_alive reports alive            -> ("running", pid)
-      - is_bg_worker_alive reports dead, re-read:
-        - re-read now shows EXIT                    -> ("exit", code)
-        - re-read still has no EXIT                 -> ("dead", pid)
+    Agent-mode dispatch (no subprocess) is the structural fix; this fallback applies
+    only to subprocess-mode workers.
+
+    Resolution order (first match wins):
+      (1) log file does not exist                     -> ("dead", None)
+      (2) log contains [mill-bg] EXIT <code>          -> ("exit", code)
+      (3) probe is "affirmative-alive" (kill succeeded) -> ("running", pid)
+      (4) valid trailing JSON completion sentinel     -> ("exit", 0)
+      (5) probe is "assumed-alive" (mtime-fresh)     -> ("running", pid)
+      (6) otherwise                                   -> ("dead", pid)
+
+    This ordering ensures a worker that finished (emitted trailing JSON) but was
+    hard-killed before writing EXIT is recognized as completed on the next poll,
+    while still respecting an affirmatively-alive process even if it has JSON-looking
+    output mid-stream.
     """
     if not log_path.exists():
         return ("dead", None)
@@ -98,17 +143,17 @@ def check_bg_status(log_path: Path) -> tuple[str, int | None]:
     if m:
         code = int(m.group(1))
         return ("exit", code)
-    alive, pid = is_bg_worker_alive(log_path)
-    if alive:
+    state, pid = _probe_liveness(log_path)
+    if state == "exit":
+        m = _EXIT_CODE_RE.search(text)
+        if m:
+            code = int(m.group(1))
+            return ("exit", code)
+        return ("exit", 0)
+    if state == "affirmative-alive":
         return ("running", pid)
-    # Race guard: re-read log and re-check for EXIT sentinel
-    if not log_path.exists():
-        return ("dead", None)
-    text = log_path.read_text(encoding="utf-8", errors="replace")
-    m = _EXIT_CODE_RE.search(text)
-    if m:
-        code = int(m.group(1))
-        return ("exit", code)
     if _has_valid_json_result(text):
         return ("exit", 0)
+    if state == "assumed-alive":
+        return ("running", pid)
     return ("dead", pid)
