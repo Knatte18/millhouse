@@ -36,6 +36,44 @@ def emit_prepare(
     return 0
 
 
+def emit_prepare_no_dispatch(
+    model_tier: str,
+    session_id: str,
+    role: str,
+    scope: str,
+    round_n: int,
+    project_root: Path,
+) -> int:
+    """Emit prepare JSON with dispatch_needed:false for verify-fix pass case.
+
+    When verify passes in prepare, there is nothing to dispatch. This emits
+    a special prepare envelope with dispatch_needed:false and an embedded
+    success envelope. Returns 0.
+    """
+    result = _subprocess_util.run(["git", "rev-parse", "HEAD"], cwd=project_root)
+    commit_sha = result.stdout.strip() if result.returncode == 0 else ""
+
+    embedded_envelope = {
+        "status": "success",
+        "commit_sha": commit_sha,
+        "session_id": session_id,
+    }
+
+    envelope = {
+        "stage": "prepare",
+        "dispatch_needed": False,
+        "subagent_type": "mill-implementer",
+        "model": model_tier,
+        "session_id": session_id,
+        "role": role,
+        "scope": scope,
+        "round": round_n,
+        "envelope": embedded_envelope,
+    }
+    print(json.dumps(envelope))
+    return 0
+
+
 def finalize_from_output(
     agent_output_path: Path,
     project_root: Path,
