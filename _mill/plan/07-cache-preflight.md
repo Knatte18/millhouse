@@ -61,9 +61,10 @@ that imports the at-risk helper.
   asserting: `missing_helpers` returns the missing names for a temp
   scripts dir lacking a file and `[]` when present; `check_helpers` returns
   non-zero + prints an ASCII actionable message when a helper is missing
-  (capture stderr) and zero when present; and a case where
-  `CLAUDE_PLUGIN_ROOT` is unset -> `check_helpers` falls back to this
-  file's own scripts dir without raising. ASCII-only.
+  (capture stderr) and zero when present; and a fallback case: with
+  `CLAUDE_PLUGIN_ROOT` unset, `check_helpers(["_preflight"])` returns 0
+  without raising (it falls back to `_preflight.py`'s own `__file__` parent
+  dir, where `_preflight.py` itself exists). ASCII-only.
 - **Commit:** `feat(mill-merge): preflight-check _archive_tag presence before use`
 
 ## Batch Tests

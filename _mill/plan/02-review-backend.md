@@ -80,12 +80,14 @@ config key.
   that returns the `large_prompt.timeout` value when the prompt is over
   threshold and the key is set, else `default_timeout`. To avoid a DRY
   violation with `maybe_switch_spec_for_large_prompt`, extract the shared
-  size/threshold computation (`estimated_ktok = len(prompt_text) // 4000`;
-  `threshold_ktok` default 100 read from
-  `cfg["roles"][role][scope]["large_prompt"]`; the "is over threshold"
-  decision) into one small internal helper and have BOTH
-  `maybe_switch_spec_for_large_prompt` and `resolve_large_prompt_timeout`
-  call it, so the threshold formula lives in exactly one place. Do NOT
+  size/threshold computation into one small named internal helper
+  `_check_large_prompt(prompt_text, cfg, role, scope) -> tuple[bool, int]`
+  returning `(is_over_threshold, estimated_ktok)` (where
+  `estimated_ktok = len(prompt_text) // 4000` and `threshold_ktok` default
+  100 is read from `cfg["roles"][role][scope]["large_prompt"]`), and have
+  BOTH `maybe_switch_spec_for_large_prompt` and
+  `resolve_large_prompt_timeout` call `_check_large_prompt`, so the
+  threshold formula lives in exactly one place. Do NOT
   change the public signature/return of `maybe_switch_spec_for_large_prompt`
   (it is also used by code-review). Wire the new helper into
   `_review_plan.py`'s `run()` function (NOT `prepare()`, which does not
@@ -98,7 +100,14 @@ config key.
   document the optional `roles.plan-review.holistic.large_prompt.timeout`
   key (commented example, consistent with the existing `large_prompt`
   documentation) so the config validator's known-key allowlist (the
-  template) recognizes it.
+  template) recognizes it. Also add a one-line clarifying comment near the
+  existing `llm.claude.psmux.response_poll_timeout_s.bulk` key noting that
+  the review-layer timeout overrides it when invoked via
+  `_llm_claude._build_psmux_argv` (the `--response-poll-timeout` path added
+  in batch psmux-dispatch); this key applies only to direct
+  `millpy-claude-sub.py` invocations without that flag. (This comment lives
+  here, not in the psmux-dispatch batch, because `templates/mill-config.yaml`
+  is owned by this batch -- keeping it here avoids a parallel-edit conflict.)
 - **Commit:** `feat(review): honor large_prompt.timeout for plan holistic review`
 
 ### Card 6: Tests for review-backend fixes

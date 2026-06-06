@@ -55,7 +55,10 @@ subprocess/psmux poll loops (#417, Fix 1). Touches `millpy-cleanup.py`,
   `processes_holding_path(worktree, process_records)`) that takes an
   injected iterable of process records (each with a pid and a command-line
   string) and returns the pids whose command line references the worktree
-  path (normalized comparison). Add a best-effort, failure-swallowing
+  path (normalized comparison). Records whose command line is `None` or
+  empty (CIM returns `CommandLine = None` for elevated processes queried
+  from a non-elevated shell) MUST be silently skipped -- they cannot match
+  any path (guard before any substring check to avoid `TypeError`). Add a best-effort, failure-swallowing
   `kill_stale_holders(worktree, *, enumerate_processes=<default>)` that
   enumerates processes, filters via the pure matcher, and terminates them
   (`taskkill /PID <pid> /F` on Windows), swallowing all errors. Matching

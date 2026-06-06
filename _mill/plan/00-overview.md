@@ -3,7 +3,7 @@
 ```yaml
 task: "Fix infrastructure bugs across merge, wiki-daemon, config, plan, and cleanup"
 slug: mill-infra-bug-fixes
-approved: false
+approved: true
 started: "20260606-190000"
 parent: main
 root: ""

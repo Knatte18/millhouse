@@ -89,8 +89,11 @@ success (#426). Touches `_cleanliness.py`, `millpy-implement.py`,
   empty AND there are no untracked files -- meaning every remaining change
   is pure whitespace. If `git diff -w` still shows changes, or untracked
   files exist, the dirt is NOT formatter drift: leave it for the
-  cleanliness gate to block (do not mask real uncommitted work). ASCII-only
-  messages.
+  cleanliness gate to block (do not mask real uncommitted work). If either
+  `git diff` subprocess used by the heuristic returns non-zero or raises,
+  treat the result as "not formatter drift" (skip the auto-commit and
+  proceed normally) -- never let the heuristic itself fail the run.
+  ASCII-only messages.
 - **Commit:** `fix(implement): commit formatter drift before success report`
 
 ### Card 17: Tests for implementer-correctness fixes
