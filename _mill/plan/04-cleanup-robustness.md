@@ -36,9 +36,10 @@ subprocess/psmux poll loops (#417, Fix 1). Touches `millpy-cleanup.py`,
   "orphan worktree" when it IS a registered git worktree that lacks an
   active marker. Plain directories under `wts/` that are NOT in the
   registry (e.g. an empty `millhouse.worktrees` leftover) must be ignored
-  (or reported under a clearly distinct "unexpected directory, not a
-  worktree" message -- never as an orphan worktree to `git worktree
-  remove`). Preserve the existing in-use-marker handling.
+  silently -- they are never reported as an orphan worktree and never
+  surfaced for `git worktree remove`. (Deterministic single behavior: do
+  not emit a separate "unexpected directory" message; just skip them.)
+  Preserve the existing in-use-marker handling.
 - **Commit:** `fix(cleanup): use git worktree registry for orphan detection`
 
 ### Card 11: Kill stale processes before worktree removal
@@ -56,10 +57,18 @@ subprocess/psmux poll loops (#417, Fix 1). Touches `millpy-cleanup.py`,
   string) and returns the pids whose command line references the worktree
   path (normalized comparison). Add a best-effort, failure-swallowing
   `kill_stale_holders(worktree, *, enumerate_processes=<default>)` that
-  enumerates processes (default real enumerator: Windows `tasklist`/`wmic`
-  via `_subprocess_util`; on non-Windows a no-op or `ps`-based equivalent),
-  filters via the pure matcher, and terminates them (`taskkill /PID <pid>
-  /F` on Windows), swallowing all errors. Call `kill_stale_holders(path)`
+  enumerates processes, filters via the pure matcher, and terminates them
+  (`taskkill /PID <pid> /F` on Windows), swallowing all errors. Matching
+  requires each process's COMMAND LINE (to find bash poll-loops that
+  reference the worktree path), so the default real enumerator MUST obtain
+  command-line text. Use PowerShell
+  `Get-CimInstance Win32_Process | Select-Object ProcessId,CommandLine`
+  (the supported replacement for the removed-on-Windows-11 `wmic`; do NOT
+  use `wmic`, and do NOT use `tasklist`, which exposes only the window
+  title, not the command line) via `_subprocess_util`, parsing ProcessId +
+  CommandLine. On non-Windows the enumerator may be a no-op (the bug is
+  Windows-specific). The enumerator and kill steps are best-effort and must
+  never raise. Call `kill_stale_holders(path)`
   inside `remove_safe` AFTER junction stripping and BEFORE
   `git worktree remove`. The kill step must never raise; a failure to kill
   must not abort removal. ASCII-only messages.

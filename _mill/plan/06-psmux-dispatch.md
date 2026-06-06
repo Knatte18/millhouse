@@ -52,12 +52,17 @@ response-poll must honor the review-layer timeout instead of a hardcoded
   (seconds) argument to `millpy-claude-sub.py`; when provided, use it as the
   response-poll timeout instead of the hardcoded
   `RESPONSE_POLL_TIMEOUT_S["bulk"] = 300` (the hardcoded values remain the
-  fallback default when the flag is absent). In `_llm_claude.py`, where the
-  psmux argv for the claude-sub wrapper is built (the `_build_psmux_argv`
-  path), forward the caller-supplied review timeout (the same timeout
-  `_reviewer_single.run` receives, e.g. `holistic_timeout`) as
-  `--response-poll-timeout` so a 1800s holistic review is not capped at
-  300s. ASCII-only.
+  fallback default when the flag is absent). Thread the timeout in
+  `_llm_claude.py`: `_build_psmux_argv` currently takes NO `timeout`
+  parameter -- add a `timeout: int` parameter to it and append
+  `--response-poll-timeout <timeout>` to the argv it returns. At the single
+  `_build_psmux_argv(...)` call site (inside the psmux branch of the invoke
+  function, where the local `timeout: int` -- the value
+  `_reviewer_single.run` forwarded, e.g. `holistic_timeout` -- is already
+  in scope and used for the wrapper subprocess `timeout=float(timeout)`),
+  pass that `timeout` into `_build_psmux_argv`. Do NOT change the
+  `_reviewer_single.run` signature (the timeout already reaches the invoke
+  function). ASCII-only.
 - **Commit:** `fix(claude-sub): honor review timeout for bulk response poll`
 
 ### Card 20: Tests for psmux wrapper + timeout passthrough

@@ -80,13 +80,17 @@ success (#426). Touches `_cleanliness.py`, `millpy-implement.py`,
   (2) In `_implementer_common.py`, in the success-finalization path
   (`_forward_output` / `finalize_from_output` inferred-success), if the
   only remaining working-tree change after the implementer's commit is
-  formatter-induced drift, auto-commit it (a single
+  WHITESPACE-ONLY formatter drift, auto-commit it (a single
   `chore(format): commit formatter drift` commit) before emitting
   `success`, rather than letting the downstream cleanliness gate block the
-  batch. Keep genuine non-formatter dirt blocking as today (do not mask
-  real uncommitted work). Final boundary between brief-guidance and
-  auto-commit is the implementer's call; document the chosen split in the
-  commit body. ASCII-only messages.
+  batch. Detection heuristic (deterministic): the residual dirt is
+  treated as formatter drift ONLY when `git diff` (tracked files) is
+  non-empty BUT `git diff --ignore-all-space` (i.e. `git diff -w`) is
+  empty AND there are no untracked files -- meaning every remaining change
+  is pure whitespace. If `git diff -w` still shows changes, or untracked
+  files exist, the dirt is NOT formatter drift: leave it for the
+  cleanliness gate to block (do not mask real uncommitted work). ASCII-only
+  messages.
 - **Commit:** `fix(implement): commit formatter drift before success report`
 
 ### Card 17: Tests for implementer-correctness fixes

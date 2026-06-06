@@ -135,6 +135,7 @@ batches:
 - `plugins/mill/skills/mill-plan/SKILL.md`
 - `plugins/mill/templates/implementer-brief.md`
 - `plugins/mill/templates/mill-config.yaml`
+- `plugins/mill/templates/review-output.schema.md`
 - `plugins/mill/unit_tests/test-claude-sub.py`
 - `plugins/mill/unit_tests/test-cleanliness.py`
 - `plugins/mill/unit_tests/test-cleanup.py`

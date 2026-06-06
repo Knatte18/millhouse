@@ -61,7 +61,9 @@ that imports the at-risk helper.
   asserting: `missing_helpers` returns the missing names for a temp
   scripts dir lacking a file and `[]` when present; `check_helpers` returns
   non-zero + prints an ASCII actionable message when a helper is missing
-  (capture stderr) and zero when present. ASCII-only.
+  (capture stderr) and zero when present; and a case where
+  `CLAUDE_PLUGIN_ROOT` is unset -> `check_helpers` falls back to this
+  file's own scripts dir without raising. ASCII-only.
 - **Commit:** `feat(mill-merge): preflight-check _archive_tag presence before use`
 
 ## Batch Tests
@@ -70,3 +72,7 @@ that imports the at-risk helper.
 / `check_helpers` against temp directories and a patched
 `CLAUDE_PLUGIN_ROOT`; the SKILL.md wiring is documentation and is covered
 by inspection.
+
+Ordering: Card 22 Creates `test-preflight.py`, which the `verify:` `--only`
+flag requires on disk. mill-go runs `verify:` once at batch end after both
+cards are implemented and committed, so the file exists when verify runs.

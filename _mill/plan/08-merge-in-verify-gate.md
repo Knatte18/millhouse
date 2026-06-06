@@ -29,19 +29,28 @@ unaffected).
 - **Creates:** none
 - **Deletes:** none
 - **Requirements:** For `--mode verify-fix`, report `{"status":"success"}`
-  ONLY when the post-fix verify command actually passes. (1) In the
-  `--stage finalize` block: when the post-verify `returncode == 0`, keep
-  emitting success; when it is non-zero, emit `{"status":"stuck",
-  "stuck_type":"verify","reason": <verify stdout+stderr>}` instead of
-  falling through to `finalize_from_output(...)` (which can infer success
-  from the agent output). (2) In `_run_verify_fix` `--stage full`: after
-  the post-sub-agent re-verification, when the post-verify is non-zero,
-  emit the same `stuck`/`verify` JSON instead of calling
-  `_forward_output(output, ...)` (which trusts the agent's self-reported
-  success). The legitimate "verify already passes (e.g. the merge fixed
-  it), no fixer needed" path must still report success. Do NOT use
-  HEAD-vs-checkpoint as the success signal -- the verify result is the
-  gate. ASCII-only messages.
+  ONLY when the post-fix verify command actually passes. There are exactly
+  three cases; implement them explicitly:
+  - **Case A -- verify passes before any fixer runs** (the existing
+    early-return where the initial verify `returncode == 0`, e.g. the merge
+    already fixed it): emit `{"status":"success","commit_sha": <HEAD>}` as
+    today. No fixer needed.
+  - **Case B -- fixer ran, post-fix verify passes** (`returncode == 0`):
+    emit `{"status":"success","commit_sha": <HEAD>}`.
+  - **Case C -- fixer ran, post-fix verify still fails**
+    (`returncode != 0`): emit `{"status":"stuck","stuck_type":"verify",
+    "reason": <verify stdout+stderr>}`. Do NOT fall through to
+    `finalize_from_output(...)` (finalize stage) or `_forward_output(...)`
+    (full stage) -- both can infer/forward success from the agent's
+    self-reported output even though verify failed; that is the bug.
+  Apply Case C at BOTH success-emit sites: the `--stage finalize` block
+  (the post-verify branch that currently calls `finalize_from_output` on
+  non-zero) and the `--stage full` post-sub-agent re-verification in
+  `_run_verify_fix` (the branch that currently calls `_forward_output`).
+  Do NOT use HEAD-vs-checkpoint as the success signal -- the verify result
+  is the gate. `millpy-merge-in-subagent.py` is this card's Edits target
+  and is implicitly read; no separate Context entry is needed. ASCII-only
+  messages.
 - **Commit:** `fix(merge-in): gate verify-fix success on post-fix verify passing`
 
 ### Card 24: Test merge-in verify-fix success gating
@@ -72,3 +81,8 @@ unaffected).
 `verify:` runs the new `test-merge-in-subagent.py`. The shell verify
 command and the sub-agent dispatch are monkeypatched; the test asserts the
 emitted JSON verdict for passing/failing post-fix verify.
+
+Ordering: Card 24 Creates `test-merge-in-subagent.py`, which the `verify:`
+`--only` flag requires on disk. mill-go runs `verify:` once at batch end
+after both cards are implemented and committed, so the file exists when
+verify runs.

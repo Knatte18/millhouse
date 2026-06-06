@@ -65,3 +65,9 @@ test file.
 `verify:` runs the new `test-wiki-client-retry.py` only -- the change is
 confined to `_dispatch`. The test stubs the socket boundary
 (`_connect_send_recv`) and `time.sleep`, so it is fast and hermetic.
+
+Ordering: Card 2 Creates `test-wiki-client-retry.py`, which the `verify:`
+`--only` flag requires on disk. mill-go runs `verify:` once at batch end
+(after all cards in the batch are implemented and committed), so the file
+is present when verify runs -- implement both cards before the batch's
+verify, never run the `--only` command against a half-built batch.

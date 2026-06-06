@@ -23,10 +23,10 @@ config key.
 
 ### Card 3: Tolerant `parse_verdict` (unfenced fallback)
 
-- **Context:**
-  - `plugins/mill/templates/review-output.schema.md`
+- **Context:** none
 - **Edits:**
   - `plugins/mill/scripts/_review_common.py`
+  - `plugins/mill/templates/review-output.schema.md`
 - **Creates:** none
 - **Deletes:** none
 - **Requirements:** In `parse_verdict`, keep the existing fenced
@@ -39,7 +39,10 @@ config key.
   unfenced verdict line yields a valid value, raise `ReviewError` with the
   existing preview message. An invalid value found in the fenced block must
   still raise as today (do not let the fallback mask an explicit bad value
-  inside a present block).
+  inside a present block). Update `review-output.schema.md`: revise the
+  "Raises `ReviewError` if: No ` ```yaml ` opening fence is found" wording
+  to document that an unfenced `verdict:` line is now tried as a fallback
+  before raising, so the doc matches the code contract.
 - **Commit:** `fix(review): tolerate unfenced verdict line in parse_verdict`
 
 ### Card 4: Skip directory refs in bulk reading
@@ -53,10 +56,13 @@ config key.
 - **Requirements:** In `_read_for_bulk`, detect `p.is_dir()` at the top and
   skip it -- emit an ASCII stderr warning and return an empty string rather
   than calling `read_text()` on a directory (which raises `PermissionError`
-  on Windows). Additionally broaden the `bulk_files` per-path exception
-  guard to catch `PermissionError` alongside the existing
-  `FileNotFoundError`, warning and continuing. A directory listed in a
-  batch's Context/Creates must not crash the holistic review.
+  on Windows). Additionally broaden the per-path exception guard to catch
+  `PermissionError` alongside the existing `FileNotFoundError` in BOTH
+  `bulk_files` AND `bulk_files_with_diff` (both have an identical
+  `except FileNotFoundError` block calling `_read_for_bulk(p)` that would
+  otherwise still crash on a directory path), warning and continuing. A
+  directory listed in a batch's Context/Creates must not crash the holistic
+  review.
 - **Commit:** `fix(review): skip directory paths in _read_for_bulk/bulk_files`
 
 ### Card 5: Large-prompt timeout override for plan holistic review
@@ -71,20 +77,28 @@ config key.
 - **Deletes:** none
 - **Requirements:** Add a pure helper to `_review_common.py` (e.g.
   `resolve_large_prompt_timeout(prompt_text, cfg, role, scope, default_timeout)`)
-  that mirrors the size-threshold logic in
-  `maybe_switch_spec_for_large_prompt` (`estimated_ktok = len(prompt_text)
-  // 4000`, `threshold_ktok` default 100 read from
-  `cfg["roles"][role][scope]["large_prompt"]`) and returns the
-  `large_prompt.timeout` value when the prompt is over threshold and the
-  key is set, else `default_timeout`. In `_review_plan.py`, where the
-  holistic reviewer is invoked (`_reviewer_single.run(holistic_spec,
-  prompt_text, timeout=holistic_timeout)` and the resume retry call), call
-  the new helper with `role="plan-review"`, `scope="holistic"` and pass the
-  resolved timeout instead of the bare `holistic_timeout`. In
-  `templates/mill-config.yaml`, document the optional
-  `roles.plan-review.holistic.large_prompt.timeout` key (commented example,
-  consistent with the existing `large_prompt` documentation) so the config
-  validator's known-key allowlist (the template) recognizes it.
+  that returns the `large_prompt.timeout` value when the prompt is over
+  threshold and the key is set, else `default_timeout`. To avoid a DRY
+  violation with `maybe_switch_spec_for_large_prompt`, extract the shared
+  size/threshold computation (`estimated_ktok = len(prompt_text) // 4000`;
+  `threshold_ktok` default 100 read from
+  `cfg["roles"][role][scope]["large_prompt"]`; the "is over threshold"
+  decision) into one small internal helper and have BOTH
+  `maybe_switch_spec_for_large_prompt` and `resolve_large_prompt_timeout`
+  call it, so the threshold formula lives in exactly one place. Do NOT
+  change the public signature/return of `maybe_switch_spec_for_large_prompt`
+  (it is also used by code-review). Wire the new helper into
+  `_review_plan.py`'s `run()` function (NOT `prepare()`, which does not
+  invoke the reviewer): at BOTH `_reviewer_single.run` holistic call sites
+  in `run()` -- the primary call (`timeout=holistic_timeout`) and the
+  resume-retry call (`session_id=..., resume=True, timeout=holistic_timeout`)
+  -- replace the bare `holistic_timeout` with the value returned by the new
+  helper called with `role="plan-review"`, `scope="holistic"`,
+  `default_timeout=holistic_timeout`. In `templates/mill-config.yaml`,
+  document the optional `roles.plan-review.holistic.large_prompt.timeout`
+  key (commented example, consistent with the existing `large_prompt`
+  documentation) so the config validator's known-key allowlist (the
+  template) recognizes it.
 - **Commit:** `feat(review): honor large_prompt.timeout for plan holistic review`
 
 ### Card 6: Tests for review-backend fixes
