@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-reviewing
+phase: holistic-fixing
 slug: mill-bg-exit-marker
 branch: hanf/mill-bg-exit-marker
 plan: _mill/plan
@@ -26,6 +26,7 @@ approved-bg-completion-detection  '2026-06-06T19:08:37Z'
 holistic-reviewing  '2026-06-06T19:09:01Z'
 holistic-fixing  '2026-06-06T19:10:34Z'
 holistic-reviewing  '2026-06-06T19:13:02Z'
+holistic-fixing  '2026-06-06T19:15:53Z'
 ```
 
 ## Batches
