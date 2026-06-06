@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-subagent-definitions
+phase: approved-impl-fix-merge-seam
 slug: subprocess-to-agents
 branch: hanf/subprocess-to-agents
 plan: _mill/plan
@@ -23,6 +23,7 @@ planned  '2026-06-06T14:06:58Z'
 implementing  '2026-06-06T14:11:58Z'
 approved-config-and-dispatch-helper  '2026-06-06T14:31:50Z'
 approved-subagent-definitions  '2026-06-06T14:39:33Z'
+approved-impl-fix-merge-seam  '2026-06-06T14:49:20Z'
 ```
 
 ## Batches
@@ -40,9 +41,10 @@ batches:
     start_sha: 250202504d01bfaed20dc9479dea878e4e2becfb
     commit_sha: 59477ff02230fc00dcdd1b483d7ed11b9b4f507d
   - name: impl-fix-merge-seam
-    state: running
+    state: approved
     implementer_session: e6026afd-a7c4-4fce-b857-a8898d99e324
     start_sha: 368f4ed0b7d19e74c5399bfa78a1d84af933a856
+    commit_sha: 5bbb34a9afe1f3879db26a80eecc1d54b3bcadf9
   - name: review-seam
     state: pending
   - name: skill-mill-go
