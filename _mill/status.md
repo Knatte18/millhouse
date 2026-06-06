@@ -47,7 +47,9 @@ batches:
     start_sha: a645601a0a728bb181d949249a864872ff186765
     commit_sha: d2e6c11137b4c829b5eaf4825345594e1d80de3c
   - name: cleanup-robustness
-    state: pending
+    state: running
+    implementer_session: 5c8a7585-3ba0-4b17-9410-743d2fef173c
+    start_sha: 421f516e7f3f5f305241384c98bc247aab3cf1b4
   - name: implementer-correctness
     state: pending
   - name: psmux-dispatch
