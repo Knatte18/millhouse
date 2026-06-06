@@ -349,10 +349,19 @@ def main() -> int:
             wiki_path.mkdir()
 
             home_tasks = [_make_task("live-slug", "active")]
+
+            # Mock list_worktrees to include in_use as a registered worktree
+            def _mock_list_352(cwd):
+                return [
+                    {"path": str(hub), "branch": "main"},
+                    {"path": str(in_use), "branch": "live-br"},
+                ]
+
             with patch("mill_cleanup._paths.resolve_container_path", return_value=container):
-                plan = build_plan(
-                    [], home_tasks, wiki_path, hub_root=hub, container_path=container
-                )
+                with patch("mill_cleanup._worktree.list_worktrees", side_effect=_mock_list_352):
+                    plan = build_plan(
+                        [], home_tasks, wiki_path, hub_root=hub, container_path=container
+                    )
 
             warn_lines = [line for line in plan.to_report if "live-slug" in line]
             assert len(warn_lines) == 1, (
