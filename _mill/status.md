@@ -28,7 +28,9 @@ implementing  '2026-06-06T14:11:58Z'
 ```yaml
 batches:
   - name: config-and-dispatch-helper
-    state: pending
+    state: running
+    implementer_session: 99d57733-aafd-41b3-8e82-f9361ea1a230
+    start_sha: bb0acec5850d24531952ce1edb11188674419a9f
   - name: subagent-definitions
     state: pending
   - name: impl-fix-merge-seam
