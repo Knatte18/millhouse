@@ -9,7 +9,7 @@ llm:
   claude:
     dispatch: agent
     psmux:
-      shell_path: "C:/Code/tools/powershell7/pwsh.exe"
+      shell_path: "${PWSH:-pwsh}"
       reuse_idle_timeout_s: 10
 pipeline:
   auto_merge: true
