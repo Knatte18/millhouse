@@ -46,7 +46,9 @@ batches:
     start_sha: 368f4ed0b7d19e74c5399bfa78a1d84af933a856
     commit_sha: 5bbb34a9afe1f3879db26a80eecc1d54b3bcadf9
   - name: review-seam
-    state: pending
+    state: running
+    implementer_session: 1aec85c6-41a5-494f-aadb-cc1f15872b39
+    start_sha: 0728a5c387e427d51fd40b5ad9cd6552ea12a7c4
   - name: skill-mill-go
     state: pending
   - name: skill-others
