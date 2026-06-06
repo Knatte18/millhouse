@@ -120,6 +120,9 @@ def check_bg_status(log_path: Path) -> tuple[str, int | None]:
     Performs exactly one status determination without looping or sleeping.
     The orchestrator owns the poll cadence.
 
+    Agent-mode dispatch (no subprocess) is the structural fix; this fallback applies
+    only to subprocess-mode workers.
+
     Resolution order (first match wins):
       (1) log file does not exist                     -> ("dead", None)
       (2) log contains [mill-bg] EXIT <code>          -> ("exit", code)
@@ -141,6 +144,12 @@ def check_bg_status(log_path: Path) -> tuple[str, int | None]:
         code = int(m.group(1))
         return ("exit", code)
     state, pid = _probe_liveness(log_path)
+    if state == "exit":
+        m = _EXIT_CODE_RE.search(text)
+        if m:
+            code = int(m.group(1))
+            return ("exit", code)
+        return ("exit", 0)
     if state == "affirmative-alive":
         return ("running", pid)
     if _has_valid_json_result(text):
