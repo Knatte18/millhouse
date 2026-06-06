@@ -53,7 +53,9 @@ batches:
     start_sha: 421f516e7f3f5f305241384c98bc247aab3cf1b4
     commit_sha: d75e895efc643fdf355ff584448d94e3268cf4bc
   - name: implementer-correctness
-    state: pending
+    state: running
+    implementer_session: 121a4df7-ae01-4b9d-b4e4-2ac9dad6bc26
+    start_sha: 9ed571747d3961cd6c9ca35ca8769083c592b1cc
   - name: psmux-dispatch
     state: pending
   - name: cache-preflight
