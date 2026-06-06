@@ -106,6 +106,10 @@ llm:
     psmux:
       shell_path: pwsh  # Shell binary passed to new_session. Use the full path if pwsh on PATH is a broken stub (e.g. C:/Code/tools/powershell7/pwsh.exe on Windows machines with App Execution Alias disabled).
       reuse_idle_timeout_s: 10  # Seconds to wait for an existing psmux session to return to its idle prompt before reuse fails
+      response_poll_timeout_s:  # Max seconds to wait for psmux Claude TUI to return to idle per mode
+        bulk: 300
+        tool-use: 600
+        implementer: 1800
 
 # ---------------------------------------------------------------------------
 # mill-go pipeline
