@@ -15,22 +15,22 @@ _STALE_LOG_SECONDS = 5 * 60
 
 
 def _has_valid_json_result(text: str) -> bool:
-	"""Check if text contains a valid JSON result as the last {-prefixed line.
+    """Check if text contains a valid JSON result as the last {-prefixed line.
 
-	Scans text in reverse for the first line where line.strip().startswith("{"),
-	attempts json.loads on that line, and returns True on success.
-	Returns False if no such line is found or if parsing raises json.JSONDecodeError.
-	Never raises.
-	"""
-	for line in reversed(text.splitlines()):
-		stripped = line.strip()
-		if stripped.startswith("{"):
-			try:
-				json.loads(stripped)
-				return True
-			except json.JSONDecodeError:
-				return False
-	return False
+    Scans text in reverse for the first line where line.strip().startswith("{"),
+    attempts json.loads on that line, and returns True on success.
+    Returns False if no such line is found or if parsing raises json.JSONDecodeError.
+    Never raises.
+    """
+    for line in reversed(text.splitlines()):
+        stripped = line.strip()
+        if stripped.startswith("{"):
+            try:
+                json.loads(stripped)
+                return True
+            except json.JSONDecodeError:
+                return False
+    return False
 
 
 def is_bg_worker_alive(log_path: Path) -> tuple[bool, int | None]:
