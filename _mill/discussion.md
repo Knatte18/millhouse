@@ -139,7 +139,12 @@ operator is removing; this task rewrites the skill spec to the batch model.
 
 - Decision: The assistant writes the consolidated proposal to
   `.scratch/ghissues-to-tasks-proposal.md`, prints a one-line summary + path,
-  and the operator replies `approve` or gives feedback. "One-shot" means **no
+  and the operator replies `approve` or gives feedback. The proposal artifact
+  must surface, per consumed issue, the **exact** close-comment string that
+  will be posted on approval — `Consolidated into wiki task: <slug>` for
+  new/grouped-task issues and `Folded into wiki task: <slug>` for fold-ins —
+  so the single approval covers the precise GitHub side effects (skipped
+  issues show no close comment — untouched). "One-shot" means **no
   per-issue prompting**, not no iteration: on rejection the operator gives
   feedback, the assistant revises the grouping and re-presents the full
   proposal, looping until `approve` or an explicit abort. Nothing is written to
@@ -196,9 +201,14 @@ below and must not modify them.
 - `wiki/_client.list_tasks_brief(wiki_path)` → `[{id, slug, title, layer,
   brief, status, has_proposal}]` — used for overlap detection (fold
   candidates) and slug-collision checks.
-- `wiki/_client.get_task(wiki_path, slug)` → full task dict incl. `body` and
-  `status`. Fold-in path: read `body`, append the `- Sources: #N — title`
-  bullet, write back; locked-phase guard reads `status`.
+- `wiki/_client.get_task(wiki_path, id_or_slug)` → full task dict incl. `body`
+  and `status`, **or `None` when the slug is unknown**. Fold-in path: call
+  `get_task`, and if it returns `None` (stale/typo'd fold target) abort that
+  fold-in with a clear error and continue the run rather than dereferencing
+  `None["status"]`; otherwise read `body`, append the `- Sources: #N — title`
+  bullet, write back; locked-phase guard reads `status`. Fold targets are
+  drawn from `list_tasks_brief`, so in normal flow the slug exists — the guard
+  is defensive against an operator-edited proposal.
 - `wiki/_client.upsert_task(wiki_path, slug, *, title, brief, body, ...)` —
   creates/updates one task; the daemon commits + pushes automatically (one
   commit per call).
