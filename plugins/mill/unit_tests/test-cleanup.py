@@ -26,6 +26,7 @@ _resolve_inplace_mode = mod._resolve_inplace_mode
 
 import _status  # noqa: E402
 import _worktree  # noqa: E402
+import _worktree  # noqa: E402
 
 
 def _make_status_md(phase: str, parent: str = "main") -> str:

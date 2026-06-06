@@ -187,10 +187,12 @@ def build_plan(
     # truncated while session holds others open), corrupting the user's session.
     _IN_USE_MARKERS = {"active", "ready-to-merge", "pr-pending"}
     if container_path is not None:
+        registered_worktrees = []
         try:
             registered_worktrees = _worktree.list_worktrees(hub_root)
-        except _worktree.WorktreeError:
-            registered_worktrees = []
+        except Exception:
+            # Silent failure: list_worktrees unavailable, fall back to empty list
+            pass
         registered_paths: set[Path] = set()
         for wt_entry in registered_worktrees:
             try:

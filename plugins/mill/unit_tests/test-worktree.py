@@ -146,10 +146,11 @@ def main() -> int:
             mock_result.stderr = "fatal: Permission denied"
             raised_locked = False
             with patch("_worktree._subprocess_util.run", return_value=mock_result):
-                try:
-                    remove_safe(path, cwd=cwd, junctions_cfg={})
-                except WorktreeLockedError:
-                    raised_locked = True
+                with patch("_worktree.kill_stale_holders"):
+                    try:
+                        remove_safe(path, cwd=cwd, junctions_cfg={})
+                    except WorktreeLockedError:
+                        raised_locked = True
             assert raised_locked, "expected WorktreeLockedError for Permission denied"
             print("PASS: remove_safe raises WorktreeLockedError on Permission denied")
 
@@ -164,10 +165,11 @@ def main() -> int:
             mock_result.stderr = "fatal: is in use"
             raised_locked = False
             with patch("_worktree._subprocess_util.run", return_value=mock_result):
-                try:
-                    remove_safe(path, cwd=cwd, junctions_cfg={})
-                except WorktreeLockedError:
-                    raised_locked = True
+                with patch("_worktree.kill_stale_holders"):
+                    try:
+                        remove_safe(path, cwd=cwd, junctions_cfg={})
+                    except WorktreeLockedError:
+                        raised_locked = True
             assert raised_locked, "expected WorktreeLockedError for is in use"
             print("PASS: remove_safe raises WorktreeLockedError on is in use")
 
@@ -183,12 +185,13 @@ def main() -> int:
             raised_base = False
             raised_locked_wrong = False
             with patch("_worktree._subprocess_util.run", return_value=mock_result):
-                try:
-                    remove_safe(path, cwd=cwd, junctions_cfg={})
-                except WorktreeLockedError:
-                    raised_locked_wrong = True
-                except WorktreeError:
-                    raised_base = True
+                with patch("_worktree.kill_stale_holders"):
+                    try:
+                        remove_safe(path, cwd=cwd, junctions_cfg={})
+                    except WorktreeLockedError:
+                        raised_locked_wrong = True
+                    except WorktreeError:
+                        raised_base = True
             assert raised_base and not raised_locked_wrong, "expected base WorktreeError (not locked) for unrecognized error"
             print("PASS: remove_safe raises WorktreeError (not locked) for unrecognized error")
 
@@ -205,10 +208,11 @@ def main() -> int:
             with patch("_worktree._subprocess_util.run", return_value=mock_result):
                 with patch("_safe_rmtree.shutil.rmtree", side_effect=PermissionError("locked")):
                     with patch("_safe_rmtree._blacklist_for", return_value=[]):
-                        try:
-                            remove_safe(path, cwd=cwd, junctions_cfg={})
-                        except WorktreeLockedError:
-                            raised_locked = True
+                        with patch("_worktree.kill_stale_holders"):
+                            try:
+                                remove_safe(path, cwd=cwd, junctions_cfg={})
+                            except WorktreeLockedError:
+                                raised_locked = True
             assert raised_locked, "expected WorktreeLockedError when rmtree fallback raises PermissionError"
             print("PASS: remove_safe raises WorktreeLockedError when rmtree fallback raises PermissionError")
 
@@ -224,11 +228,12 @@ def main() -> int:
             raised_locked = False
             locked_exc = None
             with patch("_worktree._subprocess_util.run", return_value=mock_result):
-                try:
-                    remove_safe(path, cwd=cwd, junctions_cfg={})
-                except WorktreeLockedError as exc:
-                    raised_locked = True
-                    locked_exc = exc
+                with patch("_worktree.kill_stale_holders"):
+                    try:
+                        remove_safe(path, cwd=cwd, junctions_cfg={})
+                    except WorktreeLockedError as exc:
+                        raised_locked = True
+                        locked_exc = exc
             assert raised_locked, "expected WorktreeLockedError for Invalid argument"
             assert locked_exc is not None and "Invalid argument" in str(locked_exc), (
                 f"expected 'Invalid argument' in error message: {locked_exc}"
@@ -249,7 +254,8 @@ def main() -> int:
             mock_prune.stderr = ""
             with patch("_worktree._subprocess_util.run", side_effect=[mock_result, mock_prune]):
                 with patch("_safe_rmtree._blacklist_for", return_value=[]):
-                    remove_safe(path, cwd=cwd, junctions_cfg={})
+                    with patch("_worktree.kill_stale_holders"):
+                        remove_safe(path, cwd=cwd, junctions_cfg={})
             assert not path.exists(), f"expected path to be removed by rmtree, but it still exists: {path}"
             print("PASS: remove_safe exits cleanly via rmtree fallback on 'is not a working tree' (path exists)")
 
@@ -266,10 +272,11 @@ def main() -> int:
             with patch("_worktree._subprocess_util.run", return_value=mock_result):
                 with patch("_safe_rmtree.shutil.rmtree", side_effect=PermissionError("locked")):
                     with patch("_safe_rmtree._blacklist_for", return_value=[]):
-                        try:
-                            remove_safe(path, cwd=cwd, junctions_cfg={})
-                        except WorktreeLockedError:
-                            raised_locked = True
+                        with patch("_worktree.kill_stale_holders"):
+                            try:
+                                remove_safe(path, cwd=cwd, junctions_cfg={})
+                            except WorktreeLockedError:
+                                raised_locked = True
             assert raised_locked, "expected WorktreeLockedError when rmtree raises PermissionError on 'is not a working tree'"
             print("PASS: remove_safe raises WorktreeLockedError when rmtree raises PermissionError on 'is not a working tree'")
 
@@ -285,7 +292,8 @@ def main() -> int:
             mock_prune.returncode = 1
             mock_prune.stderr = "warning: prune warning"
             with patch("_worktree._subprocess_util.run", side_effect=[mock_result, mock_prune]):
-                remove_safe(path, cwd=cwd, junctions_cfg={})
+                with patch("_worktree.kill_stale_holders"):
+                    remove_safe(path, cwd=cwd, junctions_cfg={})
             print("PASS: remove_safe exits cleanly when path absent and 'is not a working tree'")
 
         # --- processes_holding_path: only records whose cmdline references worktree ---
@@ -307,8 +315,9 @@ def main() -> int:
         with tempfile.TemporaryDirectory() as tmp:
             worktree = Path(tmp) / "MyWorktree"
             worktree.mkdir()
+            resolved_path = str(worktree.resolve()).lower()
             records = [
-                {"pid": 200, "command_line": f"bash myworktree/poll.sh"},
+                {"pid": 200, "command_line": f"bash {resolved_path}/poll.sh"},
                 {"pid": 201, "command_line": "python other.py"},
             ]
             result = processes_holding_path(worktree, records)
