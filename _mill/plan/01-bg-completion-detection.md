@@ -135,7 +135,12 @@ Batch-local decisions: none beyond `## Shared Decisions` in the overview.
   `_probe_liveness` keys on (`unittest.mock.patch.object(_bg.os, "kill", ...)` plus `os.utime`
   mtime control, in the `test_log_oserror_fallback_to_mtime` style) so they exercise the intended
   path rather than a now-inert patch. Preserve each test's asserted outcome
-  (`running`/`dead`/`exit`).
+  (`running`/`dead`/`exit`). For `test_check_bg_status_race_guard_exit_appears` specifically:
+  Card 2 collapses the two-read race (EXIT is now detected inside the single `_probe_liveness`
+  call), so the original "EXIT appears between two reads" scenario no longer exists — repoint the
+  test to assert that a probe yielding the EXIT sentinel returns `("exit", code)`, and update its
+  docstring from "re-read shows EXIT" to "probe returns exit" so it reflects what is actually
+  exercised.
 - **Commit:** `test(bg): cover JSON-sentinel completion detection for killed workers`
 
 ### Card 5: Trailing-JSON contract guard test
@@ -143,6 +148,7 @@ Batch-local decisions: none beyond `## Shared Decisions` in the overview.
 - **Context:**
   - `plugins/mill/scripts/_bg.py`
   - `plugins/mill/scripts/_implementer_common.py`
+  - `plugins/mill/scripts/_cleanliness.py`
   - `plugins/mill/scripts/millpy-review-discussion.py`
   - `plugins/mill/scripts/millpy-implement.py`
   - `plugins/mill/scripts/millpy-fix.py`
@@ -162,8 +168,9 @@ Batch-local decisions: none beyond `## Shared Decisions` in the overview.
   (2) **emitter seam guard** — drive `_implementer_common._forward_output` (and/or
   `finalize_from_output`) with a crafted agent-output string for the success and stuck branches
   and capture stdout (e.g. `contextlib.redirect_stdout`), asserting the final printed line
-  `json.loads`-es without error. Mock any git/subprocess calls the seam makes (patch the
-  `_subprocess_util` / git helper it uses) so the test stays in-memory; if a branch is
+  `json.loads`-es without error. Mock any git/subprocess calls the seam makes — patch the
+  `_subprocess_util` / git helper AND `_cleanliness` (`_forward_output` calls
+  `_cleanliness.compute_scope_violations` / `compute_new_dirt`) — so the test stays in-memory; if a branch is
   impractical to exercise without real git, fall back to a structural assertion that the seam's
   terminal output statements use `json.dumps`. The test's purpose is to fail loudly if a future
   CLI on the millpy-bg path stops emitting trailing JSON.

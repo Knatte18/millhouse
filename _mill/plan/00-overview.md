@@ -3,7 +3,7 @@
 ```yaml
 task: "Fix millpy-bg EXIT marker missing on wrapper crash"
 slug: "mill-bg-exit-marker"
-approved: false
+approved: true
 started: "20260606-185327"
 parent: "main"
 root: ""
