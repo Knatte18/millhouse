@@ -29,5 +29,7 @@ implementing  '2026-06-06T19:04:24Z'
 ```yaml
 batches:
   - name: bg-completion-detection
-    state: pending
+    state: running
+    implementer_session: 791dbf69-e6cc-495a-82bf-f51d48a50c4c
+    start_sha: adbfab97ff04cfa9162df8f310875c93bcde64b4
 ```
