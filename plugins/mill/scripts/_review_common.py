@@ -771,7 +771,13 @@ def _read_for_bulk(p: Path) -> str:
 
     On JSON parse error for .ipynb: prints warning to stderr and returns
     empty string so the file still appears in bulk output as an empty section.
+
+    If p is a directory: prints warning to stderr and returns empty string.
     """
+    if p.is_dir():
+        print(f"[_read_for_bulk] warning: {p} is a directory, skipping", file=sys.stderr)
+        return ""
+
     if p.suffix == ".ipynb":
         try:
             content = p.read_text(encoding="utf-8")
@@ -805,8 +811,8 @@ def bulk_files(file_paths: list[Path]) -> str:
     for p in file_paths:
         try:
             contents = _read_for_bulk(p)
-        except FileNotFoundError:
-            print(f"[bulk_files] warning: {p} not found, skipping", file=sys.stderr)
+        except (FileNotFoundError, PermissionError):
+            print(f"[bulk_files] warning: {p} not found or not readable, skipping", file=sys.stderr)
             continue
         parts.append(f"--- FILE: {p} ---\n{contents}\n--- END FILE: {p} ---")
     return "\n\n".join(parts)
@@ -829,8 +835,8 @@ def bulk_files_with_diff(
     for p in file_paths:
         try:
             file_content = _read_for_bulk(p)
-        except FileNotFoundError:
-            print(f"[bulk_files_with_diff] warning: {p} not found, skipping", file=sys.stderr)
+        except (FileNotFoundError, PermissionError):
+            print(f"[bulk_files_with_diff] warning: {p} not found or not readable, skipping", file=sys.stderr)
             continue
 
         try:
