@@ -27,5 +27,7 @@ implementing  '2026-06-06T19:09:32Z'
 ```yaml
 batches:
   - name: rewrite-skill
-    state: pending
+    state: running
+    implementer_session: c07ab2e8-018c-4d0c-88be-d2288514ceaf
+    start_sha: b2d990cf646300ea471a104777855eb21bdc923f
 ```
