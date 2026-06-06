@@ -11,7 +11,16 @@ HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
 import _safe_rmtree  # noqa: E402, F401
-from _worktree import WorktreeError, WorktreeLockedError, copy_millhouse, list_worktrees, remove, remove_safe  # noqa: E402
+from _worktree import (  # noqa: E402
+    WorktreeError,
+    WorktreeLockedError,
+    copy_millhouse,
+    list_worktrees,
+    remove,
+    remove_safe,
+    processes_holding_path,
+    kill_stale_holders,
+)
 
 
 def _git_init(path: Path) -> None:
@@ -278,6 +287,108 @@ def main() -> int:
             with patch("_worktree._subprocess_util.run", side_effect=[mock_result, mock_prune]):
                 remove_safe(path, cwd=cwd, junctions_cfg={})
             print("PASS: remove_safe exits cleanly when path absent and 'is not a working tree'")
+
+        # --- processes_holding_path: only records whose cmdline references worktree ---
+        with tempfile.TemporaryDirectory() as tmp:
+            worktree = Path(tmp) / "my-worktree"
+            worktree.mkdir()
+            records = [
+                {"pid": 100, "command_line": "bash /path/to/script.sh"},
+                {"pid": 101, "command_line": f"python -c 'poll {worktree}/file'"},
+                {"pid": 102, "command_line": "python other.py"},
+                {"pid": 103, "command_line": None},
+                {"pid": 104, "command_line": ""},
+            ]
+            result = processes_holding_path(worktree, records)
+            assert result == [101], f"Expected [101], got {result}"
+            print("PASS: processes_holding_path — only records with worktree in cmdline returned")
+
+        # --- processes_holding_path: case-insensitive match ---
+        with tempfile.TemporaryDirectory() as tmp:
+            worktree = Path(tmp) / "MyWorktree"
+            worktree.mkdir()
+            records = [
+                {"pid": 200, "command_line": f"bash myworktree/poll.sh"},
+                {"pid": 201, "command_line": "python other.py"},
+            ]
+            result = processes_holding_path(worktree, records)
+            assert result == [200], f"Expected [200] for case-insensitive match, got {result}"
+            print("PASS: processes_holding_path — case-insensitive path matching")
+
+        # --- processes_holding_path: empty cmdline dict key is skipped ---
+        with tempfile.TemporaryDirectory() as tmp:
+            worktree = Path(tmp) / "wt"
+            worktree.mkdir()
+            records = [
+                {"pid": 300},  # missing command_line key
+                {"pid": 301, "command_line": f"bash {worktree}/poll"},
+            ]
+            result = processes_holding_path(worktree, records)
+            assert result == [301], f"Expected [301], got {result}"
+            print("PASS: processes_holding_path — missing command_line key handled")
+
+        # --- kill_stale_holders: calls enumerator and taskkill for matching pids ---
+        with tempfile.TemporaryDirectory() as tmp:
+            worktree = Path(tmp) / "wt"
+            worktree.mkdir()
+            enumerated_records = [
+                {"pid": 400, "command_line": f"poll {worktree}/file"},
+                {"pid": 401, "command_line": "other process"},
+            ]
+            kill_calls = []
+
+            def _fake_enumerate():
+                return enumerated_records
+
+            def _fake_run(argv, **kwargs):
+                if "taskkill" in argv:
+                    kill_calls.append(argv)
+                return MagicMock(returncode=0, stdout="", stderr="")
+
+            with patch("_worktree._subprocess_util.run", side_effect=_fake_run):
+                kill_stale_holders(worktree, enumerate_processes=_fake_enumerate)
+
+            taskkill_calls = [c for c in kill_calls if "taskkill" in c]
+            assert len(taskkill_calls) == 1, f"Expected 1 taskkill call, got {len(taskkill_calls)}"
+            assert "400" in taskkill_calls[0], f"Expected pid 400 in taskkill call, got {taskkill_calls[0]}"
+            print("PASS: kill_stale_holders — enumerator called, matching pid taskkilled")
+
+        # --- kill_stale_holders: enumerator error is swallowed ---
+        with tempfile.TemporaryDirectory() as tmp:
+            worktree = Path(tmp) / "wt"
+            worktree.mkdir()
+
+            def _bad_enumerate():
+                raise RuntimeError("enumeration failed")
+
+            try:
+                kill_stale_holders(worktree, enumerate_processes=_bad_enumerate)
+            except RuntimeError:
+                raise AssertionError("kill_stale_holders must swallow enumerator exceptions")
+            print("PASS: kill_stale_holders — enumerator exceptions swallowed")
+
+        # --- kill_stale_holders: taskkill error is swallowed ---
+        with tempfile.TemporaryDirectory() as tmp:
+            worktree = Path(tmp) / "wt"
+            worktree.mkdir()
+            enumerated_records = [
+                {"pid": 500, "command_line": f"poll {worktree}"},
+            ]
+
+            def _fake_enumerate_500():
+                return enumerated_records
+
+            def _fake_run_error(argv, **kwargs):
+                if "taskkill" in argv:
+                    raise OSError("taskkill failed")
+                return MagicMock(returncode=0, stdout="", stderr="")
+
+            try:
+                with patch("_worktree._subprocess_util.run", side_effect=_fake_run_error):
+                    kill_stale_holders(worktree, enumerate_processes=_fake_enumerate_500)
+            except OSError:
+                raise AssertionError("kill_stale_holders must swallow taskkill exceptions")
+            print("PASS: kill_stale_holders — taskkill exceptions swallowed")
 
         print("All _worktree unit tests passed.")
         return 0
