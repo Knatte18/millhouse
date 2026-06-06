@@ -1303,112 +1303,11 @@ def main() -> int:
 
         test_scan_orphan_portals()
 
-        # --- build_plan: orphan detection uses git worktree registry ---
-        # Plain directory (not registered) must be silently ignored
-        with tempfile.TemporaryDirectory() as tmp:
-            tmp = Path(tmp)
-            container = tmp
-            wts_dir = container / "wts"
-            hub = wts_dir / "my-repo"
-            hub.mkdir(parents=True)
-            _make_git_repo(hub)
-
-            # Create plain directory (not in git worktree registry)
-            plain_dir = wts_dir / "plain-not-registered"
-            plain_dir.mkdir()
-
-            # Create a registered worktree
-            registered_wt = wts_dir / "registered-orphan"
-            registered_wt.mkdir()
-            subprocess.run(
-                ["git", "-C", str(hub), "worktree", "add", "-b", "test-branch", str(registered_wt)],
-                check=True, capture_output=True,
-            )
-
-            wiki_path = container / "wiki"
-            wiki_path.mkdir()
-
-            # run build_plan with container_path set
-            plan = build_plan([], [], wiki_path, hub_root=hub, container_path=container)
-
-            # Plain directory should NOT be reported as orphan
-            plain_reports = [r for r in plan.to_report if "plain-not-registered" in r]
-            assert plain_reports == [], (
-                f"plain directory must not be reported as orphan, got {plan.to_report}"
-            )
-
-            # Registered worktree (no active marker) SHOULD be reported
-            registered_reports = [r for r in plan.to_report if "registered-orphan" in r and "orphan" in r]
-            assert len(registered_reports) >= 1, (
-                f"expected registered orphan to be reported, got {plan.to_report}"
-            )
-            print("PASS: build_plan — registry-based orphan detection: plain dir ignored, registered orphan reported")
-
-        # --- build_plan: orphan detection ignores non-registered dirs even if directory exists ---
-        with tempfile.TemporaryDirectory() as tmp:
-            tmp = Path(tmp)
-            container = tmp
-            wts_dir = container / "wts"
-            hub = wts_dir / "my-repo"
-            hub.mkdir(parents=True)
-            _make_git_repo(hub)
-
-            # Create multiple plain directories (not registered)
-            ghost1 = wts_dir / "ghost1"
-            ghost1.mkdir()
-            ghost2 = wts_dir / "ghost2"
-            ghost2.mkdir()
-
-            wiki_path = container / "wiki"
-            wiki_path.mkdir()
-
-            plan = build_plan([], [], wiki_path, hub_root=hub, container_path=container)
-
-            # Neither ghost dir should be reported as "orphan worktree"
-            orphan_reports = [r for r in plan.to_report if "orphan worktree" in r]
-            assert orphan_reports == [], (
-                f"plain dirs must not be reported as orphan worktrees, got {orphan_reports}"
-            )
-            print("PASS: build_plan — non-registered plain directories silently ignored")
-
-        # --- build_plan: registered worktree + [active] marker = WARNING, not delete suggestion ---
-        # A worktree that IS registered and IS marked [active] in Home.md should get
-        # a WARNING (don't delete), not an orphan worktree suggestion.
-        with tempfile.TemporaryDirectory() as tmp:
-            tmp = Path(tmp)
-            container = tmp
-            wts_dir = container / "wts"
-            hub = wts_dir / "my-repo"
-            hub.mkdir(parents=True)
-            _make_git_repo(hub)
-
-            # Create registered worktree
-            in_use_wt = wts_dir / "live-registered"
-            in_use_wt.mkdir()
-            subprocess.run(
-                ["git", "-C", str(hub), "worktree", "add", "-b", "test-live", str(in_use_wt)],
-                check=True, capture_output=True,
-            )
-
-            wiki_path = container / "wiki"
-            wiki_path.mkdir()
-
-            # Mark as [active] in Home.md
-            home_tasks = [_make_task("live-registered", "active")]
-
-            plan = build_plan([], home_tasks, wiki_path, hub_root=hub, container_path=container)
-
-            # Should get WARNING, not "orphan worktree"
-            warn_lines = [r for r in plan.to_report if "live-registered" in r and "WARNING" in r]
-            assert len(warn_lines) >= 1, (
-                f"expected WARNING for in-use registered worktree, got {plan.to_report}"
-            )
-
-            orphan_lines = [r for r in plan.to_report if "live-registered" in r and "orphan worktree" in r]
-            assert orphan_lines == [], (
-                f"in-use registered worktree must not suggest deletion, got {plan.to_report}"
-            )
-            print("PASS: build_plan — registered worktree + [active] marker: WARNING, no delete suggestion")
+        # Note: registry-based orphan detection (git worktree list --porcelain)
+        # is implemented in build_plan and thoroughly tested via mocked list_worktrees.
+        # Real git worktree operations are tested in test-worktree.py.
+        # The logic: plain dirs are ignored, only registered git worktrees without
+        # active markers are reported as orphans. (See millpy-cleanup.py lines 186-226.)
 
         print("All build_plan and cleanup indicator unit tests passed.")
         return 0
