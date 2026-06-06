@@ -179,6 +179,8 @@ def main(argv=None) -> int:
                 text=True,
                 cwd=project_root,
             )
+            # Case A: verify passes with no fixer needed (initial verify was 0)
+            # Case B: fixer ran, post-fix verify passes
             if post_verify_result.returncode == 0:
                 sha_result = _subprocess_util.run(
                     ["git", "rev-parse", "HEAD"],
@@ -187,6 +189,10 @@ def main(argv=None) -> int:
                 sha = sha_result.stdout.strip() if sha_result.returncode == 0 else ""
                 print(json.dumps({"status": "success", "commit_sha": sha}))
                 return 0
+            # Case C: fixer ran, post-fix verify still fails
+            verify_output = (post_verify_result.stdout + post_verify_result.stderr).strip()
+            print(json.dumps({"status": "stuck", "stuck_type": "verify", "reason": verify_output}))
+            return 0
         return finalize_from_output(
             Path(args.agent_output),
             project_root,
@@ -338,6 +344,7 @@ def _run_verify_fix(args, project_root: Path, plugin_root: Path, cfg: dict, time
         cwd=project_root,
     )
 
+    # Case B: fixer ran, post-fix verify passes
     if post_verify_result.returncode == 0:
         sha_result = _subprocess_util.run(
             ["git", "rev-parse", "HEAD"],
@@ -347,7 +354,10 @@ def _run_verify_fix(args, project_root: Path, plugin_root: Path, cfg: dict, time
         print(json.dumps({"status": "success", "commit_sha": sha}))
         return 0
 
-    return _forward_output(output, project_root)
+    # Case C: fixer ran, post-fix verify still fails
+    verify_output = (post_verify_result.stdout + post_verify_result.stderr).strip()
+    print(json.dumps({"status": "stuck", "stuck_type": "verify", "reason": verify_output}))
+    return 0
 
 
 if __name__ == "__main__":
