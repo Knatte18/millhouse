@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-fixing
+phase: holistic-approved
 slug: millpy-bg-and-implement-fixes
 branch: hanf/millpy-bg-and-implement-fixes
 plan: _mill/plan
@@ -27,6 +27,7 @@ approved-psmux-timeout-config  '2026-06-04T17:40:33Z'
 approved-mill-go-skill-update  '2026-06-04T17:51:32Z'
 holistic-reviewing  '2026-06-04T17:52:01Z'
 holistic-fixing  '2026-06-06T12:58:03Z'
+holistic-approved  '2026-06-06T13:05:58Z'
 ```
 
 ## Batches
