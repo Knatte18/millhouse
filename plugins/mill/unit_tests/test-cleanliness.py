@@ -177,9 +177,9 @@ def main() -> int:
     # CV-2. compute_scope_violations: untracked file at root returned
     try:
         with tempfile.TemporaryDirectory() as tmp:
-            with unittest.mock.patch("_cleanliness._pygit2_util.status_porcelain", return_value=["?? plugins_mill_scripts_foo.py"]):
+            with unittest.mock.patch("_cleanliness._pygit2_util.status_porcelain", return_value=["?? plugins/mill/scripts/foo.py"]):
                 result = compute_scope_violations(Path(tmp))
-            assert result == ["plugins_mill_scripts_foo.py"], f"expected ['plugins_mill_scripts_foo.py'], got {result!r}"
+            assert result == ["plugins/mill/scripts/foo.py"], f"expected ['plugins/mill/scripts/foo.py'], got {result!r}"
         print("PASS: compute_scope_violations: untracked at root -> path returned")
     except AssertionError as exc:
         failures.append(f"FAIL: compute_scope_violations untracked root: {exc}")
