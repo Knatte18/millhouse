@@ -108,7 +108,7 @@ def _get_via_psmux_flag() -> bool:
         import _config
 
         git_root = _paths.resolve_git_root(Path.cwd())
-        cfg = _config.load_config(_paths.resolve_hub_path(), _paths.resolve_hub_path())
+        cfg = _config.load_config(_paths.resolve_hub_path(), git_root)
         mode = _agent_dispatch.resolve_dispatch_mode(cfg)
         return mode == "psmux"
     except (Exception, SystemExit):
