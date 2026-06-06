@@ -192,23 +192,22 @@ class TestCheckBgStatus(unittest.TestCase):
             self.assertEqual(code_or_pid, 0)
 
     def test_check_bg_status_running(self) -> None:
-        """Worker alive, no EXIT -> ('running', pid)."""
+        """Worker affirmatively alive, no EXIT -> ('running', pid)."""
         with tempfile.TemporaryDirectory() as tmp_str:
             log_path = Path(tmp_str) / "test.log"
-            pid_value = 12345
+            pid_value = os.getpid()
             log_path.write_text(
                 f"[mill-bg] WORKER PID={pid_value} START 2026-05-17T15:00:00Z\n"
                 "some output\n",
                 encoding="utf-8",
             )
-            # Mock is_bg_worker_alive to report alive
-            with unittest.mock.patch.object(_bg, "is_bg_worker_alive", return_value=(True, pid_value)):
-                status, code_or_pid = _bg.check_bg_status(log_path)
-                self.assertEqual(status, "running")
-                self.assertEqual(code_or_pid, pid_value)
+            # os.kill will succeed for current process; no mocking needed
+            status, code_or_pid = _bg.check_bg_status(log_path)
+            self.assertEqual(status, "running")
+            self.assertEqual(code_or_pid, pid_value)
 
     def test_check_bg_status_dead_no_exit(self) -> None:
-        """Worker dead, no EXIT, re-read still no EXIT -> ('dead', pid)."""
+        """Worker dead (stale mtime), no EXIT -> ('dead', pid)."""
         with tempfile.TemporaryDirectory() as tmp_str:
             log_path = Path(tmp_str) / "test.log"
             pid_value = 99999999
@@ -217,37 +216,102 @@ class TestCheckBgStatus(unittest.TestCase):
                 "some output\n",
                 encoding="utf-8",
             )
-            # Mock is_bg_worker_alive to report dead
-            with unittest.mock.patch.object(_bg, "is_bg_worker_alive", return_value=(False, pid_value)):
+            # Backdate mtime so probe reports dead
+            old_ts = time.time() - (_bg._STALE_LOG_SECONDS + 60)
+            os.utime(log_path, (old_ts, old_ts))
+            # Mock os.kill to raise OSError (Windows EINVAL shape)
+            with unittest.mock.patch.object(_bg.os, "kill", side_effect=OSError(22, "Invalid parameter")):
                 status, code_or_pid = _bg.check_bg_status(log_path)
                 self.assertEqual(status, "dead")
                 self.assertEqual(code_or_pid, pid_value)
 
     def test_check_bg_status_race_guard_exit_appears(self) -> None:
-        """Race guard: worker dead, re-read shows EXIT -> ('exit', 0) not ('dead', pid)."""
+        """Probe returns exit sentinel -> ('exit', code) is returned."""
         with tempfile.TemporaryDirectory() as tmp_str:
             log_path = Path(tmp_str) / "test.log"
             pid_value = 12345
             log_path.write_text(
                 f"[mill-bg] WORKER PID={pid_value} START 2026-05-17T15:00:00Z\n"
+                "some output\n"
+                "[mill-bg] EXIT 42\n",
+                encoding="utf-8",
+            )
+            status, code_or_pid = _bg.check_bg_status(log_path)
+            self.assertEqual(status, "exit")
+            self.assertEqual(code_or_pid, 42)
+
+
+    def test_check_bg_status_json_sentinel_completion_with_assumed_alive(self) -> None:
+        """Regression test for #420/#424: log with valid trailing JSON + fresh mtime + inconclusive kill probe.
+
+        When a worker finishes and emits JSON but is hard-killed before writing EXIT,
+        the probe reports assumed-alive (kill inconclusive + fresh mtime), but the JSON
+        sentinel must override it to report completion on this poll.
+        """
+        with tempfile.TemporaryDirectory() as tmp_str:
+            log_path = Path(tmp_str) / "test.log"
+            pid_value = 99999999
+            log_path.write_text(
+                f"[mill-bg] WORKER PID={pid_value} START 2026-05-17T15:00:00Z\n"
+                "some worker output\n"
+                '{"type": "discussion", "round": 1, "verdict": "GAPS_FOUND"}\n',
+                encoding="utf-8",
+            )
+            # Fresh mtime + os.kill raises OSError -> probe will report assumed-alive
+            with unittest.mock.patch.object(_bg.os, "kill", side_effect=OSError(22, "Invalid parameter")):
+                status, code_or_pid = _bg.check_bg_status(log_path)
+                self.assertEqual(status, "exit")
+                self.assertEqual(code_or_pid, 0)
+
+    def test_check_bg_status_affirmatively_alive_not_false_completed(self) -> None:
+        """Affirmatively-alive process with mid-stream JSON is still running."""
+        with tempfile.TemporaryDirectory() as tmp_str:
+            log_path = Path(tmp_str) / "test.log"
+            pid_value = os.getpid()  # Use current process (alive)
+            log_path.write_text(
+                f"[mill-bg] WORKER PID={pid_value} START 2026-05-17T15:00:00Z\n"
+                '{"partial": "output"}\n'
+                "continuing to run\n",
+                encoding="utf-8",
+            )
+            status, code_or_pid = _bg.check_bg_status(log_path)
+            self.assertEqual(status, "running")
+            self.assertEqual(code_or_pid, pid_value)
+
+    def test_check_bg_status_killed_before_json_fresh_mtime(self) -> None:
+        """Dead PID, no EXIT, no JSON, fresh mtime -> ('running', pid)."""
+        with tempfile.TemporaryDirectory() as tmp_str:
+            log_path = Path(tmp_str) / "test.log"
+            pid_value = 99999999
+            log_path.write_text(
+                f"[mill-bg] WORKER PID={pid_value} START 2026-05-17T15:00:00Z\n"
                 "some output\n",
                 encoding="utf-8",
             )
-            call_count = [0]
+            # Fresh mtime + inconclusive kill -> assumed-alive -> running
+            with unittest.mock.patch.object(_bg.os, "kill", side_effect=OSError(22, "Invalid parameter")):
+                status, code_or_pid = _bg.check_bg_status(log_path)
+                self.assertEqual(status, "running")
+                self.assertEqual(code_or_pid, pid_value)
 
-            def read_text_side_effect(self, *args, **kwargs):
-                """On first call (from check_bg_status initial read), no EXIT. On re-read (race guard), EXIT present."""
-                call_count[0] += 1
-                if call_count[0] == 1:
-                    return f"[mill-bg] WORKER PID={pid_value} START 2026-05-17T15:00:00Z\nsome output\n"
-                else:
-                    return f"[mill-bg] WORKER PID={pid_value} START 2026-05-17T15:00:00Z\nsome output\n[mill-bg] EXIT 0\n"
-
-            with unittest.mock.patch.object(_bg, "is_bg_worker_alive", return_value=(False, pid_value)):
-                with unittest.mock.patch.object(Path, "read_text", read_text_side_effect):
-                    status, code_or_pid = _bg.check_bg_status(log_path)
-                    self.assertEqual(status, "exit")
-                    self.assertEqual(code_or_pid, 0)
+    def test_check_bg_status_killed_before_json_stale_mtime(self) -> None:
+        """Dead PID, no EXIT, no JSON, stale mtime -> ('dead', pid)."""
+        with tempfile.TemporaryDirectory() as tmp_str:
+            log_path = Path(tmp_str) / "test.log"
+            pid_value = 99999999
+            log_path.write_text(
+                f"[mill-bg] WORKER PID={pid_value} START 2026-05-17T15:00:00Z\n"
+                "some output\n",
+                encoding="utf-8",
+            )
+            # Backdate mtime so probe reports dead
+            old_ts = time.time() - (_bg._STALE_LOG_SECONDS + 60)
+            os.utime(log_path, (old_ts, old_ts))
+            # Inconclusive kill with stale mtime -> dead
+            with unittest.mock.patch.object(_bg.os, "kill", side_effect=OSError(22, "Invalid parameter")):
+                status, code_or_pid = _bg.check_bg_status(log_path)
+                self.assertEqual(status, "dead")
+                self.assertEqual(code_or_pid, pid_value)
 
 
 class TestCheckBgStatusJsonFallback(unittest.TestCase):
