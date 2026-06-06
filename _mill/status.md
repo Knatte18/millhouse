@@ -41,7 +41,9 @@ batches:
     start_sha: a1e7e4c40fb16f0f8cc50d455642be8de643e81a
     commit_sha: 91761f63e0c7ab6c526ad384d1fc869180ea3715
   - name: plan-verify-language-aware
-    state: pending
+    state: running
+    implementer_session: 9dc82215-b34d-4524-99f9-4842aa163686
+    start_sha: a645601a0a728bb181d949249a864872ff186765
   - name: cleanup-robustness
     state: pending
   - name: implementer-correctness
