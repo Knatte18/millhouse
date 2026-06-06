@@ -481,6 +481,74 @@ class TestMillpyFix(unittest.TestCase):
         self.assertIn("start_sha", captured_kwargs, "start_sha must be passed to _forward_output")
         self.assertEqual(captured_kwargs["start_sha"], known_sha, f"expected start_sha={known_sha}, got {captured_kwargs.get('start_sha')}")
 
+    def test_stage_prepare_batch_scope(self):
+        """--stage prepare batch scope: renders brief, calls emit_prepare, no LLM call."""
+        with unittest.mock.patch.object(millpy_fix._render, "render", return_value="Brief text"):
+            with unittest.mock.patch.object(
+                millpy_fix._implementer_claude, "run"
+            ) as mock_run:
+                rc, out = self._run_main([
+                    "--scope", "batch",
+                    "--batch-name", "test-batch",
+                    "--review-file", str(self.review_file),
+                    "--stage", "prepare",
+                ])
+
+        self.assertEqual(rc, 0)
+        # LLM should not be called in prepare stage
+        mock_run.assert_not_called()
+        # Output should be prepare JSON envelope
+        data = json.loads(out.strip())
+        self.assertEqual(data["stage"], "prepare")
+        self.assertEqual(data["role"], "fix")
+        self.assertEqual(data["scope"], "test-batch")
+
+    def test_stage_prepare_holistic_scope(self):
+        """--stage prepare holistic scope: renders brief, calls emit_prepare, no LLM call."""
+        with unittest.mock.patch.object(millpy_fix._render, "render", return_value="Brief text"):
+            with unittest.mock.patch.object(
+                millpy_fix._implementer_claude, "run"
+            ) as mock_run:
+                rc, out = self._run_main([
+                    "--scope", "holistic",
+                    "--review-file", str(self.review_file),
+                    "--stage", "prepare",
+                ])
+
+        self.assertEqual(rc, 0)
+        # LLM should not be called in prepare stage
+        mock_run.assert_not_called()
+        # Output should be prepare JSON envelope with holistic scope
+        data = json.loads(out.strip())
+        self.assertEqual(data["stage"], "prepare")
+        self.assertEqual(data["scope"], "holistic")
+
+    def test_stage_finalize_reads_agent_output(self):
+        """--stage finalize: reads agent output file, calls finalize_from_output."""
+        agent_output_path = self.tmp_path / "agent-output.txt"
+        agent_output_path.write_text(
+            '{"status":"success","commit_sha":"xyz","session_id":"fake"}\n',
+            encoding="utf-8"
+        )
+
+        with unittest.mock.patch.object(
+            millpy_fix._implementer_claude, "run"
+        ) as mock_run:
+            rc, out = self._run_main([
+                "--scope", "batch",
+                "--batch-name", "test-batch",
+                "--review-file", str(self.review_file),
+                "--stage", "finalize",
+                "--agent-output", str(agent_output_path),
+            ])
+
+        self.assertEqual(rc, 0)
+        # LLM should not be called in finalize stage
+        mock_run.assert_not_called()
+        # Output should be the agent output processed by _forward_output
+        data = json.loads(out.strip())
+        self.assertEqual(data["status"], "success")
+
 
 class TestMillpyFixBriefSizeGuard(unittest.TestCase):
 

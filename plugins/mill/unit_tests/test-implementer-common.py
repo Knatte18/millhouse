@@ -13,7 +13,7 @@ from pathlib import Path
 HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
-from _implementer_common import _forward_output  # noqa: E402
+from _implementer_common import _forward_output, emit_prepare, emit_prepare_no_dispatch, finalize_from_output  # noqa: E402
 import _cleanliness  # noqa: E402
 
 
@@ -390,6 +390,103 @@ def main() -> int:
             print("PASS: no-snapshot, HEAD advanced but dirty tree -> stuck/logic")
         except Exception as exc:
             print(f"FAIL: case 11 ({exc}) captured={captured!r}", file=sys.stderr)
+            errors += 1
+
+    # Case 12: emit_prepare writes brief and prints prepare JSON
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        briefs_dir = Path(tmpdir) / "briefs"
+        prompt_text = "This is the prompt\n\ndetailed instructions"
+        try:
+            rc, captured = _capture_stdout(
+                lambda: emit_prepare(
+                    briefs_dir,
+                    "implement",
+                    "batch-1",
+                    1,
+                    prompt_text,
+                    "sonnet",
+                    "session-123",
+                )
+            )
+            assert rc == 0, f"expected rc=0, got {rc}"
+            brief_path = briefs_dir / "implement-batch-1-r1.md"
+            assert brief_path.exists(), f"expected brief file at {brief_path}"
+            assert brief_path.read_text(encoding="utf-8") == prompt_text, "brief content mismatch"
+            data = json.loads(captured.strip())
+            assert data["stage"] == "prepare", f"expected stage=prepare, got {data}"
+            assert data["subagent_type"] == "mill-implementer", f"expected mill-implementer, got {data}"
+            assert data["model"] == "sonnet", f"expected model=sonnet, got {data}"
+            assert data["role"] == "implement", f"expected role=implement, got {data}"
+            assert data["scope"] == "batch-1", f"expected scope=batch-1, got {data}"
+            assert data["round"] == 1, f"expected round=1, got {data}"
+            print("PASS: emit_prepare writes brief and prints prepare JSON")
+        except Exception as exc:
+            print(f"FAIL: case 12 ({exc}) captured={captured!r}", file=sys.stderr)
+            errors += 1
+
+    # Case 13: finalize_from_output reads agent output and delegates to _forward_output
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        base_sha = _setup_fixture(project_root)
+        snapshot_path = project_root / "_mill" / ".cleanliness-snapshot-test.txt"
+        _cleanliness.capture_snapshot(project_root, snapshot_path)
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "--allow-empty", "-m", "second"],
+            check=True, capture_output=True,
+        )
+        new_head = subprocess.run(
+            ["git", "-C", str(project_root), "rev-parse", "HEAD"],
+            check=True, capture_output=True, text=True,
+        ).stdout.strip()
+        agent_output_path = project_root / "_mill" / "agent-output.txt"
+        agent_output_path.write_text("garbage output", encoding="utf-8")
+        try:
+            rc, captured = _capture_stdout(
+                lambda: finalize_from_output(
+                    agent_output_path,
+                    project_root,
+                    start_sha=base_sha,
+                    snapshot_path=snapshot_path,
+                    session_id="test-session",
+                )
+            )
+            assert rc == 0, f"expected rc=0, got {rc}"
+            data = json.loads(captured.strip())
+            assert data["status"] == "success", f"expected status=success, got {data}"
+            assert data["commit_sha"] == new_head, f"expected commit_sha={new_head}, got {data}"
+            assert data["session_id"] == "test-session", f"expected session_id=test-session, got {data}"
+            print("PASS: finalize_from_output reads agent output and produces success envelope")
+        except Exception as exc:
+            print(f"FAIL: case 13 ({exc}) captured={captured!r}", file=sys.stderr)
+            errors += 1
+
+    # Case 14: emit_prepare_no_dispatch prints prepare with dispatch_needed:false
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        _setup_fixture(project_root)
+        try:
+            rc, captured = _capture_stdout(
+                lambda: emit_prepare_no_dispatch(
+                    "haiku",
+                    "session-456",
+                    "merge",
+                    "verify-fix",
+                    1,
+                    project_root,
+                )
+            )
+            assert rc == 0, f"expected rc=0, got {rc}"
+            data = json.loads(captured.strip())
+            assert data["stage"] == "prepare", f"expected stage=prepare, got {data}"
+            assert data["dispatch_needed"] is False, f"expected dispatch_needed=False, got {data}"
+            assert data["role"] == "merge", f"expected role=merge, got {data}"
+            assert data["scope"] == "verify-fix", f"expected scope=verify-fix, got {data}"
+            assert "envelope" in data, f"expected envelope key in {data}"
+            assert data["envelope"]["status"] == "success", f"expected envelope.status=success, got {data}"
+            print("PASS: emit_prepare_no_dispatch prints prepare with dispatch_needed:false and embedded envelope")
+        except Exception as exc:
+            print(f"FAIL: case 14 ({exc}) captured={captured!r}", file=sys.stderr)
             errors += 1
 
     if errors:
