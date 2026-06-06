@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: discussion-fix-r4
 slug: subprocess-to-agents
 branch: hanf/subprocess-to-agents
 plan: null
@@ -15,4 +15,5 @@ task_description: |
 
 ```text
 discussing  '2026-06-06T12:30:32Z'
+discussion-fix-r4  '2026-06-06T13:39:13Z'
 ```

@@ -244,6 +244,9 @@ Python package. No new pip dependency is added.
     `cfg["roles"]["<role>"]["<scope>"]["reviewer"]`, then
     `_reviewers.resolve(registry, reviewer_name)`, then apply
     `maybe_switch_spec_for_large_prompt` exactly as the backend does today.
+    That switch is computed from the rendered prompt size and fires for
+    **holistic** reviews only (not batch), so `prepare` must render the brief
+    before finalizing the reviewer model.
   - merge sub-agent: `cfg["merge"]["model"]` (fallback `roles.implementer.model`,
     default `haiku`), then `_reviewers.resolve(registry, model_name)`.
 - Rationale: The Agent tool cannot set effort; model selection is still
