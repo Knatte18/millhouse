@@ -44,7 +44,9 @@ Python package. No new pip dependency is added.
 
 - Add a new dispatch mode selected by config: `llm.claude.dispatch:
   subprocess | psmux | agent` (single enum, default `subprocess`). This
-  **supersedes** the existing `llm.claude.psmux.via_psmux` boolean.
+  replaces the `llm.claude.psmux.via_psmux` boolean, with a one-release
+  back-compat shim that maps legacy `via_psmux: true` -> `dispatch: psmux`
+  (see Decisions / dispatch-config-flag for the exact migration rule).
 - For every Claude LLM dispatch site, add an **agent-mode** code path that the
   orchestrator SKILL drives as: `prepare` (Python) -> Agent tool (in-session)
   -> `finalize` (Python). The dispatch sites are:
@@ -71,7 +73,8 @@ Python package. No new pip dependency is added.
   branch on the dispatch mode: in `agent` mode use the Agent tool flow; in
   `subprocess`/`psmux` mode use the existing `millpy-bg` flow unchanged.
 - Config plumbing: template `mill-config.yaml` + hub config + `_config`
-  validation updated for the `dispatch` enum; remove/retire `via_psmux`.
+  validation updated for the `dispatch` enum; remove `via_psmux` from the
+  config files and add the back-compat shim + deprecation warning in `_config`.
 
 **Out:**
 
@@ -109,14 +112,24 @@ Python package. No new pip dependency is added.
 ### dispatch-config-flag
 
 - Decision: Single enum `llm.claude.dispatch: subprocess | psmux | agent`
-  (default `subprocess`), superseding the `llm.claude.psmux.via_psmux` boolean.
-  The psmux sub-keys (`shell_path`, `reuse_idle_timeout_s`) remain in their
-  block and apply only when `dispatch: psmux`. `agent` is valid only for the
-  Claude provider.
-- Rationale: One knob, no contradictory boolean combinations (the
-  `via_psmux + via_agent` pair could disagree and need precedence rules).
-- Rejected: Parallel `via_agent` boolean beside `via_psmux` -- smaller config
-  diff but ambiguous when both are true.
+  (default `subprocess`). The psmux sub-keys (`shell_path`,
+  `reuse_idle_timeout_s`) remain in their block and apply only when
+  `dispatch: psmux`. `agent` is valid only for the Claude provider (for any
+  non-Claude provider it is an error caught by `_config` validation).
+- Migration rule (definitive -- resolves the "remove vs map" ambiguity):
+  `llm.claude.psmux.via_psmux` is **removed** from the template and hub
+  `mill-config.yaml`. For one release, `_config.load_config` keeps a back-compat
+  shim: if `dispatch` is **absent** and a legacy `via_psmux: true` is present,
+  it maps to `dispatch: psmux` and emits a one-line deprecation warning;
+  `via_psmux: false`/absent maps to `dispatch: subprocess`. When `dispatch` is
+  present it always wins and any stray `via_psmux` is ignored with the same
+  deprecation warning (it does NOT trip the unknown-key error -- it is a known,
+  deprecated key). The shim is removed in a later cleanup task.
+- Rationale: One knob, no contradictory boolean combinations; the shim keeps
+  existing hubs that still carry `via_psmux: true` working without edits.
+- Rejected: Parallel `via_agent` boolean beside `via_psmux` (ambiguous when both
+  true); hard-removing `via_psmux` with no shim (silently changes behavior for
+  hubs that relied on it).
 
 ### prepare-finalize-split
 
@@ -138,12 +151,25 @@ Python package. No new pip dependency is added.
 ### brief-file-lifecycle
 
 - Decision: The rendered role brief is written to a **git-tracked** file under
-  `_mill/` (e.g. `_mill/briefs/<role>-<identifier>.md`) and committed as part
-  of the existing atomic pre-commit. The Agent-tool prompt references this path.
-- Rationale: Easy to follow what each sub-agent was told; if the session
-  crashes mid-dispatch the brief is already on disk and reusable on resume.
-- Rejected: Gitignored/ephemeral scratch brief -- harder to audit and not
-  recoverable after a crash.
+  `_mill/briefs/` and committed as part of the existing atomic pre-commit. The
+  Agent-tool prompt references this path.
+- Identifier scheme: `_mill/briefs/<role>-<scope>-r<round>.md`, where `role` is
+  the dispatch site (`implement`, `review-code`, `review-plan`,
+  `review-discussion`, `fix`, `merge`), `scope` is the batch name for
+  per-batch roles (implementer/code-review/fix), the review scope (`holistic`)
+  for holistic reviews, or `merge` for the merge sub-agent, and `<round>` is the
+  review/fix round (`r1` for single-shot roles). Re-dispatch of the SAME
+  (role, scope, round) -- e.g. a resume after a mid-dispatch interrupt --
+  **overwrites** the same path (idempotent; `prepare` re-renders). Distinct
+  rounds/batches get distinct files and accumulate.
+- Retention: briefs are NOT pruned during the task (they are the per-dispatch
+  audit trail); they are removed with the rest of `_mill/` by mill-cleanup /
+  merge teardown, exactly as today's status/review artifacts.
+- Rationale: Easy to follow what each sub-agent was told; deterministic paths
+  avoid collisions; if the session crashes mid-dispatch the brief is already on
+  disk and reusable on resume.
+- Rejected: Gitignored/ephemeral scratch brief (harder to audit, not
+  recoverable after a crash); random/uuid identifiers (pile up, not resumable).
 
 ### output-handling-unchanged
 
@@ -159,25 +185,52 @@ Python package. No new pip dependency is added.
 
 ### subagent-types
 
-- Decision: Define `.claude/agents/mill-reviewer` (read-only: Read, Grep, Glob;
-  MUST NOT write/edit/Bash) and `.claude/agents/mill-implementer` (full worker
-  tools). Each Agent-tool call passes the appropriate `subagent_type` plus a
-  per-call `model` override taken from config; `effort` is not passed.
+- Decision: Define two custom sub-agent types, `mill-reviewer` (read-only:
+  Read, Grep, Glob; MUST NOT write/edit/Bash) and `mill-implementer` (full
+  worker tools: Read, Edit, Write, Bash, Grep, Glob, Skill). Each Agent-tool
+  call passes the appropriate `subagent_type` plus a per-call `model` override
+  taken from config; `effort` is not passed.
+- Definition format + location: each is a markdown file with YAML frontmatter --
+  `name` (the `subagent_type` string), `description`, `tools` (comma-separated
+  allow-list; the read-only set for `mill-reviewer`), and an optional `model`
+  (omitted here -- the per-call `model` override supplies it). They are
+  **shipped with the mill plugin** (e.g. `plugins/mill/agents/<name>.md`,
+  declared in the plugin manifest), NOT repo-local `.claude/agents/`, because
+  mill runs in external repos that have no millhouse checkout -- plugin-provided
+  agents resolve wherever the plugin is installed. The plan must confirm the
+  exact plugin-manifest field/dir name against the installed plugin layout.
 - Rationale: The reviewer's read-only constraint must be enforced at the tool
   layer (the user's explicit requirement: "tool access but must not write
   anything"), faithfully porting today's `--disallowedTools`. Custom types pin
   the tool set precisely, unlike the built-in `Explore` (search-tuned, not an
-  exact match) or `general-purpose` (no hard read-only enforcement).
+  exact match) or `general-purpose` (no hard read-only enforcement). The
+  agent-mode discussion review run during THIS task's design used a
+  general-purpose subagent with read-only instructions as a stand-in and
+  behaved correctly, which validates the shape.
 - Rejected: Built-in `Explore` for reviewers (wrong tuning); `general-purpose`
-  for all with brief-only read-only instruction (no hard enforcement).
+  for all with brief-only read-only instruction (no hard enforcement);
+  repo-local `.claude/agents/` (would not exist in external consumer repos).
 
 ### model-and-effort
 
-- Decision: In agent mode, pass the role's configured model (resolved through
-  the existing reviewers registry) to the Agent tool's `model` parameter. The
+- Decision: In agent mode, `prepare` resolves the role's model exactly as the
+  current CLI does, then passes it to the Agent tool's `model` parameter. The
   per-role `effort`/thinking suffix is **dropped** -- the Agent tool exposes no
   effort knob. Full model+effort control is retained on the `subprocess`/`psmux`
   paths.
+- Model value form: the reviewers registry resolves a role to a concrete model
+  string such as `claude-sonnet-4-6` / `claude-opus-4-7` / `claude-haiku-4-5`.
+  `prepare` maps that string to the Agent tool's `model` value by family tier:
+  `claude-sonnet-*` -> `sonnet`, `claude-opus-*` -> `opus`, `claude-haiku-*` ->
+  `haiku`. If the deployed Agent tool also accepts a full model id, the resolved
+  string may be passed through unchanged; the family->tier map is the
+  guaranteed-safe fallback. The plan must verify which forms the Agent tool's
+  `model` parameter accepts and pick pass-through vs tier-map accordingly.
+- Resolution entry point (per dispatch site): `prepare` must call the SAME
+  resolver the existing CLI uses -- implementer/fixer via
+  `_reviewers.resolve(registry, roles.<role>.model)`; reviewers via
+  `_reviewers.resolve_role(cfg, registry, role, scope)`. These are distinct
+  lookups; do not collapse them into one generic call.
 - Rationale: The Agent tool cannot set effort; model selection is still
   honored. User: "effort is not possible with the Agent tool, but model is --
   use the same model as in the config."
@@ -243,10 +296,14 @@ Gotchas:
   orchestrator). It cannot be invoked from a detached Python worker. Therefore
   the dispatch-mode branch lives in the SKILL, not inside `_llm_claude._invoke`.
 - `_llm_claude` strips git env vars (`STRIP_VARS`: GIT_DIR, GIT_WORK_TREE, ...)
-  before spawning, so the child does not inherit a redirected git context. An
-  Agent-tool sub-agent inherits the orchestrator session's environment instead;
-  CC sessions do not normally set these vars, but the plan should confirm the
-  implementer sub-agent commits to the correct worktree/branch.
+  before spawning, so the child does not inherit a redirected git context. In
+  agent mode the guarantee is different but sufficient: the Agent-tool sub-agent
+  runs in the orchestrator session's cwd, which is the task worktree, and CC
+  sessions do not set GIT_DIR/GIT_WORK_TREE -- so the implementer's `git`
+  commits land on the task branch in the correct worktree. The agent-mode
+  integration test MUST assert this (implementer commit appears on the task
+  branch, not the hub/main). If a future orchestrator ever runs with those vars
+  set, `prepare` is the place to neutralize them.
 - The reviewer backend writes the review file under `_mill/reviews/`; in agent
   mode the file is written by `finalize` (Python), not the sub-agent.
 - ASCII-only stdout for Python scripts (Windows cp1252); use ` -- ` and ` -> `.
