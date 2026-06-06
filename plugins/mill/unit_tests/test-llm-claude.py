@@ -976,6 +976,78 @@ def _test_build_argv_shape() -> int:
         print(f"FAIL: _build_argv full set: {exc}", file=sys.stderr)
         errors += 1
 
+    # test _build_psmux_argv: basic call without timeout
+    try:
+        from _llm_claude import _build_psmux_argv
+        argv = _build_psmux_argv("claude-opus", None, "", session_id="test-sid")
+        assert argv[0] == sys.executable, f"argv[0] should be sys.executable, got {argv[0]}"
+        assert "millpy-claude-sub.py" in argv[1], f"argv[1] should contain millpy-claude-sub.py, got {argv[1]}"
+        assert "--mode" in argv, f"--mode not in argv: {argv}"
+        mode_idx = argv.index("--mode")
+        assert argv[mode_idx + 1] == "bulk", f"mode should be 'bulk' for empty allowed_tools, got {argv[mode_idx + 1]}"
+        assert "--response-poll-timeout" not in argv, \
+            f"--response-poll-timeout should not be in argv when timeout is None, got {argv}"
+        print("PASS: _build_psmux_argv basic call without timeout")
+    except AssertionError as exc:
+        print(f"FAIL: _build_psmux_argv basic: {exc}", file=sys.stderr)
+        errors += 1
+    except Exception as exc:
+        print(f"FAIL: _build_psmux_argv basic: {type(exc).__name__}: {exc}", file=sys.stderr)
+        errors += 1
+
+    # test _build_psmux_argv: with timeout parameter
+    try:
+        from _llm_claude import _build_psmux_argv
+        argv = _build_psmux_argv("claude-opus", None, "", session_id="test-sid", timeout=999)
+        assert "--response-poll-timeout" in argv, \
+            f"--response-poll-timeout should be in argv when timeout is provided, got {argv}"
+        timeout_idx = argv.index("--response-poll-timeout")
+        assert argv[timeout_idx + 1] == "999", \
+            f"timeout value should be '999', got {argv[timeout_idx + 1]}"
+        print("PASS: _build_psmux_argv with timeout parameter includes --response-poll-timeout")
+    except AssertionError as exc:
+        print(f"FAIL: _build_psmux_argv with timeout: {exc}", file=sys.stderr)
+        errors += 1
+    except Exception as exc:
+        print(f"FAIL: _build_psmux_argv with timeout: {type(exc).__name__}: {exc}", file=sys.stderr)
+        errors += 1
+
+    # test _build_psmux_argv: timeout=0 is still passed (edge case)
+    try:
+        from _llm_claude import _build_psmux_argv
+        argv = _build_psmux_argv("claude-opus", None, "", session_id="test-sid", timeout=0)
+        assert "--response-poll-timeout" in argv, \
+            f"--response-poll-timeout should be in argv even when timeout=0, got {argv}"
+        timeout_idx = argv.index("--response-poll-timeout")
+        assert argv[timeout_idx + 1] == "0", \
+            f"timeout value should be '0' (edge case), got {argv[timeout_idx + 1]}"
+        print("PASS: _build_psmux_argv with timeout=0 edge case")
+    except AssertionError as exc:
+        print(f"FAIL: _build_psmux_argv timeout=0: {exc}", file=sys.stderr)
+        errors += 1
+    except Exception as exc:
+        print(f"FAIL: _build_psmux_argv timeout=0: {type(exc).__name__}: {exc}", file=sys.stderr)
+        errors += 1
+
+    # test _build_psmux_argv: tool-use mode with timeout
+    try:
+        from _llm_claude import _build_psmux_argv
+        argv = _build_psmux_argv("claude-opus", "max", "Read,Grep,Glob", session_id="test-sid", timeout=1200)
+        assert "--mode" in argv
+        mode_idx = argv.index("--mode")
+        assert argv[mode_idx + 1] == "tool-use", f"mode should be 'tool-use', got {argv[mode_idx + 1]}"
+        assert "--effort" in argv and "max" in argv
+        assert "--response-poll-timeout" in argv
+        timeout_idx = argv.index("--response-poll-timeout")
+        assert argv[timeout_idx + 1] == "1200"
+        print("PASS: _build_psmux_argv tool-use mode with timeout and effort")
+    except AssertionError as exc:
+        print(f"FAIL: _build_psmux_argv tool-use with timeout: {exc}", file=sys.stderr)
+        errors += 1
+    except Exception as exc:
+        print(f"FAIL: _build_psmux_argv tool-use with timeout: {type(exc).__name__}: {exc}", file=sys.stderr)
+        errors += 1
+
     return errors
 
 
