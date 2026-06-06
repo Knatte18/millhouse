@@ -1639,6 +1639,215 @@ def test_depends_on_batch_mismatch_emits_finding() -> int:
 
 
 # ---------------------------------------------------------------------------
+# Language-aware verify-not-isolated check (Python markers)
+# ---------------------------------------------------------------------------
+
+def test_check_verify_not_isolated_python_marker_pyproject_dirty() -> int:
+    """Dirty: Python marker (pyproject.toml) present + no PYTHONPATH= -> one error."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        # Create Python marker at project root
+        (project_root / "pyproject.toml").write_text("[project]\n", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = (
+            "# Batch: alpha\n\n"
+            "```yaml\n"
+            "task: test\nbatch: alpha\ncards: 1\nverify: uv run test.py\ndepends-on: []\n"
+            "```\n\n"
+            "## Cards\n\n"
+            "### Card 1: card 1\n\n"
+            "- **Context:** none\n"
+            "- **Edits:** none\n"
+            "- **Creates:** none\n"
+            "- **Deletes:** none\n"
+            "- **Requirements:**\n  See scope.\n"
+            "- **Commit:** feat(alpha): card 1\n"
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        verify_errs = [e for e in result if e["check"] == "verify-not-isolated"]
+        try:
+            assert len(verify_errs) == 1, f"expected 1 error, got {len(verify_errs)}: {verify_errs}"
+            assert verify_errs[0]["batch"] == "01-alpha", (
+                f"wrong batch: {verify_errs[0]['batch']!r}"
+            )
+            print("PASS test_check_verify_not_isolated_python_marker_pyproject_dirty")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_check_verify_not_isolated_python_marker_pyproject_dirty: {exc}",
+                  file=sys.stderr)
+            return 1
+
+
+def test_check_verify_not_isolated_python_marker_setup_py_dirty() -> int:
+    """Dirty: Python marker (setup.py) present + no PYTHONPATH= -> one error."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        # Create Python marker at project root
+        (project_root / "setup.py").write_text("from setuptools import setup\n", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = (
+            "# Batch: alpha\n\n"
+            "```yaml\n"
+            "task: test\nbatch: alpha\ncards: 1\nverify: pytest test.py\ndepends-on: []\n"
+            "```\n\n"
+            "## Cards\n\n"
+            "### Card 1: card 1\n\n"
+            "- **Context:** none\n"
+            "- **Edits:** none\n"
+            "- **Creates:** none\n"
+            "- **Deletes:** none\n"
+            "- **Requirements:**\n  See scope.\n"
+            "- **Commit:** feat(alpha): card 1\n"
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        verify_errs = [e for e in result if e["check"] == "verify-not-isolated"]
+        try:
+            assert len(verify_errs) == 1, f"expected 1 error, got {len(verify_errs)}: {verify_errs}"
+            print("PASS test_check_verify_not_isolated_python_marker_setup_py_dirty")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_check_verify_not_isolated_python_marker_setup_py_dirty: {exc}",
+                  file=sys.stderr)
+            return 1
+
+
+def test_check_verify_not_isolated_python_marker_plugins_mill_clean() -> int:
+    """Clean: Python marker (plugins/mill/pyproject.toml) + PYTHONPATH= present -> no error."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        # Create Python marker in plugins/mill subdirectory
+        (project_root / "plugins" / "mill").mkdir(parents=True)
+        (project_root / "plugins" / "mill" / "pyproject.toml").write_text("[project]\n", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = (
+            "# Batch: alpha\n\n"
+            "```yaml\n"
+            "task: test\nbatch: alpha\ncards: 1\nverify: PYTHONPATH= uv run test.py\ndepends-on: []\n"
+            "```\n\n"
+            "## Cards\n\n"
+            "### Card 1: card 1\n\n"
+            "- **Context:** none\n"
+            "- **Edits:** none\n"
+            "- **Creates:** none\n"
+            "- **Deletes:** none\n"
+            "- **Requirements:**\n  See scope.\n"
+            "- **Commit:** feat(alpha): card 1\n"
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        verify_errs = [e for e in result if e["check"] == "verify-not-isolated"]
+        try:
+            assert len(verify_errs) == 0, f"expected no errors, got {len(verify_errs)}: {verify_errs}"
+            print("PASS test_check_verify_not_isolated_python_marker_plugins_mill_clean")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_check_verify_not_isolated_python_marker_plugins_mill_clean: {exc}",
+                  file=sys.stderr)
+            return 1
+
+
+def test_check_verify_not_isolated_no_python_marker_native_command_clean() -> int:
+    """Clean: no Python marker + native verify command (go test) -> no error."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        # Create a non-Python marker (go.mod)
+        (project_root / "go.mod").write_text("module example.com/test\n", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = (
+            "# Batch: alpha\n\n"
+            "```yaml\n"
+            "task: test\nbatch: alpha\ncards: 1\nverify: go test ./...\ndepends-on: []\n"
+            "```\n\n"
+            "## Cards\n\n"
+            "### Card 1: card 1\n\n"
+            "- **Context:** none\n"
+            "- **Edits:** none\n"
+            "- **Creates:** none\n"
+            "- **Deletes:** none\n"
+            "- **Requirements:**\n  See scope.\n"
+            "- **Commit:** feat(alpha): card 1\n"
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        verify_errs = [e for e in result if e["check"] == "verify-not-isolated"]
+        try:
+            assert len(verify_errs) == 0, f"expected no errors, got {len(verify_errs)}: {verify_errs}"
+            print("PASS test_check_verify_not_isolated_no_python_marker_native_command_clean")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_check_verify_not_isolated_no_python_marker_native_command_clean: {exc}",
+                  file=sys.stderr)
+            return 1
+
+
+def test_check_verify_not_isolated_no_python_marker_dotnet_test_clean() -> int:
+    """Clean: C# project (no Python marker) + dotnet test -> no error."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        # Create a C# marker (.csproj)
+        (project_root / "Project.csproj").write_text("<Project Sdk=\"Microsoft.NET.Sdk\">\n</Project>\n",
+                                                       encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = (
+            "# Batch: alpha\n\n"
+            "```yaml\n"
+            "task: test\nbatch: alpha\ncards: 1\nverify: dotnet test\ndepends-on: []\n"
+            "```\n\n"
+            "## Cards\n\n"
+            "### Card 1: card 1\n\n"
+            "- **Context:** none\n"
+            "- **Edits:** none\n"
+            "- **Creates:** none\n"
+            "- **Deletes:** none\n"
+            "- **Requirements:**\n  See scope.\n"
+            "- **Commit:** feat(alpha): card 1\n"
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        verify_errs = [e for e in result if e["check"] == "verify-not-isolated"]
+        try:
+            assert len(verify_errs) == 0, f"expected no errors, got {len(verify_errs)}: {verify_errs}"
+            print("PASS test_check_verify_not_isolated_no_python_marker_dotnet_test_clean")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_check_verify_not_isolated_no_python_marker_dotnet_test_clean: {exc}",
+                  file=sys.stderr)
+            return 1
+
+
+# ---------------------------------------------------------------------------
 # out-of-worktree-target check
 # ---------------------------------------------------------------------------
 
@@ -2055,6 +2264,12 @@ def main() -> int:
         test_check_verify_not_isolated_leading_whitespace,
         test_check_verify_not_isolated_non_empty_pythonpath_value,
         test_check_verify_not_isolated_run_integration,
+        # Language-aware verify-not-isolated check (Python markers)
+        test_check_verify_not_isolated_python_marker_pyproject_dirty,
+        test_check_verify_not_isolated_python_marker_setup_py_dirty,
+        test_check_verify_not_isolated_python_marker_plugins_mill_clean,
+        test_check_verify_not_isolated_no_python_marker_native_command_clean,
+        test_check_verify_not_isolated_no_python_marker_dotnet_test_clean,
         # out-of-worktree-target check
         test_out_of_worktree_target_home_dir_flags,
         test_out_of_worktree_target_absolute_path_flags,
