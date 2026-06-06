@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-psmux-dispatch
+phase: approved-cache-preflight
 slug: mill-infra-bug-fixes
 branch: hanf/mill-infra-bug-fixes
 plan: _mill/plan
@@ -28,6 +28,7 @@ approved-plan-verify-language-aware  '2026-06-06T19:41:34Z'
 approved-cleanup-robustness  '2026-06-06T19:51:54Z'
 approved-implementer-correctness  '2026-06-06T19:58:34Z'
 approved-psmux-dispatch  '2026-06-06T20:14:14Z'
+approved-cache-preflight  '2026-06-06T20:16:54Z'
 ```
 
 ## Batches
@@ -65,9 +66,10 @@ batches:
     start_sha: 387efec610862a55c5d11d74f68fea746d816a37
     commit_sha: f6fd49d6a494b23c44439242fd309cbc3fe98e68
   - name: cache-preflight
-    state: running
+    state: approved
     implementer_session: 898b3679-5235-4fdd-8a69-65752a76bd98
     start_sha: 34f87db376621a8270072afa32557e0742782feb
+    commit_sha: 8625666a82c7074630740419a097fbbeb7c24d11
   - name: merge-in-verify-gate
     state: pending
 ```
