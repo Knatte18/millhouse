@@ -1,4 +1,5 @@
 """Liveness probe for millpy-bg worker subprocesses; used by orchestrators after resume to decide whether to wait or re-fire."""
+import json
 import logging
 import os
 import re
@@ -11,6 +12,25 @@ _PID_RE = re.compile(r"\[mill-bg\] WORKER PID=(\d+) START")
 _EXIT_RE = re.compile(r"\[mill-bg\] EXIT \d+")
 _EXIT_CODE_RE = re.compile(r"\[mill-bg\] EXIT (\d+)")
 _STALE_LOG_SECONDS = 5 * 60
+
+
+def _has_valid_json_result(text: str) -> bool:
+    """Check if text contains a valid JSON result as the last {-prefixed line.
+
+    Scans text in reverse for the first line where line.strip().startswith("{"),
+    attempts json.loads on that line, and returns True on success.
+    Returns False if no such line is found or if parsing raises json.JSONDecodeError.
+    Never raises.
+    """
+    for line in reversed(text.splitlines()):
+        stripped = line.strip()
+        if stripped.startswith("{"):
+            try:
+                json.loads(stripped)
+                return True
+            except json.JSONDecodeError:
+                return False
+    return False
 
 
 def is_bg_worker_alive(log_path: Path) -> tuple[bool, int | None]:
@@ -89,4 +109,6 @@ def check_bg_status(log_path: Path) -> tuple[str, int | None]:
     if m:
         code = int(m.group(1))
         return ("exit", code)
+    if _has_valid_json_result(text):
+        return ("exit", 0)
     return ("dead", pid)

@@ -187,6 +187,22 @@ def _resolve_reuse_idle_timeout_s() -> float:
         return float(REUSE_IDLE_TIMEOUT_S_DEFAULT)
 
 
+def _resolve_response_poll_timeout_s(mode: str) -> float:
+    try:
+        cfg = _config.load_config(_paths.resolve_hub_path(), _paths.resolve_hub_path())
+        override = (
+            cfg.get("llm", {})
+            .get("claude", {})
+            .get("psmux", {})
+            .get("response_poll_timeout_s", {})
+        )
+        if isinstance(override, dict) and mode in override:
+            return float(override[mode])
+    except (Exception, SystemExit):
+        pass
+    return float(RESPONSE_POLL_TIMEOUT_S.get(mode, 600))
+
+
 def _resolve_shell_path() -> str:
     """Load shell_path from config, defaulting to 'pwsh'."""
     try:
@@ -322,7 +338,7 @@ def main() -> int:
 
         # Step 11: Wait for stable idle prompt, then capture and extract response
         start = time.monotonic()
-        if not _wait_for_idle_stable(session_name, RESPONSE_POLL_TIMEOUT_S[args.mode]):
+        if not _wait_for_idle_stable(session_name, _resolve_response_poll_timeout_s(args.mode)):
             elapsed = time.monotonic() - start
             raise RuntimeError(
                 f"response-poll timeout: mode={args.mode} elapsed={elapsed:.1f}s"

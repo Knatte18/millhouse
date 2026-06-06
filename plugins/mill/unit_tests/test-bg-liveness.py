@@ -250,5 +250,92 @@ class TestCheckBgStatus(unittest.TestCase):
                     self.assertEqual(code_or_pid, 0)
 
 
+class TestCheckBgStatusJsonFallback(unittest.TestCase):
+    """Test cases for check_bg_status JSON fallback when EXIT marker is missing."""
+
+    def test_dead_no_exit_valid_json_last_line(self) -> None:
+        """Dead worker, no EXIT, valid JSON as last line -> ("exit", 0)."""
+        with tempfile.TemporaryDirectory() as tmp_str:
+            log_path = Path(tmp_str) / "test.log"
+            log_path.write_text(
+                '[mill-bg] WORKER PID=99999999 START 2026-05-17T15:00:00Z\n'
+                'some output\n'
+                '{"status":"success","commit_sha":"abc"}\n',
+                encoding="utf-8",
+            )
+            # Backdate mtime so is_bg_worker_alive reports dead
+            old_ts = time.time() - (_bg._STALE_LOG_SECONDS + 10)
+            os.utime(log_path, (old_ts, old_ts))
+            status, code_or_pid = _bg.check_bg_status(log_path)
+            self.assertEqual(status, "exit")
+            self.assertEqual(code_or_pid, 0)
+
+    def test_dead_no_exit_partial_json_last_line(self) -> None:
+        """Dead worker, no EXIT, incomplete JSON last line -> ("dead", pid)."""
+        with tempfile.TemporaryDirectory() as tmp_str:
+            log_path = Path(tmp_str) / "test.log"
+            log_path.write_text(
+                '[mill-bg] WORKER PID=99999999 START 2026-05-17T15:00:00Z\n'
+                'some output\n'
+                '{"status":\n',
+                encoding="utf-8",
+            )
+            # Backdate mtime so is_bg_worker_alive reports dead
+            old_ts = time.time() - (_bg._STALE_LOG_SECONDS + 10)
+            os.utime(log_path, (old_ts, old_ts))
+            status, code_or_pid = _bg.check_bg_status(log_path)
+            self.assertEqual(status, "dead")
+            self.assertEqual(code_or_pid, 99999999)
+
+    def test_dead_no_exit_no_json(self) -> None:
+        """Dead worker, no EXIT, no JSON output -> ("dead", pid)."""
+        with tempfile.TemporaryDirectory() as tmp_str:
+            log_path = Path(tmp_str) / "test.log"
+            log_path.write_text(
+                '[mill-bg] WORKER PID=99999999 START 2026-05-17T15:00:00Z\n'
+                'some non-JSON output\n'
+                'error message\n',
+                encoding="utf-8",
+            )
+            # Backdate mtime so is_bg_worker_alive reports dead
+            old_ts = time.time() - (_bg._STALE_LOG_SECONDS + 10)
+            os.utime(log_path, (old_ts, old_ts))
+            status, code_or_pid = _bg.check_bg_status(log_path)
+            self.assertEqual(status, "dead")
+            self.assertEqual(code_or_pid, 99999999)
+
+    def test_dead_exit_present_unaffected(self) -> None:
+        """EXIT marker present -> ("exit", code) (existing path unaffected)."""
+        with tempfile.TemporaryDirectory() as tmp_str:
+            log_path = Path(tmp_str) / "test.log"
+            log_path.write_text(
+                '[mill-bg] WORKER PID=99999999 START 2026-05-17T15:00:00Z\n'
+                'some output\n'
+                '[mill-bg] EXIT 0\n',
+                encoding="utf-8",
+            )
+            status, code_or_pid = _bg.check_bg_status(log_path)
+            self.assertEqual(status, "exit")
+            self.assertEqual(code_or_pid, 0)
+
+    def test_dead_no_exit_json_mid_log_only(self) -> None:
+        """JSON mid-log but last {-prefixed line is invalid -> ("dead", pid)."""
+        with tempfile.TemporaryDirectory() as tmp_str:
+            log_path = Path(tmp_str) / "test.log"
+            log_path.write_text(
+                '[mill-bg] WORKER PID=99999999 START 2026-05-17T15:00:00Z\n'
+                '{"valid":"json"}\n'
+                'some output\n'
+                '{"partial\n',
+                encoding="utf-8",
+            )
+            # Backdate mtime so is_bg_worker_alive reports dead
+            old_ts = time.time() - (_bg._STALE_LOG_SECONDS + 10)
+            os.utime(log_path, (old_ts, old_ts))
+            status, code_or_pid = _bg.check_bg_status(log_path)
+            self.assertEqual(status, "dead")
+            self.assertEqual(code_or_pid, 99999999)
+
+
 if __name__ == "__main__":
-    unittest.main()
+	unittest.main()
