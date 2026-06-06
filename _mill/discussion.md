@@ -233,11 +233,19 @@ Python package. No new pip dependency is added.
   string may be passed through unchanged; the family->tier map is the
   guaranteed-safe fallback. The plan must verify which forms the Agent tool's
   `model` parameter accepts and pick pass-through vs tier-map accordingly.
-- Resolution entry point (per dispatch site): `prepare` must call the SAME
-  resolver the existing CLI uses -- implementer/fixer via
-  `_reviewers.resolve(registry, roles.<role>.model)`; reviewers via
-  `_reviewers.resolve_role(cfg, registry, role, scope)`. These are distinct
-  lookups; do not collapse them into one generic call.
+- Resolution entry point (per dispatch site): `prepare` must reproduce the SAME
+  resolution the existing CLI does, then read `spec["model"]`. The three
+  distinct paths (do NOT collapse into one generic call, and note
+  `_reviewers.resolve_role` is dead code -- no CLI/backend calls it, so do not
+  use it):
+  - implementer / fixer: `_reviewers.resolve(registry, cfg["roles"]["<role>"]["model"])`
+    (implementer default `sonnethigh`, fixer per `roles.fixer.model`).
+  - reviewers (discussion / plan / code): read the reviewer name from
+    `cfg["roles"]["<role>"]["<scope>"]["reviewer"]`, then
+    `_reviewers.resolve(registry, reviewer_name)`, then apply
+    `maybe_switch_spec_for_large_prompt` exactly as the backend does today.
+  - merge sub-agent: `cfg["merge"]["model"]` (fallback `roles.implementer.model`,
+    default `haiku`), then `_reviewers.resolve(registry, model_name)`.
 - Rationale: The Agent tool cannot set effort; model selection is still
   honored. User: "effort is not possible with the Agent tool, but model is --
   use the same model as in the config."
