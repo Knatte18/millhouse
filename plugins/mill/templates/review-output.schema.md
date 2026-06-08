@@ -44,7 +44,7 @@ The fenced ` ```yaml ` block placed immediately after the `# Review: ...` headin
 | Field | Type | Required | Values |
 |---|---|---|---|
 | `verdict` | string | yes | `APPROVE`, `REQUEST_CHANGES`, `GAPS_FOUND`, or `NEED_CONTEXT` |
-| `reviewer_model` | string | yes | reviewer name from config (e.g. `sonnetmax`, `sonnetmax_tool`) |
+| `reviewer_model` | string | yes | reviewer name from config (e.g. `sonnetmax`, `sonnethigh`) |
 | `reviewed_file` | string | yes | path to the artefact reviewed (discussion file, batch file, or `plan/`) |
 | `date` | string | yes | UTC date in `YYYY-MM-DD` format |
 

@@ -131,7 +131,7 @@ roles:
   discussion-review:
     holistic:
       rounds: 4
-      reviewer: sonnetmax_tool
+      reviewer: sonnetmax
       # large_prompt:            # optional: override reviewer for large prompts
       #   threshold_ktok: 100    # switch when estimated tok count >= this (char/4000)
       #   reviewer: null         # override reviewer from agents.yaml; null = disabled
