@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-review-mode-tests
+phase: holistic-reviewing
 slug: track-task-briefs
 branch: hanf/track-task-briefs
 plan: _mill/plan
@@ -23,6 +23,7 @@ implementing  '2026-06-08T07:41:02Z'
 approved-reviewer-tooluse-convention  '2026-06-08T07:47:04Z'
 approved-track-briefs  '2026-06-08T07:50:58Z'
 approved-review-mode-tests  '2026-06-08T07:55:32Z'
+holistic-reviewing  '2026-06-08T07:55:52Z'
 ```
 
 ## Batches
