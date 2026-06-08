@@ -39,5 +39,7 @@ batches:
     start_sha: 1df55b35b6ae388eea3f44a9d0af8afb12d65cce
     commit_sha: a9eefb6af3c851202644a516aaaad6ff018d60e4
   - name: review-mode-tests
-    state: pending
+    state: running
+    implementer_session: bdb9224c-8cdc-40a7-8b84-6e9d4930366a
+    start_sha: b6248d630e0dcbdaed0031ee4646ee9ec23add22
 ```
