@@ -12,7 +12,10 @@ from pathlib import Path
 HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
+import json  # noqa: E402
+
 import _safe_rmtree  # noqa: E402
+from wiki import WikiStoreFormatError  # noqa: E402
 from wiki._store import Store  # noqa: E402
 
 
@@ -301,7 +304,6 @@ def main() -> int:
             store.upsert_task({"slug": "reload-test"})
 
             # Manually mutate tasks.json file to add a new task (simulating external change)
-            import json
             data = json.loads(db_path.read_text())
             data["_default"]["2"] = {
                 "id": 1,
@@ -694,6 +696,120 @@ def main() -> int:
             _safe_rmtree.safe_rmtree(Path(tmp_dir), allowed_root=Path(tmp_dir), ignore_errors=True)
     except Exception as exc:
         fail("migrate_group_to_deps -- preserves doc_id and id", exc)
+
+    # --- (5a) tasks.json shape -- flat top-level array (Go port format) rejected with slugs ---
+    try:
+        tmp_dir = tempfile.mkdtemp()
+        try:
+            db_path = Path(tmp_dir) / "tasks.json"
+            db_path.write_text(json.dumps([
+                {"id": 0, "slug": "foo"},
+                {"id": 1, "slug": "_mhgo"},
+            ]))
+            store = Store(db_path)
+            raised = False
+            error_msg = ""
+            try:
+                store.list_tasks_full()
+            except WikiStoreFormatError as e:
+                raised = True
+                error_msg = str(e)
+            assert raised, "Flat top-level array should raise WikiStoreFormatError"
+            assert "array" in error_msg, f"Error should name the array shape, got: {error_msg}"
+            assert "foo" in error_msg and "_mhgo" in error_msg, \
+                f"Error should list offending slugs, got: {error_msg}"
+            ok("tasks.json shape -- flat top-level array rejected with slugs")
+        finally:
+            _safe_rmtree.safe_rmtree(Path(tmp_dir), allowed_root=Path(tmp_dir), ignore_errors=True)
+    except Exception as exc:
+        fail("tasks.json shape -- flat top-level array rejected with slugs", exc)
+
+    # --- (5b) tasks.json shape -- _default as list rejected ---
+    try:
+        tmp_dir = tempfile.mkdtemp()
+        try:
+            db_path = Path(tmp_dir) / "tasks.json"
+            db_path.write_text(json.dumps({"_default": [{"id": 0, "slug": "foo"}]}))
+            store = Store(db_path)
+            raised = False
+            error_msg = ""
+            try:
+                store.list_tasks_full()
+            except WikiStoreFormatError as e:
+                raised = True
+                error_msg = str(e)
+            assert raised, "_default as list should raise WikiStoreFormatError"
+            assert "_default" in error_msg, f"Error should name _default, got: {error_msg}"
+            ok("tasks.json shape -- _default as list rejected")
+        finally:
+            _safe_rmtree.safe_rmtree(Path(tmp_dir), allowed_root=Path(tmp_dir), ignore_errors=True)
+    except Exception as exc:
+        fail("tasks.json shape -- _default as list rejected", exc)
+
+    # --- (5c) tasks.json shape -- task missing slug named by doc-id ---
+    try:
+        tmp_dir = tempfile.mkdtemp()
+        try:
+            db_path = Path(tmp_dir) / "tasks.json"
+            db_path.write_text(json.dumps({"_default": {"7": {"id": 0, "title": "x"}}}))
+            store = Store(db_path)
+            raised = False
+            error_msg = ""
+            try:
+                store.list_tasks_full()
+            except WikiStoreFormatError as e:
+                raised = True
+                error_msg = str(e)
+            assert raised, "Task missing slug should raise WikiStoreFormatError"
+            assert "slug" in error_msg and "7" in error_msg, \
+                f"Error should name the field and doc-id, got: {error_msg}"
+            ok("tasks.json shape -- task missing slug named by doc-id")
+        finally:
+            _safe_rmtree.safe_rmtree(Path(tmp_dir), allowed_root=Path(tmp_dir), ignore_errors=True)
+    except Exception as exc:
+        fail("tasks.json shape -- task missing slug named by doc-id", exc)
+
+    # --- (5d) tasks.json shape -- malformed depends_on named by slug ---
+    try:
+        tmp_dir = tempfile.mkdtemp()
+        try:
+            db_path = Path(tmp_dir) / "tasks.json"
+            db_path.write_text(json.dumps(
+                {"_default": {"1": {"id": 0, "slug": "foo", "depends_on": "nope"}}}
+            ))
+            store = Store(db_path)
+            raised = False
+            error_msg = ""
+            try:
+                store.list_tasks_full()
+            except WikiStoreFormatError as e:
+                raised = True
+                error_msg = str(e)
+            assert raised, "Malformed depends_on should raise WikiStoreFormatError"
+            assert "depends_on" in error_msg and "foo" in error_msg, \
+                f"Error should name the field and slug, got: {error_msg}"
+            ok("tasks.json shape -- malformed depends_on named by slug")
+        finally:
+            _safe_rmtree.safe_rmtree(Path(tmp_dir), allowed_root=Path(tmp_dir), ignore_errors=True)
+    except Exception as exc:
+        fail("tasks.json shape -- malformed depends_on named by slug", exc)
+
+    # --- (5e) tasks.json shape -- well-formed store still loads ---
+    try:
+        tmp_dir = tempfile.mkdtemp()
+        try:
+            db_path = Path(tmp_dir) / "tasks.json"
+            store = Store(db_path)
+            store.upsert_task({"slug": "alpha", "depends_on": []})
+            store.reload()
+            tasks = store.list_tasks_full()
+            assert len(tasks) == 1 and tasks[0]["slug"] == "alpha", \
+                f"Well-formed store should load normally, got: {tasks}"
+            ok("tasks.json shape -- well-formed store still loads")
+        finally:
+            _safe_rmtree.safe_rmtree(Path(tmp_dir), allowed_root=Path(tmp_dir), ignore_errors=True)
+    except Exception as exc:
+        fail("tasks.json shape -- well-formed store still loads", exc)
 
     print("", file=sys.stderr)
     if failed:

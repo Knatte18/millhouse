@@ -4,6 +4,121 @@ from pathlib import Path
 
 import tinydb.operations
 from tinydb import TinyDB, Query
+from tinydb.storages import JSONStorage
+
+from wiki import WikiStoreFormatError
+
+
+def _peek_slugs(entries: list, limit: int = 5) -> str:
+    """Render up to ``limit`` slugs from a list of task-like entries for diagnostics."""
+    slugs = []
+    for entry in entries[:limit]:
+        if isinstance(entry, dict) and isinstance(entry.get("slug"), str):
+            slugs.append(entry["slug"])
+        else:
+            slugs.append("<no slug>")
+    suffix = ", ..." if len(entries) > limit else ""
+    return "[" + ", ".join(slugs) + suffix + "]"
+
+
+def validate_tasks_json_shape(data: object, path: Path) -> None:
+    """Reject tasks.json shapes TinyDB cannot index, naming the offending location.
+
+    TinyDB blindly does ``tables["_default"]`` on the parsed JSON. When the file
+    is a flat top-level array (as written by the Go wiki port) or a task carries a
+    malformed field, that raises a bare ``TypeError: list indices must be integers
+    or slices, not str`` with no hint at the cause. This runs first and raises
+    WikiStoreFormatError with an actionable message instead.
+
+    Args:
+        data: The parsed JSON (or None for an empty/new file).
+        path: Path to tasks.json, for the error message.
+
+    Raises:
+        WikiStoreFormatError: The shape is not a readable TinyDB store.
+    """
+    if data is None:
+        return
+
+    if isinstance(data, list):
+        plural = "entry" if len(data) == 1 else "entries"
+        raise WikiStoreFormatError(
+            f"tasks.json at {path} is a top-level JSON array of {len(data)} {plural}, "
+            f"but the wiki store expects a TinyDB object of the form "
+            f'{{"_default": {{"1": {{...}}}}}}. This file was likely written by a '
+            f"non-Python tool (e.g. the Go wiki port), which persists tasks as a flat "
+            f"array. First slugs: {_peek_slugs(data)}. Restore a Python-written "
+            f"tasks.json or convert the array into TinyDB object form before retrying."
+        )
+
+    if not isinstance(data, dict):
+        raise WikiStoreFormatError(
+            f"tasks.json at {path} has top-level JSON type {type(data).__name__}; "
+            f"expected an object mapping table name to records."
+        )
+
+    table = data.get("_default")
+    if table is None:
+        return
+
+    if not isinstance(table, dict):
+        suffix = f" First slugs: {_peek_slugs(table)}." if isinstance(table, list) else ""
+        raise WikiStoreFormatError(
+            f'tasks.json at {path}: the "_default" table is a {type(table).__name__}, '
+            f"expected an object mapping doc-id to task. This indicates a format "
+            f"written by a non-Python tool.{suffix}"
+        )
+
+    for doc_id, task in table.items():
+        location = f'_default["{doc_id}"]'
+        if not isinstance(task, dict):
+            raise WikiStoreFormatError(
+                f"tasks.json at {path}: {location} is a {type(task).__name__}, "
+                f"expected a task object."
+            )
+
+        slug = task.get("slug")
+        if not isinstance(slug, str) or not slug:
+            raise WikiStoreFormatError(
+                f"tasks.json at {path}: {location} has a missing or non-string "
+                f'"slug" (got {slug!r}); every task must carry a string slug.'
+            )
+
+        depends_on = task.get("depends_on")
+        if depends_on is not None and (
+            not isinstance(depends_on, list)
+            or not all(isinstance(dep, str) for dep in depends_on)
+        ):
+            raise WikiStoreFormatError(
+                f"tasks.json at {path}: task {slug!r} ({location}) has a malformed "
+                f'"depends_on" {depends_on!r}; expected a list of slug strings.'
+            )
+
+        for boolean_field in ("isolated", "deferred"):
+            value = task.get(boolean_field)
+            if value is not None and not isinstance(value, bool):
+                raise WikiStoreFormatError(
+                    f"tasks.json at {path}: task {slug!r} ({location}) has a "
+                    f'non-boolean "{boolean_field}" {value!r}.'
+                )
+
+
+class _ValidatingJSONStorage(JSONStorage):
+    """JSONStorage that validates the tasks.json shape on every read.
+
+    Centralizes shape-checking so every TinyDB read path (init, reload, all
+    operations) raises an actionable WikiStoreFormatError before TinyDB indexes
+    a malformed structure.
+    """
+
+    def __init__(self, path: str, *args, **kwargs) -> None:
+        super().__init__(path, *args, **kwargs)
+        self._tasks_path = Path(path)
+
+    def read(self) -> dict | None:
+        data = super().read()
+        validate_tasks_json_shape(data, self._tasks_path)
+        return data
 
 
 def _resolve_id_or_slug(db: TinyDB, identifier: int | str) -> int | None:
@@ -19,7 +134,7 @@ def _resolve_id_or_slug(db: TinyDB, identifier: int | str) -> int | None:
 class Store:
     def __init__(self, db_path: Path) -> None:
         self._db_path = db_path
-        self._db = TinyDB(str(db_path), indent=2, sort_keys=True)
+        self._db = TinyDB(str(db_path), storage=_ValidatingJSONStorage, indent=2, sort_keys=True)
 
     def _validate_write(self, tasks_snapshot: list[dict], incoming: dict) -> None:
         # Type validation
@@ -357,7 +472,7 @@ class Store:
 
     def reload(self) -> None:
         self._db.close()
-        self._db = TinyDB(str(self._db_path), indent=2, sort_keys=True)
+        self._db = TinyDB(str(self._db_path), storage=_ValidatingJSONStorage, indent=2, sort_keys=True)
 
     def all_tasks(self) -> list[dict]:
         return self._db.all()
