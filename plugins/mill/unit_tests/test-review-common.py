@@ -120,6 +120,8 @@ from _review_common import (  # noqa: E402
     write_review_file,
 )
 
+import _review_code  # noqa: E402
+
 
 def main() -> int:
     errors = 0
@@ -2099,6 +2101,106 @@ def main() -> int:
         assert "real.py" in result and "content" in result, f"File should be bulked: {result!r}"
         assert "--- FILE:" in result, f"FILE delimiter expected: {result!r}"
         print("PASS: bulk_files directory skipped, file included")
+
+    # ---------------------------------------------------------------------------
+    # tool-use mode: artefact omits inlined bodies, build_tool_rule grants tools
+    # ---------------------------------------------------------------------------
+
+    # tool-use reviewer must NOT inline source file content (sentinel line must be absent)
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        tmpdir_path = Path(tmpdir)
+
+        # Create a fixture source file with a unique sentinel line
+        source_file = tmpdir_path / "source.py"
+        sentinel_line = "UNIQUE_SENTINEL_LINE_FOR_TEST_xyz123"
+        source_file.write_text(f"def foo():\n    # {sentinel_line}\n    return 42\n", encoding="utf-8")
+
+        # Create overview and batch files (empty for this test)
+        overview = tmpdir_path / "overview.md"
+        overview.write_text("# Overview", encoding="utf-8")
+
+        batch_file = tmpdir_path / "01-batch.md"
+        batch_file.write_text("# Batch 1", encoding="utf-8")
+
+        # Build artefact section in tool-use mode (as prepare() does)
+        artefact = _review_code._build_artefact_section(
+            reviewer_mode="tool-use",
+            overview_path=overview,
+            batch_files=[batch_file],
+            source_files=[source_file],
+            ancestors_on_disk=[],
+            deletes_union=set(),
+        )
+
+        # Also build the tool-use TOOL_RULE (as the template would)
+        tool_rule = build_tool_rule("tool-use")
+
+        # Verify: tool-use TOOL_RULE grants tools
+        assert "MAY use Read, Grep, and Glob" in tool_rule, (
+            f"Expected tool-use TOOL_RULE to grant tools, got: {tool_rule!r}"
+        )
+
+        # Verify: source file PATH is present in artefact
+        assert str(source_file) in artefact, (
+            f"Source file path not in artefact: {artefact!r}"
+        )
+
+        # Verify: sentinel line (the body content) is NOT present in artefact
+        assert sentinel_line not in artefact, (
+            f"Sentinel line should NOT be inlined in tool-use mode, but found it: {artefact!r}"
+        )
+
+        print("PASS: tool-use omits bulked bodies and build_tool_rule grants tools")
+
+    # ---------------------------------------------------------------------------
+    # bulk mode: artefact inlines source content, build_tool_rule forbids tools
+    # ---------------------------------------------------------------------------
+
+    # bulk reviewer must inline source file content (sentinel line must be present)
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        tmpdir_path = Path(tmpdir)
+
+        # Create a fixture source file with a unique sentinel line
+        source_file = tmpdir_path / "source.py"
+        sentinel_line = "UNIQUE_SENTINEL_LINE_FOR_BULK_TEST_abc789"
+        source_file.write_text(f"def bar():\n    # {sentinel_line}\n    return 99\n", encoding="utf-8")
+
+        # Create overview and batch files (empty for this test)
+        overview = tmpdir_path / "overview.md"
+        overview.write_text("# Overview", encoding="utf-8")
+
+        batch_file = tmpdir_path / "01-batch.md"
+        batch_file.write_text("# Batch 1", encoding="utf-8")
+
+        # Build artefact section in bulk mode (as prepare() does)
+        artefact = _review_code._build_artefact_section(
+            reviewer_mode="bulk",
+            overview_path=overview,
+            batch_files=[batch_file],
+            source_files=[source_file],
+            ancestors_on_disk=[],
+            deletes_union=set(),
+        )
+
+        # Also build the bulk TOOL_RULE (as the template would)
+        tool_rule = build_tool_rule("bulk")
+
+        # Verify: bulk TOOL_RULE forbids tools
+        assert "Do NOT request tool calls" in tool_rule, (
+            f"Expected bulk TOOL_RULE to forbid tools, got: {tool_rule!r}"
+        )
+
+        # Verify: sentinel line (the body content) IS present in bulk mode
+        assert sentinel_line in artefact, (
+            f"Sentinel line should be inlined in bulk mode, but missing from: {artefact!r}"
+        )
+
+        # Verify: source file path is also present
+        assert str(source_file) in artefact, (
+            f"Source file path not in artefact: {artefact!r}"
+        )
+
+        print("PASS: bulk inlines source content and build_tool_rule forbids tools")
 
     # ---------------------------------------------------------------------------
     # resolve_large_prompt_timeout
