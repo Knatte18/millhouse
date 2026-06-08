@@ -27,7 +27,9 @@ implementing  '2026-06-08T07:41:02Z'
 ```yaml
 batches:
   - name: reviewer-tooluse-convention
-    state: pending
+    state: running
+    implementer_session: d89cf7a5-311d-445a-97aa-a09e26ac9dfc
+    start_sha: 22fb1827e96318cc56054dda0805fd51798fd1f8
   - name: track-briefs
     state: pending
   - name: review-mode-tests
