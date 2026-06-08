@@ -10,86 +10,136 @@
 #
 # Schema: each entry is keyed by reviewer name and has `type: single|cluster`
 # plus type-specific fields (provider + model for single; workers + handler
-# for cluster).
+# for cluster). Tool-use is the default naming convention: an unsuffixed name
+# is a tool-use agent with explicit `tooluse: true`, and the `_bulk` suffix
+# marks a bulk variant with `tooluse: false`. The `tooluse` flag is consumed
+# only by reviewer dispatch logic and is irrelevant for entries used as
+# implementer/fixer/merge models (e.g. `haiku`), so `tooluse: true` on such
+# entries is harmless and the convention applies uniformly.
 
 g25flash:
   model: gemini-2.5-flash
   provider: gemini
+  tooluse: true
   type: single
 
-g25flash_tool:
+g25flash_bulk:
   model: gemini-2.5-flash
   provider: gemini
-  tooluse: true
+  tooluse: false
   type: single
 
 g25pro:
   model: gemini-2.5-pro
   provider: gemini
+  tooluse: true
   type: single
 
-g25pro_tool:
+g25pro_bulk:
   model: gemini-2.5-pro
   provider: gemini
-  tooluse: true
+  tooluse: false
   type: single
 
 g3flash_preview:
   model: gemini-3-flash-preview
   provider: gemini
+  tooluse: true
   type: single
 
-g3flash_preview_tool:
+g3flash_preview_bulk:
   model: gemini-3-flash-preview
   provider: gemini
-  tooluse: true
+  tooluse: false
   type: single
 
 haiku:
   model: claude-haiku-4-5-20251001
   provider: claude
   timeout: 600
+  tooluse: true
   type: single
 
 opushigh:
   effort: high
   model: claude-opus-4-7
   provider: claude
+  tooluse: true
+  type: single
+
+opushigh_bulk:
+  effort: high
+  model: claude-opus-4-7
+  provider: claude
+  tooluse: false
   type: single
 
 opusmax:
   effort: max
   model: claude-opus-4-7
   provider: claude
+  tooluse: true
+  type: single
+
+opusmax_bulk:
+  effort: max
+  model: claude-opus-4-7
+  provider: claude
+  tooluse: false
   type: single
 
 opusmedium:
   effort: medium
   model: claude-opus-4-7
   provider: claude
+  tooluse: true
+  type: single
+
+opusmedium_bulk:
+  effort: medium
+  model: claude-opus-4-7
+  provider: claude
+  tooluse: false
   type: single
 
 sonnethigh:
   effort: high
   model: claude-sonnet-4-6
   provider: claude
+  tooluse: true
+  type: single
+
+sonnethigh_bulk:
+  effort: high
+  model: claude-sonnet-4-6
+  provider: claude
+  tooluse: false
   type: single
 
 sonnetmax:
   effort: max
   model: claude-sonnet-4-6
   provider: claude
+  tooluse: true
   type: single
 
-sonnetmax_tool:
+sonnetmax_bulk:
   effort: max
   model: claude-sonnet-4-6
   provider: claude
-  tooluse: true
+  tooluse: false
   type: single
 
 sonnetmedium:
   effort: medium
   model: claude-sonnet-4-6
   provider: claude
+  tooluse: true
+  type: single
+
+sonnetmedium_bulk:
+  effort: medium
+  model: claude-sonnet-4-6
+  provider: claude
+  tooluse: false
   type: single
