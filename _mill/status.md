@@ -33,7 +33,9 @@ batches:
     start_sha: 22fb1827e96318cc56054dda0805fd51798fd1f8
     commit_sha: d3a0997c5d3c695b7955f2409d6a5e81ad53058f
   - name: track-briefs
-    state: pending
+    state: running
+    implementer_session: 8aee3edd-dfe1-46d6-ae45-4739abecb27a
+    start_sha: 1df55b35b6ae388eea3f44a9d0af8afb12d65cce
   - name: review-mode-tests
     state: pending
 ```
