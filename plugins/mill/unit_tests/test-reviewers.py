@@ -808,6 +808,57 @@ def test_extends_field_removed_from_output() -> None:
     print("PASS: extends field removed from output")
 
 
+def test_agents_catalogue_naming_convention() -> None:
+    """Lock the catalogue naming convention: unsuffixed = tool-use, _bulk = bulk, no _tool.
+
+    Every entry obeys: a key that does NOT end in _bulk has tooluse present
+    and True; a key ending in _bulk has tooluse present and False; and no key
+    ends in _tool. tooluse is reviewer-only and the convention applies uniformly,
+    so entries used as implementer/merge models (e.g. haiku) assert tooluse: True
+    by design — this is not an oversight.
+    """
+    import yaml
+    from pathlib import Path
+
+    # Resolve the catalogue path via the module's HUB pattern
+    catalogue_path = HUB / "plugins" / "mill" / "templates" / "mill-agents.yaml"
+    assert catalogue_path.exists(), f"mill-agents.yaml not found at {catalogue_path}"
+
+    with open(catalogue_path, encoding="utf-8") as f:
+        catalogue = yaml.safe_load(f)
+
+    assert isinstance(catalogue, dict), f"Expected dict, got {type(catalogue)}"
+
+    # Check convention: every key is either unsuffixed (tooluse: true) or _bulk (tooluse: false)
+    for name, entry in catalogue.items():
+        assert isinstance(entry, dict), f"Entry {name} is not a dict: {entry}"
+
+        # Rule 1: No keys ending in _tool
+        assert not name.endswith("_tool"), (
+            f"Entry {name!r} ends in _tool; convention requires unsuffixed "
+            f"(tool-use) or _bulk (bulk) names only"
+        )
+
+        # Rule 2: tooluse field must be present and bool
+        assert "tooluse" in entry, f"Entry {name!r} missing tooluse field"
+        assert isinstance(entry["tooluse"], bool), (
+            f"Entry {name!r} has non-bool tooluse: {entry['tooluse']!r}"
+        )
+
+        # Rule 3: _bulk suffix correlates with tooluse: false
+        if name.endswith("_bulk"):
+            assert entry["tooluse"] is False, (
+                f"Entry {name!r} ends in _bulk but has tooluse: {entry['tooluse']}"
+            )
+        # Rule 4: unsuffixed keys have tooluse: true
+        else:
+            assert entry["tooluse"] is True, (
+                f"Entry {name!r} does not end in _bulk but has tooluse: {entry['tooluse']}"
+            )
+
+    print("PASS: agents catalogue naming convention locked")
+
+
 def main() -> int:
     tests = [
         test_load_happy_path,
@@ -844,6 +895,7 @@ def main() -> int:
         test_cluster_cannot_extend,
         test_required_field_missing_after_merge_raises,
         test_extends_field_removed_from_output,
+        test_agents_catalogue_naming_convention,
         # --- _reviewer_single tests merged from test-reviewer-single.py ---
         test_single_signature,
         test_single_cluster_spec_raises,
