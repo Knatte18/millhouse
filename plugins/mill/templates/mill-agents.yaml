@@ -60,6 +60,13 @@ haiku:
   tooluse: true
   type: single
 
+haiku_bulk:
+  model: claude-haiku-4-5-20251001
+  provider: claude
+  timeout: 600
+  tooluse: false
+  type: single
+
 opushigh:
   effort: high
   model: claude-opus-4-7
