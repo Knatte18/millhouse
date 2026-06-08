@@ -3,7 +3,7 @@
 ```yaml
 task: "Track _mill/briefs/ instead of gitignoring them"
 slug: track-task-briefs
-approved: false
+approved: true
 started: "20260608-072059"
 parent: main
 root: ""

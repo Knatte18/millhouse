@@ -43,7 +43,9 @@ via the new `_bulk` names.
   `claude-opus-4-7`, efforts high/max/medium); `sonnethigh`, `sonnetmax`, `sonnetmedium`
   (provider `claude`, model `claude-sonnet-4-6`, efforts high/max/medium). Result: 20
   entries. Keep the file's existing header comment, updating it to describe the new
-  convention.
+  convention; in that comment note that `tooluse` is consumed only by reviewer dispatch
+  and is irrelevant for entries used as implementer/fixer/merge models (e.g. `haiku`), so
+  `tooluse: true` on such an entry is harmless and the convention still applies uniformly.
 - **Commit:** `refactor(agents): make tool-use the default name, _bulk the suffixed exception`
 
 ### Card 2: Point reviewer roles and the schema example at tool-use names
@@ -63,7 +65,11 @@ via the new `_bulk` names.
   `roles.code-review.holistic.reviewer` stays `sonnethigh`; `merge.model` stays
   `sonnethigh`. No role may reference a `*_tool` or `*_bulk` name. Keep the plugin template
   and the hub `mill-config.yaml` in sync per CLAUDE.md. In `review-output.schema.md`,
-  replace the example `reviewer_model: sonnetmax_tool` with `sonnetmax`.
+  update the `reviewer_model` metadata-fields table row (currently
+  `(e.g. \`sonnetmax\`, \`sonnetmax_tool\`)`) to drop `sonnetmax_tool`, e.g.
+  `(e.g. \`sonnetmax\`, \`sonnethigh\`)`. The line-14 example is already `sonnetmax` and
+  needs no change. Confirm `grep sonnetmax_tool plugins/mill/templates/review-output.schema.md`
+  returns nothing afterward.
 - **Commit:** `refactor(config): point reviewer roles at tool-use names`
 
 ### Card 3: Update test-registry baseline and the assertions that depend on it
@@ -127,7 +133,10 @@ via the new `_bulk` names.
   `HUB` root pattern) and asserts every entry obeys the convention: a key that does NOT
   end in `_bulk` has `tooluse` present and `True`; a key ending in `_bulk` has `tooluse`
   present and `False`; and no key ends in `_tool`. Follow the existing test style in the
-  file (return int error count or assert-based, matching siblings).
+  file (return int error count or assert-based, matching siblings). Add a short comment in
+  the test noting that `tooluse` is reviewer-only and the convention is applied uniformly,
+  so entries used as implementer/merge models (e.g. `haiku`) still assert `tooluse: True`
+  by design — this is not an oversight.
 - **Commit:** `test(agents): lock the tool-use/_bulk naming convention`
 
 ## Batch Tests
