@@ -126,6 +126,17 @@ def test_glob_entries_contains_new_junction_names() -> int:
     return errors
 
 
+def test_glob_entries_excludes_briefs() -> int:
+    errors = 0
+    for entry in GLOB_ENTRIES:
+        if "_mill/briefs" in entry:
+            print(f"FAIL: GLOB_ENTRIES contains _mill/briefs in entry '{entry}' — briefs must remain tracked", file=sys.stderr)
+            errors += 1
+    if errors == 0:
+        print("PASS: GLOB_ENTRIES contains no _mill/briefs entry — briefs are tracked, not ignored")
+    return errors
+
+
 def main() -> int:
     tests = [
         test_anchored_entries_not_exported,
@@ -135,6 +146,7 @@ def main() -> int:
         test_upsert_corrupt_marker_raises,
         test_render_block_contains_glob_entries,
         test_glob_entries_contains_new_junction_names,
+        test_glob_entries_excludes_briefs,
     ]
     errors = 0
     for test in tests:
