@@ -30,7 +30,7 @@ roles:
   discussion-review:
     holistic:
       rounds: 5
-      reviewer: sonnetmax_tool
+      reviewer: sonnetmax
   plan-review:
     batch:
       rounds: 0

@@ -58,7 +58,7 @@ paths:
 review:
   discussion:
     rounds: 2
-    holistic: sonnetmax_tool
+    holistic: sonnetmax
 
   plan:
     rounds: 3
