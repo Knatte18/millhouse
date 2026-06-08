@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-track-briefs
+phase: approved-review-mode-tests
 slug: track-task-briefs
 branch: hanf/track-task-briefs
 plan: _mill/plan
@@ -22,6 +22,7 @@ planned  '2026-06-08T07:30:10Z'
 implementing  '2026-06-08T07:41:02Z'
 approved-reviewer-tooluse-convention  '2026-06-08T07:47:04Z'
 approved-track-briefs  '2026-06-08T07:50:58Z'
+approved-review-mode-tests  '2026-06-08T07:55:32Z'
 ```
 
 ## Batches
@@ -39,7 +40,8 @@ batches:
     start_sha: 1df55b35b6ae388eea3f44a9d0af8afb12d65cce
     commit_sha: a9eefb6af3c851202644a516aaaad6ff018d60e4
   - name: review-mode-tests
-    state: running
+    state: approved
     implementer_session: bdb9224c-8cdc-40a7-8b84-6e9d4930366a
     start_sha: b6248d630e0dcbdaed0031ee4646ee9ec23add22
+    commit_sha: ac9c22c89bd2515deb12fe4b20e8ee4345d10c76
 ```
