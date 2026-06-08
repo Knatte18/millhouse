@@ -856,6 +856,14 @@ def test_agents_catalogue_naming_convention() -> None:
                 f"Entry {name!r} does not end in _bulk but has tooluse: {entry['tooluse']}"
             )
 
+    # Rule 5: Every unsuffixed key must have a corresponding _bulk counterpart
+    for name in catalogue.keys():
+        if not name.endswith("_bulk"):
+            bulk_name = name + "_bulk"
+            assert bulk_name in catalogue, (
+                f"Entry {name!r} has no corresponding {bulk_name!r} in catalogue"
+            )
+
     print("PASS: agents catalogue naming convention locked")
 
 
