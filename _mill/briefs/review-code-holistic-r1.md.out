@@ -1,0 +1,31 @@
+The implementation looks correct. Now I have all the information needed to produce the review. Let me produce it now.
+
+MILL_REVIEW_BEGIN
+# Review: Track _mill/briefs/ instead of gitignoring them -- holistic
+
+```yaml
+verdict: REQUEST_CHANGES
+reviewer_model: sonnethigh
+reviewed_file: plan/ + source
+date: 2026-06-08
+```
+
+## Findings
+
+### [BLOCKING] haiku_bulk entry missing -- plan requires 20 entries, 19 delivered
+
+**Location:** `C:/Code/millhouse/wts/track-task-briefs/plugins/mill/templates/mill-agents.yaml:56-61`
+**Issue:** Plan Card 1 explicitly lists `haiku` as one of the 10 combos requiring both a `<name>` and `<name>_bulk` pair, with the stated outcome "Result: 20 entries." The file delivers only 19 entries -- `haiku` is present with `tooluse: true` but `haiku_bulk` (with `tooluse: false`, same `model`/`provider`/`timeout`) is absent.
+**Fix:** Add a `haiku_bulk` entry immediately after `haiku:` with `model: claude-haiku-4-5-20251001`, `provider: claude`, `timeout: 600`, `tooluse: false`, `type: single`.
+
+### [NIT] Card 5 convention test does not assert symmetric _bulk pairing
+
+**Location:** `C:/Code/millhouse/wts/track-task-briefs/plugins/mill/unit_tests/test-reviewers.py:811-859`
+**Issue:** `test_agents_catalogue_naming_convention` only validates that existing entries obey the naming rules; it does not assert that every unsuffixed key has a corresponding `_bulk` counterpart. The missing `haiku_bulk` passes this test silently, so the guard is weaker than the plan intends.
+**Fix:** After the per-entry loop, add an assertion: for every key that does not end in `_bulk`, assert `key + "_bulk"` also exists in the catalogue (one line of additional assertion covering all 10 combos).
+
+## Verdict
+
+REQUEST_CHANGES
+One BLOCKING plan deviation: `haiku_bulk` absent from mill-agents.yaml.
+MILL_REVIEW_END
