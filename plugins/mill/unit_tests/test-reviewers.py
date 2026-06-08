@@ -64,8 +64,8 @@ def test_load_happy_path() -> None:
         # Write registry to local overlay
         (hub_dir / ".millhouse").mkdir()
         (hub_dir / ".millhouse" / "agents.local.yaml").write_text(
-            "sonnetmax:\n  type: single\n  provider: claude\n  model: claude-sonnet-4-6\n"
-            "sonnetmax_tool:\n  type: single\n  provider: claude\n  model: claude-sonnet-4-6\n  tooluse: true\n"
+            "sonnetmax:\n  type: single\n  provider: claude\n  model: claude-sonnet-4-6\n  tooluse: true\n"
+            "sonnetmax_bulk:\n  type: single\n  provider: claude\n  model: claude-sonnet-4-6\n  tooluse: false\n"
         )
         with patch.object(
             _reviewers,
@@ -78,8 +78,8 @@ def test_load_happy_path() -> None:
         assert "sonnetmax" in registry
         assert registry["sonnetmax"]["type"] == "single"
         assert registry["sonnetmax"]["provider"] == "claude"
-        assert "sonnetmax_tool" in registry
-        assert registry["sonnetmax_tool"]["tooluse"] is True
+        assert "sonnetmax_bulk" in registry
+        assert registry["sonnetmax_bulk"]["tooluse"] is False
     print("PASS: load happy path round-trips")
 
 
@@ -336,7 +336,16 @@ def test_load_raises_cluster_use_referencing_cluster() -> None:
 
 def test_resolve_single_happy_path() -> None:
     """resolve() returns spec for a known single entry."""
-    registry = make_minimal_registry()
+    # Test with a spec that omits tooluse to verify the default-False path
+    registry = {
+        "sonnetmax": {
+            "type": "single",
+            "provider": "claude",
+            "model": "claude-sonnet-4-6",
+            "effort": "max",
+            # tooluse intentionally omitted to test default behavior
+        }
+    }
     spec = _reviewers.resolve(registry, "sonnetmax")
     assert spec["type"] == "single"
     assert spec["provider"] == "claude"

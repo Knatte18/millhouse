@@ -3,7 +3,7 @@ Baseline reviewer registry builder for unit tests.
 
 Provides:
     make_minimal_registry(**overrides) -> dict
-        Returns a baseline registry dict with sonnetmax and sonnetmax_tool entries.
+        Returns a baseline registry dict with sonnetmax (tool-use) and sonnetmax_bulk (bulk) entries.
     write_to(wiki_root: Path, **overrides) -> Path
         Writes the registry to wiki_root/reviewers.yaml and returns the path.
 
@@ -31,7 +31,7 @@ def _deep_merge(base: dict, override: dict) -> dict:
 def make_minimal_registry(**overrides) -> dict:
     """Return a baseline reviewer registry dict.
 
-    Contains sonnetmax (bulk) and sonnetmax_tool (tool-use) single-specs.
+    Contains sonnetmax (tool-use) and sonnetmax_bulk (bulk) single-specs.
     The **overrides kwargs are deep-merged into the baseline.
     """
     baseline: dict = {
@@ -40,13 +40,14 @@ def make_minimal_registry(**overrides) -> dict:
             "provider": "claude",
             "model": "claude-sonnet-4-6",
             "effort": "max",
+            "tooluse": True,
         },
-        "sonnetmax_tool": {
+        "sonnetmax_bulk": {
             "type": "single",
             "provider": "claude",
             "model": "claude-sonnet-4-6",
             "effort": "max",
-            "tooluse": True,
+            "tooluse": False,
         },
     }
     if overrides:
