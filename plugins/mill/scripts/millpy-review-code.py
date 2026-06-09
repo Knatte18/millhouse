@@ -72,6 +72,12 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="For finalize stage only; path to the reviewer's output file.",
     )
+    parser.add_argument(
+        "--round",
+        type=int,
+        default=None,
+        help="Review round number from prepare envelope; required for finalize stage.",
+    )
     args = parser.parse_args(argv)
 
     import _agent_dispatch
@@ -79,7 +85,7 @@ def main(argv: list[str] | None = None) -> int:
     import _reviewers
     from _paths import resolve_hub_path, resolve_wiki_path
     from _review_cli import print_error_envelope
-    from _review_common import ReviewError, find_active_slug, load_config
+    from _review_common import ReviewError, find_active_slug, load_config, resolve_path
     from _review_code import prepare, finalize, run
 
     try:
@@ -147,17 +153,16 @@ def main(argv: list[str] | None = None) -> int:
         if not args.agent_output:
             print_error_envelope("code", "--agent-output required for finalize stage")
             return 1
+        if args.round is None:
+            print_error_envelope("code", "--round is required for finalize stage")
+            return 1
         try:
             agent_output_path = Path(args.agent_output)
             raw_text = agent_output_path.read_text(encoding="utf-8")
-            prepare_result = prepare(
-                cfg, slug, scope=args.batch, mill_dir=mill_dir, project_root=project_root,
-                wiki_root=wiki_root, git_root=git_root, extra_files=extra_files,
-                max_rounds=args.max_rounds,
-            )
+            reviews_dir = resolve_path(cfg["paths"]["reviews_dir"], slug)
             result = finalize(
-                cfg, slug, raw_text, scope=args.batch, round_n=prepare_result["round"],
-                reviews_dir=prepare_result["reviews_dir"], mill_dir=mill_dir,
+                cfg, slug, raw_text, scope=args.batch, round_n=args.round,
+                reviews_dir=reviews_dir, mill_dir=mill_dir,
                 project_root=project_root, wiki_root=wiki_root, git_root=git_root
             )
             print(json.dumps(result.to_dict()))
