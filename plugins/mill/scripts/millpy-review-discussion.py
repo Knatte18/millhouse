@@ -50,6 +50,12 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="For finalize stage only; path to the reviewer's output file.",
     )
+    parser.add_argument(
+        "--round",
+        type=int,
+        default=None,
+        help="Review round number from prepare envelope; required for finalize stage.",
+    )
     args = parser.parse_args(argv)
 
     import _agent_dispatch
@@ -57,7 +63,7 @@ def main(argv: list[str] | None = None) -> int:
     import _reviewers
     from _paths import resolve_git_root, resolve_hub_path, resolve_wiki_path
     from _review_cli import print_error_envelope
-    from _review_common import ReviewError, find_active_slug, load_config
+    from _review_common import ReviewError, find_active_slug, load_config, resolve_path
     from _review_discussion import prepare, finalize, run
 
     try:
@@ -111,14 +117,16 @@ def main(argv: list[str] | None = None) -> int:
         if not args.agent_output:
             print_error_envelope("discussion", "--agent-output required for finalize stage")
             return 1
+        if args.round is None:
+            print_error_envelope("discussion", "--round is required for finalize stage")
+            return 1
         try:
             agent_output_path = Path(args.agent_output)
             raw_text = agent_output_path.read_text(encoding="utf-8")
-            # We need round_n and reviews_dir; get them via prepare() first
-            prepare_result = prepare(cfg, slug, mill_dir, project_root, wiki_root, max_rounds=args.max_rounds)
+            reviews_dir = resolve_path(cfg["paths"]["reviews_dir"], slug)
             result = finalize(
-                cfg, slug, raw_text, round_n=prepare_result["round"],
-                reviews_dir=prepare_result["reviews_dir"], mill_dir=mill_dir,
+                cfg, slug, raw_text, round_n=args.round,
+                reviews_dir=reviews_dir, mill_dir=mill_dir,
                 project_root=project_root, wiki_root=wiki_root
             )
             print(json.dumps(result.to_dict()))

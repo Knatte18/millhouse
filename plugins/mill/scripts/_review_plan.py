@@ -508,6 +508,7 @@ def finalize(
             "round": round_n,
             "verdict": "ERROR",
             "blocking_count": 0,
+            "nit_count": 0,
             "file": str(path),
             "error": f"parse_verdict failed: {exc}",
             "session_id": None,
@@ -518,6 +519,7 @@ def finalize(
         "round": round_n,
         "verdict": review_entry["verdict"],
         "blocking_count": review_entry["blocking_count"],
+        "nit_count": review_entry["nit_count"],
         "file": review_entry["file"],
         "session_id": None,
     }

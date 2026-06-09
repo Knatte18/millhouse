@@ -172,7 +172,8 @@ def main(argv=None) -> int:
             print(f"batch {args.batch_name!r} not found in status", file=sys.stderr)
             return 1
         start_sha = batch_status.get("start_sha")
-        snapshot_path = project_root / "_mill" / f".cleanliness-snapshot-{args.batch_name}.txt"
+        _safe_batch = args.batch_name.replace(":", "-").replace("/", "-").replace("\\", "-")
+        snapshot_path = project_root / "_mill" / f".cleanliness-snapshot-{_safe_batch}.txt"
         session_id = batch_status.get("implementer_session")
         return finalize_from_output(
             Path(args.agent_output),
@@ -192,7 +193,8 @@ def main(argv=None) -> int:
         return 1
     start_sha = result.stdout.strip()
 
-    snapshot_path = project_root / "_mill" / f".cleanliness-snapshot-{args.batch_name}.txt"
+    _safe_batch = args.batch_name.replace(":", "-").replace("/", "-").replace("\\", "-")
+    snapshot_path = project_root / "_mill" / f".cleanliness-snapshot-{_safe_batch}.txt"
     _cleanliness.capture_snapshot(project_root, snapshot_path)
 
     session_id = str(uuid.uuid4())

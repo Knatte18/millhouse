@@ -113,6 +113,8 @@ When `dispatch == agent`, follow this three-step pattern at each dispatch point:
    - `subagent_type`: one of `"mill:mill-implementer"` or `"mill:mill-reviewer"`
    - `model`: Agent-tool tier (`"sonnet"`, `"opus"`, or `"haiku"`)
 
+   Also extract from the envelope: `session_id` (string or null), `round` (integer), and `start_sha` (string or null -- present only when the CLI emits it, e.g. fix and implementer CLIs).
+
 3. **Call Agent tool:** Synchronously invoke the Agent tool with:
    - `subagent_type`: the value from step 2
    - `model`: the value from step 2
@@ -123,6 +125,8 @@ When `dispatch == agent`, follow this three-step pattern at each dispatch point:
 4. **Capture output:** Write the Agent's returned final message to `<brief_path>.out.md` (utf-8). The response file extends the brief path by replacing the trailing `.md` with `.out.md` — for a brief `foo-r1.md` the response is `foo-r1.out.md`.
 
 5. **Run finalize stage:** Invoke the CLI with `--stage finalize`, the same standard arguments, and `--agent-output <brief_path>.out.md`. The response file follows the same naming rule: `.out.md` replaces the trailing `.md` of the brief path. Parse the returned JSON envelope.
+
+   Additionally thread any applicable prepare-envelope fields into the finalize call: for fix and implementer CLIs, pass `--session-id <session_id>` and `--start-sha <start_sha>` (when `start_sha` is not null in the envelope); for review CLIs, pass `--round <round>`.
 
 6. **Branch on verdict:** Use the JSON envelope to branch identically to the existing `subprocess`/`psmux` flow — the `status`, `verdict`, `stuck_type` handling is identical.
 
