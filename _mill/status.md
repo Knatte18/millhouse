@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-fix-and-test
 slug: review-discussion-brief-path
 branch: hanf/review-discussion-brief-path
 plan: _mill/plan
@@ -20,6 +20,7 @@ planning  '2026-06-09T12:50:00Z'
 plan-fix-r1  '2026-06-09T12:53:06Z'
 planned  '2026-06-09T12:53:31Z'
 implementing  '2026-06-09T12:55:47Z'
+approved-fix-and-test  '2026-06-09T12:58:12Z'
 ```
 
 ## Batches
@@ -27,7 +28,8 @@ implementing  '2026-06-09T12:55:47Z'
 ```yaml
 batches:
   - name: fix-and-test
-    state: running
+    state: approved
     implementer_session: 69361a85-997d-4d48-ab1e-f85ada69285e
     start_sha: a07eaeb8fbc35f79dbcb93c297c43666f5eb4a93
+    commit_sha: 863b5466da4009cfc4e817095dc624cce8c28185
 ```
