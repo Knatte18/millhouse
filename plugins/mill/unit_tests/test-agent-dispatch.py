@@ -130,8 +130,8 @@ def test_write_brief_returns_path() -> None:
 
 def test_subagent_constants() -> None:
     """SUBAGENT_* constants are defined correctly."""
-    assert _agent_dispatch.SUBAGENT_REVIEWER == "mill-reviewer"
-    assert _agent_dispatch.SUBAGENT_IMPLEMENTER == "mill-implementer"
+    assert _agent_dispatch.SUBAGENT_REVIEWER == "mill:mill-reviewer"
+    assert _agent_dispatch.SUBAGENT_IMPLEMENTER == "mill:mill-implementer"
     print("PASS subagent constants")
 
 

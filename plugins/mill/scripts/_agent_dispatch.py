@@ -15,7 +15,7 @@ model_to_tier(model: str) -> str
 
 write_brief(briefs_dir: Path, role: str, scope: str, round_n: int, prompt_text: str) -> Path
     Write a brief file to briefs_dir/<role>-<scope>-r<round_n>.md,
-    create parent directories, and return the path.
+    create parent directories, and return the path. Example role: "implement".
 
 SUBAGENT_REVIEWER, SUBAGENT_IMPLEMENTER
     String constants for subagent type names.
@@ -32,8 +32,8 @@ __all__ = [
     "SUBAGENT_IMPLEMENTER",
 ]
 
-SUBAGENT_REVIEWER = "mill-reviewer"
-SUBAGENT_IMPLEMENTER = "mill-implementer"
+SUBAGENT_REVIEWER = "mill:mill-reviewer"
+SUBAGENT_IMPLEMENTER = "mill:mill-implementer"
 
 VALID_DISPATCH_MODES = {"subprocess", "psmux", "agent"}
 MODEL_FAMILIES = {
@@ -94,7 +94,7 @@ def write_brief(
 
     Args:
         briefs_dir: Parent directory for briefs.
-        role: Role name (e.g., "mill-implementer").
+        role: Role name (e.g., "implement").
         scope: Scope name (e.g., "code-review").
         round_n: Round number (integer).
         prompt_text: Full prompt text to write (UTF-8).
