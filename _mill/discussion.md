@@ -56,7 +56,7 @@ Additionally, `_implementer_common.py` hardcodes the string `"mill-implementer"`
 - `plugins/mill/.claude-plugin/plugin.json` — `"name": "mill"` establishes the namespace prefix used by Claude Code to qualify agent names.
 - `plugins/mill/agents/mill-reviewer.md` / `mill-implementer.md` — agent definition files with `name: mill-reviewer` / `name: mill-implementer` in frontmatter. These names are correct — they are the agents' own identities. The dispatch reference is a separate concern.
 
-**Import situation in `_implementer_common.py`:** `_agent_dispatch` is not currently imported in `_implementer_common.py`. The fix must add the import and replace both hardcoded strings.
+**Import situation in `_implementer_common.py`:** `_agent_dispatch` is already imported at line 4 of `_implementer_common.py`. The fix only needs to replace the two hardcoded string literals with `_agent_dispatch.SUBAGENT_IMPLEMENTER`.
 
 **No other callers emit `subagent_type` directly** — all review CLIs already go through the `SUBAGENT_REVIEWER` constant. The only bare-string sites are in `_implementer_common.py`.
 
@@ -68,7 +68,7 @@ The existing unit-test suite covers the affected constants and the `emit_prepare
 
 **`test-agent-dispatch.py`** — `test_subagent_constants()` asserts `SUBAGENT_REVIEWER == "mill-reviewer"` and `SUBAGENT_IMPLEMENTER == "mill-implementer"`. Update both to namespaced values.
 
-**`test-implementer-common.py`** — Case 12 asserts `data["subagent_type"] == "mill-implementer"` on the `emit_prepare` output (line 419). Update to `"mill:mill-implementer"`.
+**`test-implementer-common.py`** — Case 12 asserts `data["subagent_type"] == "mill-implementer"` on the `emit_prepare` output (line 419). Update to `"mill:mill-implementer"`. Case 14 (`emit_prepare_no_dispatch`) has no `subagent_type` assertion; add `assert data["subagent_type"] == "mill:mill-implementer"` there so the no-dispatch path is also covered after the fix.
 
 Verify command: `PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py`
 
