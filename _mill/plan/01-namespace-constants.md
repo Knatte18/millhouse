@@ -22,7 +22,7 @@ Fix the two `_agent_dispatch.py` constants to use plugin-namespaced agent names,
   - `plugins/mill/scripts/_agent_dispatch.py`
 - **Creates:** none
 - **Deletes:** none
-- **Requirements:** In `_agent_dispatch.py`, change `SUBAGENT_REVIEWER = "mill-reviewer"` to `SUBAGENT_REVIEWER = "mill:mill-reviewer"` and `SUBAGENT_IMPLEMENTER = "mill-implementer"` to `SUBAGENT_IMPLEMENTER = "mill:mill-implementer"`. Also update the two docstring example references: the module docstring at the top lists `SUBAGENT_REVIEWER, SUBAGENT_IMPLEMENTER` as exports (no string value shown there — no change needed in that section); the `write_brief` docstring uses `"mill-implementer"` as an example in the `role` param description — update to `"mill:mill-implementer"`. No other changes to this file.
+- **Requirements:** In `_agent_dispatch.py`, change `SUBAGENT_REVIEWER = "mill-reviewer"` to `SUBAGENT_REVIEWER = "mill:mill-reviewer"` and `SUBAGENT_IMPLEMENTER = "mill-implementer"` to `SUBAGENT_IMPLEMENTER = "mill:mill-implementer"`. Also update the two docstring example references: the module docstring at the top lists `SUBAGENT_REVIEWER, SUBAGENT_IMPLEMENTER` as exports (no string value shown there — no change needed in that section); the `write_brief` docstring uses `"mill-implementer"` as an example in the `role` param description — update to `"implement"` (the actual usage; `role` is a brief-naming token, not a subagent type). No other changes to this file.
 - **Commit:** `fix(agent-dispatch): namespace SUBAGENT_REVIEWER and SUBAGENT_IMPLEMENTER constants`
 
 ### Card 2: Use SUBAGENT_IMPLEMENTER constant in _implementer_common.py

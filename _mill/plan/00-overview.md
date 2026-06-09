@@ -3,7 +3,7 @@
 ```yaml
 task: Fix agent-dispatch prepare stage to emit namespaced subagent_type
 slug: agent-dispatch-namespace-fix
-approved: false
+approved: true
 started: 20260609-124741
 parent: main
 root: ""
