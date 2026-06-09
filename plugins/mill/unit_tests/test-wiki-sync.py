@@ -22,6 +22,8 @@ from wiki._sync import (  # noqa: E402
     atomic_write,
     commit_push,
     path_guard,
+    _run,
+    _git_env,
 )
 from wiki import WikiPathError, WikiPushError  # noqa: E402
 
@@ -253,6 +255,36 @@ def main() -> int:
             ok("path_guard('subdir/file.md') does not raise")
         except Exception as exc:
             fail("path_guard('subdir/file.md') does not raise", exc)
+
+        # --- (k) _run kills and raises WikiPushError when it exceeds timeout ---
+        try:
+            raised = False
+            error_msg = ""
+            try:
+                _run(
+                    [sys.executable, "-c", "import time; time.sleep(10)"],
+                    clone,
+                    timeout=0.5,
+                )
+            except WikiPushError as e:
+                raised = True
+                error_msg = str(e)
+            assert raised, "Command exceeding timeout should raise WikiPushError"
+            assert "timed out" in error_msg, f"Error should say 'timed out', got: {error_msg}"
+            ok("_run raises WikiPushError on timeout")
+        except Exception as exc:
+            fail("_run raises WikiPushError on timeout", exc)
+
+        # --- (l) _git_env disables interactive prompts ---
+        try:
+            env = _git_env()
+            assert env.get("GIT_TERMINAL_PROMPT") == "0", \
+                f"GIT_TERMINAL_PROMPT should be '0', got {env.get('GIT_TERMINAL_PROMPT')!r}"
+            assert env.get("GCM_INTERACTIVE") == "Never", \
+                f"GCM_INTERACTIVE should be 'Never', got {env.get('GCM_INTERACTIVE')!r}"
+            ok("_git_env disables interactive prompts")
+        except Exception as exc:
+            fail("_git_env disables interactive prompts", exc)
 
     finally:
         _safe_rmtree.safe_rmtree(tmp, allowed_root=tmp, ignore_errors=True)

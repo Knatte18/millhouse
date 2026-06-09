@@ -29,6 +29,25 @@ from pathlib import Path
 from wiki import WikiPathError, WikiPushError
 
 
+# Bound network git operations so an unreachable remote -- or one waiting on a
+# credential prompt the headless daemon can never answer -- fails fast instead
+# of blocking every wiki op forever.
+_GIT_NETWORK_TIMEOUT_SECONDS = 30.0
+
+
+def _git_env() -> dict:
+    """Environment for git subprocesses that forbids interactive prompts.
+
+    The wiki daemon launches with no console (CREATE_NO_WINDOW), so any git
+    credential or host-key prompt would block forever and starve every wiki
+    op. These vars make git fail with a non-zero exit instead of prompting.
+    """
+    env = dict(os.environ)
+    env["GIT_TERMINAL_PROMPT"] = "0"
+    env["GCM_INTERACTIVE"] = "Never"
+    return env
+
+
 def path_guard(rel_path: str) -> None:
     """Validate a relative path before any filesystem access.
 
@@ -93,27 +112,40 @@ def _run(
     cwd: Path,
     *,
     check: bool = True,
+    timeout: float | None = None,
 ) -> subprocess.CompletedProcess:
-    """Run a subprocess command with output capture.
+    """Run a subprocess command with output capture and no interactive prompts.
 
     Args:
         args: Command arguments (e.g. ["git", "-C", "<path>", "status"]).
         cwd: Working directory (for context only; "-C" args override).
         check: If True, raise WikiPushError on non-zero exit.
+        timeout: Seconds to wait before killing the command. None means no
+            limit; pass a value for network ops that could hang on a remote.
 
     Returns:
         subprocess.CompletedProcess with returncode, stdout, stderr.
 
     Raises:
-        WikiPushError: (if check=True) Command exited with non-zero rc.
+        WikiPushError: (if check=True) Command exited with non-zero rc, or the
+            command exceeded ``timeout``.
     """
-    result = subprocess.run(
-        args,
-        cwd=str(cwd),
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-    )
+    try:
+        result = subprocess.run(
+            args,
+            cwd=str(cwd),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            env=_git_env(),
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise WikiPushError(
+            f"git command timed out after {timeout:.0f}s: {' '.join(args)} -- "
+            f"the remote may be unreachable or waiting on credentials "
+            f"(interactive prompts are disabled for the daemon)."
+        ) from exc
 
     if check and result.returncode != 0:
         raise WikiPushError(result.stderr.strip())
@@ -139,6 +171,7 @@ def pull(wiki_path: Path) -> bool:
     result = _run(
         ["git", "-C", str(wiki_path), "pull", "--ff-only"],
         wiki_path,
+        timeout=_GIT_NETWORK_TIMEOUT_SECONDS,
     )
 
     return "Already up to date." not in result.stdout
@@ -198,6 +231,7 @@ def commit_push(
             ["git", "-C", str(wiki_path), "push"],
             wiki_path,
             check=False,
+            timeout=_GIT_NETWORK_TIMEOUT_SECONDS,
         )
         if push.returncode == 0:
             return
@@ -209,6 +243,7 @@ def commit_push(
             ["git", "-C", str(wiki_path), "pull", "--rebase"],
             wiki_path,
             check=False,
+            timeout=_GIT_NETWORK_TIMEOUT_SECONDS,
         )
         if rebase.returncode == 0:
             continue
