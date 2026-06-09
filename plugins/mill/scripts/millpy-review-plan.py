@@ -82,6 +82,12 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="For finalize stage only; path to the reviewer's output file.",
     )
+    parser.add_argument(
+        "--round",
+        type=int,
+        default=None,
+        help="Review round number from prepare envelope; required for finalize stage.",
+    )
     args = parser.parse_args(argv)
 
     import _agent_dispatch
@@ -146,22 +152,22 @@ def main(argv: list[str] | None = None) -> int:
         if not args.agent_output:
             print_error_envelope("plan", "--agent-output required for finalize stage")
             return 1
+        if args.round is None:
+            print_error_envelope("plan", "--round is required for finalize stage")
+            return 1
         try:
             agent_output_path = Path(args.agent_output)
             raw_text = agent_output_path.read_text(encoding="utf-8")
-            prepare_result = prepare(
-                cfg, slug, scope=None, mill_dir=mill_dir, project_root=project_root,
-                wiki_root=wiki_root, git_root=git_root
-            )
+            reviews_dir = resolve_path(cfg["paths"]["reviews_dir"], slug)
             review_entry = finalize(
-                cfg, slug, raw_text, scope=None, round_n=prepare_result["round"],
-                reviews_dir=prepare_result["reviews_dir"], mill_dir=mill_dir,
+                cfg, slug, raw_text, scope=None, round_n=args.round,
+                reviews_dir=reviews_dir, mill_dir=mill_dir,
                 project_root=project_root, wiki_root=wiki_root, git_root=git_root
             )
             # Build ReviewResult from the single review entry
             result_dict = {
                 "type": "plan",
-                "round": prepare_result["round"],
+                "round": args.round,
                 "verdict": review_entry["verdict"],
                 "blocking_count": review_entry["blocking_count"],
                 "reviews": [review_entry],
