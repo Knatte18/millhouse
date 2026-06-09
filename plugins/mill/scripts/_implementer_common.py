@@ -1,6 +1,5 @@
 """Shared helpers for millpy-implement.py and millpy-fix.py."""
 import json
-import re
 import _agent_dispatch
 import _cleanliness
 import _subprocess_util
@@ -116,7 +115,7 @@ def emit_prepare(
     envelope = {
         "stage": "prepare",
         "brief_path": str(brief_path.resolve()),
-        "subagent_type": "mill-implementer",
+        "subagent_type": _agent_dispatch.SUBAGENT_IMPLEMENTER,
         "model": model_tier,
         "session_id": session_id,
         "role": role,
@@ -155,7 +154,7 @@ def emit_prepare_no_dispatch(
     envelope = {
         "stage": "prepare",
         "dispatch_needed": False,
-        "subagent_type": "mill-implementer",
+        "subagent_type": _agent_dispatch.SUBAGENT_IMPLEMENTER,
         "model": model_tier,
         "session_id": session_id,
         "role": role,

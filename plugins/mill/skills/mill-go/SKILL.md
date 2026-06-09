@@ -110,7 +110,7 @@ When `dispatch == agent`, follow this three-step pattern at each dispatch point:
 
 2. **Run prepare stage:** Invoke the CLI with `--stage prepare` and the standard arguments (see each subsection for the exact CLI invocation). Parse the returned JSON line to extract:
    - `brief_path`: absolute file path to the rendered brief
-   - `subagent_type`: one of `"mill-implementer"` or `"mill-reviewer"`
+   - `subagent_type`: one of `"mill:mill-implementer"` or `"mill:mill-reviewer"`
    - `model`: Agent-tool tier (`"sonnet"`, `"opus"`, or `"haiku"`)
 
    Also extract from the envelope: `session_id` (string or null), `round` (integer), and `start_sha` (string or null -- present only when the CLI emits it, e.g. fix and implementer CLIs).
