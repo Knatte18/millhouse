@@ -1,10 +1,10 @@
 # Status
 
 ```yaml
-phase: discussed
+phase: planning
 slug: agent-pipeline-reliability
 branch: hanf/agent-pipeline-reliability
-plan: null
+plan: _mill/plan
 parent: main
 task: Fix agent-pipeline reliability gaps in finalize/success contract
 task_description: |
@@ -21,4 +21,5 @@ discussion-gap-fix-r3  '2026-06-09T12:57:50Z'
 discussion-gap-fix-r4  '2026-06-09T13:01:39Z'
 discussion-fix-r5  '2026-06-09T13:04:10Z'
 discussed  '2026-06-09T13:04:24Z'
+planning  '2026-06-09T13:15:43Z'
 ```
