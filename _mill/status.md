@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: agent-dispatch-namespace-fix
 branch: hanf/agent-dispatch-namespace-fix
 plan: _mill/plan
@@ -20,4 +20,13 @@ discussed  '2026-06-09T12:46:36Z'
 planning  '2026-06-09T12:48:58Z'
 plan-fix-r1  '2026-06-09T12:51:28Z'
 planned  '2026-06-09T12:51:51Z'
+implementing  '2026-06-09T12:54:19Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: Namespace constants
+    state: pending
 ```
