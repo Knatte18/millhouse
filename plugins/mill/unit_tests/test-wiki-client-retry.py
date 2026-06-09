@@ -6,18 +6,19 @@ WikiBusyError.
 """
 from __future__ import annotations
 
+import json
 import os
+import socket
 import sys
-import tempfile
+import threading
+import time
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
-from wiki import (
-    WikiBusyError,
-)  # noqa: E402
+from wiki import WikiBusyError  # noqa: E402
 from wiki import _client  # noqa: E402
 from _test_helpers import safe_temp_dir  # noqa: E402
 
@@ -43,7 +44,7 @@ def main() -> int:
             wiki_path.mkdir(parents=True, exist_ok=True)
 
             call_count = 0
-            def mock_connect_send_recv(host, port, msg, *, timeout=10.0):
+            def mock_connect_send_recv(host, port, msg, **kwargs):
                 nonlocal call_count
                 call_count += 1
                 if call_count == 1:
@@ -74,7 +75,7 @@ def main() -> int:
             wiki_path.mkdir(parents=True, exist_ok=True)
 
             call_count = 0
-            def mock_connect_send_recv(host, port, msg, *, timeout=10.0):
+            def mock_connect_send_recv(host, port, msg, **kwargs):
                 nonlocal call_count
                 call_count += 1
                 if call_count == 1:
@@ -104,7 +105,7 @@ def main() -> int:
             wiki_path.mkdir(parents=True, exist_ok=True)
 
             call_count = 0
-            def mock_connect_send_recv(host, port, msg, *, timeout=10.0):
+            def mock_connect_send_recv(host, port, msg, **kwargs):
                 nonlocal call_count
                 call_count += 1
                 raise ConnectionRefusedError("connection refused")
@@ -137,7 +138,7 @@ def main() -> int:
             wiki_path.mkdir(parents=True, exist_ok=True)
 
             call_count = 0
-            def mock_connect_send_recv(host, port, msg, *, timeout=10.0):
+            def mock_connect_send_recv(host, port, msg, **kwargs):
                 nonlocal call_count
                 call_count += 1
                 if call_count == 1:
@@ -166,7 +167,7 @@ def main() -> int:
             wiki_path.mkdir(parents=True, exist_ok=True)
 
             call_count = 0
-            def mock_connect_send_recv(host, port, msg, *, timeout=10.0):
+            def mock_connect_send_recv(host, port, msg, **kwargs):
                 nonlocal call_count
                 call_count += 1
                 raise ValueError("bad value")
@@ -198,7 +199,7 @@ def main() -> int:
             wiki_path.mkdir(parents=True, exist_ok=True)
 
             call_count = 0
-            def mock_connect_send_recv(host, port, msg, *, timeout=10.0):
+            def mock_connect_send_recv(host, port, msg, **kwargs):
                 nonlocal call_count
                 call_count += 1
                 raise TimeoutError("timeout")
@@ -219,6 +220,67 @@ def main() -> int:
                 ok("Backoff schedule is [2, 4, 8]")
     except Exception as exc:
         fail("Backoff schedule is [2, 4, 8]", exc)
+
+    # --- (7) _dispatch gives the response a longer read budget than connect ---
+    try:
+        with safe_temp_dir() as tmp:
+            wiki_path = tmp / "wiki"
+            wiki_path.mkdir(parents=True, exist_ok=True)
+
+            captured = {}
+            def mock_connect_send_recv(host, port, msg, **kwargs):
+                captured.update(kwargs)
+                return {"ok": True}
+
+            with patch.dict(os.environ, {"WIKI_DAEMON_INPROCESS": ""}), \
+                 patch.object(_client, "_connect_send_recv", mock_connect_send_recv), \
+                 patch.object(_client, "_ensure_daemon", return_value=("127.0.0.1", 9999, "token")):
+                _client._dispatch(wiki_path, "test_op", {})
+                connect_t = captured.get("timeout")
+                read_t = captured.get("read_timeout")
+                assert read_t is not None, "read_timeout must be passed to _connect_send_recv"
+                assert read_t >= 30.0, f"read_timeout should accommodate a git pull+push, got {read_t}"
+                assert read_t > connect_t, \
+                    f"read_timeout ({read_t}) must exceed connect timeout ({connect_t})"
+                ok("_dispatch gives the response a longer read budget than connect")
+    except Exception as exc:
+        fail("_dispatch gives the response a longer read budget than connect", exc)
+
+    # --- (8) _connect_send_recv waits read_timeout for a slow response, not connect timeout ---
+    try:
+        # A server that accepts instantly but delays its reply longer than the
+        # connect timeout. The recv must be governed by read_timeout, so a slow
+        # (but successful) op is not misreported as a timeout.
+        server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        server.bind(("127.0.0.1", 0))
+        server.listen(1)
+        bound_port = server.getsockname()[1]
+
+        def serve_slowly():
+            conn, _ = server.accept()
+            try:
+                while conn.recv(4096):
+                    pass  # drain until client signals SHUT_WR
+                time.sleep(0.4)  # longer than the 0.1s connect timeout below
+                conn.sendall(json.dumps({"ok": True, "slow": True}).encode("utf-8"))
+            finally:
+                conn.close()
+
+        thread = threading.Thread(target=serve_slowly, daemon=True)
+        thread.start()
+        try:
+            resp = _client._connect_send_recv(
+                "127.0.0.1", bound_port, {"op": "x"},
+                timeout=0.1, read_timeout=2.0,
+            )
+            assert resp == {"ok": True, "slow": True}, f"expected slow response, got {resp}"
+            ok("_connect_send_recv waits read_timeout for a slow response")
+        finally:
+            thread.join(timeout=3.0)
+            server.close()
+    except Exception as exc:
+        fail("_connect_send_recv waits read_timeout for a slow response", exc)
 
     print("", file=sys.stderr)
     if failed:

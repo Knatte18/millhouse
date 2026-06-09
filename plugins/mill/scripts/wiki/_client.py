@@ -44,6 +44,15 @@ from wiki import (
 SPAWN_TIMEOUT: int = 20 if sys.platform == "win32" else 10
 _SERVER_MODULE: str = "wiki._server"
 
+# Connecting to the daemon is local and instant, so a short budget detects a
+# dead/unreachable port quickly. Receiving the *response*, however, waits for
+# the daemon to finish the op -- and a mutating op runs git pull + push (two
+# network round-trips), which routinely exceeds a few seconds, especially on a
+# cold daemon start. The read budget must therefore be far longer than the
+# connect budget, or a successful-but-slow op is misreported as WikiBusyError.
+_CONNECT_TIMEOUT_SECONDS: float = 5.0
+_READ_TIMEOUT_SECONDS: float = 30.0
+
 # Registry of in-process WikiServer instances, keyed by resolved wiki_path.
 # When a wiki_path is registered, all client ops route directly to the server's
 # handle_request method instead of spawning a subprocess and talking over TCP.
@@ -151,7 +160,13 @@ def _dispatch(wiki_path: Path, op: str, payload: dict) -> dict:
     backoff_sleeps = [2, 4, 8]
     for attempt in range(4):
         try:
-            return _connect_send_recv(host, port, req, timeout=3.0)
+            return _connect_send_recv(
+                host,
+                port,
+                req,
+                timeout=_CONNECT_TIMEOUT_SECONDS,
+                read_timeout=_READ_TIMEOUT_SECONDS,
+            )
         except (TimeoutError, ConnectionResetError, ConnectionRefusedError):
             if attempt < 3:
                 time.sleep(backoff_sleeps[attempt])
@@ -672,14 +687,25 @@ def _spawn_server(wiki_path: Path) -> None:
         subprocess.Popen(cmd, env=env, close_fds=True, start_new_session=True)
 
 
-def _connect_send_recv(host: str, port: int, msg: dict, *, timeout: float = 10.0) -> dict:
+def _connect_send_recv(
+    host: str,
+    port: int,
+    msg: dict,
+    *,
+    timeout: float = 10.0,
+    read_timeout: float | None = None,
+) -> dict:
     """Send JSON request and receive JSON response over TCP.
 
     Args:
         host: Server host.
         port: Server port.
         msg: Request dict to send.
-        timeout: Connection timeout in seconds (default 10.0).
+        timeout: Connection (handshake) timeout in seconds (default 10.0).
+        read_timeout: Timeout in seconds for sending and receiving the
+            response once connected. Defaults to ``timeout`` when None. Pass a
+            larger value than ``timeout`` for ops the daemon services slowly
+            (e.g. mutating ops that run git pull + push).
 
     Returns:
         Response dict.
@@ -689,6 +715,8 @@ def _connect_send_recv(host: str, port: int, msg: dict, *, timeout: float = 10.0
     """
     sock = socket.create_connection((host, port), timeout=timeout)
     try:
+        if read_timeout is not None:
+            sock.settimeout(read_timeout)
         sock.sendall(json.dumps(msg).encode("utf-8"))
         sock.shutdown(socket.SHUT_WR)
 
