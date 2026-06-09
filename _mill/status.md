@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussion-fix-r5
+phase: discussed
 slug: agent-pipeline-reliability
 branch: hanf/agent-pipeline-reliability
 plan: null
@@ -20,4 +20,5 @@ discussion-gap-fix-r2  '2026-06-09T12:55:00Z'
 discussion-gap-fix-r3  '2026-06-09T12:57:50Z'
 discussion-gap-fix-r4  '2026-06-09T13:01:39Z'
 discussion-fix-r5  '2026-06-09T13:04:10Z'
+discussed  '2026-06-09T13:04:24Z'
 ```
