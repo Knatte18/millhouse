@@ -170,6 +170,7 @@ def main(argv: list[str] | None = None) -> int:
                 "round": args.round,
                 "verdict": review_entry["verdict"],
                 "blocking_count": review_entry["blocking_count"],
+                "nit_count": review_entry["nit_count"],
                 "reviews": [review_entry],
             }
             print(json.dumps(result_dict))
