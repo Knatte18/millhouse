@@ -3,7 +3,7 @@
 ```yaml
 task: Fix millpy-review-discussion to write briefs to the task worktree
 slug: review-discussion-brief-path
-approved: false
+approved: true
 started: 20260609-124907
 parent: main
 root: ""
