@@ -26,8 +26,8 @@ These gaps were introduced when subprocess dispatch was replaced with Agent SDK 
 - `millpy-review-code.py`: Add `--round` to finalize stage; derive `reviews_dir` via `_review_common.resolve_path(cfg["paths"]["reviews_dir"], slug)`; stop re-invoking `prepare()` in finalize.
 - `millpy-review-plan.py`: Same as code review.
 - `millpy-review-discussion.py`: Same as code review.
-- `mill-go/SKILL.md`: Update agent-mode dispatch docs to (a) pass `--round` to review finalize calls, (b) pass `--start-sha`/`--session-id` to fix finalize calls, (c) amend step 5 of the "Agent-mode dispatch" pattern to document threading prepare-envelope fields into finalize.
-- `mill-start/SKILL.md`: Update discussion-review finalize dispatch to pass `--round`; amend step 5 of the agent-mode dispatch pattern similarly.
+- `mill-go/SKILL.md`: Amend the "Agent-mode dispatch" pattern in two places: (a) step 2 — extend the prepare-envelope parse to also extract `session_id`, `round`, and `start_sha` (the latter for fix/implementer CLIs only); (b) step 5 — document threading those extracted fields into the finalize call (`--round <round>`, `--start-sha <start_sha>`, `--session-id <session_id>` for applicable CLIs). Also update the specific dispatch subsections for fix and review CLIs to show the new finalize flags.
+- `mill-start/SKILL.md`: At the two discussion-review finalize call sites (subprocess branch step 2 and agent-mode finalize), thread `--round <round>` from the prepare envelope into the finalize CLI invocation. mill-start references mill-go's pattern rather than owning its own copy; the concrete edit is at those two call sites.
 - New unit tests: `test-fix-finalize.py` and `test-review-finalize.py`.
 
 **Out:**
@@ -74,14 +74,17 @@ These gaps were introduced when subprocess dispatch was replaced with Agent SDK 
 
 ### Prepare→Agent→finalize pattern (mill-go SKILL.md "Agent-mode dispatch")
 
-The SKILL describes five steps:
-1. Run CLI with `--stage prepare`; parse envelope for `brief_path`, `subagent_type`, `model`, `session_id`, `round`.
-2. Call Agent tool with `prompt = "Read this file and follow the instructions exactly: <brief_path>"`.
-3. Write Agent's final message to `<brief_path>.out.md`.
-4. Run CLI with `--stage finalize` + same standard args + `--agent-output <brief_path>.out.md`.
-5. Parse returned JSON envelope.
+The SKILL describes six steps:
+1. Resolve dispatch mode.
+2. Run CLI with `--stage prepare`; parse envelope for `brief_path`, `subagent_type`, `model` (currently — to be amended to also extract `session_id`, `round`, `start_sha`).
+3. Call Agent tool with `prompt = "Read this file and follow the instructions exactly: <brief_path>"`.
+4. Write Agent's final message to `<brief_path>.out.md`.
+5. Run CLI with `--stage finalize` + same standard args + `--agent-output <brief_path>.out.md` (to be amended to also pass envelope-derived fields).
+6. Branch on verdict.
 
-**Critical step 4 gap:** "Same standard arguments" refers to the original invocation args (`--batch`, `--review-file`, `--scope`, etc.), not the prepare envelope. The new `--start-sha`, `--session-id`, and `--round` arguments come from the prepare envelope, not the original call. The SKILL update must explicitly amend step 5 of the Agent-mode dispatch pattern to document: "additionally, thread named prepare-envelope fields into finalize: `start_sha` → `--start-sha`, `session_id` → `--session-id` (implementer CLIs), `round` → `--round` (review CLIs)."
+**Two-step amendment required:** The live Agent-mode dispatch pattern has 6 steps (1: resolve dispatch mode, 2: run prepare, 3: call Agent tool, 4: capture output to `.out.md`, 5: run finalize, 6: branch on verdict). Two amendments are needed:
+- **Step 2 (prepare parse):** Currently extracts only `brief_path`, `subagent_type`, `model`. Must be extended to also extract `session_id`, `round`, and `start_sha` from the prepare envelope. Without this, step 5 has no values to thread.
+- **Step 5 (finalize invocation):** "Same standard arguments" refers to the original invocation args (`--batch`, `--review-file`, `--scope`, etc.), not the prepare envelope. Must be amended to document: additionally thread prepare-envelope fields into finalize — `start_sha` → `--start-sha`, `session_id` → `--session-id` (fix CLIs), `round` → `--round` (review CLIs).
 
 ### Key files
 
@@ -220,3 +223,6 @@ Tests that review finalize correctly uses `--round` without re-invoking prepare:
 - **Q (r3 gap 1):** Does merge-in-subagent finalize get `--session-id`? **A:** No — conflicts finalize is out of scope entirely. Removed from session-id decision; now scoped to millpy-fix.py only.
 - **Q (r3 note 2):** Are start_sha line number citations accurate? **A:** No — line 314 is the prepare guard, 318 is emit_prepare. Replaced exact line numbers with structural description.
 - **Q (r3 note 3):** Is `max_rounds` positional in discussion-review prepare? **A:** No — it is keyword-only; the first five args are positional. Updated the description.
+- **Q (r4 gap 1):** Does the SKILL step 2 already capture session_id/round? **A:** No — step 2 currently parses only brief_path, subagent_type, model. Both step 2 (extract) and step 5 (thread into finalize) must be amended. Added step 2 amendment to scope.
+- **Q (r4 note 2):** How many steps does the Agent-mode dispatch pattern have? **A:** Six (resolve-mode, prepare, Agent-call, capture-output, finalize, branch-verdict). Corrected from five; finalize = step 5.
+- **Q (r4 note 3):** Does mill-start have its own copy of the dispatch pattern? **A:** No — it references mill-go's pattern. The concrete mill-start edit is threading `--round` at the two discussion-review finalize call sites in mill-start/SKILL.md.
