@@ -44,7 +44,9 @@ batches:
     start_sha: adaf915a5548bb13d33612f075a1f10cf8c2c872
     commit_sha: 88d699518265662aca547e4c0d2bdcda485a748c
   - name: 'SKILL.md updates: Agent-mode dispatch pattern'
-    state: pending
+    state: running
+    implementer_session: fae80776-b1fa-4704-859f-ba06096ce8e4
+    start_sha: f274ac5c2cd1a6f7f3de98394d5c3ebc2bbfa15d
   - name: 'Unit tests: fix-finalize and review-finalize'
     state: pending
 ```
