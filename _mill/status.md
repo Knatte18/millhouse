@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-fix-r1
+phase: planned
 slug: agent-dispatch-namespace-fix
 branch: hanf/agent-dispatch-namespace-fix
 plan: _mill/plan
@@ -19,4 +19,5 @@ discussion-gap-fix-r1  '2026-06-09T12:45:25Z'
 discussed  '2026-06-09T12:46:36Z'
 planning  '2026-06-09T12:48:58Z'
 plan-fix-r1  '2026-06-09T12:51:28Z'
+planned  '2026-06-09T12:51:51Z'
 ```
