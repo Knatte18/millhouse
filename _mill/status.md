@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: 'approved-Unit tests: fix-finalize and review-finalize'
+phase: holistic-reviewing
 slug: agent-pipeline-reliability
 branch: hanf/agent-pipeline-reliability
 plan: _mill/plan
@@ -29,6 +29,7 @@ approved-Core fix: emit_prepare + millpy-fix.py  '2026-06-09T17:59:07Z'
 approved-Review CLI finalize: drop prepare() re-invocation  '2026-06-09T18:01:45Z'
 approved-SKILL.md updates: Agent-mode dispatch pattern  '2026-06-09T18:03:43Z'
 approved-Unit tests: fix-finalize and review-finalize  '2026-06-09T18:11:23Z'
+holistic-reviewing  '2026-06-09T18:11:58Z'
 ```
 
 ## Batches
