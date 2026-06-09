@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-Namespace constants
 slug: agent-dispatch-namespace-fix
 branch: hanf/agent-dispatch-namespace-fix
 plan: _mill/plan
@@ -21,6 +21,7 @@ planning  '2026-06-09T12:48:58Z'
 plan-fix-r1  '2026-06-09T12:51:28Z'
 planned  '2026-06-09T12:51:51Z'
 implementing  '2026-06-09T12:54:19Z'
+approved-Namespace constants  '2026-06-09T12:58:50Z'
 ```
 
 ## Batches
@@ -28,7 +29,8 @@ implementing  '2026-06-09T12:54:19Z'
 ```yaml
 batches:
   - name: Namespace constants
-    state: running
+    state: approved
     implementer_session: 3d9471bc-b910-4c6c-80de-9f2921ac24b0
     start_sha: bdcd7cb7585ac48df6f26c67512b131160a02c05
+    commit_sha: 3424e6fc9104c2ffffc5581088ee168cf974feae
 ```
