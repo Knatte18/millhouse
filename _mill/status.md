@@ -32,7 +32,9 @@ implementing  '2026-06-09T13:23:02Z'
 ```yaml
 batches:
   - name: 'Core fix: emit_prepare + millpy-fix.py'
-    state: pending
+    state: running
+    implementer_session: 7c87dfdb-e29a-40ba-b367-7f046ad27286
+    start_sha: b214851ccec9f755abf49dc158c37faecdaf2297
   - name: 'Review CLI finalize: drop prepare() re-invocation'
     state: pending
   - name: 'SKILL.md updates: Agent-mode dispatch pattern'
