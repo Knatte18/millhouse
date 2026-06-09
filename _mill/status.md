@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-fixing
+phase: holistic-reviewing
 slug: agent-pipeline-reliability
 branch: hanf/agent-pipeline-reliability
 plan: _mill/plan
@@ -31,6 +31,7 @@ approved-SKILL.md updates: Agent-mode dispatch pattern  '2026-06-09T18:03:43Z'
 approved-Unit tests: fix-finalize and review-finalize  '2026-06-09T18:11:23Z'
 holistic-reviewing  '2026-06-09T18:11:58Z'
 holistic-fixing  '2026-06-09T18:13:49Z'
+holistic-reviewing  '2026-06-09T18:18:42Z'
 ```
 
 ## Batches
