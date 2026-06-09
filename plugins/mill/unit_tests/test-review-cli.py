@@ -334,6 +334,98 @@ def test_review_cli_emits_envelope_on_slug_failure() -> int:
     return failures
 
 
+def test_discussion_prepare_brief_path_uses_git_root() -> int:
+    """Test that discussion prepare stage writes briefs to git_root, not hub_dir."""
+    failures = 0
+    import importlib.util as _ilu
+    import unittest.mock as _mock
+    import os as _os
+
+    _cli_path = HUB / "plugins" / "mill" / "scripts" / "millpy-review-discussion.py"
+    _spec = _ilu.spec_from_file_location("millpy_review_discussion_brief_path", str(_cli_path))
+    _mod = _ilu.module_from_spec(_spec)
+    _spec.loader.exec_module(_mod)
+
+    with _test_helpers.safe_temp_dir() as tmp:
+        task_root = tmp / "wts" / "my-slug"
+        hub_root = tmp / "wts" / "millhouse"
+        wiki_root = tmp / "wiki"
+        task_root.mkdir(parents=True)
+        hub_root.mkdir(parents=True)
+        wiki_root.mkdir(parents=True)
+
+        cfg_dict = {
+            "paths": {
+                "discussion_file": "_mill/discussion.md",
+                "plan_dir": "_mill/plan/",
+                "reviews_dir": "_mill/reviews/",
+            },
+            "roles": {
+                "discussion-review": {
+                    "holistic": {
+                        "rounds": 1,
+                        "reviewer": "sonnetmax",
+                    }
+                }
+            },
+            "spawn": {
+                "branch_prefix": "hanf/",
+            },
+        }
+
+        fake_prepare = {
+            "prompt_text": "# test prompt",
+            "model": "claude-sonnet-4-6",
+            "round": 1,
+            "reviews_dir": task_root / "_mill" / "reviews",
+            "scope": "holistic",
+        }
+
+        stdout_buf = io.StringIO()
+        _orig_cwd = _os.getcwd()
+        _os.chdir(task_root)
+        try:
+            with contextlib.redirect_stdout(stdout_buf):
+                with _mock.patch("_paths.resolve_git_root", return_value=task_root):
+                    with _mock.patch("_paths.resolve_hub_path", return_value=hub_root):
+                        with _mock.patch("_paths.resolve_wiki_path", return_value=wiki_root):
+                            with _mock.patch("_review_common.load_config", return_value=cfg_dict):
+                                with _mock.patch("_reviewers.load", return_value={}):
+                                    with _mock.patch("_reviewers.validate_role_refs"):
+                                        with _mock.patch("_review_common.find_active_slug", return_value="my-slug"):
+                                            with _mock.patch("_review_discussion.prepare", return_value=fake_prepare):
+                                                _rc = _mod.main(["--stage", "prepare"])
+        finally:
+            _os.chdir(_orig_cwd)
+
+        if _rc != 0:
+            print(f"FAIL brief_path (exit): expected 0, got {_rc}", file=sys.stderr)
+            failures += 1
+            return failures
+
+        try:
+            envelope = json.loads(stdout_buf.getvalue().strip())
+        except json.JSONDecodeError as e:
+            print(f"FAIL brief_path (JSON): {e}", file=sys.stderr)
+            failures += 1
+            return failures
+
+        brief_path_str = envelope.get("brief_path", "")
+
+        if str(task_root) not in brief_path_str:
+            print(f"FAIL brief_path: expected path under task_root {task_root!r}, got {brief_path_str!r}", file=sys.stderr)
+            failures += 1
+
+        if str(hub_root) in brief_path_str:
+            print(f"FAIL brief_path: brief went to hub_root (regression): {brief_path_str!r}", file=sys.stderr)
+            failures += 1
+
+        if failures == 0:
+            print("PASS brief_path: discussion prepare stage writes brief to git_root (task worktree)")
+
+        return failures
+
+
 def main() -> int:
     failures = 0
 
@@ -342,6 +434,7 @@ def main() -> int:
     failures += test_review_cli_emits_envelope_on_config_failure()
     failures += test_review_cli_emits_envelope_on_reviewer_load_failure()
     failures += test_review_cli_emits_envelope_on_slug_failure()
+    failures += test_discussion_prepare_brief_path_uses_git_root()
 
     # (a) plain message — ERROR: prefix present, hint absent, trailing newline present
     buf = io.StringIO()
