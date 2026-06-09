@@ -38,7 +38,9 @@ batches:
     start_sha: b214851ccec9f755abf49dc158c37faecdaf2297
     commit_sha: c92c93a370a4ec97eca7fec28fc5aa4d9fda442d
   - name: 'Review CLI finalize: drop prepare() re-invocation'
-    state: pending
+    state: running
+    implementer_session: e76cea1e-9ce2-4fa8-bd49-250ab4f9848a
+    start_sha: adaf915a5548bb13d33612f075a1f10cf8c2c872
   - name: 'SKILL.md updates: Agent-mode dispatch pattern'
     state: pending
   - name: 'Unit tests: fix-finalize and review-finalize'
