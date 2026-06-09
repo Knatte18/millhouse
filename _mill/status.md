@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: discussed
 slug: review-discussion-brief-path
 branch: hanf/review-discussion-brief-path
 plan: null
@@ -15,4 +15,5 @@ task_description: |
 
 ```text
 discussing  '2026-06-09T12:36:09Z'
+discussed  '2026-06-09T12:46:04Z'
 ```
