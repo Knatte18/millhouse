@@ -1,10 +1,10 @@
 # Status
 
 ```yaml
-phase: discussed
+phase: planning
 slug: agent-dispatch-namespace-fix
 branch: hanf/agent-dispatch-namespace-fix
-plan: null
+plan: _mill/plan
 parent: main
 task: Fix agent-dispatch prepare stage to emit namespaced subagent_type
 task_description: |
@@ -17,4 +17,5 @@ task_description: |
 discussing  '2026-06-09T12:35:20Z'
 discussion-gap-fix-r1  '2026-06-09T12:45:25Z'
 discussed  '2026-06-09T12:46:36Z'
+planning  '2026-06-09T12:48:58Z'
 ```
