@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-approved
+phase: done
 slug: agent-dispatch-namespace-fix
 branch: hanf/agent-dispatch-namespace-fix
 plan: _mill/plan
@@ -24,6 +24,7 @@ implementing  '2026-06-09T12:54:19Z'
 approved-Namespace constants  '2026-06-09T12:58:50Z'
 holistic-reviewing  '2026-06-09T12:59:29Z'
 holistic-approved  '2026-06-09T13:00:57Z'
+done  '2026-06-09T13:01:37Z'
 ```
 
 ## Batches
