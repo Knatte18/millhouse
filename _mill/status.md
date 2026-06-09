@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: agent-pipeline-reliability
 branch: hanf/agent-pipeline-reliability
 plan: _mill/plan
@@ -24,4 +24,19 @@ discussed  '2026-06-09T13:04:24Z'
 planning  '2026-06-09T13:15:43Z'
 plan-fix-r1  '2026-06-09T13:19:19Z'
 planned  '2026-06-09T13:19:47Z'
+implementing  '2026-06-09T13:23:02Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: 'Core fix: emit_prepare + millpy-fix.py'
+    state: pending
+  - name: 'Review CLI finalize: drop prepare() re-invocation'
+    state: pending
+  - name: 'SKILL.md updates: Agent-mode dispatch pattern'
+    state: pending
+  - name: 'Unit tests: fix-finalize and review-finalize'
+    state: pending
 ```
