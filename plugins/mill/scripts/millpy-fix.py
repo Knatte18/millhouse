@@ -92,6 +92,16 @@ def main(argv=None) -> int:
         "--agent-output",
         help="Path to agent output file (required when --stage finalize).",
     )
+    parser.add_argument(
+        "--start-sha",
+        default=None,
+        help="SHA captured at prepare stage (from prepare envelope).",
+    )
+    parser.add_argument(
+        "--session-id",
+        default=None,
+        help="Session ID from prepare envelope (for finalize stage).",
+    )
     args = parser.parse_args(argv)
 
     # Validate mutual constraints
@@ -188,9 +198,9 @@ def main(argv=None) -> int:
         return finalize_from_output(
             Path(args.agent_output),
             project_root,
-            start_sha=None,
+            start_sha=args.start_sha,
             snapshot_path=fixer_snapshot_path if fixer_snapshot_path.exists() else None,
-            session_id=session_id,
+            session_id=args.session_id,
         )
 
     # Branch on scope (for prepare and full stages)
@@ -315,7 +325,7 @@ def main(argv=None) -> int:
         briefs_dir = _paths.resolve_task_path(project_root, "_mill/briefs/")
         model_tier = _agent_dispatch.model_to_tier(fixer_model)
         scope_label = args.batch_name if args.scope == "batch" else "holistic"
-        return emit_prepare(briefs_dir, "fix", scope_label, args.round, prompt_text, model_tier, session_id)
+        return emit_prepare(briefs_dir, "fix", scope_label, args.round, prompt_text, model_tier, session_id, start_sha=start_sha)
 
     # Stage: full (default)
     try:
