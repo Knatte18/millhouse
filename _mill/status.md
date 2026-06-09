@@ -50,5 +50,7 @@ batches:
     start_sha: f274ac5c2cd1a6f7f3de98394d5c3ebc2bbfa15d
     commit_sha: 9c1fdf6c703fe1473381de001ee71414c0e6f95e
   - name: 'Unit tests: fix-finalize and review-finalize'
-    state: pending
+    state: running
+    implementer_session: 73cb184e-7f7f-4ff8-8caa-33ed891e5ba5
+    start_sha: 15a014d42f161ab8a97153c28d95d01c8301ff5e
 ```
