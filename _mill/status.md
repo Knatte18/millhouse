@@ -27,5 +27,7 @@ implementing  '2026-06-09T12:55:47Z'
 ```yaml
 batches:
   - name: fix-and-test
-    state: pending
+    state: running
+    implementer_session: 69361a85-997d-4d48-ab1e-f85ada69285e
+    start_sha: a07eaeb8fbc35f79dbcb93c297c43666f5eb4a93
 ```
