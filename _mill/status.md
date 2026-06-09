@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: review-discussion-brief-path
 branch: hanf/review-discussion-brief-path
 plan: _mill/plan
@@ -19,4 +19,13 @@ discussed  '2026-06-09T12:46:04Z'
 planning  '2026-06-09T12:50:00Z'
 plan-fix-r1  '2026-06-09T12:53:06Z'
 planned  '2026-06-09T12:53:31Z'
+implementing  '2026-06-09T12:55:47Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: fix-and-test
+    state: pending
 ```
