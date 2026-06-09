@@ -35,7 +35,7 @@ These gaps were introduced when subprocess dispatch was replaced with Agent SDK 
 - `_forward_output` / `_implementer_common.py` (logic) — no changes to the inferred-success logic itself; only `emit_prepare` signature changes.
 - `_review_code.py`, `_review_plan.py`, `_review_discussion.py` backend `finalize()` functions — their signatures already accept `round_n` and `reviews_dir`; no changes needed.
 - `_status.py` — no schema changes needed (start_sha is passed via CLI args, not persisted to status.md for fix/merge).
-- `millpy-merge-in-subagent.py` (conflicts mode) — conflicts finalize is correct as-is. At finalize time HEAD == start_sha (merge --continue runs in the SKILL after finalize returns success, not before), so the `_forward_output` inferred-success branch (requires HEAD != start_sha AND clean tree) can never fire regardless. If the agent emits JSON it is used; if not, stuck/logic is the correct outcome. No changes needed.
+- `millpy-merge-in-subagent.py` — the `finalize_from_output(start_sha=None, snapshot_path=None, session_id=None)` call at the top of the finalize early-exit block is mode-agnostic (handles both conflicts and verify-fix before the mode branch at line 216). Leaving `start_sha=None` is intentionally correct for both modes: in conflicts mode HEAD has not moved (merge --continue runs after finalize); in verify-fix mode the finalize branch explicitly checks verify results and emits success/stuck directly, bypassing `finalize_from_output` entirely. No changes needed.
 - `mill-merge-in/SKILL.md` — no changes needed (conflicts finalize is correct).
 - End-to-end integration tests with real Agent tool calls.
 
@@ -49,7 +49,7 @@ These gaps were introduced when subprocess dispatch was replaced with Agent SDK 
 
 ### session-id-via-cli-arg
 
-- **Decision:** Add `--session-id` to the finalize stage of `millpy-fix.py` only. The prepare envelope already includes `session_id`; pass it to finalize. Finalize uses it in the inferred-success fallback path. `millpy-merge-in-subagent.py` conflicts finalize is unchanged (inferred-success cannot fire there; no `--session-id` needed).
+- **Decision:** Add `--session-id` to the finalize stage of `millpy-fix.py` only. The prepare envelope already includes `session_id`; pass it to finalize. The finalize branch must drop the local `uuid.uuid4()` call that currently generates a fresh session_id at the top of `main()` and instead read session_id solely from `--session-id`. `millpy-merge-in-subagent.py` finalize is unchanged (inferred-success cannot fire there; no `--session-id` needed).
 - **Rationale:** Completes the contract so both fields (start_sha and session_id) round-trip cleanly. Prevents the inferred-success path from emitting `session_id: "unknown"` in the future.
 - **Rejected:** Using `"unknown"` as a fallback — technically acceptable today since the fixer session_id is not used by the builder for anything after finalize, but defers a correctness fix that has zero cost to implement alongside Gap A.
 
