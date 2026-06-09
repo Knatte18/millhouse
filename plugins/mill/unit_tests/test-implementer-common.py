@@ -15,7 +15,6 @@ sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
 from _implementer_common import _forward_output, emit_prepare, emit_prepare_no_dispatch, finalize_from_output, _is_formatter_drift_only, _commit_formatter_drift  # noqa: E402
 import _cleanliness  # noqa: E402
-import _subprocess_util  # noqa: E402
 
 
 def _capture_stdout(fn):
@@ -416,7 +415,7 @@ def main() -> int:
             assert brief_path.read_text(encoding="utf-8") == prompt_text, "brief content mismatch"
             data = json.loads(captured.strip())
             assert data["stage"] == "prepare", f"expected stage=prepare, got {data}"
-            assert data["subagent_type"] == "mill-implementer", f"expected mill-implementer, got {data}"
+            assert data["subagent_type"] == "mill:mill-implementer", f"expected mill:mill-implementer, got {data}"
             assert data["model"] == "sonnet", f"expected model=sonnet, got {data}"
             assert data["role"] == "implement", f"expected role=implement, got {data}"
             assert data["scope"] == "batch-1", f"expected scope=batch-1, got {data}"
@@ -481,6 +480,7 @@ def main() -> int:
             data = json.loads(captured.strip())
             assert data["stage"] == "prepare", f"expected stage=prepare, got {data}"
             assert data["dispatch_needed"] is False, f"expected dispatch_needed=False, got {data}"
+            assert data["subagent_type"] == "mill:mill-implementer", f"expected mill:mill-implementer, got {data}"
             assert data["role"] == "merge", f"expected role=merge, got {data}"
             assert data["scope"] == "verify-fix", f"expected scope=verify-fix, got {data}"
             assert "envelope" in data, f"expected envelope key in {data}"
