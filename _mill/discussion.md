@@ -22,7 +22,7 @@ These gaps were introduced when subprocess dispatch was replaced with Agent SDK 
 
 **In:**
 - `millpy-fix.py`: Add `--start-sha` and `--session-id` to the finalize stage CLI; emit them in the prepare stage envelope; pass them through to `finalize_from_output`.
-- `_implementer_common.py`: Add optional `start_sha: str | None = None` kwarg to `emit_prepare()`; include it in the emitted envelope when non-None. Implement.py does not pass it (backward-compatible); fix.py and merge-in-subagent conflicts will pass it.
+- `_implementer_common.py`: Add optional `start_sha: str | None = None` kwarg to `emit_prepare()`; include it in the emitted envelope when non-None. Implement.py does not pass it (backward-compatible); fix.py passes it; merge-in-subagent conflicts prepare does NOT pass it (inferred-success cannot fire there, so there is no benefit — see Scope-Out).
 - `millpy-review-code.py`: Add `--round` to finalize stage; derive `reviews_dir` via `_review_common.resolve_path(cfg["paths"]["reviews_dir"], slug)`; stop re-invoking `prepare()` in finalize.
 - `millpy-review-plan.py`: Same as code review.
 - `millpy-review-discussion.py`: Same as code review.
@@ -149,7 +149,16 @@ For fix, the equivalent is passing these values via CLI args (no batch entry for
 
 ### `emit_prepare` signature change
 
-`emit_prepare(briefs_dir, role, scope, round_n, prompt_text, model_tier, session_id)` in `_implementer_common.py` must gain an optional `start_sha: str | None = None` kwarg. When non-None, it is included in the emitted envelope JSON as `"start_sha": <value>`. When None (the default), it is omitted. This preserves backward compatibility: `millpy-implement.py` does not pass `start_sha` (it persists via status.md instead); `millpy-fix.py` will pass it; `millpy-merge-in-subagent.py` conflicts prepare will pass it (for future use even if inferred-success is not triggered today).
+`emit_prepare(briefs_dir, role, scope, round_n, prompt_text, model_tier, session_id)` in `_implementer_common.py` must gain an optional `start_sha: str | None = None` kwarg. When non-None, it is included in the emitted envelope JSON as `"start_sha": <value>`. When None (the default), it is omitted. This preserves backward compatibility: `millpy-implement.py` does not pass `start_sha` (it persists via status.md instead); `millpy-fix.py` passes it; `millpy-merge-in-subagent.py` conflicts prepare does NOT pass it (inferred-success cannot fire for conflicts mode — HEAD does not move before finalize returns — so there is no value to supply and no benefit to adding the capture).
+
+**Ordering invariant:** In `millpy-fix.py`'s shared dispatch tail, `start_sha` must be captured via `git rev-parse HEAD` BEFORE the `--stage prepare` early-return. The current code (line 305 rev-parse, line 314 emit_prepare) is already correct. Any restructuring of the prepare branch must preserve this ordering; a rev-parse after the early-return would silently emit a stale or wrong SHA.
+
+### Discussion-review finalize differs from code/plan
+
+`millpy-review-discussion.py`'s finalize is NOT a literal copy of the code-review change. Key differences:
+- `_review_discussion.finalize(cfg, slug, raw_text, round_n, reviews_dir, mill_dir, project_root, wiki_root)` — no `scope` or `git_root` params.
+- The CLI's prepare call site uses positional args: `prepare(cfg, slug, mill_dir, project_root, wiki_root, max_rounds=args.max_rounds)` — different signature from the code/plan prepare.
+- The finalize stage must wire `round_n=args.round` and derive `reviews_dir` from config; then call `finalize(...)` without `scope` or `git_root`. **Read `_review_discussion.finalize` signature before editing.**
 
 ### `reviews_dir` resolution in review finalize
 
@@ -204,3 +213,7 @@ Tests that review finalize correctly uses `--round` without re-invoking prepare:
 - **Q (review gap 3):** What is the correct helper for reviews_dir in review finalize? **A:** `_review_common.resolve_path(cfg["paths"]["reviews_dir"], slug)` — not `_paths.resolve_task_path`; the former applies slug substitution + active-hub resolution.
 - **Q (review note 4):** Does conflicts mode have a pre-commit before capturing start_sha? **A:** No — conflicts mode (`_run_conflicts`) has no pre-commit. Moot since conflicts finalize is now out of scope.
 - **Q (review note 5):** Does step 5 of Agent-mode dispatch cover prepare-envelope-derived args? **A:** No — "same standard arguments" only covers the original invocation args. SKILL update must explicitly amend step 5 to thread `start_sha`/`session_id`/`round` from the prepare envelope into finalize.
+- **Q (r2 gap 1):** Should conflicts prepare pass `start_sha` to `emit_prepare` "for future use"? **A:** No — YAGNI. Inferred-success cannot fire for conflicts (HEAD unchanged at finalize time), so there is no value to capture and no benefit. Removed the contradicting clause; conflicts mode stays fully out of scope.
+- **Q (r2 gap 2):** Where would conflicts prepare get `start_sha` if needed? **A:** Moot (conflicts passes nothing). Noted that `_run_conflicts` has no pre-commit and no rev-parse in the prepare path.
+- **Q (r2 note 3):** Is discussion-review finalize wiring identical to code/plan? **A:** No — `_review_discussion.finalize` omits `scope` and `git_root`; prepare call site uses positional args. Added explicit caution; implementer must read the signature before editing.
+- **Q (r2 note 4):** Is start_sha capture ordering in fix prepare documented? **A:** Added explicit invariant: rev-parse must precede `emit_prepare` early-return in the shared dispatch tail.
