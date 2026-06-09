@@ -3,7 +3,7 @@
 ```yaml
 task: Fix agent-pipeline reliability gaps in finalize/success contract
 slug: agent-pipeline-reliability
-approved: false
+approved: true
 started: 20260609-131228
 parent: main
 root: ""

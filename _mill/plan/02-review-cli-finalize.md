@@ -82,6 +82,7 @@ This batch is independent of Batch 1 and can run in parallel. Batch 3 (SKILL.md)
     - `print(json.dumps(result.to_dict()))` and `return 0` remain.
   - The prepare stage and full stage are NOT changed.
   - `_review_discussion.finalize` signature (read before editing): `finalize(cfg, slug, raw_text, *, round_n, reviews_dir, mill_dir, project_root, wiki_root) -> ReviewResult`. No `scope`, no `git_root`.
+  - `--max-rounds` is intentionally a prepare-only concern: after removing `prepare()` from finalize, the `--max-rounds` arg is silently inert in the finalize branch. This is correct — round-cap enforcement belongs in prepare, not finalize. Do not add any new logic to enforce `--max-rounds` in finalize.
 - **Commit:** `fix(pipeline): review-discussion finalize uses --round arg, drops prepare() re-invocation (Gap C)`
 
 ## Batch Tests
