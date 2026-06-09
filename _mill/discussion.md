@@ -22,30 +22,30 @@ These gaps were introduced when subprocess dispatch was replaced with Agent SDK 
 
 **In:**
 - `millpy-fix.py`: Add `--start-sha` and `--session-id` to the finalize stage CLI; emit them in the prepare stage envelope; pass them through to `finalize_from_output`.
-- `millpy-merge-in-subagent.py` (conflicts mode): Same — add `--start-sha` and `--session-id` to finalize; emit in prepare envelope.
-- `millpy-review-code.py`: Add `--round` to finalize stage; derive `reviews_dir` from config; stop re-invoking `prepare()` in finalize.
+- `_implementer_common.py`: Add optional `start_sha: str | None = None` kwarg to `emit_prepare()`; include it in the emitted envelope when non-None. Implement.py does not pass it (backward-compatible); fix.py and merge-in-subagent conflicts will pass it.
+- `millpy-review-code.py`: Add `--round` to finalize stage; derive `reviews_dir` via `_review_common.resolve_path(cfg["paths"]["reviews_dir"], slug)`; stop re-invoking `prepare()` in finalize.
 - `millpy-review-plan.py`: Same as code review.
 - `millpy-review-discussion.py`: Same as code review.
-- `mill-go/SKILL.md`: Update agent-mode dispatch docs to pass `--round` to review finalize calls, and `--start-sha`/`--session-id` to fix finalize calls.
-- `mill-start/SKILL.md`: Update discussion-review finalize dispatch to pass `--round`.
-- `mill-merge-in/SKILL.md`: Update merge-in-subagent conflicts-mode finalize to pass `--start-sha`/`--session-id`.
+- `mill-go/SKILL.md`: Update agent-mode dispatch docs to (a) pass `--round` to review finalize calls, (b) pass `--start-sha`/`--session-id` to fix finalize calls, (c) amend step 5 of the "Agent-mode dispatch" pattern to document threading prepare-envelope fields into finalize.
+- `mill-start/SKILL.md`: Update discussion-review finalize dispatch to pass `--round`; amend step 5 of the agent-mode dispatch pattern similarly.
 - New unit tests: `test-fix-finalize.py` and `test-review-finalize.py`.
 
 **Out:**
 - `millpy-implement.py` — already correct; no changes.
-- `_forward_output` / `_implementer_common.py` — logic is correct; no changes needed.
-- `_review_code.py`, `_review_plan.py`, `_review_discussion.py` backend `finalize()` functions — their signatures already accept `round_n` and `reviews_dir` as parameters; no changes needed.
+- `_forward_output` / `_implementer_common.py` (logic) — no changes to the inferred-success logic itself; only `emit_prepare` signature changes.
+- `_review_code.py`, `_review_plan.py`, `_review_discussion.py` backend `finalize()` functions — their signatures already accept `round_n` and `reviews_dir`; no changes needed.
 - `_status.py` — no schema changes needed (start_sha is passed via CLI args, not persisted to status.md for fix/merge).
-- `millpy-merge-in-subagent.py` verify-fix mode — finalize already handles verify re-run correctly and doesn't use `finalize_from_output`; no changes needed.
+- `millpy-merge-in-subagent.py` (conflicts mode) — conflicts finalize is correct as-is. At finalize time HEAD == start_sha (merge --continue runs in the SKILL after finalize returns success, not before), so the `_forward_output` inferred-success branch (requires HEAD != start_sha AND clean tree) can never fire regardless. If the agent emits JSON it is used; if not, stuck/logic is the correct outcome. No changes needed.
+- `mill-merge-in/SKILL.md` — no changes needed (conflicts finalize is correct).
 - End-to-end integration tests with real Agent tool calls.
 
 ## Decisions
 
 ### persist-start-sha-via-cli-arg
 
-- **Decision:** Pass `start_sha` from prepare to finalize via a `--start-sha` CLI argument, added to both `millpy-fix.py` and `millpy-merge-in-subagent.py`. The prepare stage captures `start_sha` (via `git rev-parse HEAD` after the pre-commit), includes it in the prepare envelope JSON, and the mill-go/mill-merge-in SKILL picks it up and passes it to the finalize call.
-- **Rationale:** Explicit contract — no hidden sidecar files, no status.md schema changes, no cross-stage file reads. Matches how the implement CLI already makes `start_sha` queryable (it writes it to status.md; finalize reads it from there). The CLI arg approach is lighter and consistent with the SKILL's existing "pass prepare envelope fields as finalize args" pattern.
-- **Rejected:** (a) Sidecar `.meta.json` next to the brief — works but creates implicit coupling between prepare and finalize via the filesystem rather than a declared contract. (b) Persist to status.md for fixer — requires new `_status.py` API for holistic scope and adds schema complexity.
+- **Decision:** Pass `start_sha` from prepare to finalize via a `--start-sha` CLI argument added to `millpy-fix.py`. The prepare stage captures `start_sha` via `git rev-parse HEAD` after its pre-commit, includes it in the prepare envelope JSON, and mill-go picks it up and passes it to the finalize call. `millpy-merge-in-subagent.py` conflicts mode is explicitly excluded: at finalize time HEAD == start_sha (the merge commit happens via `merge --continue` in the SKILL after finalize returns success), so `_forward_output`'s inferred-success branch (requires HEAD != start_sha AND clean tree) cannot fire regardless. Conflicts finalize is correct as-is.
+- **Rationale:** Explicit contract — no hidden sidecar files, no status.md schema changes, no cross-stage file reads. The CLI arg approach is lighter and consistent with the SKILL's existing "pass prepare envelope fields as finalize args" pattern.
+- **Rejected:** (a) Sidecar `.meta.json` next to the brief — works but creates implicit coupling via the filesystem. (b) Persist to status.md for fixer — requires new `_status.py` API for holistic scope and adds schema complexity. (c) Adding `--start-sha` to conflicts finalize — reviewer confirmed this is infeasible since the inferred-success condition (HEAD moved AND clean tree) is structurally impossible to satisfy in conflicts mode.
 
 ### session-id-via-cli-arg
 
@@ -55,9 +55,9 @@ These gaps were introduced when subprocess dispatch was replaced with Agent SDK 
 
 ### round-via-cli-arg-for-review-finalize
 
-- **Decision:** Add `--round` to the finalize stage of all three review CLIs (`millpy-review-code.py`, `millpy-review-plan.py`, `millpy-review-discussion.py`). The prepare envelope already returns `round` in its JSON; the SKILL passes it to finalize. In finalize, derive `reviews_dir` directly from `cfg['paths']['reviews_dir']` (via `_paths.resolve_task_path`); do not call `prepare()`.
+- **Decision:** Add `--round` to the finalize stage of all three review CLIs (`millpy-review-code.py`, `millpy-review-plan.py`, `millpy-review-discussion.py`). The prepare envelope already returns `round` in its JSON; the SKILL passes it to finalize. In finalize, derive `reviews_dir` via `_review_common.resolve_path(cfg["paths"]["reviews_dir"], slug)` (not `_paths.resolve_task_path` directly — `resolve_path` applies slug substitution and active-hub resolution that the bare helper skips); do not call `prepare()`.
 - **Rationale:** Eliminates the double-config-load and fragile round-re-derivation. Makes the finalize stage stateless relative to prepare's side effects. The `round` field is already in every prepare envelope, so no new serialization is needed.
-- **Rejected:** Adding `--reviews-dir` as another CLI arg — over-specifying; reviews_dir is always config-derived and does not need to cross the CLI boundary.
+- **Rejected:** Adding `--reviews-dir` as another CLI arg — over-specifying; reviews_dir is always config-derived and does not need to cross the CLI boundary. Using `_paths.resolve_task_path` directly — omits slug substitution + active-hub resolution that `_review_common.resolve_path` provides.
 
 ### no-backend-changes
 
@@ -81,7 +81,7 @@ The SKILL describes five steps:
 4. Run CLI with `--stage finalize` + same standard args + `--agent-output <brief_path>.out.md`.
 5. Parse returned JSON envelope.
 
-The fix adds `start_sha` (for implement-style CLIs) and `round` (for review CLIs) to step 1's envelope, and documents passing them in step 4.
+**Critical step 4 gap:** "Same standard arguments" refers to the original invocation args (`--batch`, `--review-file`, `--scope`, etc.), not the prepare envelope. The new `--start-sha`, `--session-id`, and `--round` arguments come from the prepare envelope, not the original call. The SKILL update must explicitly amend step 5 of the Agent-mode dispatch pattern to document: "additionally, thread named prepare-envelope fields into finalize: `start_sha` → `--start-sha`, `session_id` → `--session-id` (implementer CLIs), `round` → `--round` (review CLIs)."
 
 ### Key files
 
@@ -145,7 +145,17 @@ The implement CLI correctly handles the prepare→finalize boundary:
 - prepare: `_status.set_batch_fields(status_path, batch_name, {"start_sha": start_sha, "implementer_session": session_id})`
 - finalize: reads `batch_status.get("start_sha")` and `batch_status.get("implementer_session")` from status.md
 
-For fix and merge-in, the equivalent is passing these values via CLI args rather than status.md (no batch entry for holistic fix; no status.md for merge-in conflicts mode).
+For fix, the equivalent is passing these values via CLI args (no batch entry for holistic fix; no per-fix status entry). `millpy-merge-in-subagent.py` conflicts mode is intentionally left without start_sha passthrough — the inferred-success branch can never fire there (HEAD does not move before finalize returns; the merge commit is created by the SKILL after success is confirmed).
+
+### `emit_prepare` signature change
+
+`emit_prepare(briefs_dir, role, scope, round_n, prompt_text, model_tier, session_id)` in `_implementer_common.py` must gain an optional `start_sha: str | None = None` kwarg. When non-None, it is included in the emitted envelope JSON as `"start_sha": <value>`. When None (the default), it is omitted. This preserves backward compatibility: `millpy-implement.py` does not pass `start_sha` (it persists via status.md instead); `millpy-fix.py` will pass it; `millpy-merge-in-subagent.py` conflicts prepare will pass it (for future use even if inferred-success is not triggered today).
+
+### `reviews_dir` resolution in review finalize
+
+The correct helper is `_review_common.resolve_path(cfg["paths"]["reviews_dir"], slug)` — this applies the `<SLUG>` substitution pattern and resolves against the active hub root, matching what the existing prepare() call returns. `_paths.resolve_task_path(project_root, ...)` is the wrong helper: it does not apply slug substitution and resolves against `project_root` (the task worktree), not the hub.
+
+**Caution:** verify the exact helper call by reading the existing `prepare()` functions in `_review_code.py`, `_review_plan.py`, and `_review_discussion.py` before wiring up finalize. The path must match exactly what prepare() returns.
 
 ## Constraints
 
@@ -189,3 +199,8 @@ Tests that review finalize correctly uses `--round` without re-invoking prepare:
 - **Q:** Should `--session-id` also be added to fix/merge-in finalize? **A:** [auto-pick] Yes. **Why:** Completes the contract so inferred-success path emits the correct session_id.
 - **Q:** How should reviews_dir be obtained in review finalize without calling prepare()? **A:** [auto-pick] Derive from `cfg['paths']['reviews_dir']` via `_paths.resolve_task_path`. **Why:** Single authoritative source; no new CLI arg needed.
 - **Q:** Extend existing integration test or write new unit tests? **A:** [auto-pick] New unit tests. **Why:** Focused on the specific finalize path logic; no LLM call needed.
+- **Q (review gap 1):** Does `emit_prepare` need to change to include `start_sha`? **A:** Yes — add optional `start_sha` kwarg; backward-compatible (implement.py doesn't pass it). Added `_implementer_common.py` to scope.
+- **Q (review gap 2):** Is `--start-sha` applicable to `millpy-merge-in-subagent.py` conflicts finalize? **A:** No — at finalize time HEAD == start_sha (merge --continue hasn't run yet) and tree is dirty, so `_forward_output` inferred-success can never fire. Conflicts finalize is correct as-is; removed from scope.
+- **Q (review gap 3):** What is the correct helper for reviews_dir in review finalize? **A:** `_review_common.resolve_path(cfg["paths"]["reviews_dir"], slug)` — not `_paths.resolve_task_path`; the former applies slug substitution + active-hub resolution.
+- **Q (review note 4):** Does conflicts mode have a pre-commit before capturing start_sha? **A:** No — conflicts mode (`_run_conflicts`) has no pre-commit. Moot since conflicts finalize is now out of scope.
+- **Q (review note 5):** Does step 5 of Agent-mode dispatch cover prepare-envelope-derived args? **A:** No — "same standard arguments" only covers the original invocation args. SKILL update must explicitly amend step 5 to thread `start_sha`/`session_id`/`round` from the prepare envelope into finalize.
