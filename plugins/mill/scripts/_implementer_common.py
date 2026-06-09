@@ -105,6 +105,7 @@ def emit_prepare(
     prompt_text: str,
     model_tier: str,
     session_id: str,
+    start_sha: str | None = None,
 ) -> int:
     """Write brief and emit prepare JSON envelope.
 
@@ -122,6 +123,8 @@ def emit_prepare(
         "scope": scope,
         "round": round_n,
     }
+    if start_sha is not None:
+        envelope["start_sha"] = start_sha
     print(json.dumps(envelope))
     return 0
 
