@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: 'approved-Core fix: emit_prepare + millpy-fix.py'
 slug: agent-pipeline-reliability
 branch: hanf/agent-pipeline-reliability
 plan: _mill/plan
@@ -25,6 +25,7 @@ planning  '2026-06-09T13:15:43Z'
 plan-fix-r1  '2026-06-09T13:19:19Z'
 planned  '2026-06-09T13:19:47Z'
 implementing  '2026-06-09T13:23:02Z'
+approved-Core fix: emit_prepare + millpy-fix.py  '2026-06-09T17:59:07Z'
 ```
 
 ## Batches
@@ -32,9 +33,10 @@ implementing  '2026-06-09T13:23:02Z'
 ```yaml
 batches:
   - name: 'Core fix: emit_prepare + millpy-fix.py'
-    state: running
+    state: approved
     implementer_session: 7c87dfdb-e29a-40ba-b367-7f046ad27286
     start_sha: b214851ccec9f755abf49dc158c37faecdaf2297
+    commit_sha: c92c93a370a4ec97eca7fec28fc5aa4d9fda442d
   - name: 'Review CLI finalize: drop prepare() re-invocation'
     state: pending
   - name: 'SKILL.md updates: Agent-mode dispatch pattern'
