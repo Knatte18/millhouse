@@ -52,9 +52,10 @@ The user is new to Go and learning the language. Standard Go code is required, b
 
 ### Test library: standard `testing` package only
 
-- Decision: Use Go's standard `testing` package. For struct comparison, use `cmp.Diff` from `google/go-cmp`. No testify.
+- Decision: Use Go's standard `testing` package. For struct comparison, use `cmp.Diff` from `github.com/google/go-cmp/cmp`. No testify.
 - Rationale: "De facto standard" — the user asked for this. The standard library is what all official Go style guides use. Testify is popular but adds a dependency and obscures idiomatic Go patterns that are worth learning.
 - Rejected: testify — adds `require.*`/`assert.*` abstractions that hide standard Go error reporting patterns.
+- Note: `google/go-cmp` is a dependency only of Go projects that use these skill files as guidance — the skill files themselves are pure Markdown documentation; no `go.mod` is required in the plugin directory.
 
 ### Build workflow: complete
 
@@ -89,7 +90,8 @@ plugins/go/
 
 Reference file: `plugins/csharp/.claude-plugin/plugin.json` — copy structure, change name/description.
 Reference file: `plugins/csharp/settings.json` — copy, change `csharp` → `go`.
-Reference file: `plugins/csharp/skills/csharp-comments/SKILL.md` — the style template.
+Reference file: `plugins/csharp/skills/csharp-comments/SKILL.md` — the style template for comment rules.
+Reference file: `plugins/csharp/skills/csharp-build/SKILL.md` — carries the `<!-- Project-specific ... -->` placeholder that **all three** Go SKILL.md files must end with. Note: `csharp-comments/SKILL.md` does NOT have this placeholder; do not use it as the reference for the placeholder — use `csharp-build/SKILL.md` instead.
 
 Go-specific technical facts mill-plan needs:
 
@@ -107,6 +109,12 @@ Go-specific technical facts mill-plan needs:
 3. `go build ./...` — compilation check
 4. `go test ./...` — run tests
 5. `golangci-lint run` — unified linter (covers errcheck, revive, staticcheck, etc.)
+
+`goimports` and `golangci-lint` are not part of the standard Go toolchain and must be installed separately:
+- `go install golang.org/x/tools/cmd/goimports@latest`
+- `go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest`
+
+The go-build SKILL.md must include these install commands and instruct Claude to report "golangci-lint not found — install with the command above" rather than failing silently if the binary is missing. Mirror the C# build skill's test-discovery guidance pattern.
 
 **Error handling (for go-comments):**
 - `fmt.Errorf("context: %w", err)` — `%w` wraps for `errors.Is`/`errors.As`
