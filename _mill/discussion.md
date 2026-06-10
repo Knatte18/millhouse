@@ -150,13 +150,16 @@ No `CONSTRAINTS.md` present in this worktree.
 - Plugin files must be pure Markdown + JSON — no scripts, no Python.
 - Skill files follow the SKILL.md frontmatter convention: `---\nname: ...\ndescription: ...\n---`.
 - The `settings.json` permission entry must match the pattern in other plugins exactly.
-- Each SKILL.md ends with a `<!-- Project-specific configuration goes here -->` comment block (same as C# and Python), so per-project overrides can be appended without modifying the base file.
+- Each SKILL.md ends with a skill-specific placeholder comment, matching the C# naming pattern:
+  - `go-build/SKILL.md` → `<!-- Project-specific build configuration goes here -->`
+  - `go-comments/SKILL.md` → `<!-- Project-specific comments configuration goes here -->`
+  - `go-testing/SKILL.md` → `<!-- Project-specific testing configuration goes here -->`
 
 ## Testing
 
 These are static text files — no automated tests. Mill-plan should verify:
 
-- All five files exist at the correct paths after the task
+- All six files exist at the correct paths after the task: `plugin.json`, `settings.json`, `skills/INDEX.md`, `skills/go-build/SKILL.md`, `skills/go-comments/SKILL.md`, `skills/go-testing/SKILL.md`
 - `plugin.json` is valid JSON
 - `settings.json` is valid JSON with the correct permission entry
 - Each SKILL.md has valid frontmatter (name + description fields)
