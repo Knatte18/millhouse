@@ -154,6 +154,6 @@ The following conventions are suggested for your project; customize as needed:
 
 - **Test directory:** Tests reside in `*_test.go` files alongside the code they test (standard Go layout).
 - **Fixture strategy:** Use `testdata/` subdirectories for fixture files (JSON, YAML, etc.). Load fixtures explicitly in tests.
-- **Integration test markers:** Use build tags (`// +build integration`) on integration test files to exclude them from fast unit test runs. Run integration tests separately with `go test -tags=integration ./...`.
+- **Integration test markers:** Use build tags (`//go:build integration`) on integration test files to exclude them from fast unit test runs (Go 1.17+ requires the `//go:build` form; the older `// +build` syntax is deprecated). Run integration tests separately with `go test -tags=integration ./...`.
 
 <!-- Project-specific testing configuration goes here -->
