@@ -30,14 +30,14 @@ roles:
   discussion-review:
     holistic:
       rounds: 5
-      reviewer: sonnetmax
+      reviewer: opushigh
   plan-review:
     batch:
       rounds: 0
       reviewer: null
     holistic:
       rounds: 7
-      reviewer: sonnetmax
+      reviewer: opushigh
   code-review:
     batch:
       rounds: 0
