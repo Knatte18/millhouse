@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-Create Go plugin files
 slug: golang-skills
 branch: hanf/golang-skills
 plan: _mill/plan
@@ -20,6 +20,7 @@ planning  '2026-06-10T07:05:27Z'
 plan-fix-r1  '2026-06-10T07:07:26Z'
 planned  '2026-06-10T07:07:40Z'
 implementing  '2026-06-10T07:12:00Z'
+approved-Create Go plugin files  '2026-06-10T07:15:49Z'
 ```
 
 ## Batches
@@ -27,7 +28,8 @@ implementing  '2026-06-10T07:12:00Z'
 ```yaml
 batches:
   - name: Create Go plugin files
-    state: running
+    state: approved
     implementer_session: 31e4d9b1-fe10-47bc-8cae-efb589227e96
     start_sha: 8593806c4868587cf9a26d23d8f3d8a52aee9138
+    commit_sha: 287679073abab1d406fffc79ae6aa32ddafb0720
 ```
