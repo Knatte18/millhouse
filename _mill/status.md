@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: golang-skills
 branch: hanf/golang-skills
 plan: _mill/plan
@@ -19,4 +19,13 @@ discussed  '2026-06-10T06:59:47Z'
 planning  '2026-06-10T07:05:27Z'
 plan-fix-r1  '2026-06-10T07:07:26Z'
 planned  '2026-06-10T07:07:40Z'
+implementing  '2026-06-10T07:12:00Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: Create Go plugin files
+    state: pending
 ```
