@@ -27,5 +27,7 @@ implementing  '2026-06-10T07:12:00Z'
 ```yaml
 batches:
   - name: Create Go plugin files
-    state: pending
+    state: running
+    implementer_session: 31e4d9b1-fe10-47bc-8cae-efb589227e96
+    start_sha: 8593806c4868587cf9a26d23d8f3d8a52aee9138
 ```
