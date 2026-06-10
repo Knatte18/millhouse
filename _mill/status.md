@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-Create Go plugin files
+phase: holistic-reviewing
 slug: golang-skills
 branch: hanf/golang-skills
 plan: _mill/plan
@@ -21,6 +21,7 @@ plan-fix-r1  '2026-06-10T07:07:26Z'
 planned  '2026-06-10T07:07:40Z'
 implementing  '2026-06-10T07:12:00Z'
 approved-Create Go plugin files  '2026-06-10T07:15:49Z'
+holistic-reviewing  '2026-06-10T07:16:14Z'
 ```
 
 ## Batches
