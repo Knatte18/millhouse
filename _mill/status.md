@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: discussed
 slug: golang-skills
 branch: hanf/golang-skills
 plan: null
@@ -15,4 +15,5 @@ task_description: |
 
 ```text
 discussing  '2026-06-10T06:39:11Z'
+discussed  '2026-06-10T06:59:47Z'
 ```
