@@ -3,7 +3,7 @@
 ```yaml
 task: "Add Go skill package (build, test, comments)"
 slug: golang-skills
-approved: false
+approved: true
 started: 20260610-070413
 parent: main
 root: ""

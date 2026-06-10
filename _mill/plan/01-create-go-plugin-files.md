@@ -111,7 +111,6 @@ Create all six files that make up the `plugins/go/` skill plugin: the plugin man
 
 - **Context:**
   - `plugins/csharp/skills/csharp-comments/SKILL.md`
-  - `plugins/csharp/skills/csharp-build/SKILL.md`
 - **Edits:** none
 - **Creates:**
   - `plugins/go/skills/go-comments/SKILL.md`

@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planning
+phase: plan-fix-r1
 slug: golang-skills
 branch: hanf/golang-skills
 plan: _mill/plan
@@ -17,4 +17,5 @@ task_description: |
 discussing  '2026-06-10T06:39:11Z'
 discussed  '2026-06-10T06:59:47Z'
 planning  '2026-06-10T07:05:27Z'
+plan-fix-r1  '2026-06-10T07:07:26Z'
 ```
