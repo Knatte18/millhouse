@@ -388,9 +388,9 @@ def main() -> int:
              patch("_inplace.resolve_worktrees_dir", return_value=worktrees_dir):
             p = resolve_path("task/discussion.md", slug)
 
-        expected = git_root / "task" / "discussion.md"
+        expected = git_root / "src" / "Models" / "task" / "discussion.md"
         assert p == expected, f"M2+sub in-place: expected {expected}, got {p}"
-        print("PASS: resolve_path M2+sub in-place (hub_rel='src/Models') -> git_root/task/discussion.md")
+        print("PASS: resolve_path M2+sub in-place (hub_rel='src/Models') -> git_root/src/Models/task/discussion.md")
 
     # parse_verdict: APPROVE
     raw = "# Review: My Task\n\n```yaml\nverdict: APPROVE\nreviewer_model: sonnetmax\n```\n"

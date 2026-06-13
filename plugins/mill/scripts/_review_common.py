@@ -317,38 +317,34 @@ def read_constraints_md(project_root: Path) -> str:
 
 
 def resolve_path(path_tmpl: str, slug: str) -> Path:
-    """Resolve a config path template to an absolute path inside the active worktree.
+    """Resolve a config path template to an absolute path inside the active hub.
 
     Computes the container, git_root, and cfg internally:
       - git_root via _paths.resolve_git_root()
       - container via _paths.resolve_container_path(git_root)
-      - hub_dir via _paths.resolve_hub_path() (the hub where mill-config.yaml
-        lives; equals git_root when hub_relative_path == ".")
+      - hub_dir via _paths.resolve_hub_path() (Path.cwd().resolve() — the hub
+        where mill scripts run; equals git_root for hub_relative_path == ".")
       - cfg via load_config(hub_dir, hub_dir / ".millhouse")
 
     cfg is sourced from the hub's own .millhouse/, not from git_root/.millhouse/,
     because mill-claim writes hub_relative_path only at the hub (it does not
     bootstrap a stub at git_root/.millhouse/ the way mill-spawn does).
 
-    Returns active_worktree / path_tmpl after substituting any "<SLUG>" token.
-    Task artefacts (_mill/plan/, _mill/reviews/, _mill/discussion.md, etc.)
-    always live at the worktree root, NOT inside the hub subdirectory — so
-    the base for path resolution is the worktree root, regardless of
-    hub_relative_path.
+    Returns active_hub / path_tmpl after substituting any "<SLUG>" token.
 
     Raises:
         _paths.ActiveWorktreeNotFound | _paths.ActiveWorktreeSlugMismatch:
-            propagated from the inner resolve_active_worktree call.
+            propagated from the inner resolve_active_hub call.
     """
     git_root = _paths.resolve_git_root()
     container_path = _paths.resolve_container_path(git_root)
     hub_dir = _paths.resolve_hub_path()
     cfg = load_config(hub_dir, hub_dir / ".millhouse")
-    active_wt = _paths.resolve_active_worktree(
+    active_hub = _paths.resolve_active_hub(
         container_path, slug, cfg=cfg, git_root=git_root,
     )
     resolved_tmpl = path_tmpl.replace("<SLUG>", slug)
-    return _paths.resolve_task_path(active_wt, resolved_tmpl)
+    return _paths.resolve_task_path(active_hub, resolved_tmpl)
 
 
 def discover_round(reviews_dir: Path, review_type: str, scope: str) -> int:
