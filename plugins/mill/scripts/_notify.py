@@ -37,8 +37,6 @@ import sys
 from functools import lru_cache
 from pathlib import Path
 
-import yaml
-
 
 class NotifyError(Exception):
     """Raised on config / backend-module load failure. Not on delivery."""
@@ -48,41 +46,27 @@ _DEFAULT_BACKEND = "stdout"
 
 
 def _load_backend_name() -> str:
-    """Read ``notify.backend`` from wiki/config.yaml (with local overlay).
+    """Read ``notify.backend`` from the deep-merged mill config.
 
-    We resolve this lazily on first call and cache the result. Mill
-    workflows are long-lived single-process sessions; reading config
-    once per process is correct and avoids importing ``_review_common``
-    (which pulls in most of the review subsystem).
-
-    Resolution order:
-    - ``<CWD>/.millhouse/wiki/config.yaml`` (shared) +
-      ``<CWD>/.millhouse/config.local.yaml`` (overlay)
-    - Any failure falls back to the default ``stdout`` backend with a
-      stderr warning — notifications are a nice-to-have, not a hard
-      dependency.
+    Resolution order: plugin template -> mill-config.yaml -> config.local.yaml -> env.
+    Any failure falls back to the default ``stdout`` backend with a
+    stderr warning — notifications are a nice-to-have, not a hard dependency.
     """
-    cwd = Path.cwd()
-    shared = cwd / ".millhouse" / "wiki" / "config.yaml"
-    local = cwd / ".millhouse" / "config.local.yaml"
+    try:
+        import _config
+        import _paths
+        cwd = Path.cwd()
+        hub_root = _paths.resolve_hub_path(cwd)
+        worktree_root = _paths.resolve_git_root(cwd)
+        cfg = _config.load_config(hub_root, worktree_root)
+        backend = cfg.get("notify", {}).get("backend", _DEFAULT_BACKEND)
+    except Exception as exc:
+        print(
+            f"[_notify] config load failed, using default backend {_DEFAULT_BACKEND!r}: {exc}",
+            file=sys.stderr,
+        )
+        return _DEFAULT_BACKEND
 
-    def _load_or_empty(path: Path) -> dict:
-        try:
-            text = path.read_text(encoding="utf-8")
-        except FileNotFoundError:
-            return {}
-        try:
-            data = yaml.safe_load(text) or {}
-        except yaml.YAMLError:
-            return {}
-        return data if isinstance(data, dict) else {}
-
-    merged: dict = {}
-    for path in (shared, local):
-        section = _load_or_empty(path).get("notify", {})
-        if isinstance(section, dict):
-            merged.update(section)
-    backend = merged.get("backend", _DEFAULT_BACKEND)
     if not isinstance(backend, str) or not backend:
         print(
             f"[_notify] warning: notify.backend is not a string; falling back to {_DEFAULT_BACKEND!r}",

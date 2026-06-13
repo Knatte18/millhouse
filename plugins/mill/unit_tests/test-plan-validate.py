@@ -910,19 +910,15 @@ def test_reads_token_in_creates_union_suppressed() -> int:
 
 
 def test_wiki_config_mutation_clean() -> int:
-    """wiki/config.yaml only in Reads: (not Modifies/Creates) -> zero wiki-config-mutation errors."""
+    """mill-config.yaml only in Reads: (not Modifies/Creates) -> zero wiki-config-mutation errors."""
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
         plan_dir = tmp / "plan"
         project_root = tmp / "project"
         project_root.mkdir()
 
-        wiki_dir = project_root / "wiki"
-        wiki_dir.mkdir()
-        (wiki_dir / "config.yaml").write_text("# placeholder", encoding="utf-8")
-
         overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
-        batch = _make_batch_file("alpha", context=["wiki/config.yaml"])
+        batch = _make_batch_file("alpha", context=["mill-config.yaml"])
         _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
 
         result = _plan_validate.run(plan_dir, project_root)
@@ -939,19 +935,15 @@ def test_wiki_config_mutation_clean() -> int:
 
 
 def test_wiki_config_mutation_modifies() -> int:
-    """wiki/config.yaml in Modifies: -> exactly one wiki-config-mutation error with correct shape."""
+    """mill-config.yaml in Modifies: -> exactly one wiki-config-mutation error with correct shape."""
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
         plan_dir = tmp / "plan"
         project_root = tmp / "project"
         project_root.mkdir()
 
-        wiki_dir = project_root / "wiki"
-        wiki_dir.mkdir()
-        (wiki_dir / "config.yaml").write_text("# placeholder", encoding="utf-8")
-
         overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
-        batch = _make_batch_file("alpha", edits=["wiki/config.yaml"])
+        batch = _make_batch_file("alpha", edits=["mill-config.yaml"])
         _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
 
         result = _plan_validate.run(plan_dir, project_root)
@@ -964,7 +956,7 @@ def test_wiki_config_mutation_modifies() -> int:
             assert e["check"] == "wiki-config-mutation", f"wrong check: {e['check']!r}"
             assert e["batch"] == "01-alpha", f"wrong batch: {e['batch']!r}"
             assert e["card"] is None, f"card should be None, got: {e['card']!r}"
-            assert e["path"] == "wiki/config.yaml", f"wrong path: {e['path']!r}"
+            assert e["path"] == "mill-config.yaml", f"wrong path: {e['path']!r}"
             print("PASS test_wiki_config_mutation_modifies")
             return 0
         except AssertionError as exc:
@@ -973,7 +965,7 @@ def test_wiki_config_mutation_modifies() -> int:
 
 
 def test_wiki_config_mutation_creates() -> int:
-    """wiki/config.yaml in Creates: -> exactly one wiki-config-mutation error with correct shape."""
+    """mill-config.yaml in Creates: -> exactly one wiki-config-mutation error with correct shape."""
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
         plan_dir = tmp / "plan"
@@ -981,7 +973,7 @@ def test_wiki_config_mutation_creates() -> int:
         project_root.mkdir()
 
         overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
-        batch = _make_batch_file("alpha", creates=["wiki/config.yaml"])
+        batch = _make_batch_file("alpha", creates=["mill-config.yaml"])
         _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
 
         result = _plan_validate.run(plan_dir, project_root)
@@ -994,7 +986,7 @@ def test_wiki_config_mutation_creates() -> int:
             assert e["check"] == "wiki-config-mutation", f"wrong check: {e['check']!r}"
             assert e["batch"] == "01-alpha", f"wrong batch: {e['batch']!r}"
             assert e["card"] is None, f"card should be None, got: {e['card']!r}"
-            assert e["path"] == "wiki/config.yaml", f"wrong path: {e['path']!r}"
+            assert e["path"] == "mill-config.yaml", f"wrong path: {e['path']!r}"
             print("PASS test_wiki_config_mutation_creates")
             return 0
         except AssertionError as exc:
@@ -1003,23 +995,19 @@ def test_wiki_config_mutation_creates() -> int:
 
 
 def test_wiki_config_mutation_multi_batch() -> int:
-    """Two batches each with wiki/config.yaml in Modifies: -> exactly two wiki-config-mutation errors."""
+    """Two batches each with mill-config.yaml in Modifies: -> exactly two wiki-config-mutation errors."""
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
         plan_dir = tmp / "plan"
         project_root = tmp / "project"
         project_root.mkdir()
 
-        wiki_dir = project_root / "wiki"
-        wiki_dir.mkdir()
-        (wiki_dir / "config.yaml").write_text("# placeholder", encoding="utf-8")
-
         overview = _make_overview([
             {"name": "alpha", "file": "01-alpha.md", "depends-on": []},
             {"name": "beta",  "file": "02-beta.md",  "depends-on": []},
         ])
-        batch_a = _make_batch_file("alpha", card_num=1, edits=["wiki/config.yaml"])
-        batch_b = _make_batch_file("beta",  card_num=2, edits=["wiki/config.yaml"])
+        batch_a = _make_batch_file("alpha", card_num=1, edits=["mill-config.yaml"])
+        batch_b = _make_batch_file("beta",  card_num=2, edits=["mill-config.yaml"])
         _write_plan(plan_dir, overview, [
             ("01-alpha.md", batch_a),
             ("02-beta.md",  batch_b),
@@ -1042,22 +1030,18 @@ def test_wiki_config_mutation_multi_batch() -> int:
 
 
 def test_wiki_config_mutation_modifies_and_creates() -> int:
-    """wiki/config.yaml in both Modifies: and Creates: -> exactly one error (deduplicated)."""
+    """mill-config.yaml in both Modifies: and Creates: -> exactly one error (deduplicated)."""
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
         plan_dir = tmp / "plan"
         project_root = tmp / "project"
         project_root.mkdir()
 
-        wiki_dir = project_root / "wiki"
-        wiki_dir.mkdir()
-        (wiki_dir / "config.yaml").write_text("# placeholder", encoding="utf-8")
-
         overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
         batch = _make_batch_file(
             "alpha",
-            edits=["wiki/config.yaml"],
-            creates=["wiki/config.yaml"],
+            edits=["mill-config.yaml"],
+            creates=["mill-config.yaml"],
         )
         _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
 
@@ -1081,18 +1065,14 @@ def test_skip_checks_filters_wiki_config_mutation() -> int:
         plan_dir = tmp / "plan"
         project_root = tmp / "project"
         project_root.mkdir()
-
-        wiki_dir = tmp / "wiki"
-        wiki_dir.mkdir()
-        (wiki_dir / "config.yaml").write_text("# placeholder", encoding="utf-8")
+        (project_root / "mill-config.yaml").write_text("# placeholder", encoding="utf-8")
 
         overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
-        batch = _make_batch_file("alpha", edits=["wiki/config.yaml"])
+        batch = _make_batch_file("alpha", edits=["mill-config.yaml"])
         _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
 
         result = _plan_validate.run(
             plan_dir, project_root,
-            wiki_root=wiki_dir,
             skip_checks=frozenset({"wiki-config-mutation"}),
         )
         try:
@@ -1111,18 +1091,14 @@ def test_skip_checks_does_not_suppress_other_checks() -> int:
         plan_dir = tmp / "plan"
         project_root = tmp / "project"
         project_root.mkdir()
-
-        wiki_dir = tmp / "wiki"
-        wiki_dir.mkdir()
-        (wiki_dir / "config.yaml").write_text("# placeholder", encoding="utf-8")
+        (project_root / "mill-config.yaml").write_text("# placeholder", encoding="utf-8")
 
         overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
-        batch = _make_batch_file("alpha", edits=["wiki/config.yaml"], missing_fields={"Commit"})
+        batch = _make_batch_file("alpha", edits=["mill-config.yaml"], missing_fields={"Commit"})
         _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
 
         result = _plan_validate.run(
             plan_dir, project_root,
-            wiki_root=wiki_dir,
             skip_checks=frozenset({"wiki-config-mutation"}),
         )
         try:

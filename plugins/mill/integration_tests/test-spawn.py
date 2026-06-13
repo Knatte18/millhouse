@@ -125,7 +125,7 @@ def _setup_pair(container: Path) -> tuple[Path, Path, Path]:
         )
     else:
         os.symlink(str(wiki), str(millhouse / "wiki"))
-    # Empty local overlay is fine — wiki/config.yaml carries everything.
+    # Empty local overlay is fine — mill-config.yaml carries everything.
     (millhouse / "config.local.yaml").write_text("", encoding="utf-8")
 
     return hub, wiki, worktrees_dir

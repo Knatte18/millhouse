@@ -4,7 +4,7 @@ Covers:
   - load_config: three-layer merge (plugin template -> repo -> local)
   - load_config: environment variable overrides
   - load_config: unknown-key validation and warnings
-  - load_config: legacy wiki/config.yaml fallback
+  - load_config: mill-config.yaml absent -> returns plugin template only
   - load_config: local override wins via deep_merge
   - load_config: repo sources absent -> returns plugin template only (lenient)
   - load_config: subfolder-install layout — stub + real config merged

@@ -649,9 +649,15 @@ def resolve_ref_paths(
             continue
         # Git-root fallback (only for non-wiki paths).
         if not raw.startswith("wiki/") and git_root is not None:
-            gr_candidate = git_root / raw
-            if gr_candidate.exists():
-                resolved.append(gr_candidate)
+            # When the worktree cwd is itself the `root` sub-path, project_root
+            # already ends with `root`, so project_root / root / raw doubles it.
+            # Try git_root / root / raw first so `root` is joined onto the repo
+            # root exactly once — matching how the plan was validated.
+            gr_candidates = [git_root / root / raw] if root else []
+            gr_candidates.append(git_root / raw)
+            gr_hit = next((c for c in gr_candidates if c.exists()), None)
+            if gr_hit is not None:
+                resolved.append(gr_hit)
                 continue
         # Suppression via creates_union or deletes_union.
         if raw in creates or raw in deletes:

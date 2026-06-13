@@ -201,10 +201,10 @@ def create_hub_links(
     wiki_path: Path,
     tokens: dict[str, str],
 ) -> dict[str, list[Path]]:
-    """Create junctions and hardlinks from wiki/config.yaml in *target_root*.
+    """Create junctions and hardlinks defined in *target_root*'s mill config.
 
     Iterates both the ``junctions:`` and ``hardlinks:`` blocks from
-    ``wiki/config.yaml``. For each entry:
+    ``mill-config.yaml``. For each entry:
 
     * Scans the target template for ``<TOKEN>`` references.
     * Intersects with the supplied *tokens* dict.

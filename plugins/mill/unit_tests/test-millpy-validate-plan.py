@@ -178,13 +178,13 @@ def test_cli_dirty_exits_one_card_missing_field() -> int:
 
 
 def test_cli_skip_check_suppresses_target_check() -> int:
-    """--skip-check wiki-config-mutation: exit 0, no errors despite wiki/config.yaml in Edits:."""
+    """--skip-check wiki-config-mutation: exit 0, no errors despite mill-config.yaml in Edits:."""
     with tempfile.TemporaryDirectory() as tmpdir:
         fixture_root = Path(tmpdir)
         plan_dir = fixture_root / "plan"
         wiki_dir = fixture_root / "wiki"
         wiki_dir.mkdir()
-        (wiki_dir / "config.yaml").write_text("", encoding="utf-8")
+        (fixture_root / "mill-config.yaml").write_text("", encoding="utf-8")
 
         batch_text = (
             "# Batch: alpha\n\n"
@@ -194,7 +194,7 @@ def test_cli_skip_check_suppresses_target_check() -> int:
             "## Cards\n\n"
             "### Card 1: card 1\n\n"
             "- **Context:** none\n"
-            "- **Edits:** `wiki/config.yaml`\n"
+            "- **Edits:** `mill-config.yaml`\n"
             "- **Creates:** none\n"
             "- **Deletes:** none\n"
             "- **Requirements:**\n  See scope.\n"
@@ -239,7 +239,7 @@ def test_cli_multiple_skip_checks_suppress_multiple_checks() -> int:
         plan_dir = fixture_root / "plan"
         wiki_dir = fixture_root / "wiki"
         wiki_dir.mkdir()
-        (wiki_dir / "config.yaml").write_text("", encoding="utf-8")
+        (fixture_root / "mill-config.yaml").write_text("", encoding="utf-8")
 
         batch_text = (
             "# Batch: alpha\n\n"
@@ -249,7 +249,7 @@ def test_cli_multiple_skip_checks_suppress_multiple_checks() -> int:
             "## Cards\n\n"
             "### Card 1: card 1\n\n"
             "- **Context:** none\n"
-            "- **Edits:** `wiki/config.yaml`\n"
+            "- **Edits:** `mill-config.yaml`\n"
             "- **Creates:** none\n"
             "- **Deletes:** none\n"
             "- **Requirements:**\n  See scope.\n"

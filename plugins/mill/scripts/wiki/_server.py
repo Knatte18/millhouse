@@ -196,17 +196,31 @@ class WikiServer(DaemonBase):
 
     def _handle_set_phase(self, payload: dict) -> dict:
         """Handle set_phase operation."""
-        try:
-            id_or_slug = payload.get("id_or_slug")
-            phase = payload.get("phase")
+        id_or_slug = payload.get("id_or_slug")
+        phase = payload.get("phase")
 
-            self._store.set_phase(id_or_slug, phase)
-            self._render_and_commit_all(slug_for_msg=str(id_or_slug))
-            return {FIELD_OK: True}
-        except Exception as e:
+        task = self._store.get_task(id_or_slug)
+        if task is None:
             return {
                 FIELD_OK: False,
                 FIELD_ERROR_TYPE: ERR_NOT_FOUND,
+                FIELD_ERROR: f"task not found: {id_or_slug}",
+            }
+
+        try:
+            self._store.set_phase(id_or_slug, phase)
+            self._render_and_commit_all(slug_for_msg=str(id_or_slug))
+            return {FIELD_OK: True}
+        except WikiPushError as e:
+            return {
+                FIELD_OK: False,
+                FIELD_ERROR_TYPE: ERR_PUSH_FAILED,
+                FIELD_ERROR: str(e),
+            }
+        except Exception as e:
+            return {
+                FIELD_OK: False,
+                FIELD_ERROR_TYPE: ERR_PROTOCOL,
                 FIELD_ERROR: str(e),
             }
 

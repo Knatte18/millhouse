@@ -476,7 +476,7 @@ def main() -> int:
         failures += 1
 
     # (d) validate_role_refs failure via millpy-review-discussion CLI
-    # wiki/config.yaml references "missing_reviewer"; reviewers.yaml omits it.
+    # mill-config.yaml references "missing_reviewer"; reviewers.yaml omits it.
     # main() should exit 1 and write the missing name to stderr.
     import importlib.util as _ilu
     _cli_path = HUB / "plugins" / "mill" / "scripts" / "millpy-review-discussion.py"

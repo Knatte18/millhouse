@@ -28,7 +28,7 @@ Checks performed (check keys):
     all-files-touched-mismatch — (#10 check 8) Mismatch between overview's
                                All Files Touched section and cards' Edits:/Creates:
     verify-not-isolated      — per-batch frontmatter verify: command does not start with PYTHONPATH= reset prefix
-    wiki-config-mutation  — batch Edits:/Creates: contains wiki/config.yaml (self-applying layout risk)
+    wiki-config-mutation  — batch Edits:/Creates: contains mill-config.yaml (self-applying layout risk)
 """
 from __future__ import annotations
 
@@ -722,14 +722,14 @@ def _check_wiki_config_mutation(batch_files: list[Path]) -> list[dict]:
     errors: list[dict] = []
     for batch_path in batch_files:
         writes = _parse_edits_only(batch_path) | _parse_creates_only(batch_path)
-        if "wiki/config.yaml" in writes:
+        if "mill-config.yaml" in writes:
             errors.append({
                 "check": "wiki-config-mutation",
                 "batch": batch_path.stem,
                 "card": None,
-                "path": "wiki/config.yaml",
+                "path": "mill-config.yaml",
                 "message": (
-                    "batch edits or creates wiki/config.yaml — self-applying layout change risk; "
+                    "batch edits or creates mill-config.yaml — self-applying layout change risk; "
                     "use --skip-check wiki-config-mutation if a bootstrap card is present"
                 ),
             })

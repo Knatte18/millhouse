@@ -26,10 +26,20 @@ Claude proposes; you decide; nothing is written until you type `approve`.
 
 ## Step 1 — Read config
 
-Load `wiki/config.yaml` from `<WIKI_PATH>`. Extract:
+Load the merged mill config to extract groom thresholds:
 
-- `groom.brevity-threshold-lines` — default **5**
-- `groom.brevity-threshold-chars` — default **500**
+```bash
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
+import json, _config, _paths
+hub = _paths.resolve_hub_path()
+wt = _paths.resolve_git_root()
+cfg = _config.load_config(hub, wt)
+g = cfg.get('groom', {})
+print(json.dumps({'brevity-threshold-lines': g.get('brevity-threshold-lines', 5), 'brevity-threshold-chars': g.get('brevity-threshold-chars', 500)}))
+"
+```
+
+Defaults if absent: `brevity-threshold-lines` = **5**, `brevity-threshold-chars` = **500**.
 
 Use these thresholds in Step 3.
 

@@ -154,6 +154,12 @@ def resolve_hub_path(cwd: Path | None = None) -> Path:
     - Task worktree cwd → walks up to the git root (the task worktree), then
       collapses through the common gitdir to the main worktree (the hub).
 
+    When the main worktree carries a stub at ``.millhouse/config.local.yaml``
+    with a ``hub_relative_path`` key, the actual hub is a subdirectory of the
+    main worktree (e.g. ``src/csharp/NORCE.Models``). In that case the function
+    returns ``main_root / hub_relative_path`` so that callers find
+    ``mill-config.yaml`` and ``.millhouse/`` in the right place.
+
     Previously this returned ``Path.cwd().resolve()`` and silently misbehaved
     when the user invoked a wrapper from ``.millhouse/`` -- ``_load_config``
     looked for ``.millhouse/mill-config.yaml`` (not present), fell back to
@@ -164,7 +170,18 @@ def resolve_hub_path(cwd: Path | None = None) -> Path:
     """
     try:
         git_root = resolve_git_root(cwd)
-        return resolve_main_worktree_root(git_root)
+        main_root = resolve_main_worktree_root(git_root)
+        stub_path = main_root / ".millhouse" / "config.local.yaml"
+        if stub_path.exists():
+            try:
+                import yaml as _yaml
+                stub = _yaml.safe_load(stub_path.read_text(encoding="utf-8")) or {}
+                hub_subpath = stub.get("hub_relative_path", ".")
+                if hub_subpath and hub_subpath != ".":
+                    return resolve_hub_relative_path(main_root, hub_subpath)
+            except Exception:
+                pass
+        return main_root
     except (SystemExit, _pygit2_util.GitOpsError):
         return (cwd or Path.cwd()).resolve()
 

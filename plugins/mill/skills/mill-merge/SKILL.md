@@ -170,7 +170,7 @@ PR dispatch lives in mill-finalize. This step is direct path only.
   8. Report to the user:
 
      ```
-     Direct push rejected by branch protection — switched to PR path. PR: <url>. Consider setting `git.require_pr_to_base: true` in wiki/config.yaml.
+     Direct push rejected by branch protection — switched to PR path. PR: <url>. Consider setting `git.require_pr_to_base: true` in mill-config.yaml.
      ```
 
   9. Skip to Step 8 (Release lock). Do not run Steps 6 (archive tag) or 7 (Home.md flip). Re-run `/mill-merge` after the PR lands to complete teardown.
