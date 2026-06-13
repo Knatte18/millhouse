@@ -15,11 +15,31 @@ The goal is to write code with doc comments detailed enough that a reader learni
 
 ---
 
+## File-level comments
+
+Every `.go` file **must** begin with a comment that describes what this specific file is for — what it contains and why it exists. This comment is separated from the `package` declaration by a blank line so it is not treated as a godoc package comment.
+
+- Describe the file's role within the package, not just the package itself.
+- Write in plain narrative prose, not a bullet list.
+- One to three lines is usually sufficient.
+
+**Example:**
+
+```go
+// handlers_auth.go implements the HTTP handlers for login, logout, and token refresh.
+// Each handler validates the request, delegates to the auth service, and writes a
+// structured JSON response.
+
+package auth
+```
+
+---
+
 ## Package doc comments
 
-Every package must have a package-level documentation comment in exactly one file (either `doc.go` or the main `.go` file of the package).
+Exactly one file per package must have a godoc package comment (no blank line between comment and `package`). Use `doc.go` when the package is large; otherwise put it in the main file.
 
-- The package comment must start with `Package <name>`, where `<name>` is the package name.
+- The comment must start with `Package <name>`, where `<name>` is the package name.
 - Follow with a sentence or paragraph explaining what the package is for and how to use it.
 
 **Example:**
