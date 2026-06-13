@@ -1,5 +1,5 @@
 ---
-name: go-testing
+name: golang-testing
 description: Testing conventions for Go projects. Use when writing tests.
 ---
 

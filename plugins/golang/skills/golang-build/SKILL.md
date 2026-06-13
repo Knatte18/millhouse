@@ -1,5 +1,5 @@
 ---
-name: go-build
+name: golang-build
 description: Build and test commands for Go. Use after completing a task.
 ---
 

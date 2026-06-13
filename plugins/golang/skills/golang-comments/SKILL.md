@@ -1,5 +1,5 @@
 ---
-name: go-comments
+name: golang-comments
 description: Godoc and inline comment rules for Go. Use when writing Go comments.
 ---
 
