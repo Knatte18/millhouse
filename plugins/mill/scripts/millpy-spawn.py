@@ -189,9 +189,9 @@ def main(argv: list[str] | None = None) -> int:
 
     container_path = resolve_container_path(git_root)
     (container_path / "portals").mkdir(parents=True, exist_ok=True)
-    (worktree_path / "_mill").mkdir(parents=True, exist_ok=True)
-    # Portal entry: <container>/portals/<slug> -> <wts>/<slug>/_mill/.
-    _junction.create(target=worktree_path / "_mill", link_path=container_path / "portals" / slug)
+    (dest_hub / "_mill").mkdir(parents=True, exist_ok=True)
+    # Portal entry: <container>/portals/<slug> -> <hub>/_mill/ (dest_hub, not worktree root).
+    _junction.create(target=dest_hub / "_mill", link_path=container_path / "portals" / slug)
 
     # Create remaining junctions/hardlinks from junctions config for the new
     # worktree (.wiki, .portals). _setup.create_hub_links uses the token-scope
