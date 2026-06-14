@@ -234,6 +234,30 @@ def main() -> int:
                 f"hub subdir should resolve to hub, got {_paths.resolve_hub_path(sub)}"
         print("PASS: resolve_hub_path inside git resolves subdirs to hub")
 
+        # M2+sub: hub is a subdir of the git root; .millhouse/ lives there, not at root.
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp).resolve()
+            git_root_dir = tmp_path / "repo"
+            git_root_dir.mkdir()
+            _test_helpers.init_minimal_git_repo(git_root_dir, branch="main")
+            hub_dir = git_root_dir / "src" / "subproj"
+            hub_dir.mkdir(parents=True)
+            (hub_dir / ".millhouse").mkdir()
+            (hub_dir / ".millhouse" / "config.local.yaml").write_text(
+                "hub_relative_path: src/subproj\n", encoding="utf-8"
+            )
+            # cwd = hub itself
+            got = _paths.resolve_hub_path(hub_dir)
+            assert got == hub_dir, \
+                f"M2+sub cwd=hub: expected {hub_dir}, got {got}"
+            # cwd = nested inside hub
+            nested = hub_dir / "some" / "nested"
+            nested.mkdir(parents=True)
+            got2 = _paths.resolve_hub_path(nested)
+            assert got2 == hub_dir, \
+                f"M2+sub cwd=hub/nested: expected {hub_dir}, got {got2}"
+        print("PASS: resolve_hub_path M2+sub returns hub subdir when cwd is inside it")
+
         # resolve_wiki_path — container-form default (main_root under wts/)
 
         with tempfile.TemporaryDirectory() as tmp:

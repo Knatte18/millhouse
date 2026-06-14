@@ -145,42 +145,67 @@ def resolve_git_root(start: Path | None = None) -> Path:
 def resolve_hub_path(cwd: Path | None = None) -> Path:
     """Return the hub directory (the main worktree, where mill-config.yaml lives).
 
-    Uses ``resolve_git_root`` + ``resolve_main_worktree_root`` so the lookup
-    works regardless of the caller's cwd:
+    Primary strategy — cwd walk:
+        Walk upward from the actual cwd toward the git root, checking each
+        directory for ``.millhouse/config.local.yaml``. The first directory
+        that contains it is the hub, *unless* that directory is the git root
+        itself and its config declares ``hub_relative_path``, in which case
+        the hub is that subpath (handles a worktree-root stub pointing to a
+        hub subdirectory).
 
-    - Hub-root cwd → the hub itself.
-    - Hub subdirectory cwd (e.g. ``.millhouse/`` where the .cmd wrappers live)
-      → walks up to the git root, which is the hub.
-    - Task worktree cwd → walks up to the git root (the task worktree), then
-      collapses through the common gitdir to the main worktree (the hub).
+        This handles M2+sub repos (e.g. ``src/csharp/NORCE.Models``) where
+        ``.millhouse/`` lives in a git subdirectory without requiring a stub
+        file at the worktree root.  It also handles the common case (hub ==
+        git root) and cwd-inside-``.millhouse/`` (walks up one level).
 
-    When the main worktree carries a stub at ``.millhouse/config.local.yaml``
-    with a ``hub_relative_path`` key, the actual hub is a subdirectory of the
-    main worktree (e.g. ``src/csharp/NORCE.Models``). In that case the function
-    returns ``main_root / hub_relative_path`` so that callers find
-    ``mill-config.yaml`` and ``.millhouse/`` in the right place.
+    Fallback — main-worktree stub:
+        When the walk finds nothing (cwd outside git root, or no
+        ``.millhouse/`` anywhere in the tree), check whether the main worktree
+        root has an explicit stub with ``hub_relative_path``.  Rarely needed
+        after the walk, kept for edge-case compatibility.
 
-    Previously this returned ``Path.cwd().resolve()`` and silently misbehaved
-    when the user invoked a wrapper from ``.millhouse/`` -- ``_load_config``
-    looked for ``.millhouse/mill-config.yaml`` (not present), fell back to
-    the plugin template (where ``spawn.branch_prefix`` is empty), and tasks
-    got spawned on branches without the configured prefix. Falling back to
-    cwd here when git lookup fails preserves the historical behaviour for
-    callers running outside a git repo (mill-setup pre-init).
+    Terminal fallback: ``main_root`` (historic behaviour).
     """
     try:
         git_root = resolve_git_root(cwd)
         main_root = resolve_main_worktree_root(git_root)
+
+        import yaml as _yaml
+
+        actual_cwd = (cwd or Path.cwd()).resolve()
+        git_root_resolved = git_root.resolve()
+        check = actual_cwd
+        while True:
+            candidate = check / ".millhouse" / "config.local.yaml"
+            if candidate.exists():
+                try:
+                    data = _yaml.safe_load(candidate.read_text(encoding="utf-8")) or {}
+                    sub = data.get("hub_relative_path", ".")
+                    if sub and sub != "." and check == git_root_resolved:
+                        # Stub at the worktree root pointing to a hub subdir.
+                        return resolve_hub_relative_path(git_root, sub)
+                except Exception:
+                    pass
+                # Either no hub_relative_path or we found .millhouse/ inside a
+                # subdir that IS the hub itself — return this directory.
+                return check
+            if check == git_root_resolved or check == check.parent:
+                break
+            check = check.parent
+
+        # Fallback: explicit stub at main worktree root when the walk above
+        # found nothing (e.g. cwd was already the worktree root for an M2+sub
+        # repo and no stub exists there yet).
         stub_path = main_root / ".millhouse" / "config.local.yaml"
         if stub_path.exists():
             try:
-                import yaml as _yaml
                 stub = _yaml.safe_load(stub_path.read_text(encoding="utf-8")) or {}
                 hub_subpath = stub.get("hub_relative_path", ".")
                 if hub_subpath and hub_subpath != ".":
                     return resolve_hub_relative_path(main_root, hub_subpath)
             except Exception:
                 pass
+
         return main_root
     except (SystemExit, _pygit2_util.GitOpsError):
         return (cwd or Path.cwd()).resolve()
