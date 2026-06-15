@@ -14,8 +14,10 @@ model_to_tier(model: str) -> str
     Raises ValueError on unrecognized family.
 
 write_brief(briefs_dir: Path, role: str, scope: str, round_n: int, prompt_text: str) -> Path
-    Write a brief file to briefs_dir/<role>-<scope>-r<round_n>.md,
-    create parent directories, and return the path. Example role: "implement".
+    Write a brief file to briefs_dir/<role>-<sanitized_scope>-r<round_n>.md,
+    creating parent directories. The scope component is sanitized for Windows
+    filename safety (colons, slashes, etc. become hyphens). Returns the path
+    of the written file. Example role: "implement".
 
 SUBAGENT_REVIEWER, SUBAGENT_IMPLEMENTER
     String constants for subagent type names.
@@ -23,6 +25,8 @@ SUBAGENT_REVIEWER, SUBAGENT_IMPLEMENTER
 from __future__ import annotations
 
 from pathlib import Path
+
+import _paths
 
 __all__ = [
     "resolve_dispatch_mode",
@@ -95,7 +99,7 @@ def write_brief(
     Args:
         briefs_dir: Parent directory for briefs.
         role: Role name (e.g., "implement").
-        scope: Scope name (e.g., "code-review").
+        scope: Scope name (e.g., "code-review"). Sanitized for filename safety.
         round_n: Round number (integer).
         prompt_text: Full prompt text to write (UTF-8).
 
@@ -104,6 +108,7 @@ def write_brief(
     """
     briefs_dir = Path(briefs_dir)
     briefs_dir.mkdir(parents=True, exist_ok=True)
-    brief_path = briefs_dir / f"{role}-{scope}-r{round_n}.md"
+    sanitized_scope = _paths.sanitize_filename_component(scope)
+    brief_path = briefs_dir / f"{role}-{sanitized_scope}-r{round_n}.md"
     brief_path.write_text(prompt_text, encoding="utf-8")
     return brief_path

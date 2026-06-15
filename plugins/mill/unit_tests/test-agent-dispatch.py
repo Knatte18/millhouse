@@ -135,6 +135,42 @@ def test_subagent_constants() -> None:
     print("PASS subagent constants")
 
 
+def test_write_brief_sanitizes_colon_in_scope() -> None:
+    """write_brief sanitizes colon in scope and creates a real file."""
+    with tempfile.TemporaryDirectory() as tmp:
+        briefs_dir = Path(tmp) / "briefs"
+        scope = "Core fix: emit_prepare"
+        prompt = "Test prompt"
+        path = _agent_dispatch.write_brief(briefs_dir, "implement", scope, 1, prompt)
+
+        # Filename should not contain colon
+        assert ":" not in path.name, f"Filename should not contain colon: {path.name!r}"
+        # File should exist and be readable
+        assert path.exists(), f"File should exist at {path}"
+        content = path.read_text(encoding="utf-8")
+        assert content == prompt, f"Content should match"
+    print("PASS write_brief -- sanitizes colon in scope")
+
+
+def test_write_brief_sanitizes_slash_in_scope() -> None:
+    """write_brief sanitizes slash in scope and creates a flat file."""
+    with tempfile.TemporaryDirectory() as tmp:
+        briefs_dir = Path(tmp) / "briefs"
+        scope = "internal/lock - x"
+        prompt = "Test prompt"
+        path = _agent_dispatch.write_brief(briefs_dir, "implement", scope, 1, prompt)
+
+        # Should create a single flat file directly under briefs_dir, no nested directories
+        assert path.parent == briefs_dir, f"File should be directly under briefs_dir, got {path.parent}"
+        # Filename should not contain forward slash (no nested dirs created)
+        assert "/" not in path.name, f"Filename should not contain slash: {path.name!r}"
+        # File should exist and be readable
+        assert path.exists(), f"File should exist at {path}"
+        content = path.read_text(encoding="utf-8")
+        assert content == prompt, f"Content should match"
+    print("PASS write_brief -- sanitizes slash in scope")
+
+
 def main() -> int:
     tests = [
         test_resolve_dispatch_mode_defaults_to_subprocess,
@@ -149,6 +185,8 @@ def main() -> int:
         test_write_brief_overwrites_existing_file,
         test_write_brief_returns_path,
         test_subagent_constants,
+        test_write_brief_sanitizes_colon_in_scope,
+        test_write_brief_sanitizes_slash_in_scope,
     ]
     failures: list[str] = []
     for fn in tests:
