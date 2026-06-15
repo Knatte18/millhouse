@@ -225,10 +225,14 @@ def commit_push(
             raise
         raise WikiPushError(f"failed to verify git repository: {e}")
 
-    _run(
+    add = _run(
         ["git", "-C", str(wiki_path), "add", "--"] + list(rel_paths),
         wiki_path,
+        check=False,
     )
+    if add.returncode != 0:
+        stderr_msg = (add.stderr.strip() or "(git add failed with no error message)")
+        raise WikiPushError(f"git add failed: {stderr_msg}")
 
     diff = _run(
         ["git", "-C", str(wiki_path), "diff", "--cached", "--quiet"],
@@ -240,10 +244,14 @@ def commit_push(
     elif diff.returncode != 1:
         raise WikiPushError(f"git diff --cached --quiet failed: {diff.stderr.strip()!r}")
 
-    _run(
+    commit = _run(
         ["git", "-C", str(wiki_path), "commit", "-m", message],
         wiki_path,
+        check=False,
     )
+    if commit.returncode != 0:
+        stderr_msg = (commit.stderr.strip() or "(git commit failed with no error message)")
+        raise WikiPushError(f"git commit failed: {stderr_msg}")
 
     # Test mode: stop after local commit; skip the network push.
     if os.environ.get("WIKI_DAEMON_SKIP_PUSH") == "1":
