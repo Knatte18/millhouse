@@ -185,6 +185,7 @@ def commit_push(
     """Stage, commit, and push with one rebase retry on non-fast-forward.
 
     Sequence:
+    0. Verify wiki_path is a git repository
     1. git add -- <rel_paths>
     2. git diff --cached --quiet (check if staged)
     3. git commit -m <message>
@@ -202,6 +203,18 @@ def commit_push(
     Raises:
         WikiPushError: Any unrecoverable git failure.
     """
+    # Verify wiki_path is a git repository before attempting operations
+    git_dir_check = _run(
+        ["git", "-C", str(wiki_path), "rev-parse", "--git-dir"],
+        wiki_path,
+        check=False,
+    )
+    if git_dir_check.returncode != 0:
+        raise WikiPushError(
+            f"not a git repository: {wiki_path} -- "
+            f"initialize the wiki with 'git clone' or 'git init'"
+        )
+
     _run(
         ["git", "-C", str(wiki_path), "add", "--"] + list(rel_paths),
         wiki_path,
