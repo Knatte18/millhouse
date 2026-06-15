@@ -3,7 +3,7 @@
 ```yaml
 task: Fix millpy-review-plan validator gaps and resolve_ref_paths path-doubling
 slug: review-plan-and-ref-paths
-approved: false
+approved: true
 started: 20260615-113046
 parent: main
 root: ""
