@@ -48,7 +48,7 @@ This batch delivers Windows-safe filenames for batch names. It adds one shared s
   - `plugins/mill/scripts/millpy-implement.py`
 - **Creates:** none
 - **Deletes:** none
-- **Requirements:** In `millpy-implement.py`, replace both occurrences of the inline expression `_safe_batch = args.batch_name.replace(":", "-").replace("/", "-").replace("\\", "-")` (the two snapshot-path constructions for `.cleanliness-snapshot-{_safe_batch}.txt`) with `_safe_batch = _paths.sanitize_filename_component(args.batch_name)`. `_paths` is already imported in this module; confirm and reuse the existing import. Behavior for `:`/`/`/`\` is unchanged; the helper additionally covers `*?"<>|`. Do not touch any other use of `args.batch_name` (the raw name must remain for status and envelope lookups).
+- **Requirements:** In `millpy-implement.py`, replace BOTH occurrences (near lines ~189 and ~210 — one per snapshot-path construction branch) of the inline expression `_safe_batch = args.batch_name.replace(":", "-").replace("/", "-").replace("\\", "-")` (each feeding `.cleanliness-snapshot-{_safe_batch}.txt`) with `_safe_batch = _paths.sanitize_filename_component(args.batch_name)`. `_paths` is already imported in this module; confirm and reuse the existing import. Behavior for `:`/`/`/`\` is unchanged; the helper additionally covers `*?"<>|`. Do not touch any other use of `args.batch_name` (the raw name must remain for status and envelope lookups).
 - **Commit:** `refactor(implement): use shared sanitizer for snapshot filename`
 
 ## Batch Tests
