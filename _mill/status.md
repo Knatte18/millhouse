@@ -29,7 +29,9 @@ implementing  '2026-06-15T13:10:15Z'
 ```yaml
 batches:
   - name: filename-sanitization
-    state: pending
+    state: running
+    implementer_session: cb6f064b-cca1-4139-a8d3-f3a87588b521
+    start_sha: 42d69d2d4e10efd9fe5f720a46dfea9752e91785
   - name: skill-injection
     state: pending
 ```
