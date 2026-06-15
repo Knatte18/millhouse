@@ -26,7 +26,7 @@ Typical triggers:
 
 ### `/mill-fold <target-slug> --issue <N>` — GH issue
 
-1. The script parses Home.md, runs the phase guard, then calls `_gh_issues.fetch_one(N)` to retrieve the issue title.
+1. The script parses Home.md, runs the unclaimed-only guard, then calls `_gh_issues.fetch_one(N)` to retrieve the issue title.
 2. It prints the draft Sources line and (when stdin is a tty) prompts: `1) Use as-is (Recommended) / 2) Edit / 3) Abort`.
 3. On confirmation it appends `- Sources: #N — <title>` to the target body.
 4. After the daemon commit/push succeeds (daemon auto-commits on each `_client` mutation) it calls `_gh_issues.close_with_comment(N, 'Folded into wiki task: <slug>', git_root=...)`.
@@ -34,7 +34,7 @@ Typical triggers:
 
 ### `/mill-fold <target-slug> --scope "<text>"` — scope item
 
-1. The script parses Home.md and runs the phase guard.
+1. The script parses Home.md and runs the unclaimed-only guard.
 2. It appends `- Folded in: <text>` to the target body.
 3. No GitHub side-effects.
 
