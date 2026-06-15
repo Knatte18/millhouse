@@ -58,7 +58,8 @@ This batch closes #483: spawned implementer/fixer sub-agents never load the lang
 
 ### Card 7: Add language-skill backstop to the implementer agent definition
 
-- **Context:** none
+- **Context:**
+  - `plugins/mill/unit_tests/test-agent-dispatch.py`
 - **Edits:**
   - `plugins/mill/agents/mill-implementer.md`
   - `plugins/mill/unit_tests/test-agents-defs.py`

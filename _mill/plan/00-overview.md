@@ -3,7 +3,7 @@
 ```yaml
 task: "Fix batch-name sanitization (colon/slash on Windows) and implementer skill loading"
 slug: batch-name-and-skill-loading
-approved: false
+approved: true
 started: "20260615-125429"
 parent: main
 root: ""
