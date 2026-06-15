@@ -95,7 +95,7 @@ def main(argv: list[str] | None = None) -> int:
     import _reviewers
     from _paths import resolve_hub_path, resolve_wiki_path
     from _review_cli import print_error_envelope
-    from _review_common import ReviewError, _load_root_from_overview, find_active_slug, load_config, resolve_path
+    from _review_common import _load_root_from_overview, find_active_slug, load_config, resolve_path, ReviewError
     from _review_plan import prepare, finalize, run
 
     try:
