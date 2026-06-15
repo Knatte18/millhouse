@@ -399,6 +399,36 @@ def main() -> int:
         except Exception as exc:
             fail("clone_or_init plain-clone path C sets upstream tracking", exc)
 
+        # --- (p) clone_or_init path D (branch-specified) sets upstream tracking ---
+        try:
+            import _setup  # noqa: F811
+            clone5 = tmp / "clone5"
+
+            # Test Path D (clone with specified branch)
+            result = _setup.clone_or_init(str(bare), "main", clone5)
+            assert result["action"] == "cloned"
+
+            # Verify tracking is set for the specified branch
+            get_tracking = subprocess.run(
+                ["git", "-C", str(clone5), "config", "--get", "branch.main.remote"],
+                capture_output=True,
+                text=True,
+            )
+            assert get_tracking.returncode == 0 and "origin" in get_tracking.stdout, \
+                f"branch.main.remote should be configured, got: {get_tracking.stderr}"
+
+            get_merge = subprocess.run(
+                ["git", "-C", str(clone5), "config", "--get", "branch.main.merge"],
+                capture_output=True,
+                text=True,
+            )
+            assert get_merge.returncode == 0 and "refs/heads/main" in get_merge.stdout, \
+                f"branch.main.merge should be configured, got: {get_merge.stderr}"
+
+            ok("clone_or_init path D (branch-specified) sets upstream tracking")
+        except Exception as exc:
+            fail("clone_or_init path D (branch-specified) sets upstream tracking", exc)
+
     finally:
         _safe_rmtree.safe_rmtree(tmp, allowed_root=tmp, ignore_errors=True)
 
