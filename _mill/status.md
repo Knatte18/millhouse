@@ -35,5 +35,7 @@ batches:
     start_sha: 42d69d2d4e10efd9fe5f720a46dfea9752e91785
     commit_sha: 48d19c23f032726b19bcaf4d14d13d098b410c0b
   - name: skill-injection
-    state: pending
+    state: running
+    implementer_session: a5990e75-7ee5-4305-bc44-4df19ead1473
+    start_sha: 3c2e75a5133a01c444e4fc70ce8c12ef85bb9ab1
 ```
