@@ -112,3 +112,28 @@ def test_implementer_agent_definition() -> None:
     )
 
     print("PASS test_implementer_agent_definition")
+
+
+def main() -> int:
+    tests = [
+        test_reviewer_agent_definition,
+        test_implementer_agent_definition,
+    ]
+    failures: list[str] = []
+    for fn in tests:
+        try:
+            fn()
+        except AssertionError as exc:
+            print(f"FAIL [{fn.__name__}]: {exc}", file=sys.stderr)
+            failures.append(fn.__name__)
+        except Exception as exc:  # noqa: BLE001
+            print(f"ERROR [{fn.__name__}]: {exc}", file=sys.stderr)
+            failures.append(fn.__name__)
+    if failures:
+        print(f"\n{len(failures)} test(s) failed: {failures}", file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
