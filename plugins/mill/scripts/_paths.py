@@ -83,9 +83,16 @@ Public API:
         ``cfg['paths']['status_md']``, with ``_mill/`` -> ``task/`` compat
         fallback via ``resolve_task_path``. Raises ``KeyError`` naming
         ``paths.status_md`` when the key is absent from ``cfg``.
+
+    sanitize_filename_component(name: str) -> str
+        Replace Windows-reserved characters in ``name`` with hyphens to ensure
+        the result is a valid NTFS filename component. Replaces each of
+        ``: \ / * ? " < > |`` with ``-``. Safe for use in brief filenames,
+        snapshot filenames, and any other filename component construction.
 """
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import _pygit2_util
@@ -109,6 +116,7 @@ __all__ = [
     "ActiveWorktreeSlugMismatch",
     "resolve_task_path",
     "status_path",
+    "sanitize_filename_component",
 ]
 
 
@@ -538,3 +546,20 @@ def status_path(worktree_root: Path, cfg: dict) -> Path:
     if "status_md" not in cfg["paths"]:
         raise KeyError(_msg)
     return resolve_task_path(worktree_root, cfg["paths"]["status_md"])
+
+
+def sanitize_filename_component(name: str) -> str:
+    """Replace Windows-reserved characters in a string to make it NTFS-safe.
+
+    Replaces every Windows-reserved character (colon, backslash, forward-slash,
+    asterisk, question-mark, double-quote, less-than, greater-than, pipe) with
+    a single hyphen. The result is guaranteed to be a valid filename component
+    on Windows NTFS, macOS, and Linux.
+
+    Args:
+        name: String to sanitize (e.g., batch name).
+
+    Returns:
+        Sanitized string with reserved characters replaced by hyphens.
+    """
+    return re.sub(r'[:\\/*?"<>|]', '-', name)
