@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-validator-git-root-threading
+phase: approved-review-plan-cli
 slug: review-plan-and-ref-paths
 branch: hanf/review-plan-and-ref-paths
 plan: _mill/plan
@@ -25,6 +25,7 @@ planned  '2026-06-15T11:41:16Z'
 implementing  '2026-06-15T11:44:17Z'
 approved-ref-path-resolution  '2026-06-15T11:48:43Z'
 approved-validator-git-root-threading  '2026-06-15T11:53:19Z'
+approved-review-plan-cli  '2026-06-15T12:02:23Z'
 ```
 
 ## Batches
@@ -42,9 +43,10 @@ batches:
     start_sha: 3ee9b43121c340c373e608bc1735ddf24fa06789
     commit_sha: eb3fe9237d022e1254a94f75d6d5ffe37a1570c6
   - name: review-plan-cli
-    state: running
+    state: approved
     implementer_session: a24ffdee-2ca2-434f-bbb7-5be523053f36
     start_sha: afa44c3cf676342a9084436d7cfebb118dfdd411
+    commit_sha: cd962846fb58e9acafbcce972a5f371835677a5c
   - name: skill-doc-update
     state: pending
 ```
