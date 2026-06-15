@@ -26,7 +26,6 @@ import sys
 from pathlib import Path
 
 import _junction
-import _paths
 import _subprocess_util
 
 _TOKEN_RE = re.compile(r"<([A-Za-z][A-Za-z0-9_]*)>")
@@ -143,14 +142,17 @@ def clone_or_init(url: str, branch: str | None, dest: Path) -> dict:
                 cfg_remote = _subprocess_util.run(
                     ["git", "-C", str(dest), "config", f"branch.{branch_name}.remote", "origin"]
                 )
-                if cfg_remote.returncode == 0:
-                    cfg_merge = _subprocess_util.run(
-                        ["git", "-C", str(dest), "config", f"branch.{branch_name}.merge", f"refs/heads/{branch_name}"]
+                if cfg_remote.returncode != 0:
+                    raise WikiSetupError(
+                        f"git -C {dest} config branch.{branch_name}.remote failed: {cfg_remote.stderr}"
                     )
-                    if cfg_merge.returncode != 0:
-                        raise WikiSetupError(
-                            f"git -C {dest} config branch.{branch_name}.merge failed: {cfg_merge.stderr}"
-                        )
+                cfg_merge = _subprocess_util.run(
+                    ["git", "-C", str(dest), "config", f"branch.{branch_name}.merge", f"refs/heads/{branch_name}"]
+                )
+                if cfg_merge.returncode != 0:
+                    raise WikiSetupError(
+                        f"git -C {dest} config branch.{branch_name}.merge failed: {cfg_merge.stderr}"
+                    )
 
         return {"action": "cloned", "branch_existed_on_remote": None}
 
