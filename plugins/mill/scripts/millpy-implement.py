@@ -262,6 +262,7 @@ def main(argv=None) -> int:
         "SELF_FIX_ROUNDS": str(self_fix_rounds),
         "ROUND": "1",
         "SESSION_ID": session_id,
+        "LANGUAGE_SKILLS": _agent_dispatch.language_skills_directive(batch_file),
     })
 
     max_chars = cfg.get("llm", {}).get("max_implementer_prompt_chars", 0)
