@@ -1,10 +1,10 @@
 # Status
 
 ```yaml
-phase: discussed
+phase: planning
 slug: implement-finalize-session-id
 branch: hanf/implement-finalize-session-id
-plan: null
+plan: _mill/plan
 parent: main
 task: Fix millpy-implement.py finalize to accept (or not require) --session-id/--start-sha
 task_description: |
@@ -16,4 +16,5 @@ task_description: |
 ```text
 discussing  '2026-06-15T10:24:16Z'
 discussed  '2026-06-15T10:38:38Z'
+planning  '2026-06-15T10:41:59Z'
 ```
