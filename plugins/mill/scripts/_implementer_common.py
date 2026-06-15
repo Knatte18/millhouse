@@ -108,8 +108,9 @@ def emit_prepare(
 ) -> int:
     """Write brief and emit prepare JSON envelope.
 
-    Writes the brief to briefs_dir/<role>-<scope>-r<round_n>.md and prints
-    one JSON line with the brief path and metadata. Returns 0.
+    Writes the brief to briefs_dir/<role>-<sanitized_scope>-r<round_n>.md
+    (scope is sanitized for Windows filename safety) and prints one JSON line
+    with the brief path and metadata. Returns 0.
     """
     brief_path = _agent_dispatch.write_brief(briefs_dir, role, scope, round_n, prompt_text)
     envelope = {
