@@ -48,5 +48,7 @@ batches:
     start_sha: afa44c3cf676342a9084436d7cfebb118dfdd411
     commit_sha: cd962846fb58e9acafbcce972a5f371835677a5c
   - name: skill-doc-update
-    state: pending
+    state: running
+    implementer_session: 580c8792-8a29-48d8-9e47-83f014978900
+    start_sha: 5028a0326c2cd2f4e9f3082ee36cdbb162473a23
 ```
