@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: review-plan-and-ref-paths
 branch: hanf/review-plan-and-ref-paths
 plan: _mill/plan
@@ -22,4 +22,19 @@ plan-review-r1  '2026-06-15T11:37:54Z'
 plan-fix-r1  '2026-06-15T11:37:54Z'
 plan-fix-r2  '2026-06-15T11:41:02Z'
 planned  '2026-06-15T11:41:16Z'
+implementing  '2026-06-15T11:44:17Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: ref-path-resolution
+    state: pending
+  - name: validator-git-root-threading
+    state: pending
+  - name: review-plan-cli
+    state: pending
+  - name: skill-doc-update
+    state: pending
 ```
