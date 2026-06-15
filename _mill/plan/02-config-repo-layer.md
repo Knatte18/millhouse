@@ -55,15 +55,20 @@ container-layout and total-absence cases.
 - **Creates:** none
 - **Deletes:** none
 - **Requirements:** In `test-config.py`, add a test that builds a container/`wts`
-  tempdir layout where `hub_root` is the container dir (no
-  `mill-config.yaml` at hub root) and the primary clone at
-  `<hub>/wts/<repo>/mill-config.yaml` carries a
-  `roles.discussion-review.holistic.reviewer: opushigh` override; assert
-  `load_config` returns `opushigh`, not the template default. Add a second test
-  for the total-absence case (no repo-layer config in any of the three search
-  locations): assert the template default is returned and that the
-  "no repo-layer" note is written to stderr. Reuse the existing helpers
-  (`_git_init`, `_write_yaml`, `_setup_plugin_template`) and harness style.
+  tempdir layout where `hub_root` is the container dir (no `mill-config.yaml` at
+  hub root) and the primary clone is a real `_git_init`'d repo at
+  `<hub>/wts/<repo>/` (so `resolve_main_worktree_root(worktree_root)` resolves to
+  that clone — candidate #2) carrying a
+  `<hub>/wts/<repo>/mill-config.yaml` with a
+  `roles.discussion-review.holistic.reviewer: opushigh` override; call
+  `load_config(hub_root=<container>, worktree_root=<clone>)` and assert it
+  returns `opushigh`, not the template default. `load_config` does not call
+  `resolve_wiki_path`, so no wiki stub is needed; the clone must be a genuine git
+  repo because `resolve_main_worktree_root` walks git. Add a second test for the
+  total-absence case (no repo-layer config in any of the three search locations):
+  assert the template default is returned and that the "no repo-layer" note is
+  written to stderr. Reuse the existing helpers (`_git_init`, `_write_yaml`,
+  `_setup_plugin_template`) and harness style.
 - **Commit:** `test(config): cover container-layout repo-config resolution (#470)`
 
 ## Batch Tests

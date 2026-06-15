@@ -34,13 +34,17 @@ commits vs the parent branch.
   `compute_terminal_dirt(worktree: Path, task_dir: Path, parent_branch: str) ->
   list[str]` to `_cleanliness.py`. It runs
   `_pygit2_util.status_porcelain(worktree, include_untracked=False)` for current
-  dirt, computes the task's owned paths as the union of (a) paths under
-  `task_dir` (worktree-relative) and (b) the names from `git diff --name-only
-  <parent_branch>...HEAD`, and returns the sorted subset of dirty entries whose
-  path falls within that owned set. Factor the path-membership filter as a small
-  pure helper (porcelain lines + owned-path set -> in-scope lines) so it is
+  dirt and computes the task's owned paths as the union of (a) paths under
+  `task_dir` (worktree-relative) and (b) the names returned by a discrete module
+  function `_parent_diff_names(worktree: Path, parent_branch: str) -> list[str]`
+  (also added in this card) that runs `git diff --name-only
+  <parent_branch>...HEAD` via `_subprocess_util.run` and parses the output;
+  `compute_terminal_dirt` returns the sorted subset of dirty entries whose path
+  falls within that owned set. Factor the path-membership filter as a small pure
+  helper (porcelain lines + owned-path set -> in-scope lines) so it is
   unit-testable without git, mirroring how `compute_new_dirt` isolates its
-  set-diff. Any added runtime output must be ASCII.
+  set-diff. Keeping `_parent_diff_names` a separate named function gives the test
+  a single mock point. Any added runtime output must be ASCII.
 - **Commit:** `feat(cleanliness): add task-scoped compute_terminal_dirt (#467)`
 
 ### Card 9: scope mill-go Handoff gate to task paths
@@ -70,13 +74,15 @@ commits vs the parent branch.
 - **Creates:** none
 - **Deletes:** none
 - **Requirements:** In `test-cleanliness.py`, add tests for
-  `compute_terminal_dirt` following the file's existing mock pattern (patch
-  `_cleanliness._pygit2_util.status_porcelain`, and mock the parent-diff lookup):
-  (1) in-scope dirt (a file under `task_dir`, and a file in the parent-diff set)
-  is returned; (2) out-of-scope dirt (e.g. another task's nested `_mill/` path
-  not under `task_dir` and not in the parent-diff set) is ignored; (3) clean
-  worktree returns an empty list. If the pure membership filter is exposed
-  separately, also test it directly with synthetic input.
+  `compute_terminal_dirt` following the file's existing mock pattern: patch
+  `_cleanliness._pygit2_util.status_porcelain` for the dirt list and patch
+  `_cleanliness._parent_diff_names` for the parent-diff names (these two are the
+  exact mock points; do not invoke real git). Cases: (1) in-scope dirt (a file
+  under `task_dir`, and a file in the parent-diff set) is returned; (2)
+  out-of-scope dirt (e.g. another task's nested `_mill/` path not under
+  `task_dir` and not in the parent-diff set) is ignored; (3) clean worktree
+  returns an empty list. If the pure membership filter is exposed separately,
+  also test it directly with synthetic input (no patching needed).
 - **Commit:** `test(cleanliness): cover task-scoped terminal dirt (#467)`
 
 ## Batch Tests

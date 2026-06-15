@@ -5,7 +5,7 @@ task: "Fix wiki push upstream, cleanliness gate, mojibake, container config, and
 batch: "stacked-finalize-cleanup"
 number: 5
 cards: 4
-verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-finalize-cleanup.py
+verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/test-finalize-cleanup.py
 depends-on: []
 ```
 
@@ -83,7 +83,8 @@ layouts) instead of a literal git-root-relative `_mill/status.md`.
 - **Context:**
   - `plugins/mill/scripts/_finalize_cleanup.py`
   - `plugins/mill/unit_tests/test-wiki-sync.py`
-- **Edits:** none
+- **Edits:**
+  - `plugins/mill/unit_tests/run-all.py`
 - **Creates:**
   - `plugins/mill/unit_tests/test-finalize-cleanup.py`
 - **Deletes:** none
@@ -92,8 +93,10 @@ layouts) instead of a literal git-root-relative `_mill/status.md`.
   setup style from `test-wiki-sync.py` as a reference): (1) a base branch that
   tracks `<task_dir>/status.md` -> returns True; (2) a base branch with no
   tracked `_mill/` -> returns False. Use the repo's pass/fail harness style with
-  `if __name__ == "__main__": sys.exit(main())` so `run-all.py --only
-  test-finalize-cleanup.py` picks it up.
+  `if __name__ == "__main__": sys.exit(main())`. Because this test uses real git,
+  add `"test-finalize-cleanup.py"` to the `SKIP` frozenset in `run-all.py`
+  (matching the `test-wiki-sync.py` precedent) so the default parallel suite does
+  not run it; the batch `verify:` invokes it directly instead.
 - **Commit:** `test(finalize): cover base_tracks_task_dir detection (#482)`
 
 ## Batch Tests

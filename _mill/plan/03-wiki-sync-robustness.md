@@ -39,7 +39,9 @@ existing tempfile bare-repo + clone pattern in `test-wiki-sync.py`.
   `["git", "-C", str(wiki_path), "push", "origin", f"HEAD:{branch}"]`. Keep the
   existing non-fast-forward retry/rebase behaviour and the
   `WIKI_DAEMON_SKIP_PUSH` short-circuit unchanged. The refspec form must not
-  depend on `push.default` or `branch.*.remote` config.
+  depend on `push.default` or `branch.*.remote` config. If the resolved branch is
+  empty or the literal `HEAD` (detached HEAD), raise `WikiPushError` with an
+  ASCII message rather than pushing the malformed `HEAD:HEAD` refspec.
 - **Commit:** `fix(wiki): push with explicit refspec so untracked clones succeed (#469)`
 
 ### Card 5: detect non-git-repo wiki dir early

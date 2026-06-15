@@ -42,7 +42,7 @@ batches:
     name: stacked-finalize-cleanup
     file: 05-stacked-finalize-cleanup.md
     depends-on: []
-    verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-finalize-cleanup.py
+    verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/test-finalize-cleanup.py
 ```
 
 ## Shared Decisions
@@ -84,6 +84,7 @@ _Cross-cutting decisions every batch inherits._
 - `plugins/mill/skills/git-pr/SKILL.md`
 - `plugins/mill/skills/mill-finalize/SKILL.md`
 - `plugins/mill/skills/mill-go/SKILL.md`
+- `plugins/mill/unit_tests/run-all.py`
 - `plugins/mill/unit_tests/test-cleanliness.py`
 - `plugins/mill/unit_tests/test-config.py`
 - `plugins/mill/unit_tests/test-finalize-cleanup.py`
