@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: discussed
 slug: batch-name-and-skill-loading
 branch: hanf/batch-name-and-skill-loading
 plan: null
@@ -15,4 +15,5 @@ task_description: |
 
 ```text
 discussing  '2026-06-15T11:05:35Z'
+discussed  '2026-06-15T12:50:21Z'
 ```
