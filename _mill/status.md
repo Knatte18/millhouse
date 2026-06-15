@@ -40,7 +40,9 @@ batches:
     start_sha: ed8daceeed6c8d425ace1ca8d1e6ed5d8b22364a
     commit_sha: ae0140449e3c274e82edad2caa2c1905c71062ee
   - name: wiki-sync-robustness
-    state: pending
+    state: running
+    implementer_session: d574dfad-8063-4c61-9400-af977790a83d
+    start_sha: b33fed013ef5134083a9c3ee03a5e980f4b93ea8
   - name: terminal-cleanliness-gate
     state: pending
   - name: stacked-finalize-cleanup
