@@ -1417,7 +1417,7 @@ def load_config(hub_root: Path, mill_dir: Path) -> dict:
     template_cfg = copy.deepcopy(cfg)
 
     # 2. Resolve hub-layer sources
-    mill_cfg_path = resolve_repo_config_path(hub_root, mill_dir)
+    mill_cfg_path = resolve_repo_config_path(hub_root, mill_dir.parent)
 
     # 3. Apply repo-layer merge logic
     found_repo_layer = False
