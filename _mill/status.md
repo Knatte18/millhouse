@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-filename-sanitization
+phase: approved-skill-injection
 slug: batch-name-and-skill-loading
 branch: hanf/batch-name-and-skill-loading
 plan: _mill/plan
@@ -23,6 +23,7 @@ plan-fix-r2  '2026-06-15T13:05:46Z'
 planned  '2026-06-15T13:06:01Z'
 implementing  '2026-06-15T13:10:15Z'
 approved-filename-sanitization  '2026-06-15T13:15:01Z'
+approved-skill-injection  '2026-06-15T13:20:03Z'
 ```
 
 ## Batches
@@ -35,7 +36,8 @@ batches:
     start_sha: 42d69d2d4e10efd9fe5f720a46dfea9752e91785
     commit_sha: 48d19c23f032726b19bcaf4d14d13d098b410c0b
   - name: skill-injection
-    state: running
+    state: approved
     implementer_session: a5990e75-7ee5-4305-bc44-4df19ead1473
     start_sha: 3c2e75a5133a01c444e4fc70ce8c12ef85bb9ab1
+    commit_sha: bdc3981788112b94f9d570f90aaa86407f098f53
 ```
