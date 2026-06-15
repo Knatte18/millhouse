@@ -82,6 +82,20 @@ def main(argv=None) -> int:
         "--agent-output",
         help="Path to agent output file (required when --stage finalize).",
     )
+    # These flags are accepted for CLI-shape parity with millpy-fix.py and the
+    # generic agent-mode dispatch loop (mill-go SKILL.md step 5).
+    # millpy-implement.py ignores them; the --stage finalize branch reads the
+    # authoritative start_sha and implementer_session from status.md instead.
+    parser.add_argument(
+        "--start-sha",
+        default=None,
+        help="SHA captured at prepare stage (ignored by implement; status.md is authoritative).",
+    )
+    parser.add_argument(
+        "--session-id",
+        default=None,
+        help="Session ID from prepare envelope (ignored by implement; status.md is authoritative).",
+    )
     args = parser.parse_args(argv)
 
     # Common setup
