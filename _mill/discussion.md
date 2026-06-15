@@ -50,8 +50,13 @@ need a proper, tested fix in the plugin source.
 - `plugins/mill/scripts/_plan_validate.py` — accept and forward `git_root` to its
   `resolve_existing_paths` calls so source-ref checks are robust to subfolder cwd.
 - `plugins/mill/scripts/_review_common.py` — make `git_root/root/raw` the
-  **primary** source-ref resolution (when `root` is set) in `resolve_ref_paths`
-  and `resolve_existing_paths`; demote `project_root/root/raw` to fallback.
+  **primary** source-ref resolution (when `root` is set) in both
+  `resolve_ref_paths` and `resolve_existing_paths`. NOTE the asymmetry:
+  `resolve_ref_paths` already *has* a `git_root/root/raw` candidate
+  (lines ~656) and only needs **reordering**; `resolve_existing_paths` has
+  only `git_root/raw` today (lines ~721-726) and needs a `git_root/root/raw`
+  candidate **added** (not reordered). Demote `project_root/root/raw` to
+  fallback in both.
 - `plugins/mill/skills/mill-plan/SKILL.md` — update the agent-mode branch to
   handle a validator-failure envelope from `--stage prepare`; correct/keep the
   SKILL.md:133 "BOTH modes" claim true.
@@ -99,10 +104,13 @@ need a proper, tested fix in the plugin source.
 - Decision: In `resolve_ref_paths` and `resolve_existing_paths`, when `root` is
   set, try `git_root / root / raw` **first**, then fall back to
   `project_root / root / raw`, then the bare/`git_root / raw` paths, then
-  creates/deletes suppression, then hard-fail. `root:` is repo-relative by
-  definition, so `git_root/root/raw` is correct regardless of where cwd sits —
-  it works in both the cwd==git_root layout (mill-plan) and the
-  cwd==git_root/root layout (#471).
+  creates/deletes suppression (resolve_ref_paths only), then hard-fail
+  (resolve_ref_paths) / silent-drop (resolve_existing_paths). `root:` is
+  repo-relative by definition, so `git_root/root/raw` is correct regardless of
+  where cwd sits — it works in both the cwd==git_root layout (mill-plan) and the
+  cwd==git_root/root layout (#471). For `resolve_ref_paths` this is a reorder of
+  an existing candidate; for `resolve_existing_paths` the `git_root/root/raw`
+  candidate must be **newly added** (it does not exist today).
 - Rationale: The current additive fallback "works" only because the doubled
   `project_root/root/raw` candidate happens not to exist on disk; that is fragile
   (a stray matching path would mask the bug). Making git_root primary removes the
@@ -143,6 +151,13 @@ need a proper, tested fix in the plugin source.
   agent-mode branch to detect this envelope and apply the existing Step 1.5
   mechanical-fix loop + two-pass cap before re-running `--stage prepare`. This
   makes the SKILL.md:133 "runs in BOTH modes" claim true.
+- Wiring note: unlike `--stage full`, the `prepare` branch (lines ~124-150) does
+  NOT currently compute `plan_dir` or the overview `root` — it only has `cfg`,
+  `slug`, `project_root`, `git_root`, `wiki_root`. The gate must construct
+  `plan_dir = resolve_path(cfg["paths"]["plan_dir"], slug)`, derive `root` from
+  the overview, and pass `git_root` + `root` into `_plan_validate.run(...)` so
+  the agent path gets the same #466/#471 base-consistency as the full path. Use
+  the `--stage full` call (lines ~181-199) as the template.
 - Rationale: Single source of truth in the script (the `--stage full` branch
   already does exactly this). Putting the gate in `prepare` means it cannot be
   silently skipped by orchestrator omission — which is the exact failure #465
@@ -178,8 +193,15 @@ need a proper, tested fix in the plugin source.
     fallback → creates/deletes suppression → hard-fail (lines ~636-669). The
     #471 fallback is lines ~650-661. Reorder so `git_root/root/raw` is primary.
   - `resolve_existing_paths(...)` (line 673): silent-drop sibling of
-    `resolve_ref_paths`; same routing. Apply the same reorder. Used by the
-    validator.
+    `resolve_ref_paths`; same routing. Its git-root fallback (lines ~721-726)
+    currently tries **only** `git_root / raw` — there is no `git_root/root/raw`
+    candidate to reorder. The fix here is to **ADD** a primary
+    `git_root / root / raw` candidate (when `root` is set), mirroring
+    `resolve_ref_paths` (~line 656). Used by the validator's
+    `_check_non_existent_path` and `_check_batch_oversized`, so without this add
+    the #471 layout (cwd==git_root/root) still doubles `root` and the validator
+    silently drops the referenced files — defeating the threaded `git_root` from
+    the #466 fix.
 - `plugins/mill/scripts/_plan_validate.py`
   - `run(plan_dir, project_root, *, root=None, wiki_root=None, skip_checks=...,
     max_cards_per_batch=..., max_batch_context_tokens=...)` (line 1007). It loads
