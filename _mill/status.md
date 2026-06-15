@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: ghissues-skill-fold-guard
 branch: hanf/ghissues-skill-fold-guard
 plan: _mill/plan
@@ -20,4 +20,13 @@ discussed  '2026-06-15T12:49:11Z'
 planning  '2026-06-15T12:56:27Z'
 plan-fix-r1  '2026-06-15T12:59:06Z'
 planned  '2026-06-15T12:59:37Z'
+implementing  '2026-06-15T13:00:40Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: fold-guard-allowlist
+    state: pending
 ```
