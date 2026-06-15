@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-reviewing
+phase: holistic-fixing
 slug: review-plan-and-ref-paths
 branch: hanf/review-plan-and-ref-paths
 plan: _mill/plan
@@ -30,6 +30,7 @@ approved-skill-doc-update  '2026-06-15T12:04:44Z'
 holistic-reviewing  '2026-06-15T12:05:11Z'
 holistic-fixing  '2026-06-15T12:07:20Z'
 holistic-reviewing  '2026-06-15T12:17:12Z'
+holistic-fixing  '2026-06-15T12:20:12Z'
 ```
 
 ## Batches
