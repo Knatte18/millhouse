@@ -259,6 +259,7 @@ def main(argv=None) -> int:
                 "SESSION_ID": session_id,
                 "ROUND": str(args.round),
                 "SELF_FIX_ROUNDS": str(self_fix_rounds),
+                "LANGUAGE_SKILLS": _agent_dispatch.language_skills_directive(batch_file),
             },
         )
 

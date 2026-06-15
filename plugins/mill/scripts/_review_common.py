@@ -445,7 +445,10 @@ _RE_REFS_HEADER = re.compile(
 _RE_REFS_SUB = re.compile(r"^\s+-\s*(.+)$")
 
 
-def parse_batch_refs(batch_path: Path) -> list[str]:
+def parse_batch_refs(
+    batch_path: Path,
+    fields: tuple[str, ...] = ("Context", "Edits", "Creates", "Deletes"),
+) -> list[str]:
     """Extract raw path strings from a batch file's Context/Edits/Creates/Deletes lines.
 
     Handles the single-line form (- **Context:** `a`, `b`) and the multi-line
@@ -453,6 +456,15 @@ def parse_batch_refs(batch_path: Path) -> list[str]:
     lowercase form equals ``'none'`` (case-insensitive). Returns a
     deduplicated list preserving first-seen order. Used by both plan review
     and code review to build the source-file bulk.
+
+    Args:
+        batch_path: Path to the batch file.
+        fields: Tuple of field names to extract (e.g., ("Edits", "Creates")).
+            Defaults to ("Context", "Edits", "Creates", "Deletes").
+
+    Returns:
+        Deduplicated list of raw path strings from matched fields, preserving
+        first-seen order.
     """
     text = batch_path.read_text(encoding="utf-8")
     seen: dict[str, None] = {}
@@ -461,7 +473,7 @@ def parse_batch_refs(batch_path: Path) -> list[str]:
     i = 0
     while i < len(lines):
         m = _RE_REFS_HEADER.match(lines[i])
-        if m:
+        if m and m.group(1) in fields:
             inline = m.group("inline").strip()
             if inline:
                 backtick_tokens = re.findall(r"`([^`]+)`", inline)

@@ -14,6 +14,7 @@ Rendered by millpy-fix.py via `_render.render` with these tokens:
   <SESSION_ID>         — UUID injected at render time; copy verbatim into the report JSON
   <ROUND>              — fix-cycle round number (1-based)
   <SELF_FIX_ROUNDS>    — integer; how many self-fix attempts before reporting stuck
+  <LANGUAGE_SKILLS>    — markdown block naming required language-specific skills
 
 (`_render.render` strips this comment automatically.)
 -->
@@ -33,6 +34,8 @@ You are a dedicated fixer for the mill-v2 orchestrator. This is a cold-start ses
 ## Before reading any finding
 
 Load the **mill-receiving-review** skill before reading any finding in `<REVIEW_FILE>`. This is non-negotiable.
+
+<LANGUAGE_SKILLS>
 
 ## Fix discipline
 
@@ -87,7 +90,7 @@ Anything other than this JSON on the last line is a protocol violation; mill-go 
 
 ## Tools
 
-Available: Read, Edit, Write, Bash, Grep, Glob. Banned: TodoWrite, WebFetch, WebSearch. Use `git -C <PROJECT_ROOT>` for commits; do not `cd`.
+Available: Read, Edit, Write, Bash, Grep, Glob, Skill. Banned: TodoWrite, WebFetch, WebSearch. Use `git -C <PROJECT_ROOT>` for commits; do not `cd`.
 
 ## Cross-worktree isolation
 

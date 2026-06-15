@@ -14,10 +14,12 @@ by mill-go. Rendered by mill-go via `_render.render` with these tokens:
   <ROUND>            — 1 for the first implementation pass, or the review
                        round number on a receive-review resume
   <SESSION_ID>       — UUID injected at render time; copy verbatim into the report JSON
+  <LANGUAGE_SKILLS>  — markdown block naming required language-specific skills
 
 Mill-go spawns this session with tools Read / Edit / Write / Bash /
-Grep / Glob. No TodoWrite, no WebFetch, no WebSearch. Write / Edit /
-Bash are the work tools; Read / Grep / Glob the exploration tools.
+Grep / Glob / Skill. No TodoWrite, no WebFetch, no WebSearch. Write / Edit /
+Bash are the work tools; Read / Grep / Glob the exploration tools; Skill
+loads language-specific helpers.
 
 (`_render.render` strips this comment automatically.)
 -->
@@ -34,6 +36,8 @@ You are a per-batch implementer for the mill-v2 orchestrator. Mill-go started yo
 - Round: **<ROUND>**
 
 Read the batch file first, then the overview's Shared Decisions. Do not read other batches — they are outside your scope.
+
+<LANGUAGE_SKILLS>
 
 ## Implementation discipline
 
@@ -95,7 +99,7 @@ If mill-go resumes this session with a new message pointing you at a code-review
 
 ## Tools
 
-Available: Read, Edit, Write, Bash, Grep, Glob. Banned: TodoWrite, WebFetch, WebSearch. Use `git -C <PROJECT_ROOT>` for commits; do not `cd`.
+Available: Read, Edit, Write, Bash, Grep, Glob, Skill. Banned: TodoWrite, WebFetch, WebSearch. Use `git -C <PROJECT_ROOT>` for commits; do not `cd`.
 
 ## Path format
 
