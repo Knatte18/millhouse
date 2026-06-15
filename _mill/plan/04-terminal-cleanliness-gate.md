@@ -44,9 +44,11 @@ commits vs the parent branch.
   helper (porcelain lines + owned-path set -> in-scope lines) so it is
   unit-testable without git, mirroring how `compute_new_dirt` isolates its
   set-diff. The pure helper must extract the path portion from each porcelain
-  line — `line[3:]` strips the 2-char status code + space prefix; for a rename
-  line (`R  old -> new`) compare the destination path after the ` -> ` — before
-  membership-testing against the owned-path set. Keeping `_parent_diff_names` a
+  line via `line[3:]` (strips the 2-char status code + space prefix) before
+  membership-testing against the owned-path set. No ` -> ` rename handling is
+  needed: `_pygit2_util.status_porcelain` returns only the new path for
+  index-renamed files (no `oldpath -> newpath` form, per its docstring), so
+  `line[3:]` already yields the correct path. Keeping `_parent_diff_names` a
   separate named function gives the test a single mock point. Any added runtime
   output must be ASCII.
 - **Commit:** `feat(cleanliness): add task-scoped compute_terminal_dirt (#467)`
@@ -55,6 +57,7 @@ commits vs the parent branch.
 
 - **Context:**
   - `plugins/mill/scripts/_cleanliness.py`
+  - `plugins/mill/scripts/_parent_branch.py`
 - **Edits:**
   - `plugins/mill/skills/mill-go/SKILL.md`
 - **Creates:** none

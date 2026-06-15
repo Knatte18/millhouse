@@ -34,9 +34,12 @@ layouts) instead of a literal git-root-relative `_mill/status.md`.
   `base_tracks_task_dir(worktree: Path, base_branch: str, task_dir: Path) ->
   bool`. It returns True when `base_branch` tracks the task state directory —
   implement via `git -C <worktree> cat-file -e <base_branch>:<task_dir
-  -relative>/status.md` (or `git ls-tree <base_branch> -- <task_dir-relative>`),
-  computing the worktree-relative form of `task_dir`. Return False on a
-  non-zero/empty result. Use `_subprocess_util.run`; any runtime output must be
+  -relative>/status.md` (or `git ls-tree <base_branch> -- <task_dir-relative>`).
+  Compute the worktree-relative form of `task_dir` and render it with
+  `.as_posix()` before building the `<rev>:<path>` pathspec — git requires
+  forward slashes, so a raw `str(task_dir.relative_to(worktree))` would emit
+  backslashes on Windows and the check would always return False. Return False on
+  a non-zero/empty result. Use `_subprocess_util.run`; any runtime output must be
   ASCII. Include a module-level docstring and a file-level comment per repo
   convention.
 - **Commit:** `feat(finalize): add base_tracks_task_dir helper (#482)`

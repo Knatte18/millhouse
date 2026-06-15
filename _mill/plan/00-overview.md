@@ -26,7 +26,7 @@ batches:
   - number: 2
     name: config-repo-layer
     file: 02-config-repo-layer.md
-    depends-on: []
+    depends-on: [1]
     verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-config.py
   - number: 3
     name: wiki-sync-robustness
