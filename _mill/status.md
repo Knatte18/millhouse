@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-fix-r3
+phase: plan-fix-r4
 slug: mill-infra-and-path-fixes
 branch: hanf/mill-infra-and-path-fixes
 plan: _mill/plan
@@ -24,4 +24,5 @@ plan-review-r2  '2026-06-15T10:57:30Z'
 plan-fix-r2  '2026-06-15T10:57:30Z'
 plan-review-r3  '2026-06-15T11:04:19Z'
 plan-fix-r3  '2026-06-15T11:04:19Z'
+plan-fix-r4  '2026-06-15T11:10:12Z'
 ```

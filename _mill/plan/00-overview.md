@@ -3,7 +3,7 @@
 ```yaml
 task: "Fix wiki push upstream, cleanliness gate, mojibake, container config, and stacked-branch finalize"
 slug: "mill-infra-and-path-fixes"
-approved: false
+approved: true
 started: "20260615-104327"
 parent: "main"
 root: ""
@@ -51,8 +51,8 @@ _Cross-cutting decisions every batch inherits._
 
 ### Decision: six-independent-fixes
 
-- **Decision:** Each of the six bundled GitHub issues is implemented as its own batch with no inter-batch dependencies (all `depends-on: []`). #469 and #462 are merged into a single batch (`wiki-sync-robustness`) because both edit `wiki/_sync.py`'s `commit_push`; keeping them separate would create a parallel-modifies-overlap on that file.
-- **Rationale:** The fixes touch disjoint file sets and have no code coupling, so they parallelize cleanly. Merging only where a shared file forces it avoids overlap while preserving parallelism.
+- **Decision:** Each of the six bundled GitHub issues is implemented as its own batch. The fixes are functionally independent, but two shared-file overlaps force structure: (1) #469 and #462 are merged into a single batch (`wiki-sync-robustness`) because both edit `wiki/_sync.py`'s `commit_push`; (2) `config-repo-layer` (batch 2) declares `depends-on: [1]` because it edits `_review_common.py` (extending the #470 fix to the second `load_config`) which `review-warning-ascii` (batch 1) also edits for #475 — serializing the two edits avoids a parallel-modifies-overlap. All other batches are `depends-on: []`.
+- **Rationale:** The fixes have no functional coupling, so they parallelize cleanly. Where a shared file would otherwise be written by two parallel batches, the plan either merges the batches (wiki) or adds a dependency edge (config/review) to serialize the writes.
 - **Applies to:** all batches
 
 ### Decision: ascii-console-output

@@ -19,6 +19,12 @@ mill-finalize Step 3 cleanup conditional (restore vs. remove), and fix git-pr's
 Step 1.5 guard to resolve `task_dir` via config (so it catches nested-hub
 layouts) instead of a literal git-root-relative `_mill/status.md`.
 
+Cards 12 (mill-finalize sets `MILL_FINALIZE_PR_CLEANUP=1`) and 13 (git-pr reads
+it to skip its guard) are interdependent and ship together as one atomic batch —
+the batch's `verify:` and code review run after all four cards are implemented,
+so the env-flag setter and reader land as a unit with no broken intermediate
+state in normal mill-go batch execution.
+
 ## Cards
 
 ### Card 11: base_tracks_task_dir helper
@@ -90,7 +96,14 @@ layouts) instead of a literal git-root-relative `_mill/status.md`.
   back to the literal `$GIT_ROOT/_mill/status.md` check only when config
   resolution is unavailable (git-pr can run standalone outside mill). Keep the
   existing halt/redirect message unchanged. Document that the env-flag skip is
-  the mill-finalize integration point.
+  the mill-finalize integration point. Since git-pr/SKILL.md is a bash skill,
+  specify the config resolution as a guarded cache-form Python invocation that
+  runs only when both `$MILL_PYTHON` and `$CLAUDE_PLUGIN_ROOT` are set — e.g.
+  `PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c '<resolve and
+  print the status.md path via _config.load_config + _paths.resolve_task_path>'`
+  — and if either env var is unset or the invocation errors (standalone
+  git-pr outside mill), fall through to the literal `$GIT_ROOT/_mill/status.md`
+  check.
 - **Commit:** `fix(git-pr): resolve task_dir for the task-branch guard (#482)`
 
 ### Card 14: base_tracks_task_dir tests
