@@ -66,6 +66,7 @@ from _config import (
     apply_env_overrides,
     warn_unknown_keys,
     resolve_plugin_template_path,
+    resolve_repo_config_path,
 )
 
 # ---------------------------------------------------------------------------
@@ -1416,11 +1417,11 @@ def load_config(hub_root: Path, mill_dir: Path) -> dict:
     template_cfg = copy.deepcopy(cfg)
 
     # 2. Resolve hub-layer sources
-    mill_cfg_path = _paths.resolve_mill_config_path(hub_root)
+    mill_cfg_path = resolve_repo_config_path(hub_root, mill_dir)
 
     # 3. Apply repo-layer merge logic
     found_repo_layer = False
-    if mill_cfg_path.exists():
+    if mill_cfg_path is not None:
         with mill_cfg_path.open(encoding="utf-8") as fh:
             repo_cfg = yaml.safe_load(fh) or {}
         cfg = _deep_merge(cfg, repo_cfg)
@@ -1430,7 +1431,7 @@ def load_config(hub_root: Path, mill_dir: Path) -> dict:
     if not template_path.exists() and not found_repo_layer:
         raise ReviewError(
             f"Missing config: searched plugin template at {template_path} "
-            f"and mill-config.yaml at {mill_cfg_path}"
+            f"and mill-config.yaml in hub, main worktree, or task worktree"
         )
 
     # 5. Deep-merge the local layer
