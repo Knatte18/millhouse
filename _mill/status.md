@@ -52,7 +52,9 @@ batches:
     start_sha: 4fadd6df02d1f6da1cf2426c0b3f087a6b556e73
     commit_sha: 3caa42a65344431453dc92f48adb5de66fbd8fca
   - name: stacked-finalize-cleanup
-    state: pending
+    state: running
+    implementer_session: 746464df-77cb-4f0e-966d-b4ad020d8793
+    start_sha: 67b89c787bdaefdcdd908532db33c25d1cf41445
   - name: config-repo-layer
     state: pending
 ```
