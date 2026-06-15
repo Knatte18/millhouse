@@ -1237,7 +1237,9 @@ def main() -> int:
     # Test 24 — prepare-stage validator gate with errors (non-existent-path ref)
     # Error plan has a Context: ref to nonexistent file; validator should reject
     # it with exit 1, JSON errors envelope, and no brief file written.
-    # Direct test of the validator logic by calling _plan_validate.run directly.
+    # Tests the CLI entry point main(["--stage", "prepare", "--holistic-only"]),
+    # NOT the validator function directly (see test-plan-validate.py for
+    # negative case: omitting git_root from validator).
     # ------------------------------------------------------------------
     with _test_helpers.safe_temp_dir() as tmpdir:
         batch_specs = [
@@ -1249,31 +1251,57 @@ def main() -> int:
         orig_dir = os.getcwd()
         os.chdir(project_root)
         try:
-            from _plan_validate import run as validate_run
+            import importlib.util
+            import io
+            from unittest import mock
 
-            # Directly test the prepare-stage validator call
-            plan_dir = project_root / "plan"
-            root = None  # fixture sets root to "" (falsy)
+            # Load millpy-review-plan via importlib to test the CLI entry point
+            spec = importlib.util.spec_from_file_location(
+                "millpy_review_plan_test24",
+                HUB / "plugins" / "mill" / "scripts" / "millpy-review-plan.py",
+            )
+            millpy_review_plan_test24 = importlib.util.module_from_spec(spec)
+
+            # Mock _paths.resolve_* functions to return fixture paths
             git_root = project_root.parent.parent.parent
+            with mock.patch("_paths.resolve_git_root", return_value=git_root):
+                with mock.patch("_paths.resolve_hub_path", return_value=project_root):
+                    with mock.patch("_paths.resolve_wiki_path", return_value=wiki_root):
+                        with mock.patch("_paths.resolve_task_path", return_value=project_root / "_mill" / "briefs"):
+                            # Capture stdout to check JSON envelope
+                            captured_stdout = io.StringIO()
+                            old_stdout = sys.stdout
+                            sys.stdout = captured_stdout
+                            try:
+                                spec.loader.exec_module(millpy_review_plan_test24)
+                                rc = millpy_review_plan_test24.main(
+                                    ["--stage", "prepare", "--holistic-only"]
+                                )
+                            finally:
+                                sys.stdout = old_stdout
 
-            errors = validate_run(
-                plan_dir,
-                project_root,
-                root=root,
-                git_root=git_root,
-                wiki_root=wiki_root,
-                skip_checks=frozenset(),
-                max_cards_per_batch=10,
-                max_batch_context_tokens=120000,
+            # Should exit with code 1 (validator found errors)
+            assert rc == 1, f"expected exit code 1 for validator errors, got {rc}"
+
+            # Check that stdout contains JSON with errors and summary keys
+            output = captured_stdout.getvalue()
+            json_output = json.loads(output)
+            assert "errors" in json_output, f"expected 'errors' key in JSON output: {json_output}"
+            assert "summary" in json_output, f"expected 'summary' key in JSON output: {json_output}"
+            validate_errors = json_output["errors"]
+            assert len(validate_errors) > 0, f"expected non-empty errors list, got {validate_errors}"
+            assert any(e["check"] == "non-existent-path" for e in validate_errors), (
+                f"expected non-existent-path check error, got checks: {[e['check'] for e in validate_errors]}"
             )
 
-            # Should have validator errors for non-existent path
-            assert len(errors) > 0, f"expected validator errors for non-existent path, got {len(errors)}"
-            assert any(e["check"] == "non-existent-path" for e in errors), (
-                f"expected non-existent-path check error, got checks: {[e['check'] for e in errors]}"
+            # Brief file should NOT exist (validator rejected the plan)
+            briefs_dir = project_root / "_mill" / "briefs"
+            brief_files = list(briefs_dir.glob("*.md")) if briefs_dir.exists() else []
+            assert len(brief_files) == 0, (
+                f"expected no brief files written on validator errors, got {len(brief_files)}: {brief_files}"
             )
 
-            print("PASS test24: prepare-stage validator detects non-existent-path error correctly")
+            print("PASS test24: prepare CLI entry point rejects plan with validator errors, no brief written")
         except AssertionError as exc:
             errors += 1
             print(f"FAIL test24: {exc}", file=sys.stderr)
@@ -1285,8 +1313,9 @@ def main() -> int:
 
     # ------------------------------------------------------------------
     # Test 25 — prepare-stage validator gate with clean plan
-    # Clean plan should pass validation (no errors returned).
-    # Direct test of the validator logic.
+    # Clean plan should pass validation, write brief file, and return
+    # prepare envelope with stage: "prepare" and brief_path.
+    # Tests the CLI entry point main(["--stage", "prepare", "--holistic-only"]).
     # ------------------------------------------------------------------
     with _test_helpers.safe_temp_dir() as tmpdir:
         batch_specs = [
@@ -1296,31 +1325,62 @@ def main() -> int:
         orig_dir = os.getcwd()
         os.chdir(project_root)
         try:
-            from _plan_validate import run as validate_run
+            import importlib.util
+            import io
+            from unittest import mock
 
-            # Directly test the prepare-stage validator call
-            plan_dir = project_root / "plan"
-            root = None  # fixture sets root to "" (falsy)
+            # Load millpy-review-plan via importlib to test the CLI entry point
+            spec = importlib.util.spec_from_file_location(
+                "millpy_review_plan_test25",
+                HUB / "plugins" / "mill" / "scripts" / "millpy-review-plan.py",
+            )
+            millpy_review_plan_test25 = importlib.util.module_from_spec(spec)
+
+            # Mock _paths.resolve_* functions to return fixture paths
             git_root = project_root.parent.parent.parent
+            with mock.patch("_paths.resolve_git_root", return_value=git_root):
+                with mock.patch("_paths.resolve_hub_path", return_value=project_root):
+                    with mock.patch("_paths.resolve_wiki_path", return_value=wiki_root):
+                        with mock.patch("_paths.resolve_task_path", return_value=project_root / "_mill" / "briefs"):
+                            # Create briefs directory so write_brief doesn't fail
+                            briefs_dir = project_root / "_mill" / "briefs"
+                            briefs_dir.mkdir(parents=True, exist_ok=True)
 
-            errors = validate_run(
-                plan_dir,
-                project_root,
-                root=root,
-                git_root=git_root,
-                wiki_root=wiki_root,
-                skip_checks=frozenset(),
-                max_cards_per_batch=10,
-                max_batch_context_tokens=120000,
+                            # Capture stdout to check JSON envelope
+                            captured_stdout = io.StringIO()
+                            old_stdout = sys.stdout
+                            sys.stdout = captured_stdout
+                            try:
+                                spec.loader.exec_module(millpy_review_plan_test25)
+                                rc = millpy_review_plan_test25.main(
+                                    ["--stage", "prepare", "--holistic-only"]
+                                )
+                            finally:
+                                sys.stdout = old_stdout
+
+            # Should exit with code 0 (clean plan, validator passed)
+            assert rc == 0, f"expected exit code 0 for clean plan, got {rc}"
+
+            # Check that stdout contains JSON with prepare stage envelope
+            output = captured_stdout.getvalue()
+            json_output = json.loads(output)
+            assert json_output.get("stage") == "prepare", (
+                f"expected stage='prepare' in JSON output, got {json_output}"
+            )
+            assert "brief_path" in json_output, (
+                f"expected 'brief_path' key in JSON output, got {json_output}"
+            )
+            assert "errors" not in json_output, (
+                f"expected no 'errors' key in successful prepare envelope, got {json_output}"
             )
 
-            # Should have no validator errors for a clean plan
-            assert len(errors) == 0, (
-                f"expected no validator errors for clean plan, got {len(errors)}: "
-                f"{[(e['check'], e['message']) for e in errors]}"
+            # Brief file should exist
+            brief_path = Path(json_output["brief_path"])
+            assert brief_path.exists(), (
+                f"expected brief file to exist at {brief_path}, but it does not"
             )
 
-            print("PASS test25: prepare-stage validator accepts clean plan (no errors)")
+            print("PASS test25: prepare CLI entry point accepts clean plan, writes brief file")
         except AssertionError as exc:
             errors += 1
             print(f"FAIL test25: {exc}", file=sys.stderr)
