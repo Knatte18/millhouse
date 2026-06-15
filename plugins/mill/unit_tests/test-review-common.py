@@ -1322,6 +1322,99 @@ def main() -> int:
         assert result == [], f"Got {result}"
         print("PASS: resolve_existing_paths without git_root preserves current behavior")
 
+    # resolve_ref_paths: cwd==git_root layout with root set (#471 regression: should NOT double)
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        tmp_git = Path(tmpdir) / "git"
+        tmp_git.mkdir()
+        # Create git_root/root/raw file
+        (tmp_git / "src").mkdir(parents=True)
+        (tmp_git / "src" / "file.py").write_text("x")
+        # project_root is git_root (not doubled subfolder)
+        result = resolve_ref_paths(
+            ["file.py"], tmp_git, root="src",
+            git_root=tmp_git,
+        )
+        # Should resolve to git_root/src/file.py (primary candidate)
+        assert result == [tmp_git / "src" / "file.py"], f"Got {result}"
+        print("PASS: resolve_ref_paths cwd==git_root with root set uses git_root/root/raw primary")
+
+    # resolve_existing_paths: cwd==git_root/root layout (#471 regression: should NOT double)
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        tmp_git = Path(tmpdir) / "git"
+        tmp_git.mkdir()
+        # Create git_root/src/file.py
+        (tmp_git / "src").mkdir(parents=True)
+        (tmp_git / "src" / "file.py").write_text("x")
+        # When cwd is git_root/src, project_root would be git_root/src
+        project_root = tmp_git / "src"
+        result = resolve_existing_paths(
+            ["file.py"], project_root, root="src",
+            git_root=tmp_git,
+        )
+        # Should resolve to git_root/src/file.py (NOT doubled git_root/src/src/file.py)
+        assert result == [tmp_git / "src" / "file.py"], f"Got {result}"
+        print("PASS: resolve_existing_paths cwd==git_root/root returns single-prefixed git_root/root/raw (not doubled)")
+
+    # resolve_ref_paths: git_root=None falls back to project_root/root/raw
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        tmp_project = Path(tmpdir) / "project"
+        (tmp_project / "src").mkdir(parents=True)
+        (tmp_project / "src" / "file.py").write_text("x")
+        result = resolve_ref_paths(
+            ["file.py"], tmp_project, root="src",
+            git_root=None,
+        )
+        # Should resolve to project_root/src/file.py (no git_root candidate)
+        assert result == [tmp_project / "src" / "file.py"], f"Got {result}"
+        print("PASS: resolve_ref_paths git_root=None falls back to project_root/root/raw")
+
+    # resolve_existing_paths: git_root=None falls back to project_root/root/raw
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        tmp_project = Path(tmpdir) / "project"
+        (tmp_project / "src").mkdir(parents=True)
+        (tmp_project / "src" / "file.py").write_text("x")
+        result = resolve_existing_paths(
+            ["file.py"], tmp_project, root="src",
+            git_root=None,
+        )
+        # Should resolve to project_root/src/file.py
+        assert result == [tmp_project / "src" / "file.py"], f"Got {result}"
+        print("PASS: resolve_existing_paths git_root=None falls back to project_root/root/raw")
+
+    # resolve_ref_paths: wiki/ prefix unchanged by git_root threading
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        tmp_project = Path(tmpdir) / "project"
+        tmp_project.mkdir()
+        tmp_wiki = Path(tmpdir) / "wiki"
+        (tmp_wiki / "active" / "x").mkdir(parents=True)
+        (tmp_wiki / "active" / "x" / "discussion.md").write_text("w")
+        tmp_git = Path(tmpdir) / "git"
+        tmp_git.mkdir()
+        result = resolve_ref_paths(
+            ["wiki/active/x/discussion.md"], tmp_project, root="src",
+            wiki_root=tmp_wiki,
+            git_root=tmp_git,
+        )
+        assert result == [tmp_wiki / "active" / "x" / "discussion.md"], f"Got {result}"
+        print("PASS: resolve_ref_paths wiki/ prefix routes through wiki_root unchanged")
+
+    # resolve_existing_paths: wiki/ prefix unchanged by git_root threading
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        tmp_project = Path(tmpdir) / "project"
+        tmp_project.mkdir()
+        tmp_wiki = Path(tmpdir) / "wiki"
+        (tmp_wiki / "active" / "x").mkdir(parents=True)
+        (tmp_wiki / "active" / "x" / "discussion.md").write_text("w")
+        tmp_git = Path(tmpdir) / "git"
+        tmp_git.mkdir()
+        result = resolve_existing_paths(
+            ["wiki/active/x/discussion.md"], tmp_project, root="src",
+            wiki_root=tmp_wiki,
+            git_root=tmp_git,
+        )
+        assert result == [tmp_wiki / "active" / "x" / "discussion.md"], f"Got {result}"
+        print("PASS: resolve_existing_paths wiki/ prefix routes through wiki_root unchanged")
+
     # Per-scope counters survive interleaved per-batch + holistic writes (regression for #21, #62, #63)
     with _test_helpers.safe_temp_dir() as tmpdir:
         reviews = tmpdir

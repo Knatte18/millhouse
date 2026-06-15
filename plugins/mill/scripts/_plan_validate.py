@@ -6,7 +6,7 @@ Used by millpy-validate-plan.py (standalone CLI) and by millpy-review-plan.py
 (auto-run gate before each review round).
 
 Public API:
-    run(plan_dir, project_root, *, root=None, wiki_root=None, skip_checks=frozenset()) -> list[dict]
+    run(plan_dir, project_root, *, root=None, wiki_root=None, git_root=None, skip_checks=frozenset()) -> list[dict]
         Validate plan files in plan_dir. Returns a sorted list of error dicts.
         Each error dict has keys: {check, batch, card, path, message}.
 
@@ -231,6 +231,7 @@ def _check_non_existent_path(
     deletes_union: set[str],
     *,
     wiki_root: Path | None = None,
+    git_root: Path | None = None,
 ) -> list[dict]:
     errors: list[dict] = []
     for batch_path in batch_files:
@@ -243,7 +244,7 @@ def _check_non_existent_path(
         for t in general_refs:
             if t.lower() == "none":
                 continue
-            existing = resolve_existing_paths([t], project_root, root, wiki_root=wiki_root)
+            existing = resolve_existing_paths([t], project_root, root, wiki_root=wiki_root, git_root=git_root)
             if not existing and t not in creates_union and t not in deletes_union:
                 errors.append({
                     "check": "non-existent-path",
@@ -261,7 +262,7 @@ def _check_non_existent_path(
         for t in deletes_only:
             if t.lower() == "none":
                 continue
-            existing = resolve_existing_paths([t], project_root, root, wiki_root=wiki_root)
+            existing = resolve_existing_paths([t], project_root, root, wiki_root=wiki_root, git_root=git_root)
             if not existing and t not in creates_union:
                 errors.append({
                     "check": "non-existent-path",
@@ -948,6 +949,7 @@ def _check_batch_oversized(
     max_cards: int,
     max_context_tokens: int,
     wiki_root: Path | None = None,
+    git_root: Path | None = None,
 ) -> list[dict]:
     errors: list[dict] = []
     for batch_path in batch_files:
@@ -980,6 +982,7 @@ def _check_batch_oversized(
                 project_root,
                 root,
                 wiki_root=wiki_root,
+                git_root=git_root,
             )
 
             # Sum byte sizes and divide by 4 for token estimate
@@ -1010,6 +1013,7 @@ def run(
     *,
     root: str | None = None,
     wiki_root: Path | None = None,
+    git_root: Path | None = None,
     skip_checks: frozenset[str] = frozenset(),
     max_cards_per_batch: int = 10,
     max_batch_context_tokens: int = 120000,
@@ -1020,6 +1024,19 @@ def run(
     {check, batch, card, path, message}.
 
     Checks 1, 2, 3, 4, 5, 6, 8 from issue #10, plus wiki-config-mutation, verify-not-isolated, out-of-worktree-target, and batch-oversized.
+
+    Args:
+        plan_dir: Directory containing the plan files (00-overview.md + batch files).
+        project_root: Root of the project (typically the worktree root).
+        root: Optional root subfolder for source refs (e.g. "subproject1"); when set,
+            refs resolve to git_root/root/raw first, then project_root/root/raw.
+        wiki_root: Optional wiki root path; when provided, refs starting with "wiki/"
+            are resolved against wiki_root instead of project_root.
+        git_root: Optional repo root; when provided, refs resolve to git_root/root/raw
+            before falling back to project_root-based candidates (addresses #471 layout).
+        skip_checks: Set of check names to skip (e.g. {"wiki-config-mutation"}).
+        max_cards_per_batch: Maximum cards per batch before batch-oversized is raised.
+        max_batch_context_tokens: Maximum context token estimate before batch-oversized is raised.
     """
     overview_path = plan_dir / "00-overview.md"
     if not overview_path.exists():
@@ -1046,6 +1063,7 @@ def run(
     errors.extend(_check_non_existent_path(
         batch_files, project_root, effective_root, creates_union, deletes_union,
         wiki_root=wiki_root,
+        git_root=git_root,
     ))
     errors.extend(_check_card_missing_field(batch_files))
     errors.extend(_check_card_numbering(batch_files))
@@ -1063,6 +1081,7 @@ def run(
         max_cards=max_cards_per_batch,
         max_context_tokens=max_batch_context_tokens,
         wiki_root=wiki_root,
+        git_root=git_root,
     ))
 
     errors.sort(key=lambda e: (e["batch"] or "", e["card"] or 0, e["check"]))

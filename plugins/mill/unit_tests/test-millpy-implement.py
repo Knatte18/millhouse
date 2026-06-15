@@ -499,6 +499,43 @@ class TestMillpyImplement(unittest.TestCase):
         # git_commit should be called exactly once
         mock_git_commit.assert_called_once()
 
+    def test_15_stage_finalize_accepts_session_and_start_sha_flags(self):
+        """--stage finalize accepts --session-id and --start-sha flags, still uses status.md values."""
+        status_path = self.tmp_path / "task" / "status.md"
+        agent_output_path = self.tmp_path / "agent-output.txt"
+        agent_output_path.write_text(
+            '{"status":"success","commit_sha":"xyz","session_id":"fake"}\n',
+            encoding="utf-8"
+        )
+
+        # Set distinct sentinel values in status.md
+        millpy_implement._status.set_batch_field(status_path, "test-batch", "start_sha", "STATUS_SHA")
+        millpy_implement._status.set_batch_field(status_path, "test-batch", "implementer_session", "STATUS_SESSION")
+
+        # Patch finalize_from_output to capture the call
+        with unittest.mock.patch.object(
+            millpy_implement, "finalize_from_output",
+            return_value=0
+        ) as mock_finalize:
+            rc, out = self._run_main([
+                "test-batch",
+                "--stage", "finalize",
+                "--agent-output", str(agent_output_path),
+                "--session-id", "CLI_SESSION",
+                "--start-sha", "CLI_SHA",
+            ])
+
+        # Verify argparse succeeded (rc == 0)
+        self.assertEqual(rc, 0)
+
+        # Verify finalize_from_output was called once
+        mock_finalize.assert_called_once()
+
+        # Verify the kwargs passed to finalize_from_output contain status.md values, NOT CLI args
+        call_kwargs = mock_finalize.call_args.kwargs
+        self.assertEqual(call_kwargs.get("start_sha"), "STATUS_SHA")
+        self.assertEqual(call_kwargs.get("session_id"), "STATUS_SESSION")
+
 
 class TestClassifyStuckType(unittest.TestCase):
 
