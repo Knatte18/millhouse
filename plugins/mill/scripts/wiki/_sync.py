@@ -203,17 +203,27 @@ def commit_push(
     Raises:
         WikiPushError: Any unrecoverable git failure.
     """
-    # Verify wiki_path is a git repository before attempting operations
-    git_dir_check = _run(
-        ["git", "-C", str(wiki_path), "rev-parse", "--git-dir"],
-        wiki_path,
-        check=False,
-    )
-    if git_dir_check.returncode != 0:
-        raise WikiPushError(
-            f"not a git repository: {wiki_path} -- "
-            f"initialize the wiki with 'git clone' or 'git init'"
+    # Verify wiki_path is a git repository before attempting operations.
+    # Use a subprocess.run call directly to avoid any potential issues with _run.
+    try:
+        import subprocess as sp
+        result = sp.run(
+            ["git", "-C", str(wiki_path), "rev-parse", "--git-dir"],
+            capture_output=True,
+            text=True,
+            timeout=5.0,
         )
+        if result.returncode != 0:
+            raise WikiPushError(
+                f"not a git repository: {wiki_path} -- "
+                f"initialize the wiki with 'git clone' or 'git init'"
+            )
+    except sp.TimeoutExpired:
+        raise WikiPushError(f"git directory check timed out for {wiki_path}")
+    except Exception as e:
+        if isinstance(e, WikiPushError):
+            raise
+        raise WikiPushError(f"failed to verify git repository: {e}")
 
     _run(
         ["git", "-C", str(wiki_path), "add", "--"] + list(rel_paths),
