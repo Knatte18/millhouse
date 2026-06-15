@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-accept-session-start-sha-flags
+phase: holistic-reviewing
 slug: implement-finalize-session-id
 branch: hanf/implement-finalize-session-id
 plan: _mill/plan
@@ -21,6 +21,7 @@ plan-fix-r1  '2026-06-15T10:44:52Z'
 planned  '2026-06-15T10:45:05Z'
 implementing  '2026-06-15T10:51:37Z'
 approved-accept-session-start-sha-flags  '2026-06-15T10:54:31Z'
+holistic-reviewing  '2026-06-15T10:55:02Z'
 ```
 
 ## Batches
