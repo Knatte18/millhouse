@@ -1238,7 +1238,7 @@ def _warn_if_prose_diverges(raw_output: str, severity: str, heading_count: int) 
         print(
             f"[_review_common] warning: parse_blocking_count heading count {heading_count} "
             f"diverges from prose count {prose_count} (severity={severity}) "
-            f"— check review file for missing heading.",
+            f"-- check review file for missing heading.",
             file=sys.stderr,
         )
 
