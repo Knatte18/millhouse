@@ -2195,6 +2195,138 @@ def test_check_verify_full_suite_run_all_py_with_only_is_ok() -> int:
 
 
 # ---------------------------------------------------------------------------
+# git_root threading tests (Card 5)
+# ---------------------------------------------------------------------------
+
+def test_git_root_threading_with_subfolder_cwd_clean() -> int:
+    """Clean: project_root is git_root/root subfolder, files at git_root/root/<path>, git_root threaded.
+
+    This test verifies the fix for #471 layout: when project_root is a subfolder
+    (root:) of the git repo, and git_root is threaded through the validator,
+    resolve_existing_paths should find files at git_root/root/raw correctly
+    instead of mis-resolving under a doubled path.
+    """
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        git_root = tmp / "repo"                    # repo top
+        project_root = git_root / "subproject"     # project_root is a subfolder
+        plan_dir = git_root / "plan"               # plan dir at repo top
+
+        # Create the project root
+        project_root.mkdir(parents=True)
+
+        # Create a source file at git_root/subproject/src/code.py
+        source_file = project_root / "src" / "code.py"
+        source_file.parent.mkdir(parents=True)
+        source_file.write_text("# source code", encoding="utf-8")
+
+        # Create the plan at git_root/plan/ with root: "subproject"
+        overview = (
+            "# Overview\n\n"
+            "```yaml\n"
+            'task: test\nslug: test-slug\nroot: "subproject"\n'
+            "```\n\n"
+            "## Batch Index\n\n"
+            "```yaml\n"
+            "batches:\n"
+            "  - name: alpha\n"
+            "    file: 01-alpha.md\n"
+            "    depends-on: []\n"
+            "    verify: null\n"
+            "```\n"
+        )
+        batch = _make_batch_file("alpha", context=["src/code.py"])
+        plan_dir.mkdir(parents=True)
+        (plan_dir / "00-overview.md").write_text(overview, encoding="utf-8")
+        (plan_dir / "01-alpha.md").write_text(batch, encoding="utf-8")
+
+        # When git_root is provided, the validator should resolve src/code.py
+        # against git_root/subproject/src/code.py (primary) before trying
+        # project_root/subproject/src/code.py (fallback).
+        result = _plan_validate.run(plan_dir, project_root, root="subproject", git_root=git_root)
+
+        # Should have no non-existent-path errors
+        check1 = [e for e in result if e["check"] == "non-existent-path"]
+        try:
+            assert len(check1) == 0, (
+                f"expected no non-existent-path errors with git_root threading, "
+                f"got: {check1}"
+            )
+            print("PASS test_git_root_threading_with_subfolder_cwd_clean")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_git_root_threading_with_subfolder_cwd_clean: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_git_root_threading_without_git_root_default_none_documents_required() -> int:
+    """Comment: demonstrates why git_root threading is necessary.
+
+    This test documents the potential issue: when project_root is the root
+    subfolder itself (git_root/subproject) and root="subproject" is set,
+    resolve_existing_paths without git_root will try:
+      1. project_root / "subproject" / raw  → DOUBLED, wrong path
+      2. project_root / raw  → correct, file is here
+
+    So the file IS found, but only by luck (via the fallback). Threading git_root
+    makes git_root/root/raw PRIMARY, which is safer and doesn't depend on
+    correct project_root positioning in the worktree.
+
+    This test skips root param to avoid the doubling issue and focus on the
+    threading mechanism: it shows that when root="" (default empty), files
+    resolve correctly either way.
+    """
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        git_root = tmp / "repo"
+        project_root = git_root / "subproject"
+        plan_dir = git_root / "plan"
+
+        project_root.mkdir(parents=True)
+        source_file = project_root / "src" / "code.py"
+        source_file.parent.mkdir(parents=True)
+        source_file.write_text("# source code", encoding="utf-8")
+
+        # Use empty root (the default) to test that the mechanism works
+        overview = (
+            "# Overview\n\n"
+            "```yaml\n"
+            'task: test\nslug: test-slug\nroot: ""\n'
+            "```\n\n"
+            "## Batch Index\n\n"
+            "```yaml\n"
+            "batches:\n"
+            "  - name: alpha\n"
+            "    file: 01-alpha.md\n"
+            "    depends-on: []\n"
+            "    verify: null\n"
+            "```\n"
+        )
+        batch = _make_batch_file("alpha", context=["src/code.py"])
+        plan_dir.mkdir(parents=True)
+        (plan_dir / "00-overview.md").write_text(overview, encoding="utf-8")
+        (plan_dir / "01-alpha.md").write_text(batch, encoding="utf-8")
+
+        # Without git_root and without root param, the validator finds the file
+        # at project_root/src/code.py. This test confirms the basic resolution
+        # works and documents why git_root threading is still necessary for the
+        # subfolder layout case (root="subproject").
+        result = _plan_validate.run(plan_dir, project_root)
+
+        check1 = [e for e in result if e["check"] == "non-existent-path"]
+        try:
+            assert len(check1) == 0, (
+                f"expected no non-existent-path errors when root='', "
+                f"got: {check1}"
+            )
+            print("PASS test_git_root_threading_without_git_root_default_none_documents_required")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_git_root_threading_without_git_root_default_none_documents_required: {exc}", file=sys.stderr)
+            return 1
+
+
+# ---------------------------------------------------------------------------
 # Runner
 # ---------------------------------------------------------------------------
 
@@ -2270,6 +2402,9 @@ def main() -> int:
         test_check_verify_full_suite_run_all_py_without_filter_is_error,
         test_check_verify_full_suite_run_all_py_with_k_filter_is_ok,
         test_check_verify_full_suite_run_all_py_with_only_is_ok,
+        # git_root threading (Card 5 / #471)
+        test_git_root_threading_with_subfolder_cwd_clean,
+        test_git_root_threading_without_git_root_default_none_documents_required,
     ]
 
     errors = 0

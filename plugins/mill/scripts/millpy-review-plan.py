@@ -95,7 +95,7 @@ def main(argv: list[str] | None = None) -> int:
     import _reviewers
     from _paths import resolve_hub_path, resolve_wiki_path
     from _review_cli import print_error_envelope
-    from _review_common import ReviewError, find_active_slug, load_config, resolve_path
+    from _review_common import _load_root_from_overview, find_active_slug, load_config, resolve_path, ReviewError
     from _review_plan import prepare, finalize, run
 
     try:
@@ -124,6 +124,26 @@ def main(argv: list[str] | None = None) -> int:
     if args.stage == "prepare":
         # Agent mode uses holistic scope only
         try:
+            if not args.skip_validate:
+                from _plan_validate import run as validate_run
+                plan_dir = resolve_path(cfg["paths"]["plan_dir"], slug)
+                root = _load_root_from_overview(plan_dir / "00-overview.md")
+                errors = validate_run(
+                    plan_dir,
+                    project_root,
+                    root=root,
+                    git_root=git_root,
+                    wiki_root=wiki_root,
+                    skip_checks=frozenset(args.skip_checks),
+                    max_cards_per_batch=cfg.get("pipeline", {}).get("max_cards_per_batch", 10),
+                    max_batch_context_tokens=cfg.get("pipeline", {}).get("max_batch_context_tokens", 120000),
+                )
+                if errors:
+                    n = len(errors)
+                    m = len({e["batch"] for e in errors if e["batch"]})
+                    summary = f"{n} finding(s) across {m} batch(es)"
+                    print(json.dumps({"errors": errors, "summary": summary}))
+                    return 1
             prepare_result = prepare(
                 cfg, slug, scope=None, mill_dir=mill_dir, project_root=project_root,
                 wiki_root=wiki_root, git_root=git_root
@@ -183,9 +203,12 @@ def main(argv: list[str] | None = None) -> int:
             if not args.skip_validate:
                 from _plan_validate import run as validate_run
                 plan_dir = resolve_path(cfg["paths"]["plan_dir"], slug)
+                root = _load_root_from_overview(plan_dir / "00-overview.md")
                 errors = validate_run(
                     plan_dir,
                     project_root,
+                    root=root,
+                    git_root=git_root,
                     wiki_root=wiki_root,
                     skip_checks=frozenset(args.skip_checks),
                     max_cards_per_batch=cfg.get("pipeline", {}).get("max_cards_per_batch", 10),

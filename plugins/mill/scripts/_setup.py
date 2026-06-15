@@ -26,7 +26,6 @@ import sys
 from pathlib import Path
 
 import _junction
-import _paths
 import _subprocess_util
 
 _TOKEN_RE = re.compile(r"<([A-Za-z][A-Za-z0-9_]*)>")
@@ -132,6 +131,29 @@ def clone_or_init(url: str, branch: str | None, dest: Path) -> dict:
             raise WikiSetupError(
                 f"git clone {url} {dest} failed: {result.stderr}"
             )
+
+        # Configure upstream tracking for the current branch
+        current_branch = _subprocess_util.run(
+            ["git", "-C", str(dest), "rev-parse", "--abbrev-ref", "HEAD"]
+        )
+        if current_branch.returncode == 0:
+            branch_name = current_branch.stdout.strip()
+            if branch_name and branch_name != "HEAD":
+                cfg_remote = _subprocess_util.run(
+                    ["git", "-C", str(dest), "config", f"branch.{branch_name}.remote", "origin"]
+                )
+                if cfg_remote.returncode != 0:
+                    raise WikiSetupError(
+                        f"git -C {dest} config branch.{branch_name}.remote failed: {cfg_remote.stderr}"
+                    )
+                cfg_merge = _subprocess_util.run(
+                    ["git", "-C", str(dest), "config", f"branch.{branch_name}.merge", f"refs/heads/{branch_name}"]
+                )
+                if cfg_merge.returncode != 0:
+                    raise WikiSetupError(
+                        f"git -C {dest} config branch.{branch_name}.merge failed: {cfg_merge.stderr}"
+                    )
+
         return {"action": "cloned", "branch_existed_on_remote": None}
 
     # Path D — dest missing, branch specified
@@ -149,6 +171,24 @@ def clone_or_init(url: str, branch: str | None, dest: Path) -> dict:
             raise WikiSetupError(
                 f"git clone -b {branch} --single-branch {url} {dest} failed: {result.stderr}"
             )
+
+        # Configure upstream tracking for the specified branch
+        cfg_remote = _subprocess_util.run(
+            ["git", "-C", str(dest), "config", f"branch.{branch}.remote", "origin"]
+        )
+        if cfg_remote.returncode != 0:
+            raise WikiSetupError(
+                f"git -C {dest} config branch.{branch}.remote failed: {cfg_remote.stderr}"
+            )
+
+        cfg_merge = _subprocess_util.run(
+            ["git", "-C", str(dest), "config", f"branch.{branch}.merge", f"refs/heads/{branch}"]
+        )
+        if cfg_merge.returncode != 0:
+            raise WikiSetupError(
+                f"git -C {dest} config branch.{branch}.merge failed: {cfg_merge.stderr}"
+            )
+
         return {"action": "cloned", "branch_existed_on_remote": True}
 
     # branch missing — init orphan

@@ -66,6 +66,7 @@ from _config import (
     apply_env_overrides,
     warn_unknown_keys,
     resolve_plugin_template_path,
+    resolve_repo_config_path,
 )
 
 # ---------------------------------------------------------------------------
@@ -611,10 +612,11 @@ def resolve_ref_paths(
 
     Resolution order (first match wins):
     1. wiki/ prefix routes through wiki_root (unchanged).
-    2. Candidate path under project_root (unchanged).
-    3. Candidate path under git_root (when provided).
-    4. creates_union/deletes_union suppression (unchanged).
-    5. Hard-fail ReviewError (unchanged).
+    2. Candidate path under git_root/root/raw (when git_root and root set).
+    3. Candidate path under project_root (unchanged).
+    4. Candidate path under git_root/raw (when git_root provided, no root).
+    5. creates_union/deletes_union suppression (unchanged).
+    6. Hard-fail ReviewError (unchanged).
 
     Keyword args:
         creates_union: Set of raw token strings extracted from ``Creates:``
@@ -651,26 +653,40 @@ def resolve_ref_paths(
                     f"[{caller_label}] wiki-prefixed ref {raw!r} but no wiki_root provided"
                 )
             candidate = wiki_root / raw[len("wiki/"):]
-        elif root:
-            candidate = project_root / root / raw
-        else:
-            candidate = project_root / raw
-        # Hit on disk.
-        if candidate.exists():
-            resolved.append(candidate)
-            continue
-        # Git-root fallback (only for non-wiki paths).
-        if not raw.startswith("wiki/") and git_root is not None:
+            # Hit on disk.
+            if candidate.exists():
+                resolved.append(candidate)
+                continue
+            # Suppression via creates_union or deletes_union.
+            if raw in creates or raw in deletes:
+                continue
+            # Hard-fail.
+            raise ReviewError(
+                f"[{caller_label}] referenced path not found: {raw!r}; "
+                f"not in plan creates_union, not on disk; resolved candidate: {candidate}"
+            )
+        # Non-wiki path resolution: try git_root/root/raw (if git_root available),
+        # then project_root/root/raw, then git_root/raw (if no root).
+        candidates = []
+        if root and git_root is not None:
             # When the worktree cwd is itself the `root` sub-path, project_root
             # already ends with `root`, so project_root / root / raw doubles it.
             # Try git_root / root / raw first so `root` is joined onto the repo
             # root exactly once — matching how the plan was validated.
-            gr_candidates = [git_root / root / raw] if root else []
-            gr_candidates.append(git_root / raw)
-            gr_hit = next((c for c in gr_candidates if c.exists()), None)
-            if gr_hit is not None:
-                resolved.append(gr_hit)
-                continue
+            candidates.append(git_root / root / raw)
+        if root:
+            candidates.append(project_root / root / raw)
+        else:
+            candidates.append(project_root / raw)
+        if git_root is not None:
+            candidates.append(git_root / raw)
+        # Primary candidate is the first one for error reporting.
+        candidate = candidates[0]
+        # Try all candidates; first match wins.
+        hit = next((c for c in candidates if c.exists()), None)
+        if hit is not None:
+            resolved.append(hit)
+            continue
         # Suppression via creates_union or deletes_union.
         if raw in creates or raw in deletes:
             continue
@@ -702,9 +718,10 @@ def resolve_existing_paths(
 
     Resolution order (first match wins):
     1. wiki/ prefix routes through wiki_root (unchanged).
-    2. Candidate path under project_root (unchanged).
-    3. Candidate path under git_root (when provided).
-    4. Silent drop (no raise).
+    2. Candidate path under git_root/root/raw (when git_root and root set).
+    3. Candidate path under project_root (unchanged).
+    4. Candidate path under git_root/raw (when git_root provided, no root).
+    5. Silent drop (no raise).
 
     Keyword args:
         wiki_root: When provided, raw paths starting with ``wiki/`` are
@@ -723,19 +740,28 @@ def resolve_existing_paths(
                 # Key divergence from resolve_ref_paths: silent drop instead of raise.
                 continue
             candidate = wiki_root / raw[len("wiki/"):]
-        elif root:
-            candidate = project_root / root / raw
-        else:
-            candidate = project_root / raw
-        if candidate.exists():
-            result.append(candidate)
+            if candidate.exists():
+                result.append(candidate)
             continue
-        # Git-root fallback (only for non-wiki paths).
-        if not raw.startswith("wiki/") and git_root is not None:
-            gr_candidate = git_root / raw
-            if gr_candidate.exists():
-                result.append(gr_candidate)
-                continue
+        # Non-wiki path resolution: try git_root/root/raw (if git_root available),
+        # then project_root/root/raw, then git_root/raw (if no root).
+        candidates = []
+        if root and git_root is not None:
+            # When the worktree cwd is itself the `root` sub-path, project_root
+            # already ends with `root`, so project_root / root / raw doubles it.
+            # Try git_root / root / raw first so `root` is joined onto the repo
+            # root exactly once — matching how the plan was validated.
+            candidates.append(git_root / root / raw)
+        if root:
+            candidates.append(project_root / root / raw)
+        else:
+            candidates.append(project_root / raw)
+        if git_root is not None:
+            candidates.append(git_root / raw)
+        # Try all candidates; first match wins (silent drop if none found).
+        hit = next((c for c in candidates if c.exists()), None)
+        if hit is not None:
+            result.append(hit)
     return result
 
 
@@ -1250,7 +1276,7 @@ def _warn_if_prose_diverges(raw_output: str, severity: str, heading_count: int) 
         print(
             f"[_review_common] warning: parse_blocking_count heading count {heading_count} "
             f"diverges from prose count {prose_count} (severity={severity}) "
-            f"— check review file for missing heading.",
+            f"-- check review file for missing heading.",
             file=sys.stderr,
         )
 
@@ -1428,11 +1454,11 @@ def load_config(hub_root: Path, mill_dir: Path) -> dict:
     template_cfg = copy.deepcopy(cfg)
 
     # 2. Resolve hub-layer sources
-    mill_cfg_path = _paths.resolve_mill_config_path(hub_root)
+    mill_cfg_path = resolve_repo_config_path(hub_root, mill_dir.parent)
 
     # 3. Apply repo-layer merge logic
     found_repo_layer = False
-    if mill_cfg_path.exists():
+    if mill_cfg_path is not None:
         with mill_cfg_path.open(encoding="utf-8") as fh:
             repo_cfg = yaml.safe_load(fh) or {}
         cfg = _deep_merge(cfg, repo_cfg)
@@ -1442,7 +1468,7 @@ def load_config(hub_root: Path, mill_dir: Path) -> dict:
     if not template_path.exists() and not found_repo_layer:
         raise ReviewError(
             f"Missing config: searched plugin template at {template_path} "
-            f"and mill-config.yaml at {mill_cfg_path}"
+            f"and mill-config.yaml in hub, main worktree, or task worktree"
         )
 
     # 5. Deep-merge the local layer

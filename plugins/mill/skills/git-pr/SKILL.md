@@ -33,21 +33,52 @@ If on `main` or `master`: stop and tell the user "You're on main — switch to a
 
 ### 1.5 Detect task branch
 
-Check whether the current worktree contains `_mill/status.md`:
+Skip this entire check if the environment variable `MILL_FINALIZE_PR_CLEANUP` is set
+(non-empty) — mill-finalize sets this after it has already handled cleanup (removed or
+restored task_dir), so the guard must not block PR creation.
+
+Otherwise, resolve the task state directory via config and check whether it exists.
+When both `$MILL_PYTHON` and `$CLAUDE_PLUGIN_ROOT` are set, use them to resolve the
+status.md path via `_config.load_config` + `_paths.resolve_task_path`; otherwise fall
+back to the literal `$GIT_ROOT/_mill/status.md` check (standalone git-pr outside mill):
 
 ```bash
-GIT_ROOT=$(git rev-parse --show-toplevel)
-if [ -f "$GIT_ROOT/_mill/status.md" ]; then
-    # halt with the redirect message below
+if [ -n "$MILL_FINALIZE_PR_CLEANUP" ]; then
+    # Mill-finalize cleanup already ran; skip the guard
     :
+elif [ -n "$MILL_PYTHON" ] && [ -n "$CLAUDE_PLUGIN_ROOT" ]; then
+    # Try config-based resolution (nested hub support)
+    STATUS_PATH=$(PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
+from pathlib import Path
+import _config, _paths
+try:
+    git_root = Path.cwd()
+    cfg = _config.load_config(_paths.resolve_hub_path(), git_root)
+    status_path = _paths.resolve_task_path(git_root, cfg['paths']['status_md'])
+    print(status_path)
+except Exception:
+    exit(1)
+" 2>/dev/null)
+    if [ $? -eq 0 ] && [ -f "$STATUS_PATH" ]; then
+        echo "This is a mill task branch -- _mill/ files would land in the PR. Use /mill-merge to handle the cleanup commit, archive tag, and Home.md flip in one shot. For mid-task collaborator review, push the branch directly with 'git push' and open a draft PR via the GitHub UI." >&2
+        exit 1
+    fi
+else
+    # Standalone: literal check at git root
+    GIT_ROOT=$(git rev-parse --show-toplevel)
+    if [ -f "$GIT_ROOT/_mill/status.md" ]; then
+        echo "This is a mill task branch -- _mill/ files would land in the PR. Use /mill-merge to handle the cleanup commit, archive tag, and Home.md flip in one shot. For mid-task collaborator review, push the branch directly with 'git push' and open a draft PR via the GitHub UI." >&2
+        exit 1
+    fi
 fi
 ```
 
-If `_mill/status.md` exists at the worktree root, halt with the following message and return without running any subsequent step:
+If the task state file is detected to exist via any of the above checks, halt with the
+following message and return without running any subsequent step:
 
 > This is a mill task branch — `_mill/` files would land in the PR. Use `/mill-merge` to handle the cleanup commit, archive tag, and Home.md flip in one shot. For mid-task collaborator review, push the branch directly with `git push` and open a draft PR via the GitHub UI.
 
-If the file does not exist, proceed to step 2.
+Otherwise, proceed to step 2.
 
 ### 2. Determine base branch
 

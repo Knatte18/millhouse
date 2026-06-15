@@ -185,10 +185,11 @@ def commit_push(
     """Stage, commit, and push with one rebase retry on non-fast-forward.
 
     Sequence:
+    0. Verify wiki_path is a git repository
     1. git add -- <rel_paths>
     2. git diff --cached --quiet (check if staged)
     3. git commit -m <message>
-    4. git push
+    4. git push origin HEAD:<branch> (explicit refspec)
        - On non-fast-forward: git pull --rebase, retry push
        - On rebase conflict: git rebase --abort, raise WikiPushError
 
@@ -202,10 +203,35 @@ def commit_push(
     Raises:
         WikiPushError: Any unrecoverable git failure.
     """
-    _run(
+    # Verify wiki_path is a git repository before attempting operations.
+    # Use a subprocess.run call directly to avoid any potential issues with _run.
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(wiki_path), "rev-parse", "--git-dir"],
+            capture_output=True,
+            text=True,
+            timeout=5.0,
+        )
+        if result.returncode != 0:
+            raise WikiPushError(
+                f"not a git repository: {wiki_path} -- "
+                f"initialize the wiki with 'git clone' or 'git init'"
+            )
+    except subprocess.TimeoutExpired:
+        raise WikiPushError(f"git directory check timed out for {wiki_path}")
+    except Exception as e:
+        if isinstance(e, WikiPushError):
+            raise
+        raise WikiPushError(f"failed to verify git repository: {e}")
+
+    add = _run(
         ["git", "-C", str(wiki_path), "add", "--"] + list(rel_paths),
         wiki_path,
+        check=False,
     )
+    if add.returncode != 0:
+        stderr_msg = (add.stderr.strip() or "(git add failed with no error message)")
+        raise WikiPushError(f"git add failed: {stderr_msg}")
 
     diff = _run(
         ["git", "-C", str(wiki_path), "diff", "--cached", "--quiet"],
@@ -217,18 +243,37 @@ def commit_push(
     elif diff.returncode != 1:
         raise WikiPushError(f"git diff --cached --quiet failed: {diff.stderr.strip()!r}")
 
-    _run(
+    commit = _run(
         ["git", "-C", str(wiki_path), "commit", "-m", message],
         wiki_path,
+        check=False,
     )
+    if commit.returncode != 0:
+        stderr_msg = (commit.stderr.strip() or "(git commit failed with no error message)")
+        raise WikiPushError(f"git commit failed: {stderr_msg}")
 
     # Test mode: stop after local commit; skip the network push.
     if os.environ.get("WIKI_DAEMON_SKIP_PUSH") == "1":
         return
 
+    # Resolve the current branch to use in the explicit-refspec push.
+    branch_result = _run(
+        ["git", "-C", str(wiki_path), "rev-parse", "--abbrev-ref", "HEAD"],
+        wiki_path,
+        check=False,
+    )
+    if branch_result.returncode != 0:
+        raise WikiPushError(f"failed to resolve branch: {branch_result.stderr.strip()!r}")
+
+    branch = branch_result.stdout.strip()
+    if not branch or branch == "HEAD":
+        raise WikiPushError(
+            "cannot push: repository is in detached HEAD state or branch name is empty"
+        )
+
     for attempt in range(2):
         push = _run(
-            ["git", "-C", str(wiki_path), "push"],
+            ["git", "-C", str(wiki_path), "push", "origin", f"HEAD:{branch}"],
             wiki_path,
             check=False,
             timeout=_GIT_NETWORK_TIMEOUT_SECONDS,

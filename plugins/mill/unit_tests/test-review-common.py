@@ -94,6 +94,7 @@ from _review_common import (  # noqa: E402
     ReviewResult,
     _load_root_from_overview,
     _read_for_bulk,
+    _warn_if_prose_diverges,
     aggregate_verdict,
     build_deletes_section,
     build_manifest_section,
@@ -1321,6 +1322,99 @@ def main() -> int:
         assert result == [], f"Got {result}"
         print("PASS: resolve_existing_paths without git_root preserves current behavior")
 
+    # resolve_ref_paths: cwd==git_root layout with root set (#471 regression: should NOT double)
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        tmp_git = Path(tmpdir) / "git"
+        tmp_git.mkdir()
+        # Create git_root/root/raw file
+        (tmp_git / "src").mkdir(parents=True)
+        (tmp_git / "src" / "file.py").write_text("x")
+        # project_root is git_root (not doubled subfolder)
+        result = resolve_ref_paths(
+            ["file.py"], tmp_git, root="src",
+            git_root=tmp_git,
+        )
+        # Should resolve to git_root/src/file.py (primary candidate)
+        assert result == [tmp_git / "src" / "file.py"], f"Got {result}"
+        print("PASS: resolve_ref_paths cwd==git_root with root set uses git_root/root/raw primary")
+
+    # resolve_existing_paths: cwd==git_root/root layout (#471 regression: should NOT double)
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        tmp_git = Path(tmpdir) / "git"
+        tmp_git.mkdir()
+        # Create git_root/src/file.py
+        (tmp_git / "src").mkdir(parents=True)
+        (tmp_git / "src" / "file.py").write_text("x")
+        # When cwd is git_root/src, project_root would be git_root/src
+        project_root = tmp_git / "src"
+        result = resolve_existing_paths(
+            ["file.py"], project_root, root="src",
+            git_root=tmp_git,
+        )
+        # Should resolve to git_root/src/file.py (NOT doubled git_root/src/src/file.py)
+        assert result == [tmp_git / "src" / "file.py"], f"Got {result}"
+        print("PASS: resolve_existing_paths cwd==git_root/root returns single-prefixed git_root/root/raw (not doubled)")
+
+    # resolve_ref_paths: git_root=None falls back to project_root/root/raw
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        tmp_project = Path(tmpdir) / "project"
+        (tmp_project / "src").mkdir(parents=True)
+        (tmp_project / "src" / "file.py").write_text("x")
+        result = resolve_ref_paths(
+            ["file.py"], tmp_project, root="src",
+            git_root=None,
+        )
+        # Should resolve to project_root/src/file.py (no git_root candidate)
+        assert result == [tmp_project / "src" / "file.py"], f"Got {result}"
+        print("PASS: resolve_ref_paths git_root=None falls back to project_root/root/raw")
+
+    # resolve_existing_paths: git_root=None falls back to project_root/root/raw
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        tmp_project = Path(tmpdir) / "project"
+        (tmp_project / "src").mkdir(parents=True)
+        (tmp_project / "src" / "file.py").write_text("x")
+        result = resolve_existing_paths(
+            ["file.py"], tmp_project, root="src",
+            git_root=None,
+        )
+        # Should resolve to project_root/src/file.py
+        assert result == [tmp_project / "src" / "file.py"], f"Got {result}"
+        print("PASS: resolve_existing_paths git_root=None falls back to project_root/root/raw")
+
+    # resolve_ref_paths: wiki/ prefix unchanged by git_root threading
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        tmp_project = Path(tmpdir) / "project"
+        tmp_project.mkdir()
+        tmp_wiki = Path(tmpdir) / "wiki"
+        (tmp_wiki / "active" / "x").mkdir(parents=True)
+        (tmp_wiki / "active" / "x" / "discussion.md").write_text("w")
+        tmp_git = Path(tmpdir) / "git"
+        tmp_git.mkdir()
+        result = resolve_ref_paths(
+            ["wiki/active/x/discussion.md"], tmp_project, root="src",
+            wiki_root=tmp_wiki,
+            git_root=tmp_git,
+        )
+        assert result == [tmp_wiki / "active" / "x" / "discussion.md"], f"Got {result}"
+        print("PASS: resolve_ref_paths wiki/ prefix routes through wiki_root unchanged")
+
+    # resolve_existing_paths: wiki/ prefix unchanged by git_root threading
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        tmp_project = Path(tmpdir) / "project"
+        tmp_project.mkdir()
+        tmp_wiki = Path(tmpdir) / "wiki"
+        (tmp_wiki / "active" / "x").mkdir(parents=True)
+        (tmp_wiki / "active" / "x" / "discussion.md").write_text("w")
+        tmp_git = Path(tmpdir) / "git"
+        tmp_git.mkdir()
+        result = resolve_existing_paths(
+            ["wiki/active/x/discussion.md"], tmp_project, root="src",
+            wiki_root=tmp_wiki,
+            git_root=tmp_git,
+        )
+        assert result == [tmp_wiki / "active" / "x" / "discussion.md"], f"Got {result}"
+        print("PASS: resolve_existing_paths wiki/ prefix routes through wiki_root unchanged")
+
     # Per-scope counters survive interleaved per-batch + holistic writes (regression for #21, #62, #63)
     with _test_helpers.safe_temp_dir() as tmpdir:
         reviews = tmpdir
@@ -1569,6 +1663,35 @@ def main() -> int:
     test_parse_blocking_count_silent_when_aligned()
     test_parse_blocking_count_silent_when_no_prose_count()
     test_parse_blocking_count_warns_for_gap_severity()
+
+    def test_parse_blocking_count_divergence_warning_ascii_only():
+        import contextlib
+        import io
+        raw = (
+            "### [BLOCKING] finding one\n"
+            "### [BLOCKING] finding two\n"
+            "There are 5 blocking findings in this review.\n"
+        )
+        buf = io.StringIO()
+        with contextlib.redirect_stderr(buf):
+            count = parse_blocking_count(raw, severity="BLOCKING")
+        assert count == 2, f"expected 2, got {count}"
+        stderr_output = buf.getvalue()
+        assert stderr_output, "expected stderr warning, got empty"
+        # Verify every character is ASCII (ord < 128)
+        for i, char in enumerate(stderr_output):
+            if ord(char) >= 128:
+                print(
+                    f"FAIL: parse_blocking_count_divergence_warning_ascii_only: "
+                    f"non-ASCII character at position {i}: {char!r} (ord={ord(char)})",
+                    file=sys.stderr,
+                )
+                return False
+        print("PASS: parse_blocking_count divergence warning is ASCII-only (no mojibake)")
+        return True
+
+    if not test_parse_blocking_count_divergence_warning_ascii_only():
+        errors += 1
 
     # ---------------------------------------------------------------------------
     # _load_root_from_overview: importable from _review_common

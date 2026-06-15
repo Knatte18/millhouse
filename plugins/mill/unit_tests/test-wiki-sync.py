@@ -26,6 +26,7 @@ from wiki._sync import (  # noqa: E402
     _git_env,
 )
 from wiki import WikiPathError, WikiPushError  # noqa: E402
+from unittest.mock import patch, MagicMock  # noqa: E402
 
 
 def _run_quiet(args: list[str], cwd: Path) -> int:
@@ -128,7 +129,7 @@ def main() -> int:
             (clone / "Home.md").write_text("# Home Updated\n", encoding="utf-8")
             commit_push(clone, ["Home.md"], "update home")
             log_result = subprocess.run(
-                ["git", "-C", str(bare), "log", "--oneline"],
+                ["git", "-c", "safe.bareRepository=all", "-C", str(bare), "log", "--oneline"],
                 capture_output=True,
                 text=True,
             )
@@ -142,7 +143,7 @@ def main() -> int:
             (clone / "Home.md").write_text("# Home Updated\n", encoding="utf-8")
             commit_push(clone, ["Home.md"], "idempotent test")
             log_result = subprocess.run(
-                ["git", "-C", str(bare), "log", "--oneline"],
+                ["git", "-c", "safe.bareRepository=all", "-C", str(bare), "log", "--oneline"],
                 capture_output=True,
                 text=True,
             )
@@ -285,6 +286,190 @@ def main() -> int:
             ok("_git_env disables interactive prompts")
         except Exception as exc:
             fail("_git_env disables interactive prompts", exc)
+
+        # --- (m) commit_push with explicit refspec (no upstream tracking) ---
+        try:
+            # Create a clone without upstream tracking configured
+            clone3 = tmp / "clone3"
+            clone3.mkdir(parents=True)
+            subprocess.run(
+                ["git", "init", "-b", "main", str(clone3)],
+                check=True,
+                capture_output=True,
+            )
+            subprocess.run(
+                ["git", "-C", str(clone3), "config", "user.email", "test@test.com"],
+                check=True,
+                capture_output=True,
+            )
+            subprocess.run(
+                ["git", "-C", str(clone3), "config", "user.name", "Test User"],
+                check=True,
+                capture_output=True,
+            )
+            subprocess.run(
+                ["git", "-C", str(clone3), "remote", "add", "origin", str(bare)],
+                check=True,
+                capture_output=True,
+            )
+            subprocess.run(
+                ["git", "-C", str(clone3), "fetch", "origin", "main"],
+                check=True,
+                capture_output=True,
+            )
+            subprocess.run(
+                ["git", "-C", str(clone3), "checkout", "-b", "main", "origin/main"],
+                check=True,
+                capture_output=True,
+            )
+            # Explicitly unset tracking to test refspec-based push
+            subprocess.run(
+                ["git", "-C", str(clone3), "config", "--unset", "branch.main.remote"],
+                check=False,
+                capture_output=True,
+            )
+            subprocess.run(
+                ["git", "-C", str(clone3), "config", "--unset", "branch.main.merge"],
+                check=False,
+                capture_output=True,
+            )
+
+            (clone3 / "tracked.md").write_text("tracked content\n", encoding="utf-8")
+            commit_push(clone3, ["tracked.md"], "test explicit refspec")
+            log_result = subprocess.run(
+                ["git", "-c", "safe.bareRepository=all", "-C", str(bare), "log", "--oneline"],
+                capture_output=True,
+                text=True,
+            )
+            assert "test explicit refspec" in log_result.stdout
+            ok("commit_push with explicit refspec (no upstream tracking)")
+        except Exception as exc:
+            fail("commit_push with explicit refspec (no upstream tracking)", exc)
+
+        # --- (n) commit_push against non-git-repo raises WikiPushError ---
+        try:
+            not_git = tmp / "not_git"
+            not_git.mkdir(parents=True)
+            (not_git / "file.md").write_text("content\n", encoding="utf-8")
+
+            raised = False
+            error_msg = ""
+            try:
+                commit_push(not_git, ["file.md"], "should fail")
+            except WikiPushError as e:
+                raised = True
+                error_msg = str(e)
+
+            assert raised, "commit_push on non-git-repo should raise WikiPushError"
+            assert "not a git repository" in error_msg, \
+                f"Error should mention 'not a git repository', got: {error_msg}"
+            assert str(not_git) in error_msg, \
+                f"Error should name the path {not_git}, got: {error_msg}"
+            ok("commit_push against non-git-repo raises WikiPushError")
+        except Exception as exc:
+            fail("commit_push against non-git-repo raises WikiPushError", exc)
+
+        # --- (o) clone_or_init plain-clone paths set upstream tracking ---
+        try:
+            # Import the setup module for clone_or_init
+            import _setup
+            clone4 = tmp / "clone4"
+
+            # Test Path C (clone without branch)
+            result = _setup.clone_or_init(str(bare), None, clone4)
+            assert result["action"] == "cloned"
+
+            # Verify tracking is set
+            get_tracking = subprocess.run(
+                ["git", "-C", str(clone4), "config", "--get", "branch.main.remote"],
+                capture_output=True,
+                text=True,
+            )
+            assert get_tracking.returncode == 0 and "origin" in get_tracking.stdout, \
+                f"branch.main.remote should be configured, got: {get_tracking.stderr}"
+
+            get_merge = subprocess.run(
+                ["git", "-C", str(clone4), "config", "--get", "branch.main.merge"],
+                capture_output=True,
+                text=True,
+            )
+            assert get_merge.returncode == 0 and "refs/heads/main" in get_merge.stdout, \
+                f"branch.main.merge should be configured, got: {get_merge.stderr}"
+
+            ok("clone_or_init plain-clone path C sets upstream tracking")
+        except Exception as exc:
+            fail("clone_or_init plain-clone path C sets upstream tracking", exc)
+
+        # --- (p) clone_or_init path D (branch-specified) sets upstream tracking ---
+        try:
+            import _setup  # noqa: F811
+            clone5 = tmp / "clone5"
+
+            # Test Path D (clone with specified branch)
+            result = _setup.clone_or_init(str(bare), "main", clone5)
+            assert result["action"] == "cloned"
+
+            # Verify tracking is set for the specified branch
+            get_tracking = subprocess.run(
+                ["git", "-C", str(clone5), "config", "--get", "branch.main.remote"],
+                capture_output=True,
+                text=True,
+            )
+            assert get_tracking.returncode == 0 and "origin" in get_tracking.stdout, \
+                f"branch.main.remote should be configured, got: {get_tracking.stderr}"
+
+            get_merge = subprocess.run(
+                ["git", "-C", str(clone5), "config", "--get", "branch.main.merge"],
+                capture_output=True,
+                text=True,
+            )
+            assert get_merge.returncode == 0 and "refs/heads/main" in get_merge.stdout, \
+                f"branch.main.merge should be configured, got: {get_merge.stderr}"
+
+            ok("clone_or_init path D (branch-specified) sets upstream tracking")
+        except Exception as exc:
+            fail("clone_or_init path D (branch-specified) sets upstream tracking", exc)
+
+        # --- (q) clone_or_init path C: git config failure raises WikiSetupError ---
+        try:
+            import _setup  # noqa: F811
+            from _setup import WikiSetupError  # noqa: E402
+
+            # Build a fake _subprocess_util.run that:
+            #   - allows git clone (returncode 0, stdout/stderr empty)
+            #   - allows rev-parse --abbrev-ref HEAD (returncode 0, stdout "main")
+            #   - makes the first git config (branch.main.remote) fail (returncode 1)
+            call_count = [0]
+
+            def _fake_run(cmd, **kwargs):
+                call_count[0] += 1
+                m = MagicMock()
+                if "clone" in cmd:
+                    m.returncode = 0
+                    m.stdout = ""
+                    m.stderr = ""
+                elif "--abbrev-ref" in cmd:
+                    m.returncode = 0
+                    m.stdout = "main"
+                    m.stderr = ""
+                else:
+                    # git config step -- simulate failure
+                    m.returncode = 1
+                    m.stdout = ""
+                    m.stderr = "error: could not set config"
+                return m
+
+            clone6 = tmp / "clone6"
+            raised = False
+            with patch.object(_setup._subprocess_util, "run", side_effect=_fake_run):
+                try:
+                    _setup.clone_or_init(str(bare), None, clone6)
+                except WikiSetupError:
+                    raised = True
+            assert raised, "Expected WikiSetupError when git config branch.main.remote fails"
+            ok("clone_or_init path C: git config failure raises WikiSetupError")
+        except Exception as exc:
+            fail("clone_or_init path C: git config failure raises WikiSetupError", exc)
 
     finally:
         _safe_rmtree.safe_rmtree(tmp, allowed_root=tmp, ignore_errors=True)

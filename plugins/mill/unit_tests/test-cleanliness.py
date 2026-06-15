@@ -10,7 +10,14 @@ from pathlib import Path
 HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
-from _cleanliness import capture_snapshot, compute_new_dirt, compute_scope_violations  # noqa: E402
+from _cleanliness import (  # noqa: E402
+    capture_snapshot,
+    compute_new_dirt,
+    compute_scope_violations,
+    compute_terminal_dirt,
+    _filter_to_task_scope,
+    _parent_diff_names,
+)
 
 
 def main() -> int:
@@ -239,6 +246,159 @@ def main() -> int:
         failures.append(f"FAIL: compute_scope_violations files under junctions: {exc}")
     except Exception as exc:
         failures.append(f"FAIL: compute_scope_violations files under junctions ({type(exc).__name__}): {exc}")
+
+    # TD-1. _filter_to_task_scope: in-scope file under task_dir is included
+    try:
+        porcelain = [" M _mill/status.md", " M other_file.txt"]
+        task_dir = Path("_mill")
+        owned_paths = set()
+        result = _filter_to_task_scope(porcelain, task_dir, owned_paths)
+        assert result == [" M _mill/status.md"], f"expected [' M _mill/status.md'], got {result!r}"
+        print("PASS: _filter_to_task_scope: file under task_dir included")
+    except AssertionError as exc:
+        failures.append(f"FAIL: _filter_to_task_scope under task_dir: {exc}")
+    except Exception as exc:
+        failures.append(f"FAIL: _filter_to_task_scope under task_dir ({type(exc).__name__}): {exc}")
+
+    # TD-2. _filter_to_task_scope: in-scope file in owned_paths is included
+    try:
+        porcelain = [" M src/main.py", " M other.py"]
+        task_dir = Path("_mill")
+        owned_paths = {"src/main.py"}
+        result = _filter_to_task_scope(porcelain, task_dir, owned_paths)
+        assert result == [" M src/main.py"], f"expected [' M src/main.py'], got {result!r}"
+        print("PASS: _filter_to_task_scope: file in owned_paths included")
+    except AssertionError as exc:
+        failures.append(f"FAIL: _filter_to_task_scope owned_paths: {exc}")
+    except Exception as exc:
+        failures.append(f"FAIL: _filter_to_task_scope owned_paths ({type(exc).__name__}): {exc}")
+
+    # TD-3. _filter_to_task_scope: out-of-scope file excluded
+    try:
+        porcelain = [" M _mill/status.md", " M plugins/foo.py"]
+        task_dir = Path("_mill")
+        owned_paths = set()
+        result = _filter_to_task_scope(porcelain, task_dir, owned_paths)
+        assert result == [" M _mill/status.md"], f"expected [' M _mill/status.md'], got {result!r}"
+        print("PASS: _filter_to_task_scope: out-of-scope file excluded")
+    except AssertionError as exc:
+        failures.append(f"FAIL: _filter_to_task_scope out-of-scope: {exc}")
+    except Exception as exc:
+        failures.append(f"FAIL: _filter_to_task_scope out-of-scope ({type(exc).__name__}): {exc}")
+
+    # TD-4. _filter_to_task_scope: empty porcelain returns empty
+    try:
+        porcelain = []
+        task_dir = Path("_mill")
+        owned_paths = {"some/file.py"}
+        result = _filter_to_task_scope(porcelain, task_dir, owned_paths)
+        assert result == [], f"expected [], got {result!r}"
+        print("PASS: _filter_to_task_scope: empty porcelain -> []")
+    except AssertionError as exc:
+        failures.append(f"FAIL: _filter_to_task_scope empty: {exc}")
+    except Exception as exc:
+        failures.append(f"FAIL: _filter_to_task_scope empty ({type(exc).__name__}): {exc}")
+
+    # CTD-1. compute_terminal_dirt: clean worktree returns []
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            with unittest.mock.patch("_cleanliness._pygit2_util.status_porcelain", return_value=[]):
+                with unittest.mock.patch("_cleanliness._parent_diff_names", return_value=[]):
+                    result = compute_terminal_dirt(Path(tmp), Path("_mill"), "main")
+            assert result == [], f"expected [], got {result!r}"
+        print("PASS: compute_terminal_dirt: clean worktree -> []")
+    except AssertionError as exc:
+        failures.append(f"FAIL: compute_terminal_dirt clean: {exc}")
+    except Exception as exc:
+        failures.append(f"FAIL: compute_terminal_dirt clean ({type(exc).__name__}): {exc}")
+
+    # CTD-2. compute_terminal_dirt: in-scope dirt (file under task_dir) is returned
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            with unittest.mock.patch(
+                "_cleanliness._pygit2_util.status_porcelain",
+                return_value=[" M _mill/status.md", " M other.txt"]
+            ):
+                with unittest.mock.patch("_cleanliness._parent_diff_names", return_value=[]):
+                    result = compute_terminal_dirt(Path(tmp), Path("_mill"), "main")
+            assert result == [" M _mill/status.md"], f"expected [' M _mill/status.md'], got {result!r}"
+        print("PASS: compute_terminal_dirt: in-scope file under task_dir returned")
+    except AssertionError as exc:
+        failures.append(f"FAIL: compute_terminal_dirt in-scope under task_dir: {exc}")
+    except Exception as exc:
+        failures.append(f"FAIL: compute_terminal_dirt in-scope under task_dir ({type(exc).__name__}): {exc}")
+
+    # CTD-3. compute_terminal_dirt: in-scope dirt (file in parent-diff set) is returned
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            with unittest.mock.patch(
+                "_cleanliness._pygit2_util.status_porcelain",
+                return_value=[" M src/main.py", " M other.txt"]
+            ):
+                with unittest.mock.patch("_cleanliness._parent_diff_names", return_value=["src/main.py"]):
+                    result = compute_terminal_dirt(Path(tmp), Path("_mill"), "main")
+            assert result == [" M src/main.py"], f"expected [' M src/main.py'], got {result!r}"
+        print("PASS: compute_terminal_dirt: in-scope file in parent-diff set returned")
+    except AssertionError as exc:
+        failures.append(f"FAIL: compute_terminal_dirt in-scope parent-diff: {exc}")
+    except Exception as exc:
+        failures.append(f"FAIL: compute_terminal_dirt in-scope parent-diff ({type(exc).__name__}): {exc}")
+
+    # CTD-4. compute_terminal_dirt: out-of-scope dirt (another task's _mill/) is ignored
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            with unittest.mock.patch(
+                "_cleanliness._pygit2_util.status_porcelain",
+                return_value=[" M _mill/status.md", " M other_task/_mill/status.md"]
+            ):
+                with unittest.mock.patch("_cleanliness._parent_diff_names", return_value=[]):
+                    result = compute_terminal_dirt(Path(tmp), Path("_mill"), "main")
+            assert result == [" M _mill/status.md"], f"expected [' M _mill/status.md'], got {result!r}"
+        print("PASS: compute_terminal_dirt: out-of-scope another task's _mill/ ignored")
+    except AssertionError as exc:
+        failures.append(f"FAIL: compute_terminal_dirt out-of-scope: {exc}")
+    except Exception as exc:
+        failures.append(f"FAIL: compute_terminal_dirt out-of-scope ({type(exc).__name__}): {exc}")
+
+    # CTD-5. compute_terminal_dirt: absolute task_dir is relativized and still matches
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            worktree = Path(tmp)
+            # Simulate mill-go's task_dir = status_path.parent (absolute)
+            abs_task_dir = worktree / "_mill"
+            with unittest.mock.patch(
+                "_cleanliness._pygit2_util.status_porcelain",
+                return_value=[" M _mill/status.md", " M other.txt"]
+            ):
+                with unittest.mock.patch("_cleanliness._parent_diff_names", return_value=[]):
+                    result = compute_terminal_dirt(worktree, abs_task_dir, "main")
+            assert result == [" M _mill/status.md"], (
+                f"expected [' M _mill/status.md'] with absolute task_dir, got {result!r}"
+            )
+        print("PASS: compute_terminal_dirt: absolute task_dir relativized correctly")
+    except AssertionError as exc:
+        failures.append(f"FAIL: compute_terminal_dirt absolute task_dir: {exc}")
+    except Exception as exc:
+        failures.append(f"FAIL: compute_terminal_dirt absolute task_dir ({type(exc).__name__}): {exc}")
+
+    # PDN-1. _parent_diff_names: non-zero git exit emits stderr warning and returns []
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            with unittest.mock.patch(
+                "_cleanliness._subprocess_util.run",
+                return_value=unittest.mock.Mock(returncode=128, stdout="", stderr="fatal: bad revision"),
+            ):
+                with unittest.mock.patch("sys.stderr", new=io.StringIO()) as fake_err:
+                    result = _parent_diff_names(Path(tmp), "nonexistent-branch")
+            assert result == [], f"expected [], got {result!r}"
+            assert "[cleanliness]" in fake_err.getvalue(), (
+                f"'[cleanliness]' not in stderr: {fake_err.getvalue()!r}"
+            )
+        print("PASS: _parent_diff_names: non-zero exit -> [] + stderr warning")
+    except AssertionError as exc:
+        failures.append(f"FAIL: _parent_diff_names non-zero exit: {exc}")
+    except Exception as exc:
+        failures.append(f"FAIL: _parent_diff_names non-zero exit ({type(exc).__name__}): {exc}")
 
     if failures:
         for msg in failures:

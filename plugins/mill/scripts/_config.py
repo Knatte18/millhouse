@@ -40,6 +40,7 @@ __all__ = [
     "walk_unknown_keys",
     "warn_unknown_keys",
     "resolve_plugin_template_path",
+    "resolve_repo_config_path",
 ]
 
 ENV_REGISTRY = {
@@ -148,6 +149,47 @@ def resolve_plugin_template_path(filename: str) -> Path:
     return Path(__file__).resolve().parent.parent / "templates" / filename
 
 
+def resolve_repo_config_path(hub_root: Path, worktree_root: Path) -> Path | None:
+    """Resolve repo-layer mill-config.yaml search in container-aware order.
+
+    Returns the first EXISTING file among:
+    1. hub_root / "mill-config.yaml" (via _paths.resolve_mill_config_path)
+    2. primary clone / "mill-config.yaml" (resolved via _paths.resolve_main_worktree_root)
+    3. worktree_root / "mill-config.yaml"
+
+    When none exist, returns None. This allows config to be present in any of
+    the three locations, accommodating both standard and container layouts.
+
+    Args:
+        hub_root: Absolute path to the hub directory.
+        worktree_root: Absolute path to the worktree git repository root.
+
+    Returns:
+        Absolute Path to the repo-layer config, or None when none exist.
+    """
+    # Candidate 1: hub_root / mill-config.yaml
+    candidate1 = _paths.resolve_mill_config_path(hub_root)
+    if candidate1.exists():
+        return candidate1
+
+    # Candidate 2: primary clone / mill-config.yaml
+    try:
+        main_worktree = _paths.resolve_main_worktree_root(worktree_root)
+        candidate2 = main_worktree / "mill-config.yaml"
+        if candidate2.exists():
+            return candidate2
+    except SystemExit:
+        pass
+
+    # Candidate 3: worktree_root / mill-config.yaml
+    candidate3 = worktree_root / "mill-config.yaml"
+    if candidate3.exists():
+        return candidate3
+
+    # None found
+    return None
+
+
 def load_config(hub_root: Path, worktree_root: Path) -> dict:
     """Load mill config with overlay from plugin template, repo layer, and local layer.
 
@@ -189,14 +231,19 @@ def load_config(hub_root: Path, worktree_root: Path) -> dict:
             break
 
     # 2. Resolve repo-layer sources
-    mill_cfg_path = _paths.resolve_mill_config_path(hub_root)
+    mill_cfg_path = resolve_repo_config_path(hub_root, worktree_root)
 
     # 3. Apply repo-layer merge logic
     source_label = ""
-    if mill_cfg_path.exists():
+    if mill_cfg_path is not None:
         repo_cfg = yaml.safe_load(mill_cfg_path.read_text(encoding="utf-8")) or {}
         cfg = deep_merge(cfg, repo_cfg)
         source_label = "mill-config.yaml"
+    else:
+        print(
+            "[_config] note: no repo-layer mill-config.yaml found in hub, main worktree, or task worktree",
+            file=sys.stderr,
+        )
 
     # 4. Apply stub-aware local config logic (preserved from existing code)
     stub_path = worktree_root / ".millhouse" / "config.local.yaml"
