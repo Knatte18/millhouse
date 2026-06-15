@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-infra-and-path-fixes
 branch: hanf/mill-infra-and-path-fixes
 plan: _mill/plan
@@ -26,4 +26,21 @@ plan-review-r3  '2026-06-15T11:04:19Z'
 plan-fix-r3  '2026-06-15T11:04:19Z'
 plan-fix-r4  '2026-06-15T11:10:12Z'
 planned  '2026-06-15T11:11:11Z'
+implementing  '2026-06-15T11:19:04Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: review-warning-ascii
+    state: pending
+  - name: wiki-sync-robustness
+    state: pending
+  - name: terminal-cleanliness-gate
+    state: pending
+  - name: stacked-finalize-cleanup
+    state: pending
+  - name: config-repo-layer
+    state: pending
 ```
