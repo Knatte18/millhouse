@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-reviewing
+phase: holistic-fixing
 slug: ghissues-skill-fold-guard
 branch: hanf/ghissues-skill-fold-guard
 plan: _mill/plan
@@ -23,6 +23,7 @@ planned  '2026-06-15T12:59:37Z'
 implementing  '2026-06-15T13:00:40Z'
 approved-fold-guard-allowlist  '2026-06-15T13:05:49Z'
 holistic-reviewing  '2026-06-15T13:06:19Z'
+holistic-fixing  '2026-06-15T13:09:39Z'
 ```
 
 ## Batches
