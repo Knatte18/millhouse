@@ -206,8 +206,7 @@ def commit_push(
     # Verify wiki_path is a git repository before attempting operations.
     # Use a subprocess.run call directly to avoid any potential issues with _run.
     try:
-        import subprocess as sp
-        result = sp.run(
+        result = subprocess.run(
             ["git", "-C", str(wiki_path), "rev-parse", "--git-dir"],
             capture_output=True,
             text=True,
@@ -218,7 +217,7 @@ def commit_push(
                 f"not a git repository: {wiki_path} -- "
                 f"initialize the wiki with 'git clone' or 'git init'"
             )
-    except sp.TimeoutExpired:
+    except subprocess.TimeoutExpired:
         raise WikiPushError(f"git directory check timed out for {wiki_path}")
     except Exception as e:
         if isinstance(e, WikiPushError):
