@@ -36,7 +36,9 @@ batches:
     start_sha: 08e2b2d683edb920cd1176546ec73153cc200248
     commit_sha: a6e1cc354fd2251073482948cfa553bad11b010f
   - name: validator-git-root-threading
-    state: pending
+    state: running
+    implementer_session: e3332b44-0666-4387-943e-00fecf460d53
+    start_sha: 3ee9b43121c340c373e608bc1735ddf24fa06789
   - name: review-plan-cli
     state: pending
   - name: skill-doc-update
