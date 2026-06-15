@@ -27,5 +27,7 @@ implementing  '2026-06-15T10:51:37Z'
 ```yaml
 batches:
   - name: accept-session-start-sha-flags
-    state: pending
+    state: running
+    implementer_session: cc802323-bcf3-4516-92d7-c3553a3650b5
+    start_sha: a9249edac04527ca157e3385a28e8bf4ddcbbaae
 ```
