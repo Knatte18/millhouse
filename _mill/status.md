@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-fix-r2
+phase: planned
 slug: batch-name-and-skill-loading
 branch: hanf/batch-name-and-skill-loading
 plan: _mill/plan
@@ -20,4 +20,5 @@ planning  '2026-06-15T12:57:15Z'
 plan-review-r1  '2026-06-15T13:02:37Z'
 plan-fix-r1  '2026-06-15T13:02:37Z'
 plan-fix-r2  '2026-06-15T13:05:46Z'
+planned  '2026-06-15T13:06:01Z'
 ```
