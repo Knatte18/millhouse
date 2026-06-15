@@ -60,15 +60,15 @@ except Exception:
     exit(1)
 " 2>/dev/null)
     if [ $? -eq 0 ] && [ -f "$STATUS_PATH" ]; then
-        # halt with the redirect message below
-        :
+        echo "This is a mill task branch -- _mill/ files would land in the PR. Use /mill-merge to handle the cleanup commit, archive tag, and Home.md flip in one shot. For mid-task collaborator review, push the branch directly with 'git push' and open a draft PR via the GitHub UI." >&2
+        exit 1
     fi
 else
     # Standalone: literal check at git root
     GIT_ROOT=$(git rev-parse --show-toplevel)
     if [ -f "$GIT_ROOT/_mill/status.md" ]; then
-        # halt with the redirect message below
-        :
+        echo "This is a mill task branch -- _mill/ files would land in the PR. Use /mill-merge to handle the cleanup commit, archive tag, and Home.md flip in one shot. For mid-task collaborator review, push the branch directly with 'git push' and open a draft PR via the GitHub UI." >&2
+        exit 1
     fi
 fi
 ```
