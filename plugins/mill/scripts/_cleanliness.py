@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 
 import _pygit2_util
+import _subprocess_util
 
 # Junction directory names that are gitignored and should be excluded from scope violations
 _JUNCTION_SKIP_SET = frozenset({".active", ".portals", ".wiki", ".others"})
@@ -69,3 +70,68 @@ def compute_scope_violations(worktree: Path) -> list[str]:
                 if first_segment not in _JUNCTION_SKIP_SET:
                     violations.append(path)
     return sorted(violations)
+
+
+def _parent_diff_names(worktree: Path, parent_branch: str) -> list[str]:
+    """Return file paths changed by the task vs the parent branch.
+
+    Runs `git diff --name-only <parent_branch>...HEAD` and returns the
+    parsed output as a list of relative paths.
+    """
+    result = _subprocess_util.run(
+        ["git", "diff", "--name-only", f"{parent_branch}...HEAD"],
+        cwd=worktree,
+    )
+    if result.returncode != 0:
+        return []
+    return [line for line in result.stdout.splitlines() if line]
+
+
+def _filter_to_task_scope(porcelain_lines: list[str], task_dir: Path, owned_paths: set[str]) -> list[str]:
+    """Filter porcelain status lines to paths within task scope.
+
+    Task scope = paths under task_dir (worktree-relative) OR in owned_paths.
+    Extracts path via line[3:] (skips 2-char status + space), checks membership.
+
+    Args:
+        porcelain_lines: List of porcelain-format status strings.
+        task_dir: Worktree-relative path to the task directory.
+        owned_paths: Set of worktree-relative paths changed by the task.
+
+    Returns:
+        Sorted subset of porcelain lines whose path is in scope.
+    """
+    task_dir_str = task_dir.as_posix()
+    in_scope = []
+    for line in porcelain_lines:
+        path = line[3:]  # strip "XY " prefix
+        # Check if path is under task_dir or in the parent-diff set
+        if path.startswith(task_dir_str + "/") or path == task_dir_str or path in owned_paths:
+            in_scope.append(line)
+    return sorted(in_scope)
+
+
+def compute_terminal_dirt(worktree: Path, task_dir: Path, parent_branch: str) -> list[str]:
+    """Return in-scope dirty files at task completion.
+
+    Task scope = the task_dir subtree union paths changed by the task's own
+    commits vs the parent branch. Runs git status --porcelain --untracked-files=no
+    and filters the result to only include files within the task's owned scope.
+
+    Args:
+        worktree: Path to the task worktree.
+        task_dir: Worktree-relative path to the task directory (e.g., Path("_mill")).
+        parent_branch: Name of the parent branch (e.g., "main").
+
+    Returns:
+        Sorted list of dirty files within the task scope, in porcelain format.
+    """
+    # Get current dirt
+    lines = _pygit2_util.status_porcelain(worktree, include_untracked=False)
+
+    # Get paths changed by the task
+    parent_diff_names = _parent_diff_names(worktree, parent_branch)
+    owned_paths = set(parent_diff_names)
+
+    # Filter to task scope
+    return _filter_to_task_scope(lines, task_dir, owned_paths)
