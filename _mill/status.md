@@ -34,7 +34,9 @@ implementing  '2026-06-15T11:19:04Z'
 ```yaml
 batches:
   - name: review-warning-ascii
-    state: pending
+    state: running
+    implementer_session: bef00b5f-04ed-4fe4-a8b6-f2b94a474bcd
+    start_sha: ed8daceeed6c8d425ace1ca8d1e6ed5d8b22364a
   - name: wiki-sync-robustness
     state: pending
   - name: terminal-cleanliness-gate
