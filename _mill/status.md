@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-fixing
+phase: holistic-reviewing
 slug: mill-infra-and-path-fixes
 branch: hanf/mill-infra-and-path-fixes
 plan: _mill/plan
@@ -34,6 +34,7 @@ approved-stacked-finalize-cleanup  '2026-06-15T11:48:49Z'
 approved-config-repo-layer  '2026-06-15T11:52:00Z'
 holistic-reviewing  '2026-06-15T11:52:27Z'
 holistic-fixing  '2026-06-15T11:55:41Z'
+holistic-reviewing  '2026-06-15T12:05:01Z'
 ```
 
 ## Batches
