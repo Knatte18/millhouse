@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: discussed
 slug: implement-finalize-session-id
 branch: hanf/implement-finalize-session-id
 plan: null
@@ -15,4 +15,5 @@ task_description: |
 
 ```text
 discussing  '2026-06-15T10:24:16Z'
+discussed  '2026-06-15T10:38:38Z'
 ```
