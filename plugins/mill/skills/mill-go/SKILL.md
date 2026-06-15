@@ -647,11 +647,18 @@ For each round `H` from 1 to `max_holistic_rounds`:
 
 ## Handoff
 
-**Terminal cleanliness gate.** Run `git -C <worktree> status --porcelain --untracked-files=no`. If the output is non-empty (any tracked files have uncommitted modifications), halt with:
-`BLOCKED: dirty working tree at task completion -- <N> file(s) uncommitted: <file-list>. Commit or discard before proceeding.`
-where `<N>` is the count of dirty lines and `<file-list>` is the filenames extracted from the porcelain output. Do NOT set `phase: done` when the gate fires; the task remains in its current phase so the operator can inspect and fix.
+**Terminal cleanliness gate.** Resolve the parent branch and check for in-scope uncommitted changes:
 
-If the output is empty, proceed normally.
+```python
+parent_branch = _parent_branch.resolve(status_path, interactive=False)
+in_scope_dirt = _cleanliness.compute_terminal_dirt(worktree_root, task_dir, parent_branch)
+```
+
+If `in_scope_dirt` is non-empty, halt with:
+`BLOCKED: dirty working tree at task completion -- <N> file(s) uncommitted: <file-list>. Commit or discard before proceeding.`
+where `<N>` is the count of dirty lines and `<file-list>` is the filenames extracted from the in-scope dirt. Do NOT set `phase: done` when the gate fires; the task remains in its current phase so the operator can inspect and fix.
+
+If the list is empty, proceed normally.
 
 1. `_status.append_phase(status_path, "done", _timestamp.now_utc_iso())`. Commit on the task branch: `git -C <worktree> add <status_path> _mill/briefs/ && git -C <worktree> commit -m "mill-go: done {slug}"`.
 
