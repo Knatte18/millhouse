@@ -28,5 +28,7 @@ implementing  '2026-06-15T13:00:40Z'
 ```yaml
 batches:
   - name: fold-guard-allowlist
-    state: pending
+    state: running
+    implementer_session: 7cbe5aa1-3e10-4b1b-944c-659dfed85a27
+    start_sha: 28d571b7bce46672dc5f4e5d97000caab3b791e7
 ```
