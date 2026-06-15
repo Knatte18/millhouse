@@ -3,7 +3,7 @@
 ```yaml
 task: "Fix mill-ghissues-to-tasks to refuse fold-ins into done and deferred tasks"
 slug: "ghissues-skill-fold-guard"
-approved: false
+approved: true
 started: "20260615-125443"
 parent: "main"
 root: ""
