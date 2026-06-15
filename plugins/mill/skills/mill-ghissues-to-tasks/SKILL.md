@@ -56,7 +56,7 @@ For each grouped **new** task, draft:
 - A title (free text).
 - A brief theme statement (1–2 sentences).
 
-For each fold-in candidate, the locked-phase guard applies: from the already-loaded task list, find the task with matching slug and inspect its `status`. When the status is in the locked set `{"active", "ready-to-merge", "pr-pending"}`, refuse the fold for those issues — route them to a new task or skip instead. The locked set `{"active", "ready-to-merge", "pr-pending"}` is the source of truth.
+For each fold-in candidate, the unclaimed-only guard applies: from the already-loaded task list, find the task with matching slug and inspect its `status` and `deferred` flag. A fold target must be unclaimed (`status is None` and not `deferred`); any task with a concrete status or `deferred=True` is routed to a new task or skipped.
 
 **There is NO per-issue decision menu and NO per-issue prompting.** The assistant makes all grouping decisions at once and presents them in Step 4.
 
@@ -103,9 +103,9 @@ Print a one-line summary to chat + the path. The operator replies `approve` or g
        # Stale or typo'd target — report error for this fold-in and continue
        print('ERROR: target task <target_slug> not found')
    else:
-       # Re-check locked-phase guard
-       if task['status'] in {'active', 'ready-to-merge', 'pr-pending'}:
-           print('ERROR: Cannot fold into <target_slug>: task is locked')
+       # Re-check unclaimed-only guard
+       if task.get('status') is not None or task.get('deferred', False):
+           print('ERROR: Cannot fold into <target_slug>: task is not unclaimed')
        else:
            new_body = (task['body'] or '') + '\n- Sources: #N — <issue title>'
            _client.upsert_task(<wiki_path>, '<target_slug>', body=new_body)
@@ -149,6 +149,6 @@ Revision applied.
 - **Skipped issues are untouched** — no comment, no label, no close. Forgetting is better than lingering "tracked" state.
 - **Close only on approval + actual write** — never close an issue before the task is committed to the wiki.
 - **Pointer comment is the invariant** — every closed issue gets a reference comment so someone browsing closed issues later can find where it went. New/grouped-task issues close with `Consolidated into wiki task: <slug>`; fold-in issues close with `Folded into wiki task: <slug>`.
-- **Locked-phase guard** — fold targets must be in an unlocked phase. The locked set `{"active", "ready-to-merge", "pr-pending"}` is the source of truth; issues destined for locked tasks are routed to a new task or skipped instead.
+- **Unclaimed-only guard** — fold targets must be unclaimed (`status is None` and not `deferred`). Any claimed, terminal, blocked, or deferred task is routed to a new task or skipped instead.
 - **Fold-in format** — each fold-in appends a `- Sources: #N — <issue title>` bullet via `_client.get_task` + `_client.upsert_task(..., body=...)`. The Home.md output is identical to `/mill-fold`.
 - **Close-comment strings** — new/grouped-task → `Consolidated into wiki task: <slug>`; fold-in → `Folded into wiki task: <slug>` (byte-identical to `/mill-fold`'s comment).

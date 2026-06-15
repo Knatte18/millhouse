@@ -1,11 +1,11 @@
 ---
 name: mill-fold
-description: Fold a GitHub issue or scope item into an existing Home.md backlog task. Hard-refuses locked-phase targets ([active], [ready-to-merge], [pr-pending]) so a frozen plan is never invalidated by silent scope creep.
+description: Fold a GitHub issue or scope item into an existing Home.md backlog task. Accepts only unclaimed tasks (status is None AND not deferred); claimed, terminal, blocked, or deferred tasks reject fold-ins.
 ---
 
 # mill-fold
 
-A thin skill wrapping `millpy-fold.py`. Use it when the user wants to attach a GitHub issue or a free-form scope note to an existing backlog task in Home.md. The script acquires the wiki lock, appends one bullet to the target task's body, commits and pushes, then (GH path only) closes the issue with comment `"Folded into wiki task: <slug>"`. Locked-phase targets (`[active]`, `[ready-to-merge]`, `[pr-pending]`) are refused outright — the plan was frozen at spawn time and silent scope additions would invalidate it. The locked phase set is `{"active", "ready-to-merge", "pr-pending"}` — inline this set in operator instructions; the locked-phase policy is authoritative.
+A thin skill wrapping `millpy-fold.py`. Use it when the user wants to attach a GitHub issue or a free-form scope note to an existing backlog task in Home.md. The script acquires the wiki lock, appends one bullet to the target task's body, commits and pushes, then (GH path only) closes the issue with comment `"Folded into wiki task: <slug>"`. Fold targets must be unclaimed: `status is None AND not deferred`. Any claimed, terminal, blocked, or deferred task rejects the fold — the allowlist auto-refuses any future status value, which is safe in the event of silent GitHub issue loss on refused folds.
 
 ## When the user invokes me
 
@@ -26,7 +26,7 @@ Typical triggers:
 
 ### `/mill-fold <target-slug> --issue <N>` — GH issue
 
-1. The script parses Home.md, runs the phase guard, then calls `_gh_issues.fetch_one(N)` to retrieve the issue title.
+1. The script parses Home.md, runs the unclaimed-only guard, then calls `_gh_issues.fetch_one(N)` to retrieve the issue title.
 2. It prints the draft Sources line and (when stdin is a tty) prompts: `1) Use as-is (Recommended) / 2) Edit / 3) Abort`.
 3. On confirmation it appends `- Sources: #N — <title>` to the target body.
 4. After the daemon commit/push succeeds (daemon auto-commits on each `_client` mutation) it calls `_gh_issues.close_with_comment(N, 'Folded into wiki task: <slug>', git_root=...)`.
@@ -34,19 +34,19 @@ Typical triggers:
 
 ### `/mill-fold <target-slug> --scope "<text>"` — scope item
 
-1. The script parses Home.md and runs the phase guard.
+1. The script parses Home.md and runs the unclaimed-only guard.
 2. It appends `- Folded in: <text>` to the target body.
 3. No GitHub side-effects.
 
-## Locked-phase guard
+## Unclaimed-only guard
 
-Tasks marked `[active]`, `[ready-to-merge]`, or `[pr-pending]` reject the fold with `SystemExit(1)`:
+Only unclaimed tasks (`status is None` and not `deferred`) accept folds. Any other task state rejects the fold with `SystemExit(1)`:
 
 ```
-Cannot fold into '<slug>': task is [<phase>]. Plan is frozen — scope additions silently invalidate it.
+Cannot fold into '<slug>': task is not unclaimed (status: <status-or-'deferred'>). Only unclaimed backlog tasks accept fold-ins.
 ```
 
-There is no `--force` flag. The rationale: mill-spawn commits a frozen plan at the time a task enters `[active]`; appending scope after that point silently invalidates the plan that the implementer is following. Pick a different action: skip the issue, handle it in a follow-up task, or wait until the current task merges. The locked phase set `{"active", "ready-to-merge", "pr-pending"}` is the source of truth — never duplicate it in operator instructions or scripts.
+There is no `--force` flag. The rationale: folding closes the source GitHub issue with a pointer comment; folding into a claimed/terminal/blocked/deferred task silently loses the issue. The allowlist predicate — only unclaimed tasks — ensures that adding any new status value in the future will auto-refuse, which is safe in the event of silent issue loss.
 
 ## How to call the script
 
@@ -117,7 +117,7 @@ PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" `
 ```
 
 ```
-Cannot fold into 'mill-fold': task is [active]. Plan is frozen — scope additions silently invalidate it.
+Cannot fold into 'mill-fold': task is not unclaimed (status: 'active'). Only unclaimed backlog tasks accept fold-ins.
 ```
 
 Exit code 1. No Home.md change.
@@ -127,7 +127,7 @@ Exit code 1. No Home.md change.
 | Script exit message | Operator meaning |
 |---|---|
 | `Slug 'X' not found in Home.md.` | The target slug doesn't exist in Home.md. Check spelling or run `/mill-add` first. |
-| `Cannot fold into 'X': task is [Y]. Plan is frozen — scope additions silently invalidate it.` | Target is in a locked phase. Wait until the task merges, or pick a different target. |
+| `Cannot fold into 'X': task is not unclaimed (status: <Y>). Only unclaimed backlog tasks accept fold-ins.` | Target is not unclaimed. Route the issue to a new task, handle it in a follow-up task, or skip it. |
 | `issue #N is CLOSED; only OPEN issues can be folded` | The GH issue is already closed. No fold needed — it may have been handled elsewhere. |
 | `gh issue view failed ...` | `gh` CLI error (network, auth, 404). Run `gh auth status` and retry. |
 

@@ -18,7 +18,7 @@ os.environ.setdefault("WIKI_DAEMON_INPROCESS", "1")
 
 import _safe_rmtree  # noqa: E402
 import _gh_issues  # noqa: E402
-from wiki import _client as wiki, LOCKED_FOLD_PHASES, WikiPushError  # noqa: E402
+from wiki import _client as wiki, WikiPushError  # noqa: E402
 
 millpy_fold = importlib.import_module("millpy-fold")
 
@@ -173,16 +173,6 @@ def _suppress_stdin_isatty():
 # ---------------------------------------------------------------------------
 
 def main() -> int:
-    # --- LOCKED_FOLD_PHASES constant ---
-    try:
-        assert LOCKED_FOLD_PHASES == ("active", "ready-to-merge", "pr-pending"), (
-            f"Got {LOCKED_FOLD_PHASES!r}"
-        )
-        print("PASS: LOCKED_FOLD_PHASES has the correct value")
-    except (AssertionError, Exception) as exc:
-        print(f"FAIL: LOCKED_FOLD_PHASES constant: {exc}")
-        return 1
-
     # --- append to task body via daemon round-trip ---
     try:
         home_content = "# Tasks\n\n## Spawn Ready Task\n[spawn-ready]\n\nInitial body.\n\n## Active Task\n[active-task]\n\nOther task.\n"
@@ -408,7 +398,7 @@ def main() -> int:
         print(f"FAIL: spawn-ready target accepts scope fold: {exc}")
         return 1
 
-    # --- done phase accepts fold ---
+    # --- done phase refused ---
     try:
         home_content = "# Tasks\n\n## Done Task\n[done-task] [done]\n\nBody.\n"
         td = _setup_tempfile_wiki(
@@ -420,20 +410,25 @@ def main() -> int:
         wiki_path = Path(td.name)
         orig_rg, orig_rwp = _patch_resolve_paths(wiki_path)
         try:
-            rc = millpy_fold.main(["done-task", "--scope", "done fold"])
-            assert rc == 0, f"Expected return 0, got {rc}"
+            pre_home = (wiki_path / "Home.md").read_text(encoding="utf-8")
+            raised = False
+            try:
+                millpy_fold.main(["done-task", "--scope", "done fold"])
+            except SystemExit:
+                raised = True
+            assert raised, "Expected SystemExit for done phase"
             post_home = (wiki_path / "Home.md").read_text(encoding="utf-8")
-            assert "- Folded in: done fold" in post_home, "Fold bullet not found in Home.md"
-            print("PASS: done phase accepts fold")
+            assert post_home == pre_home, "Home.md was mutated despite done phase guard"
+            print("PASS: done phase refused")
         finally:
             millpy_fold.resolve_git_root = orig_rg
             millpy_fold.resolve_wiki_path = orig_rwp
             td.cleanup()
     except (AssertionError, Exception) as exc:
-        print(f"FAIL: done phase accepts fold: {exc}")
+        print(f"FAIL: done phase refused: {exc}")
         return 1
 
-    # --- abandoned phase accepts fold ---
+    # --- abandoned phase refused ---
     try:
         home_content = "# Tasks\n\n## Abandoned Task\n[abandoned-task] [abandoned]\n\nBody.\n"
         td = _setup_tempfile_wiki(
@@ -445,17 +440,145 @@ def main() -> int:
         wiki_path = Path(td.name)
         orig_rg, orig_rwp = _patch_resolve_paths(wiki_path)
         try:
-            rc = millpy_fold.main(["abandoned-task", "--scope", "abandoned fold"])
-            assert rc == 0, f"Expected return 0, got {rc}"
+            pre_home = (wiki_path / "Home.md").read_text(encoding="utf-8")
+            raised = False
+            try:
+                millpy_fold.main(["abandoned-task", "--scope", "abandoned fold"])
+            except SystemExit:
+                raised = True
+            assert raised, "Expected SystemExit for abandoned phase"
             post_home = (wiki_path / "Home.md").read_text(encoding="utf-8")
-            assert "- Folded in: abandoned fold" in post_home, "Fold bullet not found in Home.md"
-            print("PASS: abandoned phase accepts fold")
+            assert post_home == pre_home, "Home.md was mutated despite abandoned phase guard"
+            print("PASS: abandoned phase refused")
         finally:
             millpy_fold.resolve_git_root = orig_rg
             millpy_fold.resolve_wiki_path = orig_rwp
             td.cleanup()
     except (AssertionError, Exception) as exc:
-        print(f"FAIL: abandoned phase accepts fold: {exc}")
+        print(f"FAIL: abandoned phase refused: {exc}")
+        return 1
+
+    # --- unclaimed backlog accepts fold ---
+    try:
+        home_content = "# Tasks\n\n## Backlog Task\n[backlog-task]\n\nBacklog body.\n"
+        td = _setup_tempfile_wiki(
+            home_content,
+            tasks=[
+                {"slug": "backlog-task", "title": "Backlog Task", "brief": "Backlog body.", "status": None},
+            ],
+        )
+        wiki_path = Path(td.name)
+        orig_rg, orig_rwp = _patch_resolve_paths(wiki_path)
+        try:
+            rc = millpy_fold.main(["backlog-task", "--scope", "unclaimed fold"])
+            assert rc == 0, f"Expected return 0, got {rc}"
+            post_home = (wiki_path / "Home.md").read_text(encoding="utf-8")
+            assert "- Folded in: unclaimed fold" in post_home, "Fold bullet not found in Home.md"
+            print("PASS: unclaimed backlog accepts fold")
+        finally:
+            millpy_fold.resolve_git_root = orig_rg
+            millpy_fold.resolve_wiki_path = orig_rwp
+            td.cleanup()
+    except (AssertionError, Exception) as exc:
+        print(f"FAIL: unclaimed backlog accepts fold: {exc}")
+        return 1
+
+    # --- blocked status refused ---
+    try:
+        home_content = "# Tasks\n\n## Blocked Task\n[blocked-task] [blocked]\n\nBody.\n"
+        td = _setup_tempfile_wiki(
+            home_content,
+            tasks=[
+                {"slug": "blocked-task", "title": "Blocked Task", "brief": "Body.", "status": "blocked"},
+            ],
+        )
+        wiki_path = Path(td.name)
+        orig_rg, orig_rwp = _patch_resolve_paths(wiki_path)
+        try:
+            pre_home = (wiki_path / "Home.md").read_text(encoding="utf-8")
+            raised = False
+            try:
+                millpy_fold.main(["blocked-task", "--scope", "blocked fold"])
+            except SystemExit:
+                raised = True
+            assert raised, "Expected SystemExit for blocked status"
+            post_home = (wiki_path / "Home.md").read_text(encoding="utf-8")
+            assert post_home == pre_home, "Home.md was mutated despite blocked status guard"
+            print("PASS: blocked status refused")
+        finally:
+            millpy_fold.resolve_git_root = orig_rg
+            millpy_fold.resolve_wiki_path = orig_rwp
+            td.cleanup()
+    except (AssertionError, Exception) as exc:
+        print(f"FAIL: blocked status refused: {exc}")
+        return 1
+
+    # --- deferred task refused ---
+    try:
+        home_content = "# Tasks\n\n## Deferred Task\n[deferred-task]\n\nBody.\n"
+        td = _setup_tempfile_wiki(
+            home_content,
+            tasks=[
+                {"slug": "deferred-task", "title": "Deferred Task", "brief": "Body.", "status": None, "deferred": True},
+            ],
+        )
+        wiki_path = Path(td.name)
+        orig_rg, orig_rwp = _patch_resolve_paths(wiki_path)
+        try:
+            pre_home = (wiki_path / "Home.md").read_text(encoding="utf-8")
+            raised = False
+            try:
+                millpy_fold.main(["deferred-task", "--scope", "deferred fold"])
+            except SystemExit:
+                raised = True
+            assert raised, "Expected SystemExit for deferred task"
+            post_home = (wiki_path / "Home.md").read_text(encoding="utf-8")
+            assert post_home == pre_home, "Home.md was mutated despite deferred guard"
+            print("PASS: deferred task refused")
+        finally:
+            millpy_fold.resolve_git_root = orig_rg
+            millpy_fold.resolve_wiki_path = orig_rwp
+            td.cleanup()
+    except (AssertionError, Exception) as exc:
+        print(f"FAIL: deferred task refused: {exc}")
+        return 1
+
+    # --- --issue path against refused target raises SystemExit and skips GH close ---
+    try:
+        home_content = "# Tasks\n\n## Done Task\n[done-task] [done]\n\nBody.\n"
+        td = _setup_tempfile_wiki(
+            home_content,
+            tasks=[
+                {"slug": "done-task", "title": "Done Task", "brief": "Body.", "status": "done"},
+            ],
+        )
+        wiki_path = Path(td.name)
+        orig_rg, orig_rwp = _patch_resolve_paths(wiki_path)
+        close_fn, captured_calls = _make_fake_close_with_comment()
+        orig_isatty = _suppress_stdin_isatty()
+        try:
+            pre_home = (wiki_path / "Home.md").read_text(encoding="utf-8")
+            raised = False
+            try:
+                millpy_fold.main(
+                    ["done-task", "--issue", "99"],
+                    _fetch_one=_make_fake_fetch_one(state="OPEN", title="issue X", number=99),
+                    _close_with_comment=close_fn,
+                )
+            except SystemExit:
+                raised = True
+            assert raised, "Expected SystemExit for --issue fold into done task"
+            post_home = (wiki_path / "Home.md").read_text(encoding="utf-8")
+            assert post_home == pre_home, "Home.md was mutated despite done phase guard"
+            assert captured_calls == [], f"Expected no GH close calls for refused --issue fold, got {captured_calls}"
+            print("PASS: --issue path against refused target raises SystemExit and skips GH close")
+        finally:
+            millpy_fold.resolve_git_root = orig_rg
+            millpy_fold.resolve_wiki_path = orig_rwp
+            sys.stdin.isatty = orig_isatty
+            td.cleanup()
+    except (AssertionError, Exception) as exc:
+        print(f"FAIL: --issue path against refused target raises SystemExit and skips GH close: {exc}")
         return 1
 
     # --- missing slug errors ---
