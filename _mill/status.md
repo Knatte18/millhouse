@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-approved
+phase: done
 slug: batch-name-and-skill-loading
 branch: hanf/batch-name-and-skill-loading
 plan: _mill/plan
@@ -27,6 +27,7 @@ approved-skill-injection  '2026-06-15T13:20:03Z'
 holistic-reviewing  '2026-06-15T13:20:33Z'
 holistic-fixing  '2026-06-15T13:23:06Z'
 holistic-approved  '2026-06-15T13:24:59Z'
+done  '2026-06-15T13:25:23Z'
 ```
 
 ## Batches
