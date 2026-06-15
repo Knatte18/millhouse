@@ -9,10 +9,14 @@ with no real LLM, no network calls. Covers:
 """
 from __future__ import annotations
 
+import io
+import json
 import os
+import runpy
 import subprocess
 import sys
 from pathlib import Path
+from unittest.mock import patch
 
 HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
@@ -1229,6 +1233,169 @@ def main() -> int:
         except Exception as exc:
             errors += 1
             print(f"FAIL test23 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
+    # Test 24 — prepare-stage validator gate with errors (non-existent-path ref)
+    # Error plan has a Context: ref to nonexistent file; validator should reject
+    # it with exit 1, JSON errors envelope, and no brief file written.
+    # ------------------------------------------------------------------
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        batch_specs = [
+            ("alpha", "01-alpha.md", ["nonexistent/path.py"], []),
+        ]
+        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(
+            tmpdir, batch_specs, skip_create={"nonexistent/path.py"}
+        )
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            # Prepare stage should run validator gate and reject on non-existent-path.
+            # Capture stdout and check for JSON errors envelope.
+            millpy_script = HUB / "plugins" / "mill" / "scripts" / "millpy-review-plan.py"
+
+            # Monkeypatch sys.argv and capture stdout to invoke main()
+            old_argv = sys.argv
+            old_stdout = sys.stdout
+            sys.argv = ["millpy-review-plan.py", "--stage", "prepare", "--holistic-only", "--slug", SLUG]
+            try:
+                captured_output = io.StringIO()
+                sys.stdout = captured_output
+
+                # Use runpy to execute the script in a controlled way
+                # We'll use execfile-style exec instead to avoid complications
+                import importlib.util
+                spec = importlib.util.spec_from_file_location(
+                    "millpy_review_plan_test",
+                    str(millpy_script)
+                )
+                mod = importlib.util.module_from_spec(spec)
+
+                # Capture the return value from main()
+                exit_code = None
+                try:
+                    spec.loader.exec_module(mod)
+                    # The script runs __name__ == "__main__" block, which calls sys.exit(main())
+                    # We need to intercept that. Let's just call main() directly instead.
+                    exit_code = mod.main(["--stage", "prepare", "--holistic-only", "--slug", SLUG])
+                except SystemExit as e:
+                    exit_code = e.code
+
+                output_text = captured_output.getvalue()
+
+                # Verify exit code is 1
+                assert exit_code == 1, f"expected exit 1 for validator error, got {exit_code}"
+
+                # Parse output JSON
+                try:
+                    output_json = json.loads(output_text.strip())
+                except json.JSONDecodeError as e:
+                    raise AssertionError(f"expected JSON output for error envelope, got: {output_text!r}")
+
+                # Verify errors and summary keys are present
+                assert "errors" in output_json, f"expected 'errors' key in {output_json.keys()}"
+                assert "summary" in output_json, f"expected 'summary' key in {output_json.keys()}"
+                assert len(output_json["errors"]) > 0, f"expected errors list to be non-empty"
+
+                # Verify no brief file was written
+                briefs_dir = project_root / "_mill" / "briefs"
+                if briefs_dir.exists():
+                    brief_files = list(briefs_dir.glob("*"))
+                    assert len(brief_files) == 0, (
+                        f"expected no brief files written on validator error, "
+                        f"found {len(brief_files)}: {brief_files}"
+                    )
+
+                print("PASS test24: prepare-stage validator gate rejects error plan (no brief, exit 1, errors JSON)")
+            finally:
+                sys.argv = old_argv
+                sys.stdout = old_stdout
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test24: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test24 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
+    # Test 25 — prepare-stage validator gate with clean plan
+    # Clean plan should pass validation and produce prepare envelope with
+    # brief file written and exit 0.
+    # ------------------------------------------------------------------
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        batch_specs = [
+            ("alpha", "01-alpha.md", ["src/a.py"], []),
+        ]
+        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(tmpdir, batch_specs)
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            millpy_script = HUB / "plugins" / "mill" / "scripts" / "millpy-review-plan.py"
+
+            old_argv = sys.argv
+            old_stdout = sys.stdout
+            sys.argv = ["millpy-review-plan.py", "--stage", "prepare", "--holistic-only", "--slug", SLUG]
+            try:
+                captured_output = io.StringIO()
+                sys.stdout = captured_output
+
+                import importlib.util
+                spec = importlib.util.spec_from_file_location(
+                    "millpy_review_plan_test_clean",
+                    str(millpy_script)
+                )
+                mod = importlib.util.module_from_spec(spec)
+
+                exit_code = None
+                try:
+                    spec.loader.exec_module(mod)
+                    exit_code = mod.main(["--stage", "prepare", "--holistic-only", "--slug", SLUG])
+                except SystemExit as e:
+                    exit_code = e.code
+
+                output_text = captured_output.getvalue()
+
+                # Verify exit code is 0
+                assert exit_code == 0, f"expected exit 0 for clean plan, got {exit_code}"
+
+                # Parse output JSON (prepare envelope)
+                try:
+                    output_json = json.loads(output_text.strip())
+                except json.JSONDecodeError as e:
+                    raise AssertionError(f"expected JSON prepare envelope, got: {output_text!r}")
+
+                # Verify prepare envelope has stage: "prepare" and brief_path
+                assert output_json.get("stage") == "prepare", (
+                    f"expected stage='prepare', got {output_json.get('stage')!r}"
+                )
+                assert "brief_path" in output_json, (
+                    f"expected 'brief_path' key in prepare envelope, got {output_json.keys()}"
+                )
+
+                # Verify errors key is NOT present (distinguishable from error envelope)
+                assert "errors" not in output_json, (
+                    f"expected no 'errors' key in prepare envelope, got {output_json.keys()}"
+                )
+
+                # Verify brief file actually exists
+                brief_path = Path(output_json["brief_path"])
+                assert brief_path.exists(), (
+                    f"expected brief file to exist at {brief_path}"
+                )
+
+                print("PASS test25: prepare-stage validator gate accepts clean plan (exit 0, brief written)")
+            finally:
+                sys.argv = old_argv
+                sys.stdout = old_stdout
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test25: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test25 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
         finally:
             os.chdir(orig_dir)
 
