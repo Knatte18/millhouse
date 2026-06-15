@@ -30,7 +30,9 @@ implementing  '2026-06-15T11:44:17Z'
 ```yaml
 batches:
   - name: ref-path-resolution
-    state: pending
+    state: running
+    implementer_session: c5f9a08a-43a9-4562-a8e6-2f1fd3b5624c
+    start_sha: 08e2b2d683edb920cd1176546ec73153cc200248
   - name: validator-git-root-threading
     state: pending
   - name: review-plan-cli
