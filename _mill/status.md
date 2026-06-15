@@ -42,7 +42,9 @@ batches:
     start_sha: 3ee9b43121c340c373e608bc1735ddf24fa06789
     commit_sha: eb3fe9237d022e1254a94f75d6d5ffe37a1570c6
   - name: review-plan-cli
-    state: pending
+    state: running
+    implementer_session: a24ffdee-2ca2-434f-bbb7-5be523053f36
+    start_sha: afa44c3cf676342a9084436d7cfebb118dfdd411
   - name: skill-doc-update
     state: pending
 ```
