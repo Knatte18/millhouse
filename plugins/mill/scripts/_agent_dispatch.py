@@ -19,6 +19,10 @@ write_brief(briefs_dir: Path, role: str, scope: str, round_n: int, prompt_text: 
     filename safety (colons, slashes, etc. become hyphens). Returns the path
     of the written file. Example role: "implement".
 
+language_skills_directive(batch_file: Path) -> str
+    Detect languages from a batch file's touched files (Edits/Creates only)
+    and return a markdown block naming the required language skills plus code-quality.
+
 SUBAGENT_REVIEWER, SUBAGENT_IMPLEMENTER
     String constants for subagent type names.
 """
@@ -27,11 +31,13 @@ from __future__ import annotations
 from pathlib import Path
 
 import _paths
+import _review_common
 
 __all__ = [
     "resolve_dispatch_mode",
     "model_to_tier",
     "write_brief",
+    "language_skills_directive",
     "SUBAGENT_REVIEWER",
     "SUBAGENT_IMPLEMENTER",
 ]
@@ -112,3 +118,56 @@ def write_brief(
     brief_path = briefs_dir / f"{role}-{sanitized_scope}-r{round_n}.md"
     brief_path.write_text(prompt_text, encoding="utf-8")
     return brief_path
+
+
+def language_skills_directive(batch_file: Path) -> str:
+    """Detect languages from a batch's touched files and return a skills block.
+
+    Reads the batch file's Edits and Creates fields (not Context) and detects
+    languages by file suffix. For each detected language, names the matching
+    {lang}-comments and {lang}-testing skills plus code-quality for all.
+
+    Args:
+        batch_file: Path to the batch file.
+
+    Returns:
+        Markdown block starting with "## Required skills" naming the skills.
+        Block includes prose specifying which languages are touched.
+    """
+    # Get only touched files (Edits and Creates, not Context)
+    touched_paths = _review_common.parse_batch_refs(
+        batch_file, fields=("Edits", "Creates")
+    )
+
+    # Language mapping: extension -> (human name, skill prefix)
+    LANG_MAP = {
+        ".go": ("Go", "golang"),
+        ".py": ("Python", "python"),
+        ".cs": ("C#", "csharp"),
+    }
+
+    # Detect languages by file suffix, preserving first-seen order
+    detected_langs: list[tuple[str, str]] = []
+    seen_langs: set[str] = set()
+    for path_str in touched_paths:
+        for ext, (human_name, prefix) in LANG_MAP.items():
+            if path_str.lower().endswith(ext):
+                if human_name not in seen_langs:
+                    detected_langs.append((human_name, prefix))
+                    seen_langs.add(human_name)
+                break
+
+    # Build skills list
+    skills = ["`code-quality`"]
+    for _, prefix in detected_langs:
+        skills.append(f"`{prefix}-comments`")
+        skills.append(f"`{prefix}-testing`")
+
+    # Build prose
+    if detected_langs:
+        lang_list = ", ".join(h for h, _ in detected_langs)
+        prose = f"This batch touches {lang_list} files. Before editing any file, load and follow these skills (non-optional): {', '.join(skills)}"
+    else:
+        prose = f"Before editing any file, load and follow this skill (non-optional): {skills[0]}"
+
+    return f"## Required skills\n\n{prose}"
