@@ -3,7 +3,7 @@
 ```yaml
 task: "Fix millpy-implement.py finalize to accept (or not require) --session-id/--start-sha"
 slug: implement-finalize-session-id
-approved: false
+approved: true
 started: "20260615-104103"
 parent: main
 root: ""

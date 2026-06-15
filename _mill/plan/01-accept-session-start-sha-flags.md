@@ -17,16 +17,17 @@ SKILL.md step 5, lines 127-129), so agent-mode implement batch finalize stops dy
 `error: unrecognized arguments: --session-id` (exit 2). The flags are accepted-but-ignored: the
 `--stage finalize` branch continues to read `start_sha` and `implementer_session` from `status.md`,
 unchanged. The batch is one unit because the two cards (argparse addition + its unit test) share the
-same two files and the same logical change. Card 2 is a TDD card written first to pin the contract;
-Card 3 makes it pass. No external interface is produced for a later batch — this is the whole task.
+same two files and the same logical change. Card 1 is a TDD card written first to pin the contract;
+Card 2 makes it pass. No external interface is produced for a later batch — this is the whole task.
 
 ## Cards
 
-### Card 2: TDD test — finalize accepts the flags and still uses status.md values
+### Card 1: TDD test — finalize accepts the flags and still uses status.md values
 
 - **Context:**
   - `plugins/mill/scripts/millpy-implement.py`
   - `plugins/mill/scripts/_implementer_common.py`
+  - `plugins/mill/scripts/_status.py`
   - `plugins/mill/unit_tests/test-fix-finalize.py`
 - **Edits:**
   - `plugins/mill/unit_tests/test-millpy-implement.py`
@@ -56,7 +57,7 @@ Card 3 makes it pass. No external interface is produced for a later batch — th
   passthrough-assertion style from `test-fix-finalize.py:167-172`.
 - **Commit:** `test(implement): finalize accepts --session-id/--start-sha, still uses status.md`
 
-### Card 3: Add --session-id and --start-sha as accepted-but-ignored argparse flags
+### Card 2: Add --session-id and --start-sha as accepted-but-ignored argparse flags
 
 - **Context:**
   - `plugins/mill/scripts/millpy-fix.py`
