@@ -857,6 +857,147 @@ def test_same_template_path_skips_augmentation() -> None:
     print("PASS load_config -- same/missing template path skips augmentation")
 
 
+def test_container_layout_config_resolution() -> None:
+    """load_config resolves repo-layer config in container/wts layout via primary clone."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        _setup_plugin_template(tmp_path)
+
+        # Create container/wts layout: container is hub_root, primary clone at container/wts/repo
+        container = tmp_path / "container"
+        container.mkdir()
+        wts_dir = container / "wts"
+        wts_dir.mkdir()
+        primary_clone = wts_dir / "primary"
+        primary_clone.mkdir()
+        _git_init(primary_clone)
+
+        # Write mill-config.yaml to primary clone (not to container root)
+        _write_yaml(
+            primary_clone / "mill-config.yaml",
+            "roles:\n  discussion-review:\n    holistic:\n      reviewer: opushigh\n",
+        )
+
+        # Create a linked worktree via git worktree add
+        task_worktree = wts_dir / "task-slug"
+        subprocess.run(
+            ["git", "-C", str(primary_clone), "worktree", "add", str(task_worktree)],
+            check=True,
+            capture_output=True,
+        )
+
+        # Load config with hub_root=container and worktree_root=task_worktree
+        # resolve_main_worktree_root(task_worktree) should resolve to primary_clone
+        with patch.object(_paths, "resolve_wiki_path", side_effect=SystemExit):
+            with patch.object(
+                _config, "resolve_plugin_template_path",
+                return_value=tmp_path / "templates" / "mill-config.yaml"
+            ):
+                cfg = _config.load_config(hub_root=container, worktree_root=task_worktree)
+
+        # Should have resolved primary_clone/mill-config.yaml and found opushigh
+        assert cfg.get("roles", {}).get("discussion-review", {}).get("holistic", {}).get("reviewer") == "opushigh", (
+            f"Should resolve primary clone config; got {cfg.get('roles')!r}"
+        )
+    print("PASS load_config -- container/wts layout: primary clone mill-config.yaml resolved")
+
+
+def test_review_common_load_config_container_layout() -> None:
+    """_review_common.load_config resolves repo-layer config in container/wts layout."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        _setup_plugin_template(tmp_path)
+
+        # Create container/wts layout
+        container = tmp_path / "container"
+        container.mkdir()
+        wts_dir = container / "wts"
+        wts_dir.mkdir()
+        primary_clone = wts_dir / "primary"
+        primary_clone.mkdir()
+        _git_init(primary_clone)
+
+        # Write mill-config.yaml to primary clone
+        _write_yaml(
+            primary_clone / "mill-config.yaml",
+            "roles:\n  code-review:\n    holistic:\n      reviewer: opushigh\n",
+        )
+
+        # Create a linked worktree
+        task_worktree = wts_dir / "task-slug"
+        subprocess.run(
+            ["git", "-C", str(primary_clone), "worktree", "add", str(task_worktree)],
+            check=True,
+            capture_output=True,
+        )
+
+        # Need to import _review_common to test its load_config
+        # (we already imported _config at the top)
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "_review_common",
+            SCRIPTS_DIR / "_review_common.py"
+        )
+        review_common = importlib.util.module_from_spec(spec)
+        sys.modules["_review_common"] = review_common
+        spec.loader.exec_module(review_common)
+
+        # Call _review_common.load_config with hub=container, mill_dir=task_worktree
+        with patch.object(_paths, "resolve_wiki_path", side_effect=SystemExit):
+            with patch.object(
+                review_common, "resolve_plugin_template_path",
+                return_value=tmp_path / "templates" / "mill-config.yaml"
+            ):
+                cfg = review_common.load_config(hub_root=container, mill_dir=task_worktree)
+
+        # Should have resolved the primary clone config
+        assert cfg.get("roles", {}).get("code-review", {}).get("holistic", {}).get("reviewer") == "opushigh", (
+            f"Should resolve primary clone config; got {cfg.get('roles')!r}"
+        )
+    print("PASS _review_common.load_config -- container/wts layout: primary clone config resolved")
+
+
+def test_no_repo_layer_config_anywhere_emits_note() -> None:
+    """load_config emits note to stderr when no repo-layer config found anywhere."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        _setup_plugin_template(tmp_path)
+
+        # Create a simple layout with NO mill-config.yaml anywhere
+        container = tmp_path / "container"
+        container.mkdir()
+        wts_dir = container / "wts"
+        wts_dir.mkdir()
+        primary_clone = wts_dir / "primary"
+        primary_clone.mkdir()
+        _git_init(primary_clone)
+
+        # Create a linked worktree (but NO mill-config.yaml in any location)
+        task_worktree = wts_dir / "task-slug"
+        subprocess.run(
+            ["git", "-C", str(primary_clone), "worktree", "add", str(task_worktree)],
+            check=True,
+            capture_output=True,
+        )
+
+        with patch.object(_paths, "resolve_wiki_path", side_effect=SystemExit):
+            with patch.object(
+                _config, "resolve_plugin_template_path",
+                return_value=tmp_path / "templates" / "mill-config.yaml"
+            ):
+                with patch("sys.stderr", new=io.StringIO()) as mock_stderr:
+                    cfg = _config.load_config(hub_root=container, worktree_root=task_worktree)
+                    stderr_output = mock_stderr.getvalue()
+
+        # Should return template defaults (not raise)
+        assert isinstance(cfg, dict), f"Expected dict, got {type(cfg)!r}"
+        # Should emit the "no repo-layer" note
+        assert "no repo-layer mill-config.yaml found" in stderr_output, (
+            f"Expected 'no repo-layer' note in stderr; got {stderr_output!r}"
+        )
+    print("PASS load_config -- no repo-layer config anywhere: emits note, returns template defaults")
+
+
 def test_dispatch_shim_via_psmux_true_resolves_to_psmux() -> None:
     """dispatch shim converts via_psmux: true to dispatch: psmux."""
     with tempfile.TemporaryDirectory() as tmp:
@@ -1034,6 +1175,9 @@ def main() -> int:
         test_dispatch_shim_explicit_dispatch_wins_over_via_psmux,
         test_via_psmux_does_not_trigger_unknown_key_warning,
         test_dispatch_shim_unknown_value_falls_back_to_subprocess,
+        test_container_layout_config_resolution,
+        test_review_common_load_config_container_layout,
+        test_no_repo_layer_config_anywhere_emits_note,
     ]
     failures: list[str] = []
     for fn in tests:
