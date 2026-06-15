@@ -87,7 +87,7 @@ Public API:
     sanitize_filename_component(name: str) -> str
         Replace Windows-reserved characters in ``name`` with hyphens to ensure
         the result is a valid NTFS filename component. Replaces each of
-        ``: \ / * ? " < > |`` with ``-``. Safe for use in brief filenames,
+        ``: \\ / * ? " < > |`` with ``-``. Safe for use in brief filenames,
         snapshot filenames, and any other filename component construction.
 """
 from __future__ import annotations
