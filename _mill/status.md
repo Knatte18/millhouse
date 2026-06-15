@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-fix-r1
+phase: planned
 slug: implement-finalize-session-id
 branch: hanf/implement-finalize-session-id
 plan: _mill/plan
@@ -18,4 +18,5 @@ discussing  '2026-06-15T10:24:16Z'
 discussed  '2026-06-15T10:38:38Z'
 planning  '2026-06-15T10:41:59Z'
 plan-fix-r1  '2026-06-15T10:44:52Z'
+planned  '2026-06-15T10:45:05Z'
 ```
