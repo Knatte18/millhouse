@@ -8,13 +8,14 @@ sequence, then optionally closes the GitHub issue after the wiki commit succeeds
 and the lock is released.
 
 Operation order (``fold-operation-order`` shared decision):
-    lock → parse → phase-guard → fetch_one (GH path only) → body-append →
+    lock → parse → unclaimed-only-guard → fetch_one (GH path only) → body-append →
     sidebar regen → commit/push → release → optional GH close-with-comment
 
-Phases that reject fold operations (``locked-fold-phases-tuple`` shared decision):
-    LOCKED_FOLD_PHASES = ("active", "ready-to-merge", "pr-pending")
-    The plan is frozen once a task enters these phases; scope additions would
-    silently invalidate it.
+Unclaimed-only fold guard (``unclaimed-only-allowlist`` shared decision):
+    Fold targets must be unclaimed: status is None AND not deferred.
+    Any claimed, terminal, blocked, or deferred task refuses the fold.
+    The allowlist auto-refuses any future status value — safe in the event
+    of silent GitHub issue loss on refused folds.
 
 GitHub issue close-comment string (``close-comment-strings`` shared decision):
     "Folded into wiki task: <slug>"
@@ -27,7 +28,7 @@ Usage:
 
 Exit codes:
     0 — fold appended and pushed (GH close may have soft-failed; see stderr)
-    1 — validation, environment, phase-guard, or GH-state error
+    1 — validation, environment, unclaimed-only-guard, or GH-state error
 """
 from __future__ import annotations
 
@@ -36,7 +37,7 @@ import re
 import sys
 
 import _gh_issues
-from wiki import _client as wiki, LOCKED_FOLD_PHASES
+from wiki import _client as wiki
 from _paths import resolve_git_root, resolve_wiki_path
 
 _SLUG_RE = re.compile(r"^[a-z][a-z0-9-]*$")
@@ -94,11 +95,13 @@ def main(argv: list[str] | None = None, *, _fetch_one=None, _close_with_comment=
     if target_task is None:
         raise SystemExit(f"Slug {target_slug!r} not found in Home.md.")
 
-    phase = target_task["status"]
-    if phase in LOCKED_FOLD_PHASES:
+    status = target_task.get("status")
+    deferred = target_task.get("deferred", False)
+    if status is not None or deferred:
+        blocking_state = "deferred" if status is None and deferred else status
         raise SystemExit(
-            f"Cannot fold into {target_slug!r}: task is [{phase}]. "
-            "Plan is frozen — scope additions silently invalidate it."
+            f"Cannot fold into {target_slug!r}: task is not unclaimed "
+            f"(status: {blocking_state!r}). Only unclaimed backlog tasks accept fold-ins."
         )
 
     if args.issue is not None:
