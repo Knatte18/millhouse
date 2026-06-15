@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-fix-r2
+phase: planned
 slug: review-plan-and-ref-paths
 branch: hanf/review-plan-and-ref-paths
 plan: _mill/plan
@@ -21,4 +21,5 @@ planning  '2026-06-15T11:33:01Z'
 plan-review-r1  '2026-06-15T11:37:54Z'
 plan-fix-r1  '2026-06-15T11:37:54Z'
 plan-fix-r2  '2026-06-15T11:41:02Z'
+planned  '2026-06-15T11:41:16Z'
 ```
