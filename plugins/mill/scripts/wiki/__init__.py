@@ -18,9 +18,6 @@ OP_SHUTDOWN = "shutdown"
 OP_SET_DEPS = "set_deps"
 OP_MIGRATE_DEPS = "migrate_deps"
 
-# Locked fold phases - phases where tasks cannot be folded into other tasks
-LOCKED_FOLD_PHASES = ("active", "ready-to-merge", "pr-pending")
-
 # Response fields
 FIELD_OK = "ok"
 FIELD_CONTENT = "content"
