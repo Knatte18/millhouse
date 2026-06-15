@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-review-warning-ascii
 slug: mill-infra-and-path-fixes
 branch: hanf/mill-infra-and-path-fixes
 plan: _mill/plan
@@ -27,6 +27,7 @@ plan-fix-r3  '2026-06-15T11:04:19Z'
 plan-fix-r4  '2026-06-15T11:10:12Z'
 planned  '2026-06-15T11:11:11Z'
 implementing  '2026-06-15T11:19:04Z'
+approved-review-warning-ascii  '2026-06-15T11:23:48Z'
 ```
 
 ## Batches
@@ -34,9 +35,10 @@ implementing  '2026-06-15T11:19:04Z'
 ```yaml
 batches:
   - name: review-warning-ascii
-    state: running
+    state: approved
     implementer_session: bef00b5f-04ed-4fe4-a8b6-f2b94a474bcd
     start_sha: ed8daceeed6c8d425ace1ca8d1e6ed5d8b22364a
+    commit_sha: ae0140449e3c274e82edad2caa2c1905c71062ee
   - name: wiki-sync-robustness
     state: pending
   - name: terminal-cleanliness-gate
