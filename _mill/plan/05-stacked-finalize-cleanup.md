@@ -54,10 +54,17 @@ layouts) instead of a literal git-root-relative `_mill/status.md`.
   `_finalize_cleanup.base_tracks_task_dir(<worktree>, <base_branch>, <task_dir>)`
   (`base_branch` is resolved in Dispatch). If it returns True, run `git -C
   <worktree> checkout <base_branch> -- <task_dir>` then commit (net `_mill/`
-  diff vs base becomes empty). If False, keep the current `git rm -r <task_dir>`
-  path. Preserve the existing idempotency notes for re-runs (absent task_dir /
-  nothing to commit). State the exact helper signature inline so the implementer
-  needs no exploration.
+  diff vs base becomes empty); note that in this branch `task_dir` remains
+  PRESENT in the worktree (restored to base's version), unlike the rm branch.
+  If False, keep the current `git rm -r <task_dir>` path. Preserve the existing
+  idempotency notes for re-runs (absent task_dir / nothing to commit). State the
+  exact helper signature inline so the implementer needs no exploration. ALSO
+  update Step 5: invoke `/git-pr <base_branch>` with the environment variable
+  `MILL_FINALIZE_PR_CLEANUP=1` set, and replace the existing "it will not halt
+  on its step 1.5 guard because `<task_dir>` is absent" note with: cleanup has
+  already run (task_dir is either absent on the rm path or restored-to-base on
+  the restore path), and `MILL_FINALIZE_PR_CLEANUP=1` tells git-pr's guard to
+  skip its task-branch halt so PR creation proceeds in both cases.
 - **Commit:** `fix(finalize): restore task_dir from base on stacked branches (#482)`
 
 ### Card 13: git-pr guard resolves task_dir via config
@@ -69,13 +76,18 @@ layouts) instead of a literal git-root-relative `_mill/status.md`.
   - `plugins/mill/skills/git-pr/SKILL.md`
 - **Creates:** none
 - **Deletes:** none
-- **Requirements:** In `git-pr/SKILL.md` Step 1.5, change the task-branch guard
-  so that when the worktree is inside a mill container it resolves the task
-  state path via `_config.load_config` + `_paths.resolve_task_path(worktree,
-  cfg['paths']['status_md'])` (catching nested-hub `_mill/` locations) and falls
+- **Requirements:** In `git-pr/SKILL.md` Step 1.5, make two changes. (1) When
+  the environment variable `MILL_FINALIZE_PR_CLEANUP` is set (non-empty), skip
+  the task-branch guard entirely and proceed — mill-finalize sets this after it
+  has already handled `_mill/` cleanup (removed or restored-to-base), so the
+  guard must not block PR creation on the stacked-branch restore case. (2)
+  Otherwise (standalone invocation), resolve the task state path via
+  `_config.load_config` + `_paths.resolve_task_path(worktree,
+  cfg['paths']['status_md'])` (catching nested-hub `_mill/` locations) and fall
   back to the literal `$GIT_ROOT/_mill/status.md` check only when config
   resolution is unavailable (git-pr can run standalone outside mill). Keep the
-  existing halt/redirect message unchanged.
+  existing halt/redirect message unchanged. Document that the env-flag skip is
+  the mill-finalize integration point.
 - **Commit:** `fix(git-pr): resolve task_dir for the task-branch guard (#482)`
 
 ### Card 14: base_tracks_task_dir tests

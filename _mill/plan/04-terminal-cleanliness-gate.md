@@ -43,8 +43,12 @@ commits vs the parent branch.
   falls within that owned set. Factor the path-membership filter as a small pure
   helper (porcelain lines + owned-path set -> in-scope lines) so it is
   unit-testable without git, mirroring how `compute_new_dirt` isolates its
-  set-diff. Keeping `_parent_diff_names` a separate named function gives the test
-  a single mock point. Any added runtime output must be ASCII.
+  set-diff. The pure helper must extract the path portion from each porcelain
+  line — `line[3:]` strips the 2-char status code + space prefix; for a rename
+  line (`R  old -> new`) compare the destination path after the ` -> ` — before
+  membership-testing against the owned-path set. Keeping `_parent_diff_names` a
+  separate named function gives the test a single mock point. Any added runtime
+  output must be ASCII.
 - **Commit:** `feat(cleanliness): add task-scoped compute_terminal_dirt (#467)`
 
 ### Card 9: scope mill-go Handoff gate to task paths
@@ -60,9 +64,12 @@ commits vs the parent branch.
   --untracked-files=no` check) so it calls
   `_cleanliness.compute_terminal_dirt(<worktree>, <task_dir>, <parent_branch>)`
   and halts only when the returned list is non-empty, listing those in-scope
-  files in the existing `BLOCKED:` message shape. `task_dir` and
-  `parent_branch` are already available in mill-go's Path Setup / status.md.
-  Keep the "do not set phase: done when the gate fires" behaviour.
+  files in the existing `BLOCKED:` message shape. `task_dir` is available from
+  mill-go's Path Setup; `parent_branch` is NOT derived there, so add a resolution
+  step to the Handoff gate: `parent_branch =
+  _parent_branch.resolve(status_path, interactive=False)` (the same helper
+  mill-finalize uses). Keep the "do not set phase: done when the gate fires"
+  behaviour.
 - **Commit:** `fix(mill-go): scope terminal cleanliness gate to task paths (#467)`
 
 ### Card 10: compute_terminal_dirt tests
