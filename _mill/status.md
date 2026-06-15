@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-reviewing
+phase: holistic-fixing
 slug: batch-name-and-skill-loading
 branch: hanf/batch-name-and-skill-loading
 plan: _mill/plan
@@ -25,6 +25,7 @@ implementing  '2026-06-15T13:10:15Z'
 approved-filename-sanitization  '2026-06-15T13:15:01Z'
 approved-skill-injection  '2026-06-15T13:20:03Z'
 holistic-reviewing  '2026-06-15T13:20:33Z'
+holistic-fixing  '2026-06-15T13:23:06Z'
 ```
 
 ## Batches
