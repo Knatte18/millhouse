@@ -52,14 +52,32 @@ git commit -m "mill-finalize: pr-pending for <slug>"
 
 ### Step 3: Cleanup commit (issue #268)
 
-Remove the task state directory so it does not appear in the PR diff:
+Clean up the task state directory. On stacked branches (where base branch
+tracks `task_dir`), restore it from the base; otherwise remove it. This
+prevents PR diffs from being polluted with unrelated deletions on
+stacked-branch PRs.
+
+Call `_finalize_cleanup.base_tracks_task_dir(git_root, parent_branch, task_dir)`.
+If True (base tracks task_dir):
+
+```bash
+git -C <worktree> checkout <parent_branch> -- <task_dir>
+git commit -m "chore: pre-merge cleanup"
+```
+
+If False (base does not track task_dir):
 
 ```bash
 git -C <worktree> rm -r <task_dir>
 git commit -m "chore: pre-merge cleanup"
 ```
 
-Idempotency: if `<task_dir>` is already absent (re-run after partial failure), `git rm -r <task_dir>` prints "did not match any files" — treat as a no-op. If the working tree has nothing to commit, skip the commit.
+Idempotency: On the restore path, if checkout fails (rare; base has no
+`<task_dir>`), skip the commit. On the rm path, if `<task_dir>` is already
+absent (re-run after partial failure), `git rm -r <task_dir>` prints "did
+not match any files" — treat as a no-op. If the working tree has nothing to
+commit, skip the commit. In both cases `task_dir` is either absent (rm path)
+or restored to base's version (restore path).
 
 ### Step 4: Push task branch
 
@@ -70,7 +88,19 @@ git push origin "$CHILD_BRANCH"
 
 ### Step 5: Create PR
 
-Invoke `/git-pr <base_branch>` (the base branch as argument). The skill generates title and body from commit history. It will not halt on its step 1.5 guard because `<task_dir>` is absent (cleanup already ran). If `/git-pr` fails → halt and surface the error; do not roll back status.md or the cleanup commit (push already happened; operator can create the PR manually via GitHub UI or `gh pr create`).
+Invoke `/git-pr <base_branch>` with environment variable `MILL_FINALIZE_PR_CLEANUP=1`:
+
+```bash
+MILL_FINALIZE_PR_CLEANUP=1 /git-pr <base_branch>
+```
+
+The skill generates title and body from commit history. Cleanup has already run
+in Step 3 (task_dir is either absent on the rm path or restored-to-base on the
+restore path), and `MILL_FINALIZE_PR_CLEANUP=1` tells git-pr's guard to skip
+its task-branch halt so PR creation proceeds in both cases. If `/git-pr` fails
+→ halt and surface the error; do not roll back status.md or the cleanup commit
+(push already happened; operator can create the PR manually via GitHub UI or
+`gh pr create`).
 
 ### Step 6: Home.md → [pr-pending]
 

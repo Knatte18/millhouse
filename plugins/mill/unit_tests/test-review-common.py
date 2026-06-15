@@ -94,6 +94,7 @@ from _review_common import (  # noqa: E402
     ReviewResult,
     _load_root_from_overview,
     _read_for_bulk,
+    _warn_if_prose_diverges,
     aggregate_verdict,
     build_deletes_section,
     build_manifest_section,
@@ -1662,6 +1663,35 @@ def main() -> int:
     test_parse_blocking_count_silent_when_aligned()
     test_parse_blocking_count_silent_when_no_prose_count()
     test_parse_blocking_count_warns_for_gap_severity()
+
+    def test_parse_blocking_count_divergence_warning_ascii_only():
+        import contextlib
+        import io
+        raw = (
+            "### [BLOCKING] finding one\n"
+            "### [BLOCKING] finding two\n"
+            "There are 5 blocking findings in this review.\n"
+        )
+        buf = io.StringIO()
+        with contextlib.redirect_stderr(buf):
+            count = parse_blocking_count(raw, severity="BLOCKING")
+        assert count == 2, f"expected 2, got {count}"
+        stderr_output = buf.getvalue()
+        assert stderr_output, "expected stderr warning, got empty"
+        # Verify every character is ASCII (ord < 128)
+        for i, char in enumerate(stderr_output):
+            if ord(char) >= 128:
+                print(
+                    f"FAIL: parse_blocking_count_divergence_warning_ascii_only: "
+                    f"non-ASCII character at position {i}: {char!r} (ord={ord(char)})",
+                    file=sys.stderr,
+                )
+                return False
+        print("PASS: parse_blocking_count divergence warning is ASCII-only (no mojibake)")
+        return True
+
+    if not test_parse_blocking_count_divergence_warning_ascii_only():
+        errors += 1
 
     # ---------------------------------------------------------------------------
     # _load_root_from_overview: importable from _review_common
