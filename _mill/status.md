@@ -58,5 +58,7 @@ batches:
     start_sha: 67b89c787bdaefdcdd908532db33c25d1cf41445
     commit_sha: 9654b39dc96b56883fbfdb0df8ec26afa956c56f
   - name: config-repo-layer
-    state: pending
+    state: running
+    implementer_session: 7435c3ab-1eb6-4f24-8ee7-b491439b7c22
+    start_sha: b5fcd3bcb7bb02b554732adedfadce4da0ee5817
 ```
