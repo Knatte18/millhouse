@@ -1248,44 +1248,38 @@ def main() -> int:
         mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(
             tmpdir, batch_specs, skip_create={"nonexistent/path.py"}
         )
+        # The CLI expects the plan in _mill/plan/ (default config has plan_dir: _mill/plan/)
+        # Copy from plan/ to _mill/plan/
+        mill_plan_dir = project_root / "_mill" / "plan"
+        mill_plan_dir.mkdir(parents=True, exist_ok=True)
+        for f in (project_root / "plan").glob("*.md"):
+            (mill_plan_dir / f.name).write_text(f.read_text(encoding="utf-8"), encoding="utf-8")
+
         orig_dir = os.getcwd()
         os.chdir(project_root)
         try:
-            import importlib.util
-            import io
-            from unittest import mock
-
-            # Load millpy-review-plan via importlib to test the CLI entry point
-            spec = importlib.util.spec_from_file_location(
-                "millpy_review_plan_test24",
-                HUB / "plugins" / "mill" / "scripts" / "millpy-review-plan.py",
+            # Invoke the CLI entry point via subprocess through uv
+            result = subprocess.run(
+                [
+                    "uv", "run",
+                    "--project", str(HUB / "plugins" / "mill"),
+                    "python", str(HUB / "plugins" / "mill" / "scripts" / "millpy-review-plan.py"),
+                    "--stage", "prepare",
+                    "--holistic-only",
+                ],
+                capture_output=True,
+                text=True,
+                cwd=str(project_root),
             )
-            millpy_review_plan_test24 = importlib.util.module_from_spec(spec)
-
-            # Mock _paths.resolve_* functions to return fixture paths
-            git_root = project_root.parent.parent.parent
-            with mock.patch("_paths.resolve_git_root", return_value=git_root):
-                with mock.patch("_paths.resolve_hub_path", return_value=project_root):
-                    with mock.patch("_paths.resolve_wiki_path", return_value=wiki_root):
-                        with mock.patch("_paths.resolve_task_path", return_value=project_root / "_mill" / "briefs"):
-                            # Capture stdout to check JSON envelope
-                            captured_stdout = io.StringIO()
-                            old_stdout = sys.stdout
-                            sys.stdout = captured_stdout
-                            try:
-                                spec.loader.exec_module(millpy_review_plan_test24)
-                                rc = millpy_review_plan_test24.main(
-                                    ["--stage", "prepare", "--holistic-only"]
-                                )
-                            finally:
-                                sys.stdout = old_stdout
 
             # Should exit with code 1 (validator found errors)
-            assert rc == 1, f"expected exit code 1 for validator errors, got {rc}"
+            assert result.returncode == 1, (
+                f"expected exit code 1 for validator errors, got {result.returncode}; "
+                f"stdout={result.stdout!r}, stderr={result.stderr!r}"
+            )
 
             # Check that stdout contains JSON with errors and summary keys
-            output = captured_stdout.getvalue()
-            json_output = json.loads(output)
+            json_output = json.loads(result.stdout)
             assert "errors" in json_output, f"expected 'errors' key in JSON output: {json_output}"
             assert "summary" in json_output, f"expected 'summary' key in JSON output: {json_output}"
             validate_errors = json_output["errors"]
@@ -1322,48 +1316,42 @@ def main() -> int:
             ("alpha", "01-alpha.md", ["src/a.py"], []),
         ]
         mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(tmpdir, batch_specs)
+        # The CLI expects the plan in _mill/plan/ (default config has plan_dir: _mill/plan/)
+        # Copy from plan/ to _mill/plan/
+        mill_plan_dir = project_root / "_mill" / "plan"
+        mill_plan_dir.mkdir(parents=True, exist_ok=True)
+        for f in (project_root / "plan").glob("*.md"):
+            (mill_plan_dir / f.name).write_text(f.read_text(encoding="utf-8"), encoding="utf-8")
+
         orig_dir = os.getcwd()
         os.chdir(project_root)
         try:
-            import importlib.util
-            import io
-            from unittest import mock
+            # Create briefs directory so write_brief doesn't fail
+            briefs_dir = project_root / "_mill" / "briefs"
+            briefs_dir.mkdir(parents=True, exist_ok=True)
 
-            # Load millpy-review-plan via importlib to test the CLI entry point
-            spec = importlib.util.spec_from_file_location(
-                "millpy_review_plan_test25",
-                HUB / "plugins" / "mill" / "scripts" / "millpy-review-plan.py",
+            # Invoke the CLI entry point via subprocess through uv
+            result = subprocess.run(
+                [
+                    "uv", "run",
+                    "--project", str(HUB / "plugins" / "mill"),
+                    "python", str(HUB / "plugins" / "mill" / "scripts" / "millpy-review-plan.py"),
+                    "--stage", "prepare",
+                    "--holistic-only",
+                ],
+                capture_output=True,
+                text=True,
+                cwd=str(project_root),
             )
-            millpy_review_plan_test25 = importlib.util.module_from_spec(spec)
-
-            # Mock _paths.resolve_* functions to return fixture paths
-            git_root = project_root.parent.parent.parent
-            with mock.patch("_paths.resolve_git_root", return_value=git_root):
-                with mock.patch("_paths.resolve_hub_path", return_value=project_root):
-                    with mock.patch("_paths.resolve_wiki_path", return_value=wiki_root):
-                        with mock.patch("_paths.resolve_task_path", return_value=project_root / "_mill" / "briefs"):
-                            # Create briefs directory so write_brief doesn't fail
-                            briefs_dir = project_root / "_mill" / "briefs"
-                            briefs_dir.mkdir(parents=True, exist_ok=True)
-
-                            # Capture stdout to check JSON envelope
-                            captured_stdout = io.StringIO()
-                            old_stdout = sys.stdout
-                            sys.stdout = captured_stdout
-                            try:
-                                spec.loader.exec_module(millpy_review_plan_test25)
-                                rc = millpy_review_plan_test25.main(
-                                    ["--stage", "prepare", "--holistic-only"]
-                                )
-                            finally:
-                                sys.stdout = old_stdout
 
             # Should exit with code 0 (clean plan, validator passed)
-            assert rc == 0, f"expected exit code 0 for clean plan, got {rc}"
+            assert result.returncode == 0, (
+                f"expected exit code 0 for clean plan, got {result.returncode}; "
+                f"stdout={result.stdout!r}, stderr={result.stderr!r}"
+            )
 
             # Check that stdout contains JSON with prepare stage envelope
-            output = captured_stdout.getvalue()
-            json_output = json.loads(output)
+            json_output = json.loads(result.stdout)
             assert json_output.get("stage") == "prepare", (
                 f"expected stage='prepare' in JSON output, got {json_output}"
             )
