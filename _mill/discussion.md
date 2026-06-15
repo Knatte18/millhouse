@@ -120,10 +120,12 @@ The six issues:
   (`git -C <wiki> rev-parse --abbrev-ref HEAD`) and push `origin
   HEAD:<branch>`. Keep the existing 2-attempt non-fast-forward retry loop
   wrapping it. Additionally, in `_setup.py`'s non-orphan clone paths
-  (`clone` / `clone -b --single-branch`), set upstream tracking
-  (`git config branch.<b>.remote origin` + `branch.<b>.merge refs/heads/<b>`,
-  or push `--set-upstream` on first push) so freshly created clones are
-  self-consistent.
+  (`clone` / `clone -b --single-branch`), set upstream tracking using the
+  `git config branch.<b>.remote origin` + `git config branch.<b>.merge
+  refs/heads/<b>` form (matching the existing orphan-init path at
+  `_setup.py:175-189` — pin this form rather than `push --set-upstream` so all
+  setup paths configure tracking identically and deterministically) so freshly
+  created clones are self-consistent.
 - Rationale: The refspec push is the load-bearing fix because it repairs
   **already-existing** clones that lack tracking (a setup-only fix would not
   help clones created before the fix). The setup change is defensive for new
@@ -141,9 +143,11 @@ The six issues:
   (`_paths.resolve_mill_config_path`) is correct when hub == git root (the
   self-hosting case) but yields a non-existent path in container/`wts` layout
   where `hub_root` is the container dir. Resolution order: (1) `<hub_root>/
-  mill-config.yaml`; (2) if absent, the primary clone under the container —
-  `<container>/wts/<repo>/mill-config.yaml` (derive container via
-  `_paths.resolve_container_path`; repo via the main worktree name); (3) if
+  mill-config.yaml`; (2) if absent, the primary clone's config at
+  `_paths.resolve_main_worktree_root(worktree_root) / "mill-config.yaml"`
+  (`resolve_main_worktree_root` already returns the primary clone dir —
+  `<container>/wts/<repo>` in container-form — so do **not** hand-roll a
+  `container / "wts" / repo` join, which the path constraints forbid); (3) if
   still absent, the worktree's own `<worktree_root>/mill-config.yaml`. Merge the
   first that exists. If a repo-layer config is genuinely absent everywhere,
   proceed with template+local layers (current behaviour) but emit a one-line
