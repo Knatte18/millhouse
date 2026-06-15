@@ -158,6 +158,16 @@ need a proper, tested fix in the plugin source.
   the overview, and pass `git_root` + `root` into `_plan_validate.run(...)` so
   the agent path gets the same #466/#471 base-consistency as the full path. Use
   the `--stage full` call (lines ~181-199) as the template.
+- SKILL edit scope: only SKILL.md:133 (the "runs unchanged in BOTH modes" claim)
+  plus the agent-mode envelope-handling step need editing. SKILL.md:104 ("The CLI
+  auto-runs `_plan_validate` before invoking the LLM") stays accurate as-is once
+  prepare runs the validator — do NOT "fix" it redundantly.
+- Envelope discriminator: `--stage prepare` success emits
+  `{"stage":"prepare","brief_path":...}`; validator-failure emits
+  `{"errors":[...],"summary":...}`. Both are JSON on stdout, and prepare-success
+  exits 0 while validator-failure exits 1, but the SKILL agent-mode parser must
+  branch on **presence of the `errors` key**, not on exit code alone, to route
+  into the Step 1.5 mechanical-fix loop.
 - Rationale: Single source of truth in the script (the `--stage full` branch
   already does exactly this). Putting the gate in `prepare` means it cannot be
   silently skipped by orchestrator omission — which is the exact failure #465
