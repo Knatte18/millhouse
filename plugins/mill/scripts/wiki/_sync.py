@@ -215,10 +215,16 @@ def commit_push(
             f"initialize the wiki with 'git clone' or 'git init'"
         )
 
-    _run(
+    add_result = _run(
         ["git", "-C", str(wiki_path), "add", "--"] + list(rel_paths),
         wiki_path,
+        check=False,
     )
+    if add_result.returncode != 0:
+        stderr = add_result.stderr.strip()
+        if not stderr:
+            stderr = "(no error details available)"
+        raise WikiPushError(f"git add failed: {stderr}")
 
     diff = _run(
         ["git", "-C", str(wiki_path), "diff", "--cached", "--quiet"],
@@ -230,10 +236,16 @@ def commit_push(
     elif diff.returncode != 1:
         raise WikiPushError(f"git diff --cached --quiet failed: {diff.stderr.strip()!r}")
 
-    _run(
+    commit_result = _run(
         ["git", "-C", str(wiki_path), "commit", "-m", message],
         wiki_path,
+        check=False,
     )
+    if commit_result.returncode != 0:
+        stderr = commit_result.stderr.strip()
+        if not stderr:
+            stderr = "(no error details available)"
+        raise WikiPushError(f"git commit failed: {stderr}")
 
     # Test mode: stop after local commit; skip the network push.
     if os.environ.get("WIKI_DAEMON_SKIP_PUSH") == "1":
