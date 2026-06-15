@@ -705,9 +705,10 @@ def resolve_existing_paths(
 
     Resolution order (first match wins):
     1. wiki/ prefix routes through wiki_root (unchanged).
-    2. Candidate path under project_root (unchanged).
-    3. Candidate path under git_root (when provided).
-    4. Silent drop (no raise).
+    2. Candidate path under git_root/root/raw (when git_root and root set).
+    3. Candidate path under project_root (unchanged).
+    4. Candidate path under git_root/raw (when git_root provided, no root).
+    5. Silent drop (no raise).
 
     Keyword args:
         wiki_root: When provided, raw paths starting with ``wiki/`` are
@@ -726,19 +727,28 @@ def resolve_existing_paths(
                 # Key divergence from resolve_ref_paths: silent drop instead of raise.
                 continue
             candidate = wiki_root / raw[len("wiki/"):]
-        elif root:
-            candidate = project_root / root / raw
-        else:
-            candidate = project_root / raw
-        if candidate.exists():
-            result.append(candidate)
+            if candidate.exists():
+                result.append(candidate)
             continue
-        # Git-root fallback (only for non-wiki paths).
-        if not raw.startswith("wiki/") and git_root is not None:
-            gr_candidate = git_root / raw
-            if gr_candidate.exists():
-                result.append(gr_candidate)
-                continue
+        # Non-wiki path resolution: try git_root/root/raw (if git_root available),
+        # then project_root/root/raw, then git_root/raw (if no root).
+        candidates = []
+        if root and git_root is not None:
+            # When the worktree cwd is itself the `root` sub-path, project_root
+            # already ends with `root`, so project_root / root / raw doubles it.
+            # Try git_root / root / raw first so `root` is joined onto the repo
+            # root exactly once — matching how the plan was validated.
+            candidates.append(git_root / root / raw)
+        if root:
+            candidates.append(project_root / root / raw)
+        else:
+            candidates.append(project_root / raw)
+        if git_root is not None:
+            candidates.append(git_root / raw)
+        # Try all candidates; first match wins (silent drop if none found).
+        hit = next((c for c in candidates if c.exists()), None)
+        if hit is not None:
+            result.append(hit)
     return result
 
 
