@@ -188,7 +188,7 @@ def commit_push(
     1. git add -- <rel_paths>
     2. git diff --cached --quiet (check if staged)
     3. git commit -m <message>
-    4. git push
+    4. git push origin HEAD:<branch> (explicit refspec)
        - On non-fast-forward: git pull --rebase, retry push
        - On rebase conflict: git rebase --abort, raise WikiPushError
 
@@ -226,9 +226,24 @@ def commit_push(
     if os.environ.get("WIKI_DAEMON_SKIP_PUSH") == "1":
         return
 
+    # Resolve the current branch to use in the explicit-refspec push.
+    branch_result = _run(
+        ["git", "-C", str(wiki_path), "rev-parse", "--abbrev-ref", "HEAD"],
+        wiki_path,
+        check=False,
+    )
+    if branch_result.returncode != 0:
+        raise WikiPushError(f"failed to resolve branch: {branch_result.stderr.strip()!r}")
+
+    branch = branch_result.stdout.strip()
+    if not branch or branch == "HEAD":
+        raise WikiPushError(
+            "cannot push: repository is in detached HEAD state or branch name is empty"
+        )
+
     for attempt in range(2):
         push = _run(
-            ["git", "-C", str(wiki_path), "push"],
+            ["git", "-C", str(wiki_path), "push", "origin", f"HEAD:{branch}"],
             wiki_path,
             check=False,
             timeout=_GIT_NETWORK_TIMEOUT_SECONDS,
