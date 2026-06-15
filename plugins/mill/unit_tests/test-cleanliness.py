@@ -16,6 +16,7 @@ from _cleanliness import (  # noqa: E402
     compute_scope_violations,
     compute_terminal_dirt,
     _filter_to_task_scope,
+    _parent_diff_names,
 )
 
 
@@ -358,6 +359,46 @@ def main() -> int:
         failures.append(f"FAIL: compute_terminal_dirt out-of-scope: {exc}")
     except Exception as exc:
         failures.append(f"FAIL: compute_terminal_dirt out-of-scope ({type(exc).__name__}): {exc}")
+
+    # CTD-5. compute_terminal_dirt: absolute task_dir is relativized and still matches
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            worktree = Path(tmp)
+            # Simulate mill-go's task_dir = status_path.parent (absolute)
+            abs_task_dir = worktree / "_mill"
+            with unittest.mock.patch(
+                "_cleanliness._pygit2_util.status_porcelain",
+                return_value=[" M _mill/status.md", " M other.txt"]
+            ):
+                with unittest.mock.patch("_cleanliness._parent_diff_names", return_value=[]):
+                    result = compute_terminal_dirt(worktree, abs_task_dir, "main")
+            assert result == [" M _mill/status.md"], (
+                f"expected [' M _mill/status.md'] with absolute task_dir, got {result!r}"
+            )
+        print("PASS: compute_terminal_dirt: absolute task_dir relativized correctly")
+    except AssertionError as exc:
+        failures.append(f"FAIL: compute_terminal_dirt absolute task_dir: {exc}")
+    except Exception as exc:
+        failures.append(f"FAIL: compute_terminal_dirt absolute task_dir ({type(exc).__name__}): {exc}")
+
+    # PDN-1. _parent_diff_names: non-zero git exit emits stderr warning and returns []
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            with unittest.mock.patch(
+                "_cleanliness._subprocess_util.run",
+                return_value=unittest.mock.Mock(returncode=128, stdout="", stderr="fatal: bad revision"),
+            ):
+                with unittest.mock.patch("sys.stderr", new=io.StringIO()) as fake_err:
+                    result = _parent_diff_names(Path(tmp), "nonexistent-branch")
+            assert result == [], f"expected [], got {result!r}"
+            assert "[cleanliness]" in fake_err.getvalue(), (
+                f"'[cleanliness]' not in stderr: {fake_err.getvalue()!r}"
+            )
+        print("PASS: _parent_diff_names: non-zero exit -> [] + stderr warning")
+    except AssertionError as exc:
+        failures.append(f"FAIL: _parent_diff_names non-zero exit: {exc}")
+    except Exception as exc:
+        failures.append(f"FAIL: _parent_diff_names non-zero exit ({type(exc).__name__}): {exc}")
 
     if failures:
         for msg in failures:

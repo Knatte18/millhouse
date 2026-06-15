@@ -26,6 +26,7 @@ from wiki._sync import (  # noqa: E402
     _git_env,
 )
 from wiki import WikiPathError, WikiPushError  # noqa: E402
+from unittest.mock import patch, MagicMock  # noqa: E402
 
 
 def _run_quiet(args: list[str], cwd: Path) -> int:
@@ -428,6 +429,47 @@ def main() -> int:
             ok("clone_or_init path D (branch-specified) sets upstream tracking")
         except Exception as exc:
             fail("clone_or_init path D (branch-specified) sets upstream tracking", exc)
+
+        # --- (q) clone_or_init path C: git config failure raises WikiSetupError ---
+        try:
+            import _setup  # noqa: F811
+            from _setup import WikiSetupError  # noqa: E402
+
+            # Build a fake _subprocess_util.run that:
+            #   - allows git clone (returncode 0, stdout/stderr empty)
+            #   - allows rev-parse --abbrev-ref HEAD (returncode 0, stdout "main")
+            #   - makes the first git config (branch.main.remote) fail (returncode 1)
+            call_count = [0]
+
+            def _fake_run(cmd, **kwargs):
+                call_count[0] += 1
+                m = MagicMock()
+                if "clone" in cmd:
+                    m.returncode = 0
+                    m.stdout = ""
+                    m.stderr = ""
+                elif "--abbrev-ref" in cmd:
+                    m.returncode = 0
+                    m.stdout = "main"
+                    m.stderr = ""
+                else:
+                    # git config step -- simulate failure
+                    m.returncode = 1
+                    m.stdout = ""
+                    m.stderr = "error: could not set config"
+                return m
+
+            clone6 = tmp / "clone6"
+            raised = False
+            with patch.object(_setup._subprocess_util, "run", side_effect=_fake_run):
+                try:
+                    _setup.clone_or_init(str(bare), None, clone6)
+                except WikiSetupError:
+                    raised = True
+            assert raised, "Expected WikiSetupError when git config branch.main.remote fails"
+            ok("clone_or_init path C: git config failure raises WikiSetupError")
+        except Exception as exc:
+            fail("clone_or_init path C: git config failure raises WikiSetupError", exc)
 
     finally:
         _safe_rmtree.safe_rmtree(tmp, allowed_root=tmp, ignore_errors=True)

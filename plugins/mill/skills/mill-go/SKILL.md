@@ -44,7 +44,7 @@ You are the **Builder** — a lean orchestrator. You coordinate per-batch implem
    plan_dir      = _paths.resolve_task_path(worktree_root, cfg['paths']['plan_dir'])
    overview_path = plan_dir / "00-overview.md"
    reviews_dir   = _paths.resolve_task_path(worktree_root, cfg['paths']['reviews_dir'])
-   task_dir      = status_path.parent
+   task_dir      = status_path.parent  # absolute; compute_terminal_dirt relativizes internally
    ```
    Use these variables for all subsequent path references. Exception: the cleanliness snapshot path `_mill/.cleanliness-snapshot-<batch_name>.txt` keeps its `_mill/` literal — `millpy-implement.py` writes it unconditionally to `_mill/` and is out of scope.
 5. **Entry phase gate.** Before reading `status_path`, guard against the merge-interrupted state where `_mill/status.md` has been removed by mill-merge's cleanup commit but teardown did not complete -- mirrors mill-merge's own Step 5 fallback. Wiki daemon errors are caught explicitly so a daemon outage surfaces a readable message instead of a raw traceback.

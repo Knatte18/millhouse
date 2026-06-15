@@ -83,6 +83,11 @@ def _parent_diff_names(worktree: Path, parent_branch: str) -> list[str]:
         cwd=worktree,
     )
     if result.returncode != 0:
+        print(
+            f"[cleanliness] warning: git diff --name-only {parent_branch}...HEAD"
+            f" exited {result.returncode} -- treating parent diff as empty",
+            file=sys.stderr,
+        )
         return []
     return [line for line in result.stdout.splitlines() if line]
 
@@ -133,5 +138,11 @@ def compute_terminal_dirt(worktree: Path, task_dir: Path, parent_branch: str) ->
     parent_diff_names = _parent_diff_names(worktree, parent_branch)
     owned_paths = set(parent_diff_names)
 
+    # Ensure task_dir is worktree-relative for path membership checks.
+    # Callers (e.g. mill-go) may pass an absolute path derived from status_path.parent;
+    # _filter_to_task_scope compares against worktree-relative porcelain paths,
+    # so an absolute task_dir_str would never match.
+    task_dir_rel = task_dir.relative_to(worktree) if task_dir.is_absolute() else task_dir
+
     # Filter to task scope
-    return _filter_to_task_scope(lines, task_dir, owned_paths)
+    return _filter_to_task_scope(lines, task_dir_rel, owned_paths)

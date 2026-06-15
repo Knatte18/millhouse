@@ -31,6 +31,7 @@ import yaml  # noqa: E402
 
 import _config  # noqa: E402
 import _paths  # noqa: E402
+import _review_common  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -931,17 +932,7 @@ def test_review_common_load_config_container_layout() -> None:
             capture_output=True,
         )
 
-        # Need to import _review_common to test its load_config
-        # (we already imported _config at the top)
-        import importlib.util
-        spec = importlib.util.spec_from_file_location(
-            "_review_common",
-            SCRIPTS_DIR / "_review_common.py"
-        )
-        review_common = importlib.util.module_from_spec(spec)
-        sys.modules["_review_common"] = review_common
-        spec.loader.exec_module(review_common)
-
+        # _review_common is imported at the top of this module (sys.path already includes SCRIPTS_DIR)
         # Call _review_common.load_config with hub=container, mill_dir=task_worktree/.millhouse
         # (real callers pass hub_dir / ".millhouse" or project_root / ".millhouse";
         # load_config uses mill_dir.parent as worktree_root for repo-config resolution)
@@ -949,10 +940,10 @@ def test_review_common_load_config_container_layout() -> None:
         mill_dir.mkdir(parents=True, exist_ok=True)
         with patch.object(_paths, "resolve_wiki_path", side_effect=SystemExit):
             with patch.object(
-                review_common, "resolve_plugin_template_path",
+                _review_common, "resolve_plugin_template_path",
                 return_value=tmp_path / "templates" / "mill-config.yaml"
             ):
-                cfg = review_common.load_config(hub_root=container, mill_dir=mill_dir)
+                cfg = _review_common.load_config(hub_root=container, mill_dir=mill_dir)
 
         # Should have resolved the primary clone config
         assert cfg.get("roles", {}).get("code-review", {}).get("holistic", {}).get("reviewer") == "opushigh", (
