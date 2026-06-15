@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussion-fix-r2
+phase: discussed
 slug: ghissues-skill-fold-guard
 branch: hanf/ghissues-skill-fold-guard
 plan: null
@@ -16,4 +16,5 @@ task_description: |
 ```text
 discussing  '2026-06-15T12:31:38Z'
 discussion-fix-r2  '2026-06-15T12:48:37Z'
+discussed  '2026-06-15T12:49:11Z'
 ```
