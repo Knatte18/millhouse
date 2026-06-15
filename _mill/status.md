@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-stacked-finalize-cleanup
+phase: approved-config-repo-layer
 slug: mill-infra-and-path-fixes
 branch: hanf/mill-infra-and-path-fixes
 plan: _mill/plan
@@ -31,6 +31,7 @@ approved-review-warning-ascii  '2026-06-15T11:23:48Z'
 approved-wiki-sync-robustness  '2026-06-15T11:41:38Z'
 approved-terminal-cleanliness-gate  '2026-06-15T11:45:12Z'
 approved-stacked-finalize-cleanup  '2026-06-15T11:48:49Z'
+approved-config-repo-layer  '2026-06-15T11:52:00Z'
 ```
 
 ## Batches
@@ -58,7 +59,8 @@ batches:
     start_sha: 67b89c787bdaefdcdd908532db33c25d1cf41445
     commit_sha: 9654b39dc96b56883fbfdb0df8ec26afa956c56f
   - name: config-repo-layer
-    state: running
+    state: approved
     implementer_session: 7435c3ab-1eb6-4f24-8ee7-b491439b7c22
     start_sha: b5fcd3bcb7bb02b554732adedfadce4da0ee5817
+    commit_sha: 8c1d2720b9e626af480e1fc6312aa7e6f49f0d44
 ```
