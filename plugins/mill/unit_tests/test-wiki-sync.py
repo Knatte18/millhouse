@@ -128,7 +128,7 @@ def main() -> int:
             (clone / "Home.md").write_text("# Home Updated\n", encoding="utf-8")
             commit_push(clone, ["Home.md"], "update home")
             log_result = subprocess.run(
-                ["git", "-C", str(bare), "log", "--oneline"],
+                ["git", "-c", "safe.bareRepository=all", "-C", str(bare), "log", "--oneline"],
                 capture_output=True,
                 text=True,
             )
@@ -142,7 +142,7 @@ def main() -> int:
             (clone / "Home.md").write_text("# Home Updated\n", encoding="utf-8")
             commit_push(clone, ["Home.md"], "idempotent test")
             log_result = subprocess.run(
-                ["git", "-C", str(bare), "log", "--oneline"],
+                ["git", "-c", "safe.bareRepository=all", "-C", str(bare), "log", "--oneline"],
                 capture_output=True,
                 text=True,
             )
@@ -336,7 +336,7 @@ def main() -> int:
             (clone3 / "tracked.md").write_text("tracked content\n", encoding="utf-8")
             commit_push(clone3, ["tracked.md"], "test explicit refspec")
             log_result = subprocess.run(
-                ["git", "-C", str(bare), "log", "--oneline"],
+                ["git", "-c", "safe.bareRepository=all", "-C", str(bare), "log", "--oneline"],
                 capture_output=True,
                 text=True,
             )
