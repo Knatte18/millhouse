@@ -599,10 +599,11 @@ def resolve_ref_paths(
 
     Resolution order (first match wins):
     1. wiki/ prefix routes through wiki_root (unchanged).
-    2. Candidate path under project_root (unchanged).
-    3. Candidate path under git_root (when provided).
-    4. creates_union/deletes_union suppression (unchanged).
-    5. Hard-fail ReviewError (unchanged).
+    2. Candidate path under git_root/root/raw (when git_root and root set).
+    3. Candidate path under project_root (unchanged).
+    4. Candidate path under git_root/raw (when git_root provided, no root).
+    5. creates_union/deletes_union suppression (unchanged).
+    6. Hard-fail ReviewError (unchanged).
 
     Keyword args:
         creates_union: Set of raw token strings extracted from ``Creates:``
@@ -639,26 +640,40 @@ def resolve_ref_paths(
                     f"[{caller_label}] wiki-prefixed ref {raw!r} but no wiki_root provided"
                 )
             candidate = wiki_root / raw[len("wiki/"):]
-        elif root:
-            candidate = project_root / root / raw
-        else:
-            candidate = project_root / raw
-        # Hit on disk.
-        if candidate.exists():
-            resolved.append(candidate)
-            continue
-        # Git-root fallback (only for non-wiki paths).
-        if not raw.startswith("wiki/") and git_root is not None:
+            # Hit on disk.
+            if candidate.exists():
+                resolved.append(candidate)
+                continue
+            # Suppression via creates_union or deletes_union.
+            if raw in creates or raw in deletes:
+                continue
+            # Hard-fail.
+            raise ReviewError(
+                f"[{caller_label}] referenced path not found: {raw!r}; "
+                f"not in plan creates_union, not on disk; resolved candidate: {candidate}"
+            )
+        # Non-wiki path resolution: try git_root/root/raw (if git_root available),
+        # then project_root/root/raw, then git_root/raw (if no root).
+        candidates = []
+        if root and git_root is not None:
             # When the worktree cwd is itself the `root` sub-path, project_root
             # already ends with `root`, so project_root / root / raw doubles it.
             # Try git_root / root / raw first so `root` is joined onto the repo
             # root exactly once — matching how the plan was validated.
-            gr_candidates = [git_root / root / raw] if root else []
-            gr_candidates.append(git_root / raw)
-            gr_hit = next((c for c in gr_candidates if c.exists()), None)
-            if gr_hit is not None:
-                resolved.append(gr_hit)
-                continue
+            candidates.append(git_root / root / raw)
+        if root:
+            candidates.append(project_root / root / raw)
+        else:
+            candidates.append(project_root / raw)
+        if git_root is not None:
+            candidates.append(git_root / raw)
+        # Primary candidate is the first one for error reporting.
+        candidate = candidates[0]
+        # Try all candidates; first match wins.
+        hit = next((c for c in candidates if c.exists()), None)
+        if hit is not None:
+            resolved.append(hit)
+            continue
         # Suppression via creates_union or deletes_union.
         if raw in creates or raw in deletes:
             continue
