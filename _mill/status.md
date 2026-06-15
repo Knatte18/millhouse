@@ -46,7 +46,9 @@ batches:
     start_sha: b33fed013ef5134083a9c3ee03a5e980f4b93ea8
     commit_sha: 55c9ce9ef154a9d0bab6ebeaf484a13242c1372e
   - name: terminal-cleanliness-gate
-    state: pending
+    state: running
+    implementer_session: d2834361-e8eb-4efa-b0d9-c0834e714129
+    start_sha: 4fadd6df02d1f6da1cf2426c0b3f087a6b556e73
   - name: stacked-finalize-cleanup
     state: pending
   - name: config-repo-layer
