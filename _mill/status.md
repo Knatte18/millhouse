@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-orchestrator-skills
+phase: holistic-reviewing
 slug: mill-external-repo-infra
 branch: hanf/mill-external-repo-infra
 plan: _mill/plan
@@ -26,6 +26,7 @@ implementing  '2026-06-16T12:53:38Z'
 approved-path-resolution-scripts  '2026-06-16T12:59:06Z'
 approved-cleanliness-drift-guard  '2026-06-16T13:02:29Z'
 approved-orchestrator-skills  '2026-06-16T13:08:06Z'
+holistic-reviewing  '2026-06-16T13:08:45Z'
 ```
 
 ## Batches
