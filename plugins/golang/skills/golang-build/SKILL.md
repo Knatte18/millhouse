@@ -14,12 +14,14 @@ Build and test configuration for Go projects.
 Run these commands after completing a task to verify correctness:
 
 ```bash
-goimports -w .
+goimports -w <changed-files>
 go vet ./...
 go build ./...
 go test ./...
 golangci-lint run
 ```
+
+**Convention: Writing formatters (goimports -w) run on changed files only, never on the whole project. Whole-project build, test, and read-only lint stay whole-project.**
 
 ## Failure Handling
 
