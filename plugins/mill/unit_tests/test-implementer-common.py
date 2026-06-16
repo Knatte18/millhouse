@@ -662,7 +662,7 @@ def main() -> int:
         try:
             data = json.loads(captured.strip())
             assert data["status"] == "success", f"expected status=success, got {data}"
-            assert "reason" in data or data["status"] == "success", "expected success or reason in output"
+            assert "reason" not in data, f"expected no reason field in success output, got {data}"
             print("PASS: parsed success with passing verify_cmd -> success preserved")
         except Exception as exc:
             print(f"FAIL: case 20 ({exc}) captured={captured!r}", file=sys.stderr)

@@ -2420,6 +2420,32 @@ def main() -> int:
         print(f"FAIL: parse_blocking_count zero headings: {exc}", file=sys.stderr)
         errors += 1
 
+    # parse_blocking_count: one heading + verdict line, diverging prose count
+    try:
+        import contextlib
+        import io
+        raw = (
+            "### [GAP] issue one\n"
+            "There are 2 gaps in the discussion.\n"
+            "verdict: GAPS_FOUND\n"
+        )
+        buf = io.StringIO()
+        with contextlib.redirect_stderr(buf):
+            count = parse_blocking_count(raw, severity="GAP")
+        if count != 1:
+            print(f"FAIL: parse_blocking_count one heading + verdict: expected heading_count 1, got {count}", file=sys.stderr)
+            errors += 1
+        else:
+            stderr = buf.getvalue()
+            if "heading count 1 diverges from prose count 2" not in stderr:
+                print(f"FAIL: parse_blocking_count one heading + verdict: expected divergence warning (verdict line not inflating count), got: {stderr!r}", file=sys.stderr)
+                errors += 1
+            else:
+                print("PASS: parse_blocking_count one heading + verdict: verdict line filtered from prose count")
+    except Exception as exc:
+        print(f"FAIL: parse_blocking_count one heading + verdict: {exc}", file=sys.stderr)
+        errors += 1
+
     # parse_blocking_count: non-zero headings still emit divergence warning
     try:
         import contextlib
