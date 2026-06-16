@@ -146,3 +146,82 @@ def compute_terminal_dirt(worktree: Path, task_dir: Path, parent_branch: str) ->
 
     # Filter to task scope
     return _filter_to_task_scope(lines, task_dir_rel, owned_paths)
+
+
+def revert_out_of_scope_drift(
+    worktree: Path, task_dir: Path, parent_branch: str
+) -> tuple[list[str], list[str]]:
+    """
+    Revert out-of-scope formatter drift and return status.
+
+    Out-of-scope = a tracked modification (status code ` M`, `M `, `MM`) whose path is
+    NOT under task_dir AND NOT in the task's parent-diff owned set. Such drift is
+    reverted via `git checkout HEAD -- <path>`. Untracked files (`??`) and added
+    files (`A `) are NOT reverted.
+
+    Args:
+        worktree: Path to the task worktree.
+        task_dir: Worktree-relative path to the task directory (e.g., Path("_mill")).
+            If absolute, relativized to worktree.
+        parent_branch: Name of the parent branch (e.g., "main").
+
+    Returns:
+        A tuple of (reverted_paths, remaining_in_scope_lines) where:
+        - reverted_paths: sorted list of file paths that were reverted.
+        - remaining_in_scope_lines: sorted list of in-scope porcelain lines still dirty
+          after revert.
+    """
+    # Get current dirt
+    lines = _pygit2_util.status_porcelain(worktree, include_untracked=False)
+
+    # Get paths changed by the task
+    parent_diff_names = _parent_diff_names(worktree, parent_branch)
+    owned_paths = set(parent_diff_names)
+
+    # Ensure task_dir is worktree-relative for path membership checks.
+    task_dir_rel = task_dir.relative_to(worktree) if task_dir.is_absolute() else task_dir
+    task_dir_str = task_dir_rel.as_posix()
+
+    # Partition lines into in-scope and out-of-scope tracked modifications.
+    reverted_paths = []
+    remaining_in_scope_lines = []
+
+    for line in lines:
+        # Extract status code and path from porcelain format "XY path"
+        status_code = line[:2]
+        path = line[3:]
+
+        # Check if this path is in scope
+        in_scope = (
+            path.startswith(task_dir_str + "/")
+            or path == task_dir_str
+            or path in owned_paths
+        )
+
+        if in_scope:
+            # In-scope: keep it
+            remaining_in_scope_lines.append(line)
+        else:
+            # Out-of-scope: check if it's a tracked modification that should be reverted
+            # Modified status codes: " M" (modified in worktree), "M " (modified in index),
+            # "MM" (modified in both)
+            if status_code in (" M", "M ", "MM"):
+                # Revert the file
+                result = _subprocess_util.run(
+                    ["git", "checkout", "HEAD", "--", path],
+                    cwd=worktree,
+                )
+                if result.returncode == 0:
+                    reverted_paths.append(path)
+                    print(
+                        f"[cleanliness] reverted out-of-scope: {path}",
+                        file=sys.stderr,
+                    )
+                else:
+                    print(
+                        f"[cleanliness] warning: failed to revert {path}: "
+                        f"git checkout exited {result.returncode}",
+                        file=sys.stderr,
+                    )
+
+    return (sorted(reverted_paths), sorted(remaining_in_scope_lines))
