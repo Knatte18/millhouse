@@ -15,6 +15,7 @@ from _cleanliness import (  # noqa: E402
     compute_new_dirt,
     compute_scope_violations,
     compute_terminal_dirt,
+    revert_out_of_scope_drift,
     _filter_to_task_scope,
     _parent_diff_names,
 )
@@ -399,6 +400,88 @@ def main() -> int:
         failures.append(f"FAIL: _parent_diff_names non-zero exit: {exc}")
     except Exception as exc:
         failures.append(f"FAIL: _parent_diff_names non-zero exit ({type(exc).__name__}): {exc}")
+
+    # ROOD-1. revert_out_of_scope_drift: out-of-scope tracked modification only -> reverted, remaining empty
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            with unittest.mock.patch(
+                "_cleanliness._pygit2_util.status_porcelain",
+                return_value=[" M out_of_scope.txt"]
+            ):
+                with unittest.mock.patch("_cleanliness._parent_diff_names", return_value=[]):
+                    with unittest.mock.patch("_cleanliness._subprocess_util.run") as mock_run:
+                        mock_run.return_value = unittest.mock.Mock(returncode=0)
+                        reverted, remaining = revert_out_of_scope_drift(Path(tmp), Path("_mill"), "main")
+            assert reverted == ["out_of_scope.txt"], f"expected ['out_of_scope.txt'], got {reverted!r}"
+            assert remaining == [], f"expected [], got {remaining!r}"
+            # Verify git checkout was called
+            assert mock_run.call_count == 1, f"expected 1 call to run, got {mock_run.call_count}"
+            call_args = mock_run.call_args[0][0]
+            assert call_args[0:3] == ["git", "checkout", "HEAD"], f"unexpected git call: {call_args}"
+        print("PASS: revert_out_of_scope_drift: out-of-scope modification reverted, remaining empty")
+    except AssertionError as exc:
+        failures.append(f"FAIL: revert_out_of_scope_drift out-of-scope only: {exc}")
+    except Exception as exc:
+        failures.append(f"FAIL: revert_out_of_scope_drift out-of-scope only ({type(exc).__name__}): {exc}")
+
+    # ROOD-2. revert_out_of_scope_drift: mixed in-scope + out-of-scope -> out-of-scope reverted, in-scope returned
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            with unittest.mock.patch(
+                "_cleanliness._pygit2_util.status_porcelain",
+                return_value=[" M _mill/status.md", " M out_of_scope.txt"]
+            ):
+                with unittest.mock.patch("_cleanliness._parent_diff_names", return_value=[]):
+                    with unittest.mock.patch("_cleanliness._subprocess_util.run") as mock_run:
+                        mock_run.return_value = unittest.mock.Mock(returncode=0)
+                        reverted, remaining = revert_out_of_scope_drift(Path(tmp), Path("_mill"), "main")
+            assert reverted == ["out_of_scope.txt"], f"expected ['out_of_scope.txt'], got {reverted!r}"
+            assert remaining == [" M _mill/status.md"], f"expected [' M _mill/status.md'], got {remaining!r}"
+        print("PASS: revert_out_of_scope_drift: mixed in-scope + out-of-scope -> out-of-scope reverted")
+    except AssertionError as exc:
+        failures.append(f"FAIL: revert_out_of_scope_drift mixed: {exc}")
+    except Exception as exc:
+        failures.append(f"FAIL: revert_out_of_scope_drift mixed ({type(exc).__name__}): {exc}")
+
+    # ROOD-3. revert_out_of_scope_drift: untracked out-of-scope file NOT reverted and NOT returned
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            with unittest.mock.patch(
+                "_cleanliness._pygit2_util.status_porcelain",
+                return_value=["?? out_of_scope.txt"]
+            ):
+                with unittest.mock.patch("_cleanliness._parent_diff_names", return_value=[]):
+                    with unittest.mock.patch("_cleanliness._subprocess_util.run") as mock_run:
+                        reverted, remaining = revert_out_of_scope_drift(Path(tmp), Path("_mill"), "main")
+            assert reverted == [], f"expected [], got {reverted!r}"
+            assert remaining == [], f"expected [], got {remaining!r}"
+            # Verify git checkout was NOT called
+            assert mock_run.call_count == 0, f"expected 0 calls to run, got {mock_run.call_count}"
+        print("PASS: revert_out_of_scope_drift: untracked file NOT reverted and NOT returned")
+    except AssertionError as exc:
+        failures.append(f"FAIL: revert_out_of_scope_drift untracked: {exc}")
+    except Exception as exc:
+        failures.append(f"FAIL: revert_out_of_scope_drift untracked ({type(exc).__name__}): {exc}")
+
+    # ROOD-4. revert_out_of_scope_drift: file in parent-diff owned set but outside task_dir is in-scope
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            with unittest.mock.patch(
+                "_cleanliness._pygit2_util.status_porcelain",
+                return_value=[" M src/main.py"]
+            ):
+                with unittest.mock.patch("_cleanliness._parent_diff_names", return_value=["src/main.py"]):
+                    with unittest.mock.patch("_cleanliness._subprocess_util.run") as mock_run:
+                        reverted, remaining = revert_out_of_scope_drift(Path(tmp), Path("_mill"), "main")
+            assert reverted == [], f"expected [], got {reverted!r}"
+            assert remaining == [" M src/main.py"], f"expected [' M src/main.py'], got {remaining!r}"
+            # Verify git checkout was NOT called
+            assert mock_run.call_count == 0, f"expected 0 calls to run, got {mock_run.call_count}"
+        print("PASS: revert_out_of_scope_drift: owned-set file treated as in-scope")
+    except AssertionError as exc:
+        failures.append(f"FAIL: revert_out_of_scope_drift owned-set: {exc}")
+    except Exception as exc:
+        failures.append(f"FAIL: revert_out_of_scope_drift owned-set ({type(exc).__name__}): {exc}")
 
     if failures:
         for msg in failures:
