@@ -30,7 +30,9 @@ implementing  '2026-06-16T12:53:38Z'
 ```yaml
 batches:
   - name: path-resolution-scripts
-    state: pending
+    state: running
+    implementer_session: 927a2b4f-a90d-4d83-ad31-56fab2588e61
+    start_sha: aee8d4186d74ba8755e1744ba225fd043d21afd7
   - name: cleanliness-drift-guard
     state: pending
   - name: orchestrator-skills
