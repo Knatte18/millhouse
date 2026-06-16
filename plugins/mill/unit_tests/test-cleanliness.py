@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import io
+import subprocess
 import sys
 import tempfile
 import unittest.mock
@@ -466,17 +467,74 @@ def main() -> int:
     # ROOD-4. revert_out_of_scope_drift: file in parent-diff owned set but outside task_dir is in-scope
     try:
         with tempfile.TemporaryDirectory() as tmp:
-            with unittest.mock.patch(
-                "_cleanliness._pygit2_util.status_porcelain",
-                return_value=[" M src/main.py"]
-            ):
-                with unittest.mock.patch("_cleanliness._parent_diff_names", return_value=["src/main.py"]):
-                    with unittest.mock.patch("_cleanliness._subprocess_util.run") as mock_run:
-                        reverted, remaining = revert_out_of_scope_drift(Path(tmp), Path("_mill"), "main")
+            tmp_path = Path(tmp)
+            # Create a git repo with a main branch and a parent branch
+            subprocess.run(
+                ["git", "init", "-b", "main", str(tmp_path)],
+                check=True,
+                capture_output=True,
+            )
+            # Configure git user
+            subprocess.run(
+                ["git", "-C", str(tmp_path), "config", "user.email", "test@test.com"],
+                check=True,
+                capture_output=True,
+            )
+            subprocess.run(
+                ["git", "-C", str(tmp_path), "config", "user.name", "Test User"],
+                check=True,
+                capture_output=True,
+            )
+            # Create initial commit on main
+            (tmp_path / "initial.txt").write_text("initial", encoding="utf-8")
+            subprocess.run(
+                ["git", "-C", str(tmp_path), "add", "initial.txt"],
+                check=True,
+                capture_output=True,
+            )
+            subprocess.run(
+                ["git", "-C", str(tmp_path), "commit", "-m", "initial"],
+                check=True,
+                capture_output=True,
+            )
+            # Create a parent branch from main
+            subprocess.run(
+                ["git", "-C", str(tmp_path), "checkout", "-b", "parent"],
+                check=True,
+                capture_output=True,
+            )
+            # Create src/main.py file on parent branch
+            (tmp_path / "src").mkdir(parents=True, exist_ok=True)
+            (tmp_path / "src" / "main.py").write_text("def hello(): pass", encoding="utf-8")
+            subprocess.run(
+                ["git", "-C", str(tmp_path), "add", "src/main.py"],
+                check=True,
+                capture_output=True,
+            )
+            subprocess.run(
+                ["git", "-C", str(tmp_path), "commit", "-m", "add src/main.py"],
+                check=True,
+                capture_output=True,
+            )
+            # Checkout back to main
+            subprocess.run(
+                ["git", "-C", str(tmp_path), "checkout", "main"],
+                check=True,
+                capture_output=True,
+            )
+            # Modify src/main.py on main (outside task_dir but in parent-diff owned set)
+            (tmp_path / "src").mkdir(parents=True, exist_ok=True)
+            (tmp_path / "src" / "main.py").write_text("def hello(): return 1", encoding="utf-8")
+            # Create _mill directory (task_dir)
+            (tmp_path / "_mill").mkdir(parents=True, exist_ok=True)
+            (tmp_path / "_mill" / "status.md").write_text("# Status", encoding="utf-8")
+            # Now test revert_out_of_scope_drift
+            reverted, remaining = revert_out_of_scope_drift(tmp_path, Path("_mill"), "parent")
+            # src/main.py is in the parent-diff owned set, so it should NOT be reverted
             assert reverted == [], f"expected [], got {reverted!r}"
-            assert remaining == [" M src/main.py"], f"expected [' M src/main.py'], got {remaining!r}"
-            # Verify git checkout was NOT called
-            assert mock_run.call_count == 0, f"expected 0 calls to run, got {mock_run.call_count}"
+            # It should be in remaining since it is in-scope (part of owned set)
+            assert len(remaining) == 1, f"expected 1 remaining line, got {len(remaining)}"
+            assert "src/main.py" in remaining[0], f"expected 'src/main.py' in remaining, got {remaining!r}"
         print("PASS: revert_out_of_scope_drift: owned-set file treated as in-scope")
     except AssertionError as exc:
         failures.append(f"FAIL: revert_out_of_scope_drift owned-set: {exc}")
