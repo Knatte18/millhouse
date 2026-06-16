@@ -134,9 +134,14 @@ def _run_verify_gate(project_root: Path, verify_cmd: str | None) -> dict | None:
                 "stuck_type": "verify",
                 "reason": reason,
             }
-    except Exception:
-        # On any exception, treat as "not a verify gate issue"
-        pass
+    except Exception as e:
+        # On any exception (e.g., missing binary), return stuck dict so caller
+        # can distinguish this from a genuine pass
+        return {
+            "status": "stuck",
+            "stuck_type": "verify",
+            "reason": f"verify gate raised: {e}",
+        }
 
     return None
 
