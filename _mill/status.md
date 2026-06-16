@@ -35,7 +35,9 @@ implementing  '2026-06-16T13:02:31Z'
 ```yaml
 batches:
   - name: review-common-fixes
-    state: pending
+    state: running
+    implementer_session: a9bb157c-c812-462d-b9c3-1de367ba6771
+    start_sha: e0fa7089fd20efceffe4f14bf088e666fffbd3a2
   - name: ascii-arrow-fix
     state: pending
   - name: implementer-verify-gate
