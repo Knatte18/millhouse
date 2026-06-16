@@ -2389,6 +2389,59 @@ def main() -> int:
     assert timeout == 1800, f"Expected default 1800, got {timeout}"
     print("PASS: resolve_large_prompt_timeout no large_prompt key -> default")
 
+    # ---------------------------------------------------------------------------
+    # parse_blocking_count / _warn_if_prose_diverges: #489 clean review tests
+    # ---------------------------------------------------------------------------
+
+    def test_parse_blocking_count_clean_review_zero_headings():
+        """
+        Clean review body with zero severity headings and prose containing
+        a number-plus-severity phrase. Should suppress the divergence warning
+        and return heading_count=0.
+        """
+        import contextlib
+        import io
+        raw = (
+            "### Overview\n"
+            "This is a clean review with no findings.\n"
+            "There are 1 gap in the discussion.\n"
+            "verdict: GAPS_FOUND\n"
+        )
+        buf = io.StringIO()
+        with contextlib.redirect_stderr(buf):
+            count = parse_blocking_count(raw, severity="GAP")
+        assert count == 0, f"expected heading_count 0, got {count}"
+        stderr = buf.getvalue()
+        assert "diverges from prose count" not in stderr, (
+            f"expected no divergence warning for zero-heading review, got: {stderr!r}"
+        )
+        print("PASS: parse_blocking_count zero headings suppresses divergence warning")
+
+    def test_parse_blocking_count_with_headings_still_warns():
+        """
+        Review body with two severity headings and divergent prose count.
+        Should emit the divergence warning and return heading_count=2.
+        """
+        import contextlib
+        import io
+        raw = (
+            "### [GAP] issue one\n"
+            "### [GAP] issue two\n"
+            "Three gaps were identified in the discussion.\n"
+        )
+        buf = io.StringIO()
+        with contextlib.redirect_stderr(buf):
+            count = parse_blocking_count(raw, severity="GAP")
+        assert count == 2, f"expected heading_count 2, got {count}"
+        stderr = buf.getvalue()
+        assert "heading count 2 diverges from prose count 3" in stderr, (
+            f"expected divergence warning, got: {stderr!r}"
+        )
+        print("PASS: parse_blocking_count with headings still warns on divergence")
+
+    test_parse_blocking_count_clean_review_zero_headings()
+    test_parse_blocking_count_with_headings_still_warns()
+
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)
         return 1
