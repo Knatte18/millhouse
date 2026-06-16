@@ -1,7 +1,7 @@
 """Source-tree guards: regressions against documented anti-patterns.
 
-Three checks bundled into one test file so we pay Python startup + import
-overhead once instead of three times. Each check scans `plugins/mill/` (and
+Four checks bundled into one test file so we pay Python startup + import
+overhead once instead of four times. Each check scans `plugins/mill/` (and
 `plugins/codeguide/` for the wiki-cwd check) for forbidden patterns and
 returns FAIL with line numbers on hit.
 
@@ -17,6 +17,9 @@ Checks:
                           scripts/ or skills/. Wiki access goes through
                           `_wiki` helpers, never via cwd change (2026-05-11
                           incident). See CLAUDE.md `## Wiki access`.
+  - anti_weakening_guardrail -- assert the anti-weakening guardrail is present
+                          in both implementer-brief.md and mill-implementer.md
+                          (#492).
 
 Each previously lived in its own test-no-*.py file. Consolidated 2026-05-28
 to reduce suite startup overhead (#388).
@@ -185,6 +188,45 @@ def _check_no_wiki_cwd() -> int:
 
 
 # --------------------------------------------------------------------------- #
+# Check 4: anti_weakening_guardrail                                           #
+# --------------------------------------------------------------------------- #
+
+_ANTI_WEAKENING_MARKER = "Never weaken, relax, exclude, downgrade, or delete test assertions, conformance checks, or allowlist entries to make verify pass."
+
+_GUARDRAIL_FILES = [
+    "plugins/mill/templates/implementer-brief.md",
+    "plugins/mill/agents/mill-implementer.md",
+]
+
+
+def _check_anti_weakening_guardrail() -> int:
+    """
+    Return 0 on PASS, 1 on FAIL.
+
+    Assert that the anti-weakening guardrail marker sentence is present in both
+    implementer-brief.md and mill-implementer.md (#492).
+    """
+    findings: list[str] = []
+
+    for rel_path in _GUARDRAIL_FILES:
+        file_path = HUB / rel_path
+        if not file_path.exists():
+            findings.append(f"FAIL: file not found: {rel_path}")
+            continue
+        text = file_path.read_text(encoding="utf-8")
+        if _ANTI_WEAKENING_MARKER not in text:
+            findings.append(f"FAIL: {rel_path}: anti-weakening guardrail marker not found")
+
+    if findings:
+        for msg in findings:
+            print(msg)
+        return 1
+
+    print("PASS: anti-weakening guardrail present in both implementer-brief.md and mill-implementer.md")
+    return 0
+
+
+# --------------------------------------------------------------------------- #
 # Entry                                                                       #
 # --------------------------------------------------------------------------- #
 
@@ -193,6 +235,7 @@ def main() -> int:
     rc |= _check_no_direct_rmtree()
     rc |= _check_no_unicode_arrow()
     rc |= _check_no_wiki_cwd()
+    rc |= _check_anti_weakening_guardrail()
     return rc
 
 
