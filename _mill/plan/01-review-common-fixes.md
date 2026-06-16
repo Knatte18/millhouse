@@ -78,8 +78,11 @@ internal to the review backend.
   `contextlib.redirect_stderr` or equivalent) for `parse_blocking_count` /
   `_warn_if_prose_diverges`: (a) a clean review body with zero `### [GAP]`
   headings whose prose contains a number-plus-severity phrase (e.g. `1 gap`) and
-  a `verdict: GAPS_FOUND` line emits NO warning, and `parse_blocking_count(...,
-  severity="GAP")` still returns `0`; (b) a review body with two `### [GAP]`
+  a `verdict: GAPS_FOUND` line — assert (against the captured stderr) that the
+  `parse_blocking_count` divergence-warning string is ABSENT (this zero-heading
+  suppression is the load-bearing assertion for #489), and that
+  `parse_blocking_count(..., severity="GAP")` still returns `0`; (b) a review
+  body with two `### [GAP]`
   headings whose prose says a divergent count (e.g. `three GAPs`) STILL emits the
   warning, and the returned count is `2`. Follow the file's actual convention:
   it is a `main()` runner (NOT `unittest.TestCase`) that prints `PASS:`/`FAIL:`

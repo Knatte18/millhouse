@@ -48,7 +48,12 @@ and the pre-existing `test-implementer-common.py` cases keep passing unchanged.
   `(stdout + stderr).strip()`; on success (rc 0) or `verify_cmd is None` returns
   `None`. In `_forward_output`, before EACH point that emits a `status: success`
   JSON (the parsed-success emit and all inferred-success emits), call the gate
-  helper; if it returns a stuck dict, enrich it with `commit_sha` set to the
+  helper. At the parsed-emit point the gate call MUST be guarded by
+  `parsed.get("status") == "success"` — the parsed branch prints the dict whether
+  the implementer self-reported `success` OR `stuck`, and a self-reported `stuck`
+  must NOT trigger a verify re-run (only a claimed success is gated). The
+  inferred-success emits are already success-only paths. If the gate returns a
+  stuck dict, enrich it with `commit_sha` set to the
   current `git rev-parse HEAD` (same as the success path does at the parsed-emit
   point) when that git call succeeds, then print the dict and return instead of
   emitting success. Skip the `commit_sha` key only if the `git rev-parse` fails. The gate must run AFTER any formatter-drift
@@ -123,13 +128,19 @@ and the pre-existing `test-implementer-common.py` cases keep passing unchanged.
   assert the emitted stuck dict carries a `commit_sha` key (the gate enriches it
   per card 5). Keep the file's existing cases passing (they call without
   `verify_cmd`).
-  ADDITIONALLY, in `test-millpy-implement.py` (a `unittest.TestCase` file with a
-  mocking `setUp`), add one case asserting the threading from card 6: patch
-  `_implementer_common.finalize_from_output` (imported into `millpy-implement.py`),
-  drive the `--stage finalize` branch for a batch whose batch-file frontmatter
+  ADDITIONALLY, in `test-millpy-implement.py` (a `unittest.TestCase` file that
+  loads the CLI via importlib as the module object `millpy_implement` and has a
+  mocking `setUp` using a `_p(<module>, "<attr>", ...)` helper), add one case
+  asserting the threading from card 6. CRITICAL — patch
+  `millpy_implement.finalize_from_output`, i.e. the binding INSIDE the
+  module-under-test, NOT `_implementer_common.finalize_from_output`:
+  `millpy-implement.py` does `from _implementer_common import ...
+  finalize_from_output`, so it holds its own reference and patching the
+  `_implementer_common` attribute would not intercept the call. Use the file's
+  existing `_p(millpy_implement, "finalize_from_output", ...)` patch convention.
+  Drive the `--stage finalize` branch for a batch whose batch-file frontmatter
   declares a known `verify:` command, and assert the patched function received
-  that exact command as its `verify_cmd` keyword argument. Follow the file's
-  existing `setUp`/patch conventions. (The `millpy-fix.py` threading uses the
+  that exact command as its `verify_cmd` keyword argument. (The `millpy-fix.py` threading uses the
   identical `.get("verify")` + pass-through pattern and is covered by the shared
   gate tests above plus its own `test-millpy-fix.py` regression run; no separate
   fix-path threading case is added.)
