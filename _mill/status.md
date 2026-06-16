@@ -1,10 +1,10 @@
 # Status
 
 ```yaml
-phase: discussed
+phase: planning
 slug: mill-external-repo-infra
 branch: hanf/mill-external-repo-infra
-plan: null
+plan: _mill/plan
 parent: main
 task: Fix nested mill layout paths, whole-repo formatter drift, and stacked-branch PR cleanup
 task_description: |
@@ -17,4 +17,5 @@ task_description: |
 discussing  '2026-06-16T12:12:23Z'
 discussion-fix-r2  '2026-06-16T12:32:56Z'
 discussed  '2026-06-16T12:33:13Z'
+planning  '2026-06-16T12:39:07Z'
 ```
