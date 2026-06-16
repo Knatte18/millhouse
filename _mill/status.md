@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-test-and-implementer-reliability
 branch: hanf/mill-test-and-implementer-reliability
 plan: _mill/plan
@@ -27,4 +27,19 @@ plan-review-r4  '2026-06-16T12:56:09Z'
 plan-fix-r4  '2026-06-16T12:56:09Z'
 plan-fix-r5  '2026-06-16T12:59:54Z'
 planned  '2026-06-16T13:00:12Z'
+implementing  '2026-06-16T13:02:31Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: review-common-fixes
+    state: pending
+  - name: ascii-arrow-fix
+    state: pending
+  - name: implementer-verify-gate
+    state: pending
+  - name: implementer-guardrail
+    state: pending
 ```
