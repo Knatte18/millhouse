@@ -12,7 +12,7 @@ Run these before staging. Both are conditional — skip if the condition isn't m
 
 ### 1. Lint (language-specific)
 
-Detect the project language (see `@mill:workflow` Language Detection) and run the lint step from the matching `{lang}-build` skill on changed files. Skip if no source files changed or no language detected.
+Detect the project language (see `@mill:workflow` Language Detection) and run the lint/format step from the matching `{lang}-build` skill on **changed files only**, never the whole solution/project. Skip if no source files changed or no language detected.
 
 ### 2. Codeguide sync (only if codeguide is initialized)
 
