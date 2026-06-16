@@ -444,21 +444,21 @@ def main() -> int:
     except Exception as exc:
         failures.append(f"FAIL: revert_out_of_scope_drift mixed ({type(exc).__name__}): {exc}")
 
-    # ROOD-3. revert_out_of_scope_drift: untracked out-of-scope file NOT reverted and NOT returned
+    # ROOD-3. revert_out_of_scope_drift: deleted-in-index out-of-scope file NOT reverted (not a modified status code)
     try:
         with tempfile.TemporaryDirectory() as tmp:
             with unittest.mock.patch(
                 "_cleanliness._pygit2_util.status_porcelain",
-                return_value=["?? out_of_scope.txt"]
+                return_value=[" D out_of_scope.txt"]
             ):
                 with unittest.mock.patch("_cleanliness._parent_diff_names", return_value=[]):
                     with unittest.mock.patch("_cleanliness._subprocess_util.run") as mock_run:
                         reverted, remaining = revert_out_of_scope_drift(Path(tmp), Path("_mill"), "main")
             assert reverted == [], f"expected [], got {reverted!r}"
             assert remaining == [], f"expected [], got {remaining!r}"
-            # Verify git checkout was NOT called
+            # Verify git checkout was NOT called (file is deleted in index, not modified)
             assert mock_run.call_count == 0, f"expected 0 calls to run, got {mock_run.call_count}"
-        print("PASS: revert_out_of_scope_drift: untracked file NOT reverted and NOT returned")
+        print("PASS: revert_out_of_scope_drift: deleted-in-index file NOT reverted and NOT returned")
     except AssertionError as exc:
         failures.append(f"FAIL: revert_out_of_scope_drift untracked: {exc}")
     except Exception as exc:
