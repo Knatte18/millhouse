@@ -18,7 +18,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 
-SKIP: frozenset[str] = frozenset({"test-wiki-sync.py", "test-finalize-cleanup.py"})
+SKIP: frozenset[str] = frozenset({"test-wiki-sync.py"})
 
 
 def _run_one(test: Path, env: dict) -> tuple[str, int, float, str]:
