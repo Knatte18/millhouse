@@ -12,7 +12,7 @@ You are the end-of-task finalization orchestrator. Your job is to choose the cor
 ## Entry
 
 1. Resolve `git_root` via `_paths.resolve_git_root()`, `wiki_path` via `_paths.resolve_wiki_path(git_root)`.
-2. Load config: `cfg = _config.load_config(_paths.resolve_hub_path(), git_root)`.
+2. Load config: `cfg = _config.load_config(_paths.resolve_hub_path(), _paths.resolve_hub_path())`.
    `signature: _config.load_config(hub_root: Path, worktree_root: Path) -> dict` — deep-merges `<hub_root>/mill-config.yaml` with `<worktree_root>/.millhouse/config.local.yaml`.
 2.5. **Path Setup.** `cfg` was loaded in step 2. Derive:
    - `worktree_root = _paths.resolve_hub_path()` (the hub root; used to anchor `_mill/` paths in nested layouts)
