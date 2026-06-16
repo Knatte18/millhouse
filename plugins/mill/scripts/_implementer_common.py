@@ -1,5 +1,6 @@
 """Shared helpers for millpy-implement.py and millpy-fix.py."""
 import json
+import subprocess
 import _agent_dispatch
 import _cleanliness
 import _subprocess_util
@@ -96,6 +97,50 @@ def _commit_formatter_drift(project_root: Path) -> bool:
         return False
 
 
+def _run_verify_gate(project_root: Path, verify_cmd: str | None) -> dict | None:
+    """
+    Run a verify command and return a stuck dict on failure, None on success or when verify_cmd is None.
+
+    When verify_cmd is not None, runs the command via subprocess.run with shell=True,
+    capture_output=True, and text=True. On non-zero return code, returns a stuck dict
+    with stuck_type="verify" and reason set to the last 2000 characters of stdout+stderr.
+    On success (rc 0) or when verify_cmd is None, returns None.
+
+    Args:
+        project_root: Path to the worktree root.
+        verify_cmd: Verify command to run (e.g., "pytest tests/ -q"), or None.
+
+    Returns:
+        A stuck dict {"status": "stuck", "stuck_type": "verify", "reason": <tail>} on
+        non-zero return, or None on success or when verify_cmd is None.
+    """
+    if verify_cmd is None:
+        return None
+
+    try:
+        result = subprocess.run(
+            verify_cmd,
+            shell=True,
+            capture_output=True,
+            text=True,
+            cwd=project_root,
+        )
+        if result.returncode != 0:
+            output = (result.stdout + result.stderr).strip()
+            # Use last 2000 characters of the output
+            reason = output[-2000:] if len(output) > 2000 else output
+            return {
+                "status": "stuck",
+                "stuck_type": "verify",
+                "reason": reason,
+            }
+    except Exception:
+        # On any exception, treat as "not a verify gate issue"
+        pass
+
+    return None
+
+
 def emit_prepare(
     briefs_dir: Path,
     role: str,
@@ -174,6 +219,7 @@ def finalize_from_output(
     start_sha: str | None = None,
     snapshot_path: Path | None = None,
     session_id: str | None = None,
+    verify_cmd: str | None = None,
 ) -> int:
     """Read sub-agent output and finalize.
 
@@ -187,6 +233,7 @@ def finalize_from_output(
         start_sha=start_sha,
         snapshot_path=snapshot_path,
         session_id=session_id,
+        verify_cmd=verify_cmd,
     )
 
 
@@ -228,6 +275,7 @@ def _forward_output(
     start_sha: str | None = None,
     snapshot_path: Path | None = None,
     session_id: str | None = None,
+    verify_cmd: str | None = None,
 ) -> int:
     """Extract the last JSON object containing a 'status' key from output.
 
@@ -235,9 +283,25 @@ def _forward_output(
     When no valid JSON is found, emits a stuck/logic sentinel.
     When the inferred-success fallback fires, the emitted JSON uses ``session_id`` if supplied,
     falling back to the literal ``"unknown"`` for backwards compatibility with callers that don't pass it.
+    When verify_cmd is not None, runs it before emitting any success; if the command fails,
+    demotes the success to stuck/verify with the command's output in reason.
     """
     parsed = _extract_status_json(output)
     if parsed is not None:
+        # Apply verify gate ONLY for self-reported success
+        if parsed.get("status") == "success":
+            gate_result = _run_verify_gate(project_root, verify_cmd)
+            if gate_result is not None:
+                # Verify failed; enrich with commit_sha and emit
+                result = _subprocess_util.run(
+                    ["git", "rev-parse", "HEAD"],
+                    cwd=project_root,
+                )
+                if result.returncode == 0:
+                    gate_result["commit_sha"] = result.stdout.strip()
+                print(json.dumps(gate_result))
+                return 0
+
         result = _subprocess_util.run(
             ["git", "rev-parse", "HEAD"],
             cwd=project_root,
@@ -282,6 +346,12 @@ def _forward_output(
                                         new_head = result_head.stdout.strip()
                                     else:
                                         new_head = head
+                                    # Apply verify gate before emitting success
+                                    gate_result = _run_verify_gate(project_root, verify_cmd)
+                                    if gate_result is not None:
+                                        gate_result["commit_sha"] = new_head
+                                        print(json.dumps(gate_result))
+                                        return 0
                                     # Emit success
                                     violations = _cleanliness.compute_scope_violations(project_root)
                                     if violations:
@@ -291,6 +361,12 @@ def _forward_output(
                                     return 0
                         # Not formatter drift, or commit failed
                         print(json.dumps({"status": "stuck", "stuck_type": "logic", "reason": "inferred success but working tree dirty -- implementer likely skipped git-commit on modified files"}))
+                        return 0
+                    # Apply verify gate before emitting success
+                    gate_result = _run_verify_gate(project_root, verify_cmd)
+                    if gate_result is not None:
+                        gate_result["commit_sha"] = head
+                        print(json.dumps(gate_result))
                         return 0
                     violations = _cleanliness.compute_scope_violations(project_root)
                     if violations:
@@ -307,6 +383,12 @@ def _forward_output(
                     check=True,
                 )
                 if not result_full.stdout.strip():
+                    # Apply verify gate before emitting success
+                    gate_result = _run_verify_gate(project_root, verify_cmd)
+                    if gate_result is not None:
+                        gate_result["commit_sha"] = head
+                        print(json.dumps(gate_result))
+                        return 0
                     print(json.dumps({"status": "success", "commit_sha": head, "session_id": session_id or "unknown", "inferred": True}))
                     return 0
     except Exception:
