@@ -83,11 +83,15 @@ stacked case. `test-finalize-cleanup.py` is run as regression (the
   not a `_mill/` task-state path).
   (3) **Cleanliness gate (step 2b):** before the existing
   block-on-`compute_new_dirt` flow, derive `parent_branch =
-  _parent_branch.resolve(status_path, interactive=False)` and
-  `task_dir = status_path.parent` within step 2b (neither is in scope at 2b today;
-  `parent_branch` is otherwise resolved only at Handoff). Then call
-  `_cleanliness.revert_out_of_scope_drift(<worktree>, task_dir, parent_branch)` to
-  revert out-of-scope formatter drift and warn. Decide the block using the helper's
+  _parent_branch.resolve(status_path, interactive=False)` within step 2b
+  (`parent_branch` is otherwise resolved only at Handoff). Reuse the existing
+  global `task_dir` from Path Setup (step 4.5, `task_dir = status_path.parent`) — do
+  NOT re-derive it. Then call `_cleanliness.revert_out_of_scope_drift(<worktree>,
+  task_dir, parent_branch)`, passing the SAME first argument `<worktree>` that the
+  adjacent step-2b `compute_new_dirt(<worktree>, ...)` call already uses (i.e.
+  `worktree_root`, the hub root — the same root passed to `compute_terminal_dirt`
+  at Handoff, line 654); the helper relativizes the absolute `task_dir` internally
+  exactly as `compute_terminal_dirt` does. Decide the block using the helper's
   returned remaining-in-scope dirt (the second element of its return tuple) instead
   of the raw `compute_new_dirt` list — block the batch only if that in-scope
   remaining set is non-empty, preserving the existing blocked-state status writes

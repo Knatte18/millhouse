@@ -36,9 +36,9 @@ CLIs are exercised for regression only (their flat-layout behavior must not chan
 - **Creates:** none
 - **Deletes:** none
 - **Requirements:** In `main()`, `project_root` is already
-  `resolve_hub_path()` (`hub_dir`). Change the briefs path from
-  `briefs_dir = _paths.resolve_task_path(git_root, "_mill/briefs/")` to use
-  `project_root` (the hub root) instead of `git_root`. Change the active-slug call
+  `resolve_hub_path()` (`hub_dir`). Inside the `--stage prepare` branch, change the
+  briefs path line `briefs_dir = _paths.resolve_task_path(git_root, "_mill/briefs/")`
+  to use `project_root` (the hub root) instead of `git_root`. Change the active-slug call
   from `find_active_slug(git_root, wiki_root, cfg)` to
   `find_active_slug(project_root, wiki_root, cfg)` so its glob fallback
   (`<arg>/_mill/*.active` in `_review_common.find_active_slug`) resolves under the

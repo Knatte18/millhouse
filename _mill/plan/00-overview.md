@@ -3,7 +3,7 @@
 ```yaml
 task: "Fix nested mill layout paths, whole-repo formatter drift, and stacked-branch PR cleanup"
 slug: mill-external-repo-infra
-approved: false
+approved: true
 started: "20260616-123625"
 parent: main
 root: ""
