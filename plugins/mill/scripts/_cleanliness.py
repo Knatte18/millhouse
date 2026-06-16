@@ -218,6 +218,8 @@ def revert_out_of_scope_drift(
                         file=sys.stderr,
                     )
                 else:
+                    # Failed revert: treat as still-dirty in-scope so the gate sees it
+                    remaining_in_scope_lines.append(line)
                     print(
                         f"[cleanliness] warning: failed to revert {path}: "
                         f"git checkout exited {result.returncode}",
