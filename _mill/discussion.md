@@ -133,11 +133,29 @@ dangerous class of mill bug because nothing downstream catches it.
   instead of `success`, including the verify output in `reason`. If
   `verify: null` (nothing to run), keep current behaviour. The verify command
   is read from the batch file's fenced-yaml frontmatter via
-  `_plan_dag._read_batch_frontmatter(batch_file)["verify"]`; thread the verify
-  command string into `_forward_output` / `finalize_from_output` as a new
-  parameter (e.g. `verify_cmd: str | None`). `millpy-implement.py` resolves it
-  in both the `finalize` branch (where `batch_file` is already in scope at
-  line ~175) and the `full` stage before calling `_forward_output`.
+  `_plan_dag._read_batch_frontmatter(batch_file).get("verify")` — use `.get`,
+  NOT `["verify"]`: the helper returns `{}` on missing/malformed frontmatter
+  and a valid batch may omit the `verify:` key, so indexing would raise
+  `KeyError`; `.get` yields `None`, which the gate treats as "nothing to run"
+  (the verify:null no-op branch). Thread the verify command string into
+  `_forward_output` / `finalize_from_output` as a new parameter (e.g.
+  `verify_cmd: str | None`). `millpy-implement.py` resolves it in both the
+  `finalize` branch (where `batch_file` is already in scope at line ~175) and
+  the `full` stage before calling `_forward_output`.
+- Gate locus (resolves which process runs verify): the gate executes inside
+  the `finalize` (and `full`) process, against `project_root` at its CURRENT
+  HEAD — i.e. after the implementer's commits, never a stale snapshot. Under
+  `agent` dispatch (this repo's mode) the implementer runs out-of-process and a
+  separate `--stage finalize` invocation does the gating; that finalize call
+  must carry `verify_cmd`, so the agent-dispatch path is gated identically to
+  the in-process `full` stage. There is no path where a `success` is emitted
+  without the verify gate having run (when `verify_cmd` is non-null).
+- Ordering vs formatter-drift auto-commit: in the inferred-success fallback,
+  `_forward_output` may auto-commit formatter drift (`_implementer_common.py`
+  ~line 269) before emitting success at line 290. The verify gate runs AFTER
+  any such drift commit, against the resulting clean HEAD, so all four success
+  emit points (parsed-success line 250; inferred-success lines 290, 299, 310)
+  are gated uniformly on the same final state.
 - Rationale: The finalize stage trusts the implementer's self-reported JSON and
   never re-runs verify. When per-batch review is disabled there is no later
   stage that re-runs verify either — and even when review IS enabled, the
@@ -158,7 +176,12 @@ dangerous class of mill bug because nothing downstream catches it.
   `millpy-merge-in-subagent.py` does (lines 175–194):
   `subprocess.run(verify_cmd, shell=True, capture_output=True, text=True, cwd=project_root)`;
   return code 0 = pass; non-zero → `stuck_type: verify` with
-  `reason = (stdout + stderr).strip()`.
+  `reason` set to the FAILURE output. Cap `reason` to the last ~2000 chars of
+  `(stdout + stderr).strip()` (keep the tail — pytest/unittest summaries and
+  the failing assertion live at the end), so the single-line stuck JSON that
+  mill-go consumes stays bounded. This is the one intentional divergence from
+  the merge-in precedent (which passes the full output); note it in the
+  implementation.
 - Rationale: There is an existing, working precedent for running a user
   `verify:` string from Python in this exact context; mirror it for
   consistency and to avoid inventing a second execution path.
@@ -288,5 +311,16 @@ Full-suite baseline gate after all batches: `run-all.py` must be fully green
   guardrail to both `implementer-brief.md` and `mill-implementer.md`. Defer the
   per-batch tier-raise suggestion as out of scope.
 - **Q:** Verify-execution mechanism for #488? **A:** Mirror
-  `millpy-merge-in-subagent.py` exactly: `subprocess.run(cmd, shell=True,
-  capture_output=True, text=True, cwd=project_root)`.
+  `millpy-merge-in-subagent.py`: `subprocess.run(cmd, shell=True,
+  capture_output=True, text=True, cwd=project_root)`; one divergence — cap
+  `reason` to the last ~2000 chars of output.
+- **Q:** (review r1 GAP) How read the batch verify command safely? **A:**
+  `_read_batch_frontmatter(batch_file).get("verify")` — `.get`, not `["..."]`,
+  so missing/malformed frontmatter yields `None` (the verify:null no-op).
+- **Q:** (review r1 GAP) Which process/HEAD runs the verify gate? **A:** The
+  `finalize`/`full` process, against `project_root` at its post-implementer
+  HEAD; the agent-dispatch `prepare`→`finalize` split carries `verify_cmd` so
+  it is gated identically. No `success` emit bypasses the gate.
+- **Q:** (review r1 NOTE) Verify vs formatter-drift commit ordering? **A:**
+  Verify runs after any drift auto-commit, on the final clean HEAD; all four
+  success emit points are gated uniformly.
