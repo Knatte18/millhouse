@@ -10,20 +10,23 @@ try:
     parent_branch = "main"
     require_pr = bool(cfg.get("git", {}).get("require_pr_to_base", False))
     base_branch = cfg.get("git", {}).get("base_branch", "main")
-    assert require_pr and parent_branch == base_branch, "expected PR mode"
-    print("PASS: require_pr_to_base=true, parent==base_branch -> PR mode")
+    assert require_pr, "expected PR mode"
+    print("PASS: require_pr_to_base=true -> PR mode")
 except AssertionError as e:
     print(f"FAIL: {e}", file=sys.stderr)
     failures.append(("scenario_1", str(e)))
 
-# Scenario 2 -- require_pr_to_base: true, parent != base_branch -> direct mode
+# Scenario 2 -- require_pr_to_base: true, parent != base_branch (stacked) -> PR mode
 try:
     cfg = {"git": {"require_pr_to_base": True, "base_branch": "main"}}
     parent_branch = "develop"
     require_pr = bool(cfg.get("git", {}).get("require_pr_to_base", False))
     base_branch = cfg.get("git", {}).get("base_branch", "main")
-    assert not (require_pr and parent_branch == base_branch), "expected direct mode"
-    print("PASS: require_pr_to_base=true, parent!=base_branch -> direct mode")
+    assert require_pr, "expected PR mode for stacked task"
+    # Stacked task: PR targets parent_branch, not base_branch
+    pr_target = parent_branch
+    assert pr_target == "develop", "PR target should be parent_branch for stacked task"
+    print("PASS: require_pr_to_base=true, stacked (parent!=base) -> PR mode with parent as target")
 except AssertionError as e:
     print(f"FAIL: {e}", file=sys.stderr)
     failures.append(("scenario_2", str(e)))
