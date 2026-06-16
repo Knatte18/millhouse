@@ -42,5 +42,7 @@ batches:
     start_sha: b0d64bafe247d16ad52e431a08f8ddf6353cf273
     commit_sha: c0953218b2733f5d0eb21a7a85a3fed3515df951
   - name: orchestrator-skills
-    state: pending
+    state: running
+    implementer_session: 6135be7f-00e4-4b30-baf0-5d34ce06e1f0
+    start_sha: 006eb6a766a73d9ebf21b8a5dfc39c81d969bb66
 ```
