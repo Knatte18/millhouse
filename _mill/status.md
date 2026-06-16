@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-implementer-verify-gate
+phase: approved-implementer-guardrail
 slug: mill-test-and-implementer-reliability
 branch: hanf/mill-test-and-implementer-reliability
 plan: _mill/plan
@@ -31,6 +31,7 @@ implementing  '2026-06-16T13:02:31Z'
 approved-review-common-fixes  '2026-06-16T13:06:02Z'
 approved-ascii-arrow-fix  '2026-06-16T13:17:34Z'
 approved-implementer-verify-gate  '2026-06-16T13:24:52Z'
+approved-implementer-guardrail  '2026-06-16T13:27:49Z'
 ```
 
 ## Batches
@@ -53,7 +54,8 @@ batches:
     start_sha: 7a043d86d5ff2e4dbfa1117fd094e2f47996c4f0
     commit_sha: be481746329623c22c6196dfee815c8c34eb4233
   - name: implementer-guardrail
-    state: running
+    state: approved
     implementer_session: 98635c89-f76e-4285-ae50-4a69098a44e5
     start_sha: 80a3286df2aee9d3661d6406bc93321de8ab9c62
+    commit_sha: 67c56639ab9aff5a0039f9e247e5672a387394b8
 ```
