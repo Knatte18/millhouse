@@ -53,5 +53,7 @@ batches:
     start_sha: 7a043d86d5ff2e4dbfa1117fd094e2f47996c4f0
     commit_sha: be481746329623c22c6196dfee815c8c34eb4233
   - name: implementer-guardrail
-    state: pending
+    state: running
+    implementer_session: 98635c89-f76e-4285-ae50-4a69098a44e5
+    start_sha: 80a3286df2aee9d3661d6406bc93321de8ab9c62
 ```
