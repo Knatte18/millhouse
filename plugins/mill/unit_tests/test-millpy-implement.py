@@ -536,6 +536,43 @@ class TestMillpyImplement(unittest.TestCase):
         self.assertEqual(call_kwargs.get("start_sha"), "STATUS_SHA")
         self.assertEqual(call_kwargs.get("session_id"), "STATUS_SESSION")
 
+    def test_finalize_stage_resolves_batch_verify_command(self):
+        """--stage finalize: batch verify command is resolved and passed to finalize_from_output."""
+        # Update the batch file to include a verify command in frontmatter
+        plan_dir = self.tmp_path / "task" / "plan"
+        batch_file = plan_dir / "01-test-batch.md"
+        batch_file.write_text(
+            "```yaml\n"
+            "task: Test Task\n"
+            "verify: exit 0\n"
+            "```\n\n"
+            "# Batch: test-batch\n",
+            encoding="utf-8"
+        )
+
+        agent_output_path = self.tmp_path / "agent-output.txt"
+        agent_output_path.write_text(
+            '{"status":"success","commit_sha":"xyz","session_id":"fake"}\n',
+            encoding="utf-8"
+        )
+
+        # Patch finalize_from_output to capture the verify_cmd argument
+        with unittest.mock.patch.object(
+            millpy_implement, "finalize_from_output",
+            return_value=0,
+        ) as mock_finalize:
+            rc, out = self._run_main([
+                "test-batch",
+                "--stage", "finalize",
+                "--agent-output", str(agent_output_path),
+            ])
+
+        self.assertEqual(rc, 0)
+        # Verify that finalize_from_output was called with the resolved verify_cmd
+        mock_finalize.assert_called_once()
+        call_kwargs = mock_finalize.call_args.kwargs
+        self.assertEqual(call_kwargs.get("verify_cmd"), "exit 0")
+
 
 class TestClassifyStuckType(unittest.TestCase):
 

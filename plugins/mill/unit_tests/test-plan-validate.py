@@ -2265,8 +2265,8 @@ def test_git_root_threading_without_git_root_default_none_documents_required() -
     This test documents the potential issue: when project_root is the root
     subfolder itself (git_root/subproject) and root="subproject" is set,
     resolve_existing_paths without git_root will try:
-      1. project_root / "subproject" / raw  → DOUBLED, wrong path
-      2. project_root / raw  → correct, file is here
+      1. project_root / "subproject" / raw  -> DOUBLED, wrong path
+      2. project_root / raw  -> correct, file is here
 
     So the file IS found, but only by luck (via the fallback). Threading git_root
     makes git_root/root/raw PRIMARY, which is safer and doesn't depend on

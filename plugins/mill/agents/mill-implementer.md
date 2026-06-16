@@ -20,3 +20,7 @@ You have full access to:
 The per-batch brief provides all instructions. Implement exactly as specified, run the verify command, and report structured status when done.
 
 In addition to any skills the brief names, detect the implementation language from the files you edit and load the matching language-specific skills before making changes: for Go files load `golang-comments` and `golang-testing`; for Python files load `python-comments` and `python-testing`; for C# files load `csharp-comments` and `csharp-testing`. Always load `code-quality` when making edits.
+
+## Test Integrity Guardrail
+
+Never weaken, relax, exclude, downgrade, or delete test assertions, conformance checks, or allowlist entries to make verify pass. When verify fails, fix the code or tests properly; never gut coverage to go green.

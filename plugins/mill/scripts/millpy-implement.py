@@ -189,12 +189,16 @@ def main(argv=None) -> int:
         _safe_batch = _paths.sanitize_filename_component(args.batch_name)
         snapshot_path = project_root / "_mill" / f".cleanliness-snapshot-{_safe_batch}.txt"
         session_id = batch_status.get("implementer_session")
+        # Resolve batch verify command from the batch file's frontmatter
+        batch_frontmatter = _plan_dag._read_batch_frontmatter(batch_file)
+        verify_cmd = batch_frontmatter.get("verify")
         return finalize_from_output(
             Path(args.agent_output),
             project_root,
             start_sha=start_sha,
             snapshot_path=snapshot_path,
             session_id=session_id,
+            verify_cmd=verify_cmd,
         )
 
     # Stages: prepare and full (need pre-commit, render, and setup)
@@ -298,7 +302,10 @@ def main(argv=None) -> int:
         print(json.dumps({"status": "stuck", "stuck_type": stuck_type, "reason": error_reason, "commits_made": commits_made}))
         print(error_reason, file=sys.stderr)
         return 1
-    return _forward_output(output, project_root, start_sha=start_sha, snapshot_path=snapshot_path, session_id=session_id)
+    # Resolve batch verify command from the batch file's frontmatter for full stage
+    batch_frontmatter = _plan_dag._read_batch_frontmatter(batch_file)
+    verify_cmd = batch_frontmatter.get("verify")
+    return _forward_output(output, project_root, start_sha=start_sha, snapshot_path=snapshot_path, session_id=session_id, verify_cmd=verify_cmd)
 
 
 if __name__ == "__main__":

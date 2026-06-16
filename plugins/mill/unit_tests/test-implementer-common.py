@@ -599,12 +599,145 @@ def main() -> int:
             print(f"FAIL: case 18 ({exc})", file=sys.stderr)
             errors += 1
 
-    # Case 19: inferred success with formatter drift auto-committed
+    # Case 19: verify_cmd provided, verify fails, parsed success -> demoted to stuck/verify
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        base_sha = _setup_fixture(project_root)
+        snapshot_path = project_root / "_mill" / ".cleanliness-snapshot-test.txt"
+        _cleanliness.capture_snapshot(project_root, snapshot_path)
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "--allow-empty", "-m", "second"],
+            check=True, capture_output=True,
+        )
+        new_head = subprocess.run(
+            ["git", "-C", str(project_root), "rev-parse", "HEAD"],
+            check=True, capture_output=True, text=True,
+        ).stdout.strip()
+        agent_output = '{"status":"success","commit_sha":"abc","session_id":"test-session"}\n'
+        # Verify command that always fails
+        verify_cmd = "exit 1"
+        rc, captured = _capture_stdout(
+            lambda: _forward_output(
+                agent_output,
+                project_root,
+                start_sha=base_sha,
+                snapshot_path=snapshot_path,
+                verify_cmd=verify_cmd,
+            )
+        )
+        try:
+            data = json.loads(captured.strip())
+            assert data["status"] == "stuck", f"expected status=stuck, got {data}"
+            assert data["stuck_type"] == "verify", f"expected stuck_type=verify, got {data}"
+            assert "reason" in data, f"expected reason key in {data}"
+            assert "commit_sha" in data, f"expected commit_sha key in {data}"
+            assert data["commit_sha"] == new_head, f"expected commit_sha={new_head}, got {data}"
+            print("PASS: parsed success with failing verify_cmd -> stuck/verify with commit_sha")
+        except Exception as exc:
+            print(f"FAIL: case 19 ({exc}) captured={captured!r}", file=sys.stderr)
+            errors += 1
+
+    # Case 20: verify_cmd provided, verify passes, parsed success -> success preserved
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        base_sha = _setup_fixture(project_root)
+        snapshot_path = project_root / "_mill" / ".cleanliness-snapshot-test.txt"
+        _cleanliness.capture_snapshot(project_root, snapshot_path)
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "--allow-empty", "-m", "second"],
+            check=True, capture_output=True,
+        )
+        agent_output = '{"status":"success","commit_sha":"abc","session_id":"test-session"}\n'
+        # Verify command that succeeds
+        verify_cmd = "exit 0"
+        rc, captured = _capture_stdout(
+            lambda: _forward_output(
+                agent_output,
+                project_root,
+                start_sha=base_sha,
+                snapshot_path=snapshot_path,
+                verify_cmd=verify_cmd,
+            )
+        )
+        try:
+            data = json.loads(captured.strip())
+            assert data["status"] == "success", f"expected status=success, got {data}"
+            assert "reason" not in data, f"expected no reason field in success output, got {data}"
+            print("PASS: parsed success with passing verify_cmd -> success preserved")
+        except Exception as exc:
+            print(f"FAIL: case 20 ({exc}) captured={captured!r}", file=sys.stderr)
+            errors += 1
+
+    # Case 21: verify_cmd=None, parsed success -> success preserved (backward compat)
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        base_sha = _setup_fixture(project_root)
+        snapshot_path = project_root / "_mill" / ".cleanliness-snapshot-test.txt"
+        _cleanliness.capture_snapshot(project_root, snapshot_path)
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "--allow-empty", "-m", "second"],
+            check=True, capture_output=True,
+        )
+        agent_output = '{"status":"success","commit_sha":"abc","session_id":"test-session"}\n'
+        rc, captured = _capture_stdout(
+            lambda: _forward_output(
+                agent_output,
+                project_root,
+                start_sha=base_sha,
+                snapshot_path=snapshot_path,
+                verify_cmd=None,
+            )
+        )
+        try:
+            data = json.loads(captured.strip())
+            assert data["status"] == "success", f"expected status=success, got {data}"
+            print("PASS: verify_cmd=None -> success preserved (backward compat)")
+        except Exception as exc:
+            print(f"FAIL: case 21 ({exc}) captured={captured!r}", file=sys.stderr)
+            errors += 1
+
+    # Case 22: inferred success, verify_cmd fails -> demoted to stuck/verify with commit_sha
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        base_sha = _setup_fixture(project_root)
+        snapshot_path = project_root / "_mill" / ".cleanliness-snapshot-test.txt"
+        _cleanliness.capture_snapshot(project_root, snapshot_path)
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "--allow-empty", "-m", "second"],
+            check=True, capture_output=True,
+        )
+        new_head = subprocess.run(
+            ["git", "-C", str(project_root), "rev-parse", "HEAD"],
+            check=True, capture_output=True, text=True,
+        ).stdout.strip()
+        # Inferred success path (no JSON in agent output)
+        verify_cmd = "exit 1"
+        rc, captured = _capture_stdout(
+            lambda: _forward_output(
+                "garbage output with no json",
+                project_root,
+                start_sha=base_sha,
+                snapshot_path=snapshot_path,
+                verify_cmd=verify_cmd,
+            )
+        )
+        try:
+            data = json.loads(captured.strip())
+            assert data["status"] == "stuck", f"expected status=stuck, got {data}"
+            assert data["stuck_type"] == "verify", f"expected stuck_type=verify, got {data}"
+            assert "commit_sha" in data, f"expected commit_sha key in {data}"
+            assert data["commit_sha"] == new_head, f"expected commit_sha={new_head}, got {data}"
+            print("PASS: inferred success with failing verify_cmd -> stuck/verify with commit_sha")
+        except Exception as exc:
+            print(f"FAIL: case 22 ({exc}) captured={captured!r}", file=sys.stderr)
+            errors += 1
+
+    # Case 23: inferred success with formatter drift auto-committed
     # Note: This is a complex integration test that requires the formatter drift
     # detection logic to work end-to-end. We skip it as Cases 15-18 test the
     # components independently and pass. The full integration is better tested
     # with e2e tests when formatter drift actually occurs in a real batch.
-    print("SKIP: case 19 (formatter drift integration test - components tested separately in cases 15-18)")
+    print("SKIP: case 23 (formatter drift integration test - components tested separately in cases 15-18)")
 
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)

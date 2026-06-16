@@ -772,7 +772,7 @@ def main() -> int:
             print(f"[FAIL] _wait_for_idle_stable scenario (a): {e}")
             errors += 1
 
-        # Scenario (b): Phase 1 finds "esc to interrupt", Phase 2 finds "? for shortcuts" twice → True
+        # Scenario (b): Phase 1 finds "esc to interrupt", Phase 2 finds "? for shortcuts" twice -> True
         try:
             with mock.patch("_psmux.capture_pane", side_effect=["esc to interrupt\n", "? for shortcuts\n", "? for shortcuts\n"]), \
                  mock.patch("time.sleep"), \
@@ -784,7 +784,7 @@ def main() -> int:
             print(f"[FAIL] _wait_for_idle_stable scenario (b): {e}")
             errors += 1
 
-        # Scenario (c): Phase 1 finds marker quickly, Phase 2 never finds "for shortcuts", timeout fires → returns False
+        # Scenario (c): Phase 1 finds marker quickly, Phase 2 never finds "for shortcuts", timeout fires -> returns False
         try:
             with mock.patch("_psmux.capture_pane", side_effect=["esc to interrupt\n", ""]), \
                  mock.patch("time.sleep"), \
