@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-implementer-guardrail
+phase: holistic-reviewing
 slug: mill-test-and-implementer-reliability
 branch: hanf/mill-test-and-implementer-reliability
 plan: _mill/plan
@@ -32,6 +32,7 @@ approved-review-common-fixes  '2026-06-16T13:06:02Z'
 approved-ascii-arrow-fix  '2026-06-16T13:17:34Z'
 approved-implementer-verify-gate  '2026-06-16T13:24:52Z'
 approved-implementer-guardrail  '2026-06-16T13:27:49Z'
+holistic-reviewing  '2026-06-16T17:38:31Z'
 ```
 
 ## Batches
