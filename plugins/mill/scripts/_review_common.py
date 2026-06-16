@@ -139,10 +139,7 @@ def worktree_snapshot_guard(
     ANY entry in ``expected_paths`` as a substring. HEAD-SHA changes are
     NEVER filtered.
 
-    A fast-forward HEAD advance (where the new HEAD is a descendant of the old
-    HEAD) is tolerated if no new working-tree dirt is introduced and no dirt
-    is removed outside of a fast-forward commit. A stderr warning is emitted
-    when a fast-forward is detected.
+    Any change to HEAD during the review window is considered an overstep.
 
     If the wrapped block raises AND state was mutated, ``ReviewerOverstepError`` takes priority and chains the inner exception via ``__cause__``; if state was unchanged the inner exception is re-raised unchanged.
     If the post-snapshot capture itself raises (e.g. ``_capture_head_sha`` propagating a ``ReviewError`` from a broken git invocation), that error propagates and the inner exception is NOT chained -- the capture failure indicates the snapshot is untrustworthy, so the typed ``ReviewerOverstepError`` cannot be raised safely. This is an intentional trade-off; the inner exception, if any, is visible in the traceback frames above the capture call.
@@ -162,24 +159,12 @@ def worktree_snapshot_guard(
     added = set(after_filtered) - set(before_filtered)
     removed = set(before_filtered) - set(after_filtered)
     head_changed = before_sha != after_sha
-    fast_forward = head_changed and _pygit2_util.is_ancestor(project_root, before_sha, after_sha)
 
-    should_raise = (
-        (added)  # New working-tree dirt added
-        or (head_changed and not fast_forward)  # HEAD rewritten/reset to non-descendant
-        or (removed and not fast_forward)  # Dirt removed without a fast-forward commit
-    )
+    should_raise = bool(added) or head_changed or bool(removed)
 
     if should_raise:
         diff = _porcelain_diff(before_filtered, after_filtered)
         raise ReviewerOverstepError(before_sha, after_sha, diff) from inner_exc
-
-    if fast_forward and not added and not (removed and not fast_forward):
-        print(
-            f"[_review_common] HEAD advanced {before_sha[:8]} -> {after_sha[:8]} "
-            f"during review window (fast-forward; allowed)",
-            file=sys.stderr,
-        )
 
     if inner_exc is not None:
         raise inner_exc
@@ -1259,15 +1244,34 @@ def parse_verdict(raw_output: str) -> str:
 
 
 def _warn_if_prose_diverges(raw_output: str, severity: str, heading_count: int) -> None:
+    """
+    Emit a warning if prose count diverges from heading count.
+
+    Only warns when heading_count > 0 (to suppress spurious warnings on clean
+    APPROVE reviews with no severity headings). The raw_output is filtered to
+    exclude lines starting with 'verdict:' before the prose scan, so verdict
+    lines cannot trigger warnings.
+    """
+    if heading_count == 0:
+        return
+
     _WORD_TO_INT = {
         "one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
         "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
     }
+
+    # Filter out verdict: lines from prose scan
+    filtered_lines = [
+        line for line in raw_output.splitlines()
+        if not line.strip().startswith("verdict:")
+    ]
+    filtered_output = "\n".join(filtered_lines)
+
     pattern = re.compile(
         r"\b(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+" + re.escape(severity),
         re.IGNORECASE,
     )
-    matches = pattern.findall(raw_output)
+    matches = pattern.findall(filtered_output)
     if not matches:
         return
     raw_val = matches[0]
