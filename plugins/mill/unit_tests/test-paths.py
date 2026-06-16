@@ -258,6 +258,111 @@ def main() -> int:
                 f"M2+sub cwd=hub/nested: expected {hub_dir}, got {got2}"
         print("PASS: resolve_hub_path M2+sub returns hub subdir when cwd is inside it")
 
+        # Nested-layout fixture: mill project below git toplevel, with worktree-root stub
+        # This mirrors what millpy-spawn.py writes: {"hub_relative_path": hub_subpath}
+        # at worktree_root/.millhouse/config.local.yaml when the hub is a subdir.
+
+        # Test 1: Nested layout, cwd == nested hub dir
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp).resolve()
+            git_root = tmp_path / "git-root"
+            git_root.mkdir()
+            _test_helpers.init_minimal_git_repo(git_root, branch="main")
+            # Hub lives in src/models subdirectory
+            hub_dir = git_root / "src" / "models"
+            hub_dir.mkdir(parents=True)
+            (hub_dir / ".millhouse").mkdir()
+            (hub_dir / ".millhouse" / "config.local.yaml").write_text(
+                "hub_relative_path: src/models\n", encoding="utf-8"
+            )
+            # cwd == hub_dir (the nested mill project root)
+            got = _paths.resolve_hub_path(hub_dir)
+            assert got == hub_dir, \
+                f"nested layout cwd=hub: expected {hub_dir}, got {got}"
+        print("PASS: resolve_hub_path nested layout cwd=hub -> hub subdir")
+
+        # Test 2: Nested layout, cwd == git root (with worktree-root stub)
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp).resolve()
+            git_root = tmp_path / "git-root"
+            git_root.mkdir()
+            _test_helpers.init_minimal_git_repo(git_root, branch="main")
+            # Hub lives in src/models subdirectory
+            hub_dir = git_root / "src" / "models"
+            hub_dir.mkdir(parents=True)
+            (hub_dir / ".millhouse").mkdir()
+            (hub_dir / ".millhouse" / "config.local.yaml").write_text(
+                "hub_relative_path: src/models\n", encoding="utf-8"
+            )
+            # Stub at worktree root pointing to the hub (as millpy-spawn.py does)
+            stub_dir = git_root / ".millhouse"
+            stub_dir.mkdir(parents=True, exist_ok=True)
+            (stub_dir / "config.local.yaml").write_text(
+                "hub_relative_path: src/models\n", encoding="utf-8"
+            )
+            # cwd == git_root; resolve_hub_path should follow stub to hub_dir
+            got = _paths.resolve_hub_path(git_root)
+            assert got == hub_dir, \
+                f"nested layout cwd=git_root: expected {hub_dir}, got {got}"
+        print("PASS: resolve_hub_path nested layout cwd=git_root -> resolves via stub to hub subdir")
+
+        # Test 3: Nested layout, resolve_task_path on nested hub
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp).resolve()
+            git_root = tmp_path / "git-root"
+            git_root.mkdir()
+            _test_helpers.init_minimal_git_repo(git_root, branch="main")
+            # Hub lives in src/models
+            hub_dir = git_root / "src" / "models"
+            hub_dir.mkdir(parents=True)
+            (hub_dir / ".millhouse").mkdir()
+            (hub_dir / ".millhouse" / "config.local.yaml").write_text(
+                "hub_relative_path: src/models\n", encoding="utf-8"
+            )
+            # Create _mill/status.md under the nested hub
+            (hub_dir / "_mill").mkdir()
+            (hub_dir / "_mill" / "status.md").write_text("test content", encoding="utf-8")
+            # resolve_task_path should find the file when passed hub_dir
+            got = _paths.resolve_task_path(hub_dir, "_mill/status.md")
+            expected = hub_dir / "_mill" / "status.md"
+            assert got == expected, \
+                f"nested layout task path: expected {expected}, got {got}"
+            assert got.exists(), f"nested layout task path should exist on disk"
+        print("PASS: resolve_task_path nested layout finds _mill/status.md under nested hub")
+
+        # Regression tests: flat layout (hub == git root) still works
+        # These pair with the nested tests above to ensure no regression.
+
+        # Regression 1: Flat layout, cwd == hub == git root
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp).resolve()
+            hub = tmp_path / "hub"
+            hub.mkdir()
+            _test_helpers.init_minimal_git_repo(hub, branch="main")
+            (hub / ".millhouse").mkdir()
+            (hub / ".millhouse" / "config.local.yaml").write_text(
+                "hub_relative_path: .\n", encoding="utf-8"
+            )
+            got = _paths.resolve_hub_path(hub)
+            assert got == hub, \
+                f"flat layout cwd=hub: expected {hub}, got {got}"
+        print("PASS: resolve_hub_path flat layout cwd=hub -> hub unchanged (regression)")
+
+        # Regression 2: Flat layout, resolve_task_path
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp).resolve()
+            hub = tmp_path / "hub"
+            hub.mkdir()
+            _test_helpers.init_minimal_git_repo(hub, branch="main")
+            (hub / "_mill").mkdir()
+            (hub / "_mill" / "status.md").write_text("test content", encoding="utf-8")
+            got = _paths.resolve_task_path(hub, "_mill/status.md")
+            expected = hub / "_mill" / "status.md"
+            assert got == expected, \
+                f"flat layout task path: expected {expected}, got {got}"
+            assert got.exists(), f"flat layout task path should exist"
+        print("PASS: resolve_task_path flat layout finds _mill/status.md (regression)")
+
         # resolve_wiki_path — container-form default (main_root under wts/)
 
         with tempfile.TemporaryDirectory() as tmp:

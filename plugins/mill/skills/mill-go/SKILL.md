@@ -148,7 +148,7 @@ import sys
 sys.path.insert(0, r'${CLAUDE_PLUGIN_ROOT}/scripts')
 from pathlib import Path
 import _paths, _status, _llm_claude
-status_path = _paths.resolve_task_path(_paths.resolve_git_root(), '_mill/status.md')
+status_path = _paths.resolve_task_path(_paths.resolve_hub_path(), '_mill/status.md')
 batches = _status.read_batches(status_path)
 sid = next((b.get('implementer_session') for b in batches if b['name'] == '<batch_name>'), None)
 _llm_claude.cleanup_session(sid)
@@ -238,7 +238,22 @@ The implementer's last output line must be JSON:
 
 ### 2b. Cleanliness gate
 
-After a `success` report: compute new dirt via `_cleanliness.compute_new_dirt(<worktree>, <worktree>/_mill/.cleanliness-snapshot-<batch_name>.txt)`. If the returned list is non-empty (genuine implementer-introduced dirt that did not pre-date the batch):
+After a `success` report: Before the dirt computation, resolve the parent branch and revert out-of-scope drift.
+
+Inline Python (in step 2b, before compute_new_dirt):
+```python
+import _parent_branch, _cleanliness
+parent_branch = _parent_branch.resolve(status_path, interactive=False)
+reverted_paths, remaining_in_scope_lines = _cleanliness.revert_out_of_scope_drift(
+    worktree_root, task_dir, parent_branch
+)
+in_scope_dirt = remaining_in_scope_lines
+```
+
+`signature: _parent_branch.resolve(status_path: Path, *, interactive: bool = True) -> str`
+`signature: _cleanliness.revert_out_of_scope_drift(worktree: Path, task_dir: Path, parent_branch: str) -> tuple[list[str], list[str]]`
+
+If `in_scope_dirt` is non-empty (genuine implementer-introduced dirt within task scope that did not pre-date the batch):
 - `_status.set_batch_field(status_path, batch_name, "state", "blocked")`
 - `_status.set_batch_field(status_path, batch_name, "blocked_reason", "uncommitted working tree after implementer report")`
 - `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`
@@ -246,9 +261,7 @@ After a `success` report: compute new dirt via `_cleanliness.compute_new_dirt(<w
 - Invoke the per-batch cleanup block.
 - Go to *Blocked*.
 
-`signature: _cleanliness.compute_new_dirt(worktree: Path, snapshot_path: Path) -> list[str]`
-
-If the returned list is empty, invoke the per-batch cleanup block (after a `success` report, before the cleanliness gate at step 2b) — the cold-start fixer used in step 4 REQUEST_CHANGES does not need the warm session. Record `commit_sha` via `_status.set_batch_field(status_path, batch_name, "commit_sha", <sha from JSON report>)`. Then continue to "3. Code Review loop" as normal.
+If `in_scope_dirt` is empty, invoke the per-batch cleanup block — the cold-start fixer used in step 4 REQUEST_CHANGES does not need the warm session. Record `commit_sha` via `_status.set_batch_field(status_path, batch_name, "commit_sha", <sha from JSON report>)`. Then continue to "3. Code Review loop" as normal.
 
 ### 3. Code Review loop
 
@@ -512,9 +525,9 @@ For each round `H` from 1 to `max_holistic_rounds`:
    PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
    from pathlib import Path
    import _paths, _bg, json, sys
-   git_root = _paths.resolve_git_root()
-   reviews_dir = git_root / '_mill/reviews'
-   scratch_dir = git_root / '.scratch'
+   hub = _paths.resolve_hub_path()
+   reviews_dir = hub / '_mill/reviews'
+   scratch_dir = _paths.resolve_git_root() / '.scratch'
    H = ${H}
    # (a) review file scan
    matches = sorted(reviews_dir.glob(f'*-code-review-r{H}.md')) if reviews_dir.exists() else []

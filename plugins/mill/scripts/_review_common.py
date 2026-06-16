@@ -256,16 +256,16 @@ class ReviewResult:
 # Helper functions
 # ---------------------------------------------------------------------------
 
-def find_active_slug(git_root: Path, wiki_path: Path, cfg: dict) -> str:
+def find_active_slug(hub_root: Path, wiki_path: Path, cfg: dict) -> str:
     """Detect active slug via branch name, falling back to _mill/*.active glob.
 
     Raises ReviewError (wrapping MarkerError or glob-fallback errors).
     """
     try:
-        return _marker.slug_from_branch(git_root, wiki_path, cfg)
+        return _marker.slug_from_branch(hub_root, wiki_path, cfg)
     except _marker.MarkerError as exc:
         try:
-            matches = list((git_root / "_mill").glob("*.active"))
+            matches = list((hub_root / "_mill").glob("*.active"))
         except OSError:
             matches = []
         if len(matches) == 1:

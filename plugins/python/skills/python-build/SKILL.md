@@ -18,6 +18,8 @@ ruff check .
 pytest
 ```
 
+**Convention: Writing formatters (when used) run on changed files only, never on the whole project. This is precautionary since python-build today ships only ruff check (read-only). Any future ruff format or ruff check --fix must be scoped to changed files. Whole-project build and test stay whole-project.**
+
 ## Failure Handling
 
 - If **ruff fails**: fix the linting violations and retry. Do not add `noqa` suppression unless the rule is genuinely inapplicable.

@@ -48,7 +48,14 @@ Operator-driven entries keep the existing bare format (`- **Q:** … **A:** …`
 3. Load config — deep-merge `<hub_root>/mill-config.yaml` (shared hub overlay) with `.millhouse/config.local.yaml` (gitignored worktree overlay). Read `roles.discussion-review.holistic.rounds` as `max_review_rounds`.
    `signature: _config.load_config(hub_root: Path, worktree_root: Path) -> dict`
 
-**Path Setup.** `cfg` is already loaded. Derive: `status_path = _paths.resolve_task_path(worktree_root, cfg['paths']['status_md'])`. For new discussion file creation (Phase: Discussion File), use `discussion_path = worktree_root / cfg['paths']['discussion_file']` (config-canonical; no compat fallback on write). For reviews: `reviews_dir = worktree_root / cfg['paths']['reviews_dir']`. Use these variables for all subsequent path references.
+**Path Setup.** `cfg` is already loaded. Derive:
+- `git_root = _paths.resolve_git_root()`
+- `worktree_root = _paths.resolve_hub_path()` (the hub root; used to anchor `_mill/` paths in nested layouts)
+- `status_path = _paths.resolve_task_path(worktree_root, cfg['paths']['status_md'])` (resolves against the hub root)
+- `discussion_path = worktree_root / cfg['paths']['discussion_file']` (config-canonical; no compat fallback on write)
+- `reviews_dir = worktree_root / cfg['paths']['reviews_dir']`
+
+Use these variables for all subsequent path references.
 
 ## Phases
 

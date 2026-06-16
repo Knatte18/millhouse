@@ -18,7 +18,12 @@ You are an autonomous planner running on Opus. Your job is to turn `discussion.m
 3. Load config — deep-merge `<hub_root>/mill-config.yaml` with `.millhouse/config.local.yaml`. Read `roles.plan-review.holistic.rounds` as `max_review_rounds`.
    `signature: _config.load_config(hub_root: Path, worktree_root: Path) -> dict`
 
-**Path Setup.** Derive from config: `status_path = _paths.resolve_task_path(worktree_root, cfg['paths']['status_md'])`. `plan_dir` and `reviews_dir` will be derived during Phase: Plan (writes) or Phase: Plan Review (reads) as appropriate — see those phases for details.
+**Path Setup.** Derive:
+- `git_root = _paths.resolve_git_root()`
+- `worktree_root = _paths.resolve_hub_path()` (the hub root; used to anchor `_mill/` paths in nested layouts)
+- `status_path = _paths.resolve_task_path(worktree_root, cfg['paths']['status_md'])` (resolves against the hub root)
+
+`plan_dir` and `reviews_dir` will be derived during Phase: Plan (writes) or Phase: Plan Review (reads) as appropriate — see those phases for details.
 
 4. Read `status_path` and inspect `phase:` + the plan state on disk (no `plan_dir` dir at worktree root, using `cfg['paths']['plan_dir']`). Decide entry branch:
 
