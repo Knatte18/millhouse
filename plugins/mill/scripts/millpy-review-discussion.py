@@ -85,7 +85,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     try:
-        slug = args.slug or find_active_slug(git_root, wiki_root, cfg)
+        slug = args.slug or find_active_slug(project_root, wiki_root, cfg)
     except ReviewError as exc:
         print_error_envelope("discussion", str(exc))
         return 1
@@ -93,7 +93,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.stage == "prepare":
         try:
             prepare_result = prepare(cfg, slug, mill_dir, project_root, wiki_root, max_rounds=args.max_rounds)
-            briefs_dir = _paths.resolve_task_path(git_root, "_mill/briefs/")
+            briefs_dir = _paths.resolve_task_path(project_root, "_mill/briefs/")
             brief_path = _agent_dispatch.write_brief(
                 briefs_dir, "review-discussion", prepare_result["scope"],
                 prepare_result["round"], prepare_result["prompt_text"]
