@@ -55,6 +55,10 @@ Read the batch file first, then the overview's Shared Decisions. Do not read oth
    - This keeps the code reviewer's bulk complete; a surprise file in the diff is a BLOCKING-severity review failure.
 3. Never edit files outside this batch's declared scope — you don't know whether another batch depends on them.
 
+## Test Integrity Guardrail
+
+Never weaken, relax, exclude, downgrade, or delete test assertions, conformance checks, or allowlist entries to make verify pass. When `verify:` fails because a test or harness is itself buggy, fix the test, fix the harness, or fix the code under test. If the bug cannot be fixed, report `stuck_type: logic` -- never weaken coverage to go green.
+
 ## Verify
 
 After every card in the batch is committed, run the batch's `verify:` command (from the batch file's frontmatter). If it fails:
