@@ -81,8 +81,12 @@ internal to the review backend.
   a `verdict: GAPS_FOUND` line emits NO warning, and `parse_blocking_count(...,
   severity="GAP")` still returns `0`; (b) a review body with two `### [GAP]`
   headings whose prose says a divergent count (e.g. `three GAPs`) STILL emits the
-  warning, and the returned count is `2`. Follow the existing test conventions in
-  the file (module-path bootstrap, `unittest.TestCase`).
+  warning, and the returned count is `2`. Follow the file's actual convention:
+  it is a `main()` runner (NOT `unittest.TestCase`) that prints `PASS:`/`FAIL:`
+  lines and accumulates failures — add the cases inside `main()`, capturing the
+  warning via `contextlib.redirect_stderr` (the module-path `sys.path` bootstrap
+  is already at the top of the file), and contribute to the same failure
+  accounting the other cases use.
 - **Commit:** `test(review): cover parse_blocking_count warning suppression (#489)`
 
 ## Batch Tests

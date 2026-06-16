@@ -75,6 +75,7 @@ _Full union of every `Creates:` / `Edits:` across every batch, sorted alphabetic
 - `plugins/mill/agents/mill-implementer.md`
 - `plugins/mill/scripts/_implementer_common.py`
 - `plugins/mill/scripts/_review_common.py`
+- `plugins/mill/scripts/millpy-fix.py`
 - `plugins/mill/scripts/millpy-implement.py`
 - `plugins/mill/templates/implementer-brief.md`
 - `plugins/mill/unit_tests/test-claude-sub.py`
