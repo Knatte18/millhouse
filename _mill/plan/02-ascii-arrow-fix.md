@@ -24,6 +24,7 @@ ASCII `->`. Comment-only change; no test logic or behaviour is affected.
   - `plugins/mill/unit_tests/test-guards.py`
 - **Edits:**
   - `plugins/mill/unit_tests/test-claude-sub.py`
+  - `plugins/mill/unit_tests/test-plan-validate.py`
 - **Creates:** none
 - **Deletes:** none
 - **Requirements:** In `test-claude-sub.py`, replace each literal U+2192 (the `->`
