@@ -99,11 +99,11 @@ def main(argv: list[str] | None = None) -> int:
     from _review_plan import prepare, finalize, run
 
     try:
-        project_root = Path.cwd()
+        project_root = _paths.resolve_hub_path()
         git_root = _paths.resolve_git_root()
         mill_dir = project_root / ".millhouse"
         wiki_root = resolve_wiki_path(project_root)
-        cfg = load_config(resolve_hub_path(), mill_dir)
+        cfg = load_config(project_root, mill_dir)
     except (ReviewError, ValueError, SystemExit) as exc:
         print_error_envelope("plan", str(exc))
         return 1
