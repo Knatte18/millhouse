@@ -2393,12 +2393,8 @@ def main() -> int:
     # parse_blocking_count / _warn_if_prose_diverges: #489 clean review tests
     # ---------------------------------------------------------------------------
 
-    def test_parse_blocking_count_clean_review_zero_headings():
-        """
-        Clean review body with zero severity headings and prose containing
-        a number-plus-severity phrase. Should suppress the divergence warning
-        and return heading_count=0.
-        """
+    # parse_blocking_count: zero headings suppress divergence warning
+    try:
         import contextlib
         import io
         raw = (
@@ -2410,18 +2406,22 @@ def main() -> int:
         buf = io.StringIO()
         with contextlib.redirect_stderr(buf):
             count = parse_blocking_count(raw, severity="GAP")
-        assert count == 0, f"expected heading_count 0, got {count}"
-        stderr = buf.getvalue()
-        assert "diverges from prose count" not in stderr, (
-            f"expected no divergence warning for zero-heading review, got: {stderr!r}"
-        )
-        print("PASS: parse_blocking_count zero headings suppresses divergence warning")
+        if count != 0:
+            print(f"FAIL: parse_blocking_count zero headings: expected heading_count 0, got {count}", file=sys.stderr)
+            errors += 1
+        else:
+            stderr = buf.getvalue()
+            if "diverges from prose count" in stderr:
+                print(f"FAIL: parse_blocking_count zero headings: expected no divergence warning, got: {stderr!r}", file=sys.stderr)
+                errors += 1
+            else:
+                print("PASS: parse_blocking_count zero headings suppresses divergence warning")
+    except Exception as exc:
+        print(f"FAIL: parse_blocking_count zero headings: {exc}", file=sys.stderr)
+        errors += 1
 
-    def test_parse_blocking_count_with_headings_still_warns():
-        """
-        Review body with two severity headings and divergent prose count.
-        Should emit the divergence warning and return heading_count=2.
-        """
+    # parse_blocking_count: non-zero headings still emit divergence warning
+    try:
         import contextlib
         import io
         raw = (
@@ -2432,15 +2432,19 @@ def main() -> int:
         buf = io.StringIO()
         with contextlib.redirect_stderr(buf):
             count = parse_blocking_count(raw, severity="GAP")
-        assert count == 2, f"expected heading_count 2, got {count}"
-        stderr = buf.getvalue()
-        assert "heading count 2 diverges from prose count 3" in stderr, (
-            f"expected divergence warning, got: {stderr!r}"
-        )
-        print("PASS: parse_blocking_count with headings still warns on divergence")
-
-    test_parse_blocking_count_clean_review_zero_headings()
-    test_parse_blocking_count_with_headings_still_warns()
+        if count != 2:
+            print(f"FAIL: parse_blocking_count with headings: expected heading_count 2, got {count}", file=sys.stderr)
+            errors += 1
+        else:
+            stderr = buf.getvalue()
+            if "heading count 2 diverges from prose count 3" not in stderr:
+                print(f"FAIL: parse_blocking_count with headings: expected divergence warning, got: {stderr!r}", file=sys.stderr)
+                errors += 1
+            else:
+                print("PASS: parse_blocking_count with headings still warns on divergence")
+    except Exception as exc:
+        print(f"FAIL: parse_blocking_count with headings: {exc}", file=sys.stderr)
+        errors += 1
 
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)
