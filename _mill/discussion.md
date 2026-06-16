@@ -219,8 +219,12 @@ changes to the external repos themselves.
   correctly from either root (pygit2 discovers the repo upward), so this is the
   fallback-correctness fix, not a behavior change for the common case.
 - `millpy-review-plan.py`: `project_root = Path.cwd()` (line 102) feeds
-  `mill_dir`, registry load, `find_active_slug`, and `briefs_dir` (line 151).
-  Switching to `resolve_hub_path()` corrects all of them together. Verify
+  `mill_dir`, registry load, `find_active_slug` (line 119), and `briefs_dir`
+  (line 151). Switching **only** line 102 to `resolve_hub_path()` corrects all of
+  them together — line 119 already passes `project_root` (not `git_root`), so it
+  auto-corrects and needs no separate edit. This is the asymmetry with the
+  discussion CLI: there, `find_active_slug` is called with `git_root` (line 88) and
+  must be moved explicitly; here it already rides on `project_root`. Verify
   `find_active_slug` and `_reviewers.load` behave identically when given the hub
   root instead of cwd (they should — both expect the mill project root).
 
@@ -268,11 +272,18 @@ changes to the external repos themselves.
 - `_finalize_cleanup.base_tracks_task_dir(worktree, base_branch, task_dir)`
   returns True when `<base>` tracks `task_dir/status.md` (stacked → restore from
   base) and False otherwise (normal → remove). Already correct; reused.
-- `mill-finalize/SKILL.md` Dispatch: PR mode = `require_pr is True AND
-  parent_branch == base_branch`. Change to `require_pr is True`; set the PR base
-  to `parent_branch`. Step 3 cleanup already calls `base_tracks_task_dir(git_root,
-  parent_branch, task_dir)`. `git-pr` invoked with `MILL_FINALIZE_PR_CLEANUP=1`
-  (already wired; its Step 1.5 skips the halt when that env var is set).
+- `mill-finalize/SKILL.md` requires **two** coordinated edits, not just the
+  trigger clause:
+  1. **Dispatch trigger:** PR mode is currently `require_pr is True AND
+     parent_branch == base_branch`; drop the `parent_branch == base_branch` clause
+     so PR mode = `require_pr is True`.
+  2. **PR invocation (Step 5, SKILL.md:94):** the invocation literally reads
+     `/git-pr <base_branch>`; change the argument token to `<parent_branch>` so the
+     PR is opened against the parent. Changing only the trigger without this token
+     swap would still target `base_branch` (= `main`) and fail for a stacked task.
+  Step 3 cleanup already calls `base_tracks_task_dir(git_root, parent_branch,
+  task_dir)`. `git-pr` is invoked with `MILL_FINALIZE_PR_CLEANUP=1` (already wired;
+  its Step 1.5 skips the halt when that env var is set).
 - Also fix `mill-finalize/SKILL.md:17` (`worktree_root = git_root`) and `git-pr`
   Step 1.5 (`resolve_task_path(git_root, …)`) to the hub root, so stacked/nested
   finalize+PR resolves `task_dir` correctly.

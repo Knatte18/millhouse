@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: discussion-fix-r2
 slug: mill-external-repo-infra
 branch: hanf/mill-external-repo-infra
 plan: null
@@ -15,4 +15,5 @@ task_description: |
 
 ```text
 discussing  '2026-06-16T12:12:23Z'
+discussion-fix-r2  '2026-06-16T12:32:56Z'
 ```
