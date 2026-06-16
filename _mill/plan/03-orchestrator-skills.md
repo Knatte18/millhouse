@@ -57,27 +57,42 @@ stacked case. `test-finalize-cleanup.py` is run as regression (the
   `_mill/` paths under the hub root in a nested layout.
 - **Commit:** `fix(mill-plan): anchor worktree_root on hub root for nested layouts`
 
-### Card 10: Fix mill-go path callsite and wire the drift-revert guard
+### Card 10: Fix mill-go path callsites and wire the drift-revert guard
 
 - **Context:**
   - `plugins/mill/scripts/_paths.py`
   - `plugins/mill/scripts/_cleanliness.py`
+  - `plugins/mill/scripts/_parent_branch.py`
 - **Edits:**
   - `plugins/mill/skills/mill-go/SKILL.md`
 - **Creates:** none
 - **Deletes:** none
-- **Requirements:** Two edits to `mill-go/SKILL.md`. (1) Replace the standalone
-  `status_path = _paths.resolve_task_path(_paths.resolve_git_root(), '_mill/status.md')`
-  line so it anchors on the hub root (`_paths.resolve_hub_path()`), matching the
-  `worktree_root` already derived via `resolve_active_hub` at Path Setup. (2) In the
-  Cleanliness gate (step 2b), before the existing block-on-`compute_new_dirt` flow,
-  call `_cleanliness.revert_out_of_scope_drift(<worktree>, task_dir, parent_branch)`
-  to revert out-of-scope formatter drift and warn; then block the batch only if
-  the returned in-scope remaining dirt is non-empty (use that remaining set in
-  place of the raw `compute_new_dirt` result for the block decision). Preserve the
-  existing blocked-state status writes and per-batch cleanup when in-scope dirt
-  remains. Keep prose ASCII-only.
-- **Commit:** `fix(mill-go): hub-root status path and out-of-scope drift revert in gate`
+- **Requirements:** Three edits to `mill-go/SKILL.md`.
+  (1) **Per-batch cleanup snippet:** the inline `python -c` block whose body
+  contains `status_path = _paths.resolve_task_path(_paths.resolve_git_root(),
+  '_mill/status.md')` runs in its own subprocess where `worktree_root` is NOT in
+  scope. Replace `_paths.resolve_git_root()` with `_paths.resolve_hub_path()`
+  inside that snippet so the status path resolves under the hub root in a nested
+  layout. (Do not reference `worktree_root` there — it does not exist in the
+  snippet.)
+  (2) **Crash-recovery inline helper:** the inline `python -c` block that sets
+  `git_root = _paths.resolve_git_root()` then `reviews_dir = git_root / '_mill/reviews'`
+  — change the reviews anchor to the hub root, i.e. `hub = _paths.resolve_hub_path()`
+  then `reviews_dir = hub / '_mill/reviews'`. Leave the adjacent
+  `scratch_dir = git_root / '.scratch'` unchanged (`.scratch` is repo-root scratch,
+  not a `_mill/` task-state path).
+  (3) **Cleanliness gate (step 2b):** before the existing
+  block-on-`compute_new_dirt` flow, derive `parent_branch =
+  _parent_branch.resolve(status_path, interactive=False)` and
+  `task_dir = status_path.parent` within step 2b (neither is in scope at 2b today;
+  `parent_branch` is otherwise resolved only at Handoff). Then call
+  `_cleanliness.revert_out_of_scope_drift(<worktree>, task_dir, parent_branch)` to
+  revert out-of-scope formatter drift and warn. Decide the block using the helper's
+  returned remaining-in-scope dirt (the second element of its return tuple) instead
+  of the raw `compute_new_dirt` list — block the batch only if that in-scope
+  remaining set is non-empty, preserving the existing blocked-state status writes
+  and per-batch cleanup. Keep prose ASCII-only.
+- **Commit:** `fix(mill-go): hub-root _mill paths and out-of-scope drift revert in gate`
 
 ### Card 11: Anchor git-pr task-branch detection on the hub root
 
