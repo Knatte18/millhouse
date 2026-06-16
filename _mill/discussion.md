@@ -46,12 +46,20 @@ changes to the external repos themselves.
   - `plugins/mill/scripts/millpy-review-discussion.py:96` — `briefs_dir` uses
     `git_root`; change to the already-resolved hub root (`project_root`,
     `= resolve_hub_path()`).
+  - `plugins/mill/scripts/millpy-review-discussion.py:88` — `find_active_slug(git_root, …)`
+    likewise moves to the hub root, for symmetry with the plan CLI (see
+    review-plan-anchor below). The function's glob fallback resolves
+    `<arg>/_mill/*.active`, so a `git_root` arg breaks the fallback in a nested
+    layout; branch-based slug detection still works from either root.
   - `plugins/mill/scripts/millpy-review-plan.py:102` — `project_root = Path.cwd()`;
-    change to `resolve_hub_path()` so both review CLIs resolve briefs/state to the
-    same hub root.
-  - `plugins/mill/skills/mill-start/SKILL.md` Entry / Path Setup — derive
-    `worktree_root` from the hub root, not `git_root`.
-  - `plugins/mill/skills/mill-plan/SKILL.md` Entry / Path Setup — same.
+    change to `resolve_hub_path()` so both review CLIs resolve briefs/state and
+    `find_active_slug` to the same hub root.
+  - `plugins/mill/skills/mill-start/SKILL.md` Entry / Path Setup — **add** an
+    explicit `worktree_root = _paths.resolve_hub_path()` (plus `git_root`/`hub_root`
+    as needed). These SKILLs today *reference* `worktree_root` without ever
+    assigning it — it is implicitly `git_root`; this is an addition of an explicit
+    hub-rooted definition, not an edit of an existing `worktree_root = git_root` line.
+  - `plugins/mill/skills/mill-plan/SKILL.md` Entry / Path Setup — same addition.
   - `plugins/mill/skills/mill-go/SKILL.md:151` — `resolve_task_path(resolve_git_root(), …)`
     → hub root.
   - `plugins/mill/skills/git-pr/SKILL.md` Step 1.5 — `resolve_task_path(git_root, …)`
@@ -119,9 +127,16 @@ changes to the external repos themselves.
 - Rationale: `Path.cwd()` is the fragile workaround #490 flagged; in a nested
   layout cwd may be the git root (the discussion-review session in #484), which
   diverges from the plan-review cwd and splits briefs (#491). A single resolver
-  removes the divergence.
+  removes the divergence. Symmetrically, the discussion CLI's
+  `find_active_slug(git_root, …)` (`millpy-review-discussion.py:88`) also moves to
+  the hub root so both CLIs resolve the active-slug glob fallback
+  (`<arg>/_mill/*.active`) to the same `_mill/` — otherwise the discussion CLI's
+  fallback looks in `<git_root>/_mill` (nonexistent in a nested layout) while plan
+  looks in `<hub>/_mill`.
 - Rejected: Fixing only the discussion side and leaving plan on `Path.cwd()` —
-  smaller diff but preserves the cwd fragility.
+  smaller diff but preserves the cwd fragility. Also rejected leaving the
+  discussion CLI's `find_active_slug` on `git_root` — the "both CLIs resolve to the
+  same hub root" intent requires line 88 to move too, not only line 96.
 
 ### formatter-drift-handling
 
@@ -196,8 +211,13 @@ changes to the external repos themselves.
 **Review CLIs:**
 
 - `millpy-review-discussion.py`: already sets `project_root = resolve_hub_path()`
-  (`hub_dir`), but line 96 computes `briefs_dir = resolve_task_path(git_root, …)`.
-  Single-line fix: use `project_root`/`hub_dir`.
+  (`hub_dir`), but line 96 computes `briefs_dir = resolve_task_path(git_root, …)`
+  and line 88 calls `find_active_slug(git_root, …)`. Both must use
+  `project_root`/`hub_dir`. Note `find_active_slug`'s glob fallback
+  (`<arg>/_mill/*.active`, `_review_common.py:283`) is the path-literal part that a
+  `git_root` arg breaks under nesting; the branch-based slug path resolves
+  correctly from either root (pygit2 discovers the repo upward), so this is the
+  fallback-correctness fix, not a behavior change for the common case.
 - `millpy-review-plan.py`: `project_root = Path.cwd()` (line 102) feeds
   `mill_dir`, registry load, `find_active_slug`, and `briefs_dir` (line 151).
   Switching to `resolve_hub_path()` corrects all of them together. Verify
@@ -208,10 +228,14 @@ changes to the external repos themselves.
 
 - `plugins/mill/scripts/_cleanliness.py` already has the scope primitives:
   `compute_new_dirt(worktree, snapshot)` (post − pre line-set diff),
-  `_parent_diff_names` / `owned_paths` (task's parent-diff), and
-  `_filter_to_task_scope(lines, task_dir, owned_paths)` (under `task_dir` ∪
-  `owned_paths`). The guard reuses these: partition `compute_new_dirt` output by
-  the same scope predicate; out-of-scope tracked modifications get reverted.
+  `_parent_diff_names(worktree, parent_branch)` (the task's parent-diff file list —
+  this is the *source* of the "owned" set), and
+  `_filter_to_task_scope(lines, task_dir, owned_paths)` (keeps lines under
+  `task_dir` ∪ the owned set; `owned_paths` is just the parameter name, not a
+  standalone helper). The new `revert_out_of_scope_drift` helper computes the
+  owned set itself by calling `_parent_diff_names`, then partitions
+  `compute_new_dirt` output by the same scope predicate; out-of-scope tracked
+  modifications get reverted.
 - The guard belongs in `_cleanliness.py` (testable helper, e.g.
   `revert_out_of_scope_drift(worktree, task_dir, parent_branch) -> (reverted, remaining)`),
   invoked from mill-go's **Cleanliness gate (step 2b)** before it decides to
@@ -229,8 +253,11 @@ changes to the external repos themselves.
 - `plugins/golang/skills/golang-build/SKILL.md` — `goimports -w .` is the only
   writer; scope to changed `.go` files. `go vet/build/test`, `golangci-lint run`
   stay whole-project.
-- `plugins/python/skills/python-build/SKILL.md` — `ruff check .` (and any
-  `--fix`/`ruff format`) scope to changed files; `pytest` stays whole-project.
+- `plugins/python/skills/python-build/SKILL.md` — today ships only `ruff check .`
+  (read-only) and `pytest`; there is **no** write-mode formatter (`ruff format`,
+  `ruff check --fix`) to narrow. The edit is therefore precautionary: add the
+  convention note so that any future `ruff format`/`--fix` (or other writer) is
+  scoped to changed files. `pytest` stays whole-project.
 - `plugins/csharp/skills/csharp-build/SKILL.md` — ships no formatter; add the
   convention note only.
 - `plugins/mill/skills/git-commit/SKILL.md` already says "lint changed files";
@@ -334,3 +361,12 @@ by inspection/doc tests where applicable.
 - **Q:** Testing approach — unit (tempfile+git) vs add integration? **A:** Unit
   tests with tempfile + real `git`, no LLM; nested-layout, drift-revert, and
   stacked PR-mode fixtures.
+- **Q:** (review r1 GAP) Is `worktree_root` an existing assignment to edit in
+  mill-start/mill-plan? **A:** No — they reference it without defining it
+  (implicitly `git_root`); the plan must **add** an explicit
+  `worktree_root = resolve_hub_path()` to Entry of both SKILLs.
+- **Q:** (review r1 GAP) Should the discussion CLI's `find_active_slug(git_root)`
+  (`millpy-review-discussion.py:88`) also move to the hub root? **A:** Yes — the
+  "both CLIs resolve to the same hub root" intent requires line 88 to move, not
+  only line 96; the glob fallback `<arg>/_mill/*.active` breaks under nesting
+  otherwise.
