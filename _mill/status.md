@@ -41,7 +41,9 @@ batches:
     start_sha: e0fa7089fd20efceffe4f14bf088e666fffbd3a2
     commit_sha: 2b6a9ae2d48916375c98f0be2da0de2826d5800e
   - name: ascii-arrow-fix
-    state: pending
+    state: running
+    implementer_session: 1f9f1580-bc41-47f5-8ab0-ae508bf94e25
+    start_sha: e6d2a914c7ab7f0632864e9cba400002b840bc30
   - name: implementer-verify-gate
     state: pending
   - name: implementer-guardrail
