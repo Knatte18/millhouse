@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-fix-r1
+phase: plan-fix-r2
 slug: mill-test-and-implementer-reliability
 branch: hanf/mill-test-and-implementer-reliability
 plan: _mill/plan
@@ -19,4 +19,6 @@ discussed  '2026-06-16T12:30:17Z'
 planning  '2026-06-16T12:35:50Z'
 plan-review-r1  '2026-06-16T12:43:20Z'
 plan-fix-r1  '2026-06-16T12:43:20Z'
+plan-review-r2  '2026-06-16T12:47:50Z'
+plan-fix-r2  '2026-06-16T12:47:50Z'
 ```

@@ -32,7 +32,7 @@ batches:
     name: implementer-verify-gate
     file: 03-implementer-verify-gate.md
     depends-on: []
-    verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-implementer-common.py test-millpy-implement.py
+    verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-implementer-common.py test-millpy-implement.py test-millpy-fix.py
   - number: 4
     name: implementer-guardrail
     file: 04-implementer-guardrail.md
@@ -81,4 +81,5 @@ _Full union of every `Creates:` / `Edits:` across every batch, sorted alphabetic
 - `plugins/mill/unit_tests/test-claude-sub.py`
 - `plugins/mill/unit_tests/test-guards.py`
 - `plugins/mill/unit_tests/test-implementer-common.py`
+- `plugins/mill/unit_tests/test-millpy-implement.py`
 - `plugins/mill/unit_tests/test-review-common.py`

@@ -48,9 +48,10 @@ and the pre-existing `test-implementer-common.py` cases keep passing unchanged.
   `(stdout + stderr).strip()`; on success (rc 0) or `verify_cmd is None` returns
   `None`. In `_forward_output`, before EACH point that emits a `status: success`
   JSON (the parsed-success emit and all inferred-success emits), call the gate
-  helper; if it returns a stuck dict, print that dict (with the same
-  `commit_sha` enrichment the success path uses where applicable) and return
-  instead of emitting success. The gate must run AFTER any formatter-drift
+  helper; if it returns a stuck dict, enrich it with `commit_sha` set to the
+  current `git rev-parse HEAD` (same as the success path does at the parsed-emit
+  point) when that git call succeeds, then print the dict and return instead of
+  emitting success. Skip the `commit_sha` key only if the `git rev-parse` fails. The gate must run AFTER any formatter-drift
   auto-commit (`_commit_formatter_drift`), i.e. against the final HEAD, so every
   success emit is gated on the same clean state. Do not change behaviour when
   `verify_cmd is None` (current behaviour preserved exactly).
@@ -94,8 +95,10 @@ and the pre-existing `test-implementer-common.py` cases keep passing unchanged.
 
 - **Context:**
   - `plugins/mill/scripts/_implementer_common.py`
+  - `plugins/mill/scripts/millpy-implement.py`
 - **Edits:**
   - `plugins/mill/unit_tests/test-implementer-common.py`
+  - `plugins/mill/unit_tests/test-millpy-implement.py`
 - **Creates:** none
 - **Deletes:** none
 - **Requirements:** Add test cases for `_forward_output` (and/or
@@ -116,16 +119,29 @@ and the pre-existing `test-implementer-common.py` cases keep passing unchanged.
   `verify_cmd` (e.g. `exit 0`) -> emitted JSON keeps `status == "success"`;
   (c) `verify_cmd=None` -> success preserved (current behaviour); (d) an
   inferred-success scenario (no JSON status line, HEAD advanced, tree clean) with
-  a failing `verify_cmd` -> `stuck_type == "verify"`. Keep the file's existing
-  cases passing (they call without `verify_cmd`).
-- **Commit:** `test(implementer): cover the finalize verify gate (#488)`
+  a failing `verify_cmd` -> `stuck_type == "verify"`. In case (a) or (d), also
+  assert the emitted stuck dict carries a `commit_sha` key (the gate enriches it
+  per card 5). Keep the file's existing cases passing (they call without
+  `verify_cmd`).
+  ADDITIONALLY, in `test-millpy-implement.py` (a `unittest.TestCase` file with a
+  mocking `setUp`), add one case asserting the threading from card 6: patch
+  `_implementer_common.finalize_from_output` (imported into `millpy-implement.py`),
+  drive the `--stage finalize` branch for a batch whose batch-file frontmatter
+  declares a known `verify:` command, and assert the patched function received
+  that exact command as its `verify_cmd` keyword argument. Follow the file's
+  existing `setUp`/patch conventions. (The `millpy-fix.py` threading uses the
+  identical `.get("verify")` + pass-through pattern and is covered by the shared
+  gate tests above plus its own `test-millpy-fix.py` regression run; no separate
+  fix-path threading case is added.)
+- **Commit:** `test(implementer): cover the finalize verify gate and threading (#488)`
 
 ## Batch Tests
 
 `verify:` runs `run-all.py --only test-implementer-common.py
 test-millpy-implement.py test-millpy-fix.py`. `test-implementer-common.py`
 covers the gate logic (card 7's new cases plus the pre-existing cases, which
-must stay green). `test-millpy-implement.py` and `test-millpy-fix.py` are re-run
-to confirm the card-6 threading into each CLI introduces no regression in the
-CLIs' stage handling. All three files are scoped to the modules this batch
-edits.
+must stay green). `test-millpy-implement.py` gains a card-7 case asserting the
+resolved `verify_cmd` reaches `finalize_from_output` (and its existing cases
+must stay green); `test-millpy-fix.py` is re-run to confirm the card-6 threading
+into the fixer CLI introduces no regression. All three files are scoped to the
+modules this batch edits.
