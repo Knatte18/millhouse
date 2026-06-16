@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-fixing
+phase: holistic-reviewing
 slug: mill-external-repo-infra
 branch: hanf/mill-external-repo-infra
 plan: _mill/plan
@@ -28,6 +28,7 @@ approved-cleanliness-drift-guard  '2026-06-16T13:02:29Z'
 approved-orchestrator-skills  '2026-06-16T13:08:06Z'
 holistic-reviewing  '2026-06-16T13:08:45Z'
 holistic-fixing  '2026-06-16T13:11:18Z'
+holistic-reviewing  '2026-06-16T13:15:59Z'
 ```
 
 ## Batches
