@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-review-common-fixes
+phase: approved-ascii-arrow-fix
 slug: mill-test-and-implementer-reliability
 branch: hanf/mill-test-and-implementer-reliability
 plan: _mill/plan
@@ -29,6 +29,7 @@ plan-fix-r5  '2026-06-16T12:59:54Z'
 planned  '2026-06-16T13:00:12Z'
 implementing  '2026-06-16T13:02:31Z'
 approved-review-common-fixes  '2026-06-16T13:06:02Z'
+approved-ascii-arrow-fix  '2026-06-16T13:17:34Z'
 ```
 
 ## Batches
@@ -41,9 +42,10 @@ batches:
     start_sha: e0fa7089fd20efceffe4f14bf088e666fffbd3a2
     commit_sha: 2b6a9ae2d48916375c98f0be2da0de2826d5800e
   - name: ascii-arrow-fix
-    state: running
+    state: approved
     implementer_session: 1f9f1580-bc41-47f5-8ab0-ae508bf94e25
     start_sha: e6d2a914c7ab7f0632864e9cba400002b840bc30
+    commit_sha: 637833c79c900f98f2324e11f43545b4b48be9e1
   - name: implementer-verify-gate
     state: pending
   - name: implementer-guardrail
