@@ -58,7 +58,11 @@ and the pre-existing `test-implementer-common.py` cases keep passing unchanged.
   point) when that git call succeeds, then print the dict and return instead of
   emitting success. Skip the `commit_sha` key only if the `git rev-parse` fails. The gate must run AFTER any formatter-drift
   auto-commit (`_commit_formatter_drift`), i.e. against the final HEAD, so every
-  success emit is gated on the same clean state. Do not change behaviour when
+  success emit is gated on the same clean state. (Only the inferred-success emit
+  that follows a drift auto-commit has a commit between HEAD-capture and emit;
+  for the other emits the gate simply runs against the already-current HEAD —
+  no behavioural difference, the ordering rule just guarantees no emit precedes
+  its gate.) Do not change behaviour when
   `verify_cmd is None` (current behaviour preserved exactly).
 - **Commit:** `fix(implementer): re-run verify before approving a success report (#488)`
 
@@ -67,6 +71,7 @@ and the pre-existing `test-implementer-common.py` cases keep passing unchanged.
 - **Context:**
   - `plugins/mill/scripts/_plan_dag.py`
   - `plugins/mill/scripts/_implementer_common.py`
+  - `plugins/mill/unit_tests/test-millpy-fix.py`
 - **Edits:**
   - `plugins/mill/scripts/millpy-implement.py`
   - `plugins/mill/scripts/millpy-fix.py`
