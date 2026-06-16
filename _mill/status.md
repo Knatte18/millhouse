@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-external-repo-infra
 branch: hanf/mill-external-repo-infra
 plan: _mill/plan
@@ -22,4 +22,17 @@ plan-review-r1  '2026-06-16T12:43:41Z'
 plan-fix-r1  '2026-06-16T12:43:41Z'
 plan-fix-r2  '2026-06-16T12:48:23Z'
 planned  '2026-06-16T12:48:48Z'
+implementing  '2026-06-16T12:53:38Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: path-resolution-scripts
+    state: pending
+  - name: cleanliness-drift-guard
+    state: pending
+  - name: orchestrator-skills
+    state: pending
 ```
