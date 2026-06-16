@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-cleanliness-drift-guard
+phase: approved-orchestrator-skills
 slug: mill-external-repo-infra
 branch: hanf/mill-external-repo-infra
 plan: _mill/plan
@@ -25,6 +25,7 @@ planned  '2026-06-16T12:48:48Z'
 implementing  '2026-06-16T12:53:38Z'
 approved-path-resolution-scripts  '2026-06-16T12:59:06Z'
 approved-cleanliness-drift-guard  '2026-06-16T13:02:29Z'
+approved-orchestrator-skills  '2026-06-16T13:08:06Z'
 ```
 
 ## Batches
@@ -42,7 +43,8 @@ batches:
     start_sha: b0d64bafe247d16ad52e431a08f8ddf6353cf273
     commit_sha: c0953218b2733f5d0eb21a7a85a3fed3515df951
   - name: orchestrator-skills
-    state: running
+    state: approved
     implementer_session: 6135be7f-00e4-4b30-baf0-5d34ce06e1f0
     start_sha: 006eb6a766a73d9ebf21b8a5dfc39c81d969bb66
+    commit_sha: cd05271f9bb46257a039df11857a24ef884c922e
 ```
