@@ -36,7 +36,7 @@ batches:
   - number: 4
     name: implementer-guardrail
     file: 04-implementer-guardrail.md
-    depends-on: []
+    depends-on: [2]
     verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-guards.py
 ```
 

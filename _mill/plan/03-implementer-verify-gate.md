@@ -140,7 +140,13 @@ and the pre-existing `test-implementer-common.py` cases keep passing unchanged.
   existing `_p(millpy_implement, "finalize_from_output", ...)` patch convention.
   Drive the `--stage finalize` branch for a batch whose batch-file frontmatter
   declares a known `verify:` command, and assert the patched function received
-  that exact command as its `verify_cmd` keyword argument. (The `millpy-fix.py` threading uses the
+  that exact command as its `verify_cmd` keyword argument. NOTE: the fixture
+  must write that `verify:` into the per-batch `.md` file's fenced-yaml
+  frontmatter (the file `_read_batch_frontmatter` reads) — the existing fixture
+  writes the batch `.md` as a bare `# Batch:` line with no frontmatter, so
+  `.get("verify")` would resolve to `None`; the test must add a frontmatter
+  block with a non-null `verify:` so the resolved `verify_cmd` is the asserted
+  value (do NOT rely on the overview entry, whose `verify:` may be null). (The `millpy-fix.py` threading uses the
   identical `.get("verify")` + pass-through pattern and is covered by the shared
   gate tests above plus its own `test-millpy-fix.py` regression run; no separate
   fix-path threading case is added.)

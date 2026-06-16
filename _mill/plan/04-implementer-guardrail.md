@@ -6,7 +6,7 @@ batch: implementer-guardrail
 number: 4
 cards: 3
 verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-guards.py
-depends-on: []
+depends-on: [2]
 ```
 
 ## Batch Scope
@@ -21,6 +21,12 @@ to the per-batch brief template (`implementer-brief.md`) and the
 guardrail text is present in both files so it cannot be silently dropped. To
 keep the guard test simple, both prose edits embed one exact marker sentence
 (defined in card 8) that card 10 asserts on.
+
+This batch declares `depends-on: [2]` (ascii-arrow-fix): its `verify:` runs
+`test-guards.py`, whose `_check_no_unicode_arrow` scans every `test-*.py`
+(including `test-claude-sub.py`). Until batch 2 removes the U+2192 arrows from
+`test-claude-sub.py`, that guard check fails — so batch 4 must run after batch 2
+to verify cleanly.
 
 ## Cards
 
