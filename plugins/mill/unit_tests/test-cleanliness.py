@@ -468,9 +468,9 @@ def main() -> int:
     try:
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
-            # Create a git repo with a main branch and a parent branch
+            # Create a git repo with parent branch as base
             subprocess.run(
-                ["git", "init", "-b", "main", str(tmp_path)],
+                ["git", "init", "-b", "parent", str(tmp_path)],
                 check=True,
                 capture_output=True,
             )
@@ -485,25 +485,7 @@ def main() -> int:
                 check=True,
                 capture_output=True,
             )
-            # Create initial commit on main
-            (tmp_path / "initial.txt").write_text("initial", encoding="utf-8")
-            subprocess.run(
-                ["git", "-C", str(tmp_path), "add", "initial.txt"],
-                check=True,
-                capture_output=True,
-            )
-            subprocess.run(
-                ["git", "-C", str(tmp_path), "commit", "-m", "initial"],
-                check=True,
-                capture_output=True,
-            )
-            # Create a parent branch from main
-            subprocess.run(
-                ["git", "-C", str(tmp_path), "checkout", "-b", "parent"],
-                check=True,
-                capture_output=True,
-            )
-            # Create src/main.py file on parent branch
+            # Create initial commit on parent branch
             (tmp_path / "src").mkdir(parents=True, exist_ok=True)
             (tmp_path / "src" / "main.py").write_text("def hello(): pass", encoding="utf-8")
             subprocess.run(
@@ -512,19 +494,30 @@ def main() -> int:
                 capture_output=True,
             )
             subprocess.run(
-                ["git", "-C", str(tmp_path), "commit", "-m", "add src/main.py"],
+                ["git", "-C", str(tmp_path), "commit", "-m", "initial"],
                 check=True,
                 capture_output=True,
             )
-            # Checkout back to main
+            # Create task branch from parent
             subprocess.run(
-                ["git", "-C", str(tmp_path), "checkout", "main"],
+                ["git", "-C", str(tmp_path), "checkout", "-b", "task"],
                 check=True,
                 capture_output=True,
             )
-            # Modify src/main.py on main (outside task_dir but in parent-diff owned set)
-            (tmp_path / "src").mkdir(parents=True, exist_ok=True)
+            # Modify src/main.py on task branch (this creates a parent-diff)
             (tmp_path / "src" / "main.py").write_text("def hello(): return 1", encoding="utf-8")
+            subprocess.run(
+                ["git", "-C", str(tmp_path), "add", "src/main.py"],
+                check=True,
+                capture_output=True,
+            )
+            subprocess.run(
+                ["git", "-C", str(tmp_path), "commit", "-m", "modify src/main.py on task"],
+                check=True,
+                capture_output=True,
+            )
+            # Modify src/main.py again in working tree (simulating formatter drift)
+            (tmp_path / "src" / "main.py").write_text("def hello(): return 2", encoding="utf-8")
             # Create _mill directory (task_dir)
             (tmp_path / "_mill").mkdir(parents=True, exist_ok=True)
             (tmp_path / "_mill" / "status.md").write_text("# Status", encoding="utf-8")
