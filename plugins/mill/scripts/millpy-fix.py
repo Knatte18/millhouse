@@ -195,12 +195,21 @@ def main(argv=None) -> int:
             print("--agent-output is required when --stage finalize", file=sys.stderr)
             return 1
         fixer_snapshot_path = project_root / "_mill" / ".cleanliness-snapshot-fixer.txt"
+        # Resolve batch verify command for batch-scope fixes only
+        verify_cmd = None
+        if args.scope == "batch":
+            batch_entry = next((b for b in batches if b["name"] == args.batch_name), None)
+            if batch_entry is not None:
+                batch_file = plan_base / batch_entry["file"]
+                batch_frontmatter = _plan_dag._read_batch_frontmatter(batch_file)
+                verify_cmd = batch_frontmatter.get("verify")
         return finalize_from_output(
             Path(args.agent_output),
             project_root,
             start_sha=args.start_sha,
             snapshot_path=fixer_snapshot_path if fixer_snapshot_path.exists() else None,
             session_id=args.session_id,
+            verify_cmd=verify_cmd,
         )
 
     # Branch on scope (for prepare and full stages)
@@ -212,6 +221,9 @@ def main(argv=None) -> int:
             return 1
 
         batch_file = plan_base / batch_entry["file"]
+        # Resolve batch verify command for batch-scope fixes
+        batch_frontmatter = _plan_dag._read_batch_frontmatter(batch_file)
+        verify_cmd = batch_frontmatter.get("verify")
 
         _status.set_batch_fields(
             status_path, args.batch_name, {"state": "fixing", "review_round": args.round, "review_file": str(review_file)}
@@ -265,6 +277,8 @@ def main(argv=None) -> int:
 
     else:  # args.scope == "holistic"
         # Holistic fixer dispatch
+        # No single batch verify command for holistic fixes; pass None to finalize/full
+        verify_cmd = None
         batch_files_text = "\n".join(str(plan_base / b["file"]) for b in batches)
 
         _status.append_phase(status_path, "holistic-fixing", _timestamp.now_utc_iso())
@@ -353,7 +367,7 @@ def main(argv=None) -> int:
         print(str(e), file=sys.stderr)
         return 1
 
-    return _forward_output(output, project_root, start_sha=start_sha, session_id=session_id)
+    return _forward_output(output, project_root, start_sha=start_sha, session_id=session_id, verify_cmd=verify_cmd)
 
 
 if __name__ == "__main__":
