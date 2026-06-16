@@ -12,9 +12,14 @@ You are the end-of-task finalization orchestrator. Your job is to choose the cor
 ## Entry
 
 1. Resolve `git_root` via `_paths.resolve_git_root()`, `wiki_path` via `_paths.resolve_wiki_path(git_root)`.
-2. Load config: `cfg = _config.load_config(_paths.resolve_hub_path(), git_root)`.
+2. Load config: `cfg = _config.load_config(_paths.resolve_hub_path(), _paths.resolve_hub_path())`.
    `signature: _config.load_config(hub_root: Path, worktree_root: Path) -> dict` — deep-merges `<hub_root>/mill-config.yaml` with `<worktree_root>/.millhouse/config.local.yaml`.
-2.5. **Path Setup.** `cfg` was loaded in step 2; `worktree_root = git_root` from step 1. Derive `status_path = _paths.resolve_task_path(worktree_root, cfg['paths']['status_md'])` and `task_dir = status_path.parent`. Use these variables for all subsequent path references.
+2.5. **Path Setup.** `cfg` was loaded in step 2. Derive:
+   - `worktree_root = _paths.resolve_hub_path()` (the hub root; used to anchor `_mill/` paths in nested layouts)
+   - `status_path = _paths.resolve_task_path(worktree_root, cfg['paths']['status_md'])`
+   - `task_dir = status_path.parent`
+
+   Use these variables for all subsequent path references.
 3. Resolve task data: `active_data = _marker.task_data(git_root, wiki_path, cfg)`. On `MarkerError` → halt: "This worktree has no registered task branch — mill-finalize needs a tracked branch. Run mill-claim to register it, or merge manually."
 4. `slug = active_data['slug']`.
 5. `status_path` is set in Path Setup (step 2.5). Call `data = _status.read_status(status_path)`. Verify `data["phase"] == "done"`. If not: halt "status.md phase is `<value>`; mill-finalize expects `done`. Run mill-go first to bring the task to done."
@@ -28,7 +33,7 @@ Read these config keys from the deep-merged config (`cfg`):
 - `base_branch = cfg.get("git", {}).get("base_branch", "main")` — default "main".
 - `parent_branch = _parent_branch.resolve(status_path, interactive=False)` — reads `parent:` from status.md. On `ParentBranchError` → halt with the error message.
 
-**PR mode** activates when `require_pr is True` AND `parent_branch == base_branch`.
+**PR mode** activates when `require_pr is True`.
 
 - **PR mode:** proceed to PR Steps.
 - **Direct mode** (everything else): invoke `/mill-merge`. Execution ends — mill-merge owns its own steps and teardown.
@@ -88,10 +93,10 @@ git push origin "$CHILD_BRANCH"
 
 ### Step 5: Create PR
 
-Invoke `/git-pr <base_branch>` with environment variable `MILL_FINALIZE_PR_CLEANUP=1`:
+Invoke `/git-pr <parent_branch>` with environment variable `MILL_FINALIZE_PR_CLEANUP=1`:
 
 ```bash
-MILL_FINALIZE_PR_CLEANUP=1 /git-pr <base_branch>
+MILL_FINALIZE_PR_CLEANUP=1 /git-pr <parent_branch>
 ```
 
 The skill generates title and body from commit history. Cleanup has already run

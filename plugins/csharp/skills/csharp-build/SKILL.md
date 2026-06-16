@@ -18,6 +18,8 @@ dotnet build
 dotnet test
 ```
 
+**Convention: Writing formatters (when used) run on changed files only, never on the whole project. This is precautionary since csharp-build today ships no formatter. Any future formatter must be scoped to changed files. Whole-project build and test stay whole-project.**
+
 ## Failure Handling
 
 - If **build fails**: analyze the error, fix the issue, and retry.

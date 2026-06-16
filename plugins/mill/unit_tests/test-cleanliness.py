@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import io
+import subprocess
 import sys
 import tempfile
 import unittest.mock
@@ -15,6 +16,7 @@ from _cleanliness import (  # noqa: E402
     compute_new_dirt,
     compute_scope_violations,
     compute_terminal_dirt,
+    revert_out_of_scope_drift,
     _filter_to_task_scope,
     _parent_diff_names,
 )
@@ -399,6 +401,138 @@ def main() -> int:
         failures.append(f"FAIL: _parent_diff_names non-zero exit: {exc}")
     except Exception as exc:
         failures.append(f"FAIL: _parent_diff_names non-zero exit ({type(exc).__name__}): {exc}")
+
+    # ROOD-1. revert_out_of_scope_drift: out-of-scope tracked modification only -> reverted, remaining empty
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            with unittest.mock.patch(
+                "_cleanliness._pygit2_util.status_porcelain",
+                return_value=[" M out_of_scope.txt"]
+            ):
+                with unittest.mock.patch("_cleanliness._parent_diff_names", return_value=[]):
+                    with unittest.mock.patch("_cleanliness._subprocess_util.run") as mock_run:
+                        mock_run.return_value = unittest.mock.Mock(returncode=0)
+                        reverted, remaining = revert_out_of_scope_drift(Path(tmp), Path("_mill"), "main")
+            assert reverted == ["out_of_scope.txt"], f"expected ['out_of_scope.txt'], got {reverted!r}"
+            assert remaining == [], f"expected [], got {remaining!r}"
+            # Verify git checkout was called
+            assert mock_run.call_count == 1, f"expected 1 call to run, got {mock_run.call_count}"
+            call_args = mock_run.call_args[0][0]
+            assert call_args[0:3] == ["git", "checkout", "HEAD"], f"unexpected git call: {call_args}"
+        print("PASS: revert_out_of_scope_drift: out-of-scope modification reverted, remaining empty")
+    except AssertionError as exc:
+        failures.append(f"FAIL: revert_out_of_scope_drift out-of-scope only: {exc}")
+    except Exception as exc:
+        failures.append(f"FAIL: revert_out_of_scope_drift out-of-scope only ({type(exc).__name__}): {exc}")
+
+    # ROOD-2. revert_out_of_scope_drift: mixed in-scope + out-of-scope -> out-of-scope reverted, in-scope returned
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            with unittest.mock.patch(
+                "_cleanliness._pygit2_util.status_porcelain",
+                return_value=[" M _mill/status.md", " M out_of_scope.txt"]
+            ):
+                with unittest.mock.patch("_cleanliness._parent_diff_names", return_value=[]):
+                    with unittest.mock.patch("_cleanliness._subprocess_util.run") as mock_run:
+                        mock_run.return_value = unittest.mock.Mock(returncode=0)
+                        reverted, remaining = revert_out_of_scope_drift(Path(tmp), Path("_mill"), "main")
+            assert reverted == ["out_of_scope.txt"], f"expected ['out_of_scope.txt'], got {reverted!r}"
+            assert remaining == [" M _mill/status.md"], f"expected [' M _mill/status.md'], got {remaining!r}"
+        print("PASS: revert_out_of_scope_drift: mixed in-scope + out-of-scope -> out-of-scope reverted")
+    except AssertionError as exc:
+        failures.append(f"FAIL: revert_out_of_scope_drift mixed: {exc}")
+    except Exception as exc:
+        failures.append(f"FAIL: revert_out_of_scope_drift mixed ({type(exc).__name__}): {exc}")
+
+    # ROOD-3. revert_out_of_scope_drift: deleted-in-index out-of-scope file NOT reverted (not a modified status code)
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            with unittest.mock.patch(
+                "_cleanliness._pygit2_util.status_porcelain",
+                return_value=[" D out_of_scope.txt"]
+            ):
+                with unittest.mock.patch("_cleanliness._parent_diff_names", return_value=[]):
+                    with unittest.mock.patch("_cleanliness._subprocess_util.run") as mock_run:
+                        reverted, remaining = revert_out_of_scope_drift(Path(tmp), Path("_mill"), "main")
+            assert reverted == [], f"expected [], got {reverted!r}"
+            assert remaining == [], f"expected [], got {remaining!r}"
+            # Verify git checkout was NOT called (file is deleted in index, not modified)
+            assert mock_run.call_count == 0, f"expected 0 calls to run, got {mock_run.call_count}"
+        print("PASS: revert_out_of_scope_drift: deleted-in-index file NOT reverted and NOT returned")
+    except AssertionError as exc:
+        failures.append(f"FAIL: revert_out_of_scope_drift untracked: {exc}")
+    except Exception as exc:
+        failures.append(f"FAIL: revert_out_of_scope_drift untracked ({type(exc).__name__}): {exc}")
+
+    # ROOD-4. revert_out_of_scope_drift: file in parent-diff owned set but outside task_dir is in-scope
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            # Create a git repo with parent branch as base
+            subprocess.run(
+                ["git", "init", "-b", "parent", str(tmp_path)],
+                check=True,
+                capture_output=True,
+            )
+            # Configure git user
+            subprocess.run(
+                ["git", "-C", str(tmp_path), "config", "user.email", "test@test.com"],
+                check=True,
+                capture_output=True,
+            )
+            subprocess.run(
+                ["git", "-C", str(tmp_path), "config", "user.name", "Test User"],
+                check=True,
+                capture_output=True,
+            )
+            # Create initial commit on parent branch
+            (tmp_path / "src").mkdir(parents=True, exist_ok=True)
+            (tmp_path / "src" / "main.py").write_text("def hello(): pass", encoding="utf-8")
+            subprocess.run(
+                ["git", "-C", str(tmp_path), "add", "src/main.py"],
+                check=True,
+                capture_output=True,
+            )
+            subprocess.run(
+                ["git", "-C", str(tmp_path), "commit", "-m", "initial"],
+                check=True,
+                capture_output=True,
+            )
+            # Create task branch from parent
+            subprocess.run(
+                ["git", "-C", str(tmp_path), "checkout", "-b", "task"],
+                check=True,
+                capture_output=True,
+            )
+            # Modify src/main.py on task branch (this creates a parent-diff)
+            (tmp_path / "src" / "main.py").write_text("def hello(): return 1", encoding="utf-8")
+            subprocess.run(
+                ["git", "-C", str(tmp_path), "add", "src/main.py"],
+                check=True,
+                capture_output=True,
+            )
+            subprocess.run(
+                ["git", "-C", str(tmp_path), "commit", "-m", "modify src/main.py on task"],
+                check=True,
+                capture_output=True,
+            )
+            # Modify src/main.py again in working tree (simulating formatter drift)
+            (tmp_path / "src" / "main.py").write_text("def hello(): return 2", encoding="utf-8")
+            # Create _mill directory (task_dir)
+            (tmp_path / "_mill").mkdir(parents=True, exist_ok=True)
+            (tmp_path / "_mill" / "status.md").write_text("# Status", encoding="utf-8")
+            # Now test revert_out_of_scope_drift
+            reverted, remaining = revert_out_of_scope_drift(tmp_path, Path("_mill"), "parent")
+            # src/main.py is in the parent-diff owned set, so it should NOT be reverted
+            assert reverted == [], f"expected [], got {reverted!r}"
+            # It should be in remaining since it is in-scope (part of owned set)
+            assert len(remaining) == 1, f"expected 1 remaining line, got {len(remaining)}"
+            assert "src/main.py" in remaining[0], f"expected 'src/main.py' in remaining, got {remaining!r}"
+        print("PASS: revert_out_of_scope_drift: owned-set file treated as in-scope")
+    except AssertionError as exc:
+        failures.append(f"FAIL: revert_out_of_scope_drift owned-set: {exc}")
+    except Exception as exc:
+        failures.append(f"FAIL: revert_out_of_scope_drift owned-set ({type(exc).__name__}): {exc}")
 
     if failures:
         for msg in failures:

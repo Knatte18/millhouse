@@ -52,9 +52,9 @@ elif [ -n "$MILL_PYTHON" ] && [ -n "$CLAUDE_PLUGIN_ROOT" ]; then
 from pathlib import Path
 import _config, _paths
 try:
-    git_root = Path.cwd()
-    cfg = _config.load_config(_paths.resolve_hub_path(), git_root)
-    status_path = _paths.resolve_task_path(git_root, cfg['paths']['status_md'])
+    hub_root = _paths.resolve_hub_path()
+    cfg = _config.load_config(hub_root, hub_root)
+    status_path = _paths.resolve_task_path(hub_root, cfg['paths']['status_md'])
     print(status_path)
 except Exception:
     exit(1)
