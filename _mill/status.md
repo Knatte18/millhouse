@@ -34,7 +34,9 @@ batches:
     start_sha: 81cae509a2273c91d3fe899cdd8e2b3eaaf483a3
     commit_sha: ec2621765033f4a198164f69a8e5d7796abd1cc9
   - name: merge-skill-path-fixes
-    state: pending
+    state: running
+    implementer_session: f8790c96-b403-400e-91ce-78fd103d90eb
+    start_sha: 15c631668679bd59ad0ef2dd1335b79c0b0ad319
   - name: merge-integration-test
     state: pending
 ```
