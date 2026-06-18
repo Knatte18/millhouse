@@ -50,8 +50,9 @@ def _collect_shipped_helpers() -> dict[str, set[str]]:
     Scan plugins/mill/scripts recursively for module-level functions.
 
     Returns a mapping: module_stem -> set of function names.
-    The module stem is the bare filename without .py (e.g., "_client", "_paths"),
-    which matches how SKILLs reference helpers (_client.get_task(), _paths.resolve_hub_path()).
+    The module stem is the bare filename without .py and without leading underscore
+    (e.g., "client", "paths"), which matches how the regex extracts _<module> references
+    from SKILLs (the underscore is matched but not captured in the regex).
     """
     helpers: dict[str, set[str]] = {}
 
@@ -61,6 +62,9 @@ def _collect_shipped_helpers() -> dict[str, set[str]]:
             continue
 
         module_stem = py_file.stem  # bare filename, e.g., "_client", "_paths"
+        # Strip leading underscore to match what the regex extracts
+        if module_stem.startswith("_"):
+            module_stem = module_stem[1:]
 
         try:
             source = py_file.read_text(encoding="utf-8")
@@ -87,6 +91,7 @@ def _extract_helper_references(skill_md_text: str) -> list[tuple[str, str]]:
 
     Returns list of (module_stem, function_name) tuples.
     Regex matches underscore-prefixed module identifier, dot, function identifier, then (.
+    The underscore is matched but not captured; the captured module name does not include it.
     """
     pattern = r"_([a-zA-Z_][a-zA-Z0-9_]*)\.([a-zA-Z_][a-zA-Z0-9_]*)\("
     matches = re.findall(pattern, skill_md_text)
