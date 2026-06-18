@@ -1,5 +1,7 @@
 """Shared helpers for millpy-implement.py and millpy-fix.py."""
 import json
+import os
+import shutil
 import subprocess
 import _agent_dispatch
 import _cleanliness
@@ -118,12 +120,25 @@ def _run_verify_gate(project_root: Path, verify_cmd: str | None) -> dict | None:
         return None
 
     try:
+        # Plan verify commands use POSIX syntax (e.g. the mandated "PYTHONPATH= "
+        # env-prefix). subprocess shell=True routes through cmd.exe on Windows,
+        # which cannot parse a leading VAR= env-prefix and fails with
+        # "'PYTHONPATH' is not recognized". Run through bash when available so the
+        # POSIX verify command is honoured cross-platform; fall back to shell=True
+        # only when bash is absent.
+        bash = shutil.which("bash") if os.name == "nt" else None
+        if bash:
+            run_args = [bash, "-c", verify_cmd]
+            run_kwargs = {}
+        else:
+            run_args = verify_cmd
+            run_kwargs = {"shell": True}
         result = subprocess.run(
-            verify_cmd,
-            shell=True,
+            run_args,
             capture_output=True,
             text=True,
             cwd=project_root,
+            **run_kwargs,
         )
         if result.returncode != 0:
             output = (result.stdout + result.stderr).strip()
