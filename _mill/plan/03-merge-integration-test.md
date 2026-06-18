@@ -52,9 +52,10 @@ test and skill stay in lockstep.
      survived); (b) the squash commit's changed-files set (`git show --stat`/`git diff --name-only`)
      contains the child's production file and does NOT contain any `<hub>/_mill/` path (no deletion,
      no modification of parent state); (c) additionally confirm the archive-tag path still works by
-     creating an archive tag over the child branch (reuse the same `_archive_tag`/git approach the
-     existing flat scenario uses) and asserting the tag resolves to a commit whose tree still
-     contains the child's cleanup state. Keep the existing flat-hub scenario and all its current
+     creating an archive tag over the child branch using the **raw `git tag` approach the existing
+     flat scenario already uses** (`test-merge.py` does `git tag archive/<slug>` near line 291 —
+     there is no `_archive_tag` helper in this test) and asserting the tag resolves to a commit
+     whose tree still contains the child's cleanup state. Keep the existing flat-hub scenario and all its current
      assertions intact and passing. Preserve the file's exit-0-on-pass / exit-1-on-failure
      contract and ASCII-only output. Clean up scratch on pass as the existing test does.
 - **Commit:** `test(mill-merge): nested-hub squash preserves parent's own _mill/status.md (#497)`

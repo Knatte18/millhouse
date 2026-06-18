@@ -37,11 +37,16 @@ mill-merge uses `resolve_active_hub`; mill-merge-in uses `resolve_hub_path`.
   currently reading "Load the deep-merged config: read `<wiki_path>/config.yaml` and overlay
   `<git_root>/.millhouse/config.local.yaml` if present (same deep-merge pattern used elsewhere)"),
   replace the obsolete wiki-config instruction with the canonical helper:
-  `cfg = _config.load_config(_paths.resolve_hub_path(), git_root)`. Mirror mill-go Entry step 3,
-  which loads config from the hub root via `resolve_hub_path()` *before* the slug-driven hub is
-  resolved. Keep the rest of Step 1 (the `_marker.task_data` call, `_inplace.is_inplace`, mode
-  selection) unchanged. Do not introduce an absolute path; intra-plugin references in prose use
-  `${CLAUDE_PLUGIN_ROOT}` literally if any are added (none required here).
+  `cfg = _config.load_config(_paths.resolve_hub_path(), git_root)`. Use **`_config.load_config`**
+  specifically — its signature is `load_config(hub_root, worktree_root)`, so arg1 is the hub
+  (`resolve_hub_path()`) and arg2 is the worktree git root (`git_root`); arg2 is where it reads the
+  `.millhouse/config.local.yaml` stub. Do NOT use `_review_common.load_config` — that is a different
+  function whose arg2 is a `.millhouse` directory (`hub/".millhouse"`), and mixing the two arg
+  conventions silently misreads config. (mill-go Entry step 3 happens to call the `_review_common`
+  variant; do not copy its argument shape here — match `_config.load_config`'s own signature, which
+  mill-start Entry step 3 uses.) Keep the rest of Step 1 (the `_marker.task_data` call,
+  `_inplace.is_inplace`, mode selection) unchanged. Do not introduce an absolute path; intra-plugin
+  references in prose use `${CLAUDE_PLUGIN_ROOT}` literally if any are added (none required here).
 - **Commit:** `fix(mill-merge): load config via _config.load_config, not obsolete wiki config.yaml`
 
 ### Card 4: mill-merge 1.5 Path Setup — resolve the hub via resolve_active_hub (no mode branch)

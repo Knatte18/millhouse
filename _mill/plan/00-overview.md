@@ -3,7 +3,7 @@
 ```yaml
 task: Fix nested-hub path resolution and SKILL.md vs shipped-API mismatches
 slug: mill-nested-hub-and-skill-sync
-approved: false
+approved: true
 started: 20260618-091504
 parent: main
 root: ""
