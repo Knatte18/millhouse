@@ -80,7 +80,7 @@ def _collect_shipped_helpers() -> dict[str, set[str]]:
                 top_level_functions.add(node.name)
 
         if top_level_functions:
-            helpers[module_stem] = top_level_functions
+            helpers[module_stem] = helpers.get(module_stem, set()) | top_level_functions
 
     return helpers
 
