@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-fix-r1
+phase: planned
 slug: mill-nested-hub-and-skill-sync
 branch: hanf/mill-nested-hub-and-skill-sync
 plan: _mill/plan
@@ -19,4 +19,5 @@ discussion-fix-r2  '2026-06-18T09:06:28Z'
 discussed  '2026-06-18T09:06:44Z'
 planning  '2026-06-18T09:18:46Z'
 plan-fix-r1  '2026-06-18T09:23:01Z'
+planned  '2026-06-18T09:23:21Z'
 ```
