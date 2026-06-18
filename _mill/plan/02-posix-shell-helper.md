@@ -73,7 +73,7 @@ Fixes `millpy-merge-in-subagent.py` so its verify commands run through bash on W
 - **Requirements:**
   Add `import _implementer_common  # noqa: E402` to the import block of `test-merge-in-subagent.py`, immediately after the existing `import _subprocess_util  # noqa: E402` line. `unittest.mock` is already imported in that file.
 
-  Add three test cases after the existing ones (before the `return errors` line at the end of `main()`). Each uses the same `errors`/`PASS:`/`FAIL:` pattern as the existing cases: wrap the assertion in `try: ...; print("PASS: <name>") except Exception as exc: print(f"FAIL: <name> ({exc})", file=sys.stderr); errors += 1`.
+  Add three test cases after the existing ones (before the final `if errors:` block at the end of `main()`, ~line 326). Each uses the same `errors`/`PASS:`/`FAIL:` pattern as the existing cases: wrap the assertion in `try: ...; print("PASS: <name>") except Exception as exc: print(f"FAIL: <name> ({exc})", file=sys.stderr); errors += 1`.
 
   Each case uses `unittest.mock.patch` to override the module-level `os` and `shutil` references on `_implementer_common`. Use `unittest.mock.patch("_implementer_common.os") as mock_os` and set `mock_os.name = "nt"` (not `mock.patch.object` — `os` is a module reference on the target module, not an attribute).
 
