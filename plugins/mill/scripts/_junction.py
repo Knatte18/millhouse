@@ -278,24 +278,25 @@ def points_to(link_path: Path, target: Path) -> bool:
 
 def strip_all_in_worktree(worktree_path: Path, junctions_cfg: dict[str, str]) -> list[Path]:
     """
-    Unlink every junction inside ``worktree_path`` discovered by a one-level FS scan.
+    Walks the worktree tree recursively, stopping at any junction or symlink.
 
     This is the mandatory safety prelude to any recursive removal of a
     worktree on Windows. ``rmdir /s`` (cmd.exe) and ``shutil.rmtree``
     (Python) follow NTFS directory junctions by default — running either
     against a worktree without first stripping junctions risks deleting
-    the wiki (`.millhouse/wiki -> <WIKI_PATH>`), the portals dir
-    (`.others -> <CONTAINER_PATH>/portals/`), or sibling worktrees
-    (`.active -> <CONTAINER_PATH>/portals/<SLUG>/`).
+    the wiki, the portals dir, or sibling worktrees. This function recursively
+    descends into real directories and stops at junctions/symlinks, stripping
+    every junction found regardless of depth, including those placed under a
+    hub-relative subdir (e.g., ``src/csharp/NORCE.Models/.wiki``).
 
     Rather than iterating a declared list of junctions from ``mill-config.yaml``,
-    this function scans the worktree root (one level only) for any symlink or
-    junction, including undeclared ones (e.g. legacy ``.active`` in old worktrees).
-    This catches junctions regardless of whether they appear in ``junctions_cfg``.
+    this function scans the worktree tree for any symlink or junction,
+    including undeclared ones. This catches junctions regardless of whether
+    they appear in ``junctions_cfg``.
 
     Idempotent: missing paths and non-junction entries are silently skipped.
     The ``junctions_cfg`` parameter is retained for backward compatibility;
-    it is no longer consulted.
+    it is no longer read.
 
     Args:
         worktree_path: Absolute path to the worktree being torn down.
@@ -305,13 +306,33 @@ def strip_all_in_worktree(worktree_path: Path, junctions_cfg: dict[str, str]) ->
         List of link paths that were stripped.
     """
     removed: list[Path] = []
-    try:
-        with os.scandir(str(worktree_path)) as it:
-            for entry in it:
-                ep = Path(entry.path)
-                if entry.is_symlink() or _is_junction_or_symlink(ep):
-                    remove(ep)
-                    removed.append(ep)
-    except FileNotFoundError:
+
+    # If worktree does not exist, return empty list.
+    if not worktree_path.exists():
         return []
+
+    def _walk(dir_path: Path) -> None:
+        """Recursively walk dir_path, stopping at junctions/symlinks."""
+        try:
+            entries = list(os.scandir(str(dir_path)))
+        except PermissionError:
+            print(
+                f"[junction] WARNING: permission denied scanning {dir_path}; "
+                f"junctions inside may survive",
+                file=sys.stderr,
+            )
+            return
+
+        for entry in entries:
+            ep = Path(entry.path)
+            # If entry is a junction or symlink, remove it and do NOT descend.
+            if entry.is_symlink() or _is_junction_or_symlink(ep):
+                remove(ep)
+                removed.append(ep)
+            # If entry is a real directory, recurse into it.
+            elif entry.is_dir():
+                _walk(ep)
+            # Files are skipped.
+
+    _walk(worktree_path)
     return removed

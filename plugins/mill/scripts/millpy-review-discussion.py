@@ -54,7 +54,7 @@ def main(argv: list[str] | None = None) -> int:
         "--round",
         type=int,
         default=None,
-        help="Review round number from prepare envelope; required for finalize stage.",
+        help="Review round number from prepare envelope; auto-discovered when absent in finalize stage.",
     )
     args = parser.parse_args(argv)
 
@@ -63,7 +63,7 @@ def main(argv: list[str] | None = None) -> int:
     import _reviewers
     from _paths import resolve_git_root, resolve_hub_path, resolve_wiki_path
     from _review_cli import print_error_envelope
-    from _review_common import ReviewError, find_active_slug, load_config, resolve_path
+    from _review_common import ReviewError, discover_round, find_active_slug, load_config, resolve_path
     from _review_discussion import prepare, finalize, run
 
     try:
@@ -117,15 +117,16 @@ def main(argv: list[str] | None = None) -> int:
         if not args.agent_output:
             print_error_envelope("discussion", "--agent-output required for finalize stage")
             return 1
-        if args.round is None:
-            print_error_envelope("discussion", "--round is required for finalize stage")
-            return 1
+        round_n = args.round
+        if round_n is None:
+            reviews_dir_for_discovery = resolve_path(cfg["paths"]["reviews_dir"], slug)
+            round_n = discover_round(reviews_dir_for_discovery, "discussion", "holistic")
         try:
             agent_output_path = Path(args.agent_output)
             raw_text = agent_output_path.read_text(encoding="utf-8")
             reviews_dir = resolve_path(cfg["paths"]["reviews_dir"], slug)
             result = finalize(
-                cfg, slug, raw_text, round_n=args.round,
+                cfg, slug, raw_text, round_n=round_n,
                 reviews_dir=reviews_dir, mill_dir=mill_dir,
                 project_root=project_root, wiki_root=wiki_root
             )

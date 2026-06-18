@@ -139,6 +139,48 @@ def main() -> int:
     except Exception as exc:
         fail("missing-worktree case", exc)
 
+    # --- (e) nested-junction case ---
+    try:
+        tmp = tempfile.mkdtemp()
+        tmp_path = Path(tmp)
+        try:
+            # Create worktree with nested subdirectories.
+            wt = tmp_path / "wt"
+            nested_hub = wt / "src" / "hub"
+            nested_hub.mkdir(parents=True)
+
+            # Create junction targets.
+            wiki_target = tmp_path / "wiki_target"
+            portals_target = tmp_path / "portals_target"
+            wiki_target.mkdir()
+            portals_target.mkdir()
+
+            # Create junctions at nested level.
+            wiki_link = nested_hub / ".wiki"
+            portals_link = nested_hub / ".portals"
+            _junction.create(wiki_target, wiki_link)
+            _junction.create(portals_target, portals_link)
+
+            # Call strip_all_in_worktree from the root.
+            stripped = _junction.strip_all_in_worktree(wt, junctions_cfg={})
+
+            # Verify both junctions are stripped.
+            assert wiki_link in stripped, ".wiki not in stripped list"
+            assert portals_link in stripped, ".portals not in stripped list"
+            assert not wiki_link.exists(), ".wiki still exists after stripping"
+            assert not portals_link.exists(), ".portals still exists after stripping"
+            # Verify the real parent directory still exists.
+            assert (wt / "src" / "hub").exists(), "nested parent directory was removed (should not be touched)"
+            # Verify the junction targets still exist.
+            assert wiki_target.exists(), "wiki_target was deleted (junctions were stripped, targets untouched)"
+            assert portals_target.exists(), "portals_target was deleted (junctions were stripped, targets untouched)"
+
+            ok("(e) nested-junction case")
+        finally:
+            _safe_rmtree.safe_rmtree(tmp_path, allowed_root=tmp_path, ignore_errors=True)
+    except Exception as exc:
+        fail("(e) nested-junction case", exc)
+
     print("", file=sys.stderr)
     if failed:
         print(f"FAIL -- {failed} of {passed + failed}", file=sys.stderr)

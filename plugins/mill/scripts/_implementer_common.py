@@ -9,6 +9,31 @@ import _subprocess_util
 from pathlib import Path
 
 
+def _posix_shell_run_args(cmd: str) -> tuple:
+    """
+    Build subprocess.run args to route POSIX shell commands through bash on Windows.
+
+    On Windows (os.name == "nt"), when bash is available, returns args to invoke
+    bash -c explicitly. On other platforms or when bash is unavailable, returns
+    the command string with shell=True so the native shell processes it.
+
+    POSIX verify commands often start with "PYTHONPATH= " (env-prefix syntax) that
+    cmd.exe cannot parse. Running through bash honours this syntax cross-platform.
+
+    Args:
+        cmd: The command string (e.g., "PYTHONPATH= pytest tests/ -q").
+
+    Returns:
+        A tuple (run_args, run_kwargs) where run_args is either a list
+        ([bash, "-c", cmd]) or a string (cmd), and run_kwargs is either {}
+        or {"shell": True} to be unpacked into subprocess.run.
+    """
+    bash = shutil.which("bash") if os.name == "nt" else None
+    if bash:
+        return [bash, "-c", cmd], {}
+    return cmd, {"shell": True}
+
+
 def _is_formatter_drift_only(project_root: Path) -> bool:
     """Check if the only remaining dirt is whitespace-only formatter drift.
 
@@ -127,13 +152,7 @@ def _run_verify_gate(project_root: Path, verify_cmd: str | None) -> dict | None:
         # "'PYTHONPATH' is not recognized". Run through bash when available so the
         # POSIX verify command is honoured cross-platform; fall back to shell=True
         # only when bash is absent.
-        bash = shutil.which("bash") if os.name == "nt" else None
-        if bash:
-            run_args = [bash, "-c", verify_cmd]
-            run_kwargs = {}
-        else:
-            run_args = verify_cmd
-            run_kwargs = {"shell": True}
+        run_args, run_kwargs = _posix_shell_run_args(verify_cmd)
         result = subprocess.run(
             run_args,
             capture_output=True,

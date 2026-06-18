@@ -86,7 +86,7 @@ def main(argv: list[str] | None = None) -> int:
         "--round",
         type=int,
         default=None,
-        help="Review round number from prepare envelope; required for finalize stage.",
+        help="Review round number from prepare envelope; auto-discovered when absent in finalize stage.",
     )
     args = parser.parse_args(argv)
 
@@ -95,7 +95,7 @@ def main(argv: list[str] | None = None) -> int:
     import _reviewers
     from _paths import resolve_hub_path, resolve_wiki_path
     from _review_cli import print_error_envelope
-    from _review_common import _load_root_from_overview, find_active_slug, load_config, resolve_path, ReviewError
+    from _review_common import _load_root_from_overview, discover_round, find_active_slug, load_config, resolve_path, ReviewError
     from _review_plan import prepare, finalize, run
 
     try:
@@ -172,22 +172,22 @@ def main(argv: list[str] | None = None) -> int:
         if not args.agent_output:
             print_error_envelope("plan", "--agent-output required for finalize stage")
             return 1
-        if args.round is None:
-            print_error_envelope("plan", "--round is required for finalize stage")
-            return 1
+        round_n = args.round
+        reviews_dir = resolve_path(cfg["paths"]["reviews_dir"], slug)
+        if round_n is None:
+            round_n = discover_round(reviews_dir, "plan", "holistic")
         try:
             agent_output_path = Path(args.agent_output)
             raw_text = agent_output_path.read_text(encoding="utf-8")
-            reviews_dir = resolve_path(cfg["paths"]["reviews_dir"], slug)
             review_entry = finalize(
-                cfg, slug, raw_text, scope=None, round_n=args.round,
+                cfg, slug, raw_text, scope=None, round_n=round_n,
                 reviews_dir=reviews_dir, mill_dir=mill_dir,
                 project_root=project_root, wiki_root=wiki_root, git_root=git_root
             )
             # Build ReviewResult from the single review entry
             result_dict = {
                 "type": "plan",
-                "round": args.round,
+                "round": round_n,
                 "verdict": review_entry["verdict"],
                 "blocking_count": review_entry["blocking_count"],
                 "nit_count": review_entry["nit_count"],
