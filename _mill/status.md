@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-approved
+phase: done
 slug: mill-junction-and-agent-gaps
 branch: hanf/mill-junction-and-agent-gaps
 plan: _mill/plan
@@ -25,6 +25,7 @@ approved-review-round-autodiscovery  '2026-06-18T12:14:52Z'
 holistic-reviewing  '2026-06-18T12:15:35Z'
 holistic-fixing  '2026-06-18T12:17:29Z'
 holistic-approved  '2026-06-18T12:19:19Z'
+done  '2026-06-18T12:19:50Z'
 ```
 
 ## Batches
