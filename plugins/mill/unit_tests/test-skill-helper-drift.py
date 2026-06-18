@@ -154,6 +154,10 @@ def _run_regression_locks() -> list[str]:
     #495: millpy-review-plan.py uses _paths.resolve_hub_path() for project_root
     #496: mill-go SKILL.md resolves reviews_dir = hub / '_mill/reviews'
 
+    Note: #504/#505 (SKILL.md helper reference mismatches) are already covered by
+    Card 1's drift-guard scan, which asserts _cleanliness.revert_out_of_scope_drift
+    (referenced by mill-go SKILL.md) resolves to a shipped function.
+
     Returns list of failure messages (empty list = all passed).
     """
     failures: list[str] = []
