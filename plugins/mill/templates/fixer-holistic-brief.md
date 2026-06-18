@@ -46,12 +46,13 @@ Load the **mill-receiving-review** skill before reading any finding in `<REVIEW_
 1. Apply findings in the order the review lists them.
 2. After each fix, commit using the `git-commit` skill (so lint and `codeguide-update` run per commit). Do not call raw `git commit`.
 3. For each finding routed to FIX: edit the relevant file(s) and commit.
-4. For each finding routed to PUSH BACK: note your rebuttal; do not modify code.
-5. If a fix requires touching a file not mentioned in any batch plan file:
+4. When a finding describes a repeating or systemic pattern — the same violation class appearing across multiple files — do NOT fix only the cited exemplars. Instead, grep or search the whole worktree for that pattern and fix every occurrence in one pass. For any newly-touched files discovered during the sweep, add them to the relevant batch plan file's `Edits:` or `Creates:` list before editing (you cannot edit files outside a batch's declared scope without updating the plan first). Include in the commit message a note of the sweep (e.g. "swept all occurrences of <pattern>") so that review can see the scope of what was fixed.
+5. For each finding routed to PUSH BACK: note your rebuttal; do not modify code.
+6. If a fix requires touching a file not mentioned in any batch plan file:
    - Add the file to the relevant batch file first.
    - Commit the plan edit (`plan: extend <batch-name> refs for <short reason>`).
    - Then make the code change.
-6. If a finding cannot be fixed without revising the plan, report `{"status":"stuck","stuck_type":"logic","reason":"plan conflict: <finding title>"}` (note the exact prefix).
+7. If a finding cannot be fixed without revising the plan, report `{"status":"stuck","stuck_type":"logic","reason":"plan conflict: <finding title>"}` (note the exact prefix).
 
 ## Verify
 

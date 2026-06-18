@@ -739,6 +739,81 @@ def main() -> int:
     # with e2e tests when formatter drift actually occurs in a real batch.
     print("SKIP: case 23 (formatter drift integration test - components tested separately in cases 15-18)")
 
+    # Case 24: #500 regression - parsed success but no content commit (HEAD == start_sha)
+    # The verify gate must pass so we can test the no-commit guard independently
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        base_sha = _setup_fixture(project_root)
+        snapshot_path = project_root / "_mill" / ".cleanliness-snapshot-test.txt"
+        _cleanliness.capture_snapshot(project_root, snapshot_path)
+        # IMPORTANT: Do NOT make a new commit - HEAD == start_sha
+        # Verify must pass (so verify gate doesn't fire first)
+        verify_cmd = "exit 0"
+        agent_output = '{"status":"success","commit_sha":"abc","session_id":"test-session"}\n'
+        rc, captured = _capture_stdout(
+            lambda: _forward_output(
+                agent_output,
+                project_root,
+                start_sha=base_sha,
+                snapshot_path=snapshot_path,
+                verify_cmd=verify_cmd,
+            )
+        )
+        try:
+            data = json.loads(captured.strip())
+            assert data["status"] == "stuck", f"expected status=stuck, got {data}"
+            assert data["stuck_type"] == "logic", f"expected stuck_type=logic, got {data}"
+            assert "no content commit" in data.get("reason", "").lower(), f"expected 'no content commit' in reason, got {data}"
+            print("PASS: #500 - parsed success with no content commit (HEAD == start_sha) -> stuck/logic")
+        except Exception as exc:
+            print(f"FAIL: case 24 ({exc}) captured={captured!r}", file=sys.stderr)
+            errors += 1
+
+    # Case 25: #499/#502 regression (a) - API error markers classified as transient
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        _setup_fixture(project_root)
+        # Output contains API error but no parseable JSON
+        rc, captured = _capture_stdout(
+            lambda: _forward_output(
+                "API Error: Internal server error occurred",
+                project_root,
+            )
+        )
+        try:
+            data = json.loads(captured.strip())
+            assert data["status"] == "stuck", f"expected status=stuck, got {data}"
+            assert data["stuck_type"] == "transient", f"expected stuck_type=transient, got {data}"
+            print("PASS: #499/#502 (a) - raw API error -> stuck/transient")
+        except Exception as exc:
+            print(f"FAIL: case 25 ({exc}) captured={captured!r}", file=sys.stderr)
+            errors += 1
+
+    # Case 26: #499/#502 regression (b) - plain garbage + HEAD == start_sha still yields logic
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        base_sha = _setup_fixture(project_root)
+        snapshot_path = project_root / "_mill" / ".cleanliness-snapshot-test.txt"
+        _cleanliness.capture_snapshot(project_root, snapshot_path)
+        # NO new commit — HEAD == start_sha
+        # Output contains no API error and no JSON
+        rc, captured = _capture_stdout(
+            lambda: _forward_output(
+                "plain garbage output with no error markers",
+                project_root,
+                start_sha=base_sha,
+                snapshot_path=snapshot_path,
+            )
+        )
+        try:
+            data = json.loads(captured.strip())
+            assert data["status"] == "stuck", f"expected status=stuck, got {data}"
+            assert data["stuck_type"] == "logic", f"expected stuck_type=logic, got {data}"
+            print("PASS: #499/#502 (b) - plain garbage + HEAD == start_sha -> stuck/logic (not transient)")
+        except Exception as exc:
+            print(f"FAIL: case 26 ({exc}) captured={captured!r}", file=sys.stderr)
+            errors += 1
+
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)
         return 1

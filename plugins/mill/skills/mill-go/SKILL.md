@@ -122,19 +122,21 @@ When `dispatch == agent`, follow this three-step pattern at each dispatch point:
    
    The Agent returns its final message text.
 
-4. **Capture output:** Write the Agent's returned final message to `<brief_path>.out.md` (utf-8). The response file extends the brief path by replacing the trailing `.md` with `.out.md` — for a brief `foo-r1.md` the response is `foo-r1.out.md`.
+4. **Recover from raw API errors:** If the Agent's response contains a raw API/infrastructure error (text like `API Error` / `Internal server error`, roughly 0 tokens, no `MILL_REVIEW` block and no `status` JSON), classify it as `stuck_type: transient` and re-dispatch once using a fresh brief and session (no `--resume`). This applies to implementer, reviewer, and fixer Agent dispatches. On a second consecutive raw API error: implementer and fixer dispatches escalate per the "Stuck escalation" section; read-only reviewer dispatches (which write no review file) fall back to the subprocess `--stage full` path via `millpy-bg` before escalating.
 
-5. **Run finalize stage:** Invoke the CLI with `--stage finalize`, the same standard arguments, and `--agent-output <brief_path>.out.md`. The response file follows the same naming rule: `.out.md` replaces the trailing `.md` of the brief path. Parse the returned JSON envelope.
+5. **Capture output:** Write the Agent's returned final message to `<brief_path>.out.md` (utf-8). The response file extends the brief path by replacing the trailing `.md` with `.out.md` — for a brief `foo-r1.md` the response is `foo-r1.out.md`.
+
+6. **Run finalize stage:** Invoke the CLI with `--stage finalize`, the same standard arguments, and `--agent-output <brief_path>.out.md`. The response file follows the same naming rule: `.out.md` replaces the trailing `.md` of the brief path. Parse the returned JSON envelope.
 
    Additionally thread any applicable prepare-envelope fields into the finalize call: for fix and implementer CLIs, pass `--session-id <session_id>` and `--start-sha <start_sha>` (when `start_sha` is not null in the envelope); for review CLIs, pass `--round <round>`.
 
-6. **Branch on verdict:** Use the JSON envelope to branch identically to the existing `subprocess`/`psmux` flow — the `status`, `verdict`, `stuck_type` handling is identical.
+7. **Branch on verdict:** Use the JSON envelope to branch identically to the existing `subprocess`/`psmux` flow — the `status`, `verdict`, `stuck_type` handling is identical.
 
 **Agent-mode properties:**
 - No log-polling or liveness check required (the Agent tool is synchronous).
 - No `infrastructure` stuck path (no detached worker).
 - `transient` stuck errors can still be emitted by `finalize` as synthetic JSON (e.g., if the brief write fails).
-- The one-retry transient policy still applies.
+- The one-retry transient policy still applies (see step 4 for raw API error recovery).
 
 **Subprocess/psmux poll-loop max-wait.** When `dispatch == subprocess` or `psmux`, all poll loops that wait for `[mill-bg] EXIT` must have a bounded max-wait (~3600s) to self-terminate if the worker dies without writing the exit marker. Exceedance of the max-wait is a fatal `infrastructure` stuck escalation. The explicit timeout guard prevents infinite polling when the worker session is killed (e.g., logout or crash). This applies to implementer, reviewer, and fixer dispatch in all scopes (per-batch and holistic), and to ERROR-only retries. See individual subsections for the loop structure; all follow the same time-bounded poll-until-EXIT pattern.
 

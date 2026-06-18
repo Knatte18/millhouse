@@ -1,5 +1,7 @@
 """Shared helpers for millpy-implement.py and millpy-fix.py."""
 import json
+import os
+import shutil
 import subprocess
 import _agent_dispatch
 import _cleanliness
@@ -101,10 +103,11 @@ def _run_verify_gate(project_root: Path, verify_cmd: str | None) -> dict | None:
     """
     Run a verify command and return a stuck dict on failure, None on success or when verify_cmd is None.
 
-    When verify_cmd is not None, runs the command via subprocess.run with shell=True,
-    capture_output=True, and text=True. On non-zero return code, returns a stuck dict
-    with stuck_type="verify" and reason set to the last 2000 characters of stdout+stderr.
-    On success (rc 0) or when verify_cmd is None, returns None.
+    When verify_cmd is not None, runs the command via bash on Windows (so the
+    POSIX env-prefix syntax is honoured) and via subprocess.run with shell=True
+    elsewhere, capturing output as text. On non-zero return code, returns a stuck
+    dict with stuck_type="verify" and reason set to the last 2000 characters of
+    stdout+stderr. On success (rc 0) or when verify_cmd is None, returns None.
 
     Args:
         project_root: Path to the worktree root.
@@ -118,12 +121,25 @@ def _run_verify_gate(project_root: Path, verify_cmd: str | None) -> dict | None:
         return None
 
     try:
+        # Plan verify commands use POSIX syntax (e.g. the mandated "PYTHONPATH= "
+        # env-prefix). subprocess shell=True routes through cmd.exe on Windows,
+        # which cannot parse a leading VAR= env-prefix and fails with
+        # "'PYTHONPATH' is not recognized". Run through bash when available so the
+        # POSIX verify command is honoured cross-platform; fall back to shell=True
+        # only when bash is absent.
+        bash = shutil.which("bash") if os.name == "nt" else None
+        if bash:
+            run_args = [bash, "-c", verify_cmd]
+            run_kwargs = {}
+        else:
+            run_args = verify_cmd
+            run_kwargs = {"shell": True}
         result = subprocess.run(
-            verify_cmd,
-            shell=True,
+            run_args,
             capture_output=True,
             text=True,
             cwd=project_root,
+            **run_kwargs,
         )
         if result.returncode != 0:
             output = (result.stdout + result.stderr).strip()
@@ -307,6 +323,22 @@ def _forward_output(
                 print(json.dumps(gate_result))
                 return 0
 
+            # Check for no-content-commit success: reject if HEAD == start_sha
+            if start_sha is not None:
+                result = _subprocess_util.run(
+                    ["git", "rev-parse", "HEAD"],
+                    cwd=project_root,
+                )
+                if result.returncode == 0 and result.stdout.strip() == start_sha:
+                    # Implementer reported success but no content commit was made
+                    print(json.dumps({
+                        "status": "stuck",
+                        "stuck_type": "logic",
+                        "reason": "success reported but no content commit (HEAD == start_sha)",
+                        "session_id": session_id or parsed.get("session_id"),
+                    }))
+                    return 0
+
         result = _subprocess_util.run(
             ["git", "rev-parse", "HEAD"],
             cwd=project_root,
@@ -398,6 +430,28 @@ def _forward_output(
                     return 0
     except Exception:
         pass
+    # Before emitting the no-JSON fallback, check if the output contains API/infrastructure error markers
+    # If so, classify as transient (retriable) rather than logic (ask user)
+    api_error_markers = [
+        "api error",
+        "internal server error",
+        "bad gateway",
+        "service unavailable",
+        "gateway timeout",
+        "overloaded",
+        "500 internal",
+    ]
+    output_lower = output.lower()
+    for marker in api_error_markers:
+        if marker in output_lower:
+            # Found an API/infrastructure error marker; classify as transient
+            print(json.dumps({
+                "status": "stuck",
+                "stuck_type": "transient",
+                "reason": "agent returned a raw API error before producing a structured report",
+            }))
+            return 0
+    # No API error markers found; emit the default logic sentinel
     violations = _cleanliness.compute_scope_violations(project_root)
     result = {"status": "stuck", "stuck_type": "logic", "reason": "no structured report"}
     if violations:

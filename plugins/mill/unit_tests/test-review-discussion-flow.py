@@ -244,6 +244,53 @@ def main() -> int:
             os.chdir(orig_dir)
 
     # ------------------------------------------------------------------
+    # nit_count populated from NOTE headings
+    # ------------------------------------------------------------------
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        mill_dir, project_root, wiki_root = _make_fixture(tmpdir)
+        (project_root / "discussion.md").write_text(
+            "# Discussion\n\nTest.\n", encoding="utf-8"
+        )
+
+        cfg = {
+            "paths": {
+                "discussion_file": "discussion.md",
+                "plan_dir":        "plan/",
+                "reviews_dir":     "reviews/",
+            },
+            "roles": {
+                "discussion-review": {
+                    "holistic": {"rounds": 5, "reviewer": "test_stub"},
+                },
+            },
+        }
+
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            # Two NOTE headings and zero GAPs -> nit_count == 2, blocking_count == 0
+            two_notes = (
+                "# Review\n\n"
+                "### [NOTE] minor style issue\n\n- bullet\n\n"
+                "### [NOTE] consider this optimization\n\n- bullet\n\n"
+                "```yaml\nverdict: APPROVE\n```\n"
+            )
+            stub.seed([(two_notes, "sid-notes")])
+            r = discussion_run(cfg, SLUG, mill_dir, project_root, wiki_root)
+            assert r.nit_count == 2, f"expected nit_count=2, got {r.nit_count}"
+            assert r.blocking_count == 0, f"expected blocking_count=0, got {r.blocking_count}"
+            print("PASS nit_count: two NOTE headings -> nit_count == 2, blocking_count == 0")
+
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL nit_count: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL nit_count (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
     # Test parse_verdict failure — returns ERROR envelope (#315)
     # Unparseable output -> ERROR verdict, ERROR entry with file path.
     # ------------------------------------------------------------------

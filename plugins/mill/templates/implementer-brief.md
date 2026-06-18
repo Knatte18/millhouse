@@ -79,6 +79,8 @@ Your last line of output (after all work and commits) MUST be a single JSON obje
 
 **`session_id` MUST be exactly `<SESSION_ID>` (the UUID shown in the example above — it was injected into this brief when it was rendered). Copy it verbatim.**
 
+**`commit_sha` MUST be a real content commit distinct from the batch start commit.** An implementer that made edits but did not run the per-card `git-commit` skill must report `status: stuck` instead.
+
 or, when stuck:
 
 ```json
