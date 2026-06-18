@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-plan-validate-deletes
+phase: approved-vscode-watcher-exclude
 slug: mill-agent-and-implement-contracts
 branch: hanf/mill-agent-and-implement-contracts
 plan: _mill/plan
@@ -22,6 +22,7 @@ plan-fix-r1  '2026-06-18T09:19:48Z'
 planned  '2026-06-18T09:20:02Z'
 implementing  '2026-06-18T09:23:31Z'
 approved-plan-validate-deletes  '2026-06-18T09:35:23Z'
+approved-vscode-watcher-exclude  '2026-06-18T09:37:31Z'
 ```
 
 ## Batches
@@ -34,9 +35,10 @@ batches:
     start_sha: 2b7edcaf182c14836383a42f6f4fe33ada52bc3e
     commit_sha: e170c292ad1843052096a3ebfa1ce9681ff9061b
   - name: vscode-watcher-exclude
-    state: running
+    state: approved
     implementer_session: f3cc4eb4-ec06-4610-bc1b-eff057f8992e
     start_sha: 9ca983855d9ff98a8293af6d0a225a1c7919c8d4
+    commit_sha: 09289b93db8bc5321768c245330e7c6f87fc7931
   - name: review-discussion-nitcount
     state: pending
   - name: holistic-fix-sweep
