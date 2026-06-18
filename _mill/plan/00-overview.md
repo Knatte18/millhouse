@@ -3,7 +3,7 @@
 ```yaml
 task: "Fix agent error recovery, implementer/review false-success contracts, VS Code watcher, and plan-validator Deletes"
 slug: "mill-agent-and-implement-contracts"
-approved: false
+approved: true
 started: "20260618-091402"
 parent: "main"
 root: ""
