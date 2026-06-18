@@ -28,7 +28,9 @@ implementing  '2026-06-18T09:30:30Z'
 ```yaml
 batches:
   - name: drift-guard-and-regression-locks
-    state: pending
+    state: running
+    implementer_session: b825910f-d782-42ed-acf9-7626ac6c1642
+    start_sha: 81cae509a2273c91d3fe899cdd8e2b3eaaf483a3
   - name: merge-skill-path-fixes
     state: pending
   - name: merge-integration-test
