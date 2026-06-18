@@ -38,5 +38,7 @@ batches:
     start_sha: 31879e6e79043079db8c2226aa4ad29ca70ec678
     commit_sha: 41741b189db06244bfc1299fc3f2da1b29db2955
   - name: review-round-autodiscovery
-    state: pending
+    state: running
+    implementer_session: f6e09660-2cc9-418f-bcb8-46471b4b21c5
+    start_sha: c67f34acc0bad069d04b14323f398cb28e43fc8e
 ```
