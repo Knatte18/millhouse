@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-reviewing
+phase: holistic-fixing
 slug: mill-nested-hub-and-skill-sync
 branch: hanf/mill-nested-hub-and-skill-sync
 plan: _mill/plan
@@ -27,6 +27,7 @@ approved-merge-integration-test  '2026-06-18T10:17:19Z'
 holistic-reviewing  '2026-06-18T10:17:49Z'
 holistic-fixing  '2026-06-18T10:20:54Z'
 holistic-reviewing  '2026-06-18T10:29:07Z'
+holistic-fixing  '2026-06-18T10:32:21Z'
 ```
 
 ## Batches
