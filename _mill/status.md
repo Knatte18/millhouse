@@ -28,7 +28,9 @@ implementing  '2026-06-18T09:23:31Z'
 ```yaml
 batches:
   - name: plan-validate-deletes
-    state: pending
+    state: running
+    implementer_session: 26c0c1f2-619f-4231-9d55-39fbe2a9c62f
+    start_sha: 2b7edcaf182c14836383a42f6f4fe33ada52bc3e
   - name: vscode-watcher-exclude
     state: pending
   - name: review-discussion-nitcount
