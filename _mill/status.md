@@ -34,7 +34,9 @@ batches:
     start_sha: 2b7edcaf182c14836383a42f6f4fe33ada52bc3e
     commit_sha: e170c292ad1843052096a3ebfa1ce9681ff9061b
   - name: vscode-watcher-exclude
-    state: pending
+    state: running
+    implementer_session: f3cc4eb4-ec06-4610-bc1b-eff057f8992e
+    start_sha: 9ca983855d9ff98a8293af6d0a225a1c7919c8d4
   - name: review-discussion-nitcount
     state: pending
   - name: holistic-fix-sweep
