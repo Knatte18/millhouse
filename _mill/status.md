@@ -40,5 +40,7 @@ batches:
     start_sha: 15c631668679bd59ad0ef2dd1335b79c0b0ad319
     commit_sha: ee42b7e5ff91ca380e831d64e77965f4080f75e4
   - name: merge-integration-test
-    state: pending
+    state: running
+    implementer_session: 48691dc3-8fd9-406e-8a0a-d9b42d36501a
+    start_sha: bb00b1918e435c23f51ce93fa0daa0b31d020548
 ```
