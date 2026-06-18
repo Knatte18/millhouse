@@ -322,6 +322,22 @@ def _forward_output(
                 print(json.dumps(gate_result))
                 return 0
 
+            # Check for no-content-commit success: reject if HEAD == start_sha
+            if start_sha is not None:
+                result = _subprocess_util.run(
+                    ["git", "rev-parse", "HEAD"],
+                    cwd=project_root,
+                )
+                if result.returncode == 0 and result.stdout.strip() == start_sha:
+                    # Implementer reported success but no content commit was made
+                    print(json.dumps({
+                        "status": "stuck",
+                        "stuck_type": "logic",
+                        "reason": "success reported but no content commit (HEAD == start_sha)",
+                        "session_id": session_id or parsed.get("session_id"),
+                    }))
+                    return 0
+
         result = _subprocess_util.run(
             ["git", "rev-parse", "HEAD"],
             cwd=project_root,
@@ -413,6 +429,28 @@ def _forward_output(
                     return 0
     except Exception:
         pass
+    # Before emitting the no-JSON fallback, check if the output contains API/infrastructure error markers
+    # If so, classify as transient (retriable) rather than logic (ask user)
+    api_error_markers = [
+        "api error",
+        "internal server error",
+        "bad gateway",
+        "service unavailable",
+        "gateway timeout",
+        "overloaded",
+        "500 internal",
+    ]
+    output_lower = output.lower()
+    for marker in api_error_markers:
+        if marker in output_lower:
+            # Found an API/infrastructure error marker; classify as transient
+            print(json.dumps({
+                "status": "stuck",
+                "stuck_type": "transient",
+                "reason": "agent returned a raw API error before producing a structured report",
+            }))
+            return 0
+    # No API error markers found; emit the default logic sentinel
     violations = _cleanliness.compute_scope_violations(project_root)
     result = {"status": "stuck", "stuck_type": "logic", "reason": "no structured report"}
     if violations:
