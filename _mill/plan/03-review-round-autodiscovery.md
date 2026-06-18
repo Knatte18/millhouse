@@ -41,8 +41,8 @@ Removes the hard error `"--round is required for finalize stage"` from `millpy-r
   ```
 
   Replace every occurrence of `args.round` with `round_n` in the finalize branch. There are two occurrences:
-  - Line 183: `round_n=args.round` in the `finalize(...)` call — change to `round_n=round_n`.
-  - Line 190: `"round": args.round` in the `result_dict` — change to `"round": round_n`.
+  - ~Line 183: `round_n=args.round` in the `finalize(...)` call — change to `round_n=round_n`.
+  - ~Line 191: `"round": args.round` in the `result_dict` — change to `"round": round_n`.
 
   Update the `--round` argparse help string (wherever it is defined) from the existing text (which says "--round is required") to: `"Review round number from prepare envelope; auto-discovered when absent in finalize stage."`.
 - **Commit:** `fix(millpy-review-plan): auto-discover round in finalize when --round absent (#507)`
@@ -104,7 +104,7 @@ Removes the hard error `"--round is required for finalize stage"` from `millpy-r
 
   **Test case `review-plan-finalize-round-with-existing`**: same setup but add file `reviews_dir / "20260618-120000-plan-review-r1.md"` (zero-byte) to reviews_dir before calling main(). Assert `round_n` kwarg equals `2`.
 
-  **Test case `review-discussion-finalize-round-empty`** and **`review-discussion-finalize-round-with-existing`**: repeat the same two sub-cases for `millpy_review_discussion.main`. Use `"discussion"` wherever `"plan"` appears in mock targets. Note: `millpy-review-discussion.py` finalize calls `result.to_dict()` on the value returned by `_review_discussion.finalize` (line 132 of that script). The mock finalize for discussion sub-cases must therefore return an object that exposes `.to_dict()`, not a plain dict. Use `unittest.mock.Mock(to_dict=unittest.mock.Mock(return_value=stub_review_entry))` as the mock return value for the discussion finalize mock.
+  **Test case `review-discussion-finalize-round-empty`** and **`review-discussion-finalize-round-with-existing`**: repeat the same two sub-cases for `millpy_review_discussion.main`. Use `"discussion"` wherever `"plan"` appears in mock targets. For the with-existing sub-case, seed the file `reviews_dir / "20260618-120000-discussion-review-r1.md"` (use `discussion-review`, not `plan-review` — `discover_round` filters by `review_type` and only counts files whose name contains the type string). Note: `millpy-review-discussion.py` finalize calls `result.to_dict()` on the value returned by `_review_discussion.finalize` (line 132 of that script). The mock finalize for discussion sub-cases must therefore return an object that exposes `.to_dict()`, not a plain dict. Use `unittest.mock.Mock(to_dict=unittest.mock.Mock(return_value=stub_review_entry))` as the mock return value for the discussion finalize mock.
 
   **Pass/fail reporting**: follow the same `pass_count / fail_count` pattern and `print(f"[case] (a) ...")` style used in the other test files.
 
