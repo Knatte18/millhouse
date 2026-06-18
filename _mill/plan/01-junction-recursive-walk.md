@@ -61,6 +61,8 @@ Fixes `_junction.strip_all_in_worktree` to walk the worktree tree recursively in
   - Neither `wt / "src" / "hub" / ".wiki"` nor `wt / "src" / "hub" / ".portals"` exists after stripping.
   - `wt / "src" / "hub"` (the real parent directory) still exists.
   - `tmp_path / "wiki_target"` and `tmp_path / "portals_target"` still exist (junctions were stripped, targets untouched).
+
+  `test-junction.py` uses `ok()`/`fail()` helper closures (not `pass_count/fail_count`): `ok(name)` increments `passed` and prints `PASS: {name}`; `fail(name, exc)` increments `failed` and prints `FAIL: {name}: {exc}`. Wrap the case body in `try: ... ok("(e) nested-junction case") except Exception as exc: fail("(e) nested-junction case", exc)`.
 - **Commit:** `test(_junction): nested-junction regression test (#510)`
 
 ## Batch Tests

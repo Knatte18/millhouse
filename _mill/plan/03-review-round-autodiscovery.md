@@ -40,7 +40,9 @@ Removes the hard error `"--round is required for finalize stage"` from `millpy-r
       round_n = discover_round(reviews_dir_for_discovery, "plan", "holistic")
   ```
 
-  In the `finalize(...)` call below (~line 183): replace every occurrence of `args.round` with `round_n` (there should be exactly one).
+  Replace every occurrence of `args.round` with `round_n` in the finalize branch. There are two occurrences:
+  - Line 183: `round_n=args.round` in the `finalize(...)` call — change to `round_n=round_n`.
+  - Line 190: `"round": args.round` in the `result_dict` — change to `"round": round_n`.
 
   Update the `--round` argparse help string (wherever it is defined) from the existing text (which says "--round is required") to: `"Review round number from prepare envelope; auto-discovered when absent in finalize stage."`.
 - **Commit:** `fix(millpy-review-plan): auto-discover round in finalize when --round absent (#507)`
