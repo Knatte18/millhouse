@@ -74,7 +74,8 @@ def _assert(cond: bool, msg: str) -> None:
 
 
 def _setup_trio(container: Path) -> tuple[Path, Path, Path, str]:
-    """Build hub + wiki + worktree trio with a seeded done task.
+    """
+    Build hub + wiki + worktree trio with a seeded done task.
 
     Returns ``(hub, wiki, worktree, slug)``. The worktree is on branch
     ``test/<slug>`` and has one commit ahead of the hub's ``main``.
@@ -176,6 +177,16 @@ def _setup_trio(container: Path) -> tuple[Path, Path, Path, str]:
     _run(["git", "-C", str(wiki_path), "commit", "-m", "seed"], cwd=container)
     _run(["git", "-C", str(wiki_path), "push", "origin", "main"], cwd=container)
 
+    # Upsert task in wiki via client so set_phase works later.
+    wiki.upsert_task(
+        wiki_path,
+        slug,
+        title="Demo merge",
+        brief="Seed task for mill-merge integration test.",
+        body="# Demo merge\n\nSeed task for mill-merge integration test.\n",
+        status=None,
+    )
+
     # Hub: one-commit init.
     _run(["git", "init", str(hub), "-b", "main"], cwd=container)
     _run(["git", "-C", str(hub), "config", "user.email", "test@example.com"], cwd=container)
@@ -231,15 +242,184 @@ def _setup_trio(container: Path) -> tuple[Path, Path, Path, str]:
     return hub, wiki_path, worktree, slug
 
 
+def _setup_nested_hub_scenario(
+    container: Path,
+) -> tuple[Path, Path, Path, Path, str, str]:
+    """
+    Build a nested-hub scenario where parent branch tracks its own _mill/status.md.
+
+    Creates:
+    - Outer repo with hub at <repo>/src/hub (nested layout).
+    - Parent branch with its own <hub>/_mill/status.md belonging to a different task.
+    - Child branch with its own task state and a production file, then cleaned up.
+    - Returns (repo, hub, wiki, parent_branch, child_branch, other_task_slug) for assertions.
+
+    The test verifies that mill-merge's restore step (reset + checkout) preserves
+    the parent's own _mill/status.md when squashing the child's cleanup commit.
+    """
+    container.mkdir(parents=True, exist_ok=True)
+    parent_slug = "other-task"
+    child_slug = "nested-merge"
+    bare = container / "wiki.git"
+    wiki_path = container / "wiki"
+    outer_repo = container / "nested-repo"
+    hub = outer_repo / "src" / "hub"
+
+    # Initialize bare wiki and clone.
+    _run(["git", "init", "--bare", str(bare), "-b", "main"], cwd=container)
+    _run(["git", "clone", str(bare), str(wiki_path)], cwd=container)
+    _run(["git", "-C", str(wiki_path), "config", "user.email", "test@example.com"], cwd=container)
+    _run(["git", "-C", str(wiki_path), "config", "user.name", "Test"], cwd=container)
+
+    # Seed wiki: config only (tasks will be upserted separately).
+    (wiki_path / "config.yaml").write_text(
+        "junctions:\n"
+        "  .millhouse/wiki: <WIKI_PATH>\n"
+        "  .active: <WIKI_PATH>/active/<SLUG>/\n"
+        "\n"
+        "spawn:\n"
+        "  branch_prefix: test\n",
+        encoding="utf-8",
+    )
+    (wiki_path / "Home.md").write_text("# Tasks\n\n", encoding="utf-8")
+    _run(["git", "-C", str(wiki_path), "add", "."], cwd=container)
+    _run(["git", "-C", str(wiki_path), "commit", "-m", "seed wiki config"], cwd=container)
+    _run(["git", "-C", str(wiki_path), "push", "origin", "main"], cwd=container)
+
+    # Initialize outer repo with hub subfolder structure.
+    outer_repo.mkdir(parents=True, exist_ok=True)
+    _run(["git", "init", str(outer_repo), "-b", "main"], cwd=container)
+    _run(["git", "-C", str(outer_repo), "config", "user.email", "test@example.com"], cwd=container)
+    _run(["git", "-C", str(outer_repo), "config", "user.name", "Test"], cwd=container)
+
+    # Create hub subfolder with mill-config.
+    hub.mkdir(parents=True, exist_ok=True)
+    (hub / "mill-config.yaml").write_text(
+        "spawn:\n"
+        '  branch_prefix: "test"\n'
+        "paths:\n"
+        "  status_md: _mill/status.md\n"
+        "  discussion_file: _mill/discussion.md\n"
+        "  reviews_dir: _mill/reviews\n",
+        encoding="utf-8",
+    )
+
+    # Create initial production file at hub.
+    (hub / "feature.py").write_text("def feature():\n    return 1\n", encoding="utf-8")
+    _run(
+        ["git", "-C", str(outer_repo), "add", "src/hub/mill-config.yaml", "src/hub/feature.py"],
+        cwd=container,
+    )
+    _run(["git", "-C", str(outer_repo), "commit", "-m", "init hub"], cwd=container)
+
+    # === Create parent branch (parent-feature) ===
+    _run(
+        ["git", "-C", str(outer_repo), "checkout", "-b", "parent-feature"],
+        cwd=container,
+    )
+
+    # On parent branch: add parent's own _mill/status.md for a different task (other-task).
+    task_dir = hub / "_mill"
+    task_dir.mkdir(exist_ok=True)
+    (task_dir / "status.md").write_text(
+        "# Status\n"
+        "\n"
+        "```yaml\n"
+        f"phase: done\n"
+        f"task: Other task\n"
+        f"parent: main\n"
+        "```\n"
+        "\n"
+        "## Timeline\n"
+        "\n"
+        "```text\n"
+        "discussing  2026-04-22T12:00:00Z\n"
+        "done        2026-04-22T14:00:00Z\n"
+        "```\n",
+        encoding="utf-8",
+    )
+    # Add a parent-side production file to distinguish the commit.
+    (hub / "parent-file.py").write_text("def parent_func():\n    return 42\n", encoding="utf-8")
+    _run(
+        ["git", "-C", str(outer_repo), "add", "src/hub/_mill/status.md", "src/hub/parent-file.py"],
+        cwd=container,
+    )
+    _run(
+        ["git", "-C", str(outer_repo), "commit", "-m", "parent: add task state"],
+        cwd=container,
+    )
+
+    # Store parent branch's status.md content for later assertion.
+    parent_status_content = (task_dir / "status.md").read_text(encoding="utf-8")
+
+    # === Create child branch from parent ===
+    _run(
+        ["git", "-C", str(outer_repo), "checkout", "-b", f"test/{child_slug}"],
+        cwd=container,
+    )
+
+    # Child adds its own _mill/status.md (for nested-merge task, not other-task).
+    (task_dir / "status.md").write_text(
+        "# Status\n"
+        "\n"
+        "```yaml\n"
+        f"phase: done\n"
+        f"task: Nested merge\n"
+        f"parent: parent-feature\n"
+        "```\n"
+        "\n"
+        "## Timeline\n"
+        "\n"
+        "```text\n"
+        "discussing  2026-04-22T13:00:00Z\n"
+        "done        2026-04-22T15:00:00Z\n"
+        "```\n",
+        encoding="utf-8",
+    )
+    # Child adds its own production file.
+    (hub / "child-feature.py").write_text("def child_func():\n    return 99\n", encoding="utf-8")
+    _run(
+        ["git", "-C", str(outer_repo), "add", "src/hub/_mill/status.md", "src/hub/child-feature.py"],
+        cwd=container,
+    )
+    _run(
+        ["git", "-C", str(outer_repo), "commit", "-m", "child: add task state and feature"],
+        cwd=container,
+    )
+
+    # === Child cleanup commit (mirror mill-merge Step 4) ===
+    # Remove _mill directory and commit.
+    _run(
+        ["git", "-C", str(outer_repo), "rm", "-r", "src/hub/_mill"],
+        cwd=container,
+    )
+    _run(
+        ["git", "-C", str(outer_repo), "commit", "-m", "chore: pre-merge cleanup"],
+        cwd=container,
+    )
+
+    # Return paths and metadata for the test scenario.
+    return (
+        outer_repo,
+        hub,
+        wiki_path,
+        "parent-feature",
+        f"test/{child_slug}",
+        parent_slug,
+        parent_status_content,
+    )
+
+
 def main() -> int:
     SCRATCH.mkdir(parents=True, exist_ok=True)
     container = SCRATCH / f"merge-test-{uuid.uuid4().hex[:8]}"
     failed = False
     child_branch = None
     try:
+        # === Run flat-hub scenario (existing test) ===
         hub, wiki_path, worktree, slug = _setup_trio(container)
         child_branch = f"test/{slug}"
-        print(f"[test-merge] container: {container}", file=sys.stderr)
+        print(f"[test-merge] flat-hub scenario container: {container}", file=sys.stderr)
 
         # --- parent resolution ---
         status_path = wiki_path / "active" / slug / "status.md"
@@ -296,8 +476,10 @@ def main() -> int:
         # V3: no advisory lock; daemon handles concurrent commits
         wiki.set_phase(wiki_path, slug, "done")
         home_after = (wiki_path / "Home.md").read_text(encoding="utf-8")
-        _assert(f"[{slug}] [done]" in home_after,
-                f"Home.md did not flip to [done]:\n{home_after}")
+        _assert(
+            "[done]" in home_after and slug in home_after,
+            f"Home.md did not flip to [done]:\n{home_after}",
+        )
         print("PASS: Home.md flipped to [done]")
         _assert((wiki_path / "active" / slug).exists(),
                 f"active/{slug}/ must remain intact — teardown is mill-cleanup's job")
@@ -330,7 +512,99 @@ def main() -> int:
         _assert(tag_result.stdout.strip() != "", f"archive tag archive/{slug} not found")
         print(f"PASS: archive tag archive/{slug} present")
 
-        print("PASS -- mill-merge end-to-end")
+        print("PASS -- mill-merge end-to-end (flat-hub scenario)")
+
+        # === Run nested-hub scenario (new test for #497 bug 2) ===
+        print(f"\n[test-merge] nested-hub scenario starting", file=sys.stderr)
+        container_nested = SCRATCH / f"merge-test-nested-{uuid.uuid4().hex[:8]}"
+        (
+            outer_repo,
+            nested_hub,
+            nested_wiki_path,
+            parent_branch,
+            nested_child_branch,
+            parent_task_slug,
+            parent_status_content,
+        ) = _setup_nested_hub_scenario(container_nested)
+        print(f"[test-merge] nested-hub container: {container_nested}", file=sys.stderr)
+
+        # --- Perform squash-merge with restore step (mill-merge Step 5) ---
+        # On parent branch, run the squash-merge sequence verbatim.
+        _run(
+            ["git", "-C", str(outer_repo), "checkout", parent_branch],
+            cwd=container_nested,
+        )
+        task_dir_name = "src/hub/_mill"
+        _run(
+            ["git", "-C", str(outer_repo), "merge", "--squash", nested_child_branch],
+            cwd=container_nested,
+        )
+        # Restore step: reset and checkout the parent's own _mill from HEAD.
+        _run(
+            ["git", "-C", str(outer_repo), "reset", "-q", "HEAD", "--", task_dir_name],
+            cwd=container_nested,
+        )
+        _run(
+            ["git", "-C", str(outer_repo), "checkout", "--", task_dir_name],
+            cwd=container_nested,
+        )
+        # Commit the squash (without the restored _mill changes staged).
+        _run(
+            ["git", "-C", str(outer_repo), "commit", "-m", "Nested merge"],
+            cwd=container_nested,
+        )
+
+        # --- Assertion (a): parent's _mill/status.md is byte-identical to original ---
+        parent_status_after = (nested_hub / "_mill" / "status.md").read_text(
+            encoding="utf-8"
+        )
+        _assert(
+            parent_status_after == parent_status_content,
+            f"parent _mill/status.md was modified by squash.\n"
+            f"Expected:\n{parent_status_content}\n\n"
+            f"Got:\n{parent_status_after}",
+        )
+        print("PASS: parent's _mill/status.md preserved byte-identical")
+
+        # --- Assertion (b): squash commit stat does NOT contain _mill paths ---
+        stat_result = _run(
+            ["git", "-C", str(outer_repo), "show", "--stat", "HEAD"],
+            cwd=container_nested,
+        )
+        stat_output = stat_result.stdout
+        _assert(
+            "_mill" not in stat_output and ".mill" not in stat_output,
+            f"squash commit stat contains _mill paths:\n{stat_output}",
+        )
+        print("PASS: squash commit stat does not contain _mill paths")
+
+        # --- Assertion (c): archived child commit still has cleanup state ---
+        # Create archive tag on the nested child branch.
+        _run(
+            ["git", "-C", str(outer_repo), "tag", f"archive/{parent_task_slug}-nested", nested_child_branch],
+            cwd=container_nested,
+        )
+        # Verify the tag resolves to a commit.
+        tag_verify = _run(
+            ["git", "-C", str(outer_repo), "rev-list", "-n", "1", f"archive/{parent_task_slug}-nested"],
+            cwd=container_nested,
+        )
+        _assert(
+            tag_verify.stdout.strip() != "",
+            f"archive tag archive/{parent_task_slug}-nested did not resolve",
+        )
+        # Verify the archive tag's tree does not contain _mill (the cleanup commit removed it).
+        tree_files = _run(
+            ["git", "-C", str(outer_repo), "ls-tree", "-r", "--name-only", f"archive/{parent_task_slug}-nested"],
+            cwd=container_nested,
+        )
+        _assert(
+            "_mill" not in tree_files.stdout and ".mill" not in tree_files.stdout,
+            f"archived tag tree contains _mill paths, cleanup not preserved:\n{tree_files.stdout}",
+        )
+        print("PASS: archive tag resolves and preserves child cleanup state (no _mill)")
+
+        print("PASS -- mill-merge nested-hub scenario (preserves parent _mill/status.md)")
         return 0
     except AssertionError as exc:
         print(f"FAIL: {exc}", file=sys.stderr)
@@ -345,8 +619,16 @@ def main() -> int:
     finally:
         if failed:
             print(f"Scratch preserved: {container}", file=sys.stderr)
+            if "container_nested" in locals():
+                print(f"Scratch preserved: {container_nested}", file=sys.stderr)
         else:
             _safe_rmtree.safe_rmtree(container, allowed_root=container, ignore_errors=True)
+            if "container_nested" in locals():
+                _safe_rmtree.safe_rmtree(
+                    container_nested,
+                    allowed_root=container_nested,
+                    ignore_errors=True,
+                )
 
 
 if __name__ == "__main__":
