@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: discussion-fix-r2
 slug: mill-nested-hub-and-skill-sync
 branch: hanf/mill-nested-hub-and-skill-sync
 plan: null
@@ -15,4 +15,5 @@ task_description: |
 
 ```text
 discussing  '2026-06-18T08:37:23Z'
+discussion-fix-r2  '2026-06-18T09:06:28Z'
 ```

@@ -87,6 +87,14 @@ work is concentrated in `mill-merge` and `mill-merge-in` (neither was touched by
 - Rejected: `resolve_hub_path()` (what the #506 workaround used) — simpler call but
   cwd-dependent (walks up from cwd, or relies on a git-root stub declaring
   `hub_relative_path`); more fragile when cwd is the git root of a nested layout.
+- In-place-mode caveat (plan must confirm): mill-merge Step 1 sets `mode = 'inplace'` when
+  `_inplace.is_inplace(slug, git_root, cfg)` is true, and `1.5 Path Setup` runs for **both**
+  modes. In in-place mode cwd *is* the hub and there is no separate `wts/<slug>` worktree, so
+  `resolve_active_hub` (which routes through `resolve_active_worktree` -> `container/"wts"/slug`)
+  may not match the in-place layout. The discussion only cites mill-go's *worktree-mode* usage
+  as precedent. The plan MUST verify the chosen resolver returns the correct hub in in-place
+  mode, or branch to a mode-appropriate resolver (e.g. `resolve_hub_path()` / direct
+  `git_root`) for the in-place case. Do not assume worktree-mode behavior transfers unchecked.
 
 ### squash-safety (#497 bug 2)
 - Decision: Keep Step 4's child-side cleanup commit (`git rm -r <task_dir>`). In Step 5,
@@ -113,6 +121,13 @@ work is concentrated in `mill-merge` and `mill-merge-in` (neither was touched by
   `scripts/*.py` scan would false-positive on every one, and the allowlist must not be the
   workaround for a heavily-used shipped module. Maintain a small explicit allowlist only for
   deliberately-illustrative or not-yet-shipped references.
+- Matching precision: the resolver matches each `(_module, fn)` against **module-level `def`s
+  only** in `scripts/**/*.py`. The `_<module>.<fn>(` regex can also catch underscore-prefixed
+  *locals* (e.g. a SKILL binding `_status = ...` then calling `_status.read(`) and
+  dunder/private method calls — these are not module functions and will not resolve. The
+  implementer should expect a handful of such legitimate non-module matches and curate them
+  into the allowlist rather than treat them as drift failures; the allowlist is for exactly
+  this (plus illustrative refs), not for masking real missing helpers.
 - Rationale: Targets the exact convention mill uses (underscore-prefixed helper modules),
   keeping the false-positive rate low while catching the real drift class. Broad
   `name.fn()` matching would flood on stdlib (`json.dumps`, `Path.resolve`); `signature:`-only
