@@ -83,7 +83,7 @@ def main() -> int:
                         with unittest.mock.patch("_review_common.load_config") as mock_cfg:
                             with unittest.mock.patch("_review_common.find_active_slug") as mock_slug:
                                 with unittest.mock.patch("_reviewers.load") as mock_reviewers_load:
-                                    with unittest.mock.patch("_reviewers.validate_role_refs") as mock_validate:
+                                    with unittest.mock.patch("_reviewers.validate_role_refs"):
                                         with unittest.mock.patch("_review_common.resolve_path") as mock_resolve:
                                             with unittest.mock.patch("_review_plan.finalize") as mock_finalize:
                                                 mock_hub.return_value = tmp
@@ -136,7 +136,7 @@ def main() -> int:
                         with unittest.mock.patch("_review_common.load_config") as mock_cfg:
                             with unittest.mock.patch("_review_common.find_active_slug") as mock_slug:
                                 with unittest.mock.patch("_reviewers.load") as mock_reviewers_load:
-                                    with unittest.mock.patch("_reviewers.validate_role_refs") as mock_validate:
+                                    with unittest.mock.patch("_reviewers.validate_role_refs"):
                                         with unittest.mock.patch("_review_common.resolve_path") as mock_resolve:
                                             with unittest.mock.patch("_review_plan.finalize") as mock_finalize:
                                                 mock_hub.return_value = tmp
@@ -186,7 +186,7 @@ def main() -> int:
                         with unittest.mock.patch("_review_common.load_config") as mock_cfg:
                             with unittest.mock.patch("_review_common.find_active_slug") as mock_slug:
                                 with unittest.mock.patch("_reviewers.load") as mock_reviewers_load:
-                                    with unittest.mock.patch("_reviewers.validate_role_refs") as mock_validate:
+                                    with unittest.mock.patch("_reviewers.validate_role_refs"):
                                         with unittest.mock.patch("_review_common.resolve_path") as mock_resolve:
                                             with unittest.mock.patch("_review_discussion.finalize") as mock_finalize:
                                                 mock_git.return_value = tmp
@@ -240,7 +240,7 @@ def main() -> int:
                         with unittest.mock.patch("_review_common.load_config") as mock_cfg:
                             with unittest.mock.patch("_review_common.find_active_slug") as mock_slug:
                                 with unittest.mock.patch("_reviewers.load") as mock_reviewers_load:
-                                    with unittest.mock.patch("_reviewers.validate_role_refs") as mock_validate:
+                                    with unittest.mock.patch("_reviewers.validate_role_refs"):
                                         with unittest.mock.patch("_review_common.resolve_path") as mock_resolve:
                                             with unittest.mock.patch("_review_discussion.finalize") as mock_finalize:
                                                 mock_git.return_value = tmp

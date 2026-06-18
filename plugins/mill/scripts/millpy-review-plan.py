@@ -173,13 +173,12 @@ def main(argv: list[str] | None = None) -> int:
             print_error_envelope("plan", "--agent-output required for finalize stage")
             return 1
         round_n = args.round
+        reviews_dir = resolve_path(cfg["paths"]["reviews_dir"], slug)
         if round_n is None:
-            reviews_dir_for_discovery = resolve_path(cfg["paths"]["reviews_dir"], slug)
-            round_n = discover_round(reviews_dir_for_discovery, "plan", "holistic")
+            round_n = discover_round(reviews_dir, "plan", "holistic")
         try:
             agent_output_path = Path(args.agent_output)
             raw_text = agent_output_path.read_text(encoding="utf-8")
-            reviews_dir = resolve_path(cfg["paths"]["reviews_dir"], slug)
             review_entry = finalize(
                 cfg, slug, raw_text, scope=None, round_n=round_n,
                 reviews_dir=reviews_dir, mill_dir=mill_dir,
