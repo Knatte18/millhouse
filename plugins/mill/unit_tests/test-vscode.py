@@ -40,6 +40,14 @@ def _test_render_settings(errors: list[int]) -> None:
     assert '"window.title": "custom"' in result, f"explicit title FAIL: {result}"
     print('PASS: render_settings(window_title="custom") -> "window.title": "custom"')
 
+    # render_settings: files.watcherExclude contains junction globs
+    result = render_settings(color_hex="#000000", window_title="test")
+    assert '"files.watcherExclude"' in result, f"watcherExclude key missing FAIL: {result}"
+    assert '"**/.portals/**": true' in result, f"portals glob missing FAIL: {result}"
+    assert '"**/.wiki/**": true' in result, f"wiki glob missing FAIL: {result}"
+    assert '"**/.active/**": true' in result, f"active glob missing FAIL: {result}"
+    print("PASS: render_settings includes files.watcherExclude with junction globs")
+
     # render_settings: neither provided -> ValueError
     try:
         render_settings(color_hex="#000000")

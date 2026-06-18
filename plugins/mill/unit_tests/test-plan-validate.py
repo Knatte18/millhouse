@@ -659,6 +659,48 @@ def test_check_all_files_touched_mismatch_dirty() -> int:
             return 1
 
 
+def test_check_all_files_touched_mismatch_deletes_only_excluded() -> int:
+    """Deletes-only path not in All Files Touched -> zero all-files-touched-mismatch errors (regression for #494).
+
+    This tests the git-mv rename shape: a card has Deletes: old/path and
+    Creates: new/path, with only the created path in overview's All Files Touched.
+    The deleted path should NOT trigger an all-files-touched-mismatch error,
+    because Deletes: tokens are excluded from the check per issue #494.
+    """
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        # Overview includes only the new path (created by the card).
+        overview = _make_overview(
+            [{"name": "alpha", "file": "01-alpha.md"}],
+            all_files_touched=["new/path.py"],
+        )
+        # Card deletes old/path.py, creates new/path.py.
+        # Only new/path.py is in All Files Touched (correct for git-mv pattern).
+        batch = _make_batch_file(
+            "alpha",
+            deletes=["old/path.py"],
+            creates=["new/path.py"],
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        mismatch_errs = [e for e in result if e["check"] == "all-files-touched-mismatch"]
+        try:
+            assert len(mismatch_errs) == 0, (
+                f"Deletes-only path should be excluded from all-files-touched check, "
+                f"got: {mismatch_errs}"
+            )
+            print("PASS test_check_all_files_touched_mismatch_deletes_only_excluded")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_check_all_files_touched_mismatch_deletes_only_excluded: {exc}", file=sys.stderr)
+            return 1
+
+
 def test_run_returns_sorted() -> int:
     """Output is sorted by (batch or '', card or 0, check)."""
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -1489,8 +1531,13 @@ def test_reads_token_missing_both_unions_dirty() -> int:
             return 1
 
 
-def test_all_files_touched_deletes_counted() -> int:
-    """Deletes: token listed in All Files Touched -> no all-files-touched-mismatch error."""
+def test_all_files_touched_deletes_not_required() -> int:
+    """Deletes: token NOT required in All Files Touched -> no error (per issue #494).
+
+    When a card has a Deletes: path, that path does NOT need to appear in the
+    overview's All Files Touched section. Deletes: tokens are excluded from the
+    all-files-touched check per issue #494 (validator was incorrectly requiring them).
+    """
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
         plan_dir = tmp / "plan"
@@ -1500,9 +1547,10 @@ def test_all_files_touched_deletes_counted() -> int:
         (project_root / "foo.md").parent.mkdir(parents=True)
         (project_root / "foo.md").write_text("# foo", encoding="utf-8")
 
+        # Overview does NOT include foo.md (it will be deleted, not touched as Edits/Creates).
         overview = _make_overview(
             [{"name": "alpha", "file": "01-alpha.md"}],
-            all_files_touched=["foo.md"],
+            all_files_touched=[],
         )
         batch = _make_batch_file("alpha", deletes=["foo.md"])
         _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
@@ -1514,13 +1562,13 @@ def test_all_files_touched_deletes_counted() -> int:
         ]
         try:
             assert len(mismatch_errs) == 0, (
-                f"Deletes: token should count toward all-files-touched union, "
+                f"Deletes: token should NOT be required in All Files Touched, "
                 f"got: {mismatch_errs}"
             )
-            print("PASS test_all_files_touched_deletes_counted")
+            print("PASS test_all_files_touched_deletes_not_required")
             return 0
         except AssertionError as exc:
-            print(f"FAIL test_all_files_touched_deletes_counted: {exc}", file=sys.stderr)
+            print(f"FAIL test_all_files_touched_deletes_not_required: {exc}", file=sys.stderr)
             return 1
 
 
@@ -2351,6 +2399,7 @@ def main() -> int:
         test_check_reads_not_backtick_path_dirty,
         test_check_all_files_touched_mismatch_clean_no_section,
         test_check_all_files_touched_mismatch_dirty,
+        test_check_all_files_touched_mismatch_deletes_only_excluded,
         test_run_returns_sorted,
         test_run_no_overview,
         # Deletes-aware behaviour (Cards 26–28)
@@ -2361,7 +2410,7 @@ def main() -> int:
         test_reads_token_in_deletes_union_clean,
         test_reads_token_in_creates_union_suppressed,
         test_reads_token_missing_both_unions_dirty,
-        test_all_files_touched_deletes_counted,
+        test_all_files_touched_deletes_not_required,
 
         test_wiki_config_mutation_clean,
         test_wiki_config_mutation_modifies,
