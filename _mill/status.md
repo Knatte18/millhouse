@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-review-round-autodiscovery
+phase: holistic-reviewing
 slug: mill-junction-and-agent-gaps
 branch: hanf/mill-junction-and-agent-gaps
 plan: _mill/plan
@@ -22,6 +22,7 @@ implementing  '2026-06-18T12:05:33Z'
 approved-junction-recursive-walk  '2026-06-18T12:08:09Z'
 approved-posix-shell-helper  '2026-06-18T12:11:53Z'
 approved-review-round-autodiscovery  '2026-06-18T12:14:52Z'
+holistic-reviewing  '2026-06-18T12:15:35Z'
 ```
 
 ## Batches
