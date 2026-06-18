@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussion-fix-r1
+phase: discussed
 slug: mill-agent-and-implement-contracts
 branch: hanf/mill-agent-and-implement-contracts
 plan: null
@@ -16,4 +16,5 @@ task_description: |
 ```text
 discussing  '2026-06-18T08:38:39Z'
 discussion-fix-r1  '2026-06-18T09:01:42Z'
+discussed  '2026-06-18T09:02:00Z'
 ```
