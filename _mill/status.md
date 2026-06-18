@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-plan-validate-deletes
 slug: mill-agent-and-implement-contracts
 branch: hanf/mill-agent-and-implement-contracts
 plan: _mill/plan
@@ -21,6 +21,7 @@ planning  '2026-06-18T09:16:29Z'
 plan-fix-r1  '2026-06-18T09:19:48Z'
 planned  '2026-06-18T09:20:02Z'
 implementing  '2026-06-18T09:23:31Z'
+approved-plan-validate-deletes  '2026-06-18T09:35:23Z'
 ```
 
 ## Batches
@@ -28,9 +29,10 @@ implementing  '2026-06-18T09:23:31Z'
 ```yaml
 batches:
   - name: plan-validate-deletes
-    state: running
+    state: approved
     implementer_session: 26c0c1f2-619f-4231-9d55-39fbe2a9c62f
     start_sha: 2b7edcaf182c14836383a42f6f4fe33ada52bc3e
+    commit_sha: e170c292ad1843052096a3ebfa1ce9681ff9061b
   - name: vscode-watcher-exclude
     state: pending
   - name: review-discussion-nitcount
