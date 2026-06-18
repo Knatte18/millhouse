@@ -39,7 +39,7 @@ import _paths
 import _render
 import _review_common
 import _reviewers
-from _implementer_common import _forward_output, emit_prepare, emit_prepare_no_dispatch, finalize_from_output
+from _implementer_common import _forward_output, _posix_shell_run_args, emit_prepare, emit_prepare_no_dispatch, finalize_from_output
 
 
 # DU-conflict resolution needs branch intent; the resolver had no signal before #314.
@@ -172,12 +172,13 @@ def main(argv=None) -> int:
                 print("--cmd is required for verify-fix mode", file=sys.stderr)
                 return 1
             # Re-run verify command before finalizing
+            _run_args, _run_kwargs = _posix_shell_run_args(args.cmd)
             post_verify_result = subprocess.run(
-                args.cmd,
-                shell=True,
+                _run_args,
                 capture_output=True,
                 text=True,
                 cwd=project_root,
+                **_run_kwargs,
             )
             # Case A: verify passes with no fixer needed (initial verify was 0)
             # Case B: fixer ran, post-fix verify passes
@@ -271,12 +272,13 @@ def _run_verify_fix(args, project_root: Path, plugin_root: Path, cfg: dict, time
         return 1
 
     # Shell-escaped user verify command — _subprocess_util.run does not support shell=True.
+    _run_args, _run_kwargs = _posix_shell_run_args(args.cmd)
     result = subprocess.run(
-        args.cmd,
-        shell=True,
+        _run_args,
         capture_output=True,
         text=True,
         cwd=project_root,
+        **_run_kwargs,
     )
 
     # Stage: prepare (special case: verify passes)
@@ -338,12 +340,13 @@ def _run_verify_fix(args, project_root: Path, plugin_root: Path, cfg: dict, time
         return 1
 
     # Post-sub-agent re-verification (only in full mode)
+    _run_args, _run_kwargs = _posix_shell_run_args(args.cmd)
     post_verify_result = subprocess.run(
-        args.cmd,
-        shell=True,
+        _run_args,
         capture_output=True,
         text=True,
         cwd=project_root,
+        **_run_kwargs,
     )
 
     # Case B: fixer ran, post-fix verify passes
