@@ -46,7 +46,9 @@ batches:
     start_sha: 2f5a512febba71fc0bb421532a40e123dde2f804
     commit_sha: 7ce9b6426dd89ea67b8445ed82be1514e8e8ec75
   - name: holistic-fix-sweep
-    state: pending
+    state: running
+    implementer_session: 2f6800a7-4242-4b1d-a65f-93dcdd501967
+    start_sha: 9887f8b2ac535ffd5d42144aa42bc47e18d5549e
   - name: implementer-contracts
     state: pending
 ```
