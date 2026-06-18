@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-implementer-contracts
+phase: holistic-reviewing
 slug: mill-agent-and-implement-contracts
 branch: hanf/mill-agent-and-implement-contracts
 plan: _mill/plan
@@ -26,6 +26,7 @@ approved-vscode-watcher-exclude  '2026-06-18T09:37:31Z'
 approved-review-discussion-nitcount  '2026-06-18T09:40:17Z'
 approved-holistic-fix-sweep  '2026-06-18T09:42:00Z'
 approved-implementer-contracts  '2026-06-18T09:49:15Z'
+holistic-reviewing  '2026-06-18T09:50:01Z'
 ```
 
 ## Batches
