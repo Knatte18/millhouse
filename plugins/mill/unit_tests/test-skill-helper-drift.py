@@ -69,16 +69,7 @@ def _collect_shipped_helpers() -> dict[str, set[str]]:
             print(f"FAIL: could not parse {py_file}: {e}", file=sys.stderr)
             return {}
 
-        # Collect all module-level function definitions
-        functions = set()
-        for node in ast.walk(tree):
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                # Only collect top-level functions (parent is Module)
-                # ast.walk does not preserve parent info, so we check manually
-                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                    functions.add(node.name)
-
-        # Rebuild to only get top-level functions
+        # Collect only top-level function definitions
         top_level_functions = set()
         for node in tree.body:
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
@@ -97,7 +88,7 @@ def _extract_helper_references(skill_md_text: str) -> list[tuple[str, str]]:
     Returns list of (module_stem, function_name) tuples.
     Regex matches underscore-prefixed module identifier, dot, function identifier, then (.
     """
-    pattern = r"_([a-zA-Z_][a-zA-Z0-9_]*)\\.([a-zA-Z_][a-zA-Z0-9_]*)\("
+    pattern = r"_([a-zA-Z_][a-zA-Z0-9_]*)\.([a-zA-Z_][a-zA-Z0-9_]*)\("
     matches = re.findall(pattern, skill_md_text)
     return [(module, fn) for module, fn in matches]
 
@@ -166,7 +157,7 @@ def _run_regression_locks() -> list[str]:
     review_plan_path = SCRIPTS / "millpy-review-plan.py"
     try:
         review_plan_text = review_plan_path.read_text(encoding="utf-8")
-    except UnicodeDecodeError as e:
+    except (UnicodeDecodeError, OSError) as e:
         failures.append(f"FAIL: {review_plan_path}: could not read {e}")
         return failures
 
@@ -186,7 +177,7 @@ def _run_regression_locks() -> list[str]:
     mill_go_skill_path = SKILLS / "mill-go" / "SKILL.md"
     try:
         mill_go_skill_text = mill_go_skill_path.read_text(encoding="utf-8")
-    except UnicodeDecodeError as e:
+    except (UnicodeDecodeError, OSError) as e:
         failures.append(f"FAIL: {mill_go_skill_path}: could not read {e}")
         return failures
 
