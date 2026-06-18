@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-holistic-fix-sweep
+phase: approved-implementer-contracts
 slug: mill-agent-and-implement-contracts
 branch: hanf/mill-agent-and-implement-contracts
 plan: _mill/plan
@@ -25,6 +25,7 @@ approved-plan-validate-deletes  '2026-06-18T09:35:23Z'
 approved-vscode-watcher-exclude  '2026-06-18T09:37:31Z'
 approved-review-discussion-nitcount  '2026-06-18T09:40:17Z'
 approved-holistic-fix-sweep  '2026-06-18T09:42:00Z'
+approved-implementer-contracts  '2026-06-18T09:49:15Z'
 ```
 
 ## Batches
@@ -52,7 +53,8 @@ batches:
     start_sha: 9887f8b2ac535ffd5d42144aa42bc47e18d5549e
     commit_sha: 13ca5158f34b9c83289d4d0cbd58cd2c4842a10d
   - name: implementer-contracts
-    state: running
+    state: approved
     implementer_session: 1fc4dd80-d3ea-4db7-aede-96d5fe5a03d6
     start_sha: 91a0c8d352d3789927acb1ecbf7866c1bea20251
+    commit_sha: 32e8458fa9c4e6a5a2acd7ff5b5f7dc43c9dbd93
 ```
