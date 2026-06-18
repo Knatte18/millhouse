@@ -32,7 +32,9 @@ batches:
     start_sha: 37e5b4de5b5e767410362a99dc38b046fb7f3226
     commit_sha: fb5750680babb7e417c5edc705225d8934be0747
   - name: posix-shell-helper
-    state: pending
+    state: running
+    implementer_session: d965e1bd-7de4-4b57-94f3-5332c9c14db1
+    start_sha: 31879e6e79043079db8c2226aa4ad29ca70ec678
   - name: review-round-autodiscovery
     state: pending
 ```
