@@ -103,10 +103,11 @@ def _run_verify_gate(project_root: Path, verify_cmd: str | None) -> dict | None:
     """
     Run a verify command and return a stuck dict on failure, None on success or when verify_cmd is None.
 
-    When verify_cmd is not None, runs the command via subprocess.run with shell=True,
-    capture_output=True, and text=True. On non-zero return code, returns a stuck dict
-    with stuck_type="verify" and reason set to the last 2000 characters of stdout+stderr.
-    On success (rc 0) or when verify_cmd is None, returns None.
+    When verify_cmd is not None, runs the command via bash on Windows (so the
+    POSIX env-prefix syntax is honoured) and via subprocess.run with shell=True
+    elsewhere, capturing output as text. On non-zero return code, returns a stuck
+    dict with stuck_type="verify" and reason set to the last 2000 characters of
+    stdout+stderr. On success (rc 0) or when verify_cmd is None, returns None.
 
     Args:
         project_root: Path to the worktree root.
