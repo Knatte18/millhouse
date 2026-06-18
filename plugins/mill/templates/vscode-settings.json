@@ -5,5 +5,10 @@
         "titleBar.inactiveBackground": "<COLOR_HEX>",
         "titleBar.inactiveForeground": "#ffffffaa"
     },
-    "window.title": "<WINDOW_TITLE>"
+    "window.title": "<WINDOW_TITLE>",
+    "files.watcherExclude": {
+        "**/.portals/**": true,
+        "**/.wiki/**": true,
+        "**/.active/**": true
+    }
 }
