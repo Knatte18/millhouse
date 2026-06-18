@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-junction-recursive-walk
+phase: approved-posix-shell-helper
 slug: mill-junction-and-agent-gaps
 branch: hanf/mill-junction-and-agent-gaps
 plan: _mill/plan
@@ -20,6 +20,7 @@ planning  '2026-06-18T11:47:31Z'
 planned  '2026-06-18T11:59:10Z'
 implementing  '2026-06-18T12:05:33Z'
 approved-junction-recursive-walk  '2026-06-18T12:08:09Z'
+approved-posix-shell-helper  '2026-06-18T12:11:53Z'
 ```
 
 ## Batches
@@ -32,9 +33,10 @@ batches:
     start_sha: 37e5b4de5b5e767410362a99dc38b046fb7f3226
     commit_sha: fb5750680babb7e417c5edc705225d8934be0747
   - name: posix-shell-helper
-    state: running
+    state: approved
     implementer_session: d965e1bd-7de4-4b57-94f3-5332c9c14db1
     start_sha: 31879e6e79043079db8c2226aa4ad29ca70ec678
+    commit_sha: 41741b189db06244bfc1299fc3f2da1b29db2955
   - name: review-round-autodiscovery
     state: pending
 ```
