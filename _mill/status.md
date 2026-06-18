@@ -40,7 +40,9 @@ batches:
     start_sha: 9ca983855d9ff98a8293af6d0a225a1c7919c8d4
     commit_sha: 09289b93db8bc5321768c245330e7c6f87fc7931
   - name: review-discussion-nitcount
-    state: pending
+    state: running
+    implementer_session: 0dce4179-6ac9-4c0e-9b4b-b46e7ce90110
+    start_sha: 2f5a512febba71fc0bb421532a40e123dde2f804
   - name: holistic-fix-sweep
     state: pending
   - name: implementer-contracts
