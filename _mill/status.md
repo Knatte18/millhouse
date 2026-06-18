@@ -26,7 +26,9 @@ implementing  '2026-06-18T12:05:33Z'
 ```yaml
 batches:
   - name: junction-recursive-walk
-    state: pending
+    state: running
+    implementer_session: a13258d6-cbb3-432f-bb96-d27f00869cc5
+    start_sha: 37e5b4de5b5e767410362a99dc38b046fb7f3226
   - name: posix-shell-helper
     state: pending
   - name: review-round-autodiscovery
