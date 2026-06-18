@@ -43,6 +43,12 @@ Three bugs filed during the `mill-nested-hub-and-skill-sync` and `mill-agent-and
 - Rationale: Catches undeclared/legacy junctions at any depth; works regardless of `hub_relative_path`; no coupling to mill-config.yaml's junctions block.
 - Rejected: Declared-list approach — only strips known junctions; misses legacy `.active` and any hub-relative path variations not in config.
 
+### junctions_cfg parameter retained in strip_all_in_worktree
+
+- Decision: Keep the `junctions_cfg` parameter on `strip_all_in_worktree` (unused by the new recursive walk).
+- Rationale: The only caller is `_worktree.remove_safe`. Removing the param would require touching `remove_safe`'s call site in this fix, mixing a signature change with the bug fix. This round changes only the walk logic; param cleanup is a separate task.
+- Rejected: Drop the param and update `remove_safe` — adds scope to this fix for a cosmetic change.
+
 ### No max-depth guard on recursive walk
 
 - Decision: Recurse without a depth limit.
@@ -87,14 +93,22 @@ This is a single-level scan of `worktree_path` (the git worktree root). Junction
 Replacement: a recursive helper (or `os.walk`-equivalent) that descends into real directories but stops at junctions/symlinks. Pseudocode:
 ```
 def _walk(dir_path):
-    for entry in os.scandir(dir_path):
+    try:
+        entries = list(os.scandir(dir_path))
+    except PermissionError:
+        # Print a warning so the operator knows a subdir was skipped.
+        # Silently swallowing would reproduce the wiki-destruction failure if
+        # a junction lives in an ACL-restricted dir.
+        print(f"[junction] WARNING: permission denied scanning {dir_path}; junctions inside may survive", file=sys.stderr)
+        return
+    for entry in entries:
         ep = Path(entry.path)
         if is_junction_or_symlink(ep):
             remove(ep); removed.append(ep)  # do NOT descend
         elif entry.is_dir():
             _walk(ep)  # real dir — recurse
 ```
-`entry.is_dir()` is checked AFTER the junction guard, so a junction-to-directory (which `is_dir()` returns True for on Windows) is never descended into. The `FileNotFoundError` guard wraps the outer call (missing worktree → `[]`). Wrap inner `os.scandir` in a try/except for `PermissionError` (gitignored dirs with ACL restrictions).
+`entry.is_dir()` is checked AFTER the junction guard, so a junction-to-directory (which `is_dir()` returns True for on Windows) is never descended into. The `FileNotFoundError` guard wraps the outer call (missing worktree → `[]`). `PermissionError` on an inner scandir prints a warning and skips that subtree — not silently swallowed, so an operator can detect and investigate.
 
 The `junctions_cfg` parameter is retained for backward compatibility (callers still pass it) but continues to be unused.
 
@@ -177,7 +191,9 @@ Add two test cases (using `unittest.mock.patch` on `os.name` and `shutil.which`)
 
 These test `_implementer_common._posix_shell_run_args` directly. Import `_implementer_common` (already imported in this test file).
 
-No new test file needed for `--round` auto-discovery — the behavior is a CLI-level arg defaulting that is tested adequately by the full `run()` path in `test-review-plan-flow.py` (which exercises `finalize()` without going through the CLI).
+The auto-discovery branch lives in the CLI `main()` finalize handler, not in `finalize()` itself, so `test-review-plan-flow.py`'s backend coverage does not reach it. Add CLI-level tests:
+
+- In `test-review-plan-flow.py` (or a new `test-review-plan-cli-round.py`), load `millpy-review-plan` via `importlib.util.spec_from_file_location` (same pattern as `test-merge-in-subagent.py` loads the subagent). Call `main(["--stage", "finalize", "--agent-output", "<out_path>"])` without `--round`. Verify the call succeeds (exit 0) and the returned JSON has the expected round number. A minimal fixture: write a stub `.out.md` containing a valid `MILL_REVIEW_BEGIN` block, set up the reviews_dir (empty → discover_round returns 1). Repeat the same test for `millpy-review-discussion.py`.
 
 ## Q&A log
 
