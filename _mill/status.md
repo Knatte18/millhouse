@@ -1,10 +1,10 @@
 # Status
 
 ```yaml
-phase: discussed
+phase: planning
 slug: mill-junction-and-agent-gaps
 branch: hanf/mill-junction-and-agent-gaps
-plan: null
+plan: _mill/plan
 parent: main
 task: Fix nested-junction teardown, Windows verify gate in merge-in, and review-plan --round threading
 task_description: |
@@ -16,4 +16,5 @@ task_description: |
 ```text
 discussing  '2026-06-18T11:21:06Z'
 discussed  '2026-06-18T11:37:22Z'
+planning  '2026-06-18T11:47:31Z'
 ```
