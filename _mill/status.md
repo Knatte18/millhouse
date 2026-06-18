@@ -52,5 +52,7 @@ batches:
     start_sha: 9887f8b2ac535ffd5d42144aa42bc47e18d5549e
     commit_sha: 13ca5158f34b9c83289d4d0cbd58cd2c4842a10d
   - name: implementer-contracts
-    state: pending
+    state: running
+    implementer_session: 1fc4dd80-d3ea-4db7-aede-96d5fe5a03d6
+    start_sha: 91a0c8d352d3789927acb1ecbf7866c1bea20251
 ```
