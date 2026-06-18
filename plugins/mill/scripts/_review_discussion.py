@@ -168,6 +168,7 @@ def finalize(
         round=round_n,
         verdict=review_entry["verdict"],
         blocking_count=review_entry["blocking_count"],
+        nit_count=review_entry["nit_count"],
         reviews=[{
             "scope": "holistic",
             "verdict": review_entry["verdict"],
