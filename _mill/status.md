@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-drift-guard-and-regression-locks
+phase: approved-merge-skill-path-fixes
 slug: mill-nested-hub-and-skill-sync
 branch: hanf/mill-nested-hub-and-skill-sync
 plan: _mill/plan
@@ -22,6 +22,7 @@ plan-fix-r1  '2026-06-18T09:23:01Z'
 planned  '2026-06-18T09:23:21Z'
 implementing  '2026-06-18T09:30:30Z'
 approved-drift-guard-and-regression-locks  '2026-06-18T10:08:28Z'
+approved-merge-skill-path-fixes  '2026-06-18T10:12:34Z'
 ```
 
 ## Batches
@@ -34,9 +35,10 @@ batches:
     start_sha: 81cae509a2273c91d3fe899cdd8e2b3eaaf483a3
     commit_sha: ec2621765033f4a198164f69a8e5d7796abd1cc9
   - name: merge-skill-path-fixes
-    state: running
+    state: approved
     implementer_session: f8790c96-b403-400e-91ce-78fd103d90eb
     start_sha: 15c631668679bd59ad0ef2dd1335b79c0b0ad319
+    commit_sha: ee42b7e5ff91ca380e831d64e77965f4080f75e4
   - name: merge-integration-test
     state: pending
 ```
