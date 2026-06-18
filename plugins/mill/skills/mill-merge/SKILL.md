@@ -32,7 +32,13 @@ You are an integration engineer. Your job is to merge a completed task branch ba
 
    **In-place mode bypass:** when `mode == 'inplace'`, the existing Steps 1 (acquire merge lock on parent) and 2 (invoke `mill-merge-in`) are SKIPPED. There is no separate parent worktree to lock; the merge is purely local. Continue from Step 3 (capture child branch) onward, but treat "child" and "parent" as branches in the same working tree (cwd is the hub). For the squash merge in Step 4 (Direct path), omit the `-C <parent-path>` flag — the merge runs against the current working tree directly.
 
-1.5. **Path Setup.** `cfg` was loaded in step 1; `worktree_root = git_root` from step 1. Derive `status_path = _paths.resolve_task_path(worktree_root, cfg['paths']['status_md'])` and `task_dir = status_path.parent`. Use these variables for all subsequent path references.
+1.5. **Path Setup.** `cfg` was loaded in step 1; `container_path` and `slug` are in scope from Step 1. Derive:
+   ```python
+   worktree_root = _paths.resolve_active_hub(container_path, slug, cfg=cfg, git_root=git_root)
+   status_path = _paths.resolve_task_path(worktree_root, cfg['paths']['status_md'])
+   task_dir = status_path.parent
+   ```
+   No in-place vs worktree mode branch is needed: `resolve_active_worktree` checks in-place mode first (returns `git_root` when `_inplace.is_inplace` is true) and `resolve_active_hub` covers both modes, so the single call is correct whether `mode == 'inplace'` or `'worktree'`. Use these variables for all subsequent path references.
 
 2. Slug already resolved in Step 1; reuse `active_data['slug']` — no second read needed.
 3. *(Config already loaded in Step 1.)*
