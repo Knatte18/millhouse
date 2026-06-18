@@ -130,6 +130,8 @@ Loop up to `max_review_rounds` rounds. Each round:
 1. Report: **"Discussion Review — round N/max_review_rounds"**.
 2. **Dispatch mode:** Resolve dispatch mode via `_agent_dispatch.resolve_dispatch_mode(cfg)`. If `agent` (Claude provider only): follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" in `plugins/mill/skills/mill-go/SKILL.md`) with `<cli> = millpy-review-discussion.py` with no additional prepare arguments; thread `--round <round>` from the prepare envelope into the finalize invocation. If `subprocess` or `psmux`: use the subprocess branch below.
 
+   **Agent-mode error recovery:** A raw Agent API error before any verdict is classified as `stuck_type: transient` and the brief is re-dispatched once. On a second consecutive error, the read-only reviewer dispatch (which writes no review file) falls back to the subprocess `--stage full` path via `millpy-bg` before surfacing to the operator. This recovery applies even though mill-start is interactive and has no autonomous stuck machinery; the one-retry plus subprocess fallback is the defined recovery, after which the skill surfaces to the operator.
+
    **Agent-mode properties:** mill-start remains interactive and the GAPS_FOUND / APPROVE-with-NOTE branches (steps 4a/4b/5) are unchanged once the envelope is in hand. Preserve `--auto` mode behavior. There is no detached worker, so the dead-worker halt at step 2's subprocess liveness check does not apply in agent mode.
 
    **Subprocess/psmux branch — Background the CLI via `millpy-bg`:**
