@@ -1,10 +1,10 @@
 # Status
 
 ```yaml
-phase: discussed
+phase: planning
 slug: mill-agent-and-implement-contracts
 branch: hanf/mill-agent-and-implement-contracts
-plan: null
+plan: _mill/plan
 parent: main
 task: Fix agent error recovery, implementer/review false-success contracts, VS Code watcher, and plan-validator Deletes
 task_description: |
@@ -17,4 +17,5 @@ task_description: |
 discussing  '2026-06-18T08:38:39Z'
 discussion-fix-r1  '2026-06-18T09:01:42Z'
 discussed  '2026-06-18T09:02:00Z'
+planning  '2026-06-18T09:16:29Z'
 ```
