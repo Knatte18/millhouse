@@ -50,9 +50,12 @@ work is concentrated in `mill-merge` and `mill-merge-in` (neither was touched by
     consistent).
 - **Regression / drift guard:**
   - Add a unit test that scans all SKILL.md files for `_<module>.<fn>(`-style mill-helper
-    references and asserts each resolves to a real function in `plugins/mill/scripts/`
-    (with a small allowlist for illustrative references). Directly serves the task title's
-    "SKILL.md vs shipped-API mismatches" and would have caught #504/#505.
+    references and asserts each resolves to a real function defined under
+    `plugins/mill/scripts/` **including its subpackages** (e.g. `wiki/`) — so heavily-used
+    subpackage helpers like `_client.*` (`scripts/wiki/_client.py`, referenced by ~10
+    SKILLs) resolve rather than false-positive. A small allowlist covers genuinely
+    illustrative references only. Directly serves the task title's "SKILL.md vs shipped-API
+    mismatches" and would have caught #504/#505.
   - Add a nested-hub scenario to integration `test-merge.py`: parent branch carries its own
     `_mill/status.md`; after the merge sequence, assert the parent's file survives and only
     production files land. Covers #497 bug 2 at the git level.
@@ -102,9 +105,14 @@ work is concentrated in `mill-merge` and `mill-merge-in` (neither was touched by
 ### drift-guard scope
 - Decision: New unit test scans SKILL.md files for the mill-helper call convention
   `_<module>.<fn>(` (both inline-Python calls and `signature: _module.fn(...)` annotation
-  lines), resolves each `(_module, fn)` against the functions defined in
-  `plugins/mill/scripts/`, and fails on any unresolved reference. Maintain a small explicit
-  allowlist for deliberately-illustrative or not-yet-shipped references.
+  lines), resolves each `(_module, fn)` against the functions defined under
+  `plugins/mill/scripts/` **recursing into subpackages** (e.g. `wiki/`), and fails on any
+  unresolved reference. The subpackage recursion is essential: `_client` lives only at
+  `scripts/wiki/_client.py` and is referenced (`_client.get_task`, `set_phase`,
+  `upsert_task`, `health_check`, `list_tasks_brief`, …) by ~10 SKILLs — a non-recursive
+  `scripts/*.py` scan would false-positive on every one, and the allowlist must not be the
+  workaround for a heavily-used shipped module. Maintain a small explicit allowlist only for
+  deliberately-illustrative or not-yet-shipped references.
 - Rationale: Targets the exact convention mill uses (underscore-prefixed helper modules),
   keeping the false-positive rate low while catching the real drift class. Broad
   `name.fn()` matching would flood on stdlib (`json.dumps`, `Path.resolve`); `signature:`-only
@@ -160,7 +168,9 @@ hub-resolved. See CLAUDE.md `## Path invariants`.
   this file (Step 6 archive tag line ~203, wiki calls) are git-level and correct — leave them.
 - `plugins/mill/skills/mill-merge-in/SKILL.md` — entry step 2 (~line 13), verify-replay
   `plan_dir` (~line 54). Line 56's `resolve_hub_path()` is already correct.
-- `plugins/mill/unit_tests/test-<drift-guard-name>.py` — new; registered in `run-all.py`.
+- `plugins/mill/unit_tests/test-<drift-guard-name>.py` — new; `run-all.py:58` auto-discovers
+  any `test-*.py` via glob, so just name it `test-*.py` and keep it out of the `SKIP`
+  frozenset — there is no registration step.
 - `plugins/mill/integration_tests/test-merge.py` — add nested-hub + parent-tracked-task_dir
   scenario.
 
@@ -204,10 +214,12 @@ template; the new scenario adds a nested hub and a parent-side `_mill/status.md`
 - **Drift-guard unit test (TDD candidate).** New `test-*.py` under `plugins/mill/unit_tests/`.
   Walk every `SKILL.md` under `plugins/mill/skills/` (and consider plugin SKILLs if cheap),
   regex-extract `_<module>.<fn>(` references (covering inline calls and `signature:` lines),
-  build the set of functions defined in `plugins/mill/scripts/*.py`, and assert every
+  build the set of functions defined under `plugins/mill/scripts/` **recursing into
+  subpackages** (`scripts/**/*.py`, so `wiki/_client.py` is included), and assert every
   referenced `(_module, fn)` exists. Allowlist a small set of intentional exceptions. Must
-  FAIL today if pointed at the pre-#504-fix text and PASS against current source. Register in
-  `run-all.py`.
+  FAIL today if pointed at the pre-#504-fix text and PASS against current source. No
+  registration step — `run-all.py:58` auto-discovers `test-*.py` via glob; just keep the
+  file out of the `SKIP` frozenset.
 - **mill-merge nested-hub squash safety (integration, #497 bug 2).** Extend `test-merge.py`:
   build a nested hub (hub is a subdir of the worktree git root; `.millhouse/config.local.yaml`
   with `hub_relative_path`), put a `_mill/status.md` for a *different* task on the parent
@@ -215,6 +227,13 @@ template; the new scenario adds a nested hub and a parent-side `_mill/status.md`
   restore-from-HEAD step, and assert: (a) the parent's `_mill/status.md` is unchanged after
   the merge commit, (b) only the intended production files are in the squash commit, (c) the
   archive tag still captures the child's cleanup state.
+  - **Fixture caveat:** the existing `test-merge.py` fixture builds `<container>/worktrees/<slug>`
+    (`test-merge.py:90`), whereas `resolve_active_hub` expects `container/"wts"/slug`
+    (`_paths.py`). This scenario exercises the **git-level squash + restore-from-HEAD sequence
+    directly** and does not need to route through `resolve_active_hub` — drive the raw git
+    commands against the fixture's own paths. Only if the implementer wants to also exercise
+    `resolve_active_hub` end-to-end must the fixture be rebuilt in `wts/`-form; that is
+    optional and not required to validate bug 2.
 - **Hub resolution (regression).** Lean on existing `test-paths.py` /
   `test-hub-relative-path.py` for `resolve_active_hub` / `resolve_task_path` nested behavior;
   add a case only if a gap is found while implementing.
