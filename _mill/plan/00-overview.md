@@ -3,7 +3,7 @@
 ```yaml
 task: Fix nested-junction teardown, Windows verify gate in merge-in, and review-plan --round threading
 slug: mill-junction-and-agent-gaps
-approved: false
+approved: true
 started: 20260618-114407
 parent: main
 root: ""

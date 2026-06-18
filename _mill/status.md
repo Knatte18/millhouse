@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planning
+phase: planned
 slug: mill-junction-and-agent-gaps
 branch: hanf/mill-junction-and-agent-gaps
 plan: _mill/plan
@@ -17,4 +17,5 @@ task_description: |
 discussing  '2026-06-18T11:21:06Z'
 discussed  '2026-06-18T11:37:22Z'
 planning  '2026-06-18T11:47:31Z'
+planned  '2026-06-18T11:59:10Z'
 ```
