@@ -114,6 +114,8 @@ PR dispatch lives in mill-finalize. This step is direct path only.
   git -C <parent-path> push
   ```
 
+  Note: `<task_dir>` may be passed as either an absolute path (when `_paths.resolve_task_path` derives it from `worktree_root`) or a repo-relative path. `git reset` and `git checkout` accept both forms within the repo root.
+
   **Why:** The child cleanup commit deletes `task_dir`, so a parent that independently tracks `task_dir/_mill/status.md` at the same relative path would otherwise have its file deleted by the squash diff (the #497 bug-2 corruption). The restore step unstages and restores the parent's own `task_dir` from its pre-squash HEAD, ensuring the squash only stages the intended production files. This is a clean no-op when the parent tracks nothing at `task_dir`.
 
   After the restore, re-inspect the staged changes via `git -C <parent-path> diff --cached --stat` and proceed to commit only the intended production files.
