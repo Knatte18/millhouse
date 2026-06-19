@@ -60,6 +60,10 @@ def _setup_plugin_template(tmp_path: Path) -> None:
     template_path = template_dir / "mill-config.yaml"
     template_path.write_text(
         "spawn:\n  branch_prefix: ''\n"
+        "git:\n"
+        "  parent-branch: null\n"
+        "  require_pr_to_base: false\n"
+        "  base_branch: main\n"
         "roles:\n"
         "  discussion-review:\n"
         "    holistic:\n"
@@ -1130,6 +1134,70 @@ def test_dispatch_shim_unknown_value_falls_back_to_subprocess() -> None:
     print("PASS dispatch shim -- unknown dispatch value falls back to subprocess with error")
 
 
+def test_git_namespace_no_unknown_key_warning() -> None:
+    """
+    The git namespace is registered in the template with parent-branch, require_pr_to_base,
+    and base_branch, so loading a valid git block should not emit unknown-key warning.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        _setup_plugin_template(tmp_path)
+        wt_root = tmp_path / "hub"
+        _git_init(wt_root)
+        _write_yaml(
+            wt_root / "mill-config.yaml",
+            "git:\n"
+            "  parent-branch: null\n"
+            "  require_pr_to_base: false\n"
+            "  base_branch: main\n"
+        )
+
+        with patch.object(_paths, "resolve_wiki_path", side_effect=SystemExit):
+            with patch.object(
+                _config, "resolve_plugin_template_path",
+                return_value=tmp_path / "templates" / "mill-config.yaml"
+            ):
+                with patch("sys.stderr", new=io.StringIO()) as mock_stderr:
+                    _config.load_config(wt_root, wt_root)
+                    stderr_output = mock_stderr.getvalue()
+
+        assert "unknown key: git" not in stderr_output, (
+            f"git namespace should be registered; stderr: {stderr_output!r}"
+        )
+    print("PASS load_config -- git namespace registered, no unknown-key warning")
+
+
+def test_git_unknown_subkey_still_warns() -> None:
+    """
+    Even though git is registered, a typo in a git subkey (e.g., bogus-key) should
+    still emit an unknown-key warning for git.bogus-key.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        _setup_plugin_template(tmp_path)
+        wt_root = tmp_path / "hub"
+        _git_init(wt_root)
+        _write_yaml(
+            wt_root / "mill-config.yaml",
+            "git:\n"
+            "  bogus-key: x\n"
+        )
+
+        with patch.object(_paths, "resolve_wiki_path", side_effect=SystemExit):
+            with patch.object(
+                _config, "resolve_plugin_template_path",
+                return_value=tmp_path / "templates" / "mill-config.yaml"
+            ):
+                with patch("sys.stderr", new=io.StringIO()) as mock_stderr:
+                    _config.load_config(wt_root, wt_root)
+                    stderr_output = mock_stderr.getvalue()
+
+        assert "unknown key: git.bogus-key" in stderr_output, (
+            f"Unknown git subkey should warn; stderr: {stderr_output!r}"
+        )
+    print("PASS load_config -- git subkey typo still warns")
+
+
 def main() -> int:
     tests = [
         test_load_config_shared_present,
@@ -1170,6 +1238,8 @@ def main() -> int:
         test_dispatch_shim_explicit_dispatch_wins_over_via_psmux,
         test_via_psmux_does_not_trigger_unknown_key_warning,
         test_dispatch_shim_unknown_value_falls_back_to_subprocess,
+        test_git_namespace_no_unknown_key_warning,
+        test_git_unknown_subkey_still_warns,
         test_container_layout_config_resolution,
         test_review_common_load_config_container_layout,
         test_no_repo_layer_config_anywhere_emits_note,
