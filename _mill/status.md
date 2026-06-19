@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-config-and-brief-gaps
 branch: hanf/mill-config-and-brief-gaps
 plan: _mill/plan
@@ -22,4 +22,15 @@ plan-review-r1  '2026-06-19T11:21:57Z'
 plan-fix-r1  '2026-06-19T11:21:57Z'
 plan-fix-r2  '2026-06-19T11:24:32Z'
 planned  '2026-06-19T11:25:04Z'
+implementing  '2026-06-19T11:27:58Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: config-git-namespace
+    state: pending
+  - name: brief-commit-uniformity
+    state: pending
 ```
