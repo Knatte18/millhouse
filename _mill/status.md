@@ -36,5 +36,7 @@ batches:
     start_sha: d40e241e05ef0735e2cca40b531a3a132bd1fc2b
     commit_sha: bd700c84c0157c40e114146421c59c4c53345a96
   - name: brief-commit-uniformity
-    state: pending
+    state: running
+    implementer_session: 108aeeb8-384b-4890-904c-98157f08839a
+    start_sha: cf9927f2d0174711e9b34bdc29a6aba421132c23
 ```
