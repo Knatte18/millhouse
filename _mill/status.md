@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-reviewing
+phase: holistic-approved
 slug: mill-config-and-brief-gaps
 branch: hanf/mill-config-and-brief-gaps
 plan: _mill/plan
@@ -26,6 +26,7 @@ implementing  '2026-06-19T11:27:58Z'
 approved-config-git-namespace  '2026-06-19T11:30:35Z'
 approved-brief-commit-uniformity  '2026-06-19T11:34:15Z'
 holistic-reviewing  '2026-06-19T11:34:42Z'
+holistic-approved  '2026-06-19T11:36:19Z'
 ```
 
 ## Batches
