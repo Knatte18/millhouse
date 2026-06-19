@@ -72,6 +72,18 @@ If `_codeguide/Overview.md` exists anywhere in the repo, invoke the `codeguide-u
 
 If `_codeguide/Overview.md` is absent → skip silently. This is the documented convention in `plugins/mill/skills/git-commit/SKILL.md` step 2 and we follow it here for symmetry.
 
+### 5.5. Commit dispatch briefs
+
+If any dispatch briefs exist and have changes (both the `merge/conflicts` brief written in step 3 and the `merge/verify-fix` brief written in step 4 after the `git merge --continue`), stage and commit them. Use a guarded `git status --porcelain` check to avoid an empty commit:
+
+```bash
+if [ -d <worktree>/_mill/briefs ] && [ -n "$(git -C <worktree> status --porcelain -- _mill/briefs)" ]; then
+  git -C <worktree> add _mill/briefs/ && git -C <worktree> commit -m "mill-merge-in: commit dispatch briefs"
+fi
+```
+
+This step runs on the success path only: any failure in steps 2-5 triggers the Rollback (`git reset --hard "$CHK"`) before reaching this point, so the brief commit is intentionally outside rollback scope and captures successful state. Clean merges (no conflicts, no verify failures) skip steps 3 and 4 entirely, so this step gracefully handles the case where no briefs were written (the `git status --porcelain` guard returns empty).
+
 ### 6. Report
 
 ```
