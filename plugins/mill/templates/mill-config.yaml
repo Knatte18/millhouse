@@ -76,10 +76,11 @@ spawn:
 # ---------------------------------------------------------------------------
 # Git integration
 # ---------------------------------------------------------------------------
-# Uncomment if your remote enforces PRs to the base branch (branch protection).
-# git:
-#   require_pr_to_base: true   # create a PR instead of pushing directly; dispatch lives in mill-finalize
-#   base_branch: main          # branch to target; defaults to main if absent
+# Configure git integration settings for PR vs. direct push.
+git:
+  parent-branch: null         # consumed by git-pr (reads .millhouse/config.yaml); null/absent -> falls back to arg/main
+  require_pr_to_base: false    # consumed by mill-finalize; true -> open a PR instead of pushing directly
+  base_branch: main            # consumed by mill-finalize; PR --base target; falls back to main if absent
 
 # ---------------------------------------------------------------------------
 # File-path templates (relative to active worktree root)
