@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-config-git-namespace
 slug: mill-config-and-brief-gaps
 branch: hanf/mill-config-and-brief-gaps
 plan: _mill/plan
@@ -23,6 +23,7 @@ plan-fix-r1  '2026-06-19T11:21:57Z'
 plan-fix-r2  '2026-06-19T11:24:32Z'
 planned  '2026-06-19T11:25:04Z'
 implementing  '2026-06-19T11:27:58Z'
+approved-config-git-namespace  '2026-06-19T11:30:35Z'
 ```
 
 ## Batches
@@ -30,9 +31,10 @@ implementing  '2026-06-19T11:27:58Z'
 ```yaml
 batches:
   - name: config-git-namespace
-    state: running
+    state: approved
     implementer_session: deadb076-fc48-4696-a8f9-7e2b8497b737
     start_sha: d40e241e05ef0735e2cca40b531a3a132bd1fc2b
+    commit_sha: bd700c84c0157c40e114146421c59c4c53345a96
   - name: brief-commit-uniformity
     state: pending
 ```
