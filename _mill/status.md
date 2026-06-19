@@ -30,7 +30,9 @@ implementing  '2026-06-19T11:27:58Z'
 ```yaml
 batches:
   - name: config-git-namespace
-    state: pending
+    state: running
+    implementer_session: deadb076-fc48-4696-a8f9-7e2b8497b737
+    start_sha: d40e241e05ef0735e2cca40b531a3a132bd1fc2b
   - name: brief-commit-uniformity
     state: pending
 ```
