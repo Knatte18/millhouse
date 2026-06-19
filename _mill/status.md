@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-config-git-namespace
+phase: approved-brief-commit-uniformity
 slug: mill-config-and-brief-gaps
 branch: hanf/mill-config-and-brief-gaps
 plan: _mill/plan
@@ -24,6 +24,7 @@ plan-fix-r2  '2026-06-19T11:24:32Z'
 planned  '2026-06-19T11:25:04Z'
 implementing  '2026-06-19T11:27:58Z'
 approved-config-git-namespace  '2026-06-19T11:30:35Z'
+approved-brief-commit-uniformity  '2026-06-19T11:34:15Z'
 ```
 
 ## Batches
@@ -36,7 +37,8 @@ batches:
     start_sha: d40e241e05ef0735e2cca40b531a3a132bd1fc2b
     commit_sha: bd700c84c0157c40e114146421c59c4c53345a96
   - name: brief-commit-uniformity
-    state: running
+    state: approved
     implementer_session: 108aeeb8-384b-4890-904c-98157f08839a
     start_sha: cf9927f2d0174711e9b34bdc29a6aba421132c23
+    commit_sha: 11b4c9acfef3e3504d5d1ca9582cd01bfca7c09e
 ```
