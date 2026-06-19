@@ -3,7 +3,7 @@
 ```yaml
 task: "Fix config unknown-key warning on git namespace and commit _mill/briefs/ after dispatch"
 slug: mill-config-and-brief-gaps
-approved: false
+approved: true
 started: 20260619-111549
 parent: main
 root: ""
