@@ -525,6 +525,54 @@ def main() -> int:
     except FileNotFoundError:
         print("PASS: render_prompt missing template -> FileNotFoundError")
 
+    # render_prompt: prior_nonblocking token with digest content
+    try:
+        prompt = render_prompt(
+            "review-code-batch",
+            task_title="Test Task",
+            tool_rule="test rule",
+            artefact_section="test section",
+            constraints="test constraints",
+            round=2,
+            reviewer_model="test-model",
+            batch_name="test-batch",
+            prior_nonblocking="- Item 1: description\n- Item 2: description"
+        )
+        assert "Item 1: description" in prompt, "prior_nonblocking content not in rendered prompt"
+        assert "- Item 2: description" in prompt, "prior_nonblocking content not in rendered prompt"
+        assert "Do NOT escalate" in prompt, "escalation-justification rule not in prompt"
+        assert "Do NOT read `reviews/`" in prompt, "tool rule read-ban not preserved in prompt"
+        print("PASS: render_prompt with prior_nonblocking digest renders correctly")
+    except KeyError as e:
+        print(f"FAIL: render_prompt with prior_nonblocking raised KeyError: {e}", file=sys.stderr)
+        errors += 1
+    except AssertionError as e:
+        print(f"FAIL: render_prompt prior_nonblocking check: {e}", file=sys.stderr)
+        errors += 1
+
+    # render_prompt: prior_nonblocking defaults to (none) on round 1
+    try:
+        prompt_r1 = render_prompt(
+            "review-code-batch",
+            task_title="Test Task",
+            tool_rule="test rule",
+            artefact_section="test section",
+            constraints="test constraints",
+            round=1,
+            reviewer_model="test-model",
+            batch_name="test-batch",
+            prior_nonblocking="(none)"
+        )
+        assert "(none)" in prompt_r1, "prior_nonblocking (none) should appear in round 1 prompt"
+        assert "Do NOT read `reviews/`" in prompt_r1, "tool rule read-ban not preserved in round 1 prompt"
+        print("PASS: render_prompt round 1 with prior_nonblocking=(none) renders without KeyError")
+    except KeyError as e:
+        print(f"FAIL: render_prompt round 1 raised KeyError: {e}", file=sys.stderr)
+        errors += 1
+    except AssertionError as e:
+        print(f"FAIL: render_prompt round 1 check: {e}", file=sys.stderr)
+        errors += 1
+
     # aggregate_verdict
     assert aggregate_verdict(["APPROVE", "APPROVE"]) == "APPROVE"
     assert aggregate_verdict(["APPROVE", "REQUEST_CHANGES"]) == "REQUEST_CHANGES"
