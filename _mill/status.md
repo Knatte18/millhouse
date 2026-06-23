@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-fix-r3
+phase: planned
 slug: mill-implementer-and-dispatch-quality
 branch: hanf/mill-implementer-and-dispatch-quality
 plan: _mill/plan
@@ -22,4 +22,5 @@ plan-fix-r1  '2026-06-23T08:51:27Z'
 plan-review-r2  '2026-06-23T08:57:11Z'
 plan-fix-r2  '2026-06-23T08:57:11Z'
 plan-fix-r3  '2026-06-23T09:01:02Z'
+planned  '2026-06-23T09:01:22Z'
 ```
