@@ -12,6 +12,32 @@ import _timestamp
 from pathlib import Path
 
 
+def _has_windows_cleanup_signature(text: str) -> bool:
+    """
+    Check if text contains a Windows cleanup-race signature (case-insensitive).
+
+    Detects Windows file-system access patterns that appear in cleanup races and
+    lock errors: unlinkat, access is denied, winerror 5, winerror 32,
+    process cannot access, being used by another process.
+
+    Args:
+        text: A string to check (e.g., exception message or command output).
+
+    Returns:
+        True if any cleanup-race signature is present; False otherwise.
+    """
+    text_lower = text.lower()
+    cleanup_signatures = [
+        "unlinkat",
+        "access is denied",
+        "winerror 5",
+        "winerror 32",
+        "process cannot access",
+        "being used by another process",
+    ]
+    return any(sig in text_lower for sig in cleanup_signatures)
+
+
 def _is_benign_windows_cleanup(output: str) -> bool:
     """
     Check if the combined output contains only a Windows cleanup-race signature with no test failures.
@@ -20,7 +46,7 @@ def _is_benign_windows_cleanup(output: str) -> bool:
     1. The output contains a Windows cleanup-race signature (case-insensitive any of:
        unlinkat, access is denied, winerror 5, winerror 32, process cannot access, being used by another process)
     2. The output contains NO test-failure markers (case-insensitive none of:
-       fail, --- fail, panic:, build failed)
+       fail, panic:, build failed)
 
     This is used to distinguish benign file-cleanup races from real test failures on Windows.
 
@@ -33,15 +59,7 @@ def _is_benign_windows_cleanup(output: str) -> bool:
     output_lower = output.lower()
 
     # Check for cleanup-race signatures
-    cleanup_signatures = [
-        "unlinkat",
-        "access is denied",
-        "winerror 5",
-        "winerror 32",
-        "process cannot access",
-        "being used by another process",
-    ]
-    has_cleanup_signature = any(sig in output_lower for sig in cleanup_signatures)
+    has_cleanup_signature = _has_windows_cleanup_signature(output)
 
     # Check for test-failure markers (more specific patterns to avoid false positives)
     failure_markers = [
