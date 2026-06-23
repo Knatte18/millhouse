@@ -37,7 +37,12 @@ import _review_common
 import _reviewers
 import _status
 import _timestamp
-from _implementer_common import _forward_output, emit_prepare, finalize_from_output
+from _implementer_common import (
+    _forward_output,
+    _is_benign_windows_cleanup,
+    emit_prepare,
+    finalize_from_output,
+)
 
 
 def _is_windows_lock_error(e: Exception) -> bool:
