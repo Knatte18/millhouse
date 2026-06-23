@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-review-and-verify-quality
 branch: hanf/mill-review-and-verify-quality
 plan: _mill/plan
@@ -26,4 +26,21 @@ plan-review-r3  '2026-06-23T09:03:27Z'
 plan-fix-r3  '2026-06-23T09:03:27Z'
 plan-fix-r4  '2026-06-23T09:07:19Z'
 planned  '2026-06-23T09:07:34Z'
+implementing  '2026-06-23T09:15:51Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: windows-verify-gate
+    state: pending
+  - name: nit-enforcement
+    state: pending
+  - name: fixer-holistic-verify
+    state: pending
+  - name: reviewer-anti-oscillation
+    state: pending
+  - name: scope-violation-cleanup
+    state: pending
 ```
