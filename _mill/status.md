@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-approved
+phase: done
 slug: mill-implementer-and-dispatch-quality
 branch: hanf/mill-implementer-and-dispatch-quality
 plan: _mill/plan
@@ -30,6 +30,7 @@ approved-workflow-memory-note  '2026-06-23T10:15:49Z'
 approved-implementer-finalize-contract  '2026-06-23T10:29:38Z'
 holistic-reviewing  '2026-06-23T10:30:14Z'
 holistic-approved  '2026-06-23T10:32:05Z'
+done  '2026-06-23T10:47:41Z'
 ```
 
 ## Batches
