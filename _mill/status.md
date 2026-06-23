@@ -52,7 +52,9 @@ batches:
     start_sha: a14aa44affbd275be897261729f468da9a6671ff
     commit_sha: 5eb127c06b84f77a663f12d816c31fd7a1bbc8fb
   - name: reviewer-anti-oscillation
-    state: pending
+    state: running
+    implementer_session: cc12698d-e23d-44c4-8f71-c166c36a59c9
+    start_sha: 39ce042adc4c77269840403a8c056d6cbc2d5a7a
   - name: scope-violation-cleanup
     state: pending
 ```
