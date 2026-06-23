@@ -34,7 +34,9 @@ implementing  '2026-06-23T09:15:51Z'
 ```yaml
 batches:
   - name: windows-verify-gate
-    state: pending
+    state: running
+    implementer_session: 41ca123c-0b3a-43ed-85e2-eb1551569c1e
+    start_sha: 47c5d0b22dc4f47a3e25764e42aa70deb51af00d
   - name: nit-enforcement
     state: pending
   - name: fixer-holistic-verify
