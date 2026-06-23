@@ -1062,39 +1062,54 @@ def main() -> int:
             errors += 1
 
     # Case 28: dirty-tree gate (c) -- uncommitted in-scope tracked file -> stuck/logic
-    # Set up a real git repo with a branch so compute_terminal_dirt can run.
+    # Set up a real git repo with a parent branch and a task branch.
+    # README.md is committed on the task branch (owned by this task via parent-diff),
+    # then dirtied again without committing. compute_terminal_dirt must detect it as
+    # in-scope and dirty.
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         base_sha = _setup_fixture(project_root)
-        # Create the parent branch (base_sha is on 'main' already after _setup_fixture)
-        # _setup_fixture leaves HEAD on the default branch (likely 'master' or 'main').
-        # Make 1 content commit so HEAD != start_sha (passes no-content-commit check).
-        subprocess.run(
-            ["git", "-C", str(project_root), "commit", "--allow-empty", "-m", "card-1"],
-            check=True,
-            capture_output=True,
-        )
-        # Determine the current branch name
+        # _setup_fixture commits on the default branch; treat that as the parent.
         branch_result = subprocess.run(
             ["git", "-C", str(project_root), "branch", "--show-current"],
             check=True,
             capture_output=True,
             text=True,
         )
-        current_branch = branch_result.stdout.strip()
-        # Dirty an already-tracked file without committing it (in-scope via parent-diff)
+        parent_branch_name = branch_result.stdout.strip()
+        # Create a task branch off of base_sha.
+        subprocess.run(
+            ["git", "-C", str(project_root), "checkout", "-b", "task-branch"],
+            check=True,
+            capture_output=True,
+        )
+        # Make a commit on the task branch that modifies README.md (puts it in owned_paths).
+        (project_root / "README.md").write_text("task change", encoding="utf-8")
+        subprocess.run(
+            ["git", "-C", str(project_root), "add", "README.md"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "-m", "card-1-modify-readme"],
+            check=True,
+            capture_output=True,
+        )
+        # Dirty README.md again without committing -- it is in owned_paths, so in-scope.
         (project_root / "README.md").write_text("dirty in-scope", encoding="utf-8")
-        # task_dir = _mill subdir (does not need to exist; compute_terminal_dirt uses posix comparisons)
+        # task_dir = _mill subdir.
         task_dir = project_root / "_mill"
         agent_output = '{"status":"success","commit_sha":"abc","session_id":"s3"}\n'
         rc, captured = _capture_stdout(
             lambda: _forward_output(
                 agent_output,
                 project_root,
+                # Use base_sha (the initial commit) as start_sha so HEAD != start_sha
+                # (the card-1 commit advanced HEAD), passing the no-content-commit check.
                 start_sha=base_sha,
                 verify_cmd=None,
                 task_dir=task_dir,
-                parent_branch=current_branch,
+                parent_branch=parent_branch_name,
             )
         )
         try:
