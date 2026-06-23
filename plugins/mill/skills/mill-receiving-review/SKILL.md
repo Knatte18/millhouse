@@ -58,6 +58,7 @@ Pushback is valid **only** when:
 2. **Fix breaks something** — identify what breaks
 3. **Conflicts with design doc** — cite the document and passage
 4. **Destabilizes other work** — cite what is affected and why
+5. **Physically unsatisfiable** — the change demanded contradicts an in-repo convention or cannot pass its own test (e.g., in-process test of a detached-spawn / os.Executable() path). Cite the in-repo analog or explain why the test itself is flawed. Report `stuck_type: logic` with the contradiction described; do not silently apply a change you know will fail.
 
 ---
 

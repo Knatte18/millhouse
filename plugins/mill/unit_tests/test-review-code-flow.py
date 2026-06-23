@@ -1092,6 +1092,72 @@ def main() -> int:
         finally:
             os.chdir(orig_dir)
 
+    # ------------------------------------------------------------------
+    # Test 18 — prior-notes digest renders correctly in prompt
+    # ------------------------------------------------------------------
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        mill_dir, wiki_root, project_root, cfg = _make_fixture(tmpdir)
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            # Create a prior-notes digest file
+            briefs_dir = project_root / "_mill" / "briefs"
+            briefs_dir.mkdir(parents=True, exist_ok=True)
+            prior_notes_path = briefs_dir / "prior-digest.txt"
+            prior_notes_content = (
+                "- Title 1: issue was about naming conventions\n"
+                "- Title 2: style suggestion, prefer foo over bar\n"
+            )
+            prior_notes_path.write_text(prior_notes_content, encoding="utf-8")
+
+            # Run code review with prior_notes
+            _seed_approve(1)
+            r = code_run(
+                cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root,
+                batch_name="alpha", prior_notes=prior_notes_path
+            )
+            assert r.verdict == "APPROVE", f"expected APPROVE, got {r.verdict}"
+
+            # Check that the digest appears in the rendered prompt
+            prompts = stub.captured_prompts()
+            assert prompts, "expected at least one prompt"
+            prompt_text = prompts[0][0]
+            assert "Title 1: issue was about naming conventions" in prompt_text, (
+                "prior-notes content should appear in prompt"
+            )
+            assert "Title 2: style suggestion" in prompt_text, (
+                "prior-notes content should appear in prompt"
+            )
+            assert "Do NOT escalate" in prompt_text, (
+                "escalation-justification rule should appear in prompt"
+            )
+            print("PASS test18a: prior-notes digest renders in prompt")
+
+            # Test round 1: prior_notes=None should render (none)
+            mill_dir2, wiki_root2, project_root2, cfg2 = _make_fixture(tmpdir / "test2")
+            orig_dir2 = os.getcwd()
+            os.chdir(project_root2)
+            _seed_approve(1)
+            r2 = code_run(cfg2, SLUG, mill_dir2, wiki_root2, project_root2, git_root=project_root2, batch_name="alpha")
+            assert r2.verdict == "APPROVE"
+            prompts2 = stub.captured_prompts()
+            prompt_text2 = prompts2[-1][0]  # last prompt
+            # Should contain (none) or mention round 1 explicitly
+            assert "(none)" in prompt_text2 or "Prior non-blocking items" in prompt_text2, (
+                f"prompt should mention prior-nonblocking section, got: {prompt_text2[200:600]}"
+            )
+            print("PASS test18b: round 1 without prior-notes renders (none) without KeyError")
+            os.chdir(orig_dir2)
+
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test18: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test18 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
+
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)
         return 1

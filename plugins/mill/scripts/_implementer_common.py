@@ -3,10 +3,92 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import _agent_dispatch
 import _cleanliness
+import _status
 import _subprocess_util
+import _timestamp
 from pathlib import Path
+
+
+def _has_windows_lock_error_signature(text: str) -> bool:
+    """
+    Check if text contains a Windows file-locking error signature (case-insensitive).
+
+    Detects file-locking error patterns: winerror 32, process cannot access,
+    being used by another process.
+
+    Args:
+        text: A string to check (e.g., exception message).
+
+    Returns:
+        True if any lock-error signature is present; False otherwise.
+    """
+    text_lower = text.lower()
+    lock_error_patterns = [
+        "winerror 32",
+        "process cannot access",
+        "being used by another process",
+    ]
+    return any(pattern in text_lower for pattern in lock_error_patterns)
+
+
+def _has_windows_cleanup_race_signature(text: str) -> bool:
+    """
+    Check if text contains a Windows cleanup-race signature (case-insensitive).
+
+    Detects cleanup-race patterns from tempdir cleanup: unlinkat, access is denied,
+    winerror 5, winerror 32.
+
+    Args:
+        text: A string to check (e.g., exception message or command output).
+
+    Returns:
+        True if any cleanup-race signature is present; False otherwise.
+    """
+    text_lower = text.lower()
+    cleanup_signatures = [
+        "unlinkat",
+        "access is denied",
+        "winerror 5",
+        "winerror 32",
+    ]
+    return any(sig in text_lower for sig in cleanup_signatures)
+
+
+def _is_benign_windows_cleanup(output: str) -> bool:
+    """
+    Check if the combined output contains only a Windows cleanup-race signature with no test failures.
+
+    Returns True only when both conditions hold:
+    1. The output contains a Windows cleanup-race signature (case-insensitive any of:
+       unlinkat, access is denied, winerror 5, winerror 32)
+    2. The output contains NO test-failure markers (case-insensitive none of:
+       fail, panic:, build failed)
+
+    This is used to distinguish benign file-cleanup races from real test failures on Windows.
+
+    Args:
+        output: Combined stdout and stderr from a verify command.
+
+    Returns:
+        True if output contains cleanup signature with no failure markers; False otherwise.
+    """
+    output_lower = output.lower()
+
+    # Check for cleanup-race signatures
+    has_cleanup_signature = _has_windows_cleanup_race_signature(output)
+
+    # Check for test-failure markers (more specific patterns to avoid false positives)
+    failure_markers = [
+        "fail",
+        "panic:",
+        "build failed",
+    ]
+    has_failure_marker = any(marker in output_lower for marker in failure_markers)
+
+    return has_cleanup_signature and not has_failure_marker
 
 
 def _posix_shell_run_args(cmd: str) -> tuple:
@@ -134,13 +216,17 @@ def _run_verify_gate(project_root: Path, verify_cmd: str | None) -> dict | None:
     dict with stuck_type="verify" and reason set to the last 2000 characters of
     stdout+stderr. On success (rc 0) or when verify_cmd is None, returns None.
 
+    On Windows (sys.platform == "win32"), applies an additional gate: if the output
+    contains a benign cleanup-race signature and no test failures (per
+    _is_benign_windows_cleanup), treats the non-zero exit as success and returns None.
+
     Args:
         project_root: Path to the worktree root.
         verify_cmd: Verify command to run (e.g., "pytest tests/ -q"), or None.
 
     Returns:
         A stuck dict {"status": "stuck", "stuck_type": "verify", "reason": <tail>} on
-        non-zero return, or None on success or when verify_cmd is None.
+        non-zero return (unless win32 benign cleanup), or None on success or when verify_cmd is None.
     """
     if verify_cmd is None:
         return None
@@ -161,9 +247,13 @@ def _run_verify_gate(project_root: Path, verify_cmd: str | None) -> dict | None:
             **run_kwargs,
         )
         if result.returncode != 0:
-            output = (result.stdout + result.stderr).strip()
+            output = result.stdout + result.stderr
+            # On Windows, check if this is a benign cleanup-race with no test failure
+            if sys.platform == "win32" and _is_benign_windows_cleanup(output):
+                return None
             # Use last 2000 characters of the output
-            reason = output[-2000:] if len(output) > 2000 else output
+            output_stripped = output.strip()
+            reason = output_stripped[-2000:] if len(output_stripped) > 2000 else output_stripped
             return {
                 "status": "stuck",
                 "stuck_type": "verify",
@@ -260,6 +350,9 @@ def finalize_from_output(
     snapshot_path: Path | None = None,
     session_id: str | None = None,
     verify_cmd: str | None = None,
+    nits_only: bool = False,
+    status_path: Path | None = None,
+    nits_scope: str | None = None,
 ) -> int:
     """Read sub-agent output and finalize.
 
@@ -274,6 +367,9 @@ def finalize_from_output(
         snapshot_path=snapshot_path,
         session_id=session_id,
         verify_cmd=verify_cmd,
+        nits_only=nits_only,
+        status_path=status_path,
+        nits_scope=nits_scope,
     )
 
 
@@ -316,6 +412,9 @@ def _forward_output(
     snapshot_path: Path | None = None,
     session_id: str | None = None,
     verify_cmd: str | None = None,
+    nits_only: bool = False,
+    status_path: Path | None = None,
+    nits_scope: str | None = None,
 ) -> int:
     """Extract the last JSON object containing a 'status' key from output.
 
@@ -325,6 +424,9 @@ def _forward_output(
     falling back to the literal ``"unknown"`` for backwards compatibility with callers that don't pass it.
     When verify_cmd is not None, runs it before emitting any success; if the command fails,
     demotes the success to stuck/verify with the command's output in reason.
+    When nits_only is True and status_path and nits_scope are not None, on the parsed-success
+    emit path (where a fixer's own reported status == "success" is about to be printed),
+    adds "nits_applied": True to the dict and writes a nits-fixed-<scope> marker to the status file.
     """
     parsed = _extract_status_json(output)
     if parsed is not None:
@@ -357,6 +459,11 @@ def _forward_output(
                         "session_id": session_id or parsed.get("session_id"),
                     }))
                     return 0
+
+            # On the parsed-success emit path, handle nits-only marker and flag
+            if nits_only and status_path and nits_scope:
+                parsed["nits_applied"] = True
+                _status.append_phase(status_path, f"nits-fixed-{nits_scope}", _timestamp.now_utc_iso())
 
         result = _subprocess_util.run(
             ["git", "rev-parse", "HEAD"],

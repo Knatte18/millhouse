@@ -52,7 +52,8 @@ Load the **mill-receiving-review** skill before reading any finding in `<REVIEW_
    - Add the file to the relevant batch file first.
    - Commit the plan edit (`plan: extend <batch-name> refs for <short reason>`).
    - Then make the code change.
-7. If a finding cannot be fixed without revising the plan, report `{"status":"stuck","stuck_type":"logic","reason":"plan conflict: <finding title>"}` (note the exact prefix).
+7. If a BLOCKING finding requires a change you can demonstrate cannot pass its own test (e.g., an in-process test of a detached-spawn / os.Executable() path, or a demand contradicting a deliberate in-repo convention), you MUST NOT silently apply the change and report success. Instead, return `{"status":"stuck","stuck_type":"logic","reason":"physically unsatisfiable: <explanation>; cf. <in-repo analog>"}` describing the contradiction and citing the in-repo precedent. This prevents knowingly-failing tests from being reported as success.
+8. If a finding cannot be fixed without revising the plan, report `{"status":"stuck","stuck_type":"logic","reason":"plan conflict: <finding title>"}` (note the exact prefix).
 
 ## Verify
 
@@ -62,6 +63,8 @@ After all fixes are committed, run every non-null `verify:` command from every b
 - After **<SELF_FIX_ROUNDS>** failing self-fix attempts for the same batch, stop and report `stuck`.
 
 If all `verify:` commands are null, skip straight to Report.
+
+**Critical:** Do not report `success` while any test is failing or timing out. Every `verify:` command must exit with code 0. If you report success but a test remains failing, the system will automatically demote the report to `stuck/verify`.
 
 ## Report
 

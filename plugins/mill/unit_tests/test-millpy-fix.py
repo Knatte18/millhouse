@@ -200,6 +200,24 @@ class TestMillpyFix(unittest.TestCase):
         status_path = self.tmp_path / "_mill" / "status.md"
 
         captured = {}
+        call_count = [0]  # Use list to allow mutation in nested function
+
+        def mock_subprocess_run(argv, **kwargs):
+            # Track git rev-parse calls to return different values (start_sha vs final HEAD)
+            if argv[0:2] == ["git", "rev-parse"]:
+                call_count[0] += 1
+                # First call (start_sha): return "abc1234"
+                # Second call (final HEAD check): return "def5678" to simulate a commit was made
+                if call_count[0] == 1:
+                    return subprocess.CompletedProcess(
+                        args=argv, returncode=0, stdout="abc1234\n", stderr=""
+                    )
+                else:
+                    return subprocess.CompletedProcess(
+                        args=argv, returncode=0, stdout="def5678\n", stderr=""
+                    )
+            # All other calls use the standard mock
+            return self.mock_subprocess_run.return_value
 
         def mock_run(prompt_text, *, model, effort, session_id, resume, cwd, timeout):
             captured["prompt_text"] = prompt_text
@@ -207,15 +225,19 @@ class TestMillpyFix(unittest.TestCase):
             return ('{"status":"success","commit_sha":"abc","session_id":"fake"}\n', "fake-session")
 
         with unittest.mock.patch.object(
-            millpy_fix._implementer_claude, "run",
-            side_effect=mock_run,
+            millpy_fix._subprocess_util, "run",
+            side_effect=mock_subprocess_run,
         ):
-            rc, out = self._run_main([
-                "--scope", "batch",
-                "--batch-name", "test-batch",
-                "--review-file", str(self.review_file),
-                "--round", "1",
-            ])
+            with unittest.mock.patch.object(
+                millpy_fix._implementer_claude, "run",
+                side_effect=mock_run,
+            ):
+                rc, out = self._run_main([
+                    "--scope", "batch",
+                    "--batch-name", "test-batch",
+                    "--review-file", str(self.review_file),
+                    "--round", "1",
+                ])
 
         self.assertEqual(rc, 0)
         data = json.loads(out.strip().splitlines()[-1])
@@ -264,6 +286,24 @@ class TestMillpyFix(unittest.TestCase):
         status_path = self.tmp_path / "_mill" / "status.md"
 
         captured = {}
+        call_count = [0]  # Use list to allow mutation in nested function
+
+        def mock_subprocess_run(argv, **kwargs):
+            # Track git rev-parse calls to return different values (start_sha vs final HEAD)
+            if argv[0:2] == ["git", "rev-parse"]:
+                call_count[0] += 1
+                # First call (start_sha): return "abc1234"
+                # Second call (final HEAD check): return "def5678" to simulate a commit was made
+                if call_count[0] == 1:
+                    return subprocess.CompletedProcess(
+                        args=argv, returncode=0, stdout="abc1234\n", stderr=""
+                    )
+                else:
+                    return subprocess.CompletedProcess(
+                        args=argv, returncode=0, stdout="def5678\n", stderr=""
+                    )
+            # All other calls use the standard mock
+            return self.mock_subprocess_run.return_value
 
         def mock_run(prompt_text, *, model, effort, session_id, resume, cwd, timeout):
             captured["prompt_text"] = prompt_text
@@ -271,14 +311,18 @@ class TestMillpyFix(unittest.TestCase):
             return ('{"status":"success","commit_sha":"abc","session_id":"fake"}\n', "fake-session")
 
         with unittest.mock.patch.object(
-            millpy_fix._implementer_claude, "run",
-            side_effect=mock_run,
+            millpy_fix._subprocess_util, "run",
+            side_effect=mock_subprocess_run,
         ):
-            rc, out = self._run_main([
-                "--scope", "holistic",
-                "--review-file", str(self.review_file),
-                "--round", "1",
-            ])
+            with unittest.mock.patch.object(
+                millpy_fix._implementer_claude, "run",
+                side_effect=mock_run,
+            ):
+                rc, out = self._run_main([
+                    "--scope", "holistic",
+                    "--review-file", str(self.review_file),
+                    "--round", "1",
+                ])
 
         self.assertEqual(rc, 0)
         data = json.loads(out.strip().splitlines()[-1])
@@ -346,35 +390,49 @@ class TestMillpyFix(unittest.TestCase):
         self.assertEqual(data["stuck_type"], "transient")
 
     def test_is_windows_lock_error_helper(self):
-        """Unit test for _is_windows_lock_error helper with various inputs."""
-        # Test message patterns
+        """Unit test for _is_windows_lock_error helper with various inputs.
+
+        Tests both the structured __cause__ winerror=32 check and the textual
+        match for Windows file-locking signatures (distinct from cleanup-race signatures).
+        """
+        # Test message patterns that match lock-error signatures (not cleanup-race)
         self.assertTrue(
             millpy_fix._is_windows_lock_error(millpy_fix._llm_claude.LLMError("failed: WinError 32: file in use"))
         )
         self.assertTrue(
-            millpy_fix._is_windows_lock_error(millpy_fix._llm_claude.LLMError("the process cannot access the file"))
+            millpy_fix._is_windows_lock_error(millpy_fix._llm_claude.LLMError("winerror 32"))
+        )
+        self.assertTrue(
+            millpy_fix._is_windows_lock_error(millpy_fix._llm_claude.LLMError("process cannot access the file"))
         )
         self.assertTrue(
             millpy_fix._is_windows_lock_error(millpy_fix._llm_claude.LLMError("being used by another process"))
         )
 
-        # Test non-matching message
+        # Test cleanup-race signature (unlinkat) does NOT match lock-error helper
+        self.assertFalse(
+            millpy_fix._is_windows_lock_error(millpy_fix._llm_claude.LLMError("error: unlinkat ... Access is denied"))
+        )
+
+        # Test non-matching message (no lock-error signature, no winerror 32)
         self.assertFalse(
             millpy_fix._is_windows_lock_error(millpy_fix._llm_claude.LLMError("timeout after 60s"))
         )
 
-        # Test OSError __cause__ with winerror=32
+        # Test OSError __cause__ with winerror=32 (structured check, takes precedence)
         e_with_cause_32 = millpy_fix._llm_claude.LLMError("file error")
         cause_32 = OSError("Cannot access file")
         cause_32.winerror = 32
         e_with_cause_32.__cause__ = cause_32
         self.assertTrue(millpy_fix._is_windows_lock_error(e_with_cause_32))
 
-        # Test OSError __cause__ with winerror != 32 (access denied)
+        # Test OSError __cause__ with winerror != 32 (access denied, winerror 5)
+        # Exception message is "file error" which has no lock-error signature text
         e_with_cause_5 = millpy_fix._llm_claude.LLMError("file error")
         cause_5 = OSError("Access denied")
         cause_5.winerror = 5
         e_with_cause_5.__cause__ = cause_5
+        # "file error" has no lock-error signature, so returns False
         self.assertFalse(millpy_fix._is_windows_lock_error(e_with_cause_5))
 
     def test_windows_lock_error_routes_to_verify(self):
@@ -705,6 +763,425 @@ class TestMillpyFixBriefSizeGuard(unittest.TestCase):
         self.assertEqual(rc, 0)
         # Verify that _implementer_claude.run was called (the guard did not fire)
         mock_run.assert_called_once()
+
+    def test_nits_only_flag_appends_marker_and_flag(self):
+        """
+        Test that --nits-only flag causes nits_applied: true to be added to the envelope
+        and a nits-fixed-<scope> marker to be appended to the status timeline.
+        """
+        status_path = self.tmp_path / "_mill" / "status.md"
+
+        captured = {}
+        call_count = [0]
+
+        def mock_subprocess_run(argv, **kwargs):
+            if argv[0:2] == ["git", "rev-parse"]:
+                call_count[0] += 1
+                if call_count[0] == 1:
+                    return subprocess.CompletedProcess(
+                        args=argv, returncode=0, stdout="abc1234\n", stderr=""
+                    )
+                else:
+                    return subprocess.CompletedProcess(
+                        args=argv, returncode=0, stdout="def5678\n", stderr=""
+                    )
+            return subprocess.CompletedProcess(
+                args=argv, returncode=0, stdout="abc1234\n", stderr=""
+            )
+
+        def mock_run(prompt_text, *, model, effort, session_id, resume, cwd, timeout):
+            captured["prompt_text"] = prompt_text
+            captured["resume"] = resume
+            return ('{"status":"success","commit_sha":"abc","session_id":"fake"}\n', "fake-session")
+
+        with unittest.mock.patch.object(
+            millpy_fix._subprocess_util, "run",
+            side_effect=mock_subprocess_run,
+        ):
+            with unittest.mock.patch.object(
+                millpy_fix._implementer_claude, "run",
+                side_effect=mock_run,
+            ):
+                rc, out = self._run_main([
+                    "--scope", "batch",
+                    "--batch-name", "test-batch",
+                    "--review-file", str(self.review_file),
+                    "--round", "1",
+                    "--nits-only",
+                ])
+
+        self.assertEqual(rc, 0)
+        # Parse the output JSON
+        data = json.loads(out.strip().splitlines()[-1])
+        self.assertEqual(data["status"], "success")
+        # Check that nits_applied flag was added
+        self.assertTrue(data.get("nits_applied"), "nits_applied flag must be True when --nits-only is used")
+
+        # Check that nits-fixed-test-batch marker was appended to timeline
+        full = millpy_fix._status.read_full(status_path)
+        self.assertTrue(
+            any(e.startswith("nits-fixed-test-batch") for e in full["timeline"]),
+            f"Expected nits-fixed-test-batch in timeline, got: {full['timeline']}",
+        )
+
+    def test_holistic_derived_verify_cmd_two_batches_failing(self):
+        """Holistic with two batch verify commands, combined exits non-zero -> stuck/verify."""
+        # Create plan with two batches, each with a verify command
+        plan_dir = self.tmp_path / "_mill" / "plan"
+        overview_text = (
+            "# Plan: Test Task\n\n"
+            "```yaml\n"
+            "task: Test Task\n"
+            "slug: test-slug\n"
+            "approved: true\n"
+            "```\n\n"
+            "## Batch Index\n\n"
+            "```yaml\n"
+            "batches:\n"
+            "  - name: batch1\n"
+            "    file: 01-batch1.md\n"
+            "    depends-on: []\n"
+            "    verify: 'exit 1'\n"
+            "  - name: batch2\n"
+            "    file: 02-batch2.md\n"
+            "    depends-on: [1]\n"
+            "    verify: 'exit 0'\n"
+            "```\n"
+        )
+        (plan_dir / "00-overview.md").write_text(overview_text, encoding="utf-8")
+        (plan_dir / "01-batch1.md").write_text("# Batch: batch1\n\n```yaml\nverify: exit 1\n```\n", encoding="utf-8")
+        (plan_dir / "02-batch2.md").write_text("# Batch: batch2\n\n```yaml\nverify: exit 0\n```\n", encoding="utf-8")
+
+        captured = {}
+        rev_parse_calls = [0]
+
+        def mock_run(prompt_text, *, model, effort, session_id, resume, cwd, timeout):
+            captured["prompt_text"] = prompt_text
+            # Initialize git repo in the temp directory if not already done
+            git_dir = self.tmp_path / ".git"
+            if not git_dir.exists():
+                subprocess.run(
+                    ["git", "-C", str(self.tmp_path), "init"],
+                    check=True, capture_output=True,
+                )
+                subprocess.run(
+                    ["git", "-C", str(self.tmp_path), "config", "user.email", "test@test.com"],
+                    check=True, capture_output=True,
+                )
+                subprocess.run(
+                    ["git", "-C", str(self.tmp_path), "config", "user.name", "Test"],
+                    check=True, capture_output=True,
+                )
+                # Create an initial commit
+                (self.tmp_path / "README.md").write_text("initial", encoding="utf-8")
+                subprocess.run(
+                    ["git", "-C", str(self.tmp_path), "add", "README.md"],
+                    check=True, capture_output=True,
+                )
+                subprocess.run(
+                    ["git", "-C", str(self.tmp_path), "commit", "-m", "initial"],
+                    check=True, capture_output=True,
+                )
+            # Make a commit so HEAD != start_sha
+            subprocess.run(
+                ["git", "-C", str(self.tmp_path), "commit", "--allow-empty", "-m", "fixer commit"],
+                check=True, capture_output=True,
+            )
+            return ('{"status":"success","commit_sha":"abc","session_id":"fake"}\n', "fake-session")
+
+        # Use the real subprocess.run for the verify gate so it actually executes the commands
+        def mock_subprocess_run_with_verify(argv, **kwargs):
+            # All git commands return mocked results
+            if argv[0] == "git":
+                if argv[1:3] == ["rev-parse", "HEAD"]:
+                    rev_parse_calls[0] += 1
+                    if rev_parse_calls[0] == 1:
+                        # First call: start_sha
+                        return subprocess.CompletedProcess(
+                            args=argv, returncode=0, stdout="abc1234567890abcdef1234567890abcdef123456\n", stderr=""
+                        )
+                    else:
+                        # Subsequent calls: final HEAD (after mock_run makes a commit)
+                        result = subprocess.run(argv, capture_output=True, text=True, **kwargs)
+                        return result
+                elif argv[1:4] == ["config", "--global", "--get"]:
+                    # Mock git config calls
+                    return subprocess.CompletedProcess(
+                        args=argv, returncode=0, stdout="Test User\n", stderr=""
+                    )
+                else:
+                    # Other git commands
+                    return subprocess.CompletedProcess(
+                        args=argv, returncode=0, stdout="", stderr=""
+                    )
+            # For all other subprocess calls, including verify commands, use real subprocess
+            # This allows the real _run_verify_gate to execute shell commands properly
+            # Make sure to capture output
+            return subprocess.run(argv, capture_output=True, text=True, **kwargs)
+
+        with unittest.mock.patch.object(
+            millpy_fix._subprocess_util, "run",
+            side_effect=mock_subprocess_run_with_verify,
+        ):
+            with unittest.mock.patch.object(
+                millpy_fix._implementer_claude, "run",
+                side_effect=mock_run,
+            ):
+                rc, out = self._run_main([
+                    "--scope", "holistic",
+                    "--review-file", str(self.review_file),
+                    "--round", "1",
+                ])
+
+        self.assertEqual(rc, 0)
+        data = json.loads(out.strip().splitlines()[-1])
+        self.assertEqual(data["status"], "stuck", f"expected stuck status, got {data}")
+        self.assertEqual(data["stuck_type"], "verify", f"expected verify stuck_type, got {data}")
+
+    def test_holistic_derived_verify_cmd_two_batches_passing(self):
+        """Holistic with two batch verify commands, combined exits 0 -> success preserved."""
+        # Create plan with two batches, each with a verify command
+        plan_dir = self.tmp_path / "_mill" / "plan"
+        overview_text = (
+            "# Plan: Test Task\n\n"
+            "```yaml\n"
+            "task: Test Task\n"
+            "slug: test-slug\n"
+            "approved: true\n"
+            "```\n\n"
+            "## Batch Index\n\n"
+            "```yaml\n"
+            "batches:\n"
+            "  - name: batch1\n"
+            "    file: 01-batch1.md\n"
+            "    depends-on: []\n"
+            "    verify: 'exit 0'\n"
+            "  - name: batch2\n"
+            "    file: 02-batch2.md\n"
+            "    depends-on: [1]\n"
+            "    verify: 'exit 0'\n"
+            "```\n"
+        )
+        (plan_dir / "00-overview.md").write_text(overview_text, encoding="utf-8")
+        (plan_dir / "01-batch1.md").write_text("# Batch: batch1\n\n```yaml\nverify: exit 0\n```\n", encoding="utf-8")
+        (plan_dir / "02-batch2.md").write_text("# Batch: batch2\n\n```yaml\nverify: exit 0\n```\n", encoding="utf-8")
+
+        captured = {}
+        rev_parse_calls = [0]
+
+        def mock_run(prompt_text, *, model, effort, session_id, resume, cwd, timeout):
+            captured["prompt_text"] = prompt_text
+            # Initialize git repo in the temp directory if not already done
+            git_dir = self.tmp_path / ".git"
+            if not git_dir.exists():
+                subprocess.run(
+                    ["git", "-C", str(self.tmp_path), "init"],
+                    check=True, capture_output=True,
+                )
+                subprocess.run(
+                    ["git", "-C", str(self.tmp_path), "config", "user.email", "test@test.com"],
+                    check=True, capture_output=True,
+                )
+                subprocess.run(
+                    ["git", "-C", str(self.tmp_path), "config", "user.name", "Test"],
+                    check=True, capture_output=True,
+                )
+                # Create an initial commit
+                (self.tmp_path / "README.md").write_text("initial", encoding="utf-8")
+                subprocess.run(
+                    ["git", "-C", str(self.tmp_path), "add", "README.md"],
+                    check=True, capture_output=True,
+                )
+                subprocess.run(
+                    ["git", "-C", str(self.tmp_path), "commit", "-m", "initial"],
+                    check=True, capture_output=True,
+                )
+            # Make a commit so HEAD != start_sha
+            subprocess.run(
+                ["git", "-C", str(self.tmp_path), "commit", "--allow-empty", "-m", "fixer commit"],
+                check=True, capture_output=True,
+            )
+            return ('{"status":"success","commit_sha":"abc","session_id":"fake"}\n', "fake-session")
+
+        # Use the real subprocess.run for the verify gate so it actually executes the commands
+        def mock_subprocess_run_with_verify(argv, **kwargs):
+            # All git commands return mocked results
+            if argv[0] == "git":
+                if argv[1:3] == ["rev-parse", "HEAD"]:
+                    rev_parse_calls[0] += 1
+                    if rev_parse_calls[0] == 1:
+                        # First call: start_sha
+                        return subprocess.CompletedProcess(
+                            args=argv, returncode=0, stdout="abc1234567890abcdef1234567890abcdef123456\n", stderr=""
+                        )
+                    else:
+                        # Subsequent calls: final HEAD (after mock_run makes a commit)
+                        result = subprocess.run(argv, capture_output=True, text=True, **kwargs)
+                        return result
+                elif argv[1:4] == ["config", "--global", "--get"]:
+                    # Mock git config calls
+                    return subprocess.CompletedProcess(
+                        args=argv, returncode=0, stdout="Test User\n", stderr=""
+                    )
+                else:
+                    # Other git commands
+                    return subprocess.CompletedProcess(
+                        args=argv, returncode=0, stdout="", stderr=""
+                    )
+            # For all other subprocess calls, including verify commands, use real subprocess
+            # This allows the real _run_verify_gate to execute shell commands properly
+            # Make sure to capture output
+            return subprocess.run(argv, capture_output=True, text=True, **kwargs)
+
+        with unittest.mock.patch.object(
+            millpy_fix._subprocess_util, "run",
+            side_effect=mock_subprocess_run_with_verify,
+        ):
+            with unittest.mock.patch.object(
+                millpy_fix._implementer_claude, "run",
+                side_effect=mock_run,
+            ):
+                rc, out = self._run_main([
+                    "--scope", "holistic",
+                    "--review-file", str(self.review_file),
+                    "--round", "1",
+                ])
+
+        self.assertEqual(rc, 0)
+        data = json.loads(out.strip().splitlines()[-1])
+        self.assertEqual(data["status"], "success", f"expected success status, got {data}")
+
+    def test_holistic_all_null_verifies(self):
+        """Holistic with all verify: null -> no gate, success preserved."""
+        # Create plan with two batches, both with null verify
+        plan_dir = self.tmp_path / "_mill" / "plan"
+        overview_text = (
+            "# Plan: Test Task\n\n"
+            "```yaml\n"
+            "task: Test Task\n"
+            "slug: test-slug\n"
+            "approved: true\n"
+            "```\n\n"
+            "## Batch Index\n\n"
+            "```yaml\n"
+            "batches:\n"
+            "  - name: batch1\n"
+            "    file: 01-batch1.md\n"
+            "    depends-on: []\n"
+            "    verify: null\n"
+            "  - name: batch2\n"
+            "    file: 02-batch2.md\n"
+            "    depends-on: [1]\n"
+            "    verify: null\n"
+            "```\n"
+        )
+        (plan_dir / "00-overview.md").write_text(overview_text, encoding="utf-8")
+        (plan_dir / "01-batch1.md").write_text("# Batch: batch1\n", encoding="utf-8")
+        (plan_dir / "02-batch2.md").write_text("# Batch: batch2\n", encoding="utf-8")
+
+        captured = {}
+        rev_parse_calls = [0]
+
+        def mock_run(prompt_text, *, model, effort, session_id, resume, cwd, timeout):
+            captured["prompt_text"] = prompt_text
+            # Initialize git repo in the temp directory if not already done
+            git_dir = self.tmp_path / ".git"
+            if not git_dir.exists():
+                subprocess.run(
+                    ["git", "-C", str(self.tmp_path), "init"],
+                    check=True, capture_output=True,
+                )
+                subprocess.run(
+                    ["git", "-C", str(self.tmp_path), "config", "user.email", "test@test.com"],
+                    check=True, capture_output=True,
+                )
+                subprocess.run(
+                    ["git", "-C", str(self.tmp_path), "config", "user.name", "Test"],
+                    check=True, capture_output=True,
+                )
+                # Create an initial commit
+                (self.tmp_path / "README.md").write_text("initial", encoding="utf-8")
+                subprocess.run(
+                    ["git", "-C", str(self.tmp_path), "add", "README.md"],
+                    check=True, capture_output=True,
+                )
+                subprocess.run(
+                    ["git", "-C", str(self.tmp_path), "commit", "-m", "initial"],
+                    check=True, capture_output=True,
+                )
+            # Make a commit so HEAD != start_sha
+            subprocess.run(
+                ["git", "-C", str(self.tmp_path), "commit", "--allow-empty", "-m", "fixer commit"],
+                check=True, capture_output=True,
+            )
+            return ('{"status":"success","commit_sha":"abc","session_id":"fake"}\n', "fake-session")
+
+        # Use the real subprocess.run for the verify gate so it actually executes the commands
+        def mock_subprocess_run_with_verify(argv, **kwargs):
+            # All git commands return mocked results
+            if argv[0] == "git":
+                if argv[1:3] == ["rev-parse", "HEAD"]:
+                    rev_parse_calls[0] += 1
+                    if rev_parse_calls[0] == 1:
+                        # First call: start_sha
+                        return subprocess.CompletedProcess(
+                            args=argv, returncode=0, stdout="abc1234567890abcdef1234567890abcdef123456\n", stderr=""
+                        )
+                    else:
+                        # Subsequent calls: final HEAD (after mock_run makes a commit)
+                        result = subprocess.run(argv, capture_output=True, text=True, **kwargs)
+                        return result
+                elif argv[1:4] == ["config", "--global", "--get"]:
+                    # Mock git config calls
+                    return subprocess.CompletedProcess(
+                        args=argv, returncode=0, stdout="Test User\n", stderr=""
+                    )
+                else:
+                    # Other git commands
+                    return subprocess.CompletedProcess(
+                        args=argv, returncode=0, stdout="", stderr=""
+                    )
+            # For all other subprocess calls, including verify commands, use real subprocess
+            # This allows the real _run_verify_gate to execute shell commands properly
+            # Make sure to capture output
+            return subprocess.run(argv, capture_output=True, text=True, **kwargs)
+
+        with unittest.mock.patch.object(
+            millpy_fix._subprocess_util, "run",
+            side_effect=mock_subprocess_run_with_verify,
+        ):
+            with unittest.mock.patch.object(
+                millpy_fix._implementer_claude, "run",
+                side_effect=mock_run,
+            ):
+                rc, out = self._run_main([
+                    "--scope", "holistic",
+                    "--review-file", str(self.review_file),
+                    "--round", "1",
+                ])
+
+        self.assertEqual(rc, 0)
+        data = json.loads(out.strip().splitlines()[-1])
+        self.assertEqual(data["status"], "success", f"expected success status, got {data}")
+
+    def test_brief_contains_unsatisfiable_demand_instruction(self):
+        """Assert fixer briefs contain unsatisfiable-demand instruction."""
+        # Read the brief templates
+        batch_brief_path = Path(__file__).resolve().parent.parent / "templates" / "fixer-batch-brief.md"
+        holistic_brief_path = Path(__file__).resolve().parent.parent / "templates" / "fixer-holistic-brief.md"
+
+        batch_brief = batch_brief_path.read_text(encoding="utf-8")
+        holistic_brief = holistic_brief_path.read_text(encoding="utf-8")
+
+        # Check batch brief contains unsatisfiable-demand instruction
+        self.assertIn("unsatisfiable", batch_brief.lower(), "fixer-batch-brief.md must contain unsatisfiable-demand instruction")
+        self.assertIn("stuck_type: logic", batch_brief, "fixer-batch-brief.md must mention stuck_type: logic")
+        self.assertIn("cannot pass", batch_brief.lower(), "fixer-batch-brief.md must reference cannot pass")
+
+        # Check holistic brief contains unsatisfiable-demand instruction
+        self.assertIn("unsatisfiable", holistic_brief.lower(), "fixer-holistic-brief.md must contain unsatisfiable-demand instruction")
+        self.assertIn("stuck_type: logic", holistic_brief, "fixer-holistic-brief.md must mention stuck_type: logic")
+        self.assertIn("cannot pass", holistic_brief.lower(), "fixer-holistic-brief.md must reference cannot pass")
 
 
 if __name__ == "__main__":

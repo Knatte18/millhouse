@@ -732,14 +732,200 @@ def main() -> int:
             print(f"FAIL: case 22 ({exc}) captured={captured!r}", file=sys.stderr)
             errors += 1
 
-    # Case 23: inferred success with formatter drift auto-committed
-    # Note: This is a complex integration test that requires the formatter drift
-    # detection logic to work end-to-end. We skip it as Cases 15-18 test the
-    # components independently and pass. The full integration is better tested
-    # with e2e tests when formatter drift actually occurs in a real batch.
-    print("SKIP: case 23 (formatter drift integration test - components tested separately in cases 15-18)")
+    # Case 23: win32 + cleanup signature + no FAIL marker -> success (benign race)
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        base_sha = _setup_fixture(project_root)
+        snapshot_path = project_root / "_mill" / ".cleanliness-snapshot-test.txt"
+        _cleanliness.capture_snapshot(project_root, snapshot_path)
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "--allow-empty", "-m", "second"],
+            check=True, capture_output=True,
+        )
+        new_head = subprocess.run(
+            ["git", "-C", str(project_root), "rev-parse", "HEAD"],
+            check=True, capture_output=True, text=True,
+        ).stdout.strip()
+        # Verify command that outputs cleanup signature (unlinkat ... Access is denied) and fails
+        verify_cmd = "echo 'error: unlinkat ...\\X.test.exe: Access is denied' && exit 1"
+        agent_output = '{"status":"success","commit_sha":"abc","session_id":"test-session"}\n'
+        # Monkeypatch sys.platform to win32
+        original_platform = sys.platform
+        try:
+            sys.platform = "win32"
+            rc, captured = _capture_stdout(
+                lambda: _forward_output(
+                    agent_output,
+                    project_root,
+                    start_sha=base_sha,
+                    snapshot_path=snapshot_path,
+                    verify_cmd=verify_cmd,
+                )
+            )
+            data = json.loads(captured.strip())
+            assert data["status"] == "success", f"expected status=success (benign cleanup on win32), got {data}"
+            assert data["commit_sha"] == new_head, f"expected commit_sha={new_head}, got {data}"
+            print("PASS: case 23 - win32 + cleanup signature + no FAIL -> success (benign race)")
+        except Exception as exc:
+            print(f"FAIL: case 23 ({exc}) captured={captured!r}", file=sys.stderr)
+            errors += 1
+        finally:
+            sys.platform = original_platform
 
-    # Case 24: #500 regression - parsed success but no content commit (HEAD == start_sha)
+    # Case 24: win32 + cleanup signature BUT --- FAIL line present -> stays stuck/verify
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        base_sha = _setup_fixture(project_root)
+        snapshot_path = project_root / "_mill" / ".cleanliness-snapshot-test.txt"
+        _cleanliness.capture_snapshot(project_root, snapshot_path)
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "--allow-empty", "-m", "second"],
+            check=True, capture_output=True,
+        )
+        new_head = subprocess.run(
+            ["git", "-C", str(project_root), "rev-parse", "HEAD"],
+            check=True, capture_output=True, text=True,
+        ).stdout.strip()
+        # Verify command that outputs both cleanup signature AND --- FAIL
+        verify_cmd = "echo 'error: unlinkat ...\\X.test.exe: Access is denied' && echo '--- FAIL: test_foo' && exit 1"
+        agent_output = '{"status":"success","commit_sha":"abc","session_id":"test-session"}\n'
+        original_platform = sys.platform
+        try:
+            sys.platform = "win32"
+            rc, captured = _capture_stdout(
+                lambda: _forward_output(
+                    agent_output,
+                    project_root,
+                    start_sha=base_sha,
+                    snapshot_path=snapshot_path,
+                    verify_cmd=verify_cmd,
+                )
+            )
+            data = json.loads(captured.strip())
+            assert data["status"] == "stuck", f"expected status=stuck (real failure present), got {data}"
+            assert data["stuck_type"] == "verify", f"expected stuck_type=verify, got {data}"
+            print("PASS: case 24 - win32 + cleanup signature + --- FAIL present -> stuck/verify")
+        except Exception as exc:
+            print(f"FAIL: case 24 ({exc}) captured={captured!r}", file=sys.stderr)
+            errors += 1
+        finally:
+            sys.platform = original_platform
+
+    # Case 24b: win32 + cleanup signature BUT bare FAIL line present -> stays stuck/verify
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        base_sha = _setup_fixture(project_root)
+        snapshot_path = project_root / "_mill" / ".cleanliness-snapshot-test.txt"
+        _cleanliness.capture_snapshot(project_root, snapshot_path)
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "--allow-empty", "-m", "second"],
+            check=True, capture_output=True,
+        )
+        new_head = subprocess.run(
+            ["git", "-C", str(project_root), "rev-parse", "HEAD"],
+            check=True, capture_output=True, text=True,
+        ).stdout.strip()
+        # Verify command that outputs cleanup signature AND bare FAIL (as in go test output)
+        verify_cmd = "echo 'error: unlinkat ...\\X.test.exe: Access is denied' && echo 'FAIL\tgithub.com/test/...' && exit 1"
+        agent_output = '{"status":"success","commit_sha":"abc","session_id":"test-session"}\n'
+        original_platform = sys.platform
+        try:
+            sys.platform = "win32"
+            rc, captured = _capture_stdout(
+                lambda: _forward_output(
+                    agent_output,
+                    project_root,
+                    start_sha=base_sha,
+                    snapshot_path=snapshot_path,
+                    verify_cmd=verify_cmd,
+                )
+            )
+            data = json.loads(captured.strip())
+            assert data["status"] == "stuck", f"expected status=stuck (real failure present), got {data}"
+            assert data["stuck_type"] == "verify", f"expected stuck_type=verify, got {data}"
+            print("PASS: case 24b - win32 + cleanup signature + bare FAIL present -> stuck/verify")
+        except Exception as exc:
+            print(f"FAIL: case 24b ({exc}) captured={captured!r}", file=sys.stderr)
+            errors += 1
+        finally:
+            sys.platform = original_platform
+
+    # Case 25: win32 + ordinary non-zero (no cleanup signature) -> stuck/verify
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        base_sha = _setup_fixture(project_root)
+        snapshot_path = project_root / "_mill" / ".cleanliness-snapshot-test.txt"
+        _cleanliness.capture_snapshot(project_root, snapshot_path)
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "--allow-empty", "-m", "second"],
+            check=True, capture_output=True,
+        )
+        new_head = subprocess.run(
+            ["git", "-C", str(project_root), "rev-parse", "HEAD"],
+            check=True, capture_output=True, text=True,
+        ).stdout.strip()
+        # Verify command that fails with non-cleanup output
+        verify_cmd = "echo 'something went wrong' && exit 1"
+        agent_output = '{"status":"success","commit_sha":"abc","session_id":"test-session"}\n'
+        original_platform = sys.platform
+        try:
+            sys.platform = "win32"
+            rc, captured = _capture_stdout(
+                lambda: _forward_output(
+                    agent_output,
+                    project_root,
+                    start_sha=base_sha,
+                    snapshot_path=snapshot_path,
+                    verify_cmd=verify_cmd,
+                )
+            )
+            data = json.loads(captured.strip())
+            assert data["status"] == "stuck", f"expected status=stuck, got {data}"
+            assert data["stuck_type"] == "verify", f"expected stuck_type=verify, got {data}"
+            print("PASS: case 25 - win32 + ordinary non-zero (no signature) -> stuck/verify")
+        except Exception as exc:
+            print(f"FAIL: case 25 ({exc}) captured={captured!r}", file=sys.stderr)
+            errors += 1
+        finally:
+            sys.platform = original_platform
+
+    # Case 26: non-win32 + cleanup signature output -> stuck/verify (platform gate)
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        base_sha = _setup_fixture(project_root)
+        snapshot_path = project_root / "_mill" / ".cleanliness-snapshot-test.txt"
+        _cleanliness.capture_snapshot(project_root, snapshot_path)
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "--allow-empty", "-m", "second"],
+            check=True, capture_output=True,
+        )
+        # Verify command with cleanup signature
+        verify_cmd = "echo 'error: unlinkat ...\\X.test.exe: Access is denied' && exit 1"
+        agent_output = '{"status":"success","commit_sha":"abc","session_id":"test-session"}\n'
+        original_platform = sys.platform
+        try:
+            # Force non-win32 (e.g., linux)
+            sys.platform = "linux"
+            rc, captured = _capture_stdout(
+                lambda: _forward_output(
+                    agent_output,
+                    project_root,
+                    start_sha=base_sha,
+                    snapshot_path=snapshot_path,
+                    verify_cmd=verify_cmd,
+                )
+            )
+            data = json.loads(captured.strip())
+            assert data["status"] == "stuck", f"expected status=stuck (non-win32 sees failure), got {data}"
+            assert data["stuck_type"] == "verify", f"expected stuck_type=verify, got {data}"
+            print("PASS: case 26 - non-win32 + cleanup signature -> stuck/verify (platform gate)")
+        except Exception as exc:
+            print(f"FAIL: case 26 ({exc}) captured={captured!r}", file=sys.stderr)
+            errors += 1
+        finally:
+            sys.platform = original_platform
+
+    # Case 27: #500 regression - parsed success but no content commit (HEAD == start_sha)
     # The verify gate must pass so we can test the no-commit guard independently
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
@@ -766,10 +952,10 @@ def main() -> int:
             assert "no content commit" in data.get("reason", "").lower(), f"expected 'no content commit' in reason, got {data}"
             print("PASS: #500 - parsed success with no content commit (HEAD == start_sha) -> stuck/logic")
         except Exception as exc:
-            print(f"FAIL: case 24 ({exc}) captured={captured!r}", file=sys.stderr)
+            print(f"FAIL: case 27 ({exc}) captured={captured!r}", file=sys.stderr)
             errors += 1
 
-    # Case 25: #499/#502 regression (a) - API error markers classified as transient
+    # Case 28: #499/#502 regression (a) - API error markers classified as transient
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         _setup_fixture(project_root)
@@ -786,10 +972,10 @@ def main() -> int:
             assert data["stuck_type"] == "transient", f"expected stuck_type=transient, got {data}"
             print("PASS: #499/#502 (a) - raw API error -> stuck/transient")
         except Exception as exc:
-            print(f"FAIL: case 25 ({exc}) captured={captured!r}", file=sys.stderr)
+            print(f"FAIL: case 28 ({exc}) captured={captured!r}", file=sys.stderr)
             errors += 1
 
-    # Case 26: #499/#502 regression (b) - plain garbage + HEAD == start_sha still yields logic
+    # Case 29: #499/#502 regression (b) - plain garbage + HEAD == start_sha still yields logic
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         base_sha = _setup_fixture(project_root)
@@ -811,7 +997,7 @@ def main() -> int:
             assert data["stuck_type"] == "logic", f"expected stuck_type=logic, got {data}"
             print("PASS: #499/#502 (b) - plain garbage + HEAD == start_sha -> stuck/logic (not transient)")
         except Exception as exc:
-            print(f"FAIL: case 26 ({exc}) captured={captured!r}", file=sys.stderr)
+            print(f"FAIL: case 29 ({exc}) captured={captured!r}", file=sys.stderr)
             errors += 1
 
     if errors:
