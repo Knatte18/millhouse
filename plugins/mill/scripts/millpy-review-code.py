@@ -62,6 +62,15 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
     parser.add_argument(
+        "--prior-notes",
+        default=None,
+        help=(
+            "Path to a file containing prior-round non-blocking findings digest. "
+            "Used to feed context to the reviewer about settled non-issues. "
+            "Omit for round 1."
+        ),
+    )
+    parser.add_argument(
         "--stage",
         choices=["prepare", "finalize", "full"],
         default="full",
@@ -124,10 +133,11 @@ def main(argv: list[str] | None = None) -> int:
     if args.stage == "prepare":
         try:
             scope = args.batch or "holistic"
+            prior_notes_path = Path(args.prior_notes) if args.prior_notes else None
             prepare_result = prepare(
                 cfg, slug, scope=args.batch, mill_dir=mill_dir, project_root=project_root,
                 wiki_root=wiki_root, git_root=git_root, extra_files=extra_files,
-                max_rounds=args.max_rounds,
+                max_rounds=args.max_rounds, prior_notes=prior_notes_path,
             )
             briefs_dir = _paths.resolve_task_path(project_root, "_mill/briefs/")
             brief_path = _agent_dispatch.write_brief(
@@ -172,6 +182,7 @@ def main(argv: list[str] | None = None) -> int:
             return 1
     else:  # full
         try:
+            prior_notes_path = Path(args.prior_notes) if args.prior_notes else None
             result = run(
                 cfg,
                 slug,
@@ -182,6 +193,7 @@ def main(argv: list[str] | None = None) -> int:
                 max_rounds=args.max_rounds,
                 batch_name=args.batch,
                 extra_files=extra_files,
+                prior_notes=prior_notes_path,
             )
             print(json.dumps(result.to_dict()))
             return 0
