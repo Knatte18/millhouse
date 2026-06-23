@@ -98,11 +98,11 @@ def main(argv: list[str] | None = None) -> int:
     from _review_code import prepare, finalize, run
 
     try:
-        project_root = Path.cwd()
+        project_root = _paths.resolve_hub_path()
         git_root = _paths.resolve_git_root()
         mill_dir = project_root / ".millhouse"
         wiki_root = resolve_wiki_path(project_root)
-        cfg = load_config(resolve_hub_path(), mill_dir)
+        cfg = load_config(project_root, mill_dir)
     except (ReviewError, ValueError, SystemExit) as exc:
         print_error_envelope("code", str(exc))
         return 1
@@ -129,6 +129,14 @@ def main(argv: list[str] | None = None) -> int:
     except ReviewError as exc:
         print_error_envelope("code", str(exc))
         return 1
+
+    # Guard for per-batch reviews: ensure status.md exists before calling review backend
+    if args.batch is not None:
+        try:
+            _paths.require_status_path(project_root, cfg)
+        except _paths.TaskHubError as e:
+            print(str(e), file=sys.stderr)
+            return 1
 
     if args.stage == "prepare":
         try:

@@ -116,6 +116,8 @@ __all__ = [
     "ActiveWorktreeSlugMismatch",
     "resolve_task_path",
     "status_path",
+    "require_status_path",
+    "TaskHubError",
     "sanitize_filename_component",
 ]
 
@@ -355,6 +357,12 @@ def resolve_hub_relative_path(worktree_root: Path, hub_subpath: str) -> Path:
     return worktree_root / sub
 
 
+class TaskHubError(Exception):
+    """
+    Raised when a task hub cannot be resolved or status file is missing.
+    """
+
+
 class ActiveWorktreeNotFound(RuntimeError):
     """Raised when the expected worktree directory does not exist."""
 
@@ -546,6 +554,29 @@ def status_path(worktree_root: Path, cfg: dict) -> Path:
     if "status_md" not in cfg["paths"]:
         raise KeyError(_msg)
     return resolve_task_path(worktree_root, cfg["paths"]["status_md"])
+
+
+def require_status_path(project_root: Path, cfg: dict) -> Path:
+    """
+    Compute the status.md path and raise TaskHubError if the file does not exist.
+
+    Args:
+        project_root: Absolute path to the task hub directory.
+        cfg: Loaded mill config dict.
+
+    Returns:
+        Path to the status.md file if it exists.
+
+    Raises:
+        TaskHubError: When the status.md file does not exist.
+    """
+    sp = status_path(project_root, cfg)
+    if not sp.exists():
+        raise TaskHubError(
+            f"mill: task status file not found at {sp} -- "
+            f"run this CLI from the task hub dir ({project_root})"
+        )
+    return sp
 
 
 def sanitize_filename_component(name: str) -> str:

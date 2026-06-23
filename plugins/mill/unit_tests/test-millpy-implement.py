@@ -110,6 +110,10 @@ class TestMillpyImplement(unittest.TestCase):
             millpy_implement._paths, "resolve_git_root",
             return_value=self.tmp_path,
         )
+        self.mock_resolve_hub_path = _p(
+            millpy_implement._paths, "resolve_hub_path",
+            return_value=self.tmp_path,
+        )
         self.mock_resolve_wiki = _p(
             millpy_implement._paths, "resolve_wiki_path",
             return_value=self.tmp_path / "wiki",
@@ -178,6 +182,20 @@ class TestMillpyImplement(unittest.TestCase):
     def test_1_initial_dispatch_success(self):
         """Initial dispatch: pending batch -> success JSON, batch state running."""
         status_path = self.tmp_path / "task" / "status.md"
+
+        # Route rev-parse HEAD to differ between the start_sha capture (first call)
+        # and the post-implementation HEAD, so the no-content-commit guard in
+        # _forward_output sees HEAD != start_sha and accepts the success report.
+        rev_parse_calls = []
+
+        def routing_fn(argv, **kw):
+            if argv[1] == "rev-parse":
+                rev_parse_calls.append(1)
+                sha = "start000" if len(rev_parse_calls) == 1 else "end11111"
+                return subprocess.CompletedProcess(args=argv, returncode=0, stdout=sha + "\n", stderr="")
+            return subprocess.CompletedProcess(args=argv, returncode=0, stdout="abc1234\n", stderr="")
+
+        self.mock_subprocess_run.side_effect = routing_fn
 
         with unittest.mock.patch.object(
             millpy_implement._implementer_claude, "run",

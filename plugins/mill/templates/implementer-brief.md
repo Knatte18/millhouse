@@ -41,6 +41,8 @@ Read the batch file first, then the overview's Shared Decisions. Do not read oth
 
 ## Implementation discipline
 
+**Complete the ENTIRE batch in a single turn. Never end your turn between cards. A per-card commit is NOT a stopping point. Only stop after every `## Cards` entry is committed, `## Verify` has run (or was skipped because `verify: null`), and the JSON report has been emitted. Ending a turn mid-batch -- even after a successful commit -- is a protocol violation that causes the orchestrator to classify the batch as stuck.**
+
 1. Work through `## Cards` in order. For each card:
    - Read every file in `Context:` and `Edits:` before editing.
    - Edit / create the files in `Edits:` / `Creates:`.
@@ -59,6 +61,10 @@ Read the batch file first, then the overview's Shared Decisions. Do not read oth
 
 Never weaken, relax, exclude, downgrade, or delete test assertions, conformance checks, or allowlist entries to make verify pass. When `verify:` fails because a test or harness is itself buggy, fix the test, fix the harness, or fix the code under test. If the bug cannot be fixed, report `stuck_type: logic` -- never weaken coverage to go green.
 
+During any migration or refactor, the post-change test set MUST include every pre-change test. Dropping, skipping, renaming away, or omitting any pre-existing test -- even temporarily -- is forbidden. If a pre-existing test conflicts with the new design, fix the test to match the new design; do not delete it.
+
+Never use Shared-Decision-violating shortcuts to make verify pass. For example, if the plan's Shared Decision requires a plain text edit to a config file, do NOT use `git remote set-url` or any other side-channel to achieve the same effect -- apply the edit the plan specifies. Shortcuts that bypass the Shared Decision corrupt the design record and will be caught as BLOCKING findings in code review.
+
 ## Verify
 
 After every card in the batch is committed, run the batch's `verify:` command (from the batch file's frontmatter). If it fails:
@@ -69,6 +75,8 @@ After every card in the batch is committed, run the batch's `verify:` command (f
 If `verify: null` in the frontmatter, there is nothing to run; skip straight to Report.
 
 ## Report
+
+**Pre-report self-check (mandatory before emitting success JSON):** Run `git -C <PROJECT_ROOT> status --porcelain --untracked-files=no`. If it shows ANY tracked in-scope modification, commit it via the `git-commit` skill (or report `stuck_type: logic`) -- never report `success` with an uncommitted tracked change. The finalize gate now mechanically rejects a success report when in-scope files are dirty, so an uncommitted change will demote your report to stuck regardless.
 
 Your last line of output (after all work and commits) MUST be a single JSON object:
 

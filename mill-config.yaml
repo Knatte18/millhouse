@@ -51,7 +51,7 @@ roles:
     diff_scope_threshold: 0.25
   implementer:
     self_fix_rounds: 2
-    model: haiku
+    model: sonnethigh
   fixer:
     model: haiku
 notify:

@@ -128,7 +128,7 @@ def main(argv=None) -> int:
         return 1
 
     # Common setup
-    project_root = Path.cwd()
+    project_root = _paths.resolve_hub_path()
     mill_dir = project_root / ".millhouse"
 
     git_root = _paths.resolve_git_root()
@@ -154,7 +154,11 @@ def main(argv=None) -> int:
         print(str(e), file=sys.stderr)
         return 1
 
-    status_path = _paths.status_path(project_root, cfg)
+    try:
+        status_path = _paths.require_status_path(project_root, cfg)
+    except _paths.TaskHubError as e:
+        print(str(e), file=sys.stderr)
+        return 1
     full = _status.read_full(status_path)
     task_title = full["yaml"].get("task", slug)
     branch = _status.read_branch(status_path, cfg=cfg, slug=slug)
