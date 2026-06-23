@@ -1001,6 +1001,47 @@ def main() -> int:
         test_resolve_task_path()
         test_status_path()
 
+        # require_status_path — validates status.md existence with actionable error
+        cfg = {"paths": {"status_md": "_mill/status.md"}}
+
+        # Case 1: status.md exists -> returns path, no exception
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "_mill").mkdir()
+            (root / "_mill" / "status.md").write_text("test", encoding="utf-8")
+            got = _paths.require_status_path(root, cfg)
+            assert got == root / "_mill" / "status.md", f"case 1: got {got}"
+            assert got.exists(), "case 1: returned path must exist"
+        print("PASS: require_status_path case 1: file exists -> returns path")
+
+        # Case 2: status.md missing -> raises TaskHubError with actionable message
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            try:
+                _paths.require_status_path(root, cfg)
+                raise AssertionError("case 2: expected TaskHubError, got none")
+            except _paths.TaskHubError as exc:
+                msg = str(exc)
+                # Check for both the missing path and the hub dir in the message
+                assert str(root / "_mill" / "status.md") in msg, \
+                    f"case 2: message missing status path: {msg!r}"
+                assert str(root) in msg, \
+                    f"case 2: message missing hub dir: {msg!r}"
+                assert "task status file not found" in msg.lower(), \
+                    f"case 2: message missing error context: {msg!r}"
+                assert "--" in msg, "case 2: message should use ASCII em-dash replacement"
+        print("PASS: require_status_path case 2: file missing -> raises TaskHubError with actionable message")
+
+        # Case 3: status.md via compat fallback (task/) -> returns path, no exception
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "task").mkdir()
+            (root / "task" / "status.md").write_text("compat", encoding="utf-8")
+            got = _paths.require_status_path(root, cfg)
+            assert got == root / "task" / "status.md", f"case 3: got {got}"
+            assert got.exists(), "case 3: returned path must exist"
+        print("PASS: require_status_path case 3: compat fallback (task/) -> returns path")
+
         # Test resolve_git_root with start argument
         # Test 1: resolve_git_root(start) on a real git repo
         with tempfile.TemporaryDirectory() as tmp:
