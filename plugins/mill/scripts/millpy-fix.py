@@ -53,14 +53,8 @@ def _is_windows_lock_error(e: Exception) -> bool:
     if isinstance(cause, OSError) and getattr(cause, "winerror", None) == 32:
         return True
 
-    # Check for file-locking signature patterns in error message
-    error_str = str(e).lower()
-    lock_error_patterns = [
-        "winerror 32",
-        "process cannot access",
-        "being used by another process",
-    ]
-    return any(pattern in error_str for pattern in lock_error_patterns)
+    # Delegate string-signature match to shared helper
+    return _is_benign_windows_cleanup(str(e))
 
 
 def main(argv=None) -> int:
