@@ -57,7 +57,7 @@ review with `--skip-check wiki-config-mutation`.
   - `plugins/mill/unit_tests/test-config.py`
 - **Creates:** none
 - **Deletes:** none
-- **Requirements:** Add a unit test to `test-config.py` that loads each shipped config file with `yaml.safe_load` and asserts `roles.implementer.model == "sonnethigh"` for both `plugins/mill/templates/mill-config.yaml` and the hub `mill-config.yaml`. Resolve the repo root the way the existing tests in this file do (follow the file's existing path-resolution convention; do not hard-code an absolute path). This guards against a silent revert to `haiku` and against the template/hub pair drifting out of sync. Follow the file's `run-all.py` discovery convention.
+- **Requirements:** Add a unit test to `test-config.py` that loads each shipped config file with `yaml.safe_load` and asserts `roles.implementer.model == "sonnethigh"` for both `plugins/mill/templates/mill-config.yaml` and the hub `mill-config.yaml`. Define it as a new `test_*` function (e.g. `test_implementer_model_default_is_sonnethigh`) following the file's per-function convention, and **append the function name to the `tests = [...]` list in `main()`** (around line ~1202) — that list is how this file's runner discovers tests; a function not in the list never runs. Resolve the repo root the way the existing tests in this file do (follow the file's existing path-resolution convention; do not hard-code an absolute path). This guards against a silent revert to `haiku` and against the template/hub pair drifting out of sync.
 - **Commit:** `test(config): assert implementer model default is sonnethigh in template and hub`
 
 ## Batch Tests
