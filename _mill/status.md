@@ -58,5 +58,7 @@ batches:
     start_sha: 39ce042adc4c77269840403a8c056d6cbc2d5a7a
     commit_sha: 9fbfdbd85eee8fdcc07cddd1a4eaecf4b247c9d1
   - name: scope-violation-cleanup
-    state: pending
+    state: running
+    implementer_session: 99729e60-f335-40eb-8c5d-07fc50998b74
+    start_sha: d6d6da8d3b837ce47dda5e99fdaafe9092e1db23
 ```
