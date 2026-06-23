@@ -39,7 +39,7 @@ import _status
 import _timestamp
 from _implementer_common import (
     _forward_output,
-    _has_windows_cleanup_signature,
+    _has_windows_lock_error_signature,
     emit_prepare,
     finalize_from_output,
 )
@@ -59,7 +59,7 @@ def _is_windows_lock_error(e: Exception) -> bool:
         return True
 
     # Delegate string-signature match to shared helper
-    return _has_windows_cleanup_signature(str(e))
+    return _has_windows_lock_error_signature(str(e))
 
 
 def main(argv=None) -> int:

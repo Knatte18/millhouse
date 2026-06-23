@@ -12,13 +12,34 @@ import _timestamp
 from pathlib import Path
 
 
-def _has_windows_cleanup_signature(text: str) -> bool:
+def _has_windows_lock_error_signature(text: str) -> bool:
+    """
+    Check if text contains a Windows file-locking error signature (case-insensitive).
+
+    Detects file-locking error patterns: winerror 32, process cannot access,
+    being used by another process.
+
+    Args:
+        text: A string to check (e.g., exception message).
+
+    Returns:
+        True if any lock-error signature is present; False otherwise.
+    """
+    text_lower = text.lower()
+    lock_error_patterns = [
+        "winerror 32",
+        "process cannot access",
+        "being used by another process",
+    ]
+    return any(pattern in text_lower for pattern in lock_error_patterns)
+
+
+def _has_windows_cleanup_race_signature(text: str) -> bool:
     """
     Check if text contains a Windows cleanup-race signature (case-insensitive).
 
-    Detects Windows file-system access patterns that appear in cleanup races and
-    lock errors: unlinkat, access is denied, winerror 5, winerror 32,
-    process cannot access, being used by another process.
+    Detects cleanup-race patterns from tempdir cleanup: unlinkat, access is denied,
+    winerror 5, winerror 32.
 
     Args:
         text: A string to check (e.g., exception message or command output).
@@ -32,8 +53,6 @@ def _has_windows_cleanup_signature(text: str) -> bool:
         "access is denied",
         "winerror 5",
         "winerror 32",
-        "process cannot access",
-        "being used by another process",
     ]
     return any(sig in text_lower for sig in cleanup_signatures)
 
@@ -44,7 +63,7 @@ def _is_benign_windows_cleanup(output: str) -> bool:
 
     Returns True only when both conditions hold:
     1. The output contains a Windows cleanup-race signature (case-insensitive any of:
-       unlinkat, access is denied, winerror 5, winerror 32, process cannot access, being used by another process)
+       unlinkat, access is denied, winerror 5, winerror 32)
     2. The output contains NO test-failure markers (case-insensitive none of:
        fail, panic:, build failed)
 
@@ -59,7 +78,7 @@ def _is_benign_windows_cleanup(output: str) -> bool:
     output_lower = output.lower()
 
     # Check for cleanup-race signatures
-    has_cleanup_signature = _has_windows_cleanup_signature(output)
+    has_cleanup_signature = _has_windows_cleanup_race_signature(output)
 
     # Check for test-failure markers (more specific patterns to avoid false positives)
     failure_markers = [
