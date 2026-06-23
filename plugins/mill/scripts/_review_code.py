@@ -188,6 +188,7 @@ def prepare(
     git_root: Path,
     extra_files: list[Path] | None = None,
     max_rounds: int | None = None,
+    prior_notes: Path | None = None,
 ) -> dict:
     """Prepare a code review by rendering the prompt for a single scope.
 
@@ -195,6 +196,7 @@ def prepare(
         scope: Batch name (e.g., "01-setup") or None for holistic.
         extra_files: Additional source files to include in the bulk.
         max_rounds: Override the configured round cap for this scope.
+        prior_notes: Path to a file containing prior-round non-blocking findings digest.
 
     Returns:
         Dict with keys: prompt_text, model, round, reviews_dir, scope.
@@ -307,6 +309,13 @@ def prepare(
         project_root=project_root,
     )
 
+    # Build prior-nonblocking digest: read file if provided and readable, else "(none)".
+    # This is ALWAYS set so render_prompt does not raise KeyError on the <PRIOR_NONBLOCKING> token.
+    if prior_notes is not None and prior_notes.is_file():
+        prior_nonblocking = prior_notes.read_text(encoding="utf-8")
+    else:
+        prior_nonblocking = "(none)"
+
     prompt_kwargs = {
         "task_title": load_task_title(project_root, wiki_root, cfg, slug),
         "tool_rule": tool_rule,
@@ -314,6 +323,7 @@ def prepare(
         "constraints": read_constraints_md(project_root),
         "round": round_n,
         "reviewer_model": reviewer_name,
+        "prior_nonblocking": prior_nonblocking,
     }
     if scope:
         prompt_kwargs["batch_name"] = scope
@@ -412,11 +422,13 @@ def run(
     max_rounds: int | None = None,
     batch_name: str | None = None,
     extra_files: list[Path] | None = None,
+    prior_notes: Path | None = None,
 ) -> ReviewResult:
     """Review the code produced for a task.
 
     ``batch_name`` selects per-batch vs. holistic mode. ``extra_files`` are
-    additional source files to bulk this round.
+    additional source files to bulk this round. ``prior_notes`` is a path to
+    a file containing prior-round non-blocking findings digest.
     """
     with worktree_snapshot_guard(project_root, expected_paths=[cfg["paths"]["reviews_dir"]]):
         # Check if review is disabled
@@ -443,7 +455,7 @@ def run(
         prepare_result = prepare(
             cfg, slug, scope=batch_name, mill_dir=mill_dir, project_root=project_root,
             wiki_root=wiki_root, git_root=git_root, extra_files=extra_files,
-            max_rounds=max_rounds,
+            max_rounds=max_rounds, prior_notes=prior_notes,
         )
         prompt_text = prepare_result["prompt_text"]
         round_n = prepare_result["round"]
