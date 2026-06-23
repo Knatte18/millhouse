@@ -328,13 +328,15 @@ For each round `N` from 1 to `roles.code-review.batch.rounds`:
 4. Branch on verdict:
    - `APPROVE` — If `nit_count > 0` in the envelope, dispatch one cold-start NIT-only fix pass:
    
-     If `dispatch == agent`: follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" above) with `<cli> = millpy-fix.py` and `<args> = --scope batch --batch-name <batch_name> --review-file <review-file-abs-path> --round <N>`.
+     **NEVER skip the NIT-fix pass, even under time or performance pressure. 'Non-blocking' does NOT mean optional -- deferred nits re-surface as BLOCKING in later rounds and cost more total rounds. Only nits a reviewer explicitly marks 'no action required' may be left.**
+   
+     If `dispatch == agent`: follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" above) with `<cli> = millpy-fix.py` and `<args> = --scope batch --batch-name <batch_name> --review-file <review-file-abs-path> --round <N> --nits-only`.
      
      If `dispatch == subprocess` or `psmux`: via `millpy-bg`:
      ```bash
      PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-bg.py" \
          --slug fix-<batch_name>-r<N>-nits -- \
-         "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-fix.py" --scope batch --batch-name <batch_name> --review-file <review-file-abs-path> --round <N>
+         "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-fix.py" --scope batch --batch-name <batch_name> --review-file <review-file-abs-path> --round <N> --nits-only
      ```
      Poll `cat <log-path>` until `[mill-bg] EXIT` appears, but on each iteration also run a liveness check:
      ```bash
@@ -623,13 +625,15 @@ For each round `H` from 1 to `max_holistic_rounds`:
 
 4. On `APPROVE`: If `nit_count > 0` in the envelope, dispatch one cold-start NIT-only fix pass:
    
-   If `dispatch == agent`: follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" above) with `<cli> = millpy-fix.py` and `<args> = --scope holistic --review-file <review-file-abs-path> --round {H}`.
+   **NEVER skip the NIT-fix pass, even under time or performance pressure. 'Non-blocking' does NOT mean optional -- deferred nits re-surface as BLOCKING in later rounds and cost more total rounds. Only nits a reviewer explicitly marks 'no action required' may be left.**
+   
+   If `dispatch == agent`: follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" above) with `<cli> = millpy-fix.py` and `<args> = --scope holistic --review-file <review-file-abs-path> --round {H} --nits-only`.
    
    If `dispatch == subprocess` or `psmux` (via `millpy-bg`):
    ```bash
    PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-bg.py" \
        --slug fix-holistic-r{H}-nits -- \
-       "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-fix.py" --scope holistic --review-file <review-file-abs-path> --round {H}
+       "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-fix.py" --scope holistic --review-file <review-file-abs-path> --round {H} --nits-only
    ```
    Poll `cat <log-path>` until `[mill-bg] EXIT` appears, but on each iteration also run a liveness check:
    ```bash
@@ -661,6 +665,20 @@ For each round `H` from 1 to `max_holistic_rounds`:
    On user choice of "3) Block": invoke the holistic cleanup block, then halt and leave for manual resolution. Wait for user choice before proceeding.
 
 ## Handoff
+
+**Nit-enforcement gate.** Check for approved scopes with unfixed nits:
+
+```python
+from pathlib import Path
+import _nit_gate
+unfixed_nits = _nit_gate.compute_unfixed_nits(worktree_root, reviews_dir, status_path)
+```
+
+If `unfixed_nits` is non-empty, halt with:
+`BLOCKED: unfixed nits in scope(s): <scope-list> -- run the NIT-fix pass before completing`
+where `<scope-list>` is the joined list of scope names. Do NOT set `phase: done` when the gate fires; the task remains in its current phase so the operator can run the NIT-fix pass and re-run `/mill-go`.
+
+If the list is empty, proceed to terminal cleanliness gate.
 
 **Terminal cleanliness gate.** Resolve the parent branch and check for in-scope uncommitted changes:
 
