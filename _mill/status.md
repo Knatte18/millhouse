@@ -1,10 +1,10 @@
 # Status
 
 ```yaml
-phase: discussed
+phase: planning
 slug: mill-review-and-verify-quality
 branch: hanf/mill-review-and-verify-quality
-plan: null
+plan: _mill/plan
 parent: main
 task: Fix nit-enforcement gate, Windows verify false-positive, reviewer oscillation, and scope-violation handling
 task_description: |
@@ -17,4 +17,5 @@ task_description: |
 discussing  '2026-06-23T08:07:49Z'
 discussion-fix-r2  '2026-06-23T08:40:28Z'
 discussed  '2026-06-23T08:41:03Z'
+planning  '2026-06-23T08:48:09Z'
 ```
