@@ -527,10 +527,11 @@ def main() -> int:
 
     # render_prompt: prior_nonblocking token with digest content
     try:
+        tool_rule = build_tool_rule("bulk")
         prompt = render_prompt(
             "review-code-batch",
             task_title="Test Task",
-            tool_rule="test rule",
+            tool_rule=tool_rule,
             artefact_section="test section",
             constraints="test constraints",
             round=2,
@@ -552,10 +553,11 @@ def main() -> int:
 
     # render_prompt: prior_nonblocking defaults to (none) on round 1
     try:
+        tool_rule = build_tool_rule("bulk")
         prompt_r1 = render_prompt(
             "review-code-batch",
             task_title="Test Task",
-            tool_rule="test rule",
+            tool_rule=tool_rule,
             artefact_section="test section",
             constraints="test constraints",
             round=1,
