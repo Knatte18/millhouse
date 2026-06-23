@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-implementer-and-dispatch-quality
 branch: hanf/mill-implementer-and-dispatch-quality
 plan: _mill/plan
@@ -23,4 +23,19 @@ plan-review-r2  '2026-06-23T08:57:11Z'
 plan-fix-r2  '2026-06-23T08:57:11Z'
 plan-fix-r3  '2026-06-23T09:01:02Z'
 planned  '2026-06-23T09:01:22Z'
+implementing  '2026-06-23T09:15:43Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: hub-cwd-resolution
+    state: pending
+  - name: implementer-model-tier
+    state: pending
+  - name: workflow-memory-note
+    state: pending
+  - name: implementer-finalize-contract
+    state: pending
 ```
