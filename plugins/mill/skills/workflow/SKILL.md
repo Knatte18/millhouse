@@ -29,7 +29,7 @@ Use the appropriate skill based on the current activity:
 
 ## Wiki mutations
 
-Wiki mutations go through `_client` calls (`set_phase`, `upsert_task`, `merge_tasks`); the daemon serializes all writes and pushes automatically. For multi-step atomic operations (e.g. remove + upsert + set phase together), use `_client.merge_tasks`. Never write wiki files via raw `Edit` / `Write` — the daemon owns the wiki repo. Per-task working state (`status.md`, `discussion.md`, `plan/`, `reviews/`) is NOT in the wiki — it lives on the task branch. `Home.md`, `_Sidebar.md`, and `proposal-*.md` are daemon-rendered derived files.
+Wiki mutations go through `_client` calls (`set_phase`, `upsert_task`, `merge_tasks`); the daemon serializes all writes and pushes automatically. For multi-step atomic operations (e.g. remove + upsert + set phase together), use `_client.merge_tasks`. Never write wiki files via raw `Edit` / `Write` — the daemon owns the wiki repo. Per-task working state (`status.md`, `discussion.md`, `plan/`, `reviews/`) is NOT in the wiki — it lives on the task branch. `Home.md`, `_Sidebar.md`, and `proposal-*.md` are daemon-rendered derived files. Harness file-memory (`memory/`) is ephemeral in task worktrees and is discarded when the worktree is removed on merge/cleanup; durable notes belong in versioned files that merge to main -- `CLAUDE.md`, `_codeguide/`, or code comments -- not in harness memory.
 
 ---
 
