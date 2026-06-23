@@ -103,6 +103,11 @@ def main(argv=None) -> int:
         default=None,
         help="Session ID from prepare envelope (for finalize stage).",
     )
+    parser.add_argument(
+        "--nits-only",
+        action="store_true",
+        help="Fix nits only (write nits-fixed marker if successful).",
+    )
     args = parser.parse_args(argv)
 
     # Validate mutual constraints
@@ -204,6 +209,7 @@ def main(argv=None) -> int:
                 batch_file = plan_base / batch_entry["file"]
                 batch_frontmatter = _plan_dag._read_batch_frontmatter(batch_file)
                 verify_cmd = batch_frontmatter.get("verify")
+        nits_scope = args.batch_name if args.scope == "batch" else "holistic"
         return finalize_from_output(
             Path(args.agent_output),
             project_root,
@@ -211,6 +217,9 @@ def main(argv=None) -> int:
             snapshot_path=fixer_snapshot_path if fixer_snapshot_path.exists() else None,
             session_id=args.session_id,
             verify_cmd=verify_cmd,
+            nits_only=args.nits_only,
+            status_path=status_path,
+            nits_scope=nits_scope,
         )
 
     # Branch on scope (for prepare and full stages)
@@ -368,7 +377,17 @@ def main(argv=None) -> int:
         print(str(e), file=sys.stderr)
         return 1
 
-    return _forward_output(output, project_root, start_sha=start_sha, session_id=session_id, verify_cmd=verify_cmd)
+    nits_scope = args.batch_name if args.scope == "batch" else "holistic"
+    return _forward_output(
+        output,
+        project_root,
+        start_sha=start_sha,
+        session_id=session_id,
+        verify_cmd=verify_cmd,
+        nits_only=args.nits_only,
+        status_path=status_path,
+        nits_scope=nits_scope,
+    )
 
 
 if __name__ == "__main__":

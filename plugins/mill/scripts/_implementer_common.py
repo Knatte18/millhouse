@@ -6,7 +6,9 @@ import subprocess
 import sys
 import _agent_dispatch
 import _cleanliness
+import _status
 import _subprocess_util
+import _timestamp
 from pathlib import Path
 
 
@@ -309,6 +311,9 @@ def finalize_from_output(
     snapshot_path: Path | None = None,
     session_id: str | None = None,
     verify_cmd: str | None = None,
+    nits_only: bool = False,
+    status_path: Path | None = None,
+    nits_scope: str | None = None,
 ) -> int:
     """Read sub-agent output and finalize.
 
@@ -323,6 +328,9 @@ def finalize_from_output(
         snapshot_path=snapshot_path,
         session_id=session_id,
         verify_cmd=verify_cmd,
+        nits_only=nits_only,
+        status_path=status_path,
+        nits_scope=nits_scope,
     )
 
 
@@ -365,6 +373,9 @@ def _forward_output(
     snapshot_path: Path | None = None,
     session_id: str | None = None,
     verify_cmd: str | None = None,
+    nits_only: bool = False,
+    status_path: Path | None = None,
+    nits_scope: str | None = None,
 ) -> int:
     """Extract the last JSON object containing a 'status' key from output.
 
@@ -374,6 +385,9 @@ def _forward_output(
     falling back to the literal ``"unknown"`` for backwards compatibility with callers that don't pass it.
     When verify_cmd is not None, runs it before emitting any success; if the command fails,
     demotes the success to stuck/verify with the command's output in reason.
+    When nits_only is True and status_path and nits_scope are not None, on the parsed-success
+    emit path (where a fixer's own reported status == "success" is about to be printed),
+    adds "nits_applied": True to the dict and writes a nits-fixed-<scope> marker to the status file.
     """
     parsed = _extract_status_json(output)
     if parsed is not None:
@@ -406,6 +420,11 @@ def _forward_output(
                         "session_id": session_id or parsed.get("session_id"),
                     }))
                     return 0
+
+            # On the parsed-success emit path, handle nits-only marker and flag
+            if nits_only and status_path and nits_scope:
+                parsed["nits_applied"] = True
+                _status.append_phase(status_path, f"nits-fixed-{nits_scope}", _timestamp.now_utc_iso())
 
         result = _subprocess_util.run(
             ["git", "rev-parse", "HEAD"],
