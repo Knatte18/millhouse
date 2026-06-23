@@ -11,22 +11,27 @@ depends-on: [1]
 
 ## Batch Scope
 
-Fixes #515 — make the "always fix nits" rule structurally enforced instead of prose-only. Adds a `--nits-only` flag to `millpy-fix.py` that, on a successful nit-only pass, writes a `nits-fixed-<scope>` status row and emits `nits_applied: true`. Adds a new `_nit_gate.py` helper that recomputes, from the final review file per scope plus the status timeline, which approved scopes had nits but no fix marker. Wires that gate into mill-go's Handoff (block `phase: done` on unfixed nits) and strengthens both APPROVE-with-nits branches with non-skip language. Depends on batch 1 because it also edits `millpy-fix.py` and `test-millpy-fix.py` (shared-file write ordering). External interface consumed downstream: none (batches 3-5 do not touch the nit machinery).
+Fixes #515 — make the "always fix nits" rule structurally enforced instead of prose-only. Adds a `--nits-only` flag to `millpy-fix.py` that, on a successful nit-only pass, writes a `nits-fixed-<scope>` status row and emits `nits_applied: true`. Adds a new `_nit_gate.py` helper that recomputes, from the final review file per scope plus the status timeline, which approved scopes had nits but no fix marker. Wires that gate into mill-go's Handoff (block `phase: done` on unfixed nits) and strengthens both APPROVE-with-nits branches with non-skip language. The marker/flag emission lives inside `_implementer_common._forward_output` (the single success-emit point), so it fires in both agent (`--stage finalize`) and subprocess/psmux dispatch. Depends on batch 1 because it also edits `millpy-fix.py`, `_implementer_common.py`, and `test-millpy-fix.py` (shared-file write ordering). External interface consumed downstream: none (batches 3-5 do not touch the nit machinery).
 
 ## Cards
 
-### Card 4: --nits-only flag + nits-fixed marker in millpy-fix
+### Card 4: --nits-only flag + nits-fixed marker (emitted inside _forward_output)
 
 - **Context:**
   - `plugins/mill/scripts/_status.py`
   - `plugins/mill/scripts/_paths.py`
-  - `plugins/mill/scripts/_implementer_common.py`
 - **Edits:**
   - `plugins/mill/scripts/millpy-fix.py`
+  - `plugins/mill/scripts/_implementer_common.py`
 - **Creates:** none
 - **Deletes:** none
-- **Requirements:** Add a boolean `--nits-only` argument to `millpy-fix.py`'s argparse (alongside `--scope`, `--review-file`, `--round`). When `--nits-only` is set and the fix pass finalizes with `status == "success"`: (1) resolve `status_path = _paths.resolve_task_path(_paths.resolve_hub_path(), "_mill/status.md")`; (2) compute `scope = batch_name if scope == "batch" else "holistic"`; (3) call `_status.append_phase(status_path, f"nits-fixed-{scope}", _timestamp.now_utc_iso())`; (4) add `"nits_applied": True` to the JSON envelope before it is printed. The marker write must happen only on success, atomically before the final JSON print. Do NOT change behaviour when `--nits-only` is absent. Keep messages ASCII.
-- **Commit:** `feat(fix): --nits-only writes nits-fixed marker and nits_applied flag`
+- **Requirements:** The success verdict is emitted *inside* `_implementer_common._forward_output` (it owns the JSON print and may demote success→`stuck/verify`); `millpy-fix.main()` returns `finalize_from_output(...)`/`_forward_output(...)` directly and never sees the final status. So thread the nit behaviour into that function, not into `main()`:
+  1. Add a boolean `--nits-only` argument to `millpy-fix.py`'s argparse (alongside `--scope`, `--review-file`, `--round`).
+  2. Add two keyword-only params to BOTH `_forward_output(...)` and `finalize_from_output(...)` in `_implementer_common.py`: `nits_only: bool = False` and `status_path: Path | None = None` (the latter forwarded straight through `finalize_from_output` → `_forward_output`).
+  3. Inside `_forward_output`, at the single point where it is about to print a `status == "success"` envelope (i.e. NOT a demoted `stuck/*` path), when `nits_only` is True and `status_path` is not None: add `"nits_applied": True` to the dict before printing, and call `_status.append_phase(status_path, f"nits-fixed-{scope}", _timestamp.now_utc_iso())`. Derive `scope` from a new `nits_scope` param OR pass the already-formatted marker label in; pick the minimal shape (e.g. add `nits_scope: str | None = None` so the function writes `nits-fixed-<nits_scope>`). On any `stuck` outcome, write no marker and no flag.
+  4. In `millpy-fix.main()`, pass `nits_only=args.nits_only`, `status_path=status_path` (reuse the existing `status_path = _paths.status_path(project_root, cfg)` at line 146 — do NOT re-resolve via a hard-coded `"_mill/status.md"`), and `nits_scope = args.batch_name if args.scope == "batch" else "holistic"` into the call in BOTH the `--stage finalize` branch (via `finalize_from_output`) AND the full-stage dispatch (via `_forward_output`), so the marker fires under `dispatch == agent` (which uses `--stage finalize`) as well as subprocess/psmux.
+  Do NOT change behaviour when `--nits-only` is absent. Keep messages ASCII.
+- **Commit:** `feat(fix): --nits-only writes nits-fixed marker via _forward_output`
 
 ### Card 5: _nit_gate.compute_unfixed_nits helper
 
@@ -56,6 +61,7 @@ Fixes #515 — make the "always fix nits" rule structurally enforced instead of 
 
 - **Context:**
   - `plugins/mill/scripts/millpy-fix.py`
+  - `plugins/mill/scripts/_implementer_common.py`
   - `plugins/mill/scripts/_review_common.py`
 - **Edits:**
   - `plugins/mill/unit_tests/test-millpy-fix.py`
@@ -67,4 +73,4 @@ Fixes #515 — make the "always fix nits" rule structurally enforced instead of 
 
 ## Batch Tests
 
-`verify:` runs `test-nit-gate.py` (new) and `test-millpy-fix.py`. Scope matches the batch's code surface: `_nit_gate.py` and the `--nits-only` path in `millpy-fix.py`. The `mill-go/SKILL.md` edit has no runnable unit surface — it is validated by the plan reviewer. Key scenarios: the four gate cases (a)-(d) and the marker/flag emission.
+`verify:` runs `test-nit-gate.py` (new) and `test-millpy-fix.py`. Scope matches the batch's code surface: `_nit_gate.py`, the `--nits-only` path through `_forward_output`, and the marker. The `mill-go/SKILL.md` edit has no runnable unit surface — it is validated by the plan reviewer. Key scenarios: the four gate cases (a)-(d) and the marker/flag emission. Note: `verify:` (including the `--only test-nit-gate.py` term) runs only at batch completion, after every card in the batch has been implemented — so `test-nit-gate.py` always exists by the time `run-all.py --only` names it; it is never invoked mid-card.

@@ -23,8 +23,8 @@ Fixes #518a — the code reviewer re-escalates settled non-issues because it get
   - `plugins/mill/scripts/millpy-review-code.py`
 - **Creates:** none
 - **Deletes:** none
-- **Requirements:** Add an optional `--prior-notes <path>` argument to `millpy-review-code.py` (mirror the existing `--extra-file` argument's wiring). Pass its value through to `_review_code.prepare(...)` as a new `prior_notes` parameter (path or `None`). Do not change behaviour when the flag is absent.
-- **Commit:** `feat(review-code): add --prior-notes CLI argument`
+- **Requirements:** Add an optional `--prior-notes <path>` argument to `millpy-review-code.py` (mirror the existing `--extra-file` argument's wiring). Pass `args.prior_notes` (path or `None`) into BOTH dispatch branches: the `--stage prepare` branch's `prepare(...)` call AND the `--stage full` branch's `run(...)` call (around lines 127 and 175). The full/`run()` path is the dominant subprocess/psmux dispatch — omitting it there would silently drop the digest. Do not change behaviour when the flag is absent.
+- **Commit:** `feat(review-code): add --prior-notes CLI argument (prepare + run)`
 
 ### Card 12: thread prior_nonblocking into prepare() unconditionally
 
@@ -35,8 +35,8 @@ Fixes #518a — the code reviewer re-escalates settled non-issues because it get
   - `plugins/mill/scripts/_review_code.py`
 - **Creates:** none
 - **Deletes:** none
-- **Requirements:** In `_review_code.prepare()`, accept the new `prior_notes` parameter. Build the digest string: if `prior_notes` is a readable file, use its text; otherwise use the literal `"(none)"`. ALWAYS set `prompt_kwargs["prior_nonblocking"]` to that string (unconditionally — `render_prompt` raises `KeyError` on any unresolved `<TOKEN>` once the templates carry `<PRIOR_NONBLOCKING>`, so a missing default would crash round 1). The kwarg key `prior_nonblocking` maps to the `<PRIOR_NONBLOCKING>` template token via the existing upper-casing in `render_prompt`. Do not touch `_review_common.py`.
-- **Commit:** `feat(review-code): always supply prior_nonblocking digest to prompt`
+- **Requirements:** In `_review_code.prepare()`, add a keyword-only `prior_notes: Path | None = None` parameter. Build the digest string: if `prior_notes` is a readable file, use its text; otherwise use the literal `"(none)"`. ALWAYS set `prompt_kwargs["prior_nonblocking"]` to that string (unconditionally — `render_prompt` raises `KeyError` on any unresolved `<TOKEN>` once the templates carry `<PRIOR_NONBLOCKING>`, so a missing default would crash round 1). The kwarg key `prior_nonblocking` maps to the `<PRIOR_NONBLOCKING>` template token via the existing upper-casing in `render_prompt`. ALSO add the same `prior_notes: Path | None = None` keyword-only parameter to `_review_code.run(...)` (signature at line 404) and forward it to the `prepare(...)` call that `run()` makes internally — otherwise the `--stage full`/subprocess path never sees the digest. Do not touch `_review_common.py`.
+- **Commit:** `feat(review-code): thread prior_notes through prepare() and run()`
 
 ### Card 13: add <PRIOR_NONBLOCKING> section to code-review templates
 
