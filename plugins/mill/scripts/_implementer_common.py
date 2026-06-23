@@ -588,6 +588,13 @@ def _forward_output(
                                         gate_result["commit_sha"] = new_head
                                         print(json.dumps(gate_result))
                                         return 0
+                                    # Completeness gate: incomplete batch demotes to stuck/transient.
+                                    _comp = _batch_completeness_stuck(
+                                        project_root, start_sha, card_count, session_id
+                                    )
+                                    if _comp is not None:
+                                        print(json.dumps(_comp))
+                                        return 0
                                     # Emit success
                                     violations = _cleanliness.compute_scope_violations(
                                         project_root
@@ -633,6 +640,13 @@ def _forward_output(
                     if gate_result is not None:
                         gate_result["commit_sha"] = head
                         print(json.dumps(gate_result))
+                        return 0
+                    # Completeness gate: incomplete batch demotes to stuck/transient.
+                    _comp = _batch_completeness_stuck(
+                        project_root, start_sha, card_count, session_id
+                    )
+                    if _comp is not None:
+                        print(json.dumps(_comp))
                         return 0
                     violations = _cleanliness.compute_scope_violations(project_root)
                     if violations:
@@ -682,6 +696,13 @@ def _forward_output(
                     if gate_result is not None:
                         gate_result["commit_sha"] = head
                         print(json.dumps(gate_result))
+                        return 0
+                    # Completeness gate: incomplete batch demotes to stuck/transient.
+                    _comp = _batch_completeness_stuck(
+                        project_root, start_sha, card_count, session_id
+                    )
+                    if _comp is not None:
+                        print(json.dumps(_comp))
                         return 0
                     print(
                         json.dumps(
