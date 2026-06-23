@@ -3,7 +3,7 @@
 ```yaml
 task: "Fix agent-dispatch cwd guard, implementer self-termination, and false-success contracts"
 slug: mill-implementer-and-dispatch-quality
-approved: false
+approved: true
 started: "20260623-084125"
 parent: main
 root: ""
@@ -44,7 +44,7 @@ batches:
 
 ### Decision: cwd-independent hub resolution
 
-- **Decision:** Stage CLIs (`millpy-implement.py`, `millpy-fix.py`, `millpy-review-code.py`) must anchor `project_root` on `_paths.resolve_hub_path()` (which walks up to the `.millhouse/config.local.yaml` marker), never on `Path.cwd()`. When the resolved `_mill/status.md` is missing, emit a clear actionable error via the new `_paths.TaskHubError` / `_paths.require_status_path` helper — never let `_status.read_full` raise a raw `ValueError`.
+- **Decision:** Stage CLIs (`millpy-implement.py`, `millpy-fix.py`, `millpy-review-code.py`) must anchor `project_root` on `_paths.resolve_hub_path()` (a cwd walk up to the `.millhouse/config.local.yaml` marker, stub-aware — it tolerates cwd being a subdir or the git-root-with-stub of a nested-hub repo) rather than on a raw `Path.cwd()` literal. (`resolve_hub_path()` does seed its walk from `Path.cwd()`; the point is it resolves to the same hub from any descendant, which a bare `Path.cwd()` does not.) When the resolved `_mill/status.md` is missing, emit a clear actionable error via the new `_paths.TaskHubError` / `_paths.require_status_path` helper — never let `_status.read_full` raise a raw `ValueError`.
 - **Rationale:** Agent-dispatch invokes these CLIs directly, bypassing `millpy-bg`'s cwd guard; on nested-hub repos (hub is a git subdir) a git-root cwd crashed with an unguarded traceback (#514/#520).
 - **Applies to:** hub-cwd-resolution (and consumed by implementer-finalize-contract via the same `millpy-implement.py` setup).
 
