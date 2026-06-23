@@ -43,6 +43,7 @@ def _is_benign_windows_cleanup(output: str) -> bool:
 
     # Check for test-failure markers (more specific patterns to avoid false positives)
     failure_markers = [
+        "fail",
         "--- fail",
         "panic:",
         "build failed",
