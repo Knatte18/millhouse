@@ -200,6 +200,24 @@ class TestMillpyFix(unittest.TestCase):
         status_path = self.tmp_path / "_mill" / "status.md"
 
         captured = {}
+        call_count = [0]  # Use list to allow mutation in nested function
+
+        def mock_subprocess_run(argv, **kwargs):
+            # Track git rev-parse calls to return different values (start_sha vs final HEAD)
+            if argv[0:2] == ["git", "rev-parse"]:
+                call_count[0] += 1
+                # First call (start_sha): return "abc1234"
+                # Second call (final HEAD check): return "def5678" to simulate a commit was made
+                if call_count[0] == 1:
+                    return subprocess.CompletedProcess(
+                        args=argv, returncode=0, stdout="abc1234\n", stderr=""
+                    )
+                else:
+                    return subprocess.CompletedProcess(
+                        args=argv, returncode=0, stdout="def5678\n", stderr=""
+                    )
+            # All other calls use the standard mock
+            return self.mock_subprocess_run.return_value
 
         def mock_run(prompt_text, *, model, effort, session_id, resume, cwd, timeout):
             captured["prompt_text"] = prompt_text
@@ -207,15 +225,19 @@ class TestMillpyFix(unittest.TestCase):
             return ('{"status":"success","commit_sha":"abc","session_id":"fake"}\n', "fake-session")
 
         with unittest.mock.patch.object(
-            millpy_fix._implementer_claude, "run",
-            side_effect=mock_run,
+            millpy_fix._subprocess_util, "run",
+            side_effect=mock_subprocess_run,
         ):
-            rc, out = self._run_main([
-                "--scope", "batch",
-                "--batch-name", "test-batch",
-                "--review-file", str(self.review_file),
-                "--round", "1",
-            ])
+            with unittest.mock.patch.object(
+                millpy_fix._implementer_claude, "run",
+                side_effect=mock_run,
+            ):
+                rc, out = self._run_main([
+                    "--scope", "batch",
+                    "--batch-name", "test-batch",
+                    "--review-file", str(self.review_file),
+                    "--round", "1",
+                ])
 
         self.assertEqual(rc, 0)
         data = json.loads(out.strip().splitlines()[-1])
@@ -264,6 +286,24 @@ class TestMillpyFix(unittest.TestCase):
         status_path = self.tmp_path / "_mill" / "status.md"
 
         captured = {}
+        call_count = [0]  # Use list to allow mutation in nested function
+
+        def mock_subprocess_run(argv, **kwargs):
+            # Track git rev-parse calls to return different values (start_sha vs final HEAD)
+            if argv[0:2] == ["git", "rev-parse"]:
+                call_count[0] += 1
+                # First call (start_sha): return "abc1234"
+                # Second call (final HEAD check): return "def5678" to simulate a commit was made
+                if call_count[0] == 1:
+                    return subprocess.CompletedProcess(
+                        args=argv, returncode=0, stdout="abc1234\n", stderr=""
+                    )
+                else:
+                    return subprocess.CompletedProcess(
+                        args=argv, returncode=0, stdout="def5678\n", stderr=""
+                    )
+            # All other calls use the standard mock
+            return self.mock_subprocess_run.return_value
 
         def mock_run(prompt_text, *, model, effort, session_id, resume, cwd, timeout):
             captured["prompt_text"] = prompt_text
@@ -271,14 +311,18 @@ class TestMillpyFix(unittest.TestCase):
             return ('{"status":"success","commit_sha":"abc","session_id":"fake"}\n', "fake-session")
 
         with unittest.mock.patch.object(
-            millpy_fix._implementer_claude, "run",
-            side_effect=mock_run,
+            millpy_fix._subprocess_util, "run",
+            side_effect=mock_subprocess_run,
         ):
-            rc, out = self._run_main([
-                "--scope", "holistic",
-                "--review-file", str(self.review_file),
-                "--round", "1",
-            ])
+            with unittest.mock.patch.object(
+                millpy_fix._implementer_claude, "run",
+                side_effect=mock_run,
+            ):
+                rc, out = self._run_main([
+                    "--scope", "holistic",
+                    "--review-file", str(self.review_file),
+                    "--round", "1",
+                ])
 
         self.assertEqual(rc, 0)
         data = json.loads(out.strip().splitlines()[-1])

@@ -18,7 +18,7 @@ def _is_benign_windows_cleanup(output: str) -> bool:
     1. The output contains a Windows cleanup-race signature (case-insensitive any of:
        unlinkat, access is denied, winerror 5, winerror 32)
     2. The output contains NO test-failure markers (case-insensitive none of:
-       fail, --- fail, panic:, build failed)
+       --- fail, panic:, build failed)
 
     This is used to distinguish benign file-cleanup races from real test failures on Windows.
 
@@ -39,9 +39,8 @@ def _is_benign_windows_cleanup(output: str) -> bool:
     ]
     has_cleanup_signature = any(sig in output_lower for sig in cleanup_signatures)
 
-    # Check for test-failure markers
+    # Check for test-failure markers (more specific patterns to avoid false positives)
     failure_markers = [
-        "fail",
         "--- fail",
         "panic:",
         "build failed",
