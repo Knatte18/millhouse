@@ -695,7 +695,21 @@ If `in_scope_dirt` is non-empty, halt with:
 `BLOCKED: dirty working tree at task completion -- <N> file(s) uncommitted: <file-list>. Commit or discard before proceeding.`
 where `<N>` is the count of dirty lines and `<file-list>` is the filenames extracted from the in-scope dirt. Do NOT set `phase: done` when the gate fires; the task remains in its current phase so the operator can inspect and fix.
 
+If the list is empty, proceed to scope violations cleanup.
+
+**Scope violations cleanup gate.** Clean up ephemeral build artifacts that may have been left by verify runs:
+
+```python
+removed_paths, blocking_paths = _cleanliness.clean_ephemeral_scope_violations(worktree_root)
+```
+
+Log the removed artifacts (ASCII-only). If `blocking_paths` is non-empty, halt with:
+`BLOCKED: out-of-scope untracked file(s): <file-list>`
+where `<file-list>` is the comma-separated list of blocking paths. Do NOT set `phase: done` when the gate fires; the task remains in its current phase so the operator can inspect and manually remove the files.
+
 If the list is empty, proceed normally.
+
+**Scope violations handling note.** The `scope_violations` field in the fixer JSON envelope (present when a fixer detects untracked out-of-scope files) is read and surfaced to the orchestrator. It is folded into the generic `stuck_type: logic` envelope; the terminal gate (above) is the authoritative cleanup point for common artifacts like coverage profiling outputs.
 
 1. `_status.append_phase(status_path, "done", _timestamp.now_utc_iso())`. Commit on the task branch: `git -C <worktree> add <status_path> _mill/briefs/ && git -C <worktree> commit -m "mill-go: done {slug}"`.
 
