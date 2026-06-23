@@ -37,23 +37,24 @@ import _review_common
 import _reviewers
 import _status
 import _timestamp
-from _implementer_common import _forward_output, emit_prepare, finalize_from_output
+from _implementer_common import _forward_output, emit_prepare, finalize_from_output, _is_benign_windows_cleanup
 
 
 def _is_windows_lock_error(e: Exception) -> bool:
-    """Check if exception is a Windows file-locking error.
+    """
+    Check if exception is a Windows file-locking error.
 
     Returns True if the exception is caused by a Windows file-locking issue:
-    - OSError with winerror == 32 (process cannot access the file)
-    - Error message contains 'winerror 32', 'process cannot access', or
-      'being used by another process'
+    - OSError with winerror == 32 (process cannot access the file), OR
+    - Error message contains signature patterns for file-locking (delegated to shared helper)
     """
+    # Check for OSError with winerror == 32 (WinError 32)
     cause = getattr(e, "__cause__", None)
     if isinstance(cause, OSError) and getattr(cause, "winerror", None) == 32:
         return True
 
-    msg = str(e).lower()
-    return any(s in msg for s in ["winerror 32", "process cannot access", "being used by another process"])
+    # Delegate textual match to the shared helper
+    return _is_benign_windows_cleanup(str(e))
 
 
 def main(argv=None) -> int:

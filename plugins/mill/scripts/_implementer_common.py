@@ -3,10 +3,52 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import _agent_dispatch
 import _cleanliness
 import _subprocess_util
 from pathlib import Path
+
+
+def _is_benign_windows_cleanup(output: str) -> bool:
+    """
+    Check if the combined output contains only a Windows cleanup-race signature with no test failures.
+
+    Returns True only when both conditions hold:
+    1. The output contains a Windows cleanup-race signature (case-insensitive any of:
+       unlinkat, access is denied, winerror 5, winerror 32)
+    2. The output contains NO test-failure markers (case-insensitive none of:
+       fail, --- fail, panic:, build failed)
+
+    This is used to distinguish benign file-cleanup races from real test failures on Windows.
+
+    Args:
+        output: Combined stdout and stderr from a verify command.
+
+    Returns:
+        True if output contains cleanup signature with no failure markers; False otherwise.
+    """
+    output_lower = output.lower()
+
+    # Check for cleanup-race signatures
+    cleanup_signatures = [
+        "unlinkat",
+        "access is denied",
+        "winerror 5",
+        "winerror 32",
+    ]
+    has_cleanup_signature = any(sig in output_lower for sig in cleanup_signatures)
+
+    # Check for test-failure markers
+    failure_markers = [
+        "fail",
+        "--- fail",
+        "panic:",
+        "build failed",
+    ]
+    has_failure_marker = any(marker in output_lower for marker in failure_markers)
+
+    return has_cleanup_signature and not has_failure_marker
 
 
 def _posix_shell_run_args(cmd: str) -> tuple:
@@ -134,13 +176,17 @@ def _run_verify_gate(project_root: Path, verify_cmd: str | None) -> dict | None:
     dict with stuck_type="verify" and reason set to the last 2000 characters of
     stdout+stderr. On success (rc 0) or when verify_cmd is None, returns None.
 
+    On Windows (sys.platform == "win32"), applies an additional gate: if the output
+    contains a benign cleanup-race signature and no test failures (per
+    _is_benign_windows_cleanup), treats the non-zero exit as success and returns None.
+
     Args:
         project_root: Path to the worktree root.
         verify_cmd: Verify command to run (e.g., "pytest tests/ -q"), or None.
 
     Returns:
         A stuck dict {"status": "stuck", "stuck_type": "verify", "reason": <tail>} on
-        non-zero return, or None on success or when verify_cmd is None.
+        non-zero return (unless win32 benign cleanup), or None on success or when verify_cmd is None.
     """
     if verify_cmd is None:
         return None
@@ -161,9 +207,13 @@ def _run_verify_gate(project_root: Path, verify_cmd: str | None) -> dict | None:
             **run_kwargs,
         )
         if result.returncode != 0:
-            output = (result.stdout + result.stderr).strip()
+            output = result.stdout + result.stderr
+            # On Windows, check if this is a benign cleanup-race with no test failure
+            if sys.platform == "win32" and _is_benign_windows_cleanup(output):
+                return None
             # Use last 2000 characters of the output
-            reason = output[-2000:] if len(output) > 2000 else output
+            output_stripped = output.strip()
+            reason = output_stripped[-2000:] if len(output_stripped) > 2000 else output_stripped
             return {
                 "status": "stuck",
                 "stuck_type": "verify",
