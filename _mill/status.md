@@ -43,7 +43,9 @@ batches:
     start_sha: 47fc77c0ca2774f3bf10171e26855b506f551466
     commit_sha: c58e02cf1e4e39170b72693c8b40fa89d991d516
   - name: workflow-memory-note
-    state: pending
+    state: running
+    implementer_session: 77ef7128-3ee9-45bb-8c80-e7e092f12926
+    start_sha: e9ffa9ff740aefaeb417ad23b7714c54754277f3
   - name: implementer-finalize-contract
     state: pending
 ```
