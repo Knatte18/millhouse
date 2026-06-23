@@ -166,7 +166,7 @@ roles:
 
   implementer:
     self_fix_rounds: 2
-    model: haiku
+    model: sonnethigh
 
   fixer:
     model: haiku
