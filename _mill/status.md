@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-fixer-holistic-verify
+phase: approved-reviewer-anti-oscillation
 slug: mill-review-and-verify-quality
 branch: hanf/mill-review-and-verify-quality
 plan: _mill/plan
@@ -30,6 +30,7 @@ implementing  '2026-06-23T09:15:51Z'
 approved-windows-verify-gate  '2026-06-23T09:24:52Z'
 approved-nit-enforcement  '2026-06-23T09:30:05Z'
 approved-fixer-holistic-verify  '2026-06-23T09:36:45Z'
+approved-reviewer-anti-oscillation  '2026-06-23T09:42:54Z'
 ```
 
 ## Batches
@@ -52,9 +53,10 @@ batches:
     start_sha: a14aa44affbd275be897261729f468da9a6671ff
     commit_sha: 5eb127c06b84f77a663f12d816c31fd7a1bbc8fb
   - name: reviewer-anti-oscillation
-    state: running
+    state: approved
     implementer_session: cc12698d-e23d-44c4-8f71-c166c36a59c9
     start_sha: 39ce042adc4c77269840403a8c056d6cbc2d5a7a
+    commit_sha: 9fbfdbd85eee8fdcc07cddd1a4eaecf4b247c9d1
   - name: scope-violation-cleanup
     state: pending
 ```
