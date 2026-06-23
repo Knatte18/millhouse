@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-reviewing
+phase: holistic-approved
 slug: mill-review-and-verify-quality
 branch: hanf/mill-review-and-verify-quality
 plan: _mill/plan
@@ -37,6 +37,7 @@ holistic-fixing  '2026-06-23T09:48:48Z'
 holistic-reviewing  '2026-06-23T09:52:31Z'
 holistic-fixing  '2026-06-23T09:55:55Z'
 holistic-reviewing  '2026-06-23T10:02:51Z'
+holistic-approved  '2026-06-23T10:05:07Z'
 ```
 
 ## Batches
