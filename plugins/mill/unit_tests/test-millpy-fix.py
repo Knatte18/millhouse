@@ -757,6 +757,66 @@ class TestMillpyFixBriefSizeGuard(unittest.TestCase):
         # Verify that _implementer_claude.run was called (the guard did not fire)
         mock_run.assert_called_once()
 
+    def test_nits_only_flag_appends_marker_and_flag(self):
+        """
+        Test that --nits-only flag causes nits_applied: true to be added to the envelope
+        and a nits-fixed-<scope> marker to be appended to the status timeline.
+        """
+        status_path = self.tmp_path / "_mill" / "status.md"
+
+        captured = {}
+        call_count = [0]
+
+        def mock_subprocess_run(argv, **kwargs):
+            if argv[0:2] == ["git", "rev-parse"]:
+                call_count[0] += 1
+                if call_count[0] == 1:
+                    return subprocess.CompletedProcess(
+                        args=argv, returncode=0, stdout="abc1234\n", stderr=""
+                    )
+                else:
+                    return subprocess.CompletedProcess(
+                        args=argv, returncode=0, stdout="def5678\n", stderr=""
+                    )
+            return subprocess.CompletedProcess(
+                args=argv, returncode=0, stdout="abc1234\n", stderr=""
+            )
+
+        def mock_run(prompt_text, *, model, effort, session_id, resume, cwd, timeout):
+            captured["prompt_text"] = prompt_text
+            captured["resume"] = resume
+            return ('{"status":"success","commit_sha":"abc","session_id":"fake"}\n', "fake-session")
+
+        with unittest.mock.patch.object(
+            millpy_fix._subprocess_util, "run",
+            side_effect=mock_subprocess_run,
+        ):
+            with unittest.mock.patch.object(
+                millpy_fix._implementer_claude, "run",
+                side_effect=mock_run,
+            ):
+                rc, out = self._run_main([
+                    "--scope", "batch",
+                    "--batch-name", "test-batch",
+                    "--review-file", str(self.review_file),
+                    "--round", "1",
+                    "--nits-only",
+                ])
+
+        self.assertEqual(rc, 0)
+        # Parse the output JSON
+        data = json.loads(out.strip().splitlines()[-1])
+        self.assertEqual(data["status"], "success")
+        # Check that nits_applied flag was added
+        self.assertTrue(data.get("nits_applied"), "nits_applied flag must be True when --nits-only is used")
+
+        # Check that nits-fixed-test-batch marker was appended to timeline
+        full = millpy_fix._status.read_full(status_path)
+        self.assertTrue(
+            any(e.startswith("nits-fixed-test-batch") for e in full["timeline"]),
+            f"Expected nits-fixed-test-batch in timeline, got: {full['timeline']}",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
