@@ -13,10 +13,12 @@ Exit codes:
     1 — pre-launch error (bad config, missing slug, git failure, missing
         file); message on stderr, no JSON on stdout
 """
+
 from __future__ import annotations
 
 import argparse
 import json
+import re
 import _subprocess_util
 import sys
 import uuid
@@ -27,6 +29,7 @@ import _cleanliness
 import _implementer_claude
 import _llm_claude
 import _marker
+import _parent_branch
 import _paths
 import _plan_dag
 import _render
@@ -111,12 +114,18 @@ def main(argv=None) -> int:
         print(str(e), file=sys.stderr)
         return 1
 
-    name_result = _subprocess_util.run(["git", "config", "--global", "--get", "user.name"], cwd=project_root)
-    email_result = _subprocess_util.run(["git", "config", "--global", "--get", "user.email"], cwd=project_root)
+    name_result = _subprocess_util.run(
+        ["git", "config", "--global", "--get", "user.name"], cwd=project_root
+    )
+    email_result = _subprocess_util.run(
+        ["git", "config", "--global", "--get", "user.email"], cwd=project_root
+    )
     git_name = name_result.stdout.strip()
     git_email = email_result.stdout.strip()
     if not git_name or not git_email:
-        print("git config --global user.name and user.email must be set", file=sys.stderr)
+        print(
+            "git config --global user.name and user.email must be set", file=sys.stderr
+        )
         return 1
 
     try:
@@ -138,15 +147,33 @@ def main(argv=None) -> int:
         ["git", "-C", str(project_root), "branch", "--show-current"]
     )
     if branch_result.returncode != 0:
-        print(json.dumps({"status": "stuck", "stuck_type": "transient", "reason": f"git branch --show-current failed: {branch_result.stderr.strip()}"}))
+        print(
+            json.dumps(
+                {
+                    "status": "stuck",
+                    "stuck_type": "transient",
+                    "reason": f"git branch --show-current failed: {branch_result.stderr.strip()}",
+                }
+            )
+        )
         print(branch_result.stderr, file=sys.stderr)
         return 1
     branch = branch_result.stdout.strip()
     if not branch:
-        print(json.dumps({"status": "stuck", "stuck_type": "transient", "reason": "detached HEAD: no current branch"}))
+        print(
+            json.dumps(
+                {
+                    "status": "stuck",
+                    "stuck_type": "transient",
+                    "reason": "detached HEAD: no current branch",
+                }
+            )
+        )
         print("detached HEAD: no current branch", file=sys.stderr)
         return 1
-    self_fix_rounds = cfg.get("roles", {}).get("implementer", {}).get("self_fix_rounds", 2)
+    self_fix_rounds = (
+        cfg.get("roles", {}).get("implementer", {}).get("self_fix_rounds", 2)
+    )
     implementer_cfg = cfg.get("roles", {}).get("implementer", {})
     model_name = implementer_cfg.get("model", "sonnethigh")
     try:
@@ -157,7 +184,9 @@ def main(argv=None) -> int:
         return 1
     impl_model = impl_spec["model"]
     impl_effort = impl_spec.get("effort")
-    timeout = impl_spec.get("timeout") or cfg.get("llm", {}).get("implementer_timeout", 1800)
+    timeout = impl_spec.get("timeout") or cfg.get("llm", {}).get(
+        "implementer_timeout", 1800
+    )
 
     plan_base = _paths.resolve_task_path(project_root, plan_dir)
     overview_path = plan_base / "00-overview.md"
@@ -166,7 +195,9 @@ def main(argv=None) -> int:
         return 1
 
     try:
-        batches = _plan_dag.extract_batch_index(overview_path.read_text(encoding="utf-8"))
+        batches = _plan_dag.extract_batch_index(
+            overview_path.read_text(encoding="utf-8")
+        )
     except _plan_dag.PlanDAGError as e:
         print(str(e), file=sys.stderr)
         return 1
@@ -179,19 +210,38 @@ def main(argv=None) -> int:
     batch_file = plan_base / batch_entry["file"]
     plugin_root = Path(__file__).resolve().parent.parent
 
+    # Compute gate inputs used by both the finalize and full stages.
+    # card_count: count Card headings in the batch file using the same heading
+    # shape _plan_validate uses. The single-backslash raw string matches
+    # "### Card N:" headings at the start of a line; a zero count (docs-only
+    # batch) disables the completeness gate.
+    _batch_text = batch_file.read_text(encoding="utf-8")
+    card_count = len(re.findall(r"(?m)^###\s+Card\s+\d+\s*:", _batch_text))
+
+    # parent_branch: resolve non-interactively from status.md; fall back to
+    # None on failure (makes the dirty gate a safe no-op rather than crashing).
+    try:
+        parent_branch = _parent_branch.resolve(status_path, interactive=False)
+    except Exception:
+        parent_branch = None
+
     # Stage: finalize
     if args.stage == "finalize":
         if not args.agent_output:
             print("--agent-output is required when --stage finalize", file=sys.stderr)
             return 1
         batches = _status.read_batches(status_path)
-        batch_status = next((b for b in batches if b.get("name") == args.batch_name), None)
+        batch_status = next(
+            (b for b in batches if b.get("name") == args.batch_name), None
+        )
         if batch_status is None:
             print(f"batch {args.batch_name!r} not found in status", file=sys.stderr)
             return 1
         start_sha = batch_status.get("start_sha")
         _safe_batch = _paths.sanitize_filename_component(args.batch_name)
-        snapshot_path = project_root / "_mill" / f".cleanliness-snapshot-{_safe_batch}.txt"
+        snapshot_path = (
+            project_root / "_mill" / f".cleanliness-snapshot-{_safe_batch}.txt"
+        )
         session_id = batch_status.get("implementer_session")
         # Resolve batch verify command from the batch file's frontmatter
         batch_frontmatter = _plan_dag._read_batch_frontmatter(batch_file)
@@ -203,6 +253,9 @@ def main(argv=None) -> int:
             snapshot_path=snapshot_path,
             session_id=session_id,
             verify_cmd=verify_cmd,
+            card_count=card_count,
+            task_dir=status_path.parent,
+            parent_branch=parent_branch,
         )
 
     # Stages: prepare and full (need pre-commit, render, and setup)
@@ -221,7 +274,11 @@ def main(argv=None) -> int:
 
     session_id = str(uuid.uuid4())
 
-    _status.set_batch_fields(status_path, args.batch_name, {"state": "running", "start_sha": start_sha, "implementer_session": session_id})
+    _status.set_batch_fields(
+        status_path,
+        args.batch_name,
+        {"state": "running", "start_sha": start_sha, "implementer_session": session_id},
+    )
 
     last_log = _subprocess_util.run(
         ["git", "log", "-1", "--pretty=%s"],
@@ -234,7 +291,12 @@ def main(argv=None) -> int:
 
     if not skip_start_commit:
         result = _subprocess_util.run(
-            ["git", "add", status_path.relative_to(project_root).as_posix(), str(snapshot_path.relative_to(project_root))],
+            [
+                "git",
+                "add",
+                status_path.relative_to(project_root).as_posix(),
+                str(snapshot_path.relative_to(project_root)),
+            ],
             cwd=project_root,
         )
         if result.returncode != 0:
@@ -259,30 +321,49 @@ def main(argv=None) -> int:
             return 1
 
     template_path = plugin_root / "templates" / "implementer-brief.md"
-    prompt_text = _render.render(template_path, {
-        "TASK_TITLE": task_title,
-        "SLUG": slug,
-        "BATCH_NAME": args.batch_name,
-        "BATCH_FILE": str(batch_file),
-        "OVERVIEW_FILE": str(overview_path),
-        "PROJECT_ROOT": str(project_root),
-        "WIKI_PATH": str(wiki_path),
-        "SELF_FIX_ROUNDS": str(self_fix_rounds),
-        "ROUND": "1",
-        "SESSION_ID": session_id,
-        "LANGUAGE_SKILLS": _agent_dispatch.language_skills_directive(batch_file),
-    })
+    prompt_text = _render.render(
+        template_path,
+        {
+            "TASK_TITLE": task_title,
+            "SLUG": slug,
+            "BATCH_NAME": args.batch_name,
+            "BATCH_FILE": str(batch_file),
+            "OVERVIEW_FILE": str(overview_path),
+            "PROJECT_ROOT": str(project_root),
+            "WIKI_PATH": str(wiki_path),
+            "SELF_FIX_ROUNDS": str(self_fix_rounds),
+            "ROUND": "1",
+            "SESSION_ID": session_id,
+            "LANGUAGE_SKILLS": _agent_dispatch.language_skills_directive(batch_file),
+        },
+    )
 
     max_chars = cfg.get("llm", {}).get("max_implementer_prompt_chars", 0)
     if max_chars > 0 and len(prompt_text) > max_chars:
-        print(json.dumps({"status": "stuck", "stuck_type": "transient", "reason": f"brief exceeds max_implementer_prompt_chars ({len(prompt_text)} chars)"}))
+        print(
+            json.dumps(
+                {
+                    "status": "stuck",
+                    "stuck_type": "transient",
+                    "reason": f"brief exceeds max_implementer_prompt_chars ({len(prompt_text)} chars)",
+                }
+            )
+        )
         return 0
 
     # Stage: prepare
     if args.stage == "prepare":
         briefs_dir = _paths.resolve_task_path(project_root, "_mill/briefs/")
         model_tier = _agent_dispatch.model_to_tier(impl_model)
-        return emit_prepare(briefs_dir, "implement", args.batch_name, 1, prompt_text, model_tier, session_id)
+        return emit_prepare(
+            briefs_dir,
+            "implement",
+            args.batch_name,
+            1,
+            prompt_text,
+            model_tier,
+            session_id,
+        )
 
     # Stage: full (default)
     try:
@@ -296,20 +377,41 @@ def main(argv=None) -> int:
             timeout=timeout,
         )
     except _llm_claude.LLMError as e:
-        result = _subprocess_util.run(["git", "rev-list", "--count", f"{start_sha}..HEAD"], cwd=project_root)
+        result = _subprocess_util.run(
+            ["git", "rev-list", "--count", f"{start_sha}..HEAD"], cwd=project_root
+        )
         if result.returncode == 0:
             commits_made = int(result.stdout.strip())
         else:
             commits_made = 0
         error_reason = str(e)
         stuck_type = classify_stuck_type(error_reason)
-        print(json.dumps({"status": "stuck", "stuck_type": stuck_type, "reason": error_reason, "commits_made": commits_made}))
+        print(
+            json.dumps(
+                {
+                    "status": "stuck",
+                    "stuck_type": stuck_type,
+                    "reason": error_reason,
+                    "commits_made": commits_made,
+                }
+            )
+        )
         print(error_reason, file=sys.stderr)
         return 1
     # Resolve batch verify command from the batch file's frontmatter for full stage
     batch_frontmatter = _plan_dag._read_batch_frontmatter(batch_file)
     verify_cmd = batch_frontmatter.get("verify")
-    return _forward_output(output, project_root, start_sha=start_sha, snapshot_path=snapshot_path, session_id=session_id, verify_cmd=verify_cmd)
+    return _forward_output(
+        output,
+        project_root,
+        start_sha=start_sha,
+        snapshot_path=snapshot_path,
+        session_id=session_id,
+        verify_cmd=verify_cmd,
+        card_count=card_count,
+        task_dir=status_path.parent,
+        parent_branch=parent_branch,
+    )
 
 
 if __name__ == "__main__":
