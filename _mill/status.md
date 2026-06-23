@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-hub-cwd-resolution
 slug: mill-implementer-and-dispatch-quality
 branch: hanf/mill-implementer-and-dispatch-quality
 plan: _mill/plan
@@ -24,6 +24,7 @@ plan-fix-r2  '2026-06-23T08:57:11Z'
 plan-fix-r3  '2026-06-23T09:01:02Z'
 planned  '2026-06-23T09:01:22Z'
 implementing  '2026-06-23T09:15:43Z'
+approved-hub-cwd-resolution  '2026-06-23T10:11:07Z'
 ```
 
 ## Batches
@@ -31,9 +32,10 @@ implementing  '2026-06-23T09:15:43Z'
 ```yaml
 batches:
   - name: hub-cwd-resolution
-    state: running
+    state: approved
     implementer_session: 2db17510-f8e5-4a58-ad08-4605d2ad7e2b
     start_sha: 450f02e60d8a395720dafeaf9dea3f531f0f6368
+    commit_sha: ebc92404764589d579abfefdf2ef90b158afe448
   - name: implementer-model-tier
     state: pending
   - name: workflow-memory-note
