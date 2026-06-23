@@ -1,4 +1,5 @@
 """Shared helpers for millpy-implement.py and millpy-fix.py."""
+
 import json
 import os
 import shutil
@@ -7,6 +8,110 @@ import _agent_dispatch
 import _cleanliness
 import _subprocess_util
 from pathlib import Path
+
+
+def _batch_completeness_stuck(
+    project_root: Path,
+    start_sha: str | None,
+    card_count: int | None,
+    session_id: str | None,
+) -> dict | None:
+    """
+    Check whether enough commits exist since start_sha for the declared card_count.
+
+    Returns None (gate disabled) when start_sha is None, card_count is None,
+    or card_count <= 0. Otherwise counts commits via `git rev-list --count
+    start_sha..HEAD`. If the subprocess fails or returns a non-numeric string,
+    returns None rather than crashing (callers such as test-millpy-implement.py
+    mock _subprocess_util.run to return non-numeric strings for all git calls).
+    Only when a numeric count is obtained and count < card_count is a stuck
+    dict returned; otherwise returns None.
+
+    Args:
+        project_root: Path to the worktree root.
+        start_sha: The SHA recorded at batch start; None disables the gate.
+        card_count: Number of Card headings in the batch file; None or 0 disables the gate.
+        session_id: Session identifier included in the returned dict when non-None.
+
+    Returns:
+        A stuck dict with stuck_type="transient" when incomplete, or None otherwise.
+    """
+    # Gate is a no-op when any required input is absent or card_count is zero/negative.
+    if start_sha is None or card_count is None or card_count <= 0:
+        return None
+
+    # Count commits made since the batch start SHA.
+    result = _subprocess_util.run(
+        ["git", "rev-list", "--count", f"{start_sha}..HEAD"],
+        cwd=project_root,
+    )
+    if result.returncode != 0:
+        # Git failure -- treat as no-op rather than crashing finalize.
+        return None
+
+    # Guard the parse: non-numeric stdout (e.g. a mocked sha string) must not raise.
+    try:
+        count = int(result.stdout.strip())
+    except ValueError:
+        return None
+
+    if count < card_count:
+        return {
+            "status": "stuck",
+            "stuck_type": "transient",
+            "reason": (
+                f"batch incomplete: {count} commit(s) since start but"
+                f" {card_count} card(s) in batch -- implementer stopped before finishing all cards"
+            ),
+            "session_id": session_id or "unknown",
+        }
+    return None
+
+
+def _in_scope_dirty_stuck(
+    project_root: Path,
+    task_dir: Path | None,
+    parent_branch: str | None,
+    session_id: str | None,
+) -> dict | None:
+    """
+    Check whether any in-scope files are dirty at finalize time.
+
+    Returns None when task_dir or parent_branch is None (gate disabled).
+    Otherwise calls _cleanliness.compute_terminal_dirt; if the returned list
+    is non-empty, returns a stuck dict. Any exception from compute_terminal_dirt
+    (including GitOpsError when project_root is not a real git repo) is caught
+    and treated as a no-op -- the authoritative mill-go 2b cleanliness gate
+    still runs afterward.
+
+    Args:
+        project_root: Path to the worktree root.
+        task_dir: Worktree-relative path to the task directory (_mill/); None disables the gate.
+        parent_branch: Name of the parent branch (e.g. "main"); None disables the gate.
+        session_id: Session identifier included in the returned dict when non-None.
+
+    Returns:
+        A stuck dict with stuck_type="logic" when dirty, or None otherwise.
+    """
+    # Gate is a no-op when required inputs are absent.
+    if task_dir is None or parent_branch is None:
+        return None
+
+    try:
+        dirt = _cleanliness.compute_terminal_dirt(project_root, task_dir, parent_branch)
+    except Exception:
+        # compute_terminal_dirt raises GitOpsError on non-git paths (e.g. test fixtures).
+        # Treat any failure as a safe no-op; the mill-go gate is authoritative.
+        return None
+
+    if dirt:
+        return {
+            "status": "stuck",
+            "stuck_type": "logic",
+            "reason": f"success reported but in-scope working tree dirty: {dirt}",
+            "session_id": session_id or "unknown",
+        }
+    return None
 
 
 def _posix_shell_run_args(cmd: str) -> tuple:
@@ -54,7 +159,14 @@ def _is_formatter_drift_only(project_root: Path) -> bool:
     try:
         # Check if there are any untracked files
         result_untracked = _subprocess_util.run(
-            ["git", "-C", str(project_root), "status", "--porcelain", "--untracked-files=all"],
+            [
+                "git",
+                "-C",
+                str(project_root),
+                "status",
+                "--porcelain",
+                "--untracked-files=all",
+            ],
             check=False,
         )
         if result_untracked.returncode != 0:
@@ -116,7 +228,14 @@ def _commit_formatter_drift(project_root: Path) -> bool:
 
         # Commit with ASCII-only message
         result_commit = _subprocess_util.run(
-            ["git", "-C", str(project_root), "commit", "-m", "chore(format): commit formatter drift"],
+            [
+                "git",
+                "-C",
+                str(project_root),
+                "commit",
+                "-m",
+                "chore(format): commit formatter drift",
+            ],
             check=False,
         )
         return result_commit.returncode == 0
@@ -197,7 +316,9 @@ def emit_prepare(
     (scope is sanitized for Windows filename safety) and prints one JSON line
     with the brief path and metadata. Returns 0.
     """
-    brief_path = _agent_dispatch.write_brief(briefs_dir, role, scope, round_n, prompt_text)
+    brief_path = _agent_dispatch.write_brief(
+        briefs_dir, role, scope, round_n, prompt_text
+    )
     envelope = {
         "stage": "prepare",
         "brief_path": str(brief_path.resolve()),
@@ -260,6 +381,9 @@ def finalize_from_output(
     snapshot_path: Path | None = None,
     session_id: str | None = None,
     verify_cmd: str | None = None,
+    card_count: int | None = None,
+    task_dir: Path | None = None,
+    parent_branch: str | None = None,
 ) -> int:
     """Read sub-agent output and finalize.
 
@@ -274,6 +398,9 @@ def finalize_from_output(
         snapshot_path=snapshot_path,
         session_id=session_id,
         verify_cmd=verify_cmd,
+        card_count=card_count,
+        task_dir=task_dir,
+        parent_branch=parent_branch,
     )
 
 
@@ -288,14 +415,14 @@ def _extract_status_json(output: str) -> dict | None:
     depth = 0
     start = None
     for i, char in enumerate(output):
-        if char == '{':
+        if char == "{":
             if depth == 0:
                 start = i
             depth += 1
-        elif char == '}':
+        elif char == "}":
             depth -= 1
             if depth == 0 and start is not None:
-                candidates.append(output[start:i + 1])
+                candidates.append(output[start : i + 1])
                 start = None
     # Try to parse candidates in reverse order (last first)
     for candidate in reversed(candidates):
@@ -316,6 +443,9 @@ def _forward_output(
     snapshot_path: Path | None = None,
     session_id: str | None = None,
     verify_cmd: str | None = None,
+    card_count: int | None = None,
+    task_dir: Path | None = None,
+    parent_branch: str | None = None,
 ) -> int:
     """Extract the last JSON object containing a 'status' key from output.
 
@@ -325,6 +455,8 @@ def _forward_output(
     falling back to the literal ``"unknown"`` for backwards compatibility with callers that don't pass it.
     When verify_cmd is not None, runs it before emitting any success; if the command fails,
     demotes the success to stuck/verify with the command's output in reason.
+    When card_count is provided, the completeness gate checks that enough commits were made.
+    When task_dir and parent_branch are provided, the dirty-tree gate checks in-scope cleanliness.
     """
     parsed = _extract_status_json(output)
     if parsed is not None:
@@ -350,13 +482,36 @@ def _forward_output(
                 )
                 if result.returncode == 0 and result.stdout.strip() == start_sha:
                     # Implementer reported success but no content commit was made
-                    print(json.dumps({
-                        "status": "stuck",
-                        "stuck_type": "logic",
-                        "reason": "success reported but no content commit (HEAD == start_sha)",
-                        "session_id": session_id or parsed.get("session_id"),
-                    }))
+                    print(
+                        json.dumps(
+                            {
+                                "status": "stuck",
+                                "stuck_type": "logic",
+                                "reason": "success reported but no content commit (HEAD == start_sha)",
+                                "session_id": session_id or parsed.get("session_id"),
+                            }
+                        )
+                    )
                     return 0
+
+            # Resolve session id for the new gates: prefer caller-supplied over parsed.
+            _gate_session_id = session_id or parsed.get("session_id")
+
+            # Completeness gate: demote to stuck/transient when fewer commits than cards.
+            _completeness_result = _batch_completeness_stuck(
+                project_root, start_sha, card_count, _gate_session_id
+            )
+            if _completeness_result is not None:
+                print(json.dumps(_completeness_result))
+                return 0
+
+            # In-scope dirty-tree gate: demote to stuck/logic when tracked in-scope files remain dirty.
+            _dirty_result = _in_scope_dirty_stuck(
+                project_root, task_dir, parent_branch, _gate_session_id
+            )
+            if _dirty_result is not None:
+                print(json.dumps(_dirty_result))
+                return 0
 
         result = _subprocess_util.run(
             ["git", "rev-parse", "HEAD"],
@@ -372,14 +527,27 @@ def _forward_output(
             print(json.dumps(parsed))
         return 0
     try:
-        if start_sha is not None and snapshot_path is not None and snapshot_path.exists():
+        if (
+            start_sha is not None
+            and snapshot_path is not None
+            and snapshot_path.exists()
+        ):
             new_dirt = _cleanliness.compute_new_dirt(project_root, snapshot_path)
             if new_dirt == []:
-                result = _subprocess_util.run(["git", "rev-parse", "HEAD"], cwd=project_root)
+                result = _subprocess_util.run(
+                    ["git", "rev-parse", "HEAD"], cwd=project_root
+                )
                 if result.returncode == 0 and result.stdout.strip() != start_sha:
                     head = result.stdout.strip()
                     result_full = _subprocess_util.run(
-                        ["git", "-C", str(project_root), "status", "--porcelain", "--untracked-files=no"],
+                        [
+                            "git",
+                            "-C",
+                            str(project_root),
+                            "status",
+                            "--porcelain",
+                            "--untracked-files=no",
+                        ],
                         check=True,
                     )
                     if result_full.stdout.strip():
@@ -389,10 +557,20 @@ def _forward_output(
                             if _commit_formatter_drift(project_root):
                                 # Re-check that tree is now clean
                                 result_check = _subprocess_util.run(
-                                    ["git", "-C", str(project_root), "status", "--porcelain", "--untracked-files=no"],
+                                    [
+                                        "git",
+                                        "-C",
+                                        str(project_root),
+                                        "status",
+                                        "--porcelain",
+                                        "--untracked-files=no",
+                                    ],
                                     check=False,
                                 )
-                                if result_check.returncode == 0 and not result_check.stdout.strip():
+                                if (
+                                    result_check.returncode == 0
+                                    and not result_check.stdout.strip()
+                                ):
                                     # Tree is now clean; get the new HEAD after drift commit
                                     result_head = _subprocess_util.run(
                                         ["git", "rev-parse", "HEAD"],
@@ -403,20 +581,52 @@ def _forward_output(
                                     else:
                                         new_head = head
                                     # Apply verify gate before emitting success
-                                    gate_result = _run_verify_gate(project_root, verify_cmd)
+                                    gate_result = _run_verify_gate(
+                                        project_root, verify_cmd
+                                    )
                                     if gate_result is not None:
                                         gate_result["commit_sha"] = new_head
                                         print(json.dumps(gate_result))
                                         return 0
                                     # Emit success
-                                    violations = _cleanliness.compute_scope_violations(project_root)
+                                    violations = _cleanliness.compute_scope_violations(
+                                        project_root
+                                    )
                                     if violations:
-                                        print(json.dumps({"status": "stuck", "stuck_type": "logic", "reason": f"untracked files outside scope: {violations}", "scope_violations": violations, "inferred": True}))
+                                        print(
+                                            json.dumps(
+                                                {
+                                                    "status": "stuck",
+                                                    "stuck_type": "logic",
+                                                    "reason": f"untracked files outside scope: {violations}",
+                                                    "scope_violations": violations,
+                                                    "inferred": True,
+                                                }
+                                            )
+                                        )
                                     else:
-                                        print(json.dumps({"status": "success", "commit_sha": new_head, "session_id": session_id or "unknown", "inferred": True}))
+                                        print(
+                                            json.dumps(
+                                                {
+                                                    "status": "success",
+                                                    "commit_sha": new_head,
+                                                    "session_id": session_id
+                                                    or "unknown",
+                                                    "inferred": True,
+                                                }
+                                            )
+                                        )
                                     return 0
                         # Not formatter drift, or commit failed
-                        print(json.dumps({"status": "stuck", "stuck_type": "logic", "reason": "inferred success but working tree dirty -- implementer likely skipped git-commit on modified files"}))
+                        print(
+                            json.dumps(
+                                {
+                                    "status": "stuck",
+                                    "stuck_type": "logic",
+                                    "reason": "inferred success but working tree dirty -- implementer likely skipped git-commit on modified files",
+                                }
+                            )
+                        )
                         return 0
                     # Apply verify gate before emitting success
                     gate_result = _run_verify_gate(project_root, verify_cmd)
@@ -426,16 +636,44 @@ def _forward_output(
                         return 0
                     violations = _cleanliness.compute_scope_violations(project_root)
                     if violations:
-                        print(json.dumps({"status": "stuck", "stuck_type": "logic", "reason": f"untracked files outside scope: {violations}", "scope_violations": violations, "inferred": True}))
+                        print(
+                            json.dumps(
+                                {
+                                    "status": "stuck",
+                                    "stuck_type": "logic",
+                                    "reason": f"untracked files outside scope: {violations}",
+                                    "scope_violations": violations,
+                                    "inferred": True,
+                                }
+                            )
+                        )
                     else:
-                        print(json.dumps({"status": "success", "commit_sha": head, "session_id": session_id or "unknown", "inferred": True}))
+                        print(
+                            json.dumps(
+                                {
+                                    "status": "success",
+                                    "commit_sha": head,
+                                    "session_id": session_id or "unknown",
+                                    "inferred": True,
+                                }
+                            )
+                        )
                     return 0
         elif start_sha is not None and snapshot_path is None:
-            result = _subprocess_util.run(["git", "rev-parse", "HEAD"], cwd=project_root)
+            result = _subprocess_util.run(
+                ["git", "rev-parse", "HEAD"], cwd=project_root
+            )
             if result.returncode == 0 and result.stdout.strip() != start_sha:
                 head = result.stdout.strip()
                 result_full = _subprocess_util.run(
-                    ["git", "-C", str(project_root), "status", "--porcelain", "--untracked-files=no"],
+                    [
+                        "git",
+                        "-C",
+                        str(project_root),
+                        "status",
+                        "--porcelain",
+                        "--untracked-files=no",
+                    ],
                     check=True,
                 )
                 if not result_full.stdout.strip():
@@ -445,7 +683,16 @@ def _forward_output(
                         gate_result["commit_sha"] = head
                         print(json.dumps(gate_result))
                         return 0
-                    print(json.dumps({"status": "success", "commit_sha": head, "session_id": session_id or "unknown", "inferred": True}))
+                    print(
+                        json.dumps(
+                            {
+                                "status": "success",
+                                "commit_sha": head,
+                                "session_id": session_id or "unknown",
+                                "inferred": True,
+                            }
+                        )
+                    )
                     return 0
     except Exception:
         pass
@@ -464,15 +711,23 @@ def _forward_output(
     for marker in api_error_markers:
         if marker in output_lower:
             # Found an API/infrastructure error marker; classify as transient
-            print(json.dumps({
-                "status": "stuck",
-                "stuck_type": "transient",
-                "reason": "agent returned a raw API error before producing a structured report",
-            }))
+            print(
+                json.dumps(
+                    {
+                        "status": "stuck",
+                        "stuck_type": "transient",
+                        "reason": "agent returned a raw API error before producing a structured report",
+                    }
+                )
+            )
             return 0
     # No API error markers found; emit the default logic sentinel
     violations = _cleanliness.compute_scope_violations(project_root)
-    result = {"status": "stuck", "stuck_type": "logic", "reason": "no structured report"}
+    result = {
+        "status": "stuck",
+        "stuck_type": "logic",
+        "reason": "no structured report",
+    }
     if violations:
         result["scope_violations"] = violations
     print(json.dumps(result))
