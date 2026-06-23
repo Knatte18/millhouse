@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-windows-verify-gate
+phase: approved-nit-enforcement
 slug: mill-review-and-verify-quality
 branch: hanf/mill-review-and-verify-quality
 plan: _mill/plan
@@ -28,6 +28,7 @@ plan-fix-r4  '2026-06-23T09:07:19Z'
 planned  '2026-06-23T09:07:34Z'
 implementing  '2026-06-23T09:15:51Z'
 approved-windows-verify-gate  '2026-06-23T09:24:52Z'
+approved-nit-enforcement  '2026-06-23T09:30:05Z'
 ```
 
 ## Batches
@@ -40,9 +41,10 @@ batches:
     start_sha: 47c5d0b22dc4f47a3e25764e42aa70deb51af00d
     commit_sha: 859e59aee5998537176791ccc6e81b7ddc408e2f
   - name: nit-enforcement
-    state: running
+    state: approved
     implementer_session: 6fe1de11-f0e9-4a12-b3cd-a2fbd4efc1c4
     start_sha: 856185852af48ae0d0c22fd6981893c59817c9a2
+    commit_sha: e5261d68ccd56885699cd849d8dd124d79f64bd2
   - name: fixer-holistic-verify
     state: pending
   - name: reviewer-anti-oscillation
