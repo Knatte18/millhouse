@@ -834,42 +834,87 @@ class TestMillpyFixBriefSizeGuard(unittest.TestCase):
             "  - name: batch1\n"
             "    file: 01-batch1.md\n"
             "    depends-on: []\n"
-            "    verify: 'exit 0'\n"
+            "    verify: 'exit 1'\n"
             "  - name: batch2\n"
             "    file: 02-batch2.md\n"
             "    depends-on: [1]\n"
-            "    verify: 'exit 1'\n"
+            "    verify: 'exit 0'\n"
             "```\n"
         )
         (plan_dir / "00-overview.md").write_text(overview_text, encoding="utf-8")
-        (plan_dir / "01-batch1.md").write_text("# Batch: batch1\n\n```yaml\nverify: exit 0\n```\n", encoding="utf-8")
-        (plan_dir / "02-batch2.md").write_text("# Batch: batch2\n\n```yaml\nverify: exit 1\n```\n", encoding="utf-8")
+        (plan_dir / "01-batch1.md").write_text("# Batch: batch1\n\n```yaml\nverify: exit 1\n```\n", encoding="utf-8")
+        (plan_dir / "02-batch2.md").write_text("# Batch: batch2\n\n```yaml\nverify: exit 0\n```\n", encoding="utf-8")
 
         captured = {}
-        call_count = [0]
-
-        def mock_subprocess_run(argv, **kwargs):
-            if argv[0:2] == ["git", "rev-parse"]:
-                call_count[0] += 1
-                if call_count[0] == 1:
-                    return subprocess.CompletedProcess(
-                        args=argv, returncode=0, stdout="abc1234\n", stderr=""
-                    )
-                else:
-                    return subprocess.CompletedProcess(
-                        args=argv, returncode=0, stdout="def5678\n", stderr=""
-                    )
-            return subprocess.CompletedProcess(
-                args=argv, returncode=0, stdout="abc1234\n", stderr=""
-            )
+        rev_parse_calls = [0]
 
         def mock_run(prompt_text, *, model, effort, session_id, resume, cwd, timeout):
             captured["prompt_text"] = prompt_text
+            # Initialize git repo in the temp directory if not already done
+            git_dir = self.tmp_path / ".git"
+            if not git_dir.exists():
+                subprocess.run(
+                    ["git", "-C", str(self.tmp_path), "init"],
+                    check=True, capture_output=True,
+                )
+                subprocess.run(
+                    ["git", "-C", str(self.tmp_path), "config", "user.email", "test@test.com"],
+                    check=True, capture_output=True,
+                )
+                subprocess.run(
+                    ["git", "-C", str(self.tmp_path), "config", "user.name", "Test"],
+                    check=True, capture_output=True,
+                )
+                # Create an initial commit
+                (self.tmp_path / "README.md").write_text("initial", encoding="utf-8")
+                subprocess.run(
+                    ["git", "-C", str(self.tmp_path), "add", "README.md"],
+                    check=True, capture_output=True,
+                )
+                subprocess.run(
+                    ["git", "-C", str(self.tmp_path), "commit", "-m", "initial"],
+                    check=True, capture_output=True,
+                )
+            # Make a commit so HEAD != start_sha
+            subprocess.run(
+                ["git", "-C", str(self.tmp_path), "commit", "--allow-empty", "-m", "fixer commit"],
+                check=True, capture_output=True,
+            )
             return ('{"status":"success","commit_sha":"abc","session_id":"fake"}\n', "fake-session")
+
+        # Use the real subprocess.run for the verify gate so it actually executes the commands
+        def mock_subprocess_run_with_verify(argv, **kwargs):
+            # All git commands return mocked results
+            if argv[0] == "git":
+                if argv[1:3] == ["rev-parse", "HEAD"]:
+                    rev_parse_calls[0] += 1
+                    if rev_parse_calls[0] == 1:
+                        # First call: start_sha
+                        return subprocess.CompletedProcess(
+                            args=argv, returncode=0, stdout="abc1234567890abcdef1234567890abcdef123456\n", stderr=""
+                        )
+                    else:
+                        # Subsequent calls: final HEAD (after mock_run makes a commit)
+                        result = subprocess.run(argv, capture_output=True, text=True, **kwargs)
+                        return result
+                elif argv[1:4] == ["config", "--global", "--get"]:
+                    # Mock git config calls
+                    return subprocess.CompletedProcess(
+                        args=argv, returncode=0, stdout="Test User\n", stderr=""
+                    )
+                else:
+                    # Other git commands
+                    return subprocess.CompletedProcess(
+                        args=argv, returncode=0, stdout="", stderr=""
+                    )
+            # For all other subprocess calls, including verify commands, use real subprocess
+            # This allows the real _run_verify_gate to execute shell commands properly
+            # Make sure to capture output
+            return subprocess.run(argv, capture_output=True, text=True, **kwargs)
 
         with unittest.mock.patch.object(
             millpy_fix._subprocess_util, "run",
-            side_effect=mock_subprocess_run,
+            side_effect=mock_subprocess_run_with_verify,
         ):
             with unittest.mock.patch.object(
                 millpy_fix._implementer_claude, "run",
@@ -915,30 +960,75 @@ class TestMillpyFixBriefSizeGuard(unittest.TestCase):
         (plan_dir / "02-batch2.md").write_text("# Batch: batch2\n\n```yaml\nverify: exit 0\n```\n", encoding="utf-8")
 
         captured = {}
-        call_count = [0]
-
-        def mock_subprocess_run(argv, **kwargs):
-            if argv[0:2] == ["git", "rev-parse"]:
-                call_count[0] += 1
-                if call_count[0] == 1:
-                    return subprocess.CompletedProcess(
-                        args=argv, returncode=0, stdout="abc1234\n", stderr=""
-                    )
-                else:
-                    return subprocess.CompletedProcess(
-                        args=argv, returncode=0, stdout="def5678\n", stderr=""
-                    )
-            return subprocess.CompletedProcess(
-                args=argv, returncode=0, stdout="abc1234\n", stderr=""
-            )
+        rev_parse_calls = [0]
 
         def mock_run(prompt_text, *, model, effort, session_id, resume, cwd, timeout):
             captured["prompt_text"] = prompt_text
+            # Initialize git repo in the temp directory if not already done
+            git_dir = self.tmp_path / ".git"
+            if not git_dir.exists():
+                subprocess.run(
+                    ["git", "-C", str(self.tmp_path), "init"],
+                    check=True, capture_output=True,
+                )
+                subprocess.run(
+                    ["git", "-C", str(self.tmp_path), "config", "user.email", "test@test.com"],
+                    check=True, capture_output=True,
+                )
+                subprocess.run(
+                    ["git", "-C", str(self.tmp_path), "config", "user.name", "Test"],
+                    check=True, capture_output=True,
+                )
+                # Create an initial commit
+                (self.tmp_path / "README.md").write_text("initial", encoding="utf-8")
+                subprocess.run(
+                    ["git", "-C", str(self.tmp_path), "add", "README.md"],
+                    check=True, capture_output=True,
+                )
+                subprocess.run(
+                    ["git", "-C", str(self.tmp_path), "commit", "-m", "initial"],
+                    check=True, capture_output=True,
+                )
+            # Make a commit so HEAD != start_sha
+            subprocess.run(
+                ["git", "-C", str(self.tmp_path), "commit", "--allow-empty", "-m", "fixer commit"],
+                check=True, capture_output=True,
+            )
             return ('{"status":"success","commit_sha":"abc","session_id":"fake"}\n', "fake-session")
+
+        # Use the real subprocess.run for the verify gate so it actually executes the commands
+        def mock_subprocess_run_with_verify(argv, **kwargs):
+            # All git commands return mocked results
+            if argv[0] == "git":
+                if argv[1:3] == ["rev-parse", "HEAD"]:
+                    rev_parse_calls[0] += 1
+                    if rev_parse_calls[0] == 1:
+                        # First call: start_sha
+                        return subprocess.CompletedProcess(
+                            args=argv, returncode=0, stdout="abc1234567890abcdef1234567890abcdef123456\n", stderr=""
+                        )
+                    else:
+                        # Subsequent calls: final HEAD (after mock_run makes a commit)
+                        result = subprocess.run(argv, capture_output=True, text=True, **kwargs)
+                        return result
+                elif argv[1:4] == ["config", "--global", "--get"]:
+                    # Mock git config calls
+                    return subprocess.CompletedProcess(
+                        args=argv, returncode=0, stdout="Test User\n", stderr=""
+                    )
+                else:
+                    # Other git commands
+                    return subprocess.CompletedProcess(
+                        args=argv, returncode=0, stdout="", stderr=""
+                    )
+            # For all other subprocess calls, including verify commands, use real subprocess
+            # This allows the real _run_verify_gate to execute shell commands properly
+            # Make sure to capture output
+            return subprocess.run(argv, capture_output=True, text=True, **kwargs)
 
         with unittest.mock.patch.object(
             millpy_fix._subprocess_util, "run",
-            side_effect=mock_subprocess_run,
+            side_effect=mock_subprocess_run_with_verify,
         ):
             with unittest.mock.patch.object(
                 millpy_fix._implementer_claude, "run",
@@ -983,30 +1073,75 @@ class TestMillpyFixBriefSizeGuard(unittest.TestCase):
         (plan_dir / "02-batch2.md").write_text("# Batch: batch2\n", encoding="utf-8")
 
         captured = {}
-        call_count = [0]
-
-        def mock_subprocess_run(argv, **kwargs):
-            if argv[0:2] == ["git", "rev-parse"]:
-                call_count[0] += 1
-                if call_count[0] == 1:
-                    return subprocess.CompletedProcess(
-                        args=argv, returncode=0, stdout="abc1234\n", stderr=""
-                    )
-                else:
-                    return subprocess.CompletedProcess(
-                        args=argv, returncode=0, stdout="def5678\n", stderr=""
-                    )
-            return subprocess.CompletedProcess(
-                args=argv, returncode=0, stdout="abc1234\n", stderr=""
-            )
+        rev_parse_calls = [0]
 
         def mock_run(prompt_text, *, model, effort, session_id, resume, cwd, timeout):
             captured["prompt_text"] = prompt_text
+            # Initialize git repo in the temp directory if not already done
+            git_dir = self.tmp_path / ".git"
+            if not git_dir.exists():
+                subprocess.run(
+                    ["git", "-C", str(self.tmp_path), "init"],
+                    check=True, capture_output=True,
+                )
+                subprocess.run(
+                    ["git", "-C", str(self.tmp_path), "config", "user.email", "test@test.com"],
+                    check=True, capture_output=True,
+                )
+                subprocess.run(
+                    ["git", "-C", str(self.tmp_path), "config", "user.name", "Test"],
+                    check=True, capture_output=True,
+                )
+                # Create an initial commit
+                (self.tmp_path / "README.md").write_text("initial", encoding="utf-8")
+                subprocess.run(
+                    ["git", "-C", str(self.tmp_path), "add", "README.md"],
+                    check=True, capture_output=True,
+                )
+                subprocess.run(
+                    ["git", "-C", str(self.tmp_path), "commit", "-m", "initial"],
+                    check=True, capture_output=True,
+                )
+            # Make a commit so HEAD != start_sha
+            subprocess.run(
+                ["git", "-C", str(self.tmp_path), "commit", "--allow-empty", "-m", "fixer commit"],
+                check=True, capture_output=True,
+            )
             return ('{"status":"success","commit_sha":"abc","session_id":"fake"}\n', "fake-session")
+
+        # Use the real subprocess.run for the verify gate so it actually executes the commands
+        def mock_subprocess_run_with_verify(argv, **kwargs):
+            # All git commands return mocked results
+            if argv[0] == "git":
+                if argv[1:3] == ["rev-parse", "HEAD"]:
+                    rev_parse_calls[0] += 1
+                    if rev_parse_calls[0] == 1:
+                        # First call: start_sha
+                        return subprocess.CompletedProcess(
+                            args=argv, returncode=0, stdout="abc1234567890abcdef1234567890abcdef123456\n", stderr=""
+                        )
+                    else:
+                        # Subsequent calls: final HEAD (after mock_run makes a commit)
+                        result = subprocess.run(argv, capture_output=True, text=True, **kwargs)
+                        return result
+                elif argv[1:4] == ["config", "--global", "--get"]:
+                    # Mock git config calls
+                    return subprocess.CompletedProcess(
+                        args=argv, returncode=0, stdout="Test User\n", stderr=""
+                    )
+                else:
+                    # Other git commands
+                    return subprocess.CompletedProcess(
+                        args=argv, returncode=0, stdout="", stderr=""
+                    )
+            # For all other subprocess calls, including verify commands, use real subprocess
+            # This allows the real _run_verify_gate to execute shell commands properly
+            # Make sure to capture output
+            return subprocess.run(argv, capture_output=True, text=True, **kwargs)
 
         with unittest.mock.patch.object(
             millpy_fix._subprocess_util, "run",
-            side_effect=mock_subprocess_run,
+            side_effect=mock_subprocess_run_with_verify,
         ):
             with unittest.mock.patch.object(
                 millpy_fix._implementer_claude, "run",
