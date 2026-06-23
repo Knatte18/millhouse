@@ -45,7 +45,7 @@ review with `--skip-check wiki-config-mutation`.
   - `mill-config.yaml`
 - **Creates:** none
 - **Deletes:** none
-- **Requirements:** Change the `roles.implementer.model` value from `haiku` to `sonnethigh` in BOTH files: `plugins/mill/templates/mill-config.yaml` (line ~169) and the hub `mill-config.yaml` at the worktree root (line ~54). Change ONLY the `implementer` block's `model:` — leave `roles.implementer.self_fix_rounds`, `roles.fixer.model: haiku`, and `merge.model: haiku` untouched (#519 is implementer-specific). Confirm `sonnethigh` is a defined alias in `plugins/mill/templates/mill-agents.yaml` before relying on it (it is, per the registry). Do not alter surrounding comments or other keys.
+- **Requirements:** Change the `roles.implementer.model` value from `haiku` to `sonnethigh` in BOTH files: `plugins/mill/templates/mill-config.yaml` (line ~169) and the hub `mill-config.yaml` at the worktree root (line ~54). Change ONLY the `implementer` block's `model:` key — do not touch any other `model:` key (`roles.fixer.model`, `merge.model`, or any reviewer model) or `roles.implementer.self_fix_rounds` in either file; #519 is implementer-specific. (The `fixer`/`merge` model values differ between template and hub and are out of scope — leave each exactly as it is.) Confirm `sonnethigh` is a defined alias in `plugins/mill/templates/mill-agents.yaml` before relying on it (it is, per the registry). Do not alter surrounding comments or other keys.
 - **Commit:** `feat(config): raise default implementer model to sonnethigh (#519)`
 
 ### Card 12: Unit-test the implementer-model default
