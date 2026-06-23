@@ -9,6 +9,14 @@ Reviewer model: **<REVIEWER_MODEL>**. Round **<ROUND>**.
 
 <TOOL_RULE>
 
+## Prior non-blocking items
+
+The following items were judged non-blocking in a prior round. Do NOT escalate any of them to BLOCKING unless NEW information justifies it -- a new diff, a real reproducible failure, or a concrete in-repo convention. If you escalate, you MUST state the new information explicitly.
+
+Prefer the convention already used by analogous code in the provided source files over a stricter alternative.
+
+<PRIOR_NONBLOCKING>
+
 ## Constraints
 <CONSTRAINTS>
 

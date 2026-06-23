@@ -48,7 +48,8 @@ Load the **mill-receiving-review** skill before reading any finding in `<REVIEW_
    - Add the file to the appropriate list in `<BATCH_FILE>`.
    - Commit the plan edit first (`plan: extend <BATCH_NAME> refs for <short reason>`).
    - Then make the code change.
-6. If a finding cannot be fixed without revising the plan, report `{"status":"stuck","stuck_type":"logic","reason":"plan conflict: <finding title>"}` (note the exact prefix).
+6. If a BLOCKING finding requires a change you can demonstrate cannot pass its own test (e.g., an in-process test of a detached-spawn / os.Executable() path, or a demand contradicting a deliberate in-repo convention), you MUST NOT silently apply the change and report success. Instead, return `{"status":"stuck","stuck_type":"logic","reason":"physically unsatisfiable: <explanation>; cf. <in-repo analog>"}` describing the contradiction and citing the in-repo precedent. This prevents knowingly-failing tests from being reported as success.
+7. If a finding cannot be fixed without revising the plan, report `{"status":"stuck","stuck_type":"logic","reason":"plan conflict: <finding title>"}` (note the exact prefix).
 
 ## Verify
 

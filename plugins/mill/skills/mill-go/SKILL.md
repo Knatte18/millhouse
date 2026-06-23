@@ -293,7 +293,9 @@ For each round `N` from 1 to `roles.code-review.batch.rounds`:
    `signature: _review_common.parse_verdict(text: str) -> str`
    `signature: _status.phase_entry_timestamp(status_path: Path, phase: str, *, occurrence: int = 1) -> str | None`
 
-2. If `dispatch == agent`: follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" above) with `<cli> = millpy-review-code.py` and `<args> = --batch <batch_name> [--extra-file <p> ...]`.
+1.5. **Prior-notes digest (round N > 1 only).** If `N > 1`: scan the prior round's review file (from round `N-1`) for every line matching `### [NIT] <title>` (case-insensitive NIT marker). Extract the title text and the next non-empty line (which should contain Location and Issue fields). Build a digest: one line per NIT finding, in format "- Title: issue context" (ASCII-only, all non-ASCII replaced with closest ASCII), write to `<briefs_dir>/prior-nonblocking-<batch_name>-r<N>.txt`, and pass `--prior-notes <digest-path>` to the `millpy-review-code.py` invocation below. The `reviews/` read-ban is unchanged — only the curated digest reaches the reviewer. Round 1 passes no `--prior-notes` (digest defaults to `(none)` in the template).
+
+2. If `dispatch == agent`: follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" above) with `<cli> = millpy-review-code.py` and `<args> = --batch <batch_name> [--extra-file <p> ...] [--prior-notes <digest-path>]`.
 
    If `dispatch == subprocess` or `psmux`: background via `millpy-bg`:
 
@@ -303,7 +305,7 @@ For each round `N` from 1 to `roles.code-review.batch.rounds`:
    PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-bg.py" \
        --slug review-code-<batch_name>-r<N> -- \
        "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-review-code.py" \
-           --batch <batch_name> [--extra-file <p> ...]
+           --batch <batch_name> [--extra-file <p> ...] [--prior-notes <digest-path>]
    ```
 
    Returns immediately with `pid=<N> log=<abs-path>`. Do **not** use `run_in_background: true`. Poll `cat <log-path>` until `[mill-bg] EXIT` appears with a bounded max-wait (~3600s), but on each iteration also run a liveness check:
@@ -328,13 +330,15 @@ For each round `N` from 1 to `roles.code-review.batch.rounds`:
 4. Branch on verdict:
    - `APPROVE` — If `nit_count > 0` in the envelope, dispatch one cold-start NIT-only fix pass:
    
-     If `dispatch == agent`: follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" above) with `<cli> = millpy-fix.py` and `<args> = --scope batch --batch-name <batch_name> --review-file <review-file-abs-path> --round <N>`.
+     **NEVER skip the NIT-fix pass, even under time or performance pressure. 'Non-blocking' does NOT mean optional -- deferred nits re-surface as BLOCKING in later rounds and cost more total rounds. Only nits a reviewer explicitly marks 'no action required' may be left.**
+   
+     If `dispatch == agent`: follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" above) with `<cli> = millpy-fix.py` and `<args> = --scope batch --batch-name <batch_name> --review-file <review-file-abs-path> --round <N> --nits-only`.
      
      If `dispatch == subprocess` or `psmux`: via `millpy-bg`:
      ```bash
      PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-bg.py" \
          --slug fix-<batch_name>-r<N>-nits -- \
-         "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-fix.py" --scope batch --batch-name <batch_name> --review-file <review-file-abs-path> --round <N>
+         "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-fix.py" --scope batch --batch-name <batch_name> --review-file <review-file-abs-path> --round <N> --nits-only
      ```
      Poll `cat <log-path>` until `[mill-bg] EXIT` appears, but on each iteration also run a liveness check:
      ```bash
@@ -551,7 +555,9 @@ For each round `H` from 1 to `max_holistic_rounds`:
 
 2. **Skip this step when step 1 returned branch (a) or any sub-branch of (c).** `_status.append_phase(status_path, "holistic-reviewing", _timestamp.now_utc_iso())`. Commit: `git -C <worktree> add <status_path> && git -C <worktree> commit -m "mill-go: holistic reviewing round {H}"`.
 
-3. If `dispatch == agent`: follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" above) with `<cli> = millpy-review-code.py` and `<args> = [--extra-file <p> ...]` (no `--batch` flag for holistic scope). Include any accumulated `extra_files` from prior `NEED_CONTEXT` rounds via `--extra-file <p>` (one flag per path).
+2.5. **Prior-notes digest (round H > 1 only).** If `H > 1`: scan the prior round's review file (from round `H-1`, matching `*-code-review-r{H-1}.md` with no batch-name segment) for every line matching `### [NIT] <title>` (case-insensitive NIT marker). Extract the title text and the next non-empty line (which should contain Location and Issue fields). Build a digest: one line per NIT finding, in format "- Title: issue context" (ASCII-only, all non-ASCII replaced with closest ASCII), write to `<briefs_dir>/prior-nonblocking-holistic-r{H}.txt`, and pass `--prior-notes <digest-path>` to the `millpy-review-code.py` invocation below. The `reviews/` read-ban is unchanged — only the curated digest reaches the reviewer. Round 1 passes no `--prior-notes` (digest defaults to `(none)` in the template).
+
+3. If `dispatch == agent`: follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" above) with `<cli> = millpy-review-code.py` and `<args> = [--extra-file <p> ...] [--prior-notes <digest-path>]` (no `--batch` flag for holistic scope). Include any accumulated `extra_files` from prior `NEED_CONTEXT` rounds via `--extra-file <p>` (one flag per path).
 
    If `dispatch == subprocess` or `psmux` (via `millpy-bg`):
 
@@ -574,7 +580,7 @@ For each round `H` from 1 to `max_holistic_rounds`:
    PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-bg.py" \
      --slug review-code-holistic-r{H} -- \
      "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-review-code.py" \
-       [--extra-file <p> ...]
+       [--extra-file <p> ...] [--prior-notes <digest-path>]
    ```
    Include any accumulated `extra_files` from prior `NEED_CONTEXT` rounds via `--extra-file <p>` (one flag per path). Poll `cat <log-path>` until `[mill-bg] EXIT` appears, but on each iteration also run a liveness check:
    ```bash
@@ -623,13 +629,15 @@ For each round `H` from 1 to `max_holistic_rounds`:
 
 4. On `APPROVE`: If `nit_count > 0` in the envelope, dispatch one cold-start NIT-only fix pass:
    
-   If `dispatch == agent`: follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" above) with `<cli> = millpy-fix.py` and `<args> = --scope holistic --review-file <review-file-abs-path> --round {H}`.
+   **NEVER skip the NIT-fix pass, even under time or performance pressure. 'Non-blocking' does NOT mean optional -- deferred nits re-surface as BLOCKING in later rounds and cost more total rounds. Only nits a reviewer explicitly marks 'no action required' may be left.**
+   
+   If `dispatch == agent`: follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" above) with `<cli> = millpy-fix.py` and `<args> = --scope holistic --review-file <review-file-abs-path> --round {H} --nits-only`.
    
    If `dispatch == subprocess` or `psmux` (via `millpy-bg`):
    ```bash
    PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-bg.py" \
        --slug fix-holistic-r{H}-nits -- \
-       "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-fix.py" --scope holistic --review-file <review-file-abs-path> --round {H}
+       "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-fix.py" --scope holistic --review-file <review-file-abs-path> --round {H} --nits-only
    ```
    Poll `cat <log-path>` until `[mill-bg] EXIT` appears, but on each iteration also run a liveness check:
    ```bash
@@ -662,6 +670,20 @@ For each round `H` from 1 to `max_holistic_rounds`:
 
 ## Handoff
 
+**Nit-enforcement gate.** Check for approved scopes with unfixed nits:
+
+```python
+from pathlib import Path
+import _nit_gate
+unfixed_nits = _nit_gate.compute_unfixed_nits(worktree_root, reviews_dir, status_path)
+```
+
+If `unfixed_nits` is non-empty, halt with:
+`BLOCKED: unfixed nits in scope(s): <scope-list> -- run the NIT-fix pass before completing`
+where `<scope-list>` is the joined list of scope names. Do NOT set `phase: done` when the gate fires; the task remains in its current phase so the operator can run the NIT-fix pass and re-run `/mill-go`.
+
+If the list is empty, proceed to terminal cleanliness gate.
+
 **Terminal cleanliness gate.** Resolve the parent branch and check for in-scope uncommitted changes:
 
 ```python
@@ -673,7 +695,21 @@ If `in_scope_dirt` is non-empty, halt with:
 `BLOCKED: dirty working tree at task completion -- <N> file(s) uncommitted: <file-list>. Commit or discard before proceeding.`
 where `<N>` is the count of dirty lines and `<file-list>` is the filenames extracted from the in-scope dirt. Do NOT set `phase: done` when the gate fires; the task remains in its current phase so the operator can inspect and fix.
 
+If the list is empty, proceed to scope violations cleanup.
+
+**Scope violations cleanup gate.** Clean up ephemeral build artifacts that may have been left by verify runs:
+
+```python
+removed_paths, blocking_paths = _cleanliness.clean_ephemeral_scope_violations(worktree_root)
+```
+
+Log the removed artifacts (ASCII-only). If `blocking_paths` is non-empty, halt with:
+`BLOCKED: out-of-scope untracked file(s): <file-list>`
+where `<file-list>` is the comma-separated list of blocking paths. Do NOT set `phase: done` when the gate fires; the task remains in its current phase so the operator can inspect and manually remove the files.
+
 If the list is empty, proceed normally.
+
+**Scope violations handling note.** The `scope_violations` field in the fixer JSON envelope (present when a fixer detects untracked out-of-scope files) is read and surfaced to the orchestrator. It is folded into the generic `stuck_type: logic` envelope; the terminal gate (above) is the authoritative cleanup point for common artifacts like coverage profiling outputs.
 
 1. `_status.append_phase(status_path, "done", _timestamp.now_utc_iso())`. Commit on the task branch: `git -C <worktree> add <status_path> _mill/briefs/ && git -C <worktree> commit -m "mill-go: done {slug}"`.
 

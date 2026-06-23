@@ -37,23 +37,29 @@ import _review_common
 import _reviewers
 import _status
 import _timestamp
-from _implementer_common import _forward_output, emit_prepare, finalize_from_output
+from _implementer_common import (
+    _forward_output,
+    _has_windows_lock_error_signature,
+    emit_prepare,
+    finalize_from_output,
+)
 
 
 def _is_windows_lock_error(e: Exception) -> bool:
-    """Check if exception is a Windows file-locking error.
+    """
+    Check if exception is a Windows file-locking error.
 
     Returns True if the exception is caused by a Windows file-locking issue:
-    - OSError with winerror == 32 (process cannot access the file)
-    - Error message contains 'winerror 32', 'process cannot access', or
-      'being used by another process'
+    - OSError with winerror == 32 (process cannot access the file), OR
+    - Error message contains Windows file-locking signature patterns
     """
+    # Check for OSError with winerror == 32 (WinError 32)
     cause = getattr(e, "__cause__", None)
     if isinstance(cause, OSError) and getattr(cause, "winerror", None) == 32:
         return True
 
-    msg = str(e).lower()
-    return any(s in msg for s in ["winerror 32", "process cannot access", "being used by another process"])
+    # Delegate string-signature match to shared helper
+    return _has_windows_lock_error_signature(str(e))
 
 
 def main(argv=None) -> int:
@@ -101,6 +107,11 @@ def main(argv=None) -> int:
         "--session-id",
         default=None,
         help="Session ID from prepare envelope (for finalize stage).",
+    )
+    parser.add_argument(
+        "--nits-only",
+        action="store_true",
+        help="Fix nits only (write nits-fixed marker if successful).",
     )
     args = parser.parse_args(argv)
 
@@ -199,7 +210,7 @@ def main(argv=None) -> int:
             print("--agent-output is required when --stage finalize", file=sys.stderr)
             return 1
         fixer_snapshot_path = project_root / "_mill" / ".cleanliness-snapshot-fixer.txt"
-        # Resolve batch verify command for batch-scope fixes only
+        # Resolve verify command for batch/holistic fixes
         verify_cmd = None
         if args.scope == "batch":
             batch_entry = next((b for b in batches if b["name"] == args.batch_name), None)
@@ -207,6 +218,12 @@ def main(argv=None) -> int:
                 batch_file = plan_base / batch_entry["file"]
                 batch_frontmatter = _plan_dag._read_batch_frontmatter(batch_file)
                 verify_cmd = batch_frontmatter.get("verify")
+        elif args.scope == "holistic":
+            # Derive concatenated verify_cmd from all batch verify commands in DAG order
+            batch_verifies = _plan_dag.iter_batch_verifies(plan_base)
+            if batch_verifies:
+                verify_cmd = " && ".join(verify for _, verify in batch_verifies)
+        nits_scope = args.batch_name if args.scope == "batch" else "holistic"
         return finalize_from_output(
             Path(args.agent_output),
             project_root,
@@ -214,6 +231,9 @@ def main(argv=None) -> int:
             snapshot_path=fixer_snapshot_path if fixer_snapshot_path.exists() else None,
             session_id=args.session_id,
             verify_cmd=verify_cmd,
+            nits_only=args.nits_only,
+            status_path=status_path,
+            nits_scope=nits_scope,
         )
 
     # Branch on scope (for prepare and full stages)
@@ -281,8 +301,9 @@ def main(argv=None) -> int:
 
     else:  # args.scope == "holistic"
         # Holistic fixer dispatch
-        # No single batch verify command for holistic fixes; pass None to finalize/full
-        verify_cmd = None
+        # Derive concatenated verify_cmd from all batch verify commands in DAG order
+        batch_verifies = _plan_dag.iter_batch_verifies(plan_base)
+        verify_cmd = " && ".join(verify for _, verify in batch_verifies) if batch_verifies else None
         batch_files_text = "\n".join(str(plan_base / b["file"]) for b in batches)
 
         _status.append_phase(status_path, "holistic-fixing", _timestamp.now_utc_iso())
@@ -371,7 +392,17 @@ def main(argv=None) -> int:
         print(str(e), file=sys.stderr)
         return 1
 
-    return _forward_output(output, project_root, start_sha=start_sha, session_id=session_id, verify_cmd=verify_cmd)
+    nits_scope = args.batch_name if args.scope == "batch" else "holistic"
+    return _forward_output(
+        output,
+        project_root,
+        start_sha=start_sha,
+        session_id=session_id,
+        verify_cmd=verify_cmd,
+        nits_only=args.nits_only,
+        status_path=status_path,
+        nits_scope=nits_scope,
+    )
 
 
 if __name__ == "__main__":

@@ -13,6 +13,7 @@ sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
 from _cleanliness import (  # noqa: E402
     capture_snapshot,
+    clean_ephemeral_scope_violations,
     compute_new_dirt,
     compute_scope_violations,
     compute_terminal_dirt,
@@ -533,6 +534,139 @@ def main() -> int:
         failures.append(f"FAIL: revert_out_of_scope_drift owned-set: {exc}")
     except Exception as exc:
         failures.append(f"FAIL: revert_out_of_scope_drift owned-set ({type(exc).__name__}): {exc}")
+
+    # CESV-1. clean_ephemeral_scope_violations: allowlisted coverage.out is removed and reported
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            # Create a git repo
+            subprocess.run(
+                ["git", "init", str(tmp_path)],
+                check=True,
+                capture_output=True,
+            )
+            # Create coverage.out as untracked (simulate a -cover run)
+            coverage_file = tmp_path / "coverage.out"
+            coverage_file.write_text("mode: set", encoding="utf-8")
+            # Mock compute_scope_violations to return the coverage file
+            with unittest.mock.patch(
+                "_cleanliness.compute_scope_violations",
+                return_value=["coverage.out"]
+            ):
+                removed, blocking = clean_ephemeral_scope_violations(tmp_path)
+            # coverage.out should be removed and reported
+            assert removed == ["coverage.out"], f"expected ['coverage.out'] in removed, got {removed!r}"
+            assert blocking == [], f"expected [] in blocking, got {blocking!r}"
+            # File should be deleted from disk
+            assert not coverage_file.exists(), "coverage.out should have been deleted"
+        print("PASS: clean_ephemeral_scope_violations: coverage.out allowlisted and removed")
+    except AssertionError as exc:
+        failures.append(f"FAIL: clean_ephemeral_scope_violations coverage.out: {exc}")
+    except Exception as exc:
+        failures.append(f"FAIL: clean_ephemeral_scope_violations coverage.out ({type(exc).__name__}): {exc}")
+
+    # CESV-2. clean_ephemeral_scope_violations: allowlisted .test.exe suffix is removed and reported
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            subprocess.run(
+                ["git", "init", str(tmp_path)],
+                check=True,
+                capture_output=True,
+            )
+            # Create foo.test.exe as untracked
+            test_file = tmp_path / "foo.test.exe"
+            test_file.write_text("", encoding="utf-8")
+            with unittest.mock.patch(
+                "_cleanliness.compute_scope_violations",
+                return_value=["foo.test.exe"]
+            ):
+                removed, blocking = clean_ephemeral_scope_violations(tmp_path)
+            assert removed == ["foo.test.exe"], f"expected ['foo.test.exe'] in removed, got {removed!r}"
+            assert blocking == [], f"expected [] in blocking, got {blocking!r}"
+            assert not test_file.exists(), "foo.test.exe should have been deleted"
+        print("PASS: clean_ephemeral_scope_violations: .test.exe suffix allowlisted and removed")
+    except AssertionError as exc:
+        failures.append(f"FAIL: clean_ephemeral_scope_violations .test.exe: {exc}")
+    except Exception as exc:
+        failures.append(f"FAIL: clean_ephemeral_scope_violations .test.exe ({type(exc).__name__}): {exc}")
+
+    # CESV-3. clean_ephemeral_scope_violations: non-allowlisted file is NOT removed and reported as blocking
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            subprocess.run(
+                ["git", "init", str(tmp_path)],
+                check=True,
+                capture_output=True,
+            )
+            # Create notes.txt as untracked (non-allowlisted)
+            notes_file = tmp_path / "notes.txt"
+            notes_file.write_text("some notes", encoding="utf-8")
+            with unittest.mock.patch(
+                "_cleanliness.compute_scope_violations",
+                return_value=["notes.txt"]
+            ):
+                removed, blocking = clean_ephemeral_scope_violations(tmp_path)
+            assert removed == [], f"expected [] in removed, got {removed!r}"
+            assert blocking == ["notes.txt"], f"expected ['notes.txt'] in blocking, got {blocking!r}"
+            # File should NOT be deleted from disk
+            assert notes_file.exists(), "notes.txt should NOT have been deleted"
+        print("PASS: clean_ephemeral_scope_violations: non-allowlisted file NOT removed, reported as blocking")
+    except AssertionError as exc:
+        failures.append(f"FAIL: clean_ephemeral_scope_violations non-allowlisted: {exc}")
+    except Exception as exc:
+        failures.append(f"FAIL: clean_ephemeral_scope_violations non-allowlisted ({type(exc).__name__}): {exc}")
+
+    # CESV-4. clean_ephemeral_scope_violations: in-scope _mill/ files are neither removed nor reported
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            subprocess.run(
+                ["git", "init", str(tmp_path)],
+                check=True,
+                capture_output=True,
+            )
+            # Create a file under _mill/ (in-scope, filtered by compute_scope_violations)
+            (tmp_path / "_mill").mkdir(parents=True, exist_ok=True)
+            mill_file = tmp_path / "_mill" / "scratch.txt"
+            mill_file.write_text("", encoding="utf-8")
+            with unittest.mock.patch(
+                "_cleanliness.compute_scope_violations",
+                return_value=[]  # _mill/ files already filtered by compute_scope_violations
+            ):
+                removed, blocking = clean_ephemeral_scope_violations(tmp_path)
+            assert removed == [], f"expected [] in removed, got {removed!r}"
+            assert blocking == [], f"expected [] in blocking, got {blocking!r}"
+        print("PASS: clean_ephemeral_scope_violations: in-scope _mill/ files neither removed nor reported")
+    except AssertionError as exc:
+        failures.append(f"FAIL: clean_ephemeral_scope_violations in-scope: {exc}")
+    except Exception as exc:
+        failures.append(f"FAIL: clean_ephemeral_scope_violations in-scope ({type(exc).__name__}): {exc}")
+
+    # CESV-5. clean_ephemeral_scope_violations: already-gone allowlisted file is still reported as removed
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            subprocess.run(
+                ["git", "init", str(tmp_path)],
+                check=True,
+                capture_output=True,
+            )
+            # Don't actually create the file, just mock compute_scope_violations
+            with unittest.mock.patch(
+                "_cleanliness.compute_scope_violations",
+                return_value=["coverage.out"]  # File doesn't exist on disk
+            ):
+                removed, blocking = clean_ephemeral_scope_violations(tmp_path)
+            # Should still be reported as removed (swallow FileNotFoundError)
+            assert removed == ["coverage.out"], f"expected ['coverage.out'] in removed, got {removed!r}"
+            assert blocking == [], f"expected [] in blocking, got {blocking!r}"
+        print("PASS: clean_ephemeral_scope_violations: already-gone file swallowed and reported as removed")
+    except AssertionError as exc:
+        failures.append(f"FAIL: clean_ephemeral_scope_violations already-gone: {exc}")
+    except Exception as exc:
+        failures.append(f"FAIL: clean_ephemeral_scope_violations already-gone ({type(exc).__name__}): {exc}")
 
     if failures:
         for msg in failures:

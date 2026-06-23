@@ -82,6 +82,8 @@ tokens["BATCH_SLUG"]      = batch_slug
 
 A batch that legitimately touches a cross-cutting helper that every test imports MAY use the unbounded `run-all.py` — but state the justification in `## Batch Tests` so the plan reviewer can validate the scope choice. The default expectation is per-batch scoping.
 
+**Coverage profiling guidance.** If a `verify:` command collects coverage (e.g. `go test -cover`), write the profiling output to a scratch path (e.g. `-coverprofile=.scratch/coverage.out`) so it does not leave an untracked `coverage.out` at the repo root. The Handoff terminal gate auto-cleans common ephemeral artifacts (`coverage.out`, `.test`, `.test.exe`, `.prof`, `.cover` suffixes) as a backstop.
+
 **Self-validate the DAG** before committing: call `_plan_dag.extract_batch_index(overview_text)` then `_plan_dag.validate(batches, sorted(p.name for p in plan_dir.glob("??-*.md") if p.name != "00-overview.md"))`. Any `PlanDAGError` → fix the plan files, then re-validate. Do not commit a plan that fails this check.
 
 `signature: _status.read(status_path: Path) -> dict`

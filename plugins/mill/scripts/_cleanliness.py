@@ -148,6 +148,60 @@ def compute_terminal_dirt(worktree: Path, task_dir: Path, parent_branch: str) ->
     return _filter_to_task_scope(lines, task_dir_rel, owned_paths)
 
 
+def clean_ephemeral_scope_violations(worktree: Path) -> tuple[list[str], list[str]]:
+    """
+    Auto-clean ephemeral build artifacts from scope violations.
+
+    Calls compute_scope_violations to get untracked out-of-scope files, partitions
+    them by a conservative allowlist (basename 'coverage.out' or suffix in
+    {.test, .test.exe, .prof, .cover}), removes allowlisted files from disk
+    (swallowing already-gone errors), and returns the removed and blocking paths.
+
+    Args:
+        worktree: Path to the task worktree.
+
+    Returns:
+        A tuple of (removed_paths, blocking_paths) where:
+        - removed_paths: sorted list of allowlisted files that were removed from disk.
+        - blocking_paths: sorted list of non-allowlisted untracked out-of-scope files.
+    """
+    import os
+
+    violations = compute_scope_violations(worktree)
+
+    # Conservative allowlist: basename coverage.out, or suffix in {.test, .test.exe, .prof, .cover}
+    removed_paths = []
+    blocking_paths = []
+
+    for violation in violations:
+        basename = violation.split("/")[-1]
+        is_allowlisted = (
+            basename == "coverage.out"
+            or basename.endswith(".test")
+            or basename.endswith(".test.exe")
+            or basename.endswith(".prof")
+            or basename.endswith(".cover")
+        )
+
+        if is_allowlisted:
+            # Try to remove the file from disk, swallowing errors for already-gone files
+            file_path = worktree / violation
+            try:
+                os.remove(file_path)
+                removed_paths.append(violation)
+            except FileNotFoundError:
+                # Already gone, treat as successfully removed
+                removed_paths.append(violation)
+            except OSError:
+                # Other errors (permissions, etc.) are still reported as blocking
+                blocking_paths.append(violation)
+        else:
+            # Non-allowlisted: report as blocking
+            blocking_paths.append(violation)
+
+    return (sorted(removed_paths), sorted(blocking_paths))
+
+
 def revert_out_of_scope_drift(
     worktree: Path, task_dir: Path, parent_branch: str
 ) -> tuple[list[str], list[str]]:
