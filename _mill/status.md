@@ -37,7 +37,9 @@ batches:
     start_sha: 450f02e60d8a395720dafeaf9dea3f531f0f6368
     commit_sha: ebc92404764589d579abfefdf2ef90b158afe448
   - name: implementer-model-tier
-    state: pending
+    state: running
+    implementer_session: a2ea5001-ec35-482b-b468-851cddeb931b
+    start_sha: 47fc77c0ca2774f3bf10171e26855b506f551466
   - name: workflow-memory-note
     state: pending
   - name: implementer-finalize-contract
