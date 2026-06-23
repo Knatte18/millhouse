@@ -49,5 +49,7 @@ batches:
     start_sha: e9ffa9ff740aefaeb417ad23b7714c54754277f3
     commit_sha: c644049ac5fac7cc786b4e660ed5c42f53767332
   - name: implementer-finalize-contract
-    state: pending
+    state: running
+    implementer_session: b79e4b22-ac17-4ec9-8974-02c19d9e672c
+    start_sha: 39ecfe192ad22a64f43a11df80b4536018132b33
 ```
