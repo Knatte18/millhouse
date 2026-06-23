@@ -293,7 +293,9 @@ For each round `N` from 1 to `roles.code-review.batch.rounds`:
    `signature: _review_common.parse_verdict(text: str) -> str`
    `signature: _status.phase_entry_timestamp(status_path: Path, phase: str, *, occurrence: int = 1) -> str | None`
 
-2. If `dispatch == agent`: follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" above) with `<cli> = millpy-review-code.py` and `<args> = --batch <batch_name> [--extra-file <p> ...]`.
+1.5. **Prior-notes digest (round N > 1 only).** If `N > 1`: scan the prior round's review file (from round `N-1`) for every line matching `### [NIT] <title>` (case-insensitive NIT marker). Extract the title text and the next non-empty line (which should contain Location and Issue fields). Build a digest: one line per NIT finding, in format "- Title: issue context" (ASCII-only, all non-ASCII replaced with closest ASCII), write to `<briefs_dir>/prior-nonblocking-<batch_name>-r<N>.txt`, and pass `--prior-notes <digest-path>` to the `millpy-review-code.py` invocation below. The `reviews/` read-ban is unchanged — only the curated digest reaches the reviewer. Round 1 passes no `--prior-notes` (digest defaults to `(none)` in the template).
+
+2. If `dispatch == agent`: follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" above) with `<cli> = millpy-review-code.py` and `<args> = --batch <batch_name> [--extra-file <p> ...] [--prior-notes <digest-path>]`.
 
    If `dispatch == subprocess` or `psmux`: background via `millpy-bg`:
 
@@ -303,7 +305,7 @@ For each round `N` from 1 to `roles.code-review.batch.rounds`:
    PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-bg.py" \
        --slug review-code-<batch_name>-r<N> -- \
        "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-review-code.py" \
-           --batch <batch_name> [--extra-file <p> ...]
+           --batch <batch_name> [--extra-file <p> ...] [--prior-notes <digest-path>]
    ```
 
    Returns immediately with `pid=<N> log=<abs-path>`. Do **not** use `run_in_background: true`. Poll `cat <log-path>` until `[mill-bg] EXIT` appears with a bounded max-wait (~3600s), but on each iteration also run a liveness check:
@@ -553,7 +555,9 @@ For each round `H` from 1 to `max_holistic_rounds`:
 
 2. **Skip this step when step 1 returned branch (a) or any sub-branch of (c).** `_status.append_phase(status_path, "holistic-reviewing", _timestamp.now_utc_iso())`. Commit: `git -C <worktree> add <status_path> && git -C <worktree> commit -m "mill-go: holistic reviewing round {H}"`.
 
-3. If `dispatch == agent`: follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" above) with `<cli> = millpy-review-code.py` and `<args> = [--extra-file <p> ...]` (no `--batch` flag for holistic scope). Include any accumulated `extra_files` from prior `NEED_CONTEXT` rounds via `--extra-file <p>` (one flag per path).
+2.5. **Prior-notes digest (round H > 1 only).** If `H > 1`: scan the prior round's review file (from round `H-1`, matching `*-code-review-r{H-1}.md` with no batch-name segment) for every line matching `### [NIT] <title>` (case-insensitive NIT marker). Extract the title text and the next non-empty line (which should contain Location and Issue fields). Build a digest: one line per NIT finding, in format "- Title: issue context" (ASCII-only, all non-ASCII replaced with closest ASCII), write to `<briefs_dir>/prior-nonblocking-holistic-r{H}.txt`, and pass `--prior-notes <digest-path>` to the `millpy-review-code.py` invocation below. The `reviews/` read-ban is unchanged — only the curated digest reaches the reviewer. Round 1 passes no `--prior-notes` (digest defaults to `(none)` in the template).
+
+3. If `dispatch == agent`: follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" above) with `<cli> = millpy-review-code.py` and `<args> = [--extra-file <p> ...] [--prior-notes <digest-path>]` (no `--batch` flag for holistic scope). Include any accumulated `extra_files` from prior `NEED_CONTEXT` rounds via `--extra-file <p>` (one flag per path).
 
    If `dispatch == subprocess` or `psmux` (via `millpy-bg`):
 
@@ -576,7 +580,7 @@ For each round `H` from 1 to `max_holistic_rounds`:
    PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-bg.py" \
      --slug review-code-holistic-r{H} -- \
      "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-review-code.py" \
-       [--extra-file <p> ...]
+       [--extra-file <p> ...] [--prior-notes <digest-path>]
    ```
    Include any accumulated `extra_files` from prior `NEED_CONTEXT` rounds via `--extra-file <p>` (one flag per path). Poll `cat <log-path>` until `[mill-bg] EXIT` appears, but on each iteration also run a liveness check:
    ```bash
