@@ -31,7 +31,9 @@ implementing  '2026-06-23T09:15:43Z'
 ```yaml
 batches:
   - name: hub-cwd-resolution
-    state: pending
+    state: running
+    implementer_session: 2db17510-f8e5-4a58-ad08-4605d2ad7e2b
+    start_sha: 450f02e60d8a395720dafeaf9dea3f531f0f6368
   - name: implementer-model-tier
     state: pending
   - name: workflow-memory-note
