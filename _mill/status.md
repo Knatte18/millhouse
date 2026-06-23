@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-implementer-model-tier
+phase: approved-workflow-memory-note
 slug: mill-implementer-and-dispatch-quality
 branch: hanf/mill-implementer-and-dispatch-quality
 plan: _mill/plan
@@ -26,6 +26,7 @@ planned  '2026-06-23T09:01:22Z'
 implementing  '2026-06-23T09:15:43Z'
 approved-hub-cwd-resolution  '2026-06-23T10:11:07Z'
 approved-implementer-model-tier  '2026-06-23T10:13:44Z'
+approved-workflow-memory-note  '2026-06-23T10:15:49Z'
 ```
 
 ## Batches
@@ -43,9 +44,10 @@ batches:
     start_sha: 47fc77c0ca2774f3bf10171e26855b506f551466
     commit_sha: c58e02cf1e4e39170b72693c8b40fa89d991d516
   - name: workflow-memory-note
-    state: running
+    state: approved
     implementer_session: 77ef7128-3ee9-45bb-8c80-e7e092f12926
     start_sha: e9ffa9ff740aefaeb417ad23b7714c54754277f3
+    commit_sha: c644049ac5fac7cc786b4e660ed5c42f53767332
   - name: implementer-finalize-contract
     state: pending
 ```
