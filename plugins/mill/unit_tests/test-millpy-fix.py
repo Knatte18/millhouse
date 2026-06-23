@@ -346,35 +346,42 @@ class TestMillpyFix(unittest.TestCase):
         self.assertEqual(data["stuck_type"], "transient")
 
     def test_is_windows_lock_error_helper(self):
-        """Unit test for _is_windows_lock_error helper with various inputs."""
-        # Test message patterns
+        """Unit test for _is_windows_lock_error helper with various inputs.
+
+        Tests both the structured __cause__ winerror=32 check and the delegated
+        textual match via _is_benign_windows_cleanup. After refactoring, the string
+        matching delegates to the shared helper.
+        """
+        # Test message patterns that match cleanup signatures via shared helper
         self.assertTrue(
             millpy_fix._is_windows_lock_error(millpy_fix._llm_claude.LLMError("failed: WinError 32: file in use"))
         )
         self.assertTrue(
-            millpy_fix._is_windows_lock_error(millpy_fix._llm_claude.LLMError("the process cannot access the file"))
+            millpy_fix._is_windows_lock_error(millpy_fix._llm_claude.LLMError("winerror 32"))
         )
         self.assertTrue(
-            millpy_fix._is_windows_lock_error(millpy_fix._llm_claude.LLMError("being used by another process"))
+            millpy_fix._is_windows_lock_error(millpy_fix._llm_claude.LLMError("error: unlinkat ... Access is denied"))
         )
 
-        # Test non-matching message
+        # Test non-matching message (no cleanup signature, no winerror 32)
         self.assertFalse(
             millpy_fix._is_windows_lock_error(millpy_fix._llm_claude.LLMError("timeout after 60s"))
         )
 
-        # Test OSError __cause__ with winerror=32
+        # Test OSError __cause__ with winerror=32 (structured check, takes precedence)
         e_with_cause_32 = millpy_fix._llm_claude.LLMError("file error")
         cause_32 = OSError("Cannot access file")
         cause_32.winerror = 32
         e_with_cause_32.__cause__ = cause_32
         self.assertTrue(millpy_fix._is_windows_lock_error(e_with_cause_32))
 
-        # Test OSError __cause__ with winerror != 32 (access denied)
+        # Test OSError __cause__ with winerror != 32 (access denied, winerror 5)
+        # Exception message is "file error" which has no cleanup signature text
         e_with_cause_5 = millpy_fix._llm_claude.LLMError("file error")
         cause_5 = OSError("Access denied")
         cause_5.winerror = 5
         e_with_cause_5.__cause__ = cause_5
+        # "file error" has no cleanup signature in the shared helper, so returns False
         self.assertFalse(millpy_fix._is_windows_lock_error(e_with_cause_5))
 
     def test_windows_lock_error_routes_to_verify(self):
