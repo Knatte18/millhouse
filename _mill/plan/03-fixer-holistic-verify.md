@@ -47,13 +47,15 @@ Fixes #518b — the holistic fixer could report success while leaving a knowingl
   - `plugins/mill/scripts/_implementer_common.py`
   - `plugins/mill/scripts/_plan_dag.py`
   - `plugins/mill/unit_tests/test-implementer-common.py`
+  - `plugins/mill/templates/fixer-batch-brief.md`
+  - `plugins/mill/templates/fixer-holistic-brief.md`
 - **Edits:**
   - `plugins/mill/unit_tests/test-millpy-fix.py`
 - **Creates:** none
 - **Deletes:** none
-- **Requirements:** In `test-millpy-fix.py`, add cases for the holistic derivation: (a) a plan with two batches having non-null `verify:` derives `cmd1 && cmd2` and, when the combined command exits non-zero (use a stub like `exit 1`), demotes a self-reported `success` to `stuck/verify`; (b) the same with a passing stub (`exit 0`) preserves `success`; (c) a plan whose batches all have `verify: null` derives `None` (no gate, success preserved). Reuse the `_run_verify_gate` fixture style from `test-implementer-common.py`. Drive the plan-dir fixture with synthetic `00-overview.md` + batch files, or monkeypatch `_plan_dag.iter_batch_verifies` to return controlled pairs — pick whichever matches the existing fix-test fixtures.
-- **Commit:** `test(fix): cover derived holistic verify gate (pass/fail/none)`
+- **Requirements:** In `test-millpy-fix.py`, add cases for the holistic derivation: (a) a plan with two batches having non-null `verify:` derives `cmd1 && cmd2` and, when the combined command exits non-zero (use a stub like `exit 1`), demotes a self-reported `success` to `stuck/verify`; (b) the same with a passing stub (`exit 0`) preserves `success`; (c) a plan whose batches all have `verify: null` derives `None` (no gate, success preserved). Reuse the `_run_verify_gate` fixture style from `test-implementer-common.py`. Drive the plan-dir fixture with synthetic `00-overview.md` + batch files, or monkeypatch `_plan_dag.iter_batch_verifies` to return controlled pairs — pick whichever matches the existing fix-test fixtures. Additionally, add a firm content assertion: read `fixer-batch-brief.md` and `fixer-holistic-brief.md` and assert each contains the unsatisfiable-demand instruction (e.g. the substring `stuck_type: logic` together with a phrase like `cannot pass` / `unsatisfiable`), so the brief contract from card 9 is regression-guarded.
+- **Commit:** `test(fix): cover derived holistic verify gate + brief unsatisfiable-demand text`
 
 ## Batch Tests
 
-`verify:` runs `test-millpy-fix.py` — the only suite with runnable surface here (the derived-gate logic lives in `millpy-fix.py`). The fixer-brief and `mill-receiving-review` edits are prose validated by the plan reviewer; card 10 separately asserts the briefs contain the unsatisfiable-demand instruction via a content check if practical. Key scenarios: pass/fail/none derivation in card 10.
+`verify:` runs `test-millpy-fix.py` — the only suite with runnable surface here (the derived-gate logic lives in `millpy-fix.py`). The `mill-receiving-review` edit is prose validated by the plan reviewer; card 10 firmly asserts the fixer briefs contain the unsatisfiable-demand instruction via a content check. Key scenarios: pass/fail/none derivation and the brief-text regression guard in card 10.
