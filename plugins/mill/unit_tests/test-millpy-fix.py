@@ -817,6 +817,230 @@ class TestMillpyFixBriefSizeGuard(unittest.TestCase):
             f"Expected nits-fixed-test-batch in timeline, got: {full['timeline']}",
         )
 
+    def test_holistic_derived_verify_cmd_two_batches_failing(self):
+        """Holistic with two batch verify commands, combined exits non-zero -> stuck/verify."""
+        # Create plan with two batches, each with a verify command
+        plan_dir = self.tmp_path / "_mill" / "plan"
+        overview_text = (
+            "# Plan: Test Task\n\n"
+            "```yaml\n"
+            "task: Test Task\n"
+            "slug: test-slug\n"
+            "approved: true\n"
+            "```\n\n"
+            "## Batch Index\n\n"
+            "```yaml\n"
+            "batches:\n"
+            "  - name: batch1\n"
+            "    file: 01-batch1.md\n"
+            "    depends-on: []\n"
+            "    verify: 'exit 0'\n"
+            "  - name: batch2\n"
+            "    file: 02-batch2.md\n"
+            "    depends-on: [1]\n"
+            "    verify: 'exit 1'\n"
+            "```\n"
+        )
+        (plan_dir / "00-overview.md").write_text(overview_text, encoding="utf-8")
+        (plan_dir / "01-batch1.md").write_text("# Batch: batch1\n\n```yaml\nverify: exit 0\n```\n", encoding="utf-8")
+        (plan_dir / "02-batch2.md").write_text("# Batch: batch2\n\n```yaml\nverify: exit 1\n```\n", encoding="utf-8")
+
+        captured = {}
+        call_count = [0]
+
+        def mock_subprocess_run(argv, **kwargs):
+            if argv[0:2] == ["git", "rev-parse"]:
+                call_count[0] += 1
+                if call_count[0] == 1:
+                    return subprocess.CompletedProcess(
+                        args=argv, returncode=0, stdout="abc1234\n", stderr=""
+                    )
+                else:
+                    return subprocess.CompletedProcess(
+                        args=argv, returncode=0, stdout="def5678\n", stderr=""
+                    )
+            return subprocess.CompletedProcess(
+                args=argv, returncode=0, stdout="abc1234\n", stderr=""
+            )
+
+        def mock_run(prompt_text, *, model, effort, session_id, resume, cwd, timeout):
+            captured["prompt_text"] = prompt_text
+            return ('{"status":"success","commit_sha":"abc","session_id":"fake"}\n', "fake-session")
+
+        with unittest.mock.patch.object(
+            millpy_fix._subprocess_util, "run",
+            side_effect=mock_subprocess_run,
+        ):
+            with unittest.mock.patch.object(
+                millpy_fix._implementer_claude, "run",
+                side_effect=mock_run,
+            ):
+                rc, out = self._run_main([
+                    "--scope", "holistic",
+                    "--review-file", str(self.review_file),
+                    "--round", "1",
+                ])
+
+        self.assertEqual(rc, 0)
+        data = json.loads(out.strip().splitlines()[-1])
+        self.assertEqual(data["status"], "stuck", f"expected stuck status, got {data}")
+        self.assertEqual(data["stuck_type"], "verify", f"expected verify stuck_type, got {data}")
+
+    def test_holistic_derived_verify_cmd_two_batches_passing(self):
+        """Holistic with two batch verify commands, combined exits 0 -> success preserved."""
+        # Create plan with two batches, each with a verify command
+        plan_dir = self.tmp_path / "_mill" / "plan"
+        overview_text = (
+            "# Plan: Test Task\n\n"
+            "```yaml\n"
+            "task: Test Task\n"
+            "slug: test-slug\n"
+            "approved: true\n"
+            "```\n\n"
+            "## Batch Index\n\n"
+            "```yaml\n"
+            "batches:\n"
+            "  - name: batch1\n"
+            "    file: 01-batch1.md\n"
+            "    depends-on: []\n"
+            "    verify: 'exit 0'\n"
+            "  - name: batch2\n"
+            "    file: 02-batch2.md\n"
+            "    depends-on: [1]\n"
+            "    verify: 'exit 0'\n"
+            "```\n"
+        )
+        (plan_dir / "00-overview.md").write_text(overview_text, encoding="utf-8")
+        (plan_dir / "01-batch1.md").write_text("# Batch: batch1\n\n```yaml\nverify: exit 0\n```\n", encoding="utf-8")
+        (plan_dir / "02-batch2.md").write_text("# Batch: batch2\n\n```yaml\nverify: exit 0\n```\n", encoding="utf-8")
+
+        captured = {}
+        call_count = [0]
+
+        def mock_subprocess_run(argv, **kwargs):
+            if argv[0:2] == ["git", "rev-parse"]:
+                call_count[0] += 1
+                if call_count[0] == 1:
+                    return subprocess.CompletedProcess(
+                        args=argv, returncode=0, stdout="abc1234\n", stderr=""
+                    )
+                else:
+                    return subprocess.CompletedProcess(
+                        args=argv, returncode=0, stdout="def5678\n", stderr=""
+                    )
+            return subprocess.CompletedProcess(
+                args=argv, returncode=0, stdout="abc1234\n", stderr=""
+            )
+
+        def mock_run(prompt_text, *, model, effort, session_id, resume, cwd, timeout):
+            captured["prompt_text"] = prompt_text
+            return ('{"status":"success","commit_sha":"abc","session_id":"fake"}\n', "fake-session")
+
+        with unittest.mock.patch.object(
+            millpy_fix._subprocess_util, "run",
+            side_effect=mock_subprocess_run,
+        ):
+            with unittest.mock.patch.object(
+                millpy_fix._implementer_claude, "run",
+                side_effect=mock_run,
+            ):
+                rc, out = self._run_main([
+                    "--scope", "holistic",
+                    "--review-file", str(self.review_file),
+                    "--round", "1",
+                ])
+
+        self.assertEqual(rc, 0)
+        data = json.loads(out.strip().splitlines()[-1])
+        self.assertEqual(data["status"], "success", f"expected success status, got {data}")
+
+    def test_holistic_all_null_verifies(self):
+        """Holistic with all verify: null -> no gate, success preserved."""
+        # Create plan with two batches, both with null verify
+        plan_dir = self.tmp_path / "_mill" / "plan"
+        overview_text = (
+            "# Plan: Test Task\n\n"
+            "```yaml\n"
+            "task: Test Task\n"
+            "slug: test-slug\n"
+            "approved: true\n"
+            "```\n\n"
+            "## Batch Index\n\n"
+            "```yaml\n"
+            "batches:\n"
+            "  - name: batch1\n"
+            "    file: 01-batch1.md\n"
+            "    depends-on: []\n"
+            "    verify: null\n"
+            "  - name: batch2\n"
+            "    file: 02-batch2.md\n"
+            "    depends-on: [1]\n"
+            "    verify: null\n"
+            "```\n"
+        )
+        (plan_dir / "00-overview.md").write_text(overview_text, encoding="utf-8")
+        (plan_dir / "01-batch1.md").write_text("# Batch: batch1\n", encoding="utf-8")
+        (plan_dir / "02-batch2.md").write_text("# Batch: batch2\n", encoding="utf-8")
+
+        captured = {}
+        call_count = [0]
+
+        def mock_subprocess_run(argv, **kwargs):
+            if argv[0:2] == ["git", "rev-parse"]:
+                call_count[0] += 1
+                if call_count[0] == 1:
+                    return subprocess.CompletedProcess(
+                        args=argv, returncode=0, stdout="abc1234\n", stderr=""
+                    )
+                else:
+                    return subprocess.CompletedProcess(
+                        args=argv, returncode=0, stdout="def5678\n", stderr=""
+                    )
+            return subprocess.CompletedProcess(
+                args=argv, returncode=0, stdout="abc1234\n", stderr=""
+            )
+
+        def mock_run(prompt_text, *, model, effort, session_id, resume, cwd, timeout):
+            captured["prompt_text"] = prompt_text
+            return ('{"status":"success","commit_sha":"abc","session_id":"fake"}\n', "fake-session")
+
+        with unittest.mock.patch.object(
+            millpy_fix._subprocess_util, "run",
+            side_effect=mock_subprocess_run,
+        ):
+            with unittest.mock.patch.object(
+                millpy_fix._implementer_claude, "run",
+                side_effect=mock_run,
+            ):
+                rc, out = self._run_main([
+                    "--scope", "holistic",
+                    "--review-file", str(self.review_file),
+                    "--round", "1",
+                ])
+
+        self.assertEqual(rc, 0)
+        data = json.loads(out.strip().splitlines()[-1])
+        self.assertEqual(data["status"], "success", f"expected success status, got {data}")
+
+    def test_brief_contains_unsatisfiable_demand_instruction(self):
+        """Assert fixer briefs contain unsatisfiable-demand instruction."""
+        # Read the brief templates
+        batch_brief_path = Path(__file__).resolve().parent.parent / "templates" / "fixer-batch-brief.md"
+        holistic_brief_path = Path(__file__).resolve().parent.parent / "templates" / "fixer-holistic-brief.md"
+
+        batch_brief = batch_brief_path.read_text(encoding="utf-8")
+        holistic_brief = holistic_brief_path.read_text(encoding="utf-8")
+
+        # Check batch brief contains unsatisfiable-demand instruction
+        self.assertIn("unsatisfiable", batch_brief.lower(), "fixer-batch-brief.md must contain unsatisfiable-demand instruction")
+        self.assertIn("stuck_type: logic", batch_brief, "fixer-batch-brief.md must mention stuck_type: logic")
+        self.assertIn("cannot pass", batch_brief.lower(), "fixer-batch-brief.md must reference cannot pass")
+
+        # Check holistic brief contains unsatisfiable-demand instruction
+        self.assertIn("unsatisfiable", holistic_brief.lower(), "fixer-holistic-brief.md must contain unsatisfiable-demand instruction")
+        self.assertIn("stuck_type: logic", holistic_brief, "fixer-holistic-brief.md must mention stuck_type: logic")
+        self.assertIn("cannot pass", holistic_brief.lower(), "fixer-holistic-brief.md must reference cannot pass")
+
 
 if __name__ == "__main__":
     unittest.main()
