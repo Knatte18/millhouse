@@ -46,7 +46,9 @@ batches:
     start_sha: 856185852af48ae0d0c22fd6981893c59817c9a2
     commit_sha: e5261d68ccd56885699cd849d8dd124d79f64bd2
   - name: fixer-holistic-verify
-    state: pending
+    state: running
+    implementer_session: 70815b42-077d-490d-9da1-0acd2c4de85f
+    start_sha: a14aa44affbd275be897261729f468da9a6671ff
   - name: reviewer-anti-oscillation
     state: pending
   - name: scope-violation-cleanup
