@@ -1,10 +1,10 @@
 # Status
 
 ```yaml
-phase: discussed
+phase: planning
 slug: mill-implementer-and-dispatch-quality
 branch: hanf/mill-implementer-and-dispatch-quality
-plan: null
+plan: _mill/plan
 parent: main
 task: Fix agent-dispatch cwd guard, implementer self-termination, and false-success contracts
 task_description: |
@@ -16,4 +16,5 @@ task_description: |
 ```text
 discussing  '2026-06-23T08:06:37Z'
 discussed  '2026-06-23T08:23:06Z'
+planning  '2026-06-23T08:44:30Z'
 ```
