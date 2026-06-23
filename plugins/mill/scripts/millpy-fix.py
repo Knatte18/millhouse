@@ -201,7 +201,7 @@ def main(argv=None) -> int:
             print("--agent-output is required when --stage finalize", file=sys.stderr)
             return 1
         fixer_snapshot_path = project_root / "_mill" / ".cleanliness-snapshot-fixer.txt"
-        # Resolve batch verify command for batch-scope fixes only
+        # Resolve verify command for batch/holistic fixes
         verify_cmd = None
         if args.scope == "batch":
             batch_entry = next((b for b in batches if b["name"] == args.batch_name), None)
@@ -209,6 +209,11 @@ def main(argv=None) -> int:
                 batch_file = plan_base / batch_entry["file"]
                 batch_frontmatter = _plan_dag._read_batch_frontmatter(batch_file)
                 verify_cmd = batch_frontmatter.get("verify")
+        elif args.scope == "holistic":
+            # Derive concatenated verify_cmd from all batch verify commands in DAG order
+            batch_verifies = _plan_dag.iter_batch_verifies(plan_base)
+            if batch_verifies:
+                verify_cmd = " && ".join(verify for _, verify in batch_verifies)
         nits_scope = args.batch_name if args.scope == "batch" else "holistic"
         return finalize_from_output(
             Path(args.agent_output),
@@ -287,8 +292,9 @@ def main(argv=None) -> int:
 
     else:  # args.scope == "holistic"
         # Holistic fixer dispatch
-        # No single batch verify command for holistic fixes; pass None to finalize/full
-        verify_cmd = None
+        # Derive concatenated verify_cmd from all batch verify commands in DAG order
+        batch_verifies = _plan_dag.iter_batch_verifies(plan_base)
+        verify_cmd = " && ".join(verify for _, verify in batch_verifies) if batch_verifies else None
         batch_files_text = "\n".join(str(plan_base / b["file"]) for b in batches)
 
         _status.append_phase(status_path, "holistic-fixing", _timestamp.now_utc_iso())
