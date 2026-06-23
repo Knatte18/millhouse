@@ -811,6 +811,45 @@ def main() -> int:
         finally:
             sys.platform = original_platform
 
+    # Case 24b: win32 + cleanup signature BUT bare FAIL line present -> stays stuck/verify
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        base_sha = _setup_fixture(project_root)
+        snapshot_path = project_root / "_mill" / ".cleanliness-snapshot-test.txt"
+        _cleanliness.capture_snapshot(project_root, snapshot_path)
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "--allow-empty", "-m", "second"],
+            check=True, capture_output=True,
+        )
+        new_head = subprocess.run(
+            ["git", "-C", str(project_root), "rev-parse", "HEAD"],
+            check=True, capture_output=True, text=True,
+        ).stdout.strip()
+        # Verify command that outputs cleanup signature AND bare FAIL (as in go test output)
+        verify_cmd = "echo 'error: unlinkat ...\\X.test.exe: Access is denied' && echo 'FAIL\tgithub.com/test/...' && exit 1"
+        agent_output = '{"status":"success","commit_sha":"abc","session_id":"test-session"}\n'
+        original_platform = sys.platform
+        try:
+            sys.platform = "win32"
+            rc, captured = _capture_stdout(
+                lambda: _forward_output(
+                    agent_output,
+                    project_root,
+                    start_sha=base_sha,
+                    snapshot_path=snapshot_path,
+                    verify_cmd=verify_cmd,
+                )
+            )
+            data = json.loads(captured.strip())
+            assert data["status"] == "stuck", f"expected status=stuck (real failure present), got {data}"
+            assert data["stuck_type"] == "verify", f"expected stuck_type=verify, got {data}"
+            print("PASS: case 24b - win32 + cleanup signature + bare FAIL present -> stuck/verify")
+        except Exception as exc:
+            print(f"FAIL: case 24b ({exc}) captured={captured!r}", file=sys.stderr)
+            errors += 1
+        finally:
+            sys.platform = original_platform
+
     # Case 25: win32 + ordinary non-zero (no cleanup signature) -> stuck/verify
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
