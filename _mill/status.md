@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-windows-verify-gate
 slug: mill-review-and-verify-quality
 branch: hanf/mill-review-and-verify-quality
 plan: _mill/plan
@@ -27,6 +27,7 @@ plan-fix-r3  '2026-06-23T09:03:27Z'
 plan-fix-r4  '2026-06-23T09:07:19Z'
 planned  '2026-06-23T09:07:34Z'
 implementing  '2026-06-23T09:15:51Z'
+approved-windows-verify-gate  '2026-06-23T09:24:52Z'
 ```
 
 ## Batches
@@ -34,9 +35,10 @@ implementing  '2026-06-23T09:15:51Z'
 ```yaml
 batches:
   - name: windows-verify-gate
-    state: running
+    state: approved
     implementer_session: 41ca123c-0b3a-43ed-85e2-eb1551569c1e
     start_sha: 47c5d0b22dc4f47a3e25764e42aa70deb51af00d
+    commit_sha: 859e59aee5998537176791ccc6e81b7ddc408e2f
   - name: nit-enforcement
     state: pending
   - name: fixer-holistic-verify
