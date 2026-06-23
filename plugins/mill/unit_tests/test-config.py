@@ -1198,6 +1198,38 @@ def test_git_unknown_subkey_still_warns() -> None:
     print("PASS load_config -- git subkey typo still warns")
 
 
+def test_implementer_model_default_is_sonnethigh() -> None:
+    """
+    Verify that the implementer model is set to sonnethigh in both
+    the plugin template and the hub config file.
+    """
+    repo_root = HUB
+    template_path = repo_root / "plugins" / "mill" / "templates" / "mill-config.yaml"
+    hub_config_path = repo_root / "mill-config.yaml"
+
+    # Load template config
+    with open(template_path, "r", encoding="utf-8") as f:
+        template_config = yaml.safe_load(f)
+
+    # Load hub config
+    with open(hub_config_path, "r", encoding="utf-8") as f:
+        hub_config = yaml.safe_load(f)
+
+    # Assert template implementer model is sonnethigh
+    template_impl_model = template_config.get("roles", {}).get("implementer", {}).get("model")
+    assert template_impl_model == "sonnethigh", (
+        f"Template implementer model should be sonnethigh, got {template_impl_model!r}"
+    )
+
+    # Assert hub implementer model is sonnethigh
+    hub_impl_model = hub_config.get("roles", {}).get("implementer", {}).get("model")
+    assert hub_impl_model == "sonnethigh", (
+        f"Hub implementer model should be sonnethigh, got {hub_impl_model!r}"
+    )
+
+    print("PASS implementer_model_default_is_sonnethigh")
+
+
 def main() -> int:
     tests = [
         test_load_config_shared_present,
@@ -1243,6 +1275,7 @@ def main() -> int:
         test_container_layout_config_resolution,
         test_review_common_load_config_container_layout,
         test_no_repo_layer_config_anywhere_emits_note,
+        test_implementer_model_default_is_sonnethigh,
     ]
     failures: list[str] = []
     for fn in tests:
