@@ -40,7 +40,9 @@ batches:
     start_sha: 47c5d0b22dc4f47a3e25764e42aa70deb51af00d
     commit_sha: 859e59aee5998537176791ccc6e81b7ddc408e2f
   - name: nit-enforcement
-    state: pending
+    state: running
+    implementer_session: 6fe1de11-f0e9-4a12-b3cd-a2fbd4efc1c4
+    start_sha: 856185852af48ae0d0c22fd6981893c59817c9a2
   - name: fixer-holistic-verify
     state: pending
   - name: reviewer-anti-oscillation
