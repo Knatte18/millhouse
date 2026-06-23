@@ -117,17 +117,23 @@ implementer/dispatch quality surface.
   `### Card N` entries are committed, `## Verify` has run, and the JSON report is
   emitted. Combine with the existing Long-session reminder (emit JSON as the first
   line of the final turn). (2) Add a mechanical **batch-completeness gate** in the
-  finalize path (`_implementer_common._forward_output`): count `### Card N` headings
-  in the batch file and count content commits since `start_sha`; if commits <
-  cards, the batch is incomplete — demote any self-reported (or inferred) success to
-  `stuck` rather than reporting success. Apply to both the self-reported-success and
-  inferred-success branches.
+  finalize path (`_implementer_common._forward_output`, with the new params also
+  threaded through its agent-dispatch entry `finalize_from_output` — see Technical
+  context): count `### Card N` headings in the batch file and count content commits
+  with the **raw** `git rev-list --count start_sha..HEAD` (no filtering); if that
+  count < card count, the batch is incomplete — demote any self-reported (or inferred)
+  success to `stuck` rather than reporting success. Apply to both the
+  self-reported-success and inferred-success branches.
 - **Rationale:** The brief directive is the primary prevention (make the agent finish
   in one turn). The completeness gate is a cheap, language-agnostic safety net:
   "one commit per card" is already brief policy, so `commits_since_start >= card_count`
-  is a sound lower-bound completeness signal (extra commits — formatter drift,
-  plan-extend — only inflate the count, so `commits < cards` reliably means
-  incomplete). This guarantees an incomplete batch can never slip through as success,
+  is a sound lower-bound completeness signal. The raw count is used deliberately:
+  `start_sha` is captured before the `mill-go: start batch` orchestration commit, so
+  `start_sha..HEAD` already includes that commit plus any formatter-drift / plan-extend
+  commits — every such extra commit only **inflates** the count, and over-count can
+  never falsely demote a complete batch, so no "non-content" filtering is needed (and
+  a filtering scheme would only add inconsistency risk). This guarantees an incomplete
+  batch can never slip through as success,
   which is the core of #521. Recommended stuck_type: `transient` (mill-go's existing
   one-shot retry gives a free continuation; a fresh re-dispatch resumes because
   committed cards and `start_sha` persist in status.md), surfacing to the operator if
@@ -145,8 +151,11 @@ implementer/dispatch quality surface.
   dirt via `_cleanliness.compute_terminal_dirt(worktree, task_dir, parent_branch)`
   (read-only — it does **not** revert) and, if the result is non-empty, demote the
   success to `stuck` (e.g. `stuck_type: logic`, reason "success reported but in-scope
-  tree dirty"). Thread `task_dir` and `parent_branch` (resolved from `status_path` /
-  status.md, as mill-go's 2b gate does) into `_forward_output`. Also add a mandatory
+  tree dirty"). Thread `task_dir` and `parent_branch` into `_forward_output` (and
+  through `finalize_from_output`, the agent-dispatch entry). Resolve `parent_branch`
+  via `_parent_branch.resolve(status_path, interactive=False)` — the **non-interactive**
+  form is mandatory because the finalize CLI has no operator attached (mill-go's 2b
+  gate uses the same `interactive=False` call). Also add a mandatory
   `git status --porcelain` self-check to the end of `implementer-brief.md`:
   commit-or-report-stuck before emitting the JSON line.
 - **Rationale:** Moves the dirty-tree check **to the source** (the CLI) so it fires in
@@ -230,7 +239,11 @@ Key files and the cwd-independent contract:
   `_extract_status_json` (280) takes the **last** balanced-brace `{...}` with a `status`
   key. `finalize_from_output` (255) reads the agent-output file and delegates here. Both
   new checks (completeness, dirty-tree) go here; thread `batch_file`/`card_count`,
-  `task_dir`, `parent_branch` from `millpy-implement.py`.
+  `task_dir`, `parent_branch` from `millpy-implement.py`. **`finalize_from_output`'s own
+  signature must also gain these params and forward them** — it is the agent-dispatch
+  finalize entry (called at millpy-implement.py ~195), so threading only into
+  `_forward_output` would leave agent dispatch without the new checks. Keep subprocess
+  (`full` stage) and agent (`finalize` stage) in parity.
 - `plugins/mill/scripts/_cleanliness.py` — `compute_terminal_dirt(worktree, task_dir, parent_branch)`
   (119-148) is the **read-only** in-scope dirt computation to reuse for #516.
   `revert_out_of_scope_drift` (151) is what mill-go 2b uses (revert + block) — do not
@@ -249,8 +262,11 @@ Key files and the cwd-independent contract:
   insertion point for the #522 note.
 
 Card-completeness count is mechanical and language-agnostic: number of `### Card`
-headings in the batch file vs `git rev-list --count <start_sha>..HEAD` content commits
-(excluding the prepare pre-commit / any empty commits as appropriate).
+headings in the batch file vs the **raw** `git rev-list --count <start_sha>..HEAD`
+(no filtering). The raw count intentionally includes the `mill-go: start batch`
+orchestration commit and any formatter-drift/plan-extend commits — they only inflate
+the count, and over-count can never falsely demote a complete batch, so the
+`commits < cards ⇒ incomplete` lower-bound holds without a filtering scheme.
 
 ## Constraints
 
@@ -327,4 +343,16 @@ unit tests; ensure rendered-brief token substitution still passes any existing
 - **Q:** Should the finalize dirty-tree check revert out-of-scope drift like mill-go's
   2b gate? **A:** No — finalize is read-only (reject only); reverting stays mill-go 2b's
   responsibility to avoid surprising double-reverts.
+- **Q:** (review r1 gap) How is the completeness-gate commit count computed, given
+  `start_sha` predates the `mill-go: start batch` commit? **A:** Raw
+  `git rev-list --count start_sha..HEAD`, no filtering — over-count is safe (never
+  falsely demotes), so the `commits < cards` lower-bound holds without excluding any
+  "non-content" commits.
+- **Q:** (review r1 gap) Where do the new finalize params get threaded? **A:** Through
+  both `_forward_output` **and** its agent-dispatch entry `finalize_from_output`, whose
+  signature must gain `card_count`/`task_dir`/`parent_branch`, keeping subprocess and
+  agent finalize in parity.
+- **Q:** (review r1 note) How is `parent_branch` resolved in the finalize dirty-tree
+  check? **A:** `_parent_branch.resolve(status_path, interactive=False)` — non-interactive
+  is mandatory (no operator attached at finalize), matching mill-go's 2b gate.
 ```
