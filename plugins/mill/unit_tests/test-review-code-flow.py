@@ -1134,7 +1134,6 @@ def main() -> int:
             print("PASS test18a: prior-notes digest renders in prompt")
 
             # Test round 1: prior_notes=None should render (none)
-            stub.seed([(APPROVE_TEXT, "sid-r1")])
             mill_dir2, wiki_root2, project_root2, cfg2 = _make_fixture(tmpdir / "test2")
             orig_dir2 = os.getcwd()
             os.chdir(project_root2)
