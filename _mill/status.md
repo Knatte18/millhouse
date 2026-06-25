@@ -42,7 +42,9 @@ batches:
     start_sha: ab9d737f237940d06ef98e662bb18f2ec762d75e
     commit_sha: 190762646ae3cdae954e72a44e82517e4b64e019
   - name: dispatch-and-mergein-docs
-    state: pending
+    state: running
+    implementer_session: d12ebce0-3a20-46ab-9e88-9bef8c5341a9
+    start_sha: c940e0554e0a349be4c18c9ca18fc42acd6f23f7
   - name: teardown-reconcile
     state: pending
 ```
