@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-spawn-claim-lifecycle
 slug: mill-spawn-and-workflow-integrity
 branch: hanf/mill-spawn-and-workflow-integrity
 plan: _mill/plan
@@ -23,6 +23,7 @@ plan-fix-r1  '2026-06-25T07:15:36Z'
 plan-fix-r2  '2026-06-25T07:19:10Z'
 planned  '2026-06-25T07:19:45Z'
 implementing  '2026-06-25T07:20:55Z'
+approved-spawn-claim-lifecycle  '2026-06-25T07:40:42Z'
 ```
 
 ## Batches
@@ -30,9 +31,10 @@ implementing  '2026-06-25T07:20:55Z'
 ```yaml
 batches:
   - name: spawn-claim-lifecycle
-    state: running
+    state: approved
     implementer_session: fe87e522-d190-40e2-8d53-8464dece5163
     start_sha: 2f9ba02e0ef723156a13addd7dc1d5a93aa05f4d
+    commit_sha: 715315af05cfaa5b023428000653ac7ae2c69768
   - name: verify-and-implementer
     state: pending
   - name: dispatch-and-mergein-docs
