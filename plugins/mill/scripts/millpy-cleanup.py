@@ -413,9 +413,10 @@ def _delete_remote_branch(hub_root: Path, branch: str) -> None:
     )
     if result.returncode != 0:
         stderr_lower = result.stderr.lower()
-        # "remote ref does not exist" signals the branch was never pushed or was
-        # already cleaned; both cases are acceptable -- nothing to remove.
-        if "remote ref does not exist" not in stderr_lower:
+        # "remote ref does not exist" or "unable to delete" signals the branch was
+        # never pushed or was already cleaned; both cases are acceptable -- nothing
+        # to remove.
+        if "remote ref does not exist" not in stderr_lower and "unable to delete" not in stderr_lower:
             print(
                 f"[cleanup] push origin --delete {branch!r} failed (non-fatal): "
                 f"{result.stderr.strip()!r}",
