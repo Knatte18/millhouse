@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: discussion-fix-r1
 slug: mill-unit-test-and-signal-accuracy
 branch: hanf/mill-unit-test-and-signal-accuracy
 plan: null
@@ -15,4 +15,5 @@ task_description: |
 
 ```text
 discussing  '2026-06-25T06:25:17Z'
+discussion-fix-r1  '2026-06-25T06:59:06Z'
 ```
