@@ -28,7 +28,9 @@ implementing  '2026-06-25T07:13:21Z'
 ```yaml
 batches:
   - name: review-dispatch-fixes
-    state: pending
+    state: running
+    implementer_session: d1b58a43-d5e2-4ffb-8e81-d880ec512306
+    start_sha: 2a9903639f148306df62c4931d1a6c80100bb3f1
   - name: implementer-signal-fixes
     state: pending
   - name: stale-test-corrections
