@@ -258,9 +258,11 @@ def _is_formatter_drift_only(project_root: Path) -> bool:
             if line.startswith("??"):
                 return False
 
-        # Check if tracked files have changes
+        # Check if tracked files have changes. --ignore-cr-at-eol ensures that a
+        # pure CRLF-vs-LF delta (e.g. from text-mode CRLF translation on Windows)
+        # is treated the same as whitespace and does not prevent drift detection.
         result_diff = _subprocess_util.run(
-            ["git", "-C", str(project_root), "diff"],
+            ["git", "-C", str(project_root), "diff", "--ignore-cr-at-eol"],
             check=False,
         )
         if result_diff.returncode != 0:
@@ -269,9 +271,12 @@ def _is_formatter_drift_only(project_root: Path) -> bool:
             # No tracked-file changes at all
             return False
 
-        # Check if those changes are purely whitespace
+        # Check if those changes are purely whitespace. --ignore-cr-at-eol is
+        # added here too because git diff -w does not suppress CR-at-EOL diffs
+        # on its own; a CRLF-only delta would still appear as content under -w
+        # without this flag, causing a false "not formatter drift" result.
         result_diff_w = _subprocess_util.run(
-            ["git", "-C", str(project_root), "diff", "-w"],
+            ["git", "-C", str(project_root), "diff", "-w", "--ignore-cr-at-eol"],
             check=False,
         )
         if result_diff_w.returncode != 0:
