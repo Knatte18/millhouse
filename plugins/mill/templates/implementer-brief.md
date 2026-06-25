@@ -15,6 +15,10 @@ by mill-go. Rendered by mill-go via `_render.render` with these tokens:
                        round number on a receive-review resume
   <SESSION_ID>       — UUID injected at render time; copy verbatim into the report JSON
   <LANGUAGE_SKILLS>  — markdown block naming required language-specific skills
+  <PARENT_BRANCH>    — the parent branch name (e.g. "main") that this task
+                       branches off; empty string when not resolvable. Used
+                       by the implementer to check whether a verify failure
+                       is pre-existing on the parent before reporting stuck.
 
 Mill-go spawns this session with tools Read / Edit / Write / Bash /
 Grep / Glob / Skill. No TodoWrite, no WebFetch, no WebSearch. Write / Edit /
@@ -70,6 +74,10 @@ Never use Shared-Decision-violating shortcuts to make verify pass. For example, 
 After every card in the batch is committed, run the batch's `verify:` command (from the batch file's frontmatter). If it fails:
 
 - Try to self-fix in this same session, committing each attempt.
+- Before reporting any failure as "pre-existing" or "unrelated to my changes", confirm the failure reproduces on the parent branch `<PARENT_BRANCH>`:
+  - Run `git log <PARENT_BRANCH>..HEAD -- <files in the failure's import/dependency chain>`. If a same-task commit touches those files, the failure is NOT pre-existing -- fix it.
+  - Or run `git show <PARENT_BRANCH>:<path>` to inspect the parent's version of the failing file. If the failure does not exist on the parent, it is in-scope: fix it, or escalate `logic` -- never label it "pre-existing verify".
+  - If `<PARENT_BRANCH>` is empty (the token renders as an empty string), skip the parent-reproduction check entirely and treat the failure as in-scope.
 - After **<SELF_FIX_ROUNDS>** failing self-fix attempts, stop. Report `stuck` with `stuck_type: verify`.
 
 If `verify: null` in the frontmatter, there is nothing to run; skip straight to Report.
@@ -100,7 +108,7 @@ or, when stuck:
 
 `stuck_type` values:
 - `transient` — tool/network failure that a retry might clear (quota, 5xx, timeout).
-- `verify` — `verify:` still failing after <SELF_FIX_ROUNDS> self-fix attempts.
+- `verify` — `verify:` still failing after <SELF_FIX_ROUNDS> self-fix attempts. Before using this type, you MUST verify the failure is NOT pre-existing by checking `<PARENT_BRANCH>` (see `## Verify` above). Only use `verify` when you have confirmed the failure is not pre-existing OR when `<PARENT_BRANCH>` is empty.
 - `logic` — plan is unclear or contradicts itself; you cannot implement without clarification.
 
 Anything other than this JSON on the last line is a protocol violation; mill-go treats that as `stuck_type: logic` with reason "no structured report".

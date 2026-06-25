@@ -718,6 +718,60 @@ class TestMillpyImplement(unittest.TestCase):
         # A null overview verify must produce None (not the string "null")
         self.assertIsNone(call_kwargs.get("module_wide_verify_cmd"))
 
+    def test_real_brief_renders_parent_branch_token(self):
+        """Rendering the real implementer-brief.md substitutes <PARENT_BRANCH> with the parent value."""
+        plugin_root = HUB / "plugins" / "mill"
+        template_path = plugin_root / "templates" / "implementer-brief.md"
+
+        # Build a minimal token map that satisfies all required tokens in the brief
+        tokens = {
+            "TASK_TITLE": "Test Task",
+            "SLUG": "test-slug",
+            "BATCH_NAME": "test-batch",
+            "BATCH_FILE": "/path/to/batch.md",
+            "OVERVIEW_FILE": "/path/to/overview.md",
+            "PROJECT_ROOT": "/path/to/root",
+            "WIKI_PATH": "/path/to/wiki",
+            "SELF_FIX_ROUNDS": "2",
+            "ROUND": "1",
+            "SESSION_ID": "test-session-uuid",
+            "LANGUAGE_SKILLS": "",
+            "PARENT_BRANCH": "main",
+        }
+
+        import _render
+        rendered = _render.render(template_path, tokens)
+        # The rendered text must contain the substituted parent value, not the raw token
+        self.assertIn("main", rendered)
+        self.assertNotIn("<PARENT_BRANCH>", rendered)
+
+    def test_real_brief_renders_parent_branch_empty_when_unresolvable(self):
+        """Rendering the real implementer-brief.md with empty PARENT_BRANCH substitutes empty string."""
+        plugin_root = HUB / "plugins" / "mill"
+        template_path = plugin_root / "templates" / "implementer-brief.md"
+
+        tokens = {
+            "TASK_TITLE": "Test Task",
+            "SLUG": "test-slug",
+            "BATCH_NAME": "test-batch",
+            "BATCH_FILE": "/path/to/batch.md",
+            "OVERVIEW_FILE": "/path/to/overview.md",
+            "PROJECT_ROOT": "/path/to/root",
+            "WIKI_PATH": "/path/to/wiki",
+            "SELF_FIX_ROUNDS": "2",
+            "ROUND": "1",
+            "SESSION_ID": "test-session-uuid",
+            "LANGUAGE_SKILLS": "",
+            "PARENT_BRANCH": "",
+        }
+
+        import _render
+        rendered = _render.render(template_path, tokens)
+        # The raw token placeholder must not appear in the output
+        self.assertNotIn("<PARENT_BRANCH>", rendered)
+        # The literal string "None" must not appear where the token was
+        self.assertNotIn("None", rendered)
+
 
 class TestClassifyStuckType(unittest.TestCase):
 
