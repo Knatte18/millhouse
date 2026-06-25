@@ -48,5 +48,7 @@ batches:
     start_sha: c940e0554e0a349be4c18c9ca18fc42acd6f23f7
     commit_sha: f3ca9eb64fa369d53181484f9c137a591a3b1705
   - name: teardown-reconcile
-    state: pending
+    state: running
+    implementer_session: a11f2732-a55c-4ce8-84cd-f0935006d704
+    start_sha: eb70c53a3860cff6b531bebf394c420ad76a154d
 ```
