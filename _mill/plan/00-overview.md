@@ -3,7 +3,7 @@
 ```yaml
 task: "Fix pre-existing unit-test failures, CRLF cleanliness false-positive, and review false-BLOCKING on Go"
 slug: mill-unit-test-and-signal-accuracy
-approved: false
+approved: true
 started: "20260625-070133"
 parent: main
 root: ""
