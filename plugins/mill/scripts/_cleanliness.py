@@ -21,7 +21,9 @@ def capture_snapshot(worktree: Path, snapshot_path: Path) -> None:
     """
     lines = _pygit2_util.status_porcelain(worktree, include_untracked=False)
     snapshot_path.parent.mkdir(parents=True, exist_ok=True)
-    snapshot_path.write_text("\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
+    # Use newline="" to suppress text-mode CRLF translation on Windows so the
+    # snapshot keeps LF terminators and does not itself appear as a dirty file.
+    snapshot_path.write_text("\n".join(lines) + ("\n" if lines else ""), encoding="utf-8", newline="")
 
 
 def compute_new_dirt(worktree: Path, snapshot_path: Path) -> list[str]:
@@ -46,8 +48,11 @@ def compute_new_dirt(worktree: Path, snapshot_path: Path) -> list[str]:
     lines = _pygit2_util.status_porcelain(worktree, include_untracked=False)
     post_text = "\n".join(lines) + ("\n" if lines else "")
 
-    pre_set = {line for line in pre_text.splitlines() if line}
-    post_set = {line for line in post_text.splitlines() if line}
+    # Strip trailing \r from each line so that a CRLF snapshot (possible on
+    # Windows even with newline="" when the file is read back via text mode)
+    # and an LF live-status output compare equal and produce no false-positive dirt.
+    pre_set = {line.rstrip("\r") for line in pre_text.splitlines() if line.strip("\r")}
+    post_set = {line.rstrip("\r") for line in post_text.splitlines() if line.strip("\r")}
     return sorted(post_set - pre_set)
 
 

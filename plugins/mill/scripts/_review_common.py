@@ -127,22 +127,45 @@ def worktree_snapshot_guard(
     *,
     expected_paths: list[str] | None = None,
 ) -> Iterator[None]:
-    """Snapshot git state before/after the with-block; raise on any change.
+    """Snapshot git state before/after the with-block; raise on unsanctioned changes.
 
-    Captures `git rev-parse HEAD` and `git status --porcelain` on entry,
-    re-captures on exit, and raises ``ReviewerOverstepError`` if either the
-    HEAD SHA or the porcelain diff (filtered by ``expected_paths``) differs.
+    Captures ``git rev-parse HEAD`` and ``git status --porcelain`` on entry,
+    re-captures on exit, and raises ``ReviewerOverstepError`` if the reviewer
+    made unsanctioned mutations to HEAD or the working tree.
 
     ``expected_paths`` is a list of substring patterns that filter the
     porcelain diff before comparison. A porcelain line is filtered when its
     path field (with backslashes normalised to forward slashes) contains
-    ANY entry in ``expected_paths`` as a substring. HEAD-SHA changes are
-    NEVER filtered.
+    ANY entry in ``expected_paths`` as a substring.
 
-    Any change to HEAD during the review window is considered an overstep.
+    Fast-forward tolerance: a HEAD advance is permitted when ``after_sha`` is a
+    strict descendant of ``before_sha`` (i.e. the reviewer committed its own
+    output files in a forward direction). In that case the guard emits a
+    one-line warning to stderr containing the token ``fast-forward`` and both
+    short SHAs, then skips the ``ReviewerOverstepError`` raise -- provided no
+    NEW working-tree dirt appeared (entries in ``added`` after porcelain
+    filtering). A non-fast-forward HEAD change (orphan branch, reset to
+    unrelated commit, etc.) still raises unconditionally. If the ancestry check
+    itself raises ``GitOpsError``, the fast-forward flag is set to ``False`` so
+    the non-verifiable advance is treated conservatively as an overstep.
 
-    If the wrapped block raises AND state was mutated, ``ReviewerOverstepError`` takes priority and chains the inner exception via ``__cause__``; if state was unchanged the inner exception is re-raised unchanged.
-    If the post-snapshot capture itself raises (e.g. ``_capture_head_sha`` propagating a ``ReviewError`` from a broken git invocation), that error propagates and the inner exception is NOT chained -- the capture failure indicates the snapshot is untrustworthy, so the typed ``ReviewerOverstepError`` cannot be raised safely. This is an intentional trade-off; the inner exception, if any, is visible in the traceback frames above the capture call.
+    Raise rules (``ff`` = fast-forward detected):
+    - ``bool(added)``             -- new dirt appeared; always raises.
+    - ``head_changed and not ff`` -- non-fast-forward HEAD change; raises.
+    - ``bool(removed) and not ff``-- working-tree entries disappeared without a
+                                     fast-forward commit to account for them; raises.
+
+    If the wrapped block raises AND state was mutated, ``ReviewerOverstepError``
+    takes priority and chains the inner exception via ``__cause__``; if state
+    was unchanged the inner exception is re-raised unchanged.
+
+    If the post-snapshot capture itself raises (e.g. ``_capture_head_sha``
+    propagating a ``ReviewError`` from a broken git invocation), that error
+    propagates and the inner exception is NOT chained -- the capture failure
+    indicates the snapshot is untrustworthy, so the typed
+    ``ReviewerOverstepError`` cannot be raised safely. This is an intentional
+    trade-off; the inner exception, if any, is visible in the traceback frames
+    above the capture call.
     """
     before_sha = _capture_head_sha(project_root)
     before_porcelain = _capture_porcelain(project_root)
@@ -160,7 +183,24 @@ def worktree_snapshot_guard(
     removed = set(before_filtered) - set(after_filtered)
     head_changed = before_sha != after_sha
 
-    should_raise = bool(added) or head_changed or bool(removed)
+    # Determine whether the HEAD advance is a clean fast-forward (after_sha is a
+    # descendant of before_sha). If the ancestry helper raises GitOpsError the
+    # relationship cannot be verified, so treat it conservatively as non-fast-forward.
+    ff = False
+    if head_changed:
+        try:
+            ff = _pygit2_util.is_ancestor(project_root, before_sha, after_sha)
+        except _pygit2_util.GitOpsError:
+            ff = False
+
+    # Emit a warning when a fast-forward is accepted so operators can inspect logs.
+    if ff:
+        print(
+            f"[worktree_snapshot_guard] fast-forward: HEAD {before_sha[:8]} -> {after_sha[:8]}",
+            file=sys.stderr,
+        )
+
+    should_raise = bool(added) or (head_changed and not ff) or (bool(removed) and not ff)
 
     if should_raise:
         diff = _porcelain_diff(before_filtered, after_filtered)
