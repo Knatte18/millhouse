@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -169,8 +170,16 @@ def _is_benign_windows_cleanup(output: str) -> bool:
     Returns True only when both conditions hold:
     1. The output contains a Windows cleanup-race signature (case-insensitive any of:
        unlinkat, access is denied, winerror 5, winerror 32)
-    2. The output contains NO test-failure markers (case-insensitive none of:
-       fail, panic:, build failed)
+    2. The output contains NO test-failure markers. Markers are matched
+       case-insensitively against the lowercased output using line-anchored
+       patterns to avoid false positives on benign package paths containing
+       "fail" as a substring (e.g. "ok  \\tpkg/failover\\t0.1s"):
+       - "--- fail" (Go per-test failure prefix; safe as a substring because
+         the leading "--- " makes it unambiguous)
+       - re pattern (?m)^fail[\\t ] (Go package-summary line "FAIL\\tpkg"
+         or "FAIL " at the start of a line -- a real TAB or space after fail)
+       - "panic:" (Go runtime panic)
+       - "build failed" (compiler/linker failure)
 
     This is used to distinguish benign file-cleanup races from real test failures on Windows.
 
@@ -182,16 +191,24 @@ def _is_benign_windows_cleanup(output: str) -> bool:
     """
     output_lower = output.lower()
 
-    # Check for cleanup-race signatures
+    # Check for cleanup-race signatures.
     has_cleanup_signature = _has_windows_cleanup_race_signature(output)
 
-    # Check for test-failure markers (more specific patterns to avoid false positives)
-    failure_markers = [
-        "fail",
-        "panic:",
-        "build failed",
-    ]
-    has_failure_marker = any(marker in output_lower for marker in failure_markers)
+    # Check for test-failure markers using line-anchored patterns.
+    # The bare substring "fail" is intentionally NOT used here because Go test
+    # output includes lines like "ok  \tpkg/failover\t0.1s" whose path contains
+    # "fail" as a substring but represents a passing package.
+    has_failure_marker = (
+        # Go per-test failure line (e.g. "--- FAIL: TestFoo (0.00s)")
+        "--- fail" in output_lower
+        # Go package-summary failure line (e.g. "FAIL\tgithub.com/pkg" or "FAIL pkg")
+        # anchored to line-start so a path like "pkg/failover" does not match.
+        or bool(re.search(r"(?m)^fail[\t ]", output_lower))
+        # Go runtime panic
+        or "panic:" in output_lower
+        # Compiler / linker failure
+        or "build failed" in output_lower
+    )
 
     return has_cleanup_signature and not has_failure_marker
 
