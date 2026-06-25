@@ -180,11 +180,38 @@ class TestImplementerModeParity(unittest.TestCase):
             millpy_implement._marker, "slug_from_branch",
             return_value="test-slug",
         )
+        # The no-content-commit gate in _forward_output compares finalize's
+        # `git rev-parse HEAD` against the prepare-recorded start_sha. A flat
+        # constant-SHA mock makes the two equal and trips the gate (demoting
+        # success to stuck/logic). Instead, inspect the git argv: return the
+        # prepare-time SHA for `rev-parse HEAD` while self._in_finalize is False,
+        # and a distinct finalize-time SHA once the test flips the flag. All
+        # other git calls (config, branch, add, commit, push, log) return a
+        # sensible default CompletedProcess so prepare's commit sequence succeeds.
+        self._in_finalize = False
+        self._prepare_head_sha = "abc1234"
+        self._finalize_head_sha = "def5678"
+
+        def _git_side_effect(*args, **kwargs):
+            argv = args[0] if args else kwargs.get("args", [])
+            # Detect the `git rev-parse HEAD` calls regardless of any leading
+            # `-C <path>` flags, since those are the only calls whose SHA the
+            # no-content-commit gate compares.
+            is_rev_parse_head = "rev-parse" in argv and "HEAD" in argv
+            if is_rev_parse_head:
+                sha = self._finalize_head_sha if self._in_finalize else self._prepare_head_sha
+                return subprocess.CompletedProcess(
+                    args=list(argv), returncode=0, stdout=f"{sha}\n", stderr=""
+                )
+            # Default for every non-rev-parse git call: succeed with the
+            # prepare-time SHA as stdout (used as branch name, log subject, etc.).
+            return subprocess.CompletedProcess(
+                args=list(argv), returncode=0, stdout="abc1234\n", stderr=""
+            )
+
         self.mock_subprocess_run = _p(
             millpy_implement._subprocess_util, "run",
-            return_value=subprocess.CompletedProcess(
-                args=[], returncode=0, stdout="abc1234\n", stderr=""
-            ),
+            side_effect=_git_side_effect,
         )
         self.mock_uuid4 = _p(
             millpy_implement.uuid, "uuid4",
@@ -264,6 +291,12 @@ class TestImplementerModeParity(unittest.TestCase):
             encoding="utf-8"
         )
 
+        # Flip the SHA mock into finalize mode so `git rev-parse HEAD` returns a
+        # SHA distinct from the prepare-recorded start_sha. Without this, the
+        # no-content-commit gate would see HEAD == start_sha and demote the
+        # success envelope to stuck/logic.
+        self._in_finalize = True
+
         # Run finalize
         with unittest.mock.patch.object(millpy_implement._implementer_claude, "run") as mock_run:
             rc, out = self._run_main([
@@ -275,7 +308,8 @@ class TestImplementerModeParity(unittest.TestCase):
         self.assertEqual(rc, 0)
         # LLM should not be called in finalize stage
         mock_run.assert_not_called()
-        # Output should be the processed envelope
+        # Output should be the processed envelope; the distinct finalize-time HEAD
+        # makes a real content commit, so the gate passes and success is preserved.
         data = json.loads(out.strip())
         self.assertEqual(data["status"], "success")
         self.assertIn("commit_sha", data)

@@ -93,7 +93,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.stage == "prepare":
         try:
             prepare_result = prepare(cfg, slug, mill_dir, project_root, wiki_root, max_rounds=args.max_rounds)
-            briefs_dir = _paths.resolve_task_path(project_root, "_mill/briefs/")
+            # Write the brief under the task worktree (git_root), not the hub root,
+            # so the implementer's brief path is relative to the task branch checkout.
+            briefs_dir = _paths.resolve_task_path(git_root, "_mill/briefs/")
             brief_path = _agent_dispatch.write_brief(
                 briefs_dir, "review-discussion", prepare_result["scope"],
                 prepare_result["round"], prepare_result["prompt_text"]

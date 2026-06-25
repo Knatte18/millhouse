@@ -668,6 +668,60 @@ def main() -> int:
     except Exception as exc:
         failures.append(f"FAIL: clean_ephemeral_scope_violations already-gone ({type(exc).__name__}): {exc}")
 
+    # CRLF-1. capture_snapshot writes LF-only bytes (no \r\n) on disk
+    # This is the regression test for the Windows text-mode CRLF translation bug:
+    # without newline="" in write_text, Python rewrites \n as \r\n on Windows,
+    # causing the snapshot itself to appear as a dirty file in git status.
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            snapshot_path = Path(tmp) / "_mill" / ".cleanliness-snapshot-crlf.txt"
+            with unittest.mock.patch(
+                "_cleanliness._pygit2_util.status_porcelain",
+                return_value=[" M file.txt"],
+            ):
+                capture_snapshot(Path(tmp), snapshot_path)
+            assert snapshot_path.exists(), "snapshot file not created"
+            # Read raw bytes to confirm no CRLF sequences on disk regardless of platform
+            raw_bytes = snapshot_path.read_bytes()
+            assert b"\r\n" not in raw_bytes, (
+                f"snapshot contains CRLF bytes; got {raw_bytes!r}"
+            )
+            # Sanity: the content is still there with LF
+            assert raw_bytes == b" M file.txt\n", (
+                f"unexpected snapshot content: {raw_bytes!r}"
+            )
+        print("PASS: CRLF-1 - capture_snapshot writes LF-only bytes (no CRLF) on disk")
+    except AssertionError as exc:
+        failures.append(f"FAIL: CRLF-1 capture_snapshot LF-only: {exc}")
+    except Exception as exc:
+        failures.append(f"FAIL: CRLF-1 capture_snapshot LF-only ({type(exc).__name__}): {exc}")
+
+    # CRLF-2. CR-only delta between snapshot and live porcelain -> empty compute_new_dirt
+    # This is the regression test for the false-positive dirt: when the snapshot was
+    # written with CRLF (before the fix) and the live git status returns LF, the set
+    # comparison would see " M file.txt\r" != " M file.txt" and report false new dirt.
+    # After the fix, \r is stripped from both sides before comparison.
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            snapshot_path = Path(tmp) / "snapshot-crlf.txt"
+            # Write the snapshot with CRLF line endings (simulating the pre-fix behaviour
+            # or a snapshot read back through text mode on Windows).
+            snapshot_path.write_bytes(b" M file.txt\r\n M other.txt\r\n")
+            # Live porcelain returns the same lines but with LF (normal git output).
+            with unittest.mock.patch(
+                "_cleanliness._pygit2_util.status_porcelain",
+                return_value=[" M file.txt", " M other.txt"],
+            ):
+                result = compute_new_dirt(Path(tmp), snapshot_path)
+            assert result == [], (
+                f"expected [] (no false-positive dirt from CR-only delta), got {result!r}"
+            )
+        print("PASS: CRLF-2 - CR-only delta between snapshot and live porcelain -> []")
+    except AssertionError as exc:
+        failures.append(f"FAIL: CRLF-2 compute_new_dirt CR-only delta: {exc}")
+    except Exception as exc:
+        failures.append(f"FAIL: CRLF-2 compute_new_dirt CR-only delta ({type(exc).__name__}): {exc}")
+
     if failures:
         for msg in failures:
             print(msg, file=sys.stderr)

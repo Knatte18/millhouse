@@ -148,7 +148,13 @@ def test_review_code_finalize_round_required() -> bool:
 
 
 def test_review_plan_finalize_round_required() -> bool:
-    """Test that review-plan finalize requires --round."""
+    """
+    Test that review-plan finalize auto-discovers the round when --round is absent.
+
+    Commit 8a5fefac switched plan finalize to auto-discover the round via
+    discover_round() instead of requiring --round. This test verifies the new
+    contract: omitting --round succeeds (rc == 0) and prepare() is never called.
+    """
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         output_file = project_root / "output.txt"
@@ -167,12 +173,17 @@ def test_review_plan_finalize_round_required() -> bool:
             mock_modules["_paths"].resolve_git_root = unittest.mock.MagicMock(return_value=project_root)
             mock_modules["_paths"].resolve_hub_path = unittest.mock.MagicMock(return_value=project_root)
             mock_modules["_paths"].resolve_wiki_path = unittest.mock.MagicMock(return_value=project_root)
+            mock_modules["_paths"].resolve_task_path = unittest.mock.MagicMock(
+                return_value=project_root / "_mill/briefs"
+            )
 
             mock_modules["_review_common"].load_config = unittest.mock.MagicMock(
                 return_value={"paths": {"reviews_dir": "_mill/reviews/"}}
             )
             mock_modules["_review_common"].find_active_slug = unittest.mock.MagicMock(return_value="test-slug")
             mock_modules["_review_common"].resolve_path = unittest.mock.MagicMock(return_value="_mill/reviews/")
+            # discover_round supplies the round number when --round is absent
+            mock_modules["_review_common"].discover_round = unittest.mock.MagicMock(return_value=1)
 
             mock_modules["_reviewers"].load = unittest.mock.MagicMock(return_value={})
             mock_modules["_reviewers"].validate_role_refs = unittest.mock.MagicMock()
@@ -184,7 +195,15 @@ def test_review_plan_finalize_round_required() -> bool:
                 raise AssertionError("prepare() must not be called")
 
             mock_modules["_review_plan"].prepare = raise_on_prepare
-            mock_modules["_review_plan"].finalize = unittest.mock.MagicMock()
+            mock_modules["_review_plan"].finalize = unittest.mock.MagicMock(
+                return_value={
+                    "scope": "holistic",
+                    "verdict": "APPROVE",
+                    "blocking_count": 0,
+                    "nit_count": 0,
+                    "file": "x.md",
+                }
+            )
 
             with unittest.mock.patch.dict(sys.modules, mock_modules):
                 spec_plan = importlib.util.spec_from_file_location(
@@ -201,7 +220,8 @@ def test_review_plan_finalize_round_required() -> bool:
                     )
                 )
 
-                return rc == 1 and not prepare_called
+                # plan finalize auto-discovers the round; omitting --round must succeed
+                return rc == 0 and not prepare_called
         except Exception:
             return False
 
@@ -360,7 +380,13 @@ def test_review_discussion_finalize_no_prepare() -> bool:
 
 
 def test_review_discussion_finalize_round_required() -> bool:
-    """Test that review-discussion finalize requires --round."""
+    """
+    Test that review-discussion finalize auto-discovers the round when --round is absent.
+
+    Commit 8a5fefac switched discussion finalize to auto-discover the round via
+    discover_round() instead of requiring --round. This test verifies the new
+    contract: omitting --round succeeds (rc == 0) and prepare() is never called.
+    """
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         output_file = project_root / "output.txt"
@@ -379,12 +405,17 @@ def test_review_discussion_finalize_round_required() -> bool:
             mock_modules["_paths"].resolve_git_root = unittest.mock.MagicMock(return_value=project_root)
             mock_modules["_paths"].resolve_hub_path = unittest.mock.MagicMock(return_value=project_root)
             mock_modules["_paths"].resolve_wiki_path = unittest.mock.MagicMock(return_value=project_root)
+            mock_modules["_paths"].resolve_task_path = unittest.mock.MagicMock(
+                return_value=project_root / "_mill/briefs"
+            )
 
             mock_modules["_review_common"].load_config = unittest.mock.MagicMock(
                 return_value={"paths": {"reviews_dir": "_mill/reviews/"}}
             )
             mock_modules["_review_common"].find_active_slug = unittest.mock.MagicMock(return_value="test-slug")
             mock_modules["_review_common"].resolve_path = unittest.mock.MagicMock(return_value="_mill/reviews/")
+            # discover_round supplies the round number when --round is absent
+            mock_modules["_review_common"].discover_round = unittest.mock.MagicMock(return_value=1)
 
             mock_modules["_reviewers"].load = unittest.mock.MagicMock(return_value={})
             mock_modules["_reviewers"].validate_role_refs = unittest.mock.MagicMock()
@@ -396,7 +427,19 @@ def test_review_discussion_finalize_round_required() -> bool:
                 raise AssertionError("prepare() must not be called")
 
             mock_modules["_review_discussion"].prepare = raise_on_prepare
-            mock_modules["_review_discussion"].finalize = unittest.mock.MagicMock()
+
+            mock_result = unittest.mock.MagicMock()
+            mock_result.to_dict = unittest.mock.MagicMock(
+                return_value={
+                    "type": "discussion",
+                    "round": 1,
+                    "verdict": "APPROVE",
+                    "blocking_count": 0,
+                    "nit_count": 0,
+                    "reviews": [],
+                }
+            )
+            mock_modules["_review_discussion"].finalize = unittest.mock.MagicMock(return_value=mock_result)
 
             with unittest.mock.patch.dict(sys.modules, mock_modules):
                 spec_discussion = importlib.util.spec_from_file_location(
@@ -413,7 +456,8 @@ def test_review_discussion_finalize_round_required() -> bool:
                     )
                 )
 
-                return rc == 1 and not prepare_called
+                # discussion finalize auto-discovers the round; omitting --round must succeed
+                return rc == 0 and not prepare_called
         except Exception:
             return False
 
@@ -443,9 +487,9 @@ def main() -> int:
 
     try:
         if test_review_plan_finalize_round_required():
-            print("PASS: review-plan finalize --round required")
+            print("PASS: review-plan finalize auto-discovers round when --round absent")
         else:
-            print("FAIL: review-plan finalize --round not enforced", file=sys.stderr)
+            print("FAIL: review-plan finalize did not succeed via auto-discovery", file=sys.stderr)
             errors += 1
     except Exception as exc:
         print(f"FAIL: test 3 ({exc})", file=sys.stderr)
@@ -473,9 +517,9 @@ def main() -> int:
 
     try:
         if test_review_discussion_finalize_round_required():
-            print("PASS: review-discussion finalize --round required")
+            print("PASS: review-discussion finalize auto-discovers round when --round absent")
         else:
-            print("FAIL: review-discussion finalize --round not enforced", file=sys.stderr)
+            print("FAIL: review-discussion finalize did not succeed via auto-discovery", file=sys.stderr)
             errors += 1
     except Exception as exc:
         print(f"FAIL: test 6 ({exc})", file=sys.stderr)
