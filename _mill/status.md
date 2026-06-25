@@ -40,5 +40,7 @@ batches:
     start_sha: 10c6166de326f1cb2547ce3a3a04bf57fecbb6e6
     commit_sha: 24d8acc3a9338adbfa8b7473c22ecdc245ee460c
   - name: stale-test-corrections
-    state: pending
+    state: running
+    implementer_session: c40e7adb-b17a-4bcb-8e92-9ef12479fab4
+    start_sha: 1a77ba53da4831906aaa6436dde352437f10c9cb
 ```
