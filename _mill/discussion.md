@@ -273,6 +273,13 @@ hardening task.
   treat it as in-scope: fix it, or escalate `logic` — never label it "pre-existing verify".
   The brief already permits `git -C <parent-path> ...` reads (`## Cross-worktree isolation`,
   lines 122-129).
+- Unresolved-parent fallback: `parent_branch` can resolve to `None` (`millpy-implement.py:224-226`
+  falls back to `None` on failure), so the `<PARENT_BRANCH>` token may render empty. When the
+  parent branch is unresolvable, the brief's parent-reproduction check is **skipped and the
+  failure is treated as in-scope** (fix it or escalate `logic`) — the implementer must **never**
+  auto-label a failure "pre-existing" on an empty/None parent token. An unknown parent is the
+  *more* conservative case, not a license to wave the failure through. The brief wording and the
+  `verify` enum note (`implementer-brief.md:103`) must make this empty-token behavior explicit.
 - Rationale: An unverified "pre-existing" claim waves through regressions the current task
   caused (exactly what happened: a batch-2 `lyxtest→configreg` import cycle was mislabeled
   pre-existing by a later batch) and misdirects the orchestrator into a manual takeover.
