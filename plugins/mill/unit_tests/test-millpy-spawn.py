@@ -1241,6 +1241,147 @@ def test_single_selection_does_not_call_multi_select_groom_then_claim() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Rollback on partial spawn failure (Card 4)
+# ---------------------------------------------------------------------------
+
+
+def test_spawn_rolls_back_when_write_initial_status_fails() -> None:
+    """When write_initial_status raises mid-spawn, the rollback stack must:
+    - call _worktree.remove_safe to drop the worktree and local branch
+    - call wiki.set_phase(wiki_path, slug, None) to revert the Home.md claim
+    - exit with code 1
+
+    The test forces write_initial_status to raise IOError (simulating a push
+    failure) and asserts both rollback side effects occur.
+    """
+    import importlib
+    import importlib.util
+
+    spawn_path = HUB / "plugins" / "mill" / "scripts" / "millpy-spawn.py"
+    spec = importlib.util.spec_from_file_location("mill_spawn_rollback_test", spawn_path)
+    mod = importlib.util.module_from_spec(spec)
+
+    task = _make_fake_task(slug="my-task", title="My Task")
+    spawn_core_mock = MagicMock()
+    spawn_core_mock.pick_task_single_or_multi.return_value = ("single", task, [])
+    spawn_core_mock.BacklogEmpty = type("BacklogEmpty", (Exception,), {})
+    spawn_core_mock.claim_in_wiki.return_value = None
+    spawn_core_mock.capture_parent_branch.return_value = "main"
+    # Force write_initial_status to raise, simulating a push failure.
+    spawn_core_mock.write_initial_status.side_effect = IOError(
+        "[spawn] simulated push failure in write_initial_status"
+    )
+
+    worktree_mock = MagicMock()
+    junction_mock = MagicMock()
+    setup_mock = MagicMock()
+    setup_mock.create_hub_links.return_value = {"junctions": [], "hardlinks": []}
+
+    wiki_client_mock = MagicMock()
+    wiki_client_mock.list_tasks_brief.return_value = [task]
+
+    paths_mock = MagicMock()
+    paths_mock.resolve_git_root.return_value = Path("/fake/repo")
+    paths_mock.resolve_wiki_path.return_value = Path("/fake/wiki")
+    paths_mock.resolve_worktrees_dir.return_value = Path("/fake/worktrees")
+    paths_mock.resolve_short_name.return_value = "MI"
+    paths_mock.resolve_container_path.return_value = Path("/fake/container")
+    paths_mock.resolve_hub_path.return_value = Path("/fake/hub")
+    paths_mock.resolve_hub_relative_path.side_effect = lambda wt, sub: wt if sub == "." else wt / sub
+    paths_mock.resolve_main_worktree_root.return_value = Path("/fake/repo")
+    paths_mock.status_path.return_value = Path("/fake/worktrees/my-task/_mill/status.md")
+
+    stub_map = {
+        "_spawn_core": spawn_core_mock,
+        "_setup": setup_mock,
+        "_wiki": MagicMock(),
+        "_junction": junction_mock,
+        "_tasks_md": MagicMock(),
+        "_vscode": MagicMock(),
+        "_worktree": worktree_mock,
+        "_paths": paths_mock,
+        "_sibling": types.ModuleType("_sibling"),
+        "_subprocess_util": _make_subprocess_util_stub(),
+    }
+    # Also inject wiki._client so the 'from wiki import _client as wiki' line
+    # in millpy-spawn.py binds to our mock, enabling assertion of set_phase calls.
+    saved: dict[str, object] = {}
+    for name, stub in stub_map.items():
+        saved[name] = sys.modules.get(name)
+        sys.modules[name] = stub
+    saved_wiki_client = sys.modules.get("wiki._client")
+    sys.modules["wiki._client"] = wiki_client_mock
+
+    try:
+        spec.loader.exec_module(mod)
+
+        # After exec, 'mod.wiki' is the module-level name bound by
+        # 'from wiki import _client as wiki'. Patch set_phase on it directly
+        # so we can assert the rollback call without relying on sys.modules
+        # side-channel injection surviving into the exec'd namespace.
+        mod.wiki = wiki_client_mock
+
+        fake_cfg = {"spawn": {"branch_prefix": ""}}
+        with (
+            patch.object(mod, "_load_config", return_value=fake_cfg),
+            patch.object(mod, "resolve_worktrees_dir", return_value=Path("/fake/worktrees")),
+            patch.object(mod, "pick_worktree_color", return_value="#7d2d6b"),
+            patch.object(Path, "exists", return_value=True),
+            patch.object(Path, "read_text", return_value="# Home\n"),
+            patch.object(Path, "mkdir", return_value=None),
+            patch.object(Path, "unlink", return_value=None),
+        ):
+            try:
+                exit_code = mod.main([])
+            except SystemExit as exc:
+                exit_code = exc.code if isinstance(exc.code, int) else 1
+    finally:
+        for name, original in saved.items():
+            if original is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = original
+        if saved_wiki_client is None:
+            sys.modules.pop("wiki._client", None)
+        else:
+            sys.modules["wiki._client"] = saved_wiki_client
+
+    # Spawn must exit 1 when a mid-span step fails.
+    if exit_code != 1:
+        raise AssertionError(
+            f"spawn must exit 1 on partial failure, got {exit_code}"
+        )
+
+    # remove_safe must be called to drop the worktree and local branch.
+    if not worktree_mock.remove_safe.called:
+        raise AssertionError(
+            "rollback must call _worktree.remove_safe to clean up the worktree; "
+            f"remove_safe calls: {worktree_mock.remove_safe.call_args_list}"
+        )
+
+    # wiki.set_phase(wiki_path, slug, None) must be called to revert the claim.
+    if not wiki_client_mock.set_phase.called:
+        raise AssertionError(
+            "rollback must call wiki.set_phase to revert the Home.md claim; "
+            f"set_phase calls: {wiki_client_mock.set_phase.call_args_list}"
+        )
+    set_phase_call = wiki_client_mock.set_phase.call_args
+    # Expect positional args: (wiki_path, slug, None) or keyword phase=None.
+    phase_arg = (
+        set_phase_call.kwargs.get("phase")
+        if "phase" in set_phase_call.kwargs
+        else (set_phase_call.args[2] if len(set_phase_call.args) > 2 else "NOT_FOUND")
+    )
+    if phase_arg is not None:
+        raise AssertionError(
+            f"wiki.set_phase rollback must pass phase=None; got phase={phase_arg!r} "
+            f"from call {set_phase_call}"
+        )
+
+    print("PASS: spawn rollback calls remove_safe and set_phase(None) on write_initial_status failure")
+
+
+# ---------------------------------------------------------------------------
 # Main runner
 # ---------------------------------------------------------------------------
 
@@ -1262,6 +1403,7 @@ def main() -> int:
         test_spawn_slug_help_text_has_no_s_marker,
         test_spawn_empty_backlog_message_has_no_s_marker,
         test_spawn_aborts_when_origin_branch_already_exists,
+        test_spawn_rolls_back_when_write_initial_status_fails,
     ]
 
     failures: list[str] = []
