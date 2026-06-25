@@ -342,6 +342,12 @@ def main(argv=None) -> int:
             "ROUND": "1",
             "SESSION_ID": session_id,
             "LANGUAGE_SKILLS": _agent_dispatch.language_skills_directive(batch_file),
+            # PARENT_BRANCH lets the implementer verify whether a test failure
+            # is pre-existing (present on parent) vs. introduced by this batch.
+            # When parent_branch could not be resolved, use empty string so the
+            # token always substitutes; the brief instructs the implementer to
+            # skip the parent check when the value is empty.
+            "PARENT_BRANCH": parent_branch or "",
         },
     )
 

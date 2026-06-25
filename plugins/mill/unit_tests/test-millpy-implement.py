@@ -591,6 +591,63 @@ class TestMillpyImplement(unittest.TestCase):
         call_kwargs = mock_finalize.call_args.kwargs
         self.assertEqual(call_kwargs.get("verify_cmd"), "exit 0")
 
+    def test_parent_branch_token_in_render_map(self):
+        """PARENT_BRANCH token is present in the render map with the resolved parent value."""
+        # Patch _parent_branch.resolve to return a known string
+        with unittest.mock.patch.object(
+            millpy_implement._parent_branch, "resolve",
+            return_value="main",
+        ):
+            captured_tokens: dict = {}
+
+            def capture_render(template_path, tokens):
+                captured_tokens.update(tokens)
+                # Return a minimal rendered string to avoid token-missing KeyError
+                return "rendered"
+
+            with unittest.mock.patch.object(millpy_implement._render, "render", side_effect=capture_render):
+                with unittest.mock.patch.object(
+                    millpy_implement._implementer_claude, "run",
+                    return_value=(
+                        '{"status":"success","commit_sha":"abc","session_id":"fake"}\n',
+                        "fake-session",
+                    ),
+                ):
+                    # Use --stage prepare so the render call fires without needing a real LLM
+                    rc, out = self._run_main(["test-batch", "--stage", "prepare"])
+
+        # The key must be present and equal to the resolved parent value
+        self.assertIn("PARENT_BRANCH", captured_tokens)
+        self.assertEqual(captured_tokens["PARENT_BRANCH"], "main")
+
+    def test_parent_branch_token_empty_string_when_unresolvable(self):
+        """PARENT_BRANCH token is empty string (not None) when parent_branch cannot be resolved."""
+        # Patch _parent_branch.resolve to raise so parent_branch falls back to None
+        with unittest.mock.patch.object(
+            millpy_implement._parent_branch, "resolve",
+            side_effect=Exception("no parent"),
+        ):
+            captured_tokens: dict = {}
+
+            def capture_render(template_path, tokens):
+                captured_tokens.update(tokens)
+                return "rendered"
+
+            with unittest.mock.patch.object(millpy_implement._render, "render", side_effect=capture_render):
+                with unittest.mock.patch.object(
+                    millpy_implement._implementer_claude, "run",
+                    return_value=(
+                        '{"status":"success","commit_sha":"abc","session_id":"fake"}\n',
+                        "fake-session",
+                    ),
+                ):
+                    rc, out = self._run_main(["test-batch", "--stage", "prepare"])
+
+        # When parent is unresolvable the token must be "" (empty string), never None
+        self.assertIn("PARENT_BRANCH", captured_tokens)
+        self.assertEqual(captured_tokens["PARENT_BRANCH"], "")
+        self.assertIsNotNone(captured_tokens["PARENT_BRANCH"])
+
     def test_overview_verify_threaded_as_module_wide(self):
         """Overview with non-null top-level verify: threads it as module_wide_verify_cmd."""
         plan_dir = self.tmp_path / "task" / "plan"
