@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-approved
+phase: done
 slug: mill-unit-test-and-signal-accuracy
 branch: hanf/mill-unit-test-and-signal-accuracy
 plan: _mill/plan
@@ -26,6 +26,7 @@ approved-implementer-signal-fixes  '2026-06-25T07:30:43Z'
 approved-stale-test-corrections  '2026-06-25T07:36:44Z'
 holistic-reviewing  '2026-06-25T07:37:17Z'
 holistic-approved  '2026-06-25T07:38:53Z'
+done  '2026-06-25T07:39:15Z'
 ```
 
 ## Batches
