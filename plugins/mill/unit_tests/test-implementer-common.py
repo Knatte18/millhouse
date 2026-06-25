@@ -21,6 +21,7 @@ from _implementer_common import (  # noqa: E402
     finalize_from_output,
     _is_formatter_drift_only,
     _commit_formatter_drift,
+    _is_benign_windows_cleanup,
 )
 import _cleanliness  # noqa: E402
 
@@ -1385,6 +1386,72 @@ def main() -> int:
         except Exception as exc:
             print(f"FAIL: case 29e ({exc}) captured={captured!r}", file=sys.stderr)
             errors += 1
+
+    # Case 30: benign Go output -- cleanup race with "fail" only inside an ok-line path
+    # Regression for the bare-"fail"-substring over-match: before the fix, output like
+    # "ok  \tpkg/failover\t0.1s" was classified as a real failure because "fail" appeared
+    # as a substring. After the fix, line-anchored matching is used, so only lines that
+    # start with "fail" (for the package-summary) or contain "--- fail" (for per-test)
+    # trigger the failure marker -- a passing "ok" line with "failover" in the path does not.
+    try:
+        # Output has a Windows cleanup-race signature (unlinkat / Access is denied) and
+        # Go test output whose only "fail" substring is inside an ok-line package path.
+        # The real TAB character is used in the ok-line (as produced by go test).
+        benign_go_output = (
+            "error: unlinkat ...\\X.test.exe: Access is denied\n"
+            "ok  \tpkg/failover\t0.1s\n"
+            "ok  \tpkg/other\t0.2s\n"
+        )
+        result = _is_benign_windows_cleanup(benign_go_output)
+        assert result is True, (
+            f"case 30: expected True (benign -- fail only in ok-line path), got {result}"
+        )
+        print(
+            "PASS: case 30 - benign Go output: cleanup race + fail only in ok-line path -> True"
+        )
+    except Exception as exc:
+        print(f"FAIL: case 30 ({exc})", file=sys.stderr)
+        errors += 1
+
+    # Case 31: real Go test failure -- cleanup race + "--- FAIL:" per-test line -> False
+    # Verifies that a real per-test failure line still triggers the failure marker even
+    # after the line-anchoring change.
+    try:
+        real_fail_per_test_output = (
+            "error: unlinkat ...\\X.test.exe: Access is denied\n"
+            "ok  \tpkg/failover\t0.1s\n"
+            "--- FAIL: TestSomething (0.01s)\n"
+        )
+        result = _is_benign_windows_cleanup(real_fail_per_test_output)
+        assert result is False, (
+            f"case 31: expected False (real --- FAIL: line present), got {result}"
+        )
+        print(
+            "PASS: case 31 - real Go failure: cleanup race + --- FAIL: line -> False"
+        )
+    except Exception as exc:
+        print(f"FAIL: case 31 ({exc})", file=sys.stderr)
+        errors += 1
+
+    # Case 32: real Go package failure -- cleanup race + "FAIL\tpkg" summary line -> False
+    # Verifies that the package-summary line "FAIL\tgithub.com/..." (with a real TAB
+    # after FAIL at the start of the line) still triggers the failure marker.
+    try:
+        real_fail_pkg_output = (
+            "error: unlinkat ...\\X.test.exe: Access is denied\n"
+            "ok  \tpkg/failover\t0.1s\n"
+            "FAIL\tgithub.com/test/pkg\t0.05s\n"
+        )
+        result = _is_benign_windows_cleanup(real_fail_pkg_output)
+        assert result is False, (
+            f"case 32: expected False (real FAIL\\tpkg summary line present), got {result}"
+        )
+        print(
+            "PASS: case 32 - real Go failure: cleanup race + FAIL\\tpkg summary line -> False"
+        )
+    except Exception as exc:
+        print(f"FAIL: case 32 ({exc})", file=sys.stderr)
+        errors += 1
 
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)
