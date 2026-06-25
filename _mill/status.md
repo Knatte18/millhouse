@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-fix-r1
+phase: planned
 slug: mill-unit-test-and-signal-accuracy
 branch: hanf/mill-unit-test-and-signal-accuracy
 plan: _mill/plan
@@ -19,4 +19,5 @@ discussion-fix-r1  '2026-06-25T06:59:06Z'
 discussed  '2026-06-25T06:59:24Z'
 planning  '2026-06-25T07:04:08Z'
 plan-fix-r1  '2026-06-25T07:08:11Z'
+planned  '2026-06-25T07:08:31Z'
 ```
