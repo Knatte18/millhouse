@@ -390,6 +390,57 @@ def _run_verify_gate(project_root: Path, verify_cmd: str | None) -> dict | None:
     return None
 
 
+def _run_verify_gates(
+    project_root: Path,
+    verify_cmd: str | None,
+    module_wide_verify_cmd: str | None,
+) -> dict | None:
+    """
+    Run the batch-level verify gate and, if it passes, the module-wide verify gate.
+
+    Sequences two calls to _run_verify_gate so that every success-emit path in
+    _forward_output passes through both gates with a single call. The batch gate
+    runs first; only when it returns None (pass or skipped) does the module-wide
+    gate run. This ensures a batch failure is never masked by a module-wide pass
+    and that the module-wide gate cannot be accidentally skipped on any code path
+    that replaces a bare _run_verify_gate call with this helper.
+
+    When module_wide_verify_cmd is None, behavior is identical to calling
+    _run_verify_gate(project_root, verify_cmd) alone -- fully backward-compatible.
+
+    When the module-wide gate fails its stuck dict reason is prefixed with
+    "[module-wide verify]" so the operator can distinguish it from a batch-level
+    verify failure in the stuck report.
+
+    Args:
+        project_root: Path to the worktree root.
+        verify_cmd: Batch-level verify command, or None to skip.
+        module_wide_verify_cmd: Module-wide verify command run after the batch gate
+            passes, or None to skip.
+
+    Returns:
+        A stuck dict on the first gate that fails, or None when both pass (or are
+        skipped).
+    """
+    # Run the batch-level gate first; propagate any failure immediately.
+    batch_result = _run_verify_gate(project_root, verify_cmd)
+    if batch_result is not None:
+        return batch_result
+
+    # Batch gate passed (or was skipped); run the module-wide gate if configured.
+    if module_wide_verify_cmd is None:
+        return None
+
+    module_result = _run_verify_gate(project_root, module_wide_verify_cmd)
+    if module_result is not None:
+        # Prefix the reason so the operator can identify the source of the failure.
+        original_reason = module_result.get("reason", "")
+        module_result["reason"] = f"[module-wide verify] {original_reason}"
+        return module_result
+
+    return None
+
+
 def emit_prepare(
     briefs_dir: Path,
     role: str,
@@ -471,6 +522,7 @@ def finalize_from_output(
     snapshot_path: Path | None = None,
     session_id: str | None = None,
     verify_cmd: str | None = None,
+    module_wide_verify_cmd: str | None = None,
     card_count: int | None = None,
     task_dir: Path | None = None,
     parent_branch: str | None = None,
@@ -491,6 +543,7 @@ def finalize_from_output(
         snapshot_path=snapshot_path,
         session_id=session_id,
         verify_cmd=verify_cmd,
+        module_wide_verify_cmd=module_wide_verify_cmd,
         card_count=card_count,
         task_dir=task_dir,
         parent_branch=parent_branch,
@@ -539,6 +592,7 @@ def _forward_output(
     snapshot_path: Path | None = None,
     session_id: str | None = None,
     verify_cmd: str | None = None,
+    module_wide_verify_cmd: str | None = None,
     card_count: int | None = None,
     task_dir: Path | None = None,
     parent_branch: str | None = None,
@@ -548,12 +602,16 @@ def _forward_output(
 ) -> int:
     """Extract the last JSON object containing a 'status' key from output.
 
-    Returns 0 in both success and fallback cases — the JSON on stdout is how the caller reads state.
+    Returns 0 in both success and fallback cases -- the JSON on stdout is how the caller reads state.
     When no valid JSON is found, emits a stuck/logic sentinel.
     When the inferred-success fallback fires, the emitted JSON uses ``session_id`` if supplied,
     falling back to the literal ``"unknown"`` for backwards compatibility with callers that don't pass it.
     When verify_cmd is not None, runs it before emitting any success; if the command fails,
     demotes the success to stuck/verify with the command's output in reason.
+    When module_wide_verify_cmd is not None, it is run as a second gate after verify_cmd passes
+    (or is skipped); a module-wide failure also demotes to stuck/verify with a
+    "[module-wide verify]" prefix in the reason. When module_wide_verify_cmd is None, behavior
+    is unchanged (single gate, backward-compatible).
     When card_count is provided, the completeness gate checks that enough commits were made.
     When task_dir and parent_branch are provided, the dirty-tree gate checks in-scope cleanliness.
     When nits_only is True and status_path and nits_scope are not None, on the parsed-success
@@ -562,9 +620,9 @@ def _forward_output(
     """
     parsed = _extract_status_json(output)
     if parsed is not None:
-        # Apply verify gate ONLY for self-reported success
+        # Apply verify gates ONLY for self-reported success
         if parsed.get("status") == "success":
-            gate_result = _run_verify_gate(project_root, verify_cmd)
+            gate_result = _run_verify_gates(project_root, verify_cmd, module_wide_verify_cmd)
             if gate_result is not None:
                 # Verify failed; enrich with commit_sha and emit
                 result = _subprocess_util.run(
@@ -687,9 +745,9 @@ def _forward_output(
                                         new_head = result_head.stdout.strip()
                                     else:
                                         new_head = head
-                                    # Apply verify gate before emitting success
-                                    gate_result = _run_verify_gate(
-                                        project_root, verify_cmd
+                                    # Apply verify gates before emitting success
+                                    gate_result = _run_verify_gates(
+                                        project_root, verify_cmd, module_wide_verify_cmd
                                     )
                                     if gate_result is not None:
                                         gate_result["commit_sha"] = new_head
@@ -742,8 +800,8 @@ def _forward_output(
                             )
                         )
                         return 0
-                    # Apply verify gate before emitting success
-                    gate_result = _run_verify_gate(project_root, verify_cmd)
+                    # Apply verify gates before emitting success
+                    gate_result = _run_verify_gates(project_root, verify_cmd, module_wide_verify_cmd)
                     if gate_result is not None:
                         gate_result["commit_sha"] = head
                         print(json.dumps(gate_result))
@@ -798,8 +856,8 @@ def _forward_output(
                     check=True,
                 )
                 if not result_full.stdout.strip():
-                    # Apply verify gate before emitting success
-                    gate_result = _run_verify_gate(project_root, verify_cmd)
+                    # Apply verify gates before emitting success
+                    gate_result = _run_verify_gates(project_root, verify_cmd, module_wide_verify_cmd)
                     if gate_result is not None:
                         gate_result["commit_sha"] = head
                         print(json.dumps(gate_result))

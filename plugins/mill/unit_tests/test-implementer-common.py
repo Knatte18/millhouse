@@ -21,6 +21,7 @@ from _implementer_common import (  # noqa: E402
     finalize_from_output,
     _is_formatter_drift_only,
     _commit_formatter_drift,
+    _run_verify_gates,
 )
 import _cleanliness  # noqa: E402
 
@@ -1384,6 +1385,135 @@ def main() -> int:
             )
         except Exception as exc:
             print(f"FAIL: case 29e ({exc}) captured={captured!r}", file=sys.stderr)
+            errors += 1
+
+    # Case 30: two-gate sequence -- batch passes, module-wide fails -> stuck/verify
+    # with "[module-wide verify]" prefix in reason.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        base_sha = _setup_fixture(project_root)
+        snapshot_path = project_root / "_mill" / ".cleanliness-snapshot-test.txt"
+        _cleanliness.capture_snapshot(project_root, snapshot_path)
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "--allow-empty", "-m", "second"],
+            check=True,
+            capture_output=True,
+        )
+        new_head = subprocess.run(
+            ["git", "-C", str(project_root), "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        agent_output = (
+            '{"status":"success","commit_sha":"abc","session_id":"test-session"}\n'
+        )
+        # Batch gate passes (exit 0), module-wide gate fails (exit 1)
+        rc, captured = _capture_stdout(
+            lambda: _forward_output(
+                agent_output,
+                project_root,
+                start_sha=base_sha,
+                snapshot_path=snapshot_path,
+                verify_cmd="exit 0",
+                module_wide_verify_cmd="exit 1",
+            )
+        )
+        try:
+            data = json.loads(captured.strip())
+            assert data["status"] == "stuck", (
+                f"case 30: expected stuck, got {data}"
+            )
+            assert data["stuck_type"] == "verify", (
+                f"case 30: expected stuck_type=verify, got {data}"
+            )
+            assert "[module-wide verify]" in data.get("reason", ""), (
+                f"case 30: expected '[module-wide verify]' prefix in reason, got {data}"
+            )
+            assert data.get("commit_sha") == new_head, (
+                f"case 30: expected commit_sha={new_head}, got {data}"
+            )
+            print(
+                "PASS: case 30 - two-gate: batch passes + module-wide fails -> stuck/verify with prefix"
+            )
+        except Exception as exc:
+            print(f"FAIL: case 30 ({exc}) captured={captured!r}", file=sys.stderr)
+            errors += 1
+
+    # Case 31: module_wide_verify_cmd=None runs only the batch gate (backward compat)
+    # Verify that _run_verify_gates with None module_wide behaves identically to
+    # _run_verify_gate for both the pass and fail cases.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        _setup_fixture(project_root)
+        try:
+            # Batch gate passes, module-wide is None -> no stuck result
+            result = _run_verify_gates(project_root, "exit 0", None)
+            assert result is None, (
+                f"case 31a: expected None (both pass), got {result}"
+            )
+            # Batch gate fails, module-wide is None -> stuck dict (batch reason, no prefix)
+            result = _run_verify_gates(project_root, "exit 1", None)
+            assert result is not None, (
+                f"case 31b: expected stuck dict, got {result}"
+            )
+            assert result["stuck_type"] == "verify", (
+                f"case 31b: expected stuck_type=verify, got {result}"
+            )
+            assert "[module-wide verify]" not in result.get("reason", ""), (
+                f"case 31b: expected no module-wide prefix in batch failure reason, got {result}"
+            )
+            print(
+                "PASS: case 31 - module_wide_verify_cmd=None: only batch gate runs (backward compat)"
+            )
+        except Exception as exc:
+            print(f"FAIL: case 31 ({exc})", file=sys.stderr)
+            errors += 1
+
+    # Case 32: module-wide gate is reached from the inferred-success path (no snapshot)
+    # Verifies that the no-snapshot inferred-success code path also invokes the module-wide gate.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        base_sha = _setup_fixture(project_root)
+        # Make a new commit so inferred-success fires (HEAD != start_sha, clean tree)
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "--allow-empty", "-m", "second"],
+            check=True,
+            capture_output=True,
+        )
+        new_head = subprocess.run(
+            ["git", "-C", str(project_root), "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        # No JSON in output so the inferred-success path fires (no snapshot provided)
+        rc, captured = _capture_stdout(
+            lambda: _forward_output(
+                "garbage output with no json",
+                project_root,
+                start_sha=base_sha,
+                # No snapshot_path -> no-snapshot branch
+                verify_cmd="exit 0",
+                module_wide_verify_cmd="exit 1",
+            )
+        )
+        try:
+            data = json.loads(captured.strip())
+            assert data["status"] == "stuck", (
+                f"case 32: expected stuck, got {data}"
+            )
+            assert data["stuck_type"] == "verify", (
+                f"case 32: expected stuck_type=verify, got {data}"
+            )
+            assert "[module-wide verify]" in data.get("reason", ""), (
+                f"case 32: expected '[module-wide verify]' prefix in reason, got {data}"
+            )
+            print(
+                "PASS: case 32 - module-wide gate reached from no-snapshot inferred-success path"
+            )
+        except Exception as exc:
+            print(f"FAIL: case 32 ({exc}) captured={captured!r}", file=sys.stderr)
             errors += 1
 
     if errors:
