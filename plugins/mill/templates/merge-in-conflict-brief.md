@@ -24,7 +24,7 @@ For each file listed above:
 
 1. Read the file and locate every conflict block (`<<<<<<<`, `=======`, `>>>>>>>`).
 2. Understand both sides of the conflict — what each branch intended.
-3. Write a resolution that preserves the intent of both sides.
+3. Write a resolution that preserves the intent of both sides. When both sides modify **different, non-overlapping parts** of the same conflict region — for example, different columns of one table row, different keys of one object, or disjoint lines of a prose block — **combine both edits** into a single resolved structure. Do NOT pick one side wholesale just because the region overlaps syntactically; picking one side wholesale is correct only when the two changes are genuinely mutually exclusive (e.g. the same key is renamed to two different values). Worked example: if `ours` changes column A and `theirs` changes column B of the same table row, the resolution keeps both column changes in a single row — it does not discard either.
 4. Run `git -C <PROJECT_ROOT> add <file>` to stage the resolved file.
 5. For modify/delete (DU) conflicts: if Task intent above lists this file under a batch's `Deletes:`, run `git -C <PROJECT_ROOT> rm <file>` instead of editing; that stages the intentional deletion.
 6. For UD conflicts — files this branch **modified** that the parent branch **deleted**: do not silently keep the modification. Instead:
@@ -39,9 +39,15 @@ Never use `git checkout --ours` or `git checkout --theirs` — they silently dis
 
 Your last output line MUST be a bare JSON object (no code fence, no backticks):
 
-On success:
+On success (nothing discarded):
 
 {"status":"success"}
+
+On success with discarded content — if you had to drop content from one side (e.g. two sides made mutually exclusive changes and only one could survive), list each dropped item:
+
+{"status":"success","discarded":["<short description of what was dropped from which side>"]}
+
+An empty or absent `discarded` field means nothing was lost. If anything was discarded, you MUST list it; an empty list when content was actually dropped is a protocol violation. The `mill-merge-in` frontend reads this field and surfaces any losses to the operator before continuing, rather than silently running `git merge --continue`.
 
 If you cannot resolve one or more conflicts:
 
