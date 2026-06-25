@@ -107,15 +107,28 @@ def main() -> int:
     )
     if commit_result.returncode != 0:
         sys.exit(f"Error: git commit failed: {commit_result.stderr.strip()!r}")
-    push_result = _subprocess_util.run(
-        ["git", "-C", str(active_hub), "push"]
+    # Resolve the branch name from status.md (with a config-derived fallback).
+    # We cannot use info["branch"] because read_status returns a summary dict
+    # that does not include the branch key; read_branch reads it from the YAML
+    # block and falls back via cfg and slug when the field is absent.
+    branch = _status.read_branch(status_path, cfg=cfg, slug=slug)
+
+    # Delete the remote branch so re-spawning the same slug starts clean.
+    # A missing remote ref (never-pushed branch, or already deleted) is treated
+    # as success -- teardown must be idempotent per the Shared Decision.
+    delete_result = _subprocess_util.run(
+        ["git", "-C", str(active_hub), "push", "origin", "--delete", branch]
     )
-    if push_result.returncode != 0:
-        sys.exit(f"Error: git push failed: {push_result.stderr.strip()!r}")
+    if delete_result.returncode != 0:
+        stderr_lower = delete_result.stderr.lower()
+        # Git emits "remote ref does not exist" when the branch was never pushed
+        # or was already deleted; both cases are fine -- nothing to remove.
+        if "remote ref does not exist" not in stderr_lower and "unable to delete" not in stderr_lower:
+            sys.exit(f"Error: git push --delete failed: {delete_result.stderr.strip()!r}")
 
     # Step 11: success
     print(
-        f"Task '{slug}' marked abandoned. "
+        f"Task '{slug}' marked abandoned and remote branch deleted. "
         f"Run 'mill-cleanup' from the hub to remove the worktree and active dir, "
         f"and reset Home.md."
     )
