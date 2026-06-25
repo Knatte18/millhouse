@@ -379,6 +379,8 @@ def main() -> int:
             print("PASS build_plan — in-use orphan worktree -> WARNING, not delete suggestion")
 
         # --- orphan Home.md marker ([active] with no active worktree) ---
+        # Card 7: a plain "active" orphan with no worktree/branch/portal is now
+        # promoted to to_reset_unclaimed (auto-reset) instead of to_report.
         with tempfile.TemporaryDirectory() as tmp:
             tmp = Path(tmp)
             hub = tmp / "hub"
@@ -386,10 +388,25 @@ def main() -> int:
             wiki_path = tmp / "wiki"
             wiki_path.mkdir()
             home_tasks = [_make_task("ghost-slug", "active")]
-            plan = build_plan([], home_tasks, wiki_path, hub_root=hub)
+
+            def _mock_run_ghost(argv, **kwargs):
+                r = MagicMock()
+                r.returncode = 0
+                r.stderr = ""
+                r.stdout = ""
+                return r
+
+            with patch("mill_cleanup._subprocess_util.run", side_effect=_mock_run_ghost):
+                plan = build_plan([], home_tasks, wiki_path, hub_root=hub)
+
+            assert "ghost-slug" in plan.to_reset_unclaimed, (
+                f"expected 'ghost-slug' in to_reset_unclaimed, got {plan.to_reset_unclaimed}"
+            )
             orphan_lines = [line for line in plan.to_report if "orphan" in line and "ghost-slug" in line]
-            assert len(orphan_lines) == 1, f"expected 1 orphan marker line, got {plan.to_report}"
-            print("PASS build_plan — orphan [active] Home.md marker -> reported")
+            assert len(orphan_lines) == 0, (
+                f"ghost-slug must not appear in to_report when promoted to to_reset_unclaimed, got {plan.to_report}"
+            )
+            print("PASS build_plan — orphan [active] Home.md marker -> to_reset_unclaimed (auto-reset)")
 
         # --- orphan active worktree (task branch but no Home.md entry) ---
         # discover_active_worktrees skips worktrees not in Home.md, so build_plan
@@ -1199,6 +1216,9 @@ def main() -> int:
             print("PASS build_plan — phase=pr-pending -> to_reap_pr")
 
         # --- build_plan: orphan check covers ready-to-merge, pr-pending, active ---
+        # Card 7 update: a plain "active" orphan with no worktree/branch/portal is
+        # promoted to to_reset_unclaimed (auto-reset) rather than to_report.
+        # "ready-to-merge" and "pr-pending" remain in to_report as before.
         with tempfile.TemporaryDirectory() as tmp:
             tmp = Path(tmp)
             hub = tmp / "hub"
@@ -1210,10 +1230,22 @@ def main() -> int:
                 _make_task("pp", "pr-pending"),
                 _make_task("act", "active"),
             ]
-            plan = build_plan([], home_tasks, wiki_path, hub_root=hub)
+
+            def _mock_run_orphan_check(argv, **kwargs):
+                r = MagicMock()
+                r.returncode = 0
+                r.stderr = ""
+                # branch --list returns empty (no local branch for any slug)
+                r.stdout = ""
+                return r
+
+            with patch("mill_cleanup._subprocess_util.run", side_effect=_mock_run_orphan_check):
+                plan = build_plan([], home_tasks, wiki_path, hub_root=hub)
+
             orphan_lines = [line for line in plan.to_report if "orphan Home.md marker" in line]
-            assert len(orphan_lines) == 3, (
-                f"expected 3 orphan-marker lines, got {orphan_lines}"
+            # "ready-to-merge" and "pr-pending" go to to_report
+            assert len(orphan_lines) == 2, (
+                f"expected 2 orphan-marker lines (rtm, pp), got {orphan_lines}"
             )
             assert any("[ready-to-merge]" in line and "rtm" in line for line in orphan_lines), (
                 f"expected [ready-to-merge] orphan for 'rtm', got {orphan_lines}"
@@ -1221,10 +1253,15 @@ def main() -> int:
             assert any("[pr-pending]" in line and "pp" in line for line in orphan_lines), (
                 f"expected [pr-pending] orphan for 'pp', got {orphan_lines}"
             )
-            assert any("[active]" in line and "act" in line for line in orphan_lines), (
-                f"expected [active] orphan for 'act', got {orphan_lines}"
+            # "active" is promoted to to_reset_unclaimed (auto-reset, not report)
+            assert "act" in plan.to_reset_unclaimed, (
+                f"expected 'act' in to_reset_unclaimed (auto-reset), got {plan.to_reset_unclaimed}"
             )
-            print("PASS build_plan — orphan check covers [ready-to-merge], [pr-pending], and [active]")
+            # "act" slug must not appear as a marker slug in the orphan-report lines
+            assert not any("act is [" in line for line in orphan_lines), (
+                f"'act' must not appear in to_report orphan marker lines, got {orphan_lines}"
+            )
+            print("PASS build_plan — orphan check: [ready-to-merge]/[pr-pending] -> to_report, [active] -> to_reset_unclaimed")
 
         # --- test_apply_inplace_deletes_hub_indicator ---
         with tempfile.TemporaryDirectory() as tmp:
@@ -1334,6 +1371,360 @@ def main() -> int:
         # Real git worktree operations are tested in test-worktree.py.
         # The logic: plain dirs are ignored, only registered git worktrees without
         # active markers are reported as orphans. (See millpy-cleanup.py lines 186-226.)
+
+        # --- Card 6: _apply_worktree_record issues push origin --delete after local delete ---
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            hub_root_wr = tmp / "hub"
+            hub_root_wr.mkdir()
+
+            wt_path_wr = tmp / "wts" / "my-task"
+            wt_path_wr.mkdir(parents=True)
+
+            wiki_path_wr = tmp / "wiki"
+            wiki_path_wr.mkdir()
+
+            record_wr = SlugRecord(
+                slug="my-task",
+                worktree_path=wt_path_wr,
+                branch="hanf/my-task",
+                home_marker="active",
+            )
+
+            run_calls_wr: list = []
+
+            def _fake_run_wr(argv, **kwargs):
+                run_calls_wr.append(list(argv))
+                result = MagicMock()
+                result.returncode = 0
+                result.stdout = ""
+                result.stderr = ""
+                return result
+
+            with patch("mill_cleanup._subprocess_util.run", side_effect=_fake_run_wr):
+                with patch("mill_cleanup._worktree.remove_safe"):
+                    with patch("mill_cleanup._junction.remove"):
+                        with patch("mill_cleanup._paths.resolve_container_path", return_value=tmp / "container"):
+                            mod._apply_worktree_record(record_wr, hub_root_wr, wiki_path_wr, {})
+
+            # Verify push origin --delete was issued for the branch
+            push_delete_calls = [c for c in run_calls_wr if "push" in c and "--delete" in c]
+            assert len(push_delete_calls) == 1, (
+                f"expected exactly one 'push origin --delete' call, got: {run_calls_wr}"
+            )
+            assert "origin" in push_delete_calls[0], (
+                f"expected 'origin' in push --delete call, got: {push_delete_calls[0]}"
+            )
+            assert "hanf/my-task" in push_delete_calls[0], (
+                f"expected branch name 'hanf/my-task' in push --delete call, got: {push_delete_calls[0]}"
+            )
+            print("PASS _apply_worktree_record: push origin --delete issued after local branch delete")
+
+        # --- Card 6: _apply_worktree_record tolerates 'remote ref does not exist' from push --delete ---
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            hub_root_wrt = tmp / "hub"
+            hub_root_wrt.mkdir()
+
+            wt_path_wrt = tmp / "wts" / "gone-task"
+            wt_path_wrt.mkdir(parents=True)
+
+            wiki_path_wrt = tmp / "wiki"
+            wiki_path_wrt.mkdir()
+
+            record_wrt = SlugRecord(
+                slug="gone-task",
+                worktree_path=wt_path_wrt,
+                branch="hanf/gone-task",
+                home_marker="active",
+            )
+
+            run_calls_wrt: list = []
+
+            def _fake_run_wrt(argv, **kwargs):
+                run_calls_wrt.append(list(argv))
+                result = MagicMock()
+                # Simulate "remote ref does not exist" on push --delete
+                if "push" in argv and "--delete" in argv:
+                    result.returncode = 1
+                    result.stdout = ""
+                    result.stderr = "error: unable to delete refs/heads/hanf/gone-task: remote ref does not exist"
+                else:
+                    result.returncode = 0
+                    result.stdout = ""
+                    result.stderr = ""
+                return result
+
+            # Should not raise despite non-zero push exit
+            stderr_wrt = io.StringIO()
+            with patch("mill_cleanup._subprocess_util.run", side_effect=_fake_run_wrt):
+                with patch("mill_cleanup._worktree.remove_safe"):
+                    with patch("mill_cleanup._junction.remove"):
+                        with patch("mill_cleanup._paths.resolve_container_path", return_value=tmp / "container"):
+                            with contextlib.redirect_stderr(stderr_wrt):
+                                mod._apply_worktree_record(record_wrt, hub_root_wrt, wiki_path_wrt, {})
+            # Verify push --delete was attempted
+            push_delete_calls_t = [c for c in run_calls_wrt if "push" in c and "--delete" in c]
+            assert len(push_delete_calls_t) == 1, (
+                f"expected push --delete attempt, got: {run_calls_wrt}"
+            )
+            # The "remote ref does not exist" message must NOT appear in stderr as a warning
+            # (it is tolerated silently)
+            stderr_text_wrt = stderr_wrt.getvalue()
+            assert "non-fatal" not in stderr_text_wrt, (
+                f"'remote ref does not exist' must not produce a non-fatal warning, got: {stderr_text_wrt!r}"
+            )
+            print("PASS _apply_worktree_record: 'remote ref does not exist' tolerated silently")
+
+        # --- Card 6: _apply_inplace_record issues push origin --delete after local branch delete ---
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            hub_root_ir = tmp / "hub"
+            hub_root_ir.mkdir()
+            (hub_root_ir / "_mill").mkdir()
+            (hub_root_ir / "_mill" / "status.md").write_text(
+                _make_status_md("done", parent="main"), encoding="utf-8"
+            )
+
+            record_ir = SlugRecord(
+                slug="my-task",
+                worktree_path=hub_root_ir,
+                branch="hanf/my-task",
+                home_marker="done",
+            )
+
+            run_calls_ir: list = []
+
+            def _fake_run_ir(argv, **kwargs):
+                run_calls_ir.append(list(argv))
+                result = MagicMock()
+                result.returncode = 0
+                result.stdout = ""
+                result.stderr = ""
+                return result
+
+            with patch("mill_cleanup._subprocess_util.run", side_effect=_fake_run_ir):
+                with patch("mill_cleanup._junction.remove"):
+                    with patch("mill_cleanup._paths.resolve_container_path", return_value=tmp / "container"):
+                        mod._apply_inplace_record(
+                            record_ir, hub_root_ir, task_branch="hanf/my-task",
+                            cfg={"paths": {"status_md": "_mill/status.md"}},
+                        )
+
+            push_delete_calls_ir = [c for c in run_calls_ir if "push" in c and "--delete" in c]
+            assert len(push_delete_calls_ir) == 1, (
+                f"expected exactly one 'push origin --delete' call, got: {run_calls_ir}"
+            )
+            assert "hanf/my-task" in push_delete_calls_ir[0], (
+                f"expected branch in push --delete call, got: {push_delete_calls_ir[0]}"
+            )
+            print("PASS _apply_inplace_record: push origin --delete issued after local branch delete")
+
+        # --- Card 6: _apply_inplace_record tolerates 'remote ref does not exist' from push --delete ---
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            hub_root_irt = tmp / "hub"
+            hub_root_irt.mkdir()
+            (hub_root_irt / "_mill").mkdir()
+            (hub_root_irt / "_mill" / "status.md").write_text(
+                _make_status_md("done", parent="main"), encoding="utf-8"
+            )
+
+            record_irt = SlugRecord(
+                slug="gone-task",
+                worktree_path=hub_root_irt,
+                branch="hanf/gone-task",
+                home_marker="done",
+            )
+
+            run_calls_irt: list = []
+
+            def _fake_run_irt(argv, **kwargs):
+                run_calls_irt.append(list(argv))
+                result = MagicMock()
+                if "push" in argv and "--delete" in argv:
+                    result.returncode = 1
+                    result.stdout = ""
+                    result.stderr = "error: unable to delete refs/heads/hanf/gone-task: remote ref does not exist"
+                else:
+                    result.returncode = 0
+                    result.stdout = ""
+                    result.stderr = ""
+                return result
+
+            stderr_irt = io.StringIO()
+            with patch("mill_cleanup._subprocess_util.run", side_effect=_fake_run_irt):
+                with patch("mill_cleanup._junction.remove"):
+                    with patch("mill_cleanup._paths.resolve_container_path", return_value=tmp / "container"):
+                        with contextlib.redirect_stderr(stderr_irt):
+                            mod._apply_inplace_record(
+                                record_irt, hub_root_irt, task_branch="hanf/gone-task",
+                                cfg={"paths": {"status_md": "_mill/status.md"}},
+                            )
+
+            push_delete_calls_irt = [c for c in run_calls_irt if "push" in c and "--delete" in c]
+            assert len(push_delete_calls_irt) == 1, (
+                f"expected push --delete attempt, got: {run_calls_irt}"
+            )
+            stderr_text_irt = stderr_irt.getvalue()
+            assert "non-fatal" not in stderr_text_irt, (
+                f"'remote ref does not exist' must not produce a non-fatal warning for inplace, got: {stderr_text_irt!r}"
+            )
+            print("PASS _apply_inplace_record: 'remote ref does not exist' tolerated silently")
+
+        # --- Card 7: reconcile orphaned 'active' markers to unclaimed ---
+        # (a) active task with no worktree/branch/portal -> reset to None
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            hub_root_rec = tmp / "hub"
+            hub_root_rec.mkdir()
+            container_rec = tmp
+
+            wiki_path_rec = tmp / "wiki"
+            wiki_path_rec.mkdir()
+
+            home_tasks_rec = [_make_task("orphan-active", "active")]
+
+            def _mock_run_rec(argv, **kwargs):
+                r = MagicMock()
+                r.returncode = 0
+                r.stderr = ""
+                # --show-current: return a non-matching branch to keep orphan-active out of active_slugs
+                if "--show-current" in argv:
+                    r.stdout = "main\n"
+                # branch --list: return empty string (no local branch for this slug)
+                elif "branch" in argv and "--list" in argv:
+                    r.stdout = ""
+                elif "tag" in argv and "-l" in argv:
+                    r.stdout = ""
+                else:
+                    r.stdout = ""
+                return r
+
+            # No wts/ subdirectory for orphan-active, no portals/ entry
+            with patch("mill_cleanup._subprocess_util.run", side_effect=_mock_run_rec):
+                plan_rec = build_plan(
+                    [], home_tasks_rec, wiki_path_rec, hub_root=hub_root_rec,
+                    container_path=container_rec,
+                )
+
+            assert "orphan-active" in plan_rec.to_reset_unclaimed, (
+                f"expected 'orphan-active' in to_reset_unclaimed, got: {plan_rec.to_reset_unclaimed}"
+            )
+            # Must NOT appear in to_report as a plain orphan marker (it is handled specially)
+            orphan_report = [l for l in plan_rec.to_report if "orphan-active" in l and "orphan Home.md marker" in l]
+            assert orphan_report == [], (
+                f"orphan-active must not appear in to_report when promoted to to_reset_unclaimed, got: {plan_rec.to_report}"
+            )
+            print("PASS build_plan Card 7 (a): active task with no worktree/branch/portal -> to_reset_unclaimed")
+
+        # (b) ready-to-merge and pr-pending orphans are NOT auto-reset
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            hub_root_live = tmp / "hub"
+            hub_root_live.mkdir()
+
+            wiki_path_live = tmp / "wiki"
+            wiki_path_live.mkdir()
+
+            home_tasks_live = [
+                _make_task("live-rtm", "ready-to-merge"),
+                _make_task("live-pp", "pr-pending"),
+            ]
+
+            def _mock_run_live(argv, **kwargs):
+                r = MagicMock()
+                r.returncode = 0
+                r.stderr = ""
+                r.stdout = ""
+                return r
+
+            with patch("mill_cleanup._subprocess_util.run", side_effect=_mock_run_live):
+                plan_live = build_plan(
+                    [], home_tasks_live, wiki_path_live, hub_root=hub_root_live,
+                )
+
+            assert "live-rtm" not in plan_live.to_reset_unclaimed, (
+                f"ready-to-merge must NOT be in to_reset_unclaimed, got: {plan_live.to_reset_unclaimed}"
+            )
+            assert "live-pp" not in plan_live.to_reset_unclaimed, (
+                f"pr-pending must NOT be in to_reset_unclaimed, got: {plan_live.to_reset_unclaimed}"
+            )
+            print("PASS build_plan Card 7 (b): ready-to-merge/pr-pending orphans NOT auto-reset")
+
+        # (c) active task that still has a worktree on disk -> left untouched (not in to_reset_unclaimed)
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            container_alive = tmp
+            wts_dir_alive = container_alive / "wts"
+            hub_root_alive = wts_dir_alive / "my-repo"
+            hub_root_alive.mkdir(parents=True)
+
+            # The task's worktree dir exists on disk
+            alive_wt = wts_dir_alive / "still-active"
+            alive_wt.mkdir(parents=True)
+
+            wiki_path_alive = container_alive / "wiki"
+            wiki_path_alive.mkdir()
+
+            home_tasks_alive = [_make_task("still-active", "active")]
+
+            def _mock_run_alive(argv, **kwargs):
+                r = MagicMock()
+                r.returncode = 0
+                r.stderr = ""
+                r.stdout = ""
+                return r
+
+            with patch("mill_cleanup._subprocess_util.run", side_effect=_mock_run_alive):
+                plan_alive = build_plan(
+                    [], home_tasks_alive, wiki_path_alive, hub_root=hub_root_alive,
+                    container_path=container_alive,
+                )
+
+            assert "still-active" not in plan_alive.to_reset_unclaimed, (
+                f"task with worktree on disk must NOT be in to_reset_unclaimed, got: {plan_alive.to_reset_unclaimed}"
+            )
+            print("PASS build_plan Card 7 (c): active task with worktree on disk -> not in to_reset_unclaimed")
+
+        # (d) apply_plan calls wiki.set_phase(slug, None) for each to_reset_unclaimed slug
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            hub_root_ap = tmp / "hub"
+            hub_root_ap.mkdir()
+            wiki_path_ap = tmp / "wiki"
+            wiki_path_ap.mkdir()
+            (wiki_path_ap / "Home.md").write_text("", encoding="utf-8")
+
+            plan_ap = CleanupPlan(
+                to_remove_done=[],
+                to_remove_abandoned=[],
+                to_reset_home=[],
+                to_report=[],
+                to_reset_unclaimed=["orphan-slug"],
+            )
+
+            set_phase_calls: list = []
+
+            def _fake_set_phase_ap(wiki_path, slug, phase):
+                set_phase_calls.append((slug, phase))
+
+            stdout_ap = io.StringIO()
+            with patch("mill_cleanup.wiki.set_phase", side_effect=_fake_set_phase_ap):
+                with contextlib.redirect_stdout(stdout_ap):
+                    apply_plan(plan_ap, wiki_path_ap, hub_root_ap, {})
+
+            assert ("orphan-slug", None) in set_phase_calls, (
+                f"expected wiki.set_phase('orphan-slug', None), got: {set_phase_calls}"
+            )
+            stdout_text_ap = stdout_ap.getvalue()
+            assert "RECONCILE" in stdout_text_ap, (
+                f"expected 'RECONCILE' in stdout, got: {stdout_text_ap!r}"
+            )
+            assert "orphan-slug" in stdout_text_ap, (
+                f"expected 'orphan-slug' in stdout, got: {stdout_text_ap!r}"
+            )
+            print("PASS apply_plan Card 7 (d): wiki.set_phase called for to_reset_unclaimed + RECONCILE printed")
 
         print("All build_plan and cleanup indicator unit tests passed.")
         return 0
