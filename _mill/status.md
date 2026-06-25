@@ -1,10 +1,10 @@
 # Status
 
 ```yaml
-phase: discussed
+phase: planning
 slug: mill-unit-test-and-signal-accuracy
 branch: hanf/mill-unit-test-and-signal-accuracy
-plan: null
+plan: _mill/plan
 parent: main
 task: Fix pre-existing unit-test failures, CRLF cleanliness false-positive, and review false-BLOCKING on Go
 task_description: |
@@ -17,4 +17,5 @@ task_description: |
 discussing  '2026-06-25T06:25:17Z'
 discussion-fix-r1  '2026-06-25T06:59:06Z'
 discussed  '2026-06-25T06:59:24Z'
+planning  '2026-06-25T07:04:08Z'
 ```
