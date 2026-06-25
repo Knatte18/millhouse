@@ -157,6 +157,18 @@ hardening task.
   evidence-driven, not a guess. Atomicity is the structural guarantee the issue asks for.
 - Rejected: Treating reconciliation alone as the fix — self-heals the symptom on the next
   cleanup but leaves the race that mis-claims tasks during the run.
+- **Plannability (root cause is unlocated, so the batch is structured to ship regardless):**
+  The plan's **first card for this batch is an explicit reproduce-and-locate step** with a
+  concrete acceptance criterion — a regression test that drives the reported scenario (select
+  one of two backlog tasks, assert the *other* stays `None`) and is **red** before the fix,
+  **green** after. The implementer locates the divergence (suspects above) and closes it.
+  Crucially, the **guaranteed-shipping deliverables are atomicity (spawn-atomicity decision)
+  and reconciliation (orphan-reconciliation decision)**: even if the over-claim race turns out
+  to be environmental/non-reproducible, those two structural guarantees alone prevent a
+  claimed-but-artifactless task from persisting, so the batch is completable and the regression
+  test still pins the picker's selection→claim contract. mill-plan should therefore write this
+  batch with the locate-card first and atomicity+reconciliation as independent, always-landing
+  cards, not contingent on root-causing the race.
 
 ### orphan-reconciliation (#543b)
 
@@ -167,6 +179,20 @@ hardening task.
   reports around `millpy-cleanup.py:219-264`).
 - Rationale: A backstop that converges the board to a consistent state regardless of how a
   task got mis-claimed (the picker bug, an interrupted spawn, a manual edit).
+- Detection seam (what cleanup already has vs. what to add): `build_plan` already enumerates
+  every signal needed except local-branch presence — registered git worktrees
+  (`_worktree.list_worktrees`), `wts/` dirs on disk (`wts_slugs_on_disk`), `.active`-junction
+  slugs (`active_slugs`), Home.md markers (`marker_by_slug` / `home_tasks`), and orphan portals
+  (`_scan_orphan_portals(container/portals, active_slugs)`). The **"orphan Home.md marker"**
+  branch (`millpy-cleanup.py:255-264`) **already detects exactly the active-with-no-worktree
+  case** (`marker in {active,ready-to-merge,pr-pending} and slug not in active_slugs and slug
+  not in wts_slugs_on_disk`) — but today it only **appends a `REPORT:` line**, it does not reset.
+  Reconciliation is therefore: **promote that existing detection from report-only to an actual
+  `wiki.set_phase(slug, None)` reset**, gated narrowly on the orphan being `active` (not
+  `ready-to-merge`/`pr-pending`, which are live PR states) AND having no portal
+  (`_scan_orphan_portals` reuse — no new cross-platform junction probe) AND no local branch
+  (the **one** signal not already enumerated: add a `git branch --list <branch>` check). Junction
+  presence is probed via the existing portal scan, not a hand-rolled `os.path` test.
 - Rejected: A standalone `millpy-reconcile.py` — cleanup already enumerates worktrees/branches/
   portals and is the natural teardown reconciliation point; a new CLI is redundant surface area.
 
@@ -192,11 +218,18 @@ hardening task.
 
 ### merge-in-combine (#540)
 
-- Decision: (a) In `templates/merge-in-conflict-brief.md` step 3 (line 27), add explicit
-  guidance: when both sides modify **different, non-overlapping parts of the same region**
-  (e.g. different columns of one table row, different keys of one object), **combine both
-  edits** into a single resolved line/structure; picking one side wholesale is correct only
-  when the two sides are genuinely mutually exclusive. (b) Extend the success report schema
+- Note on the current brief: step 3 (line 27) **already** reads "Write a resolution that
+  preserves the intent of both sides", and line 36 already forbids `git checkout --ours/--theirs`.
+  So the abstract instruction is present; the observed #540 failure was **model non-compliance**
+  with that abstract guidance, not a missing instruction. The fix therefore **sharpens
+  enforcement**, it does not add absent guidance.
+- Decision: (a) In `templates/merge-in-conflict-brief.md` step 3 (line 27), **sharpen** the
+  existing "preserve the intent of both sides" line with a **concrete worked example**: when
+  both sides modify **different, non-overlapping parts of the same region** (e.g. different
+  columns of one table row, different keys of one object), **combine both edits** into a single
+  resolved line/structure; picking one side wholesale is correct only when the two sides are
+  genuinely mutually exclusive. The worked example is what converts the abstract rule into
+  something the model reliably follows. (b) Extend the success report schema
   (lines 38-50) with an optional `discarded` / `warnings` array; if the resolver must drop
   any content from one side it MUST list it. (c) `mill-merge-in/SKILL.md` step 3 (line 48)
   reads that field on `{"status":"success"}` and surfaces any discards to the operator
