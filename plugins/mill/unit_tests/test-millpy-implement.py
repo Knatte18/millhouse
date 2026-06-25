@@ -591,6 +591,76 @@ class TestMillpyImplement(unittest.TestCase):
         call_kwargs = mock_finalize.call_args.kwargs
         self.assertEqual(call_kwargs.get("verify_cmd"), "exit 0")
 
+    def test_overview_verify_threaded_as_module_wide(self):
+        """Overview with non-null top-level verify: threads it as module_wide_verify_cmd."""
+        plan_dir = self.tmp_path / "task" / "plan"
+        # Write an overview with a non-null top-level verify command
+        overview_with_verify = (
+            "# Plan: Test Task\n\n"
+            "```yaml\n"
+            "task: Test Task\n"
+            "slug: test-slug\n"
+            "approved: true\n"
+            "verify: exit 0\n"
+            "```\n\n"
+            "## Batch Index\n\n"
+            "```yaml\n"
+            "batches:\n"
+            "  - name: test-batch\n"
+            "    file: 01-test-batch.md\n"
+            "    depends-on: []\n"
+            "    verify: null\n"
+            "```\n"
+        )
+        (plan_dir / "00-overview.md").write_text(overview_with_verify, encoding="utf-8")
+
+        agent_output_path = self.tmp_path / "agent-output.txt"
+        agent_output_path.write_text(
+            '{"status":"success","commit_sha":"xyz","session_id":"fake"}\n',
+            encoding="utf-8"
+        )
+
+        with unittest.mock.patch.object(
+            millpy_implement, "finalize_from_output",
+            return_value=0,
+        ) as mock_finalize:
+            rc, out = self._run_main([
+                "test-batch",
+                "--stage", "finalize",
+                "--agent-output", str(agent_output_path),
+            ])
+
+        self.assertEqual(rc, 0)
+        mock_finalize.assert_called_once()
+        call_kwargs = mock_finalize.call_args.kwargs
+        # The overview-level verify command must be threaded as module_wide_verify_cmd
+        self.assertEqual(call_kwargs.get("module_wide_verify_cmd"), "exit 0")
+
+    def test_overview_verify_null_passes_none_as_module_wide(self):
+        """Overview with null top-level verify: passes None as module_wide_verify_cmd."""
+        # The default fixture already has verify: null in the overview (via _make_fixture)
+        agent_output_path = self.tmp_path / "agent-output.txt"
+        agent_output_path.write_text(
+            '{"status":"success","commit_sha":"xyz","session_id":"fake"}\n',
+            encoding="utf-8"
+        )
+
+        with unittest.mock.patch.object(
+            millpy_implement, "finalize_from_output",
+            return_value=0,
+        ) as mock_finalize:
+            rc, out = self._run_main([
+                "test-batch",
+                "--stage", "finalize",
+                "--agent-output", str(agent_output_path),
+            ])
+
+        self.assertEqual(rc, 0)
+        mock_finalize.assert_called_once()
+        call_kwargs = mock_finalize.call_args.kwargs
+        # A null overview verify must produce None (not the string "null")
+        self.assertIsNone(call_kwargs.get("module_wide_verify_cmd"))
+
 
 class TestClassifyStuckType(unittest.TestCase):
 

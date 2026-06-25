@@ -225,6 +225,12 @@ def main(argv=None) -> int:
     except Exception:
         parent_branch = None
 
+    # Read the overview-level module-wide verify command from the overview frontmatter.
+    # The overview's first fenced-yaml block is the frontmatter (task/slug/verify/...).
+    # A null or absent `verify:` passes None, which makes the module-wide gate a no-op.
+    overview_frontmatter = _plan_dag._read_batch_frontmatter(overview_path)
+    module_wide_verify_cmd = overview_frontmatter.get("verify") or None
+
     # Stage: finalize
     if args.stage == "finalize":
         if not args.agent_output:
@@ -253,6 +259,7 @@ def main(argv=None) -> int:
             snapshot_path=snapshot_path,
             session_id=session_id,
             verify_cmd=verify_cmd,
+            module_wide_verify_cmd=module_wide_verify_cmd,
             card_count=card_count,
             task_dir=status_path.parent,
             parent_branch=parent_branch,
@@ -408,6 +415,7 @@ def main(argv=None) -> int:
         snapshot_path=snapshot_path,
         session_id=session_id,
         verify_cmd=verify_cmd,
+        module_wide_verify_cmd=module_wide_verify_cmd,
         card_count=card_count,
         task_dir=status_path.parent,
         parent_branch=parent_branch,
