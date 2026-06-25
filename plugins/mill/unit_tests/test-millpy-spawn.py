@@ -90,6 +90,21 @@ def test_smoke_import() -> None:
 # ---------------------------------------------------------------------------
 
 
+def _make_subprocess_util_stub() -> types.ModuleType:
+    """Return a _subprocess_util stub whose .run returns exit-code 2 by default.
+
+    Exit code 2 is what 'git ls-remote --exit-code' returns when the ref is
+    absent, so all happy-path tests proceed past the origin-branch pre-check
+    without blocking on an AttributeError.
+    """
+    import subprocess as _sp
+    stub = types.ModuleType("_subprocess_util")
+    stub.run = MagicMock(
+        return_value=_sp.CompletedProcess(args=[], returncode=2, stdout="", stderr="")
+    )
+    return stub
+
+
 def _make_fake_task(slug: str = "my-task", title: str = "My Task") -> dict:
     return {
         "slug": slug,
@@ -179,7 +194,7 @@ def _run_main_with_mocks(
         "_worktree": worktree_mock,
         "_paths": paths_mock,
         "_sibling": types.ModuleType("_sibling"),
-        "_subprocess_util": types.ModuleType("_subprocess_util"),
+        "_subprocess_util": _make_subprocess_util_stub(),
     }
     for name, stub in stub_map.items():
         saved[name] = sys.modules.get(name)
@@ -313,7 +328,7 @@ def test_write_settings_uses_short_name_and_slug() -> None:
         "_worktree": MagicMock(),
         "_paths": paths_mock,
         "_sibling": types.ModuleType("_sibling"),
-        "_subprocess_util": types.ModuleType("_subprocess_util"),
+        "_subprocess_util": _make_subprocess_util_stub(),
     }
     saved: dict[str, object] = {}
     for name, stub in stub_map.items():
@@ -405,7 +420,7 @@ def test_main_backlog_empty_exits_zero() -> None:
         "_worktree": MagicMock(),
         "_paths": paths_mock,
         "_sibling": types.ModuleType("_sibling"),
-        "_subprocess_util": types.ModuleType("_subprocess_util"),
+        "_subprocess_util": _make_subprocess_util_stub(),
     }
     saved: dict[str, object] = {}
     for name, stub in stub_map.items():
@@ -528,7 +543,7 @@ def test_create_hub_links_called_after_portal_creation() -> None:
         "_worktree": MagicMock(),
         "_paths": paths_mock,
         "_sibling": types.ModuleType("_sibling"),
-        "_subprocess_util": types.ModuleType("_subprocess_util"),
+        "_subprocess_util": _make_subprocess_util_stub(),
     }
     saved: dict[str, object] = {}
     for name, stub in stub_map.items():
@@ -755,7 +770,7 @@ def _run_spawn_real_fs(
         "_worktree": worktree_mock,
         "_paths": paths_mock,
         "_sibling": types.ModuleType("_sibling"),
-        "_subprocess_util": types.ModuleType("_subprocess_util"),
+        "_subprocess_util": _make_subprocess_util_stub(),
     }
     saved: dict[str, object] = {}
     for name, stub in stub_map.items():
@@ -1059,6 +1074,124 @@ def test_spawn_empty_backlog_message_has_no_s_marker() -> None:
 
 
 # ---------------------------------------------------------------------------
+# origin/<branch> pre-check aborts spawn before any artifact (Card 3)
+# ---------------------------------------------------------------------------
+
+
+def test_spawn_aborts_when_origin_branch_already_exists() -> None:
+    """When git ls-remote reports the branch already exists on origin, spawn must
+    abort with exit code 1 before creating any worktree, junction, or wiki claim.
+
+    Mocks _subprocess_util.run so that the ls-remote call returns exit code 0
+    (branch found) and asserts that _worktree.create, _junction.create, and
+    _spawn_core.claim_in_wiki are never invoked.
+    """
+    import importlib
+    import importlib.util
+    import subprocess
+
+    spawn_path = HUB / "plugins" / "mill" / "scripts" / "millpy-spawn.py"
+    spec = importlib.util.spec_from_file_location("mill_spawn_precheck_test", spawn_path)
+    mod = importlib.util.module_from_spec(spec)
+
+    task = _make_fake_task(slug="my-task", title="My Task")
+    spawn_core_mock = MagicMock()
+    spawn_core_mock.pick_task_single_or_multi.return_value = ("single", task, [])
+    spawn_core_mock.BacklogEmpty = type("BacklogEmpty", (Exception,), {})
+
+    # Simulate ls-remote returning exit code 0 (branch already exists on remote).
+    def _ls_remote_exists(argv, **kwargs):
+        if "ls-remote" in argv:
+            return subprocess.CompletedProcess(args=argv, returncode=0, stdout="refs/heads/my-task\n", stderr="")
+        # Any other subprocess call returns success.
+        return subprocess.CompletedProcess(args=argv, returncode=0, stdout="", stderr="")
+
+    subprocess_mock = types.ModuleType("_subprocess_util")
+    subprocess_mock.run = MagicMock(side_effect=_ls_remote_exists)
+
+    worktree_mock = MagicMock()
+    junction_mock = MagicMock()
+
+    paths_mock = MagicMock()
+    paths_mock.resolve_git_root.return_value = Path("/fake/repo")
+    paths_mock.resolve_wiki_path.return_value = Path("/fake/wiki")
+    paths_mock.resolve_worktrees_dir.return_value = Path("/fake/worktrees")
+    paths_mock.resolve_short_name.return_value = "MI"
+    paths_mock.resolve_container_path.return_value = Path("/fake/container")
+    paths_mock.resolve_hub_path.return_value = Path("/fake/hub")
+    paths_mock.resolve_hub_relative_path.side_effect = lambda wt, sub: wt if sub == "." else wt / sub
+    paths_mock.resolve_main_worktree_root.return_value = Path("/fake/repo")
+    paths_mock.status_path.return_value = Path("/fake/worktrees/my-task/_mill/status.md")
+
+    stub_map = {
+        "_spawn_core": spawn_core_mock,
+        "_setup": MagicMock(),
+        "_wiki": MagicMock(),
+        "_junction": junction_mock,
+        "_tasks_md": MagicMock(),
+        "_vscode": MagicMock(),
+        "_worktree": worktree_mock,
+        "_paths": paths_mock,
+        "_sibling": types.ModuleType("_sibling"),
+        "_subprocess_util": subprocess_mock,
+    }
+    saved: dict[str, object] = {}
+    for name, stub in stub_map.items():
+        saved[name] = sys.modules.get(name)
+        sys.modules[name] = stub
+
+    try:
+        spec.loader.exec_module(mod)
+        fake_cfg = {"spawn": {"branch_prefix": ""}}
+        with (
+            patch.object(mod, "_load_config", return_value=fake_cfg),
+            patch.object(mod, "resolve_worktrees_dir", return_value=Path("/fake/worktrees")),
+            patch.object(mod, "pick_worktree_color", return_value="#7d2d6b"),
+            patch.object(Path, "exists", return_value=True),
+            patch.object(Path, "read_text", return_value="# Home\n"),
+            patch.object(Path, "mkdir", return_value=None),
+        ):
+            exit_code = mod.main([])
+    finally:
+        for name, original in saved.items():
+            if original is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = original
+
+    # Spawn must exit non-zero (return 1) when origin branch already exists.
+    if exit_code != 1:
+        raise AssertionError(
+            f"spawn should exit 1 when origin branch already exists, got {exit_code}"
+        )
+
+    # No worktree must be created.
+    if worktree_mock.create.called:
+        raise AssertionError(
+            f"_worktree.create must not be called when origin branch exists; "
+            f"got calls: {worktree_mock.create.call_args_list}"
+        )
+
+    # No junction must be created.
+    if junction_mock.create.called:
+        raise AssertionError(
+            f"_junction.create must not be called when origin branch exists; "
+            f"got calls: {junction_mock.create.call_args_list}"
+        )
+
+    # No wiki claim must be made.
+    if spawn_core_mock.claim_in_wiki.called:
+        raise AssertionError(
+            f"claim_in_wiki must not be called when origin branch exists; "
+            f"got calls: {spawn_core_mock.claim_in_wiki.call_args_list}"
+        )
+
+    print(
+        "PASS: spawn aborts with exit 1 before any artifact when origin branch exists"
+    )
+
+
+# ---------------------------------------------------------------------------
 # Over-claim regression: single selection never touches un-picked task (Card 1)
 # ---------------------------------------------------------------------------
 
@@ -1128,6 +1261,7 @@ def main() -> int:
         test_single_selection_does_not_call_multi_select_groom_then_claim,
         test_spawn_slug_help_text_has_no_s_marker,
         test_spawn_empty_backlog_message_has_no_s_marker,
+        test_spawn_aborts_when_origin_branch_already_exists,
     ]
 
     failures: list[str] = []

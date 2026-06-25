@@ -42,6 +42,7 @@ import _junction
 import _paths
 import _setup
 import _spawn_core
+import _subprocess_util
 import _vscode
 import _worktree
 from _config import load_config as _load_config
@@ -145,6 +146,29 @@ def main(argv: list[str] | None = None) -> int:
     worktrees_dir = resolve_worktrees_dir(cfg, git_root)
     worktree_path = worktrees_dir / slug
     dest_hub = resolve_hub_relative_path(worktree_path, hub_subpath)
+
+    # Pre-flight: check whether origin/<branch_name> already exists.
+    # A surviving remote branch from a previous aborted spawn would cause
+    # 'git worktree add -b' to succeed locally but 'git push --set-upstream'
+    # to fail later with a non-fast-forward error. Catching it here lets the
+    # operator clean up (e.g. via teardown) before any artifact is created.
+    #
+    # Exit-code semantics from git ls-remote:
+    #   0  -> ref found (branch already exists on remote -> abort)
+    #   2  -> ref not found (genuine absent -> proceed normally)
+    #   other non-zero -> network/config problem -> soft skip (do not block spawn)
+    if not args.dry_run:
+        ls_remote_result = _subprocess_util.run(
+            ["git", "-C", str(git_root), "ls-remote", "--exit-code", "--heads", "origin", branch_name],
+        )
+        if ls_remote_result.returncode == 0:
+            print(
+                f"[spawn] ERROR: origin/{branch_name} already exists on the remote. "
+                f"Delete the surviving remote branch (e.g. via teardown or "
+                f"'git push origin --delete {branch_name}') before re-spawning.",
+                file=sys.stderr,
+            )
+            return 1
 
     if args.dry_run:
         print(f"[DryRun] Task:     {picked['title']} [{slug}]")
