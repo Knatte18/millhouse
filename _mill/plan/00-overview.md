@@ -3,7 +3,7 @@
 ```yaml
 task: Fix spawn lifecycle integrity, agent-mode async assumption, merge-in conflicts, and pre-existing failure validation
 slug: mill-spawn-and-workflow-integrity
-approved: false
+approved: true
 started: 20260625-070609
 parent: main
 root: ""
