@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-spawn-and-workflow-integrity
 branch: hanf/mill-spawn-and-workflow-integrity
 plan: _mill/plan
@@ -22,4 +22,19 @@ plan-review-r1  '2026-06-25T07:15:36Z'
 plan-fix-r1  '2026-06-25T07:15:36Z'
 plan-fix-r2  '2026-06-25T07:19:10Z'
 planned  '2026-06-25T07:19:45Z'
+implementing  '2026-06-25T07:20:55Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: spawn-claim-lifecycle
+    state: pending
+  - name: verify-and-implementer
+    state: pending
+  - name: dispatch-and-mergein-docs
+    state: pending
+  - name: teardown-reconcile
+    state: pending
 ```
