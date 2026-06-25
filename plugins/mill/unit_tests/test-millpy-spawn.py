@@ -1022,6 +1022,55 @@ def test_spawn_discovery_round_trip_subfolder() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Over-claim regression: single selection never touches un-picked task (Card 1)
+# ---------------------------------------------------------------------------
+
+
+def test_single_selection_does_not_call_multi_select_groom_then_claim() -> None:
+    """CLI-level contract: when pick returns mode=single, multi_select_groom_then_claim
+    is never invoked, so only the selected slug ever reaches claim_in_wiki.
+
+    This is the spawn-side half of the #543 regression guard.  The core-level
+    half lives in test-spawn-core.py.
+    """
+    task = _make_fake_task(slug="task-one", title="Task One")
+
+    exit_code, sc, _ = _run_main_with_mocks(
+        [],
+        picked_task=task,
+    )
+
+    if exit_code != 0:
+        raise AssertionError(f"expected exit 0 on happy path, got {exit_code}")
+
+    # Single mode must call claim_in_wiki for the selected slug only.
+    sc.claim_in_wiki.assert_called_once()
+    claim_call = sc.claim_in_wiki.call_args
+    # Second positional arg (or slug= kwarg) is the slug being claimed.
+    claimed_slug = (
+        claim_call.kwargs.get("slug")
+        or (claim_call.args[1] if len(claim_call.args) > 1 else None)
+    )
+    if claimed_slug != "task-one":
+        raise AssertionError(
+            f"claim_in_wiki must be called with slug='task-one', "
+            f"got {claimed_slug!r} from call {claim_call}"
+        )
+
+    # multi_select_groom_then_claim must NOT be invoked for a single selection.
+    if sc.multi_select_groom_then_claim.called:
+        raise AssertionError(
+            "multi_select_groom_then_claim must not be called when mode=single; "
+            f"got calls: {sc.multi_select_groom_then_claim.call_args_list}"
+        )
+
+    print(
+        "PASS: single selection calls claim_in_wiki once; "
+        "multi_select_groom_then_claim never called"
+    )
+
+
+# ---------------------------------------------------------------------------
 # Main runner
 # ---------------------------------------------------------------------------
 
@@ -1039,6 +1088,7 @@ def main() -> int:
         test_spawn_standard_layout_regression,
         test_spawn_subfolder_install_destination_layout,
         test_spawn_discovery_round_trip_subfolder,
+        test_single_selection_does_not_call_multi_select_groom_then_claim,
     ]
 
     failures: list[str] = []

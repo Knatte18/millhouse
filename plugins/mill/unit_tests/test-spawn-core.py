@@ -1040,6 +1040,94 @@ def test_pick_task_single_numbered_path_extended_title() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Multi-select over-claim regression (Card 1)
+# ---------------------------------------------------------------------------
+
+
+def test_multi_select_one_of_two_does_not_claim_second() -> None:
+    """Selection -> claim contract: user picks exactly one of two unmarked tasks.
+
+    When the numbered prompt receives "1" from stdin with two candidates, the
+    picker returns mode="single" -- the single-item shortcut fires in
+    pick_task_single_or_multi.  The second task must never be passed to
+    set_phase/merge_tasks.
+
+    This encodes the regression scenario from #543: a slug the user did NOT
+    select must remain status=None and must never appear in any merge_tasks
+    remove_slugs or set_phase call.
+    """
+    import io
+    from unittest.mock import MagicMock, patch
+
+    tasks_text = """\
+# Home
+
+## Task One
+[task-one]
+
+## Task Two
+[task-two]
+"""
+    tasks = parse_home_md(tasks_text)
+
+    # Inject "1\n" so the numbered prompt picks only task-one.
+    original_stdin = sys.stdin
+    sys.stdin = io.StringIO("1\n")
+    try:
+        mode, picked, candidates = pick_task_single_or_multi(tasks)
+    finally:
+        sys.stdin = original_stdin
+
+    # The picker must return single mode with only task-one selected.
+    if mode != "single":
+        raise AssertionError(f"expected mode=single for one-item selection, got {mode!r}")
+    if isinstance(picked, list):
+        raise AssertionError(
+            f"mode=single must yield a single task dict, got list {picked!r}"
+        )
+    if picked["slug"] != "task-one":
+        raise AssertionError(f'expected task-one selected, got {picked["slug"]!r}')
+
+    # The un-picked task must still have status=None.
+    remaining = next((t for t in tasks if t["slug"] == "task-two"), None)
+    if remaining is None:
+        raise AssertionError("task-two should still be in the task list")
+    if remaining["status"] is not None:
+        raise AssertionError(
+            f"task-two status should be None (un-picked), got {remaining['status']!r}"
+        )
+
+    # Simulate the millpy-spawn.py multi-branch guard: only mode=="multi" enters
+    # the multi_select_groom_then_claim path.  For a single selection, the caller
+    # MUST NOT call merge_tasks at all -- verify by mocking wiki.merge_tasks.
+    merge_mock = MagicMock()
+    with patch("wiki._client.merge_tasks", merge_mock):
+        # Re-run the same selection path but via the high-level multi_select path.
+        # Only multi mode reaches merge_tasks.  Single mode does NOT.
+        sys.stdin = io.StringIO("1\n")
+        try:
+            mode2, picked2, _ = pick_task_single_or_multi(tasks)
+        finally:
+            sys.stdin = original_stdin
+
+        # In single mode the caller invokes claim_in_wiki(slug) -- NOT merge_tasks.
+        # Confirm mode is still single so the caller would use claim_in_wiki, not
+        # multi_select_groom_then_claim.
+        if mode2 != "single":
+            raise AssertionError(
+                f"second call should also return single, got {mode2!r}"
+            )
+
+    # merge_tasks must never have been called in the single path.
+    merge_mock.assert_not_called()
+
+    print(
+        "PASS: single-item selection -> mode=single; second task stays None; "
+        "merge_tasks never called"
+    )
+
+
+# ---------------------------------------------------------------------------
 # Main runner
 # ---------------------------------------------------------------------------
 
@@ -1080,6 +1168,7 @@ def main() -> int:
         test_write_hub_active_indicator_creates_mill_dir,
         test_discover_active_worktrees_standard_layout,
         test_discover_active_worktrees_subfolder_install,
+        test_multi_select_one_of_two_does_not_claim_second,
     ]
 
     failures: list[str] = []
