@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussion-fix-r2
+phase: discussed
 slug: mill-spawn-and-workflow-integrity
 branch: hanf/mill-spawn-and-workflow-integrity
 plan: null
@@ -16,4 +16,5 @@ task_description: |
 ```text
 discussing  '2026-06-25T06:26:39Z'
 discussion-fix-r2  '2026-06-25T07:01:01Z'
+discussed  '2026-06-25T07:01:37Z'
 ```
