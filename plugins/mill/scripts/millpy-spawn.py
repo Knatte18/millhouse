@@ -2,10 +2,11 @@
 mill-spawn — claim one task from the wiki Home.md and spin up a worktree for it.
 
 Flow:
-    1. Resolve the wiki clone via ``_paths.resolve_wiki_path`` (``.millhouse/wiki`` is a junction for IDE/terminal convenience only).
+    1. Resolve the wiki clone via ``_paths.resolve_wiki_path`` (``.millhouse/wiki``
+       is a junction for IDE/terminal convenience only).
     2. Fast-forward pull the wiki so we pick against current state.
-    3. Parse ``Home.md``; pick a task via ``pick_task`` (fast-path on
-       ``[s]``, numbered picker on unmarked-only, exit 0 when empty).
+    3. Parse ``Home.md``; pick a task via ``pick_task_single_or_multi``
+       (numbered picker on unmarked tasks, exit 0 when backlog is empty).
     4. Under the wiki lock: mark the chosen task ``[active]``, regenerate
        ``_Sidebar.md``, and commit+push.
     5. Create the worktree at ``<worktrees-dir>/<slug>`` on branch
@@ -15,7 +16,7 @@ Flow:
        inside the new worktree.
     8. Pick a non-green VS Code title-bar colour not in use by sibling
        worktrees; write ``.vscode/settings.json`` via ``_vscode``.
-    9. Write the initial ``task/status.md`` (phase=discussing) and commit+push.
+    9. Write the initial ``_mill/status.md`` (phase=discussing) and commit+push.
    10. Print worktree-path, branch, and status path on stdout.
 
 Usage:
@@ -84,7 +85,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--slug",
         default=None,
-        help="Skip the picker and claim this specific slug (must be unmarked or [s]).",
+        help="Skip the picker and claim this specific slug (must be unmarked).",
     )
     parser.add_argument(
         "--dry-run",
@@ -119,8 +120,8 @@ def main(argv: list[str] | None = None) -> int:
 
     if mode == "empty":
         print(
-            "[spawn] No pickable tasks. Mark a task [s] or leave one "
-            "unmarked (see /mill-add). Exiting.",
+            "[spawn] No pickable tasks. Leave one unmarked "
+            "(see /mill-add). Exiting.",
             file=sys.stderr,
         )
         return 0

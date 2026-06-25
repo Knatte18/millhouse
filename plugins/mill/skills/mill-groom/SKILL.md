@@ -64,7 +64,6 @@ Note: V3 task dicts have `"status"` (not `"phase"`), `"slug"`, `"title"`, `"brie
 | `task["status"]` | Listed? | Actions available |
 |---|---|---|
 | `None` (plain backlog) | Yes | keep / shorten / fold / drop / extract |
-| `"s"` (spawn-ready) | Yes | keep / shorten / fold / drop / extract |
 | `"active"` | Yes (listed, read-only) | none |
 | `"done"` | Yes | drop only |
 | (protected) | Yes (listed, read-only) | none |
@@ -79,7 +78,7 @@ Render every `Home.md` entry as a numbered list in file order. Show number, slug
 - `(done — drop only)` for `[done]` entries
 - `(proposal)` for entries with a proposal link
 - `(protected — skipped)` if the body contains `<!-- protected -->`
-- No suffix for plain backlog or `[s]` entries
+- No suffix for plain backlog entries
 
 Example output:
 
@@ -112,7 +111,7 @@ When the user enters a number, look up the task at that position.
   ```
   Confirm with the user. Record the drop decision. Return to Step 3.
 
-- **Otherwise (unmarked, `[s]`)** → apply the heuristic below to determine which action to recommend, then build the menu: if the recommended action is not `Keep as-is`, **swap** it into position 1; the remaining options keep their relative order from the canonical sequence (Keep / Shorten / Fold / Drop / Extract). The `(Recommended)` suffix appears after the label of option 1.
+- **Otherwise (unmarked)** → apply the heuristic below to determine which action to recommend, then build the menu: if the recommended action is not `Keep as-is`, **swap** it into position 1; the remaining options keep their relative order from the canonical sequence (Keep / Shorten / Fold / Drop / Extract). The `(Recommended)` suffix appears after the label of option 1.
 
   Heuristic (at most one recommendation per task):
   - Body exceeds `groom.brevity-threshold-lines` lines OR `groom.brevity-threshold-chars` chars → recommend "Extract to proposal"

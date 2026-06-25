@@ -1022,6 +1022,43 @@ def test_spawn_discovery_round_trip_subfolder() -> None:
 
 
 # ---------------------------------------------------------------------------
+# [s] retirement assertions (Card 2)
+# ---------------------------------------------------------------------------
+
+
+def test_spawn_slug_help_text_has_no_s_marker() -> None:
+    """--slug help text must not contain the retired '[s]' spawn-ready marker."""
+    import re as _re
+
+    # Read the spawn source and grep the --slug help= string directly.
+    source = (HUB / "plugins" / "mill" / "scripts" / "millpy-spawn.py").read_text(encoding="utf-8")
+    slug_help_matches = _re.findall(r'--slug.*?help=["\']([^"\']+)["\']', source, _re.DOTALL)
+    slug_help_text = " ".join(slug_help_matches)
+    if "[s]" in slug_help_text:
+        raise AssertionError(
+            f"--slug help text must not contain '[s]'; found in: {slug_help_text!r}"
+        )
+    print("PASS: spawn --slug help text contains no '[s]' substring")
+
+
+def test_spawn_empty_backlog_message_has_no_s_marker() -> None:
+    """Empty-backlog message printed by spawn must not contain the retired '[s]' marker."""
+    source = (HUB / "plugins" / "mill" / "scripts" / "millpy-spawn.py").read_text(encoding="utf-8")
+    # Find the empty-backlog message block
+    if "No pickable tasks" in source:
+        # Extract the relevant string(s)
+        import re as _re
+        # Find all print() calls that mention "No pickable tasks"
+        matches = _re.findall(r'print\([^)]*No pickable tasks[^)]*\)', source, _re.DOTALL)
+        for match in matches:
+            if "[s]" in match:
+                raise AssertionError(
+                    f"spawn empty-backlog message must not contain '[s]'; found in: {match!r}"
+                )
+    print("PASS: spawn empty-backlog message contains no '[s]' substring")
+
+
+# ---------------------------------------------------------------------------
 # Over-claim regression: single selection never touches un-picked task (Card 1)
 # ---------------------------------------------------------------------------
 
@@ -1089,6 +1126,8 @@ def main() -> int:
         test_spawn_subfolder_install_destination_layout,
         test_spawn_discovery_round_trip_subfolder,
         test_single_selection_does_not_call_multi_select_groom_then_claim,
+        test_spawn_slug_help_text_has_no_s_marker,
+        test_spawn_empty_backlog_message_has_no_s_marker,
     ]
 
     failures: list[str] = []

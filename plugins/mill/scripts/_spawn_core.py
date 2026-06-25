@@ -3,8 +3,8 @@ Shared spawn-flow helpers used by both ``mill-spawn`` and ``mill-claim``.
 
 ``mill-spawn`` creates a worktree and then delegates the task-picking,
 wiki-claiming, and status-writing steps to the helpers here.
-``mill-claim`` (batch 04) picks and claims a task in an existing worktree
-without creating a new one; it calls the same helpers to keep parity.
+``mill-claim`` picks and claims a task in an existing worktree without
+creating a new one; it calls the same helpers to keep parity.
 
 Public API:
     WORKTREE_COLOR_NAME_TO_HEX
@@ -18,14 +18,14 @@ Public API:
         worktree. Scans ``<worktrees_dir>/*/.vscode/settings.json``.
     BacklogEmpty        — raised by ``pick_task_single`` when no task is pickable.
     pick_task_single(tasks, slug=None) -> Task
-        Single-task picker: ``--slug`` short-circuit, ``[s]`` fast-path, or
-        numbered interactive prompt. Raises ``BacklogEmpty`` when nothing is
+        Single-task picker: ``--slug`` short-circuit, or numbered interactive
+        prompt over unmarked tasks. Raises ``BacklogEmpty`` when nothing is
         available; raises ``ValueError`` when the requested slug is invalid.
     pick_task_single_or_multi(tasks, slug=None) -> tuple[str, Task | list[Task] | None, list[Task]]
         Extends ``pick_task_single`` with multi-select support from the numbered
         prompt. ``mode`` is ``"single"``, ``"multi"``, or ``"empty"``; ``picked``
         is one Task, a list of Task, or None; ``candidates`` is always ``[]``.
-        ``--slug`` short-circuit and ``[s]`` fast-path remain single-only.
+        ``--slug`` short-circuit is always single-only.
     claim_in_wiki(wiki_path, slug) -> None
         Lock-acquire, mark Home.md ``[active]``, regen sidebar, commit+push,
         lock-release.
@@ -37,15 +37,15 @@ Public API:
         commit+push under the wiki lock. Returns the merged Task.
     prompt_merged_entry(source_tasks) -> tuple[str, str, str, bool, str | None]
         Interactive stdin prompt that collects merged title, slug, body,
-        and proposal flag from the user. Re-prompts 3× on invalid input;
+        and proposal flag from the user. Re-prompts 3x on invalid input;
         raises ValueError when attempts exhausted. Returns
         (merged_title, merged_slug, body_for_home, has_proposal, proposal_body).
     capture_parent_branch(git_root) -> str
         Return the current HEAD branch name via ``git rev-parse --abbrev-ref HEAD``.
         Raises ``RuntimeError`` on non-zero exit.
     write_initial_status(worktree_path, slug, title, ts, parent_branch, branch, *, cfg) -> Path
-        Render + write ``status.md`` at worktree root; stage + commit on task branch;
-        return the absolute path of the written file.
+        Render + write ``_mill/status.md`` at worktree root; stage + commit on
+        task branch; return the absolute path of the written file.
     recreate_active_junction(hub_root) -> None
         Delete-then-create the ``.active`` junction so it points at
         ``hub_root / "_mill"``. Used by both ``mill-claim`` and ``mill-spawn``.
@@ -265,10 +265,9 @@ def pick_task_single(
 
     When ``slug`` is ``None`` the standard interactive flow runs:
 
-    1. If at least one unmarked task exists, present the
-       numbered picker and return the chosen task.  A failed picker (EOF
-       or out-of-range input) returns ``None`` from ``_prompt_numbered``,
-       which is propagated as ``ValueError``.
+    1. If at least one unmarked task (status is None) exists, present
+       the numbered picker and return the chosen task. A failed picker
+       (EOF or out-of-range input) propagates as ``ValueError``.
     2. If nothing is pickable, raise ``BacklogEmpty``.
 
     Args:
@@ -388,8 +387,8 @@ def pick_task_single_or_multi(
 
     Extends ``pick_task_single`` by allowing the numbered interactive prompt to
     return multiple tasks when the user enters comma-separated indices. The
-    ``--slug`` short-circuit always resolves to a single task; multi only fires
-    from the numbered prompt.
+    ``--slug`` short-circuit always resolves to a single task (single-only);
+    multi only fires from the numbered prompt.
 
     Return shape:
         - ``("single", task, [])`` — one task picked (slug bypass
