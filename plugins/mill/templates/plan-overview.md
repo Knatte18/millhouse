@@ -19,6 +19,17 @@ Each batch entry has `number:` (the NN integer prefix, for DAG navigation),
 `name:`, `file:`, `depends-on:` (list of integers referencing other batch
 `number:` values), and `verify:`.
 
+`verify:` (top-level, in the frontmatter below) is an OPTIONAL module-wide
+check run at each batch boundary AFTER the batch's own `verify:` passes.
+`null` means skip (the default; no behavior change for existing plans). When
+set, it follows the same `PYTHONPATH= ` shape rule as per-batch `verify:`
+commands and should be a cheap whole-module compile/vet/smoke command (e.g.
+`PYTHONPATH= go vet ./...` or a scoped `run-all.py`) that catches
+cross-package regressions from shared-helper edits at the introducing batch.
+A module-wide failure propagates a `stuck_type: verify` stuck dict with
+the reason prefixed to indicate module-wide scope so the operator can
+distinguish the two gates.
+
 Strip this HTML comment before writing.
 -->
 # Plan: <TASK_TITLE>

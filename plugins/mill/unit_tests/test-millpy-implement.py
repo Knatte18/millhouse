@@ -591,6 +591,187 @@ class TestMillpyImplement(unittest.TestCase):
         call_kwargs = mock_finalize.call_args.kwargs
         self.assertEqual(call_kwargs.get("verify_cmd"), "exit 0")
 
+    def test_parent_branch_token_in_render_map(self):
+        """PARENT_BRANCH token is present in the render map with the resolved parent value."""
+        # Patch _parent_branch.resolve to return a known string
+        with unittest.mock.patch.object(
+            millpy_implement._parent_branch, "resolve",
+            return_value="main",
+        ):
+            captured_tokens: dict = {}
+
+            def capture_render(template_path, tokens):
+                captured_tokens.update(tokens)
+                # Return a minimal rendered string to avoid token-missing KeyError
+                return "rendered"
+
+            with unittest.mock.patch.object(millpy_implement._render, "render", side_effect=capture_render):
+                with unittest.mock.patch.object(
+                    millpy_implement._implementer_claude, "run",
+                    return_value=(
+                        '{"status":"success","commit_sha":"abc","session_id":"fake"}\n',
+                        "fake-session",
+                    ),
+                ):
+                    # Use --stage prepare so the render call fires without needing a real LLM
+                    rc, out = self._run_main(["test-batch", "--stage", "prepare"])
+
+        # The key must be present and equal to the resolved parent value
+        self.assertIn("PARENT_BRANCH", captured_tokens)
+        self.assertEqual(captured_tokens["PARENT_BRANCH"], "main")
+
+    def test_parent_branch_token_empty_string_when_unresolvable(self):
+        """PARENT_BRANCH token is empty string (not None) when parent_branch cannot be resolved."""
+        # Patch _parent_branch.resolve to raise so parent_branch falls back to None
+        with unittest.mock.patch.object(
+            millpy_implement._parent_branch, "resolve",
+            side_effect=Exception("no parent"),
+        ):
+            captured_tokens: dict = {}
+
+            def capture_render(template_path, tokens):
+                captured_tokens.update(tokens)
+                return "rendered"
+
+            with unittest.mock.patch.object(millpy_implement._render, "render", side_effect=capture_render):
+                with unittest.mock.patch.object(
+                    millpy_implement._implementer_claude, "run",
+                    return_value=(
+                        '{"status":"success","commit_sha":"abc","session_id":"fake"}\n',
+                        "fake-session",
+                    ),
+                ):
+                    rc, out = self._run_main(["test-batch", "--stage", "prepare"])
+
+        # When parent is unresolvable the token must be "" (empty string), never None
+        self.assertIn("PARENT_BRANCH", captured_tokens)
+        self.assertEqual(captured_tokens["PARENT_BRANCH"], "")
+        self.assertIsNotNone(captured_tokens["PARENT_BRANCH"])
+
+    def test_overview_verify_threaded_as_module_wide(self):
+        """Overview with non-null top-level verify: threads it as module_wide_verify_cmd."""
+        plan_dir = self.tmp_path / "task" / "plan"
+        # Write an overview with a non-null top-level verify command
+        overview_with_verify = (
+            "# Plan: Test Task\n\n"
+            "```yaml\n"
+            "task: Test Task\n"
+            "slug: test-slug\n"
+            "approved: true\n"
+            "verify: exit 0\n"
+            "```\n\n"
+            "## Batch Index\n\n"
+            "```yaml\n"
+            "batches:\n"
+            "  - name: test-batch\n"
+            "    file: 01-test-batch.md\n"
+            "    depends-on: []\n"
+            "    verify: null\n"
+            "```\n"
+        )
+        (plan_dir / "00-overview.md").write_text(overview_with_verify, encoding="utf-8")
+
+        agent_output_path = self.tmp_path / "agent-output.txt"
+        agent_output_path.write_text(
+            '{"status":"success","commit_sha":"xyz","session_id":"fake"}\n',
+            encoding="utf-8"
+        )
+
+        with unittest.mock.patch.object(
+            millpy_implement, "finalize_from_output",
+            return_value=0,
+        ) as mock_finalize:
+            rc, out = self._run_main([
+                "test-batch",
+                "--stage", "finalize",
+                "--agent-output", str(agent_output_path),
+            ])
+
+        self.assertEqual(rc, 0)
+        mock_finalize.assert_called_once()
+        call_kwargs = mock_finalize.call_args.kwargs
+        # The overview-level verify command must be threaded as module_wide_verify_cmd
+        self.assertEqual(call_kwargs.get("module_wide_verify_cmd"), "exit 0")
+
+    def test_overview_verify_null_passes_none_as_module_wide(self):
+        """Overview with null top-level verify: passes None as module_wide_verify_cmd."""
+        # The default fixture already has verify: null in the overview (via _make_fixture)
+        agent_output_path = self.tmp_path / "agent-output.txt"
+        agent_output_path.write_text(
+            '{"status":"success","commit_sha":"xyz","session_id":"fake"}\n',
+            encoding="utf-8"
+        )
+
+        with unittest.mock.patch.object(
+            millpy_implement, "finalize_from_output",
+            return_value=0,
+        ) as mock_finalize:
+            rc, out = self._run_main([
+                "test-batch",
+                "--stage", "finalize",
+                "--agent-output", str(agent_output_path),
+            ])
+
+        self.assertEqual(rc, 0)
+        mock_finalize.assert_called_once()
+        call_kwargs = mock_finalize.call_args.kwargs
+        # A null overview verify must produce None (not the string "null")
+        self.assertIsNone(call_kwargs.get("module_wide_verify_cmd"))
+
+    def test_real_brief_renders_parent_branch_token(self):
+        """Rendering the real implementer-brief.md substitutes <PARENT_BRANCH> with the parent value."""
+        plugin_root = HUB / "plugins" / "mill"
+        template_path = plugin_root / "templates" / "implementer-brief.md"
+
+        # Build a minimal token map that satisfies all required tokens in the brief
+        tokens = {
+            "TASK_TITLE": "Test Task",
+            "SLUG": "test-slug",
+            "BATCH_NAME": "test-batch",
+            "BATCH_FILE": "/path/to/batch.md",
+            "OVERVIEW_FILE": "/path/to/overview.md",
+            "PROJECT_ROOT": "/path/to/root",
+            "WIKI_PATH": "/path/to/wiki",
+            "SELF_FIX_ROUNDS": "2",
+            "ROUND": "1",
+            "SESSION_ID": "test-session-uuid",
+            "LANGUAGE_SKILLS": "",
+            "PARENT_BRANCH": "main",
+        }
+
+        import _render
+        rendered = _render.render(template_path, tokens)
+        # The rendered text must contain the substituted parent value, not the raw token
+        self.assertIn("main", rendered)
+        self.assertNotIn("<PARENT_BRANCH>", rendered)
+
+    def test_real_brief_renders_parent_branch_empty_when_unresolvable(self):
+        """Rendering the real implementer-brief.md with empty PARENT_BRANCH substitutes empty string."""
+        plugin_root = HUB / "plugins" / "mill"
+        template_path = plugin_root / "templates" / "implementer-brief.md"
+
+        tokens = {
+            "TASK_TITLE": "Test Task",
+            "SLUG": "test-slug",
+            "BATCH_NAME": "test-batch",
+            "BATCH_FILE": "/path/to/batch.md",
+            "OVERVIEW_FILE": "/path/to/overview.md",
+            "PROJECT_ROOT": "/path/to/root",
+            "WIKI_PATH": "/path/to/wiki",
+            "SELF_FIX_ROUNDS": "2",
+            "ROUND": "1",
+            "SESSION_ID": "test-session-uuid",
+            "LANGUAGE_SKILLS": "",
+            "PARENT_BRANCH": "",
+        }
+
+        import _render
+        rendered = _render.render(template_path, tokens)
+        # The raw token placeholder must not appear in the output
+        self.assertNotIn("<PARENT_BRANCH>", rendered)
+        # The literal string "None" must not appear where the token was
+        self.assertNotIn("None", rendered)
+
 
 class TestClassifyStuckType(unittest.TestCase):
 

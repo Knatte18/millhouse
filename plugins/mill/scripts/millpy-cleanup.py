@@ -42,6 +42,11 @@ class CleanupPlan:
     to_report: list[str]
     to_reap_pr: list[SlugRecord] = field(default_factory=list)
     orphan_portals: list[Path] = field(default_factory=list)
+    # Slugs whose Home.md marker is exactly "active" but have no worktree
+    # on disk, no local branch, and no portal junction -- safe to auto-reset
+    # to unclaimed.  "ready-to-merge" and "pr-pending" are live PR states
+    # and are never auto-reset.
+    to_reset_unclaimed: list[str] = field(default_factory=list)
 
 
 # Returns None if status.md is missing or phase: is unreadable.
@@ -105,6 +110,7 @@ def build_plan(
     to_reset_home: list[str] = []
     to_report: list[str] = []
     to_reap_pr: list[SlugRecord] = []
+    to_reset_unclaimed: list[str] = []
 
     _LIVE_PHASES = {
         "discussing", "discussed", "planning", "planned",
@@ -258,8 +264,31 @@ def build_plan(
             if task["slug"] in wts_slugs_on_disk:
                 # Already reported under the in-use-worktree warning above.
                 continue
+            # For the narrow safe case of a plain "active" marker: attempt
+            # automatic reconciliation to unclaimed if no worktree, no local
+            # branch, and no portal junction exist.  "ready-to-merge" and
+            # "pr-pending" are live PR states and must never be auto-reset.
+            if marker == "active":
+                slug_for_check = task["slug"]
+                # Probe for a local branch: an existing branch means the task
+                # is partially set up and should not be silently wiped.
+                branch_name = f"{branch_prefix}{slug_for_check}" if branch_prefix else slug_for_check
+                branch_check = _subprocess_util.run(
+                    ["git", "-C", str(hub_root), "branch", "--list", branch_name]
+                )
+                has_local_branch = (
+                    branch_check.returncode == 0 and branch_check.stdout.strip() != ""
+                )
+                # Probe for a portal junction: reuse the existing portals enumeration.
+                has_portal = (
+                    container_path is not None
+                    and (container_path / "portals" / slug_for_check).exists()
+                )
+                if not has_local_branch and not has_portal:
+                    to_reset_unclaimed.append(slug_for_check)
+                    continue
             to_report.append(
-                f"orphan Home.md marker: {task["slug"]} is [{marker}] but has no "
+                f"orphan Home.md marker: {task['slug']} is [{marker}] but has no "
                 f"active worktree"
             )
 
@@ -270,11 +299,19 @@ def build_plan(
                 f"orphan active worktree: {slug} has active marker but no Home.md entry"
             )
 
-    return CleanupPlan(to_remove_done, to_remove_abandoned, to_reset_home, to_report, to_reap_pr=to_reap_pr, orphan_portals=orphan_portals)
+    return CleanupPlan(
+        to_remove_done,
+        to_remove_abandoned,
+        to_reset_home,
+        to_report,
+        to_reap_pr=to_reap_pr,
+        orphan_portals=orphan_portals,
+        to_reset_unclaimed=to_reset_unclaimed,
+    )
 
 
 def _print_plan(plan: CleanupPlan) -> None:
-    if not any([plan.to_remove_done, plan.to_remove_abandoned, plan.to_reap_pr, plan.to_report, plan.orphan_portals]):
+    if not any([plan.to_remove_done, plan.to_remove_abandoned, plan.to_reap_pr, plan.to_report, plan.orphan_portals, plan.to_reset_unclaimed]):
         print("Nothing to do.")
         return
     for r in plan.to_remove_done:
@@ -290,6 +327,8 @@ def _print_plan(plan: CleanupPlan) -> None:
         )
     for r in plan.to_reap_pr:
         print(f"REAP-PR:           {r.slug}  [worktree={r.worktree_path}, branch={r.branch}]")
+    for slug in plan.to_reset_unclaimed:
+        print(f"RECONCILE:         {slug}  [active marker -> unclaimed (no worktree/branch/portal)]")
     for line in plan.to_report:
         print(f"REPORT: {line}")
     for p in plan.orphan_portals:
@@ -353,6 +392,36 @@ def _resolve_inplace_mode(
         return ("inplace", task_branch)
 
     return ("worktree", "")
+
+
+def _delete_remote_branch(hub_root: Path, branch: str) -> None:
+    """
+    Delete the remote origin branch for a task, tolerating an already-absent ref.
+
+    Attempts `git push origin --delete <branch>` from `hub_root`. A non-zero
+    exit whose stderr contains "remote ref does not exist" is treated as success
+    (idempotent teardown -- the branch may never have been pushed, or was already
+    deleted by an earlier abandon/cleanup run). Any other non-zero exit is printed
+    to stderr as a non-fatal warning so the rest of the teardown proceeds.
+
+    Args:
+        hub_root: Absolute path to the hub git checkout used as the git -C target.
+        branch: The remote branch name to delete (e.g. "hanf/my-task").
+    """
+    result = _subprocess_util.run(
+        ["git", "-C", str(hub_root), "push", "origin", "--delete", branch]
+    )
+    if result.returncode != 0:
+        stderr_lower = result.stderr.lower()
+        # "remote ref does not exist" or "unable to delete" signals the branch was
+        # never pushed or was already cleaned; both cases are acceptable -- nothing
+        # to remove.
+        if "remote ref does not exist" not in stderr_lower and "unable to delete" not in stderr_lower:
+            print(
+                f"[cleanup] push origin --delete {branch!r} failed (non-fatal): "
+                f"{result.stderr.strip()!r}",
+                file=sys.stderr,
+            )
 
 
 def _apply_orphan_portal(portal_path: Path) -> None:
@@ -428,6 +497,9 @@ def _apply_inplace_record(
                 f"(may already be gone): {result.stderr.strip()!r}",
                 file=sys.stderr,
             )
+        # Delete the remote branch after the local branch is gone so that
+        # re-spawning the same slug starts clean (idempotent per Shared Decision).
+        _delete_remote_branch(hub_root, task_branch)
     else:
         print(
             f"[cleanup] {record.slug}: no branch name in active marker; "
@@ -482,6 +554,11 @@ def _apply_worktree_record(
                     f"{result.stderr.strip()!r}",
                     file=sys.stderr,
                 )
+            # Delete the remote branch so re-spawning the same slug starts clean.
+            # A missing remote ref is treated as success (idempotent teardown per
+            # Shared Decision "Remote-branch delete tolerates a missing ref").
+            if record.branch:
+                _delete_remote_branch(hub_root, record.branch)
 
     # Remove the portal entry for this task.
     container_path = _paths.resolve_container_path(hub_root)
@@ -645,6 +722,16 @@ def apply_plan(
     if plan.to_reset_home:
         for slug in plan.to_reset_home:
             wiki.set_phase(wiki_path, slug, None)
+
+    # Reconcile orphaned "active" markers that have no worktree, branch, or portal.
+    # This is the narrow safe auto-reset: only plain "active" (never live PR states)
+    # and only when all three presence signals are absent.
+    for slug in plan.to_reset_unclaimed:
+        wiki.set_phase(wiki_path, slug, None)
+        print(
+            f"RECONCILE: {slug} active marker reset to unclaimed"
+            f" (no worktree/branch/portal)"
+        )
 
 
 def main() -> None:

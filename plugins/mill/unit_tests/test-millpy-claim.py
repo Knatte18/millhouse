@@ -730,6 +730,41 @@ def test_hub_paths_use_cwd_not_git_root() -> None:
 
 
 # ---------------------------------------------------------------------------
+# [s] retirement assertions (Card 2)
+# ---------------------------------------------------------------------------
+
+
+def test_claim_slug_help_text_has_no_s_marker() -> None:
+    """--slug help text in millpy-claim.py must not contain the retired '[s]' marker."""
+    import re as _re
+
+    source = CLAIM_PATH.read_text(encoding="utf-8")
+    # Find all --slug argument help= text in the source.
+    slug_help_matches = _re.findall(r'--slug.*?help=["\']([^"\']+)["\']', source, _re.DOTALL)
+    slug_help_text = " ".join(slug_help_matches)
+    if "[s]" in slug_help_text:
+        raise AssertionError(
+            f"--slug help text must not contain '[s]'; found in: {slug_help_text!r}"
+        )
+    print("PASS: claim --slug help text contains no '[s]' substring")
+
+
+def test_claim_empty_backlog_message_has_no_s_marker() -> None:
+    """Empty-backlog message printed by claim must not contain the retired '[s]' marker."""
+    import re as _re
+
+    source = CLAIM_PATH.read_text(encoding="utf-8")
+    if "No pickable tasks" in source:
+        matches = _re.findall(r'print\([^)]*No pickable tasks[^)]*\)', source, _re.DOTALL)
+        for match in matches:
+            if "[s]" in match:
+                raise AssertionError(
+                    f"claim empty-backlog message must not contain '[s]'; found in: {match!r}"
+                )
+    print("PASS: claim empty-backlog message contains no '[s]' substring")
+
+
+# ---------------------------------------------------------------------------
 # Main runner
 # ---------------------------------------------------------------------------
 
@@ -748,6 +783,8 @@ def main() -> int:
         test_portal_idempotent_when_already_correct,
         test_main_hub_title_flip_when_cwd_is_hub,
         test_hub_paths_use_cwd_not_git_root,
+        test_claim_slug_help_text_has_no_s_marker,
+        test_claim_empty_backlog_message_has_no_s_marker,
     ]
 
     failures: list[str] = []

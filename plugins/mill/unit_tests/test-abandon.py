@@ -184,9 +184,19 @@ def main() -> int:
                 f"add not in cmds: {cmds}"
             assert ["git", "-C", wt_str, "commit", "-m", f"task: abandon {slug}"] in cmds, \
                 f"commit not in cmds: {cmds}"
-            assert ["git", "-C", wt_str, "push"] in cmds, \
-                f"push not in cmds: {cmds}"
-            ok("happy path --force: exits 0, status.md updated, task-branch commits recorded")
+            # The final git operation must be push origin --delete <branch>,
+            # not a bare push -- we delete the remote branch instead of pushing
+            # an abandon-marker commit.
+            delete_cmds = [c for c in cmds if "push" in c and "--delete" in c]
+            assert len(delete_cmds) == 1, \
+                f"expected exactly one 'push origin --delete' command, got: {cmds}"
+            assert "origin" in delete_cmds[0] and "--delete" in delete_cmds[0], \
+                f"expected 'push origin --delete', got: {delete_cmds[0]}"
+            # Confirm bare 'push' (old marker-push pattern) is not present.
+            bare_push_cmds = [c for c in cmds if c == ["git", "-C", wt_str, "push"]]
+            assert bare_push_cmds == [], \
+                f"bare 'push' must not be present after refactor; got: {cmds}"
+            ok("happy path --force: exits 0, status.md updated, push origin --delete issued")
     except Exception as exc:
         fail("happy path --force", exc)
 
@@ -274,6 +284,89 @@ def main() -> int:
             ok("stale lock -> proceed with --force")
     except Exception as exc:
         fail("stale lock proceed", exc)
+
+    # --- (g-push-delete) push origin --delete tolerates "remote ref does not exist" stderr ---
+    # Verifies the Shared Decision: a non-zero exit whose stderr indicates the
+    # remote ref does not exist is treated as success (idempotent teardown).
+    try:
+        with tempfile.TemporaryDirectory() as tmp_str:
+            tmp = Path(tmp_str)
+            slug = "test-task"
+            wt, mill_dir, status_path = _make_worktree(tmp, slug, "implementing")
+            # Build a trampoline where push origin --delete returns non-zero
+            # with a "remote ref does not exist" message -- should succeed.
+            abandon_src = (SCRIPTS / "millpy-abandon.py").as_posix()
+            wt_posix = (tmp / "worktree").as_posix()
+            wiki_posix = (tmp / "wiki").as_posix()
+            tmp_posix = tmp.as_posix()
+            cmds_posix = (tmp / "_git_cmds.json").as_posix()
+            trampoline_rnd = tmp / "_trampoline_rnd.py"
+            trampoline_rnd.write_text(
+                "import sys, types, importlib.util, json\n"
+                "from pathlib import Path\n"
+                "\n"
+                "pm = types.ModuleType('_paths')\n"
+                f"pm.resolve_git_root = lambda: Path(r'{tmp_posix}')\n"
+                f"pm.resolve_wiki_path = lambda g: Path(r'{wiki_posix}')\n"
+                f"pm.resolve_container_path = lambda p: Path(r'{tmp_posix}')\n"
+                f"pm.resolve_hub_path = lambda: Path(r'{wt_posix}')\n"
+                f"pm.resolve_active_hub = lambda container, slug, *, cfg, git_root: Path(r'{wt_posix}')\n"
+                "pm.status_path = lambda wt, cfg: wt / '_mill' / 'status.md'\n"
+                "sys.modules['_paths'] = pm\n"
+                "\n"
+                "mm = types.ModuleType('_marker')\n"
+                "mm.MarkerError = type('MarkerError', (RuntimeError,), {})\n"
+                "mm.slug_from_branch = lambda *a, **kw: 'test-task'\n"
+                "sys.modules['_marker'] = mm\n"
+                "\n"
+                "rcm = types.ModuleType('_review_common')\n"
+                "rcm.load_config = lambda wiki_root, mill_dir: {}\n"
+                "sys.modules['_review_common'] = rcm\n"
+                "\n"
+                "_recorded = []\n"
+                f"_cmds_file = Path(r'{cmds_posix}')\n"
+                "\n"
+                "class _FakeResultOK:\n"
+                "    returncode = 0\n"
+                "    stdout = ''\n"
+                "    stderr = ''\n"
+                "\n"
+                "class _FakeResultMissingRef:\n"
+                "    returncode = 1\n"
+                "    stdout = ''\n"
+                "    stderr = 'error: unable to delete refs/heads/hanf/test-task: remote ref does not exist'\n"
+                "\n"
+                "_sub = types.ModuleType('_subprocess_util')\n"
+                "def _mock_run(argv, **kw):\n"
+                "    _recorded.append(list(argv))\n"
+                "    _cmds_file.write_text(json.dumps(_recorded), encoding='utf-8')\n"
+                "    # Simulate push origin --delete returning 'remote ref does not exist'\n"
+                "    if '--delete' in argv:\n"
+                "        return _FakeResultMissingRef()\n"
+                "    return _FakeResultOK()\n"
+                "_sub.run = _mock_run\n"
+                "sys.modules['_subprocess_util'] = _sub\n"
+                "\n"
+                f"spec = importlib.util.spec_from_file_location('mill_abandon', r'{abandon_src}')\n"
+                "mod = importlib.util.module_from_spec(spec)\n"
+                "spec.loader.exec_module(mod)\n"
+                "sys.exit(mod.main())\n",
+                encoding="utf-8",
+            )
+            env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
+            import subprocess as _subprocess
+            result = _subprocess.run(
+                [sys.executable, str(trampoline_rnd), "--force"],
+                cwd=str(wt), input="",
+                capture_output=True, text=True, encoding="utf-8", env=env,
+            )
+            assert result.returncode == 0, (
+                f"expected exit 0 when 'remote ref does not exist', "
+                f"got {result.returncode}; stderr={result.stderr!r}"
+            )
+            ok("push --delete tolerates 'remote ref does not exist' stderr (idempotent)")
+    except Exception as exc:
+        fail("push --delete tolerates missing remote ref", exc)
 
     # --- (g) missing status.md -> refuse ---
     try:

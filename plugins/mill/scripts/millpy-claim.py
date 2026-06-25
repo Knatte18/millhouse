@@ -10,16 +10,15 @@ Flow:
     1. Resolve the wiki clone via ``_paths.resolve_wiki_path``.
     2. Fast-forward pull the wiki so we pick against current state.
     3. Parse ``Home.md``; pick a task via ``pick_task_single_or_multi``
-       (``--slug`` short-circuit, ``[s]`` fast-path, numbered prompt).
-    4. Multi-select is not yet wired (arrives in Card 13).
-    5. Mark the chosen task ``[active]`` under the wiki lock.
-    6. Capture the current branch name as the parent for status.md.
-    7. If the working tree is dirty, prompt: stash, carry, or abort.
-    8. Check out a new branch via ``git checkout -b <branch_name>``.
-    9. If stash was chosen, pop the stash onto the new branch.
-   10. Recreate the ``.active`` junction pointing at this task's wiki dir.
-   11. Write the initial status.md.
-   12. Print Branch / Status / "in-place".
+       (``--slug`` short-circuit, numbered prompt for unmarked tasks).
+    4. Mark the chosen task ``[active]`` under the wiki lock.
+    5. Capture the current branch name as the parent for status.md.
+    6. If the working tree is dirty, prompt: stash, carry, or abort.
+    7. Check out a new branch via ``git checkout -b <branch_name>``.
+    8. If stash was chosen, pop the stash onto the new branch.
+    9. Recreate the ``.active`` junction pointing at this task's ``_mill/`` dir.
+   10. Write the initial ``_mill/status.md``.
+   11. Print Branch / Status / "in-place".
 
 Usage:
     python plugins/mill/scripts/mill-claim.py
@@ -141,7 +140,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--slug",
         default=None,
-        help="Skip the picker and claim this specific slug (must be unmarked or [s]).",
+        help="Skip the picker and claim this specific slug (must be unmarked).",
     )
     parser.add_argument(
         "--dry-run",
@@ -173,8 +172,8 @@ def main(argv: list[str] | None = None) -> int:
 
     if mode == "empty":
         print(
-            "[claim] No pickable tasks. Mark a task [s] or leave one "
-            "unmarked (see /mill-add). Exiting.",
+            "[claim] No pickable tasks. Leave one unmarked "
+            "(see /mill-add). Exiting.",
             file=sys.stderr,
         )
         return 0

@@ -460,7 +460,78 @@ class TestMillpyMergeInSubagent(unittest.TestCase):
         data = json.loads(out.strip())
         self.assertEqual(data["status"], "success")
 
-    def test_16_stage_finalize_verify_fix_reruns_verify(self):
+    def test_16_conflicts_discarded_field_preserved(self):
+        """conflicts mode: success verdict with discarded field is forwarded intact.
+
+        Pins the contract that _forward_output prints the full parsed dict verbatim,
+        so an optional discarded list emitted by the conflict sub-agent is not stripped.
+        """
+        with unittest.mock.patch.object(
+            millpy_merge_in_subagent._render, "render",
+            return_value="rendered",
+        ), \
+        unittest.mock.patch.object(
+            millpy_merge_in_subagent._implementer_claude, "run",
+            # Sub-agent emits success with a non-empty discarded list
+            return_value=(
+                '{"status":"success","discarded":["column B of table row 3 from ours side"]}\n',
+                "fake-session",
+            ),
+        ), \
+        unittest.mock.patch.object(
+            _implementer_common._subprocess_util, "run",
+            return_value=subprocess.CompletedProcess(
+                args=[], returncode=0, stdout="abc1234\n", stderr=""
+            ),
+        ):
+            rc, out = self._run_main(["--mode", "conflicts", "--files", "a.py"])
+
+        self.assertEqual(rc, 0)
+        data = json.loads(out.strip())
+        self.assertEqual(data["status"], "success")
+        # discarded field must be present and non-empty -- the forwarding path must not strip it
+        self.assertIn("discarded", data)
+        self.assertIsInstance(data["discarded"], list)
+        self.assertGreater(len(data["discarded"]), 0)
+        self.assertIn("column B", data["discarded"][0])
+
+    def test_17_conflicts_success_no_discarded_is_clean(self):
+        """conflicts mode: success verdict without discarded field emits clean success.
+
+        Pins the contract that a conflict sub-agent that discarded nothing emits
+        {"status":"success"} (no discarded key), and _forward_output passes it through unchanged.
+        """
+        with unittest.mock.patch.object(
+            millpy_merge_in_subagent._render, "render",
+            return_value="rendered",
+        ), \
+        unittest.mock.patch.object(
+            millpy_merge_in_subagent._implementer_claude, "run",
+            # Sub-agent emits plain success with no discarded field
+            return_value=(
+                '{"status":"success"}\n',
+                "fake-session",
+            ),
+        ), \
+        unittest.mock.patch.object(
+            _implementer_common._subprocess_util, "run",
+            return_value=subprocess.CompletedProcess(
+                args=[], returncode=0, stdout="abc1234\n", stderr=""
+            ),
+        ):
+            rc, out = self._run_main(["--mode", "conflicts", "--files", "a.py"])
+
+        self.assertEqual(rc, 0)
+        data = json.loads(out.strip())
+        self.assertEqual(data["status"], "success")
+        # discarded must be absent (or empty) when the sub-agent did not report any
+        discarded = data.get("discarded")
+        self.assertTrue(
+            discarded is None or discarded == [],
+            f"Expected no discarded field or empty list, got: {discarded!r}",
+        )
+
+    def test_18_stage_finalize_verify_fix_reruns_verify(self):
         """--stage finalize verify-fix mode: re-runs verify, returns success if it passes."""
         agent_output_path = self.tmp_path / "agent-output.txt"
         agent_output_path.write_text("agent output", encoding="utf-8")

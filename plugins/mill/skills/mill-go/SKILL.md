@@ -115,16 +115,18 @@ When `dispatch == agent`, follow this three-step pattern at each dispatch point:
 
    Also extract from the envelope: `session_id` (string or null), `round` (integer), and `start_sha` (string or null -- present only when the CLI emits it, e.g. fix and implementer CLIs).
 
-3. **Call Agent tool:** Synchronously invoke the Agent tool with:
+3. **Call Agent tool:** Invoke the Agent tool with:
    - `subagent_type`: the value from step 2
    - `model`: the value from step 2
    - `prompt`: `"Read this file and follow the instructions exactly: <brief_path>"`
-   
-   The Agent returns its final message text.
 
-4. **Recover from raw API errors:** If the Agent's response contains a raw API/infrastructure error (text like `API Error` / `Internal server error`, roughly 0 tokens, no `MILL_REVIEW` block and no `status` JSON), classify it as `stuck_type: transient` and re-dispatch once using a fresh brief and session (no `--resume`). This applies to implementer, reviewer, and fixer Agent dispatches. On a second consecutive raw API error: implementer and fixer dispatches escalate per the "Stuck escalation" section; read-only reviewer dispatches (which write no review file) fall back to the subprocess `--stage full` path via `millpy-bg` before escalating.
+   The Agent tool launches a **background** subagent and returns immediately with a message such as "Async agent launched..." — the subagent's final output is NOT available at call time. The orchestrator must then **wait for the completion `<task-notification>`** from that background agent. Read the subagent's final message from the notification payload — that is the text used in steps 4 and 5 below.
 
-5. **Capture output:** Write the Agent's returned final message to `<brief_path>.out.md` (utf-8). The response file extends the brief path by replacing the trailing `.md` with `.out.md` — for a brief `foo-r1.md` the response is `foo-r1.out.md`.
+   A background agent is a **detached worker** that can be stopped or interrupted independently of the orchestrator. If the `<task-notification>` indicates the subagent was stopped or interrupted (rather than completing normally), treat it the same as a raw API error and apply the one-retry transient path in step 4.
+
+4. **Recover from raw API errors and interruptions:** If the notification message (or the inline tool return on immediate failure) contains a raw API/infrastructure error (text like `API Error` / `Internal server error`, roughly 0 tokens, no `MILL_REVIEW` block and no `status` JSON), OR if the background agent was stopped/interrupted before completing, classify it as `stuck_type: transient` and re-dispatch once using a fresh brief and session (no `--resume`). This applies to implementer, reviewer, and fixer Agent dispatches. On a second consecutive raw API error or interruption: implementer and fixer dispatches escalate per the "Stuck escalation" section; read-only reviewer dispatches (which write no review file) fall back to the subprocess `--stage full` path via `millpy-bg` before escalating.
+
+5. **Capture output:** Write **the message captured from the `<task-notification>`** to `<brief_path>.out.md` (utf-8). The response file extends the brief path by replacing the trailing `.md` with `.out.md` — for a brief `foo-r1.md` the response is `foo-r1.out.md`.
 
 6. **Run finalize stage:** Invoke the CLI with `--stage finalize`, the same standard arguments, and `--agent-output <brief_path>.out.md`. The response file follows the same naming rule: `.out.md` replaces the trailing `.md` of the brief path. Parse the returned JSON envelope.
 
@@ -133,10 +135,10 @@ When `dispatch == agent`, follow this three-step pattern at each dispatch point:
 7. **Branch on verdict:** Use the JSON envelope to branch identically to the existing `subprocess`/`psmux` flow — the `status`, `verdict`, `stuck_type` handling is identical.
 
 **Agent-mode properties:**
-- No log-polling or liveness check required (the Agent tool is synchronous).
-- No `infrastructure` stuck path (no detached worker).
+- No log-polling or liveness check required: the orchestrator waits for the `<task-notification>` from the background agent instead of polling a log file.
+- A background agent IS a detached worker and CAN be stopped or interrupted. A stopped/interrupted agent produces a notification indicating it did not complete normally — handle that the same as a raw API error via the one-retry transient path in step 4.
 - `transient` stuck errors can still be emitted by `finalize` as synthetic JSON (e.g., if the brief write fails).
-- The one-retry transient policy still applies (see step 4 for raw API error recovery).
+- The one-retry transient policy applies to both raw API errors and stopped/interrupted agents (see step 4).
 
 **Subprocess/psmux poll-loop max-wait.** When `dispatch == subprocess` or `psmux`, all poll loops that wait for `[mill-bg] EXIT` must have a bounded max-wait (~3600s) to self-terminate if the worker dies without writing the exit marker. Exceedance of the max-wait is a fatal `infrastructure` stuck escalation. The explicit timeout guard prevents infinite polling when the worker session is killed (e.g., logout or crash). This applies to implementer, reviewer, and fixer dispatch in all scopes (per-batch and holistic), and to ERROR-only retries. See individual subsections for the loop structure; all follow the same time-bounded poll-until-EXIT pattern.
 

@@ -2,10 +2,11 @@
 mill-spawn — claim one task from the wiki Home.md and spin up a worktree for it.
 
 Flow:
-    1. Resolve the wiki clone via ``_paths.resolve_wiki_path`` (``.millhouse/wiki`` is a junction for IDE/terminal convenience only).
+    1. Resolve the wiki clone via ``_paths.resolve_wiki_path`` (``.millhouse/wiki``
+       is a junction for IDE/terminal convenience only).
     2. Fast-forward pull the wiki so we pick against current state.
-    3. Parse ``Home.md``; pick a task via ``pick_task`` (fast-path on
-       ``[s]``, numbered picker on unmarked-only, exit 0 when empty).
+    3. Parse ``Home.md``; pick a task via ``pick_task_single_or_multi``
+       (numbered picker on unmarked tasks, exit 0 when backlog is empty).
     4. Under the wiki lock: mark the chosen task ``[active]``, regenerate
        ``_Sidebar.md``, and commit+push.
     5. Create the worktree at ``<worktrees-dir>/<slug>`` on branch
@@ -15,7 +16,7 @@ Flow:
        inside the new worktree.
     8. Pick a non-green VS Code title-bar colour not in use by sibling
        worktrees; write ``.vscode/settings.json`` via ``_vscode``.
-    9. Write the initial ``task/status.md`` (phase=discussing) and commit+push.
+    9. Write the initial ``_mill/status.md`` (phase=discussing) and commit+push.
    10. Print worktree-path, branch, and status path on stdout.
 
 Usage:
@@ -41,6 +42,7 @@ import _junction
 import _paths
 import _setup
 import _spawn_core
+import _subprocess_util
 import _vscode
 import _worktree
 from _config import load_config as _load_config
@@ -84,7 +86,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--slug",
         default=None,
-        help="Skip the picker and claim this specific slug (must be unmarked or [s]).",
+        help="Skip the picker and claim this specific slug (must be unmarked).",
     )
     parser.add_argument(
         "--dry-run",
@@ -119,8 +121,8 @@ def main(argv: list[str] | None = None) -> int:
 
     if mode == "empty":
         print(
-            "[spawn] No pickable tasks. Mark a task [s] or leave one "
-            "unmarked (see /mill-add). Exiting.",
+            "[spawn] No pickable tasks. Leave one unmarked "
+            "(see /mill-add). Exiting.",
             file=sys.stderr,
         )
         return 0
@@ -145,6 +147,29 @@ def main(argv: list[str] | None = None) -> int:
     worktree_path = worktrees_dir / slug
     dest_hub = resolve_hub_relative_path(worktree_path, hub_subpath)
 
+    # Pre-flight: check whether origin/<branch_name> already exists.
+    # A surviving remote branch from a previous aborted spawn would cause
+    # 'git worktree add -b' to succeed locally but 'git push --set-upstream'
+    # to fail later with a non-fast-forward error. Catching it here lets the
+    # operator clean up (e.g. via teardown) before any artifact is created.
+    #
+    # Exit-code semantics from git ls-remote:
+    #   0  -> ref found (branch already exists on remote -> abort)
+    #   2  -> ref not found (genuine absent -> proceed normally)
+    #   other non-zero -> network/config problem -> soft skip (do not block spawn)
+    if not args.dry_run:
+        ls_remote_result = _subprocess_util.run(
+            ["git", "-C", str(git_root), "ls-remote", "--exit-code", "--heads", "origin", branch_name],
+        )
+        if ls_remote_result.returncode == 0:
+            print(
+                f"[spawn] ERROR: origin/{branch_name} already exists on the remote. "
+                f"Delete the surviving remote branch (e.g. via teardown or "
+                f"'git push origin --delete {branch_name}') before re-spawning.",
+                file=sys.stderr,
+            )
+            return 1
+
     if args.dry_run:
         print(f"[DryRun] Task:     {picked['title']} [{slug}]")
         print(f"[DryRun] Branch:   {branch_name}")
@@ -165,74 +190,149 @@ def main(argv: list[str] | None = None) -> int:
     except RuntimeError as exc:
         raise SystemExit(str(exc)) from exc
 
-    # Create the worktree. git refuses if the target path exists, so we
-    # only ensure the PARENT exists. Any failure here surfaces as a
-    # WorktreeError with captured stderr.
-    worktrees_dir.mkdir(parents=True, exist_ok=True)
-    _worktree.create(branch_name, worktree_path, cwd=git_root)
+    # --------------------------------------------------------------------------
+    # Side-effecting span: wrapped in try/except for LIFO rollback.
+    #
+    # Each step that successfully creates an artifact pushes a cleanup callable
+    # onto _cleanup_stack. On any exception the stack is drained in reverse
+    # (last-created artifact is removed first) before the error is re-raised,
+    # leaving no partial state on disk, in git, or in the wiki.
+    #
+    # Rollback scope (MULTI mode):
+    #   multi_select_groom_then_claim runs BEFORE this span. Restoring the
+    #   absorbed source slugs is out of scope here; wiki.set_phase(slug, None)
+    #   only clears the merged task's [active] marker. The orphaned-active
+    #   reconciliation backstop in batch 2 converges any residual state.
+    # --------------------------------------------------------------------------
 
-    if hub_subpath != ".":
-        dest_hub.mkdir(parents=True, exist_ok=True)
+    _cleanup_stack: list = []
 
-    # Propagate .millhouse/ minus task/worktree-specific subtrees. The
-    # excluded names cover (a) the scratch area whose contents belong to
-    # the parent clone's last run and (b) junctions that must be
-    # recreated per-worktree.
-    _worktree.copy_millhouse(
-        src=hub / ".millhouse",
-        dst=dest_hub / ".millhouse",
-        exclude={"wiki", "active"},
-    )
-
-    # Timestamp used for write_initial_status.
-    ts = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-
-    container_path = resolve_container_path(git_root)
-    (container_path / "portals").mkdir(parents=True, exist_ok=True)
-    (dest_hub / "_mill").mkdir(parents=True, exist_ok=True)
-    # Portal entry: <container>/portals/<slug> -> <hub>/_mill/ (dest_hub, not worktree root).
-    _junction.create(target=dest_hub / "_mill", link_path=container_path / "portals" / slug)
-
-    # Create remaining junctions/hardlinks from junctions config for the new
-    # worktree (.wiki, .portals). _setup.create_hub_links uses the token-scope
-    # filter so that entries requiring <SLUG> are only created in slug-bearing
-    # (task) worktrees.
-    dest_tokens = _build_tokens(dest_hub, wiki_path, slug=slug)
-    _setup.create_hub_links(dest_hub, wiki_path, dest_tokens)
-
-    # .active is task-scoped and points to <hub>/_mill/ -- created explicitly
-    # rather than via mill-config.yaml junctions block so it is not auto-created
-    # in non-task worktrees.
-    _spawn_core.recreate_active_junction(dest_hub)
-    _spawn_core.write_hub_active_indicator(git_root, slug)
-
-    # Pick a colour + write .vscode/settings.json. The palette scans the
-    # *existing* sibling worktrees in the shared worktrees dir; the newly
-    # created one has no settings.json yet, so it does not self-contribute
-    # to the "used" set.
-    color = pick_worktree_color(worktrees_dir)
-    short = resolve_short_name(cfg, git_root.name)
-    _vscode.write_settings(color_hex=color, target=dest_hub / ".vscode" / "settings.json", short_name=short, slug=slug)
-    # When hub lives in a subfolder, write a bootstrap stub at worktree root so
-    # terminal/vscode discovery can find dest_hub without walking the tree.
-    if hub_subpath != ".":
-        stub_dir = worktree_path / ".millhouse"
-        stub_dir.mkdir(parents=True, exist_ok=True)
-        (stub_dir / "config.local.yaml").write_text(
-            yaml.safe_dump({"hub_relative_path": hub_subpath}),
-            encoding="utf-8",
+    try:
+        # Create the worktree. git refuses if the target path exists, so we
+        # only ensure the PARENT exists. Any failure here surfaces as a
+        # WorktreeError with captured stderr.
+        worktrees_dir.mkdir(parents=True, exist_ok=True)
+        _worktree.create(branch_name, worktree_path, cwd=git_root)
+        # Read the junctions config from the new worktree hub for remove_safe.
+        junctions_cfg = _junction.read_junctions(dest_hub)
+        # Rollback: strip junctions first (mandatory), then remove worktree + local branch.
+        _cleanup_stack.append(
+            lambda: _worktree.remove_safe(worktree_path, cwd=git_root, junctions_cfg=junctions_cfg)
         )
 
-    # Use the task title as description so the status.md template renders without empty placeholders.
-    status_abs = _spawn_core.write_initial_status(
-        worktree_path=dest_hub,
-        slug=slug,
-        title=picked["title"],
-        ts=ts,
-        parent_branch=parent_branch,
-        branch=branch_name,
-        cfg=cfg,
-    )
+        if hub_subpath != ".":
+            dest_hub.mkdir(parents=True, exist_ok=True)
+
+        # Propagate .millhouse/ minus task/worktree-specific subtrees. The
+        # excluded names cover (a) the scratch area whose contents belong to
+        # the parent clone's last run and (b) junctions that must be
+        # recreated per-worktree.
+        _worktree.copy_millhouse(
+            src=hub / ".millhouse",
+            dst=dest_hub / ".millhouse",
+            exclude={"wiki", "active"},
+        )
+
+        # Timestamp used for write_initial_status.
+        ts = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+        container_path = resolve_container_path(git_root)
+        (container_path / "portals").mkdir(parents=True, exist_ok=True)
+        (dest_hub / "_mill").mkdir(parents=True, exist_ok=True)
+        portal_link = container_path / "portals" / slug
+        # Portal entry: <container>/portals/<slug> -> <hub>/_mill/ (dest_hub, not worktree root).
+        _junction.create(target=dest_hub / "_mill", link_path=portal_link)
+        # Rollback: remove the portal junction.
+        _cleanup_stack.append(lambda: _junction.remove(portal_link))
+
+        # Create remaining junctions/hardlinks from junctions config for the new
+        # worktree (.wiki, .portals). _setup.create_hub_links uses the token-scope
+        # filter so that entries requiring <SLUG> are only created in slug-bearing
+        # (task) worktrees.
+        dest_tokens = _build_tokens(dest_hub, wiki_path, slug=slug)
+        hub_links = _setup.create_hub_links(dest_hub, wiki_path, dest_tokens)
+        # Rollback: remove hub junctions (.wiki, .portals) in reverse creation order.
+        _cleanup_stack.append(
+            lambda: [_junction.remove(j) for j in reversed(hub_links.get("junctions", []))]
+        )
+
+        # .active is task-scoped and points to <hub>/_mill/ -- created explicitly
+        # rather than via mill-config.yaml junctions block so it is not auto-created
+        # in non-task worktrees.
+        _spawn_core.recreate_active_junction(dest_hub)
+        # Rollback: remove .active junction and hub active indicator.
+        _cleanup_stack.append(lambda: _junction.remove(dest_hub / ".active"))
+
+        _spawn_core.write_hub_active_indicator(git_root, slug)
+        active_indicator = git_root / "_mill" / f"{slug}.active"
+        # Rollback: delete the hub active indicator file.
+        _cleanup_stack.append(
+            lambda: active_indicator.unlink(missing_ok=True)
+        )
+
+        # Pick a colour + write .vscode/settings.json. The palette scans the
+        # *existing* sibling worktrees in the shared worktrees dir; the newly
+        # created one has no settings.json yet, so it does not self-contribute
+        # to the "used" set.
+        color = pick_worktree_color(worktrees_dir)
+        short = resolve_short_name(cfg, git_root.name)
+        vscode_settings_path = dest_hub / ".vscode" / "settings.json"
+        _vscode.write_settings(color_hex=color, target=vscode_settings_path, short_name=short, slug=slug)
+        # Rollback: delete the .vscode/settings.json written above.
+        _cleanup_stack.append(
+            lambda: vscode_settings_path.unlink(missing_ok=True)
+        )
+
+        # When hub lives in a subfolder, write a bootstrap stub at worktree root so
+        # terminal/vscode discovery can find dest_hub without walking the tree.
+        if hub_subpath != ".":
+            stub_dir = worktree_path / ".millhouse"
+            stub_dir.mkdir(parents=True, exist_ok=True)
+            (stub_dir / "config.local.yaml").write_text(
+                yaml.safe_dump({"hub_relative_path": hub_subpath}),
+                encoding="utf-8",
+            )
+
+        # Use the task title as description so the status.md template renders without empty placeholders.
+        status_abs = _spawn_core.write_initial_status(
+            worktree_path=dest_hub,
+            slug=slug,
+            title=picked["title"],
+            ts=ts,
+            parent_branch=parent_branch,
+            branch=branch_name,
+            cfg=cfg,
+        )
+
+    except Exception as exc:
+        # Drain the cleanup stack in LIFO order. Each step is best-effort;
+        # failures are printed to stderr but do not suppress earlier errors.
+        print(
+            f"[spawn] ERROR during worktree setup: {exc}\n"
+            "[spawn] Rolling back partial artifacts...",
+            file=sys.stderr,
+        )
+        for _cleanup_fn in reversed(_cleanup_stack):
+            try:
+                _cleanup_fn()
+            except Exception as rollback_exc:
+                print(
+                    f"[spawn] WARNING: rollback step failed (continuing): {rollback_exc}",
+                    file=sys.stderr,
+                )
+        # Revert the wiki claim that was made before this span (or the merged
+        # slug's active marker in MULTI mode). set_phase(slug, None) is
+        # best-effort -- a failure here is printed but does not re-raise.
+        try:
+            wiki.set_phase(wiki_path, slug, None)
+        except Exception as wiki_exc:
+            print(
+                f"[spawn] WARNING: wiki claim rollback failed: {wiki_exc}\n"
+                "[spawn] Manual cleanup may be required: clear [active] on "
+                f"'{slug}' in Home.md.",
+                file=sys.stderr,
+            )
+        raise SystemExit(1) from exc
 
     print(f"Worktree: {worktree_path}")
     print(f"Branch:   {branch_name}")
