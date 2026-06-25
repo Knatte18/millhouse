@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-stale-test-corrections
+phase: holistic-reviewing
 slug: mill-unit-test-and-signal-accuracy
 branch: hanf/mill-unit-test-and-signal-accuracy
 plan: _mill/plan
@@ -24,6 +24,7 @@ implementing  '2026-06-25T07:13:21Z'
 approved-review-dispatch-fixes  '2026-06-25T07:21:33Z'
 approved-implementer-signal-fixes  '2026-06-25T07:30:43Z'
 approved-stale-test-corrections  '2026-06-25T07:36:44Z'
+holistic-reviewing  '2026-06-25T07:37:17Z'
 ```
 
 ## Batches
