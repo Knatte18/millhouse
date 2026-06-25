@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-verify-and-implementer
+phase: approved-dispatch-and-mergein-docs
 slug: mill-spawn-and-workflow-integrity
 branch: hanf/mill-spawn-and-workflow-integrity
 plan: _mill/plan
@@ -25,6 +25,7 @@ planned  '2026-06-25T07:19:45Z'
 implementing  '2026-06-25T07:20:55Z'
 approved-spawn-claim-lifecycle  '2026-06-25T07:40:42Z'
 approved-verify-and-implementer  '2026-06-25T07:55:37Z'
+approved-dispatch-and-mergein-docs  '2026-06-25T08:02:48Z'
 ```
 
 ## Batches
@@ -42,9 +43,10 @@ batches:
     start_sha: ab9d737f237940d06ef98e662bb18f2ec762d75e
     commit_sha: 190762646ae3cdae954e72a44e82517e4b64e019
   - name: dispatch-and-mergein-docs
-    state: running
+    state: approved
     implementer_session: d12ebce0-3a20-46ab-9e88-9bef8c5341a9
     start_sha: c940e0554e0a349be4c18c9ca18fc42acd6f23f7
+    commit_sha: f3ca9eb64fa369d53181484f9c137a591a3b1705
   - name: teardown-reconcile
     state: pending
 ```
