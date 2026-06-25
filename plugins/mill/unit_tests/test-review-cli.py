@@ -489,10 +489,12 @@ def test_plan_prepare_brief_path_uses_git_root() -> int:
                                 with _mock.patch("_reviewers.load", return_value={}):
                                     with _mock.patch("_reviewers.validate_role_refs"):
                                         with _mock.patch("_review_common.find_active_slug", return_value="my-slug"):
-                                            # Bypass the plan validator so the CLI reaches the prepare step.
-                                            with _mock.patch("_plan_validate.run", return_value=[]):
-                                                with _mock.patch("_review_plan.prepare", return_value=fake_prepare):
-                                                    _rc = _mod.main(["--stage", "prepare"])
+                                            with _mock.patch("_review_plan.prepare", return_value=fake_prepare):
+                                                # Pass --skip-validate to bypass the pre-review plan
+                                                # validator; mocking _plan_validate.run does not work
+                                                # because the CLI binds it via 'from ... import run'
+                                                # inside the function scope before the mock can intercept.
+                                                _rc = _mod.main(["--stage", "prepare", "--skip-validate"])
         finally:
             _os.chdir(_orig_cwd)
 
