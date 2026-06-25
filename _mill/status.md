@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-fix-r2
+phase: planned
 slug: mill-spawn-and-workflow-integrity
 branch: hanf/mill-spawn-and-workflow-integrity
 plan: _mill/plan
@@ -21,4 +21,5 @@ planning  '2026-06-25T07:10:38Z'
 plan-review-r1  '2026-06-25T07:15:36Z'
 plan-fix-r1  '2026-06-25T07:15:36Z'
 plan-fix-r2  '2026-06-25T07:19:10Z'
+planned  '2026-06-25T07:19:45Z'
 ```
