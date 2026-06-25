@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-reviewing
+phase: holistic-fixing
 slug: mill-spawn-and-workflow-integrity
 branch: hanf/mill-spawn-and-workflow-integrity
 plan: _mill/plan
@@ -28,6 +28,7 @@ approved-verify-and-implementer  '2026-06-25T07:55:37Z'
 approved-dispatch-and-mergein-docs  '2026-06-25T08:02:48Z'
 approved-teardown-reconcile  '2026-06-25T08:17:00Z'
 holistic-reviewing  '2026-06-25T08:17:31Z'
+holistic-fixing  '2026-06-25T08:23:53Z'
 ```
 
 ## Batches
