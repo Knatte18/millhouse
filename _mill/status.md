@@ -34,7 +34,9 @@ batches:
     start_sha: 2a9903639f148306df62c4931d1a6c80100bb3f1
     commit_sha: a43fc3190e0c8a31826dbb4f97a269166d334630
   - name: implementer-signal-fixes
-    state: pending
+    state: running
+    implementer_session: 94ab2a1f-5e2c-4346-9919-39a04ed646c0
+    start_sha: 10c6166de326f1cb2547ce3a3a04bf57fecbb6e6
   - name: stale-test-corrections
     state: pending
 ```
