@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-implementer-cwd-and-dotnet
+phase: approved-done-gate
 slug: mill-verify-and-layout-gaps
 branch: hanf/mill-verify-and-layout-gaps
 plan: _mill/plan
@@ -22,6 +22,7 @@ planned  '2026-06-28T06:23:23Z'
 implementing  '2026-06-28T06:24:54Z'
 approved-parser-and-brief  '2026-06-28T13:09:30Z'
 approved-implementer-cwd-and-dotnet  '2026-06-28T13:17:12Z'
+approved-done-gate  '2026-06-28T13:19:27Z'
 ```
 
 ## Batches
@@ -39,7 +40,8 @@ batches:
     start_sha: e2a0d7d65c5c30fcab0efa8edfe2be0e2750f7b5
     commit_sha: b2a89730049f5c05a00c2a60c6d138a46e9abf14
   - name: done-gate
-    state: running
+    state: approved
     implementer_session: 9b793112-754e-4054-8cef-841a1257f245
     start_sha: 30bbe9eeaefa668bb11cfee54bb1d908a7ae6029
+    commit_sha: a027140a664b2066a5fc07aaef781069c45f746b
 ```
