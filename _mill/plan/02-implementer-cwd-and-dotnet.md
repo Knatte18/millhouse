@@ -29,19 +29,41 @@ Fixes two bugs in the implementer verify path: #554 (finalize stage runs batch v
   **Change 1 — `_run_verify_gate` (#554 + #556):**
   Add `git_root: Path | None = None` as a keyword-only parameter after the existing positional parameters. Docstring update: add "git_root: Optional git root directory used as cwd for the verify subprocess. When None, falls back to project_root." Change the `subprocess.run` call at line 383 from `cwd=project_root` to `cwd=(git_root if git_root is not None else project_root)`.
 
-  Also add dotnet cleanup (#556): after the `subprocess.run` call exits (regardless of the return code — place this after the `if result.returncode != 0:` block but before the final `return None`), add:
+  Also add dotnet cleanup (#556): place the cleanup immediately after `result = subprocess.run(...)`, **before the `if result.returncode != 0:` check** — this ensures cleanup fires on both success and failure. Failed dotnet runs (the re-run lock scenario #556 targets) also release testhost/build-server processes. The placement is:
+
   ```python
+  result = subprocess.run(...)
+  # dotnet cleanup: release testhost/MSBuild locks before caller retries
   if sys.platform == "win32" and verify_cmd is not None and "dotnet" in verify_cmd.lower():
-      import subprocess as _sp
-      _sp.run(["dotnet", "build-server", "shutdown"], capture_output=True, timeout=30)
+      subprocess.run(["dotnet", "build-server", "shutdown"], capture_output=True, timeout=30)
+  if result.returncode != 0:
+      ...  # existing error handling
   ```
-  The `subprocess` module is already imported. Do not use a new alias if `subprocess` is already imported as `subprocess` in the file; adjust accordingly.
+
+  The `subprocess` module is already imported in this file — do not use a new alias.
 
   **Change 2 — `_run_verify_gates` (#554):**
   Add `git_root: Path | None = None` as a keyword-only parameter. Thread it to both `_run_verify_gate` calls: `_run_verify_gate(project_root, verify_cmd, git_root=git_root)` and `_run_verify_gate(project_root, module_wide_verify_cmd, git_root=git_root)`. Update the docstring to document `git_root`.
 
   **Change 3 — `_forward_output` (#554):**
-  Add `git_root: Path | None = None` as a keyword-only parameter (position in the signature: after the last existing kw-only param). Thread it to the `_run_verify_gates` call(s) inside `_forward_output`: change `_run_verify_gates(project_root, verify_cmd, module_wide_verify_cmd)` to `_run_verify_gates(project_root, verify_cmd, module_wide_verify_cmd, git_root=git_root)`.
+  Add `git_root: Path | None = None` as a keyword-only parameter (position in the signature: after the last existing kw-only param). Thread it to all four `_run_verify_gates` call sites inside `_forward_output`. The four call sites (as of the current file state) are:
+  - Line 647: single-line `gate_result = _run_verify_gates(project_root, verify_cmd, module_wide_verify_cmd)`
+  - Lines 771-773: multi-line form:
+    ```python
+    gate_result = _run_verify_gates(
+        project_root, verify_cmd, module_wide_verify_cmd
+    )
+    ```
+  - Line 826: single-line `gate_result = _run_verify_gates(project_root, verify_cmd, module_wide_verify_cmd)`
+  - Line 882: single-line `gate_result = _run_verify_gates(project_root, verify_cmd, module_wide_verify_cmd)`
+
+  Add `git_root=git_root` to every call. The multi-line form at 771-773 must expand to:
+  ```python
+  gate_result = _run_verify_gates(
+      project_root, verify_cmd, module_wide_verify_cmd, git_root=git_root
+  )
+  ```
+  Before editing, re-read the function to confirm these line numbers and catch any additional call sites added after this plan was written.
 
   **Change 4 — `finalize_from_output` (#554):**
   Add `git_root: Path | None = None` as a keyword-only parameter. Thread it to the `_forward_output` call: add `git_root=git_root` to the call at line 561.
@@ -104,8 +126,11 @@ Fixes two bugs in the implementer verify path: #554 (finalize stage runs batch v
   **Test B — git_root=None falls back to project_root (#554):**
   Mock `subprocess.run`; call `_run_verify_gate(project_root, "echo ok")`. Assert `subprocess.run` is called with `cwd=project_root`. This confirms the default behavior is unchanged.
 
-  **Test C — dotnet cleanup fires on Windows with dotnet verify (#556):**
-  Use `unittest.mock.patch("sys.platform", "win32")` and `unittest.mock.patch("_implementer_common.subprocess.run")` (or the module-level subprocess) to capture calls. Call `_run_verify_gate(project_root, "dotnet test Foo.Tests")`. After the main verify mock returns a zero exit code, assert a second call to `subprocess.run` was made with `["dotnet", "build-server", "shutdown"]`. Also assert the dotnet shutdown call is NOT made when the verify command does not contain "dotnet".
+  **Test C — dotnet cleanup fires regardless of verify exit code (#556):**
+  Use `unittest.mock.patch("sys.platform", "win32")` and `unittest.mock.patch("_implementer_common.subprocess.run")` (or the module-level subprocess) to capture calls. Run two sub-cases:
+  - Sub-case C1: main verify mock returns exit code 0. Assert `["dotnet", "build-server", "shutdown"]` is called (cleanup on success).
+  - Sub-case C2: main verify mock returns exit code 1 (failure). Assert `["dotnet", "build-server", "shutdown"]` is STILL called (cleanup on failure — this is the key regression guard for #556). The mock's `returncode` attribute must be set to 1 for the second call.
+  Also assert the dotnet shutdown call is NOT made when the verify command does not contain "dotnet".
 
   Print PASS messages for each test using the existing pattern in the file.
 - **Commit:** `test(_implementer_common): add git_root cwd and dotnet cleanup unit tests (#554 #556)`

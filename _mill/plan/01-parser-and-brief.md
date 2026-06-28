@@ -102,14 +102,32 @@ Fixes two bugs with no shared state: #552 (`parse_blocking_count` in `_review_co
 - **Creates:** none
 - **Deletes:** none
 - **Requirements:**
-  Add a new test function (or test block inside `main()`) to `test-review-discussion-flow.py` that verifies the brief is written under `hub_dir` when `hub_dir != git_root`. Use `unittest.mock.patch` (already available via `import unittest.mock`) to patch `_paths.resolve_hub_path` and `_paths.resolve_git_root` in the `millpy-review-discussion` module's namespace:
+  Add a new test function (or test block inside `main()`) to `test-review-discussion-flow.py` that verifies the brief is written under `hub_dir` when `hub_dir != git_root`. The test must exercise `millpy-review-discussion`'s prepare branch so that reverting Card 3's one-line fix breaks the assertion. Use `unittest.mock.patch` to override `_paths.resolve_hub_path` and `_paths.resolve_git_root` inside the `millpy_review_discussion` module namespace (or the `millpy-review-discussion` CLI module — check the exact import path used by the CLI). Then import and call the prepare branch logic directly:
 
-  1. Create a temp dir with two subdirs: `git_root = tmpdir / "git_root"` and `hub_dir = tmpdir / "git_root" / "src" / "proj"` (a nested subdir).
-  2. Patch `_paths.resolve_hub_path` (as used inside `millpy-review-discussion`) to return `hub_dir`.
-  3. Patch `_paths.resolve_git_root` (as used inside `millpy-review-discussion`) to return `git_root`.
-  4. Call the prepare stage logic (either import and call the `prepare()` function via its CLI import path, or invoke the CLI subprocess). The simplest in-process approach is to import the brief-path logic directly: after patching, call `_paths.resolve_task_path(hub_dir, "_mill/briefs/")` and `_paths.resolve_task_path(git_root, "_mill/briefs/")` and assert they differ, then assert the fixed code (`hub_dir` form) places the brief under `hub_dir`.
+  ```python
+  import unittest.mock, sys, importlib
+  from pathlib import Path
+  import tempfile, subprocess
 
-  Since the prepare stage requires a full fixture (wiki, config, discussion file), the minimal correct test is a path-logic assertion: confirm that after the fix, `_paths.resolve_task_path(hub_dir, "_mill/briefs/")` differs from `_paths.resolve_task_path(git_root, "_mill/briefs/")` when hub_dir is a subdir of git_root, and that the brief path used in the fixed code resolves under hub_dir. This avoids a full LLM fixture while still catching a regression if the one-line fix is reverted.
+  with tempfile.TemporaryDirectory() as tmpdir:
+      git_root = Path(tmpdir) / "repo"
+      hub_dir = git_root / "src" / "proj"
+      hub_dir.mkdir(parents=True)
+      # patch _paths in the CLI module's namespace
+      with unittest.mock.patch("millpy_review_discussion._paths.resolve_hub_path", return_value=hub_dir), \
+           unittest.mock.patch("millpy_review_discussion._paths.resolve_git_root", return_value=git_root):
+          # The changed line: _paths.resolve_task_path(hub_dir, "_mill/briefs/")
+          import _paths
+          briefs_dir = _paths.resolve_task_path(hub_dir, "_mill/briefs/")
+          assert str(briefs_dir).startswith(str(hub_dir)), (
+              f"brief path {briefs_dir} must be under hub_dir {hub_dir}"
+          )
+          assert not str(briefs_dir).startswith(str(git_root / "_mill")), (
+              "brief must NOT land at git_root/_mill when hub_dir is a subdir"
+          )
+  ```
+
+  Since `millpy-review-discussion.py` uses a hyphenated filename, import it with `importlib.util.spec_from_file_location` pointing at the script path, or invoke the patch at the `_paths` module level and call `_paths.resolve_task_path` with the patched values directly. The critical assertion is: when `hub_dir` is `git_root/src/proj`, `_paths.resolve_task_path(hub_dir, "_mill/briefs/")` must resolve under `hub_dir`, NOT under `git_root`. A reversion of the fix (changing back to `git_root`) must break this assertion.
 
   Print: `"PASS: discussion-review brief path is under hub_dir not git_root in nested layout"`.
 - **Commit:** `test(review-discussion): add brief-path nested-layout assertion (#553)`

@@ -58,15 +58,15 @@ Adds the `pipeline.done_gate` feature (#561): a config key that lets operators s
   >
   > ```bash
   > PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
-  > import json, sys, subprocess
-  > import _paths, _config, _subprocess_util
+  > import json, sys, subprocess, platform
+  > import _paths, _config
   > git_root = _paths.resolve_git_root()
   > hub_root = _paths.resolve_hub_path()
   > cfg = _config.load_config(hub_root, git_root)
   > gate_cmd = (cfg.get('pipeline') or {}).get('done_gate')
   > if not gate_cmd:
   >     sys.exit(0)
-  > result = _subprocess_util.run_allow_fail(gate_cmd, cwd=git_root, shell=True)
+  > result = subprocess.run(gate_cmd, cwd=git_root, shell=True, capture_output=True, text=True)
   > if result.returncode != 0:
   >     out = (result.stdout + result.stderr).strip()
   >     reason = out[-2000:] if len(out) > 2000 else out
@@ -74,17 +74,16 @@ Adds the `pipeline.done_gate` feature (#561): a config key that lets operators s
   >     sys.exit(1)
   > # dotnet cleanup: if gate command contains 'dotnet' and we are on Windows,
   > # run build-server shutdown to release process locks before mill-finalize runs.
-  > import platform
   > if platform.system() == 'Windows' and 'dotnet' in gate_cmd.lower():
   >     subprocess.run(['dotnet', 'build-server', 'shutdown'], capture_output=True, timeout=30)
   > "
   > ```
   >
-  > Parse stdout for a JSON line. If the exit code is non-zero and the JSON line has `status: blocked`, halt with: `BLOCKED: done gate failed — <reason>`. Do NOT set `phase: done` when the gate fires; the task remains in its current phase so the operator can investigate the failure. The `run_allow_fail` helper does not raise on non-zero exit code; check `result.returncode`.
+  > Parse stdout for a JSON line. If the exit code is non-zero and the JSON line has `status: blocked`, halt with: `BLOCKED: done gate failed — <reason>`. Do NOT set `phase: done` when the gate fires; the task remains in its current phase so the operator can investigate the failure. `subprocess.run` with `capture_output=True` does not raise on non-zero exit code — check `result.returncode`.
 
   The existing step 1 (`_status.append_phase(status_path, "done", ...)`) and later steps are renumbered accordingly (step 0 is inserted before the existing numbered steps, so the existing numbered list does not change — step 0 is new). The existing step text for "1. `_status.append_phase(status_path, 'done', ...)`" stays as-is.
 
-  **Important:** `_subprocess_util.run_allow_fail` must exist (check the file). If it does not exist, use `subprocess.run(gate_cmd, cwd=git_root, shell=True, capture_output=True, text=True)` inline instead (no raise on non-zero). Inspect `_subprocess_util.py` via Context if needed — but do not add it to Context: if using inline subprocess, since the inline approach has no dependency on that helper. The SKILL.md text must be accurate about which approach is used.
+  The snippet above uses inline `subprocess.run` with `capture_output=True` — `_subprocess_util` is NOT imported in this snippet (it does not expose a `run_allow_fail` helper). The SKILL.md text must exactly match the snippet above.
 - **Commit:** `feat(mill-go): add pre-done gate step to Handoff for repo-wide test guard (#561)`
 
 ---
@@ -119,13 +118,14 @@ Adds the `pipeline.done_gate` feature (#561): a config key that lets operators s
 - **Requirements:**
   In `test-config.py`, add a new test function `test_load_config_done_gate_key_present()` that:
 
-  1. Uses the existing `_setup_plugin_template` helper and `unittest.mock.patch` pattern already present in the file.
-  2. Calls `_config.load_config(hub_root, hub_root)` with a mocked `resolve_plugin_template_path` pointing at the real `plugins/mill/templates/mill-config.yaml` (resolve via `Path(__file__).resolve().parent.parent / "templates" / "mill-config.yaml"` or `HUB / "plugins" / "mill" / "templates" / "mill-config.yaml"`).
-  3. Asserts `cfg.get("pipeline", {}).get("done_gate") is None` — the template key exists and its value is null.
+  1. Does NOT use `_setup_plugin_template` (which seeds a synthetic template that lacks the new `done_gate` key and would make the assertion meaningless).
+  2. Resolves the real template path via `Path(__file__).resolve().parent.parent / "templates" / "mill-config.yaml"` and patches `_config`'s `resolve_plugin_template_path` (or whichever internal call `_config.load_config` makes to locate the template) to return this real path.
+  3. Creates a minimal temp hub dir (no overlay `mill-config.yaml`) and calls `_config.load_config(hub_root, hub_root)` against it.
+  4. Asserts `cfg.get("pipeline", {}).get("done_gate") is None` — the key must exist in the template and its value must be null.
 
-  Add the function immediately before the `if __name__ == "__main__"` block (or wherever the other test functions are). Call it from `main()` and print `"PASS: pipeline.done_gate key present and null in template"` on success.
+  The pattern to use: inspect the existing `test-config.py` tests that do NOT use `_setup_plugin_template` and follow their pattern for pointing at the real template. If all existing tests use `_setup_plugin_template`, add the real-template fixture as a one-off in this test function. The goal is to assert against the actual shipped template, so that removing `done_gate` from the template breaks the test.
 
-  This test does not require a hub overlay or local config — the template alone must provide the key.
+  Add the function immediately before the `if __name__ == "__main__"` block. Call it from `main()` and print `"PASS: pipeline.done_gate key present and null in template"` on success.
 - **Commit:** `test(config): verify pipeline.done_gate key is present and null in template (#561)`
 
 ## Batch Tests
