@@ -123,7 +123,7 @@ Fixes two bugs with no shared state: #552 (`parse_blocking_count` in `_review_co
 
   3. Load the CLI module via `importlib.util.spec_from_file_location("millpy_review_discussion", scripts_dir / "millpy-review-discussion.py")` and call `spec.loader.exec_module(mod)`.
 
-  4. Patch `sys.argv = ['prog', '--stage', 'prepare']`. Call `mod.main()` (capturing or discarding stdout).
+  4. Patch `sys.argv = ['prog', '--stage', 'prepare']`. Call `mod.main()` inside a `try/except (TypeError, SystemExit, Exception): pass` block — the prepare branch calls `json.dumps(envelope)` after `resolve_task_path`, and a bare-MagicMock return value will cause a `TypeError` at that point. The `resolve_task_path` call is recorded before the crash, so the assertion below still works.
 
   5. Assert: inspect `sys.modules['_paths'].resolve_task_path.call_args_list`. Find the call whose second argument starts with `"_mill/briefs/"`. Assert its first argument equals `hub_dir`.
 

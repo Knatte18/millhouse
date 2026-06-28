@@ -110,6 +110,7 @@ Adds the `pipeline.done_gate` feature (#561): a config key that lets operators s
 
 - **Context:**
   - `plugins/mill/templates/mill-config.yaml`
+  - `plugins/mill/scripts/_config.py`
   - `plugins/mill/unit_tests/test-config.py`
 - **Edits:**
   - `plugins/mill/unit_tests/test-config.py`

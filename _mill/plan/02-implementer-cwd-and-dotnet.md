@@ -78,38 +78,36 @@ Fixes two bugs in the implementer verify path: #554 (finalize stage runs batch v
 
 ---
 
-### Card 6: Pass `git_root` to `finalize_from_output` in `millpy-implement.py` (#554)
+### Card 6: Pass `git_root` to all external verify callers (#554)
 
 - **Context:**
   - `plugins/mill/scripts/_implementer_common.py`
   - `plugins/mill/scripts/millpy-implement.py`
+  - `plugins/mill/scripts/millpy-fix.py`
 - **Edits:**
   - `plugins/mill/scripts/millpy-implement.py`
+  - `plugins/mill/scripts/millpy-fix.py`
 - **Creates:** none
 - **Deletes:** none
 - **Requirements:**
-  In `millpy-implement.py`, in the `--stage finalize` branch (lines 234-266):
+  Card 5 makes the helper chain accept `git_root`. Card 6 wires `git_root` at every external call site that invokes `finalize_from_output` or `_forward_output` with a real `verify_cmd`. Both files already resolve `git_root = _paths.resolve_git_root()` near the top of `main()`.
 
-  `project_root` is `_paths.resolve_hub_path()` (line 105) and `git_root` is `_paths.resolve_git_root()` (line 108). Both are already in scope at the start of `main()`.
+  **`millpy-implement.py` changes:**
 
-  The `finalize_from_output` call at line 255 currently does not pass `git_root`. Add `git_root=git_root` as a keyword argument to this call. The full call becomes:
-  ```python
-  return finalize_from_output(
-      Path(args.agent_output),
-      project_root,
-      start_sha=start_sha,
-      snapshot_path=snapshot_path,
-      session_id=session_id,
-      verify_cmd=verify_cmd,
-      module_wide_verify_cmd=module_wide_verify_cmd,
-      card_count=card_count,
-      task_dir=status_path.parent,
-      parent_branch=parent_branch,
-      git_root=git_root,
-  )
-  ```
-  No other changes needed in `millpy-implement.py`.
-- **Commit:** `fix(millpy-implement): pass git_root to finalize_from_output for nested-layout verify cwd (#554)`
+  1. `--stage finalize` branch (line ~255): add `git_root=git_root` to the `finalize_from_output(...)` call.
+  2. `--stage full` branch (line ~417): add `git_root=git_root` to the `_forward_output(...)` call.
+
+  Re-read the function to confirm line numbers before editing. The changes are single-argument additions; no restructuring needed.
+
+  **`millpy-fix.py` changes:**
+
+  1. Fixer finalize branch (line ~227): add `git_root=git_root` to the `finalize_from_output(...)` call.
+  2. Fixer forward branch (line ~396): add `git_root=git_root` to the `_forward_output(...)` call.
+
+  In both cases `git_root` is already in scope (resolved at line ~134). Re-read the function to confirm the exact lines and the shape of the existing call before editing.
+
+  After this card, all paths that can run a batch `verify_cmd` in a nested layout pass the correct `git_root` as the subprocess cwd.
+- **Commit:** `fix(millpy-implement,millpy-fix): pass git_root to all verify call sites for nested-layout cwd (#554)`
 
 ---
 

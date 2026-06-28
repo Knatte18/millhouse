@@ -49,6 +49,7 @@ batches:
 
 - **Decision:** The `dotnet build-server shutdown` call added after dotnet verify is guarded by `sys.platform == "win32"` and uses `subprocess.run` with `capture_output=True`, discarding the exit code.
 - **Rationale:** Build-server locking only occurs on Windows (file-handle semantics). POSIX has no persistent build server. Failure to shut down is non-fatal; the intent is proactive cleanup, not a correctness gate.
+- **Scope note:** `dotnet build-server shutdown` releases VBCSCompiler/MSBuild/Razor persistent servers. It does NOT kill orphaned `testhost.exe` processes from `dotnet test`. Reaping testhost processes (via `taskkill` or similar) is out of scope for this fix; #556 targets build-server locks only.
 - **Applies to:** batch 2 (implementer-cwd-and-dotnet).
 
 ### Decision: done_gate null means disabled
@@ -61,6 +62,7 @@ batches:
 
 - `plugins/mill/scripts/_implementer_common.py`
 - `plugins/mill/scripts/_review_common.py`
+- `plugins/mill/scripts/millpy-fix.py`
 - `plugins/mill/scripts/millpy-implement.py`
 - `plugins/mill/scripts/millpy-review-discussion.py`
 - `plugins/mill/skills/mill-go/SKILL.md`
