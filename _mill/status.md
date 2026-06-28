@@ -39,5 +39,7 @@ batches:
     start_sha: e2a0d7d65c5c30fcab0efa8edfe2be0e2750f7b5
     commit_sha: b2a89730049f5c05a00c2a60c6d138a46e9abf14
   - name: done-gate
-    state: pending
+    state: running
+    implementer_session: 9b793112-754e-4054-8cef-841a1257f245
+    start_sha: 30bbe9eeaefa668bb11cfee54bb1d908a7ae6029
 ```
