@@ -14,32 +14,61 @@ import _timestamp
 from pathlib import Path
 
 
+def _is_only_start_batch_commit(project_root: Path, start_sha: str) -> bool:
+    """Return True when the only commit since start_sha is the batch-start housekeeping commit.
+
+    Detects Bug #557: prepare makes a "mill-go: start batch" commit, so HEAD != start_sha
+    even when the implementer wrote zero code commits. A single-card retry has start_sha ==
+    the start-batch commit, so its real code commit message will NOT start with the prefix.
+    Returns False on any subprocess failure so the guard is always safe to skip on error.
+    """
+    result = _subprocess_util.run(
+        ["git", "log", "--pretty=%s", f"{start_sha}..HEAD"],
+        cwd=project_root,
+    )
+    if result.returncode != 0:
+        return False
+    # Collect non-empty commit subject lines since start_sha.
+    msgs = [m.strip() for m in result.stdout.strip().splitlines() if m.strip()]
+    return len(msgs) == 1 and msgs[0].startswith("mill-go: start batch")
+
+
 def _batch_completeness_stuck(
     project_root: Path,
     start_sha: str | None,
     card_count: int | None,
     session_id: str | None,
+    *,
+    verify_cmd: str | None = None,
 ) -> dict | None:
     """
     Check whether enough commits exist since start_sha for the declared card_count.
 
-    Returns None (gate disabled) when start_sha is None, card_count is None,
-    or card_count <= 0. Otherwise counts commits via `git rev-list --count
-    start_sha..HEAD`. If the subprocess fails or returns a non-numeric string,
-    returns None rather than crashing (callers such as test-millpy-implement.py
-    mock _subprocess_util.run to return non-numeric strings for all git calls).
-    Only when a numeric count is obtained and count < card_count is a stuck
-    dict returned; otherwise returns None.
+    Returns None (gate disabled) when verify_cmd is not None — a passing verify
+    command is conclusive evidence of batch completeness, so the heuristic commit-
+    count check is unnecessary. Also returns None when start_sha is None,
+    card_count is None, or card_count <= 0.
+
+    Otherwise counts commits via `git rev-list --count start_sha..HEAD`. If the
+    subprocess fails or returns a non-numeric string, returns None rather than
+    crashing (callers such as test-millpy-implement.py mock _subprocess_util.run
+    to return non-numeric strings for all git calls). Only when a numeric count
+    is obtained and count < card_count is a stuck dict returned; otherwise returns None.
 
     Args:
         project_root: Path to the worktree root.
         start_sha: The SHA recorded at batch start; None disables the gate.
         card_count: Number of Card headings in the batch file; None or 0 disables the gate.
         session_id: Session identifier included in the returned dict when non-None.
+        verify_cmd: When not None, the gate is disabled entirely (verify is conclusive).
 
     Returns:
-        A stuck dict with stuck_type="transient" when incomplete, or None otherwise.
+        A stuck dict with stuck_type="transient" and commits_made when incomplete, or None otherwise.
     """
+    # When a verify command is present, a passing verify is conclusive; skip the heuristic gate.
+    if verify_cmd is not None:
+        return None
+
     # Gate is a no-op when any required input is absent or card_count is zero/negative.
     if start_sha is None or card_count is None or card_count <= 0:
         return None
@@ -68,6 +97,7 @@ def _batch_completeness_stuck(
                 f" {card_count} card(s) in batch -- implementer stopped before finishing all cards"
             ),
             "session_id": session_id or "unknown",
+            "commits_made": count,
         }
     return None
 
@@ -394,7 +424,11 @@ def _run_verify_gate(project_root: Path, verify_cmd: str | None) -> dict | None:
                 return None
             # Use last 2000 characters of the output
             output_stripped = output.strip()
-            reason = output_stripped[-2000:] if len(output_stripped) > 2000 else output_stripped
+            reason = (
+                output_stripped[-2000:]
+                if len(output_stripped) > 2000
+                else output_stripped
+            )
             return {
                 "status": "stuck",
                 "stuck_type": "verify",
@@ -644,7 +678,9 @@ def _forward_output(
     if parsed is not None:
         # Apply verify gates ONLY for self-reported success
         if parsed.get("status") == "success":
-            gate_result = _run_verify_gates(project_root, verify_cmd, module_wide_verify_cmd)
+            gate_result = _run_verify_gates(
+                project_root, verify_cmd, module_wide_verify_cmd
+            )
             if gate_result is not None:
                 # Verify failed; enrich with commit_sha and emit
                 result = _subprocess_util.run(
@@ -656,7 +692,8 @@ def _forward_output(
                 print(json.dumps(gate_result))
                 return 0
 
-            # Check for no-content-commit success: reject if HEAD == start_sha
+            # Check for no-content-commit success: reject if HEAD == start_sha or if
+            # the only commit since start_sha is the batch-start housekeeping commit.
             if start_sha is not None:
                 result = _subprocess_util.run(
                     ["git", "rev-parse", "HEAD"],
@@ -675,13 +712,34 @@ def _forward_output(
                         )
                     )
                     return 0
+                # Guard against the start-batch-commit-only case (Bug #557): prepare makes a
+                # "mill-go: start batch" commit, so HEAD != start_sha even when the implementer
+                # wrote zero code commits. Detect this and demote to stuck/logic.
+                if result.returncode == 0 and _is_only_start_batch_commit(
+                    project_root, start_sha
+                ):
+                    print(
+                        json.dumps(
+                            {
+                                "status": "stuck",
+                                "stuck_type": "logic",
+                                "reason": "success reported but no content commit (only batch-start commit since start_sha)",
+                                "session_id": session_id or parsed.get("session_id"),
+                            }
+                        )
+                    )
+                    return 0
 
             # Resolve session id for the new gates: prefer caller-supplied over parsed.
             _gate_session_id = session_id or parsed.get("session_id")
 
             # Completeness gate: demote to stuck/transient when fewer commits than cards.
             _completeness_result = _batch_completeness_stuck(
-                project_root, start_sha, card_count, _gate_session_id
+                project_root,
+                start_sha,
+                card_count,
+                _gate_session_id,
+                verify_cmd=verify_cmd,
             )
             if _completeness_result is not None:
                 print(json.dumps(_completeness_result))
@@ -698,7 +756,9 @@ def _forward_output(
             # On the parsed-success emit path, handle nits-only marker and flag
             if nits_only and status_path and nits_scope:
                 parsed["nits_applied"] = True
-                _status.append_phase(status_path, f"nits-fixed-{nits_scope}", _timestamp.now_utc_iso())
+                _status.append_phase(
+                    status_path, f"nits-fixed-{nits_scope}", _timestamp.now_utc_iso()
+                )
 
         result = _subprocess_util.run(
             ["git", "rev-parse", "HEAD"],
@@ -777,7 +837,11 @@ def _forward_output(
                                         return 0
                                     # Completeness gate: incomplete batch demotes to stuck/transient.
                                     _comp = _batch_completeness_stuck(
-                                        project_root, start_sha, card_count, session_id
+                                        project_root,
+                                        start_sha,
+                                        card_count,
+                                        session_id,
+                                        verify_cmd=verify_cmd,
                                     )
                                     if _comp is not None:
                                         print(json.dumps(_comp))
@@ -799,17 +863,35 @@ def _forward_output(
                                             )
                                         )
                                     else:
-                                        print(
-                                            json.dumps(
-                                                {
-                                                    "status": "success",
-                                                    "commit_sha": new_head,
-                                                    "session_id": session_id
-                                                    or "unknown",
-                                                    "inferred": True,
-                                                }
+                                        # Guard against start-batch-commit-only case on the
+                                        # formatter-drift inference path (Bug #557).
+                                        if _is_only_start_batch_commit(
+                                            project_root, start_sha
+                                        ):
+                                            print(
+                                                json.dumps(
+                                                    {
+                                                        "status": "stuck",
+                                                        "stuck_type": "logic",
+                                                        "reason": "inferred success but only batch-start commit since start_sha",
+                                                        "session_id": session_id
+                                                        or "unknown",
+                                                        "inferred": True,
+                                                    }
+                                                )
                                             )
-                                        )
+                                        else:
+                                            print(
+                                                json.dumps(
+                                                    {
+                                                        "status": "success",
+                                                        "commit_sha": new_head,
+                                                        "session_id": session_id
+                                                        or "unknown",
+                                                        "inferred": True,
+                                                    }
+                                                )
+                                            )
                                     return 0
                         # Not formatter drift, or commit failed
                         print(
@@ -823,14 +905,20 @@ def _forward_output(
                         )
                         return 0
                     # Apply verify gates before emitting success
-                    gate_result = _run_verify_gates(project_root, verify_cmd, module_wide_verify_cmd)
+                    gate_result = _run_verify_gates(
+                        project_root, verify_cmd, module_wide_verify_cmd
+                    )
                     if gate_result is not None:
                         gate_result["commit_sha"] = head
                         print(json.dumps(gate_result))
                         return 0
                     # Completeness gate: incomplete batch demotes to stuck/transient.
                     _comp = _batch_completeness_stuck(
-                        project_root, start_sha, card_count, session_id
+                        project_root,
+                        start_sha,
+                        card_count,
+                        session_id,
+                        verify_cmd=verify_cmd,
                     )
                     if _comp is not None:
                         print(json.dumps(_comp))
@@ -849,16 +937,31 @@ def _forward_output(
                             )
                         )
                     else:
-                        print(
-                            json.dumps(
-                                {
-                                    "status": "success",
-                                    "commit_sha": head,
-                                    "session_id": session_id or "unknown",
-                                    "inferred": True,
-                                }
+                        # Guard against start-batch-commit-only case on the
+                        # snapshot-present clean-tree inference path (Bug #557).
+                        if _is_only_start_batch_commit(project_root, start_sha):
+                            print(
+                                json.dumps(
+                                    {
+                                        "status": "stuck",
+                                        "stuck_type": "logic",
+                                        "reason": "inferred success but only batch-start commit since start_sha",
+                                        "session_id": session_id or "unknown",
+                                        "inferred": True,
+                                    }
+                                )
                             )
-                        )
+                        else:
+                            print(
+                                json.dumps(
+                                    {
+                                        "status": "success",
+                                        "commit_sha": head,
+                                        "session_id": session_id or "unknown",
+                                        "inferred": True,
+                                    }
+                                )
+                            )
                     return 0
         elif start_sha is not None and snapshot_path is None:
             result = _subprocess_util.run(
@@ -879,28 +982,49 @@ def _forward_output(
                 )
                 if not result_full.stdout.strip():
                     # Apply verify gates before emitting success
-                    gate_result = _run_verify_gates(project_root, verify_cmd, module_wide_verify_cmd)
+                    gate_result = _run_verify_gates(
+                        project_root, verify_cmd, module_wide_verify_cmd
+                    )
                     if gate_result is not None:
                         gate_result["commit_sha"] = head
                         print(json.dumps(gate_result))
                         return 0
                     # Completeness gate: incomplete batch demotes to stuck/transient.
                     _comp = _batch_completeness_stuck(
-                        project_root, start_sha, card_count, session_id
+                        project_root,
+                        start_sha,
+                        card_count,
+                        session_id,
+                        verify_cmd=verify_cmd,
                     )
                     if _comp is not None:
                         print(json.dumps(_comp))
                         return 0
-                    print(
-                        json.dumps(
-                            {
-                                "status": "success",
-                                "commit_sha": head,
-                                "session_id": session_id or "unknown",
-                                "inferred": True,
-                            }
+                    # Guard against start-batch-commit-only case on the
+                    # no-snapshot inference path (Bug #557).
+                    if _is_only_start_batch_commit(project_root, start_sha):
+                        print(
+                            json.dumps(
+                                {
+                                    "status": "stuck",
+                                    "stuck_type": "logic",
+                                    "reason": "inferred success but only batch-start commit since start_sha",
+                                    "session_id": session_id or "unknown",
+                                    "inferred": True,
+                                }
+                            )
                         )
-                    )
+                    else:
+                        print(
+                            json.dumps(
+                                {
+                                    "status": "success",
+                                    "commit_sha": head,
+                                    "session_id": session_id or "unknown",
+                                    "inferred": True,
+                                }
+                            )
+                        )
                     return 0
     except Exception:
         pass
