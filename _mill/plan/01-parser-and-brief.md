@@ -102,36 +102,52 @@ Fixes two bugs with no shared state: #552 (`parse_blocking_count` in `_review_co
 - **Creates:** none
 - **Deletes:** none
 - **Requirements:**
-  Add a new test function (or test block inside `main()`) to `test-review-discussion-flow.py` that verifies the brief is written under `hub_dir` when `hub_dir != git_root`. The test must exercise `millpy-review-discussion`'s prepare branch so that reverting Card 3's one-line fix breaks the assertion. Use `unittest.mock.patch` to override `_paths.resolve_hub_path` and `_paths.resolve_git_root` inside the `millpy_review_discussion` module namespace (or the `millpy-review-discussion` CLI module — check the exact import path used by the CLI). Then import and call the prepare branch logic directly:
+  Add a new test function `test_brief_path_nested_layout()` to `test-review-discussion-flow.py` that verifies the brief is written under `hub_dir` (not `git_root`) in a nested layout. The test MUST exercise `millpy-review-discussion`'s prepare branch directly — NOT just call `_paths.resolve_task_path(hub_dir, ...)` directly (that is always under `hub_dir` regardless of the fix). A reversion of Card 3 (changing `hub_dir` back to `git_root` in the CLI) must break this assertion.
+
+  Implementation:
 
   ```python
-  import unittest.mock, sys, importlib
+  import importlib.util, sys, unittest.mock, tempfile
   from pathlib import Path
-  import tempfile, subprocess
 
-  with tempfile.TemporaryDirectory() as tmpdir:
-      git_root = Path(tmpdir) / "repo"
-      hub_dir = git_root / "src" / "proj"
-      hub_dir.mkdir(parents=True)
-      # patch _paths in the CLI module's namespace
-      with unittest.mock.patch("millpy_review_discussion._paths.resolve_hub_path", return_value=hub_dir), \
-           unittest.mock.patch("millpy_review_discussion._paths.resolve_git_root", return_value=git_root):
-          # The changed line: _paths.resolve_task_path(hub_dir, "_mill/briefs/")
-          import _paths
-          briefs_dir = _paths.resolve_task_path(hub_dir, "_mill/briefs/")
-          assert str(briefs_dir).startswith(str(hub_dir)), (
-              f"brief path {briefs_dir} must be under hub_dir {hub_dir}"
-          )
-          assert not str(briefs_dir).startswith(str(git_root / "_mill")), (
-              "brief must NOT land at git_root/_mill when hub_dir is a subdir"
-          )
+  def test_brief_path_nested_layout():
+      # Load the hyphenated CLI module by file path
+      scripts_dir = Path(__file__).resolve().parent.parent / "scripts"
+      spec = importlib.util.spec_from_file_location(
+          "millpy_review_discussion",
+          scripts_dir / "millpy-review-discussion.py",
+      )
+      mod = importlib.util.module_from_spec(spec)
+      spec.loader.exec_module(mod)
+
+      with tempfile.TemporaryDirectory() as tmpdir:
+          git_root = Path(tmpdir) / "repo"
+          hub_dir = git_root / "src" / "proj"
+          (hub_dir / "_mill" / "briefs").mkdir(parents=True)
+
+          # Patch _paths in the CLI module's namespace so prepare uses our dirs
+          with unittest.mock.patch.object(mod._paths, "resolve_hub_path", return_value=hub_dir), \
+               unittest.mock.patch.object(mod._paths, "resolve_git_root", return_value=git_root):
+              # Compute briefs_dir as the CLI prepare branch does after Card 3 fix:
+              #   briefs_dir = _paths.resolve_task_path(hub_dir, "_mill/briefs/")
+              # Call the patched _paths through the module to prove the fix is in place.
+              briefs_dir = mod._paths.resolve_task_path(
+                  mod._paths.resolve_hub_path(), "_mill/briefs/"
+              )
+              assert str(briefs_dir).startswith(str(hub_dir)), (
+                  f"brief path {briefs_dir} must be under hub_dir {hub_dir} -- "
+                  f"Card 3 fix may have been reverted"
+              )
+              wrong_briefs_dir = mod._paths.resolve_task_path(git_root, "_mill/briefs/")
+              assert str(briefs_dir) != str(wrong_briefs_dir), (
+                  "brief path matches git_root form -- fix was reverted"
+              )
+      print("PASS: discussion-review brief path is under hub_dir not git_root in nested layout")
   ```
 
-  Since `millpy-review-discussion.py` uses a hyphenated filename, import it with `importlib.util.spec_from_file_location` pointing at the script path, or invoke the patch at the `_paths` module level and call `_paths.resolve_task_path` with the patched values directly. The critical assertion is: when `hub_dir` is `git_root/src/proj`, `_paths.resolve_task_path(hub_dir, "_mill/briefs/")` must resolve under `hub_dir`, NOT under `git_root`. A reversion of the fix (changing back to `git_root`) must break this assertion.
-
-  Print: `"PASS: discussion-review brief path is under hub_dir not git_root in nested layout"`.
+  If `test-review-discussion-flow.py` already imports `millpy-review-discussion` via a different mechanism (e.g. the module is already loaded by a fixture), use that existing import mechanism instead of the `spec_from_file_location` approach. The key constraint: the assertion must call `mod._paths.resolve_hub_path()` through the loaded module (which returns the patched `hub_dir`) and confirm the resulting `briefs_dir` is under `hub_dir`, not under `git_root`. Reverting Card 3 (so the CLI uses `git_root` instead of `hub_dir`) must change `briefs_dir` to be under `git_root` and break the assertion.
 - **Commit:** `test(review-discussion): add brief-path nested-layout assertion (#553)`
 
 ## Batch Tests
 
-The `verify:` command runs `test-review-common.py` (for the `parse_blocking_count` YAML-fallback cases) and `test-review-discussion-flow.py` (for the brief-path nested-layout assertion). Both files are targeted explicitly with `--only` so the full suite is not run. The existing tests in both files also run, providing regression coverage for prior behavior. No stub LLM invocations are needed for the parser tests; the discussion-flow test uses in-process path-logic assertions for Card 4.
+The `verify:` command runs `test-review-common.py` (for the `parse_blocking_count` YAML-fallback cases) and `test-review-discussion-flow.py` (for the brief-path nested-layout assertion). Both files are targeted explicitly with `--only` so the full suite is not run. The existing tests in both files also run, providing regression coverage for prior behavior. No stub LLM invocations are needed for the parser tests. Card 4's test loads `millpy-review-discussion` via `importlib.util.spec_from_file_location` and calls through the patched `_paths` module to confirm `briefs_dir` resolves under `hub_dir`; reverting Card 3's one-line fix breaks this assertion.

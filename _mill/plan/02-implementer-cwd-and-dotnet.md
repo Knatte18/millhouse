@@ -33,14 +33,19 @@ Fixes two bugs in the implementer verify path: #554 (finalize stage runs batch v
 
   ```python
   result = subprocess.run(...)
-  # dotnet cleanup: release testhost/MSBuild locks before caller retries
+  # dotnet cleanup: release testhost/MSBuild locks before caller retries.
+  # Wrapped in try/except so a TimeoutExpired or FileNotFoundError here
+  # never poisons the verify verdict (best-effort, non-fatal).
   if sys.platform == "win32" and verify_cmd is not None and "dotnet" in verify_cmd.lower():
-      subprocess.run(["dotnet", "build-server", "shutdown"], capture_output=True, timeout=30)
+      try:
+          subprocess.run(["dotnet", "build-server", "shutdown"], capture_output=True, timeout=30)
+      except Exception:
+          pass
   if result.returncode != 0:
       ...  # existing error handling
   ```
 
-  The `subprocess` module is already imported in this file — do not use a new alias.
+  The `subprocess` module is already imported in this file — do not use a new alias. The `try/except Exception: pass` wrapper is required: without it, a `TimeoutExpired` or `FileNotFoundError` from the cleanup call would be caught by the outer verify `except Exception` handler and returned as a stuck dict, turning a passing verify into a false failure.
 
   **Change 2 — `_run_verify_gates` (#554):**
   Add `git_root: Path | None = None` as a keyword-only parameter. Thread it to both `_run_verify_gate` calls: `_run_verify_gate(project_root, verify_cmd, git_root=git_root)` and `_run_verify_gate(project_root, module_wide_verify_cmd, git_root=git_root)`. Update the docstring to document `git_root`.
