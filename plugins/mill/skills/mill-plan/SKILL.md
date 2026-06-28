@@ -84,6 +84,8 @@ A batch that legitimately touches a cross-cutting helper that every test imports
 
 **Coverage profiling guidance.** If a `verify:` command collects coverage (e.g. `go test -cover`), write the profiling output to a scratch path (e.g. `-coverprofile=.scratch/coverage.out`) so it does not leave an untracked `coverage.out` at the repo root. The Handoff terminal gate auto-cleans common ephemeral artifacts (`coverage.out`, `.test`, `.test.exe`, `.prof`, `.cover` suffixes) as a backstop.
 
+**Done-gate reminder.** If the plan's batch-verify scopes do not cover the entire module tree (the common case for scoped plans), consider setting `pipeline.done_gate` in `mill-config.yaml` to a cheap repo-wide test command (e.g. `go test ./...` for Go repos, `dotnet test` for .NET solutions). mill-go runs this command from `git_root` before marking the task `done`, catching regressions in packages outside the batch-verify scope. Leave `done_gate: null` (the default) if a repo-wide test would be too slow or is not meaningful for the project.
+
 **Self-validate the DAG** before committing: call `_plan_dag.extract_batch_index(overview_text)` then `_plan_dag.validate(batches, sorted(p.name for p in plan_dir.glob("??-*.md") if p.name != "00-overview.md"))`. Any `PlanDAGError` → fix the plan files, then re-validate. Do not commit a plan that fails this check.
 
 `signature: _status.read(status_path: Path) -> dict`
