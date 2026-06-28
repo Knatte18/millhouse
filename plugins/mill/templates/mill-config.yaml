@@ -120,6 +120,7 @@ pipeline:
   auto_merge: false
   auto_report: true
   autonomous_mode: false  # Set true by mill-autofix; read by mill-go and mill-plan for autonomous stuck-handling
+  done_gate: null  # Repo-wide test command run from git_root before marking done. null = disabled. e.g. "go test ./..." or "dotnet test". (#561)
   max_cards_per_batch: 10  # batch-oversized validator gate (#371)
   max_batch_context_tokens: 120000  # batch-oversized validator gate (#371)
 
