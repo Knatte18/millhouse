@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-Docs and Template
+phase: holistic-reviewing
 slug: mill-implement-finalize-gaps
 branch: hanf/mill-implement-finalize-gaps
 plan: _mill/plan
@@ -22,6 +22,7 @@ planned  '2026-06-28T06:02:53Z'
 implementing  '2026-06-28T06:04:43Z'
 approved-Code Fixes and Tests  '2026-06-28T06:13:56Z'
 approved-Docs and Template  '2026-06-28T06:17:01Z'
+holistic-reviewing  '2026-06-28T06:17:35Z'
 ```
 
 ## Batches
