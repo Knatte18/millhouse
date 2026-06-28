@@ -16,6 +16,7 @@ sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
 from _implementer_common import (  # noqa: E402
     _forward_output,
+    _batch_completeness_stuck,
     emit_prepare,
     emit_prepare_no_dispatch,
     finalize_from_output,
@@ -1803,6 +1804,390 @@ def main() -> int:
 
         except Exception as exc:
             print(f"FAIL: Test C ({exc})", file=sys.stderr)
+            errors += 1
+
+    # Case 36 -- Bug #557 (parsed success, start-batch commit only -> stuck/logic)
+    # Verifies that when the only commit since start_sha is a "mill-go: start batch" commit,
+    # the parsed-success path emits stuck/logic rather than success.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        pre_start_sha = _setup_fixture(project_root)
+        # Simulate the prepare-stage housekeeping commit.
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                str(project_root),
+                "commit",
+                "--allow-empty",
+                "-m",
+                "mill-go: start batch test-batch",
+            ],
+            check=True,
+            capture_output=True,
+        )
+        head_sha = subprocess.run(
+            ["git", "-C", str(project_root), "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        agent_output = (
+            f'{{"status":"success","commit_sha":"{head_sha}","session_id":"test"}}'
+        )
+        rc, captured = _capture_stdout(
+            lambda: _forward_output(
+                agent_output,
+                project_root,
+                start_sha=pre_start_sha,
+                card_count=1,
+                session_id="test",
+            )
+        )
+        try:
+            data = json.loads(captured.strip())
+            assert data["status"] == "stuck", f"case 36: expected stuck, got {data}"
+            assert data["stuck_type"] == "logic", (
+                f"case 36: expected stuck_type=logic, got {data}"
+            )
+            assert "no content commit" in data.get("reason", ""), (
+                f"case 36: expected 'no content commit' in reason, got {data}"
+            )
+            print(
+                "PASS: case 36 - Bug #557 parsed success with start-batch commit only -> stuck/logic"
+            )
+        except Exception as exc:
+            print(f"FAIL: case 36 ({exc}) captured={captured!r}", file=sys.stderr)
+            errors += 1
+
+    # Case 37 -- Bug #557 (start commit + code commit -> success, guard does not fire)
+    # When the implementer adds a real code commit after the start-batch commit, the guard
+    # must NOT fire and the result must be success.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        pre_start_sha = _setup_fixture(project_root)
+        # Simulate the prepare-stage housekeeping commit.
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                str(project_root),
+                "commit",
+                "--allow-empty",
+                "-m",
+                "mill-go: start batch test-batch",
+            ],
+            check=True,
+            capture_output=True,
+        )
+        # Add a real code commit so two commits exist since pre_start_sha.
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                str(project_root),
+                "commit",
+                "--allow-empty",
+                "-m",
+                "fix(foo): real code change",
+            ],
+            check=True,
+            capture_output=True,
+        )
+        head_sha = subprocess.run(
+            ["git", "-C", str(project_root), "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        agent_output = (
+            f'{{"status":"success","commit_sha":"{head_sha}","session_id":"test"}}'
+        )
+        rc, captured = _capture_stdout(
+            lambda: _forward_output(
+                agent_output,
+                project_root,
+                start_sha=pre_start_sha,
+                card_count=1,
+                session_id="test",
+            )
+        )
+        try:
+            data = json.loads(captured.strip())
+            assert data["status"] == "success", f"case 37: expected success, got {data}"
+            print(
+                "PASS: case 37 - Bug #557 start commit + code commit -> success, guard does not fire"
+            )
+        except Exception as exc:
+            print(f"FAIL: case 37 ({exc}) captured={captured!r}", file=sys.stderr)
+            errors += 1
+
+    # Case 38 -- Bug #557 (retry scenario: start_sha = start-batch commit, one code commit -> success)
+    # In a retry, skip_start_commit already ran, so start_sha points at the housekeeping commit.
+    # With a real code commit after it, there is exactly one commit since start_sha and its
+    # message does NOT start with "mill-go: start batch", so the guard must NOT fire.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        _setup_fixture(project_root)
+        # Simulate the prepare-stage housekeeping commit; capture its SHA as start_sha.
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                str(project_root),
+                "commit",
+                "--allow-empty",
+                "-m",
+                "mill-go: start batch test-batch",
+            ],
+            check=True,
+            capture_output=True,
+        )
+        # start_sha points at the housekeeping commit (retry scenario).
+        start_sha_retry = subprocess.run(
+            ["git", "-C", str(project_root), "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        # Add the real code commit (the one the implementer made on the retry).
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                str(project_root),
+                "commit",
+                "--allow-empty",
+                "-m",
+                "fix(foo): card-1 implementation",
+            ],
+            check=True,
+            capture_output=True,
+        )
+        head_sha = subprocess.run(
+            ["git", "-C", str(project_root), "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        agent_output = (
+            f'{{"status":"success","commit_sha":"{head_sha}","session_id":"test"}}'
+        )
+        rc, captured = _capture_stdout(
+            lambda: _forward_output(
+                agent_output,
+                project_root,
+                start_sha=start_sha_retry,
+                card_count=1,
+                session_id="test",
+            )
+        )
+        try:
+            data = json.loads(captured.strip())
+            assert data["status"] == "success", f"case 38: expected success, got {data}"
+            print(
+                "PASS: case 38 - Bug #557 retry scenario: start_sha at start-batch commit + code commit -> success"
+            )
+        except Exception as exc:
+            print(f"FAIL: case 38 ({exc}) captured={captured!r}", file=sys.stderr)
+            errors += 1
+
+    # Case 39 -- Bug #557 (inference path, start-batch commit only, snapshot present -> stuck/logic)
+    # Exercises the snapshot-present clean-tree inference emit path (~line 851). When the only
+    # commit since pre_start_sha is the prepare housekeeping commit and the tree is clean,
+    # the guard must fire and emit stuck/logic before the success is printed.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        pre_start_sha = _setup_fixture(project_root)
+        # Capture a snapshot of the clean repo before the prepare commit.
+        snapshot_path = project_root / "_mill" / ".cleanliness-snapshot-test.txt"
+        _cleanliness.capture_snapshot(project_root, snapshot_path)
+        # Simulate the prepare-stage housekeeping commit.
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                str(project_root),
+                "commit",
+                "--allow-empty",
+                "-m",
+                "mill-go: start batch test-batch",
+            ],
+            check=True,
+            capture_output=True,
+        )
+        # Leave tree clean; no code commits made.
+        rc, captured = _capture_stdout(
+            lambda: _forward_output(
+                "no json here",
+                project_root,
+                start_sha=pre_start_sha,
+                snapshot_path=snapshot_path,
+                session_id="test",
+            )
+        )
+        try:
+            data = json.loads(captured.strip())
+            assert data["status"] == "stuck", f"case 39: expected stuck, got {data}"
+            assert data["stuck_type"] == "logic", (
+                f"case 39: expected stuck_type=logic, got {data}"
+            )
+            assert "batch-start commit" in data.get("reason", ""), (
+                f"case 39: expected 'batch-start commit' in reason, got {data}"
+            )
+            print(
+                "PASS: case 39 - Bug #557 inference path (snapshot present, start-batch commit only) -> stuck/logic"
+            )
+        except Exception as exc:
+            print(f"FAIL: case 39 ({exc}) captured={captured!r}", file=sys.stderr)
+            errors += 1
+
+    # Case 40 -- Bug #548 (completeness gate disabled when verify_cmd is not None)
+    # Calls _batch_completeness_stuck directly with verify_cmd set to a non-None value.
+    # Even though card_count=2 and only one commit was made (which would normally fire),
+    # the gate must return None because verify_cmd is present.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        start_sha_40 = _setup_fixture(project_root)
+        # Make one commit (card_count will be 2, so 1 < 2 would normally fire).
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                str(project_root),
+                "commit",
+                "--allow-empty",
+                "-m",
+                "card-1 only",
+            ],
+            check=True,
+            capture_output=True,
+        )
+        try:
+            result = _batch_completeness_stuck(
+                project_root,
+                start_sha_40,
+                card_count=2,
+                session_id="test",
+                verify_cmd="should-not-be-called",
+            )
+            assert result is None, (
+                f"case 40: expected None (gate disabled by verify_cmd), got {result}"
+            )
+            print(
+                "PASS: case 40 - Bug #548 completeness gate disabled when verify_cmd is not None"
+            )
+        except Exception as exc:
+            print(f"FAIL: case 40 ({exc})", file=sys.stderr)
+            errors += 1
+
+    # Case 41 -- Bug #548 (regression guard: gate fires when verify_cmd is None)
+    # Same setup as Case 40 but verify_cmd=None. Confirms the gate still fires on the
+    # same commit count so the fix in Case 40 did not accidentally disable it permanently.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        start_sha_41 = _setup_fixture(project_root)
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                str(project_root),
+                "commit",
+                "--allow-empty",
+                "-m",
+                "card-1 only",
+            ],
+            check=True,
+            capture_output=True,
+        )
+        try:
+            result = _batch_completeness_stuck(
+                project_root,
+                start_sha_41,
+                card_count=2,
+                session_id="test",
+                verify_cmd=None,
+            )
+            assert result is not None, (
+                f"case 41: expected stuck dict (gate fires), got {result}"
+            )
+            assert result["status"] == "stuck", (
+                f"case 41: expected status=stuck, got {result}"
+            )
+            assert result["stuck_type"] == "transient", (
+                f"case 41: expected stuck_type=transient, got {result}"
+            )
+            print(
+                "PASS: case 41 - Bug #548 regression: gate fires when verify_cmd is None"
+            )
+        except Exception as exc:
+            print(f"FAIL: case 41 ({exc})", file=sys.stderr)
+            errors += 1
+
+    # Case 42 -- Bug #545/#560 (commits_made: 2 in stuck dict)
+    # Verifies that the commits_made field reflects the actual commit count.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        start_sha_42 = _setup_fixture(project_root)
+        # Make exactly two commits since start_sha (card_count=3 so 2 < 3 fires).
+        for msg in ("card-1", "card-2"):
+            subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    str(project_root),
+                    "commit",
+                    "--allow-empty",
+                    "-m",
+                    msg,
+                ],
+                check=True,
+                capture_output=True,
+            )
+        try:
+            result = _batch_completeness_stuck(
+                project_root,
+                start_sha_42,
+                card_count=3,
+                session_id="test",
+            )
+            assert result is not None, f"case 42: expected stuck dict, got {result}"
+            assert result.get("commits_made") == 2, (
+                f"case 42: expected commits_made=2, got {result}"
+            )
+            print("PASS: case 42 - Bug #545/#560 commits_made=2 in stuck dict")
+        except Exception as exc:
+            print(f"FAIL: case 42 ({exc})", file=sys.stderr)
+            errors += 1
+
+    # Case 43 -- Bug #545/#560 (commits_made: 0 when no commits since start_sha)
+    # Verifies that commits_made=0 appears when the implementer made no commits at all.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        start_sha_43 = _setup_fixture(project_root)
+        # No commits made after capturing start_sha.
+        try:
+            result = _batch_completeness_stuck(
+                project_root,
+                start_sha_43,
+                card_count=3,
+                session_id="test",
+            )
+            assert result is not None, f"case 43: expected stuck dict, got {result}"
+            assert result["status"] == "stuck", (
+                f"case 43: expected status=stuck, got {result}"
+            )
+            assert result["stuck_type"] == "transient", (
+                f"case 43: expected stuck_type=transient, got {result}"
+            )
+            assert result.get("commits_made") == 0, (
+                f"case 43: expected commits_made=0, got {result}"
+            )
+            print(
+                "PASS: case 43 - Bug #545/#560 commits_made=0 when no commits since start_sha"
+            )
+        except Exception as exc:
+            print(f"FAIL: case 43 ({exc})", file=sys.stderr)
             errors += 1
 
     if errors:
