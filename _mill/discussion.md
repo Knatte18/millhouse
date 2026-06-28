@@ -61,12 +61,14 @@ Five bugs were surfaced across separate user sessions. They cluster around two t
 
 - **Decision:** In `_implementer_common._run_verify_gate`, after the verify subprocess exits (success or failure), if `sys.platform == 'win32'` and the normalized verify command contains the substring `dotnet` (case-insensitive), run `subprocess.run(["dotnet", "build-server", "shutdown"], capture_output=True, timeout=30)` and discard the result. The main verify exit code is reported as before; the shutdown is best-effort.
 - **Rationale:** `dotnet build-server shutdown` is the canonical release for testhost/MSBuild process locks on Windows. Running it unconditionally after every dotnet verify is idempotent and cheap. The platform guard prevents no-op calls on POSIX. The string check avoids firing on non-dotnet commands.
+- **Concurrency assumption:** The mill-go builder lock (`millpy-builder-lock.py`) enforces that only one task's implementer runs at a time. Concurrent dotnet verifies from two tasks cannot occur in a standard mill-go session, so the global `dotnet build-server shutdown` cannot interfere with a sibling task's in-flight build server.
 - **Rejected:** `/p:UseSharedCompilation=false` — requires modifying all existing plan verify commands; may slow incremental builds; `--no-build` is semantically different. Cleanup on failure only — file locks accumulate from successful runs too.
 
 ### #561 — done_gate config key
 
 - **Decision:** Add `pipeline.done_gate: null` to `plugins/mill/templates/mill-config.yaml`. When non-null, mill-go Handoff runs the command from `git_root` before `_status.append_phase("done")`. On non-zero exit, halt with `BLOCKED: done gate failed` (do not set phase done). Update mill-go SKILL.md Handoff to document the pre-done gate step. mill-plan SKILL.md gets a note that operators should consider populating `done_gate` for languages with a fast full-suite command (e.g. `go test ./...`).
 - **Rationale:** Explicit config gives operators full control; works across all languages; zero-cost when null (backward compat for all existing configs). Language auto-detection is brittle for multi-language repos and repos with non-standard layouts.
+- **dotnet done_gate cleanup:** When `done_gate` contains `dotnet` (case-insensitive), the mill-go Handoff SKILL.md step should also run `dotnet build-server shutdown` (best-effort, discard exit code) after the gate exits, using the same detection and platform guard as #556. This prevents the done_gate from leaking processes that could block mill-finalize's subsequent full-suite verify.
 - **Rejected:** Auto-detect language and always gate — too many false positives in unusual setups; use plan overview `verify:` as final gate — same scope as existing batch verifies, doesn't add cross-scope coverage.
 
 ## Technical context
