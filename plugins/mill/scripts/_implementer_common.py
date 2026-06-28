@@ -19,27 +19,37 @@ def _batch_completeness_stuck(
     start_sha: str | None,
     card_count: int | None,
     session_id: str | None,
+    *,
+    verify_cmd: str | None = None,
 ) -> dict | None:
     """
     Check whether enough commits exist since start_sha for the declared card_count.
 
-    Returns None (gate disabled) when start_sha is None, card_count is None,
-    or card_count <= 0. Otherwise counts commits via `git rev-list --count
-    start_sha..HEAD`. If the subprocess fails or returns a non-numeric string,
-    returns None rather than crashing (callers such as test-millpy-implement.py
-    mock _subprocess_util.run to return non-numeric strings for all git calls).
-    Only when a numeric count is obtained and count < card_count is a stuck
-    dict returned; otherwise returns None.
+    Returns None (gate disabled) when verify_cmd is not None — a passing verify
+    command is conclusive evidence of batch completeness, so the heuristic commit-
+    count check is unnecessary. Also returns None when start_sha is None,
+    card_count is None, or card_count <= 0.
+
+    Otherwise counts commits via `git rev-list --count start_sha..HEAD`. If the
+    subprocess fails or returns a non-numeric string, returns None rather than
+    crashing (callers such as test-millpy-implement.py mock _subprocess_util.run
+    to return non-numeric strings for all git calls). Only when a numeric count
+    is obtained and count < card_count is a stuck dict returned; otherwise returns None.
 
     Args:
         project_root: Path to the worktree root.
         start_sha: The SHA recorded at batch start; None disables the gate.
         card_count: Number of Card headings in the batch file; None or 0 disables the gate.
         session_id: Session identifier included in the returned dict when non-None.
+        verify_cmd: When not None, the gate is disabled entirely (verify is conclusive).
 
     Returns:
-        A stuck dict with stuck_type="transient" when incomplete, or None otherwise.
+        A stuck dict with stuck_type="transient" and commits_made when incomplete, or None otherwise.
     """
+    # When a verify command is present, a passing verify is conclusive; skip the heuristic gate.
+    if verify_cmd is not None:
+        return None
+
     # Gate is a no-op when any required input is absent or card_count is zero/negative.
     if start_sha is None or card_count is None or card_count <= 0:
         return None
@@ -68,6 +78,7 @@ def _batch_completeness_stuck(
                 f" {card_count} card(s) in batch -- implementer stopped before finishing all cards"
             ),
             "session_id": session_id or "unknown",
+            "commits_made": count,
         }
     return None
 
@@ -394,7 +405,11 @@ def _run_verify_gate(project_root: Path, verify_cmd: str | None) -> dict | None:
                 return None
             # Use last 2000 characters of the output
             output_stripped = output.strip()
-            reason = output_stripped[-2000:] if len(output_stripped) > 2000 else output_stripped
+            reason = (
+                output_stripped[-2000:]
+                if len(output_stripped) > 2000
+                else output_stripped
+            )
             return {
                 "status": "stuck",
                 "stuck_type": "verify",
@@ -644,7 +659,9 @@ def _forward_output(
     if parsed is not None:
         # Apply verify gates ONLY for self-reported success
         if parsed.get("status") == "success":
-            gate_result = _run_verify_gates(project_root, verify_cmd, module_wide_verify_cmd)
+            gate_result = _run_verify_gates(
+                project_root, verify_cmd, module_wide_verify_cmd
+            )
             if gate_result is not None:
                 # Verify failed; enrich with commit_sha and emit
                 result = _subprocess_util.run(
@@ -698,7 +715,9 @@ def _forward_output(
             # On the parsed-success emit path, handle nits-only marker and flag
             if nits_only and status_path and nits_scope:
                 parsed["nits_applied"] = True
-                _status.append_phase(status_path, f"nits-fixed-{nits_scope}", _timestamp.now_utc_iso())
+                _status.append_phase(
+                    status_path, f"nits-fixed-{nits_scope}", _timestamp.now_utc_iso()
+                )
 
         result = _subprocess_util.run(
             ["git", "rev-parse", "HEAD"],
@@ -823,7 +842,9 @@ def _forward_output(
                         )
                         return 0
                     # Apply verify gates before emitting success
-                    gate_result = _run_verify_gates(project_root, verify_cmd, module_wide_verify_cmd)
+                    gate_result = _run_verify_gates(
+                        project_root, verify_cmd, module_wide_verify_cmd
+                    )
                     if gate_result is not None:
                         gate_result["commit_sha"] = head
                         print(json.dumps(gate_result))
@@ -879,7 +900,9 @@ def _forward_output(
                 )
                 if not result_full.stdout.strip():
                     # Apply verify gates before emitting success
-                    gate_result = _run_verify_gates(project_root, verify_cmd, module_wide_verify_cmd)
+                    gate_result = _run_verify_gates(
+                        project_root, verify_cmd, module_wide_verify_cmd
+                    )
                     if gate_result is not None:
                         gate_result["commit_sha"] = head
                         print(json.dumps(gate_result))
