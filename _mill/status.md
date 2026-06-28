@@ -33,5 +33,7 @@ batches:
     start_sha: 19d22527e1f09fcbb35709fd3abafb3bd7892eef
     commit_sha: aa2fffb2d34a55d1d2801988733cc168691d6a75
   - name: Docs and Template
-    state: pending
+    state: running
+    implementer_session: 69bce63f-c477-4c9c-8cd9-7e14e2b394d2
+    start_sha: 6c238d9a64cfb639957c732434eb245f519c3649
 ```
