@@ -42,6 +42,7 @@ Public API:
     resolve_large_prompt_timeout() — return large_prompt.timeout when prompt is over threshold and key is set
     maybe_switch_spec_for_large_prompt() — check prompt size; return (spec, reviewer_name), possibly overridden for large prompts
 """
+
 from __future__ import annotations
 
 import copy
@@ -94,6 +95,7 @@ RE_BATCH = re.compile(
 # ---------------------------------------------------------------------------
 # Exceptions
 # ---------------------------------------------------------------------------
+
 
 class ReviewError(Exception):
     """Raised by the backend on config / slug / reviewer / round errors.
@@ -200,7 +202,9 @@ def worktree_snapshot_guard(
             file=sys.stderr,
         )
 
-    should_raise = bool(added) or (head_changed and not ff) or (bool(removed) and not ff)
+    should_raise = (
+        bool(added) or (head_changed and not ff) or (bool(removed) and not ff)
+    )
 
     if should_raise:
         diff = _porcelain_diff(before_filtered, after_filtered)
@@ -270,13 +274,14 @@ def _porcelain_diff(before: list[str], after: list[str]) -> str:
 # Data classes
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class ReviewResult:
     """Serialisable result returned by every review backend's run() function."""
 
-    type: str                              # "discussion" | "plan" | "code"
+    type: str  # "discussion" | "plan" | "code"
     round: int
-    verdict: str                           # "APPROVE" | "REQUEST_CHANGES"
+    verdict: str  # "APPROVE" | "REQUEST_CHANGES"
     reviews: list[dict] = field(default_factory=list)
     blocking_count: int = 0
     nit_count: int = 0
@@ -295,6 +300,7 @@ class ReviewResult:
 # ---------------------------------------------------------------------------
 # Helper functions
 # ---------------------------------------------------------------------------
+
 
 def find_active_slug(hub_root: Path, wiki_path: Path, cfg: dict) -> str:
     """Detect active slug via branch name, falling back to _mill/*.active glob.
@@ -367,7 +373,10 @@ def resolve_path(path_tmpl: str, slug: str) -> Path:
     hub_dir = _paths.resolve_hub_path()
     cfg = load_config(hub_dir, hub_dir / ".millhouse")
     active_hub = _paths.resolve_active_hub(
-        container_path, slug, cfg=cfg, git_root=git_root,
+        container_path,
+        slug,
+        cfg=cfg,
+        git_root=git_root,
     )
     resolved_tmpl = path_tmpl.replace("<SLUG>", slug)
     return _paths.resolve_task_path(active_hub, resolved_tmpl)
@@ -502,9 +511,11 @@ def parse_batch_refs(
             inline = m.group("inline").strip()
             if inline:
                 backtick_tokens = re.findall(r"`([^`]+)`", inline)
-                tokens = backtick_tokens if backtick_tokens else [
-                    t.strip() for t in inline.split(",") if t.strip()
-                ]
+                tokens = (
+                    backtick_tokens
+                    if backtick_tokens
+                    else [t.strip() for t in inline.split(",") if t.strip()]
+                )
             else:
                 tokens = []
                 j = i + 1
@@ -549,9 +560,11 @@ def compute_creates_union(plan_dir: Path) -> set[str]:
                 inline = m.group("inline").strip()
                 if inline:
                     backtick_tokens = re.findall(r"`([^`]+)`", inline)
-                    tokens = backtick_tokens if backtick_tokens else [
-                        t.strip() for t in inline.split(",") if t.strip()
-                    ]
+                    tokens = (
+                        backtick_tokens
+                        if backtick_tokens
+                        else [t.strip() for t in inline.split(",") if t.strip()]
+                    )
                 else:
                     tokens = []
                     j = i + 1
@@ -595,9 +608,11 @@ def compute_deletes_union(plan_dir: Path) -> set[str]:
                 inline = m.group("inline").strip()
                 if inline:
                     backtick_tokens = re.findall(r"`([^`]+)`", inline)
-                    tokens = backtick_tokens if backtick_tokens else [
-                        t.strip() for t in inline.split(",") if t.strip()
-                    ]
+                    tokens = (
+                        backtick_tokens
+                        if backtick_tokens
+                        else [t.strip() for t in inline.split(",") if t.strip()]
+                    )
                 else:
                     tokens = []
                     j = i + 1
@@ -677,7 +692,7 @@ def resolve_ref_paths(
                 raise ReviewError(
                     f"[{caller_label}] wiki-prefixed ref {raw!r} but no wiki_root provided"
                 )
-            candidate = wiki_root / raw[len("wiki/"):]
+            candidate = wiki_root / raw[len("wiki/") :]
             # Hit on disk.
             if candidate.exists():
                 resolved.append(candidate)
@@ -764,7 +779,7 @@ def resolve_existing_paths(
             if wiki_root is None:
                 # Key divergence from resolve_ref_paths: silent drop instead of raise.
                 continue
-            candidate = wiki_root / raw[len("wiki/"):]
+            candidate = wiki_root / raw[len("wiki/") :]
             if candidate.exists():
                 result.append(candidate)
             continue
@@ -846,7 +861,9 @@ def _read_for_bulk(p: Path) -> str:
     If p is a directory: prints warning to stderr and returns empty string.
     """
     if p.is_dir():
-        print(f"[_read_for_bulk] warning: {p} is a directory, skipping", file=sys.stderr)
+        print(
+            f"[_read_for_bulk] warning: {p} is a directory, skipping", file=sys.stderr
+        )
         return ""
 
     if p.suffix == ".ipynb":
@@ -854,7 +871,10 @@ def _read_for_bulk(p: Path) -> str:
             content = p.read_text(encoding="utf-8")
             notebook = json.loads(content)
         except json.JSONDecodeError as exc:
-            print(f"[_read_for_bulk] warning: {p} JSON parse error: {exc}", file=sys.stderr)
+            print(
+                f"[_read_for_bulk] warning: {p} JSON parse error: {exc}",
+                file=sys.stderr,
+            )
             return ""
 
         cells = notebook.get("cells", [])
@@ -883,7 +903,10 @@ def bulk_files(file_paths: list[Path]) -> str:
         try:
             contents = _read_for_bulk(p)
         except (FileNotFoundError, PermissionError):
-            print(f"[bulk_files] warning: {p} not found or not readable, skipping", file=sys.stderr)
+            print(
+                f"[bulk_files] warning: {p} not found or not readable, skipping",
+                file=sys.stderr,
+            )
             continue
         parts.append(f"--- FILE: {p} ---\n{contents}\n--- END FILE: {p} ---")
     return "\n\n".join(parts)
@@ -907,7 +930,10 @@ def bulk_files_with_diff(
         try:
             file_content = _read_for_bulk(p)
         except (FileNotFoundError, PermissionError):
-            print(f"[bulk_files_with_diff] warning: {p} not found or not readable, skipping", file=sys.stderr)
+            print(
+                f"[bulk_files_with_diff] warning: {p} not found or not readable, skipping",
+                file=sys.stderr,
+            )
             continue
 
         try:
@@ -916,7 +942,15 @@ def bulk_files_with_diff(
             rel_path = str(p)
 
         result = _subprocess_util.run(
-            ["git", "-C", str(project_root), "diff", f"{start_sha}..HEAD", "--", rel_path],
+            [
+                "git",
+                "-C",
+                str(project_root),
+                "diff",
+                f"{start_sha}..HEAD",
+                "--",
+                rel_path,
+            ],
         )
 
         if result.returncode != 0:
@@ -934,7 +968,9 @@ def bulk_files_with_diff(
             continue
 
         if len(diff_text) < threshold * len(file_content):
-            parts.append(f"--- DIFF: {p} (from {start_sha[:8]}) ---\n{diff_text}\n--- END DIFF: {p} ---")
+            parts.append(
+                f"--- DIFF: {p} (from {start_sha[:8]}) ---\n{diff_text}\n--- END DIFF: {p} ---"
+            )
             continue
 
         parts.append(f"--- FILE: {p} ---\n{file_content}\n--- END FILE: {p} ---")
@@ -1004,7 +1040,7 @@ def extract_review_content(raw: str) -> str:
     end = raw.find(_REVIEW_END, begin + len(_REVIEW_BEGIN))
     if end == -1:
         return raw
-    return raw[begin + len(_REVIEW_BEGIN):end].strip()
+    return raw[begin + len(_REVIEW_BEGIN) : end].strip()
 
 
 def parse_missing_context(review_text: str) -> list[str]:
@@ -1052,9 +1088,8 @@ def build_reattached_section(file_paths: list[Path]) -> str:
     """
     if not file_paths:
         return ""
-    return (
-        "## Re-attached files (you said these were missing)\n\n"
-        + bulk_files(file_paths)
+    return "## Re-attached files (you said these were missing)\n\n" + bulk_files(
+        file_paths
     )
 
 
@@ -1100,7 +1135,9 @@ def _check_large_prompt(
     len(prompt_text) // 4000 and threshold_ktok is read from
     cfg["roles"][role][scope]["large_prompt"]["threshold_ktok"] (default 100).
     """
-    large_prompt_cfg = cfg.get("roles", {}).get(role, {}).get(scope, {}).get("large_prompt")
+    large_prompt_cfg = (
+        cfg.get("roles", {}).get(role, {}).get(scope, {}).get("large_prompt")
+    )
     if not large_prompt_cfg:
         return (False, len(prompt_text) // 4000)
     threshold_ktok = large_prompt_cfg.get("threshold_ktok", 100)
@@ -1125,7 +1162,9 @@ def resolve_large_prompt_timeout(
     is_over_threshold, _ = _check_large_prompt(prompt_text, cfg, role, scope)
     if not is_over_threshold:
         return default_timeout
-    large_prompt_cfg = cfg.get("roles", {}).get(role, {}).get(scope, {}).get("large_prompt")
+    large_prompt_cfg = (
+        cfg.get("roles", {}).get(role, {}).get(scope, {}).get("large_prompt")
+    )
     if not large_prompt_cfg:
         return default_timeout
     override_timeout = large_prompt_cfg.get("timeout")
@@ -1144,8 +1183,12 @@ def maybe_switch_spec_for_large_prompt(
     registry: dict,
 ) -> tuple[dict, str]:
     """Check prompt size; return (spec, reviewer_name), possibly overridden for large prompts."""
-    is_over_threshold, estimated_ktok = _check_large_prompt(prompt_text, cfg, role, scope)
-    large_prompt_cfg = cfg.get("roles", {}).get(role, {}).get(scope, {}).get("large_prompt")
+    is_over_threshold, estimated_ktok = _check_large_prompt(
+        prompt_text, cfg, role, scope
+    )
+    large_prompt_cfg = (
+        cfg.get("roles", {}).get(role, {}).get(scope, {}).get("large_prompt")
+    )
     if not large_prompt_cfg or not is_over_threshold:
         return (spec, reviewer_name)
     override_name = large_prompt_cfg.get("reviewer")
@@ -1240,7 +1283,7 @@ def parse_verdict(raw_output: str) -> str:
     if open_idx is not None:
         # Find the closing ``` fence after the opening.
         close_idx = None
-        for i, line in enumerate(lines[open_idx + 1:], start=open_idx + 1):
+        for i, line in enumerate(lines[open_idx + 1 :], start=open_idx + 1):
             if line.rstrip() == "```":
                 close_idx = i
                 break
@@ -1252,11 +1295,16 @@ def parse_verdict(raw_output: str) -> str:
             )
 
         # Scan block body for verdict: field.
-        for line in lines[open_idx + 1:close_idx]:
+        for line in lines[open_idx + 1 : close_idx]:
             stripped = line.strip()
             if stripped.startswith("verdict:"):
-                value = stripped[len("verdict:"):].strip().strip('"').strip("'")
-                if value in ("APPROVE", "REQUEST_CHANGES", "GAPS_FOUND", "NEED_CONTEXT"):
+                value = stripped[len("verdict:") :].strip().strip('"').strip("'")
+                if value in (
+                    "APPROVE",
+                    "REQUEST_CHANGES",
+                    "GAPS_FOUND",
+                    "NEED_CONTEXT",
+                ):
                     return value
                 raise ReviewError(
                     f"Could not parse verdict: invalid value {value!r}; "
@@ -1273,7 +1321,7 @@ def parse_verdict(raw_output: str) -> str:
     for line in lines:
         stripped = line.strip()
         if stripped.startswith("verdict:"):
-            value = stripped[len("verdict:"):].strip().strip('"').strip("'")
+            value = stripped[len("verdict:") :].strip().strip('"').strip("'")
             if value in ("APPROVE", "REQUEST_CHANGES", "GAPS_FOUND", "NEED_CONTEXT"):
                 return value
 
@@ -1296,26 +1344,38 @@ def _warn_if_prose_diverges(raw_output: str, severity: str, heading_count: int) 
         return
 
     _WORD_TO_INT = {
-        "one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
-        "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
+        "one": 1,
+        "two": 2,
+        "three": 3,
+        "four": 4,
+        "five": 5,
+        "six": 6,
+        "seven": 7,
+        "eight": 8,
+        "nine": 9,
+        "ten": 10,
     }
 
     # Filter out verdict: lines from prose scan
     filtered_lines = [
-        line for line in raw_output.splitlines()
+        line
+        for line in raw_output.splitlines()
         if not line.strip().startswith("verdict:")
     ]
     filtered_output = "\n".join(filtered_lines)
 
     pattern = re.compile(
-        r"\b(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+" + re.escape(severity),
+        r"\b(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+"
+        + re.escape(severity),
         re.IGNORECASE,
     )
     matches = pattern.findall(filtered_output)
     if not matches:
         return
     raw_val = matches[0]
-    prose_count = int(raw_val) if raw_val.isdigit() else _WORD_TO_INT.get(raw_val.lower(), -1)
+    prose_count = (
+        int(raw_val) if raw_val.isdigit() else _WORD_TO_INT.get(raw_val.lower(), -1)
+    )
     if prose_count != heading_count:
         print(
             f"[_review_common] warning: parse_blocking_count heading count {heading_count} "
@@ -1333,6 +1393,10 @@ def parse_blocking_count(raw_output: str, *, severity: str) -> int:
     Match is case-sensitive. Only line-start headings are counted —
     mid-line occurrences are ignored.
 
+    When the heading count is 0, falls back to scanning all fenced ```yaml
+    blocks for a `findings:` list, counting entries whose `severity` field
+    (case-insensitive) matches the severity argument.
+
     Emits a one-line stderr warning when a prose count phrase in the output
     (e.g. "Five blocking issues remain") disagrees with the heading count.
     The returned count is unchanged; the warning is for log inspection only (#225).
@@ -1342,8 +1406,48 @@ def parse_blocking_count(raw_output: str, *, severity: str) -> int:
         re.MULTILINE,
     )
     heading_count = len(pattern.findall(raw_output))
-    _warn_if_prose_diverges(raw_output, severity, heading_count)
-    return heading_count
+
+    # When headings are present they are the authoritative count — skip yaml scan.
+    if heading_count > 0:
+        _warn_if_prose_diverges(raw_output, severity, heading_count)
+        return heading_count
+
+    # No headings found — scan fenced yaml blocks for a structured findings list.
+    # Reviewers that emit YAML-only output (no markdown headings) use this path.
+    yaml_count = 0
+    lines = raw_output.splitlines()
+    index = 0
+    while index < len(lines):
+        # Locate the opening fence of a yaml block.
+        if lines[index].rstrip() == "```yaml":
+            body_lines: list[str] = []
+            index += 1
+            # Collect lines until the closing fence; skip unclosed blocks silently.
+            while index < len(lines) and lines[index].rstrip() != "```":
+                body_lines.append(lines[index])
+                index += 1
+            if index < len(lines):
+                # Closing fence found — try to parse the block as YAML.
+                try:
+                    parsed = yaml.safe_load("\n".join(body_lines))
+                except yaml.YAMLError:
+                    # Malformed yaml block — skip and continue scanning.
+                    index += 1
+                    continue
+                # Only count blocks that carry a findings list.
+                if isinstance(parsed, dict) and isinstance(
+                    parsed.get("findings"), list
+                ):
+                    for entry in parsed["findings"]:
+                        if (
+                            isinstance(entry, dict)
+                            and entry.get("severity", "").upper() == severity.upper()
+                        ):
+                            yaml_count += 1
+        index += 1
+
+    _warn_if_prose_diverges(raw_output, severity, yaml_count)
+    return yaml_count
 
 
 def write_review_file(
@@ -1367,11 +1471,7 @@ def write_review_file(
     """
     ts = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
 
-    if (
-        review_type in ("plan", "code")
-        and scope is not None
-        and scope != "holistic"
-    ):
+    if review_type in ("plan", "code") and scope is not None and scope != "holistic":
         filename = f"{ts}-{review_type}-review-{scope}-r{round_num}.md"
     else:
         filename = f"{ts}-{review_type}-review-r{round_num}.md"
@@ -1437,6 +1537,7 @@ def finalize_scope(
 # ---------------------------------------------------------------------------
 # Dispatch helpers and config loader (Step 8 additions)
 # ---------------------------------------------------------------------------
+
 
 def aggregate_verdict(sub_verdicts: list[str]) -> str:
     """Return the worst-case aggregate verdict across sub-verdicts.
@@ -1541,4 +1642,3 @@ def load_config(hub_root: Path, mill_dir: Path) -> dict:
     _apply_dispatch_shim(cfg)
 
     return cfg
-

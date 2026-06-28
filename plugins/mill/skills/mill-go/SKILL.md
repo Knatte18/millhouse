@@ -715,6 +715,33 @@ If the list is empty, proceed normally.
 
 **Scope violations handling note.** The `scope_violations` field in the fixer JSON envelope (present when a fixer detects untracked out-of-scope files) is read and surfaced to the orchestrator. It is folded into the generic `stuck_type: logic` envelope; the terminal gate (above) is the authoritative cleanup point for common artifacts like coverage profiling outputs.
 
+**0. Pre-done gate.** Read `(cfg.get("pipeline") or {}).get("done_gate")` (deep-merged config; the `or {}` guard handles the case where `pipeline:` is present but null). If the value is `None` or absent, skip. If it is a non-null string, run the command from `git_root` (not hub dir) as a best-effort verify:
+
+```bash
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
+import json, sys, subprocess, platform
+import _paths, _config
+git_root = _paths.resolve_git_root()
+hub_root = _paths.resolve_hub_path()
+cfg = _config.load_config(hub_root, git_root)
+gate_cmd = (cfg.get('pipeline') or {}).get('done_gate')
+if not gate_cmd:
+    sys.exit(0)
+result = subprocess.run(gate_cmd, cwd=git_root, shell=True, capture_output=True, text=True)
+if result.returncode != 0:
+    out = (result.stdout + result.stderr).strip()
+    reason = out[-2000:] if len(out) > 2000 else out
+    print(json.dumps({'status': 'blocked', 'reason': f'done gate failed: {reason}'}))
+    sys.exit(1)
+# dotnet cleanup: if gate command contains 'dotnet' and we are on Windows,
+# run build-server shutdown to release process locks before mill-finalize runs.
+if platform.system() == 'Windows' and 'dotnet' in gate_cmd.lower():
+    subprocess.run(['dotnet', 'build-server', 'shutdown'], capture_output=True, timeout=30)
+"
+```
+
+Parse stdout for a JSON line. If the exit code is non-zero and the JSON line has `status: blocked`, halt with: `BLOCKED: done gate failed — <reason>`. Do NOT set `phase: done` when the gate fires; the task remains in its current phase so the operator can investigate the failure. `subprocess.run` with `capture_output=True` does not raise on non-zero exit code — check `result.returncode`.
+
 1. `_status.append_phase(status_path, "done", _timestamp.now_utc_iso())`. Commit on the task branch: `git -C <worktree> add <status_path> _mill/briefs/ && git -C <worktree> commit -m "mill-go: done {slug}"`.
 
 2. Flip Home.md's task line to `[ready-to-merge]` — the new intermediate state signalling 'mill-go done, mill-merge pending':

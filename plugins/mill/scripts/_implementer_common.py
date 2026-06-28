@@ -377,7 +377,12 @@ def _commit_formatter_drift(project_root: Path) -> bool:
         return False
 
 
-def _run_verify_gate(project_root: Path, verify_cmd: str | None) -> dict | None:
+def _run_verify_gate(
+    project_root: Path,
+    verify_cmd: str | None,
+    *,
+    git_root: Path | None = None,
+) -> dict | None:
     """
     Run a verify command and return a stuck dict on failure, None on success or when verify_cmd is None.
 
@@ -391,9 +396,17 @@ def _run_verify_gate(project_root: Path, verify_cmd: str | None) -> dict | None:
     contains a benign cleanup-race signature and no test failures (per
     _is_benign_windows_cleanup), treats the non-zero exit as success and returns None.
 
+    After the verify subprocess completes (regardless of exit code), if the platform
+    is win32 and the command contains "dotnet", runs `dotnet build-server shutdown`
+    to release VBCSCompiler/MSBuild locks that prevent re-runs. This call is wrapped
+    in try/except so a TimeoutExpired or FileNotFoundError here never poisons the
+    verify verdict -- it is best-effort, non-fatal cleanup.
+
     Args:
         project_root: Path to the worktree root.
         verify_cmd: Verify command to run (e.g., "pytest tests/ -q"), or None.
+        git_root: Optional git root directory used as cwd for the verify subprocess.
+            When None, falls back to project_root.
 
     Returns:
         A stuck dict {"status": "stuck", "stuck_type": "verify", "reason": <tail>} on
@@ -401,6 +414,10 @@ def _run_verify_gate(project_root: Path, verify_cmd: str | None) -> dict | None:
     """
     if verify_cmd is None:
         return None
+
+    # Use git_root as the subprocess cwd when provided; fall back to project_root
+    # for flat layouts where the two paths are identical.
+    effective_cwd = git_root if git_root is not None else project_root
 
     try:
         # Plan verify commands use POSIX syntax (e.g. the mandated "PYTHONPATH= "
@@ -414,9 +431,25 @@ def _run_verify_gate(project_root: Path, verify_cmd: str | None) -> dict | None:
             run_args,
             capture_output=True,
             text=True,
-            cwd=project_root,
+            cwd=effective_cwd,
             **run_kwargs,
         )
+        # dotnet cleanup: release testhost/MSBuild locks before caller retries.
+        # Wrapped in try/except so a TimeoutExpired or FileNotFoundError here
+        # never poisons the verify verdict (best-effort, non-fatal).
+        if (
+            sys.platform == "win32"
+            and verify_cmd is not None
+            and "dotnet" in verify_cmd.lower()
+        ):
+            try:
+                subprocess.run(
+                    ["dotnet", "build-server", "shutdown"],
+                    capture_output=True,
+                    timeout=30,
+                )
+            except Exception:
+                pass
         if result.returncode != 0:
             output = result.stdout + result.stderr
             # On Windows, check if this is a benign cleanup-race with no test failure
@@ -450,6 +483,8 @@ def _run_verify_gates(
     project_root: Path,
     verify_cmd: str | None,
     module_wide_verify_cmd: str | None,
+    *,
+    git_root: Path | None = None,
 ) -> dict | None:
     """
     Run the batch-level verify gate and, if it passes, the module-wide verify gate.
@@ -473,13 +508,15 @@ def _run_verify_gates(
         verify_cmd: Batch-level verify command, or None to skip.
         module_wide_verify_cmd: Module-wide verify command run after the batch gate
             passes, or None to skip.
+        git_root: Optional git root directory used as cwd for verify subprocesses.
+            Threaded to both _run_verify_gate calls. When None, falls back to project_root.
 
     Returns:
         A stuck dict on the first gate that fails, or None when both pass (or are
         skipped).
     """
     # Run the batch-level gate first; propagate any failure immediately.
-    batch_result = _run_verify_gate(project_root, verify_cmd)
+    batch_result = _run_verify_gate(project_root, verify_cmd, git_root=git_root)
     if batch_result is not None:
         return batch_result
 
@@ -487,7 +524,9 @@ def _run_verify_gates(
     if module_wide_verify_cmd is None:
         return None
 
-    module_result = _run_verify_gate(project_root, module_wide_verify_cmd)
+    module_result = _run_verify_gate(
+        project_root, module_wide_verify_cmd, git_root=git_root
+    )
     if module_result is not None:
         # Prefix the reason so the operator can identify the source of the failure.
         original_reason = module_result.get("reason", "")
@@ -585,11 +624,31 @@ def finalize_from_output(
     nits_only: bool = False,
     status_path: Path | None = None,
     nits_scope: str | None = None,
+    git_root: Path | None = None,
 ) -> int:
     """Read sub-agent output and finalize.
 
     Reads the agent's final text from agent_output_path (utf-8) and delegates
     to _forward_output with the captured output. Returns the code from _forward_output.
+
+    Args:
+        agent_output_path: Path to the file containing the sub-agent's output text.
+        project_root: Path to the worktree root (hub directory).
+        start_sha: Git SHA recorded at batch start; used for no-content-commit detection.
+        snapshot_path: Path to the cleanliness snapshot file; enables new-dirt detection.
+        session_id: Session identifier threaded into the output envelope.
+        verify_cmd: Batch-level verify command to run before emitting success.
+        module_wide_verify_cmd: Module-wide verify command run after the batch gate passes.
+        card_count: Number of Card headings in the batch; enables the completeness gate.
+        task_dir: Worktree-relative path to the task directory (_mill/).
+        parent_branch: Name of the parent branch for in-scope dirty-tree detection.
+        nits_only: When True, writes a nits-fixed marker on success.
+        status_path: Path to the status.md file; required when nits_only is True.
+        nits_scope: Scope label for the nits-fixed marker; required when nits_only is True.
+        git_root: Optional git root directory used as cwd for verify subprocesses.
+            When None, falls back to project_root. Pass the actual git root in nested
+            layouts so the verify command runs from the repo root rather than the hub
+            sub-directory, preventing spurious MSB1009 / path-not-found errors.
     """
     output = Path(agent_output_path).read_text(encoding="utf-8")
     return _forward_output(
@@ -606,6 +665,7 @@ def finalize_from_output(
         nits_only=nits_only,
         status_path=status_path,
         nits_scope=nits_scope,
+        git_root=git_root,
     )
 
 
@@ -655,6 +715,7 @@ def _forward_output(
     nits_only: bool = False,
     status_path: Path | None = None,
     nits_scope: str | None = None,
+    git_root: Path | None = None,
 ) -> int:
     """Extract the last JSON object containing a 'status' key from output.
 
@@ -673,13 +734,16 @@ def _forward_output(
     When nits_only is True and status_path and nits_scope are not None, on the parsed-success
     emit path (where a fixer's own reported status == "success" is about to be printed),
     adds "nits_applied": True to the dict and writes a nits-fixed-<scope> marker to the status file.
+    When git_root is not None, it is used as the cwd for verify subprocesses instead of
+    project_root. This corrects verify behavior in nested layouts where the plan's verify
+    command must run from the git root rather than the hub sub-directory.
     """
     parsed = _extract_status_json(output)
     if parsed is not None:
         # Apply verify gates ONLY for self-reported success
         if parsed.get("status") == "success":
             gate_result = _run_verify_gates(
-                project_root, verify_cmd, module_wide_verify_cmd
+                project_root, verify_cmd, module_wide_verify_cmd, git_root=git_root
             )
             if gate_result is not None:
                 # Verify failed; enrich with commit_sha and emit
@@ -829,7 +893,10 @@ def _forward_output(
                                         new_head = head
                                     # Apply verify gates before emitting success
                                     gate_result = _run_verify_gates(
-                                        project_root, verify_cmd, module_wide_verify_cmd
+                                        project_root,
+                                        verify_cmd,
+                                        module_wide_verify_cmd,
+                                        git_root=git_root,
                                     )
                                     if gate_result is not None:
                                         gate_result["commit_sha"] = new_head
@@ -906,7 +973,10 @@ def _forward_output(
                         return 0
                     # Apply verify gates before emitting success
                     gate_result = _run_verify_gates(
-                        project_root, verify_cmd, module_wide_verify_cmd
+                        project_root,
+                        verify_cmd,
+                        module_wide_verify_cmd,
+                        git_root=git_root,
                     )
                     if gate_result is not None:
                         gate_result["commit_sha"] = head
@@ -983,7 +1053,10 @@ def _forward_output(
                 if not result_full.stdout.strip():
                     # Apply verify gates before emitting success
                     gate_result = _run_verify_gates(
-                        project_root, verify_cmd, module_wide_verify_cmd
+                        project_root,
+                        verify_cmd,
+                        module_wide_verify_cmd,
+                        git_root=git_root,
                     )
                     if gate_result is not None:
                         gate_result["commit_sha"] = head

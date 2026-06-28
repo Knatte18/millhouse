@@ -16,6 +16,7 @@ Exit codes:
     0 — review complete; JSON result on stdout
     1 — error (missing slug, bad config, backend failure); message on stderr
 """
+
 from __future__ import annotations
 
 import argparse
@@ -63,7 +64,13 @@ def main(argv: list[str] | None = None) -> int:
     import _reviewers
     from _paths import resolve_git_root, resolve_hub_path, resolve_wiki_path
     from _review_cli import print_error_envelope
-    from _review_common import ReviewError, discover_round, find_active_slug, load_config, resolve_path
+    from _review_common import (
+        ReviewError,
+        discover_round,
+        find_active_slug,
+        load_config,
+        resolve_path,
+    )
     from _review_discussion import prepare, finalize, run
 
     try:
@@ -92,13 +99,16 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.stage == "prepare":
         try:
-            prepare_result = prepare(cfg, slug, mill_dir, project_root, wiki_root, max_rounds=args.max_rounds)
-            # Write the brief under the task worktree (git_root), not the hub root,
-            # so the implementer's brief path is relative to the task branch checkout.
-            briefs_dir = _paths.resolve_task_path(git_root, "_mill/briefs/")
+            prepare_result = prepare(
+                cfg, slug, mill_dir, project_root, wiki_root, max_rounds=args.max_rounds
+            )
+            briefs_dir = _paths.resolve_task_path(hub_dir, "_mill/briefs/")
             brief_path = _agent_dispatch.write_brief(
-                briefs_dir, "review-discussion", prepare_result["scope"],
-                prepare_result["round"], prepare_result["prompt_text"]
+                briefs_dir,
+                "review-discussion",
+                prepare_result["scope"],
+                prepare_result["round"],
+                prepare_result["prompt_text"],
             )
             envelope = {
                 "stage": "prepare",
@@ -117,20 +127,29 @@ def main(argv: list[str] | None = None) -> int:
             return 1
     elif args.stage == "finalize":
         if not args.agent_output:
-            print_error_envelope("discussion", "--agent-output required for finalize stage")
+            print_error_envelope(
+                "discussion", "--agent-output required for finalize stage"
+            )
             return 1
         round_n = args.round
         if round_n is None:
             reviews_dir_for_discovery = resolve_path(cfg["paths"]["reviews_dir"], slug)
-            round_n = discover_round(reviews_dir_for_discovery, "discussion", "holistic")
+            round_n = discover_round(
+                reviews_dir_for_discovery, "discussion", "holistic"
+            )
         try:
             agent_output_path = Path(args.agent_output)
             raw_text = agent_output_path.read_text(encoding="utf-8")
             reviews_dir = resolve_path(cfg["paths"]["reviews_dir"], slug)
             result = finalize(
-                cfg, slug, raw_text, round_n=round_n,
-                reviews_dir=reviews_dir, mill_dir=mill_dir,
-                project_root=project_root, wiki_root=wiki_root
+                cfg,
+                slug,
+                raw_text,
+                round_n=round_n,
+                reviews_dir=reviews_dir,
+                mill_dir=mill_dir,
+                project_root=project_root,
+                wiki_root=wiki_root,
             )
             print(json.dumps(result.to_dict()))
             return 0
@@ -139,7 +158,9 @@ def main(argv: list[str] | None = None) -> int:
             return 1
     else:  # full
         try:
-            result = run(cfg, slug, mill_dir, project_root, wiki_root, max_rounds=args.max_rounds)
+            result = run(
+                cfg, slug, mill_dir, project_root, wiki_root, max_rounds=args.max_rounds
+            )
             print(json.dumps(result.to_dict()))
             return 0
         except ReviewError as exc:

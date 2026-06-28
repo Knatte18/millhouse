@@ -1230,6 +1230,43 @@ def test_implementer_model_default_is_sonnethigh() -> None:
     print("PASS implementer_model_default_is_sonnethigh")
 
 
+def test_load_config_done_gate_key_present() -> None:
+    """
+    Verify that the real mill-config.yaml template contains
+    the pipeline.done_gate key with a null value.
+    """
+    # Resolve the real template path (not synthetic via _setup_plugin_template)
+    real_template_path = Path(__file__).resolve().parent.parent / "templates" / "mill-config.yaml"
+    assert real_template_path.exists(), f"Real template not found at {real_template_path}"
+
+    # Create a minimal temp hub dir (no overlay mill-config.yaml)
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        hub_root = tmp_path / "hub"
+        hub_root.mkdir(parents=True, exist_ok=True)
+        _git_init(hub_root)
+
+        # Patch resolve_plugin_template_path to return the real template
+        with patch.object(
+            _config,
+            "resolve_plugin_template_path",
+            return_value=real_template_path
+        ):
+            # Load config from the minimal hub with patched template resolution
+            cfg = _config.load_config(hub_root, hub_root)
+
+        # Assert the done_gate key exists and is None
+        done_gate_value = cfg.get("pipeline", {}).get("done_gate")
+        assert done_gate_value is None, (
+            f"pipeline.done_gate should be None in template, got {done_gate_value!r}"
+        )
+        assert "done_gate" in cfg.get("pipeline", {}), (
+            "pipeline.done_gate key must exist in template config"
+        )
+
+    print("PASS: pipeline.done_gate key present and null in template")
+
+
 def main() -> int:
     tests = [
         test_load_config_shared_present,
@@ -1276,6 +1313,7 @@ def main() -> int:
         test_review_common_load_config_container_layout,
         test_no_repo_layer_config_anywhere_emits_note,
         test_implementer_model_default_is_sonnethigh,
+        test_load_config_done_gate_key_present,
     ]
     failures: list[str] = []
     for fn in tests:

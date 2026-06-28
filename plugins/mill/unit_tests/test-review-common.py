@@ -1,4 +1,5 @@
 """Unit tests for plugins/mill/scripts/_review_common.py."""
+
 from __future__ import annotations
 
 import json
@@ -41,35 +42,42 @@ def _make_worktree_fixture(tmp: str, slug: str) -> tuple[Path, Path]:
     container = Path(tmp) / "container"
     worktree = container / "wts" / slug
     worktree.mkdir(parents=True)
-    subprocess.run(["git", "-C", str(worktree), "init"], check=True, capture_output=True)
+    subprocess.run(
+        ["git", "-C", str(worktree), "init"], check=True, capture_output=True
+    )
     subprocess.run(
         ["git", "-C", str(worktree), "config", "user.email", "test@test.com"],
-        check=True, capture_output=True,
+        check=True,
+        capture_output=True,
     )
     subprocess.run(
         ["git", "-C", str(worktree), "config", "user.name", "Test"],
-        check=True, capture_output=True,
+        check=True,
+        capture_output=True,
     )
     (worktree / "README.md").write_text("# test\n", encoding="utf-8")
-    subprocess.run(["git", "-C", str(worktree), "add", "."], check=True, capture_output=True)
+    subprocess.run(
+        ["git", "-C", str(worktree), "add", "."], check=True, capture_output=True
+    )
     subprocess.run(
         ["git", "-C", str(worktree), "commit", "-m", "init"],
-        check=True, capture_output=True,
+        check=True,
+        capture_output=True,
     )
     subprocess.run(
         ["git", "-C", str(worktree), "checkout", "-b", f"hanf/{slug}"],
-        check=True, capture_output=True,
+        check=True,
+        capture_output=True,
     )
     (worktree / "mill-config.yaml").write_text(
-        "paths:\n  discussion_file: discussion.md\n"
-        "spawn:\n  branch_prefix: \"hanf/\"\n",
+        'paths:\n  discussion_file: discussion.md\nspawn:\n  branch_prefix: "hanf/"\n',
         encoding="utf-8",
     )
     wiki_root = container / "wiki"
     wiki_root.mkdir(parents=True, exist_ok=True)
     (wiki_root / "config.yaml").write_text(
         "paths:\n  discussion_file: task/discussion.md\n"
-        "spawn:\n  branch_prefix: \"hanf/\"\n",
+        'spawn:\n  branch_prefix: "hanf/"\n',
         encoding="utf-8",
     )
     (wiki_root / "Home.md").write_text(
@@ -79,7 +87,9 @@ def _make_worktree_fixture(tmp: str, slug: str) -> tuple[Path, Path]:
     return container, worktree
 
 
-def _make_run_result(stdout: str = "", returncode: int = 0, stderr: str = "") -> MagicMock:
+def _make_run_result(
+    stdout: str = "", returncode: int = 0, stderr: str = ""
+) -> MagicMock:
     result = MagicMock()
     result.stdout = stdout
     result.returncode = returncode
@@ -94,7 +104,6 @@ from _review_common import (  # noqa: E402
     ReviewResult,
     _load_root_from_overview,
     _read_for_bulk,
-    _warn_if_prose_diverges,
     aggregate_verdict,
     build_deletes_section,
     build_manifest_section,
@@ -145,7 +154,9 @@ def main() -> int:
         reviews = tmpdir
         (reviews / "20260418-001200-plan-review-01-setup-r2.md").write_text("x")
         assert discover_round(reviews, "discussion", "holistic") == 1
-        print("PASS: discover_round cross-type isolation (plan-batch ignored for discussion)")
+        print(
+            "PASS: discover_round cross-type isolation (plan-batch ignored for discussion)"
+        )
         result = discover_round(reviews, "plan", "01-setup")
         assert result == 3, f"expected 3, got {result}"
         print(f"PASS: discover_round for plan with batch file: {result}")
@@ -202,30 +213,49 @@ def main() -> int:
 
         result = discover_round(reviews, "code", "batch-b")
         assert result == 1, f"expected 1, got {result}"
-        print(f"PASS: discover_round per-scope code/batch-b (absent for code): {result}")
+        print(
+            f"PASS: discover_round per-scope code/batch-b (absent for code): {result}"
+        )
 
     # find_active_slug: not on a task branch -> MarkerError re-raised as ReviewError
     with _test_helpers.safe_temp_dir() as tmpdir:
-        wt, wiki = _make_task_worktree(Path(tmpdir) / "sub", "some-task", "Some Task", branch_prefix="hanf/")
-        subprocess.run(["git", "-C", str(wt), "checkout", "main"], check=True, capture_output=True)
+        wt, wiki = _make_task_worktree(
+            Path(tmpdir) / "sub", "some-task", "Some Task", branch_prefix="hanf/"
+        )
+        subprocess.run(
+            ["git", "-C", str(wt), "checkout", "main"], check=True, capture_output=True
+        )
         cfg = {"spawn": {"branch_prefix": "hanf/"}}
         try:
             find_active_slug(wt, wiki, cfg)
-            print("FAIL: find_active_slug: expected ReviewError on non-task branch", file=sys.stderr)
+            print(
+                "FAIL: find_active_slug: expected ReviewError on non-task branch",
+                file=sys.stderr,
+            )
             errors += 1
         except ReviewError:
-            print("PASS: find_active_slug non-task branch -> ReviewError (MarkerError translation)")
+            print(
+                "PASS: find_active_slug non-task branch -> ReviewError (MarkerError translation)"
+            )
 
     # find_active_slug: on task branch -> returns slug
     with _test_helpers.safe_temp_dir() as tmpdir:
-        wt, wiki = _make_task_worktree(Path(tmpdir), "my-task", "My Task", branch_prefix="hanf/", seed_task=True)
+        wt, wiki = _make_task_worktree(
+            Path(tmpdir), "my-task", "My Task", branch_prefix="hanf/", seed_task=True
+        )
         cfg = {"spawn": {"branch_prefix": "hanf/"}}
         assert find_active_slug(wt, wiki, cfg) == "my-task"
         print("PASS: find_active_slug: 'my-task'")
 
     # load_task_title: task_title present in Home.md
     with _test_helpers.safe_temp_dir() as tmpdir:
-        wt, wiki = _make_task_worktree(Path(tmpdir), "my-task", "My Task Title", branch_prefix="hanf/", seed_task=True)
+        wt, wiki = _make_task_worktree(
+            Path(tmpdir),
+            "my-task",
+            "My Task Title",
+            branch_prefix="hanf/",
+            seed_task=True,
+        )
         cfg = {"spawn": {"branch_prefix": "hanf/"}}
         assert load_task_title(wt, wiki, cfg, "my-task") == "My Task Title"
         print("PASS: load_task_title with task_title in Home.md")
@@ -263,8 +293,12 @@ def main() -> int:
             os.chdir(original_cwd)
         assert p_plan == worktree / "plan/", f"plan/ wrong: {p_plan}"
         assert p_reviews == worktree / "reviews/", f"reviews/ wrong: {p_reviews}"
-        assert p_nested == worktree / "reviews/r1/holistic.md", f"nested wrong: {p_nested}"
-        print("PASS: resolve_path covers plan/, reviews/, nested reviews/r1/holistic.md")
+        assert p_nested == worktree / "reviews/r1/holistic.md", (
+            f"nested wrong: {p_nested}"
+        )
+        print(
+            "PASS: resolve_path covers plan/, reviews/, nested reviews/r1/holistic.md"
+        )
 
     # resolve_path: stale <SLUG> in template is substituted (not a literal segment)
     with _test_helpers.safe_temp_dir() as tmp:
@@ -279,7 +313,9 @@ def main() -> int:
         # <SLUG> is substituted, so no literal segment named "<SLUG>" in result
         assert "<SLUG>" not in str(p), f"<SLUG> should not appear literally in {p}"
         assert slug in str(p), f"slug {slug!r} should appear in {p}"
-        print("PASS: resolve_path stale <SLUG> template substituted (no literal segment)")
+        print(
+            "PASS: resolve_path stale <SLUG> template substituted (no literal segment)"
+        )
 
     # resolve_path: slug-mismatch raises ActiveWorktreeSlugMismatch
     with _test_helpers.safe_temp_dir() as tmp:
@@ -290,34 +326,47 @@ def main() -> int:
         wrong_slug = "wrong-slug"
         wrong_dir = container / "wts" / wrong_slug
         wrong_dir.mkdir(parents=True)
-        subprocess.run(["git", "-C", str(wrong_dir), "init"], check=True, capture_output=True)
+        subprocess.run(
+            ["git", "-C", str(wrong_dir), "init"], check=True, capture_output=True
+        )
         subprocess.run(
             ["git", "-C", str(wrong_dir), "config", "user.email", "test@test.com"],
-            check=True, capture_output=True,
+            check=True,
+            capture_output=True,
         )
         subprocess.run(
             ["git", "-C", str(wrong_dir), "config", "user.name", "Test"],
-            check=True, capture_output=True,
+            check=True,
+            capture_output=True,
         )
         (wrong_dir / ".keep").write_text("", encoding="utf-8")
-        subprocess.run(["git", "-C", str(wrong_dir), "add", "."], check=True, capture_output=True)
+        subprocess.run(
+            ["git", "-C", str(wrong_dir), "add", "."], check=True, capture_output=True
+        )
         subprocess.run(
             ["git", "-C", str(wrong_dir), "commit", "-m", "init"],
-            check=True, capture_output=True,
+            check=True,
+            capture_output=True,
         )
         subprocess.run(
             ["git", "-C", str(wrong_dir), "checkout", "-b", "hanf/my-task"],
-            check=True, capture_output=True,
+            check=True,
+            capture_output=True,
         )
         original_cwd = Path.cwd()
         os.chdir(worktree)
         try:
             try:
                 resolve_path("discussion.md", wrong_slug)
-                print("FAIL: resolve_path: expected ActiveWorktreeSlugMismatch for wrong slug", file=sys.stderr)
+                print(
+                    "FAIL: resolve_path: expected ActiveWorktreeSlugMismatch for wrong slug",
+                    file=sys.stderr,
+                )
                 errors += 1
             except ActiveWorktreeSlugMismatch:
-                print("PASS: resolve_path raises ActiveWorktreeSlugMismatch on branch mismatch")
+                print(
+                    "PASS: resolve_path raises ActiveWorktreeSlugMismatch on branch mismatch"
+                )
         finally:
             os.chdir(original_cwd)
 
@@ -345,17 +394,21 @@ def main() -> int:
         worktrees_dir = tmp_path / "wts"
         worktrees_dir.mkdir()
 
-        with patch("_marker.slug_from_branch", return_value=slug), \
-             patch("_paths.resolve_git_root", return_value=git_root), \
-             patch("_paths.resolve_wiki_path", return_value=wiki_root), \
-             patch("_paths.resolve_hub_path", return_value=hub), \
-             patch("_paths.resolve_main_worktree_root", return_value=git_root), \
-             patch("_inplace.resolve_worktrees_dir", return_value=worktrees_dir):
+        with (
+            patch("_marker.slug_from_branch", return_value=slug),
+            patch("_paths.resolve_git_root", return_value=git_root),
+            patch("_paths.resolve_wiki_path", return_value=wiki_root),
+            patch("_paths.resolve_hub_path", return_value=hub),
+            patch("_paths.resolve_main_worktree_root", return_value=git_root),
+            patch("_inplace.resolve_worktrees_dir", return_value=worktrees_dir),
+        ):
             p = resolve_path("task/discussion.md", slug)
 
         expected = git_root / "task" / "discussion.md"
         assert p == expected, f"M2 in-place (hub_rel='.'): expected {expected}, got {p}"
-        print("PASS: resolve_path M2 in-place (hub_rel='.') -> git_root/task/discussion.md")
+        print(
+            "PASS: resolve_path M2 in-place (hub_rel='.') -> git_root/task/discussion.md"
+        )
 
     # resolve_path: M2+sub in-place mode (hub_rel="src/Models")
     with _test_helpers.safe_temp_dir() as tmp:
@@ -381,17 +434,21 @@ def main() -> int:
         worktrees_dir = tmp_path / "wts"
         worktrees_dir.mkdir()
 
-        with patch("_marker.slug_from_branch", return_value=slug), \
-             patch("_paths.resolve_git_root", return_value=git_root), \
-             patch("_paths.resolve_wiki_path", return_value=wiki_root), \
-             patch("_paths.resolve_hub_path", return_value=hub), \
-             patch("_paths.resolve_main_worktree_root", return_value=git_root), \
-             patch("_inplace.resolve_worktrees_dir", return_value=worktrees_dir):
+        with (
+            patch("_marker.slug_from_branch", return_value=slug),
+            patch("_paths.resolve_git_root", return_value=git_root),
+            patch("_paths.resolve_wiki_path", return_value=wiki_root),
+            patch("_paths.resolve_hub_path", return_value=hub),
+            patch("_paths.resolve_main_worktree_root", return_value=git_root),
+            patch("_inplace.resolve_worktrees_dir", return_value=worktrees_dir),
+        ):
             p = resolve_path("task/discussion.md", slug)
 
         expected = git_root / "src" / "Models" / "task" / "discussion.md"
         assert p == expected, f"M2+sub in-place: expected {expected}, got {p}"
-        print("PASS: resolve_path M2+sub in-place (hub_rel='src/Models') -> git_root/src/Models/task/discussion.md")
+        print(
+            "PASS: resolve_path M2+sub in-place (hub_rel='src/Models') -> git_root/src/Models/task/discussion.md"
+        )
 
     # parse_verdict: APPROVE
     raw = "# Review: My Task\n\n```yaml\nverdict: APPROVE\nreviewer_model: sonnetmax\n```\n"
@@ -416,7 +473,10 @@ def main() -> int:
     # parse_verdict: no yaml block -> ReviewError
     try:
         parse_verdict("No yaml block here.")
-        print("FAIL: parse_verdict: expected ReviewError for no yaml block", file=sys.stderr)
+        print(
+            "FAIL: parse_verdict: expected ReviewError for no yaml block",
+            file=sys.stderr,
+        )
         errors += 1
     except ReviewError:
         print("PASS: parse_verdict no yaml block -> ReviewError")
@@ -424,7 +484,10 @@ def main() -> int:
     # parse_verdict: unclosed yaml block -> ReviewError
     try:
         parse_verdict("# Review: X\n\n```yaml\nverdict: APPROVE\n")
-        print("FAIL: parse_verdict: expected ReviewError for unclosed yaml block", file=sys.stderr)
+        print(
+            "FAIL: parse_verdict: expected ReviewError for unclosed yaml block",
+            file=sys.stderr,
+        )
         errors += 1
     except ReviewError as e:
         assert "not closed" in str(e)
@@ -433,7 +496,10 @@ def main() -> int:
     # parse_verdict: invalid verdict value -> ReviewError
     try:
         parse_verdict("# Review: X\n\n```yaml\nverdict: MAYBE\n```\n")
-        print("FAIL: parse_verdict: expected ReviewError for invalid verdict", file=sys.stderr)
+        print(
+            "FAIL: parse_verdict: expected ReviewError for invalid verdict",
+            file=sys.stderr,
+        )
         errors += 1
     except ReviewError as e:
         assert "MAYBE" in str(e)
@@ -467,7 +533,9 @@ def main() -> int:
     # write_review_file: creates file
     with _test_helpers.safe_temp_dir() as tmpdir:
         reviews = tmpdir / "reviews"
-        path = write_review_file(reviews, "discussion", 1, "---\nverdict: APPROVE\n---\n")
+        path = write_review_file(
+            reviews, "discussion", 1, "---\nverdict: APPROVE\n---\n"
+        )
         assert path.exists() and "discussion-review-r1" in path.name
         print(f"PASS: write_review_file discussion: {path.name}")
 
@@ -498,10 +566,15 @@ def main() -> int:
         p1.write_text("content-a", encoding="utf-8")
         p2.write_text("content-b", encoding="utf-8")
         result = bulk_files([p1, p2])
-        assert f"--- END FILE: {p1} ---" in result, f"END FILE missing for p1: {result!r}"
-        assert f"--- END FILE: {p2} ---" in result, f"END FILE missing for p2: {result!r}"
-        assert result.index(f"--- FILE: {p1}") < result.index(f"--- END FILE: {p1}"), \
+        assert f"--- END FILE: {p1} ---" in result, (
+            f"END FILE missing for p1: {result!r}"
+        )
+        assert f"--- END FILE: {p2} ---" in result, (
+            f"END FILE missing for p2: {result!r}"
+        )
+        assert result.index(f"--- FILE: {p1}") < result.index(f"--- END FILE: {p1}"), (
             "opener must precede closer for p1"
+        )
         print("PASS: bulk_files END FILE delimiters present and ordered")
 
     # bulk_files_with_diff: END FILE delimiter present
@@ -511,16 +584,26 @@ def main() -> int:
         p1.write_text("content-a", encoding="utf-8")
         p2.write_text("content-b", encoding="utf-8")
         result = bulk_files_with_diff([p1, p2], None, Path(tmpdir), 0.25)
-        assert f"--- END FILE: {p1} ---" in result, f"END FILE missing for p1: {result!r}"
-        assert f"--- END FILE: {p2} ---" in result, f"END FILE missing for p2: {result!r}"
-        assert result.index(f"--- FILE: {p1}") < result.index(f"--- END FILE: {p1}"), \
+        assert f"--- END FILE: {p1} ---" in result, (
+            f"END FILE missing for p1: {result!r}"
+        )
+        assert f"--- END FILE: {p2} ---" in result, (
+            f"END FILE missing for p2: {result!r}"
+        )
+        assert result.index(f"--- FILE: {p1}") < result.index(f"--- END FILE: {p1}"), (
             "opener must precede closer for p1"
-        print("PASS: bulk_files_with_diff END FILE delimiters present and ordered (start_sha=None)")
+        )
+        print(
+            "PASS: bulk_files_with_diff END FILE delimiters present and ordered (start_sha=None)"
+        )
 
     # render_prompt: missing template -> FileNotFoundError
     try:
         render_prompt("nonexistent-template-xyz")
-        print("FAIL: render_prompt: expected FileNotFoundError for missing template", file=sys.stderr)
+        print(
+            "FAIL: render_prompt: expected FileNotFoundError for missing template",
+            file=sys.stderr,
+        )
         errors += 1
     except FileNotFoundError:
         print("PASS: render_prompt missing template -> FileNotFoundError")
@@ -537,15 +620,26 @@ def main() -> int:
             round=2,
             reviewer_model="test-model",
             batch_name="test-batch",
-            prior_nonblocking="- Item 1: description\n- Item 2: description"
+            prior_nonblocking="- Item 1: description\n- Item 2: description",
         )
-        assert "Item 1: description" in prompt, "prior_nonblocking content not in rendered prompt"
-        assert "- Item 2: description" in prompt, "prior_nonblocking content not in rendered prompt"
-        assert "Do NOT escalate" in prompt, "escalation-justification rule not in prompt"
-        assert "Do NOT read `reviews/`" in prompt, "tool rule read-ban not preserved in prompt"
+        assert "Item 1: description" in prompt, (
+            "prior_nonblocking content not in rendered prompt"
+        )
+        assert "- Item 2: description" in prompt, (
+            "prior_nonblocking content not in rendered prompt"
+        )
+        assert "Do NOT escalate" in prompt, (
+            "escalation-justification rule not in prompt"
+        )
+        assert "Do NOT read `reviews/`" in prompt, (
+            "tool rule read-ban not preserved in prompt"
+        )
         print("PASS: render_prompt with prior_nonblocking digest renders correctly")
     except KeyError as e:
-        print(f"FAIL: render_prompt with prior_nonblocking raised KeyError: {e}", file=sys.stderr)
+        print(
+            f"FAIL: render_prompt with prior_nonblocking raised KeyError: {e}",
+            file=sys.stderr,
+        )
         errors += 1
     except AssertionError as e:
         print(f"FAIL: render_prompt prior_nonblocking check: {e}", file=sys.stderr)
@@ -563,11 +657,17 @@ def main() -> int:
             round=1,
             reviewer_model="test-model",
             batch_name="test-batch",
-            prior_nonblocking="(none)"
+            prior_nonblocking="(none)",
         )
-        assert "(none)" in prompt_r1, "prior_nonblocking (none) should appear in round 1 prompt"
-        assert "Do NOT read `reviews/`" in prompt_r1, "tool rule read-ban not preserved in round 1 prompt"
-        print("PASS: render_prompt round 1 with prior_nonblocking=(none) renders without KeyError")
+        assert "(none)" in prompt_r1, (
+            "prior_nonblocking (none) should appear in round 1 prompt"
+        )
+        assert "Do NOT read `reviews/`" in prompt_r1, (
+            "tool rule read-ban not preserved in round 1 prompt"
+        )
+        print(
+            "PASS: render_prompt round 1 with prior_nonblocking=(none) renders without KeyError"
+        )
     except KeyError as e:
         print(f"FAIL: render_prompt round 1 raised KeyError: {e}", file=sys.stderr)
         errors += 1
@@ -591,7 +691,10 @@ def main() -> int:
 
     try:
         build_tool_rule("weird")
-        print("FAIL: build_tool_rule: expected ValueError for unknown mode", file=sys.stderr)
+        print(
+            "FAIL: build_tool_rule: expected ValueError for unknown mode",
+            file=sys.stderr,
+        )
         errors += 1
     except ValueError as e:
         assert "weird" in str(e)
@@ -633,7 +736,10 @@ def main() -> int:
                 return_value=Path("/nonexistent/mill-config.yaml"),
             ):
                 load_config(tmpdir_path, mill)
-            print("FAIL: load_config: expected ReviewError for missing config", file=sys.stderr)
+            print(
+                "FAIL: load_config: expected ReviewError for missing config",
+                file=sys.stderr,
+            )
             errors += 1
         except ReviewError as e:
             assert "Missing config" in str(e)
@@ -643,6 +749,7 @@ def main() -> int:
     with _test_helpers.safe_temp_dir() as tmpdir:
         import io as _io
         import contextlib as _cl
+
         tmpdir_path = Path(tmpdir)
         mill = tmpdir_path / ".millhouse"
         mill.mkdir()
@@ -661,8 +768,12 @@ def main() -> int:
         assert _warning, "expected a stderr warning, got empty string"
         assert "review" in _warning, f"warning should mention 'review': {_warning!r}"
         local_path_str = str(mill / "config.local.yaml")
-        assert local_path_str in _warning, f"warning should mention overlay path: {_warning!r}"
-        print("PASS: load_config stale review: overlay emits stderr warning with overlay path")
+        assert local_path_str in _warning, (
+            f"warning should mention overlay path: {_warning!r}"
+        )
+        print(
+            "PASS: load_config stale review: overlay emits stderr warning with overlay path"
+        )
 
     # load_config bare roles: key does not crash
     with _test_helpers.safe_temp_dir() as tmpdir:
@@ -678,15 +789,16 @@ def main() -> int:
         template_dir.mkdir(parents=True, exist_ok=True)
         template_path = template_dir / "mill-config.yaml"
         template_path.write_text(
-            "roles:\n"
-            "  plan-review:\n"
-            "    batch:\n"
-            "      reviewer: sonnetmax\n",
+            "roles:\n  plan-review:\n    batch:\n      reviewer: sonnetmax\n",
             encoding="utf-8",
         )
-        with patch("_review_common.resolve_plugin_template_path", return_value=template_path):
+        with patch(
+            "_review_common.resolve_plugin_template_path", return_value=template_path
+        ):
             cfg = load_config(tmpdir_path, mill)
-        assert isinstance(cfg.get("roles"), dict), f"Expected roles to be dict; got {cfg.get('roles')!r}"
+        assert isinstance(cfg.get("roles"), dict), (
+            f"Expected roles to be dict; got {cfg.get('roles')!r}"
+        )
         print("PASS: load_config bare roles: does not crash; template roles: preserved")
 
     # load_config hub_relative_path does not emit unknown-key warning
@@ -704,11 +816,18 @@ def main() -> int:
         )
         _err_buf = _io.StringIO()
         with _cl.redirect_stderr(_err_buf):
-            with patch("_review_common.resolve_plugin_template_path", return_value=tmpdir_path / "mill-config.yaml"):
+            with patch(
+                "_review_common.resolve_plugin_template_path",
+                return_value=tmpdir_path / "mill-config.yaml",
+            ):
                 cfg = load_config(tmpdir_path, mill)
         _warning = _err_buf.getvalue()
-        assert "hub_relative_path" not in _warning, f"hub_relative_path should not appear in warning; got {_warning!r}"
-        print("PASS: load_config hub_relative_path in config.local.yaml does not emit unknown-key warning")
+        assert "hub_relative_path" not in _warning, (
+            f"hub_relative_path should not appear in warning; got {_warning!r}"
+        )
+        print(
+            "PASS: load_config hub_relative_path in config.local.yaml does not emit unknown-key warning"
+        )
 
     # parse_batch_refs: multi-line bullet form returns all sub-bullet paths
     with _test_helpers.safe_temp_dir() as tmpdir:
@@ -745,11 +864,7 @@ def main() -> int:
     with _test_helpers.safe_temp_dir() as tmpdir:
         batch = Path(tmpdir) / "batch.md"
         batch.write_text(
-            "- **Context:** `a`\n"
-            "- **Edits:**\n"
-            "  - `b`\n"
-            "  - `c`\n"
-            "- **Creates:** none\n",
+            "- **Context:** `a`\n- **Edits:**\n  - `b`\n  - `c`\n- **Creates:** none\n",
             encoding="utf-8",
         )
         refs = parse_batch_refs(batch)
@@ -776,8 +891,7 @@ def main() -> int:
     with _test_helpers.safe_temp_dir() as tmpdir:
         batch = Path(tmpdir) / "batch.md"
         batch.write_text(
-            "- **Creates:**\n"
-            "  - `None`\n",
+            "- **Creates:**\n  - `None`\n",
             encoding="utf-8",
         )
         refs = parse_batch_refs(batch)
@@ -808,7 +922,9 @@ def main() -> int:
         assert "src/b.py" in refs, f"Edits token missing: {refs}"
         assert "src/c.py" in refs, f"Creates token missing: {refs}"
         assert "src/d.py" in refs, f"Deletes token missing: {refs}"
-        print("PASS: parse_batch_refs includes Deletes tokens alongside Context/Edits/Creates")
+        print(
+            "PASS: parse_batch_refs includes Deletes tokens alongside Context/Edits/Creates"
+        )
 
     # resolve_ref_paths: hit on disk
     with _test_helpers.safe_temp_dir() as tmpdir:
@@ -823,7 +939,9 @@ def main() -> int:
     with _test_helpers.safe_temp_dir() as tmpdir:
         tmp_dir = Path(tmpdir)
         result = resolve_ref_paths(
-            ["nonexistent.py"], tmp_dir, root=None,
+            ["nonexistent.py"],
+            tmp_dir,
+            root=None,
             creates_union={"nonexistent.py"},
         )
         assert result == [], f"Got {result}"
@@ -834,7 +952,10 @@ def main() -> int:
         tmp_dir = Path(tmpdir)
         try:
             resolve_ref_paths(["nonexistent.py"], tmp_dir, root=None)
-            print("FAIL: resolve_ref_paths: expected ReviewError for missing path", file=sys.stderr)
+            print(
+                "FAIL: resolve_ref_paths: expected ReviewError for missing path",
+                file=sys.stderr,
+            )
             errors += 1
         except ReviewError as e:
             assert "referenced path not found" in str(e), f"Unexpected message: {e}"
@@ -849,7 +970,9 @@ def main() -> int:
         (tmp_wiki / "active" / "x").mkdir(parents=True)
         (tmp_wiki / "active" / "x" / "discussion.md").write_text("d")
         result = resolve_ref_paths(
-            ["wiki/active/x/discussion.md"], tmp_project, root=None,
+            ["wiki/active/x/discussion.md"],
+            tmp_project,
+            root=None,
             wiki_root=tmp_wiki,
         )
         assert result == [tmp_wiki / "active" / "x" / "discussion.md"], f"Got {result}"
@@ -860,7 +983,10 @@ def main() -> int:
         tmp_dir = Path(tmpdir)
         try:
             resolve_ref_paths(["wiki/foo"], tmp_dir, root=None)
-            print("FAIL: resolve_ref_paths: expected ReviewError for wiki/ without wiki_root", file=sys.stderr)
+            print(
+                "FAIL: resolve_ref_paths: expected ReviewError for wiki/ without wiki_root",
+                file=sys.stderr,
+            )
             errors += 1
         except ReviewError as e:
             assert "no wiki_root provided" in str(e), f"Unexpected message: {e}"
@@ -874,10 +1000,15 @@ def main() -> int:
         tmp_wiki.mkdir()
         try:
             resolve_ref_paths(
-                ["wiki/active/missing.md"], tmp_project, root=None,
+                ["wiki/active/missing.md"],
+                tmp_project,
+                root=None,
                 wiki_root=tmp_wiki,
             )
-            print("FAIL: resolve_ref_paths: expected ReviewError for missing wiki path", file=sys.stderr)
+            print(
+                "FAIL: resolve_ref_paths: expected ReviewError for missing wiki path",
+                file=sys.stderr,
+            )
             errors += 1
         except ReviewError as e:
             assert "referenced path not found" in str(e), f"Unexpected message: {e}"
@@ -888,7 +1019,9 @@ def main() -> int:
         tmp_dir = Path(tmpdir)
         try:
             resolve_ref_paths(
-                ["missing.py"], tmp_dir, root=None,
+                ["missing.py"],
+                tmp_dir,
+                root=None,
                 caller_label="_review_plan",
             )
             print("FAIL: resolve_ref_paths: expected ReviewError", file=sys.stderr)
@@ -928,7 +1061,9 @@ def main() -> int:
     with _test_helpers.safe_temp_dir() as tmpdir:
         tmp_dir = Path(tmpdir)
         result = resolve_ref_paths(
-            ["nonexistent.py"], tmp_dir, root=None,
+            ["nonexistent.py"],
+            tmp_dir,
+            root=None,
             deletes_union={"nonexistent.py"},
         )
         assert result == [], f"Got {result}"
@@ -938,7 +1073,9 @@ def main() -> int:
     with _test_helpers.safe_temp_dir() as tmpdir:
         tmp_dir = Path(tmpdir)
         result = resolve_ref_paths(
-            ["nonexistent.py"], tmp_dir, root=None,
+            ["nonexistent.py"],
+            tmp_dir,
+            root=None,
             creates_union={"nonexistent.py"},
             deletes_union={"nonexistent.py"},
         )
@@ -951,32 +1088,45 @@ def main() -> int:
         real_file = tmp_dir / "real.py"
         real_file.write_text("x")
         result = resolve_ref_paths(
-            ["real.py"], tmp_dir, root=None,
+            ["real.py"],
+            tmp_dir,
+            root=None,
             deletes_union={"real.py"},
         )
         assert result == [real_file], f"Got {result}"
-        print("PASS: resolve_ref_paths on-disk + in deletes_union -> resolved and included")
+        print(
+            "PASS: resolve_ref_paths on-disk + in deletes_union -> resolved and included"
+        )
 
     # resolve_ref_paths: missing + in neither union -> ReviewError (existing behaviour preserved)
     with _test_helpers.safe_temp_dir() as tmpdir:
         tmp_dir = Path(tmpdir)
         try:
             resolve_ref_paths(
-                ["nonexistent.py"], tmp_dir, root=None,
+                ["nonexistent.py"],
+                tmp_dir,
+                root=None,
                 deletes_union={"other.py"},
             )
-            print("FAIL: resolve_ref_paths: expected ReviewError for missing path not in deletes_union", file=sys.stderr)
+            print(
+                "FAIL: resolve_ref_paths: expected ReviewError for missing path not in deletes_union",
+                file=sys.stderr,
+            )
             errors += 1
         except ReviewError as e:
             assert "referenced path not found" in str(e), f"Unexpected message: {e}"
-            print("PASS: resolve_ref_paths missing + not in deletes_union -> ReviewError")
+            print(
+                "PASS: resolve_ref_paths missing + not in deletes_union -> ReviewError"
+            )
 
     # resolve_ref_paths: caller_label in error when deletes_union present but path missing
     with _test_helpers.safe_temp_dir() as tmpdir:
         tmp_dir = Path(tmpdir)
         try:
             resolve_ref_paths(
-                ["missing.py"], tmp_dir, root=None,
+                ["missing.py"],
+                tmp_dir,
+                root=None,
                 deletes_union={"other.py"},
                 caller_label="test_caller",
             )
@@ -984,7 +1134,9 @@ def main() -> int:
             errors += 1
         except ReviewError as e:
             assert str(e).startswith("[test_caller]"), f"Unexpected message: {e}"
-            print("PASS: resolve_ref_paths caller_label in error with deletes_union present")
+            print(
+                "PASS: resolve_ref_paths caller_label in error with deletes_union present"
+            )
 
     # resolve_ref_paths: git_root fallback hit
     with _test_helpers.safe_temp_dir() as tmpdir:
@@ -995,7 +1147,9 @@ def main() -> int:
         git_file.parent.mkdir(parents=True)
         git_file.write_text("x")
         result = resolve_ref_paths(
-            ["fallback.py"], tmp_project, root=None,
+            ["fallback.py"],
+            tmp_project,
+            root=None,
             git_root=tmp_git,
         )
         assert result == [git_file], f"Got {result}"
@@ -1009,21 +1163,31 @@ def main() -> int:
         tmp_git.mkdir()
         try:
             resolve_ref_paths(
-                ["missing.py"], tmp_project, root=None,
+                ["missing.py"],
+                tmp_project,
+                root=None,
                 git_root=tmp_git,
             )
-            print("FAIL: resolve_ref_paths git_root fallback miss: expected ReviewError", file=sys.stderr)
+            print(
+                "FAIL: resolve_ref_paths git_root fallback miss: expected ReviewError",
+                file=sys.stderr,
+            )
             errors += 1
         except ReviewError as e:
             assert "referenced path not found" in str(e), f"Unexpected message: {e}"
-            print("PASS: resolve_ref_paths git_root fallback miss -> hard-fail ReviewError")
+            print(
+                "PASS: resolve_ref_paths git_root fallback miss -> hard-fail ReviewError"
+            )
 
     # resolve_ref_paths: no git_root kwarg (current behavior unchanged)
     with _test_helpers.safe_temp_dir() as tmpdir:
         tmp_dir = Path(tmpdir)
         try:
             resolve_ref_paths(["missing.py"], tmp_dir, root=None)
-            print("FAIL: resolve_ref_paths no git_root: expected ReviewError", file=sys.stderr)
+            print(
+                "FAIL: resolve_ref_paths no git_root: expected ReviewError",
+                file=sys.stderr,
+            )
             errors += 1
         except ReviewError as e:
             assert "referenced path not found" in str(e), f"Unexpected message: {e}"
@@ -1036,12 +1200,16 @@ def main() -> int:
         tmp_git = Path(tmpdir) / "git"
         tmp_git.mkdir()
         result = resolve_ref_paths(
-            ["missing.py"], tmp_project, root=None,
+            ["missing.py"],
+            tmp_project,
+            root=None,
             creates_union={"missing.py"},
             git_root=tmp_git,
         )
         assert result == [], f"Got {result}"
-        print("PASS: resolve_ref_paths creates_union suppresses even with git_root fallback")
+        print(
+            "PASS: resolve_ref_paths creates_union suppresses even with git_root fallback"
+        )
 
     # resolve_ref_paths: wiki/ prefix unaffected by git_root fallback
     with _test_helpers.safe_temp_dir() as tmpdir:
@@ -1054,7 +1222,9 @@ def main() -> int:
         wiki_file = tmp_wiki / "doc.md"
         wiki_file.write_text("x")
         result = resolve_ref_paths(
-            ["wiki/doc.md"], tmp_project, root=None,
+            ["wiki/doc.md"],
+            tmp_project,
+            root=None,
             wiki_root=tmp_wiki,
             git_root=tmp_git,
         )
@@ -1080,9 +1250,7 @@ def main() -> int:
     # compute_creates_union: none token filtered
     with _test_helpers.safe_temp_dir() as tmpdir:
         plan_dir = Path(tmpdir)
-        (plan_dir / "01-setup.md").write_text(
-            "- **Creates:** none\n", encoding="utf-8"
-        )
+        (plan_dir / "01-setup.md").write_text("- **Creates:** none\n", encoding="utf-8")
         result = compute_creates_union(plan_dir)
         assert result == set(), f"Got {result}"
         print("PASS: compute_creates_union 'none' token filtered")
@@ -1091,14 +1259,11 @@ def main() -> int:
     with _test_helpers.safe_temp_dir() as tmpdir:
         plan_dir = Path(tmpdir)
         (plan_dir / "01-setup.md").write_text(
-            "- **Creates:**\n"
-            "  - `x.py`\n"
-            "  - `y.py`\n",
+            "- **Creates:**\n  - `x.py`\n  - `y.py`\n",
             encoding="utf-8",
         )
         (plan_dir / "02-wire.md").write_text(
-            "- **Creates:**\n"
-            "  - `z.py`\n",
+            "- **Creates:**\n  - `z.py`\n",
             encoding="utf-8",
         )
         result = compute_creates_union(plan_dir)
@@ -1121,9 +1286,7 @@ def main() -> int:
     # compute_creates_union: case-variant None filtered
     with _test_helpers.safe_temp_dir() as tmpdir:
         plan_dir = Path(tmpdir)
-        (plan_dir / "01-setup.md").write_text(
-            "- **Creates:** None\n", encoding="utf-8"
-        )
+        (plan_dir / "01-setup.md").write_text("- **Creates:** None\n", encoding="utf-8")
         result = compute_creates_union(plan_dir)
         assert result == set(), f"Got {result}"
         print("PASS: compute_creates_union 'None' (capital N) filtered")
@@ -1152,9 +1315,7 @@ def main() -> int:
     with _test_helpers.safe_temp_dir() as tmpdir:
         plan_dir = Path(tmpdir)
         (plan_dir / "01-setup.md").write_text(
-            "- **Deletes:**\n"
-            "  - `a`\n"
-            "  - `b`\n",
+            "- **Deletes:**\n  - `a`\n  - `b`\n",
             encoding="utf-8",
         )
         result = compute_deletes_union(plan_dir)
@@ -1196,7 +1357,9 @@ def main() -> int:
         )
         result = compute_deletes_union(plan_dir)
         assert result == {"old.py"}, f"Got {result}"
-        print("PASS: compute_deletes_union Deletes absent on some cards; present on others")
+        print(
+            "PASS: compute_deletes_union Deletes absent on some cards; present on others"
+        )
 
     # 00-overview.md is skipped
     with _test_helpers.safe_temp_dir() as tmpdir:
@@ -1246,12 +1409,16 @@ def main() -> int:
 
     # Single token
     result = build_deletes_section(["old_module.py"])
-    assert result == "## Intentionally deleted (N=1)\n\n- old_module.py", f"Got {result!r}"
+    assert result == "## Intentionally deleted (N=1)\n\n- old_module.py", (
+        f"Got {result!r}"
+    )
     print("PASS: build_deletes_section single token -> heading + bullet")
 
     # Multiple tokens preserve input order
     result = build_deletes_section(["a.py", "b.py", "c.py"])
-    assert result.startswith("## Intentionally deleted (N=3)"), f"Wrong heading: {result!r}"
+    assert result.startswith("## Intentionally deleted (N=3)"), (
+        f"Wrong heading: {result!r}"
+    )
     lines = result.split("\n")
     assert lines[2] == "- a.py", f"Wrong first bullet: {lines[2]!r}"
     assert lines[3] == "- b.py", f"Wrong second bullet: {lines[3]!r}"
@@ -1305,14 +1472,18 @@ def main() -> int:
             ["wiki/active/slug/missing.md"], project, root=None, wiki_root=wiki
         )
         assert result == [], f"Got {result}"
-        print("PASS: resolve_existing_paths wiki-prefixed path missing -> silently dropped")
+        print(
+            "PASS: resolve_existing_paths wiki-prefixed path missing -> silently dropped"
+        )
 
         # Wiki-prefixed path with wiki_root=None -> silently dropped (no raise)
         result = resolve_existing_paths(
             ["wiki/active/slug/foo.md"], project, root=None, wiki_root=None
         )
         assert result == [], f"Got {result}"
-        print("PASS: resolve_existing_paths wiki/ with wiki_root=None -> silently dropped (no raise)")
+        print(
+            "PASS: resolve_existing_paths wiki/ with wiki_root=None -> silently dropped (no raise)"
+        )
 
         # None token silently dropped
         result = resolve_existing_paths([None, str(existing)], project, root=None)
@@ -1320,9 +1491,13 @@ def main() -> int:
         print("PASS: resolve_existing_paths None token silently dropped")
 
         # 'none' (any case) tokens silently dropped
-        result = resolve_existing_paths(["none", "NONE", "None", str(existing)], project, root=None)
+        result = resolve_existing_paths(
+            ["none", "NONE", "None", str(existing)], project, root=None
+        )
         assert result == [existing], f"Got {result}"
-        print("PASS: resolve_existing_paths 'none'/'NONE'/'None' tokens silently dropped")
+        print(
+            "PASS: resolve_existing_paths 'none'/'NONE'/'None' tokens silently dropped"
+        )
 
         # Mixed: [exists, missing, "none", None, wiki-exists] -> [exists, wiki-exists]
         result = resolve_existing_paths(
@@ -1332,7 +1507,9 @@ def main() -> int:
             wiki_root=wiki,
         )
         assert result == [existing, wiki_file], f"Got {result}"
-        print("PASS: resolve_existing_paths mixed input -> only existing paths returned")
+        print(
+            "PASS: resolve_existing_paths mixed input -> only existing paths returned"
+        )
 
     # resolve_existing_paths: git_root fallback hit
     with _test_helpers.safe_temp_dir() as tmpdir:
@@ -1343,11 +1520,15 @@ def main() -> int:
         git_file.parent.mkdir(parents=True)
         git_file.write_text("x")
         result = resolve_existing_paths(
-            ["fallback.py"], tmp_project, root=None,
+            ["fallback.py"],
+            tmp_project,
+            root=None,
             git_root=tmp_git,
         )
         assert result == [git_file], f"Got {result}"
-        print("PASS: resolve_existing_paths git_root fallback hit returns git_root path")
+        print(
+            "PASS: resolve_existing_paths git_root fallback hit returns git_root path"
+        )
 
     # resolve_existing_paths: git_root fallback miss (silent drop, no error)
     with _test_helpers.safe_temp_dir() as tmpdir:
@@ -1356,21 +1537,29 @@ def main() -> int:
         tmp_git = Path(tmpdir) / "git"
         tmp_git.mkdir()
         result = resolve_existing_paths(
-            ["missing.py"], tmp_project, root=None,
+            ["missing.py"],
+            tmp_project,
+            root=None,
             git_root=tmp_git,
         )
         assert result == [], f"Got {result}"
-        print("PASS: resolve_existing_paths git_root fallback miss silently drops (no error)")
+        print(
+            "PASS: resolve_existing_paths git_root fallback miss silently drops (no error)"
+        )
 
     # resolve_existing_paths: no git_root kwarg (current behavior unchanged)
     with _test_helpers.safe_temp_dir() as tmpdir:
         tmp_project = Path(tmpdir) / "project"
         tmp_project.mkdir()
         result = resolve_existing_paths(
-            ["missing.py"], tmp_project, root=None,
+            ["missing.py"],
+            tmp_project,
+            root=None,
         )
         assert result == [], f"Got {result}"
-        print("PASS: resolve_existing_paths without git_root preserves current behavior")
+        print(
+            "PASS: resolve_existing_paths without git_root preserves current behavior"
+        )
 
     # resolve_ref_paths: cwd==git_root layout with root set (#471 regression: should NOT double)
     with _test_helpers.safe_temp_dir() as tmpdir:
@@ -1381,12 +1570,16 @@ def main() -> int:
         (tmp_git / "src" / "file.py").write_text("x")
         # project_root is git_root (not doubled subfolder)
         result = resolve_ref_paths(
-            ["file.py"], tmp_git, root="src",
+            ["file.py"],
+            tmp_git,
+            root="src",
             git_root=tmp_git,
         )
         # Should resolve to git_root/src/file.py (primary candidate)
         assert result == [tmp_git / "src" / "file.py"], f"Got {result}"
-        print("PASS: resolve_ref_paths cwd==git_root with root set uses git_root/root/raw primary")
+        print(
+            "PASS: resolve_ref_paths cwd==git_root with root set uses git_root/root/raw primary"
+        )
 
     # resolve_existing_paths: cwd==git_root/root layout (#471 regression: should NOT double)
     with _test_helpers.safe_temp_dir() as tmpdir:
@@ -1398,12 +1591,16 @@ def main() -> int:
         # When cwd is git_root/src, project_root would be git_root/src
         project_root = tmp_git / "src"
         result = resolve_existing_paths(
-            ["file.py"], project_root, root="src",
+            ["file.py"],
+            project_root,
+            root="src",
             git_root=tmp_git,
         )
         # Should resolve to git_root/src/file.py (NOT doubled git_root/src/src/file.py)
         assert result == [tmp_git / "src" / "file.py"], f"Got {result}"
-        print("PASS: resolve_existing_paths cwd==git_root/root returns single-prefixed git_root/root/raw (not doubled)")
+        print(
+            "PASS: resolve_existing_paths cwd==git_root/root returns single-prefixed git_root/root/raw (not doubled)"
+        )
 
     # resolve_ref_paths: git_root=None falls back to project_root/root/raw
     with _test_helpers.safe_temp_dir() as tmpdir:
@@ -1411,12 +1608,16 @@ def main() -> int:
         (tmp_project / "src").mkdir(parents=True)
         (tmp_project / "src" / "file.py").write_text("x")
         result = resolve_ref_paths(
-            ["file.py"], tmp_project, root="src",
+            ["file.py"],
+            tmp_project,
+            root="src",
             git_root=None,
         )
         # Should resolve to project_root/src/file.py (no git_root candidate)
         assert result == [tmp_project / "src" / "file.py"], f"Got {result}"
-        print("PASS: resolve_ref_paths git_root=None falls back to project_root/root/raw")
+        print(
+            "PASS: resolve_ref_paths git_root=None falls back to project_root/root/raw"
+        )
 
     # resolve_existing_paths: git_root=None falls back to project_root/root/raw
     with _test_helpers.safe_temp_dir() as tmpdir:
@@ -1424,12 +1625,16 @@ def main() -> int:
         (tmp_project / "src").mkdir(parents=True)
         (tmp_project / "src" / "file.py").write_text("x")
         result = resolve_existing_paths(
-            ["file.py"], tmp_project, root="src",
+            ["file.py"],
+            tmp_project,
+            root="src",
             git_root=None,
         )
         # Should resolve to project_root/src/file.py
         assert result == [tmp_project / "src" / "file.py"], f"Got {result}"
-        print("PASS: resolve_existing_paths git_root=None falls back to project_root/root/raw")
+        print(
+            "PASS: resolve_existing_paths git_root=None falls back to project_root/root/raw"
+        )
 
     # resolve_ref_paths: wiki/ prefix unchanged by git_root threading
     with _test_helpers.safe_temp_dir() as tmpdir:
@@ -1441,7 +1646,9 @@ def main() -> int:
         tmp_git = Path(tmpdir) / "git"
         tmp_git.mkdir()
         result = resolve_ref_paths(
-            ["wiki/active/x/discussion.md"], tmp_project, root="src",
+            ["wiki/active/x/discussion.md"],
+            tmp_project,
+            root="src",
             wiki_root=tmp_wiki,
             git_root=tmp_git,
         )
@@ -1458,12 +1665,16 @@ def main() -> int:
         tmp_git = Path(tmpdir) / "git"
         tmp_git.mkdir()
         result = resolve_existing_paths(
-            ["wiki/active/x/discussion.md"], tmp_project, root="src",
+            ["wiki/active/x/discussion.md"],
+            tmp_project,
+            root="src",
             wiki_root=tmp_wiki,
             git_root=tmp_git,
         )
         assert result == [tmp_wiki / "active" / "x" / "discussion.md"], f"Got {result}"
-        print("PASS: resolve_existing_paths wiki/ prefix routes through wiki_root unchanged")
+        print(
+            "PASS: resolve_existing_paths wiki/ prefix routes through wiki_root unchanged"
+        )
 
     # Per-scope counters survive interleaved per-batch + holistic writes (regression for #21, #62, #63)
     with _test_helpers.safe_temp_dir() as tmpdir:
@@ -1477,17 +1688,23 @@ def main() -> int:
 
         result = discover_round(reviews, "code", "spawn-core")
         assert result == 1, f"expected 1, got {result}"
-        print(f"PASS: discover_round per-scope code/spawn-core (different batch, fresh count): {result}")
+        print(
+            f"PASS: discover_round per-scope code/spawn-core (different batch, fresh count): {result}"
+        )
 
         (reviews / f"{ts}-code-review-r1.md").write_text("x")
 
         result = discover_round(reviews, "code", "holistic")
         assert result == 2, f"expected 2, got {result}"
-        print(f"PASS: discover_round per-scope code/holistic independent after holistic r1: {result}")
+        print(
+            f"PASS: discover_round per-scope code/holistic independent after holistic r1: {result}"
+        )
 
         result = discover_round(reviews, "code", "helper-modules")
         assert result == 2, f"expected 2, got {result}"
-        print(f"PASS: discover_round per-scope code/helper-modules still independent of holistic: {result}")
+        print(
+            f"PASS: discover_round per-scope code/helper-modules still independent of holistic: {result}"
+        )
 
     # ---------------------------------------------------------------------------
     # parse_missing_context
@@ -1559,7 +1776,9 @@ def main() -> int:
         f = Path(tmpdir) / "foo.py"
         f.write_text("content")
         result = build_reattached_section([f])
-        assert "## Re-attached files (you said these were missing)" in result, f"Missing heading in: {result!r}"
+        assert "## Re-attached files (you said these were missing)" in result, (
+            f"Missing heading in: {result!r}"
+        )
         assert str(f) in result, f"Path not in output: {result!r}"
         assert "--- FILE:" in result, f"No FILE delimiter in: {result!r}"
         print("PASS: build_reattached_section one path -> heading + FILE delimiter")
@@ -1573,7 +1792,9 @@ def main() -> int:
         result = build_reattached_section([fa, fb])
         assert str(fa) in result, "fa not in output"
         assert str(fb) in result, "fb not in output"
-        assert result.index(str(fa)) < result.index(str(fb)), "fa should appear before fb"
+        assert result.index(str(fa)) < result.index(str(fb)), (
+            "fa should appear before fb"
+        )
         print("PASS: build_reattached_section two paths -> both delimiters in order")
 
     # ---------------------------------------------------------------------------
@@ -1611,12 +1832,67 @@ def main() -> int:
     # Severity match is case-sensitive
     result = parse_blocking_count("### [blocking] foo\n", severity="BLOCKING")
     assert result == 0, f"expected 0, got {result}"
-    print("PASS: parse_blocking_count case-sensitive: lowercase blocking with BLOCKING severity -> 0")
+    print(
+        "PASS: parse_blocking_count case-sensitive: lowercase blocking with BLOCKING severity -> 0"
+    )
 
     # Heading at start of line only — mid-line marker not counted
     result = parse_blocking_count("text ### [BLOCKING] foo\n", severity="BLOCKING")
     assert result == 0, f"expected 0, got {result}"
     print("PASS: parse_blocking_count mid-line marker not counted -> 0")
+
+    # ---------------------------------------------------------------------------
+    # parse_blocking_count YAML-fallback cases (#552)
+    # ---------------------------------------------------------------------------
+
+    # yaml-list-only BLOCKING: no markdown headings, one yaml findings entry
+    raw = "```yaml\nfindings:\n  - severity: BLOCKING\n    title: foo\n```\n"
+    result = parse_blocking_count(raw, severity="BLOCKING")
+    assert result == 1, f"expected 1, got {result}"
+    print("PASS: parse_blocking_count yaml-list BLOCKING -> 1")
+
+    # yaml-list mixed severities: BLOCKING=1, NIT=2
+    raw = (
+        "```yaml\n"
+        "findings:\n"
+        "  - severity: BLOCKING\n"
+        "    title: a\n"
+        "  - severity: NIT\n"
+        "    title: b\n"
+        "  - severity: NIT\n"
+        "    title: c\n"
+        "```\n"
+    )
+    result = parse_blocking_count(raw, severity="BLOCKING")
+    assert result == 1, f"expected 1 BLOCKING, got {result}"
+    print("PASS: parse_blocking_count yaml-list mixed severities BLOCKING -> 1")
+    result = parse_blocking_count(raw, severity="NIT")
+    assert result == 2, f"expected 2 NIT, got {result}"
+    print("PASS: parse_blocking_count yaml-list mixed severities NIT -> 2")
+
+    # heading wins over yaml: heading_count > 0 skips the yaml scan entirely
+    raw = "### [BLOCKING] foo\n```yaml\nfindings:\n  - severity: BLOCKING\n```\n"
+    result = parse_blocking_count(raw, severity="BLOCKING")
+    assert result == 1, f"expected 1 (heading wins), got {result}"
+    print("PASS: parse_blocking_count heading>0 wins over yaml list")
+
+    # verdict block is not counted: yaml with verdict: key but no findings: key
+    raw = "```yaml\nverdict: APPROVE\n```\n"
+    result = parse_blocking_count(raw, severity="BLOCKING")
+    assert result == 0, f"expected 0 for verdict-only block, got {result}"
+    print("PASS: parse_blocking_count verdict-only yaml block -> 0")
+
+    # malformed yaml does not crash: skip the block, return 0
+    raw = "```yaml\nfindings: [{\n```\n"
+    result = parse_blocking_count(raw, severity="BLOCKING")
+    assert result == 0, f"expected 0 for malformed yaml, got {result}"
+    print("PASS: parse_blocking_count malformed yaml block -> 0, no crash")
+
+    # case-insensitive severity in yaml: lowercase 'blocking' matches BLOCKING
+    raw = "```yaml\nfindings:\n  - severity: blocking\n    title: x\n```\n"
+    result = parse_blocking_count(raw, severity="BLOCKING")
+    assert result == 1, f"expected 1 (case-insensitive), got {result}"
+    print("PASS: parse_blocking_count yaml severity is case-insensitive")
 
     # ---------------------------------------------------------------------------
     # parse_blocking_count divergence warning
@@ -1625,6 +1901,7 @@ def main() -> int:
     def test_parse_blocking_count_warns_on_prose_divergence_numeric():
         import contextlib
         import io
+
         raw = (
             "### [BLOCKING] finding one\n"
             "### [BLOCKING] finding two\n"
@@ -1643,6 +1920,7 @@ def main() -> int:
     def test_parse_blocking_count_warns_on_prose_divergence_spelled():
         import contextlib
         import io
+
         raw = (
             "### [BLOCKING] finding one\n"
             "### [BLOCKING] finding two\n"
@@ -1661,6 +1939,7 @@ def main() -> int:
     def test_parse_blocking_count_silent_when_aligned():
         import contextlib
         import io
+
         raw = (
             "### [BLOCKING] finding one\n"
             "### [BLOCKING] finding two\n"
@@ -1677,6 +1956,7 @@ def main() -> int:
     def test_parse_blocking_count_silent_when_no_prose_count():
         import contextlib
         import io
+
         raw = (
             "### [BLOCKING] finding one\n"
             "### [BLOCKING] finding two\n"
@@ -1693,6 +1973,7 @@ def main() -> int:
     def test_parse_blocking_count_warns_for_gap_severity():
         import contextlib
         import io
+
         raw = (
             "### [GAP] missing edge case\n"
             "### [GAP] another gap\n"
@@ -1717,6 +1998,7 @@ def main() -> int:
     def test_parse_blocking_count_divergence_warning_ascii_only():
         import contextlib
         import io
+
         raw = (
             "### [BLOCKING] finding one\n"
             "### [BLOCKING] finding two\n"
@@ -1737,7 +2019,9 @@ def main() -> int:
                     file=sys.stderr,
                 )
                 return False
-        print("PASS: parse_blocking_count divergence warning is ASCII-only (no mojibake)")
+        print(
+            "PASS: parse_blocking_count divergence warning is ASCII-only (no mojibake)"
+        )
         return True
 
     if not test_parse_blocking_count_divergence_warning_ascii_only():
@@ -1748,7 +2032,9 @@ def main() -> int:
     # ---------------------------------------------------------------------------
 
     # Confirm the function is importable (not AttributeError); do not exercise behaviour
-    assert callable(_load_root_from_overview), "_load_root_from_overview should be callable"
+    assert callable(_load_root_from_overview), (
+        "_load_root_from_overview should be callable"
+    )
     print("PASS: _load_root_from_overview importable from _review_common")
 
     # ---------------------------------------------------------------------------
@@ -1803,7 +2089,9 @@ def main() -> int:
         # no holistic at any round
         result = detect_resume_round(reviews, "plan")
         assert result == 2, f"Got {result}"
-        print("PASS: detect_resume_round partial r2 batches, no holistic -> 2 (highest batch round)")
+        print(
+            "PASS: detect_resume_round partial r2 batches, no holistic -> 2 (highest batch round)"
+        )
 
     # type isolation: plan per-batch files don't affect code detect_resume_round
     with _test_helpers.safe_temp_dir() as tmpdir:
@@ -1820,85 +2108,185 @@ def main() -> int:
     # Test A — file with small diff uses DIFF delimiter
     with _test_helpers.safe_temp_dir() as tmpdir:
         repo = Path(tmpdir)
-        subprocess.run(["git", "-C", str(repo), "init"], check=True, capture_output=True)
-        subprocess.run(["git", "-C", str(repo), "config", "user.email", "t@t.com"], check=True, capture_output=True)
-        subprocess.run(["git", "-C", str(repo), "config", "user.name", "T"], check=True, capture_output=True)
+        subprocess.run(
+            ["git", "-C", str(repo), "init"], check=True, capture_output=True
+        )
+        subprocess.run(
+            ["git", "-C", str(repo), "config", "user.email", "t@t.com"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(repo), "config", "user.name", "T"],
+            check=True,
+            capture_output=True,
+        )
         src = repo / "src"
         src.mkdir()
         (src / "a.py").write_text("x\n" * 2000, encoding="utf-8")
-        subprocess.run(["git", "-C", str(repo), "add", "src/a.py"], check=True, capture_output=True)
-        subprocess.run(["git", "-C", str(repo), "commit", "-m", "init"], check=True, capture_output=True)
+        subprocess.run(
+            ["git", "-C", str(repo), "add", "src/a.py"], check=True, capture_output=True
+        )
+        subprocess.run(
+            ["git", "-C", str(repo), "commit", "-m", "init"],
+            check=True,
+            capture_output=True,
+        )
         start_sha = subprocess.run(
             ["git", "-C", str(repo), "rev-parse", "HEAD"],
-            check=True, capture_output=True, text=True,
+            check=True,
+            capture_output=True,
+            text=True,
         ).stdout.strip()
         with open(src / "a.py", "a", encoding="utf-8") as fh:
             fh.write("y\n" * 10)
-        subprocess.run(["git", "-C", str(repo), "add", "src/a.py"], check=True, capture_output=True)
-        subprocess.run(["git", "-C", str(repo), "commit", "-m", "small change"], check=True, capture_output=True)
+        subprocess.run(
+            ["git", "-C", str(repo), "add", "src/a.py"], check=True, capture_output=True
+        )
+        subprocess.run(
+            ["git", "-C", str(repo), "commit", "-m", "small change"],
+            check=True,
+            capture_output=True,
+        )
         result = bulk_files_with_diff([repo / "src" / "a.py"], start_sha, repo, 0.25)
         assert "--- DIFF:" in result, f"expected DIFF delimiter, got: {result[:200]!r}"
-        assert "--- FILE: " not in result, f"expected no FILE delimiter, got: {result[:200]!r}"
-        assert start_sha[:8] in result, f"expected start_sha[:8] in result, got: {result[:200]!r}"
+        assert "--- FILE: " not in result, (
+            f"expected no FILE delimiter, got: {result[:200]!r}"
+        )
+        assert start_sha[:8] in result, (
+            f"expected start_sha[:8] in result, got: {result[:200]!r}"
+        )
         print("PASS: bulk_files_with_diff small diff -> DIFF delimiter")
 
     # Test B — file with large diff uses FILE delimiter
     with _test_helpers.safe_temp_dir() as tmpdir:
         repo = Path(tmpdir)
-        subprocess.run(["git", "-C", str(repo), "init"], check=True, capture_output=True)
-        subprocess.run(["git", "-C", str(repo), "config", "user.email", "t@t.com"], check=True, capture_output=True)
-        subprocess.run(["git", "-C", str(repo), "config", "user.name", "T"], check=True, capture_output=True)
+        subprocess.run(
+            ["git", "-C", str(repo), "init"], check=True, capture_output=True
+        )
+        subprocess.run(
+            ["git", "-C", str(repo), "config", "user.email", "t@t.com"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(repo), "config", "user.name", "T"],
+            check=True,
+            capture_output=True,
+        )
         src = repo / "src"
         src.mkdir()
         (src / "b.py").write_text("x\n" * 20, encoding="utf-8")
-        subprocess.run(["git", "-C", str(repo), "add", "src/b.py"], check=True, capture_output=True)
-        subprocess.run(["git", "-C", str(repo), "commit", "-m", "init"], check=True, capture_output=True)
+        subprocess.run(
+            ["git", "-C", str(repo), "add", "src/b.py"], check=True, capture_output=True
+        )
+        subprocess.run(
+            ["git", "-C", str(repo), "commit", "-m", "init"],
+            check=True,
+            capture_output=True,
+        )
         start_sha = subprocess.run(
             ["git", "-C", str(repo), "rev-parse", "HEAD"],
-            check=True, capture_output=True, text=True,
+            check=True,
+            capture_output=True,
+            text=True,
         ).stdout.strip()
         (src / "b.py").write_text("y\n" * 20, encoding="utf-8")
-        subprocess.run(["git", "-C", str(repo), "add", "src/b.py"], check=True, capture_output=True)
-        subprocess.run(["git", "-C", str(repo), "commit", "-m", "large change"], check=True, capture_output=True)
+        subprocess.run(
+            ["git", "-C", str(repo), "add", "src/b.py"], check=True, capture_output=True
+        )
+        subprocess.run(
+            ["git", "-C", str(repo), "commit", "-m", "large change"],
+            check=True,
+            capture_output=True,
+        )
         result = bulk_files_with_diff([repo / "src" / "b.py"], start_sha, repo, 0.25)
         assert "--- FILE: " in result, f"expected FILE delimiter, got: {result[:200]!r}"
-        assert "--- DIFF:" not in result, f"expected no DIFF delimiter, got: {result[:200]!r}"
+        assert "--- DIFF:" not in result, (
+            f"expected no DIFF delimiter, got: {result[:200]!r}"
+        )
         print("PASS: bulk_files_with_diff large diff -> FILE delimiter")
 
     # Test C — unchanged file (empty diff) uses FILE delimiter
     with _test_helpers.safe_temp_dir() as tmpdir:
         repo = Path(tmpdir)
-        subprocess.run(["git", "-C", str(repo), "init"], check=True, capture_output=True)
-        subprocess.run(["git", "-C", str(repo), "config", "user.email", "t@t.com"], check=True, capture_output=True)
-        subprocess.run(["git", "-C", str(repo), "config", "user.name", "T"], check=True, capture_output=True)
+        subprocess.run(
+            ["git", "-C", str(repo), "init"], check=True, capture_output=True
+        )
+        subprocess.run(
+            ["git", "-C", str(repo), "config", "user.email", "t@t.com"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(repo), "config", "user.name", "T"],
+            check=True,
+            capture_output=True,
+        )
         src = repo / "src"
         src.mkdir()
         (src / "c.py").write_text("hello\n", encoding="utf-8")
-        subprocess.run(["git", "-C", str(repo), "add", "src/c.py"], check=True, capture_output=True)
-        subprocess.run(["git", "-C", str(repo), "commit", "-m", "init"], check=True, capture_output=True)
+        subprocess.run(
+            ["git", "-C", str(repo), "add", "src/c.py"], check=True, capture_output=True
+        )
+        subprocess.run(
+            ["git", "-C", str(repo), "commit", "-m", "init"],
+            check=True,
+            capture_output=True,
+        )
         start_sha = subprocess.run(
             ["git", "-C", str(repo), "rev-parse", "HEAD"],
-            check=True, capture_output=True, text=True,
+            check=True,
+            capture_output=True,
+            text=True,
         ).stdout.strip()
         (src / "other.py").write_text("z\n", encoding="utf-8")
-        subprocess.run(["git", "-C", str(repo), "add", "src/other.py"], check=True, capture_output=True)
-        subprocess.run(["git", "-C", str(repo), "commit", "-m", "other file"], check=True, capture_output=True)
+        subprocess.run(
+            ["git", "-C", str(repo), "add", "src/other.py"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(repo), "commit", "-m", "other file"],
+            check=True,
+            capture_output=True,
+        )
         result = bulk_files_with_diff([repo / "src" / "c.py"], start_sha, repo, 0.25)
         assert "--- FILE: " in result, f"expected FILE delimiter, got: {result[:200]!r}"
-        print("PASS: bulk_files_with_diff empty diff (unchanged file) -> FILE delimiter")
+        print(
+            "PASS: bulk_files_with_diff empty diff (unchanged file) -> FILE delimiter"
+        )
 
     # Test D — non-existent file is skipped
     with _test_helpers.safe_temp_dir() as tmpdir:
         repo = Path(tmpdir)
-        subprocess.run(["git", "-C", str(repo), "init"], check=True, capture_output=True)
-        subprocess.run(["git", "-C", str(repo), "config", "user.email", "t@t.com"], check=True, capture_output=True)
-        subprocess.run(["git", "-C", str(repo), "config", "user.name", "T"], check=True, capture_output=True)
+        subprocess.run(
+            ["git", "-C", str(repo), "init"], check=True, capture_output=True
+        )
+        subprocess.run(
+            ["git", "-C", str(repo), "config", "user.email", "t@t.com"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(repo), "config", "user.name", "T"],
+            check=True,
+            capture_output=True,
+        )
         (repo / "dummy.py").write_text("x\n", encoding="utf-8")
-        subprocess.run(["git", "-C", str(repo), "add", "dummy.py"], check=True, capture_output=True)
-        subprocess.run(["git", "-C", str(repo), "commit", "-m", "init"], check=True, capture_output=True)
+        subprocess.run(
+            ["git", "-C", str(repo), "add", "dummy.py"], check=True, capture_output=True
+        )
+        subprocess.run(
+            ["git", "-C", str(repo), "commit", "-m", "init"],
+            check=True,
+            capture_output=True,
+        )
         start_sha = subprocess.run(
             ["git", "-C", str(repo), "rev-parse", "HEAD"],
-            check=True, capture_output=True, text=True,
+            check=True,
+            capture_output=True,
+            text=True,
         ).stdout.strip()
         result = bulk_files_with_diff([repo / "nonexistent.py"], start_sha, repo, 0.25)
         assert result == "", f"expected empty string, got: {result!r}"
@@ -1907,29 +2295,53 @@ def main() -> int:
     # Test E — git diff failure falls back to full file
     with _test_helpers.safe_temp_dir() as tmpdir:
         repo = Path(tmpdir)
-        subprocess.run(["git", "-C", str(repo), "init"], check=True, capture_output=True)
-        subprocess.run(["git", "-C", str(repo), "config", "user.email", "t@t.com"], check=True, capture_output=True)
-        subprocess.run(["git", "-C", str(repo), "config", "user.name", "T"], check=True, capture_output=True)
+        subprocess.run(
+            ["git", "-C", str(repo), "init"], check=True, capture_output=True
+        )
+        subprocess.run(
+            ["git", "-C", str(repo), "config", "user.email", "t@t.com"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(repo), "config", "user.name", "T"],
+            check=True,
+            capture_output=True,
+        )
         src = repo / "src"
         src.mkdir()
         (src / "a.py").write_text("hello\n", encoding="utf-8")
-        subprocess.run(["git", "-C", str(repo), "add", "src/a.py"], check=True, capture_output=True)
-        subprocess.run(["git", "-C", str(repo), "commit", "-m", "init"], check=True, capture_output=True)
-        result = bulk_files_with_diff([repo / "src" / "a.py"], "deadbeef" * 5, repo, 0.25)
-        assert "--- FILE: " in result, f"expected FILE delimiter fallback, got: {result[:200]!r}"
-        assert "--- DIFF:" not in result, f"expected no DIFF delimiter, got: {result[:200]!r}"
+        subprocess.run(
+            ["git", "-C", str(repo), "add", "src/a.py"], check=True, capture_output=True
+        )
+        subprocess.run(
+            ["git", "-C", str(repo), "commit", "-m", "init"],
+            check=True,
+            capture_output=True,
+        )
+        result = bulk_files_with_diff(
+            [repo / "src" / "a.py"], "deadbeef" * 5, repo, 0.25
+        )
+        assert "--- FILE: " in result, (
+            f"expected FILE delimiter fallback, got: {result[:200]!r}"
+        )
+        assert "--- DIFF:" not in result, (
+            f"expected no DIFF delimiter, got: {result[:200]!r}"
+        )
         print("PASS: bulk_files_with_diff git diff failure -> FILE delimiter fallback")
 
     # _read_for_bulk: code-cell-only notebook -> source concatenated with \n\n
     with _test_helpers.safe_temp_dir() as tmpdir:
         notebook_path = Path(tmpdir) / "code_only.ipynb"
         notebook_path.write_text(
-            json.dumps({
-                "cells": [
-                    {"cell_type": "code", "source": "print('hello')"},
-                    {"cell_type": "code", "source": "x = 42"},
-                ]
-            }),
+            json.dumps(
+                {
+                    "cells": [
+                        {"cell_type": "code", "source": "print('hello')"},
+                        {"cell_type": "code", "source": "x = 42"},
+                    ]
+                }
+            ),
             encoding="utf-8",
         )
         result = _read_for_bulk(notebook_path)
@@ -1940,12 +2352,14 @@ def main() -> int:
     with _test_helpers.safe_temp_dir() as tmpdir:
         notebook_path = Path(tmpdir) / "md_only.ipynb"
         notebook_path.write_text(
-            json.dumps({
-                "cells": [
-                    {"cell_type": "markdown", "source": "# Title"},
-                    {"cell_type": "markdown", "source": "Some text"},
-                ]
-            }),
+            json.dumps(
+                {
+                    "cells": [
+                        {"cell_type": "markdown", "source": "# Title"},
+                        {"cell_type": "markdown", "source": "Some text"},
+                    ]
+                }
+            ),
             encoding="utf-8",
         )
         result = _read_for_bulk(notebook_path)
@@ -1956,13 +2370,15 @@ def main() -> int:
     with _test_helpers.safe_temp_dir() as tmpdir:
         notebook_path = Path(tmpdir) / "mixed.ipynb"
         notebook_path.write_text(
-            json.dumps({
-                "cells": [
-                    {"cell_type": "markdown", "source": "# Section"},
-                    {"cell_type": "code", "source": "x = 1"},
-                    {"cell_type": "markdown", "source": "## Subsection"},
-                ]
-            }),
+            json.dumps(
+                {
+                    "cells": [
+                        {"cell_type": "markdown", "source": "# Section"},
+                        {"cell_type": "code", "source": "x = 1"},
+                        {"cell_type": "markdown", "source": "## Subsection"},
+                    ]
+                }
+            ),
             encoding="utf-8",
         )
         result = _read_for_bulk(notebook_path)
@@ -1973,11 +2389,13 @@ def main() -> int:
     with _test_helpers.safe_temp_dir() as tmpdir:
         notebook_path = Path(tmpdir) / "list_source.ipynb"
         notebook_path.write_text(
-            json.dumps({
-                "cells": [
-                    {"cell_type": "code", "source": ["line1", "line2", "line3"]},
-                ]
-            }),
+            json.dumps(
+                {
+                    "cells": [
+                        {"cell_type": "code", "source": ["line1", "line2", "line3"]},
+                    ]
+                }
+            ),
             encoding="utf-8",
         )
         result = _read_for_bulk(notebook_path)
@@ -1988,11 +2406,13 @@ def main() -> int:
     with _test_helpers.safe_temp_dir() as tmpdir:
         notebook_path = Path(tmpdir) / "str_source.ipynb"
         notebook_path.write_text(
-            json.dumps({
-                "cells": [
-                    {"cell_type": "code", "source": "x = 42\ny = 43"},
-                ]
-            }),
+            json.dumps(
+                {
+                    "cells": [
+                        {"cell_type": "code", "source": "x = 42\ny = 43"},
+                    ]
+                }
+            ),
             encoding="utf-8",
         )
         result = _read_for_bulk(notebook_path)
@@ -2003,13 +2423,15 @@ def main() -> int:
     with _test_helpers.safe_temp_dir() as tmpdir:
         notebook_path = Path(tmpdir) / "with_raw.ipynb"
         notebook_path.write_text(
-            json.dumps({
-                "cells": [
-                    {"cell_type": "code", "source": "x = 1"},
-                    {"cell_type": "raw", "source": "ignore this"},
-                    {"cell_type": "markdown", "source": "y"},
-                ]
-            }),
+            json.dumps(
+                {
+                    "cells": [
+                        {"cell_type": "code", "source": "x = 1"},
+                        {"cell_type": "raw", "source": "ignore this"},
+                        {"cell_type": "markdown", "source": "y"},
+                    ]
+                }
+            ),
             encoding="utf-8",
         )
         result = _read_for_bulk(notebook_path)
@@ -2029,6 +2451,7 @@ def main() -> int:
     with _test_helpers.safe_temp_dir() as tmpdir:
         import io as _io
         import contextlib as _cl
+
         notebook_path = Path(tmpdir) / "bad.ipynb"
         notebook_path.write_text("{bad json", encoding="utf-8")
         _err_buf = _io.StringIO()
@@ -2036,12 +2459,17 @@ def main() -> int:
             result = _read_for_bulk(notebook_path)
         assert result == "", f"Expected empty string, got: {result!r}"
         stderr_out = _err_buf.getvalue()
-        assert "[_read_for_bulk]" in stderr_out, f"Warning should contain [_read_for_bulk]: {stderr_out!r}"
-        assert "warning" in stderr_out.lower(), f"Warning should contain 'warning': {stderr_out!r}"
+        assert "[_read_for_bulk]" in stderr_out, (
+            f"Warning should contain [_read_for_bulk]: {stderr_out!r}"
+        )
+        assert "warning" in stderr_out.lower(), (
+            f"Warning should contain 'warning': {stderr_out!r}"
+        )
         print("PASS: _read_for_bulk malformed JSON -> empty string + stderr warning")
 
     # write_review_file: UTC-timestamp regression test (frozen clock)
     import datetime as _dt
+
     with _test_helpers.safe_temp_dir() as tmpdir:
         reviews_dir = Path(tmpdir)
         frozen_dt = _dt.datetime(2026, 1, 2, 3, 4, 5, tzinfo=_dt.timezone.utc)
@@ -2050,19 +2478,25 @@ def main() -> int:
             mock_dt_module.timezone = _dt.timezone
             # Test case 1: code review, no scope
             path = write_review_file(reviews_dir, "code", 1, "content")
-            assert "20260102-030405" in path.name, f"Expected UTC timestamp 20260102-030405, got: {path.name}"
+            assert "20260102-030405" in path.name, (
+                f"Expected UTC timestamp 20260102-030405, got: {path.name}"
+            )
             assert "code-review-r1" in path.name
             print("PASS: write_review_file UTC timestamp (code, no scope)")
 
             # Test case 2: code review with scope="holistic"
-            path = write_review_file(reviews_dir, "code", 1, "content", scope="holistic")
+            path = write_review_file(
+                reviews_dir, "code", 1, "content", scope="holistic"
+            )
             assert "20260102-030405" in path.name
             assert "code-review-r1" in path.name
             assert "holistic" not in path.name
             print("PASS: write_review_file UTC timestamp (code, scope=holistic)")
 
             # Test case 3: code review with batch scope
-            path = write_review_file(reviews_dir, "code", 1, "content", scope="01-foundation")
+            path = write_review_file(
+                reviews_dir, "code", 1, "content", scope="01-foundation"
+            )
             assert "20260102-030405" in path.name
             assert "code-review-01-foundation-r1" in path.name
             print("PASS: write_review_file UTC timestamp (code, scope=batch)")
@@ -2074,7 +2508,9 @@ def main() -> int:
             print("PASS: write_review_file UTC timestamp (discussion)")
 
             # Test case 5: plan review with batch scope
-            path = write_review_file(reviews_dir, "plan", 1, "content", scope="01-foundation")
+            path = write_review_file(
+                reviews_dir, "plan", 1, "content", scope="01-foundation"
+            )
             assert "20260102-030405" in path.name
             assert "plan-review-01-foundation-r1" in path.name
             print("PASS: write_review_file UTC timestamp (plan, scope=batch)")
@@ -2096,7 +2532,9 @@ def main() -> int:
             )
 
             # Case 2: scope="holistic" (explicit holistic)
-            path2 = write_review_file(reviews_dir, "code", 1, "content", scope="holistic")
+            path2 = write_review_file(
+                reviews_dir, "code", 1, "content", scope="holistic"
+            )
             assert "-holistic-review-" not in path2.name, (
                 f"scope='holistic' should not contain '-holistic-review-': {path2.name}"
             )
@@ -2118,7 +2556,10 @@ def main() -> int:
         print(f"FAIL: write_review_file holistic naming: {exc}", file=sys.stderr)
         errors += 1
     except Exception as exc:
-        print(f"FAIL: write_review_file holistic naming (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        print(
+            f"FAIL: write_review_file holistic naming (unexpected {type(exc).__name__}): {exc}",
+            file=sys.stderr,
+        )
         errors += 1
 
     # find_active_slug glob fallback: one .active file -> returns slug
@@ -2130,16 +2571,24 @@ def main() -> int:
             (mill_dir / "my-task.active").write_text("", encoding="utf-8")
 
             cfg = {}
-            with patch("_review_common._marker.slug_from_branch", side_effect=_marker.MarkerError("test")):
+            with patch(
+                "_review_common._marker.slug_from_branch",
+                side_effect=_marker.MarkerError("test"),
+            ):
                 result = find_active_slug(hub_root, Path(tmp) / "wiki", cfg)
 
             assert result == "my-task", f"Expected 'my-task', got {result!r}"
-            print("PASS: find_active_slug glob fallback — one .active file -> 'my-task'")
+            print(
+                "PASS: find_active_slug glob fallback — one .active file -> 'my-task'"
+            )
     except AssertionError as exc:
         print(f"FAIL: find_active_slug glob fallback one file: {exc}", file=sys.stderr)
         errors += 1
     except Exception as exc:
-        print(f"FAIL: find_active_slug glob fallback one file (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        print(
+            f"FAIL: find_active_slug glob fallback one file (unexpected {type(exc).__name__}): {exc}",
+            file=sys.stderr,
+        )
         errors += 1
 
     # find_active_slug glob fallback: multiple .active files -> ReviewError
@@ -2152,20 +2601,34 @@ def main() -> int:
             (mill_dir / "task-b.active").write_text("", encoding="utf-8")
 
             cfg = {}
-            with patch("_review_common._marker.slug_from_branch", side_effect=_marker.MarkerError("test")):
+            with patch(
+                "_review_common._marker.slug_from_branch",
+                side_effect=_marker.MarkerError("test"),
+            ):
                 try:
                     find_active_slug(hub_root, Path(tmp) / "wiki", cfg)
-                    print("FAIL: find_active_slug glob fallback multiple files: expected ReviewError", file=sys.stderr)
+                    print(
+                        "FAIL: find_active_slug glob fallback multiple files: expected ReviewError",
+                        file=sys.stderr,
+                    )
                     errors += 1
                 except ReviewError as e:
                     if "use --slug" not in str(e):
-                        print(f"FAIL: find_active_slug glob fallback multiple files: expected 'use --slug' in error, got {e!r}", file=sys.stderr)
+                        print(
+                            f"FAIL: find_active_slug glob fallback multiple files: expected 'use --slug' in error, got {e!r}",
+                            file=sys.stderr,
+                        )
                         errors += 1
                     else:
-                        print("PASS: find_active_slug glob fallback — multiple .active files -> ReviewError with 'use --slug'")
+                        print(
+                            "PASS: find_active_slug glob fallback — multiple .active files -> ReviewError with 'use --slug'"
+                        )
     except Exception as exc:
         if not isinstance(exc, AssertionError):
-            print(f"FAIL: find_active_slug glob fallback multiple files (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+            print(
+                f"FAIL: find_active_slug glob fallback multiple files (unexpected {type(exc).__name__}): {exc}",
+                file=sys.stderr,
+            )
             errors += 1
 
     # find_active_slug glob fallback: no _mill/ dir -> ReviewError
@@ -2175,19 +2638,30 @@ def main() -> int:
             # Do NOT create _mill/
 
             cfg = {}
-            with patch("_review_common._marker.slug_from_branch", side_effect=_marker.MarkerError("test")):
+            with patch(
+                "_review_common._marker.slug_from_branch",
+                side_effect=_marker.MarkerError("test"),
+            ):
                 try:
                     find_active_slug(hub_root, Path(tmp) / "wiki", cfg)
-                    print("FAIL: find_active_slug glob fallback no _mill: expected ReviewError", file=sys.stderr)
+                    print(
+                        "FAIL: find_active_slug glob fallback no _mill: expected ReviewError",
+                        file=sys.stderr,
+                    )
                     errors += 1
                 except ReviewError:
-                    print("PASS: find_active_slug glob fallback — no _mill/ dir -> ReviewError")
+                    print(
+                        "PASS: find_active_slug glob fallback — no _mill/ dir -> ReviewError"
+                    )
     except AssertionError as exc:
         print(f"FAIL: find_active_slug glob fallback no _mill: {exc}", file=sys.stderr)
         errors += 1
     except Exception as exc:
         if not isinstance(exc, (ReviewError, AssertionError)):
-            print(f"FAIL: find_active_slug glob fallback no _mill (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+            print(
+                f"FAIL: find_active_slug glob fallback no _mill (unexpected {type(exc).__name__}): {exc}",
+                file=sys.stderr,
+            )
             errors += 1
 
     # ---------------------------------------------------------------------------
@@ -2196,21 +2670,35 @@ def main() -> int:
 
     # nit_count defaults to 0
     result = ReviewResult(type="code", round=1, verdict="APPROVE")
-    assert result.nit_count == 0, f"Expected nit_count=0 by default, got {result.nit_count}"
+    assert result.nit_count == 0, (
+        f"Expected nit_count=0 by default, got {result.nit_count}"
+    )
     print("PASS: ReviewResult nit_count defaults to 0")
 
     # to_dict() includes nit_count
     result_dict = result.to_dict()
-    assert "nit_count" in result_dict, f"nit_count not in to_dict(): {result_dict.keys()}"
-    assert result_dict["nit_count"] == 0, f"Expected to_dict()['nit_count']=0, got {result_dict['nit_count']}"
+    assert "nit_count" in result_dict, (
+        f"nit_count not in to_dict(): {result_dict.keys()}"
+    )
+    assert result_dict["nit_count"] == 0, (
+        f"Expected to_dict()['nit_count']=0, got {result_dict['nit_count']}"
+    )
     print("PASS: ReviewResult.to_dict() includes nit_count field")
 
     # nit_count non-default value round-trips
-    result_with_nits = ReviewResult(type="code", round=1, verdict="APPROVE", nit_count=5)
-    assert result_with_nits.nit_count == 5, f"Expected nit_count=5, got {result_with_nits.nit_count}"
+    result_with_nits = ReviewResult(
+        type="code", round=1, verdict="APPROVE", nit_count=5
+    )
+    assert result_with_nits.nit_count == 5, (
+        f"Expected nit_count=5, got {result_with_nits.nit_count}"
+    )
     result_dict = result_with_nits.to_dict()
-    assert result_dict["nit_count"] == 5, f"Expected to_dict()['nit_count']=5, got {result_dict['nit_count']}"
-    print("PASS: ReviewResult nit_count non-default value round-trips through to_dict()")
+    assert result_dict["nit_count"] == 5, (
+        f"Expected to_dict()['nit_count']=5, got {result_dict['nit_count']}"
+    )
+    print(
+        "PASS: ReviewResult nit_count non-default value round-trips through to_dict()"
+    )
 
     # ---------------------------------------------------------------------------
     # parse_verdict: unfenced fallback line
@@ -2229,7 +2717,9 @@ def main() -> int:
     # parse_verdict: no verdict at all (no fenced, no unfenced) raises ReviewError
     try:
         parse_verdict("No verdict anywhere in this text.")
-        print("FAIL: parse_verdict: expected ReviewError for no verdict", file=sys.stderr)
+        print(
+            "FAIL: parse_verdict: expected ReviewError for no verdict", file=sys.stderr
+        )
         errors += 1
     except ReviewError:
         print("PASS: parse_verdict no verdict -> ReviewError")
@@ -2238,7 +2728,10 @@ def main() -> int:
     try:
         raw = "```yaml\nverdict: INVALID_VALUE\n```\n\nverdict: APPROVE\n"
         parse_verdict(raw)
-        print("FAIL: parse_verdict: expected ReviewError for invalid fenced value", file=sys.stderr)
+        print(
+            "FAIL: parse_verdict: expected ReviewError for invalid fenced value",
+            file=sys.stderr,
+        )
         errors += 1
     except ReviewError as e:
         assert "INVALID_VALUE" in str(e)
@@ -2252,6 +2745,7 @@ def main() -> int:
     with _test_helpers.safe_temp_dir() as tmpdir:
         import io as _io
         import contextlib as _cl
+
         tmpdir_path = Path(tmpdir)
         subdir = tmpdir_path / "subdir"
         subdir.mkdir()
@@ -2260,7 +2754,9 @@ def main() -> int:
             result = _read_for_bulk(subdir)
         assert result == "", f"Expected empty string for directory, got {result!r}"
         stderr_out = _err_buf.getvalue()
-        assert "is a directory" in stderr_out, f"Expected 'is a directory' warning, got {stderr_out!r}"
+        assert "is a directory" in stderr_out, (
+            f"Expected 'is a directory' warning, got {stderr_out!r}"
+        )
         print("PASS: _read_for_bulk directory path -> empty string + warning")
 
     # bulk_files: real file and directory in path list -> file included, directory skipped
@@ -2271,7 +2767,9 @@ def main() -> int:
         subdir = tmpdir_path / "subdir"
         subdir.mkdir()
         result = bulk_files([real_file, subdir])
-        assert "real.py" in result and "content" in result, f"File should be bulked: {result!r}"
+        assert "real.py" in result and "content" in result, (
+            f"File should be bulked: {result!r}"
+        )
         assert "--- FILE:" in result, f"FILE delimiter expected: {result!r}"
         print("PASS: bulk_files directory skipped, file included")
 
@@ -2286,7 +2784,9 @@ def main() -> int:
         # Create a fixture source file with a unique sentinel line
         source_file = tmpdir_path / "source.py"
         sentinel_line = "UNIQUE_SENTINEL_LINE_FOR_TEST_xyz123"
-        source_file.write_text(f"def foo():\n    # {sentinel_line}\n    return 42\n", encoding="utf-8")
+        source_file.write_text(
+            f"def foo():\n    # {sentinel_line}\n    return 42\n", encoding="utf-8"
+        )
 
         # Create overview and batch files (empty for this test)
         overview = tmpdir_path / "overview.md"
@@ -2336,7 +2836,9 @@ def main() -> int:
         # Create a fixture source file with a unique sentinel line
         source_file = tmpdir_path / "source.py"
         sentinel_line = "UNIQUE_SENTINEL_LINE_FOR_BULK_TEST_abc789"
-        source_file.write_text(f"def bar():\n    # {sentinel_line}\n    return 99\n", encoding="utf-8")
+        source_file.write_text(
+            f"def bar():\n    # {sentinel_line}\n    return 99\n", encoding="utf-8"
+        )
 
         # Create overview and batch files (empty for this test)
         overview = tmpdir_path / "overview.md"
@@ -2393,7 +2895,9 @@ def main() -> int:
         }
     }
     prompt = "x" * 50000  # ~12 ktok
-    timeout = resolve_large_prompt_timeout(prompt, cfg, "plan-review", "holistic", default_timeout=1800)
+    timeout = resolve_large_prompt_timeout(
+        prompt, cfg, "plan-review", "holistic", default_timeout=1800
+    )
     assert timeout == 1800, f"Expected default 1800, got {timeout}"
     print("PASS: resolve_large_prompt_timeout under threshold -> default timeout")
 
@@ -2411,9 +2915,13 @@ def main() -> int:
         }
     }
     prompt = "x" * 500000  # ~125 ktok
-    timeout = resolve_large_prompt_timeout(prompt, cfg, "plan-review", "holistic", default_timeout=1800)
+    timeout = resolve_large_prompt_timeout(
+        prompt, cfg, "plan-review", "holistic", default_timeout=1800
+    )
     assert timeout == 3600, f"Expected override 3600, got {timeout}"
-    print("PASS: resolve_large_prompt_timeout over threshold + timeout key set -> override")
+    print(
+        "PASS: resolve_large_prompt_timeout over threshold + timeout key set -> override"
+    )
 
     # resolve_large_prompt_timeout: over threshold, key not set -> returns default
     cfg = {
@@ -2428,14 +2936,20 @@ def main() -> int:
         }
     }
     prompt = "x" * 500000  # ~125 ktok
-    timeout = resolve_large_prompt_timeout(prompt, cfg, "plan-review", "holistic", default_timeout=1800)
+    timeout = resolve_large_prompt_timeout(
+        prompt, cfg, "plan-review", "holistic", default_timeout=1800
+    )
     assert timeout == 1800, f"Expected default 1800, got {timeout}"
-    print("PASS: resolve_large_prompt_timeout over threshold but key not set -> default")
+    print(
+        "PASS: resolve_large_prompt_timeout over threshold but key not set -> default"
+    )
 
     # resolve_large_prompt_timeout: no large_prompt key -> returns default
     cfg = {"roles": {"plan-review": {"holistic": {}}}}
     prompt = "x" * 500000
-    timeout = resolve_large_prompt_timeout(prompt, cfg, "plan-review", "holistic", default_timeout=1800)
+    timeout = resolve_large_prompt_timeout(
+        prompt, cfg, "plan-review", "holistic", default_timeout=1800
+    )
     assert timeout == 1800, f"Expected default 1800, got {timeout}"
     print("PASS: resolve_large_prompt_timeout no large_prompt key -> default")
 
@@ -2447,6 +2961,7 @@ def main() -> int:
     try:
         import contextlib
         import io
+
         raw = (
             "### Overview\n"
             "This is a clean review with no findings.\n"
@@ -2457,15 +2972,23 @@ def main() -> int:
         with contextlib.redirect_stderr(buf):
             count = parse_blocking_count(raw, severity="GAP")
         if count != 0:
-            print(f"FAIL: parse_blocking_count zero headings: expected heading_count 0, got {count}", file=sys.stderr)
+            print(
+                f"FAIL: parse_blocking_count zero headings: expected heading_count 0, got {count}",
+                file=sys.stderr,
+            )
             errors += 1
         else:
             stderr = buf.getvalue()
             if "diverges from prose count" in stderr:
-                print(f"FAIL: parse_blocking_count zero headings: expected no divergence warning, got: {stderr!r}", file=sys.stderr)
+                print(
+                    f"FAIL: parse_blocking_count zero headings: expected no divergence warning, got: {stderr!r}",
+                    file=sys.stderr,
+                )
                 errors += 1
             else:
-                print("PASS: parse_blocking_count zero headings suppresses divergence warning")
+                print(
+                    "PASS: parse_blocking_count zero headings suppresses divergence warning"
+                )
     except Exception as exc:
         print(f"FAIL: parse_blocking_count zero headings: {exc}", file=sys.stderr)
         errors += 1
@@ -2474,6 +2997,7 @@ def main() -> int:
     try:
         import contextlib
         import io
+
         raw = (
             "### [GAP] issue one\n"
             "There are 2 gaps in the discussion.\n"
@@ -2483,23 +3007,34 @@ def main() -> int:
         with contextlib.redirect_stderr(buf):
             count = parse_blocking_count(raw, severity="GAP")
         if count != 1:
-            print(f"FAIL: parse_blocking_count one heading + verdict: expected heading_count 1, got {count}", file=sys.stderr)
+            print(
+                f"FAIL: parse_blocking_count one heading + verdict: expected heading_count 1, got {count}",
+                file=sys.stderr,
+            )
             errors += 1
         else:
             stderr = buf.getvalue()
             if "heading count 1 diverges from prose count 2" not in stderr:
-                print(f"FAIL: parse_blocking_count one heading + verdict: expected divergence warning (verdict line not inflating count), got: {stderr!r}", file=sys.stderr)
+                print(
+                    f"FAIL: parse_blocking_count one heading + verdict: expected divergence warning (verdict line not inflating count), got: {stderr!r}",
+                    file=sys.stderr,
+                )
                 errors += 1
             else:
-                print("PASS: parse_blocking_count one heading + verdict: verdict line filtered from prose count")
+                print(
+                    "PASS: parse_blocking_count one heading + verdict: verdict line filtered from prose count"
+                )
     except Exception as exc:
-        print(f"FAIL: parse_blocking_count one heading + verdict: {exc}", file=sys.stderr)
+        print(
+            f"FAIL: parse_blocking_count one heading + verdict: {exc}", file=sys.stderr
+        )
         errors += 1
 
     # parse_blocking_count: non-zero headings still emit divergence warning
     try:
         import contextlib
         import io
+
         raw = (
             "### [GAP] issue one\n"
             "### [GAP] issue two\n"
@@ -2509,15 +3044,23 @@ def main() -> int:
         with contextlib.redirect_stderr(buf):
             count = parse_blocking_count(raw, severity="GAP")
         if count != 2:
-            print(f"FAIL: parse_blocking_count with headings: expected heading_count 2, got {count}", file=sys.stderr)
+            print(
+                f"FAIL: parse_blocking_count with headings: expected heading_count 2, got {count}",
+                file=sys.stderr,
+            )
             errors += 1
         else:
             stderr = buf.getvalue()
             if "heading count 2 diverges from prose count 3" not in stderr:
-                print(f"FAIL: parse_blocking_count with headings: expected divergence warning, got: {stderr!r}", file=sys.stderr)
+                print(
+                    f"FAIL: parse_blocking_count with headings: expected divergence warning, got: {stderr!r}",
+                    file=sys.stderr,
+                )
                 errors += 1
             else:
-                print("PASS: parse_blocking_count with headings still warns on divergence")
+                print(
+                    "PASS: parse_blocking_count with headings still warns on divergence"
+                )
     except Exception as exc:
         print(f"FAIL: parse_blocking_count with headings: {exc}", file=sys.stderr)
         errors += 1

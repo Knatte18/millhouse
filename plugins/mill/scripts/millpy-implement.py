@@ -263,6 +263,7 @@ def main(argv=None) -> int:
             card_count=card_count,
             task_dir=status_path.parent,
             parent_branch=parent_branch,
+            git_root=git_root,
         )
 
     # Stages: prepare and full (need pre-commit, render, and setup)
@@ -425,6 +426,7 @@ def main(argv=None) -> int:
         card_count=card_count,
         task_dir=status_path.parent,
         parent_branch=parent_branch,
+        git_root=git_root,
     )
 
 

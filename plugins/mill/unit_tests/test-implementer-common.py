@@ -22,6 +22,7 @@ from _implementer_common import (  # noqa: E402
     finalize_from_output,
     _is_formatter_drift_only,
     _commit_formatter_drift,
+    _run_verify_gate,
     _run_verify_gates,
     _is_benign_windows_cleanup,
 )
@@ -1628,6 +1629,182 @@ def main() -> int:
     except Exception as exc:
         print(f"FAIL: case 35 ({exc})", file=sys.stderr)
         errors += 1
+
+    # Test A: git_root kwarg selects cwd for the verify subprocess (#554)
+    # Mock subprocess.run so the cwd kwarg is observable without executing real commands.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        hub_dir = Path(tmpdir) / "hub"
+        repo_dir = Path(tmpdir) / "repo"
+        hub_dir.mkdir()
+        repo_dir.mkdir()
+        try:
+            with unittest.mock.patch("_implementer_common.subprocess.run") as mock_run:
+                # Configure mock to return a passing result (returncode=0)
+                mock_result = unittest.mock.MagicMock()
+                mock_result.returncode = 0
+                mock_result.stdout = ""
+                mock_result.stderr = ""
+                mock_run.return_value = mock_result
+
+                # Call with git_root; the verify subprocess cwd must equal git_root.
+                result = _run_verify_gate(hub_dir, "echo ok", git_root=repo_dir)
+                assert result is None, f"Test A: expected None (pass), got {result}"
+                # Confirm cwd passed to subprocess.run equals repo_dir (git_root)
+                call_kwargs = mock_run.call_args[1]
+                assert call_kwargs.get("cwd") == repo_dir, (
+                    f"Test A: expected cwd=repo_dir, got {call_kwargs.get('cwd')}"
+                )
+
+                # Call without git_root; the verify subprocess cwd must equal hub_dir (project_root).
+                mock_run.reset_mock()
+                result = _run_verify_gate(hub_dir, "echo ok")
+                assert result is None, (
+                    f"Test A (no git_root): expected None (pass), got {result}"
+                )
+                call_kwargs_no_root = mock_run.call_args[1]
+                assert call_kwargs_no_root.get("cwd") == hub_dir, (
+                    f"Test A (no git_root): expected cwd=hub_dir, got {call_kwargs_no_root.get('cwd')}"
+                )
+
+            print("PASS: Test A - git_root kwarg selects verify subprocess cwd (#554)")
+        except Exception as exc:
+            print(f"FAIL: Test A ({exc})", file=sys.stderr)
+            errors += 1
+
+    # Test B: git_root=None falls back to project_root as the verify subprocess cwd (#554)
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        try:
+            with unittest.mock.patch("_implementer_common.subprocess.run") as mock_run:
+                mock_result = unittest.mock.MagicMock()
+                mock_result.returncode = 0
+                mock_result.stdout = ""
+                mock_result.stderr = ""
+                mock_run.return_value = mock_result
+
+                # Explicitly pass git_root=None; cwd must fall back to project_root.
+                result = _run_verify_gate(project_root, "echo ok", git_root=None)
+                assert result is None, f"Test B: expected None (pass), got {result}"
+                call_kwargs = mock_run.call_args[1]
+                assert call_kwargs.get("cwd") == project_root, (
+                    f"Test B: expected cwd=project_root, got {call_kwargs.get('cwd')}"
+                )
+
+            print(
+                "PASS: Test B - git_root=None falls back to project_root as verify cwd (#554)"
+            )
+        except Exception as exc:
+            print(f"FAIL: Test B ({exc})", file=sys.stderr)
+            errors += 1
+
+    # Test C: dotnet build-server shutdown fires regardless of verify exit code (#556)
+    # Sub-case C1: verify exits 0 (success) -> cleanup still fires.
+    # Sub-case C2: verify exits 1 (failure) -> cleanup still fires.
+    # Also asserts cleanup does NOT fire when the command does not contain "dotnet".
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        try:
+            dotnet_cmd = "dotnet test MyProject.csproj"
+            non_dotnet_cmd = "pytest tests/ -q"
+
+            # Sub-case C1: verify succeeds (returncode=0); dotnet cleanup must still fire.
+            with (
+                unittest.mock.patch("sys.platform", "win32"),
+                unittest.mock.patch("_implementer_common.subprocess.run") as mock_run,
+            ):
+                # First call is the verify subprocess; second is the dotnet shutdown call.
+                passing_result = unittest.mock.MagicMock()
+                passing_result.returncode = 0
+                passing_result.stdout = ""
+                passing_result.stderr = ""
+                # The dotnet shutdown call also needs a mock result (ignored by caller).
+                shutdown_result = unittest.mock.MagicMock()
+                mock_run.side_effect = [passing_result, shutdown_result]
+
+                result = _run_verify_gate(project_root, dotnet_cmd)
+                assert result is None, f"Test C1: expected None (pass), got {result}"
+
+                # Confirm dotnet build-server shutdown was called.
+                all_calls = mock_run.call_args_list
+                shutdown_calls = [
+                    c
+                    for c in all_calls
+                    if c.args and c.args[0] == ["dotnet", "build-server", "shutdown"]
+                ]
+                assert len(shutdown_calls) == 1, (
+                    f"Test C1: expected 1 dotnet shutdown call on success, got {shutdown_calls}"
+                )
+
+            print("PASS: Test C1 - dotnet cleanup fires on verify success (#556)")
+
+            # Sub-case C2: verify fails (returncode=1); dotnet cleanup must still fire.
+            with (
+                unittest.mock.patch("sys.platform", "win32"),
+                unittest.mock.patch("_implementer_common.subprocess.run") as mock_run,
+            ):
+                failing_result = unittest.mock.MagicMock()
+                failing_result.returncode = 1
+                # Provide explicit string attrs so error-handling string ops do not raise on MagicMock.
+                failing_result.stdout = ""
+                failing_result.stderr = ""
+                shutdown_result = unittest.mock.MagicMock()
+                mock_run.side_effect = [failing_result, shutdown_result]
+
+                result = _run_verify_gate(project_root, dotnet_cmd)
+                # Verify gate returns a stuck dict on failure.
+                assert result is not None, (
+                    "Test C2: expected stuck dict on verify failure"
+                )
+                assert result["stuck_type"] == "verify", (
+                    f"Test C2: expected stuck_type=verify, got {result}"
+                )
+
+                # Confirm dotnet build-server shutdown was called even on failure.
+                all_calls = mock_run.call_args_list
+                shutdown_calls = [
+                    c
+                    for c in all_calls
+                    if c.args and c.args[0] == ["dotnet", "build-server", "shutdown"]
+                ]
+                assert len(shutdown_calls) == 1, (
+                    f"Test C2: expected 1 dotnet shutdown call on failure, got {shutdown_calls}"
+                )
+
+            print("PASS: Test C2 - dotnet cleanup fires on verify failure (#556)")
+
+            # Non-dotnet command: cleanup must NOT fire.
+            with (
+                unittest.mock.patch("sys.platform", "win32"),
+                unittest.mock.patch("_implementer_common.subprocess.run") as mock_run,
+            ):
+                non_dotnet_result = unittest.mock.MagicMock()
+                non_dotnet_result.returncode = 0
+                non_dotnet_result.stdout = ""
+                non_dotnet_result.stderr = ""
+                mock_run.return_value = non_dotnet_result
+
+                result = _run_verify_gate(project_root, non_dotnet_cmd)
+                assert result is None, (
+                    f"Test C non-dotnet: expected None (pass), got {result}"
+                )
+
+                all_calls = mock_run.call_args_list
+                shutdown_calls = [
+                    c
+                    for c in all_calls
+                    if c.args and c.args[0] == ["dotnet", "build-server", "shutdown"]
+                ]
+                assert len(shutdown_calls) == 0, (
+                    f"Test C non-dotnet: expected 0 dotnet shutdown calls, got {shutdown_calls}"
+                )
+
+            print(
+                "PASS: Test C non-dotnet - dotnet cleanup skipped for non-dotnet commands (#556)"
+            )
+
+        except Exception as exc:
+            print(f"FAIL: Test C ({exc})", file=sys.stderr)
+            errors += 1
 
     # Case 36 -- Bug #557 (parsed success, start-batch commit only -> stuck/logic)
     # Verifies that when the only commit since start_sha is a "mill-go: start batch" commit,
