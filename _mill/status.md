@@ -27,7 +27,9 @@ implementing  '2026-06-28T06:24:54Z'
 ```yaml
 batches:
   - name: parser-and-brief
-    state: pending
+    state: running
+    implementer_session: 0153a899-e8c9-40da-a0e7-7302ca1f393a
+    start_sha: 15d2784b5273b5df62cdc5455f39650690dafa0e
   - name: implementer-cwd-and-dotnet
     state: pending
   - name: done-gate
