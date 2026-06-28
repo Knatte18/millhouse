@@ -11,7 +11,7 @@ depends-on: []
 
 ## Batch Scope
 
-Fixes two bugs in the implementer verify path: #554 (finalize stage runs batch verify from hub cwd instead of git_root in nested layouts, producing spurious MSB1009 errors) and #556 (dotnet test verify leaves orphaned testhost/build-server processes on Windows that lock files for subsequent runs). Both bugs are fixed in `_implementer_common.py`. `millpy-implement.py` is modified to pass `git_root` to the finalize path. Unit tests cover the cwd-selection logic and the dotnet cleanup call. All three cards touch different files except cards 5 and 7 (both `_implementer_common.py`); the implementer should implement card 5 first, then card 6 relies on the test infrastructure from card 5.
+Fixes two bugs in the implementer verify path: #554 (finalize stage runs batch verify from hub cwd instead of git_root in nested layouts, producing spurious MSB1009 errors) and #556 (dotnet test verify leaves orphaned testhost/build-server processes on Windows that lock files for subsequent runs). Both bugs are fixed in `_implementer_common.py`. `millpy-implement.py` is modified to pass `git_root` to the finalize path. Unit tests cover the cwd-selection logic and the dotnet cleanup call. Card 5 edits `_implementer_common.py`, Card 6 edits `millpy-implement.py`, and Card 7 edits `test-implementer-common.py`; all three touch different files. The implementer should implement card 5 first, then card 6 (relies on the expanded API from card 5), then card 7 (tests the expanded API).
 
 ## Cards
 

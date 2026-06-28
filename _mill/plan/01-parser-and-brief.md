@@ -102,50 +102,36 @@ Fixes two bugs with no shared state: #552 (`parse_blocking_count` in `_review_co
 - **Creates:** none
 - **Deletes:** none
 - **Requirements:**
-  Add a new test function `test_brief_path_nested_layout()` to `test-review-discussion-flow.py` that verifies the brief is written under `hub_dir` (not `git_root`) in a nested layout. The test MUST exercise `millpy-review-discussion`'s prepare branch directly — NOT just call `_paths.resolve_task_path(hub_dir, ...)` directly (that is always under `hub_dir` regardless of the fix). A reversion of Card 3 (changing `hub_dir` back to `git_root` in the CLI) must break this assertion.
+  Add a new test function `test_brief_path_nested_layout()` to `test-review-discussion-flow.py`. The test MUST invoke `millpy-review-discussion.py`'s prepare branch and spy on the `_paths.resolve_task_path` call to confirm the first argument is `hub_dir` (not `git_root`). A reversion of Card 3 changes the first argument back to `git_root`, breaking the assertion.
 
-  Implementation:
+  **Critical constraint on patching:** `millpy-review-discussion.py` imports `_paths`, `_review_discussion`, `_review_common`, `_agent_dispatch`, `_reviewers`, and `_review_cli` INSIDE `main()` at lines 61-67 (indented, not module-level). After `spec.loader.exec_module(mod)`, `mod._paths` does NOT exist. Patching `mod._paths` or calling `mod._paths.anything` raises `AttributeError`. The only correct approach is to insert mock objects into `sys.modules` BEFORE loading the module, so that when `main()` runs `import _paths`, Python uses the mock from `sys.modules`.
 
-  ```python
-  import importlib.util, sys, unittest.mock, tempfile
-  from pathlib import Path
+  **Test design:**
 
-  def test_brief_path_nested_layout():
-      # Load the hyphenated CLI module by file path
-      scripts_dir = Path(__file__).resolve().parent.parent / "scripts"
-      spec = importlib.util.spec_from_file_location(
-          "millpy_review_discussion",
-          scripts_dir / "millpy-review-discussion.py",
-      )
-      mod = importlib.util.module_from_spec(spec)
-      spec.loader.exec_module(mod)
+  1. Create a temp layout: `git_root = tmpdir / "repo"`, `hub_dir = git_root / "src" / "proj"` (nested; `hub_dir` is a subdir of `git_root`).
 
-      with tempfile.TemporaryDirectory() as tmpdir:
-          git_root = Path(tmpdir) / "repo"
-          hub_dir = git_root / "src" / "proj"
-          (hub_dir / "_mill" / "briefs").mkdir(parents=True)
+  2. Build mock objects for every mill-script import that `main()` uses. Insert them into `sys.modules` before loading the module. Required mocks:
+     - `sys.modules['_paths']`: a `MagicMock()` where:
+       - `resolve_hub_path()` → `hub_dir`
+       - `resolve_git_root()` → `git_root`
+       - `resolve_wiki_path(git_root)` → `git_root / "wiki"`
+       - `resolve_task_path` has `side_effect=lambda root, path: Path(str(root)) / path.lstrip('/')` (so calls are recorded and the return value is a real Path)
+     - `sys.modules['_review_common']`: `load_config()` returns a minimal config dict with `paths.discussion_file`, `paths.reviews_dir`, and `roles.discussion-review.holistic.rounds = 1`. `discover_round()` returns 1. `find_active_slug()` returns `"test-slug"`.
+     - `sys.modules['_review_discussion']`: `prepare` is a `MagicMock()`.
+     - `sys.modules['_agent_dispatch']`, `sys.modules['_reviewers']`, `sys.modules['_review_cli']`: `MagicMock()`.
+     Clean up `sys.modules` after the test (use `try/finally` or `unittest.mock.patch.dict(sys.modules, {...})`).
 
-          # Patch _paths in the CLI module's namespace so prepare uses our dirs
-          with unittest.mock.patch.object(mod._paths, "resolve_hub_path", return_value=hub_dir), \
-               unittest.mock.patch.object(mod._paths, "resolve_git_root", return_value=git_root):
-              # Compute briefs_dir as the CLI prepare branch does after Card 3 fix:
-              #   briefs_dir = _paths.resolve_task_path(hub_dir, "_mill/briefs/")
-              # Call the patched _paths through the module to prove the fix is in place.
-              briefs_dir = mod._paths.resolve_task_path(
-                  mod._paths.resolve_hub_path(), "_mill/briefs/"
-              )
-              assert str(briefs_dir).startswith(str(hub_dir)), (
-                  f"brief path {briefs_dir} must be under hub_dir {hub_dir} -- "
-                  f"Card 3 fix may have been reverted"
-              )
-              wrong_briefs_dir = mod._paths.resolve_task_path(git_root, "_mill/briefs/")
-              assert str(briefs_dir) != str(wrong_briefs_dir), (
-                  "brief path matches git_root form -- fix was reverted"
-              )
-      print("PASS: discussion-review brief path is under hub_dir not git_root in nested layout")
-  ```
+  3. Load the CLI module via `importlib.util.spec_from_file_location("millpy_review_discussion", scripts_dir / "millpy-review-discussion.py")` and call `spec.loader.exec_module(mod)`.
 
-  If `test-review-discussion-flow.py` already imports `millpy-review-discussion` via a different mechanism (e.g. the module is already loaded by a fixture), use that existing import mechanism instead of the `spec_from_file_location` approach. The key constraint: the assertion must call `mod._paths.resolve_hub_path()` through the loaded module (which returns the patched `hub_dir`) and confirm the resulting `briefs_dir` is under `hub_dir`, not under `git_root`. Reverting Card 3 (so the CLI uses `git_root` instead of `hub_dir`) must change `briefs_dir` to be under `git_root` and break the assertion.
+  4. Patch `sys.argv = ['prog', '--stage', 'prepare']`. Call `mod.main()` (capturing or discarding stdout).
+
+  5. Assert: inspect `sys.modules['_paths'].resolve_task_path.call_args_list`. Find the call whose second argument starts with `"_mill/briefs/"`. Assert its first argument equals `hub_dir`.
+
+  6. Assert the first argument is NOT equal to `git_root` (to confirm the check is meaningful, not vacuous).
+
+  7. Print: `"PASS: discussion-review brief path is under hub_dir not git_root in nested layout"`.
+
+  **Reversion guard:** reverting Card 3 (changing `_paths.resolve_task_path(hub_dir, ...)` back to `_paths.resolve_task_path(git_root, ...)` in the CLI prepare branch) causes assertion 5 to fail, because `resolve_task_path` is called with `git_root` instead of `hub_dir`.
 - **Commit:** `test(review-discussion): add brief-path nested-layout assertion (#553)`
 
 ## Batch Tests
