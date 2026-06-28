@@ -54,7 +54,7 @@ Adds the `pipeline.done_gate` feature (#561): a config key that lets operators s
 
   The new step is titled **"0. Pre-done gate"** and reads:
 
-  > **0. Pre-done gate.** Read `cfg.get("pipeline", {}).get("done_gate")` (deep-merged config). If the value is `None` or absent, skip. If it is a non-null string, run the command from `git_root` (not hub dir) as a best-effort verify:
+  > **0. Pre-done gate.** Read `(cfg.get("pipeline") or {}).get("done_gate")` (deep-merged config; the `or {}` guard handles the case where `pipeline:` is present but null). If the value is `None` or absent, skip. If it is a non-null string, run the command from `git_root` (not hub dir) as a best-effort verify:
   >
   > ```bash
   > PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "

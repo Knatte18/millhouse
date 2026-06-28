@@ -82,6 +82,7 @@ Fixes two bugs in the implementer verify path: #554 (finalize stage runs batch v
 
 - **Context:**
   - `plugins/mill/scripts/_implementer_common.py`
+  - `plugins/mill/scripts/_paths.py`
   - `plugins/mill/scripts/millpy-implement.py`
   - `plugins/mill/scripts/millpy-fix.py`
 - **Edits:**
@@ -131,8 +132,8 @@ Fixes two bugs in the implementer verify path: #554 (finalize stage runs batch v
 
   **Test C — dotnet cleanup fires regardless of verify exit code (#556):**
   Use `unittest.mock.patch("sys.platform", "win32")` and `unittest.mock.patch("_implementer_common.subprocess.run")` (or the module-level subprocess) to capture calls. Run two sub-cases:
-  - Sub-case C1: main verify mock returns exit code 0. Assert `["dotnet", "build-server", "shutdown"]` is called (cleanup on success).
-  - Sub-case C2: main verify mock returns exit code 1 (failure). Assert `["dotnet", "build-server", "shutdown"]` is STILL called (cleanup on failure — this is the key regression guard for #556). The mock's `returncode` attribute must be set to 1 for the second call.
+  - Sub-case C1: main verify mock returns a result with `returncode=0`, `stdout=""`, `stderr=""`. Assert `["dotnet", "build-server", "shutdown"]` is called (cleanup on success).
+  - Sub-case C2: main verify mock returns a result with `returncode=1`, `stdout=""`, `stderr=""`. Assert `["dotnet", "build-server", "shutdown"]` is STILL called (cleanup on failure — this is the key regression guard for #556). Configure `stdout=""` and `stderr=""` explicitly so that string operations inside `_run_verify_gate`'s error handling path do not raise on bare MagicMock attributes, ensuring the assertion is intentional rather than incidental.
   Also assert the dotnet shutdown call is NOT made when the verify command does not contain "dotnet".
 
   Print PASS messages for each test using the existing pattern in the file.

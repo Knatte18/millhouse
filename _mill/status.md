@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planning
+phase: planned
 slug: mill-verify-and-layout-gaps
 branch: hanf/mill-verify-and-layout-gaps
 plan: _mill/plan
@@ -18,4 +18,5 @@ discussing  '2026-06-28T05:29:05Z'
 discussion-fix-r1  '2026-06-28T05:45:27Z'
 discussed  '2026-06-28T05:45:44Z'
 planning  '2026-06-28T05:52:17Z'
+planned  '2026-06-28T06:23:23Z'
 ```

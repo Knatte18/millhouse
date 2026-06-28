@@ -3,7 +3,7 @@
 ```yaml
 task: Fix review finding-count parser, nested-layout brief path, verify cwd, process leaks, and missing done-gate
 slug: mill-verify-and-layout-gaps
-approved: false
+approved: true
 started: 20260628-054915
 parent: main
 root: ""
