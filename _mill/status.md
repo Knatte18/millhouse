@@ -28,8 +28,8 @@ implementing  '2026-06-28T06:24:54Z'
 batches:
   - name: parser-and-brief
     state: running
-    implementer_session: 0153a899-e8c9-40da-a0e7-7302ca1f393a
-    start_sha: 15d2784b5273b5df62cdc5455f39650690dafa0e
+    implementer_session: 76815769-8e42-4d5a-88e7-7526949fc0e7
+    start_sha: b3073ce886f5ae9570fb5e99da3c28b407bcfcc6
   - name: implementer-cwd-and-dotnet
     state: pending
   - name: done-gate
