@@ -3,7 +3,7 @@
 ```yaml
 task: 'Fix implement finalize correctness: mid-batch stop recovery, commit-count guard, and empty-commit detection'
 slug: mill-implement-finalize-gaps
-approved: false
+approved: true
 started: '2026-06-28T06:30:00Z'
 parent: main
 root: ""
