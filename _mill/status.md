@@ -33,7 +33,9 @@ batches:
     start_sha: b3073ce886f5ae9570fb5e99da3c28b407bcfcc6
     commit_sha: 6f897fbe7da332e0fbfcf03f8440b83d6d32840b
   - name: implementer-cwd-and-dotnet
-    state: pending
+    state: running
+    implementer_session: 66860db5-acac-4b88-9f9c-3c63d77497eb
+    start_sha: e2a0d7d65c5c30fcab0efa8edfe2be0e2750f7b5
   - name: done-gate
     state: pending
 ```
