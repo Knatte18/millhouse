@@ -27,7 +27,9 @@ implementing  '2026-06-28T06:04:43Z'
 ```yaml
 batches:
   - name: Code Fixes and Tests
-    state: pending
+    state: running
+    implementer_session: 22b880e5-2ada-470b-a450-47d09eab9e0b
+    start_sha: 19d22527e1f09fcbb35709fd3abafb3bd7892eef
   - name: Docs and Template
     state: pending
 ```
