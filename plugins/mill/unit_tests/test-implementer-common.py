@@ -21,6 +21,7 @@ from _implementer_common import (  # noqa: E402
     finalize_from_output,
     _is_formatter_drift_only,
     _commit_formatter_drift,
+    _run_verify_gate,
     _run_verify_gates,
     _is_benign_windows_cleanup,
 )
@@ -898,15 +899,22 @@ def main() -> int:
         _cleanliness.capture_snapshot(project_root, snapshot_path)
         subprocess.run(
             ["git", "-C", str(project_root), "commit", "--allow-empty", "-m", "second"],
-            check=True, capture_output=True,
+            check=True,
+            capture_output=True,
         )
         new_head = subprocess.run(
             ["git", "-C", str(project_root), "rev-parse", "HEAD"],
-            check=True, capture_output=True, text=True,
+            check=True,
+            capture_output=True,
+            text=True,
         ).stdout.strip()
         # Verify command that outputs cleanup signature (unlinkat ... Access is denied) and fails
-        verify_cmd = "echo 'error: unlinkat ...\\X.test.exe: Access is denied' && exit 1"
-        agent_output = '{"status":"success","commit_sha":"abc","session_id":"test-session"}\n'
+        verify_cmd = (
+            "echo 'error: unlinkat ...\\X.test.exe: Access is denied' && exit 1"
+        )
+        agent_output = (
+            '{"status":"success","commit_sha":"abc","session_id":"test-session"}\n'
+        )
         # Monkeypatch sys.platform to win32
         original_platform = sys.platform
         try:
@@ -921,9 +929,15 @@ def main() -> int:
                 )
             )
             data = json.loads(captured.strip())
-            assert data["status"] == "success", f"expected status=success (benign cleanup on win32), got {data}"
-            assert data["commit_sha"] == new_head, f"expected commit_sha={new_head}, got {data}"
-            print("PASS: case 23 - win32 + cleanup signature + no FAIL -> success (benign race)")
+            assert data["status"] == "success", (
+                f"expected status=success (benign cleanup on win32), got {data}"
+            )
+            assert data["commit_sha"] == new_head, (
+                f"expected commit_sha={new_head}, got {data}"
+            )
+            print(
+                "PASS: case 23 - win32 + cleanup signature + no FAIL -> success (benign race)"
+            )
         except Exception as exc:
             print(f"FAIL: case 23 ({exc}) captured={captured!r}", file=sys.stderr)
             errors += 1
@@ -938,15 +952,20 @@ def main() -> int:
         _cleanliness.capture_snapshot(project_root, snapshot_path)
         subprocess.run(
             ["git", "-C", str(project_root), "commit", "--allow-empty", "-m", "second"],
-            check=True, capture_output=True,
+            check=True,
+            capture_output=True,
         )
         new_head = subprocess.run(
             ["git", "-C", str(project_root), "rev-parse", "HEAD"],
-            check=True, capture_output=True, text=True,
+            check=True,
+            capture_output=True,
+            text=True,
         ).stdout.strip()
         # Verify command that outputs both cleanup signature AND --- FAIL
         verify_cmd = "echo 'error: unlinkat ...\\X.test.exe: Access is denied' && echo '--- FAIL: test_foo' && exit 1"
-        agent_output = '{"status":"success","commit_sha":"abc","session_id":"test-session"}\n'
+        agent_output = (
+            '{"status":"success","commit_sha":"abc","session_id":"test-session"}\n'
+        )
         original_platform = sys.platform
         try:
             sys.platform = "win32"
@@ -960,9 +979,15 @@ def main() -> int:
                 )
             )
             data = json.loads(captured.strip())
-            assert data["status"] == "stuck", f"expected status=stuck (real failure present), got {data}"
-            assert data["stuck_type"] == "verify", f"expected stuck_type=verify, got {data}"
-            print("PASS: case 24 - win32 + cleanup signature + --- FAIL present -> stuck/verify")
+            assert data["status"] == "stuck", (
+                f"expected status=stuck (real failure present), got {data}"
+            )
+            assert data["stuck_type"] == "verify", (
+                f"expected stuck_type=verify, got {data}"
+            )
+            print(
+                "PASS: case 24 - win32 + cleanup signature + --- FAIL present -> stuck/verify"
+            )
         except Exception as exc:
             print(f"FAIL: case 24 ({exc}) captured={captured!r}", file=sys.stderr)
             errors += 1
@@ -977,15 +1002,20 @@ def main() -> int:
         _cleanliness.capture_snapshot(project_root, snapshot_path)
         subprocess.run(
             ["git", "-C", str(project_root), "commit", "--allow-empty", "-m", "second"],
-            check=True, capture_output=True,
+            check=True,
+            capture_output=True,
         )
         new_head = subprocess.run(
             ["git", "-C", str(project_root), "rev-parse", "HEAD"],
-            check=True, capture_output=True, text=True,
+            check=True,
+            capture_output=True,
+            text=True,
         ).stdout.strip()
         # Verify command that outputs cleanup signature AND bare FAIL (as in go test output)
         verify_cmd = "echo 'error: unlinkat ...\\X.test.exe: Access is denied' && echo 'FAIL\tgithub.com/test/...' && exit 1"
-        agent_output = '{"status":"success","commit_sha":"abc","session_id":"test-session"}\n'
+        agent_output = (
+            '{"status":"success","commit_sha":"abc","session_id":"test-session"}\n'
+        )
         original_platform = sys.platform
         try:
             sys.platform = "win32"
@@ -999,9 +1029,15 @@ def main() -> int:
                 )
             )
             data = json.loads(captured.strip())
-            assert data["status"] == "stuck", f"expected status=stuck (real failure present), got {data}"
-            assert data["stuck_type"] == "verify", f"expected stuck_type=verify, got {data}"
-            print("PASS: case 24b - win32 + cleanup signature + bare FAIL present -> stuck/verify")
+            assert data["status"] == "stuck", (
+                f"expected status=stuck (real failure present), got {data}"
+            )
+            assert data["stuck_type"] == "verify", (
+                f"expected stuck_type=verify, got {data}"
+            )
+            print(
+                "PASS: case 24b - win32 + cleanup signature + bare FAIL present -> stuck/verify"
+            )
         except Exception as exc:
             print(f"FAIL: case 24b ({exc}) captured={captured!r}", file=sys.stderr)
             errors += 1
@@ -1016,15 +1052,20 @@ def main() -> int:
         _cleanliness.capture_snapshot(project_root, snapshot_path)
         subprocess.run(
             ["git", "-C", str(project_root), "commit", "--allow-empty", "-m", "second"],
-            check=True, capture_output=True,
+            check=True,
+            capture_output=True,
         )
         new_head = subprocess.run(
             ["git", "-C", str(project_root), "rev-parse", "HEAD"],
-            check=True, capture_output=True, text=True,
+            check=True,
+            capture_output=True,
+            text=True,
         ).stdout.strip()
         # Verify command that fails with non-cleanup output
         verify_cmd = "echo 'something went wrong' && exit 1"
-        agent_output = '{"status":"success","commit_sha":"abc","session_id":"test-session"}\n'
+        agent_output = (
+            '{"status":"success","commit_sha":"abc","session_id":"test-session"}\n'
+        )
         original_platform = sys.platform
         try:
             sys.platform = "win32"
@@ -1039,8 +1080,12 @@ def main() -> int:
             )
             data = json.loads(captured.strip())
             assert data["status"] == "stuck", f"expected status=stuck, got {data}"
-            assert data["stuck_type"] == "verify", f"expected stuck_type=verify, got {data}"
-            print("PASS: case 25 - win32 + ordinary non-zero (no signature) -> stuck/verify")
+            assert data["stuck_type"] == "verify", (
+                f"expected stuck_type=verify, got {data}"
+            )
+            print(
+                "PASS: case 25 - win32 + ordinary non-zero (no signature) -> stuck/verify"
+            )
         except Exception as exc:
             print(f"FAIL: case 25 ({exc}) captured={captured!r}", file=sys.stderr)
             errors += 1
@@ -1055,11 +1100,16 @@ def main() -> int:
         _cleanliness.capture_snapshot(project_root, snapshot_path)
         subprocess.run(
             ["git", "-C", str(project_root), "commit", "--allow-empty", "-m", "second"],
-            check=True, capture_output=True,
+            check=True,
+            capture_output=True,
         )
         # Verify command with cleanup signature
-        verify_cmd = "echo 'error: unlinkat ...\\X.test.exe: Access is denied' && exit 1"
-        agent_output = '{"status":"success","commit_sha":"abc","session_id":"test-session"}\n'
+        verify_cmd = (
+            "echo 'error: unlinkat ...\\X.test.exe: Access is denied' && exit 1"
+        )
+        agent_output = (
+            '{"status":"success","commit_sha":"abc","session_id":"test-session"}\n'
+        )
         original_platform = sys.platform
         try:
             # Force non-win32 (e.g., linux)
@@ -1074,9 +1124,15 @@ def main() -> int:
                 )
             )
             data = json.loads(captured.strip())
-            assert data["status"] == "stuck", f"expected status=stuck (non-win32 sees failure), got {data}"
-            assert data["stuck_type"] == "verify", f"expected stuck_type=verify, got {data}"
-            print("PASS: case 26 - non-win32 + cleanup signature -> stuck/verify (platform gate)")
+            assert data["status"] == "stuck", (
+                f"expected status=stuck (non-win32 sees failure), got {data}"
+            )
+            assert data["stuck_type"] == "verify", (
+                f"expected stuck_type=verify, got {data}"
+            )
+            print(
+                "PASS: case 26 - non-win32 + cleanup signature -> stuck/verify (platform gate)"
+            )
         except Exception as exc:
             print(f"FAIL: case 26 ({exc}) captured={captured!r}", file=sys.stderr)
             errors += 1
@@ -1422,9 +1478,7 @@ def main() -> int:
         )
         try:
             data = json.loads(captured.strip())
-            assert data["status"] == "stuck", (
-                f"case 30: expected stuck, got {data}"
-            )
+            assert data["status"] == "stuck", f"case 30: expected stuck, got {data}"
             assert data["stuck_type"] == "verify", (
                 f"case 30: expected stuck_type=verify, got {data}"
             )
@@ -1450,14 +1504,10 @@ def main() -> int:
         try:
             # Batch gate passes, module-wide is None -> no stuck result
             result = _run_verify_gates(project_root, "exit 0", None)
-            assert result is None, (
-                f"case 31a: expected None (both pass), got {result}"
-            )
+            assert result is None, f"case 31a: expected None (both pass), got {result}"
             # Batch gate fails, module-wide is None -> stuck dict (batch reason, no prefix)
             result = _run_verify_gates(project_root, "exit 1", None)
-            assert result is not None, (
-                f"case 31b: expected stuck dict, got {result}"
-            )
+            assert result is not None, f"case 31b: expected stuck dict, got {result}"
             assert result["stuck_type"] == "verify", (
                 f"case 31b: expected stuck_type=verify, got {result}"
             )
@@ -1501,9 +1551,7 @@ def main() -> int:
         )
         try:
             data = json.loads(captured.strip())
-            assert data["status"] == "stuck", (
-                f"case 32: expected stuck, got {data}"
-            )
+            assert data["status"] == "stuck", f"case 32: expected stuck, got {data}"
             assert data["stuck_type"] == "verify", (
                 f"case 32: expected stuck_type=verify, got {data}"
             )
@@ -1556,9 +1604,7 @@ def main() -> int:
         assert result is False, (
             f"case 34: expected False (real --- FAIL: line present), got {result}"
         )
-        print(
-            "PASS: case 34 - real Go failure: cleanup race + --- FAIL: line -> False"
-        )
+        print("PASS: case 34 - real Go failure: cleanup race + --- FAIL: line -> False")
     except Exception as exc:
         print(f"FAIL: case 34 ({exc})", file=sys.stderr)
         errors += 1
@@ -1582,6 +1628,182 @@ def main() -> int:
     except Exception as exc:
         print(f"FAIL: case 35 ({exc})", file=sys.stderr)
         errors += 1
+
+    # Test A: git_root kwarg selects cwd for the verify subprocess (#554)
+    # Mock subprocess.run so the cwd kwarg is observable without executing real commands.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        hub_dir = Path(tmpdir) / "hub"
+        repo_dir = Path(tmpdir) / "repo"
+        hub_dir.mkdir()
+        repo_dir.mkdir()
+        try:
+            with unittest.mock.patch("_implementer_common.subprocess.run") as mock_run:
+                # Configure mock to return a passing result (returncode=0)
+                mock_result = unittest.mock.MagicMock()
+                mock_result.returncode = 0
+                mock_result.stdout = ""
+                mock_result.stderr = ""
+                mock_run.return_value = mock_result
+
+                # Call with git_root; the verify subprocess cwd must equal git_root.
+                result = _run_verify_gate(hub_dir, "echo ok", git_root=repo_dir)
+                assert result is None, f"Test A: expected None (pass), got {result}"
+                # Confirm cwd passed to subprocess.run equals repo_dir (git_root)
+                call_kwargs = mock_run.call_args[1]
+                assert call_kwargs.get("cwd") == repo_dir, (
+                    f"Test A: expected cwd=repo_dir, got {call_kwargs.get('cwd')}"
+                )
+
+                # Call without git_root; the verify subprocess cwd must equal hub_dir (project_root).
+                mock_run.reset_mock()
+                result = _run_verify_gate(hub_dir, "echo ok")
+                assert result is None, (
+                    f"Test A (no git_root): expected None (pass), got {result}"
+                )
+                call_kwargs_no_root = mock_run.call_args[1]
+                assert call_kwargs_no_root.get("cwd") == hub_dir, (
+                    f"Test A (no git_root): expected cwd=hub_dir, got {call_kwargs_no_root.get('cwd')}"
+                )
+
+            print("PASS: Test A - git_root kwarg selects verify subprocess cwd (#554)")
+        except Exception as exc:
+            print(f"FAIL: Test A ({exc})", file=sys.stderr)
+            errors += 1
+
+    # Test B: git_root=None falls back to project_root as the verify subprocess cwd (#554)
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        try:
+            with unittest.mock.patch("_implementer_common.subprocess.run") as mock_run:
+                mock_result = unittest.mock.MagicMock()
+                mock_result.returncode = 0
+                mock_result.stdout = ""
+                mock_result.stderr = ""
+                mock_run.return_value = mock_result
+
+                # Explicitly pass git_root=None; cwd must fall back to project_root.
+                result = _run_verify_gate(project_root, "echo ok", git_root=None)
+                assert result is None, f"Test B: expected None (pass), got {result}"
+                call_kwargs = mock_run.call_args[1]
+                assert call_kwargs.get("cwd") == project_root, (
+                    f"Test B: expected cwd=project_root, got {call_kwargs.get('cwd')}"
+                )
+
+            print(
+                "PASS: Test B - git_root=None falls back to project_root as verify cwd (#554)"
+            )
+        except Exception as exc:
+            print(f"FAIL: Test B ({exc})", file=sys.stderr)
+            errors += 1
+
+    # Test C: dotnet build-server shutdown fires regardless of verify exit code (#556)
+    # Sub-case C1: verify exits 0 (success) -> cleanup still fires.
+    # Sub-case C2: verify exits 1 (failure) -> cleanup still fires.
+    # Also asserts cleanup does NOT fire when the command does not contain "dotnet".
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        try:
+            dotnet_cmd = "dotnet test MyProject.csproj"
+            non_dotnet_cmd = "pytest tests/ -q"
+
+            # Sub-case C1: verify succeeds (returncode=0); dotnet cleanup must still fire.
+            with (
+                unittest.mock.patch("sys.platform", "win32"),
+                unittest.mock.patch("_implementer_common.subprocess.run") as mock_run,
+            ):
+                # First call is the verify subprocess; second is the dotnet shutdown call.
+                passing_result = unittest.mock.MagicMock()
+                passing_result.returncode = 0
+                passing_result.stdout = ""
+                passing_result.stderr = ""
+                # The dotnet shutdown call also needs a mock result (ignored by caller).
+                shutdown_result = unittest.mock.MagicMock()
+                mock_run.side_effect = [passing_result, shutdown_result]
+
+                result = _run_verify_gate(project_root, dotnet_cmd)
+                assert result is None, f"Test C1: expected None (pass), got {result}"
+
+                # Confirm dotnet build-server shutdown was called.
+                all_calls = mock_run.call_args_list
+                shutdown_calls = [
+                    c
+                    for c in all_calls
+                    if c.args and c.args[0] == ["dotnet", "build-server", "shutdown"]
+                ]
+                assert len(shutdown_calls) == 1, (
+                    f"Test C1: expected 1 dotnet shutdown call on success, got {shutdown_calls}"
+                )
+
+            print("PASS: Test C1 - dotnet cleanup fires on verify success (#556)")
+
+            # Sub-case C2: verify fails (returncode=1); dotnet cleanup must still fire.
+            with (
+                unittest.mock.patch("sys.platform", "win32"),
+                unittest.mock.patch("_implementer_common.subprocess.run") as mock_run,
+            ):
+                failing_result = unittest.mock.MagicMock()
+                failing_result.returncode = 1
+                # Provide explicit string attrs so error-handling string ops do not raise on MagicMock.
+                failing_result.stdout = ""
+                failing_result.stderr = ""
+                shutdown_result = unittest.mock.MagicMock()
+                mock_run.side_effect = [failing_result, shutdown_result]
+
+                result = _run_verify_gate(project_root, dotnet_cmd)
+                # Verify gate returns a stuck dict on failure.
+                assert result is not None, (
+                    "Test C2: expected stuck dict on verify failure"
+                )
+                assert result["stuck_type"] == "verify", (
+                    f"Test C2: expected stuck_type=verify, got {result}"
+                )
+
+                # Confirm dotnet build-server shutdown was called even on failure.
+                all_calls = mock_run.call_args_list
+                shutdown_calls = [
+                    c
+                    for c in all_calls
+                    if c.args and c.args[0] == ["dotnet", "build-server", "shutdown"]
+                ]
+                assert len(shutdown_calls) == 1, (
+                    f"Test C2: expected 1 dotnet shutdown call on failure, got {shutdown_calls}"
+                )
+
+            print("PASS: Test C2 - dotnet cleanup fires on verify failure (#556)")
+
+            # Non-dotnet command: cleanup must NOT fire.
+            with (
+                unittest.mock.patch("sys.platform", "win32"),
+                unittest.mock.patch("_implementer_common.subprocess.run") as mock_run,
+            ):
+                non_dotnet_result = unittest.mock.MagicMock()
+                non_dotnet_result.returncode = 0
+                non_dotnet_result.stdout = ""
+                non_dotnet_result.stderr = ""
+                mock_run.return_value = non_dotnet_result
+
+                result = _run_verify_gate(project_root, non_dotnet_cmd)
+                assert result is None, (
+                    f"Test C non-dotnet: expected None (pass), got {result}"
+                )
+
+                all_calls = mock_run.call_args_list
+                shutdown_calls = [
+                    c
+                    for c in all_calls
+                    if c.args and c.args[0] == ["dotnet", "build-server", "shutdown"]
+                ]
+                assert len(shutdown_calls) == 0, (
+                    f"Test C non-dotnet: expected 0 dotnet shutdown calls, got {shutdown_calls}"
+                )
+
+            print(
+                "PASS: Test C non-dotnet - dotnet cleanup skipped for non-dotnet commands (#556)"
+            )
+
+        except Exception as exc:
+            print(f"FAIL: Test C ({exc})", file=sys.stderr)
+            errors += 1
 
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)
