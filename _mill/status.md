@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-done-gate
+phase: holistic-reviewing
 slug: mill-verify-and-layout-gaps
 branch: hanf/mill-verify-and-layout-gaps
 plan: _mill/plan
@@ -23,6 +23,7 @@ implementing  '2026-06-28T06:24:54Z'
 approved-parser-and-brief  '2026-06-28T13:09:30Z'
 approved-implementer-cwd-and-dotnet  '2026-06-28T13:17:12Z'
 approved-done-gate  '2026-06-28T13:19:27Z'
+holistic-reviewing  '2026-06-28T13:19:52Z'
 ```
 
 ## Batches
