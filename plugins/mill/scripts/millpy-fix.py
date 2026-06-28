@@ -17,6 +17,7 @@ Exit codes:
     1 — pre-launch error (bad config, missing slug, missing file, etc.);
         message on stderr, no JSON on stdout
 """
+
 from __future__ import annotations
 
 import argparse
@@ -140,12 +141,18 @@ def main(argv=None) -> int:
         print(str(e), file=sys.stderr)
         return 1
 
-    name_result = _subprocess_util.run(["git", "config", "--global", "--get", "user.name"], cwd=project_root)
-    email_result = _subprocess_util.run(["git", "config", "--global", "--get", "user.email"], cwd=project_root)
+    name_result = _subprocess_util.run(
+        ["git", "config", "--global", "--get", "user.name"], cwd=project_root
+    )
+    email_result = _subprocess_util.run(
+        ["git", "config", "--global", "--get", "user.email"], cwd=project_root
+    )
     git_name = name_result.stdout.strip()
     git_email = email_result.stdout.strip()
     if not git_name or not git_email:
-        print("git config --global user.name and user.email must be set", file=sys.stderr)
+        print(
+            "git config --global user.name and user.email must be set", file=sys.stderr
+        )
         return 1
 
     try:
@@ -162,7 +169,9 @@ def main(argv=None) -> int:
     full = _status.read_full(status_path)
     task_title = full["yaml"].get("task", slug)
     branch = _status.read_branch(status_path, cfg=cfg, slug=slug)
-    self_fix_rounds = cfg.get("roles", {}).get("implementer", {}).get("self_fix_rounds", 2)
+    self_fix_rounds = (
+        cfg.get("roles", {}).get("implementer", {}).get("self_fix_rounds", 2)
+    )
     fixer_cfg = cfg.get("roles", {}).get("fixer", {})
     model_name = fixer_cfg.get("model", "haiku")
     try:
@@ -173,7 +182,9 @@ def main(argv=None) -> int:
         return 1
     fixer_model = fixer_spec["model"]
     fixer_effort = fixer_spec.get("effort")
-    timeout = fixer_spec.get("timeout") or cfg.get("llm", {}).get("implementer_timeout", 1800)
+    timeout = fixer_spec.get("timeout") or cfg.get("llm", {}).get(
+        "implementer_timeout", 1800
+    )
 
     review_file = Path(args.review_file)
     if not review_file.is_absolute():
@@ -189,7 +200,9 @@ def main(argv=None) -> int:
         return 1
 
     try:
-        batches = _plan_dag.extract_batch_index(overview_path.read_text(encoding="utf-8"))
+        batches = _plan_dag.extract_batch_index(
+            overview_path.read_text(encoding="utf-8")
+        )
     except _plan_dag.PlanDAGError as e:
         print(str(e), file=sys.stderr)
         return 1
@@ -213,7 +226,9 @@ def main(argv=None) -> int:
         # Resolve verify command for batch/holistic fixes
         verify_cmd = None
         if args.scope == "batch":
-            batch_entry = next((b for b in batches if b["name"] == args.batch_name), None)
+            batch_entry = next(
+                (b for b in batches if b["name"] == args.batch_name), None
+            )
             if batch_entry is not None:
                 batch_file = plan_base / batch_entry["file"]
                 batch_frontmatter = _plan_dag._read_batch_frontmatter(batch_file)
@@ -234,6 +249,7 @@ def main(argv=None) -> int:
             nits_only=args.nits_only,
             status_path=status_path,
             nits_scope=nits_scope,
+            git_root=git_root,
         )
 
     # Branch on scope (for prepare and full stages)
@@ -250,12 +266,27 @@ def main(argv=None) -> int:
         verify_cmd = batch_frontmatter.get("verify")
 
         _status.set_batch_fields(
-            status_path, args.batch_name, {"state": "fixing", "review_round": args.round, "review_file": str(review_file)}
+            status_path,
+            args.batch_name,
+            {
+                "state": "fixing",
+                "review_round": args.round,
+                "review_file": str(review_file),
+            },
         )
-        _status.append_phase(status_path, f"fixing-{args.batch_name}-r{args.round}", _timestamp.now_utc_iso())
+        _status.append_phase(
+            status_path,
+            f"fixing-{args.batch_name}-r{args.round}",
+            _timestamp.now_utc_iso(),
+        )
 
         result = _subprocess_util.run(
-            ["git", "add", status_path.relative_to(project_root).as_posix(), review_file_arg],
+            [
+                "git",
+                "add",
+                status_path.relative_to(project_root).as_posix(),
+                review_file_arg,
+            ],
             cwd=project_root,
         )
         if result.returncode != 0:
@@ -295,7 +326,9 @@ def main(argv=None) -> int:
                 "SESSION_ID": session_id,
                 "ROUND": str(args.round),
                 "SELF_FIX_ROUNDS": str(self_fix_rounds),
-                "LANGUAGE_SKILLS": _agent_dispatch.language_skills_directive(batch_file),
+                "LANGUAGE_SKILLS": _agent_dispatch.language_skills_directive(
+                    batch_file
+                ),
             },
         )
 
@@ -303,13 +336,22 @@ def main(argv=None) -> int:
         # Holistic fixer dispatch
         # Derive concatenated verify_cmd from all batch verify commands in DAG order
         batch_verifies = _plan_dag.iter_batch_verifies(plan_base)
-        verify_cmd = " && ".join(verify for _, verify in batch_verifies) if batch_verifies else None
+        verify_cmd = (
+            " && ".join(verify for _, verify in batch_verifies)
+            if batch_verifies
+            else None
+        )
         batch_files_text = "\n".join(str(plan_base / b["file"]) for b in batches)
 
         _status.append_phase(status_path, "holistic-fixing", _timestamp.now_utc_iso())
 
         result = _subprocess_util.run(
-            ["git", "add", status_path.relative_to(project_root).as_posix(), review_file_arg],
+            [
+                "git",
+                "add",
+                status_path.relative_to(project_root).as_posix(),
+                review_file_arg,
+            ],
             cwd=project_root,
         )
         if result.returncode != 0:
@@ -357,7 +399,15 @@ def main(argv=None) -> int:
 
     max_chars = cfg.get("llm", {}).get("max_implementer_prompt_chars", 0)
     if max_chars > 0 and len(prompt_text) > max_chars:
-        print(json.dumps({"status": "stuck", "stuck_type": "transient", "reason": f"brief exceeds max_implementer_prompt_chars ({len(prompt_text)} chars)"}))
+        print(
+            json.dumps(
+                {
+                    "status": "stuck",
+                    "stuck_type": "transient",
+                    "reason": f"brief exceeds max_implementer_prompt_chars ({len(prompt_text)} chars)",
+                }
+            )
+        )
         return 0
 
     # Stage: prepare
@@ -365,7 +415,16 @@ def main(argv=None) -> int:
         briefs_dir = _paths.resolve_task_path(project_root, "_mill/briefs/")
         model_tier = _agent_dispatch.model_to_tier(fixer_model)
         scope_label = args.batch_name if args.scope == "batch" else "holistic"
-        return emit_prepare(briefs_dir, "fix", scope_label, args.round, prompt_text, model_tier, session_id, start_sha=start_sha)
+        return emit_prepare(
+            briefs_dir,
+            "fix",
+            scope_label,
+            args.round,
+            prompt_text,
+            model_tier,
+            session_id,
+            start_sha=start_sha,
+        )
 
     # Stage: full (default)
     try:
@@ -383,12 +442,23 @@ def main(argv=None) -> int:
         if start_sha is None:
             commits_made = 0
         else:
-            result = _subprocess_util.run(["git", "rev-list", "--count", f"{start_sha}..HEAD"], cwd=project_root)
+            result = _subprocess_util.run(
+                ["git", "rev-list", "--count", f"{start_sha}..HEAD"], cwd=project_root
+            )
             if result.returncode == 0:
                 commits_made = int(result.stdout.strip())
             else:
                 commits_made = 0
-        print(json.dumps({"status": "stuck", "stuck_type": stuck_type, "reason": str(e), "commits_made": commits_made}))
+        print(
+            json.dumps(
+                {
+                    "status": "stuck",
+                    "stuck_type": stuck_type,
+                    "reason": str(e),
+                    "commits_made": commits_made,
+                }
+            )
+        )
         print(str(e), file=sys.stderr)
         return 1
 
@@ -402,6 +472,7 @@ def main(argv=None) -> int:
         nits_only=args.nits_only,
         status_path=status_path,
         nits_scope=nits_scope,
+        git_root=git_root,
     )
 
 
