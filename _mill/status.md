@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-verify-and-layout-gaps
 branch: hanf/mill-verify-and-layout-gaps
 plan: _mill/plan
@@ -19,4 +19,17 @@ discussion-fix-r1  '2026-06-28T05:45:27Z'
 discussed  '2026-06-28T05:45:44Z'
 planning  '2026-06-28T05:52:17Z'
 planned  '2026-06-28T06:23:23Z'
+implementing  '2026-06-28T06:24:54Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: parser-and-brief
+    state: pending
+  - name: implementer-cwd-and-dotnet
+    state: pending
+  - name: done-gate
+    state: pending
 ```
