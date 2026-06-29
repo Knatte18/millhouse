@@ -12,9 +12,10 @@ Public API:
 
 Checks performed (check keys):
     non-existent-path        — (#10 check 1) Context:/Edits:/Creates: refs that
-                               don't exist on disk and are not Creates: targets
-    card-missing-field       — (#10 check 2) Cards missing one of the five required
-                               fields (Context, Edits, Creates, Requirements, Commit)
+                               don't exist on disk and are not Creates:/Moves: targets
+    card-missing-field       — (#10 check 2) Cards missing one of the required
+                               fields (Context, Edits, Creates, Deletes, Moves,
+                               Requirements, Commit)
     card-numbering           — (#10 check 3) Non-sequential or cross-batch-duplicate
                                card numbers
     depends-on-unknown       — (#10 check 4) depends-on entries referencing unknown
@@ -22,13 +23,18 @@ Checks performed (check keys):
     depends-on-batch-mismatch — per-batch file's depends-on disagrees with overview
                                Batch Index depends-on for the same batch
     parallel-modifies-overlap — (#10 check 5) Parallel-eligible batches both
-                               modifying the same file
+                               modifying the same file (includes Move endpoints)
     reads-not-backtick-path  — (#10 check 6) Context:/Edits:/Creates: entries not
                                in backtick-only format (exempts bare 'none')
     all-files-touched-mismatch — (#10 check 8) Mismatch between overview's
-                               All Files Touched section and cards' Edits:/Creates:
+                               All Files Touched section and cards' Edits:/Creates:/Moves: targets
     verify-not-isolated      — per-batch frontmatter verify: command does not start with PYTHONPATH= reset prefix
-    wiki-config-mutation  — batch Edits:/Creates: contains mill-config.yaml (self-applying layout risk)
+    wiki-config-mutation     — batch Edits:/Creates: contains mill-config.yaml (self-applying layout risk)
+    move-format              — Moves: sub-bullet does not match the `src` -> `dst` grammar
+    move-redundant           — a path is both a Move endpoint and in Creates:/Deletes: of the same batch
+    move-source-missing      — Move source does not exist on disk and is not created/relocated by an earlier batch
+    move-target-collision    — Move target already exists, is targeted by multiple batches, or collides with a Creates: in another batch
+    move-mechanic-missing    — batch has non-empty Moves: but is missing a '## Rename mechanic' section
 """
 from __future__ import annotations
 
@@ -1437,7 +1443,10 @@ def run(
     Returns a sorted list of error dicts with keys:
     {check, batch, card, path, message}.
 
-    Checks 1, 2, 3, 4, 5, 6, 8 from issue #10, plus wiki-config-mutation, verify-not-isolated, out-of-worktree-target, and batch-oversized.
+    Checks 1, 2, 3, 4, 5, 6, 8 from issue #10, plus wiki-config-mutation,
+    verify-not-isolated, out-of-worktree-target, batch-oversized, and five
+    Move-specific checks (move-format, move-redundant, move-source-missing,
+    move-target-collision, move-mechanic-missing).
 
     Args:
         plan_dir: Directory containing the plan files (00-overview.md + batch files).
@@ -1471,11 +1480,14 @@ def run(
     overview_text = overview_path.read_text(encoding="utf-8")
     creates_union = compute_creates_union(plan_dir)
     deletes_union = compute_deletes_union(plan_dir)
+    # Move sources behave like Deletes (disappear) and targets like Creates (appear).
+    # Computed once here and threaded into the checks that need them.
+    moves_sources, moves_targets = compute_moves_union(plan_dir)
 
     errors: list[dict] = []
 
     errors.extend(_check_non_existent_path(
-        batch_files, project_root, effective_root, creates_union, deletes_union,
+        batch_files, project_root, effective_root, creates_union, deletes_union, moves_targets,
         wiki_root=wiki_root,
         git_root=git_root,
     ))
@@ -1497,6 +1509,20 @@ def run(
         wiki_root=wiki_root,
         git_root=git_root,
     ))
+    # Move-specific checks (added by batch validator-move-checks).
+    errors.extend(_check_move_format(batch_files))
+    errors.extend(_check_move_redundant(batch_files))
+    errors.extend(_check_move_source_missing(
+        batch_files, project_root, effective_root, creates_union, moves_targets,
+        wiki_root=wiki_root,
+        git_root=git_root,
+    ))
+    errors.extend(_check_move_target_collision(
+        batch_files, project_root, effective_root, creates_union,
+        wiki_root=wiki_root,
+        git_root=git_root,
+    ))
+    errors.extend(_check_move_mechanic_missing(batch_files))
 
     errors.sort(key=lambda e: (e["batch"] or "", e["card"] or 0, e["check"]))
     if skip_checks:
