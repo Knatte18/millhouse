@@ -3,7 +3,7 @@
 ```yaml
 task: "Add first-class Moves/Renames field to plan cards for rename-heavy batches"
 slug: "mill-plan-rename-moves"
-approved: false
+approved: true
 started: "20260629-165500"
 parent: "main"
 root: ""
