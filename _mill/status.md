@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-pipeline-finalize-gaps
 branch: hanf/mill-pipeline-finalize-gaps
 plan: _mill/plan
@@ -20,4 +20,15 @@ discussed  '2026-06-29T16:42:28Z'
 planning  '2026-06-29T16:47:39Z'
 plan-fix-r1  '2026-06-29T16:53:56Z'
 planned  '2026-06-29T16:54:13Z'
+implementing  '2026-06-29T17:04:59Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: implement-pipeline
+    state: pending
+  - name: merge-in-cli-parity
+    state: pending
 ```
