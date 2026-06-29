@@ -34,7 +34,7 @@ Fixes issue #565: the agent registry defines bare `haiku` but only effort-suffix
   - `plugins/mill/scripts/_reviewers.py`
 - **Creates:** none
 - **Deletes:** none
-- **Requirements:** In `_reviewers.resolve(registry, name)`, change the `ReviewerError` raised when `name not in registry` (currently `f"Unknown reviewer: {name!r}"`) to additionally list the valid names: append `". Available: " + ", ".join(sorted(registry))`. Keep the existing `name!r` prefix so the message still reads `Unknown reviewer: 'sonnet'. Available: g25flash, ...`. ASCII only. Do not change the `test_stub` special case, `resolve_role`, `validate_role_refs`, or the cluster-flattening recursion — they propagate the richer message unchanged. The existing `test_load_raises_*` and `validate_role_refs` tests that assert on substring `"Unknown reviewer"` must remain satisfied (the prefix is unchanged).
+- **Requirements:** In `_reviewers.resolve(registry, name)`, change the `ReviewerError` raised when `name not in registry` (currently `f"Unknown reviewer: {name!r}"`) to additionally list the valid names: append `". Available: " + ", ".join(sorted(registry))`. Keep the existing `name!r` prefix so the message still reads `Unknown reviewer: 'sonnet'. Available: g25flash, ...`. ASCII only. Do not change the `test_stub` special case, `resolve_role`, `validate_role_refs`, or the cluster-flattening recursion — they propagate the richer message unchanged. Existing tests that assert on the reviewer name or on the `Unknown reviewer:` prefix remain satisfied since the prefix is unchanged.
 - **Commit:** `feat(reviewers): list available names in unknown-reviewer error`
 
 ### Card 3: Unit tests for bare aliases and the enriched error

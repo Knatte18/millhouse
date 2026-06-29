@@ -3,7 +3,7 @@
 ```yaml
 task: "Fix stale checkpoint safety, Go binary ephemeral allowlist, and bare agent-tier name trap"
 slug: mill-scope-and-infra-gaps
-approved: false
+approved: true
 started: "20260629-163520"
 parent: main
 root: ""
