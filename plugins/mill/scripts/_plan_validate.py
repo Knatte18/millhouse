@@ -603,23 +603,44 @@ def _check_non_existent_path(
     root: str | None,
     creates_union: set[str],
     deletes_union: set[str],
+    moves_targets: set[str],
     *,
     wiki_root: Path | None = None,
     git_root: Path | None = None,
 ) -> list[dict]:
+    """
+    Check that all Context/Edits/Creates/Deletes path refs resolve to existing files.
+
+    Suppression rules mirror the move-endpoint-accounting Shared Decision:
+    - ``creates_union``: paths that will be created by some batch are not flagged.
+    - ``deletes_union``: paths that will be deleted are not flagged for general refs
+      (the file may disappear before this batch runs).
+    - ``moves_targets``: paths that are Moves: destinations are not flagged because
+      they will be created by the rename step (a downstream card editing a Move
+      target must not raise non-existent-path).
+
+    Move-source existence is NOT checked here; that is solely
+    ``_check_move_source_missing``'s responsibility (card 6).  This function
+    continues to operate only on the general Context/Edits/Creates and Deletes
+    tokens that ``parse_batch_refs`` already parses (it does not parse Moves: bullets).
+
+    Error dict shape: ``{check, batch, card, path, message}``.
+    """
     errors: list[dict] = []
     for batch_path in batch_files:
         raw_refs = parse_batch_refs(batch_path)
         deletes_only = _parse_deletes_only(batch_path)
         general_refs = set(raw_refs) - deletes_only
 
-        # General refs (Reads/Modifies/Creates): missing on disk is suppressed if
-        # the token is in creates_union OR deletes_union (intentional deletion).
+        # General refs (Context/Edits/Creates): missing on disk is suppressed when
+        # the token is in creates_union, deletes_union, OR moves_targets.  The
+        # moves_targets suppression prevents false errors on downstream cards that
+        # reference a not-yet-existing Move destination in their Context:/Edits:.
         for t in general_refs:
             if t.lower() == "none":
                 continue
             existing = resolve_existing_paths([t], project_root, root, wiki_root=wiki_root, git_root=git_root)
-            if not existing and t not in creates_union and t not in deletes_union:
+            if not existing and t not in creates_union and t not in deletes_union and t not in moves_targets:
                 errors.append({
                     "check": "non-existent-path",
                     "batch": batch_path.stem,
@@ -1141,13 +1162,19 @@ def _check_all_files_touched_mismatch(
         if m:
             overview_set.add(m.group(1))
 
-    # Compute cards_set = union of Edits: + Creates: across all cards.
-    # Deletes: tokens are excluded from the all-files-touched check per issue #494.
+    # Compute cards_set = union of Edits: + Creates: + Move targets across all cards.
+    # Deletes: tokens and Move sources are excluded per issue #494 and the
+    # move-endpoint-accounting Shared Decision (sources disappear like Deletes;
+    # targets appear like Creates and must be listed in All Files Touched).
     cards_set: set[str] = set()
     for batch_path in batch_files:
         cards_set |= _parse_edits_only(batch_path)
     # Add Creates: tokens via compute_creates_union.
     cards_set |= compute_creates_union(overview_path.parent)
+    # Add Move targets: they behave like Creates: tokens (new files appear after
+    # the rename step) and must appear in the overview's All Files Touched section.
+    _, move_targets = compute_moves_union(overview_path.parent)
+    cards_set |= move_targets
 
     errors: list[dict] = []
     for p in sorted(overview_set - cards_set):
