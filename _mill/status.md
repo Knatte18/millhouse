@@ -1,10 +1,10 @@
 # Status
 
 ```yaml
-phase: discussed
+phase: planning
 slug: mill-pipeline-finalize-gaps
 branch: hanf/mill-pipeline-finalize-gaps
-plan: null
+plan: _mill/plan
 parent: main
 task: Fix prepare-retry atomicity, partial-batch finalize routing, and envelope field parity
 task_description: |
@@ -17,4 +17,5 @@ task_description: |
 discussing  '2026-06-29T16:21:33Z'
 discussion-fix-r3  '2026-06-29T16:42:15Z'
 discussed  '2026-06-29T16:42:28Z'
+planning  '2026-06-29T16:47:39Z'
 ```
