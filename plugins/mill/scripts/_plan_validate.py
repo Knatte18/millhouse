@@ -371,6 +371,180 @@ def _check_move_redundant(batch_files: list[Path]) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
+# move-source-missing check
+# ---------------------------------------------------------------------------
+
+def _check_move_source_missing(
+    batch_files: list[Path],
+    project_root: Path,
+    root: str | None,
+    creates_union: set[str],
+    moves_targets: set[str],
+    *,
+    wiki_root: Path | None = None,
+    git_root: Path | None = None,
+) -> list[dict]:
+    """
+    Flag Moves: sources that do not exist and are not created or relocated earlier.
+
+    Modelled on the Deletes branch of ``_check_non_existent_path``: a Move source
+    that is missing on disk is only an error when it cannot be explained by an
+    earlier batch creating it (``creates_union``) or an earlier Move relocating a
+    different file to that path (``moves_targets``).  Both suppression sets are
+    plan-wide, so chained moves (batch A moves X to Y; batch B moves Y to Z) do
+    not generate a false positive for batch B's source Y.
+
+    Error dict shape: ``{check, batch, card, path, message}``.
+
+    Args:
+        batch_files: Sorted list of batch file paths to validate.
+        project_root: Root of the project (worktree root).
+        root: Optional root subfolder for source refs (threaded to
+            ``resolve_existing_paths``).
+        creates_union: Union of all ``Creates:`` tokens across the plan.
+        moves_targets: Union of all ``Moves:`` destination tokens across the plan.
+        wiki_root: Optional wiki root path (threaded to ``resolve_existing_paths``).
+        git_root: Optional repo root (threaded to ``resolve_existing_paths``).
+
+    Returns:
+        List of error dicts, one per missing Move source.
+    """
+    errors: list[dict] = []
+    for batch_path in batch_files:
+        moves = parse_moves(batch_path)
+        for src, _ in moves:
+            existing = resolve_existing_paths(
+                [src], project_root, root,
+                wiki_root=wiki_root, git_root=git_root,
+            )
+            # Suppress when an earlier batch creates the file or moves something
+            # else to this path, making it available before this Move runs.
+            if not existing and src not in creates_union and src not in moves_targets:
+                errors.append({
+                    "check": "move-source-missing",
+                    "batch": batch_path.stem,
+                    "card": None,
+                    "path": src,
+                    "message": (
+                        f"Moves: source '{src}' does not exist on disk and is not "
+                        "created or relocated by an earlier batch"
+                    ),
+                })
+
+    return errors
+
+
+# ---------------------------------------------------------------------------
+# move-target-collision check
+# ---------------------------------------------------------------------------
+
+def _check_move_target_collision(
+    batch_files: list[Path],
+    project_root: Path,
+    root: str | None,
+    creates_union: set[str],
+    *,
+    wiki_root: Path | None = None,
+    git_root: Path | None = None,
+) -> list[dict]:
+    """
+    Flag Moves: targets that collide with existing files or other plan entries.
+
+    Three collision conditions are checked (OR semantics):
+
+    1. The target already exists on disk before the plan runs.
+    2. More than one batch across the plan names the same destination path.
+    3. The target appears as a ``Creates:`` token in a DIFFERENT batch (cross-batch
+       collision).  Same-batch overlap is ``move-redundant``'s responsibility; this
+       check intentionally skips it to avoid double-reporting.
+
+    Error dict shape: ``{check, batch, card, path, message}``.
+
+    Args:
+        batch_files: Sorted list of batch file paths to validate.
+        project_root: Root of the project (worktree root).
+        root: Optional root subfolder (threaded to ``resolve_existing_paths``).
+        creates_union: Union of all ``Creates:`` tokens across the plan (not used
+            directly here; per-batch creates are computed internally for cross-batch
+            collision accuracy).
+        wiki_root: Optional wiki root path.
+        git_root: Optional repo root.
+
+    Returns:
+        List of error dicts in deterministic sorted order.
+    """
+    # Build per-batch move-target sets and per-batch creates sets for
+    # accurate cross-batch collision detection.
+    batch_targets: dict[str, set[str]] = {}
+    batch_creates: dict[str, set[str]] = {}
+    for batch_path in batch_files:
+        stem = batch_path.stem
+        batch_targets[stem] = {dst for _, dst in parse_moves(batch_path)}
+        batch_creates[stem] = _parse_creates_only(batch_path)
+
+    # Count how many batches target each destination path (plan-wide).
+    target_batch_count: dict[str, int] = {}
+    for targets in batch_targets.values():
+        for dst in targets:
+            target_batch_count[dst] = target_batch_count.get(dst, 0) + 1
+
+    errors: list[dict] = []
+
+    for batch_path in sorted(batch_files):
+        stem = batch_path.stem
+        same_batch_creates = batch_creates[stem]
+
+        for dst in sorted(batch_targets[stem]):
+            # Condition 1: target file already exists on disk.
+            existing = resolve_existing_paths(
+                [dst], project_root, root,
+                wiki_root=wiki_root, git_root=git_root,
+            )
+            if existing:
+                errors.append({
+                    "check": "move-target-collision",
+                    "batch": stem,
+                    "card": None,
+                    "path": dst,
+                    "message": f"Moves: target '{dst}' already exists on disk",
+                })
+                continue
+
+            # Condition 2: more than one batch targets the same destination.
+            if target_batch_count.get(dst, 0) > 1:
+                errors.append({
+                    "check": "move-target-collision",
+                    "batch": stem,
+                    "card": None,
+                    "path": dst,
+                    "message": (
+                        f"Moves: target '{dst}' is named by more than one batch across the plan"
+                    ),
+                })
+                continue
+
+            # Condition 3: cross-batch Creates: collision.
+            # Same-batch overlap is move-redundant's job; skip it here.
+            for other_stem, other_creates in sorted(batch_creates.items()):
+                if other_stem == stem:
+                    continue
+                if dst in other_creates:
+                    errors.append({
+                        "check": "move-target-collision",
+                        "batch": stem,
+                        "card": None,
+                        "path": dst,
+                        "message": (
+                            f"Moves: target '{dst}' collides with "
+                            f"Creates: in batch '{other_stem}'"
+                        ),
+                    })
+                    break
+
+    return errors
+
+
+# ---------------------------------------------------------------------------
 # Check 1 — non-existent-path
 # ---------------------------------------------------------------------------
 
