@@ -34,7 +34,9 @@ batches:
     start_sha: 6809d5701ff7d3fda0d05c2c23ee46f217f8b7f2
     commit_sha: 2d77a036896e581bce24888b8ab4fc5017195df6
   - name: go-artifact-allowlist
-    state: pending
+    state: running
+    implementer_session: d4739c7a-f796-43b0-b23e-385a11ee9b80
+    start_sha: 462f0bda65f563d0bbea8daabfb8c811db86f2c2
   - name: idempotent-checkpoint
     state: pending
 ```
