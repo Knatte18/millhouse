@@ -374,7 +374,8 @@ def resolve(registry: dict, name: str) -> dict:
         return {"type": "single", "provider": "test_stub", "tooluse": False}
 
     if name not in registry:
-        raise ReviewerError(f"Unknown reviewer: {name!r}")
+        available = ", ".join(sorted(registry))
+        raise ReviewerError(f"Unknown reviewer: {name!r}. Available: {available}")
 
     spec = dict(registry[name])
 

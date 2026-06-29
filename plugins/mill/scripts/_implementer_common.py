@@ -33,6 +33,139 @@ def _is_only_start_batch_commit(project_root: Path, start_sha: str) -> bool:
     return len(msgs) == 1 and msgs[0].startswith("mill-go: start batch")
 
 
+def _content_commit_count(project_root: Path, start_sha: str | None) -> int | None:
+    """
+    Count content commits since start_sha, excluding the batch-start housekeeping commit.
+
+    The prepare stage always makes a "mill-go: start batch <name>" commit before the
+    implementer runs. Because start_sha is captured BEFORE that commit, a raw
+    `git rev-list --count start_sha..HEAD` over-counts by one whenever the housekeeping
+    commit is present. This helper subtracts it so that callers see the true number of
+    content commits the implementer made.
+
+    Algorithm:
+      1. Return None when start_sha is None (gate disabled).
+      2. Run `git rev-list --count start_sha..HEAD` to get the raw range count.
+         Return None on non-zero exit or non-numeric output.
+      3. Run `git log --pretty=%s start_sha..HEAD` to get per-commit subjects.
+         Git log returns newest-first, so the last non-empty subject is the oldest commit.
+      4. When the oldest subject starts with "mill-go: start batch", subtract 1 from the
+         raw count (floored at 0). This is the housekeeping commit that prepare always
+         inserts; it is not a content commit.
+      5. Return the adjusted count.
+
+    Returns None on any subprocess failure so callers can treat it as a gate no-op.
+
+    Args:
+        project_root: Path to the worktree root used as cwd for git subprocesses.
+        start_sha: The SHA recorded at batch start. None disables the count (returns None).
+
+    Returns:
+        Content commit count (int >= 0), or None when inputs are absent or git fails.
+    """
+    if start_sha is None:
+        return None
+
+    # Get the raw commit count since start_sha.
+    result = _subprocess_util.run(
+        ["git", "rev-list", "--count", f"{start_sha}..HEAD"],
+        cwd=project_root,
+    )
+    if result.returncode != 0:
+        return None
+
+    # Guard the parse: non-numeric stdout must not raise (e.g. mocked sha strings in tests).
+    try:
+        count = int(result.stdout.strip())
+    except ValueError:
+        return None
+
+    # Inspect the oldest commit subject to detect the housekeeping commit.
+    # git log returns newest-first; the last non-empty line is the oldest commit.
+    log_result = _subprocess_util.run(
+        ["git", "log", "--pretty=%s", f"{start_sha}..HEAD"],
+        cwd=project_root,
+    )
+    if log_result.returncode == 0:
+        subjects = [s.strip() for s in log_result.stdout.strip().splitlines() if s.strip()]
+        if subjects:
+            oldest_subject = subjects[-1]
+            # The housekeeping commit is "mill-go: start batch <name>" -- exclude it.
+            if oldest_subject.startswith("mill-go: start batch"):
+                count = max(0, count - 1)
+
+    return count
+
+
+def _reclassify_verify_failure(
+    verify_stuck: dict,
+    project_root: Path,
+    start_sha: str | None,
+    card_count: int | None,
+    session_id: str | None,
+) -> dict:
+    """
+    Reclassify a verify-failure stuck dict based on how many content commits exist.
+
+    Called only when the verify gate already fired (verify_stuck is non-None). A verify
+    failure that happens mid-batch -- before the implementer finished all cards -- should
+    be classified as transient (retryable) not verify (needs a fix). A failure with zero
+    content commits likely means the agent stopped before producing any work and should be
+    classified as logic (not retryable without human intervention).
+
+    Classification rules (applied in order):
+      - content is None OR card_count is None OR card_count <= 0: return verify_stuck unchanged.
+      - content == 0: reclassify as stuck_type=logic "no content commit".
+      - 0 < content < card_count: reclassify as stuck_type=transient with commits_made=content.
+      - content >= card_count (full batch): return verify_stuck unchanged.
+
+    Args:
+        verify_stuck: The stuck dict produced by _run_verify_gates (stuck_type="verify").
+        project_root: Path to the worktree root for _content_commit_count.
+        start_sha: SHA recorded at batch start; None disables reclassification.
+        card_count: Number of Card headings in the batch file; None or 0 disables it.
+        session_id: Session identifier included in reclassified dicts.
+
+    Returns:
+        Either verify_stuck unchanged, or a new dict with a different stuck_type.
+    """
+    content = _content_commit_count(project_root, start_sha)
+
+    # Inputs absent or gate disabled -- preserve original verify classification.
+    if content is None or card_count is None or card_count <= 0:
+        return verify_stuck
+
+    if content == 0:
+        # No content commits at all -- agent likely aborted before touching any files.
+        return {
+            "status": "stuck",
+            "stuck_type": "logic",
+            "reason": (
+                "success reported but no content commit"
+                " (only batch-start commit since start_sha)"
+            ),
+            "session_id": session_id or "unknown",
+        }
+
+    if 0 < content < card_count:
+        # Partial batch -- implementer stopped after some cards; retrying may complete it.
+        return {
+            "status": "stuck",
+            "stuck_type": "transient",
+            "reason": (
+                f"batch incomplete: {content} content commit(s) since start but"
+                f" {card_count} card(s) in batch"
+                " -- implementer stopped before finishing all cards"
+            ),
+            "session_id": session_id or "unknown",
+            "commits_made": content,
+        }
+
+    # content >= card_count: full batch completed, verify failure is a genuine
+    # test failure that needs to be fixed -- preserve the original classification.
+    return verify_stuck
+
+
 def _batch_completeness_stuck(
     project_root: Path,
     start_sha: str | None,
@@ -73,31 +206,24 @@ def _batch_completeness_stuck(
     if start_sha is None or card_count is None or card_count <= 0:
         return None
 
-    # Count commits made since the batch start SHA.
-    result = _subprocess_util.run(
-        ["git", "rev-list", "--count", f"{start_sha}..HEAD"],
-        cwd=project_root,
-    )
-    if result.returncode != 0:
-        # Git failure -- treat as no-op rather than crashing finalize.
+    # Count content commits (excluding the start-batch housekeeping commit) since start_sha.
+    # The housekeeping commit is always present when prepare ran, so raw rev-list
+    # over-counts by one; _content_commit_count subtracts it. Returns None on any
+    # git failure, which is treated as a gate no-op to avoid crashing finalize.
+    content = _content_commit_count(project_root, start_sha)
+    if content is None:
         return None
 
-    # Guard the parse: non-numeric stdout (e.g. a mocked sha string) must not raise.
-    try:
-        count = int(result.stdout.strip())
-    except ValueError:
-        return None
-
-    if count < card_count:
+    if content < card_count:
         return {
             "status": "stuck",
             "stuck_type": "transient",
             "reason": (
-                f"batch incomplete: {count} commit(s) since start but"
+                f"batch incomplete: {content} content commit(s) since start but"
                 f" {card_count} card(s) in batch -- implementer stopped before finishing all cards"
             ),
             "session_id": session_id or "unknown",
-            "commits_made": count,
+            "commits_made": content,
         }
     return None
 
@@ -742,17 +868,30 @@ def _forward_output(
     if parsed is not None:
         # Apply verify gates ONLY for self-reported success
         if parsed.get("status") == "success":
+            # Resolve session id now so it is available both for the verify-gate
+            # reclassification path and for the completeness / dirty gates below.
+            # Hoisted above _run_verify_gates to avoid a NameError in
+            # _reclassify_verify_failure when the gate fires.
+            _gate_session_id = session_id or parsed.get("session_id")
+
             gate_result = _run_verify_gates(
                 project_root, verify_cmd, module_wide_verify_cmd, git_root=git_root
             )
             if gate_result is not None:
-                # Verify failed; enrich with commit_sha and emit
-                result = _subprocess_util.run(
-                    ["git", "rev-parse", "HEAD"],
-                    cwd=project_root,
+                # Reclassify a verify failure that is really a partial-batch stop
+                # (stuck_type:transient) or a no-content stop (stuck_type:logic).
+                gate_result = _reclassify_verify_failure(
+                    gate_result, project_root, start_sha, card_count, _gate_session_id
                 )
-                if result.returncode == 0:
-                    gate_result["commit_sha"] = result.stdout.strip()
+                # Add commit_sha only for verify/transient results; logic (no-content)
+                # results match the sibling no-content gates that omit commit_sha.
+                if gate_result.get("stuck_type") in ("verify", "transient"):
+                    result = _subprocess_util.run(
+                        ["git", "rev-parse", "HEAD"],
+                        cwd=project_root,
+                    )
+                    if result.returncode == 0:
+                        gate_result["commit_sha"] = result.stdout.strip()
                 print(json.dumps(gate_result))
                 return 0
 
@@ -794,8 +933,7 @@ def _forward_output(
                     )
                     return 0
 
-            # Resolve session id for the new gates: prefer caller-supplied over parsed.
-            _gate_session_id = session_id or parsed.get("session_id")
+            # _gate_session_id is already resolved above (hoisted before gate call).
 
             # Completeness gate: demote to stuck/transient when fewer commits than cards.
             _completeness_result = _batch_completeness_stuck(
@@ -899,7 +1037,15 @@ def _forward_output(
                                         git_root=git_root,
                                     )
                                     if gate_result is not None:
-                                        gate_result["commit_sha"] = new_head
+                                        gate_result = _reclassify_verify_failure(
+                                            gate_result,
+                                            project_root,
+                                            start_sha,
+                                            card_count,
+                                            session_id,
+                                        )
+                                        if gate_result.get("stuck_type") in ("verify", "transient"):
+                                            gate_result["commit_sha"] = new_head
                                         print(json.dumps(gate_result))
                                         return 0
                                     # Completeness gate: incomplete batch demotes to stuck/transient.
@@ -979,7 +1125,11 @@ def _forward_output(
                         git_root=git_root,
                     )
                     if gate_result is not None:
-                        gate_result["commit_sha"] = head
+                        gate_result = _reclassify_verify_failure(
+                            gate_result, project_root, start_sha, card_count, session_id
+                        )
+                        if gate_result.get("stuck_type") in ("verify", "transient"):
+                            gate_result["commit_sha"] = head
                         print(json.dumps(gate_result))
                         return 0
                     # Completeness gate: incomplete batch demotes to stuck/transient.
@@ -1059,7 +1209,11 @@ def _forward_output(
                         git_root=git_root,
                     )
                     if gate_result is not None:
-                        gate_result["commit_sha"] = head
+                        gate_result = _reclassify_verify_failure(
+                            gate_result, project_root, start_sha, card_count, session_id
+                        )
+                        if gate_result.get("stuck_type") in ("verify", "transient"):
+                            gate_result["commit_sha"] = head
                         print(json.dumps(gate_result))
                         return 0
                     # Completeness gate: incomplete batch demotes to stuck/transient.

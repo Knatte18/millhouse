@@ -668,6 +668,124 @@ def main() -> int:
     except Exception as exc:
         failures.append(f"FAIL: clean_ephemeral_scope_violations already-gone ({type(exc).__name__}): {exc}")
 
+    # CESV-6. clean_ephemeral_scope_violations: Go .exe artifact is removed and reported
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            subprocess.run(
+                ["git", "init", str(tmp_path)],
+                check=True,
+                capture_output=True,
+            )
+            # Create an untracked .exe binary (simulates a compiled Go binary at repo root)
+            exe_file = tmp_path / "app.exe"
+            exe_file.write_text("", encoding="utf-8")
+            with unittest.mock.patch(
+                "_cleanliness.compute_scope_violations",
+                return_value=["app.exe"]
+            ):
+                removed, blocking = clean_ephemeral_scope_violations(tmp_path)
+            assert removed == ["app.exe"], f"expected ['app.exe'] in removed, got {removed!r}"
+            assert blocking == [], f"expected [] in blocking, got {blocking!r}"
+            assert not exe_file.exists(), "app.exe should have been deleted from disk"
+        print("PASS: clean_ephemeral_scope_violations: Go .exe artifact allowlisted and removed")
+    except AssertionError as exc:
+        failures.append(f"FAIL: clean_ephemeral_scope_violations .exe artifact: {exc}")
+    except Exception as exc:
+        failures.append(f"FAIL: clean_ephemeral_scope_violations .exe artifact ({type(exc).__name__}): {exc}")
+
+    # CESV-7. clean_ephemeral_scope_violations: bare-name binary with matching package main dir is removed
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            subprocess.run(
+                ["git", "init", str(tmp_path)],
+                check=True,
+                capture_output=True,
+            )
+            # Create and stage tools/sandbox/main.go so git ls-files sees it as tracked
+            go_dir = tmp_path / "tools" / "sandbox"
+            go_dir.mkdir(parents=True)
+            (go_dir / "main.go").write_text(
+                "package main\n\nfunc main() {}\n", encoding="utf-8"
+            )
+            subprocess.run(
+                ["git", "-C", str(tmp_path), "add", "tools/sandbox/main.go"],
+                check=True,
+                capture_output=True,
+            )
+            # Create untracked extensionless binary that matches the source directory name
+            sandbox_file = tmp_path / "sandbox"
+            sandbox_file.write_bytes(b"\x00binary")
+            with unittest.mock.patch(
+                "_cleanliness.compute_scope_violations",
+                return_value=["sandbox"]
+            ):
+                removed, blocking = clean_ephemeral_scope_violations(tmp_path)
+            assert removed == ["sandbox"], f"expected ['sandbox'] in removed, got {removed!r}"
+            assert blocking == [], f"expected [] in blocking, got {blocking!r}"
+            assert not sandbox_file.exists(), "sandbox binary should have been deleted from disk"
+        print("PASS: clean_ephemeral_scope_violations: bare-name binary with package main dir removed")
+    except AssertionError as exc:
+        failures.append(f"FAIL: clean_ephemeral_scope_violations bare-name package main: {exc}")
+    except Exception as exc:
+        failures.append(f"FAIL: clean_ephemeral_scope_violations bare-name package main ({type(exc).__name__}): {exc}")
+
+    # CESV-8. clean_ephemeral_scope_violations: bare-name file without matching package main is blocking
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            subprocess.run(
+                ["git", "init", str(tmp_path)],
+                check=True,
+                capture_output=True,
+            )
+            # No Go source directory named 'notes' exists, so the heuristic must not match
+            notes_file = tmp_path / "notes"
+            notes_file.write_text("my notes", encoding="utf-8")
+            with unittest.mock.patch(
+                "_cleanliness.compute_scope_violations",
+                return_value=["notes"]
+            ):
+                removed, blocking = clean_ephemeral_scope_violations(tmp_path)
+            assert removed == [], f"expected [] in removed, got {removed!r}"
+            assert blocking == ["notes"], f"expected ['notes'] in blocking, got {blocking!r}"
+            assert notes_file.exists(), "notes should NOT have been deleted from disk"
+        print("PASS: clean_ephemeral_scope_violations: bare-name file without package main dir is blocking")
+    except AssertionError as exc:
+        failures.append(f"FAIL: clean_ephemeral_scope_violations bare-name no package main: {exc}")
+    except Exception as exc:
+        failures.append(f"FAIL: clean_ephemeral_scope_violations bare-name no package main ({type(exc).__name__}): {exc}")
+
+    # CESV-9. Regression: coverage.out still removed and non-allowlisted data.json still blocking
+    # Confirms the Go artifact additions did not disturb the original fixed allowlist entries.
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            subprocess.run(
+                ["git", "init", str(tmp_path)],
+                check=True,
+                capture_output=True,
+            )
+            coverage_file = tmp_path / "coverage.out"
+            coverage_file.write_text("mode: set", encoding="utf-8")
+            data_file = tmp_path / "data.json"
+            data_file.write_text("{}", encoding="utf-8")
+            with unittest.mock.patch(
+                "_cleanliness.compute_scope_violations",
+                return_value=["coverage.out", "data.json"]
+            ):
+                removed, blocking = clean_ephemeral_scope_violations(tmp_path)
+            assert removed == ["coverage.out"], f"expected ['coverage.out'] in removed, got {removed!r}"
+            assert blocking == ["data.json"], f"expected ['data.json'] in blocking, got {blocking!r}"
+            assert not coverage_file.exists(), "coverage.out should have been deleted"
+            assert data_file.exists(), "data.json should NOT have been deleted"
+        print("PASS: Regression: coverage.out still removed, data.json still blocking")
+    except AssertionError as exc:
+        failures.append(f"FAIL: Regression coverage.out/data.json: {exc}")
+    except Exception as exc:
+        failures.append(f"FAIL: Regression coverage.out/data.json ({type(exc).__name__}): {exc}")
+
     # CRLF-1. capture_snapshot writes LF-only bytes (no \r\n) on disk
     # This is the regression test for the Windows text-mode CRLF translation bug:
     # without newline="" in write_text, Python rewrites \n as \r\n on Windows,

@@ -153,14 +153,82 @@ def compute_terminal_dirt(worktree: Path, task_dir: Path, parent_branch: str) ->
     return _filter_to_task_scope(lines, task_dir_rel, owned_paths)
 
 
+def _is_go_main_artifact(worktree: Path, path: str) -> bool:
+    """
+    Return True if the extensionless file at path is a Go package-main build artifact.
+
+    Queries tracked Go files via git ls-files and checks whether any of them (a)
+    live in a directory whose basename equals the violation's basename and (b) declare
+    package main (a stripped line that starts with "package main"). Only candidate
+    files that can be read are checked; unreadable files are silently skipped.
+
+    This is the corroborating heuristic for extensionless binary names. A bare name
+    like "sandbox" is only auto-cleaned when a tracked Go file exists at a path like
+    tools/sandbox/main.go that declares package main. This prevents over-matching
+    non-Go files such as shell scripts or data files with no extension.
+
+    Args:
+        worktree: Path to the task worktree.
+        path: Worktree-relative path of the violation (e.g. "sandbox").
+
+    Returns:
+        True if at least one tracked Go file qualifies as a package-main source for
+        this binary name; False otherwise.
+    """
+    # The binary name to match against parent directory names in the Go source tree
+    basename = Path(path).name
+
+    # Retrieve all tracked Go files; a non-zero exit (e.g. not a git repo) means no match
+    result = _subprocess_util.run(
+        ["git", "ls-files", "*.go"],
+        cwd=worktree,
+    )
+    if result.returncode != 0:
+        return False
+
+    # For each tracked Go file, check if its parent directory name matches the binary's
+    # basename and the file declares package main
+    for go_file in result.stdout.splitlines():
+        if not go_file:
+            continue
+        go_file_path = Path(go_file)
+        # Only files directly inside a directory whose name equals the binary's name qualify
+        if go_file_path.parent.name != basename:
+            continue
+        # Read the Go source file and scan for a package main declaration
+        try:
+            content = (worktree / go_file).read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        for line in content.splitlines():
+            if line.strip().startswith("package main"):
+                return True
+
+    return False
+
+
 def clean_ephemeral_scope_violations(worktree: Path) -> tuple[list[str], list[str]]:
     """
     Auto-clean ephemeral build artifacts from scope violations.
 
     Calls compute_scope_violations to get untracked out-of-scope files, partitions
-    them by a conservative allowlist (basename 'coverage.out' or suffix in
-    {.test, .test.exe, .prof, .cover}), removes allowlisted files from disk
-    (swallowing already-gone errors), and returns the removed and blocking paths.
+    them by a conservative allowlist, removes allowlisted files from disk (swallowing
+    already-gone errors), and returns the removed and blocking paths.
+
+    Allowlist rules applied in order:
+    1. Basename ends with '.exe': blanket Go compiled binary or test executable
+       (e.g. sandbox.exe, foo.test.exe). The .exe suffix rule subsumes the
+       historical .test.exe entry.
+    2. Basename has no extension (no '.' in basename): allowlisted only when
+       _is_go_main_artifact confirms a matching package-main source directory
+       (e.g. extensionless 'sandbox' corroborated by tools/sandbox/main.go
+       declaring package main).
+    3. Basename matches the fixed allowlist: 'coverage.out', or suffix in
+       {.test, .test.exe, .prof, .cover}.
+
+    For allowlisted files: os.remove is called, FileNotFoundError is swallowed and
+    the path is still reported as removed, OSError is reported as blocking instead.
+    Non-allowlisted violations are reported as blocking without touching disk.
 
     Args:
         worktree: Path to the task worktree.
@@ -174,19 +242,26 @@ def clean_ephemeral_scope_violations(worktree: Path) -> tuple[list[str], list[st
 
     violations = compute_scope_violations(worktree)
 
-    # Conservative allowlist: basename coverage.out, or suffix in {.test, .test.exe, .prof, .cover}
     removed_paths = []
     blocking_paths = []
 
     for violation in violations:
         basename = violation.split("/")[-1]
-        is_allowlisted = (
-            basename == "coverage.out"
-            or basename.endswith(".test")
-            or basename.endswith(".test.exe")
-            or basename.endswith(".prof")
-            or basename.endswith(".cover")
-        )
+
+        # Rule 1: blanket .exe suffix covers all Go compiled binaries and test executables
+        if basename.endswith(".exe"):
+            is_allowlisted = True
+        # Rule 2: extensionless name -- only allowlisted when a package-main source dir matches
+        elif "." not in basename:
+            is_allowlisted = _is_go_main_artifact(worktree, violation)
+        # Rule 3: fixed allowlist for other known extension-bearing build artifact types
+        else:
+            is_allowlisted = (
+                basename == "coverage.out"
+                or basename.endswith(".test")
+                or basename.endswith(".prof")
+                or basename.endswith(".cover")
+            )
 
         if is_allowlisted:
             # Try to remove the file from disk, swallowing errors for already-gone files
@@ -201,7 +276,7 @@ def clean_ephemeral_scope_violations(worktree: Path) -> tuple[list[str], list[st
                 # Other errors (permissions, etc.) are still reported as blocking
                 blocking_paths.append(violation)
         else:
-            # Non-allowlisted: report as blocking
+            # Non-allowlisted: report as blocking without touching disk
             blocking_paths.append(violation)
 
     return (sorted(removed_paths), sorted(blocking_paths))
