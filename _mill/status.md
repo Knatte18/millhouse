@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-bare-tier-aliases
+phase: approved-go-artifact-allowlist
 slug: mill-scope-and-infra-gaps
 branch: hanf/mill-scope-and-infra-gaps
 plan: _mill/plan
@@ -22,6 +22,7 @@ plan-fix-r1  '2026-06-29T16:42:24Z'
 planned  '2026-06-29T16:42:47Z'
 implementing  '2026-06-29T17:04:44Z'
 approved-bare-tier-aliases  '2026-06-29T17:12:35Z'
+approved-go-artifact-allowlist  '2026-06-29T17:19:41Z'
 ```
 
 ## Batches
@@ -34,9 +35,10 @@ batches:
     start_sha: 6809d5701ff7d3fda0d05c2c23ee46f217f8b7f2
     commit_sha: 2d77a036896e581bce24888b8ab4fc5017195df6
   - name: go-artifact-allowlist
-    state: running
+    state: approved
     implementer_session: d4739c7a-f796-43b0-b23e-385a11ee9b80
     start_sha: 462f0bda65f563d0bbea8daabfb8c811db86f2c2
+    commit_sha: 65bb8a634968429c7ede93c2fb866e9320fb7d1a
   - name: idempotent-checkpoint
     state: pending
 ```
