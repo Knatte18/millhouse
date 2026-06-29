@@ -30,6 +30,19 @@ verify: null
 depends-on: []
 ```
 
+## Rename mechanic
+
+_Include this section in any batch that contains at least one non-empty `Moves:` field.
+The `move-mechanic-missing` validator check enforces this requirement. For each `Moves:`
+pair the implementer MUST:_
+
+1. _Run `git mv <old> <new>` FIRST, before making any other change to the moved file._
+2. _Make ONLY surgical edits -- touch only the lines that must change after the move
+   (package or module declaration, imports, identifier retargeting, seam splits)._
+3. _Use a full-file `Creates:` entry only for genuinely new files that have no predecessor._
+4. _Never write the relocated file from scratch and delete the original -- that breaks
+   git rename history and inflates review diffs._
+
 ## Batch Scope
 
 _One paragraph stating what this batch delivers and why it is one
@@ -48,10 +61,11 @@ unambiguously. Fields per card:_
 - **Edits:** files the implementer changes (implicitly also read — do not repeat in Context:). One backtick-wrapped path per indented bullet.
 - **Creates:** files the implementer creates. One backtick-wrapped path per indented bullet. When a field has nothing, write the literal "none" on the same line as the field label.
 - **Deletes:** files the implementer deletes. One backtick-wrapped path per indented bullet. Multi-line bullet form supported. When a field has nothing, write the literal "none" on the same line as the field label.
+- **Moves:** old-to-new rename pairs this card performs. List immediately after `Deletes:` and before `Requirements:`. Each entry is a sub-bullet of the form `` `old/path` -> `new/path` `` (ASCII ` -> `, backtick-wrapped paths). Write the literal "none" on the same line when the card has no renames. A path expressed in `Moves:` must NOT also appear in `Creates:` or `Deletes:`. A rename-plus-extraction is one `Moves:` pair (the relocated file) plus a separate `Creates:` entry (the newly extracted file).
 - **Requirements:** what the card must achieve. Use stable identifiers — name the specific function, class, or constant being added, changed, or deleted (e.g., "replace `_load_config` in `mill-claim.py` with `from _config import load_config`"). Never write vague prose ("refactor X") without the specific identifier. Exact assertion shapes live in tests, not here.
 - **Commit:** one-line commit message the implementer will use.
 
-Context/Edits/Creates/Deletes fields contain ONLY backtick-wrapped paths in bullet form. No inline parenthetical commentary, no line-range suffixes (e.g. ":55-65"). Inline notes belong in Requirements:. When a field has nothing, write the literal "none" on the same line as the field label.
+Context/Edits/Creates/Deletes/Moves fields contain ONLY backtick-wrapped paths in bullet form. No inline parenthetical commentary, no line-range suffixes (e.g. ":55-65"). Inline notes belong in Requirements:. When a field has nothing, write the literal "none" on the same line as the field label. Moves: sub-bullets use the two-path form `` `old` -> `new` `` rather than a single path.
 
 Note for reviewers: the plan-reviewer bulks `Context: ∪ Edits:` (existing files only; `Creates:` targets do not exist yet). The code-reviewer bulks `Context: ∪ Edits: ∪ Creates:` (all files exist post-implementation).
 
@@ -65,6 +79,7 @@ Note for reviewers: the plan-reviewer bulks `Context: ∪ Edits:` (existing file
 - **Creates:**
   - `path/d`
 - **Deletes:** none
+- **Moves:** none
 - **Requirements:** …
 - **Commit:** `<type>(<scope>): <summary>`
 
