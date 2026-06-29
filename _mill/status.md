@@ -35,6 +35,6 @@ batches:
     commit_sha: c91b08edc5bb1285c9b9edc24ec8e574035dd5d0
   - name: merge-in-cli-parity
     state: running
-    implementer_session: 7b6b2099-dda6-4fbb-8529-21875d2bbe27
-    start_sha: a3b4613a11ba58168ab34af68e0ed474979e28b6
+    implementer_session: d4644892-f049-4c2c-840d-2f516419b495
+    start_sha: 5cfabf0e3210a4569fcbad8457c935c8a0918aa9
 ```
