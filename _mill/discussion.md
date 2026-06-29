@@ -32,7 +32,12 @@ turn or mis-routes a recoverable situation into a manual-intervention escalation
    `commits_made > 0` "re-dispatch a fresh implementer to finish the batch" path. The verify
    gate runs *before* the completeness gate, and the completeness gate is additionally
    disabled whenever a `verify_cmd` is present — so for the exact #570 scenario (a batch with
-   a verify command) completeness can never fire.
+   a verify command) completeness can never fire. **Commit-count caveat (review gap):**
+   `start_sha` is captured during prepare *before* the `mill-go: start batch` housekeeping
+   commit (`millpy-implement.py` L277 vs L313), so a raw `git rev-list --count
+   start_sha..HEAD` includes that housekeeping commit and over-counts content by one — the
+   reclassification must count **content** commits, not the raw range count (see the decision
+   below).
 
 3. **#568 — `millpy-implement.py --stage finalize` rejects `--round`.** The implement
    *prepare* envelope emits a `"round": 1` field (via the shared `emit_prepare` helper), and
@@ -121,17 +126,40 @@ agent-dispatch pipeline's promise that prepare/finalize is a clean two-phase con
 
 - Decision: Add a single helper in `_implementer_common.py` that, given a verify-gate stuck
   result, reclassifies it to `{"status":"stuck","stuck_type":"transient","commits_made":<n>,
-  "session_id":...,"reason":...}` **when** `card_count` is known and `0 < commits_made <
-  card_count` (commits counted via `git rev-list --count start_sha..HEAD`). Apply it at every
-  site in `_forward_output` where `_run_verify_gates(...)` returns a non-None stuck dict (the
-  parsed-success path and all inferred-success paths). The reason should make clear the batch
-  is incomplete (partial cards) so the failure is not mistaken for a genuine verify regression.
+  "session_id":...,"reason":...}` **when** `card_count` is known and `0 < content_commits <
+  card_count`. Apply it at every site in `_forward_output` where `_run_verify_gates(...)`
+  returns a non-None stuck dict (the parsed-success path and all inferred-success paths). The
+  reason should make clear the batch is incomplete (partial cards) so the failure is not
+  mistaken for a genuine verify regression.
+- **Content-commit counting (resolves review GAP).** `commits_made`/`content_commits` MUST
+  exclude the `mill-go: start batch <name>` housekeeping commit. `start_sha` is recorded in
+  prepare *before* that commit (`millpy-implement.py` L277 vs L313), so the raw
+  `git rev-list --count start_sha..HEAD` is `content + 1` whenever the housekeeping commit
+  exists. Compute `content_commits` as: raw range count minus 1 when the oldest commit in
+  `start_sha..HEAD` is a `mill-go: start batch` commit (reuse the existing
+  `_is_only_start_batch_commit` prefix check / inspect `git log --pretty=%s start_sha..HEAD`
+  tail), else the raw count. Intended outcomes for an N-card batch:
+  - `content_commits == 0` (only the housekeeping commit, or HEAD == start_sha): **do not
+    reclassify** — fall through to the existing no-content / start-batch-only gates
+    (`stuck_type: logic`, "no content commit").
+  - `0 < content_commits < N` (e.g. the common one-card-short case, content = N-1):
+    **reclassify** to `stuck_type: transient` with `commits_made = content_commits`.
+  - `content_commits >= N`: not partial — leave the verify failure as `stuck_type: verify`
+    (genuine regression on a complete batch).
+- **Precedence (resolves review NOTE).** The reclassification fires only on a verify
+  *failure* AND only when `0 < content_commits < card_count`. Because zero-content batches
+  yield `content_commits == 0` they are never reclassified, so the existing no-content /
+  start-batch-only gates (which run after the verify gate in the parsed-success path) still
+  own that case unchanged. No gate reordering is required; the content-commit exclusion makes
+  the new reclassification and the existing no-content gates mutually exclusive by construction.
 - Rationale: This is the surgical fix the issue requests: a half-finished batch trivially fails
   verify, and the correct response is to re-dispatch the implementer to finish remaining cards,
   not to escalate as a plan/logic problem. Reclassifying *at the verify-failure site* (rather
   than reordering the gates to run completeness first unconditionally) preserves
   `verify-pass-is-conclusive` and avoids false-incomplete reports when an implementer
-  legitimately squashes multiple cards into fewer commits and verify passes.
+  legitimately squashes multiple cards into fewer commits and verify passes. Counting content
+  commits (not the raw range) makes the `< card_count` boundary correct for the common
+  one-card-short case and keeps zero-content batches on the existing no-content path.
 - Rejected: (a) move the completeness gate before the verify gate and have it fire on
   `commits < cards` regardless of verify — would mis-report a complete-but-squashed batch
   (fewer commits than cards, verify green) as incomplete; (b) drop the `verify_cmd is not None`
@@ -212,12 +240,18 @@ TDD per fix; all under `plugins/mill/unit_tests/`, run with `run-all.py`.
   conflicts-mode finalize test passing `--session-id <id>` (and `--start-sha`, `--round`) and
   assert the parser accepts them (rc 0) and finalize proceeds normally.
 - **#570 (`test-implementer-common.py`).** Add a `_forward_output` (or `finalize_from_output`)
-  test where: `start_sha` set, `card_count = N`, commits since `start_sha` = `k` with
-  `0 < k < N`, agent output is a clean non-JSON mid-work message (inferred-success path), and
-  the verify command fails. Assert the emitted JSON is `stuck_type: transient` with
-  `commits_made == k` (and a session id), **not** `stuck_type: verify`. Add a guard test that a
-  *complete* batch whose verify fails still reports `stuck_type: verify` (no false
-  reclassification), and that a squashed-but-complete batch (verify passes) emits success.
+  test where: `start_sha` set, `card_count = N`, the range `start_sha..HEAD` contains a
+  leading `mill-go: start batch` housekeeping commit plus `k` content commits with `0 < k < N`
+  (so the raw range count is `k + 1`), agent output is a clean non-JSON mid-work message
+  (inferred-success path), and the verify command fails. Assert the emitted JSON is
+  `stuck_type: transient` with `commits_made == k` (the **content** count, not the raw `k+1`)
+  and a session id, **not** `stuck_type: verify` — this assertion is what catches the
+  housekeeping-commit off-by-one. Add guard tests: (a) a *complete* batch (`content_commits >=
+  N`) whose verify fails still reports `stuck_type: verify` (no false reclassification);
+  (b) a zero-content batch (only the housekeeping commit, `content_commits == 0`) whose verify
+  fails falls through to the existing `stuck_type: logic` "no content commit" gate, **not**
+  transient; (c) a squashed-but-complete batch (verify passes) emits success. Mock
+  `git log`/`git rev-list` so the housekeeping-commit subject is present in the range.
 - Full sweep: `uv run --project plugins/mill plugins/mill/unit_tests/run-all.py` must be green.
 
 ## Q&A log
