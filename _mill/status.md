@@ -28,7 +28,9 @@ implementing  '2026-06-29T17:04:44Z'
 ```yaml
 batches:
   - name: bare-tier-aliases
-    state: pending
+    state: running
+    implementer_session: 7b987173-d78b-46f3-9879-b699b3bd742d
+    start_sha: 6809d5701ff7d3fda0d05c2c23ee46f217f8b7f2
   - name: go-artifact-allowlist
     state: pending
   - name: idempotent-checkpoint
