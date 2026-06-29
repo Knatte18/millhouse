@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-plan-rename-moves
 branch: hanf/mill-plan-rename-moves
 plan: _mill/plan
@@ -20,4 +20,19 @@ discussed  '2026-06-29T16:46:42Z'
 planning  '2026-06-29T16:57:18Z'
 plan-fix-r1  '2026-06-29T17:05:19Z'
 planned  '2026-06-29T17:05:47Z'
+implementing  '2026-06-29T17:07:26Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: move-parsing-foundation
+    state: pending
+  - name: templates-skill-config
+    state: pending
+  - name: validator-move-checks
+    state: pending
+  - name: review-backends
+    state: pending
 ```
