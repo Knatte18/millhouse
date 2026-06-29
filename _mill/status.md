@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-implement-pipeline
+phase: approved-merge-in-cli-parity
 slug: mill-pipeline-finalize-gaps
 branch: hanf/mill-pipeline-finalize-gaps
 plan: _mill/plan
@@ -22,6 +22,7 @@ plan-fix-r1  '2026-06-29T16:53:56Z'
 planned  '2026-06-29T16:54:13Z'
 implementing  '2026-06-29T17:04:59Z'
 approved-implement-pipeline  '2026-06-29T17:27:31Z'
+approved-merge-in-cli-parity  '2026-06-29T17:36:39Z'
 ```
 
 ## Batches
@@ -34,7 +35,8 @@ batches:
     start_sha: f70a1d16da4cd8e2123471e7065eb082bec63687
     commit_sha: c91b08edc5bb1285c9b9edc24ec8e574035dd5d0
   - name: merge-in-cli-parity
-    state: running
+    state: approved
     implementer_session: d4644892-f049-4c2c-840d-2f516419b495
     start_sha: 5cfabf0e3210a4569fcbad8457c935c8a0918aa9
+    commit_sha: cdd7e53471910969a53711c318c60b56b6070fbf
 ```
