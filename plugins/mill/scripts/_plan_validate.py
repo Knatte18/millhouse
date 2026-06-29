@@ -57,6 +57,16 @@ _RE_REFS_HEADER = re.compile(
     r"^-\s*\*\*(Context|Edits|Creates|Deletes):\*\*(?P<inline>.*)$"
 )
 
+# Matches the Moves: header bullet (kept separate from _RE_REFS_HEADER because
+# Moves sub-bullets use a two-path grammar that the reads-not-backtick-path
+# validator rejects when mixed into the single-path fields above).
+_RE_MOVES_HEADER = re.compile(r"^-\s*\*\*Moves:\*\*(?P<inline>.*)$")
+
+# Matches a well-formed move sub-bullet: exactly `src` -> `dst`.
+# The separator must be the ASCII literal " -> " (space-hyphen-greater-space).
+# Any sub-bullet that does not match this pattern is considered malformed.
+_RE_MOVE_PAIR = re.compile(r"^`([^`]+)` -> `([^`]+)`$")
+
 # Matches sub-bullets under multi-line header bullets.
 _RE_REFS_SUB = re.compile(r"^\s+-\s*(.+)$")
 
@@ -220,6 +230,144 @@ def _parse_deletes_only(batch_path: Path) -> set[str]:
                     tokens.add(t)
         i += 1
     return tokens
+
+
+# ---------------------------------------------------------------------------
+# move-format check
+# ---------------------------------------------------------------------------
+
+def _check_move_format(batch_files: list[Path]) -> list[dict]:
+    """
+    Check that every non-none Moves: sub-bullet matches the canonical grammar.
+
+    Scans every ``- **Moves:**`` header in each batch file.  An inline ``none``
+    (case-insensitive) is silently accepted.  For all other headers each
+    sub-bullet is compared against ``_RE_MOVE_PAIR`` (`` `src` -> `dst` ``).
+    A sub-bullet that is missing the arrow, has only one backtick path, or
+    carries prose yields an error dict with ``check="move-format"``.
+
+    Error dict shape: ``{check, batch, card, path, message}``.
+
+    Args:
+        batch_files: Sorted list of batch file paths to validate.
+
+    Returns:
+        List of error dicts, one per malformed sub-bullet found.
+    """
+    errors: list[dict] = []
+    for batch_path in batch_files:
+        text = batch_path.read_text(encoding="utf-8")
+        lines = text.splitlines()
+        current_card: int | None = None
+        i = 0
+        while i < len(lines):
+            line = lines[i]
+
+            # Track the enclosing card number so errors carry the right card.
+            m_card = re.match(r"^###\s+Card\s+(\d+)\s*:", line)
+            if m_card:
+                current_card = int(m_card.group(1))
+
+            m_header = _RE_MOVES_HEADER.match(line)
+            if m_header:
+                inline = m_header.group("inline").strip()
+
+                # Inline "none" sentinel: no moves declared, nothing to check.
+                if inline.lower() == "none":
+                    i += 1
+                    continue
+
+                # Any other inline value (or empty): scan the following sub-bullets.
+                j = i + 1
+                while j < len(lines):
+                    sm = _RE_REFS_SUB.match(lines[j])
+                    if not sm:
+                        # No longer in a sub-bullet block; stop.
+                        break
+                    sub_content = sm.group(1).strip()
+                    pm = _RE_MOVE_PAIR.match(sub_content)
+                    if not pm:
+                        # Sub-bullet does not match the two-backtick-path grammar.
+                        errors.append({
+                            "check": "move-format",
+                            "batch": batch_path.stem,
+                            "card": current_card,
+                            "path": sub_content,
+                            "message": (
+                                "Moves: sub-bullet does not match "
+                                f"'`src` -> `dst`' grammar: {sub_content!r}"
+                            ),
+                        })
+                    j += 1
+
+                # Skip past the consumed sub-bullet block.
+                i = j
+                continue
+
+            i += 1
+
+    return errors
+
+
+# ---------------------------------------------------------------------------
+# move-redundant check
+# ---------------------------------------------------------------------------
+
+def _check_move_redundant(batch_files: list[Path]) -> list[dict]:
+    """
+    Flag Move endpoints that are also declared in Creates: or Deletes:.
+
+    For each batch file, collects every Move source and target via
+    ``parse_moves``, then intersects with the batch's own ``Creates:``
+    and ``Deletes:`` tokens.  An identical path appearing in both a
+    ``Moves:`` field and a ``Creates:``/``Deletes:`` field within the
+    SAME batch is redundant -- the implementer should use one or the
+    other, not both.
+
+    Only an exact-token match triggers the error.  A ``Moves:`` target
+    that is a DIFFERENT path from any ``Creates:`` entry (the canonical
+    rename-plus-extraction pattern) is explicitly allowed.
+
+    Error dict shape: ``{check, batch, card, path, message}``.
+
+    Args:
+        batch_files: Sorted list of batch file paths to validate.
+
+    Returns:
+        List of error dicts, one per redundant path found.
+    """
+    errors: list[dict] = []
+    for batch_path in batch_files:
+        moves = parse_moves(batch_path)
+        if not moves:
+            continue
+
+        # Build the complete set of Move endpoints for this batch.
+        move_endpoints: set[str] = set()
+        for src, dst in moves:
+            move_endpoints.add(src)
+            move_endpoints.add(dst)
+
+        # Paths declared in Creates: or Deletes: within the same batch.
+        creates = _parse_creates_only(batch_path)
+        deletes = _parse_deletes_only(batch_path)
+        conflicting = move_endpoints & (creates | deletes)
+
+        # Emit one error per conflicting path in deterministic order.
+        for path in sorted(conflicting):
+            errors.append({
+                "check": "move-redundant",
+                "batch": batch_path.stem,
+                "card": None,
+                "path": path,
+                "message": (
+                    f"path '{path}' is a Moves: endpoint and also appears in "
+                    "Creates:/Deletes: of the same batch; "
+                    "use Moves: or Creates:/Deletes:, not both"
+                ),
+            })
+
+    return errors
 
 
 # ---------------------------------------------------------------------------
