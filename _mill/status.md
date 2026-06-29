@@ -34,7 +34,9 @@ batches:
     start_sha: 24ec865bdd27d51a1da61ec5781e93b4faa09207
     commit_sha: 8780a2d3246bc8899808a6161892414c53edf7fc
   - name: templates-skill-config
-    state: pending
+    state: running
+    implementer_session: c5e41d63-de22-4d4b-84ee-badc7d2b52ac
+    start_sha: 4e935ccaf73d79228bf634c9a530981407d0edc8
   - name: validator-move-checks
     state: pending
   - name: review-backends
