@@ -3,7 +3,7 @@
 ```yaml
 task: "Fix prepare-retry atomicity, partial-batch finalize routing, and envelope field parity"
 slug: "mill-pipeline-finalize-gaps"
-approved: false
+approved: true
 started: "20260629-164439"
 parent: "main"
 root: ""
