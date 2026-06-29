@@ -65,9 +65,11 @@ plan is the right place; mill-plan should generate it.
   criteria requiring well-formed `Moves:` and the stated git mv mechanic for
   rename-heavy batches; flag full-file-rewrite plans.
 - Code-review: a **mechanical git rename-detection check** in the code-review
-  backend (`_review_code.py`) that flags BLOCKING when a planned Move landed as
-  add+delete (rewrite) rather than a detected rename; plus a matching LLM
-  criterion in `review-code-batch.md`.
+  backend (`_review_code.py`, per-batch scope only) that emits an **advisory
+  NIT** when a planned Move did not land as a git-detected rename, using a
+  **tunable low similarity threshold** (so legitimate rename+extraction/seam-
+  split work is not false-flagged); plus a matching LLM criterion in
+  `review-code-batch.md` that can escalate an actual full rewrite to BLOCKING.
 - `mill-plan/SKILL.md`: instruct the planner to express renames as `Moves:`
   (never as `Creates:` + `Deletes:`), to emit the `## Rename mechanic` section,
   and to keep naming surgical edits in `Requirements:`; update the Step 1.5
@@ -110,7 +112,10 @@ plan is the right place; mill-plan should generate it.
 
 - Decision: `Moves:` is a **required 7th card field**; write `Moves: none` when
   there are no moves. The `card-missing-field` validator check is extended to
-  require it.
+  require it. **Field position:** `Moves:` sits **immediately after `Deletes:`**
+  (semantic grouping with `Creates:` / `Deletes:`), before `Requirements:` and
+  `Commit:`. The `plan-batch.md` template, its example card, and planner output
+  all use this fixed order so card layout is consistent.
 - Rationale: uniform with the existing six required fields; the validator stays
   simple (no conditional presence). The cost is a one-time fixture update.
 - Rejected: optional field present only on rename-heavy cards — inconsistent
@@ -193,20 +198,33 @@ plan is the right place; mill-plan should generate it.
   - **Plan-review (LLM criteria):** `Moves:` is well-formed; a rename-heavy
     batch states the git mv mechanic; plans that prescribe full-file rewrites of
     relocated files are flagged.
-  - **Code-review (mechanical, in `_review_code.py`):** for each planned Move
-    pair, inspect `git diff --name-status -M <batch-base>..HEAD`; if the pair did
-    NOT land as a detected rename (`R…`) — i.e. it shows as add + delete — emit a
-    deterministic **BLOCKING** finding ("planned rename `<old>`→`<new>` landed as
-    rewrite; lost history/blame; redo with `git mv` + surgical edits"). This
-    deterministic finding is merged into the round's review so it flows through
-    the existing REQUEST_CHANGES → receive-review loop.
-  - **Code-review (LLM criterion, `review-code-batch.md`):** backup/context — the
-    reviewer is told the planned moves and flags a relocated file that reads as
-    written-from-scratch.
-- Rationale: prevention (plan expresses the move + mechanic) is the primary fix;
-  the mechanical code-review check is the deterministic backstop the issue
-  explicitly calls for. See Technical context for why `git diff -M` is a valid
-  (similarity-based) proxy here.
+  - **Code-review (mechanical, in `_review_code.py`, per-batch scope ONLY):** for
+    each planned Move pair, inspect `git diff --name-status --find-renames=<thr>
+    <batch-base>..HEAD` with a **tunable low threshold** (`<thr>` default **30%**;
+    surface it as a `pipeline.*` config knob, e.g. `pipeline.rename_detect_pct`).
+    If the pair did NOT land as a detected rename (`R…`) — it shows as add +
+    delete — emit an **advisory NIT** ("planned rename `<old>` -> `<new>` not
+    detected as a git rename at <thr>% similarity; confirm it was done with
+    `git mv` + surgical edits, not a full rewrite"). **Never auto-BLOCKING** —
+    see the threshold gap below. The NIT is merged into the round's review so it
+    flows through the existing receive-review loop. This check runs in **per-batch
+    review only**; holistic-scope review has no per-batch base SHA, so the
+    mechanical check is skipped there (the LLM criterion still applies).
+  - **Code-review (LLM criterion, `review-code-batch.md`):** the judgment layer —
+    the reviewer is told the planned moves and may **escalate to BLOCKING** when
+    it sees an actual full rewrite of a relocated file (lost structure, mass
+    reformat). This is where genuine "write-from-scratch" gets blocked; the
+    mechanical NIT only flags candidates.
+- Rationale: prevention (plan expresses the move + mechanic) is the primary fix.
+  The mechanical check is deliberately **advisory, not deterministic-BLOCKING**,
+  because git rename detection is similarity-based and the motivating workload
+  (module renames + kernel/seam **extractions**) deliberately drops the moved
+  file's surviving content below git's default 50% threshold — a correctly
+  executed `git mv` + extraction would otherwise be false-flagged as a rewrite
+  and falsely BLOCK the very work this task targets. A tunable low threshold
+  (30% default) catches genuine relocations-with-edits; legitimate sub-threshold
+  splits surface as a NIT for confirmation rather than a hard block. See
+  Technical context for why `git diff -M` is a valid (similarity-based) proxy.
 - Rejected: the issue's optional standalone "forgotten git mv" heuristic for
   *unplanned* renames — speculative and out of scope (see Scope/Out).
 
@@ -264,13 +282,26 @@ readers don't think git tracks renames.
 
 **Mechanical check placement + testability.**
 Put the check in `_review_code.py` (the code-review *backend* is ordinary
-orchestration Python — it already reads `start_sha` around line ~240 — and may
-run `git`; only the reviewer LLM is read-only). Structure it so the pure logic
-(`given a name-status diff string + planned move pairs, return findings`) is a
-separate function that takes the diff text as an argument; the caller runs
-`git -C <worktree> diff --name-status -M <base>..HEAD` and passes the output.
-This keeps the logic unit-testable without a real git repo (unit tests are
-in-memory/tempfile per CLAUDE.md; real git lives in `integration_tests/`).
+orchestration Python — it already reads `start_sha` around line ~240 and already
+runs git via `bulk_files_with_diff` at line ~165; only the reviewer LLM is
+read-only). Structure it so the pure logic (`given a name-status diff string +
+planned move pairs + threshold, return NIT findings`) is a separate function
+that takes the diff text as an argument; the caller runs
+`git -C <worktree> diff --name-status --find-renames=<thr> <base>..HEAD` and
+passes the output. This keeps the logic unit-testable without a real git repo
+(unit tests are in-memory/tempfile per CLAUDE.md; real git lives in
+`integration_tests/`). The check runs in **per-batch scope only** — gate it on
+`scope != "holistic"` and on `start_sha` being available; skip silently
+otherwise.
+
+**Docstring invariant must be updated (`_review_code.py`).** The module
+docstring opens with "v2 code review does NOT look at git diff... The reviewer
+never scrapes git for files." That rule is about the **LLM reviewer**, and the
+backend already partially contradicts it (`bulk_files_with_diff` at line ~165
+diffs against `start_sha`). The plan MUST reword the docstring to scope the "no
+git" rule to the LLM reviewer and document the backend's deterministic git usage
+(both the existing diff-scoped bulking and the new rename-detection check), so a
+future reader is not misled.
 
 **Status of issue #572:** CLOSED. Treat its text as the spec, not a live ticket.
 
@@ -355,4 +386,23 @@ batch may set `verify: null` with a stated justification.
 - **Q:** Does git actually track renames so the check is reliable? **A:** No —
   git detects renames by content similarity at diff time; the check is therefore
   a valid proxy for surgical-edit-vs-rewrite, which is exactly the failure mode.
+
+Discussion-review round 1 gap/note resolutions (auto-resolved with recommended
+fixes per operator instruction):
+
+- **Q (GAP):** Does the default `-M` (50%) similarity false-BLOCK the motivating
+  rename+extraction workload? **A:** Yes — extractions/seam-splits legitimately
+  drop similarity below 50%. Resolved: the mechanical check is **advisory NIT,
+  never auto-BLOCKING**, uses a **tunable low threshold (30% default, config
+  knob)**, and the LLM reviewer is the layer that escalates an actual full
+  rewrite to BLOCKING.
+- **Q (NOTE):** The `_review_code.py` "does NOT look at git diff" docstring
+  contradicts the new check (and existing `bulk_files_with_diff`). **A:** The
+  plan must reword the docstring to scope the "no git" rule to the LLM reviewer
+  and document the backend's deterministic git usage.
+- **Q (NOTE):** Does the mechanical check run in holistic-scope review? **A:** No
+  — per-batch scope only (no per-batch base SHA in holistic); gate on
+  `scope != "holistic"` and on `start_sha` availability.
+- **Q (NOTE):** Where does `Moves:` sit in the card? **A:** Immediately after
+  `Deletes:`, before `Requirements:` / `Commit:` — fixed template order.
 ```
