@@ -451,7 +451,6 @@ def _check_move_target_collision(
     batch_files: list[Path],
     project_root: Path,
     root: str | None,
-    creates_union: set[str],
     *,
     wiki_root: Path | None = None,
     git_root: Path | None = None,
@@ -473,9 +472,6 @@ def _check_move_target_collision(
         batch_files: Sorted list of batch file paths to validate.
         project_root: Root of the project (worktree root).
         root: Optional root subfolder (threaded to ``resolve_existing_paths``).
-        creates_union: Union of all ``Creates:`` tokens across the plan (not used
-            directly here; per-batch creates are computed internally for cross-batch
-            collision accuracy).
         wiki_root: Optional wiki root path.
         git_root: Optional repo root.
 
@@ -1516,7 +1512,7 @@ def run(
         git_root=git_root,
     ))
     errors.extend(_check_move_target_collision(
-        batch_files, project_root, effective_root, creates_union,
+        batch_files, project_root, effective_root,
         wiki_root=wiki_root,
         git_root=git_root,
     ))

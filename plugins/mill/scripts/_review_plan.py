@@ -371,7 +371,7 @@ def prepare(
         )
 
         ancestors_on_disk = resolve_existing_paths(
-            [raw for raw in creates_union if raw not in raw_refs],
+            [raw for raw in combined_creates if raw not in raw_refs],
             project_root,
             root,
             wiki_root=wiki_root,
@@ -466,7 +466,7 @@ def prepare(
         )
 
         all_creates_on_disk = resolve_existing_paths(
-            [r for r in creates_union if r not in all_raw_refs],
+            [r for r in combined_creates if r not in all_raw_refs],
             project_root,
             root,
             wiki_root=wiki_root,
