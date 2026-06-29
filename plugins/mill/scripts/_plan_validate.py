@@ -79,6 +79,9 @@ _RE_REFS_SUB = re.compile(r"^\s+-\s*(.+)$")
 # Line-range suffix inside a backtick token: e.g. "path/a:55-65"
 _RE_LINE_RANGE = re.compile(r":\d+-\d+$")
 
+# Matches the "## Rename mechanic" heading in a batch that has non-empty Moves.
+_RE_MECHANIC_HEADING = re.compile(r"^##\s+Rename mechanic\b", re.MULTILINE)
+
 # Required card fields.
 # "Moves" sits after "Deletes" and before "Requirements" per the moves-grammar Shared Decision.
 _REQUIRED_CARD_FIELDS = ["Context", "Edits", "Creates", "Deletes", "Moves", "Requirements", "Commit"]
@@ -498,8 +501,6 @@ def _check_move_target_collision(
 
     for batch_path in sorted(batch_files):
         stem = batch_path.stem
-        same_batch_creates = batch_creates[stem]
-
         for dst in sorted(batch_targets[stem]):
             # Condition 1: target file already exists on disk.
             existing = resolve_existing_paths(
@@ -573,9 +574,6 @@ def _check_move_mechanic_missing(batch_files: list[Path]) -> list[dict]:
     Returns:
         List of error dicts, one per batch that is missing the heading.
     """
-    # Compiled once for efficiency when validating many batch files.
-    _RE_MECHANIC_HEADING = re.compile(r"^##\s+Rename mechanic\b", re.MULTILINE)
-
     errors: list[dict] = []
     for batch_path in batch_files:
         # parse_moves returns [] when all Moves: headers are "none"; skip those.
