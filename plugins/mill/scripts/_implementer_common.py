@@ -137,31 +137,24 @@ def _batch_completeness_stuck(
     if start_sha is None or card_count is None or card_count <= 0:
         return None
 
-    # Count commits made since the batch start SHA.
-    result = _subprocess_util.run(
-        ["git", "rev-list", "--count", f"{start_sha}..HEAD"],
-        cwd=project_root,
-    )
-    if result.returncode != 0:
-        # Git failure -- treat as no-op rather than crashing finalize.
+    # Count content commits (excluding the start-batch housekeeping commit) since start_sha.
+    # The housekeeping commit is always present when prepare ran, so raw rev-list
+    # over-counts by one; _content_commit_count subtracts it. Returns None on any
+    # git failure, which is treated as a gate no-op to avoid crashing finalize.
+    content = _content_commit_count(project_root, start_sha)
+    if content is None:
         return None
 
-    # Guard the parse: non-numeric stdout (e.g. a mocked sha string) must not raise.
-    try:
-        count = int(result.stdout.strip())
-    except ValueError:
-        return None
-
-    if count < card_count:
+    if content < card_count:
         return {
             "status": "stuck",
             "stuck_type": "transient",
             "reason": (
-                f"batch incomplete: {count} commit(s) since start but"
+                f"batch incomplete: {content} content commit(s) since start but"
                 f" {card_count} card(s) in batch -- implementer stopped before finishing all cards"
             ),
             "session_id": session_id or "unknown",
-            "commits_made": count,
+            "commits_made": content,
         }
     return None
 
