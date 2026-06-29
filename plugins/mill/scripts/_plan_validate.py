@@ -545,6 +545,55 @@ def _check_move_target_collision(
 
 
 # ---------------------------------------------------------------------------
+# move-mechanic-missing check
+# ---------------------------------------------------------------------------
+
+def _check_move_mechanic_missing(batch_files: list[Path]) -> list[dict]:
+    """
+    Require a '## Rename mechanic' section in any batch that declares Moves:.
+
+    The ``plan-batch.md`` template includes this section to guide the implementer
+    on the correct ``git mv`` + surgical-edit workflow.  When a batch declares at
+    least one non-empty ``Moves:`` pair via ``parse_moves``, the batch file text
+    must contain a heading line matching ``^##\\s+Rename mechanic\\b`` (the
+    canonical section name).  Batches where every ``Moves:`` field carries the
+    ``none`` sentinel produce an empty ``parse_moves`` result and are skipped.
+
+    Error dict shape: ``{check, batch, card, path, message}``.
+
+    Args:
+        batch_files: Sorted list of batch file paths to validate.
+
+    Returns:
+        List of error dicts, one per batch that is missing the heading.
+    """
+    # Compiled once for efficiency when validating many batch files.
+    _RE_MECHANIC_HEADING = re.compile(r"^##\s+Rename mechanic\b", re.MULTILINE)
+
+    errors: list[dict] = []
+    for batch_path in batch_files:
+        # parse_moves returns [] when all Moves: headers are "none"; skip those.
+        moves = parse_moves(batch_path)
+        if not moves:
+            continue
+
+        text = batch_path.read_text(encoding="utf-8")
+        if not _RE_MECHANIC_HEADING.search(text):
+            errors.append({
+                "check": "move-mechanic-missing",
+                "batch": batch_path.stem,
+                "card": None,
+                "path": None,
+                "message": (
+                    f"batch '{batch_path.stem}' has Moves: entries but is missing "
+                    "a '## Rename mechanic' section"
+                ),
+            })
+
+    return errors
+
+
+# ---------------------------------------------------------------------------
 # Check 1 — non-existent-path
 # ---------------------------------------------------------------------------
 
