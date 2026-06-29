@@ -39,6 +39,7 @@ Prefer the convention already used by analogous code in the provided source file
 - **Constraint violations** — BLOCKING.
 - **Pattern consistency** — matches surrounding code style and the conventions already visible in the source files provided.
 - **Language pitfalls** — BLOCKING if high-risk (Python: mutable defaults, import side-effects, Windows path sep, CRLF/LF).
+- **Rename landed as rename** — for each planned `Moves:` pair visible in the batch file, the relocated file must land as a `git mv` + surgical edit; a relocated file rewritten from scratch (lost structure, mass reformat, history-breaking diff) is **BLOCKING**. An advisory NIT may also appear from the backend's mechanical rename check (see `## Shared Decisions` `mechanical-rename-check-advisory`); the reviewer is the layer empowered to escalate a genuine rewrite to BLOCKING.
 
 ## Output format — STRICT
 
