@@ -123,9 +123,15 @@ def write_brief(
 def language_skills_directive(batch_file: Path) -> str:
     """Detect languages from a batch's touched files and return a skills block.
 
-    Reads the batch file's Edits and Creates fields (not Context) and detects
-    languages by file suffix. For each detected language, names the matching
-    {lang}-comments and {lang}-testing skills plus code-quality for all.
+    Reads the batch file's ``Edits`` and ``Creates`` fields (not ``Context``)
+    and both endpoints of every ``Moves:`` pair (source and destination) for
+    language detection, then detects languages by file suffix.  Move endpoints
+    are included because a rename is still an edit of that language: the
+    implementer needs the right comment and testing skills whether the file is
+    being moved, created, or directly edited.
+
+    For each detected language, names the matching ``{lang}-comments`` and
+    ``{lang}-testing`` skills plus ``code-quality`` for all batches.
 
     Args:
         batch_file: Path to the batch file.
@@ -134,10 +140,25 @@ def language_skills_directive(batch_file: Path) -> str:
         Markdown block starting with "## Required skills" naming the skills.
         Block includes prose specifying which languages are touched.
     """
-    # Get only touched files (Edits and Creates, not Context)
+    # Collect explicitly touched file paths from Edits and Creates (not Context
+    # which is read-only context for the implementer).
     touched_paths = _review_common.parse_batch_refs(
         batch_file, fields=("Edits", "Creates")
     )
+
+    # Also collect both endpoints of each Moves: pair.  A renamed file still
+    # belongs to the same language family, and the implementer must load the
+    # appropriate skills to handle inline comments and tests correctly.
+    moves = _review_common.parse_moves(batch_file)
+    move_endpoints = [p for pair in moves for p in pair]
+
+    # Merge into a single deduplicated candidate list while preserving order.
+    # touched_paths wins if a path appears in both (order is insertion-stable).
+    all_candidate_paths: list[str] = list(touched_paths)
+    touched_set = set(touched_paths)
+    for p in move_endpoints:
+        if p not in touched_set:
+            all_candidate_paths.append(p)
 
     # Language mapping: extension -> (human name, skill prefix)
     LANG_MAP = {
@@ -149,7 +170,7 @@ def language_skills_directive(batch_file: Path) -> str:
     # Detect languages by file suffix, preserving first-seen order
     detected_langs: list[tuple[str, str]] = []
     seen_langs: set[str] = set()
-    for path_str in touched_paths:
+    for path_str in all_candidate_paths:
         for ext, (human_name, prefix) in LANG_MAP.items():
             if path_str.lower().endswith(ext):
                 if human_name not in seen_langs:

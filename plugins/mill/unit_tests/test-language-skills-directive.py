@@ -180,6 +180,7 @@ def test_render_implementer_brief() -> None:
             "SELF_FIX_ROUNDS": "2",
             "ROUND": "1",
             "SESSION_ID": "test-session-id",
+            "PARENT_BRANCH": "main",
             "LANGUAGE_SKILLS": _agent_dispatch.language_skills_directive(batch_path),
         }
         rendered = _render.render(template_path, tokens)
@@ -229,6 +230,76 @@ def test_render_fixer_brief() -> None:
         print("PASS test_render_fixer_brief")
 
 
+def _write_batch_file_with_moves(
+    tmp_dir: Path,
+    edits: str = "none",
+    creates: str = "none",
+    context: str = "none",
+    moves: list[tuple[str, str]] | None = None,
+) -> Path:
+    """Write a minimal batch file with an optional Moves: field and return its path."""
+    batch_path = tmp_dir / "01-test.md"
+    if moves:
+        moves_lines = "\n".join(f"  - `{s}` -> `{d}`" for s, d in moves)
+        moves_part = f"\n{moves_lines}"
+    else:
+        moves_part = " none"
+    content = (
+        "# Batch: test\n\n"
+        "```yaml\n"
+        "task: \"Test\"\nbatch: test\nnumber: 1\ncards: 1\nverify: null\ndepends-on: []\n"
+        "```\n\n"
+        "## Cards\n\n### Card 1: Test\n\n"
+        f"- **Context:** {context}\n"
+        f"- **Edits:** {edits}\n"
+        f"- **Creates:** {creates}\n"
+        "- **Deletes:** none\n"
+        f"- **Moves:**{moves_part}\n"
+        "- **Requirements:** Test.\n"
+        "- **Commit:** test: implement test\n"
+    )
+    batch_path.write_text(content, encoding="utf-8")
+    return batch_path
+
+
+def test_move_only_batch_detects_go_language() -> None:
+    """A batch with only Moves: entries (no Edits/Creates) detects Go skills from move paths.
+
+    This is the key regression guard for Card 22: the implementer must receive
+    golang-comments and golang-testing even when the batch has zero Edits/Creates
+    entries and the only touched files appear as move endpoints.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        batch_path = _write_batch_file_with_moves(
+            Path(tmp),
+            edits="none",
+            creates="none",
+            moves=[
+                ("src/old_handler.go", "src/new_handler.go"),
+                ("src/old_service.go", "src/new_service.go"),
+            ],
+        )
+        directive = _agent_dispatch.language_skills_directive(batch_path)
+
+        assert "## Required skills" in directive, "Missing Required skills heading"
+        assert "`golang-comments`" in directive, (
+            "golang-comments missing from Move-only Go batch"
+        )
+        assert "`golang-testing`" in directive, (
+            "golang-testing missing from Move-only Go batch"
+        )
+        assert "`code-quality`" in directive, "Missing code-quality"
+        assert "Go" in directive, "Missing 'Go' language name in directive"
+        # Python/C# skills must not appear when no Python/C# files are involved.
+        assert "`python-comments`" not in directive, (
+            "python-comments must not appear in a Go-only Move batch"
+        )
+        assert "`csharp-comments`" not in directive, (
+            "csharp-comments must not appear in a Go-only Move batch"
+        )
+        print("PASS test_move_only_batch_detects_go_language")
+
+
 def main() -> int:
     tests = [
         test_go_files_only,
@@ -237,6 +308,7 @@ def main() -> int:
         test_mixed_languages,
         test_no_recognized_languages,
         test_context_excluded,
+        test_move_only_batch_detects_go_language,
         test_render_implementer_brief,
         test_render_fixer_brief,
     ]
