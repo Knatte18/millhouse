@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-reviewing
+phase: holistic-fixing
 slug: mill-plan-rename-moves
 branch: hanf/mill-plan-rename-moves
 plan: _mill/plan
@@ -26,6 +26,7 @@ approved-templates-skill-config  '2026-06-29T17:24:47Z'
 approved-validator-move-checks  '2026-06-29T17:47:44Z'
 approved-review-backends  '2026-06-29T18:07:50Z'
 holistic-reviewing  '2026-06-29T18:08:16Z'
+holistic-fixing  '2026-06-29T18:17:53Z'
 ```
 
 ## Batches
