@@ -2190,6 +2190,292 @@ def main() -> int:
             print(f"FAIL: case 43 ({exc})", file=sys.stderr)
             errors += 1
 
+    # Case 44a -- #570 partial-batch reclassify: inferred no-snapshot path, verify fails,
+    # k=1 content commit + 1 housekeeping commit (raw range=2) -> stuck_type:transient
+    # with commits_made=1 (content count, not raw count).
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        base_sha = _setup_fixture(project_root)
+        # Housekeeping commit that prepare always inserts before the implementer runs.
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "--allow-empty",
+             "-m", "mill-go: start batch test-batch"],
+            check=True, capture_output=True,
+        )
+        # k=1 content commit; raw range from base_sha = 2.
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "--allow-empty", "-m", "card-1 done"],
+            check=True, capture_output=True,
+        )
+        # card_count=3 so content=1 satisfies 0<1<3 -> reclassify to transient.
+        rc, captured = _capture_stdout(
+            lambda: _forward_output(
+                "garbage output with no json",
+                project_root,
+                start_sha=base_sha,
+                verify_cmd="exit 1",
+                card_count=3,
+                session_id="test-a",
+            )
+        )
+        try:
+            data = json.loads(captured.strip())
+            assert data["status"] == "stuck", f"case 44a: expected stuck, got {data}"
+            assert data["stuck_type"] == "transient", (
+                f"case 44a: expected transient (not verify), got {data}"
+            )
+            assert data.get("commits_made") == 1, (
+                f"case 44a: expected commits_made=1 (content, not 2 raw), got {data}"
+            )
+            assert "batch incomplete" in data.get("reason", ""), (
+                f"case 44a: expected 'batch incomplete' in reason, got {data}"
+            )
+            print(
+                "PASS: case 44a - partial-batch reclassify:"
+                " inferred path k=1 content N=3 -> transient commits_made=1"
+            )
+        except Exception as exc:
+            print(f"FAIL: case 44a ({exc}) captured={captured!r}", file=sys.stderr)
+            errors += 1
+
+    # Case 45b -- #570 partial-batch reclassify: complete batch (content>=N), verify fails
+    # -> stuck_type:verify preserved (not reclassified to transient).
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        base_sha = _setup_fixture(project_root)
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "--allow-empty",
+             "-m", "mill-go: start batch test-batch"],
+            check=True, capture_output=True,
+        )
+        # 3 content commits matching card_count=3 -> content=3>=3 -> no reclassification.
+        for msg in ("card-1", "card-2", "card-3"):
+            subprocess.run(
+                ["git", "-C", str(project_root), "commit", "--allow-empty", "-m", msg],
+                check=True, capture_output=True,
+            )
+        rc, captured = _capture_stdout(
+            lambda: _forward_output(
+                "garbage output with no json",
+                project_root,
+                start_sha=base_sha,
+                verify_cmd="exit 1",
+                card_count=3,
+            )
+        )
+        try:
+            data = json.loads(captured.strip())
+            assert data["status"] == "stuck", f"case 45b: expected stuck, got {data}"
+            assert data["stuck_type"] == "verify", (
+                f"case 45b: expected verify (full batch, no reclassify), got {data}"
+            )
+            print(
+                "PASS: case 45b - partial-batch reclassify:"
+                " complete batch, verify fails -> still stuck/verify"
+            )
+        except Exception as exc:
+            print(f"FAIL: case 45b ({exc}) captured={captured!r}", file=sys.stderr)
+            errors += 1
+
+    # Case 46c -- #570 partial-batch reclassify: zero content commits (only housekeeping),
+    # verify fails -> stuck_type:logic "no content commit".
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        base_sha = _setup_fixture(project_root)
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "--allow-empty",
+             "-m", "mill-go: start batch test-batch"],
+            check=True, capture_output=True,
+        )
+        # No content commits -- content=0 after housekeeping subtraction.
+        rc, captured = _capture_stdout(
+            lambda: _forward_output(
+                "garbage output with no json",
+                project_root,
+                start_sha=base_sha,
+                verify_cmd="exit 1",
+                card_count=3,
+                session_id="test-c",
+            )
+        )
+        try:
+            data = json.loads(captured.strip())
+            assert data["status"] == "stuck", f"case 46c: expected stuck, got {data}"
+            assert data["stuck_type"] == "logic", (
+                f"case 46c: expected logic (zero content), got {data}"
+            )
+            assert "no content commit" in data.get("reason", ""), (
+                f"case 46c: expected 'no content commit' in reason, got {data}"
+            )
+            print(
+                "PASS: case 46c - partial-batch reclassify:"
+                " zero content commits, verify fails -> stuck/logic"
+            )
+        except Exception as exc:
+            print(f"FAIL: case 46c ({exc}) captured={captured!r}", file=sys.stderr)
+            errors += 1
+
+    # Case 47d -- #570 partial-batch reclassify: complete batch, verify passes -> success.
+    # When verify passes the reclassify helper does not run (verify-pass-is-conclusive).
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        base_sha = _setup_fixture(project_root)
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "--allow-empty",
+             "-m", "mill-go: start batch test-batch"],
+            check=True, capture_output=True,
+        )
+        for msg in ("card-1", "card-2", "card-3"):
+            subprocess.run(
+                ["git", "-C", str(project_root), "commit", "--allow-empty", "-m", msg],
+                check=True, capture_output=True,
+            )
+        rc, captured = _capture_stdout(
+            lambda: _forward_output(
+                "garbage output with no json",
+                project_root,
+                start_sha=base_sha,
+                verify_cmd="exit 0",
+                card_count=3,
+            )
+        )
+        try:
+            data = json.loads(captured.strip())
+            assert data["status"] == "success", (
+                f"case 47d: expected success (verify passes), got {data}"
+            )
+            print(
+                "PASS: case 47d - partial-batch reclassify:"
+                " complete batch, verify passes -> success"
+            )
+        except Exception as exc:
+            print(f"FAIL: case 47d ({exc}) captured={captured!r}", file=sys.stderr)
+            errors += 1
+
+    # Case 48e -- #570 canonical case: parsed-success path, verify fails, 0<content<N.
+    # Exercises the _gate_session_id hoist in _forward_output; the inferred-path cases
+    # (44a-47d) do not cover this code path.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        base_sha = _setup_fixture(project_root)
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "--allow-empty",
+             "-m", "mill-go: start batch test-batch"],
+            check=True, capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "--allow-empty", "-m", "card-1 done"],
+            check=True, capture_output=True,
+        )
+        # Agent output contains a success JSON -- exercises the parsed-success reclassify site.
+        agent_output = (
+            '{"status":"success","commit_sha":"abc","session_id":"parsed-session"}\n'
+        )
+        rc, captured = _capture_stdout(
+            lambda: _forward_output(
+                agent_output,
+                project_root,
+                start_sha=base_sha,
+                verify_cmd="exit 1",
+                card_count=3,
+                session_id="caller-session",
+            )
+        )
+        try:
+            data = json.loads(captured.strip())
+            assert data["status"] == "stuck", f"case 48e: expected stuck, got {data}"
+            assert data["stuck_type"] == "transient", (
+                f"case 48e: expected transient (not verify), got {data}"
+            )
+            assert data.get("commits_made") == 1, (
+                f"case 48e: expected commits_made=1 (content), got {data}"
+            )
+            print(
+                "PASS: case 48e - parsed-success path: partial-batch verify failure"
+                " -> transient (gate_session_id hoist exercised)"
+            )
+        except Exception as exc:
+            print(f"FAIL: case 48e ({exc}) captured={captured!r}", file=sys.stderr)
+            errors += 1
+
+    # Case 49f -- _batch_completeness_stuck with housekeeping commit: commits_made reflects
+    # content count (1), not raw range count (2).
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        base_sha = _setup_fixture(project_root)
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "--allow-empty",
+             "-m", "mill-go: start batch test-batch"],
+            check=True, capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "--allow-empty", "-m", "card-1"],
+            check=True, capture_output=True,
+        )
+        # raw range = 2, content = 1 (housekeeping subtracted); card_count=2 -> 1<2 -> stuck.
+        try:
+            result = _batch_completeness_stuck(
+                project_root,
+                base_sha,
+                card_count=2,
+                session_id="test",
+            )
+            assert result is not None, f"case 49f: expected stuck dict, got {result}"
+            assert result["stuck_type"] == "transient", (
+                f"case 49f: expected transient, got {result}"
+            )
+            assert result.get("commits_made") == 1, (
+                f"case 49f: expected commits_made=1 (content not 2 raw), got {result}"
+            )
+            print(
+                "PASS: case 49f - _batch_completeness_stuck with housekeeping:"
+                " commits_made=1 (content, not 2 raw)"
+            )
+        except Exception as exc:
+            print(f"FAIL: case 49f ({exc})", file=sys.stderr)
+            errors += 1
+
+    # Case 50g -- one-card-short with housekeeping commit: content==N-1 now flags transient.
+    # Without the housekeeping exclusion, raw_count==N==card_count would NOT fire the gate.
+    # With exclusion, content==N-1<N fires it -> stuck_type:transient, commits_made=N-1.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        base_sha = _setup_fixture(project_root)
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "--allow-empty",
+             "-m", "mill-go: start batch test-batch"],
+            check=True, capture_output=True,
+        )
+        # N=3, N-1=2 content commits; raw_count = 3 == card_count, content = 2 < card_count.
+        for msg in ("card-1", "card-2"):
+            subprocess.run(
+                ["git", "-C", str(project_root), "commit", "--allow-empty", "-m", msg],
+                check=True, capture_output=True,
+            )
+        try:
+            result = _batch_completeness_stuck(
+                project_root,
+                base_sha,
+                card_count=3,
+                session_id="test",
+            )
+            assert result is not None, (
+                f"case 50g: expected stuck dict (raw==N but content==N-1), got {result}"
+            )
+            assert result["stuck_type"] == "transient", (
+                f"case 50g: expected transient, got {result}"
+            )
+            assert result.get("commits_made") == 2, (
+                f"case 50g: expected commits_made=2 (N-1 content), got {result}"
+            )
+            print(
+                "PASS: case 50g - one-card-short with housekeeping:"
+                " raw==N but content==N-1 -> stuck/transient commits_made=2"
+            )
+        except Exception as exc:
+            print(f"FAIL: case 50g ({exc})", file=sys.stderr)
+            errors += 1
+
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)
         return 1
