@@ -28,7 +28,9 @@ implementing  '2026-06-29T17:04:59Z'
 ```yaml
 batches:
   - name: implement-pipeline
-    state: pending
+    state: running
+    implementer_session: 9705d416-d8a0-45dd-9231-2a2d05587ace
+    start_sha: f70a1d16da4cd8e2123471e7065eb082bec63687
   - name: merge-in-cli-parity
     state: pending
 ```
