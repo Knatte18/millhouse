@@ -70,6 +70,12 @@ plan is the right place; mill-plan should generate it.
   **tunable low similarity threshold** (so legitimate rename+extraction/seam-
   split work is not false-flagged); plus a matching LLM criterion in
   `review-code-batch.md` that can escalate an actual full rewrite to BLOCKING.
+- Register a new config knob **`pipeline.rename_detect_pct`** (default `30`) in
+  the `pipeline:` block of `plugins/mill/templates/mill-config.yaml` (after
+  `max_batch_context_tokens`, line ~125) AND in the hub `mill-config.yaml` —
+  CLAUDE.md requires the template and hub file stay in sync, and an unregistered
+  `pipeline.*` key trips the unknown-key warning (`test-config.py`). The
+  code-review backend reads this knob for the rename-detection threshold.
 - `mill-plan/SKILL.md`: instruct the planner to express renames as `Moves:`
   (never as `Creates:` + `Deletes:`), to emit the `## Rename mechanic` section,
   and to keep naming surgical edits in `Requirements:`; update the Step 1.5
@@ -354,8 +360,10 @@ run through `run-all.py`; TDD-friendly because the logic is pure):
   `test-review-code-flow.py`): plan-review bulk includes Move sources; code-
   review bulk includes Move targets.
 - **Mechanical rename check** (new `test-*.py`): the pure function, fed a crafted
-  `git diff --name-status -M` string + planned pairs, returns a BLOCKING finding
-  for an add+delete pair and no finding for an `R###` pair. No real git.
+  `git diff --name-status --find-renames=<thr>` string + planned pairs + the
+  threshold, returns an **advisory NIT** finding (never BLOCKING) for an
+  add+delete pair and no finding for an `R###` pair. No real git. (BLOCKING for an
+  actual rewrite is the LLM reviewer's call, not the mechanical function's.)
 - **Language detection** (`test-language-skills-directive.py`): a `.go -> .go`
   Move pulls the Go skills even with empty Edits/Creates.
 - **Fixture sweep:** update every existing plan fixture across the test files to
@@ -382,7 +390,9 @@ batch may set `verify: null` with a stated justification.
   call. Decided: validator move-sanity + redundancy + format checks (plan-time),
   plan-review criteria, and a mechanical `git diff -M` rename-detection check in
   the code-review backend (BLOCKING on add+delete) plus a matching LLM criterion.
-  Deferred the issue's optional unplanned-rename heuristic (YAGNI).
+  Deferred the issue's optional unplanned-rename heuristic (YAGNI). The
+  mechanical check is advisory **NIT only** (never auto-BLOCKING); BLOCKING for a
+  genuine rewrite is the LLM reviewer's escalation.
 - **Q:** Does git actually track renames so the check is reliable? **A:** No —
   git detects renames by content similarity at diff time; the check is therefore
   a valid proxy for surgical-edit-vs-rewrite, which is exactly the failure mode.
@@ -405,4 +415,15 @@ fixes per operator instruction):
   `scope != "holistic"` and on `start_sha` availability.
 - **Q (NOTE):** Where does `Moves:` sit in the card? **A:** Immediately after
   `Deletes:`, before `Requirements:` / `Commit:` — fixed template order.
+
+Discussion-review round 2 gap/note resolutions:
+
+- **Q (GAP):** Testing/Q&A still said the mechanical function returns BLOCKING,
+  contradicting the advisory-NIT decision. **A:** Fixed — the mechanical function
+  returns a **NIT only**; BLOCKING is reserved for the LLM reviewer's rewrite
+  escalation. Testing bullet and Q&A entries updated to match.
+- **Q (NOTE):** Is the new `pipeline.rename_detect_pct` knob registered? **A:**
+  Added an explicit scope item to register it (default 30) in the
+  `mill-config.yaml` template `pipeline:` block and the hub file (sync required;
+  avoids the unknown-key warning).
 ```
