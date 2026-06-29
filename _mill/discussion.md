@@ -56,9 +56,10 @@ plan is the right place; mill-plan should generate it.
   modified to carry the mechanic (the brief is an Agent-Dispatch shim, not part
   of mill proper).
 - `_plan_validate.py` new checks: move-source existence, move-target collision,
-  move-bullet format, and Moves/Creates/Deletes redundancy; plus feeding move
-  endpoints into the existing checks (non-existent-path suppression, all-files-
-  touched, parallel-overlap, batch-oversized context estimate).
+  move-bullet format, Moves/Creates/Deletes redundancy, and `## Rename mechanic`
+  section presence (`move-mechanic-missing`); plus feeding move endpoints into
+  the existing checks (non-existent-path suppression, all-files-touched,
+  parallel-overlap, batch-oversized context estimate).
 - `_review_common.py` new parsing helpers (`parse_moves`, `compute_moves_union`)
   and wiring move endpoints into the plan-review and code-review source bulks.
 - Plan-review templates (`review-plan-batch.md`, `review-plan-holistic.md`):
@@ -147,6 +148,17 @@ plan is the right place; mill-plan should generate it.
   "how" (the mechanic) is the fixed `## Rename mechanic` section. `Requirements:`
   still names the specific surgical edits (package decl, import retargeting,
   identifier renames, seam splits) using stable identifiers, as today.
+- Enforcement: the `## Rename mechanic` section's presence is enforced
+  **deterministically** by the `move-mechanic-missing` validator check (not only
+  by the plan-review LLM criterion) — consistent with the task's premise that
+  implied/LLM-only instructions get ignored.
+- **Representing rename + extraction.** The motivating workload is "module
+  renames + kernel extractions." A `Moves:` pair is strictly 1:1 (relocate one
+  file). When a file is relocated AND part of it is split out into a *new* file,
+  express it as the `Moves:` pair for the relocated file (`` `old` -> `new` ``)
+  PLUS a separate `Creates:` entry for the newly extracted file (a different
+  path). `move-redundant` permits this because the paths differ; it only flags
+  the SAME path appearing in both `Moves:` and `Creates:`/`Deletes:`.
 
 ### move-endpoints-feed-existing-checks
 
@@ -201,6 +213,15 @@ plan is the right place; mill-plan should generate it.
       (e.g. missing arrow, missing one backtick path, prose alongside).
     - `move-redundant` — a path appears both as a Move endpoint and in
       `Creates:` / `Deletes:` (a rename must be expressed in `Moves:` only).
+      NOTE: this permits the **extraction pattern** — `` `a` -> `b` `` in `Moves:`
+      AND a *different* path `c` in `Creates:` — because the paths differ; only
+      the SAME path appearing in both is flagged.
+    - `move-mechanic-missing` — a batch that has any card with a non-empty
+      `Moves:` must contain a `## Rename mechanic` section in its batch file.
+      This is a **deterministic** backstop for the task's primary prevention
+      lever: the whole premise is that implementers ignore implied instructions,
+      so the mechanic's presence is enforced by the validator, not only by the
+      plan-review LLM criterion.
   - **Plan-review (LLM criteria):** `Moves:` is well-formed; a rename-heavy
     batch states the git mv mechanic; plans that prescribe full-file rewrites of
     relocated files are flagged.
@@ -351,7 +372,10 @@ run through `run-all.py`; TDD-friendly because the logic is pure):
   - `move-target-collision` — target exists on disk; two cards same target;
     target collides with a `Creates:` target.
   - `move-format` — missing arrow, single backtick, prose alongside.
-  - `move-redundant` — endpoint also in Creates/Deletes.
+  - `move-redundant` — endpoint also in Creates/Deletes (and the inverse: a
+    `Moves:` target plus a *different* `Creates:` path is allowed — extraction).
+  - `move-mechanic-missing` — a batch with a non-empty `Moves:` card but no
+    `## Rename mechanic` section errors; passes when the section is present.
   - Endpoint feeding: a downstream card editing a Move target does NOT raise
     `non-existent-path`; Move target appears in all-files-touched reconciliation;
     parallel batches touching the same Move endpoint raise
@@ -426,4 +450,16 @@ Discussion-review round 2 gap/note resolutions:
   Added an explicit scope item to register it (default 30) in the
   `mill-config.yaml` template `pipeline:` block and the hub file (sync required;
   avoids the unknown-key warning).
+
+Discussion-review round 3 note resolutions (APPROVE + 2 NOTEs):
+
+- **Q (NOTE):** Is `## Rename mechanic` presence enforced deterministically?
+  **A:** Yes now — added a `move-mechanic-missing` validator check (non-empty
+  `Moves:` implies the section is present), so enforcement does not rely on the
+  LLM criterion alone. Matches the task's premise that implied instructions get
+  ignored.
+- **Q (NOTE):** How is rename + extraction represented given `Moves:` is 1:1?
+  **A:** The relocated file is the `Moves:` pair; the newly extracted file is a
+  separate `Creates:` (different path). `move-redundant` permits this; only the
+  same path in both is flagged.
 ```
