@@ -859,11 +859,16 @@ def _check_parallel_modifies_overlap(
         if stem in stem_to_path:
             batch_name_to_path[entry["name"]] = stem_to_path[stem]
 
-    # Compute Edits: sets.
-    batch_edits: dict[str, set[str]] = {
-        name: _parse_edits_only(path)
-        for name, path in batch_name_to_path.items()
-    }
+    # Compute "touched" sets: Edits: paths plus all Move sources and targets.
+    # Both Move endpoints count as touched for overlap detection because the
+    # implementer reads the source and writes the target during a rename.
+    batch_edits: dict[str, set[str]] = {}
+    for name, path in batch_name_to_path.items():
+        touched = _parse_edits_only(path)
+        for src, dst in parse_moves(path):
+            touched.add(src)
+            touched.add(dst)
+        batch_edits[name] = touched
 
     errors: list[dict] = []
     names = sorted(batch_name_to_path.keys())  # stable order for deterministic output
@@ -1373,8 +1378,16 @@ def _check_batch_oversized(
         all_refs = parse_batch_refs(batch_path)
         deletes = _parse_deletes_only(batch_path)
 
-        # Subtract deleted tokens so they don't inflate the estimate
-        context_tokens = set(all_refs) - deletes
+        # Move sources exist pre-implementation and are read by the implementer;
+        # add them to the estimate even when they are not listed in Context:/Edits:.
+        # Move targets do not exist yet (mirroring how Creates: targets are excluded);
+        # subtract them so they never inflate the estimate.
+        moves = parse_moves(batch_path)
+        move_sources = {src for src, _ in moves}
+        move_targets = {dst for _, dst in moves}
+
+        # Subtract deleted and move-target tokens, then add move sources.
+        context_tokens = (set(all_refs) - deletes - move_targets) | move_sources
 
         # Resolve existing paths, skipping those that don't exist (like Creates targets)
         if context_tokens:
