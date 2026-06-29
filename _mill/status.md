@@ -40,7 +40,9 @@ batches:
     start_sha: 4e935ccaf73d79228bf634c9a530981407d0edc8
     commit_sha: 59f5f7a993f60944c33fcad583147b7730c4489e
   - name: validator-move-checks
-    state: pending
+    state: running
+    implementer_session: 5b3aaf0b-7bc9-49ae-aed0-49d36fe0dd79
+    start_sha: c3b3f0641bee956c69160a5867e2a0bc1ea33c19
   - name: review-backends
     state: pending
 ```
