@@ -1,1 +1,0 @@
-- `_RE_MECHANIC_HEADING` defined as a local variable inside function body: **Location:** `C:\Code\millhouse\wts\mill-plan-rename-moves\plugins\mill\scripts\_plan_validate.py:577`
