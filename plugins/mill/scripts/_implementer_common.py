@@ -33,6 +33,70 @@ def _is_only_start_batch_commit(project_root: Path, start_sha: str) -> bool:
     return len(msgs) == 1 and msgs[0].startswith("mill-go: start batch")
 
 
+def _content_commit_count(project_root: Path, start_sha: str | None) -> int | None:
+    """
+    Count content commits since start_sha, excluding the batch-start housekeeping commit.
+
+    The prepare stage always makes a "mill-go: start batch <name>" commit before the
+    implementer runs. Because start_sha is captured BEFORE that commit, a raw
+    `git rev-list --count start_sha..HEAD` over-counts by one whenever the housekeeping
+    commit is present. This helper subtracts it so that callers see the true number of
+    content commits the implementer made.
+
+    Algorithm:
+      1. Return None when start_sha is None (gate disabled).
+      2. Run `git rev-list --count start_sha..HEAD` to get the raw range count.
+         Return None on non-zero exit or non-numeric output.
+      3. Run `git log --pretty=%s start_sha..HEAD` to get per-commit subjects.
+         Git log returns newest-first, so the last non-empty subject is the oldest commit.
+      4. When the oldest subject starts with "mill-go: start batch", subtract 1 from the
+         raw count (floored at 0). This is the housekeeping commit that prepare always
+         inserts; it is not a content commit.
+      5. Return the adjusted count.
+
+    Returns None on any subprocess failure so callers can treat it as a gate no-op.
+
+    Args:
+        project_root: Path to the worktree root used as cwd for git subprocesses.
+        start_sha: The SHA recorded at batch start. None disables the count (returns None).
+
+    Returns:
+        Content commit count (int >= 0), or None when inputs are absent or git fails.
+    """
+    if start_sha is None:
+        return None
+
+    # Get the raw commit count since start_sha.
+    result = _subprocess_util.run(
+        ["git", "rev-list", "--count", f"{start_sha}..HEAD"],
+        cwd=project_root,
+    )
+    if result.returncode != 0:
+        return None
+
+    # Guard the parse: non-numeric stdout must not raise (e.g. mocked sha strings in tests).
+    try:
+        count = int(result.stdout.strip())
+    except ValueError:
+        return None
+
+    # Inspect the oldest commit subject to detect the housekeeping commit.
+    # git log returns newest-first; the last non-empty line is the oldest commit.
+    log_result = _subprocess_util.run(
+        ["git", "log", "--pretty=%s", f"{start_sha}..HEAD"],
+        cwd=project_root,
+    )
+    if log_result.returncode == 0:
+        subjects = [s.strip() for s in log_result.stdout.strip().splitlines() if s.strip()]
+        if subjects:
+            oldest_subject = subjects[-1]
+            # The housekeeping commit is "mill-go: start batch <name>" -- exclude it.
+            if oldest_subject.startswith("mill-go: start batch"):
+                count = max(0, count - 1)
+
+    return count
+
+
 def _batch_completeness_stuck(
     project_root: Path,
     start_sha: str | None,
