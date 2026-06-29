@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-reviewing
+phase: holistic-fixing
 slug: mill-scope-and-infra-gaps
 branch: hanf/mill-scope-and-infra-gaps
 plan: _mill/plan
@@ -25,6 +25,7 @@ approved-bare-tier-aliases  '2026-06-29T17:12:35Z'
 approved-go-artifact-allowlist  '2026-06-29T17:19:41Z'
 approved-idempotent-checkpoint  '2026-06-29T17:22:22Z'
 holistic-reviewing  '2026-06-29T17:22:42Z'
+holistic-fixing  '2026-06-29T17:26:31Z'
 ```
 
 ## Batches
