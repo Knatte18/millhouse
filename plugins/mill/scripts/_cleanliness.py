@@ -259,7 +259,6 @@ def clean_ephemeral_scope_violations(worktree: Path) -> tuple[list[str], list[st
             is_allowlisted = (
                 basename == "coverage.out"
                 or basename.endswith(".test")
-                or basename.endswith(".test.exe")
                 or basename.endswith(".prof")
                 or basename.endswith(".cover")
             )
