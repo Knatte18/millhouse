@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-scope-and-infra-gaps
 branch: hanf/mill-scope-and-infra-gaps
 plan: _mill/plan
@@ -20,4 +20,17 @@ discussed  '2026-06-29T16:34:02Z'
 planning  '2026-06-29T16:37:25Z'
 plan-fix-r1  '2026-06-29T16:42:24Z'
 planned  '2026-06-29T16:42:47Z'
+implementing  '2026-06-29T17:04:44Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: bare-tier-aliases
+    state: pending
+  - name: go-artifact-allowlist
+    state: pending
+  - name: idempotent-checkpoint
+    state: pending
 ```
