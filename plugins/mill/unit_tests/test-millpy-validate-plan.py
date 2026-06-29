@@ -73,6 +73,8 @@ def _make_batch_file(name: str, *, missing_fields: set | None = None) -> str:
         parts.append("- **Creates:** none\n")
     if "Deletes" not in missing_fields:
         parts.append("- **Deletes:** none\n")
+    if "Moves" not in missing_fields:
+        parts.append("- **Moves:** none\n")
     if "Requirements" not in missing_fields:
         parts.append("- **Requirements:**\n  See scope.\n")
     if "Commit" not in missing_fields:
@@ -197,6 +199,7 @@ def test_cli_skip_check_suppresses_target_check() -> int:
             "- **Edits:** `mill-config.yaml`\n"
             "- **Creates:** none\n"
             "- **Deletes:** none\n"
+            "- **Moves:** none\n"
             "- **Requirements:**\n  See scope.\n"
             "- **Commit:** feat(alpha): card 1\n"
         )
@@ -252,6 +255,7 @@ def test_cli_multiple_skip_checks_suppress_multiple_checks() -> int:
             "- **Edits:** `mill-config.yaml`\n"
             "- **Creates:** none\n"
             "- **Deletes:** none\n"
+            "- **Moves:** none\n"
             "- **Requirements:**\n  See scope.\n"
             # Commit: field intentionally omitted to trigger card-missing-field
         )
