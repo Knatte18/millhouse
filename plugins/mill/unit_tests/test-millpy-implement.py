@@ -457,13 +457,18 @@ class TestMillpyImplement(unittest.TestCase):
         self.assertEqual(data["commits_made"], 0)
 
     def test_skip_start_commit_on_refire(self):
-        """Re-fire with matching last commit: start-batch commit block is skipped."""
-        batch_name = "test-batch"
+        """Re-fire with empty staged diff: staged-emptiness check skips the start-batch commit.
+
+        Guards the atomic-commit mechanics (#563): when git diff --cached --quiet exits 0
+        (nothing staged), git_commit must not be called.  This happens when prepare already
+        ran once and all state is committed -- the snapshot and status.md are unchanged.
+        """
 
         def routing_fn(argv, **kw):
-            if argv[1] == "log":
+            if argv[1] == "diff":
+                # git diff --cached --quiet: exit 0 means nothing new is staged.
                 return subprocess.CompletedProcess(
-                    args=argv, returncode=0, stdout=f"mill-go: start batch {batch_name}\n", stderr=""
+                    args=argv, returncode=0, stdout="", stderr=""
                 )
             return subprocess.CompletedProcess(args=argv, returncode=0, stdout="abc1234\n", stderr="")
 
@@ -482,17 +487,22 @@ class TestMillpyImplement(unittest.TestCase):
                 rc, out = self._run_main(["test-batch"])
 
         self.assertEqual(rc, 0)
-        # git_commit should NOT be called
+        # git_commit must NOT be called when the staged diff is empty.
         mock_git_commit.assert_not_called()
-        # But _implementer_claude.run should still be called
+        # The implementer session must still be dispatched.
         mock_impl_run.assert_called_once()
 
     def test_no_skip_start_commit_on_fresh_fire(self):
-        """Fresh fire with different last commit: start-batch commit block is executed."""
+        """Fresh fire with non-empty staged diff: staged-emptiness check commits and pushes.
+
+        Guards the atomic-commit mechanics (#563): when git diff --cached --quiet exits
+        non-zero (changes staged), git_commit must be called exactly once, followed by push.
+        """
         def routing_fn(argv, **kw):
-            if argv[1] == "log":
+            if argv[1] == "diff":
+                # git diff --cached --quiet: exit 1 means changes are staged.
                 return subprocess.CompletedProcess(
-                    args=argv, returncode=0, stdout="some other commit message\n", stderr=""
+                    args=argv, returncode=1, stdout="", stderr=""
                 )
             return subprocess.CompletedProcess(args=argv, returncode=0, stdout="abc1234\n", stderr="")
 
@@ -514,8 +524,89 @@ class TestMillpyImplement(unittest.TestCase):
                 rc, out = self._run_main(["test-batch"])
 
         self.assertEqual(rc, 0)
-        # git_commit should be called exactly once
+        # git_commit must be called exactly once when the staged diff is non-empty.
         mock_git_commit.assert_called_once()
+
+    def test_16_stage_finalize_accepts_round_flag(self):
+        """--stage finalize accepts --round flag with no argparse error, ignores CLI value.
+
+        Mirrors test_15_stage_finalize_accepts_session_and_start_sha_flags for #568:
+        the --round flag is accepted for CLI-shape parity with millpy-fix.py but is ignored;
+        the finalize branch reads start_sha and implementer_session from status.md.
+        """
+        status_path = self.tmp_path / "task" / "status.md"
+        agent_output_path = self.tmp_path / "agent-output.txt"
+        agent_output_path.write_text(
+            '{"status":"success","commit_sha":"xyz","session_id":"fake"}\n',
+            encoding="utf-8"
+        )
+
+        # Write sentinel values to status.md that differ from the CLI flags.
+        millpy_implement._status.set_batch_field(status_path, "test-batch", "start_sha", "STATUS_SHA")
+        millpy_implement._status.set_batch_field(status_path, "test-batch", "implementer_session", "STATUS_SESSION")
+
+        with unittest.mock.patch.object(
+            millpy_implement, "finalize_from_output",
+            return_value=0
+        ) as mock_finalize:
+            rc, out = self._run_main([
+                "test-batch",
+                "--stage", "finalize",
+                "--agent-output", str(agent_output_path),
+                "--round", "1",
+                "--session-id", "CLI_SESSION",
+                "--start-sha", "CLI_SHA",
+            ])
+
+        # rc==0 confirms argparse did not raise for --round (no "unrecognized arguments").
+        self.assertEqual(rc, 0)
+        mock_finalize.assert_called_once()
+        call_kwargs = mock_finalize.call_args.kwargs
+        # Finalize must use status.md values, not the CLI --round/--session-id/--start-sha args.
+        self.assertEqual(call_kwargs.get("start_sha"), "STATUS_SHA")
+        self.assertEqual(call_kwargs.get("session_id"), "STATUS_SESSION")
+
+    def test_prepare_retry_dirty_staged_commits(self):
+        """Re-fire with non-empty staged diff (regenerated session): git_commit IS called.
+
+        Covers the atomicity fix (#563): on a retry, the fresh implementer_session UUID
+        written to status.md dirtied the file; git diff --cached --quiet exits non-zero,
+        so git_commit must fire and the commit message must use the expected start-batch format.
+        """
+        batch_name = "test-batch"
+
+        def routing_fn(argv, **kw):
+            if argv[1] == "diff":
+                # Simulate status.md dirtied by the new session UUID -- something is staged.
+                return subprocess.CompletedProcess(
+                    args=argv, returncode=1, stdout="", stderr=""
+                )
+            return subprocess.CompletedProcess(args=argv, returncode=0, stdout="abc1234\n", stderr="")
+
+        self.mock_subprocess_run.side_effect = routing_fn
+
+        with unittest.mock.patch.object(
+            millpy_implement._implementer_claude, "run",
+            return_value=(
+                '{"status":"success","commit_sha":"abc","session_id":"fake"}\n',
+                "fake-session",
+            ),
+        ):
+            with unittest.mock.patch.object(
+                millpy_implement._subprocess_util, "git_commit",
+                return_value=subprocess.CompletedProcess(
+                    args=[], returncode=0, stdout="", stderr=""
+                ),
+            ) as mock_git_commit:
+                rc, out = self._run_main(["test-batch"])
+
+        self.assertEqual(rc, 0)
+        # git_commit must be called -- the atomic retry must commit the session write.
+        mock_git_commit.assert_called_once()
+        # The commit message must match the start-batch format so the finalize commit
+        # detection in _implementer_common still recognises it.
+        commit_msg = mock_git_commit.call_args[0][1]
+        self.assertEqual(commit_msg, f"mill-go: start batch {batch_name}")
 
     def test_15_stage_finalize_accepts_session_and_start_sha_flags(self):
         """--stage finalize accepts --session-id and --start-sha flags, still uses status.md values."""
