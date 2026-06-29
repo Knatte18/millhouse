@@ -1,10 +1,10 @@
 # Status
 
 ```yaml
-phase: discussed
+phase: planning
 slug: mill-scope-and-infra-gaps
 branch: hanf/mill-scope-and-infra-gaps
-plan: null
+plan: _mill/plan
 parent: main
 task: Fix stale checkpoint safety, Go binary ephemeral allowlist, and bare agent-tier name trap
 task_description: |
@@ -17,4 +17,5 @@ task_description: |
 discussing  '2026-06-29T16:22:25Z'
 discussion-fix-r1  '2026-06-29T16:33:45Z'
 discussed  '2026-06-29T16:34:02Z'
+planning  '2026-06-29T16:37:25Z'
 ```
