@@ -28,7 +28,9 @@ implementing  '2026-06-29T17:07:26Z'
 ```yaml
 batches:
   - name: move-parsing-foundation
-    state: pending
+    state: running
+    implementer_session: e2550aa5-1a29-41d4-908d-8ddd97037b89
+    start_sha: 24ec865bdd27d51a1da61ec5781e93b4faa09207
   - name: templates-skill-config
     state: pending
   - name: validator-move-checks
