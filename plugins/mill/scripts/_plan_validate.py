@@ -42,7 +42,9 @@ from _review_common import (
     _load_root_from_overview,
     compute_creates_union,
     compute_deletes_union,
+    compute_moves_union,
     parse_batch_refs,
+    parse_moves,
     resolve_existing_paths,
 )
 
@@ -62,7 +64,8 @@ _RE_REFS_SUB = re.compile(r"^\s+-\s*(.+)$")
 _RE_LINE_RANGE = re.compile(r":\d+-\d+$")
 
 # Required card fields.
-_REQUIRED_CARD_FIELDS = ["Context", "Edits", "Creates", "Deletes", "Requirements", "Commit"]
+# "Moves" sits after "Deletes" and before "Requirements" per the moves-grammar Shared Decision.
+_REQUIRED_CARD_FIELDS = ["Context", "Edits", "Creates", "Deletes", "Moves", "Requirements", "Commit"]
 
 
 # ---------------------------------------------------------------------------
