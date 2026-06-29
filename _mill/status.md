@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: discussion-fix-r3
 slug: mill-pipeline-finalize-gaps
 branch: hanf/mill-pipeline-finalize-gaps
 plan: null
@@ -15,4 +15,5 @@ task_description: |
 
 ```text
 discussing  '2026-06-29T16:21:33Z'
+discussion-fix-r3  '2026-06-29T16:42:15Z'
 ```

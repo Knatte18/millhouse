@@ -120,6 +120,13 @@ agent-dispatch pipeline's promise that prepare/finalize is a clean two-phase con
   (truly-no-op re-run → nothing staged → skip). It is robust across multiple consecutive
   retries, unlike the message-based guard which silently re-skips every time HEAD is a
   start-batch commit.
+- **Empty-staged branch is defensive-only.** `session_id = str(uuid.uuid4())`
+  (`millpy-implement.py` L283) is regenerated unconditionally before `set_batch_fields` (L285),
+  so status.md is dirty after *every* fire and the `git diff --cached --quiet` "nothing staged →
+  skip" path never fires in normal flow. Keep the emptiness check as a defensive guard (it
+  correctly avoids an empty commit should the staged content ever be identical, e.g. a future
+  change that stops rewriting the session UUID), but treat it as belt-and-suspenders, not a
+  reachable production retry path.
 - Rejected: (a) keep the message guard but add a separate "if status.md dirty, commit it"
   branch — two code paths that can disagree; (b) use a distinct `mill-go: resume batch <name>`
   message — needless message proliferation and risks confusing `_is_only_start_batch_commit`,
@@ -251,8 +258,12 @@ TDD per fix; all under `plugins/mill/unit_tests/`, run with `run-all.py`.
   `test_skip_start_commit_on_refire`**: its current premise (`git_commit.assert_not_called()`
   on refire) is invalidated by this fix — on a refire the new session makes status.md dirty, so
   a commit *should* now occur; re-point that test at the genuinely-empty case (nothing staged →
-  no commit) or fold it into the new test. Keep `test_no_skip_start_commit_on_fresh_fire`
-  (fresh fire still commits) green.
+  no commit) or fold it into the new test. The genuinely-empty "no commit" test is
+  **guard-mechanics coverage only** — in production the unconditional `uuid.uuid4()` session
+  rewrite (L283) guarantees a non-empty staged diff every fire, so the empty branch is never
+  hit by a real retry; the test must force an empty staged diff explicitly (mock) rather than
+  rely on a refire. Keep `test_no_skip_start_commit_on_fresh_fire` (fresh fire still commits)
+  green.
 - **#568 (`test-millpy-implement.py`).** Add a finalize test that passes `--round 1` (alongside
   `--session-id`/`--start-sha`) and asserts the parser accepts it (rc 0, no `unrecognized
   arguments`) and that finalize still uses status.md authoritative values — mirroring the
