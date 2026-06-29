@@ -27,8 +27,17 @@ If output is empty → report "Nothing to merge — already up to date." and exi
 
 ```bash
 CHK="mill-checkpoint-$(git rev-parse --abbrev-ref HEAD | tr '/' '-')"
-git branch "$CHK"
+OLD_CHK_SHA=$(git rev-parse --verify --quiet "$CHK" || true)
+git branch -f "$CHK"
+if [ -n "$OLD_CHK_SHA" ]; then
+  NEW_CHK_SHA=$(git rev-parse "$CHK")
+  echo "[mill-merge-in] note: existing checkpoint $CHK moved from $OLD_CHK_SHA -> $NEW_CHK_SHA (current pre-merge HEAD)"
+fi
 ```
+
+The checkpoint is force-refreshed to the current (true pre-merge) HEAD on every run. This is safe because step 1's no-op check has already confirmed we are at a clean pre-merge HEAD: if there were no new commits on the parent, the skill would have exited in step 1 before reaching here. On a re-run (the common case when a checkpoint branch from a prior run is still present), `git branch -f` moves the checkpoint to the actual pre-merge HEAD rather than failing silently with "already exists".
+
+If a checkpoint branch already existed from a prior run, the informational note above records the move — this is non-blocking. The move is intentional: the prior checkpoint may have pointed at a stale HEAD.
 
 Record the checkpoint branch name. On any failure after this point, roll back via `git reset --hard "$CHK"` and **preserve** the checkpoint branch (do not delete on failure — the user may need to investigate).
 
