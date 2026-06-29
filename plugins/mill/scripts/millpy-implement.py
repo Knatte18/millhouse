@@ -99,6 +99,18 @@ def main(argv=None) -> int:
         default=None,
         help="Session ID from prepare envelope (ignored by implement; status.md is authoritative).",
     )
+    # Accepted for CLI-shape parity with millpy-fix.py and the agent-mode dispatch loop;
+    # ignored by implement -- the finalize branch reads start_sha and implementer_session
+    # from status.md rather than from the prepare envelope.
+    parser.add_argument(
+        "--round",
+        default=None,
+        help=(
+            "Accepted for CLI-shape parity with millpy-fix.py and the agent-mode dispatch loop;"
+            " ignored by implement (the finalize branch reads start_sha and implementer_session"
+            " from status.md)."
+        ),
+    )
     args = parser.parse_args(argv)
 
     # Common setup
