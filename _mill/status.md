@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-templates-skill-config
+phase: approved-validator-move-checks
 slug: mill-plan-rename-moves
 branch: hanf/mill-plan-rename-moves
 plan: _mill/plan
@@ -23,6 +23,7 @@ planned  '2026-06-29T17:05:47Z'
 implementing  '2026-06-29T17:07:26Z'
 approved-move-parsing-foundation  '2026-06-29T17:14:25Z'
 approved-templates-skill-config  '2026-06-29T17:24:47Z'
+approved-validator-move-checks  '2026-06-29T17:47:44Z'
 ```
 
 ## Batches
@@ -40,9 +41,10 @@ batches:
     start_sha: 4e935ccaf73d79228bf634c9a530981407d0edc8
     commit_sha: 59f5f7a993f60944c33fcad583147b7730c4489e
   - name: validator-move-checks
-    state: running
+    state: approved
     implementer_session: 5b3aaf0b-7bc9-49ae-aed0-49d36fe0dd79
     start_sha: c3b3f0641bee956c69160a5867e2a0bc1ea33c19
+    commit_sha: 28dd74ea38ea554fc3cd7266a4a1fcf16d2f8e38
   - name: review-backends
     state: pending
 ```
