@@ -16,6 +16,7 @@ pipeline:
   auto_report: true
   max_cards_per_batch: 10
   max_batch_context_tokens: 120000
+  rename_detect_pct: 30
 merge:
   model: sonnethigh
 junctions:
