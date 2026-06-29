@@ -40,5 +40,7 @@ batches:
     start_sha: 462f0bda65f563d0bbea8daabfb8c811db86f2c2
     commit_sha: 65bb8a634968429c7ede93c2fb866e9320fb7d1a
   - name: idempotent-checkpoint
-    state: pending
+    state: running
+    implementer_session: 807706dc-1b57-4757-8d76-51c7f96d1f52
+    start_sha: 6ce20507101d0dbfe71845db6a9f6730d50a9487
 ```
