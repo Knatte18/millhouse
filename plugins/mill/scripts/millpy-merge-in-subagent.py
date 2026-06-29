@@ -140,6 +140,21 @@ def main(argv=None) -> int:
         "--agent-output",
         help="Path to agent output file (required when --stage finalize).",
     )
+    parser.add_argument(
+        "--session-id",
+        default=None,
+        help="Accepted for CLI-shape parity with millpy-fix.py / millpy-implement.py; ignored in all stages -- conflicts-mode finalize delegates to finalize_from_output(..., session_id=None) and verify-fix finalize re-runs --cmd directly.",
+    )
+    parser.add_argument(
+        "--start-sha",
+        default=None,
+        help="Accepted for CLI-shape parity with millpy-fix.py / millpy-implement.py; ignored in all stages.",
+    )
+    parser.add_argument(
+        "--round",
+        default=None,
+        help="Accepted for CLI-shape parity with millpy-fix.py / millpy-implement.py; ignored in all stages.",
+    )
     args = parser.parse_args(argv)
 
     # Common setup

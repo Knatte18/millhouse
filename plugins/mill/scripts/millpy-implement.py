@@ -99,6 +99,18 @@ def main(argv=None) -> int:
         default=None,
         help="Session ID from prepare envelope (ignored by implement; status.md is authoritative).",
     )
+    # Accepted for CLI-shape parity with millpy-fix.py and the agent-mode dispatch loop;
+    # ignored by implement -- the finalize branch reads start_sha and implementer_session
+    # from status.md rather than from the prepare envelope.
+    parser.add_argument(
+        "--round",
+        default=None,
+        help=(
+            "Accepted for CLI-shape parity with millpy-fix.py and the agent-mode dispatch loop;"
+            " ignored by implement (the finalize branch reads start_sha and implementer_session"
+            " from status.md)."
+        ),
+    )
     args = parser.parse_args(argv)
 
     # Common setup
@@ -288,28 +300,36 @@ def main(argv=None) -> int:
         {"state": "running", "start_sha": start_sha, "implementer_session": session_id},
     )
 
-    last_log = _subprocess_util.run(
-        ["git", "log", "-1", "--pretty=%s"],
+    # Stage status.md and the cleanliness snapshot unconditionally. On a re-fire
+    # the prepare step regenerated implementer_session, so status.md is always
+    # dirty; the message-based skip_start_commit check would have missed that
+    # mutation and left the session in status.md uncommitted (#563).
+    result = _subprocess_util.run(
+        [
+            "git",
+            "add",
+            status_path.relative_to(project_root).as_posix(),
+            str(snapshot_path.relative_to(project_root)),
+        ],
         cwd=project_root,
     )
-    skip_start_commit = (
-        last_log.returncode == 0
-        and last_log.stdout.strip() == f"mill-go: start batch {args.batch_name}"
+    if result.returncode != 0:
+        print(result.stderr, file=sys.stderr)
+        return 1
+
+    # Use a staged-diff emptiness check rather than the last-log message to decide
+    # whether to commit. git diff --cached --quiet exits 0 when nothing is staged
+    # (all state already committed on a genuine first-fire with matching content)
+    # and exits non-zero when at least one file differs -- which is always true on
+    # re-fires because the fresh implementer_session UUID dirtied status.md.
+    diff_result = _subprocess_util.run(
+        ["git", "diff", "--cached", "--quiet"],
+        cwd=project_root,
     )
 
-    if not skip_start_commit:
-        result = _subprocess_util.run(
-            [
-                "git",
-                "add",
-                status_path.relative_to(project_root).as_posix(),
-                str(snapshot_path.relative_to(project_root)),
-            ],
-            cwd=project_root,
-        )
-        if result.returncode != 0:
-            print(result.stderr, file=sys.stderr)
-            return 1
+    if diff_result.returncode != 0:
+        # Something is staged -- commit and push so the subsequent finalize
+        # in-scope dirty gate does not trip on the uncommitted session write.
         result = _subprocess_util.git_commit(
             project_root,
             f"mill-go: start batch {args.batch_name}",

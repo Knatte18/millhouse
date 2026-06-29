@@ -564,6 +564,61 @@ class TestMillpyMergeInSubagent(unittest.TestCase):
         data = json.loads(out.strip())
         self.assertEqual(data["status"], "success")
 
+    def test_19_finalize_conflicts_accepts_parity_flags(self):
+        """
+        conflicts finalize: --session-id/--start-sha/--round accepted without error,
+        delegates to finalize_from_output with session_id=None.
+
+        Regression test for #569: millpy-merge-in-subagent.py --stage finalize previously
+        rejected --session-id (and the other envelope fields) that its own --stage prepare
+        envelope emits via emit_prepare.  The fix adds all three as accepted-but-ignored
+        arguments so mill-go's generic "thread applicable prepare-envelope fields into
+        finalize" logic is safe for this script.
+
+        Asserts:
+        - rc == 0 (argparse would raise SystemExit(2) on unrecognized arguments)
+        - LLM is not invoked in the finalize stage
+        - finalize_from_output is called exactly once to process the agent output
+        - session_id=None is passed to finalize_from_output (the threaded value is ignored)
+        """
+        # Write an agent output file so --agent-output has a valid target.
+        agent_output_path = self.tmp_path / "agent-output.txt"
+        agent_output_path.write_text(
+            '{"status":"success","commit_sha":"xyz"}\n',
+            encoding="utf-8",
+        )
+
+        with unittest.mock.patch.object(
+            millpy_merge_in_subagent._implementer_claude, "run"
+        ) as mock_llm, \
+        unittest.mock.patch.object(
+            # Patch finalize_from_output in the subagent module's namespace so
+            # we can assert it was called with the expected arguments without
+            # triggering real git operations on a non-repo temp directory.
+            millpy_merge_in_subagent, "finalize_from_output",
+            return_value=0,
+        ) as mock_finalize:
+            rc, out = self._run_main([
+                "--mode", "conflicts",
+                "--files", "f.py",
+                "--stage", "finalize",
+                "--agent-output", str(agent_output_path),
+                "--session-id", "test-session-id",
+                "--start-sha", "abc1234",
+                "--round", "1",
+            ])
+
+        # rc must be 0 -- argparse raises SystemExit(2) on unrecognized arguments
+        self.assertEqual(rc, 0)
+        # LLM must not be invoked in the finalize stage
+        mock_llm.assert_not_called()
+        # finalize_from_output must be called to process the agent output
+        mock_finalize.assert_called_once()
+        # session_id must be None -- the threaded --session-id value is accepted but ignored;
+        # conflicts-mode finalize always passes session_id=None to finalize_from_output
+        _, call_kwargs = mock_finalize.call_args
+        self.assertIsNone(call_kwargs.get("session_id"))
+
 
 if __name__ == "__main__":
     unittest.main()
