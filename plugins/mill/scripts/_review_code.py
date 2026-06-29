@@ -1,25 +1,33 @@
 """
 Review backend for code artefacts.
 
-v2 code review does NOT look at git diff. It reads the approved plan and
-the source files the plan says were touched, then asks the reviewer:
-"does the implementation on disk realise what the plan promised?" The
-orchestrator (mill-go) invokes this once per batch after the implementer
-commits that batch, and optionally one holistic review at end-of-task.
+The LLM reviewer does NOT look at git diff. It reads the approved plan and
+the source files the plan says were touched, then asks: "does the
+implementation on disk realise what the plan promised?" The orchestrator
+(mill-go) invokes this once per batch after the implementer commits that
+batch, and optionally one holistic review at end-of-task.
+
+The backend itself uses git deterministically in two places:
+- ``bulk_files_with_diff`` (in ``prepare``) scopes large source files to
+  their diff against ``start_sha`` so the reviewer sees a focused diff
+  rather than the full file content.
+- The mechanical rename check (in ``finalize``) runs
+  ``git diff --name-status --find-renames`` to detect whether planned
+  ``Moves:`` pairs landed as git-detected renames; advisory NIT findings
+  are spliced into the review text for any pair that did not.
 
 Two modes, selected by ``scope``:
 
-- ``scope="<name>"`` — per-batch review. Bulks
+- ``scope="<name>"`` -- per-batch review. Bulks
   ``00-overview.md`` + the single ``NN-<batch>.md`` + every file under
-  that batch's ``Context:`` / ``Edits:`` / ``Creates:`` lines.
-- ``scope="holistic"`` — holistic review. Bulks ``00-overview.md`` +
+  that batch's ``Context:`` / ``Edits:`` / ``Creates:`` lines plus
+  Move targets (the relocated files exist post-implementation).
+- ``scope="holistic"`` -- holistic review. Bulks ``00-overview.md`` +
   every batch file + the union of all referenced files.
 
-Both modes accept ``extra_files`` — source files the orchestrator has
+Both modes accept ``extra_files`` -- source files the orchestrator has
 decided to include in the bulk this round, typically because a previous
-round returned ``verdict: NEED_CONTEXT`` pointing at them. The reviewer
-never scrapes git for files; the backend is explicit about what ends up
-in the prompt.
+round returned ``verdict: NEED_CONTEXT`` pointing at them.
 
 Public API:
     prepare(cfg, slug, *, scope, mill_dir, project_root, wiki_root, git_root, extra_files=None) -> dict
@@ -35,9 +43,13 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import re
+
+import _moves_check
 import _paths
 import _reviewer_single
 import _reviewers
+import _subprocess_util
 from _llm_common import LLMError
 from _plan_dag import PlanDAGError, extract_batch_index
 import _status
@@ -53,6 +65,7 @@ from _review_common import (
     bulk_files_with_diff,
     compute_creates_union,
     compute_deletes_union,
+    compute_moves_union,
     discover_round,
     extract_review_content,
     finalize_scope,
@@ -61,6 +74,7 @@ from _review_common import (
     parse_batch_refs,
     parse_blocking_count,
     parse_missing_context,
+    parse_moves,
     parse_verdict,
     read_constraints_md,
     render_prompt,
@@ -255,15 +269,33 @@ def prepare(
             all_raw_refs[ref] = None
     creates_union = compute_creates_union(plan_dir)
     deletes_union = compute_deletes_union(plan_dir)
+    # Move targets exist post-implementation; the code reviewer should see the
+    # relocated file so it can verify the rename landed correctly.
+    _, moves_targets_union = compute_moves_union(plan_dir)
     referenced = resolve_ref_paths(
         list(all_raw_refs.keys()), project_root, root,
         creates_union=creates_union, deletes_union=deletes_union, wiki_root=wiki_root, git_root=git_root,
     )
 
-    # Deduplicate while preserving order across the two lists.
+    # Deduplicate while preserving order across the three lists.
     seen: dict[Path, None] = {}
     source_files: list[Path] = []
     for p in (*referenced, *(extra_files or [])):
+        if p not in seen:
+            seen[p] = None
+            source_files.append(p)
+
+    # Resolve move targets not already in the explicit batch refs; use
+    # resolve_existing_paths so a missing target (incomplete implementation)
+    # is silently skipped rather than hard-failing code review.
+    moves_targets_on_disk = resolve_existing_paths(
+        [t for t in moves_targets_union if t not in all_raw_refs],
+        project_root,
+        root,
+        wiki_root=wiki_root,
+        git_root=git_root,
+    )
+    for p in moves_targets_on_disk:
         if p not in seen:
             seen[p] = None
             source_files.append(p)

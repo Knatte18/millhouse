@@ -1158,6 +1158,83 @@ def main() -> int:
         finally:
             os.chdir(orig_dir)
 
+    # ------------------------------------------------------------------
+    # Test 19 — Move targets included in code review bulk (Card 19)
+    # A batch declares a Moves: entry; the target file exists on disk
+    # (simulating post-implementation state). The code-review prompt must
+    # reference the target file path so the reviewer can inspect the result.
+    # ------------------------------------------------------------------
+    def _make_batch_file_with_moves(
+        name: str,
+        reads: list[str],
+        creates: list[str],
+        *,
+        moves: list[tuple[str, str]],
+        deletes: list[str] | None = None,
+    ) -> str:
+        """Return batch file text including a multi-line Moves: field."""
+        reads_part = ", ".join(f"`{r}`" for r in reads) if reads else "none"
+        creates_part = ", ".join(f"`{c}`" for c in creates) if creates else "none"
+        deletes_part = ", ".join(f"`{d}`" for d in deletes) if deletes else "none"
+        if moves:
+            moves_lines = "\n".join(f"  - `{s}` -> `{d}`" for s, d in moves)
+            moves_part = f"\n{moves_lines}"
+        else:
+            moves_part = " none"
+        return (
+            f"# Batch: {name}\n\n"
+            "```yaml\n"
+            f"task: test\nbatch: {name}\ncards: 1\nverify: null\ndepends-on: []\n"
+            "```\n\n"
+            "## Cards\n\n### Card 1\n\n"
+            f"- **Context:** {reads_part}\n"
+            "- **Edits:** none\n"
+            f"- **Creates:** {creates_part}\n"
+            f"- **Deletes:** {deletes_part}\n"
+            f"- **Moves:**{moves_part}\n"
+        )
+
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        mill_dir, wiki_root, project_root, cfg = _make_fixture(tmpdir)
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            plan_dir = project_root / "plan"
+            # Overwrite the alpha batch to declare a move: old/module.py -> new/module.py
+            (plan_dir / "01-alpha.md").write_text(
+                _make_batch_file_with_moves(
+                    "alpha",
+                    ["src/a.py"],
+                    [],
+                    moves=[("old/module.py", "new/module.py")],
+                ),
+                encoding="utf-8",
+            )
+            # Create the move TARGET on disk (post-implementation: target exists, source gone)
+            (project_root / "new").mkdir(parents=True)
+            (project_root / "new" / "module.py").write_text(
+                "# relocated module content\n", encoding="utf-8"
+            )
+
+            _seed_approve(1)
+            code_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, batch_name="alpha")
+
+            prompts = stub.captured_prompts()
+            assert prompts, "expected at least one captured prompt"
+            prompt_text = prompts[0][0]
+            assert "new/module.py" in prompt_text, (
+                "move target 'new/module.py' not found in code-review prompt"
+            )
+            print("PASS test19: Moves: target appears in code-review prompt")
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test19: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test19 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
+
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)
         return 1
