@@ -18,7 +18,7 @@ import _reviewer_single  # noqa: E402
 import _reviewer_test_stub as stub  # noqa: E402
 from _reviewers import ReviewerError  # noqa: E402
 from _test_cfg import make_minimal_cfg  # noqa: E402
-from _test_registry import make_minimal_registry, write_to  # noqa: E402
+from _test_registry import make_minimal_registry  # noqa: E402
 from unittest.mock import patch  # noqa: E402
 
 
@@ -49,6 +49,28 @@ def _load_with_overlay(yaml_text: str) -> dict:
             return_value=tmp_path / "nonexistent" / "mill-agents.yaml",
         ):
             return _reviewers.load(hub)
+
+
+def _load_real_template_registry() -> dict:
+    """
+    Load the real mill-agents.yaml plugin template via _reviewers.load().
+
+    Patches resolve_plugin_template_path to point at the worktree's actual
+    template file and suppress wiki fallback so only the template is loaded.
+    Used by tests that exercise entries present in the shipped catalogue.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        hub_dir = tmp_path / "hub"
+        hub_dir.mkdir()
+        real_template_path = HUB / "plugins" / "mill" / "templates" / "mill-agents.yaml"
+        with patch.object(
+            _reviewers,
+            "resolve_plugin_template_path",
+            return_value=real_template_path,
+        ):
+            with patch.object(_paths, "resolve_wiki_path", side_effect=SystemExit):
+                return _reviewers.load(hub_dir)
 
 
 # ---------------------------------------------------------------------------
@@ -818,7 +840,6 @@ def test_agents_catalogue_naming_convention() -> None:
     by design — this is not an oversight.
     """
     import yaml
-    from pathlib import Path
 
     # Resolve the catalogue path via the module's HUB pattern
     catalogue_path = HUB / "plugins" / "mill" / "templates" / "mill-agents.yaml"
@@ -867,6 +888,82 @@ def test_agents_catalogue_naming_convention() -> None:
     print("PASS: agents catalogue naming convention locked")
 
 
+def test_bare_aliases_resolve_with_correct_spec() -> None:
+    """Bare sonnet/opus aliases resolve with provider=claude, effort=medium, correct models, correct tooluse.
+
+    Loads the real plugin template so the assertions exercise the actual catalogue entries
+    added for issue #565. Checks all four bare aliases: sonnet, sonnet_bulk, opus, opus_bulk.
+    """
+    registry = _load_real_template_registry()
+
+    # sonnet: bare tool-use alias at medium effort
+    spec = _reviewers.resolve(registry, "sonnet")
+    assert spec["provider"] == "claude"
+    assert spec["effort"] == "medium"
+    assert spec["model"] == "claude-sonnet-4-6"
+    assert spec["tooluse"] is True
+
+    # sonnet_bulk: bare bulk alias at medium effort
+    spec = _reviewers.resolve(registry, "sonnet_bulk")
+    assert spec["provider"] == "claude"
+    assert spec["effort"] == "medium"
+    assert spec["model"] == "claude-sonnet-4-6"
+    assert spec["tooluse"] is False
+
+    # opus: bare tool-use alias at medium effort
+    spec = _reviewers.resolve(registry, "opus")
+    assert spec["provider"] == "claude"
+    assert spec["effort"] == "medium"
+    assert spec["model"] == "claude-opus-4-7"
+    assert spec["tooluse"] is True
+
+    # opus_bulk: bare bulk alias at medium effort
+    spec = _reviewers.resolve(registry, "opus_bulk")
+    assert spec["provider"] == "claude"
+    assert spec["effort"] == "medium"
+    assert spec["model"] == "claude-opus-4-7"
+    assert spec["tooluse"] is False
+
+    print("PASS: bare aliases resolve with correct spec")
+
+
+def test_validate_role_refs_accepts_bare_aliases() -> None:
+    """validate_role_refs passes for the #565 repro config: roles.implementer.model=sonnet, roles.fixer.model=opus.
+
+    Confirms that bare aliases are resolvable from validate_role_refs, which is the exact
+    code path that raised 'Unknown reviewer: sonnet' before the fix.
+    """
+    registry = _load_real_template_registry()
+    cfg = {
+        "roles": {
+            "implementer": {"model": "sonnet"},
+            "fixer": {"model": "opus"},
+        }
+    }
+    # Must not raise ReviewerError
+    _reviewers.validate_role_refs(cfg, registry)
+    print("PASS: validate_role_refs accepts bare aliases")
+
+
+def test_resolve_unknown_name_lists_available() -> None:
+    """resolve() raises ReviewerError whose message contains both 'Unknown reviewer' and 'Available:'.
+
+    Verifies the enriched error message added by the fix. The 'Unknown reviewer:' prefix
+    is preserved so callers matching on that prefix continue to work.
+    """
+    registry = {
+        "sonnet": {"type": "single", "provider": "claude", "model": "x", "tooluse": True}
+    }
+    try:
+        _reviewers.resolve(registry, "definitely-not-a-name")
+        raise AssertionError("Expected ReviewerError")
+    except ReviewerError as exc:
+        msg = str(exc)
+        assert "Unknown reviewer" in msg, f"Expected 'Unknown reviewer' in: {msg!r}"
+        assert "Available:" in msg, f"Expected 'Available:' in: {msg!r}"
+    print("PASS: resolve unknown name lists available names in error")
+
+
 def main() -> int:
     tests = [
         test_load_happy_path,
@@ -904,6 +1001,9 @@ def main() -> int:
         test_required_field_missing_after_merge_raises,
         test_extends_field_removed_from_output,
         test_agents_catalogue_naming_convention,
+        test_bare_aliases_resolve_with_correct_spec,
+        test_validate_role_refs_accepts_bare_aliases,
+        test_resolve_unknown_name_lists_available,
         # --- _reviewer_single tests merged from test-reviewer-single.py ---
         test_single_signature,
         test_single_cluster_spec_raises,

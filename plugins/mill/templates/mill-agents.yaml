@@ -67,6 +67,22 @@ haiku_bulk:
   tooluse: false
   type: single
 
+# Bare opus alias -- resolves to the medium effort tier. Use opushigh or opusmax for higher effort.
+opus:
+  effort: medium
+  model: claude-opus-4-7
+  provider: claude
+  tooluse: true
+  type: single
+
+# Bare opus_bulk alias -- resolves to the medium effort tier. Use opushigh_bulk or opusmax_bulk for higher effort.
+opus_bulk:
+  effort: medium
+  model: claude-opus-4-7
+  provider: claude
+  tooluse: false
+  type: single
+
 opushigh:
   effort: high
   model: claude-opus-4-7
@@ -105,6 +121,22 @@ opusmedium:
 opusmedium_bulk:
   effort: medium
   model: claude-opus-4-7
+  provider: claude
+  tooluse: false
+  type: single
+
+# Bare sonnet alias -- resolves to the medium effort tier. Use sonnethigh or sonnetmax for higher effort.
+sonnet:
+  effort: medium
+  model: claude-sonnet-4-6
+  provider: claude
+  tooluse: true
+  type: single
+
+# Bare sonnet_bulk alias -- resolves to the medium effort tier. Use sonnethigh_bulk or sonnetmax_bulk for higher effort.
+sonnet_bulk:
+  effort: medium
+  model: claude-sonnet-4-6
   provider: claude
   tooluse: false
   type: single
