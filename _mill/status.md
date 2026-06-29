@@ -1,10 +1,10 @@
 # Status
 
 ```yaml
-phase: discussed
+phase: planning
 slug: mill-plan-rename-moves
 branch: hanf/mill-plan-rename-moves
-plan: null
+plan: _mill/plan
 parent: main
 task: Add first-class Moves/Renames field to plan cards for rename-heavy batches
 task_description: |
@@ -17,4 +17,5 @@ task_description: |
 discussing  '2026-06-29T16:20:47Z'
 discussion-fix-r3  '2026-06-29T16:46:19Z'
 discussed  '2026-06-29T16:46:42Z'
+planning  '2026-06-29T16:57:18Z'
 ```
