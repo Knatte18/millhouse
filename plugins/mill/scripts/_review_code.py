@@ -376,6 +376,135 @@ def prepare(
     }
 
 
+def _splice_rename_nit_findings(
+    raw_text: str,
+    scope: str,
+    slug: str,
+    cfg: dict,
+    project_root: Path,
+) -> str:
+    """
+    Attempt to splice mechanical rename NIT findings into raw_text.
+
+    Resolves the batch's start_sha from status.md (same logic as
+    ``prepare``), finds the batch file, reads its ``Moves:`` declarations,
+    runs ``git diff --name-status --find-renames=<thr>% <start_sha>..HEAD``,
+    and for any planned move pair that did not land as a git-detected
+    rename, inserts an advisory NIT finding block into the ``## Findings``
+    section of raw_text before ``finalize_scope`` parses it.
+
+    Returns raw_text unchanged when any precondition fails (no start_sha,
+    empty Moves, git error) because the rename check is advisory only.
+
+    Args:
+        raw_text: Extracted review text (after MILL_REVIEW_BEGIN stripping).
+        scope: Batch name (guaranteed non-None by caller).
+        slug: Task slug, used to resolve plan_dir via resolve_path.
+        cfg: Merged mill configuration dict.
+        project_root: Absolute path to the worktree root.
+    """
+    # Resolve plan_dir and locate the batch file.
+    try:
+        plan_dir = resolve_path(cfg["paths"]["plan_dir"], slug)
+        overview_path = plan_dir / "00-overview.md"
+        if not overview_path.exists():
+            return raw_text
+        batch_files = _collect_batch_files(plan_dir, scope, overview_path)
+        batch_file = batch_files[0]
+    except Exception:
+        # Any resolution failure (missing overview, unknown batch) is
+        # treated as a skip rather than an error; the check is advisory.
+        return raw_text
+
+    # Check whether this batch declares any moves.
+    moves = parse_moves(batch_file)
+    if not moves:
+        return raw_text
+
+    # Read start_sha from status.md (mirrors prepare's resolution).
+    try:
+        status_path = _paths.status_path(project_root, cfg)
+        batches_list = _status.read_batches(status_path)
+        entry = next((b for b in batches_list if b.get("name") == scope), None)
+        start_sha = entry.get("start_sha") if entry else None
+    except Exception:
+        return raw_text
+
+    if not start_sha:
+        return raw_text
+
+    # Run git diff to detect which moves landed as git-recognised renames.
+    # The threshold comes from the pipeline config; defaults to 30% per
+    # the mechanical-rename-check-advisory Shared Decision.
+    rename_threshold = cfg.get("pipeline", {}).get("rename_detect_pct", 30)
+    try:
+        result = _subprocess_util.run([
+            "git", "-C", str(project_root),
+            "diff", "--name-status",
+            f"--find-renames={rename_threshold}%",
+            f"{start_sha}..HEAD",
+        ])
+        if result.returncode != 0:
+            return raw_text
+        name_status_text = result.stdout
+    except Exception:
+        return raw_text
+
+    # Compute advisory NIT finding blocks for undetected renames.
+    nit_blocks = _moves_check.planned_rename_findings(name_status_text, moves)
+    if not nit_blocks:
+        return raw_text
+
+    # Splice NITs into the ## Findings section before ## Verdict.
+    # The NITs are advisory; they do not alter the verdict yaml block
+    # and therefore cannot change the verdict or blocking_count.
+    return _insert_nit_blocks_before_verdict(raw_text, nit_blocks)
+
+
+def _insert_nit_blocks_before_verdict(raw_text: str, nit_blocks: list[str]) -> str:
+    """
+    Insert NIT finding blocks into raw_text's ## Findings section.
+
+    Locates the ``## Verdict`` heading and inserts the NIT blocks
+    immediately before it so they appear inside the findings section.
+    If ``## Verdict`` is absent, the NITs are appended at the end.
+    When no ``## Findings`` section exists either, a bare ``## Findings``
+    heading is prepended before the NITs so the review retains valid
+    structure.
+
+    Args:
+        raw_text: Extracted review text.
+        nit_blocks: List of NIT finding block strings to insert.
+
+    Returns:
+        Modified raw_text with NIT blocks spliced in.
+    """
+    nit_text = "\n\n".join(nit_blocks)
+
+    # Prefer inserting just before ## Verdict so all findings appear
+    # together in the findings section.
+    verdict_match = re.search(r"^## Verdict\s*$", raw_text, re.MULTILINE)
+    if verdict_match:
+        insert_pos = verdict_match.start()
+        findings_match = re.search(r"^## Findings\s*$", raw_text, re.MULTILINE)
+        if not findings_match:
+            # No findings section yet -- create one with the NITs.
+            return (
+                raw_text[:insert_pos]
+                + "## Findings\n\n"
+                + nit_text
+                + "\n\n"
+                + raw_text[insert_pos:]
+            )
+        return raw_text[:insert_pos] + nit_text + "\n\n" + raw_text[insert_pos:]
+
+    # No ## Verdict heading: append NITs at the end of the text.
+    findings_match = re.search(r"^## Findings\s*$", raw_text, re.MULTILINE)
+    if not findings_match:
+        return raw_text + "\n\n## Findings\n\n" + nit_text
+    return raw_text + "\n\n" + nit_text
+
+
 def finalize(
     cfg: dict,
     slug: str,
@@ -391,6 +520,13 @@ def finalize(
 ) -> ReviewResult:
     """Finalize a code review by parsing verdict and writing the review file.
 
+    For per-batch scope (``scope`` is not None), attempts to splice
+    advisory mechanical rename NIT findings into ``raw_text`` before
+    verdict parsing.  The NIT check uses ``git diff --name-status
+    --find-renames`` against the batch's ``start_sha``; it is skipped
+    silently on any failure (no start_sha, git error, no Moves declared).
+    NITs never change the verdict or blocking_count.
+
     Args:
         raw_text: Raw review output from the reviewer.
         scope: Batch name or None for holistic.
@@ -401,6 +537,12 @@ def finalize(
         ReviewResult with verdict, blocking count, and review entries.
     """
     scope_label = scope or "holistic"
+
+    # Mechanical rename check: per-batch only, advisory NITs, never changes
+    # verdict or blocking_count.  Holistic scope is skipped (no start_sha
+    # context); any git or resolution failure is swallowed.
+    if scope is not None:
+        raw_text = _splice_rename_nit_findings(raw_text, scope, slug, cfg, project_root)
 
     try:
         review_entry = finalize_scope(

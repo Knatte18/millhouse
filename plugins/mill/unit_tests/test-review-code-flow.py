@@ -18,12 +18,14 @@ from pathlib import Path
 HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
+import unittest.mock
+
 import _reviewer_test_stub as stub  # noqa: E402
 import _test_registry  # noqa: E402
 import _test_helpers  # noqa: E402
 from wiki import _client as wiki  # noqa: E402
 from _llm_claude import LLMError  # noqa: E402
-from _review_code import run as code_run  # noqa: E402
+from _review_code import run as code_run, finalize as code_finalize  # noqa: E402
 from _review_common import ReviewError  # noqa: E402
 from _test_helpers import seed_wiki_config  # noqa: E402
 
@@ -1232,6 +1234,126 @@ def main() -> int:
         except Exception as exc:
             errors += 1
             print(f"FAIL test19 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
+    # Test 21 — Rename NIT spliced into per-batch finalize (Card 21)
+    # When a batch declares Moves: and git diff reports add+delete (not a
+    # rename), finalize must splice an advisory [NIT] into the written
+    # review file without changing the verdict from APPROVE.
+    # ------------------------------------------------------------------
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        mill_dir, wiki_root, project_root, cfg = _make_fixture(tmpdir)
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            plan_dir = project_root / "plan"
+            # Overwrite the alpha batch file to declare a move pair.
+            def _make_batch_with_moves_for_finalize(name: str, moves: list[tuple[str, str]]) -> str:
+                """Return minimal batch file text with a Moves: field."""
+                if moves:
+                    moves_lines = "\n".join(f"  - `{s}` -> `{d}`" for s, d in moves)
+                    moves_part = f"\n{moves_lines}"
+                else:
+                    moves_part = " none"
+                return (
+                    f"# Batch: {name}\n\n"
+                    "```yaml\n"
+                    f"task: test\nbatch: {name}\ncards: 1\nverify: null\ndepends-on: []\n"
+                    "```\n\n"
+                    "## Cards\n\n### Card 1\n\n"
+                    "- **Context:** none\n"
+                    "- **Edits:** none\n"
+                    "- **Creates:** none\n"
+                    "- **Deletes:** none\n"
+                    f"- **Moves:**{moves_part}\n"
+                )
+
+            (plan_dir / "01-alpha.md").write_text(
+                _make_batch_with_moves_for_finalize(
+                    "alpha",
+                    [("old/module.py", "new/module.py")],
+                ),
+                encoding="utf-8",
+            )
+
+            # Write status.md with a start_sha so _splice_rename_nit_findings
+            # can find a start_sha for the batch.  The SHA value is a
+            # plausible git hash; the actual git diff is mocked so validity
+            # does not matter.
+            fake_start_sha = "aabbccdd1234567890abcdef1234567890abcdef"
+            mill_state_dir = project_root / "_mill"
+            mill_state_dir.mkdir(parents=True, exist_ok=True)
+            (mill_state_dir / "status.md").write_text(
+                "# Status: test-slug\n\n"
+                "```yaml\n"
+                "phase: implement\n"
+                "```\n\n"
+                "## Batches\n\n"
+                "```yaml\n"
+                f"batches:\n  - name: alpha\n    start_sha: {fake_start_sha}\n"
+                "```\n",
+                encoding="utf-8",
+            )
+
+            # Mock _subprocess_util.run so git diff returns an add+delete diff
+            # (no R-status line), which the rename check must flag as a NIT.
+            add_delete_diff = "A\tnew/module.py\nD\told/module.py\n"
+            fake_completed = subprocess.CompletedProcess(
+                args=[], returncode=0, stdout=add_delete_diff, stderr=""
+            )
+
+            reviews_dir = project_root / "reviews"
+            reviews_dir.mkdir(parents=True, exist_ok=True)
+
+            approve_raw = (
+                "# Review: test\n\n"
+                "```yaml\nverdict: APPROVE\n```\n\n"
+                "## Findings\n\n(none)\n\n"
+                "## Verdict\n\nAPPROVE\n"
+            )
+
+            with unittest.mock.patch("_subprocess_util.run", return_value=fake_completed):
+                result = code_finalize(
+                    cfg,
+                    SLUG,
+                    approve_raw,
+                    scope="alpha",
+                    round_n=1,
+                    reviews_dir=reviews_dir,
+                    mill_dir=mill_dir,
+                    project_root=project_root,
+                    wiki_root=wiki_root,
+                    git_root=project_root,
+                )
+
+            assert result.verdict == "APPROVE", (
+                f"NIT must not change verdict from APPROVE, got {result.verdict!r}"
+            )
+            assert result.blocking_count == 0, (
+                f"NIT must not increment blocking_count, got {result.blocking_count}"
+            )
+            # Read the written review file and confirm the [NIT] block is present.
+            review_files = list(reviews_dir.glob("*.md"))
+            assert review_files, "finalize must have written a review file"
+            review_text = review_files[0].read_text(encoding="utf-8")
+            assert "[NIT]" in review_text, (
+                "advisory rename NIT was not spliced into the review file"
+            )
+            assert "old/module.py" in review_text, (
+                "NIT must reference the undetected move source path"
+            )
+            assert "new/module.py" in review_text, (
+                "NIT must reference the undetected move destination path"
+            )
+            print("PASS test21: rename NIT spliced into finalize; verdict unchanged")
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test21: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test21 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
         finally:
             os.chdir(orig_dir)
 
