@@ -44,6 +44,7 @@ from _review_common import (
     bulk_files,
     compute_creates_union,
     compute_deletes_union,
+    compute_moves_union,
     detect_resume_round,
     discover_round,
     finalize_scope,
@@ -130,11 +131,25 @@ def _review_one_batch(
     root: str | None,
     creates_union: set[str],
     deletes_union: set[str],
+    moves_sources: set[str],
+    moves_targets: set[str],
     wiki_root: Path,
     git_root: Path,
     bulk_timeout: int | None,
 ) -> dict:
-    """Review a single plan batch file. Returns a reviews[] entry dict."""
+    """Review a single plan batch file. Returns a reviews[] entry dict.
+
+    Args:
+        moves_sources: Plan-wide set of Move source paths (raw token strings).
+            Sources exist pre-implementation, so plan reviewers can see the
+            file being relocated. Resolved via resolve_existing_paths and
+            added to the bulk after deduplication.
+        moves_targets: Plan-wide set of Move target paths (raw token strings).
+            Targets don't exist on disk at plan-review time (they're created as
+            part of the rename). Suppressed in resolve_ref_paths alongside
+            creates_union so downstream batches referencing a move target don't
+            raise ReviewError.
+    """
     try:
         round_n = discover_round(reviews_dir, "plan", batch_path.stem)
         if round_n > max_rounds:
@@ -143,14 +158,18 @@ def _review_one_batch(
             )
 
         raw_refs = parse_batch_refs(batch_path)
+        raw_refs_set = set(raw_refs)
+        # Merge move targets into creates suppression set so downstream batches
+        # referencing a move target don't raise ReviewError.
+        combined_creates = creates_union | moves_targets
         reads = resolve_ref_paths(
             raw_refs, project_root, root,
-            creates_union=creates_union, deletes_union=deletes_union,
+            creates_union=combined_creates, deletes_union=deletes_union,
             wiki_root=wiki_root, git_root=git_root, caller_label="_review_plan",
         )
 
         ancestors_on_disk = resolve_existing_paths(
-            [raw for raw in creates_union if raw not in raw_refs],
+            [raw for raw in combined_creates if raw not in raw_refs],
             project_root,
             root,
             wiki_root=wiki_root,
@@ -159,14 +178,28 @@ def _review_one_batch(
         reads_set = {*reads, overview_path, batch_path}
         ancestors_on_disk = [p for p in ancestors_on_disk if p not in reads_set]
 
+        # Resolve Move sources that are not already covered by the batch's own refs.
+        # Sources exist pre-implementation, so resolve_existing_paths is appropriate:
+        # it silently skips any source not on disk rather than hard-failing.
+        moves_on_disk = resolve_existing_paths(
+            [s for s in moves_sources if s not in raw_refs_set],
+            project_root,
+            root,
+            wiki_root=wiki_root,
+            git_root=git_root,
+        )
+        # Deduplicate move sources against the paths already going into the bulk.
+        already_included = reads_set | set(ancestors_on_disk)
+        moves_on_disk = [p for p in moves_on_disk if p not in already_included]
+
         mode = "tool-use" if batch_spec.get("tooluse") else "bulk"
         tool_rule = build_tool_rule(mode)
 
-        all_bulked = [overview_path, batch_path, *reads, *ancestors_on_disk]
+        all_bulked = [overview_path, batch_path, *reads, *ancestors_on_disk, *moves_on_disk]
         manifest = build_manifest_section(all_bulked)
 
         if mode == "tool-use":
-            read_list = "\n".join(f"- {p}" for p in [*reads, *ancestors_on_disk]) or "(none)"
+            read_list = "\n".join(f"- {p}" for p in [*reads, *ancestors_on_disk, *moves_on_disk]) or "(none)"
             artefact_section = (
                 f"{manifest}\n\n"
                 f"## Plan files to review\n"
@@ -308,6 +341,9 @@ def prepare(
     root = _load_root_from_overview(overview_path)
     creates_union = compute_creates_union(plan_dir)
     deletes_union = compute_deletes_union(plan_dir)
+    # Move sources exist pre-implementation; plan reviewers should see the file
+    # being relocated so they can verify the move is structurally sound.
+    moves_sources_union, moves_targets_union = compute_moves_union(plan_dir)
 
     hub_dir = project_root
     registry = _reviewers.load(hub_dir)
@@ -324,14 +360,18 @@ def prepare(
         round_n = discover_round(reviews_dir, "plan", scope)
 
         raw_refs = parse_batch_refs(batch_path)
+        raw_refs_set = set(raw_refs)
+        # Merge move targets into creates suppression set so downstream batches
+        # referencing a move target don't raise ReviewError.
+        combined_creates = creates_union | moves_targets_union
         reads = resolve_ref_paths(
             raw_refs, project_root, root,
-            creates_union=creates_union, deletes_union=deletes_union,
+            creates_union=combined_creates, deletes_union=deletes_union,
             wiki_root=wiki_root, git_root=git_root, caller_label="_review_plan",
         )
 
         ancestors_on_disk = resolve_existing_paths(
-            [raw for raw in creates_union if raw not in raw_refs],
+            [raw for raw in combined_creates if raw not in raw_refs],
             project_root,
             root,
             wiki_root=wiki_root,
@@ -339,6 +379,18 @@ def prepare(
         )
         reads_set = {*reads, overview_path, batch_path}
         ancestors_on_disk = [p for p in ancestors_on_disk if p not in reads_set]
+
+        # Resolve move sources not already covered by this batch's explicit refs;
+        # deduplicate against everything already in the bulk.
+        moves_on_disk = resolve_existing_paths(
+            [s for s in moves_sources_union if s not in raw_refs_set],
+            project_root,
+            root,
+            wiki_root=wiki_root,
+            git_root=git_root,
+        )
+        already_included = reads_set | set(ancestors_on_disk)
+        moves_on_disk = [p for p in moves_on_disk if p not in already_included]
 
         batch_reviewer_name = cfg["roles"]["plan-review"]["batch"]["reviewer"]
         if batch_reviewer_name is None:
@@ -348,11 +400,11 @@ def prepare(
         mode = "tool-use" if batch_spec.get("tooluse") else "bulk"
         tool_rule = build_tool_rule(mode)
 
-        all_bulked = [overview_path, batch_path, *reads, *ancestors_on_disk]
+        all_bulked = [overview_path, batch_path, *reads, *ancestors_on_disk, *moves_on_disk]
         manifest = build_manifest_section(all_bulked)
 
         if mode == "tool-use":
-            read_list = "\n".join(f"- {p}" for p in [*reads, *ancestors_on_disk]) or "(none)"
+            read_list = "\n".join(f"- {p}" for p in [*reads, *ancestors_on_disk, *moves_on_disk]) or "(none)"
             artefact_section = (
                 f"{manifest}\n\n"
                 f"## Plan files to review\n"
@@ -404,14 +456,17 @@ def prepare(
         for batch_path in batch_files:
             for ref in parse_batch_refs(batch_path):
                 all_raw_refs[ref] = None
+        # Merge move targets into creates suppression set so downstream batches
+        # referencing a move target don't raise ReviewError.
+        combined_creates = creates_union | moves_targets_union
         all_reads = resolve_ref_paths(
             list(all_raw_refs.keys()), project_root, root,
-            creates_union=creates_union, deletes_union=deletes_union,
+            creates_union=combined_creates, deletes_union=deletes_union,
             wiki_root=wiki_root, git_root=git_root, caller_label="_review_plan",
         )
 
         all_creates_on_disk = resolve_existing_paths(
-            [r for r in creates_union if r not in all_raw_refs],
+            [r for r in combined_creates if r not in all_raw_refs],
             project_root,
             root,
             wiki_root=wiki_root,
@@ -420,14 +475,25 @@ def prepare(
         reads_set = {*all_reads, overview_path, *batch_files}
         all_creates_on_disk = [p for p in all_creates_on_disk if p not in reads_set]
 
+        # Resolve move sources for the holistic reviewer so it sees the full rename picture.
+        holistic_already_included = reads_set | set(all_creates_on_disk)
+        holistic_moves_on_disk = resolve_existing_paths(
+            [s for s in moves_sources_union if s not in all_raw_refs],
+            project_root,
+            root,
+            wiki_root=wiki_root,
+            git_root=git_root,
+        )
+        holistic_moves_on_disk = [p for p in holistic_moves_on_disk if p not in holistic_already_included]
+
         holistic_mode = "tool-use" if holistic_spec.get("tooluse") else "bulk"
         tool_rule = build_tool_rule(holistic_mode)
 
-        manifest = build_manifest_section([overview_path, *batch_files, *all_reads, *all_creates_on_disk])
+        manifest = build_manifest_section([overview_path, *batch_files, *all_reads, *all_creates_on_disk, *holistic_moves_on_disk])
 
         if holistic_mode == "tool-use":
             batch_list = "\n".join(f"- `{p}`" for p in batch_files) or "(none)"
-            read_list = "\n".join(f"- `{p}`" for p in [*all_reads, *all_creates_on_disk]) or "(none)"
+            read_list = "\n".join(f"- `{p}`" for p in [*all_reads, *all_creates_on_disk, *holistic_moves_on_disk]) or "(none)"
             artefact_section = (
                 f"{manifest}\n\n"
                 f"## Plan files to review\n"
@@ -437,7 +503,7 @@ def prepare(
                 f"source files referenced across all batches:\n{read_list}"
             )
         else:
-            bulked_all = bulk_files([overview_path, *batch_files, *all_reads, *all_creates_on_disk])
+            bulked_all = bulk_files([overview_path, *batch_files, *all_reads, *all_creates_on_disk, *holistic_moves_on_disk])
             artefact_section = (
                 f"{manifest}\n\n"
                 f"## Plan content (overview + all batches + referenced files + cross-batch ancestor creates)\n"
@@ -582,6 +648,9 @@ def run(
         root = _load_root_from_overview(overview_path)
         creates_union = compute_creates_union(plan_dir)
         deletes_union = compute_deletes_union(plan_dir)
+        # Move sources exist pre-implementation; plan review should see the
+        # file being relocated so the reviewer can verify the move intent.
+        moves_sources_union, moves_targets_union = compute_moves_union(plan_dir)
 
         # 3. Load reviewers via registry
         hub_dir = project_root
@@ -693,6 +762,8 @@ def run(
                                     root,
                                     creates_union,
                                     deletes_union,
+                                    moves_sources_union,
+                                    moves_targets_union,
                                     wiki_root,
                                     git_root,
                                     bulk_timeout,
@@ -730,14 +801,17 @@ def run(
             for batch_path in batch_files:
                 for ref in parse_batch_refs(batch_path):
                     all_raw_refs[ref] = None
+            # Merge move targets into creates suppression set so downstream batches
+            # referencing a move target don't raise ReviewError.
+            combined_creates = creates_union | moves_targets_union
             all_reads = resolve_ref_paths(
                 list(all_raw_refs.keys()), project_root, root,
-                creates_union=creates_union, deletes_union=deletes_union,
+                creates_union=combined_creates, deletes_union=deletes_union,
                 wiki_root=wiki_root, git_root=git_root, caller_label="_review_plan",
             )
 
             all_creates_on_disk = resolve_existing_paths(
-                [r for r in creates_union if r not in all_raw_refs],
+                [r for r in combined_creates if r not in all_raw_refs],
                 project_root,
                 root,
                 wiki_root=wiki_root,
@@ -746,14 +820,26 @@ def run(
             reads_set = {*all_reads, overview_path, *batch_files}
             all_creates_on_disk = [p for p in all_creates_on_disk if p not in reads_set]
 
+            # Add move sources to the holistic bulk so the reviewer sees the file
+            # being relocated across all batches in a single prompt.
+            run_hol_already_included = reads_set | set(all_creates_on_disk)
+            run_hol_moves_on_disk = resolve_existing_paths(
+                [s for s in moves_sources_union if s not in all_raw_refs],
+                project_root,
+                root,
+                wiki_root=wiki_root,
+                git_root=git_root,
+            )
+            run_hol_moves_on_disk = [p for p in run_hol_moves_on_disk if p not in run_hol_already_included]
+
             holistic_mode = "tool-use" if holistic_spec.get("tooluse") else "bulk"
             tool_rule = build_tool_rule(holistic_mode)
 
-            manifest = build_manifest_section([overview_path, *batch_files, *all_reads, *all_creates_on_disk])
+            manifest = build_manifest_section([overview_path, *batch_files, *all_reads, *all_creates_on_disk, *run_hol_moves_on_disk])
 
             if holistic_mode == "tool-use":
                 batch_list = "\n".join(f"- `{p}`" for p in batch_files) or "(none)"
-                read_list = "\n".join(f"- `{p}`" for p in [*all_reads, *all_creates_on_disk]) or "(none)"
+                read_list = "\n".join(f"- `{p}`" for p in [*all_reads, *all_creates_on_disk, *run_hol_moves_on_disk]) or "(none)"
                 artefact_section = (
                     f"{manifest}\n\n"
                     f"## Plan files to review\n"
@@ -763,7 +849,7 @@ def run(
                     f"source files referenced across all batches:\n{read_list}"
                 )
             else:
-                bulked_all = bulk_files([overview_path, *batch_files, *all_reads, *all_creates_on_disk])
+                bulked_all = bulk_files([overview_path, *batch_files, *all_reads, *all_creates_on_disk, *run_hol_moves_on_disk])
                 artefact_section = (
                     f"{manifest}\n\n"
                     f"## Plan content (overview + all batches + referenced files + cross-batch ancestor creates)\n"

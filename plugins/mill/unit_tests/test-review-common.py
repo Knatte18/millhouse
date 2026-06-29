@@ -113,6 +113,7 @@ from _review_common import (  # noqa: E402
     bulk_files_with_diff,
     compute_creates_union,
     compute_deletes_union,
+    compute_moves_union,
     detect_resume_round,
     discover_round,
     find_active_slug,
@@ -121,6 +122,7 @@ from _review_common import (  # noqa: E402
     parse_batch_refs,
     parse_blocking_count,
     parse_missing_context,
+    parse_moves,
     parse_verdict,
     render_prompt,
     resolve_existing_paths,
@@ -3064,6 +3066,230 @@ def main() -> int:
     except Exception as exc:
         print(f"FAIL: parse_blocking_count with headings: {exc}", file=sys.stderr)
         errors += 1
+
+    # ---------------------------------------------------------------------------
+    # parse_moves
+    # ---------------------------------------------------------------------------
+
+    # Single pair in multi-line sub-bullet form.
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        batch = Path(tmpdir) / "batch.md"
+        batch.write_text(
+            "- **Moves:**\n"
+            "  - `old/a.py` -> `new/a.py`\n",
+            encoding="utf-8",
+        )
+        result = parse_moves(batch)
+        assert result == [("old/a.py", "new/a.py")], f"Got {result}"
+        print("PASS: parse_moves single pair returns list with one tuple")
+
+    # Multiple pairs in multi-line sub-bullet form.
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        batch = Path(tmpdir) / "batch.md"
+        batch.write_text(
+            "- **Moves:**\n"
+            "  - `src/alpha.py` -> `dst/alpha.py`\n"
+            "  - `src/beta.py` -> `dst/beta.py`\n",
+            encoding="utf-8",
+        )
+        result = parse_moves(batch)
+        assert result == [
+            ("src/alpha.py", "dst/alpha.py"),
+            ("src/beta.py", "dst/beta.py"),
+        ], f"Got {result}"
+        print("PASS: parse_moves multiple pairs returns all tuples in order")
+
+    # Inline 'none' (case-insensitive) returns empty list.
+    for sentinel in ("none", "None", "NONE", " none"):
+        with _test_helpers.safe_temp_dir() as tmpdir:
+            batch = Path(tmpdir) / "batch.md"
+            batch.write_text(f"- **Moves:** {sentinel}\n", encoding="utf-8")
+            result = parse_moves(batch)
+            assert result == [], f"Got {result} for sentinel {sentinel!r}"
+        print(f"PASS: parse_moves inline '{sentinel.strip()}' sentinel returns []")
+
+    # Moves field mixed among other card fields (Context/Edits/Creates/Deletes).
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        batch = Path(tmpdir) / "batch.md"
+        batch.write_text(
+            "### Card 1\n\n"
+            "- **Context:** `plugins/mill/scripts/_review_common.py`\n"
+            "- **Edits:** `plugins/mill/scripts/_review_plan.py`\n"
+            "- **Creates:** none\n"
+            "- **Deletes:** none\n"
+            "- **Moves:**\n"
+            "  - `old/seam.py` -> `new/seam.py`\n"
+            "- **Requirements:** ...\n",
+            encoding="utf-8",
+        )
+        result = parse_moves(batch)
+        assert result == [("old/seam.py", "new/seam.py")], f"Got {result}"
+        print("PASS: parse_moves Moves field mixed among other card fields")
+
+    # Malformed sub-bullet (missing arrow) is skipped without raising.
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        batch = Path(tmpdir) / "batch.md"
+        batch.write_text(
+            "- **Moves:**\n"
+            "  - `only-one-path.py`\n"
+            "  - `src/good.py` -> `dst/good.py`\n",
+            encoding="utf-8",
+        )
+        result = parse_moves(batch)
+        # The malformed bullet (only one backtick path) is silently skipped.
+        assert result == [("src/good.py", "dst/good.py")], f"Got {result}"
+        print("PASS: parse_moves malformed sub-bullet (one path only) is skipped without raising")
+
+    # Malformed sub-bullet (two paths but no arrow) is skipped without raising.
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        batch = Path(tmpdir) / "batch.md"
+        batch.write_text(
+            "- **Moves:**\n"
+            "  - `src/x.py` `dst/x.py`\n"
+            "  - `src/y.py` -> `dst/y.py`\n",
+            encoding="utf-8",
+        )
+        result = parse_moves(batch)
+        assert result == [("src/y.py", "dst/y.py")], f"Got {result}"
+        print("PASS: parse_moves malformed sub-bullet (no arrow) is skipped without raising")
+
+    # Duplicate pairs across two Moves: headers are deduplicated, first-seen order preserved.
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        batch = Path(tmpdir) / "batch.md"
+        batch.write_text(
+            "- **Moves:**\n"
+            "  - `src/a.py` -> `dst/a.py`\n"
+            "- **Moves:**\n"
+            "  - `src/a.py` -> `dst/a.py`\n"
+            "  - `src/b.py` -> `dst/b.py`\n",
+            encoding="utf-8",
+        )
+        result = parse_moves(batch)
+        assert result == [
+            ("src/a.py", "dst/a.py"),
+            ("src/b.py", "dst/b.py"),
+        ], f"Got {result}"
+        print("PASS: parse_moves duplicate pairs deduplicated, first-seen order preserved")
+
+    # ---------------------------------------------------------------------------
+    # compute_moves_union
+    # ---------------------------------------------------------------------------
+
+    # Non-existent plan_dir returns (set(), set()).
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        sources, targets = compute_moves_union(Path(tmpdir) / "nonexistent")
+        assert sources == set() and targets == set(), f"Got ({sources!r}, {targets!r})"
+        print("PASS: compute_moves_union nonexistent plan_dir returns (set(), set())")
+
+    # Empty plan_dir (no batch files) returns (set(), set()).
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        plan_dir = Path(tmpdir)
+        sources, targets = compute_moves_union(plan_dir)
+        assert sources == set() and targets == set(), f"Got ({sources!r}, {targets!r})"
+        print("PASS: compute_moves_union empty plan_dir returns (set(), set())")
+
+    # Single batch file with one move pair: correct source/target split.
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        plan_dir = Path(tmpdir)
+        (plan_dir / "01-setup.md").write_text(
+            "- **Moves:**\n"
+            "  - `old/x.py` -> `new/x.py`\n",
+            encoding="utf-8",
+        )
+        sources, targets = compute_moves_union(plan_dir)
+        assert sources == {"old/x.py"}, f"Got sources={sources!r}"
+        assert targets == {"new/x.py"}, f"Got targets={targets!r}"
+        print("PASS: compute_moves_union single batch returns correct source/target split")
+
+    # Two batch files: sources and targets accumulate into the same sets.
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        plan_dir = Path(tmpdir)
+        (plan_dir / "01-setup.md").write_text(
+            "- **Moves:**\n"
+            "  - `old/a.py` -> `new/a.py`\n"
+            "  - `old/b.py` -> `new/b.py`\n",
+            encoding="utf-8",
+        )
+        (plan_dir / "02-wire.md").write_text(
+            "- **Moves:**\n"
+            "  - `old/c.py` -> `new/c.py`\n",
+            encoding="utf-8",
+        )
+        sources, targets = compute_moves_union(plan_dir)
+        assert sources == {"old/a.py", "old/b.py", "old/c.py"}, (
+            f"Got sources={sources!r}"
+        )
+        assert targets == {"new/a.py", "new/b.py", "new/c.py"}, (
+            f"Got targets={targets!r}"
+        )
+        print("PASS: compute_moves_union two batch files aggregates sources and targets")
+
+    # 'none' sentinel filtered: batch with Moves: none contributes nothing.
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        plan_dir = Path(tmpdir)
+        (plan_dir / "01-setup.md").write_text("- **Moves:** none\n", encoding="utf-8")
+        (plan_dir / "02-wire.md").write_text(
+            "- **Moves:**\n"
+            "  - `old/z.py` -> `new/z.py`\n",
+            encoding="utf-8",
+        )
+        sources, targets = compute_moves_union(plan_dir)
+        assert sources == {"old/z.py"}, f"Got sources={sources!r}"
+        assert targets == {"new/z.py"}, f"Got targets={targets!r}"
+        print("PASS: compute_moves_union 'none' batch contributes nothing to sets")
+
+    # 00-overview.md is excluded even when it contains Moves: content.
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        plan_dir = Path(tmpdir)
+        (plan_dir / "00-overview.md").write_text(
+            "- **Moves:**\n"
+            "  - `overview-src.py` -> `overview-dst.py`\n",
+            encoding="utf-8",
+        )
+        (plan_dir / "01-setup.md").write_text(
+            "- **Moves:**\n"
+            "  - `real-src.py` -> `real-dst.py`\n",
+            encoding="utf-8",
+        )
+        sources, targets = compute_moves_union(plan_dir)
+        assert sources == {"real-src.py"}, f"Got sources={sources!r}"
+        assert targets == {"real-dst.py"}, f"Got targets={targets!r}"
+        print("PASS: compute_moves_union 00-overview.md excluded")
+
+    # ---------------------------------------------------------------------------
+    # Regression: parse_batch_refs must NOT return tokens from Moves: bullets
+    # ---------------------------------------------------------------------------
+
+    # A Moves: bullet uses two-path grammar (`src` -> `dst`) which is incompatible
+    # with the reads-not-backtick-path validator rule (rejects >1 backtick per
+    # sub-bullet when processed by parse_batch_refs).  parse_batch_refs must
+    # stay blind to Moves: headers so that move tokens never contaminate the
+    # Context/Edits/Creates/Deletes bulk.
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        batch = Path(tmpdir) / "batch.md"
+        batch.write_text(
+            "- **Context:** `ctx/file.py`\n"
+            "- **Edits:** `edit/file.py`\n"
+            "- **Creates:** none\n"
+            "- **Deletes:** none\n"
+            "- **Moves:**\n"
+            "  - `old/moved.py` -> `new/moved.py`\n",
+            encoding="utf-8",
+        )
+        refs = parse_batch_refs(batch)
+        # Context and Edits tokens are present.
+        assert "ctx/file.py" in refs, f"Context token missing from refs: {refs}"
+        assert "edit/file.py" in refs, f"Edits token missing from refs: {refs}"
+        # Moves tokens must NOT appear in refs — parse_batch_refs is blind to Moves:.
+        assert "old/moved.py" not in refs, (
+            f"Moves source token leaked into parse_batch_refs result: {refs}"
+        )
+        assert "new/moved.py" not in refs, (
+            f"Moves target token leaked into parse_batch_refs result: {refs}"
+        )
+        print(
+            "PASS: parse_batch_refs does not return any token from a Moves: bullet (regression)"
+        )
 
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)

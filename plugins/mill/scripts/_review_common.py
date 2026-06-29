@@ -33,8 +33,10 @@ Public API:
     aggregate_verdict()  — worst-case verdict across a list of sub-verdicts
     load_config()        — load mill-config.yaml + optional config.local.yaml
     parse_batch_refs()   — extract Context/Edits/Creates paths from a batch file (case-insensitive none filter)
+    parse_moves()        — extract Moves: source/destination pairs from a batch file (tolerates malformed bullets)
     compute_creates_union() — union of all Creates: tokens across every batch in a plan_dir
     compute_deletes_union() — union of all Deletes: tokens across every batch in a plan_dir
+    compute_moves_union() — union of all Moves: sources and targets across every batch in a plan_dir
     resolve_ref_paths()  — resolve raw ref strings against project_root; hard-fails on missing paths not in creates_union or deletes_union
     resolve_existing_paths() — resolve raw paths and return only those that already exist on disk (silent drop, no creates_union check)
     _load_root_from_overview() — read root: field from overview's fenced-yaml block
@@ -478,6 +480,16 @@ _RE_REFS_HEADER = re.compile(
 # Sub-bullet under a multi-line header (leading whitespace + dash).
 _RE_REFS_SUB = re.compile(r"^\s+-\s*(.+)$")
 
+# Header line for the Moves: field.  Kept separate from _RE_REFS_HEADER because
+# a Moves sub-bullet has a two-backtick-path grammar (src -> dst) that the
+# reads-not-backtick-path validator rejects when mixed with single-path headers.
+_RE_MOVES_HEADER = re.compile(r"^-\s*\*\*Moves:\*\*(?P<inline>.*)$")
+
+# Matches a well-formed move sub-bullet: exactly `src` -> `dst`.
+# The separator must be the ASCII literal " -> " (space, hyphen-minus, greater-than, space).
+# Any sub-bullet that does not match this pattern is skipped as malformed.
+_RE_MOVE_PAIR = re.compile(r"^`([^`]+)` -> `([^`]+)`$")
+
 
 def parse_batch_refs(
     batch_path: Path,
@@ -531,6 +543,73 @@ def parse_batch_refs(
             for t in tokens:
                 if t.lower() != "none":
                     seen[t] = None
+        i += 1
+
+    return list(seen.keys())
+
+
+def parse_moves(batch_path: Path) -> list[tuple[str, str]]:
+    """
+    Extract Moves: source/destination pairs from a single batch file.
+
+    Scans every ``- **Moves:**`` header in the file.  Two forms are supported:
+
+    * Inline ``none`` (case-insensitive): the header carries no moves; treated
+      as an empty contribution so the file does not raise.
+    * Multi-line sub-bullets (empty inline value or any non-"none" inline):
+      each sub-bullet is read with ``_RE_REFS_SUB`` and then matched against
+      ``_RE_MOVE_PAIR``.  A sub-bullet that does not match the pattern
+      (e.g. missing arrow, only one backtick path) is silently skipped so
+      that malformed bullets are reported by the ``move-format`` validator
+      check (batch 2) rather than raising here.
+
+    The returned list is deduplicated, preserving first-seen order.  The
+    function never raises; any I/O error propagates from ``read_text``.
+
+    Args:
+        batch_path: Path to a batch markdown file (e.g. ``01-foo.md``).
+
+    Returns:
+        Deduplicated list of ``(source, destination)`` string tuples in
+        first-seen order.  Empty list when the file declares no moves or
+        all Moves: headers carry the ``none`` sentinel.
+    """
+    text = batch_path.read_text(encoding="utf-8")
+    # Use an insertion-ordered dict (Python 3.7+) as an ordered set of pairs.
+    seen: dict[tuple[str, str], None] = {}
+    lines = text.splitlines()
+
+    i = 0
+    while i < len(lines):
+        m = _RE_MOVES_HEADER.match(lines[i])
+        if m:
+            inline = m.group("inline").strip()
+
+            # Explicit "none" sentinel: this card declares no moves; skip
+            # without scanning sub-bullets so the `none` token is not
+            # mistakenly treated as a file path.
+            if inline.lower() == "none":
+                i += 1
+                continue
+
+            # Non-"none" inline (or empty): scan the following sub-bullets.
+            # An unexpected non-empty inline value is simply ignored; the
+            # sub-bullets on the lines below are the authoritative source.
+            j = i + 1
+            while j < len(lines):
+                sm = _RE_REFS_SUB.match(lines[j])
+                if not sm:
+                    # No longer in a sub-bullet block; stop scanning.
+                    break
+                rest = sm.group(1).strip()
+                pm = _RE_MOVE_PAIR.match(rest)
+                if pm:
+                    # Well-formed pair: record source and destination.
+                    pair = (pm.group(1), pm.group(2))
+                    if pair not in seen:
+                        seen[pair] = None
+                # Malformed sub-bullet: tolerate silently.
+                j += 1
         i += 1
 
     return list(seen.keys())
@@ -630,6 +709,47 @@ def compute_deletes_union(plan_dir: Path) -> set[str]:
                         deletes.add(t)
             i += 1
     return deletes
+
+
+def compute_moves_union(plan_dir: Path) -> tuple[set[str], set[str]]:
+    """
+    Return the union of all Moves: sources and targets across every batch in plan_dir.
+
+    Iterates every ``??-*.md`` file under ``plan_dir`` except ``00-overview.md``
+    (mirroring ``compute_creates_union``), calls ``parse_moves`` on each, and
+    accumulates the source path (first element of each pair) and the destination
+    path (second element) into two independent sets.
+
+    The source set mirrors the semantics of ``compute_deletes_union`` (sources
+    disappear after the move) and the target set mirrors ``compute_creates_union``
+    (targets appear after the move).  Callers that need to suppress
+    ``non-existent-path`` errors for move targets should treat ``targets`` the
+    same way they treat ``creates_union``.
+
+    Args:
+        plan_dir: Path to the plan directory containing batch markdown files.
+
+    Returns:
+        A ``(sources, targets)`` tuple of sets of raw token strings (NOT resolved
+        Paths).  Returns ``(set(), set())`` when ``plan_dir`` does not exist or
+        contains no batch files with Moves: entries.
+    """
+    if not plan_dir.exists():
+        return (set(), set())
+
+    sources: set[str] = set()
+    targets: set[str] = set()
+
+    # Iterate batch files in sorted order, skipping the overview.
+    for batch_path in sorted(plan_dir.glob("??-*.md")):
+        if batch_path.name == "00-overview.md":
+            continue
+        # parse_moves never raises; malformed bullets are silently skipped.
+        for src, dst in parse_moves(batch_path):
+            sources.add(src)
+            targets.add(dst)
+
+    return (sources, targets)
 
 
 def resolve_ref_paths(

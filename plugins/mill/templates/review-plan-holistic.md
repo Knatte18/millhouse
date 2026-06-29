@@ -23,7 +23,10 @@ Reviewer model: **<REVIEWER_MODEL>**. Round **<ROUND>**.
 - **Constraint violations** — BLOCKING.
 - **Alignment** — plan covers all task requirements.
 - **Decision alignment** — every `### Decision:` in `## Shared Decisions` faithfully implemented.
-- **Completeness** — every card has `Creates`/`Edits`, `Context`, `Requirements`, `Commit`.
+- **Completeness** — every card has `Creates`/`Edits`, `Context`, `Moves`, `Requirements`, `Commit`.
+- **Moves well-formed** — each `Moves:` sub-bullet is an `` `old` -> `new` `` pair (backtick-wrapped paths, ASCII ` -> ` arrow); bare `none` on the label line is valid; any other format is a finding.
+- **Rename mechanic present** — any batch whose cards contain a non-empty `Moves:` must include a `## Rename mechanic` section describing the `git mv` + surgical-edit approach; absence is a finding.
+- **No full-file rewrites of relocated files** — prescribing a write-from-scratch for a file that appears in `Moves:` (rather than `git mv` + surgical edits) is a finding.
 - **Sequencing + batch dependencies** — correct order within and across batches; `batch-depends` accurate; no forward deps.
 - **Batch Index DAG integrity** — BLOCKING if the `batches:` block in `00-overview.md` has a cycle, references a batch name not declared, or names a `file:` not present in the plan directory.
 - **Edge cases + risks** — failures, empty states, boundaries addressed.

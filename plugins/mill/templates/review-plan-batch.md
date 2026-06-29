@@ -23,7 +23,10 @@ Reviewer model: **<REVIEWER_MODEL>**. Batch: **<BATCH_NAME>**. Round **<ROUND>**
 - **Constraint violations** — BLOCKING.
 - **Alignment** — steps cover what the batch claims.
 - **Decision alignment** — steps implement `## Shared Decisions` + batch decisions.
-- **Completeness** — every card has `Creates`/`Edits`, `Context`, `Requirements`, `Commit`.
+- **Completeness** — every card has `Creates`/`Edits`, `Context`, `Moves`, `Requirements`, `Commit`.
+- **Moves well-formed** — each `Moves:` sub-bullet is an `` `old` -> `new` `` pair (backtick-wrapped paths, ASCII ` -> ` arrow); bare `none` on the label line is valid; any other format is a finding.
+- **Rename mechanic present** — a batch whose cards contain any non-empty `Moves:` must include a `## Rename mechanic` section describing the `git mv` + surgical-edit approach; absence is a finding.
+- **No full-file rewrites of relocated files** — prescribing a write-from-scratch for a file that appears in `Moves:` (rather than `git mv` + surgical edits) is a finding.
 - **Sequencing** — steps in correct order; no forward dependencies.
 - **Batch isolation** — stands alone given `batch-depends`.
 - **Interface contracts** — APIs consumed by other batches are stable + clear.

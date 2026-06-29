@@ -1378,6 +1378,155 @@ def main() -> int:
         finally:
             os.chdir(orig_dir)
 
+    # ------------------------------------------------------------------
+    # Test 26 — Move sources included in plan review bulk (Card 18)
+    # A batch declares a Moves: entry; the source file exists on disk.
+    # Both the per-batch prompt and the holistic prompt must contain the
+    # source file's path/content so the reviewer can inspect the relocation.
+    # ------------------------------------------------------------------
+    def _make_batch_file_with_moves(
+        name: str,
+        reads: list[str],
+        creates: list[str],
+        *,
+        moves: list[tuple[str, str]],
+        deletes: list[str] | None = None,
+    ) -> str:
+        """Return batch file text including a multi-line Moves: field."""
+        reads_part = ", ".join(f"`{r}`" for r in reads) if reads else "none"
+        creates_part = ", ".join(f"`{c}`" for c in creates) if creates else "none"
+        deletes_part = ", ".join(f"`{d}`" for d in deletes) if deletes else "none"
+        if moves:
+            moves_lines = "\n".join(f"  - `{s}` -> `{d}`" for s, d in moves)
+            moves_part = f"\n{moves_lines}"
+        else:
+            moves_part = " none"
+        return (
+            f"# Batch: {name}\n\n"
+            "```yaml\n"
+            f"task: test\nbatch: {name}\ncards: 1\nverify: null\ndepends-on: []\n"
+            "```\n\n"
+            "## Cards\n\n### Card 1\n\n"
+            f"- **Context:** {reads_part}\n"
+            "- **Edits:** none\n"
+            f"- **Creates:** {creates_part}\n"
+            f"- **Deletes:** {deletes_part}\n"
+            f"- **Moves:**{moves_part}\n"
+        )
+
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        batch_specs = [
+            ("alpha", "01-alpha.md", ["src/a.py"], []),
+        ]
+        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(tmpdir, batch_specs)
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            plan_dir = project_root / "plan"
+            # Overwrite batch file to declare a move: old/module.py -> new/module.py
+            (plan_dir / "01-alpha.md").write_text(
+                _make_batch_file_with_moves(
+                    "alpha",
+                    ["src/a.py"],
+                    [],
+                    moves=[("old/module.py", "new/module.py")],
+                ),
+                encoding="utf-8",
+            )
+            # Create the move source on disk (it exists pre-implementation)
+            (project_root / "old").mkdir(parents=True)
+            (project_root / "old" / "module.py").write_text(
+                "# original module content\n", encoding="utf-8"
+            )
+
+            # per-batch + holistic = 2 responses
+            _seed_approve(2)
+            plan_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root)
+
+            prompts = stub.captured_prompts()
+            assert len(prompts) == 2, f"expected 2 prompts, got {len(prompts)}"
+
+            # Per-batch prompt (index 0) must reference the move source
+            per_batch_prompt = prompts[0][0]
+            assert "old/module.py" in per_batch_prompt, (
+                "move source 'old/module.py' not found in per-batch plan-review prompt"
+            )
+
+            # Holistic prompt (index 1) must also reference the move source
+            holistic_prompt = prompts[1][0]
+            assert "old/module.py" in holistic_prompt, (
+                "move source 'old/module.py' not found in holistic plan-review prompt"
+            )
+
+            print("PASS test26: Moves: source appears in both per-batch and holistic plan-review prompts")
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test26: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test26 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
+    # Test 27 — Move targets suppressed in plan-review path checks (Card 18 /
+    # move-endpoint-accounting Shared Decision).
+    # alpha declares Moves: old/module.py -> new/module.py; beta's Context
+    # references the move target new/module.py, which does NOT exist on disk
+    # at plan-review time (it is created as part of the rename). Without
+    # move-target suppression, resolve_ref_paths raises ReviewError -> beta
+    # ERROR entry in the per-batch section and ReviewError in the holistic
+    # resolver, so the run aggregates away from APPROVE. The fix merges move
+    # targets into the creates suppression set, so plan review must APPROVE
+    # both scopes. Mirrors test3 (creates_union) for the move-endpoint case.
+    # ------------------------------------------------------------------
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        batch_specs = [
+            ("alpha", "01-alpha.md", ["src/a.py"], []),
+            ("beta",  "02-beta.md",  ["new/module.py"], []),
+        ]
+        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(
+            tmpdir, batch_specs, skip_create={"new/module.py"}
+        )
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            plan_dir = project_root / "plan"
+            # alpha declares the rename old/module.py -> new/module.py.
+            (plan_dir / "01-alpha.md").write_text(
+                _make_batch_file_with_moves(
+                    "alpha",
+                    ["src/a.py"],
+                    [],
+                    moves=[("old/module.py", "new/module.py")],
+                ),
+                encoding="utf-8",
+            )
+            # Move source exists pre-implementation; move target does not.
+            (project_root / "old").mkdir(parents=True)
+            (project_root / "old" / "module.py").write_text(
+                "# original module content\n", encoding="utf-8"
+            )
+
+            # per-batch (alpha + beta) + holistic = 3 responses
+            _seed_approve(3)
+            r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root)
+            assert r.verdict == "APPROVE", f"expected APPROVE, got {r.verdict}"
+            for rv in r.reviews:
+                assert rv["verdict"] == "APPROVE", (
+                    f"scope {rv['scope']} verdict {rv['verdict']} != APPROVE "
+                    f"(move target not suppressed: {rv.get('error')})"
+                )
+            print("PASS test27: move targets suppressed in per-batch and holistic plan-review path checks")
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test27: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test27 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
+
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)
         return 1

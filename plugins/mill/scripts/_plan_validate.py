@@ -12,9 +12,10 @@ Public API:
 
 Checks performed (check keys):
     non-existent-path        — (#10 check 1) Context:/Edits:/Creates: refs that
-                               don't exist on disk and are not Creates: targets
-    card-missing-field       — (#10 check 2) Cards missing one of the five required
-                               fields (Context, Edits, Creates, Requirements, Commit)
+                               don't exist on disk and are not Creates:/Moves: targets
+    card-missing-field       — (#10 check 2) Cards missing one of the required
+                               fields (Context, Edits, Creates, Deletes, Moves,
+                               Requirements, Commit)
     card-numbering           — (#10 check 3) Non-sequential or cross-batch-duplicate
                                card numbers
     depends-on-unknown       — (#10 check 4) depends-on entries referencing unknown
@@ -22,13 +23,18 @@ Checks performed (check keys):
     depends-on-batch-mismatch — per-batch file's depends-on disagrees with overview
                                Batch Index depends-on for the same batch
     parallel-modifies-overlap — (#10 check 5) Parallel-eligible batches both
-                               modifying the same file
+                               modifying the same file (includes Move endpoints)
     reads-not-backtick-path  — (#10 check 6) Context:/Edits:/Creates: entries not
                                in backtick-only format (exempts bare 'none')
     all-files-touched-mismatch — (#10 check 8) Mismatch between overview's
-                               All Files Touched section and cards' Edits:/Creates:
+                               All Files Touched section and cards' Edits:/Creates:/Moves: targets
     verify-not-isolated      — per-batch frontmatter verify: command does not start with PYTHONPATH= reset prefix
-    wiki-config-mutation  — batch Edits:/Creates: contains mill-config.yaml (self-applying layout risk)
+    wiki-config-mutation     — batch Edits:/Creates: contains mill-config.yaml (self-applying layout risk)
+    move-format              — Moves: sub-bullet does not match the `src` -> `dst` grammar
+    move-redundant           — a path is both a Move endpoint and in Creates:/Deletes: of the same batch
+    move-source-missing      — Move source does not exist on disk and is not created/relocated by an earlier batch
+    move-target-collision    — Move target already exists, is targeted by multiple batches, or collides with a Creates: in another batch
+    move-mechanic-missing    — batch has non-empty Moves: but is missing a '## Rename mechanic' section
 """
 from __future__ import annotations
 
@@ -42,7 +48,9 @@ from _review_common import (
     _load_root_from_overview,
     compute_creates_union,
     compute_deletes_union,
+    compute_moves_union,
     parse_batch_refs,
+    parse_moves,
     resolve_existing_paths,
 )
 
@@ -55,14 +63,28 @@ _RE_REFS_HEADER = re.compile(
     r"^-\s*\*\*(Context|Edits|Creates|Deletes):\*\*(?P<inline>.*)$"
 )
 
+# Matches the Moves: header bullet (kept separate from _RE_REFS_HEADER because
+# Moves sub-bullets use a two-path grammar that the reads-not-backtick-path
+# validator rejects when mixed into the single-path fields above).
+_RE_MOVES_HEADER = re.compile(r"^-\s*\*\*Moves:\*\*(?P<inline>.*)$")
+
+# Matches a well-formed move sub-bullet: exactly `src` -> `dst`.
+# The separator must be the ASCII literal " -> " (space-hyphen-greater-space).
+# Any sub-bullet that does not match this pattern is considered malformed.
+_RE_MOVE_PAIR = re.compile(r"^`([^`]+)` -> `([^`]+)`$")
+
 # Matches sub-bullets under multi-line header bullets.
 _RE_REFS_SUB = re.compile(r"^\s+-\s*(.+)$")
 
 # Line-range suffix inside a backtick token: e.g. "path/a:55-65"
 _RE_LINE_RANGE = re.compile(r":\d+-\d+$")
 
+# Matches the "## Rename mechanic" heading in a batch that has non-empty Moves.
+_RE_MECHANIC_HEADING = re.compile(r"^##\s+Rename mechanic\b", re.MULTILINE)
+
 # Required card fields.
-_REQUIRED_CARD_FIELDS = ["Context", "Edits", "Creates", "Deletes", "Requirements", "Commit"]
+# "Moves" sits after "Deletes" and before "Requirements" per the moves-grammar Shared Decision.
+_REQUIRED_CARD_FIELDS = ["Context", "Edits", "Creates", "Deletes", "Moves", "Requirements", "Commit"]
 
 
 # ---------------------------------------------------------------------------
@@ -220,6 +242,358 @@ def _parse_deletes_only(batch_path: Path) -> set[str]:
 
 
 # ---------------------------------------------------------------------------
+# move-format check
+# ---------------------------------------------------------------------------
+
+def _check_move_format(batch_files: list[Path]) -> list[dict]:
+    """
+    Check that every non-none Moves: sub-bullet matches the canonical grammar.
+
+    Scans every ``- **Moves:**`` header in each batch file.  An inline ``none``
+    (case-insensitive) is silently accepted.  For all other headers each
+    sub-bullet is compared against ``_RE_MOVE_PAIR`` (`` `src` -> `dst` ``).
+    A sub-bullet that is missing the arrow, has only one backtick path, or
+    carries prose yields an error dict with ``check="move-format"``.
+
+    Error dict shape: ``{check, batch, card, path, message}``.
+
+    Args:
+        batch_files: Sorted list of batch file paths to validate.
+
+    Returns:
+        List of error dicts, one per malformed sub-bullet found.
+    """
+    errors: list[dict] = []
+    for batch_path in batch_files:
+        text = batch_path.read_text(encoding="utf-8")
+        lines = text.splitlines()
+        current_card: int | None = None
+        i = 0
+        while i < len(lines):
+            line = lines[i]
+
+            # Track the enclosing card number so errors carry the right card.
+            m_card = re.match(r"^###\s+Card\s+(\d+)\s*:", line)
+            if m_card:
+                current_card = int(m_card.group(1))
+
+            m_header = _RE_MOVES_HEADER.match(line)
+            if m_header:
+                inline = m_header.group("inline").strip()
+
+                # Inline "none" sentinel: no moves declared, nothing to check.
+                if inline.lower() == "none":
+                    i += 1
+                    continue
+
+                # Any other inline value (or empty): scan the following sub-bullets.
+                j = i + 1
+                while j < len(lines):
+                    sm = _RE_REFS_SUB.match(lines[j])
+                    if not sm:
+                        # No longer in a sub-bullet block; stop.
+                        break
+                    sub_content = sm.group(1).strip()
+                    pm = _RE_MOVE_PAIR.match(sub_content)
+                    if not pm:
+                        # Sub-bullet does not match the two-backtick-path grammar.
+                        errors.append({
+                            "check": "move-format",
+                            "batch": batch_path.stem,
+                            "card": current_card,
+                            "path": sub_content,
+                            "message": (
+                                "Moves: sub-bullet does not match "
+                                f"'`src` -> `dst`' grammar: {sub_content!r}"
+                            ),
+                        })
+                    j += 1
+
+                # Skip past the consumed sub-bullet block.
+                i = j
+                continue
+
+            i += 1
+
+    return errors
+
+
+# ---------------------------------------------------------------------------
+# move-redundant check
+# ---------------------------------------------------------------------------
+
+def _check_move_redundant(batch_files: list[Path]) -> list[dict]:
+    """
+    Flag Move endpoints that are also declared in Creates: or Deletes:.
+
+    For each batch file, collects every Move source and target via
+    ``parse_moves``, then intersects with the batch's own ``Creates:``
+    and ``Deletes:`` tokens.  An identical path appearing in both a
+    ``Moves:`` field and a ``Creates:``/``Deletes:`` field within the
+    SAME batch is redundant -- the implementer should use one or the
+    other, not both.
+
+    Only an exact-token match triggers the error.  A ``Moves:`` target
+    that is a DIFFERENT path from any ``Creates:`` entry (the canonical
+    rename-plus-extraction pattern) is explicitly allowed.
+
+    Error dict shape: ``{check, batch, card, path, message}``.
+
+    Args:
+        batch_files: Sorted list of batch file paths to validate.
+
+    Returns:
+        List of error dicts, one per redundant path found.
+    """
+    errors: list[dict] = []
+    for batch_path in batch_files:
+        moves = parse_moves(batch_path)
+        if not moves:
+            continue
+
+        # Build the complete set of Move endpoints for this batch.
+        move_endpoints: set[str] = set()
+        for src, dst in moves:
+            move_endpoints.add(src)
+            move_endpoints.add(dst)
+
+        # Paths declared in Creates: or Deletes: within the same batch.
+        creates = _parse_creates_only(batch_path)
+        deletes = _parse_deletes_only(batch_path)
+        conflicting = move_endpoints & (creates | deletes)
+
+        # Emit one error per conflicting path in deterministic order.
+        for path in sorted(conflicting):
+            errors.append({
+                "check": "move-redundant",
+                "batch": batch_path.stem,
+                "card": None,
+                "path": path,
+                "message": (
+                    f"path '{path}' is a Moves: endpoint and also appears in "
+                    "Creates:/Deletes: of the same batch; "
+                    "use Moves: or Creates:/Deletes:, not both"
+                ),
+            })
+
+    return errors
+
+
+# ---------------------------------------------------------------------------
+# move-source-missing check
+# ---------------------------------------------------------------------------
+
+def _check_move_source_missing(
+    batch_files: list[Path],
+    project_root: Path,
+    root: str | None,
+    creates_union: set[str],
+    moves_targets: set[str],
+    *,
+    wiki_root: Path | None = None,
+    git_root: Path | None = None,
+) -> list[dict]:
+    """
+    Flag Moves: sources that do not exist and are not created or relocated earlier.
+
+    Modelled on the Deletes branch of ``_check_non_existent_path``: a Move source
+    that is missing on disk is only an error when it cannot be explained by an
+    earlier batch creating it (``creates_union``) or an earlier Move relocating a
+    different file to that path (``moves_targets``).  Both suppression sets are
+    plan-wide, so chained moves (batch A moves X to Y; batch B moves Y to Z) do
+    not generate a false positive for batch B's source Y.
+
+    Error dict shape: ``{check, batch, card, path, message}``.
+
+    Args:
+        batch_files: Sorted list of batch file paths to validate.
+        project_root: Root of the project (worktree root).
+        root: Optional root subfolder for source refs (threaded to
+            ``resolve_existing_paths``).
+        creates_union: Union of all ``Creates:`` tokens across the plan.
+        moves_targets: Union of all ``Moves:`` destination tokens across the plan.
+        wiki_root: Optional wiki root path (threaded to ``resolve_existing_paths``).
+        git_root: Optional repo root (threaded to ``resolve_existing_paths``).
+
+    Returns:
+        List of error dicts, one per missing Move source.
+    """
+    errors: list[dict] = []
+    for batch_path in batch_files:
+        moves = parse_moves(batch_path)
+        for src, _ in moves:
+            existing = resolve_existing_paths(
+                [src], project_root, root,
+                wiki_root=wiki_root, git_root=git_root,
+            )
+            # Suppress when an earlier batch creates the file or moves something
+            # else to this path, making it available before this Move runs.
+            if not existing and src not in creates_union and src not in moves_targets:
+                errors.append({
+                    "check": "move-source-missing",
+                    "batch": batch_path.stem,
+                    "card": None,
+                    "path": src,
+                    "message": (
+                        f"Moves: source '{src}' does not exist on disk and is not "
+                        "created or relocated by an earlier batch"
+                    ),
+                })
+
+    return errors
+
+
+# ---------------------------------------------------------------------------
+# move-target-collision check
+# ---------------------------------------------------------------------------
+
+def _check_move_target_collision(
+    batch_files: list[Path],
+    project_root: Path,
+    root: str | None,
+    *,
+    wiki_root: Path | None = None,
+    git_root: Path | None = None,
+) -> list[dict]:
+    """
+    Flag Moves: targets that collide with existing files or other plan entries.
+
+    Three collision conditions are checked (OR semantics):
+
+    1. The target already exists on disk before the plan runs.
+    2. More than one batch across the plan names the same destination path.
+    3. The target appears as a ``Creates:`` token in a DIFFERENT batch (cross-batch
+       collision).  Same-batch overlap is ``move-redundant``'s responsibility; this
+       check intentionally skips it to avoid double-reporting.
+
+    Error dict shape: ``{check, batch, card, path, message}``.
+
+    Args:
+        batch_files: Sorted list of batch file paths to validate.
+        project_root: Root of the project (worktree root).
+        root: Optional root subfolder (threaded to ``resolve_existing_paths``).
+        wiki_root: Optional wiki root path.
+        git_root: Optional repo root.
+
+    Returns:
+        List of error dicts in deterministic sorted order.
+    """
+    # Build per-batch move-target sets and per-batch creates sets for
+    # accurate cross-batch collision detection.
+    batch_targets: dict[str, set[str]] = {}
+    batch_creates: dict[str, set[str]] = {}
+    for batch_path in batch_files:
+        stem = batch_path.stem
+        batch_targets[stem] = {dst for _, dst in parse_moves(batch_path)}
+        batch_creates[stem] = _parse_creates_only(batch_path)
+
+    # Count how many batches target each destination path (plan-wide).
+    target_batch_count: dict[str, int] = {}
+    for targets in batch_targets.values():
+        for dst in targets:
+            target_batch_count[dst] = target_batch_count.get(dst, 0) + 1
+
+    errors: list[dict] = []
+
+    for batch_path in sorted(batch_files):
+        stem = batch_path.stem
+        for dst in sorted(batch_targets[stem]):
+            # Condition 1: target file already exists on disk.
+            existing = resolve_existing_paths(
+                [dst], project_root, root,
+                wiki_root=wiki_root, git_root=git_root,
+            )
+            if existing:
+                errors.append({
+                    "check": "move-target-collision",
+                    "batch": stem,
+                    "card": None,
+                    "path": dst,
+                    "message": f"Moves: target '{dst}' already exists on disk",
+                })
+                continue
+
+            # Condition 2: more than one batch targets the same destination.
+            if target_batch_count.get(dst, 0) > 1:
+                errors.append({
+                    "check": "move-target-collision",
+                    "batch": stem,
+                    "card": None,
+                    "path": dst,
+                    "message": (
+                        f"Moves: target '{dst}' is named by more than one batch across the plan"
+                    ),
+                })
+                continue
+
+            # Condition 3: cross-batch Creates: collision.
+            # Same-batch overlap is move-redundant's job; skip it here.
+            for other_stem, other_creates in sorted(batch_creates.items()):
+                if other_stem == stem:
+                    continue
+                if dst in other_creates:
+                    errors.append({
+                        "check": "move-target-collision",
+                        "batch": stem,
+                        "card": None,
+                        "path": dst,
+                        "message": (
+                            f"Moves: target '{dst}' collides with "
+                            f"Creates: in batch '{other_stem}'"
+                        ),
+                    })
+                    break
+
+    return errors
+
+
+# ---------------------------------------------------------------------------
+# move-mechanic-missing check
+# ---------------------------------------------------------------------------
+
+def _check_move_mechanic_missing(batch_files: list[Path]) -> list[dict]:
+    """
+    Require a '## Rename mechanic' section in any batch that declares Moves:.
+
+    The ``plan-batch.md`` template includes this section to guide the implementer
+    on the correct ``git mv`` + surgical-edit workflow.  When a batch declares at
+    least one non-empty ``Moves:`` pair via ``parse_moves``, the batch file text
+    must contain a heading line matching ``^##\\s+Rename mechanic\\b`` (the
+    canonical section name).  Batches where every ``Moves:`` field carries the
+    ``none`` sentinel produce an empty ``parse_moves`` result and are skipped.
+
+    Error dict shape: ``{check, batch, card, path, message}``.
+
+    Args:
+        batch_files: Sorted list of batch file paths to validate.
+
+    Returns:
+        List of error dicts, one per batch that is missing the heading.
+    """
+    errors: list[dict] = []
+    for batch_path in batch_files:
+        # parse_moves returns [] when all Moves: headers are "none"; skip those.
+        moves = parse_moves(batch_path)
+        if not moves:
+            continue
+
+        text = batch_path.read_text(encoding="utf-8")
+        if not _RE_MECHANIC_HEADING.search(text):
+            errors.append({
+                "check": "move-mechanic-missing",
+                "batch": batch_path.stem,
+                "card": None,
+                "path": None,
+                "message": (
+                    f"batch '{batch_path.stem}' has Moves: entries but is missing "
+                    "a '## Rename mechanic' section"
+                ),
+            })
+
+    return errors
+
+
+# ---------------------------------------------------------------------------
 # Check 1 — non-existent-path
 # ---------------------------------------------------------------------------
 
@@ -229,23 +603,44 @@ def _check_non_existent_path(
     root: str | None,
     creates_union: set[str],
     deletes_union: set[str],
+    moves_targets: set[str],
     *,
     wiki_root: Path | None = None,
     git_root: Path | None = None,
 ) -> list[dict]:
+    """
+    Check that all Context/Edits/Creates/Deletes path refs resolve to existing files.
+
+    Suppression rules mirror the move-endpoint-accounting Shared Decision:
+    - ``creates_union``: paths that will be created by some batch are not flagged.
+    - ``deletes_union``: paths that will be deleted are not flagged for general refs
+      (the file may disappear before this batch runs).
+    - ``moves_targets``: paths that are Moves: destinations are not flagged because
+      they will be created by the rename step (a downstream card editing a Move
+      target must not raise non-existent-path).
+
+    Move-source existence is NOT checked here; that is solely
+    ``_check_move_source_missing``'s responsibility (card 6).  This function
+    continues to operate only on the general Context/Edits/Creates and Deletes
+    tokens that ``parse_batch_refs`` already parses (it does not parse Moves: bullets).
+
+    Error dict shape: ``{check, batch, card, path, message}``.
+    """
     errors: list[dict] = []
     for batch_path in batch_files:
         raw_refs = parse_batch_refs(batch_path)
         deletes_only = _parse_deletes_only(batch_path)
         general_refs = set(raw_refs) - deletes_only
 
-        # General refs (Reads/Modifies/Creates): missing on disk is suppressed if
-        # the token is in creates_union OR deletes_union (intentional deletion).
+        # General refs (Context/Edits/Creates): missing on disk is suppressed when
+        # the token is in creates_union, deletes_union, OR moves_targets.  The
+        # moves_targets suppression prevents false errors on downstream cards that
+        # reference a not-yet-existing Move destination in their Context:/Edits:.
         for t in general_refs:
             if t.lower() == "none":
                 continue
             existing = resolve_existing_paths([t], project_root, root, wiki_root=wiki_root, git_root=git_root)
-            if not existing and t not in creates_union and t not in deletes_union:
+            if not existing and t not in creates_union and t not in deletes_union and t not in moves_targets:
                 errors.append({
                     "check": "non-existent-path",
                     "batch": batch_path.stem,
@@ -464,11 +859,16 @@ def _check_parallel_modifies_overlap(
         if stem in stem_to_path:
             batch_name_to_path[entry["name"]] = stem_to_path[stem]
 
-    # Compute Edits: sets.
-    batch_edits: dict[str, set[str]] = {
-        name: _parse_edits_only(path)
-        for name, path in batch_name_to_path.items()
-    }
+    # Compute "touched" sets: Edits: paths plus all Move sources and targets.
+    # Both Move endpoints count as touched for overlap detection because the
+    # implementer reads the source and writes the target during a rename.
+    batch_edits: dict[str, set[str]] = {}
+    for name, path in batch_name_to_path.items():
+        touched = _parse_edits_only(path)
+        for src, dst in parse_moves(path):
+            touched.add(src)
+            touched.add(dst)
+        batch_edits[name] = touched
 
     errors: list[dict] = []
     names = sorted(batch_name_to_path.keys())  # stable order for deterministic output
@@ -767,13 +1167,19 @@ def _check_all_files_touched_mismatch(
         if m:
             overview_set.add(m.group(1))
 
-    # Compute cards_set = union of Edits: + Creates: across all cards.
-    # Deletes: tokens are excluded from the all-files-touched check per issue #494.
+    # Compute cards_set = union of Edits: + Creates: + Move targets across all cards.
+    # Deletes: tokens and Move sources are excluded per issue #494 and the
+    # move-endpoint-accounting Shared Decision (sources disappear like Deletes;
+    # targets appear like Creates and must be listed in All Files Touched).
     cards_set: set[str] = set()
     for batch_path in batch_files:
         cards_set |= _parse_edits_only(batch_path)
     # Add Creates: tokens via compute_creates_union.
     cards_set |= compute_creates_union(overview_path.parent)
+    # Add Move targets: they behave like Creates: tokens (new files appear after
+    # the rename step) and must appear in the overview's All Files Touched section.
+    _, move_targets = compute_moves_union(overview_path.parent)
+    cards_set |= move_targets
 
     errors: list[dict] = []
     for p in sorted(overview_set - cards_set):
@@ -972,8 +1378,16 @@ def _check_batch_oversized(
         all_refs = parse_batch_refs(batch_path)
         deletes = _parse_deletes_only(batch_path)
 
-        # Subtract deleted tokens so they don't inflate the estimate
-        context_tokens = set(all_refs) - deletes
+        # Move sources exist pre-implementation and are read by the implementer;
+        # add them to the estimate even when they are not listed in Context:/Edits:.
+        # Move targets do not exist yet (mirroring how Creates: targets are excluded);
+        # subtract them so they never inflate the estimate.
+        moves = parse_moves(batch_path)
+        move_sources = {src for src, _ in moves}
+        move_targets = {dst for _, dst in moves}
+
+        # Subtract deleted and move-target tokens, then add move sources.
+        context_tokens = (set(all_refs) - deletes - move_targets) | move_sources
 
         # Resolve existing paths, skipping those that don't exist (like Creates targets)
         if context_tokens:
@@ -1023,7 +1437,10 @@ def run(
     Returns a sorted list of error dicts with keys:
     {check, batch, card, path, message}.
 
-    Checks 1, 2, 3, 4, 5, 6, 8 from issue #10, plus wiki-config-mutation, verify-not-isolated, out-of-worktree-target, and batch-oversized.
+    Checks 1, 2, 3, 4, 5, 6, 8 from issue #10, plus wiki-config-mutation,
+    verify-not-isolated, out-of-worktree-target, batch-oversized, and five
+    Move-specific checks (move-format, move-redundant, move-source-missing,
+    move-target-collision, move-mechanic-missing).
 
     Args:
         plan_dir: Directory containing the plan files (00-overview.md + batch files).
@@ -1057,11 +1474,14 @@ def run(
     overview_text = overview_path.read_text(encoding="utf-8")
     creates_union = compute_creates_union(plan_dir)
     deletes_union = compute_deletes_union(plan_dir)
+    # Move sources behave like Deletes (disappear) and targets like Creates (appear).
+    # Computed once here and threaded into the checks that need them.
+    moves_sources, moves_targets = compute_moves_union(plan_dir)
 
     errors: list[dict] = []
 
     errors.extend(_check_non_existent_path(
-        batch_files, project_root, effective_root, creates_union, deletes_union,
+        batch_files, project_root, effective_root, creates_union, deletes_union, moves_targets,
         wiki_root=wiki_root,
         git_root=git_root,
     ))
@@ -1083,6 +1503,20 @@ def run(
         wiki_root=wiki_root,
         git_root=git_root,
     ))
+    # Move-specific checks (added by batch validator-move-checks).
+    errors.extend(_check_move_format(batch_files))
+    errors.extend(_check_move_redundant(batch_files))
+    errors.extend(_check_move_source_missing(
+        batch_files, project_root, effective_root, creates_union, moves_targets,
+        wiki_root=wiki_root,
+        git_root=git_root,
+    ))
+    errors.extend(_check_move_target_collision(
+        batch_files, project_root, effective_root,
+        wiki_root=wiki_root,
+        git_root=git_root,
+    ))
+    errors.extend(_check_move_mechanic_missing(batch_files))
 
     errors.sort(key=lambda e: (e["batch"] or "", e["card"] or 0, e["check"]))
     if skip_checks:

@@ -81,12 +81,15 @@ def _make_batch_file(
     edits: list[str] | None = None,
     creates: list[str] | None = None,
     deletes: list[str] | None = None,
+    moves: list[tuple[str, str]] | None = None,
     missing_fields: set[str] | None = None,
 ) -> str:
     """Return a well-formed batch file with one card.
 
     context/edits/creates/deletes: list of path strings (backtick-wrapped
         automatically), or None to default to "none".
+    moves: list of (src, dst) tuples for Moves: sub-bullets, or None/[] to
+        write the "none" sentinel.  Each tuple is formatted as `src` -> `dst`.
     missing_fields: set of field names to omit (for check 2 tests).
     """
     missing_fields = missing_fields or set()
@@ -112,6 +115,15 @@ def _make_batch_file(
         parts.append(f"- **Creates:** {fmt(creates)}\n")
     if "Deletes" not in missing_fields:
         parts.append(f"- **Deletes:** {fmt(deletes)}\n")
+    if "Moves" not in missing_fields:
+        # Write inline "none" sentinel when no moves are provided; otherwise
+        # write multi-line sub-bullets in the `src` -> `dst` grammar.
+        if not moves:
+            parts.append("- **Moves:** none\n")
+        else:
+            parts.append("- **Moves:**\n")
+            for src, dst in moves:
+                parts.append(f"  - `{src}` -> `{dst}`\n")
     if "Requirements" not in missing_fields:
         parts.append("- **Requirements:**\n  See scope.\n")
     if "Commit" not in missing_fields:
@@ -135,6 +147,7 @@ def _make_batch_file_cards(name: str, card_nums: list[int]) -> str:
             "- **Edits:** none\n"
             "- **Creates:** none\n"
             "- **Deletes:** none\n"
+            "- **Moves:** none\n"
             "- **Requirements:**\n  See scope.\n"
             f"- **Commit:** feat({name}): card {n}\n"
         )
@@ -521,6 +534,7 @@ def test_check_reads_not_backtick_path_clean() -> int:
             "- **Edits:** none\n"
             "- **Creates:** none\n"
             "- **Deletes:** none\n"
+            "- **Moves:** none\n"
             "- **Requirements:**\n  See scope.\n"
             "- **Commit:** feat(alpha): card 1\n"
         )
@@ -584,6 +598,7 @@ def test_check_reads_not_backtick_path_dirty() -> int:
             "- **Edits:** none\n"
             "- **Creates:** none\n"
             "- **Deletes:** none\n"
+            "- **Moves:** none\n"
             "- **Requirements:**\n  See scope.\n"
             "- **Commit:** feat(alpha): card 1\n"
         )
@@ -1223,6 +1238,7 @@ def test_check_verify_not_isolated_missing_key() -> int:
             "- **Edits:** none\n"
             "- **Creates:** none\n"
             "- **Deletes:** none\n"
+            "- **Moves:** none\n"
             "- **Requirements:**\n  See scope.\n"
             "- **Commit:** feat(alpha): card 1\n"
         )
@@ -1262,6 +1278,7 @@ def test_check_verify_not_isolated_dirty_no_prefix() -> int:
             "- **Edits:** none\n"
             "- **Creates:** none\n"
             "- **Deletes:** none\n"
+            "- **Moves:** none\n"
             "- **Requirements:**\n  See scope.\n"
             "- **Commit:** feat(alpha): card 1\n"
         )
@@ -1307,6 +1324,7 @@ def test_check_verify_not_isolated_clean_with_prefix() -> int:
             "- **Edits:** none\n"
             "- **Creates:** none\n"
             "- **Deletes:** none\n"
+            "- **Moves:** none\n"
             "- **Requirements:**\n  See scope.\n"
             "- **Commit:** feat(alpha): card 1\n"
         )
@@ -1349,6 +1367,7 @@ def test_check_verify_not_isolated_two_batches_dirty() -> int:
             "- **Edits:** none\n"
             "- **Creates:** none\n"
             "- **Deletes:** none\n"
+            "- **Moves:** none\n"
             "- **Requirements:**\n  See scope.\n"
             "- **Commit:** feat(alpha): card 1\n"
         )
@@ -1363,6 +1382,7 @@ def test_check_verify_not_isolated_two_batches_dirty() -> int:
             "- **Edits:** none\n"
             "- **Creates:** none\n"
             "- **Deletes:** none\n"
+            "- **Moves:** none\n"
             "- **Requirements:**\n  See scope.\n"
             "- **Commit:** feat(beta): card 1\n"
         )
@@ -1401,6 +1421,7 @@ def test_check_verify_not_isolated_leading_whitespace() -> int:
             "- **Edits:** none\n"
             "- **Creates:** none\n"
             "- **Deletes:** none\n"
+            "- **Moves:** none\n"
             "- **Requirements:**\n  See scope.\n"
             "- **Commit:** feat(alpha): card 1\n"
         )
@@ -1437,6 +1458,7 @@ def test_check_verify_not_isolated_non_empty_pythonpath_value() -> int:
             "- **Edits:** none\n"
             "- **Creates:** none\n"
             "- **Deletes:** none\n"
+            "- **Moves:** none\n"
             "- **Requirements:**\n  See scope.\n"
             "- **Commit:** feat(alpha): card 1\n"
         )
@@ -1476,6 +1498,7 @@ def test_check_verify_not_isolated_run_integration() -> int:
             "- **Edits:** none\n"
             "- **Creates:** none\n"
             "- **Deletes:** none\n"
+            "- **Moves:** none\n"
             "- **Requirements:**\n  See scope.\n"
             "- **Commit:** feat(alpha): card 1\n"
         )
@@ -1601,6 +1624,7 @@ def test_depends_on_batch_mismatch_no_finding_on_match() -> int:
             "- **Edits:** none\n"
             "- **Creates:** none\n"
             "- **Deletes:** none\n"
+            "- **Moves:** none\n"
             "- **Requirements:**\n  See scope.\n"
             "- **Commit:** feat(beta): card 1\n"
         )
@@ -1648,6 +1672,7 @@ def test_depends_on_batch_mismatch_emits_finding() -> int:
             "- **Edits:** none\n"
             "- **Creates:** none\n"
             "- **Deletes:** none\n"
+            "- **Moves:** none\n"
             "- **Requirements:**\n  See scope.\n"
             "- **Commit:** feat(beta): card 1\n"
         )
@@ -1698,6 +1723,7 @@ def test_check_verify_not_isolated_python_marker_pyproject_dirty() -> int:
             "- **Edits:** none\n"
             "- **Creates:** none\n"
             "- **Deletes:** none\n"
+            "- **Moves:** none\n"
             "- **Requirements:**\n  See scope.\n"
             "- **Commit:** feat(alpha): card 1\n"
         )
@@ -1741,6 +1767,7 @@ def test_check_verify_not_isolated_python_marker_setup_py_dirty() -> int:
             "- **Edits:** none\n"
             "- **Creates:** none\n"
             "- **Deletes:** none\n"
+            "- **Moves:** none\n"
             "- **Requirements:**\n  See scope.\n"
             "- **Commit:** feat(alpha): card 1\n"
         )
@@ -1782,6 +1809,7 @@ def test_check_verify_not_isolated_python_marker_plugins_mill_clean() -> int:
             "- **Edits:** none\n"
             "- **Creates:** none\n"
             "- **Deletes:** none\n"
+            "- **Moves:** none\n"
             "- **Requirements:**\n  See scope.\n"
             "- **Commit:** feat(alpha): card 1\n"
         )
@@ -1822,6 +1850,7 @@ def test_check_verify_not_isolated_no_python_marker_native_command_clean() -> in
             "- **Edits:** none\n"
             "- **Creates:** none\n"
             "- **Deletes:** none\n"
+            "- **Moves:** none\n"
             "- **Requirements:**\n  See scope.\n"
             "- **Commit:** feat(alpha): card 1\n"
         )
@@ -1863,6 +1892,7 @@ def test_check_verify_not_isolated_no_python_marker_dotnet_test_clean() -> int:
             "- **Edits:** none\n"
             "- **Creates:** none\n"
             "- **Deletes:** none\n"
+            "- **Moves:** none\n"
             "- **Requirements:**\n  See scope.\n"
             "- **Commit:** feat(alpha): card 1\n"
         )
@@ -2152,6 +2182,7 @@ def test_check_verify_full_suite_run_all_py_without_filter_is_error() -> int:
             "- **Edits:** none\n"
             "- **Creates:** none\n"
             "- **Deletes:** none\n"
+            "- **Moves:** none\n"
             "- **Requirements:**\n  See scope.\n"
             "- **Commit:** feat(alpha): card 1\n"
         )
@@ -2192,6 +2223,7 @@ def test_check_verify_full_suite_run_all_py_with_k_filter_is_ok() -> int:
             "- **Edits:** none\n"
             "- **Creates:** none\n"
             "- **Deletes:** none\n"
+            "- **Moves:** none\n"
             "- **Requirements:**\n  See scope.\n"
             "- **Commit:** feat(alpha): card 1\n"
         )
@@ -2227,6 +2259,7 @@ def test_check_verify_full_suite_run_all_py_with_only_is_ok() -> int:
             "- **Edits:** none\n"
             "- **Creates:** none\n"
             "- **Deletes:** none\n"
+            "- **Moves:** none\n"
             "- **Requirements:**\n  See scope.\n"
             "- **Commit:** feat(alpha): card 1\n"
         )
@@ -2375,6 +2408,591 @@ def test_git_root_threading_without_git_root_default_none_documents_required() -
 
 
 # ---------------------------------------------------------------------------
+# Move-specific checks (batch validator-move-checks)
+# ---------------------------------------------------------------------------
+
+def test_moves_field_required_dirty() -> int:
+    """Dirty: card without Moves: field -> card-missing-field error mentioning 'Moves:'."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file("alpha", missing_fields={"Moves"})
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        moves_errs = [
+            e for e in result
+            if e["check"] == "card-missing-field" and "Moves:" in e["message"]
+        ]
+        try:
+            assert len(moves_errs) == 1, f"expected 1 error, got: {moves_errs}"
+            assert moves_errs[0]["card"] == 1, f"wrong card: {moves_errs[0]['card']}"
+            assert "missing required field: Moves:" in moves_errs[0]["message"], (
+                f"message should contain 'missing required field: Moves:': "
+                f"{moves_errs[0]['message']!r}"
+            )
+            print("PASS test_moves_field_required_dirty")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_moves_field_required_dirty: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_move_format_well_formed_passes() -> int:
+    """Clean: well-formed `src` -> `dst` move bullet -> no move-format error."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        # Create the Move source so move-source-missing does not fire.
+        (project_root / "old").mkdir(parents=True)
+        (project_root / "old" / "path.py").write_text("# code", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_raw = _make_batch_file("alpha", moves=[("old/path.py", "new/path.py")])
+        # Insert ## Rename mechanic before ## Cards so move-mechanic-missing does not fire.
+        batch = batch_raw.replace("## Cards\n\n", "## Rename mechanic\n\nRun git mv.\n\n## Cards\n\n")
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        fmt_errs = [e for e in result if e["check"] == "move-format"]
+        try:
+            assert len(fmt_errs) == 0, f"expected no move-format errors, got: {fmt_errs}"
+            print("PASS test_move_format_well_formed_passes")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_move_format_well_formed_passes: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_move_format_malformed_missing_arrow_dirty() -> int:
+    """Dirty: Moves: sub-bullet missing the -> arrow -> one move-format error."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = (
+            "# Batch: alpha\n\n"
+            "```yaml\n"
+            "task: test\nbatch: alpha\ncards: 1\nverify: null\ndepends-on: []\n"
+            "```\n\n"
+            "## Cards\n\n"
+            "### Card 1: card 1\n\n"
+            "- **Context:** none\n"
+            "- **Edits:** none\n"
+            "- **Creates:** none\n"
+            "- **Deletes:** none\n"
+            "- **Moves:**\n"
+            "  - `old/path.py` `new/path.py`\n"
+            "- **Requirements:**\n  See scope.\n"
+            "- **Commit:** feat(alpha): card 1\n"
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        fmt_errs = [e for e in result if e["check"] == "move-format"]
+        try:
+            assert len(fmt_errs) == 1, f"expected 1 move-format error, got: {fmt_errs}"
+            assert fmt_errs[0]["batch"] == "01-alpha", f"wrong batch: {fmt_errs[0]['batch']!r}"
+            assert fmt_errs[0]["card"] == 1, f"wrong card: {fmt_errs[0]['card']}"
+            assert "`src` -> `dst`" in fmt_errs[0]["message"], (
+                f"message should mention grammar: {fmt_errs[0]['message']!r}"
+            )
+            print("PASS test_move_format_malformed_missing_arrow_dirty")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_move_format_malformed_missing_arrow_dirty: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_move_redundant_same_path_in_creates_dirty() -> int:
+    """Dirty: Move target also in Creates: of the same batch -> move-redundant error."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        # new/path.py is both the Moves: target AND in Creates: of the same batch.
+        batch = _make_batch_file(
+            "alpha",
+            creates=["new/path.py"],
+            moves=[("old/path.py", "new/path.py")],
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        redundant_errs = [e for e in result if e["check"] == "move-redundant"]
+        try:
+            assert len(redundant_errs) == 1, (
+                f"expected 1 move-redundant error, got: {redundant_errs}"
+            )
+            assert redundant_errs[0]["path"] == "new/path.py", (
+                f"wrong path: {redundant_errs[0]['path']!r}"
+            )
+            assert "Moves: endpoint" in redundant_errs[0]["message"], (
+                f"message should mention 'Moves: endpoint': {redundant_errs[0]['message']!r}"
+            )
+            print("PASS test_move_redundant_same_path_in_creates_dirty")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_move_redundant_same_path_in_creates_dirty: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_move_redundant_different_creates_path_passes() -> int:
+    """Clean: Move target + DIFFERENT Creates: path (extraction pattern) -> no move-redundant error."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        # Creates other/file.py (different from Moves target new/path.py) -- the
+        # canonical rename-plus-extraction pattern; must NOT trigger move-redundant.
+        batch = _make_batch_file(
+            "alpha",
+            creates=["other/file.py"],
+            moves=[("old/path.py", "new/path.py")],
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        redundant_errs = [e for e in result if e["check"] == "move-redundant"]
+        try:
+            assert len(redundant_errs) == 0, (
+                f"different Creates: path should NOT trigger move-redundant, got: {redundant_errs}"
+            )
+            print("PASS test_move_redundant_different_creates_path_passes")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_move_redundant_different_creates_path_passes: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_move_source_missing_dirty() -> int:
+    """Dirty: Move source not on disk and not in creates/moves union -> move-source-missing error."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        # missing/source.py does not exist on disk and is not in any creates/moves union.
+        batch = _make_batch_file("alpha", moves=[("missing/source.py", "new/dest.py")])
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        source_errs = [e for e in result if e["check"] == "move-source-missing"]
+        try:
+            assert len(source_errs) == 1, f"expected 1 move-source-missing error, got: {source_errs}"
+            assert source_errs[0]["path"] == "missing/source.py", (
+                f"wrong path: {source_errs[0]['path']!r}"
+            )
+            assert "does not exist on disk" in source_errs[0]["message"], (
+                f"message should mention 'does not exist on disk': {source_errs[0]['message']!r}"
+            )
+            print("PASS test_move_source_missing_dirty")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_move_source_missing_dirty: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_move_source_missing_suppressed_by_creates_union() -> int:
+    """Clean: Move source not on disk but in creates_union (earlier batch creates it) -> no error."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        overview = _make_overview([
+            {"name": "alpha", "file": "01-alpha.md", "number": 1, "depends-on": []},
+            {"name": "beta",  "file": "02-beta.md",  "number": 2, "depends-on": [1]},
+        ])
+        # Batch A creates generated/file.py (not on disk; will be created at runtime).
+        batch_a = _make_batch_file("alpha", card_num=1, creates=["generated/file.py"])
+        # Batch B moves generated/file.py -> final/file.py.
+        # generated/file.py is in creates_union from Batch A -> move-source-missing is suppressed.
+        batch_b_raw = _make_batch_file("beta", card_num=2, moves=[("generated/file.py", "final/file.py")])
+        batch_b = batch_b_raw.replace("## Cards\n\n", "## Rename mechanic\n\nRun git mv.\n\n## Cards\n\n")
+        _write_plan(plan_dir, overview, [
+            ("01-alpha.md", batch_a),
+            ("02-beta.md", batch_b),
+        ])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        source_errs = [
+            e for e in result
+            if e["check"] == "move-source-missing" and e["path"] == "generated/file.py"
+        ]
+        try:
+            assert len(source_errs) == 0, (
+                f"Move source in creates_union should be suppressed, got: {source_errs}"
+            )
+            print("PASS test_move_source_missing_suppressed_by_creates_union")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_move_source_missing_suppressed_by_creates_union: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_move_target_collision_pre_existing_dirty() -> int:
+    """Dirty: Move target already exists on disk -> move-target-collision error."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        # Create BOTH the source and the target; the target pre-existing triggers collision.
+        (project_root / "old.py").write_text("# old", encoding="utf-8")
+        (project_root / "new.py").write_text("# new", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_raw = _make_batch_file("alpha", moves=[("old.py", "new.py")])
+        batch = batch_raw.replace("## Cards\n\n", "## Rename mechanic\n\nRun git mv.\n\n## Cards\n\n")
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        collision_errs = [e for e in result if e["check"] == "move-target-collision"]
+        try:
+            assert len(collision_errs) == 1, (
+                f"expected 1 move-target-collision error, got: {collision_errs}"
+            )
+            assert collision_errs[0]["path"] == "new.py", (
+                f"wrong path: {collision_errs[0]['path']!r}"
+            )
+            assert "already exists on disk" in collision_errs[0]["message"], (
+                f"message should mention 'already exists on disk': {collision_errs[0]['message']!r}"
+            )
+            print("PASS test_move_target_collision_pre_existing_dirty")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_move_target_collision_pre_existing_dirty: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_move_target_collision_duplicate_target_dirty() -> int:
+    """Dirty: two parallel batches target the same destination -> move-target-collision on each."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        # Create source files; dest.py does NOT exist so condition 1 does not fire.
+        (project_root / "a.py").write_text("# a", encoding="utf-8")
+        (project_root / "b.py").write_text("# b", encoding="utf-8")
+
+        overview = _make_overview([
+            {"name": "alpha", "file": "01-alpha.md", "depends-on": []},
+            {"name": "beta",  "file": "02-beta.md",  "depends-on": []},
+        ])
+        batch_a_raw = _make_batch_file("alpha", card_num=1, moves=[("a.py", "dest.py")])
+        batch_a = batch_a_raw.replace("## Cards\n\n", "## Rename mechanic\n\nRun git mv.\n\n## Cards\n\n")
+        batch_b_raw = _make_batch_file("beta", card_num=2, moves=[("b.py", "dest.py")])
+        batch_b = batch_b_raw.replace("## Cards\n\n", "## Rename mechanic\n\nRun git mv.\n\n## Cards\n\n")
+        _write_plan(plan_dir, overview, [
+            ("01-alpha.md", batch_a),
+            ("02-beta.md",  batch_b),
+        ])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        collision_errs = [
+            e for e in result
+            if e["check"] == "move-target-collision" and e["path"] == "dest.py"
+        ]
+        try:
+            assert len(collision_errs) == 2, (
+                f"expected 2 move-target-collision errors (one per batch), got: {collision_errs}"
+            )
+            batches = {e["batch"] for e in collision_errs}
+            assert "01-alpha" in batches, f"expected 01-alpha in {batches}"
+            assert "02-beta" in batches, f"expected 02-beta in {batches}"
+            print("PASS test_move_target_collision_duplicate_target_dirty")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_move_target_collision_duplicate_target_dirty: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_move_target_collision_cross_batch_creates_dirty() -> int:
+    """Dirty: Move target in Batch A collides with Creates: new.py in Batch B -> one error."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        # Create the Move source so move-source-missing does not fire.
+        (project_root / "old.py").write_text("# source", encoding="utf-8")
+
+        overview = _make_overview([
+            {"name": "alpha", "file": "01-alpha.md", "number": 1, "depends-on": []},
+            {"name": "beta",  "file": "02-beta.md",  "number": 2, "depends-on": []},
+        ])
+        # Batch A moves old.py -> new.py; new.py does not exist on disk.
+        batch_a_raw = _make_batch_file("alpha", card_num=1, moves=[("old.py", "new.py")])
+        batch_a = batch_a_raw.replace("## Cards\n\n", "## Rename mechanic\n\nRun git mv.\n\n## Cards\n\n")
+        # Batch B creates new.py -- cross-batch Creates: collision with Batch A's Move target.
+        batch_b = _make_batch_file("beta", card_num=2, creates=["new.py"])
+        _write_plan(plan_dir, overview, [
+            ("01-alpha.md", batch_a),
+            ("02-beta.md",  batch_b),
+        ])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        collision_errs = [
+            e for e in result
+            if e["check"] == "move-target-collision" and e["path"] == "new.py"
+        ]
+        try:
+            assert len(collision_errs) == 1, (
+                f"expected 1 move-target-collision error, got: {collision_errs}"
+            )
+            assert collision_errs[0]["batch"] == "01-alpha", (
+                f"expected error on 01-alpha, got: {collision_errs[0]['batch']!r}"
+            )
+            assert "02-beta" in collision_errs[0]["message"] or "beta" in collision_errs[0]["message"], (
+                f"message should mention the conflicting batch: {collision_errs[0]['message']!r}"
+            )
+            print("PASS test_move_target_collision_cross_batch_creates_dirty")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_move_target_collision_cross_batch_creates_dirty: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_move_mechanic_missing_dirty() -> int:
+    """Dirty: batch with non-empty Moves: and no ## Rename mechanic section -> one error."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        # Batch has Moves: non-empty but NO ## Rename mechanic section inserted.
+        batch = _make_batch_file("alpha", moves=[("old/path.py", "new/path.py")])
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        mechanic_errs = [e for e in result if e["check"] == "move-mechanic-missing"]
+        try:
+            assert len(mechanic_errs) == 1, (
+                f"expected 1 move-mechanic-missing error, got: {mechanic_errs}"
+            )
+            assert mechanic_errs[0]["batch"] == "01-alpha", (
+                f"wrong batch: {mechanic_errs[0]['batch']!r}"
+            )
+            assert "Rename mechanic" in mechanic_errs[0]["message"], (
+                f"message should mention 'Rename mechanic': {mechanic_errs[0]['message']!r}"
+            )
+            print("PASS test_move_mechanic_missing_dirty")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_move_mechanic_missing_dirty: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_move_mechanic_missing_with_section_passes() -> int:
+    """Clean: batch with non-empty Moves: AND ## Rename mechanic section -> no error."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        # Create Move source so move-source-missing does not fire.
+        (project_root / "old").mkdir(parents=True)
+        (project_root / "old" / "path.py").write_text("# code", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_raw = _make_batch_file("alpha", moves=[("old/path.py", "new/path.py")])
+        batch = batch_raw.replace("## Cards\n\n", "## Rename mechanic\n\nRun git mv.\n\n## Cards\n\n")
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        mechanic_errs = [e for e in result if e["check"] == "move-mechanic-missing"]
+        try:
+            assert len(mechanic_errs) == 0, (
+                f"expected no move-mechanic-missing errors when section present, got: {mechanic_errs}"
+            )
+            print("PASS test_move_mechanic_missing_with_section_passes")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_move_mechanic_missing_with_section_passes: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_move_mechanic_missing_all_none_skipped() -> int:
+    """Clean: batch with all Moves: none sentinel -> no move-mechanic-missing error."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        # Default Moves: none sentinel; parse_moves returns [] -> check is skipped entirely.
+        batch = _make_batch_file("alpha")
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        mechanic_errs = [e for e in result if e["check"] == "move-mechanic-missing"]
+        try:
+            assert len(mechanic_errs) == 0, (
+                f"Moves: none should not trigger move-mechanic-missing, got: {mechanic_errs}"
+            )
+            print("PASS test_move_mechanic_missing_all_none_skipped")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_move_mechanic_missing_all_none_skipped: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_non_existent_path_move_target_suppressed() -> int:
+    """Clean: downstream card's Context: references a Move target -> no non-existent-path error.
+
+    When Batch A moves old.py -> new.py and Batch B has Context: new.py, the
+    validator must NOT raise non-existent-path for new.py because it is in
+    moves_targets (suppressed alongside creates_union per move-endpoint-accounting).
+    """
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        # Create the Move source; new.py does NOT exist yet.
+        (project_root / "old.py").write_text("# old code", encoding="utf-8")
+
+        overview = _make_overview([
+            {"name": "alpha", "file": "01-alpha.md", "number": 1, "depends-on": []},
+            {"name": "beta",  "file": "02-beta.md",  "number": 2, "depends-on": [1]},
+        ])
+        # Batch A: moves old.py -> new.py.
+        batch_a_raw = _make_batch_file("alpha", card_num=1, moves=[("old.py", "new.py")])
+        batch_a = batch_a_raw.replace("## Cards\n\n", "## Rename mechanic\n\nRun git mv.\n\n## Cards\n\n")
+        # Batch B: reads new.py in Context: -- new.py does not exist on disk yet.
+        batch_b = _make_batch_file("beta", card_num=2, context=["new.py"])
+        _write_plan(plan_dir, overview, [
+            ("01-alpha.md", batch_a),
+            ("02-beta.md",  batch_b),
+        ])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        nonexistent_errs = [
+            e for e in result
+            if e["check"] == "non-existent-path" and e["path"] == "new.py"
+        ]
+        try:
+            assert len(nonexistent_errs) == 0, (
+                f"Move target in Context: should be suppressed, got: {nonexistent_errs}"
+            )
+            print("PASS test_non_existent_path_move_target_suppressed")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_non_existent_path_move_target_suppressed: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_all_files_touched_move_target_included() -> int:
+    """Clean: Move target listed in All Files Touched -> no all-files-touched-mismatch error."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        # Create the Move source; new.py does NOT exist yet.
+        (project_root / "old.py").write_text("# code", encoding="utf-8")
+
+        # Overview lists the Move target new.py in All Files Touched.
+        overview = _make_overview(
+            [{"name": "alpha", "file": "01-alpha.md"}],
+            all_files_touched=["new.py"],
+        )
+        batch_raw = _make_batch_file("alpha", moves=[("old.py", "new.py")])
+        batch = batch_raw.replace("## Cards\n\n", "## Rename mechanic\n\nRun git mv.\n\n## Cards\n\n")
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        mismatch_errs = [
+            e for e in result
+            if e["check"] == "all-files-touched-mismatch" and e["path"] == "new.py"
+        ]
+        try:
+            assert len(mismatch_errs) == 0, (
+                f"Move target in All Files Touched should not raise mismatch, got: {mismatch_errs}"
+            )
+            print("PASS test_all_files_touched_move_target_included")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_all_files_touched_move_target_included: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_parallel_modifies_overlap_move_endpoint_fires() -> int:
+    """Dirty: two parallel batches touching the same Move source -> parallel-modifies-overlap error."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        # Create the shared source file; both batches declare a Move from it.
+        (project_root / "shared.py").write_text("# shared", encoding="utf-8")
+
+        overview = _make_overview([
+            {"name": "alpha", "file": "01-alpha.md", "depends-on": []},
+            {"name": "beta",  "file": "02-beta.md",  "depends-on": []},
+        ])
+        # Both batches are parallel-eligible (no dependency) and both touch shared.py
+        # as a Move source; the validator must report the overlap.
+        batch_a_raw = _make_batch_file("alpha", card_num=1, moves=[("shared.py", "a.py")])
+        batch_a = batch_a_raw.replace("## Cards\n\n", "## Rename mechanic\n\nRun git mv.\n\n## Cards\n\n")
+        batch_b_raw = _make_batch_file("beta", card_num=2, moves=[("shared.py", "b.py")])
+        batch_b = batch_b_raw.replace("## Cards\n\n", "## Rename mechanic\n\nRun git mv.\n\n## Cards\n\n")
+        _write_plan(plan_dir, overview, [
+            ("01-alpha.md", batch_a),
+            ("02-beta.md",  batch_b),
+        ])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        overlap_errs = [
+            e for e in result
+            if e["check"] == "parallel-modifies-overlap" and e["path"] == "shared.py"
+        ]
+        try:
+            assert len(overlap_errs) >= 1, (
+                f"expected at least 1 parallel-modifies-overlap error for shared.py, got: {overlap_errs}"
+            )
+            assert any("alpha" in e["message"] and "beta" in e["message"] for e in overlap_errs), (
+                f"message should mention both batch names: {overlap_errs}"
+            )
+            print("PASS test_parallel_modifies_overlap_move_endpoint_fires")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_parallel_modifies_overlap_move_endpoint_fires: {exc}", file=sys.stderr)
+            return 1
+
+
+# ---------------------------------------------------------------------------
 # Runner
 # ---------------------------------------------------------------------------
 
@@ -2454,6 +3072,23 @@ def main() -> int:
         # git_root threading (Card 5 / #471)
         test_git_root_threading_with_subfolder_cwd_clean,
         test_git_root_threading_without_git_root_default_none_documents_required,
+        # Move-specific checks (batch validator-move-checks)
+        test_moves_field_required_dirty,
+        test_move_format_well_formed_passes,
+        test_move_format_malformed_missing_arrow_dirty,
+        test_move_redundant_same_path_in_creates_dirty,
+        test_move_redundant_different_creates_path_passes,
+        test_move_source_missing_dirty,
+        test_move_source_missing_suppressed_by_creates_union,
+        test_move_target_collision_pre_existing_dirty,
+        test_move_target_collision_duplicate_target_dirty,
+        test_move_target_collision_cross_batch_creates_dirty,
+        test_move_mechanic_missing_dirty,
+        test_move_mechanic_missing_with_section_passes,
+        test_move_mechanic_missing_all_none_skipped,
+        test_non_existent_path_move_target_suppressed,
+        test_all_files_touched_move_target_included,
+        test_parallel_modifies_overlap_move_endpoint_fires,
     ]
 
     errors = 0

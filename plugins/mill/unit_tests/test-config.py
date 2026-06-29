@@ -1230,6 +1230,40 @@ def test_implementer_model_default_is_sonnethigh() -> None:
     print("PASS implementer_model_default_is_sonnethigh")
 
 
+def test_load_config_rename_detect_pct_key_present() -> None:
+    """
+    Verify that the real mill-config.yaml template registers pipeline.rename_detect_pct
+    with a default value of 30 and that loading it does not emit an unknown-key warning.
+    """
+    real_template_path = Path(__file__).resolve().parent.parent / "templates" / "mill-config.yaml"
+    assert real_template_path.exists(), f"Real template not found at {real_template_path}"
+
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        hub_root = tmp_path / "hub"
+        hub_root.mkdir(parents=True, exist_ok=True)
+        _git_init(hub_root)
+
+        with patch.object(
+            _config,
+            "resolve_plugin_template_path",
+            return_value=real_template_path
+        ):
+            with patch("sys.stderr", new=io.StringIO()) as mock_stderr:
+                cfg = _config.load_config(hub_root, hub_root)
+                stderr_output = mock_stderr.getvalue()
+
+        rename_detect_pct = cfg.get("pipeline", {}).get("rename_detect_pct")
+        assert rename_detect_pct == 30, (
+            f"pipeline.rename_detect_pct should be 30 in template, got {rename_detect_pct!r}"
+        )
+        assert "rename_detect_pct" not in stderr_output, (
+            f"rename_detect_pct should not trigger unknown-key warning; stderr: {stderr_output!r}"
+        )
+
+    print("PASS: pipeline.rename_detect_pct present (value 30) and no unknown-key warning")
+
+
 def test_load_config_done_gate_key_present() -> None:
     """
     Verify that the real mill-config.yaml template contains
@@ -1313,6 +1347,7 @@ def main() -> int:
         test_review_common_load_config_container_layout,
         test_no_repo_layer_config_anywhere_emits_note,
         test_implementer_model_default_is_sonnethigh,
+        test_load_config_rename_detect_pct_key_present,
         test_load_config_done_gate_key_present,
     ]
     failures: list[str] = []

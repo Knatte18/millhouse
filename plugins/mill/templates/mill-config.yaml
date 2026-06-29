@@ -123,6 +123,7 @@ pipeline:
   done_gate: null  # Repo-wide test command run from git_root before marking done. null = disabled. e.g. "go test ./..." or "dotnet test". (#561)
   max_cards_per_batch: 10  # batch-oversized validator gate (#371)
   max_batch_context_tokens: 120000  # batch-oversized validator gate (#371)
+  rename_detect_pct: 30  # similarity threshold (%) for git find-renames in per-batch code review; lower values catch surgical-edit renames that drop below git's default 50%
 
 # ---------------------------------------------------------------------------
 # Reviewer roles
