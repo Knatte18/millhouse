@@ -10,6 +10,12 @@ Card 2: Regression locks
   #495: millpy-review-plan.py resolves project_root via _paths.resolve_hub_path()
   #496: mill-go SKILL.md resolves reviews_dir = hub / '_mill/reviews'
   #504/#505: drift guard asserts _cleanliness.revert_out_of_scope_drift resolves
+
+Card 3: Extract-unit checks and mill-start body/brief lock
+  Directly asserts _extract_helper_references behaviour: the negative case
+  (gate_cmd.lower() produces no matches) and the positive case
+  (_paths.resolve_git_root() produces one match). Also locks mill-start/SKILL.md
+  against losing the task['body'] and task['brief'] field-name guidance.
 """
 from __future__ import annotations
 
@@ -26,23 +32,11 @@ sys.path.insert(0, str(SCRIPTS))
 
 
 # Allowlist of (module_stem, function_name) pairs exempt from the drift check.
-# These are intentionally exempt items: local variable method calls (not module functions).
-# Examples: cfg.get(...) where cfg is a dict, path.exists() where path is a Path instance.
-ALLOWLIST: set[tuple[str, str]] = {
-    # Local dict/object method calls (not module functions)
-    ("block", "get"),        # env_block.get(...) - local variable
-    ("gap_titles", "isdisjoint"),  # local variable method
-    ("ts_str", "strip"),     # local variable method
-    # Path object method calls (not module functions)
-    ("path", "exists"),      # path.exists()
-    ("path", "glob"),        # path.glob(...)
-    ("path", "read_text"),   # path.read_text(...)
-    ("path", "write_text"),  # path.write_text(...)
-    ("path", "stat"),        # path.stat()
-    ("path", "unlink"),      # path.unlink(...)
-    ("dir", "exists"),       # directory path method
-    ("dir", "glob"),         # directory path method
-}
+# The negative lookbehind in _extract_helper_references now suppresses every former
+# identifier-tail false positive (e.g. gate_cmd.lower(), env_block.get(), path.exists()),
+# so this set is intentionally empty. Reserve it only for future true module-qualified
+# (_module.func() where the leading _ is preceded by a non-identifier character) exemptions.
+ALLOWLIST: set[tuple[str, str]] = set()
 
 
 def _collect_shipped_helpers() -> dict[str, set[str]]:
@@ -90,10 +84,15 @@ def _extract_helper_references(skill_md_text: str) -> list[tuple[str, str]]:
     Extract all _<module>.<fn>( references from a SKILL.md text.
 
     Returns list of (module_stem, function_name) tuples.
-    Regex matches underscore-prefixed module identifier, dot, function identifier, then (.
-    The underscore is matched but not captured; the captured module name does not include it.
+    The regex matches an underscore-prefixed module identifier, a dot, a function
+    identifier, and an opening parenthesis. The negative lookbehind
+    `(?<![A-Za-z0-9_])` requires the leading `_` to be preceded by a
+    non-identifier character, so identifier tails such as `_cmd` in
+    `gate_cmd.lower()` are not mis-extracted as `_cmd` module references.
+    The underscore is matched but not captured; the captured module stem does
+    not include it.
     """
-    pattern = r"_([a-zA-Z_][a-zA-Z0-9_]*)\.([a-zA-Z_][a-zA-Z0-9_]*)\("
+    pattern = r"(?<![A-Za-z0-9_])_([a-zA-Z_][a-zA-Z0-9_]*)\.([a-zA-Z_][a-zA-Z0-9_]*)\("
     matches = re.findall(pattern, skill_md_text)
     return [(module, fn) for module, fn in matches]
 
@@ -192,12 +191,67 @@ def _run_regression_locks() -> list[str]:
             f"'reviews_dir = hub / '_mill/reviews'' for holistic crash-recovery"
         )
 
+    # mill-start body/brief lock: confirm the SKILL instructs agents to read both fields
+    mill_start_skill_path = SKILLS / "mill-start" / "SKILL.md"
+    try:
+        mill_start_skill_text = mill_start_skill_path.read_text(encoding="utf-8")
+    except (UnicodeDecodeError, OSError) as e:
+        failures.append(f"FAIL: {mill_start_skill_path}: could not read {e}")
+        return failures
+
+    if "task['body']" not in mill_start_skill_text:
+        failures.append(
+            f"FAIL: mill-start body/brief lock: {mill_start_skill_path} does not "
+            f"contain the literal string task['body'] -- field-name guidance was removed"
+        )
+
+    if "task['brief']" not in mill_start_skill_text:
+        failures.append(
+            f"FAIL: mill-start body/brief lock: {mill_start_skill_path} does not "
+            f"contain the literal string task['brief'] -- field-name guidance was removed"
+        )
+
+    return failures
+
+
+def _run_extract_unit_checks() -> list[str]:
+    """
+    Assert _extract_helper_references behaviour directly for the negative and positive cases.
+
+    Negative case: an identifier tail like gate_cmd.lower() must produce no matches,
+    confirming the lookbehind suppresses false positives from within-identifier underscores.
+
+    Positive case: a genuine module-qualified call like _paths.resolve_git_root() must
+    produce exactly one match, confirming real helper references are still extracted.
+
+    Returns a list of FAIL: messages; an empty list means both cases passed.
+    """
+    failures: list[str] = []
+
+    # Negative case: the _cmd tail of gate_cmd.lower() must not be extracted
+    negative_result = _extract_helper_references("gate_cmd.lower()")
+    if negative_result != []:
+        failures.append(
+            f"FAIL: extract-unit negative case: expected [], got {negative_result!r} "
+            f"for input 'gate_cmd.lower()'"
+        )
+
+    # Positive case: a real module-qualified call must be extracted with the correct tuple
+    positive_result = _extract_helper_references("_paths.resolve_git_root()")
+    expected_positive = [("paths", "resolve_git_root")]
+    if positive_result != expected_positive:
+        failures.append(
+            f"FAIL: extract-unit positive case: expected {expected_positive!r}, "
+            f"got {positive_result!r} for input '_paths.resolve_git_root()'"
+        )
+
     return failures
 
 
 def main() -> int:
     """
-    Run both check groups: drift guard (Card 1) and regression locks (Card 2).
+    Run all three check groups: drift guard (Card 1), regression locks (Card 2),
+    and extract-unit checks (Card 3).
 
     Returns 0 on all passes, 1 on any failure.
     """
@@ -218,7 +272,16 @@ def main() -> int:
                 print(msg, file=sys.stderr)
             print(f"FAIL: {len(regression_failures)} regression lock(s) failed", file=sys.stderr)
             return 1
-        print("PASS: #495/#496 source fixes are in place and locked against regression")
+        print("PASS: #495/#496 and mill-start body/brief locks are in place")
+
+        print("--- Card 3: Extract-unit checks ---")
+        extract_failures = _run_extract_unit_checks()
+        if extract_failures:
+            for msg in extract_failures:
+                print(msg, file=sys.stderr)
+            print(f"FAIL: {len(extract_failures)} extract-unit check(s) failed", file=sys.stderr)
+            return 1
+        print("PASS: _extract_helper_references correctly handles negative and positive cases")
 
         print("All test-skill-helper-drift checks passed.")
         return 0
