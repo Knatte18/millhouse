@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-resume-path-and-brief-token
+phase: approved-millgo-incomplete-routing
 slug: mill-agent-dispatch-gaps
 branch: hanf/mill-agent-dispatch-gaps
 plan: _mill/plan
@@ -30,6 +30,7 @@ implementing  '2026-06-30T05:42:27Z'
 approved-finalize-incomplete-core  '2026-06-30T05:54:53Z'
 approved-fixer-brief-commit-guard  '2026-06-30T05:57:57Z'
 approved-resume-path-and-brief-token  '2026-06-30T06:07:55Z'
+approved-millgo-incomplete-routing  '2026-06-30T11:24:10Z'
 ```
 
 ## Batches
@@ -52,7 +53,8 @@ batches:
     start_sha: 9e57a323c40a1eb179ceaf56359da57dc8f8a4d0
     commit_sha: 09bac49eeab245ad78035d34715baee319a08535
   - name: millgo-incomplete-routing
-    state: running
+    state: approved
     implementer_session: 51151dbc-fbed-4635-98ef-8bc9cc27c919
     start_sha: f3b9b709ee98e06a3281662cee82fa00ac58acd4
+    commit_sha: c8e57a9890c986a6029f96b496eb5f266f07aa66
 ```
