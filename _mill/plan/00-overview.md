@@ -3,7 +3,7 @@
 ```yaml
 task: "Handle pre-closed and pre-merged PRs gracefully in mill-merge"
 slug: mill-merge-pr-state-awareness
-approved: false
+approved: true
 started: "20260630-143720"
 parent: "main"
 root: ""
@@ -39,11 +39,15 @@ batches:
 
 ### Decision: single-pr-query-source
 
-- **Decision:** After this task, exactly one implementation of the `gh pr list`
-  query exists: `_pr_state.resolve_pr_state(branch, cwd)` in
+- **Decision:** After this task, exactly one implementation of the **PR-state
+  resolution query** exists: `_pr_state.resolve_pr_state(branch, cwd)` in
   `plugins/mill/scripts/_pr_state.py`. Both `mill-merge` (via a SKILL.md inline
-  `python -c` snippet) and `millpy-cleanup.py:_apply_pr_reap_record` call it. No
-  other code constructs a `gh pr list` argv.
+  `python -c` snippet) and `millpy-cleanup.py:_apply_pr_reap_record` call it for
+  determining whether the branch's PR is merged/open/closed. The separate
+  existence-check query in mill-merge SKILL.md's Step 5 branch-protection
+  fallback (`gh pr list --head ... --state open --json number,url --jq '.[0]'`)
+  is a distinct concern (does an open PR already exist before creating one) and
+  is intentionally left in place (Scope/Out).
 - **Rationale:** De-duplicates the query and guarantees consistent
   precedence/normalization across the two callers (discussion Constraint
   "Single source of truth for the PR query").

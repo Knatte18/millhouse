@@ -27,6 +27,7 @@ batch 1. Depends on batch 1 because the new gate invokes that helper.
 - **Context:**
   - `plugins/mill/scripts/_pr_state.py`
   - `plugins/mill/scripts/_paths.py`
+  - `plugins/mill/scripts/wiki/_client.py`
   - `plugins/mill/skills/mill-finalize/SKILL.md`
 - **Edits:**
   - `plugins/mill/skills/mill-merge/SKILL.md`
@@ -53,9 +54,13 @@ batch 1. Depends on batch 1 because the new gate invokes that helper.
        Parse the JSON `state` / `number` fields from `PR_STATE_JSON`.
     3. Route on `state` (using the helper's lowercase values):
        - `merged` -> **cleanup-only teardown**: run Step 4 (cleanup commit) so
-         the archive tag reflects a clean tip, then Step 6 (archive tag), Step 7
+         the archive tag reflects a clean tip, then Step 5.5 (cache-helper
+         preflight -- it guards the Step 6 `_archive_tag` import against a stale
+         plugin cache `ModuleNotFoundError`), then Step 6 (archive tag), Step 7
          (Home.md `[done]`), Step 8 (release lock -- no-op if never acquired),
-         Step 9 (notify/report). SKIP Steps 1, 2, and 5. State explicitly that
+         Step 9 (notify/report). SKIP Steps 1, 2, and 5. (The old
+         `## PR-path re-entry` MERGED branch skipped Step 5.5; the unified gate
+         must include it before Step 6.) State explicitly that
          the local parent branch is intentionally NOT fast-forwarded here (it
          resyncs on the next parent-side fetch/pull) -- do not add a parent
          ff-sync step (discussion Decisions/merged-remote-cleanup-only,
