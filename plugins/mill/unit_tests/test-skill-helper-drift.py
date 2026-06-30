@@ -10,6 +10,12 @@ Card 2: Regression locks
   #495: millpy-review-plan.py resolves project_root via _paths.resolve_hub_path()
   #496: mill-go SKILL.md resolves reviews_dir = hub / '_mill/reviews'
   #504/#505: drift guard asserts _cleanliness.revert_out_of_scope_drift resolves
+
+Card 3: Extract-unit checks and mill-start body/brief lock
+  Directly asserts _extract_helper_references behaviour: the negative case
+  (gate_cmd.lower() produces no matches) and the positive case
+  (_paths.resolve_git_root() produces one match). Also locks mill-start/SKILL.md
+  against losing the task['body'] and task['brief'] field-name guidance.
 """
 from __future__ import annotations
 
@@ -185,12 +191,67 @@ def _run_regression_locks() -> list[str]:
             f"'reviews_dir = hub / '_mill/reviews'' for holistic crash-recovery"
         )
 
+    # mill-start body/brief lock: confirm the SKILL instructs agents to read both fields
+    mill_start_skill_path = SKILLS / "mill-start" / "SKILL.md"
+    try:
+        mill_start_skill_text = mill_start_skill_path.read_text(encoding="utf-8")
+    except (UnicodeDecodeError, OSError) as e:
+        failures.append(f"FAIL: {mill_start_skill_path}: could not read {e}")
+        return failures
+
+    if "task['body']" not in mill_start_skill_text:
+        failures.append(
+            f"FAIL: mill-start body/brief lock: {mill_start_skill_path} does not "
+            f"contain the literal string task['body'] -- field-name guidance was removed"
+        )
+
+    if "task['brief']" not in mill_start_skill_text:
+        failures.append(
+            f"FAIL: mill-start body/brief lock: {mill_start_skill_path} does not "
+            f"contain the literal string task['brief'] -- field-name guidance was removed"
+        )
+
+    return failures
+
+
+def _run_extract_unit_checks() -> list[str]:
+    """
+    Assert _extract_helper_references behaviour directly for the negative and positive cases.
+
+    Negative case: an identifier tail like gate_cmd.lower() must produce no matches,
+    confirming the lookbehind suppresses false positives from within-identifier underscores.
+
+    Positive case: a genuine module-qualified call like _paths.resolve_git_root() must
+    produce exactly one match, confirming real helper references are still extracted.
+
+    Returns a list of FAIL: messages; an empty list means both cases passed.
+    """
+    failures: list[str] = []
+
+    # Negative case: the _cmd tail of gate_cmd.lower() must not be extracted
+    negative_result = _extract_helper_references("gate_cmd.lower()")
+    if negative_result != []:
+        failures.append(
+            f"FAIL: extract-unit negative case: expected [], got {negative_result!r} "
+            f"for input 'gate_cmd.lower()'"
+        )
+
+    # Positive case: a real module-qualified call must be extracted with the correct tuple
+    positive_result = _extract_helper_references("_paths.resolve_git_root()")
+    expected_positive = [("paths", "resolve_git_root")]
+    if positive_result != expected_positive:
+        failures.append(
+            f"FAIL: extract-unit positive case: expected {expected_positive!r}, "
+            f"got {positive_result!r} for input '_paths.resolve_git_root()'"
+        )
+
     return failures
 
 
 def main() -> int:
     """
-    Run both check groups: drift guard (Card 1) and regression locks (Card 2).
+    Run all three check groups: drift guard (Card 1), regression locks (Card 2),
+    and extract-unit checks (Card 3).
 
     Returns 0 on all passes, 1 on any failure.
     """
@@ -212,6 +273,15 @@ def main() -> int:
             print(f"FAIL: {len(regression_failures)} regression lock(s) failed", file=sys.stderr)
             return 1
         print("PASS: #495/#496 source fixes are in place and locked against regression")
+
+        print("--- Card 3: Extract-unit checks ---")
+        extract_failures = _run_extract_unit_checks()
+        if extract_failures:
+            for msg in extract_failures:
+                print(msg, file=sys.stderr)
+            print(f"FAIL: {len(extract_failures)} extract-unit check(s) failed", file=sys.stderr)
+            return 1
+        print("PASS: _extract_helper_references correctly handles negative and positive cases")
 
         print("All test-skill-helper-drift checks passed.")
         return 0
