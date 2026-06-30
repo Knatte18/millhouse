@@ -86,7 +86,7 @@ def test_nonzero_returncode() -> None:
     print("PASS resolve_pr_state -- returncode != 0 -> none")
 
 
-def test_gh_missing_raises_file_not_found() -> None:
+def test_gh_missing_no_exception_returns_none() -> None:
     """When _subprocess_util.run raises FileNotFoundError (gh absent) -> none, no exception."""
     with patch.object(_pr_state._subprocess_util, "run", side_effect=FileNotFoundError("gh not found")):
         # Must not propagate any exception.
@@ -146,7 +146,7 @@ if __name__ == "__main__":
     test_empty_array()
     test_empty_stdout()
     test_nonzero_returncode()
-    test_gh_missing_raises_file_not_found()
+    test_gh_missing_no_exception_returns_none()
     test_multi_pr_closed_then_merged_returns_merged()
     test_multi_pr_closed_then_open_returns_open()
     test_malformed_json()
