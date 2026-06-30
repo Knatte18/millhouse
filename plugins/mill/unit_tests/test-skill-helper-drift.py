@@ -272,7 +272,7 @@ def main() -> int:
                 print(msg, file=sys.stderr)
             print(f"FAIL: {len(regression_failures)} regression lock(s) failed", file=sys.stderr)
             return 1
-        print("PASS: #495/#496 source fixes are in place and locked against regression")
+        print("PASS: #495/#496 and mill-start body/brief locks are in place")
 
         print("--- Card 3: Extract-unit checks ---")
         extract_failures = _run_extract_unit_checks()
