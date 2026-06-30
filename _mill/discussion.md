@@ -113,11 +113,22 @@ session whose task carries a substantive proposal body — the design phase star
 
 - Decision: In Phase: Select, extend the sample snippet to also fetch and print
   `task.get('body', '')` and `task.get('brief', '')` (`.get` form is correct for safe code).
-  In Phase: Explore, add an explicit instruction to read the proposal and summary before
-  exploring code, and a documentation line that names the exact keys in **subscript form** —
-  the literal strings `task['body']` and `task['brief']` — plus the full observed key set, so
-  agents do not guess. This subscript-form prose in Phase: Explore is the canonical literal
-  that the regression lock (see `millstart-skill-regression-lock`) checks for.
+  To keep the existing "status must be `active`" single-line gate unambiguous when `body`
+  spans many lines (the ~6KB harden-path-invariant case), the snippet prints **`status` on
+  its own first line** (e.g. `print('STATUS:', task.get('status',''))`) and emits `brief`/`body`
+  AFTER it under labeled sentinel delimiters (e.g. `--- BRIEF ---` / `--- BODY ---` lines),
+  so the gate parses only the first `STATUS:` line. In Phase: Explore, add an explicit
+  instruction to read the proposal and summary before exploring code, and a documentation
+  line that names the exact keys in **subscript form** — the literal strings `task['body']`
+  and `task['brief']` — plus the full observed key set, so agents do not guess. This
+  subscript-form prose in Phase: Explore is the canonical literal that the regression lock
+  (see `millstart-skill-regression-lock`) checks for.
+- Data-flow source of truth: because each bash invocation is a fresh subprocess (the `task`
+  variable from Phase: Select does NOT persist into Phase: Explore), **Phase: Explore
+  re-calls `_client.get_task` itself** and reads `task['body']` / `task['brief']` from that
+  fresh result — it does not rely on scrollback from the Select printout. The Select printout
+  is for the operator's immediate visibility and the status gate; Explore's re-fetch is the
+  authoritative read that informs design.
 - Rationale: Phase: Select already calls `get_task`, so surfacing `body`/`brief` there is
   zero extra round-trips; Phase: Explore is where the proposal must actually inform the
   agent's reading. Naming the schema fields (`body`, `brief` — NOT `summary`/`proposal`)
