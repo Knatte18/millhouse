@@ -3,7 +3,7 @@
 ```yaml
 task: Fix discussion review round-cap, daemon cold-start, and nits-only no-op in finalize
 slug: mill-review-and-finalize-gaps
-approved: false
+approved: true
 started: 20260630-190522
 parent: main
 root: ""
@@ -33,10 +33,10 @@ batches:
 
 ## Shared Decisions
 
-### Decision: each of the three gaps is an independent batch with no cross-batch dependency
+### Decision: each of the three gaps is its own batch, sequenced only to avoid a shared-test-file conflict
 
-- **Decision:** the three GitHub-issue-derived gaps (#578 round-cap, #579 cold-daemon, #582 nits-only no-op) touch entirely disjoint file sets — `plugins/mill/skills/mill-start/SKILL.md` only (batch 1); `plugins/mill/scripts/_marker.py` + `plugins/mill/scripts/millpy-implement.py` + their tests (batch 2); `plugins/mill/scripts/_implementer_common.py` + its tests + `test-millpy-fix.py` (batch 3). No batch depends on another.
-- **Rationale:** confirmed via direct read during discussion that the three fixes share no helper functions, no shared state, and no ordering constraint. Running them as three independent (parallelizable) batches minimizes mill-go wall-clock with zero coordination risk.
+- **Decision:** the three GitHub-issue-derived gaps (#578 round-cap, #579 cold-daemon, #582 nits-only no-op) are functionally and logically independent — no shared helper functions, no shared state, no ordering constraint between the fixes themselves. Batch 1 (`plugins/mill/skills/mill-start/SKILL.md` only) has no dependency. Batch 3 carries `depends-on: [2]` (added during plan review round 1), but this is a coordination artifact, not a logical dependency: Batch 2's Card 4 and Batch 3's Card 6 both gained test coverage in `test-millpy-fix.py`, so Batch 3 is sequenced after Batch 2 purely to avoid a same-file parallel-modify conflict.
+- **Rationale:** confirmed via direct read during discussion that the three fixes share no helper functions, no shared state, and no ordering constraint. Batches 1 and 2 remain fully parallel; Batch 3's sequencing after Batch 2 costs one batch's worth of wall-clock but avoids two batches editing the same test file with no DAG edge between them (the `parallel-modifies-overlap` plan-validator class of error).
 - **Applies to:** all batches.
 
 ### Decision: exception type discipline — never collapse `wiki.WikiStartupError` into `_marker.MarkerError`
