@@ -42,5 +42,7 @@ batches:
     start_sha: 54c542111004376fe48e67968d87d703fbe7c8b5
     commit_sha: 8a502b782e18a9a0df2194a910c44798a26b6045
   - name: mill-merge-skill
-    state: pending
+    state: running
+    implementer_session: 33a89e54-42c9-4c2a-8b08-9415e9e262ae
+    start_sha: a8ae5f5004afdef49669b47a35055cd0d9bab506
 ```
