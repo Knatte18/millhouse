@@ -28,5 +28,7 @@ implementing  '2026-06-30T04:47:00Z'
 ```yaml
 batches:
   - name: drift-guard-and-millstart-fix
-    state: pending
+    state: running
+    implementer_session: 83e09d37-37b8-4cf5-87ea-e58876e46a4b
+    start_sha: ceeeec36d8cb2e1e3a5903ab5fcd5e1ade293008
 ```
