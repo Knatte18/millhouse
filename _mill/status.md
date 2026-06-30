@@ -40,7 +40,9 @@ batches:
     start_sha: 5b11787e4b260adfb2ec9a654cbb2ed0e30326f3
     commit_sha: 6bb4a767ccabf3f41bc26e1a2bdfb98c1da2bed1
   - name: fixer-brief-commit-guard
-    state: pending
+    state: running
+    implementer_session: 09f22ace-ca48-45ff-93d6-3ba24b07b458
+    start_sha: 680c7527d74a283d64f8bbc5985f78229ac05f6f
   - name: resume-path-and-brief-token
     state: pending
   - name: millgo-incomplete-routing
