@@ -78,17 +78,23 @@ wiki_path = _paths.resolve_wiki_path(_paths.resolve_git_root())
 task = _client.get_task(wiki_path, '<slug>')
 if task is None:
     raise SystemExit('[mill-start] slug not found in wiki -- was this worktree created by mill-spawn?')
-print(task.get('status', ''))
+print('STATUS:', task.get('status', ''))
+print('--- BRIEF ---')
+print(task.get('brief', ''))
+print('--- BODY ---')
+print(task.get('body', ''))
 "
 ```
 
-The task's `status` field must be `"active"`. If the task is missing or has any other status, halt with a message explaining what `mill-spawn` should have done.
+The `status` gate parses only the first output line (the `STATUS:` line); a multi-line `body` cannot break the gate. The task's `status` field must be `"active"`. If the task is missing or has any other status, halt with a message explaining what `mill-spawn` should have done.
 
 ### Phase: Active
 
 The initial status file (at `status_path`) was written by `mill-spawn` and committed on the task branch with `phase: discussing`. Verify it exists and the `parent:` branch is recorded. No edit needed here.
 
 ### Phase: Explore
+
+Before exploring the codebase, fetch the task document by re-calling `_client.get_task(wiki_path, slug)` (each Bash call is a fresh subprocess, so the `task` variable from Phase: Select does not persist). Read the proposal from `task['body']` and the one-paragraph summary from `task['brief']` before reading any source file. The full key set returned by `get_task()` is: `body, brief, deferred, depends_on, id, isolated, slug, status, title`. If both `task['body']` and `task['brief']` are empty or `None`, fall back to deriving scope from the codebase directly, but only after confirming those exact fields are empty.
 
 Before asking a single question, explore the relevant parts of the codebase.
 
