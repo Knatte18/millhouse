@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-plan-and-start-gaps
 branch: hanf/mill-plan-and-start-gaps
 plan: _mill/plan
@@ -20,4 +20,17 @@ discussed  '2026-06-30T18:54:06Z'
 planning  '2026-06-30T18:59:16Z'
 plan-review-r1  '2026-06-30T19:02:00Z'
 planned  '2026-06-30T19:02:18Z'
+implementing  '2026-06-30T19:06:06Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: moves-target-docs-and-messages
+    state: pending
+  - name: parse-batch-refs-leading-token
+    state: pending
+  - name: mill-start-utf8-fix
+    state: pending
 ```
