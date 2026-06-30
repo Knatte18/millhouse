@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-reviewing
+phase: holistic-fixing
 slug: mill-agent-dispatch-gaps
 branch: hanf/mill-agent-dispatch-gaps
 plan: _mill/plan
@@ -32,6 +32,7 @@ approved-fixer-brief-commit-guard  '2026-06-30T05:57:57Z'
 approved-resume-path-and-brief-token  '2026-06-30T06:07:55Z'
 approved-millgo-incomplete-routing  '2026-06-30T11:24:10Z'
 holistic-reviewing  '2026-06-30T13:44:43Z'
+holistic-fixing  '2026-06-30T13:50:56Z'
 ```
 
 ## Batches
