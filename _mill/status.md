@@ -33,7 +33,9 @@ batches:
     start_sha: 32b0b2f75883ade08fd68cf4d2f7afac44b05f77
     commit_sha: ffd4369542412c36f8692676f2745549903050e3
   - name: triage-to-tasks-skill
-    state: pending
+    state: running
+    implementer_session: 386e51b4-32a6-4a81-a6e7-a77331fbcfc2
+    start_sha: f385e9196dbfed8537d2d1b01db4e3bf7235eb9a
   - name: report-to-tasks-skill
     state: pending
   - name: ghissues-to-tasks-trim
