@@ -62,6 +62,10 @@ If `verify: null` in the frontmatter, skip straight to Report.
 
 ## Report
 
+**Pre-report self-check (mandatory before emitting success JSON):** At the very start of your session (before any edit), record `git -C <PROJECT_ROOT> rev-parse HEAD` as your baseline -- this is the current fix-round housekeeping commit. Before reporting `success`, confirm HEAD now differs from that recorded baseline; never report `success` when HEAD equals the baseline (no new commit was made). Run `git -C <PROJECT_ROOT> status --porcelain --untracked-files=no`. If it shows ANY tracked modification, commit it via the `git-commit` skill (or report `stuck_type: logic`) -- never report `success` with an uncommitted tracked change.
+
+**New-test requirement:** When a finding mandates a NEW test, you MUST add that test and confirm it runs before reporting success -- do not report success having skipped a required new test.
+
 Your last line of output (after all work and commits) MUST be a single JSON object:
 
 ```json
@@ -70,6 +74,8 @@ Your last line of output (after all work and commits) MUST be a single JSON obje
 **Do not wrap the JSON in a code block. Output it as a bare line — no backticks, no fence. Anything other than a bare JSON line is treated as `stuck_type: logic`.**
 
 **`session_id` MUST be exactly `<SESSION_ID>` (the UUID shown in the example above — it was injected into this brief when it was rendered). Copy it verbatim.**
+
+**`commit_sha` MUST be a real new content commit distinct from the fix-round housekeeping commit.** A fixer that made edits but did not commit must report `status: stuck` (`stuck_type: logic`) instead.
 
 or, when stuck:
 

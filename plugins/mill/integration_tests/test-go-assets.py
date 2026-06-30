@@ -31,6 +31,7 @@ SCRATCH = HUB / ".scratch"
 
 sys.path.insert(0, str(SCRIPTS))
 
+import _agent_dispatch  # noqa: E402
 import _builder_lock  # noqa: E402
 import _notify  # noqa: E402
 import _safe_rmtree  # noqa: E402
@@ -54,11 +55,31 @@ def _strip_leading_comment(text: str) -> str:
 
 
 def test_implementer_brief_template(scratch: Path) -> None:
-    """implementer-brief.md substitutes every token without KeyError."""
+    """implementer-brief.md substitutes every token without KeyError.
+
+    Builds a complete token dict including SESSION_ID, PARENT_BRANCH, LANGUAGE_SKILLS,
+    and START_SHA — all tokens that are present in the brief but were missing from the
+    original dict, causing KeyError from _render.render's strict unresolved-token check.
+    """
     template = TEMPLATES / "implementer-brief.md"
     body = _strip_leading_comment(template.read_text(encoding="utf-8"))
     rendered_target = scratch / "brief-rendered.md"
     rendered_target.write_text(body, encoding="utf-8")
+
+    # Write a minimal batch file so language_skills_directive can parse it.
+    # Using a .py extension so the directive returns python skills, mirroring
+    # the approach in test-language-skills-directive.py.
+    dummy_batch = scratch / "01-foundation.md"
+    dummy_batch.write_text(
+        "# Batch: foundation\n\n"
+        "```yaml\ntask: Demo\nbatch: foundation\ncards: 1\nverify: null\ndepends-on: []\n```\n\n"
+        "## Cards\n\n### Card 1: init\n\n"
+        "- **Edits:** `src/seed.py`\n"
+        "- **Requirements:** Seed module.\n"
+        "- **Commit:** feat(seed): init\n",
+        encoding="utf-8",
+    )
+
     rendered = _render.render(
         rendered_target,
         {
@@ -71,6 +92,10 @@ def test_implementer_brief_template(scratch: Path) -> None:
             "WIKI_PATH": "/abs/wiki",
             "SELF_FIX_ROUNDS": "2",
             "ROUND": "1",
+            "SESSION_ID": "test-session-uuid",
+            "PARENT_BRANCH": "main",
+            "LANGUAGE_SKILLS": _agent_dispatch.language_skills_directive(dummy_batch),
+            "START_SHA": "",
         },
     )
     _assert("Implementer Brief" in rendered, "header missing")

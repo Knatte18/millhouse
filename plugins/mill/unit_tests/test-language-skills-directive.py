@@ -168,7 +168,8 @@ def test_render_implementer_brief() -> None:
         template_path = TEMPLATES_DIR / "implementer-brief.md"
         assert template_path.exists(), f"Template not found: {template_path}"
 
-        # Render with actual directive
+        # Render with actual directive. START_SHA is included because _render.render
+        # raises KeyError on any unresolved token and the brief now contains <START_SHA>.
         tokens = {
             "TASK_TITLE": "Test",
             "SLUG": "test",
@@ -182,6 +183,7 @@ def test_render_implementer_brief() -> None:
             "SESSION_ID": "test-session-id",
             "PARENT_BRANCH": "main",
             "LANGUAGE_SKILLS": _agent_dispatch.language_skills_directive(batch_path),
+            "START_SHA": "",
         }
         rendered = _render.render(template_path, tokens)
 

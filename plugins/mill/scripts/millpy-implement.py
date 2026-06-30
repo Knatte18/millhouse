@@ -7,6 +7,12 @@ in a single call.
 Flags:
     batch_name          (positional, required) batch name from the plan
                         overview's Batch Index
+    --resume-incomplete when set, the prepare/full stage reads the existing
+                        start_sha and implementer_session from status.md
+                        rather than re-capturing HEAD and generating a new
+                        UUID. Skips capture_snapshot and the housekeeping
+                        commit so the original batch-start baseline is
+                        preserved for finalize's completeness recount.
 
 Exit codes:
     0 — implementer ran; JSON report on stdout (success or stuck)
@@ -109,6 +115,18 @@ def main(argv=None) -> int:
             "Accepted for CLI-shape parity with millpy-fix.py and the agent-mode dispatch loop;"
             " ignored by implement (the finalize branch reads start_sha and implementer_session"
             " from status.md)."
+        ),
+    )
+    parser.add_argument(
+        "--resume-incomplete",
+        action="store_true",
+        default=False,
+        help=(
+            "Resume a partially-completed batch without re-capturing start_sha or"
+            " overwriting the original implementer_session. Reads the existing start_sha"
+            " and implementer_session from status.md instead of capturing HEAD and"
+            " generating a fresh UUID. Skips the capture_snapshot call and the"
+            " mill-go: start batch housekeeping commit."
         ),
     )
     args = parser.parse_args(argv)
@@ -279,74 +297,117 @@ def main(argv=None) -> int:
         )
 
     # Stages: prepare and full (need pre-commit, render, and setup)
-    result = _subprocess_util.run(
-        ["git", "rev-parse", "HEAD"],
-        cwd=project_root,
-    )
-    if result.returncode != 0:
-        print(result.stderr, file=sys.stderr)
-        return 1
-    start_sha = result.stdout.strip()
-
     _safe_batch = _paths.sanitize_filename_component(args.batch_name)
+    # snapshot_path always points to the same file name (derived from batch name) so
+    # a resume dispatch reuses the snapshot written by the original dispatch without
+    # re-capturing it, preserving the original new-dirt baseline.
     snapshot_path = project_root / "_mill" / f".cleanliness-snapshot-{_safe_batch}.txt"
-    _cleanliness.capture_snapshot(project_root, snapshot_path)
 
-    session_id = str(uuid.uuid4())
-
-    _status.set_batch_fields(
-        status_path,
-        args.batch_name,
-        {"state": "running", "start_sha": start_sha, "implementer_session": session_id},
-    )
-
-    # Stage status.md and the cleanliness snapshot unconditionally. On a re-fire
-    # the prepare step regenerated implementer_session, so status.md is always
-    # dirty; the message-based skip_start_commit check would have missed that
-    # mutation and left the session in status.md uncommitted (#563).
-    result = _subprocess_util.run(
-        [
-            "git",
-            "add",
-            status_path.relative_to(project_root).as_posix(),
-            str(snapshot_path.relative_to(project_root)),
-        ],
-        cwd=project_root,
-    )
-    if result.returncode != 0:
-        print(result.stderr, file=sys.stderr)
-        return 1
-
-    # Use a staged-diff emptiness check rather than the last-log message to decide
-    # whether to commit. git diff --cached --quiet exits 0 when nothing is staged
-    # (all state already committed on a genuine first-fire with matching content)
-    # and exits non-zero when at least one file differs -- which is always true on
-    # re-fires because the fresh implementer_session UUID dirtied status.md.
-    diff_result = _subprocess_util.run(
-        ["git", "diff", "--cached", "--quiet"],
-        cwd=project_root,
-    )
-
-    if diff_result.returncode != 0:
-        # Something is staged -- commit and push so the subsequent finalize
-        # in-scope dirty gate does not trip on the uncommitted session write.
-        result = _subprocess_util.git_commit(
-            project_root,
-            f"mill-go: start batch {args.batch_name}",
-            name=git_name,
-            email=git_email,
+    if args.resume_incomplete:
+        # Resume path: read the original start_sha and implementer_session from status.md.
+        # Re-capturing HEAD as start_sha would make the completeness recount under-count a
+        # finished batch (because partial-work commits exist before the new start_sha), causing
+        # a false-positive incomplete loop. Preserving the original SHA lets finalize count all
+        # content commits correctly.
+        _resume_batches = _status.read_batches(status_path)
+        _resume_batch_entry = next(
+            (b for b in _resume_batches if b.get("name") == args.batch_name), None
         )
-        if result.returncode != 0:
-            print(result.stderr, file=sys.stderr)
+        if _resume_batch_entry is None:
+            print(
+                f"batch {args.batch_name!r} not found in status.md for resume",
+                file=sys.stderr,
+            )
             return 1
-
+        start_sha = _resume_batch_entry.get("start_sha")
+        if not start_sha:
+            print(
+                f"batch {args.batch_name!r} has no start_sha in status.md for resume",
+                file=sys.stderr,
+            )
+            return 1
+        # Retain the original implementer_session so the brief's SESSION_ID token and the
+        # finalize-reported session_id stay consistent. Finalize reads implementer_session
+        # from status.md; a fresh UUID here would diverge from what finalize reports.
+        session_id = _resume_batch_entry.get("implementer_session") or str(uuid.uuid4())
+        # Do NOT call capture_snapshot: the snapshot was written and committed during the
+        # original dispatch. Overwriting it now (with post-partial-work state) and then
+        # skipping the commit would corrupt the new-dirt baseline used by finalize.
+        # Do NOT call set_batch_fields: the original start_sha/implementer_session must
+        # be preserved so the completeness recount from start_sha is accurate.
+        # Do NOT make a housekeeping commit: a second "mill-go: start batch" commit would
+        # cause _content_commit_count to subtract two housekeeping commits, under-counting
+        # the implementer's content commits and producing a false incomplete result.
+    else:
+        # Normal (first-pass) dispatch: capture HEAD as start_sha, generate a fresh
+        # session_id, update status.md, take a cleanliness snapshot, and make the
+        # housekeeping commit so downstream finalize has a stable new-dirt baseline.
         result = _subprocess_util.run(
-            ["git", "push", "origin", branch],
+            ["git", "rev-parse", "HEAD"],
             cwd=project_root,
         )
         if result.returncode != 0:
             print(result.stderr, file=sys.stderr)
             return 1
+        start_sha = result.stdout.strip()
+
+        _cleanliness.capture_snapshot(project_root, snapshot_path)
+
+        session_id = str(uuid.uuid4())
+
+        _status.set_batch_fields(
+            status_path,
+            args.batch_name,
+            {"state": "running", "start_sha": start_sha, "implementer_session": session_id},
+        )
+
+        # Stage status.md and the cleanliness snapshot unconditionally. On a re-fire
+        # the prepare step regenerated implementer_session, so status.md is always
+        # dirty; the message-based skip_start_commit check would have missed that
+        # mutation and left the session in status.md uncommitted (#563).
+        result = _subprocess_util.run(
+            [
+                "git",
+                "add",
+                status_path.relative_to(project_root).as_posix(),
+                str(snapshot_path.relative_to(project_root)),
+            ],
+            cwd=project_root,
+        )
+        if result.returncode != 0:
+            print(result.stderr, file=sys.stderr)
+            return 1
+
+        # Use a staged-diff emptiness check rather than the last-log message to decide
+        # whether to commit. git diff --cached --quiet exits 0 when nothing is staged
+        # (all state already committed on a genuine first-fire with matching content)
+        # and exits non-zero when at least one file differs -- which is always true on
+        # re-fires because the fresh implementer_session UUID dirtied status.md.
+        diff_result = _subprocess_util.run(
+            ["git", "diff", "--cached", "--quiet"],
+            cwd=project_root,
+        )
+
+        if diff_result.returncode != 0:
+            # Something is staged -- commit and push so the subsequent finalize
+            # in-scope dirty gate does not trip on the uncommitted session write.
+            result = _subprocess_util.git_commit(
+                project_root,
+                f"mill-go: start batch {args.batch_name}",
+                name=git_name,
+                email=git_email,
+            )
+            if result.returncode != 0:
+                print(result.stderr, file=sys.stderr)
+                return 1
+
+            result = _subprocess_util.run(
+                ["git", "push", "origin", branch],
+                cwd=project_root,
+            )
+            if result.returncode != 0:
+                print(result.stderr, file=sys.stderr)
+                return 1
 
     template_path = plugin_root / "templates" / "implementer-brief.md"
     prompt_text = _render.render(
@@ -369,6 +430,11 @@ def main(argv=None) -> int:
             # token always substitutes; the brief instructs the implementer to
             # skip the parent check when the value is empty.
             "PARENT_BRANCH": parent_branch or "",
+            # START_SHA: the original batch start SHA on a resume-after-incomplete
+            # dispatch; empty string on a normal first-pass dispatch. Always included
+            # because _render.render raises KeyError on any unresolved token, and the
+            # brief now contains <START_SHA> in its resume-after-incomplete instruction.
+            "START_SHA": start_sha if args.resume_incomplete else "",
         },
     )
 

@@ -19,6 +19,8 @@ by mill-go. Rendered by mill-go via `_render.render` with these tokens:
                        branches off; empty string when not resolvable. Used
                        by the implementer to check whether a verify failure
                        is pre-existing on the parent before reporting stuck.
+  <START_SHA>        — the batch's original start_sha on a resume-after-incomplete
+                       dispatch; empty string on a normal first-pass dispatch.
 
 Mill-go spawns this session with tools Read / Edit / Write / Bash /
 Grep / Glob / Skill. No TodoWrite, no WebFetch, no WebSearch. Write / Edit /
@@ -47,6 +49,8 @@ Read the batch file first, then the overview's Shared Decisions. Do not read oth
 
 **Complete the ENTIRE batch in a single turn. Never end your turn between cards. A per-card commit is NOT a stopping point. Only stop after every `## Cards` entry is committed, `## Verify` has run (or was skipped because `verify: null`), and the JSON report has been emitted. Ending a turn mid-batch -- even after a successful commit -- is a protocol violation that causes the orchestrator to classify the batch as stuck.**
 
+**Resume-after-incomplete:** When `<START_SHA>` is non-empty, you are being re-dispatched to finish a partially-completed batch. Before implementing any cards, identify which cards are already committed: run `git -C <PROJECT_ROOT> log <START_SHA>..HEAD --oneline` and match each commit subject against the cards' `Commit:` messages. When `<START_SHA>` is empty, derive the range start via `git -C <PROJECT_ROOT> log --grep="^mill-go: start batch" -n 1 --format=%H`. Implement only the remaining cards — do not re-edit or re-commit cards whose `Commit:` message already appears in the log.
+
 1. Work through `## Cards` in order. For each card:
    - Read every file in `Context:` and `Edits:` before editing.
    - Edit / create the files in `Edits:` / `Creates:`.
@@ -60,6 +64,13 @@ Read the batch file first, then the overview's Shared Decisions. Do not read oth
    - Then make the code change.
    - This keeps the code reviewer's bulk complete; a surprise file in the diff is a BLOCKING-severity review failure.
 3. Never edit files outside this batch's declared scope — you don't know whether another batch depends on them.
+4. If you are forced to stop before all cards are committed (e.g. approaching context limit or an unresolvable error), emit the following JSON as your very last output line and then stop — do not report `success`:
+
+   ```json
+   {"status":"incomplete","cards_done":N,"cards_remaining":M,"session_id":"<SESSION_ID>"}
+   ```
+
+   Replace N with the count of card commits made and M with the remaining count. Finalize detection is authoritative; this line helps the orchestrator classify the partial stop correctly rather than treating it as a stuck/logic error.
 
 ## Test Integrity Guardrail
 

@@ -814,7 +814,8 @@ class TestMillpyImplement(unittest.TestCase):
         plugin_root = HUB / "plugins" / "mill"
         template_path = plugin_root / "templates" / "implementer-brief.md"
 
-        # Build a minimal token map that satisfies all required tokens in the brief
+        # Build a minimal token map that satisfies all required tokens in the brief,
+        # including START_SHA which was added in batch 2.
         tokens = {
             "TASK_TITLE": "Test Task",
             "SLUG": "test-slug",
@@ -828,6 +829,7 @@ class TestMillpyImplement(unittest.TestCase):
             "SESSION_ID": "test-session-uuid",
             "LANGUAGE_SKILLS": "",
             "PARENT_BRANCH": "main",
+            "START_SHA": "",
         }
 
         import _render
@@ -854,6 +856,7 @@ class TestMillpyImplement(unittest.TestCase):
             "SESSION_ID": "test-session-uuid",
             "LANGUAGE_SKILLS": "",
             "PARENT_BRANCH": "",
+            "START_SHA": "",
         }
 
         import _render
@@ -862,6 +865,192 @@ class TestMillpyImplement(unittest.TestCase):
         self.assertNotIn("<PARENT_BRANCH>", rendered)
         # The literal string "None" must not appear where the token was
         self.assertNotIn("None", rendered)
+
+
+    def test_resume_incomplete_preserves_start_sha(self):
+        """--resume-incomplete: prepare reads start_sha from status.md, skips set_batch_fields and capture_snapshot.
+
+        Verifies that the resume path does not re-capture HEAD or overwrite the original
+        start_sha/implementer_session in status.md. The original start_sha must survive
+        unchanged so that finalize can count content commits from the correct baseline.
+        Also verifies that capture_snapshot is NOT called, preserving the original
+        new-dirt baseline snapshot written during the first dispatch.
+        """
+        status_path = self.tmp_path / "task" / "status.md"
+
+        # Write the original start_sha and implementer_session into status.md so the
+        # resume path can read them.
+        original_start_sha = "original_start_sha_abc123"
+        original_session = "original-session-uuid-1234"
+        millpy_implement._status.set_batch_fields(
+            status_path,
+            "test-batch",
+            {
+                "state": "running",
+                "start_sha": original_start_sha,
+                "implementer_session": original_session,
+            },
+        )
+
+        # Patch set_batch_fields to detect whether it is called on the resume path.
+        with unittest.mock.patch.object(
+            millpy_implement._status, "set_batch_fields"
+        ) as mock_set_batch_fields:
+            with unittest.mock.patch.object(
+                millpy_implement._render, "render", return_value="Brief text"
+            ):
+                rc, out = self._run_main(
+                    ["test-batch", "--stage", "prepare", "--resume-incomplete"]
+                )
+
+        self.assertEqual(rc, 0)
+        # capture_snapshot must NOT be called on the resume path.
+        self.mock_capture_snapshot.assert_not_called()
+        # set_batch_fields must NOT be called on the resume path (the original
+        # start_sha and implementer_session must remain untouched in status.md).
+        mock_set_batch_fields.assert_not_called()
+
+        # Confirm the original start_sha is still intact in status.md.
+        batches = millpy_implement._status.read_batches(status_path)
+        batch_entry = next(b for b in batches if b["name"] == "test-batch")
+        self.assertEqual(batch_entry["start_sha"], original_start_sha)
+        self.assertEqual(batch_entry["implementer_session"], original_session)
+
+    def test_resume_incomplete_start_sha_token_in_render_dict(self):
+        """--resume-incomplete: START_SHA token equals preserved sha; SESSION_ID equals retained session.
+
+        On a resume dispatch the rendered brief must receive the original start_sha as
+        START_SHA so the implementer can identify already-committed cards. The SESSION_ID
+        token must match the retained implementer_session from status.md (not a fresh UUID)
+        so the finalize-reported session_id is consistent with the brief.
+        On a normal (non-resume) dispatch START_SHA must be the empty string.
+        """
+        status_path = self.tmp_path / "task" / "status.md"
+        original_start_sha = "original_sha_for_token_test"
+        original_session = "retained-session-uuid-5678"
+        millpy_implement._status.set_batch_fields(
+            status_path,
+            "test-batch",
+            {
+                "state": "running",
+                "start_sha": original_start_sha,
+                "implementer_session": original_session,
+            },
+        )
+
+        # Capture the token dict passed to _render.render on the resume path.
+        captured_resume_tokens: dict = {}
+
+        def capture_render(template_path, tokens):
+            captured_resume_tokens.update(tokens)
+            return "Brief text"
+
+        with unittest.mock.patch.object(
+            millpy_implement._render, "render", side_effect=capture_render
+        ):
+            rc, _ = self._run_main(
+                ["test-batch", "--stage", "prepare", "--resume-incomplete"]
+            )
+
+        self.assertEqual(rc, 0)
+        # START_SHA must be the preserved sha from status.md, not empty string.
+        self.assertIn("START_SHA", captured_resume_tokens)
+        self.assertEqual(captured_resume_tokens["START_SHA"], original_start_sha)
+        # SESSION_ID must match the retained implementer_session from status.md.
+        self.assertIn("SESSION_ID", captured_resume_tokens)
+        self.assertEqual(captured_resume_tokens["SESSION_ID"], original_session)
+
+        # On a normal (non-resume) dispatch START_SHA must be empty string.
+        captured_normal_tokens: dict = {}
+
+        def capture_render_normal(template_path, tokens):
+            captured_normal_tokens.update(tokens)
+            return "Brief text"
+
+        with unittest.mock.patch.object(
+            millpy_implement._render, "render", side_effect=capture_render_normal
+        ):
+            rc2, _ = self._run_main(["test-batch", "--stage", "prepare"])
+
+        self.assertEqual(rc2, 0)
+        self.assertIn("START_SHA", captured_normal_tokens)
+        self.assertEqual(captured_normal_tokens["START_SHA"], "")
+
+    def test_resume_incomplete_finalize_success_when_complete(self):
+        """Finalize after resume emits success when content commits >= card_count.
+
+        Sets up a batch file with one card heading so card_count=1. Mocks git to return
+        two commits since start_sha (one housekeeping + one content), so _content_commit_count
+        returns 1. The agent output reports success; finalize must emit success, not incomplete.
+        """
+        status_path = self.tmp_path / "task" / "status.md"
+        plan_dir = self.tmp_path / "task" / "plan"
+        original_start_sha = "original_sha_for_finalize_test"
+        original_session = "finalize-session-uuid-9999"
+
+        # Write a batch file with one card heading so card_count=1.
+        batch_file = plan_dir / "01-test-batch.md"
+        batch_file.write_text(
+            "```yaml\ntask: Test\nverify: null\n```\n\n"
+            "### Card 1: the only card\n\n"
+            "- **Requirements:** Implement it.\n"
+            "- **Commit:** feat(card1): implement\n",
+            encoding="utf-8",
+        )
+
+        # Write start_sha into status.md so finalize reads it.
+        millpy_implement._status.set_batch_fields(
+            status_path,
+            "test-batch",
+            {
+                "state": "running",
+                "start_sha": original_start_sha,
+                "implementer_session": original_session,
+            },
+        )
+
+        agent_output_path = self.tmp_path / "agent-output.txt"
+        agent_output_path.write_text(
+            f'{{"status":"success","commit_sha":"end_sha","session_id":"{original_session}"}}\n',
+            encoding="utf-8",
+        )
+
+        def routing_fn(argv, **kw):
+            # rev-parse HEAD: return a SHA different from start_sha so no-content guard passes.
+            if len(argv) >= 2 and argv[1] == "rev-parse":
+                return subprocess.CompletedProcess(
+                    args=argv, returncode=0, stdout="end_sha\n", stderr=""
+                )
+            # rev-list --count: return 2 (1 housekeeping + 1 content commit).
+            if "rev-list" in argv and "--count" in argv:
+                return subprocess.CompletedProcess(
+                    args=argv, returncode=0, stdout="2\n", stderr=""
+                )
+            # git log --pretty=%s: return subjects showing one housekeeping + one content commit.
+            if "log" in argv and "--pretty=%s" in argv:
+                return subprocess.CompletedProcess(
+                    args=argv,
+                    returncode=0,
+                    stdout=f"feat(card1): implement\nmill-go: start batch test-batch\n",
+                    stderr="",
+                )
+            return subprocess.CompletedProcess(
+                args=argv, returncode=0, stdout="abc1234\n", stderr=""
+            )
+
+        self.mock_subprocess_run.side_effect = routing_fn
+
+        rc, out = self._run_main([
+            "test-batch",
+            "--stage", "finalize",
+            "--agent-output", str(agent_output_path),
+        ])
+
+        self.assertEqual(rc, 0)
+        data = json.loads(out.strip().splitlines()[-1])
+        # With card_count=1 and content_commits=1 the batch is complete; must be success.
+        self.assertEqual(data["status"], "success")
+        self.assertNotEqual(data.get("stuck_type"), "incomplete")
 
 
 class TestClassifyStuckType(unittest.TestCase):
