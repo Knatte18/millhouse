@@ -26,23 +26,11 @@ sys.path.insert(0, str(SCRIPTS))
 
 
 # Allowlist of (module_stem, function_name) pairs exempt from the drift check.
-# These are intentionally exempt items: local variable method calls (not module functions).
-# Examples: cfg.get(...) where cfg is a dict, path.exists() where path is a Path instance.
-ALLOWLIST: set[tuple[str, str]] = {
-    # Local dict/object method calls (not module functions)
-    ("block", "get"),        # env_block.get(...) - local variable
-    ("gap_titles", "isdisjoint"),  # local variable method
-    ("ts_str", "strip"),     # local variable method
-    # Path object method calls (not module functions)
-    ("path", "exists"),      # path.exists()
-    ("path", "glob"),        # path.glob(...)
-    ("path", "read_text"),   # path.read_text(...)
-    ("path", "write_text"),  # path.write_text(...)
-    ("path", "stat"),        # path.stat()
-    ("path", "unlink"),      # path.unlink(...)
-    ("dir", "exists"),       # directory path method
-    ("dir", "glob"),         # directory path method
-}
+# The negative lookbehind in _extract_helper_references now suppresses every former
+# identifier-tail false positive (e.g. gate_cmd.lower(), env_block.get(), path.exists()),
+# so this set is intentionally empty. Reserve it only for future true module-qualified
+# (_module.func() where the leading _ is preceded by a non-identifier character) exemptions.
+ALLOWLIST: set[tuple[str, str]] = set()
 
 
 def _collect_shipped_helpers() -> dict[str, set[str]]:
@@ -90,10 +78,15 @@ def _extract_helper_references(skill_md_text: str) -> list[tuple[str, str]]:
     Extract all _<module>.<fn>( references from a SKILL.md text.
 
     Returns list of (module_stem, function_name) tuples.
-    Regex matches underscore-prefixed module identifier, dot, function identifier, then (.
-    The underscore is matched but not captured; the captured module name does not include it.
+    The regex matches an underscore-prefixed module identifier, a dot, a function
+    identifier, and an opening parenthesis. The negative lookbehind
+    `(?<![A-Za-z0-9_])` requires the leading `_` to be preceded by a
+    non-identifier character, so identifier tails such as `_cmd` in
+    `gate_cmd.lower()` are not mis-extracted as `_cmd` module references.
+    The underscore is matched but not captured; the captured module stem does
+    not include it.
     """
-    pattern = r"_([a-zA-Z_][a-zA-Z0-9_]*)\.([a-zA-Z_][a-zA-Z0-9_]*)\("
+    pattern = r"(?<![A-Za-z0-9_])_([a-zA-Z_][a-zA-Z0-9_]*)\.([a-zA-Z_][a-zA-Z0-9_]*)\("
     matches = re.findall(pattern, skill_md_text)
     return [(module, fn) for module, fn in matches]
 
