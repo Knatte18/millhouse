@@ -1,10 +1,10 @@
 # Status
 
 ```yaml
-phase: discussed
+phase: planning
 slug: mill-review-and-finalize-gaps
 branch: hanf/mill-review-and-finalize-gaps
-plan: null
+plan: _mill/plan
 parent: main
 task: Fix discussion review round-cap, daemon cold-start, and nits-only no-op in finalize
 task_description: |
@@ -16,4 +16,5 @@ task_description: |
 ```text
 discussing  '2026-06-30T18:23:43Z'
 discussed  '2026-06-30T19:03:28Z'
+planning  '2026-06-30T19:10:20Z'
 ```
