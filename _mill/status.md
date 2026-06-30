@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-cleanup-refactor
+phase: approved-mill-merge-skill
 slug: mill-merge-pr-state-awareness
 branch: hanf/mill-merge-pr-state-awareness
 plan: _mill/plan
@@ -25,6 +25,7 @@ planned  '2026-06-30T14:49:13Z'
 implementing  '2026-06-30T15:26:00Z'
 approved-pr-state-helper  '2026-06-30T15:29:24Z'
 approved-cleanup-refactor  '2026-06-30T15:34:36Z'
+approved-mill-merge-skill  '2026-06-30T15:39:54Z'
 ```
 
 ## Batches
@@ -42,7 +43,8 @@ batches:
     start_sha: 54c542111004376fe48e67968d87d703fbe7c8b5
     commit_sha: 8a502b782e18a9a0df2194a910c44798a26b6045
   - name: mill-merge-skill
-    state: running
+    state: approved
     implementer_session: 33a89e54-42c9-4c2a-8b08-9415e9e262ae
     start_sha: a8ae5f5004afdef49669b47a35055cd0d9bab506
+    commit_sha: ba4f2a4c8b6303bdb76ac42ee78754de4a302dc0
 ```
