@@ -5,7 +5,7 @@ task: "Fix mid-batch stop recovery and fixer false-success in agent-dispatch mod
 batch: "resume-path-and-brief-token"
 number: 2
 cards: 3
-verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/test-millpy-implement.py
+verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-millpy-implement.py test-language-skills-directive.py
 depends-on: [1]
 ```
 
@@ -35,6 +35,7 @@ Batch-local decision: the resume mode is exposed as a new `--resume-incomplete` 
   - `plugins/mill/scripts/_render.py`
   - `plugins/mill/scripts/_status.py`
   - `plugins/mill/scripts/_agent_dispatch.py`
+  - `plugins/mill/scripts/_cleanliness.py`
 - **Edits:**
   - `plugins/mill/scripts/millpy-implement.py`
 - **Creates:** none
@@ -49,14 +50,17 @@ Batch-local decision: the resume mode is exposed as a new `--resume-incomplete` 
   - `plugins/mill/scripts/millpy-implement.py`
   - `plugins/mill/scripts/_status.py`
   - `plugins/mill/scripts/_implementer_common.py`
+  - `plugins/mill/scripts/_render.py`
 - **Edits:**
   - `plugins/mill/unit_tests/test-millpy-implement.py`
+  - `plugins/mill/unit_tests/test-language-skills-directive.py`
+  - `plugins/mill/integration_tests/test-go-assets.py`
 - **Creates:** none
 - **Deletes:** none
 - **Moves:** none
-- **Requirements:** Add unit cases following the file's existing fixture/mocking style: (1) with `--resume-incomplete` set, the prepare stage reads `start_sha` from status.md and does NOT call `_status.set_batch_fields` to overwrite it (assert the original `start_sha` is preserved and no new housekeeping commit is staged); (2) the rendered brief token dict includes `START_SHA` equal to the preserved sha on resume and `""` on a normal dispatch (guard the `_render.render` KeyError contract), and `SESSION_ID` equals the retained `implementer_session` from status.md on resume (not a fresh uuid); (3) an end-to-end-style finalize after a resume that counts content commits from the original `start_sha` for a now-complete batch (content commits == card_count) emits `success`, not `incomplete` (the false-re-incomplete-loop regression). Mock git/subprocess and status.md as the existing tests do; do not invoke real git or claude.
-- **Commit:** `test(implement): cover start_sha-preserving resume path`
+- **Requirements:** Two parts. **(A) New resume tests** in `test-millpy-implement.py`, following the file's existing fixture/mocking style: (1) with `--resume-incomplete` set, the prepare stage reads `start_sha` from status.md and does NOT call `_status.set_batch_fields` to overwrite it (assert the original `start_sha` is preserved and no new housekeeping commit is staged), and does NOT call `_cleanliness.capture_snapshot`; (2) the rendered brief token dict includes `START_SHA` equal to the preserved sha on resume and `""` on a normal dispatch (guard the `_render.render` KeyError contract), and `SESSION_ID` equals the retained `implementer_session` from status.md on resume (not a fresh uuid); (3) an end-to-end-style finalize after a resume that counts content commits from the original `start_sha` for a now-complete batch (content commits == card_count) emits `success`, not `incomplete`. Mock git/subprocess and status.md as the existing tests do. **(B) Repair existing real-render token dicts** that call `_render.render(implementer-brief.md, tokens)` with a hand-built dict now missing the new `<START_SHA>` token (else they raise `KeyError`): in `test-millpy-implement.py` the two `test_real_brief_renders_*` dicts (~lines 830, 839 area), in `test-language-skills-directive.py` the `tokens` dict (~line 183, used by the renders at ~186 and ~221), and in `integration_tests/test-go-assets.py` the dict (~line 62). Add `"START_SHA": ""` to each. Grep the repo for any other `_render.render` call on `implementer-brief.md` and fix those token dicts too. (Note: `test-guards.py` reads the brief as text and does NOT render it — no change needed there.)
+- **Commit:** `test(implement): cover resume path and repair brief-render token dicts`
 
 ## Batch Tests
 
-`verify:` runs `test-millpy-implement.py`, covering the new `--resume-incomplete` prepare branch and the START_SHA token wiring in `millpy-implement.py`. The brief template change (card 6) is prose with no runnable surface; its contract (the `<START_SHA>` token must be supplied at every render site) is exercised indirectly by card 8's token-dict assertion, which guards the `_render.render` KeyError. Scope is the single implement test file matching the single edited script.
+`verify:` runs `run-all.py --only test-millpy-implement.py test-language-skills-directive.py`. `test-millpy-implement.py` covers the new `--resume-incomplete` prepare branch and the START_SHA token wiring; `test-language-skills-directive.py` is included because it real-renders `implementer-brief.md` and its token dict must gain `START_SHA` (card 8 part B) — running it here proves the new template token does not break that render. The two-file `--only` scope is justified: both files render or exercise the edited brief/script. The integration test `integration_tests/test-go-assets.py` also real-renders the brief and is repaired in card 8, but it requires real git/assets and is not part of the unit `verify:` — it is validated by the integration suite, not this batch's gate. The brief template change (card 6) is prose; its `<START_SHA>`-must-be-supplied contract is exercised by card 8's token-dict assertions which guard the `_render.render` KeyError.

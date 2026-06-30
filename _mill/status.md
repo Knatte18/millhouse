@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-fix-r2
+phase: plan-fix-r3
 slug: mill-agent-dispatch-gaps
 branch: hanf/mill-agent-dispatch-gaps
 plan: _mill/plan
@@ -22,4 +22,6 @@ plan-review-r1  '2026-06-30T05:19:32Z'
 plan-fix-r1  '2026-06-30T05:19:32Z'
 plan-review-r2  '2026-06-30T05:25:03Z'
 plan-fix-r2  '2026-06-30T05:25:03Z'
+plan-review-r3  '2026-06-30T05:32:00Z'
+plan-fix-r3  '2026-06-30T05:32:00Z'
 ```

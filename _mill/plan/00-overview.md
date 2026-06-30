@@ -25,7 +25,7 @@ batches:
     name: resume-path-and-brief-token
     file: 02-resume-path-and-brief-token.md
     depends-on: [1]
-    verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/test-millpy-implement.py
+    verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-millpy-implement.py test-language-skills-directive.py
   - number: 3
     name: fixer-brief-commit-guard
     file: 03-fixer-brief-commit-guard.md
@@ -66,6 +66,7 @@ batches:
 
 ## All Files Touched
 
+- `plugins/mill/integration_tests/test-go-assets.py`
 - `plugins/mill/scripts/_implementer_common.py`
 - `plugins/mill/scripts/millpy-implement.py`
 - `plugins/mill/skills/mill-go/SKILL.md`
@@ -73,4 +74,5 @@ batches:
 - `plugins/mill/templates/fixer-holistic-brief.md`
 - `plugins/mill/templates/implementer-brief.md`
 - `plugins/mill/unit_tests/test-implementer-common.py`
+- `plugins/mill/unit_tests/test-language-skills-directive.py`
 - `plugins/mill/unit_tests/test-millpy-implement.py`
