@@ -30,7 +30,9 @@ implementing  '2026-06-30T15:26:00Z'
 ```yaml
 batches:
   - name: pr-state-helper
-    state: pending
+    state: running
+    implementer_session: faaf6caf-c627-412b-be45-9e20d3999b93
+    start_sha: 07794a310ef978a6bc377c556cd7677d3c7935ac
   - name: cleanup-refactor
     state: pending
   - name: mill-merge-skill
