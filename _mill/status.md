@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-reviewing
+phase: holistic-fixing
 slug: mill-merge-pr-state-awareness
 branch: hanf/mill-merge-pr-state-awareness
 plan: _mill/plan
@@ -27,6 +27,7 @@ approved-pr-state-helper  '2026-06-30T15:29:24Z'
 approved-cleanup-refactor  '2026-06-30T15:34:36Z'
 approved-mill-merge-skill  '2026-06-30T15:39:54Z'
 holistic-reviewing  '2026-06-30T15:40:25Z'
+holistic-fixing  '2026-06-30T15:45:42Z'
 ```
 
 ## Batches
