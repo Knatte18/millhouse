@@ -39,7 +39,9 @@ batches:
     start_sha: f385e9196dbfed8537d2d1b01db4e3bf7235eb9a
     commit_sha: b0f6d498322170da38bb3724bf7bc891ccc77d5e
   - name: report-to-tasks-skill
-    state: pending
+    state: running
+    implementer_session: 478fe308-a059-4bb5-8d8f-a73fa274a8ad
+    start_sha: 32bf5c9d4455f40159c7c660f503ac05b7de71c0
   - name: ghissues-to-tasks-trim
     state: pending
   - name: skills-index-regen
