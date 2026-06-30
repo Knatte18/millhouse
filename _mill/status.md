@@ -27,7 +27,9 @@ implementing  '2026-06-30T19:30:25Z'
 ```yaml
 batches:
   - name: contract-adapters
-    state: pending
+    state: running
+    implementer_session: 6034d0ea-0d8d-462c-b503-c587e0e96896
+    start_sha: 32b0b2f75883ade08fd68cf4d2f7afac44b05f77
   - name: triage-to-tasks-skill
     state: pending
   - name: report-to-tasks-skill
