@@ -36,7 +36,9 @@ batches:
     start_sha: 07794a310ef978a6bc377c556cd7677d3c7935ac
     commit_sha: 56445ee81c0859256e8717bcf4198787a1032441
   - name: cleanup-refactor
-    state: pending
+    state: running
+    implementer_session: be33ebed-dfb0-49fd-bad0-5f2da80bc275
+    start_sha: 54c542111004376fe48e67968d87d703fbe7c8b5
   - name: mill-merge-skill
     state: pending
 ```
