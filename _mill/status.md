@@ -28,7 +28,9 @@ implementing  '2026-06-30T19:06:06Z'
 ```yaml
 batches:
   - name: moves-target-docs-and-messages
-    state: pending
+    state: running
+    implementer_session: 24069904-acee-4481-8327-f75ff0346f21
+    start_sha: b877ec25f1c72599e7a3b2e240548743812658cc
   - name: parse-batch-refs-leading-token
     state: pending
   - name: mill-start-utf8-fix
