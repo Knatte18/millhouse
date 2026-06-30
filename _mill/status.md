@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-contract-adapters
 slug: mill-ghissues-source-adapter
 branch: hanf/mill-ghissues-source-adapter
 plan: _mill/plan
@@ -20,6 +20,7 @@ planning  '2026-06-30T19:09:58Z'
 plan-fix-r1  '2026-06-30T19:16:27Z'
 planned  '2026-06-30T19:17:06Z'
 implementing  '2026-06-30T19:30:25Z'
+approved-contract-adapters  '2026-06-30T19:34:35Z'
 ```
 
 ## Batches
@@ -27,9 +28,10 @@ implementing  '2026-06-30T19:30:25Z'
 ```yaml
 batches:
   - name: contract-adapters
-    state: running
+    state: approved
     implementer_session: 6034d0ea-0d8d-462c-b503-c587e0e96896
     start_sha: 32b0b2f75883ade08fd68cf4d2f7afac44b05f77
+    commit_sha: ffd4369542412c36f8692676f2745549903050e3
   - name: triage-to-tasks-skill
     state: pending
   - name: report-to-tasks-skill
