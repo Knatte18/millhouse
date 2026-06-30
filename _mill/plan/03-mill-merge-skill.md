@@ -26,6 +26,7 @@ batch 1. Depends on batch 1 because the new gate invokes that helper.
 
 - **Context:**
   - `plugins/mill/scripts/_pr_state.py`
+  - `plugins/mill/scripts/_paths.py`
   - `plugins/mill/skills/mill-finalize/SKILL.md`
 - **Edits:**
   - `plugins/mill/skills/mill-merge/SKILL.md`
@@ -63,12 +64,25 @@ batch 1. Depends on batch 1 because the new gate invokes that helper.
          "PR #<number> is still open -- close or merge it on GitHub, then re-run
          `/mill-merge`." (discussion Decisions/open-pr-halt).
        - `closed` -> **proceed with the normal local squash** exactly as the
-         `done` fresh-merge flow (continue to Step 1). Add a caution note: in a
-         branch-protected repo the Step 5 push may be rejected, triggering the
-         existing Step 5 branch-protection fallback that auto-creates a NEW PR --
-         which contradicts the operator's deliberate close-without-merge. The
-         fallback itself stays as-is, but the gate must note that CLOSED ->
-         local-squash is not guaranteed terminal (discussion
+         `done` fresh-merge flow (continue to Step 1). **Commit-message source
+         (required):** the `closed` route can be reached from a `pr-pending`
+         re-entry, in which case `_mill/status.md` is typically absent (mill-finalize
+         already `git rm -r`'d `task_dir`) so the Entry phase-gate `done` branch
+         never cached `cached_task`/`cached_task_description` (SKILL.md L56-60) and
+         Step 5's `git commit -m "<cached_task>"` would be undefined. The gate's
+         `closed` route MUST therefore establish these values before continuing to
+         Step 1: if `status_path.exists()`, read `cached_task` /
+         `cached_task_description` from it exactly as the `done` branch does;
+         otherwise derive them from the wiki via
+         `task = _client.get_task(wiki_path, slug)` -> `cached_task =
+         task["title"]`, `cached_task_description = task.get("title")` (title is the
+         available field; there is no separate description in the wiki task).
+         State that this fallback feeds Step 5's squash commit message.
+         Add a caution note: in a branch-protected repo the Step 5 push may be
+         rejected, triggering the existing Step 5 branch-protection fallback that
+         auto-creates a NEW PR -- which contradicts the operator's deliberate
+         close-without-merge. The fallback itself stays as-is, but the gate must
+         note that CLOSED -> local-squash is not guaranteed terminal (discussion
          Decisions/closed-no-merge-proceeds, Branch-protection interaction).
        - `none` -> **silent fallback to phase-based behavior** (no new output):
          if `phase: done`, continue to Step 1 (today's direct squash); if
