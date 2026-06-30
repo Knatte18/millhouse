@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-pr-state-helper
 slug: mill-merge-pr-state-awareness
 branch: hanf/mill-merge-pr-state-awareness
 plan: _mill/plan
@@ -23,6 +23,7 @@ plan-fix-r1  '2026-06-30T14:44:40Z'
 plan-fix-r2  '2026-06-30T14:48:54Z'
 planned  '2026-06-30T14:49:13Z'
 implementing  '2026-06-30T15:26:00Z'
+approved-pr-state-helper  '2026-06-30T15:29:24Z'
 ```
 
 ## Batches
@@ -30,9 +31,10 @@ implementing  '2026-06-30T15:26:00Z'
 ```yaml
 batches:
   - name: pr-state-helper
-    state: running
+    state: approved
     implementer_session: faaf6caf-c627-412b-be45-9e20d3999b93
     start_sha: 07794a310ef978a6bc377c556cd7677d3c7935ac
+    commit_sha: 56445ee81c0859256e8717bcf4198787a1032441
   - name: cleanup-refactor
     state: pending
   - name: mill-merge-skill
