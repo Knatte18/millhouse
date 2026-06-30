@@ -48,10 +48,14 @@ instead of producing bad history or abandoning good work.
 - A single **PR-state lookup at mill-merge startup** that runs for **both**
   entry phases (`done` and `pr-pending`), replacing the divergent ad-hoc PR
   handling currently embedded only in the `pr-pending` re-entry path.
-- A new shared helper (`_pr_state.py`) that wraps the existing
-  `gh pr list --head <branch> --state all --json state,mergeCommit,number,url
-  --jq '.[0]'` query (already used by `millpy-cleanup.py:_apply_pr_reap_record`)
-  and returns a normalized, testable result.
+- A new shared helper (`_pr_state.py`). It runs
+  `gh pr list --head <branch> --state all --json state,mergeCommit,number,url`
+  **without** `--jq '.[0]'` — it returns the **full PR array** and computes
+  precedence in Python (see Decisions/normalized-state-precedence). The
+  `--jq '.[0]'` form currently used inline by
+  `millpy-cleanup.py:_apply_pr_reap_record` is intentionally dropped, because
+  trusting gh's recency ordering would let a stale CLOSED PR mask a real MERGED
+  one. The helper returns a normalized, testable result.
 - Routing on the normalized state:
   - **MERGED (remote)** -> skip the local squash entirely; run cleanup-only
     teardown (cleanup commit so the archive tag reflects a clean tip, archive
@@ -65,7 +69,9 @@ instead of producing bad history or abandoning good work.
     to the existing direct-squash behavior. PR-awareness is purely additive and
     must never break the common no-PR / local-only case.
 - Refactor `millpy-cleanup.py:_apply_pr_reap_record` to consume the same
-  `_pr_state.py` helper (de-duplicate the query), keeping its existing behavior.
+  `_pr_state.py` helper (de-duplicate the query). Its single-PR behavior is
+  unchanged; its **multi-PR** behavior intentionally changes — see
+  Decisions/cleanup-adopts-precedence.
 - Update the `mill-merge` SKILL.md: fold the old `## PR-path re-entry` table into
   the new unified startup gate; update the `pr-pending` CLOSED semantics from
   "abandon" to "proceed with local squash".
@@ -153,6 +159,44 @@ instead of producing bad history or abandoning good work.
 - Rejected: *Run local squash anyway and rely on "Already up to date"* — invalid,
   because a GitHub squash shares no ancestry, so the local squash is **not** a
   no-op and reapplies the diff.
+- Local-parent staleness: because Steps 1–2 and 5 are skipped, the **local**
+  parent branch is intentionally **not** fast-forwarded to the remote squash in
+  cleanup-only mode — it stays one commit behind `origin/<parent>` until the next
+  parent-side `fetch`/`pull` (e.g. the next `mill-merge-in` or `mill-spawn`, both
+  of which fetch origin) resyncs it. This is benign and deliberate: cleanup-only
+  mode must not touch the parent worktree (no merge lock was acquired), and
+  fast-forwarding it here would re-introduce the very parent-worktree coupling
+  the MERGED route exists to avoid. The plan must not add a parent ff-sync step.
+
+### cleanup-adopts-precedence
+
+- Decision: When `_apply_pr_reap_record` is refactored onto `_pr_state.py`, its
+  **multi-PR** behavior intentionally changes: it now resolves the PR state via
+  the MERGED > OPEN > CLOSED precedence rather than gh's `.[0]` recency ordering.
+  Single-PR behavior is unchanged; it still finalizes only on `MERGED`.
+- Rationale: This is a strict correctness improvement. Today, an older MERGED PR
+  sitting behind a more-recent CLOSED PR would make `.[0]` report CLOSED, so
+  cleanup would skip a task whose work demonstrably landed. Precedence makes it
+  finalize correctly. There is no case where the old `.[0]` answer is *more*
+  correct than precedence for "did this branch's work merge?".
+- Rejected: *Preserve `.[0]` semantics in cleanup* (would force two query
+  variants — defeating the single-source-of-truth goal — and would keep the
+  stale-CLOSED-masks-MERGED bug in the reaper).
+
+### cleanup-tag-target-unchanged
+
+- Decision: The two MERGED routes deliberately tag **different** commits, and the
+  plan must NOT unify them. `mill-merge`'s cleanup-only route tags the local
+  cleanup-commit tip of the task branch via
+  `_archive_tag.create_or_resolve(...)`. `millpy-cleanup.py`'s PR-reaper continues
+  to tag whatever it tags today (the remote merge / fetched SHA). Only the PR
+  *query* is unified, not the teardown or the tag target.
+- Rationale: The archive tag in each context preserves a different, locally
+  meaningful tip — the task branch's cleaned tip in mill-merge, the reaped record's
+  merge point in cleanup. Conflating them would change cleanup's archive semantics,
+  which is out of this task's scope.
+- Rejected: *Unify the tag target too* (scope creep; would alter cleanup's
+  existing archive behavior with no benefit).
 
 ### normalized-state-precedence
 
@@ -195,9 +239,13 @@ What mill-plan needs to know:
   `_subprocess_util.run(["gh","pr","list","--head",<branch>,"--state","all",
   "--json","state,mergeCommit,number","--jq",".[0]"], cwd=hub_root)` and tolerates
   non-zero exit / empty stdout. New `_pr_state.py` should host this query
-  (adding `url` to `--json`), and `_apply_pr_reap_record` should be refactored to
-  call it so there is one query implementation. Keep `_apply_pr_reap_record`'s
-  observable behavior identical (it only acts on `MERGED`).
+  (adding `url` to `--json`, dropping `--jq '.[0]'` so precedence is computed in
+  Python), and `_apply_pr_reap_record` should be refactored to call it so there is
+  one query implementation. `_apply_pr_reap_record` still acts only on `MERGED`,
+  but now resolves that state via the precedence helper rather than gh's `.[0]`
+  recency ordering — an intentional, strictly-safer change (see
+  Decisions/cleanup-adopts-precedence). Its archive-tag target is **not** unified
+  with mill-merge's (see Decisions/cleanup-tag-target-unchanged).
 - **`_subprocess_util.run`** — `plugins/mill/scripts/_subprocess_util.py`. The
   standard subprocess wrapper (returns an object with `returncode`, `stdout`,
   `stderr`). `_pr_state.py` must run `gh` with `cwd=<hub_root/git_root>` like the
