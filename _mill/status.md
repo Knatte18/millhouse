@@ -46,7 +46,9 @@ batches:
     start_sha: 680c7527d74a283d64f8bbc5985f78229ac05f6f
     commit_sha: 4324372dc0fa57e069395d1513c0b6b839fb0cd5
   - name: resume-path-and-brief-token
-    state: pending
+    state: running
+    implementer_session: cd830198-aa93-42fc-9554-ca3bd4222e89
+    start_sha: 9e57a323c40a1eb179ceaf56359da57dc8f8a4d0
   - name: millgo-incomplete-routing
     state: pending
 ```
