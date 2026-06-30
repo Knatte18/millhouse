@@ -28,6 +28,7 @@ No batch-local decisions beyond `## Shared Decisions` in the overview.
   - `plugins/mill/scripts/_gh_issues.py`
   - `plugins/mill/skills/mill-triage-to-tasks/SKILL.md`
   - `plugins/mill/skills/mill-fold/SKILL.md`
+  - `plugins/mill/scripts/_paths.py`
 - **Edits:**
   - `plugins/mill/skills/mill-ghissues-to-tasks/SKILL.md`
 - **Creates:** none

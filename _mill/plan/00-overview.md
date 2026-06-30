@@ -3,7 +3,7 @@
 ```yaml
 task: "Split mill-ghissues-to-tasks into source adapter + source-agnostic analysis"
 slug: mill-ghissues-source-adapter
-approved: false
+approved: true
 started: "20260630T191500Z"
 parent: main
 root: ""
@@ -51,7 +51,7 @@ batches:
 
 ### Decision: per-Sources-bullet rendering, including fold-ins
 
-- **Decision:** `detail_hint` and `embed_body` apply **per Sources bullet**, never once per task. Every `- Sources: <ref_prefix><ref> — <title>` bullet — whether on a new grouped task or appended to an existing task via fold-in — is immediately followed by that same item's own `detail_hint` line (with `{ref}` substituted from that item) when `detail_hint` is non-null, and by that item's `body` text when `embed_body` is true. This is the one accepted, intentional deviation from "ghissues output stays unchanged" (today's ghissues output used one ambiguous trailing hint line for a whole task; this plan replaces it with one hint line per source, which is identical output for the common single-source case).
+- **Decision:** `detail_hint` and `embed_body` apply **per Sources bullet**, never once per task. Every `- Sources: <ref_prefix><ref> — <title>` bullet — whether on a new grouped task or appended to an existing task's `body` field via fold-in — is immediately followed by that same item's own `detail_hint` line (with `{ref}` substituted from that item) when `detail_hint` is non-null, and by that item's `body` text when `embed_body` is true. This is the one accepted, intentional deviation from "ghissues output stays unchanged" (today's ghissues output used one ambiguous trailing hint line for a whole task; this plan replaces it with one hint line per source, which is identical output for the common single-source case). Note: the fold-in bullet *string* (`- Sources: <ref> — <title>`) matches `/mill-fold`'s format exactly, but `/mill-fold` appends it to the task's `brief` field — `mill-triage-to-tasks` appends to `body` instead, matching today's `mill-ghissues-to-tasks` placement, not `/mill-fold`'s field choice.
 - **Rationale:** `_mill/discussion.md` Decision "`detail_hint` and `embed_body` apply per source bullet, including fold-ins" (added during discussion-review rounds 2–3 to close two real gaps: ambiguous multi-source `{ref}` substitution, and sandbox QA detail being silently dropped on fold-in).
 - **Applies to:** `triage-to-tasks-skill` (batch 2).
 
@@ -70,7 +70,7 @@ batches:
 ### Decision: unclaimed-only fold guard and slug rules are unchanged
 
 - **Decision:** `mill-triage-to-tasks`'s fold-in routing reuses the existing guard verbatim: a fold target must have `status is None and not deferred` (`plugins/mill/scripts/millpy-fold.py`'s `unclaimed-only-allowlist` decision); any other state routes the item to a new task or skip instead. New-task slugs validate against `[a-z][a-z0-9-]*` and must not collide with an existing slug, exactly as today's `mill-ghissues-to-tasks` Step 3.
-- **Rationale:** `_mill/discussion.md` Technical context — `millpy-fold.py` cross-reference; preserves operator-visible behavior parity with `/mill-fold`.
+- **Rationale:** `_mill/discussion.md` Technical context — `millpy-fold.py` cross-reference; preserves the unclaimed-only guard behavior and the Sources-bullet string format used by `/mill-fold`, not its `brief`-field placement (see "Decision: per-Sources-bullet rendering, including fold-ins" above for the placement distinction).
 - **Applies to:** `triage-to-tasks-skill` (batch 2).
 
 ### Decision: ASCII-only stdout in new Python modules

@@ -70,6 +70,7 @@ No batch-local decisions beyond `## Shared Decisions` in the overview.
     5. `source` set to something other than `"sandbox-report"` (e.g. `"ghissues"` or missing entirely) → raises `SandboxReportError`.
     6. Two items sharing the same `ref` → raises `SandboxReportError` naming that `ref`.
     7. A file containing invalid JSON syntax → raises `SandboxReportError`.
+    8. A file whose top-level parsed JSON value is not an object (e.g. a bare JSON array or string) → raises `SandboxReportError` (not an uncaught `AttributeError` from calling `.get()` on a non-dict).
 - **Commit:** `feat(sandbox-report): add _sandbox_report.py contract reader with tests`
 
 ### Card 3: `triage-report.schema.md` contract documentation
