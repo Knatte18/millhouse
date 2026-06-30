@@ -133,6 +133,15 @@ instead of producing bad history or abandoning good work.
   code review and `phase: done`, so "proceed" is the safe, non-destructive
   default; a wrong proceed is recoverable via the archive tag, whereas a wrong
   abandon discards reviewed work).
+- Branch-protection interaction (must be handled, not assumed terminal): the
+  CLOSED route runs the normal local squash, whose Step 5 push can be **rejected**
+  by branch protection. mill-merge's existing Step 5 fallback then auto-creates a
+  *new* PR — which contradicts the operator's "I closed the PR on purpose" intent
+  and re-opens PR review. The branch-protection fallback itself stays out of scope
+  for this task, but the plan must NOT treat CLOSED -> local-squash as always
+  terminal: it should, at minimum, surface this interaction (and may special-case
+  it later). Recorded here so the plan writer is aware the CLOSED route can land in
+  the fallback rather than completing.
 
 ### no-pr-silent-fallback
 
@@ -154,8 +163,14 @@ instead of producing bad history or abandoning good work.
   Steps 6 (archive tag), 7 (Home.md `[done]`), 8 (lock release — no-op if never
   acquired), 9 (notify/report).
 - Rationale: The parent already has the change via the external squash; a local
-  squash would duplicate/diverge. The archive tag still wants a clean tip. This
-  generalizes the existing `pr-pending` MERGED branch to the `done` phase too.
+  squash would duplicate/diverge. The archive tag still wants a clean tip.
+- SKILL.md rewrite required (not a pure generalization): today's
+  `## PR-path re-entry` MERGED branch (SKILL.md ~line 264) says "Skip Steps 1–5",
+  which **also skips Step 4** (the cleanup commit) and therefore tags the
+  *un-cleaned* local tip. The unified route adds Step 4, so the tagged tip
+  differs from today's pr-pending behavior. The plan MUST rewrite that
+  `## PR-path re-entry` MERGED branch to run Step 4 before the archive tag — it
+  cannot be assumed identical to the current text.
 - Rejected: *Run local squash anyway and rely on "Already up to date"* — invalid,
   because a GitHub squash shares no ancestry, so the local squash is **not** a
   no-op and reapplies the diff.
@@ -206,6 +221,11 @@ instead of producing bad history or abandoning good work.
   (e.g. `state` in `{"merged","open","closed","none"}`, plus `number`, `url`,
   `merge_commit`) so callers branch on one field. `none` covers no-PR /
   `gh`-missing / query-error.
+  `merge_commit` must preserve gh's raw `mergeCommit` **object** (which carries
+  `.oid`), not just a flattened SHA string — `_apply_pr_reap_record`
+  (`millpy-cleanup.py` ~line 635) reads `(merge_commit or {}).get("oid")` as its
+  tag-target fallback when the fetched merge SHA is unavailable, and that callsite
+  must keep working after the refactor.
 - Rationale: A branch can accumulate several PRs over its life; "is it merged?"
   must win over a stale CLOSED entry, and an OPEN PR must be visible over a
   superseded CLOSED one. `none` collapses all "can't determine / no PR" cases to
