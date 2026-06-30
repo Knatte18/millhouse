@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-agent-dispatch-gaps
 branch: hanf/mill-agent-dispatch-gaps
 plan: _mill/plan
@@ -26,4 +26,19 @@ plan-review-r3  '2026-06-30T05:32:00Z'
 plan-fix-r3  '2026-06-30T05:32:00Z'
 plan-fix-r4  '2026-06-30T05:38:56Z'
 planned  '2026-06-30T05:39:10Z'
+implementing  '2026-06-30T05:42:27Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: finalize-incomplete-core
+    state: pending
+  - name: fixer-brief-commit-guard
+    state: pending
+  - name: resume-path-and-brief-token
+    state: pending
+  - name: millgo-incomplete-routing
+    state: pending
 ```
