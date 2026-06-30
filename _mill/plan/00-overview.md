@@ -3,7 +3,7 @@
 ```yaml
 task: Fix plan validator Moves-target gap, code-review backtick parser, and mill-start encoding crash
 slug: mill-plan-and-start-gaps
-approved: false
+approved: true
 started: 20260630-185645
 parent: main
 root: ""
