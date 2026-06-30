@@ -2192,7 +2192,7 @@ def main() -> int:
             errors += 1
 
     # Case 44a -- #570 partial-batch reclassify: inferred no-snapshot path, verify fails,
-    # k=1 content commit + 1 housekeeping commit (raw range=2) -> stuck_type:transient
+    # k=1 content commit + 1 housekeeping commit (raw range=2) -> stuck_type:incomplete
     # with commits_made=1 (content count, not raw count).
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
@@ -2208,7 +2208,7 @@ def main() -> int:
             ["git", "-C", str(project_root), "commit", "--allow-empty", "-m", "card-1 done"],
             check=True, capture_output=True,
         )
-        # card_count=3 so content=1 satisfies 0<1<3 -> reclassify to transient.
+        # card_count=3 so content=1 satisfies 0<1<3 -> reclassify to incomplete.
         rc, captured = _capture_stdout(
             lambda: _forward_output(
                 "garbage output with no json",
@@ -2436,9 +2436,9 @@ def main() -> int:
             print(f"FAIL: case 49f ({exc})", file=sys.stderr)
             errors += 1
 
-    # Case 50g -- one-card-short with housekeeping commit: content==N-1 now flags transient.
+    # Case 50g -- one-card-short with housekeeping commit: content==N-1 now flags incomplete.
     # Without the housekeeping exclusion, raw_count==N==card_count would NOT fire the gate.
-    # With exclusion, content==N-1<N fires it -> stuck_type:transient, commits_made=N-1.
+    # With exclusion, content==N-1<N fires it -> stuck_type:incomplete, commits_made=N-1.
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         base_sha = _setup_fixture(project_root)

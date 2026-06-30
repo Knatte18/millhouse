@@ -110,7 +110,7 @@ def _reclassify_verify_failure(
 
     Called only when the verify gate already fired (verify_stuck is non-None). A verify
     failure that happens mid-batch -- before the implementer finished all cards -- should
-    be classified as transient (retryable) not verify (needs a fix). A failure with zero
+    be classified as incomplete (resume required) not verify (needs a fix). A failure with zero
     content commits likely means the agent stopped before producing any work and should be
     classified as logic (not retryable without human intervention).
 
