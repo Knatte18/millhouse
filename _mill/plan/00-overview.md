@@ -23,11 +23,11 @@ batches:
     name: wiki-cold-daemon-retry
     file: 02-wiki-cold-daemon-retry.md
     depends-on: []
-    verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-marker.py test-millpy-implement.py
+    verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-marker.py test-millpy-implement.py test-millpy-fix.py
   - number: 3
     name: nits-only-no-op-success
     file: 03-nits-only-no-op-success.md
-    depends-on: []
+    depends-on: [2]
     verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-implementer-common.py test-millpy-fix.py
 ```
 
@@ -55,6 +55,7 @@ batches:
 
 - `plugins/mill/scripts/_implementer_common.py`
 - `plugins/mill/scripts/_marker.py`
+- `plugins/mill/scripts/millpy-fix.py`
 - `plugins/mill/scripts/millpy-implement.py`
 - `plugins/mill/skills/mill-start/SKILL.md`
 - `plugins/mill/unit_tests/test-implementer-common.py`

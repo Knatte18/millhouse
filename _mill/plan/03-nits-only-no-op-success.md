@@ -6,12 +6,12 @@ batch: nits-only-no-op-success
 number: 3
 cards: 2
 verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-implementer-common.py test-millpy-fix.py
-depends-on: []
+depends-on: [2]
 ```
 
 ## Batch Scope
 
-This batch closes GitHub issue #582: a `--nits-only` fixer pass that legitimately pushes back on every NIT finding (per the `mill-receiving-review` decision tree, the correct outcome — zero commits expected) is misclassified by `_implementer_common.finalize_from_output()` as `stuck_type: "logic"` ("no content commit") instead of success, and the `nits-fixed-<scope>` timeline marker is never written — which then blocks the Handoff nit-enforcement gate (`_nit_gate.compute_unfixed_nits`). The fix is a single-condition change: skip the no-content-commit demotion only when `nits_only=True`, leaving every other gate (completeness, in-scope dirty-tree) and the existing `nits_only` marker block unchanged. Per discussion (round 3 review correction), this batch does NOT thread `task_dir`/`parent_branch` through `millpy-fix.py`'s CLI to make the in-process dirty-tree gate reachable there — that gate is already, and remains, a no-op on the fixer's real call path; the actual backstop for stray-uncommitted-residue is mill-go's unrelated, unmodified Handoff-time terminal cleanliness gate.
+This batch closes GitHub issue #582: a `--nits-only` fixer pass that legitimately pushes back on every NIT finding (per the `mill-receiving-review` decision tree, the correct outcome — zero commits expected) is misclassified by `_implementer_common.finalize_from_output()` as `stuck_type: "logic"` ("no content commit") instead of success, and the `nits-fixed-<scope>` timeline marker is never written — which then blocks the Handoff nit-enforcement gate (`_nit_gate.compute_unfixed_nits`). The fix is a single-condition change: skip the no-content-commit demotion only when `nits_only=True`, leaving every other gate (completeness, in-scope dirty-tree) and the existing `nits_only` marker block unchanged. Per discussion (round 3 review correction), this batch does NOT thread `task_dir`/`parent_branch` through `millpy-fix.py`'s CLI to make the in-process dirty-tree gate reachable there — that gate is already, and remains, a no-op on the fixer's real call path; the actual backstop for stray-uncommitted-residue is mill-go's unrelated, unmodified Handoff-time terminal cleanliness gate. This batch `depends-on: [2]` (added during plan review round 1) solely because Batch 2's Card 4 also gained a new test in `test-millpy-fix.py` (a plan-review NIT fix unrelated to this batch's own change); sequencing after Batch 2 avoids a same-file parallel-modify conflict on `test-millpy-fix.py` — there is no logical/code dependency between the two batches' fixes.
 
 ## Cards
 
