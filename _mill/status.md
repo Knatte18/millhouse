@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-drift-guard-and-millstart-fix
+phase: holistic-reviewing
 slug: mill-skill-and-tooling-gaps
 branch: hanf/mill-skill-and-tooling-gaps
 plan: _mill/plan
@@ -22,6 +22,7 @@ plan-fix-r1  '2026-06-30T04:45:52Z'
 planned  '2026-06-30T04:46:06Z'
 implementing  '2026-06-30T04:47:00Z'
 approved-drift-guard-and-millstart-fix  '2026-06-30T04:53:06Z'
+holistic-reviewing  '2026-06-30T04:53:31Z'
 ```
 
 ## Batches
