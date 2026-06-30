@@ -34,7 +34,9 @@ implementing  '2026-06-30T05:42:27Z'
 ```yaml
 batches:
   - name: finalize-incomplete-core
-    state: pending
+    state: running
+    implementer_session: 42e6f4af-42bd-4ce6-b99c-6710dc812201
+    start_sha: 5b11787e4b260adfb2ec9a654cbb2ed0e30326f3
   - name: fixer-brief-commit-guard
     state: pending
   - name: resume-path-and-brief-token
