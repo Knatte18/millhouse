@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-merge-pr-state-awareness
 branch: hanf/mill-merge-pr-state-awareness
 plan: _mill/plan
@@ -22,4 +22,17 @@ plan-review-r1  '2026-06-30T14:44:40Z'
 plan-fix-r1  '2026-06-30T14:44:40Z'
 plan-fix-r2  '2026-06-30T14:48:54Z'
 planned  '2026-06-30T14:49:13Z'
+implementing  '2026-06-30T15:26:00Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: pr-state-helper
+    state: pending
+  - name: cleanup-refactor
+    state: pending
+  - name: mill-merge-skill
+    state: pending
 ```
