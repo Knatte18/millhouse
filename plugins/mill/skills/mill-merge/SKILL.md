@@ -49,15 +49,61 @@ You are an integration engineer. Your job is to merge a completed task branch ba
 
    | phase | action |
    | --- | --- |
-   | `done` | fresh merge — continue to Step 1 |
-   | `pr-pending` | see *PR-path re-entry* below |
+   | `done` | see *PR-state gate* below |
+   | `pr-pending` | see *PR-state gate* below |
    | `complete` / missing / other | halt with "status.md phase is `<value>`; mill-merge expects `done`. If the task is not finished, run mill-go first." |
 
-   After the phase gate confirms `phase: done`, cache the task fields from `_mill/status.md` before the Teardown Steps run:
+   When `phase: done`, cache the task fields from `_mill/status.md` now, while status.md still exists and before the Teardown Steps run:
    - `cached_task = _status.read_full(status_path)["yaml"].get("task", slug)` — the task title used in Step 5's squash commit message and Step 6's PR title.
    - `cached_task_description = _status.read_full(status_path)["yaml"].get("task_description", cached_task)` — the task description used in Step 6's PR body.
 
    Use `cached_task` and `cached_task_description` in all subsequent references to "task: field from status.md" and "task_description field from status.md". Step 4's `git rm -r _mill/` deletes status.md before Step 5 runs; reading from a cached variable avoids the read-after-delete failure.
+
+### PR-state gate
+
+This gate runs for both `done` and `pr-pending` phases, immediately after Step 5's phase check. It must execute before any squash or teardown work begins.
+
+**Capture child branch** (note: this is captured here, earlier than the existing Step 3 capture, because the gate needs it before any parent-side operations; Step 3's capture remains for the squash flow):
+
+```bash
+CHILD_BRANCH=$(git branch --show-current)
+```
+
+**Resolve PR state** (cwd = child git root, never wiki):
+
+```bash
+PR_STATE_JSON=$(PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
+import json
+import _pr_state, _paths
+r = _pr_state.resolve_pr_state('$CHILD_BRANCH', _paths.resolve_git_root())
+print(json.dumps(r))
+")
+```
+
+Parse the JSON `state` and `number` fields from `PR_STATE_JSON`.
+
+**Route on `state`** (helper returns lowercase values):
+
+- **`merged`** -- cleanup-only teardown: run Step 4 (cleanup commit, so the archive tag reflects a clean tip), then Step 5.5 (cache-helper preflight -- guards Step 6's `_archive_tag` import against a stale plugin cache `ModuleNotFoundError`), then Step 6 (archive tag), Step 7 (Home.md `[done]`), Step 8 (release lock -- no-op if never acquired), Step 9 (notify/report). Skip Steps 1, 2, and 5.
+
+  Note: the local parent branch is intentionally NOT fast-forwarded here; it resyncs on the next parent-side fetch/pull. Do not add a parent ff-sync step (discussion Decisions/merged-remote-cleanup-only, Local-parent staleness).
+
+- **`open`** -- halt and report, never auto-close:
+
+  > "PR #<number> is still open -- close or merge it on GitHub, then re-run `/mill-merge`."
+
+- **`closed`** -- proceed with the normal local squash exactly as the `done` fresh-merge flow (continue to Step 1).
+
+  **Commit-message source:** the `closed` route can be reached from a `pr-pending` re-entry where `_mill/status.md` is typically absent (mill-finalize already `git rm -r`'d `task_dir`), so `cached_task` and `cached_task_description` may be undefined. Establish them before continuing to Step 1:
+
+  - If `status_path.exists()`: read them exactly as the `done` branch caching block does (`_status.read_full(status_path)["yaml"].get("task", slug)` / `.get("task_description", cached_task)`).
+  - Otherwise: `task = _client.get_task(wiki_path, slug)`. Guard: `if task is None: halt("slug '<slug>' not found in wiki; cannot derive commit message for closed route")`. Then: `cached_task = task["title"]`, `cached_task_description = task.get("title")` (title is the available field; there is no separate description field in the wiki task). This fallback feeds Step 5's squash commit message.
+
+  **Caution -- branch-protection interaction:** in a branch-protected repo the Step 5 push may be rejected, triggering the existing Step 5 branch-protection fallback that auto-creates a NEW PR -- which contradicts the operator's deliberate close-without-merge. The fallback itself stays as-is, but be aware that `closed` -> local-squash is not guaranteed terminal (discussion Decisions/closed-no-merge-proceeds, Branch-protection interaction).
+
+- **`none`** -- silent fallback to phase-based behavior (no new output):
+  - If `phase: done`: continue to Step 1 (today's direct squash).
+  - If `phase: pr-pending`: keep today's halt -- "status.md says pr-pending but no PR on this branch; inspect manually."
 
 ## Steps
 
@@ -257,14 +303,7 @@ Report to the user:
 
 ## PR-path re-entry
 
-When the entry-phase gate sees `phase: pr-pending`:
-
-1. Resolve the PR via `gh pr list --head "$CHILD_BRANCH" --state all --json state,mergeCommit,number --jq '.[0]'`.
-2. Interpret:
-   - `state == "MERGED"` → continue to Step 6 (archive tag). Skip Steps 1–5 (merge lock no longer needed; squash has already landed via the external PR). Steps 6–7 run (archive tag + Home.md `[done]` flip). Worktree, branch, portal, and legacy wiki active-dir teardown are now handled by `/mill-cleanup --apply` — direct the operator to run it after Step 9 reports.
-   - `state == "OPEN"` → report "PR #<N> still open. Waiting — re-run `/mill-merge` after it lands." Halt.
-   - `state == "CLOSED"` without merge → report "PR #<N> closed without merging. Task branch is orphaned — run `/mill-abandon` if you want to discard, or open a new PR manually."
-   - No PR found → report "status.md says pr-pending but no PR on this branch; inspect manually."
+PR-path re-entry for both `done` and `pr-pending` phases is now handled by the `### PR-state gate` in `## Entry`. All merged/open/closed/none routing is defined there.
 
 ## Rollback (Steps 1–5 only)
 

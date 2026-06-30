@@ -834,7 +834,7 @@ def main() -> int:
                 result.returncode = 0
                 result.stderr = ""
                 if "gh" in argv and "pr" in argv:
-                    result.stdout = '{"state": "MERGED", "mergeCommit": {"oid": "abc123"}, "number": 42}'
+                    result.stdout = '[{"state": "MERGED", "mergeCommit": {"oid": "abc123"}, "number": 42, "url": "https://example/pr/42"}]'
                 elif "tag" in argv and "-l" in argv:
                     result.stdout = ""
                 else:
@@ -922,7 +922,7 @@ def main() -> int:
                 result.returncode = 0
                 result.stderr = ""
                 result.stdout = (
-                    '{"state": "OPEN", "number": 42}'
+                    '[{"state": "OPEN", "number": 42, "url": "https://example/pr/42"}]'
                     if "gh" in argv and "pr" in argv
                     else ""
                 )
@@ -988,7 +988,7 @@ def main() -> int:
                 result.returncode = 0
                 result.stderr = ""
                 result.stdout = (
-                    '{"state": "CLOSED", "mergeCommit": null, "number": 42}'
+                    '[{"state": "CLOSED", "mergeCommit": null, "number": 42, "url": "https://example/pr/42"}]'
                     if "gh" in argv and "pr" in argv
                     else ""
                 )
