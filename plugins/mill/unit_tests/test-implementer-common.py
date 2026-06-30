@@ -17,6 +17,7 @@ sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 from _implementer_common import (  # noqa: E402
     _forward_output,
     _batch_completeness_stuck,
+    _content_commit_count,
     emit_prepare,
     emit_prepare_no_dispatch,
     finalize_from_output,
@@ -1254,14 +1255,14 @@ def main() -> int:
         try:
             data = json.loads(captured.strip())
             assert data["status"] == "stuck", f"case 27a: expected stuck, got {data}"
-            assert data["stuck_type"] == "transient", (
-                f"case 27a: expected transient, got {data}"
+            assert data["stuck_type"] == "incomplete", (
+                f"case 27a: expected incomplete, got {data}"
             )
             assert "batch incomplete" in data.get("reason", ""), (
                 f"case 27a: expected 'batch incomplete' in reason, got {data}"
             )
             print(
-                "PASS: case 27a - completeness gate: fewer commits than cards -> stuck/transient"
+                "PASS: case 27a - completeness gate: fewer commits than cards -> stuck/incomplete"
             )
         except Exception as exc:
             print(f"FAIL: case 27a ({exc}) captured={captured!r}", file=sys.stderr)
@@ -2114,11 +2115,11 @@ def main() -> int:
             assert result["status"] == "stuck", (
                 f"case 41: expected status=stuck, got {result}"
             )
-            assert result["stuck_type"] == "transient", (
-                f"case 41: expected stuck_type=transient, got {result}"
+            assert result["stuck_type"] == "incomplete", (
+                f"case 41: expected stuck_type=incomplete, got {result}"
             )
             print(
-                "PASS: case 41 - Bug #548 regression: gate fires when verify_cmd is None"
+                "PASS: case 41 - Bug #548 regression: gate fires when verify_cmd is None -> incomplete"
             )
         except Exception as exc:
             print(f"FAIL: case 41 ({exc})", file=sys.stderr)
@@ -2177,14 +2178,14 @@ def main() -> int:
             assert result["status"] == "stuck", (
                 f"case 43: expected status=stuck, got {result}"
             )
-            assert result["stuck_type"] == "transient", (
-                f"case 43: expected stuck_type=transient, got {result}"
+            assert result["stuck_type"] == "incomplete", (
+                f"case 43: expected stuck_type=incomplete, got {result}"
             )
             assert result.get("commits_made") == 0, (
                 f"case 43: expected commits_made=0, got {result}"
             )
             print(
-                "PASS: case 43 - Bug #545/#560 commits_made=0 when no commits since start_sha"
+                "PASS: case 43 - Bug #545/#560 commits_made=0 when no commits since start_sha -> incomplete"
             )
         except Exception as exc:
             print(f"FAIL: case 43 ({exc})", file=sys.stderr)
@@ -2221,8 +2222,8 @@ def main() -> int:
         try:
             data = json.loads(captured.strip())
             assert data["status"] == "stuck", f"case 44a: expected stuck, got {data}"
-            assert data["stuck_type"] == "transient", (
-                f"case 44a: expected transient (not verify), got {data}"
+            assert data["stuck_type"] == "incomplete", (
+                f"case 44a: expected incomplete (not verify), got {data}"
             )
             assert data.get("commits_made") == 1, (
                 f"case 44a: expected commits_made=1 (content, not 2 raw), got {data}"
@@ -2232,7 +2233,7 @@ def main() -> int:
             )
             print(
                 "PASS: case 44a - partial-batch reclassify:"
-                " inferred path k=1 content N=3 -> transient commits_made=1"
+                " inferred path k=1 content N=3 -> incomplete commits_made=1"
             )
         except Exception as exc:
             print(f"FAIL: case 44a ({exc}) captured={captured!r}", file=sys.stderr)
@@ -2384,15 +2385,15 @@ def main() -> int:
         try:
             data = json.loads(captured.strip())
             assert data["status"] == "stuck", f"case 48e: expected stuck, got {data}"
-            assert data["stuck_type"] == "transient", (
-                f"case 48e: expected transient (not verify), got {data}"
+            assert data["stuck_type"] == "incomplete", (
+                f"case 48e: expected incomplete (not verify), got {data}"
             )
             assert data.get("commits_made") == 1, (
                 f"case 48e: expected commits_made=1 (content), got {data}"
             )
             print(
                 "PASS: case 48e - parsed-success path: partial-batch verify failure"
-                " -> transient (gate_session_id hoist exercised)"
+                " -> incomplete (gate_session_id hoist exercised)"
             )
         except Exception as exc:
             print(f"FAIL: case 48e ({exc}) captured={captured!r}", file=sys.stderr)
@@ -2421,15 +2422,15 @@ def main() -> int:
                 session_id="test",
             )
             assert result is not None, f"case 49f: expected stuck dict, got {result}"
-            assert result["stuck_type"] == "transient", (
-                f"case 49f: expected transient, got {result}"
+            assert result["stuck_type"] == "incomplete", (
+                f"case 49f: expected incomplete, got {result}"
             )
             assert result.get("commits_made") == 1, (
                 f"case 49f: expected commits_made=1 (content not 2 raw), got {result}"
             )
             print(
                 "PASS: case 49f - _batch_completeness_stuck with housekeeping:"
-                " commits_made=1 (content, not 2 raw)"
+                " commits_made=1 (content, not 2 raw) -> incomplete"
             )
         except Exception as exc:
             print(f"FAIL: case 49f ({exc})", file=sys.stderr)
@@ -2462,18 +2463,251 @@ def main() -> int:
             assert result is not None, (
                 f"case 50g: expected stuck dict (raw==N but content==N-1), got {result}"
             )
-            assert result["stuck_type"] == "transient", (
-                f"case 50g: expected transient, got {result}"
+            assert result["stuck_type"] == "incomplete", (
+                f"case 50g: expected incomplete, got {result}"
             )
             assert result.get("commits_made") == 2, (
                 f"case 50g: expected commits_made=2 (N-1 content), got {result}"
             )
             print(
                 "PASS: case 50g - one-card-short with housekeeping:"
-                " raw==N but content==N-1 -> stuck/transient commits_made=2"
+                " raw==N but content==N-1 -> stuck/incomplete commits_made=2"
             )
         except Exception as exc:
             print(f"FAIL: case 50g ({exc})", file=sys.stderr)
+            errors += 1
+
+    # Case 51: #574 regression -- no-JSON inference path, verify_cmd set and PASSES,
+    # content-commits < card_count -> stuck/incomplete with commits_made and commit_sha.
+    # Before the fix, _batch_completeness_stuck was disabled when verify_cmd was set,
+    # so a partial batch on the no-JSON path would slip through as inferred success.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        base_sha = _setup_fixture(project_root)
+        # Housekeeping commit (prepare stage).
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "--allow-empty",
+             "-m", "mill-go: start batch my-batch"],
+            check=True, capture_output=True,
+        )
+        # One content commit (card_count=3, so content=1 < 3 -> partial batch).
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "--allow-empty", "-m", "card-1"],
+            check=True, capture_output=True,
+        )
+        new_head_51 = subprocess.run(
+            ["git", "-C", str(project_root), "rev-parse", "HEAD"],
+            check=True, capture_output=True, text=True,
+        ).stdout.strip()
+        rc, captured = _capture_stdout(
+            lambda: _forward_output(
+                "garbage output no json",
+                project_root,
+                start_sha=base_sha,
+                verify_cmd="exit 0",
+                card_count=3,
+                session_id="s51",
+            )
+        )
+        try:
+            data = json.loads(captured.strip())
+            assert data["status"] == "stuck", f"case 51: expected stuck, got {data}"
+            assert data["stuck_type"] == "incomplete", (
+                f"case 51: expected incomplete (#574 fix), got {data}"
+            )
+            assert data.get("commits_made") == 1, (
+                f"case 51: expected commits_made=1 (content), got {data}"
+            )
+            assert "commit_sha" in data, f"case 51: expected commit_sha in envelope, got {data}"
+            assert data["commit_sha"] == new_head_51, (
+                f"case 51: expected commit_sha={new_head_51}, got {data}"
+            )
+            print(
+                "PASS: case 51 - #574 regression: no-JSON inference, verify passes,"
+                " partial batch -> stuck/incomplete with commits_made and commit_sha"
+            )
+        except Exception as exc:
+            print(f"FAIL: case 51 ({exc}) captured={captured!r}", file=sys.stderr)
+            errors += 1
+
+    # Case 52: explicit status:success JSON + verify passes + content < card_count -> success
+    # preserved (not false incomplete). The explicit-success completeness gate is disabled
+    # when verify_cmd is set (ignore_verify stays False on that path).
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        base_sha = _setup_fixture(project_root)
+        # One commit since base_sha; card_count=2 (fewer commits than cards), but verify passes.
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "--allow-empty", "-m", "card-1"],
+            check=True, capture_output=True,
+        )
+        agent_output_52 = (
+            '{"status":"success","commit_sha":"abc","session_id":"s52"}\n'
+        )
+        rc, captured = _capture_stdout(
+            lambda: _forward_output(
+                agent_output_52,
+                project_root,
+                start_sha=base_sha,
+                verify_cmd="exit 0",
+                card_count=2,
+                session_id="s52",
+            )
+        )
+        try:
+            data = json.loads(captured.strip())
+            assert data["status"] == "success", (
+                f"case 52: expected success (explicit+verify conclusive), got {data}"
+            )
+            print(
+                "PASS: case 52 - explicit status:success + verify passes + content<cards"
+                " -> success preserved (no false incomplete)"
+            )
+        except Exception as exc:
+            print(f"FAIL: case 52 ({exc}) captured={captured!r}", file=sys.stderr)
+            errors += 1
+
+    # Case 53: _forward_output normalizes implementer-emitted status:incomplete report.
+    # A bare {"status":"incomplete","cards_done":1,"cards_remaining":2,"session_id":"s"}
+    # must be normalized to the stuck/incomplete envelope with commits_made and commit_sha.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        base_sha = _setup_fixture(project_root)
+        # One content commit so HEAD != base_sha (enables commit_sha attachment).
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "--allow-empty", "-m", "card-1"],
+            check=True, capture_output=True,
+        )
+        new_head_53 = subprocess.run(
+            ["git", "-C", str(project_root), "rev-parse", "HEAD"],
+            check=True, capture_output=True, text=True,
+        ).stdout.strip()
+        incomplete_report = (
+            '{"status":"incomplete","cards_done":1,"cards_remaining":2,"session_id":"impl-s"}'
+        )
+        rc, captured = _capture_stdout(
+            lambda: _forward_output(
+                incomplete_report,
+                project_root,
+                start_sha=base_sha,
+                session_id="caller-s",
+            )
+        )
+        try:
+            data = json.loads(captured.strip())
+            assert data["status"] == "stuck", f"case 53: expected stuck, got {data}"
+            assert data["stuck_type"] == "incomplete", (
+                f"case 53: expected incomplete, got {data}"
+            )
+            # session_id: caller-supplied takes precedence over implementer's.
+            assert data.get("session_id") == "caller-s", (
+                f"case 53: expected session_id=caller-s, got {data}"
+            )
+            # commits_made from _content_commit_count (1 real commit since base_sha).
+            assert data.get("commits_made") == 1, (
+                f"case 53: expected commits_made=1, got {data}"
+            )
+            assert "commit_sha" in data, f"case 53: expected commit_sha in envelope, got {data}"
+            assert data["commit_sha"] == new_head_53, (
+                f"case 53: expected commit_sha={new_head_53}, got {data}"
+            )
+            print(
+                "PASS: case 53 - implementer status:incomplete normalized to stuck/incomplete"
+                " with commits_made and commit_sha"
+            )
+        except Exception as exc:
+            print(f"FAIL: case 53 ({exc}) captured={captured!r}", file=sys.stderr)
+            errors += 1
+
+    # Case 54: _content_commit_count with two "mill-go: start batch" commits returns N
+    # (subtract-all). Verifies Card 1 fix: previously only the oldest was subtracted.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        base_sha = _setup_fixture(project_root)
+        # Two housekeeping commits (e.g. original prepare + retry prepare).
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "--allow-empty",
+             "-m", "mill-go: start batch batch-a"],
+            check=True, capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "--allow-empty",
+             "-m", "mill-go: start batch batch-a (retry)"],
+            check=True, capture_output=True,
+        )
+        # Two content commits; with both housekeeping commits subtracted -> count = 2.
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "--allow-empty", "-m", "card-1"],
+            check=True, capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "--allow-empty", "-m", "card-2"],
+            check=True, capture_output=True,
+        )
+        try:
+            count = _content_commit_count(project_root, base_sha)
+            assert count == 2, (
+                f"case 54: expected 2 (2 content commits, 2 housekeeping subtracted), got {count}"
+            )
+            print(
+                "PASS: case 54 - _content_commit_count: two start-batch commits both subtracted"
+                " -> 2 content commits"
+            )
+        except Exception as exc:
+            print(f"FAIL: case 54 ({exc})", file=sys.stderr)
+            errors += 1
+
+    # Case 55: reclassified incomplete envelope carries commit_sha (membership guard includes
+    # "incomplete"). Exercises the parsed-success -> verify-fail -> reclassify -> incomplete
+    # path and confirms commit_sha was attached by the membership guard.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        base_sha = _setup_fixture(project_root)
+        # Housekeeping commit + one content commit -> content=1, card_count=3 -> partial.
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "--allow-empty",
+             "-m", "mill-go: start batch test-batch"],
+            check=True, capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "--allow-empty", "-m", "card-1 done"],
+            check=True, capture_output=True,
+        )
+        new_head_55 = subprocess.run(
+            ["git", "-C", str(project_root), "rev-parse", "HEAD"],
+            check=True, capture_output=True, text=True,
+        ).stdout.strip()
+        agent_output_55 = (
+            '{"status":"success","commit_sha":"old","session_id":"s55"}\n'
+        )
+        rc, captured = _capture_stdout(
+            lambda: _forward_output(
+                agent_output_55,
+                project_root,
+                start_sha=base_sha,
+                verify_cmd="exit 1",
+                card_count=3,
+                session_id="s55",
+            )
+        )
+        try:
+            data = json.loads(captured.strip())
+            assert data["status"] == "stuck", f"case 55: expected stuck, got {data}"
+            assert data["stuck_type"] == "incomplete", (
+                f"case 55: expected incomplete (reclassified from verify), got {data}"
+            )
+            assert "commit_sha" in data, (
+                f"case 55: expected commit_sha in incomplete envelope, got {data}"
+            )
+            assert data["commit_sha"] == new_head_55, (
+                f"case 55: expected commit_sha={new_head_55}, got {data}"
+            )
+            print(
+                "PASS: case 55 - reclassified incomplete envelope carries commit_sha"
+                " (membership guard includes incomplete)"
+            )
+        except Exception as exc:
+            print(f"FAIL: case 55 ({exc}) captured={captured!r}", file=sys.stderr)
             errors += 1
 
     if errors:
