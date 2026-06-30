@@ -41,8 +41,11 @@ session whose task carries a substantive proposal body — the design phase star
 - Fix the helper-reference regex in `test-skill-helper-drift.py` so it only matches true
   module-qualified helper calls (`_module.func(`) and not the `_cmd` tail of an identifier
   like `gate_cmd`.
+- Empty the now-dead `ALLOWLIST` set in the same file (every entry becomes unreachable once
+  the lookbehind lands), keeping the symbol and its guard.
 - Add focused regression coverage for the false-positive case (assert `gate_cmd.lower()`
-  yields no extracted reference).
+  yields no extracted reference) plus a positive case, in a new `_run_extract_unit_checks()`
+  ("Card 3") wired into `main()`.
 - Edit `plugins/mill/skills/mill-start/SKILL.md` so Phase: Select fetches and surfaces
   `task['body']` and `task['brief']`, and Phase: Explore explicitly instructs the agent to
   read them — naming the exact schema field names so agents never guess.
@@ -78,6 +81,24 @@ session whose task carries a substantive proposal body — the design phase star
   (b) Re-architecting the scan to AST-parse fenced Python code blocks — far more code for a
   one-character regex fix; SKILL.md prose is not reliably parseable as Python anyway.
 
+### allowlist-prune-dead-entries
+
+- Decision: After adding the lookbehind, **prune every current `ALLOWLIST` entry** and leave
+  the declaration as an empty `set()` with an updated comment explaining it now exists only
+  for true module-qualified exemptions (none currently needed). Do NOT delete the `ALLOWLIST`
+  name or its membership check in `_run_drift_guard()` — only empty the set.
+- Rationale: Every existing entry — `("block","get")` (from `env_block.get`),
+  `("gap_titles","isdisjoint")` (from `current_gap_titles.isdisjoint`), `("ts_str","strip")`,
+  and all the `("path",…)` / `("dir",…)` entries — is an **identifier-tail** match: the
+  underscore is preceded by an identifier character, so the lookbehind now stops the regex
+  from ever extracting them. They become unreachable dead code that misleads the next editor.
+  Pruning to an empty set (rather than leaving stale exemptions) keeps the exemption list
+  honest; keeping the declaration avoids a `NameError` in the membership check and leaves a
+  documented hook for any genuine future `_module.func(` exemption.
+- Rejected: (a) Leaving the entries in place — they are dead and imply false coverage.
+  (b) Deleting the `ALLOWLIST` symbol entirely — forces an edit to the `if (module_stem, fn)
+  in ALLOWLIST` guard in `_run_drift_guard()` for no benefit and removes the future hook.
+
 ### drift-regression-test
 
 - Decision: Add a focused unit assertion in `test-skill-helper-drift.py` that
@@ -91,15 +112,24 @@ session whose task carries a substantive proposal body — the design phase star
 ### millstart-fetch-body-brief
 
 - Decision: In Phase: Select, extend the sample snippet to also fetch and print
-  `task.get('body', '')` and `task.get('brief', '')`. In Phase: Explore, add an explicit
-  instruction to read the proposal `body` and summary `brief` before exploring code, and
-  document the exact `get_task()` key set so agents do not guess.
+  `task.get('body', '')` and `task.get('brief', '')` (`.get` form is correct for safe code).
+  In Phase: Explore, add an explicit instruction to read the proposal and summary before
+  exploring code, and a documentation line that names the exact keys in **subscript form** —
+  the literal strings `task['body']` and `task['brief']` — plus the full observed key set, so
+  agents do not guess. This subscript-form prose in Phase: Explore is the canonical literal
+  that the regression lock (see `millstart-skill-regression-lock`) checks for.
 - Rationale: Phase: Select already calls `get_task`, so surfacing `body`/`brief` there is
   zero extra round-trips; Phase: Explore is where the proposal must actually inform the
   agent's reading. Naming the schema fields (`body`, `brief` — NOT `summary`/`proposal`)
-  removes the guessing that caused the bug.
+  removes the guessing that caused the bug. Pinning the Explore documentation to the exact
+  `task['body']` / `task['brief']` subscript strings means the SKILL literally contains the
+  substrings the lock asserts, so a faithful edit and the lock agree (resolves the review
+  GAP: the `.get('body', '')` snippet form does NOT contain the substring `task['body']`,
+  so the lock must target the Explore prose, not the snippet).
 - Rejected: (a) Surfacing only in Phase: Explore — loses the cheap fetch already in Select.
-  (b) A new dedicated phase — overkill for two field reads.
+  (b) A new dedicated phase — overkill for two field reads. (c) Having the lock assert the
+  `.get('body'` form — less readable as field documentation and couples the lock to the
+  snippet's defaulting style rather than the human-facing field-name guidance.
 
 ### millstart-empty-fallback
 
@@ -112,9 +142,12 @@ session whose task carries a substantive proposal body — the design phase star
 
 ### millstart-skill-regression-lock
 
-- Decision: Add a Card 2 regression-lock assertion in `test-skill-helper-drift.py` that
-  `mill-start/SKILL.md` contains the literal strings `task['body']` and `task['brief']`
-  (mirroring the existing `#495`/`#496` source-state locks).
+- Decision: Add a Card 2 regression-lock assertion in `_run_regression_locks()` that
+  `mill-start/SKILL.md` contains BOTH literal substrings `task['body']` and `task['brief']`
+  (mirroring the existing `#495`/`#496` `... in <skill_text>` checks). These substrings are
+  guaranteed present by the Phase: Explore subscript-form documentation pinned in
+  `millstart-fetch-body-brief` — the lock and the SKILL edit reference the exact same literal,
+  so a faithful edit passes and a regression (dropping the field guidance) fails.
 - Rationale: The repo already uses Card 2 to lock SKILL.md prose against regression; a
   string-presence check is the established, lightweight pattern and prevents a future SKILL
   edit from silently dropping the field-name guidance.
@@ -127,7 +160,16 @@ session whose task carries a substantive proposal body — the design phase star
     pattern appears). It returns `list[tuple[module_stem, fn]]`.
   - `_run_drift_guard()` consumes those references and checks them against
     `_collect_shipped_helpers()` (which strips the leading `_` from module stems).
-  - `ALLOWLIST` is the exemption set — do NOT add `("cmd","lower")` here; fix the regex.
+  - `ALLOWLIST` is the exemption set — do NOT add `("cmd","lower")` here; fix the regex. After
+    the lookbehind lands, every existing `ALLOWLIST` entry is an identifier-tail match that the
+    regex no longer extracts, so the set is emptied (see `allowlist-prune-dead-entries`); keep
+    the symbol + the `in ALLOWLIST` guard in `_run_drift_guard()`.
+  - The focused extract-unit assertions get their own check group: add a new
+    `_run_extract_unit_checks()` function (call it "Card 3") that returns a `list[str]` of
+    failures exactly like the other two, and invoke it from `main()` alongside
+    `_run_drift_guard()` / `_run_regression_locks()`, gating the exit code the same way (any
+    failure -> print + `return 1`). This is where the `gate_cmd.lower()` negative case and the
+    `_paths.resolve_git_root()` positive case are asserted.
   - Card 2 `_run_regression_locks()` is where the new `mill-start` SKILL string-lock belongs;
     it already pattern-matches against `mill-go/SKILL.md` content, so the shape is established.
 - **The triggering line:** `mill-go/SKILL.md:738` — `if platform.system() == 'Windows' and
@@ -152,10 +194,13 @@ session whose task carries a substantive proposal body — the design phase star
 
 ## Testing
 
-- **Regex fix (TDD candidate):** add the focused assertion FIRST —
-  `_extract_helper_references("gate_cmd.lower()") == []` — watch it fail against the current
-  regex, then apply the lookbehind and watch it pass. Also assert a true reference still
-  matches: `_extract_helper_references("_paths.resolve_git_root()") == [("paths","resolve_git_root")]`.
+- **Regex fix (TDD candidate):** add the focused assertions FIRST, inside a new
+  `_run_extract_unit_checks()` function wired into `main()` (see Technical context):
+  `_extract_helper_references("gate_cmd.lower()") == []` (negative case — watch it fail against
+  the current regex, then apply the lookbehind and watch it pass) and
+  `_extract_helper_references("_paths.resolve_git_root()") == [("paths","resolve_git_root")]`
+  (positive case — guards against an over-broad lookbehind). The function must contribute to
+  the suite exit code so a regression actually fails the run, not sit unused.
 - **Full drift scan:** after the fix, `test-skill-helper-drift.py` must exit 0 on clean state
   (Card 1 reports PASS, no `unresolved module 'cmd'`).
 - **mill-start SKILL.md lock (TDD candidate):** add the Card 2 string-presence assertions for
