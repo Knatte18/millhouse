@@ -97,7 +97,7 @@ Parse the JSON `state` and `number` fields from `PR_STATE_JSON`.
   **Commit-message source:** the `closed` route can be reached from a `pr-pending` re-entry where `_mill/status.md` is typically absent (mill-finalize already `git rm -r`'d `task_dir`), so `cached_task` and `cached_task_description` may be undefined. Establish them before continuing to Step 1:
 
   - If `status_path.exists()`: read them exactly as the `done` branch caching block does (`_status.read_full(status_path)["yaml"].get("task", slug)` / `.get("task_description", cached_task)`).
-  - Otherwise: `task = _client.get_task(wiki_path, slug)` -> `cached_task = task["title"]`, `cached_task_description = task.get("title")` (title is the available field; there is no separate description field in the wiki task). This fallback feeds Step 5's squash commit message.
+  - Otherwise: `task = _client.get_task(wiki_path, slug)`. Guard: `if task is None: halt("slug '<slug>' not found in wiki; cannot derive commit message for closed route")`. Then: `cached_task = task["title"]`, `cached_task_description = task.get("title")` (title is the available field; there is no separate description field in the wiki task). This fallback feeds Step 5's squash commit message.
 
   **Caution -- branch-protection interaction:** in a branch-protected repo the Step 5 push may be rejected, triggering the existing Step 5 branch-protection fallback that auto-creates a NEW PR -- which contradicts the operator's deliberate close-without-merge. The fallback itself stays as-is, but be aware that `closed` -> local-squash is not guaranteed terminal (discussion Decisions/closed-no-merge-proceeds, Branch-protection interaction).
 
