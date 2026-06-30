@@ -26,6 +26,7 @@ produced for a later batch; this is the only batch.
 
 - **Context:**
   - `plugins/mill/scripts/wiki/_client.py`
+  - `plugins/mill/scripts/wiki/_store.py`
 - **Edits:**
   - `plugins/mill/skills/mill-start/SKILL.md`
 - **Creates:** none
@@ -43,7 +44,9 @@ produced for a later batch; this is the only batch.
   exploring code. Add a documentation line naming the exact keys in subscript form — the literal
   strings `task['body']` and `task['brief']` (NOT `summary`/`proposal`) — and list the full
   observed `get_task()` key set: `body, brief, deferred, depends_on, id, isolated, slug, status,
-  title`. Note the empty fallback: if both `body` and `brief` are empty/`None`, fall back to
+  title` (this set is grounded in the task document shape assembled in `wiki/_store.py` — see the
+  `"brief"`/`"body"` defaults and the `depends_on`/`isolated`/`deferred` validation there).
+  Note the empty fallback: if both `body` and `brief` are empty/`None`, fall back to
   deriving scope from code, but only after confirming those exact fields are empty. Keep all
   added text ASCII-only.
 - **Commit:** `fix(mill-start): surface task body/brief during Select and Explore`
@@ -88,8 +91,11 @@ produced for a later batch; this is the only batch.
   exit-gating shape as `_run_drift_guard` and `_run_regression_locks`). In
   `_run_regression_locks`, add a lock that reads `SKILLS / "mill-start" / "SKILL.md"` and appends
   a `FAIL:` message unless the text contains BOTH literal substrings `task['body']` and
-  `task['brief']`, so a future edit that drops the field-name guidance fails the suite. Keep all
-  added strings ASCII-only.
+  `task['brief']`, so a future edit that drops the field-name guidance fails the suite. Also
+  refresh the module header docstring (the top-of-file `"""..."""`, currently enumerating only
+  "Card 1: Drift-guard scan" and "Card 2: Regression locks") to add a line for the new
+  extract-unit checks and the mill-start `body`/`brief` regression lock, so the docstring stays
+  in sync with `main()`'s check groups. Keep all added strings ASCII-only.
 - **Commit:** `test(drift): add extract-unit checks and mill-start body/brief lock`
 
 ## Batch Tests

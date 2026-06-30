@@ -3,7 +3,7 @@
 ```yaml
 task: Fix drift-guard false positive and mill-start missing task body/brief
 slug: mill-skill-and-tooling-gaps
-approved: false
+approved: true
 started: 20260630-044003
 parent: main
 root: ""
