@@ -6,7 +6,6 @@ Runs from the hub. Pass --apply to execute removals; default is dry-run.
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import sys
 from dataclasses import dataclass, field
@@ -18,6 +17,7 @@ import _inplace
 import _junction
 import _marker
 import _paths
+import _pr_state
 import _spawn_core
 import _status
 import _subprocess_util
@@ -583,28 +583,27 @@ def _apply_pr_reap_record(
     """
     wiki_relative_paths: list[str] = []
 
-    result = _subprocess_util.run(
-        ["gh", "pr", "list", "--head", record.branch, "--state", "all",
-         "--json", "state,mergeCommit,number", "--jq", ".[0]"],
-        cwd=hub_root,
-    )
-    if result.returncode != 0 or not result.stdout.strip():
+    # Delegate PR-state resolution to the shared helper, which applies
+    # MERGED > OPEN > CLOSED precedence across all PRs on this branch and
+    # collapses every error condition (gh absent, non-zero exit, empty/malformed
+    # JSON) into state="none".
+    pr = _pr_state.resolve_pr_state(record.branch, hub_root)
+    state = pr["state"]
+    merge_commit = pr["merge_commit"]
+    number = pr["number"]
+
+    if state == "none":
         print(
-            f"[cleanup] PR-reap {record.slug}: gh pr list failed: {result.stderr!r}",
+            f"[cleanup] PR-reap {record.slug}: no PR / gh unavailable",
             file=sys.stderr,
         )
         return wiki_relative_paths
 
-    pr_data = json.loads(result.stdout.strip())
-    state = pr_data.get("state")
-    merge_commit = pr_data.get("mergeCommit")
-    number = pr_data.get("number")
-
-    if state == "OPEN":
+    if state == "open":
         print(f"[cleanup] PR-reap {record.slug}: PR #{number} still OPEN -- skipping")
         return wiki_relative_paths
 
-    if state == "CLOSED":
+    if state == "closed":
         print(
             f"[cleanup] PR-reap {record.slug}: PR #{number} CLOSED without merge"
             f" -- inspect manually (abandon or reopen)",
@@ -612,7 +611,7 @@ def _apply_pr_reap_record(
         )
         return wiki_relative_paths
 
-    if state != "MERGED":
+    if state != "merged":
         print(
             f"[cleanup] PR-reap {record.slug}: unexpected PR state {state!r}; skipping",
             file=sys.stderr,
