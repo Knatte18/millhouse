@@ -3,7 +3,7 @@
 ```yaml
 task: "Fix mid-batch stop recovery and fixer false-success in agent-dispatch mode"
 slug: "mill-agent-dispatch-gaps"
-approved: false
+approved: true
 started: "20260630-051126"
 parent: "main"
 root: ""
