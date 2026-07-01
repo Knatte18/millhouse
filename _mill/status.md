@@ -45,7 +45,9 @@ batches:
     start_sha: 954b60af4de2130f1004c7a038ef6e248e9a2c46
     commit_sha: 29a0ef4f2681a1d1d2fd3e50018f31fbb1595a53
   - name: ghissues-to-tasks-trim
-    state: pending
+    state: running
+    implementer_session: 46ad754c-04c9-4d66-b103-5b7d0b3f8340
+    start_sha: 4745ff2466138894ffc0d20afae4e7c5c143739e
   - name: skills-index-regen
     state: pending
 ```
