@@ -30,11 +30,13 @@ repo = _gh_issues.detect_repo(git_root=git_root)
 contract = _gh_issues.to_contract(issues, repo)
 with open('.scratch/triage-contract.json', 'w') as f:
     json.dump(contract, f, indent=2)
+with open('.scratch/repo-for-close.json', 'w') as f:
+    json.dump({'repo': repo}, f)
 print(json.dumps({'repo': repo, 'issue_count': len(issues)}))
 "
 ```
 
-Record `repo` (printed above) for the close step (Step 3). `.scratch/triage-contract.json` is the canonical handoff file `mill-triage-to-tasks` reads next. Optionally also write `.scratch/issues.json` (the raw `fetch()` output) as a debugging aid — no downstream step reads it.
+The code saves `repo` to `.scratch/repo-for-close.json` for the close step (Step 3). `.scratch/triage-contract.json` is the canonical handoff file `mill-triage-to-tasks` reads next. Optionally also write `.scratch/issues.json` (the raw `fetch()` output) as a debugging aid — no downstream step reads it.
 
 ## Step 2 — Hand off to the shared analysis skill
 
@@ -52,11 +54,13 @@ After `mill-triage-to-tasks` completes, check whether `.scratch/triage-result.js
   Then, for each entry, call:
   ```bash
   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
-  import _gh_issues, _paths
-  _gh_issues.close_with_comment(<int(entry['ref'])>, '<comment>', git_root=_paths.resolve_git_root())
+  import json, _gh_issues, _paths
+  with open('.scratch/repo-for-close.json') as f:
+    repo = json.load(f)['repo']
+  _gh_issues.close_with_comment(<int(entry['ref'])>, '<comment>', repo=repo, git_root=_paths.resolve_git_root())
   "
   ```
-  `to_contract()` stored `ref` as `str(issue["number"])` — cast it back to `int` before calling `close_with_comment`.
+  `to_contract()` stored `ref` as `str(issue["number"])` — cast it back to `int` before calling `close_with_comment`. The `repo` value was recorded by Step 1 and reused here to avoid redundant detection.
 
   On any individual close failure, log the issue number + error and continue to the next entry — do not abort the loop. Collect all failures for Step 4's report. This preserves today's exact close-on-approval-only invariant: `mill-triage-to-tasks` already gated every wiki write behind operator `approve`, so by the time this step runs, every entry in `.scratch/triage-result.json` is already committed to the wiki.
 
