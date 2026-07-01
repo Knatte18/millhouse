@@ -73,8 +73,10 @@ subsection per decision. Batch-local decisions live in each batch file._
 
 ## All Files Touched
 
-_Full union of every `Creates:` / `Edits:` across every batch, sorted
-alphabetically. mill-go reads this to warn if two parallel batches
-touch the same file — a sign of a misplaced dependency._
+_Full union of every `Creates:` / `Edits:` / `Moves:` **target** path
+across every batch, sorted alphabetically (Move **source** paths are
+excluded — they disappear, like `Deletes:` tokens). mill-go reads this
+to warn if two parallel batches touch the same file — a sign of a
+misplaced dependency._
 
 - `path/to/file.py`

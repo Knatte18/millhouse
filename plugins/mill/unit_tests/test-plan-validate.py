@@ -616,6 +616,62 @@ def test_check_reads_not_backtick_path_dirty() -> int:
             return 1
 
 
+def test_check_reads_not_backtick_path_dirty_multiline_multi_backtick() -> int:
+    """Dirty: multi-line sub-bullet has a leading path plus a parenthetical with
+    further backtick spans -> Check 6 independently flags the sub-bullet.
+
+    This is the same repro shape as the #580 bug that motivated the
+    parse_batch_refs leading-token fix in _review_common.py. Check 6 catches
+    it independently at plan-validate --stage prepare time (layered defense;
+    Check 6 is unmodified by this plan)."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+
+        # Create the file so check 1 (non-existent-path) doesn't also fire.
+        (project_root / "cmd" / "lyx").mkdir(parents=True)
+        (project_root / "cmd" / "lyx" / "main_test.go").write_text(
+            "# placeholder", encoding="utf-8"
+        )
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = (
+            "# Batch: alpha\n\n"
+            "```yaml\n"
+            "task: test\nbatch: alpha\ncards: 1\nverify: null\ndepends-on: []\n"
+            "```\n\n"
+            "## Cards\n\n"
+            "### Card 1: description\n\n"
+            "- **Context:**\n"
+            "  - `cmd/lyx/main_test.go` (batch 3 routed `boardcli`'s dir through `paths.Resolve`)\n"
+            "- **Edits:** none\n"
+            "- **Creates:** none\n"
+            "- **Deletes:** none\n"
+            "- **Moves:** none\n"
+            "- **Requirements:**\n  See scope.\n"
+            "- **Commit:** feat(alpha): card 1\n"
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check6 = [e for e in result if e["check"] == "reads-not-backtick-path"]
+        try:
+            assert len(check6) >= 1, (
+                f"expected at least 1 error, got {len(check6)}: {check6}"
+            )
+            print(
+                "PASS: test_check_reads_not_backtick_path_dirty_multiline_multi_backtick"
+            )
+            return 0
+        except AssertionError as exc:
+            print(
+                f"FAIL: test_check_reads_not_backtick_path_dirty_multiline_multi_backtick: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
 def test_check_all_files_touched_mismatch_clean_no_section() -> int:
     """Clean: overview without All Files Touched section -> no errors for check 8."""
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -3015,6 +3071,7 @@ def main() -> int:
         test_check_reads_not_backtick_path_clean,
         test_check_reads_not_backtick_path_none_exempt,
         test_check_reads_not_backtick_path_dirty,
+        test_check_reads_not_backtick_path_dirty_multiline_multi_backtick,
         test_check_all_files_touched_mismatch_clean_no_section,
         test_check_all_files_touched_mismatch_dirty,
         test_check_all_files_touched_mismatch_deletes_only_excluded,

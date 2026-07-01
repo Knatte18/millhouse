@@ -71,7 +71,7 @@ Read `.vscode/settings.json`; extract `titleBar.activeBackground`. Map to a Clau
 Query the wiki database for the task:
 
 ```bash
-PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
+PYTHONIOENCODING=utf-8 PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
 from pathlib import Path
 from wiki import _client
 import _paths
@@ -95,7 +95,7 @@ The initial status file (at `status_path`) was written by `mill-spawn` and commi
 
 ### Phase: Explore
 
-Before exploring the codebase, fetch the task document by re-calling `_client.get_task(wiki_path, slug)` (each Bash call is a fresh subprocess, so the `task` variable from Phase: Select does not persist). Read the proposal from `task['body']` and the one-paragraph summary from `task['brief']` before reading any source file. The full key set returned by `get_task()` is: `body, brief, deferred, depends_on, id, isolated, slug, status, title`. If both `task['body']` and `task['brief']` are empty or `None`, fall back to deriving scope from the codebase directly, but only after confirming those exact fields are empty.
+Before exploring the codebase, fetch the task document by re-calling `_client.get_task(wiki_path, slug)` (each Bash call is a fresh subprocess, so the `task` variable from Phase: Select does not persist). (use the same `PYTHONIOENCODING=utf-8`-prefixed invocation shown in Phase: Select to avoid the cp1252 `UnicodeEncodeError` on non-ASCII body/brief content.) Read the proposal from `task['body']` and the one-paragraph summary from `task['brief']` before reading any source file. The full key set returned by `get_task()` is: `body, brief, deferred, depends_on, id, isolated, slug, status, title`. If both `task['body']` and `task['brief']` are empty or `None`, fall back to deriving scope from the codebase directly, but only after confirming those exact fields are empty.
 
 Before asking a single question, explore the relevant parts of the codebase.
 

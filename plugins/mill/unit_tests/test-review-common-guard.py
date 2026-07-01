@@ -76,15 +76,18 @@ class TestWorktreeSnapshotGuard(unittest.TestCase):
         # If we reach here, no exception was raised (test passes).
 
     def test_clean_exit_state_mutated(self) -> None:
-        """Body runs without raising; state is mutated. Expect: ReviewerOverstepError."""
+        """Body runs without raising; state is mutated. Expect: ReviewerOverstepError.
+
+        Uses an untracked working-tree write rather than a commit: per the
+        documented fast-forward tolerance (see worktree_snapshot_guard's
+        docstring), a HEAD advance that is a clean descendant of the prior
+        HEAD with no new working-tree dirt is tolerated and does NOT raise.
+        An untracked file is unconditional working-tree dirt, so it always
+        triggers the guard regardless of fast-forward status.
+        """
         with self.assertRaises(_review_common.ReviewerOverstepError):
             with _review_common.worktree_snapshot_guard(self.repo_path):
-                # Create an empty commit to mutate state
-                subprocess.run(
-                    ["git", "-C", str(self.repo_path), "commit", "--allow-empty", "-m", "x"],
-                    check=True,
-                    capture_output=True,
-                )
+                (self.repo_path / "scratch.tmp").write_text("x", encoding="utf-8")
 
     def test_inner_raises_clean_state(self) -> None:
         """Body raises; state unchanged. Expect: RuntimeError propagates unchanged."""
@@ -94,15 +97,16 @@ class TestWorktreeSnapshotGuard(unittest.TestCase):
         self.assertEqual(str(ctx.exception), "inner sentinel")
 
     def test_inner_raises_state_mutated(self) -> None:
-        """Body mutates state then raises. Expect: ReviewerOverstepError with chained RuntimeError."""
+        """Body mutates state then raises. Expect: ReviewerOverstepError with chained RuntimeError.
+
+        Uses an untracked working-tree write (see test_clean_exit_state_mutated
+        for why a bare commit no longer qualifies as a mutation under the
+        documented fast-forward tolerance).
+        """
         with self.assertRaises(_review_common.ReviewerOverstepError) as ctx:
             with _review_common.worktree_snapshot_guard(self.repo_path):
-                # Mutate state
-                subprocess.run(
-                    ["git", "-C", str(self.repo_path), "commit", "--allow-empty", "-m", "x"],
-                    check=True,
-                    capture_output=True,
-                )
+                # Mutate state with untracked working-tree dirt.
+                (self.repo_path / "scratch.tmp").write_text("x", encoding="utf-8")
                 # Then raise
                 raise RuntimeError("inner sentinel")
 
