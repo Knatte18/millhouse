@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-nits-only-no-op-success
+phase: holistic-reviewing
 slug: mill-review-and-finalize-gaps
 branch: hanf/mill-review-and-finalize-gaps
 plan: _mill/plan
@@ -27,6 +27,7 @@ implementing  '2026-07-01T04:07:56Z'
 approved-discussion-review-round-cap-extension  '2026-07-01T04:11:13Z'
 approved-wiki-cold-daemon-retry  '2026-07-01T04:16:31Z'
 approved-nits-only-no-op-success  '2026-07-01T04:27:18Z'
+holistic-reviewing  '2026-07-01T04:27:42Z'
 ```
 
 ## Batches
