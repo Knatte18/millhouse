@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-report-to-tasks-skill
+phase: approved-ghissues-to-tasks-trim
 slug: mill-ghissues-source-adapter
 branch: hanf/mill-ghissues-source-adapter
 plan: _mill/plan
@@ -23,6 +23,7 @@ implementing  '2026-06-30T19:30:25Z'
 approved-contract-adapters  '2026-06-30T19:34:35Z'
 approved-triage-to-tasks-skill  '2026-06-30T19:37:13Z'
 approved-report-to-tasks-skill  '2026-07-01T04:10:17Z'
+approved-ghissues-to-tasks-trim  '2026-07-01T04:12:33Z'
 ```
 
 ## Batches
@@ -45,9 +46,10 @@ batches:
     start_sha: 954b60af4de2130f1004c7a038ef6e248e9a2c46
     commit_sha: 29a0ef4f2681a1d1d2fd3e50018f31fbb1595a53
   - name: ghissues-to-tasks-trim
-    state: running
+    state: approved
     implementer_session: 46ad754c-04c9-4d66-b103-5b7d0b3f8340
     start_sha: 4745ff2466138894ffc0d20afae4e7c5c143739e
+    commit_sha: 993c31604f5df14a34afde8a39af4f0dbf50e03c
   - name: skills-index-regen
     state: pending
 ```
