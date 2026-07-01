@@ -1,9 +1,0 @@
-{"status":"success","commit_sha":"2e44746e4f3262b39e6a378743699b34e939e65d","session_id":"4e9890d9-49c4-447a-93d0-ba6404996e62"}
-
-Summary of work done for batch `05-skills-index-regen`:
-
-- `C:\Code\millhouse\wts\mill-ghissues-source-adapter\_mill\plan\05-skills-index-regen.md` — extended Card 7's `Edits:` list to include `plugins/mill/skills/mill-ghissues-to-tasks/SKILL.md` after discovering a scope gap, committed separately first (`c2ae174b`) per the STOP-and-extend protocol.
-- `C:\Code\millhouse\wts\mill-ghissues-source-adapter\plugins\mill\skills\mill-ghissues-to-tasks\SKILL.md` — quoted the frontmatter `description:` value. It was pre-existing (unchanged since `main`, not something batch 4 introduced) but its unquoted mid-sentence `"One-shot: "` colon broke `yaml.safe_load`, causing the scanner to silently skip the file and drop its row from `SKILLS.md` — which would have violated this batch's own stated requirement that the row stay present.
-- `C:\Code\millhouse\wts\mill-ghissues-source-adapter\SKILLS.md` — regenerated via the documented scanner entrypoint (`millpy-skills-index.py`). Now contains rows for `mill-triage-to-tasks` and `mill-report-to-tasks`, the restored `mill-ghissues-to-tasks` row (description byte-identical to batch 4's), plus unrelated pre-existing drift (golang plugin skills, `mill-fold`/`mill-setup` description edits) that had never been synced into `SKILLS.md` before this run — confirmed via `git log main` that those source files' changes predate this task.
-
-Both commits (`c2ae174b`, `2e44746e`) are pushed to `hanf/mill-ghissues-source-adapter`. `verify: null` for this batch, so no test run was required; working tree is clean.
