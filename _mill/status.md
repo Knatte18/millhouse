@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-skills-index-regen
+phase: holistic-reviewing
 slug: mill-ghissues-source-adapter
 branch: hanf/mill-ghissues-source-adapter
 plan: _mill/plan
@@ -25,6 +25,7 @@ approved-triage-to-tasks-skill  '2026-06-30T19:37:13Z'
 approved-report-to-tasks-skill  '2026-07-01T04:10:17Z'
 approved-ghissues-to-tasks-trim  '2026-07-01T04:12:33Z'
 approved-skills-index-regen  '2026-07-01T04:16:32Z'
+holistic-reviewing  '2026-07-01T04:16:50Z'
 ```
 
 ## Batches
