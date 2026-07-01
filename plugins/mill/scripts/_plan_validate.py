@@ -1190,7 +1190,7 @@ def _check_all_files_touched_mismatch(
             "path": p,
             "message": (
                 f"path '{p}' listed in overview's All Files Touched "
-                f"but not in any card's Edits: or Creates:"
+                f"but not in any card's Edits:/Creates:/Moves: target"
             ),
         })
     for p in sorted(cards_set - overview_set):
@@ -1200,7 +1200,7 @@ def _check_all_files_touched_mismatch(
             "card": None,
             "path": p,
             "message": (
-                f"path '{p}' in card Edits:/Creates: but missing "
+                f"path '{p}' in card Edits:/Creates:/Moves: target but missing "
                 f"from overview's All Files Touched"
             ),
         })

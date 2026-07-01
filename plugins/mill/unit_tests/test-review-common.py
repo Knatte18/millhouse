@@ -846,6 +846,23 @@ def main() -> int:
         assert refs == ["path/a", "path/b"], f"Got {refs}"
         print("PASS: parse_batch_refs multi-line bullet form returns both paths")
 
+    # parse_batch_refs: sub-bullet with a leading real path and a parenthetical
+    # carrying further backtick-quoted prose keeps only the leading token (#580).
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        batch = Path(tmpdir) / "batch.md"
+        batch.write_text(
+            "### Card 1\n\n"
+            "- **Context:**\n"
+            "  - `cmd/lyx/main_test.go` (batch 3 routed `boardcli`'s dir through `paths.Resolve`)\n"
+            "- **Creates:** none\n",
+            encoding="utf-8",
+        )
+        refs = parse_batch_refs(batch)
+        assert refs == ["cmd/lyx/main_test.go"], f"Got {refs}"
+        print(
+            "PASS: parse_batch_refs sub-bullet keeps only leading token, drops prose backticks"
+        )
+
     # parse_batch_refs: 'none' token is filtered out
     with _test_helpers.safe_temp_dir() as tmpdir:
         batch = Path(tmpdir) / "batch.md"
@@ -3075,8 +3092,7 @@ def main() -> int:
     with _test_helpers.safe_temp_dir() as tmpdir:
         batch = Path(tmpdir) / "batch.md"
         batch.write_text(
-            "- **Moves:**\n"
-            "  - `old/a.py` -> `new/a.py`\n",
+            "- **Moves:**\n  - `old/a.py` -> `new/a.py`\n",
             encoding="utf-8",
         )
         result = parse_moves(batch)
@@ -3138,20 +3154,22 @@ def main() -> int:
         result = parse_moves(batch)
         # The malformed bullet (only one backtick path) is silently skipped.
         assert result == [("src/good.py", "dst/good.py")], f"Got {result}"
-        print("PASS: parse_moves malformed sub-bullet (one path only) is skipped without raising")
+        print(
+            "PASS: parse_moves malformed sub-bullet (one path only) is skipped without raising"
+        )
 
     # Malformed sub-bullet (two paths but no arrow) is skipped without raising.
     with _test_helpers.safe_temp_dir() as tmpdir:
         batch = Path(tmpdir) / "batch.md"
         batch.write_text(
-            "- **Moves:**\n"
-            "  - `src/x.py` `dst/x.py`\n"
-            "  - `src/y.py` -> `dst/y.py`\n",
+            "- **Moves:**\n  - `src/x.py` `dst/x.py`\n  - `src/y.py` -> `dst/y.py`\n",
             encoding="utf-8",
         )
         result = parse_moves(batch)
         assert result == [("src/y.py", "dst/y.py")], f"Got {result}"
-        print("PASS: parse_moves malformed sub-bullet (no arrow) is skipped without raising")
+        print(
+            "PASS: parse_moves malformed sub-bullet (no arrow) is skipped without raising"
+        )
 
     # Duplicate pairs across two Moves: headers are deduplicated, first-seen order preserved.
     with _test_helpers.safe_temp_dir() as tmpdir:
@@ -3169,7 +3187,9 @@ def main() -> int:
             ("src/a.py", "dst/a.py"),
             ("src/b.py", "dst/b.py"),
         ], f"Got {result}"
-        print("PASS: parse_moves duplicate pairs deduplicated, first-seen order preserved")
+        print(
+            "PASS: parse_moves duplicate pairs deduplicated, first-seen order preserved"
+        )
 
     # ---------------------------------------------------------------------------
     # compute_moves_union
@@ -3192,14 +3212,15 @@ def main() -> int:
     with _test_helpers.safe_temp_dir() as tmpdir:
         plan_dir = Path(tmpdir)
         (plan_dir / "01-setup.md").write_text(
-            "- **Moves:**\n"
-            "  - `old/x.py` -> `new/x.py`\n",
+            "- **Moves:**\n  - `old/x.py` -> `new/x.py`\n",
             encoding="utf-8",
         )
         sources, targets = compute_moves_union(plan_dir)
         assert sources == {"old/x.py"}, f"Got sources={sources!r}"
         assert targets == {"new/x.py"}, f"Got targets={targets!r}"
-        print("PASS: compute_moves_union single batch returns correct source/target split")
+        print(
+            "PASS: compute_moves_union single batch returns correct source/target split"
+        )
 
     # Two batch files: sources and targets accumulate into the same sets.
     with _test_helpers.safe_temp_dir() as tmpdir:
@@ -3211,8 +3232,7 @@ def main() -> int:
             encoding="utf-8",
         )
         (plan_dir / "02-wire.md").write_text(
-            "- **Moves:**\n"
-            "  - `old/c.py` -> `new/c.py`\n",
+            "- **Moves:**\n  - `old/c.py` -> `new/c.py`\n",
             encoding="utf-8",
         )
         sources, targets = compute_moves_union(plan_dir)
@@ -3222,15 +3242,16 @@ def main() -> int:
         assert targets == {"new/a.py", "new/b.py", "new/c.py"}, (
             f"Got targets={targets!r}"
         )
-        print("PASS: compute_moves_union two batch files aggregates sources and targets")
+        print(
+            "PASS: compute_moves_union two batch files aggregates sources and targets"
+        )
 
     # 'none' sentinel filtered: batch with Moves: none contributes nothing.
     with _test_helpers.safe_temp_dir() as tmpdir:
         plan_dir = Path(tmpdir)
         (plan_dir / "01-setup.md").write_text("- **Moves:** none\n", encoding="utf-8")
         (plan_dir / "02-wire.md").write_text(
-            "- **Moves:**\n"
-            "  - `old/z.py` -> `new/z.py`\n",
+            "- **Moves:**\n  - `old/z.py` -> `new/z.py`\n",
             encoding="utf-8",
         )
         sources, targets = compute_moves_union(plan_dir)
@@ -3242,13 +3263,11 @@ def main() -> int:
     with _test_helpers.safe_temp_dir() as tmpdir:
         plan_dir = Path(tmpdir)
         (plan_dir / "00-overview.md").write_text(
-            "- **Moves:**\n"
-            "  - `overview-src.py` -> `overview-dst.py`\n",
+            "- **Moves:**\n  - `overview-src.py` -> `overview-dst.py`\n",
             encoding="utf-8",
         )
         (plan_dir / "01-setup.md").write_text(
-            "- **Moves:**\n"
-            "  - `real-src.py` -> `real-dst.py`\n",
+            "- **Moves:**\n  - `real-src.py` -> `real-dst.py`\n",
             encoding="utf-8",
         )
         sources, targets = compute_moves_union(plan_dir)

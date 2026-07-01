@@ -538,7 +538,7 @@ def parse_batch_refs(
                     rest = sm.group(1).strip()
                     bt = re.findall(r"`([^`]+)`", rest)
                     if bt:
-                        tokens.extend(bt)
+                        tokens.append(bt[0])
                     j += 1
             for t in tokens:
                 if t.lower() != "none":
