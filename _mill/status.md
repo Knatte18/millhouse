@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-wiki-cold-daemon-retry
+phase: approved-nits-only-no-op-success
 slug: mill-review-and-finalize-gaps
 branch: hanf/mill-review-and-finalize-gaps
 plan: _mill/plan
@@ -26,6 +26,7 @@ planned  '2026-06-30T19:34:14Z'
 implementing  '2026-07-01T04:07:56Z'
 approved-discussion-review-round-cap-extension  '2026-07-01T04:11:13Z'
 approved-wiki-cold-daemon-retry  '2026-07-01T04:16:31Z'
+approved-nits-only-no-op-success  '2026-07-01T04:27:18Z'
 ```
 
 ## Batches
@@ -43,7 +44,8 @@ batches:
     start_sha: 8bd000136ee1f1bfccb16132eb855a95029f0bf2
     commit_sha: e5a625e8c41907dd173b46052cf7750477ca297d
   - name: nits-only-no-op-success
-    state: running
+    state: approved
     implementer_session: e33ccdde-df67-4a59-9aa3-192500b18422
     start_sha: 1c9e685c4c700fdafb5db0801163e8928a142db6
+    commit_sha: deab61e27171d72110cd8cfd677a236724024be8
 ```
