@@ -28,6 +28,7 @@ from _implementer_common import (  # noqa: E402
     _is_benign_windows_cleanup,
 )
 import _cleanliness  # noqa: E402
+import _status  # noqa: E402
 
 
 def _capture_stdout(fn):
@@ -2708,6 +2709,185 @@ def main() -> int:
             )
         except Exception as exc:
             print(f"FAIL: case 55 ({exc}) captured={captured!r}", file=sys.stderr)
+            errors += 1
+
+    # Case 56: #582 regression - nits-only zero-commit pushback -> success (not stuck/logic).
+    # A --nits-only pass that legitimately pushes back on every NIT finding (per the
+    # mill-receiving-review decision tree) is expected to make zero content commits;
+    # this must be reported as success with the nits-fixed marker written, not demoted
+    # by the no-content-commit gate (HEAD == start_sha).
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        base_sha = _setup_fixture(project_root)
+        snapshot_path = project_root / "_mill" / ".cleanliness-snapshot-test.txt"
+        _cleanliness.capture_snapshot(project_root, snapshot_path)
+        status_path = project_root / "_mill" / "status.md"
+        status_path.write_text(
+            _status.render_initial(
+                task_title="t",
+                task_description="d",
+                timestamp="2026-06-30T00:00:00Z",
+                parent_branch="main",
+                slug="test-slug",
+                branch="test-branch",
+            ),
+            encoding="utf-8",
+        )
+        # IMPORTANT: Do NOT make a new commit -- HEAD == base_sha (all-pushback, zero-commit).
+        verify_cmd = "exit 0"
+        agent_output = (
+            '{"status":"success","commit_sha":"abc","session_id":"test-session"}\n'
+        )
+        rc, captured = _capture_stdout(
+            lambda: _forward_output(
+                agent_output,
+                project_root,
+                start_sha=base_sha,
+                snapshot_path=snapshot_path,
+                verify_cmd=verify_cmd,
+                nits_only=True,
+                status_path=status_path,
+                nits_scope="holistic",
+            )
+        )
+        try:
+            data = json.loads(captured.strip())
+            assert data["status"] == "success", (
+                f"case 56: expected success, got {data}"
+            )
+            assert data.get("nits_applied") is True, (
+                f"case 56: expected nits_applied=True, got {data}"
+            )
+            full = _status.read_full(status_path)
+            assert any(
+                e.startswith("nits-fixed-holistic") for e in full["timeline"]
+            ), (
+                f"case 56: expected nits-fixed-holistic in timeline, got {full['timeline']}"
+            )
+            print(
+                "PASS: case 56 - #582 nits-only zero-commit pushback -> success with marker"
+            )
+        except Exception as exc:
+            print(f"FAIL: case 56 ({exc}) captured={captured!r}", file=sys.stderr)
+            errors += 1
+
+    # Case 57: #582 regression - nits-only with an in-scope dirty tracked file still hits
+    # the dirty-tree gate (stuck/logic), proving the gate's own logic is unaffected by the
+    # Card 5 change to the no-content-commit gate. task_dir/parent_branch are the inputs
+    # _in_scope_dirty_stuck() needs to run at all; millpy-fix.py's CLI never supplies them
+    # today (see Batch Scope), so this exercises the gate directly via _forward_output.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        base_sha = _setup_fixture(project_root)
+        branch_result = subprocess.run(
+            ["git", "-C", str(project_root), "branch", "--show-current"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        parent_branch_name = branch_result.stdout.strip()
+        subprocess.run(
+            ["git", "-C", str(project_root), "checkout", "-b", "task-branch"],
+            check=True,
+            capture_output=True,
+        )
+        # Commit a README.md change on the task branch (puts it in owned_paths).
+        (project_root / "README.md").write_text("task change", encoding="utf-8")
+        subprocess.run(
+            ["git", "-C", str(project_root), "add", "README.md"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "-m", "card-1-modify-readme"],
+            check=True,
+            capture_output=True,
+        )
+        # Dirty README.md again without committing -- in-scope and dirty.
+        (project_root / "README.md").write_text("dirty in-scope", encoding="utf-8")
+        task_dir = project_root / "_mill"
+        task_dir.mkdir(parents=True, exist_ok=True)
+        status_path = task_dir / "status.md"
+        status_path.write_text(
+            _status.render_initial(
+                task_title="t",
+                task_description="d",
+                timestamp="2026-06-30T00:00:00Z",
+                parent_branch=parent_branch_name,
+                slug="test-slug",
+                branch="task-branch",
+            ),
+            encoding="utf-8",
+        )
+        agent_output = '{"status":"success","commit_sha":"abc","session_id":"s57"}\n'
+        rc, captured = _capture_stdout(
+            lambda: _forward_output(
+                agent_output,
+                project_root,
+                start_sha=base_sha,
+                verify_cmd=None,
+                task_dir=task_dir,
+                parent_branch=parent_branch_name,
+                nits_only=True,
+                status_path=status_path,
+                nits_scope="holistic",
+            )
+        )
+        try:
+            data = json.loads(captured.strip())
+            assert data["status"] == "stuck", f"case 57: expected stuck, got {data}"
+            assert data["stuck_type"] == "logic", (
+                f"case 57: expected logic (dirty-tree gate), got {data}"
+            )
+            assert "in-scope working tree dirty" in data.get("reason", ""), (
+                f"case 57: expected dirty reason, got {data}"
+            )
+            print(
+                "PASS: case 57 - nits-only with dirty in-scope file still hits"
+                " dirty-tree gate -> stuck/logic"
+            )
+        except Exception as exc:
+            print(f"FAIL: case 57 ({exc}) captured={captured!r}", file=sys.stderr)
+            errors += 1
+
+    # Case 58: regression guard -- nits_only=False (default) with the same zero-commit
+    # setup as case 56 still demotes to stuck/logic "no content commit". Proves the
+    # Card 5 "not nits_only" condition does not affect the non-nits-only path.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        base_sha = _setup_fixture(project_root)
+        snapshot_path = project_root / "_mill" / ".cleanliness-snapshot-test.txt"
+        _cleanliness.capture_snapshot(project_root, snapshot_path)
+        # IMPORTANT: Do NOT make a new commit -- HEAD == base_sha.
+        verify_cmd = "exit 0"
+        agent_output = (
+            '{"status":"success","commit_sha":"abc","session_id":"test-session"}\n'
+        )
+        rc, captured = _capture_stdout(
+            lambda: _forward_output(
+                agent_output,
+                project_root,
+                start_sha=base_sha,
+                snapshot_path=snapshot_path,
+                verify_cmd=verify_cmd,
+                nits_only=False,
+            )
+        )
+        try:
+            data = json.loads(captured.strip())
+            assert data["status"] == "stuck", f"case 58: expected stuck, got {data}"
+            assert data["stuck_type"] == "logic", (
+                f"case 58: expected stuck_type=logic, got {data}"
+            )
+            assert "no content commit" in data.get("reason", "").lower(), (
+                f"case 58: expected 'no content commit' in reason, got {data}"
+            )
+            print(
+                "PASS: case 58 - nits_only=False zero-commit success still"
+                " demotes to stuck/logic (regression guard)"
+            )
+        except Exception as exc:
+            print(f"FAIL: case 58 ({exc}) captured={captured!r}", file=sys.stderr)
             errors += 1
 
     if errors:

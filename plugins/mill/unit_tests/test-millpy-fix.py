@@ -620,6 +620,26 @@ class TestMillpyFix(unittest.TestCase):
         data = json.loads(out.strip())
         self.assertEqual(data["status"], "success")
 
+    def test_main_reports_clean_message_on_exhausted_wiki_startup_error(self):
+        """slug_from_branch exhausting the cold-daemon retry -> clean stderr message, exit 1, no traceback."""
+        self.mock_slug_from_branch.side_effect = millpy_fix.WikiStartupError(
+            "daemon did not start within timeout"
+        )
+
+        stderr_buf = io.StringIO()
+        with unittest.mock.patch("sys.stderr", stderr_buf):
+            rc, out = self._run_main([
+                "--scope", "batch",
+                "--batch-name", "test-batch",
+                "--review-file", str(self.review_file),
+                "--round", "1",
+            ])
+
+        self.assertEqual(rc, 1)
+        stderr_output = stderr_buf.getvalue()
+        # A clean except clause must have caught this -- no raw unhandled traceback.
+        self.assertNotIn("Traceback (most recent call last)", stderr_output)
+
 
 class TestMillpyFixBriefSizeGuard(unittest.TestCase):
 
@@ -818,6 +838,61 @@ class TestMillpyFixBriefSizeGuard(unittest.TestCase):
         self.assertTrue(data.get("nits_applied"), "nits_applied flag must be True when --nits-only is used")
 
         # Check that nits-fixed-test-batch marker was appended to timeline
+        full = millpy_fix._status.read_full(status_path)
+        self.assertTrue(
+            any(e.startswith("nits-fixed-test-batch") for e in full["timeline"]),
+            f"Expected nits-fixed-test-batch in timeline, got: {full['timeline']}",
+        )
+
+    def test_nits_only_all_pushback_zero_commit_is_success_not_stuck(self):
+        """
+        #582 regression: a --nits-only pass that legitimately pushes back on every
+        NIT finding makes zero content commits (HEAD never moves from start_sha).
+        This must be reported as success with the nits-fixed marker written, not
+        demoted to stuck/logic by the no-content-commit gate.
+        """
+        status_path = self.tmp_path / "_mill" / "status.md"
+
+        # Every git rev-parse HEAD call returns the SAME sha -- HEAD never moves,
+        # simulating the all-pushback, zero-commit case.
+        def mock_subprocess_run(argv, **kwargs):
+            if argv[0:2] == ["git", "rev-parse"]:
+                return subprocess.CompletedProcess(
+                    args=argv, returncode=0, stdout="abc1234\n", stderr=""
+                )
+            return subprocess.CompletedProcess(
+                args=argv, returncode=0, stdout="abc1234\n", stderr=""
+            )
+
+        def mock_run(prompt_text, *, model, effort, session_id, resume, cwd, timeout):
+            return ('{"status":"success","commit_sha":"abc","session_id":"fake"}\n', "fake-session")
+
+        with unittest.mock.patch.object(
+            millpy_fix._subprocess_util, "run",
+            side_effect=mock_subprocess_run,
+        ):
+            with unittest.mock.patch.object(
+                millpy_fix._implementer_claude, "run",
+                side_effect=mock_run,
+            ):
+                rc, out = self._run_main([
+                    "--scope", "batch",
+                    "--batch-name", "test-batch",
+                    "--review-file", str(self.review_file),
+                    "--round", "1",
+                    "--nits-only",
+                ])
+
+        self.assertEqual(rc, 0)
+        data = json.loads(out.strip().splitlines()[-1])
+        self.assertEqual(data["status"], "success")
+        self.assertIsNone(data.get("stuck_type"))
+        self.assertTrue(
+            data.get("nits_applied"),
+            "nits_applied flag must be True on the zero-commit all-pushback success path",
+        )
+
+        # Check that nits-fixed-test-batch marker was still appended to timeline.
         full = millpy_fix._status.read_full(status_path)
         self.assertTrue(
             any(e.startswith("nits-fixed-test-batch") for e in full["timeline"]),

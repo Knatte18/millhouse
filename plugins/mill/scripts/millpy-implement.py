@@ -43,6 +43,7 @@ import _review_common
 import _reviewers
 import _status
 from _implementer_common import _forward_output, emit_prepare, finalize_from_output
+from wiki import WikiStartupError
 
 
 def classify_stuck_type(reason: str) -> str:
@@ -162,6 +163,9 @@ def main(argv=None) -> int:
         slug = _marker.slug_from_branch(git_root, wiki_path, cfg)
     except _marker.MarkerError as e:
         print(str(e), file=sys.stderr)
+        return 1
+    except WikiStartupError as e:
+        print(f"wiki daemon unreachable: {e}", file=sys.stderr)
         return 1
 
     plan_dir = cfg.get("paths", {}).get("plan_dir", "_mill/plan/")

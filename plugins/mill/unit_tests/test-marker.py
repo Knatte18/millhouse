@@ -5,6 +5,7 @@ import contextlib
 import io
 import subprocess
 import sys
+import unittest.mock
 from pathlib import Path
 
 _HERE = Path(__file__).resolve().parent
@@ -238,6 +239,73 @@ def test_task_data_happy_path() -> None:
     print("PASS: test_task_data_happy_path")
 
 
+def test_slug_from_branch_retries_on_cold_daemon() -> None:
+    with _test_helpers.safe_temp_dir() as tmp:
+        worktree_path, wiki_path = _test_helpers._make_task_worktree(
+            tmp, "foo", "Foo Title", branch_prefix="hanf/", phase="active", seed_task=True
+        )
+        cfg = {"spawn": {"branch_prefix": "hanf/"}}
+        # Capture the real task list before patching, so the retry's second
+        # call can still return genuine data.
+        real_tasks = _marker.wiki.list_tasks_brief(wiki_path)
+        with unittest.mock.patch.object(
+            _marker.wiki,
+            "list_tasks_brief",
+            side_effect=[_marker.wiki.WikiStartupError("cold"), real_tasks],
+        ), unittest.mock.patch.object(_marker.wiki, "health_check") as mock_health_check:
+            slug = _marker.slug_from_branch(worktree_path, wiki_path, cfg)
+        if slug != "foo":
+            raise AssertionError(f"expected 'foo', got {slug!r}")
+        if mock_health_check.call_count != 1:
+            raise AssertionError(f"expected health_check called once, got {mock_health_check.call_count}")
+    print("PASS: test_slug_from_branch_retries_on_cold_daemon")
+
+
+def test_slug_from_branch_exhausted_retry_propagates_wiki_startup_error() -> None:
+    with _test_helpers.safe_temp_dir() as tmp:
+        worktree_path, wiki_path = _test_helpers._make_task_worktree(
+            tmp, "foo", "Foo Title", branch_prefix="hanf/", phase="active", seed_task=True
+        )
+        cfg = {"spawn": {"branch_prefix": "hanf/"}}
+        # Both the initial call and the post-wake retry raise, so the
+        # daemon never recovers within the single retry budget.
+        with unittest.mock.patch.object(
+            _marker.wiki, "list_tasks_brief", side_effect=_marker.wiki.WikiStartupError("still cold")
+        ), unittest.mock.patch.object(_marker.wiki, "health_check"):
+            try:
+                _marker.slug_from_branch(worktree_path, wiki_path, cfg)
+            except _marker.wiki.WikiStartupError:
+                pass
+            else:
+                raise AssertionError("expected wiki.WikiStartupError to propagate unwrapped")
+    print("PASS: test_slug_from_branch_exhausted_retry_propagates_wiki_startup_error")
+
+
+def test_task_data_retries_on_cold_daemon() -> None:
+    with _test_helpers.safe_temp_dir() as tmp:
+        worktree_path, wiki_path = _test_helpers._make_task_worktree(
+            tmp, "foo", "Foo Title", branch_prefix="hanf/", phase="active", seed_task=True
+        )
+        cfg = {"spawn": {"branch_prefix": "hanf/"}}
+        real_tasks = _marker.wiki.list_tasks_brief(wiki_path)
+        # task_data() makes 3 total list_tasks_brief calls after the retry
+        # fix: 2 inside its own slug_from_branch() call (1 failure + 1
+        # retry-success), plus a 3rd from task_data()'s own separate
+        # _list_tasks_brief_with_retry() call.
+        with unittest.mock.patch.object(
+            _marker.wiki,
+            "list_tasks_brief",
+            side_effect=[_marker.wiki.WikiStartupError("cold"), real_tasks, real_tasks],
+        ), unittest.mock.patch.object(_marker.wiki, "health_check") as mock_health_check:
+            data = _marker.task_data(worktree_path, wiki_path, cfg)
+        expected = {"slug": "foo", "branch": "hanf/foo", "task_title": "Foo Title"}
+        if data != expected:
+            raise AssertionError(f"expected {expected!r}, got {data!r}")
+        if mock_health_check.call_count != 1:
+            raise AssertionError(f"expected health_check called once, got {mock_health_check.call_count}")
+    print("PASS: test_task_data_retries_on_cold_daemon")
+
+
 def main() -> int:
     tests = [
         test_slug_from_branch_happy_path,
@@ -255,6 +323,9 @@ def main() -> int:
         test_slug_from_branch_user_prefix_no_config_prefix,
         test_slug_from_branch_user_prefix_slug_not_found,
         test_task_data_happy_path,
+        test_slug_from_branch_retries_on_cold_daemon,
+        test_slug_from_branch_exhausted_retry_propagates_wiki_startup_error,
+        test_task_data_retries_on_cold_daemon,
     ]
 
     failures: list[str] = []

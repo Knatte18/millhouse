@@ -894,6 +894,9 @@ def _forward_output(
     When nits_only is True and status_path and nits_scope are not None, on the parsed-success
     emit path (where a fixer's own reported status == "success" is about to be printed),
     adds "nits_applied": True to the dict and writes a nits-fixed-<scope> marker to the status file.
+    When nits_only is True, the no-content-commit gate (HEAD == start_sha / only-batch-start-commit)
+    is also skipped, since a --nits-only pass that correctly pushes back on every finding is
+    expected to produce zero commits.
     When git_root is not None, it is used as the cwd for verify subprocesses instead of
     project_root. This corrects verify behavior in nested layouts where the plan's verify
     command must run from the git root rather than the hub sub-directory.
@@ -931,7 +934,11 @@ def _forward_output(
 
             # Check for no-content-commit success: reject if HEAD == start_sha or if
             # the only commit since start_sha is the batch-start housekeeping commit.
-            if start_sha is not None:
+            # Skipped entirely when nits_only is True: a --nits-only pass that
+            # legitimately pushes back on every finding (per the mill-receiving-review
+            # decision tree) is expected to make zero commits, and that is success,
+            # not a stuck/logic demotion.
+            if start_sha is not None and not nits_only:
                 result = _subprocess_util.run(
                     ["git", "rev-parse", "HEAD"],
                     cwd=project_root,
