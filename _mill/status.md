@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-review-and-finalize-gaps
 branch: hanf/mill-review-and-finalize-gaps
 plan: _mill/plan
@@ -23,4 +23,17 @@ plan-review-r2  '2026-06-30T19:25:48Z'
 plan-fix-r2  '2026-06-30T19:25:48Z'
 plan-fix-r3  '2026-06-30T19:33:53Z'
 planned  '2026-06-30T19:34:14Z'
+implementing  '2026-07-01T04:07:56Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: discussion-review-round-cap-extension
+    state: pending
+  - name: wiki-cold-daemon-retry
+    state: pending
+  - name: nits-only-no-op-success
+    state: pending
 ```
