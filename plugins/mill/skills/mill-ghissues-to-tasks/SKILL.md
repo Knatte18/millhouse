@@ -17,138 +17,60 @@ Leaving claimed-but-open issues on GitHub is a forgetting hazard — that's why 
    > `gh` is not authenticated. Run `gh auth login` and re-invoke `/mill-ghissues-to-tasks`.
 2. `.millhouse/wiki/` junction must exist. If not, stop and tell the user to run `mill-setup`.
 
-## Step 1 — Fetch all open issues
+## Step 1 — Fetch and build the contract
 
 Use the `_gh_issues` library. From the hub root:
 
 ```bash
 PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
 import json, _gh_issues, _paths
-issues = _gh_issues.fetch(limit=100, git_root=_paths.resolve_git_root())
-print(json.dumps(issues, indent=2))
-" > .scratch/issues.json
+git_root = _paths.resolve_git_root()
+issues = _gh_issues.fetch(limit=100, git_root=git_root)
+repo = _gh_issues.detect_repo(git_root=git_root)
+contract = _gh_issues.to_contract(issues, repo)
+with open('.scratch/triage-contract.json', 'w') as f:
+    json.dump(contract, f, indent=2)
+print(json.dumps({'repo': repo, 'issue_count': len(issues)}))
+"
 ```
 
-Read `.scratch/issues.json`. Record the repo name (`_gh_issues.detect_repo(git_root=_paths.resolve_git_root())`) for the close step.
+Record `repo` (printed above) for the close step (Step 3). `.scratch/triage-contract.json` is the canonical handoff file `mill-triage-to-tasks` reads next. Optionally also write `.scratch/issues.json` (the raw `fetch()` output) as a debugging aid — no downstream step reads it.
 
-## Step 2 — Read the current task list
+## Step 2 — Hand off to the shared analysis skill
 
-Resolve the wiki path and load all tasks via the client API:
+Invoke `mill-triage-to-tasks` via the Skill tool (same pattern used by `mill-report-to-tasks`) and let it run its full Steps 1–7 against `.scratch/triage-contract.json`: read the contract, read the current wiki tasks, group into new tasks / fold-ins / skips, present one consolidated proposal, wait for operator approval, apply the wiki writes (new tasks + fold-ins), write `.scratch/triage-result.json`, and report. This skill performs no grouping, proposal-writing, or wiki-write logic of its own anymore — that entire flow now lives in `mill-triage-to-tasks`.
 
-```bash
-PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
-import json, _paths
-from wiki import _client
-wiki_path = _paths.resolve_wiki_path(_paths.resolve_git_root())
-tasks = _client.list_tasks_brief(wiki_path)
-print(json.dumps(tasks, indent=2))
-" > .scratch/wiki-tasks.json
-```
+## Step 3 — Close consumed issues
 
-Store `wiki_path` for later `_client` calls. Parse `.scratch/wiki-tasks.json` — each task dict has keys `{id, slug, title, layer, brief, status, has_proposal}`.
+After `mill-triage-to-tasks` completes, check whether `.scratch/triage-result.json` exists:
 
-## Step 3 — Analyse and group
+- **Does not exist:** zero items were consumed (either the contract had zero items, or the shared skill's all-skipped short-circuit fired). Report zero closes and stop.
+- **Exists:** parse the JSON array — `[{"ref": "<issue-number-as-string>", "route": "new_task"|"fold_in", "slug": "<slug>"}, ...]`. For each entry, map `route` to the exact close-comment string:
+  - `new_task` → `Consolidated into wiki task: <slug>`
+  - `fold_in` → `Folded into wiki task: <slug>`
 
-Read all fetched issues from `.scratch/issues.json` plus the current task list from `.scratch/wiki-tasks.json`. Using judgment, propose a grouping of the open issues into a small number of **new** tasks (soft target 2-3, natural grouping by theme, no hard cap — do not force unrelated issues together or over-split tightly-related ones), plus a set of fold-in candidates (overlapping with existing unlocked backlog tasks) and skips (non-actionable issues).
+  Then, for each entry, call:
+  ```bash
+  PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
+  import _gh_issues, _paths
+  _gh_issues.close_with_comment(<int(entry['ref'])>, '<comment>', git_root=_paths.resolve_git_root())
+  "
+  ```
+  `to_contract()` stored `ref` as `str(issue["number"])` — cast it back to `int` before calling `close_with_comment`.
 
-For each grouped **new** task, draft:
-- A slug (validate `[a-z][a-z0-9-]*`; must not collide with an existing slug from Step 2).
-- A title (free text).
-- A brief theme statement (1–2 sentences).
+  On any individual close failure, log the issue number + error and continue to the next entry — do not abort the loop. Collect all failures for Step 4's report. This preserves today's exact close-on-approval-only invariant: `mill-triage-to-tasks` already gated every wiki write behind operator `approve`, so by the time this step runs, every entry in `.scratch/triage-result.json` is already committed to the wiki.
 
-For each fold-in candidate, the unclaimed-only guard applies: from the already-loaded task list, find the task with matching slug and inspect its `status` and `deferred` flag. A fold target must be unclaimed (`status is None` and not `deferred`); any task with a concrete status or `deferred=True` is routed to a new task or skipped.
+## Step 4 — Report
 
-**There is NO per-issue decision menu and NO per-issue prompting.** The assistant makes all grouping decisions at once and presents them in Step 4.
-
-## Step 4 — Propose
-
-Write the consolidated proposal to `.scratch/ghissues-to-tasks-proposal.md`. The proposal must include:
-
-1. A decisions table listing every fetched issue and its routing (New task, Fold-in, or Skip).
-2. A "New tasks (grouped)" section listing each drafted slug, title, and brief, with the source issues grouped under each.
-3. A "Fold-ins" section listing each target slug and its source issues.
-4. A "Skipped" section listing skipped issues and their skip reasons.
-5. For each consumed issue (new/grouped or fold-in), the **exact** close-comment string that will be posted on approval:
-   - New/grouped-task issues: `Consolidated into wiki task: <slug>`
-   - Fold-in issues: `Folded into wiki task: <slug>`
-   - Skipped issues: no comment.
-
-Print a one-line summary to chat + the path. The operator replies `approve` or gives feedback.
-
-**One-shot model:** there is no per-issue prompting; all decisions are presented at once. "One-shot" means no resumable state, NOT no iteration. On feedback the assistant revises the grouping and re-presents the full proposal, looping until `approve` or an explicit abort. **Nothing is written to the wiki or closed on GitHub until `approve`.**
-
-## Step 5 — Apply (on approve)
-
-1. For each grouped **new** task, call:
-   ```bash
-   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
-   from wiki import _client
-   _client.upsert_task(
-       <wiki_path>,
-       '<slug>',
-       title='<title>',
-       brief='<theme>',
-       body='''- Sources: #N — <issue title>\n- Sources: #M — <issue title>\n...\nRun 'gh issue view #N' for full detail.'''
-   )
-   "
-   ```
-   Per `wiki/_render.py`, a non-empty `body` renders to `proposal-<slug>.md` and the Home.md slug line becomes a link to that file. This minimal manifest is intended — the implementer fetches full issue detail via `gh issue view #N` rather than duplicating the issue text into the wiki. Optionally, call `_client.upsert_tasks_batch(wiki_path, tasks, message=...)` to create all grouped tasks in one commit instead of sequential `upsert_task` calls. The daemon commits and pushes automatically on each mutation.
-
-2. For each fold-in, call:
-   ```bash
-   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
-   from wiki import _client
-   task = _client.get_task(<wiki_path>, '<target_slug>')
-   if task is None:
-       # Stale or typo'd target — report error for this fold-in and continue
-       print('ERROR: target task <target_slug> not found')
-   else:
-       # Re-check unclaimed-only guard
-       if task.get('status') is not None or task.get('deferred', False):
-           print('ERROR: Cannot fold into <target_slug>: task is not unclaimed')
-       else:
-           new_body = (task['body'] or '') + '\n- Sources: #N — <issue title>'
-           _client.upsert_task(<wiki_path>, '<target_slug>', body=new_body)
-   "
-   ```
-
-3. For each consumed issue, close it on GitHub after the wiki write succeeds:
-   - For **new/grouped-task** issues:
-     ```bash
-     PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
-     import _gh_issues, _paths
-     _gh_issues.close_with_comment(<N>, 'Consolidated into wiki task: <slug>', git_root=_paths.resolve_git_root())
-     "
-     ```
-   - For **fold-in** issues:
-     ```bash
-     PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
-     import _gh_issues, _paths
-     _gh_issues.close_with_comment(<N>, 'Folded into wiki task: <slug>', git_root=_paths.resolve_git_root())
-     "
-     ```
-   The fold-in close-comment string MUST match `/mill-fold` verbatim: `Folded into wiki task: <slug>`.
-   On any close failure, log the issue number + error and continue; report all failures at the end.
-
-## Step 6 — Report
-
-Summarize the applied changes:
+Summarize what this skill itself is responsible for — issues closed and any close failures. The new-task/fold-in/skip counts were already reported to the operator by `mill-triage-to-tasks`'s own Step 7 during the handoff; do not re-derive or re-print them here, to avoid two divergent counts in the same conversation.
 
 ```
 Revision applied.
-  <X> new grouped tasks created
-  <Y> fold-ins appended
   <Z> issues closed on GitHub
-  <S> skipped (untouched)
   <F> failed to close (see stderr)
 ```
 
 ## Rules
 
-- **One-shot, no resumable state** — the proposal file at `.scratch/ghissues-to-tasks-proposal.md` is the only intermediate artefact. If the user closes mid-flow, starting over is fine.
-- **Skipped issues are untouched** — no comment, no label, no close. Forgetting is better than lingering "tracked" state.
-- **Close only on approval + actual write** — never close an issue before the task is committed to the wiki.
-- **Pointer comment is the invariant** — every closed issue gets a reference comment so someone browsing closed issues later can find where it went. New/grouped-task issues close with `Consolidated into wiki task: <slug>`; fold-in issues close with `Folded into wiki task: <slug>`.
-- **Unclaimed-only guard** — fold targets must be unclaimed (`status is None` and not `deferred`). Any claimed, terminal, blocked, or deferred task is routed to a new task or skipped instead.
-- **Fold-in format** — each fold-in appends a `- Sources: #N — <issue title>` bullet via `_client.get_task` + `_client.upsert_task(..., body=...)`. The Home.md output is identical to `/mill-fold`.
-- **Close-comment strings** — new/grouped-task → `Consolidated into wiki task: <slug>`; fold-in → `Folded into wiki task: <slug>` (byte-identical to `/mill-fold`'s comment).
+- **Close only on approval + actual write** — only issues listed in `.scratch/triage-result.json` are closed, and `mill-triage-to-tasks` only writes that file after operator approval and a successful wiki write.
+- **Close-comment strings** — new-task → `Consolidated into wiki task: <slug>`; fold-in → `Folded into wiki task: <slug>` (byte-identical to `/mill-fold`'s fold-in comment).
