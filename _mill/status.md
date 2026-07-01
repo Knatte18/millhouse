@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-mill-start-utf8-fix
+phase: holistic-reviewing
 slug: mill-plan-and-start-gaps
 branch: hanf/mill-plan-and-start-gaps
 plan: _mill/plan
@@ -24,6 +24,7 @@ implementing  '2026-06-30T19:06:06Z'
 approved-moves-target-docs-and-messages  '2026-07-01T04:14:56Z'
 approved-parse-batch-refs-leading-token  '2026-07-01T04:26:39Z'
 approved-mill-start-utf8-fix  '2026-07-01T04:33:44Z'
+holistic-reviewing  '2026-07-01T04:34:02Z'
 ```
 
 ## Batches
