@@ -43,5 +43,7 @@ batches:
     start_sha: 8bd000136ee1f1bfccb16132eb855a95029f0bf2
     commit_sha: e5a625e8c41907dd173b46052cf7750477ca297d
   - name: nits-only-no-op-success
-    state: pending
+    state: running
+    implementer_session: e33ccdde-df67-4a59-9aa3-192500b18422
+    start_sha: 1c9e685c4c700fdafb5db0801163e8928a142db6
 ```
