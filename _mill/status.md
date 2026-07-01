@@ -34,7 +34,9 @@ batches:
     start_sha: b877ec25f1c72599e7a3b2e240548743812658cc
     commit_sha: ac80b17a7da133dee9ce78c6149c535b4495575c
   - name: parse-batch-refs-leading-token
-    state: pending
+    state: running
+    implementer_session: 213d8d60-7735-4469-8f32-a5f00b6215fa
+    start_sha: 0c69c8779079b789a5c9128c92940f311383fc26
   - name: mill-start-utf8-fix
     state: pending
 ```
