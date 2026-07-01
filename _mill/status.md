@@ -37,7 +37,9 @@ batches:
     start_sha: 735737db996e8f3fcb4f3032ea3d6f60a0e40041
     commit_sha: 702e7f00b31e294b9dd409a585d3199f3ed2be44
   - name: wiki-cold-daemon-retry
-    state: pending
+    state: running
+    implementer_session: 2afc463f-b212-4f8d-9f2c-3cdf220beb96
+    start_sha: 8bd000136ee1f1bfccb16132eb855a95029f0bf2
   - name: nits-only-no-op-success
     state: pending
 ```
