@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-approved
+phase: done
 slug: mill-ghissues-source-adapter
 branch: hanf/mill-ghissues-source-adapter
 plan: _mill/plan
@@ -29,6 +29,7 @@ holistic-reviewing  '2026-07-01T04:16:50Z'
 holistic-fixing  '2026-07-01T04:19:47Z'
 nits-fixed-holistic  '2026-07-01T04:22:57Z'
 holistic-approved  '2026-07-01T04:23:02Z'
+done  '2026-07-01T04:23:26Z'
 ```
 
 ## Batches
