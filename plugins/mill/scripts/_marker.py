@@ -26,6 +26,35 @@ class MarkerError(RuntimeError):
     """Raised when slug derivation from branch + Home.md fails."""
 
 
+def _list_tasks_brief_with_retry(wiki_path: Path) -> list[dict]:
+    """Fetch the Home.md task list, retrying once after a cold-daemon wake.
+
+    A machine sleep/resume cycle can leave the wiki daemon's socket stale,
+    so the first `list_tasks_brief` call after resume raises
+    `wiki.WikiStartupError` even though the daemon would start up fine on a
+    fresh attempt. Force a wake via `health_check` and retry exactly once
+    before giving up, since retrying indefinitely would mask a genuinely
+    broken daemon.
+
+    Args:
+        wiki_path: Absolute path to the wiki clone root.
+
+    Returns:
+        List of task dicts, as returned by `wiki.list_tasks_brief`.
+
+    Raises:
+        wiki.WikiStartupError: If the daemon is still unreachable after the
+            forced wake-up and retry. Propagated unwrapped -- callers must
+            not see this collapsed into `MarkerError`.
+    """
+    try:
+        return wiki.list_tasks_brief(wiki_path)
+    except wiki.WikiStartupError:
+        # Cold daemon: force a wake-up, then retry exactly once.
+        wiki.health_check(wiki_path)
+        return wiki.list_tasks_brief(wiki_path)
+
+
 def slug_from_branch(git_root: Path, wiki_path: Path, cfg: dict) -> str:
     """Derive and validate the task slug from the current git branch.
 
@@ -49,7 +78,7 @@ def slug_from_branch(git_root: Path, wiki_path: Path, cfg: dict) -> str:
 
     prefix = cfg.get("spawn", {}).get("branch_prefix", "")
 
-    tasks = wiki.list_tasks_brief(wiki_path)
+    tasks = _list_tasks_brief_with_retry(wiki_path)
 
     if prefix and not branch.startswith(prefix):
         task = next((t for t in tasks if t["slug"] == branch), None)
@@ -92,7 +121,7 @@ def task_data(git_root: Path, wiki_path: Path, cfg: dict) -> dict:
     except _pygit2_util.GitOpsError as e:
         raise MarkerError(f"could not read branch in {git_root}: {e}") from e
 
-    tasks = wiki.list_tasks_brief(wiki_path)
+    tasks = _list_tasks_brief_with_retry(wiki_path)
     task = next(t for t in tasks if t["slug"] == slug)
 
     return {"slug": slug, "branch": branch, "task_title": task["title"]}
