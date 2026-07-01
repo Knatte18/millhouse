@@ -95,15 +95,30 @@ The initial status file (at `status_path`) was written by `mill-spawn` and commi
 
 ### Phase: Explore
 
-Before exploring the codebase, fetch the task document by re-calling `_client.get_task(wiki_path, slug)` (each Bash call is a fresh subprocess, so the `task` variable from Phase: Select does not persist). (use the same `PYTHONIOENCODING=utf-8`-prefixed invocation shown in Phase: Select to avoid the cp1252 `UnicodeEncodeError` on non-ASCII body/brief content.) Read the proposal from `task['body']` and the one-paragraph summary from `task['brief']` before reading any source file. The full key set returned by `get_task()` is: `body, brief, deferred, depends_on, id, isolated, slug, status, title`. If both `task['body']` and `task['brief']` are empty or `None`, fall back to deriving scope from the codebase directly, but only after confirming those exact fields are empty.
+**Step 1 — Read the full task document (mandatory gate).**
 
-Before asking a single question, explore the relevant parts of the codebase.
+Fetch the task document by re-calling `_client.get_task(wiki_path, slug)` (each Bash call is a fresh subprocess, so the `task` variable from Phase: Select does not persist). Use the same `PYTHONIOENCODING=utf-8`-prefixed invocation shown in Phase: Select to avoid the cp1252 `UnicodeEncodeError` on non-ASCII body/brief content. The full key set returned by `get_task()` is: `body, brief, deferred, depends_on, id, isolated, slug, status, title`.
+
+Read `task['body']` **in full**. Do not skim. If `task['body']` is long, read every paragraph before continuing. If both `task['body']` and `task['brief']` are empty or `None`, fall back to deriving scope from the codebase directly, but only after confirming those exact fields are empty.
+
+**Step 2 — Output a scope digest before touching any file.**
+
+Immediately after reading the body/brief, write a short scope digest to the user (3–6 bullets) covering:
+- What the task is (paraphrase of `brief`)
+- What is already decided in the proposal (key design choices, constraints, approach)
+- What is explicitly left open or delegated to discussion
+
+Do NOT open any source file, run any Bash command, or ask any question until this digest is written. The digest is the proof the body was read.
+
+**Step 3 — Explore the codebase.**
+
+After writing the digest, explore the relevant parts of the codebase.
 
 - If `_codeguide/Overview.md` exists: follow the codeguide navigation pattern (Overview → module docs → Source links).
 - Otherwise: use file structure, `git log`, and `Grep` / `Glob`.
 - Check recent commits related to the task.
 - Read `CONSTRAINTS.md` at the hub root if present (use `_constraints.read_if_exists()`).
-- Do not ask questions you can answer from the codebase.
+- Do not ask questions you can answer from the codebase or from the proposal.
 
 ### Phase: Discuss
 
