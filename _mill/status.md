@@ -40,5 +40,7 @@ batches:
     start_sha: 0c69c8779079b789a5c9128c92940f311383fc26
     commit_sha: 38ce7bacdd886e8f170e2e7b455091d2a39631a0
   - name: mill-start-utf8-fix
-    state: pending
+    state: running
+    implementer_session: 83cd2d5c-fb68-4999-b66a-e57384da6d5d
+    start_sha: 51a9c63df6556b8c5c767ce161a3679dd1ff0d39
 ```
