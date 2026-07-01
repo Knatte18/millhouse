@@ -1053,6 +1053,22 @@ class TestMillpyImplement(unittest.TestCase):
         self.assertNotEqual(data.get("stuck_type"), "incomplete")
 
 
+    def test_main_reports_clean_message_on_exhausted_wiki_startup_error(self):
+        """slug_from_branch exhausting the cold-daemon retry -> clean stderr message, exit 1, no traceback."""
+        self.mock_slug_from_branch.side_effect = millpy_implement.WikiStartupError(
+            "daemon did not start within timeout"
+        )
+
+        stderr_buf = io.StringIO()
+        with unittest.mock.patch("sys.stderr", stderr_buf):
+            rc, out = self._run_main(["test-batch"])
+
+        self.assertEqual(rc, 1)
+        stderr_output = stderr_buf.getvalue()
+        # A clean except clause must have caught this -- no raw unhandled traceback.
+        self.assertNotIn("Traceback (most recent call last)", stderr_output)
+
+
 class TestClassifyStuckType(unittest.TestCase):
 
     def test_classify_command_not_found(self):

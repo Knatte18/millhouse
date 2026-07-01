@@ -620,6 +620,26 @@ class TestMillpyFix(unittest.TestCase):
         data = json.loads(out.strip())
         self.assertEqual(data["status"], "success")
 
+    def test_main_reports_clean_message_on_exhausted_wiki_startup_error(self):
+        """slug_from_branch exhausting the cold-daemon retry -> clean stderr message, exit 1, no traceback."""
+        self.mock_slug_from_branch.side_effect = millpy_fix.WikiStartupError(
+            "daemon did not start within timeout"
+        )
+
+        stderr_buf = io.StringIO()
+        with unittest.mock.patch("sys.stderr", stderr_buf):
+            rc, out = self._run_main([
+                "--scope", "batch",
+                "--batch-name", "test-batch",
+                "--review-file", str(self.review_file),
+                "--round", "1",
+            ])
+
+        self.assertEqual(rc, 1)
+        stderr_output = stderr_buf.getvalue()
+        # A clean except clause must have caught this -- no raw unhandled traceback.
+        self.assertNotIn("Traceback (most recent call last)", stderr_output)
+
 
 class TestMillpyFixBriefSizeGuard(unittest.TestCase):
 
