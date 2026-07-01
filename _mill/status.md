@@ -31,7 +31,9 @@ implementing  '2026-07-01T04:07:56Z'
 ```yaml
 batches:
   - name: discussion-review-round-cap-extension
-    state: pending
+    state: running
+    implementer_session: 5d3df729-bbd2-4539-b1cb-c1d9a0dc7f20
+    start_sha: 735737db996e8f3fcb4f3032ea3d6f60a0e40041
   - name: wiki-cold-daemon-retry
     state: pending
   - name: nits-only-no-op-success
