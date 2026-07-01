@@ -81,6 +81,57 @@ def test_detect_repo_default_falls_back_to_resolve_git_root() -> int:
     return errors
 
 
+def test_to_contract_maps_issues_to_triage_contract() -> int:
+    errors = 0
+    _issues = [
+        {"number": 101, "title": "First bug", "body": "repro steps", "labels": [{"name": "bug"}], "createdAt": "2026-01-01T00:00:00Z"},
+        {"number": 202, "title": "Second bug", "body": "more repro", "labels": [], "createdAt": "2026-01-02T00:00:00Z"},
+        {"number": 303, "title": "Third bug", "body": "", "labels": [{"name": "enhancement"}], "createdAt": "2026-01-03T00:00:00Z"},
+    ]
+    _result = _gh_issues.to_contract(_issues, "Knatte18/millhouse")
+
+    if _result["source"] != "ghissues":
+        print(f"FAIL: to_contract/source — expected 'ghissues', got {_result['source']!r}", file=sys.stderr)
+        errors += 1
+    if _result["meta"]["repo"] != "Knatte18/millhouse":
+        print(f"FAIL: to_contract/meta-repo — expected 'Knatte18/millhouse', got {_result['meta']!r}", file=sys.stderr)
+        errors += 1
+    if _result["ref_prefix"] != "#":
+        print(f"FAIL: to_contract/ref-prefix — expected '#', got {_result['ref_prefix']!r}", file=sys.stderr)
+        errors += 1
+    if "{ref}" not in _result["detail_hint"]:
+        print(f"FAIL: to_contract/detail-hint — expected '{{ref}}' placeholder, got {_result['detail_hint']!r}", file=sys.stderr)
+        errors += 1
+    if _result["embed_body"] is not False:
+        print(f"FAIL: to_contract/embed-body — expected False, got {_result['embed_body']!r}", file=sys.stderr)
+        errors += 1
+
+    _items = _result["items"]
+    if len(_items) != len(_issues):
+        print(f"FAIL: to_contract/item-count — expected {len(_issues)}, got {len(_items)}", file=sys.stderr)
+        errors += 1
+    else:
+        for _issue, _item in zip(_issues, _items):
+            if _item["ref"] != str(_issue["number"]):
+                print(f"FAIL: to_contract/ref — expected {str(_issue['number'])!r}, got {_item['ref']!r}", file=sys.stderr)
+                errors += 1
+            if _item["title"] != _issue["title"]:
+                print(f"FAIL: to_contract/title — expected {_issue['title']!r}, got {_item['title']!r}", file=sys.stderr)
+                errors += 1
+            if _item["body"] != _issue["body"]:
+                print(f"FAIL: to_contract/body — expected {_issue['body']!r}, got {_item['body']!r}", file=sys.stderr)
+                errors += 1
+        _got_order = [item["ref"] for item in _items]
+        _expected_order = [str(issue["number"]) for issue in _issues]
+        if _got_order != _expected_order:
+            print(f"FAIL: to_contract/ordering — expected {_expected_order}, got {_got_order}", file=sys.stderr)
+            errors += 1
+
+    if errors == 0:
+        print("PASS: to_contract/maps-issues — envelope shape, ref/title/body passthrough, ordering correct")
+    return errors
+
+
 def main() -> int:
     errors = 0
 
@@ -270,6 +321,7 @@ def main() -> int:
     errors += test_detect_repo_with_explicit_git_root()
     errors += test_detect_repo_with_explicit_git_root_ssh_url()
     errors += test_detect_repo_default_falls_back_to_resolve_git_root()
+    errors += test_to_contract_maps_issues_to_triage_contract()
 
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)

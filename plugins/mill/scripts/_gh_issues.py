@@ -20,6 +20,7 @@ Public API:
     detect_repo(git_root=None) -> str
         owner/repo string for the current worktree. "" on failure.
         Parses ``git remote get-url origin`` (``-C git_root`` when given).
+    to_contract(issues, repo) -> dict: Maps fetch()-shaped issue dicts into the triage-report contract shape (see plugins/mill/templates/triage-report.schema.md).
 """
 from __future__ import annotations
 
@@ -187,6 +188,42 @@ def fetch_one(
 
     issue["body"] = _render_body_with_comments(issue["body"], issue.pop("comments", []))
     return issue
+
+
+def to_contract(issues: list[dict[str, Any]], repo: str) -> dict[str, Any]:
+    """Map fetch()-shaped issue dicts into the triage-report contract shape.
+
+    Each entry of ``issues`` is shaped like one element of ``fetch()``'s
+    return value (``number, title, body, labels, createdAt``). This function
+    does not call ``gh`` itself -- it is a pure mapping step that sits between
+    ``fetch()``/``fetch_one()`` and the source-agnostic ``mill-triage-to-tasks``
+    skill, which consumes the returned envelope (see
+    ``plugins/mill/templates/triage-report.schema.md``).
+
+    Args:
+        issues: List of issue dicts as returned by ``fetch()``.
+        repo: ``owner/repo`` string to record in the envelope's ``meta``.
+
+    Returns:
+        The full contract envelope: ``{"source": "ghissues", "meta":
+        {"repo": repo}, "items": [...], "ref_prefix": "#", "detail_hint":
+        "Run 'gh issue view #{ref}' for full detail.", "embed_body": False}``.
+        ``items`` preserves the input order; each item is
+        ``{"ref": str(issue["number"]), "title": issue["title"], "body":
+        issue["body"]}``.
+    """
+    items = [
+        {"ref": str(issue["number"]), "title": issue["title"], "body": issue["body"]}
+        for issue in issues
+    ]
+    return {
+        "source": "ghissues",
+        "meta": {"repo": repo},
+        "items": items,
+        "ref_prefix": "#",
+        "detail_hint": "Run 'gh issue view #{ref}' for full detail.",
+        "embed_body": False,
+    }
 
 
 def close_with_comment(
