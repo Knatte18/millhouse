@@ -63,7 +63,7 @@ Exceptions: unit tests use `uv run --project plugins/mill`; mill-setup keeps the
 - Load `mill-receiving-review` skill before reading any review output.
 - `print()` / `_log()` output: ASCII only (`—` -> ` -- `, `->` -> ` -> `). Windows cp1252 crashes on non-ASCII stdout.
 - `mill-config.yaml` hub file and plugin template must stay in sync — template seeds new hubs.
-- `CLAUDE_PLUGIN_ROOT` in directory-source mode points to the dev tree (expected); switch to cache-based install to use the cache path.
+- `CLAUDE_PLUGIN_ROOT` always resolves to the plugin cache entry, never the dev tree. Use it for all intra-plugin paths.
 
 ## Review terminology
 
