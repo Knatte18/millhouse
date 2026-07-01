@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: nits-fixed-holistic
+phase: done
 slug: mill-review-and-finalize-gaps
 branch: hanf/mill-review-and-finalize-gaps
 plan: _mill/plan
@@ -31,6 +31,7 @@ holistic-reviewing  '2026-07-01T04:27:42Z'
 holistic-fixing  '2026-07-01T04:30:54Z'
 holistic-approved  '2026-07-01T04:40:36Z'
 nits-fixed-holistic  '2026-07-01T04:41:49Z'
+done  '2026-07-01T04:42:24Z'
 ```
 
 ## Batches
