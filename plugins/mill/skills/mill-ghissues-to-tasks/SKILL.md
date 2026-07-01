@@ -1,6 +1,6 @@
 ---
 name: mill-ghissues-to-tasks
-description: Drain the GitHub issue queue into Home.md. One-shot: the assistant groups all open issues into a few tasks (new or folded-in) and asks for one combined approval, then closes consumed issues with a pointer comment. Skipped issues are left alone.
+description: "Drain the GitHub issue queue into Home.md. One-shot: the assistant groups all open issues into a few tasks (new or folded-in) and asks for one combined approval, then closes consumed issues with a pointer comment. Skipped issues are left alone."
 ---
 
 # mill-ghissues-to-tasks
