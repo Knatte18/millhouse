@@ -30,7 +30,7 @@ paths:
 roles:
   discussion-review:
     holistic:
-      rounds: 5
+      rounds: 8
       reviewer: opushigh
   plan-review:
     batch:
