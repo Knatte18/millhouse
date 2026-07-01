@@ -36,6 +36,7 @@ Operator-driven entries keep the existing bare format (`- **Q:** … **A:** …`
 - On `GAPS_FOUND`, the assistant auto-resolves each gap by adding the missing information to discussion.md using best judgment, commits, **pushes**, and re-runs the review.
 - On APPROVE, read the review file. If zero `[NOTE]` findings: break the loop and proceed to Handoff (auto-path identical to interactive 4a). If one or more `[NOTE]` findings: take the interactive 4b path verbatim — auto-resolve each NOTE by editing `<discussion_path>` using best judgment (per the `mill-receiving-review` decision tree, with PUSH BACK unavailable), write the same fixer report at `<reviews_dir>/<YYYYMMDD-HHMMSS>-discussion-fix-r<N>.md` with `## Fixed` / `## Pushed Back` sections, append `discussion-fix-r{N}` to the status timeline, single commit covering `<discussion_path>` + `<reviews_dir>/` + `<status_path>` + `_mill/briefs/` with message `mill-start: discussion-fix round {N} for {slug}`, push, break loop → Handoff. The Q&A log is NOT touched for NOTEs — the fixer report is the audit trail.
 - At the end of each GAPS_FOUND round (after committing and pushing gap fixes): (1) parse the current round's gap titles from the review file (heading text of each `### [GAP]` finding) into `current_gap_titles`; (2) if `round >= max_review_rounds` — non-progress check: if `current_gap_titles.isdisjoint(prev_gap_titles)` AND `not extension_used`: set `extension_used = True`, allow one more round (do NOT block), and continue the loop (`round += 1`); otherwise (overlap exists, or `extension_used` is already `True`): call `_status.set_blocked(status_path, f"auto: discussion review gaps unresolved after {N} rounds", timestamp=_timestamp.now_utc_iso())`, then `if [ -d <worktree>/_mill/briefs ]; then git -C <worktree> add _mill/briefs/; fi && git -C <worktree> add <status_path> && git -C <worktree> commit -m "mill-start: blocked (auto: discussion review gaps unresolved) for <slug>" && git -C <worktree> push`, then halt — do NOT proceed to Handoff; (3) update `prev_gap_titles = current_gap_titles` (every round, including the extension round).
+- Because `extension_used` was just set to `True` in this iteration, the next iteration's Step 2 dispatch (the discussion-review prepare call) for this extension round MUST pass `--max-rounds <max_review_rounds + 1>` (Agent-mode: as `<args>`; subprocess/psmux: appended to the inner `millpy-review-discussion.py` invocation) so that `_review_discussion.py:prepare()`'s `round_n > effective_max` check does not reject it; every other round (i.e. when `extension_used` is not freshly set this iteration) omits the flag entirely and relies on the configured cap.
 
 `--auto` is independent from `pipeline.autonomous_mode`: `--auto` is a per-invocation flag controlling Phase: Discuss / Discussion Review behaviour in mill-start; `pipeline.autonomous_mode` is a config key controlling mill-go's stuck-handling. The Auto mode subsection neither reads nor writes `pipeline.autonomous_mode`. Operators opt into each separately.
 
@@ -134,7 +135,7 @@ The new schema has two skip conditions: `rounds: 0` OR `reviewer: null` means "s
 Loop up to `max_review_rounds` rounds. Each round:
 
 1. Report: **"Discussion Review — round N/max_review_rounds"**.
-2. **Dispatch mode:** Resolve dispatch mode via `_agent_dispatch.resolve_dispatch_mode(cfg)`. If `agent` (Claude provider only): follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" in `plugins/mill/skills/mill-go/SKILL.md`) with `<cli> = millpy-review-discussion.py` with no additional prepare arguments; thread `--round <round>` from the prepare envelope into the finalize invocation. If `subprocess` or `psmux`: use the subprocess branch below.
+2. **Dispatch mode:** Resolve dispatch mode via `_agent_dispatch.resolve_dispatch_mode(cfg)`. If `agent` (Claude provider only): follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" in `plugins/mill/skills/mill-go/SKILL.md`) with `<cli> = millpy-review-discussion.py` with `<args> = --max-rounds <max_review_rounds + 1>` ONLY when this round is the Auto mode non-progress-extension round (per the rule in "Phase: Discussion Review — `--auto` changes" above); omit `<args>` (no additional prepare arguments) on every other round. Thread `--round <round>` from the prepare envelope into the finalize invocation unchanged (finalize has no round-cap check and never needs `--max-rounds`). If `subprocess` or `psmux`: use the subprocess branch below.
 
    **Agent-mode error recovery:** A raw Agent API error before any verdict is classified as `stuck_type: transient` and the brief is re-dispatched once. On a second consecutive error, the read-only reviewer dispatch (which writes no review file) falls back to the subprocess `--stage full` path via `millpy-bg` before surfacing to the operator. This recovery applies even though mill-start is interactive and has no autonomous stuck machinery; the one-retry plus subprocess fallback is the defined recovery, after which the skill surfaces to the operator.
 
@@ -143,6 +144,8 @@ Loop up to `max_review_rounds` rounds. Each round:
    **Subprocess/psmux branch — Background the CLI via `millpy-bg`:**
 
    > **Before invoking `millpy-bg`**: verify `pwd` in the Bash terminal matches the task worktree. If `millpy-bg` rejects cwd with the parent-worktree error (`mill-bg: cwd appears to be a non-task worktree`), halt and instruct the operator to switch to the task-worktree terminal.
+
+   > Only when this round is the Auto mode non-progress-extension round (per the rule in "Phase: Discussion Review — `--auto` changes" above), append ` --max-rounds <max_review_rounds + 1>` to the inner `millpy-review-discussion.py` invocation below; omit it on every other round.
 
    ```bash
    PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-bg.py" \
@@ -162,11 +165,13 @@ Loop up to `max_review_rounds` rounds. Each round:
 
    When the JSON envelope from step 2 has top-level `verdict: "ERROR"` (or, equivalently, every entry in `reviews[]` has `verdict: "ERROR"`), skip steps 4a / 4b / 5 entirely and immediately re-run:
 
-   **Agent-mode:** follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" in `plugins/mill/skills/mill-go/SKILL.md`) with `<cli> = millpy-review-discussion.py` with no additional prepare arguments; thread `--round <round>` from the prepare envelope into the finalize invocation.
+   **Agent-mode:** follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" in `plugins/mill/skills/mill-go/SKILL.md`) with `<cli> = millpy-review-discussion.py` with `<args> = --max-rounds <max_review_rounds + 1>` ONLY when this round is the Auto mode non-progress-extension round (per the rule in "Phase: Discussion Review — `--auto` changes" above); omit `<args>` (no additional prepare arguments) on every other round — this re-dispatch must also carry `--max-rounds` if it fires during the extension round, since it is the same prepare call being retried. Thread `--round <round>` from the prepare envelope into the finalize invocation unchanged.
 
    **Subprocess/psmux branch:**
 
    > **Before invoking `millpy-bg`**: verify `pwd` in the Bash terminal matches the task worktree. If `millpy-bg` rejects cwd with the parent-worktree error (`mill-bg: cwd appears to be a non-task worktree`), halt and instruct the operator to switch to the task-worktree terminal.
+
+   > Only when this round is the Auto mode non-progress-extension round (per the rule in "Phase: Discussion Review — `--auto` changes" above), append ` --max-rounds <max_review_rounds + 1>` to the inner `millpy-review-discussion.py` invocation below; omit it on every other round.
 
    ```bash
    PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-bg.py" \
