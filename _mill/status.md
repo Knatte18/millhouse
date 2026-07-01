@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-reviewing
+phase: holistic-fixing
 slug: mill-review-and-finalize-gaps
 branch: hanf/mill-review-and-finalize-gaps
 plan: _mill/plan
@@ -28,6 +28,7 @@ approved-discussion-review-round-cap-extension  '2026-07-01T04:11:13Z'
 approved-wiki-cold-daemon-retry  '2026-07-01T04:16:31Z'
 approved-nits-only-no-op-success  '2026-07-01T04:27:18Z'
 holistic-reviewing  '2026-07-01T04:27:42Z'
+holistic-fixing  '2026-07-01T04:30:54Z'
 ```
 
 ## Batches
