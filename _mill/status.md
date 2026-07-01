@@ -51,5 +51,7 @@ batches:
     start_sha: 4745ff2466138894ffc0d20afae4e7c5c143739e
     commit_sha: 993c31604f5df14a34afde8a39af4f0dbf50e03c
   - name: skills-index-regen
-    state: pending
+    state: running
+    implementer_session: 4e9890d9-49c4-447a-93d0-ba6404996e62
+    start_sha: 2758162ae6b702434ebe6a70ea4135082db46f8d
 ```
