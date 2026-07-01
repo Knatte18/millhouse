@@ -334,8 +334,20 @@ def test_review_cli_emits_envelope_on_slug_failure() -> int:
     return failures
 
 
-def test_discussion_prepare_brief_path_uses_git_root() -> int:
-    """Test that discussion prepare stage writes briefs to git_root, not hub_dir."""
+def test_discussion_prepare_brief_path_uses_hub_dir() -> int:
+    """Test that discussion prepare stage writes briefs under hub_dir.
+
+    ``_paths.resolve_hub_path`` resolves the directory within the CURRENT
+    worktree where ``.millhouse/`` actually lives -- for nested sub-project
+    layouts (e.g. ``src/csharp/NORCE.Models``) this is a subdirectory of
+    git_root, not git_root itself (see _paths.resolve_hub_path docstring).
+    ``_mill/`` lives alongside ``.millhouse/``, so briefs must be written
+    under hub_dir; writing them at git_root would miss nested layouts
+    entirely. This fixture models that nested relationship (hub_root is a
+    subdirectory of task_root) so the assertions hold for both the
+    real-world contract and backward-compatible flat layouts where
+    hub_dir == git_root.
+    """
     failures = 0
     import importlib.util as _ilu
     import unittest.mock as _mock
@@ -348,9 +360,8 @@ def test_discussion_prepare_brief_path_uses_git_root() -> int:
 
     with _test_helpers.safe_temp_dir() as tmp:
         task_root = tmp / "wts" / "my-slug"
-        hub_root = tmp / "wts" / "millhouse"
+        hub_root = task_root / "src" / "proj"
         wiki_root = tmp / "wiki"
-        task_root.mkdir(parents=True)
         hub_root.mkdir(parents=True)
         wiki_root.mkdir(parents=True)
 
@@ -377,7 +388,7 @@ def test_discussion_prepare_brief_path_uses_git_root() -> int:
             "prompt_text": "# test prompt",
             "model": "claude-sonnet-4-6",
             "round": 1,
-            "reviews_dir": task_root / "_mill" / "reviews",
+            "reviews_dir": hub_root / "_mill" / "reviews",
             "scope": "holistic",
         }
 
@@ -412,16 +423,12 @@ def test_discussion_prepare_brief_path_uses_git_root() -> int:
 
         brief_path_str = envelope.get("brief_path", "")
 
-        if str(task_root) not in brief_path_str:
-            print(f"FAIL brief_path: expected path under task_root {task_root!r}, got {brief_path_str!r}", file=sys.stderr)
-            failures += 1
-
-        if str(hub_root) in brief_path_str:
-            print(f"FAIL brief_path: brief went to hub_root (regression): {brief_path_str!r}", file=sys.stderr)
+        if str(hub_root) not in brief_path_str:
+            print(f"FAIL brief_path: expected path under hub_root {hub_root!r}, got {brief_path_str!r}", file=sys.stderr)
             failures += 1
 
         if failures == 0:
-            print("PASS brief_path: discussion prepare stage writes brief to git_root (task worktree)")
+            print("PASS brief_path: discussion prepare stage writes brief under hub_dir (nested-layout safe)")
 
         return failures
 
@@ -642,7 +649,7 @@ def main() -> int:
     failures += test_review_cli_emits_envelope_on_config_failure()
     failures += test_review_cli_emits_envelope_on_reviewer_load_failure()
     failures += test_review_cli_emits_envelope_on_slug_failure()
-    failures += test_discussion_prepare_brief_path_uses_git_root()
+    failures += test_discussion_prepare_brief_path_uses_hub_dir()
     failures += test_plan_prepare_brief_path_uses_git_root()
     failures += test_code_prepare_brief_path_uses_git_root()
 
