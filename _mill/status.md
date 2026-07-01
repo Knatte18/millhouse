@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-moves-target-docs-and-messages
+phase: approved-parse-batch-refs-leading-token
 slug: mill-plan-and-start-gaps
 branch: hanf/mill-plan-and-start-gaps
 plan: _mill/plan
@@ -22,6 +22,7 @@ plan-review-r1  '2026-06-30T19:02:00Z'
 planned  '2026-06-30T19:02:18Z'
 implementing  '2026-06-30T19:06:06Z'
 approved-moves-target-docs-and-messages  '2026-07-01T04:14:56Z'
+approved-parse-batch-refs-leading-token  '2026-07-01T04:26:39Z'
 ```
 
 ## Batches
@@ -34,9 +35,10 @@ batches:
     start_sha: b877ec25f1c72599e7a3b2e240548743812658cc
     commit_sha: ac80b17a7da133dee9ce78c6149c535b4495575c
   - name: parse-batch-refs-leading-token
-    state: running
+    state: approved
     implementer_session: 213d8d60-7735-4469-8f32-a5f00b6215fa
     start_sha: 0c69c8779079b789a5c9128c92940f311383fc26
+    commit_sha: 38ce7bacdd886e8f170e2e7b455091d2a39631a0
   - name: mill-start-utf8-fix
     state: pending
 ```
