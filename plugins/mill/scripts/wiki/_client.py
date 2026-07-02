@@ -167,7 +167,22 @@ def _dispatch(wiki_path: Path, op: str, payload: dict) -> dict:
                 timeout=_CONNECT_TIMEOUT_SECONDS,
                 read_timeout=_READ_TIMEOUT_SECONDS,
             )
-        except (TimeoutError, ConnectionResetError, ConnectionRefusedError):
+        except ConnectionRefusedError:
+            if attempt < 3:
+                # A refused connection means the daemon process itself is
+                # gone (not merely slow), so re-resolving it is the only way
+                # the next attempt can succeed. _ensure_daemon() is cheap and
+                # idempotent when the daemon is already healthy. If respawn
+                # itself fails, let WikiStartupError propagate uncaught --
+                # retrying against a target that just failed to start cannot
+                # succeed, so there is no point burning the remaining backoff
+                # budget only to raise WikiBusyError afterwards.
+                host, port, token = _ensure_daemon(wiki_path)
+                req[FIELD_TOKEN] = token
+                time.sleep(backoff_sleeps[attempt])
+            else:
+                raise WikiBusyError(f"daemon stayed busy past retry budget for op: {op}")
+        except (TimeoutError, ConnectionResetError):
             if attempt < 3:
                 time.sleep(backoff_sleeps[attempt])
             else:
