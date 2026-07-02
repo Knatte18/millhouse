@@ -46,7 +46,9 @@ batches:
     start_sha: 4fe53ad2b01cb62dbdff5610cedcf7803fa64dd0
     commit_sha: b7239914
   - name: receiving-review-reword
-    state: pending
+    state: running
+    implementer_session: 771fc903-df61-4f0f-87a4-29da437539f0
+    start_sha: 4731c6dcb277ea9a3c6b3e7c0f356a81203dc31e
   - name: implement-baseline-stage
     state: pending
   - name: mill-go-agent-dispatch-fixes
