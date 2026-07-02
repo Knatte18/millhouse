@@ -122,6 +122,7 @@ def compute_baseline(
     Raises:
         RuntimeError: `git rev-parse` or `git worktree add` failed.
         OSError: junction creation failed.
+        ValueError: link_path already exists (dependency dir collision).
     """
     rev_parse_result = _subprocess_util.run(
         ["git", "-C", str(git_root), "rev-parse", parent_branch],
