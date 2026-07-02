@@ -3,7 +3,7 @@
 ```yaml
 task: Fix daemon health-check race, finalize env-var delivery, skills-index drop, and encoding crash
 slug: mill-infra-and-tooling-fixes
-approved: false
+approved: true
 started: 20260702-090427
 parent: main
 root: ""
