@@ -3,7 +3,7 @@
 ```yaml
 task: "Fix agent-mode dispatch races and pipeline gaps"
 slug: agent-mode-gaps
-approved: false
+approved: true
 started: "20260702-094611"
 parent: main
 root: ""
