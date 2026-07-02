@@ -42,6 +42,7 @@ import _render
 import _review_common
 import _reviewers
 import _status
+import _verify_baseline
 from _implementer_common import _forward_output, emit_prepare, finalize_from_output
 from wiki import WikiStartupError
 
@@ -74,19 +75,88 @@ def classify_stuck_type(reason: str) -> str:
     return "transient"
 
 
+def _run_baseline_stage(
+    project_root: Path,
+    git_root: Path,
+    status_path: Path,
+    module_wide_verify_cmd: str | None,
+) -> int:
+    """
+    Compute (idempotent, no-op-if-already-cached) the task-scoped
+    ``module_verify_baseline`` and persist it to ``status.md``.
+
+    Safe to invoke unconditionally on a resumed/restarted mill-go run: a
+    non-``None`` cached value short-circuits without recomputing. Never
+    raises -- every failure path (no module-wide verify configured, parent
+    branch unresolvable, or the computation itself raising) prints a JSON
+    line describing the outcome and returns 0 without persisting a
+    baseline verdict, matching the "leave the field unset -> next
+    ``_run_verify_gates`` call runs the gate strictly" fail-safe policy.
+
+    Args:
+        project_root: Absolute path to the task worktree root.
+        git_root: Absolute path to the repo root ``git`` commands run against.
+        status_path: Absolute path to the task's status.md file.
+        module_wide_verify_cmd: The overview's module-wide verify command, or
+            None when no module-wide verify is configured for this task.
+
+    Returns:
+        Always 0 -- the baseline stage never signals a pre-launch error via
+        exit code; outcomes are communicated through the printed JSON line.
+    """
+    if module_wide_verify_cmd is None:
+        print(
+            json.dumps(
+                {
+                    "stage": "baseline",
+                    "result": "skipped",
+                    "reason": "no module-wide verify configured",
+                }
+            )
+        )
+        return 0
+
+    cached = _status.get_module_verify_baseline(status_path)
+    if cached is not None:
+        print(json.dumps({"stage": "baseline", "result": "cached", "value": cached}))
+        return 0
+
+    try:
+        parent_branch = _parent_branch.resolve(status_path, interactive=False)
+    except Exception as e:
+        print(f"[millpy-implement] baseline parent-branch resolution failed: {e}", file=sys.stderr)
+        print(json.dumps({"stage": "baseline", "result": "error", "reason": str(e)}))
+        return 0
+
+    try:
+        result = _verify_baseline.compute_baseline(
+            project_root, git_root, parent_branch, module_wide_verify_cmd
+        )
+    except Exception as e:
+        print(f"[millpy-implement] baseline computation failed: {e}", file=sys.stderr)
+        print(json.dumps({"stage": "baseline", "result": "error", "reason": str(e)}))
+        return 0
+
+    _status.set_module_verify_baseline(status_path, result)
+    print(json.dumps({"stage": "baseline", "result": "computed", "value": result}))
+    return 0
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(
         description="Dispatch or resume a per-batch implementer session."
     )
     parser.add_argument(
         "batch_name",
-        help="Batch name from the plan overview's Batch Index.",
+        nargs="?",
+        default=None,
+        help="Batch name from the plan overview's Batch Index. Not required for --stage baseline (task-scoped, not batch-scoped).",
     )
     parser.add_argument(
         "--stage",
-        choices=["prepare", "finalize", "full"],
+        choices=["prepare", "finalize", "full", "baseline"],
         default="full",
-        help="Stage of execution: prepare (render brief), finalize (process output), or full (default, unchanged behavior).",
+        help="Stage of execution: prepare (render brief), finalize (process output), full (default, unchanged behavior), or baseline (compute/cache the task-scoped module-wide verify baseline).",
     )
     parser.add_argument(
         "--agent-output",
@@ -131,6 +201,9 @@ def main(argv=None) -> int:
         ),
     )
     args = parser.parse_args(argv)
+    if args.stage != "baseline" and not args.batch_name:
+        print("batch_name is required unless --stage baseline", file=sys.stderr)
+        return 1
 
     # Common setup
     project_root = _paths.resolve_hub_path()
@@ -228,6 +301,18 @@ def main(argv=None) -> int:
         print(f"overview not found: {overview_path}", file=sys.stderr)
         return 1
 
+    # Read the overview-level module-wide verify command from the overview frontmatter.
+    # The overview's first fenced-yaml block is the frontmatter (task/slug/verify/...).
+    # A null or absent `verify:` passes None, which makes the module-wide gate a no-op.
+    # Read here -- before the batches/batch_entry resolution below -- because the
+    # task-scoped `--stage baseline` branch needs this value and never has a
+    # `batch_name` to resolve a batch_entry from.
+    overview_frontmatter = _plan_dag._read_batch_frontmatter(overview_path)
+    module_wide_verify_cmd = overview_frontmatter.get("verify") or None
+
+    if args.stage == "baseline":
+        return _run_baseline_stage(project_root, git_root, status_path, module_wide_verify_cmd)
+
     try:
         batches = _plan_dag.extract_batch_index(
             overview_path.read_text(encoding="utf-8")
@@ -258,12 +343,6 @@ def main(argv=None) -> int:
         parent_branch = _parent_branch.resolve(status_path, interactive=False)
     except Exception:
         parent_branch = None
-
-    # Read the overview-level module-wide verify command from the overview frontmatter.
-    # The overview's first fenced-yaml block is the frontmatter (task/slug/verify/...).
-    # A null or absent `verify:` passes None, which makes the module-wide gate a no-op.
-    overview_frontmatter = _plan_dag._read_batch_frontmatter(overview_path)
-    module_wide_verify_cmd = overview_frontmatter.get("verify") or None
 
     # Stage: finalize
     if args.stage == "finalize":
