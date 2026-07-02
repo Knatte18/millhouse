@@ -16,6 +16,8 @@ sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 from _status import (  # noqa: E402
     read,
     append_phase,
+    clear_module_verify_baseline,
+    get_module_verify_baseline,
     init_batches,
     phase_entry_timestamp,
     read,
@@ -28,6 +30,7 @@ from _status import (  # noqa: E402
     set_batch_field,
     set_batch_fields,
     set_blocked,
+    set_module_verify_baseline,
     update_field,
 )
 from _yaml_writer import quote_scalar  # noqa: E402
@@ -734,6 +737,84 @@ def main() -> int:
             ts = phase_entry_timestamp(sp, "nonexistent-phase")
             assert ts is None, f"expected None for absent phase, got {ts!r}"
             print("PASS: phase_entry_timestamp absent phase returns None")
+
+        # --- module_verify_baseline tests ---
+        # Test 1: get_module_verify_baseline returns None on a fresh file.
+        with tempfile.TemporaryDirectory() as tmp:
+            sp = Path(tmp) / "status.md"
+            initial = render_initial(
+                "Task", "Desc", "2026-05-28T20:00:00Z", "main", slug="t-slug", branch="hanf/t-slug"
+            )
+            sp.write_text(initial, encoding="utf-8")
+            value = get_module_verify_baseline(sp)
+            assert value is None, f"expected None on fresh file, got {value!r}"
+            print("PASS: get_module_verify_baseline returns None on a fresh file")
+
+        # Test 2: set_module_verify_baseline("clean") inserts the row; a
+        # subsequent get_module_verify_baseline returns "clean".
+        with tempfile.TemporaryDirectory() as tmp:
+            sp = Path(tmp) / "status.md"
+            initial = render_initial(
+                "Task", "Desc", "2026-05-28T20:00:00Z", "main", slug="t-slug", branch="hanf/t-slug"
+            )
+            sp.write_text(initial, encoding="utf-8")
+            set_module_verify_baseline(sp, "clean")
+            value = get_module_verify_baseline(sp)
+            assert value == "clean", f"expected 'clean', got {value!r}"
+            print("PASS: set_module_verify_baseline('clean') inserts the row")
+
+            # Test 3: a second set() with a different value rewrites the
+            # existing row in place -- exactly one module_verify_baseline:
+            # line survives, not a duplicate.
+            set_module_verify_baseline(sp, "pre-existing-failures")
+            value = get_module_verify_baseline(sp)
+            assert value == "pre-existing-failures", f"expected 'pre-existing-failures', got {value!r}"
+            raw = sp.read_text(encoding="utf-8")
+            occurrences = raw.count("module_verify_baseline:")
+            assert occurrences == 1, f"expected exactly one row, found {occurrences}"
+            print("PASS: set_module_verify_baseline rewrites the existing row in place")
+
+        # Test 4: set_module_verify_baseline rejects an unknown value.
+        with tempfile.TemporaryDirectory() as tmp:
+            sp = Path(tmp) / "status.md"
+            initial = render_initial(
+                "Task", "Desc", "2026-05-28T20:00:00Z", "main", slug="t-slug", branch="hanf/t-slug"
+            )
+            sp.write_text(initial, encoding="utf-8")
+            try:
+                set_module_verify_baseline(sp, "bogus")
+                assert False, "expected ValueError"
+            except ValueError:
+                pass
+            print("PASS: set_module_verify_baseline rejects an unknown value")
+
+        # Test 5: clear_module_verify_baseline after a prior set("clean")
+        # removes the row; get_module_verify_baseline then returns None.
+        with tempfile.TemporaryDirectory() as tmp:
+            sp = Path(tmp) / "status.md"
+            initial = render_initial(
+                "Task", "Desc", "2026-05-28T20:00:00Z", "main", slug="t-slug", branch="hanf/t-slug"
+            )
+            sp.write_text(initial, encoding="utf-8")
+            set_module_verify_baseline(sp, "clean")
+            clear_module_verify_baseline(sp)
+            value = get_module_verify_baseline(sp)
+            assert value is None, f"expected None after clear, got {value!r}"
+            print("PASS: clear_module_verify_baseline removes a previously-set row")
+
+        # Test 6: clear_module_verify_baseline is a no-op when the field was
+        # never set -- does not raise, file content unchanged.
+        with tempfile.TemporaryDirectory() as tmp:
+            sp = Path(tmp) / "status.md"
+            initial = render_initial(
+                "Task", "Desc", "2026-05-28T20:00:00Z", "main", slug="t-slug", branch="hanf/t-slug"
+            )
+            sp.write_text(initial, encoding="utf-8")
+            before = sp.read_text(encoding="utf-8")
+            clear_module_verify_baseline(sp)
+            after = sp.read_text(encoding="utf-8")
+            assert after == before, "clear_module_verify_baseline should be a no-op when field is absent"
+            print("PASS: clear_module_verify_baseline is a no-op when the field was never set")
 
         print("All _status unit tests passed.")
         return 0

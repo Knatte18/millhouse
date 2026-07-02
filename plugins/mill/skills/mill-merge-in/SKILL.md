@@ -58,6 +58,20 @@ git merge <parent-branch>
 
 On `{"status":"stuck"}` from the sub-agent → roll back to checkpoint (`git reset --hard "$CHK"`), preserve the checkpoint, report to the caller.
 
+### 3.5. Baseline recompute
+
+Runs unconditionally after step 3 completes successfully (including after any conflict-resolution sub-dispatch in step 3's table), before step 4's verify replay begins:
+
+```bash
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-merge-in-subagent.py" --recompute-baseline
+```
+
+- This call is synchronous and does not go through Agent-mode dispatch. Unlike steps 3/4's conflict/verify-fix sub-agent dispatches, `--recompute-baseline` runs the same deterministic computation `millpy-implement.py --stage baseline` uses, with no LLM session involved — it needs no `<cli>`/`<args>` Agent-mode dispatch pattern reference.
+- It never blocks or fails the merge: on any internal error it prints a `baseline: "error"` result and returns exit 0 (fail-safe). This step never triggers the Rollback section.
+- If step 1's no-op check already exited early ("Nothing to merge"), this step never runs at all — the "## No-op guarantee" section's promise ("this skill touches nothing" when there was nothing to merge) continues to hold.
+
+Rationale (`_mill/discussion.md`'s `baseline-aware module-wide verify gate (#590)` Decision, merge-in paragraph): "Whenever `mill-merge-in` pulls new parent commits into the task branch, it must recompute the baseline eagerly at its own clean post-sync boundary — immediately after the sync completes and before control returns to any further batch work — by resetting `module_verify_baseline` to `null` and then immediately invoking `millpy-merge-in-subagent.py`'s own call to the same `millpy-implement.py --stage baseline` computation... This mirrors the batch-1 pre-flight rule exactly: the parent's dependency manifests just changed as of the merge-in, and recomputing eagerly at that boundary — rather than lazily inside a later batch's finalize, after that batch's implementer may have already touched manifests again — keeps the baseline computation on the correct side of the 'no implementer has touched manifests since this snapshot' invariant established for batch 1."
+
 ### 4. Verify
 
 Replay exactly the tests that ran during implementation. Call `_plan_dag.iter_batch_verifies(plan_dir)` where `plan_dir = _paths.resolve_task_path(_paths.resolve_hub_path(), "_mill/plan/")`. That yields `(batch_name, verify_cmd)` pairs in DAG order, skipping batches with `verify: null`.

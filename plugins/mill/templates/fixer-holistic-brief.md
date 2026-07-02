@@ -13,6 +13,7 @@ Rendered by millpy-fix.py via `_render.render` with these tokens:
   <ROUND>              — holistic fix-cycle round number (1-based)
   <SELF_FIX_ROUNDS>    — integer; how many self-fix attempts before reporting stuck
   <BATCH_FILES>        — newline-separated absolute paths to every batch plan file
+  <NITS_ONLY_CARVEOUT> — trailing clause after the zero-commit rules; empty-punctuation "." for a normal pass, or a --nits-only exception clause
 
 NOTE: <BATCH_SESSION_IDS> is deliberately NOT included. Cold-start dispatch
 never reuses warm sessions.
@@ -68,7 +69,7 @@ If all `verify:` commands are null, skip straight to Report.
 
 ## Report
 
-**Pre-report self-check (mandatory before emitting success JSON):** At the very start of your session (before any edit), record `git -C <PROJECT_ROOT> rev-parse HEAD` as your baseline -- this is the holistic fix housekeeping commit (message starts with `mill-go: holistic fix`). Before reporting `success`, confirm HEAD now differs from that recorded baseline; never report `success` when HEAD equals the baseline (no new commit was made). Run `git -C <PROJECT_ROOT> status --porcelain --untracked-files=no`. If it shows ANY tracked modification, commit it via the `git-commit` skill (or report `stuck_type: logic`) -- never report `success` with an uncommitted tracked change.
+**Pre-report self-check (mandatory before emitting success JSON):** At the very start of your session (before any edit), record `git -C <PROJECT_ROOT> rev-parse HEAD` as your baseline -- this is the holistic fix housekeeping commit (message starts with `mill-go: holistic fix`). Before reporting `success`, confirm HEAD now differs from that recorded baseline; never report `success` when HEAD equals the baseline (no new commit was made)<NITS_ONLY_CARVEOUT> Run `git -C <PROJECT_ROOT> status --porcelain --untracked-files=no`. If it shows ANY tracked modification, commit it via the `git-commit` skill (or report `stuck_type: logic`) -- never report `success` with an uncommitted tracked change.
 
 **New-test requirement:** When a finding mandates a NEW test, you MUST add that test and confirm it runs before reporting success -- do not report success having skipped a required new test.
 
@@ -81,7 +82,7 @@ Your last line of output (after all work and commits) MUST be a single JSON obje
 
 **`session_id` MUST be exactly `<SESSION_ID>` (the UUID shown in the example above — it was injected into this brief when it was rendered). Copy it verbatim.**
 
-**`commit_sha` MUST be a real new content commit distinct from the holistic fix housekeeping commit.** A fixer that made edits but did not commit must report `status: stuck` (`stuck_type: logic`) instead.
+**`commit_sha` MUST be a real new content commit distinct from the holistic fix housekeeping commit**<NITS_ONLY_CARVEOUT> A fixer that made edits but did not commit must report `status: stuck` (`stuck_type: logic`) instead.
 
 or, when stuck:
 

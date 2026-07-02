@@ -2890,6 +2890,209 @@ def main() -> int:
             print(f"FAIL: case 58 ({exc}) captured={captured!r}", file=sys.stderr)
             errors += 1
 
+    # Case 59: module_verify_baseline="pre-existing-failures" with a failing
+    # module_wide_verify_cmd -- the module-wide gate is skipped entirely (never
+    # invoked), the batch gate's own pass/fail is unaffected, and the overall
+    # result is success, not stuck/verify. subprocess.run is spied on (real
+    # calls still execute via side_effect, so git plumbing inside
+    # _forward_output keeps working) so we can assert the module-wide command
+    # string never appears in any recorded call.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        base_sha = _setup_fixture(project_root)
+        snapshot_path = project_root / "_mill" / ".cleanliness-snapshot-test.txt"
+        _cleanliness.capture_snapshot(project_root, snapshot_path)
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "--allow-empty", "-m", "second"],
+            check=True,
+            capture_output=True,
+        )
+        agent_output = (
+            '{"status":"success","commit_sha":"abc","session_id":"test-session"}\n'
+        )
+        real_run = subprocess.run
+        with unittest.mock.patch(
+            "_implementer_common.subprocess.run", side_effect=real_run
+        ) as mock_run:
+            rc, captured = _capture_stdout(
+                lambda: _forward_output(
+                    agent_output,
+                    project_root,
+                    start_sha=base_sha,
+                    snapshot_path=snapshot_path,
+                    verify_cmd="exit 0",
+                    module_wide_verify_cmd="exit 1",
+                    module_verify_baseline="pre-existing-failures",
+                )
+            )
+        try:
+            data = json.loads(captured.strip())
+            assert data["status"] == "success", (
+                f"case 59: expected success, got {data}"
+            )
+            # Confirm the module-wide command ("exit 1") was never handed to
+            # subprocess.run -- only git plumbing and the batch gate's "exit 0"
+            # should appear in the recorded call history.
+            for call in mock_run.call_args_list:
+                call_args = call.args[0] if call.args else []
+                flattened = (
+                    call_args if isinstance(call_args, str) else " ".join(call_args)
+                )
+                assert "exit 1" not in flattened, (
+                    f"case 59: module-wide command invoked unexpectedly: {flattened!r}"
+                )
+            print(
+                "PASS: case 59 - pre-existing-failures baseline skips module-wide"
+                " gate entirely (never invoked), overall success"
+            )
+        except Exception as exc:
+            print(f"FAIL: case 59 ({exc}) captured={captured!r}", file=sys.stderr)
+            errors += 1
+
+    # Case 60: module_verify_baseline="clean" -- the module-wide gate runs exactly
+    # as it did before this parameter existed. Mirrors Case 30 (batch passes,
+    # module-wide fails -> stuck/verify with "[module-wide verify]" prefix) and
+    # Case 31 (module-wide passes -> overall success/None).
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        base_sha = _setup_fixture(project_root)
+        snapshot_path = project_root / "_mill" / ".cleanliness-snapshot-test.txt"
+        _cleanliness.capture_snapshot(project_root, snapshot_path)
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "--allow-empty", "-m", "second"],
+            check=True,
+            capture_output=True,
+        )
+        new_head = subprocess.run(
+            ["git", "-C", str(project_root), "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        agent_output = (
+            '{"status":"success","commit_sha":"abc","session_id":"test-session"}\n'
+        )
+        # Case 30 mirror: batch gate passes, module-wide gate fails.
+        rc, captured = _capture_stdout(
+            lambda: _forward_output(
+                agent_output,
+                project_root,
+                start_sha=base_sha,
+                snapshot_path=snapshot_path,
+                verify_cmd="exit 0",
+                module_wide_verify_cmd="exit 1",
+                module_verify_baseline="clean",
+            )
+        )
+        try:
+            data = json.loads(captured.strip())
+            assert data["status"] == "stuck", f"case 60a: expected stuck, got {data}"
+            assert data["stuck_type"] == "verify", (
+                f"case 60a: expected stuck_type=verify, got {data}"
+            )
+            assert "[module-wide verify]" in data.get("reason", ""), (
+                f"case 60a: expected '[module-wide verify]' prefix in reason, got {data}"
+            )
+            assert data.get("commit_sha") == new_head, (
+                f"case 60a: expected commit_sha={new_head}, got {data}"
+            )
+            print(
+                "PASS: case 60a - clean baseline: module-wide gate still runs and"
+                " fails -> stuck/verify with prefix (matches Case 30)"
+            )
+        except Exception as exc:
+            print(f"FAIL: case 60a ({exc}) captured={captured!r}", file=sys.stderr)
+            errors += 1
+        # Case 31 mirror: both gates pass -> no demotion.
+        try:
+            result = _run_verify_gates(
+                project_root, "exit 0", "exit 0", module_verify_baseline="clean"
+            )
+            assert result is None, f"case 60b: expected None (both pass), got {result}"
+            print(
+                "PASS: case 60b - clean baseline: module-wide gate runs and passes"
+                " -> overall success (matches Case 31)"
+            )
+        except Exception as exc:
+            print(f"FAIL: case 60b ({exc})", file=sys.stderr)
+            errors += 1
+
+    # Case 61: module_verify_baseline=None (the default, not yet computed) --
+    # identical behavior to Case 60 ("clean"): the module-wide gate still runs
+    # strictly. This is the fail-safe-toward-strict default.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        _setup_fixture(project_root)
+        try:
+            # Batch passes, module-wide fails -> stuck/verify with prefix.
+            result = _run_verify_gates(
+                project_root, "exit 0", "exit 1", module_verify_baseline=None
+            )
+            assert result is not None, f"case 61a: expected stuck dict, got {result}"
+            assert result["stuck_type"] == "verify", (
+                f"case 61a: expected stuck_type=verify, got {result}"
+            )
+            assert "[module-wide verify]" in result.get("reason", ""), (
+                f"case 61a: expected '[module-wide verify]' prefix in reason, got {result}"
+            )
+            # Batch passes, module-wide also passes -> no demotion.
+            result = _run_verify_gates(
+                project_root, "exit 0", "exit 0", module_verify_baseline=None
+            )
+            assert result is None, f"case 61b: expected None (both pass), got {result}"
+            print(
+                "PASS: case 61 - module_verify_baseline=None (default) behaves"
+                " identically to 'clean' -- strict fail-safe default"
+            )
+        except Exception as exc:
+            print(f"FAIL: case 61 ({exc})", file=sys.stderr)
+            errors += 1
+
+    # Case 62: backward-compatibility guard -- calling _forward_output without
+    # passing module_verify_baseline at all (kwarg omitted) behaves identically
+    # to Case 61 (defaults to None, module-wide gate runs strictly). Confirms no
+    # existing caller (e.g. millpy-fix.py) changes behavior from this batch alone.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        base_sha = _setup_fixture(project_root)
+        snapshot_path = project_root / "_mill" / ".cleanliness-snapshot-test.txt"
+        _cleanliness.capture_snapshot(project_root, snapshot_path)
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "--allow-empty", "-m", "second"],
+            check=True,
+            capture_output=True,
+        )
+        agent_output = (
+            '{"status":"success","commit_sha":"abc","session_id":"test-session"}\n'
+        )
+        # module_verify_baseline intentionally omitted -- exercises the default.
+        rc, captured = _capture_stdout(
+            lambda: _forward_output(
+                agent_output,
+                project_root,
+                start_sha=base_sha,
+                snapshot_path=snapshot_path,
+                verify_cmd="exit 0",
+                module_wide_verify_cmd="exit 1",
+            )
+        )
+        try:
+            data = json.loads(captured.strip())
+            assert data["status"] == "stuck", f"case 62: expected stuck, got {data}"
+            assert data["stuck_type"] == "verify", (
+                f"case 62: expected stuck_type=verify, got {data}"
+            )
+            assert "[module-wide verify]" in data.get("reason", ""), (
+                f"case 62: expected '[module-wide verify]' prefix in reason, got {data}"
+            )
+            print(
+                "PASS: case 62 - module_verify_baseline omitted entirely (existing"
+                " caller shape) -> module-wide gate still runs strictly"
+            )
+        except Exception as exc:
+            print(f"FAIL: case 62 ({exc}) captured={captured!r}", file=sys.stderr)
+            errors += 1
+
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)
         return 1

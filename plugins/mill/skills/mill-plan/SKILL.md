@@ -104,6 +104,8 @@ A batch that legitimately touches a cross-cutting helper that every test imports
 
 **Path Setup (Plan Review).** Derive: `reviews_dir = _paths.resolve_task_path(worktree_root, cfg['paths']['reviews_dir'])`. Use this variable for all review file path references in this phase.
 
+Load the `mill-receiving-review` skill now, unconditionally, before round 1's dispatch below — this is what makes step 3's "before evaluating or acting on findings" rule structurally satisfiable under Agent-mode dispatch, where a reviewer's findings arrive already embedded in the `<task-notification>` payload the orchestrator must read just to learn the round's verdict; loading the skill this early means it is already active in context by the time those findings are evaluated or acted on, even though they were technically visible in the notification text a moment earlier.
+
 The new schema has two skip conditions: `rounds: 0` OR `reviewer: null` means "skip plan review". If `roles.plan-review.holistic.rounds == 0` OR `roles.plan-review.holistic.reviewer` is `None`: set overview frontmatter `approved: true` via direct Edit, commit on the task branch (`git -C <worktree> add <plan_dir> && git commit -m "mill-plan: skip plan review (reviewer null or rounds 0) for {slug}"`), push, and proceed straight to Handoff. The skip is recorded in commit history; no `status.md` phase flip beyond the existing Handoff `planned` row.
 
 Loop up to `max_review_rounds` rounds. Each round:
@@ -172,7 +174,7 @@ Loop up to `max_review_rounds` rounds. Each round:
 
    The script discovers the slug and round from disk. It prints one JSON line: `{"type": "plan", "round": N, "verdict": "APPROVE" | "REQUEST_CHANGES", "blocking_count": N, "reviews": [...]}` where each review entry has `{scope, verdict, file}`.
 
-3. **BEFORE reading any review file, load the `mill-receiving-review` skill** (`plugins/mill/skills/mill-receiving-review/SKILL.md`). Non-negotiable. The VERIFY → HARM CHECK → FIX-or-PUSH-BACK decision tree is what keeps review loops useful.
+3. **Confirm `mill-receiving-review` is loaded before evaluating or acting on this round's findings** (`plugins/mill/skills/mill-receiving-review/SKILL.md`; it was already loaded unconditionally at the start of this phase — see the note immediately after the `### Phase: Plan Review` heading above). Non-negotiable. The VERIFY → HARM CHECK → FIX-or-PUSH-BACK decision tree is what keeps review loops useful.
 
 4a. On `APPROVE` (verdict from JSON) with zero `[NIT]` findings (read the review file at `reviews[0].file` and confirm zero `[NIT]`-prefixed findings): set overview frontmatter `approved: true` via direct Edit. `_status.append_phase(status_path, f"plan-review-r{N}", iso_ts)`. Commit on the task branch: `git -C <worktree> add <plan_dir> <reviews_dir> <status_path> _mill/briefs/ && git -C <worktree> commit -m "mill-plan: approve plan for {slug}"`. Push. Break loop → Handoff. `iso_ts` is `_timestamp.now_utc_iso()`.
 
