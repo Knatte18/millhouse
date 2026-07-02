@@ -5,7 +5,13 @@ or verify-command failures after a merge. The Builder reads only the JSON verdic
 on stdout; all context-heavy work happens inside the sub-agent session.
 
 Flags:
-    --mode conflicts|verify-fix   (required) which delegation mode to run
+    --mode conflicts|verify-fix   which delegation mode to run; required
+                                  unless --recompute-baseline is set
+    --recompute-baseline          reset and eagerly recompute the cached
+                                  module_verify_baseline after a successful
+                                  parent-branch sync. Independent of --mode;
+                                  a synchronous computation with no LLM
+                                  session involved.
 
   conflicts mode:
     --files FILE [FILE ...]       paths of files with conflict markers
@@ -35,10 +41,14 @@ import _agent_dispatch
 import _implementer_claude
 import _llm_claude
 import _marker
+import _parent_branch
 import _paths
+import _plan_dag
 import _render
 import _review_common
 import _reviewers
+import _status
+import _verify_baseline
 from _implementer_common import _forward_output, _posix_shell_run_args, emit_prepare, emit_prepare_no_dispatch, finalize_from_output
 
 
@@ -104,15 +114,91 @@ def _collect_task_intent(project_root: Path) -> str:
     return "\n\n".join(output)
 
 
+def _run_recompute_baseline(project_root: Path, git_root: Path, cfg: dict) -> int:
+    """
+    Reset and eagerly recompute the cached ``module_verify_baseline`` after a
+    successful parent-branch sync in ``mill-merge-in``.
+
+    Mirrors ``millpy-implement.py``'s ``_run_baseline_stage`` in structure and
+    error-handling shape -- the two functions compute the same thing from two
+    different entry points (task-start pre-flight vs. post-merge-in
+    recompute) -- but always clears the cached value first (via
+    ``_status.clear_module_verify_baseline``) so a stale, already-cached
+    baseline from before the merge is never reused: ``--stage baseline``'s
+    own idempotent no-op-if-cached behavior is exactly why a bare call to it
+    would not recompute after a merge-in without this explicit reset.
+
+    Never raises -- every failure path (no module-wide verify configured,
+    parent branch unresolvable, or the computation itself raising) prints a
+    JSON line describing the outcome and returns 0 without blocking the
+    merge-in; a baseline-recompute failure must never fail an otherwise
+    successful merge.
+
+    Args:
+        project_root: Absolute path to the task worktree root.
+        git_root: Absolute path to the repo root ``git`` commands run against.
+        cfg: Already-loaded mill config dict (avoids a redundant reload).
+
+    Returns:
+        Always 0 -- outcomes are communicated through the printed JSON line.
+    """
+    status_path = _paths.require_status_path(project_root, cfg)
+
+    plan_dir = cfg.get("paths", {}).get("plan_dir", "_mill/plan/")
+    plan_base = _paths.resolve_task_path(project_root, plan_dir)
+    overview_path = plan_base / "00-overview.md"
+    overview_frontmatter = _plan_dag._read_batch_frontmatter(overview_path)
+    module_wide_verify_cmd = overview_frontmatter.get("verify") or None
+
+    if module_wide_verify_cmd is None:
+        print(
+            json.dumps(
+                {
+                    "status": "success",
+                    "baseline": "skipped",
+                    "reason": "no module-wide verify configured",
+                }
+            )
+        )
+        return 0
+
+    # Reset: force recomputation regardless of any currently-cached value.
+    _status.clear_module_verify_baseline(status_path)
+
+    try:
+        parent_branch = _parent_branch.resolve(status_path, interactive=False)
+    except Exception as e:
+        print(json.dumps({"status": "success", "baseline": "error", "reason": str(e)}))
+        return 0
+
+    try:
+        result = _verify_baseline.compute_baseline(
+            project_root, git_root, parent_branch, module_wide_verify_cmd
+        )
+    except Exception as e:
+        print(f"[millpy-merge-in-subagent] baseline recompute failed: {e}", file=sys.stderr)
+        print(json.dumps({"status": "success", "baseline": "error", "reason": str(e)}))
+        return 0
+
+    _status.set_module_verify_baseline(status_path, result)
+    print(json.dumps({"status": "success", "baseline": "computed", "value": result}))
+    return 0
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(
         description="Dispatch a Sonnet sub-agent for merge-in conflict or verify-fix work."
     )
     parser.add_argument(
         "--mode",
-        required=True,
+        required=False,
         choices=["conflicts", "verify-fix"],
         help="Delegation mode: 'conflicts' or 'verify-fix'.",
+    )
+    parser.add_argument(
+        "--recompute-baseline",
+        action="store_true",
+        help="Reset and eagerly recompute the cached module_verify_baseline after a successful parent-branch sync. Independent of --mode; when set, --mode is not required and no other mode-specific flag is consulted.",
     )
     parser.add_argument(
         "--files",
@@ -156,6 +242,9 @@ def main(argv=None) -> int:
         help="Accepted for CLI-shape parity with millpy-fix.py / millpy-implement.py; ignored in all stages.",
     )
     args = parser.parse_args(argv)
+    if not args.recompute_baseline and not args.mode:
+        print("--mode is required unless --recompute-baseline is set", file=sys.stderr)
+        return 1
 
     # Common setup
     project_root = Path.cwd()
@@ -176,6 +265,9 @@ def main(argv=None) -> int:
     except _marker.MarkerError as e:
         print(str(e), file=sys.stderr)
         return 1
+
+    if args.recompute_baseline:
+        return _run_recompute_baseline(project_root, git_root, cfg)
 
     # Stage: finalize (early exit before mode-specific logic)
     if args.stage == "finalize":
