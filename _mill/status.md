@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-status-baseline-field
 slug: agent-mode-gaps
 branch: hanf/agent-mode-gaps
 plan: _mill/plan
@@ -21,6 +21,7 @@ planning  '2026-07-02T09:53:04Z'
 plan-fix-r1  '2026-07-02T09:58:01Z'
 planned  '2026-07-02T09:58:16Z'
 implementing  '2026-07-02T10:05:44Z'
+approved-status-baseline-field  '2026-07-02T10:09:22Z'
 ```
 
 ## Batches
@@ -28,9 +29,10 @@ implementing  '2026-07-02T10:05:44Z'
 ```yaml
 batches:
   - name: status-baseline-field
-    state: running
+    state: approved
     implementer_session: ef10ee26-7791-4bf3-9df0-6c67f9a7d2b7
     start_sha: ce7a0f51332899f9108ba90c01e5257715fcc216
+    commit_sha: 48f150c2
   - name: verify-gates-baseline-param
     state: pending
   - name: nits-only-carveout
