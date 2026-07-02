@@ -207,6 +207,18 @@ if not _client.health_check(wiki_path):
 }
 ```
 
+### 0.5. Baseline pre-flight (first batch of the task only)
+
+Immediately before "### 1. Implement" fires for the task's **FIRST batch only** (not on every batch — only once per task run), invoke the task-scoped module-wide verify baseline computation:
+
+```bash
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-implement.py" --stage baseline
+```
+
+(no `batch_name` positional argument — `--stage baseline` is task-scoped, not batch-scoped.) Parse the JSON line the CLI prints. This call is **idempotent and safe to invoke unconditionally even on a resumed/restarted mill-go run**: the `--stage baseline` handler itself checks whether `module_verify_baseline` is already cached in status.md and no-ops (`{"stage": "baseline", "result": "cached", "value": ...}`) if so. On `{"result": "error", ...}` or `{"result": "skipped", ...}` (no module-wide verify configured for this task), log the reason and continue to batch 1 anyway — this pre-flight step never blocks the task; its only job is to populate the cache before batch 1's implementer can touch dependency manifests. A failed/skipped computation just means the per-batch module-wide gate falls back to strict behavior, which is safe.
+
+Why this must run before batch 1 specifically, eagerly and once: per `_mill/discussion.md`'s `baseline-aware module-wide verify gate (#590)` Decision ("Compute it **eagerly, once, before the task's first batch implementer is ever dispatched**"), this ordering guarantees no implementer session has touched dependency manifests yet, so the transient worktree's reused dependency state is still guaranteed to match the parent branch tip. Skip this step entirely for every batch after the first.
+
 ### 1. Implement
 
 Background via millpy-bg:
