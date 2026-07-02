@@ -124,7 +124,9 @@ Report to the user:
 
 > "PR created for `<slug>`. Home.md updated to [pr-pending].
 >
-> **This is an inspection PR — do NOT merge it on GitHub.** Review the diff, then close the PR on GitHub without using the Merge button. After closing, run `/mill-merge` here to complete the local squash-merge, archive tag, and [done] flip."
+> Review the PR on GitHub, then run `/mill-merge` here when done — it handles both outcomes:
+> - **Closed without merging** → mill-merge does the local squash-merge, archive tag, and [done] flip.
+> - **Merged on GitHub** → mill-merge skips the local squash and goes straight to teardown (archive tag, [done] flip)."
 
 ## Board discipline
 
