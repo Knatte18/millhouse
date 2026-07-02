@@ -1,11 +1,11 @@
 ---
 name: mill-receiving-review
-description: Decision tree for evaluating reviewer findings. MUST be invoked BEFORE reading any reviewer output.
+description: Decision tree for evaluating reviewer findings. MUST be invoked BEFORE evaluating or acting on any reviewer output.
 ---
 
 # Receiving-Review Protocol
 
-**MANDATORY:** This skill must be loaded BEFORE you read any reviewer findings — during both plan review and code review. If you have already read the findings, this skill is useless; you have already formed rationalizations.
+**MANDATORY:** This skill must be loaded BEFORE you evaluate or act on any reviewer findings — during both plan review and code review. If you have already evaluated or acted on the findings, this skill is useless; you have already formed rationalizations.
 
 ---
 
