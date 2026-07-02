@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-approved
+phase: done
 slug: agent-mode-gaps
 branch: hanf/agent-mode-gaps
 plan: _mill/plan
@@ -33,6 +33,7 @@ holistic-reviewing  '2026-07-02T10:52:20Z'
 holistic-fixing  '2026-07-02T10:56:34Z'
 nits-fixed-holistic  '2026-07-02T11:11:03Z'
 holistic-approved  '2026-07-02T11:11:10Z'
+done  '2026-07-02T11:11:37Z'
 ```
 
 ## Batches
