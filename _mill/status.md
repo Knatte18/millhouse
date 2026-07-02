@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-baseline-integration-test
+phase: holistic-reviewing
 slug: agent-mode-gaps
 branch: hanf/agent-mode-gaps
 plan: _mill/plan
@@ -29,6 +29,7 @@ approved-implement-baseline-stage  '2026-07-02T10:37:54Z'
 approved-mill-go-agent-dispatch-fixes  '2026-07-02T10:42:00Z'
 approved-merge-in-baseline-recompute  '2026-07-02T10:44:58Z'
 approved-baseline-integration-test  '2026-07-02T10:52:00Z'
+holistic-reviewing  '2026-07-02T10:52:20Z'
 ```
 
 ## Batches
