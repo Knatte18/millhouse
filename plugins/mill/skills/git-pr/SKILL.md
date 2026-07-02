@@ -33,9 +33,9 @@ If on `main` or `master`: stop and tell the user "You're on main — switch to a
 
 ### 1.5 Detect task branch
 
-Skip this entire check if the environment variable `MILL_FINALIZE_PR_CLEANUP` is set
-(non-empty) — mill-finalize sets this after it has already handled cleanup (removed or
-restored task_dir), so the guard must not block PR creation.
+Skip this entire check if the `--skip-task-branch-guard` token is present among the
+tokens of `$ARGUMENTS` — mill-finalize passes this flag after it has already handled
+cleanup (removed or restored task_dir), so the guard must not block PR creation.
 
 Otherwise, resolve the task state directory via config and check whether it exists.
 When both `$MILL_PYTHON` and `$CLAUDE_PLUGIN_ROOT` are set, use them to resolve the
@@ -43,7 +43,7 @@ status.md path via `_config.load_config` + `_paths.resolve_task_path`; otherwise
 back to the literal `$GIT_ROOT/_mill/status.md` check (standalone git-pr outside mill):
 
 ```bash
-if [ -n "$MILL_FINALIZE_PR_CLEANUP" ]; then
+if case " $ARGUMENTS " in *" --skip-task-branch-guard "*) true ;; *) false ;; esac; then
     # Mill-finalize cleanup already ran; skip the guard
     :
 elif [ -n "$MILL_PYTHON" ] && [ -n "$CLAUDE_PLUGIN_ROOT" ]; then
@@ -84,7 +84,7 @@ Otherwise, proceed to step 2.
 
 Resolve the base branch in this order:
 
-1. **Argument** — if the user provided one (e.g. `/git-pr develop`), use it.
+1. **Argument** — strip/ignore the `--skip-task-branch-guard` token from `$ARGUMENTS` first (it is a coordination flag, not the base branch), then take the first remaining non-flag token, if any (e.g. `/git-pr develop` or `/git-pr develop --skip-task-branch-guard`), and use it as the base branch.
 2. **`.millhouse/config.yaml`** — if the file exists and contains a `git.parent-branch` key, use its value. If the file doesn't exist, skip silently.
 3. **Default** — `main`.
 

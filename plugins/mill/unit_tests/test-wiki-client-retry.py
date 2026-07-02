@@ -18,7 +18,7 @@ from unittest.mock import patch
 HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
-from wiki import WikiBusyError  # noqa: E402
+from wiki import WikiBusyError, WikiStartupError  # noqa: E402
 from wiki import _client  # noqa: E402
 from _test_helpers import safe_temp_dir  # noqa: E402
 
@@ -281,6 +281,106 @@ def main() -> int:
             server.close()
     except Exception as exc:
         fail("_connect_send_recv waits read_timeout for a slow response", exc)
+
+    # --- (9) ConnectionRefusedError respawns via _ensure_daemon before retrying ---
+    try:
+        with safe_temp_dir() as tmp:
+            wiki_path = tmp / "wiki"
+            wiki_path.mkdir(parents=True, exist_ok=True)
+
+            def mock_connect_send_recv(host, port, msg, **kwargs):
+                if port == 9999:
+                    raise ConnectionRefusedError("connection refused")
+                return {"ok": True}
+
+            sleep_calls = []
+            def mock_sleep(seconds):
+                sleep_calls.append(seconds)
+
+            with patch.dict(os.environ, {"WIKI_DAEMON_INPROCESS": ""}), \
+                 patch.object(_client, "_connect_send_recv", mock_connect_send_recv), \
+                 patch("time.sleep", mock_sleep), \
+                 patch.object(
+                     _client,
+                     "_ensure_daemon",
+                     side_effect=[
+                         ("127.0.0.1", 9999, "token-a"),
+                         ("127.0.0.1", 8888, "token-b"),
+                     ],
+                 ) as ensure_mock:
+                resp = _client._dispatch(wiki_path, "test_op", {})
+                assert resp == {"ok": True}, f"expected {{'ok': True}}, got {resp}"
+                assert ensure_mock.call_count == 2, \
+                    f"expected 2 _ensure_daemon calls, got {ensure_mock.call_count}"
+                ok("ConnectionRefusedError respawns via _ensure_daemon before retrying")
+    except Exception as exc:
+        fail("ConnectionRefusedError respawns via _ensure_daemon before retrying", exc)
+
+    # --- (10) TimeoutError does not trigger extra _ensure_daemon call ---
+    try:
+        with safe_temp_dir() as tmp:
+            wiki_path = tmp / "wiki"
+            wiki_path.mkdir(parents=True, exist_ok=True)
+
+            call_count = 0
+            def mock_connect_send_recv(host, port, msg, **kwargs):
+                nonlocal call_count
+                call_count += 1
+                if call_count == 1:
+                    raise TimeoutError("timeout")
+                return {"ok": True}
+
+            sleep_calls = []
+            def mock_sleep(seconds):
+                sleep_calls.append(seconds)
+
+            with patch.dict(os.environ, {"WIKI_DAEMON_INPROCESS": ""}), \
+                 patch.object(_client, "_connect_send_recv", mock_connect_send_recv), \
+                 patch("time.sleep", mock_sleep), \
+                 patch.object(
+                     _client, "_ensure_daemon", return_value=("127.0.0.1", 9999, "token"),
+                 ) as ensure_mock:
+                resp = _client._dispatch(wiki_path, "test_op", {})
+                assert resp == {"ok": True}, f"expected {{'ok': True}}, got {resp}"
+                assert ensure_mock.call_count == 1, \
+                    f"expected 1 _ensure_daemon call (no respawn for TimeoutError), got {ensure_mock.call_count}"
+                ok("TimeoutError does not trigger extra _ensure_daemon call")
+    except Exception as exc:
+        fail("TimeoutError does not trigger extra _ensure_daemon call", exc)
+
+    # --- (11) Respawn failure (WikiStartupError) propagates immediately as terminal ---
+    try:
+        with safe_temp_dir() as tmp:
+            wiki_path = tmp / "wiki"
+            wiki_path.mkdir(parents=True, exist_ok=True)
+
+            def mock_connect_send_recv(host, port, msg, **kwargs):
+                raise ConnectionRefusedError("connection refused")
+
+            sleep_calls = []
+            def mock_sleep(seconds):
+                sleep_calls.append(seconds)
+
+            with patch.dict(os.environ, {"WIKI_DAEMON_INPROCESS": ""}), \
+                 patch.object(_client, "_connect_send_recv", mock_connect_send_recv), \
+                 patch("time.sleep", mock_sleep), \
+                 patch.object(
+                     _client,
+                     "_ensure_daemon",
+                     side_effect=[
+                         ("127.0.0.1", 9999, "token-a"),
+                         WikiStartupError("daemon did not start within timeout"),
+                     ],
+                 ):
+                try:
+                    _client._dispatch(wiki_path, "test_op", {})
+                    fail("Respawn failure (WikiStartupError) propagates immediately as terminal",
+                         Exception("expected WikiStartupError"))
+                except WikiStartupError:
+                    assert len(sleep_calls) == 0, f"expected 0 sleep calls, got {len(sleep_calls)}"
+                    ok("Respawn failure (WikiStartupError) propagates immediately as terminal")
+    except Exception as exc:
+        fail("Respawn failure (WikiStartupError) propagates immediately as terminal", exc)
 
     print("", file=sys.stderr)
     if failed:
