@@ -22,6 +22,27 @@ from pathlib import Path
 import yaml
 
 
+class FrontmatterParseError(Exception):
+    """Raised when a SKILL.md's frontmatter block exists but fails to parse as YAML.
+
+    Distinguishes a genuine YAML syntax error (e.g. an unquoted `description:`
+    value containing a bare `: ` substring) from the unrelated case of a
+    SKILL.md that has no `---`-delimited frontmatter block at all. Both cases
+    still drop the skill from the generated index — a scanner cannot safely
+    guess the author's intent from malformed YAML — but callers can use this
+    exception to report the two cases with different, actionable messages.
+
+    Attributes:
+        path: The SKILL.md file whose frontmatter failed to parse.
+        original_exc: The underlying `yaml.YAMLError` raised by the parser.
+    """
+
+    def __init__(self, path: Path, original_exc: yaml.YAMLError) -> None:
+        self.path = path
+        self.original_exc = original_exc
+        super().__init__(f"{path}: frontmatter YAML parse error: {original_exc}")
+
+
 def _repo_root() -> Path:
     """Return the hub repo root via `git rev-parse --show-toplevel`."""
     result = _subprocess_util.run(
@@ -32,12 +53,17 @@ def _repo_root() -> Path:
     return Path(result.stdout.strip()).resolve()
 
 
-def _extract_frontmatter(text: str) -> dict | None:
-    """Return parsed YAML frontmatter from text, or None if absent/malformed.
+def _extract_frontmatter(text: str, path: Path) -> dict | None:
+    """Return parsed YAML frontmatter from text, or None if no block is present.
 
     Frontmatter is the block delimited by `---` lines at the very top of
     the file. This matches the SKILL.md convention — it is the one place
     `---` frontmatter is allowed by the markdown skill.
+
+    Raises:
+        FrontmatterParseError: if a `---`-delimited block is present but its
+            contents are not valid YAML. This is distinct from returning
+            None, which means no such block exists at all.
     """
     lines = text.splitlines()
     if not lines or lines[0].strip() != "---":
@@ -46,8 +72,8 @@ def _extract_frontmatter(text: str) -> dict | None:
         if lines[i].strip() == "---":
             try:
                 return yaml.safe_load("\n".join(lines[1:i])) or {}
-            except yaml.YAMLError:
-                return None
+            except yaml.YAMLError as exc:
+                raise FrontmatterParseError(path, exc) from exc
     return None
 
 
@@ -73,7 +99,14 @@ def _scan(repo_root: Path) -> dict[str, list[dict]]:
             except OSError as exc:
                 print(f"[skills-index] skip {skill_md}: {exc}", file=sys.stderr)
                 continue
-            fm = _extract_frontmatter(text)
+            try:
+                fm = _extract_frontmatter(text, skill_md)
+            except FrontmatterParseError as exc:
+                print(
+                    f"[skills-index] {exc.path}: frontmatter YAML parse error: {exc.original_exc}",
+                    file=sys.stderr,
+                )
+                continue
             if fm is None or "name" not in fm or "description" not in fm:
                 print(
                     f"[skills-index] skip {skill_md}: missing frontmatter",
