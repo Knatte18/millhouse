@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-skills-index-fail-loud
+phase: approved-encoding-crash-migrate-fix
 slug: mill-infra-and-tooling-fixes
 branch: hanf/mill-infra-and-tooling-fixes
 plan: _mill/plan
@@ -24,6 +24,7 @@ implementing  '2026-07-02T09:27:42Z'
 approved-daemon-respawn-on-retry  '2026-07-02T09:30:53Z'
 approved-git-pr-explicit-flag  '2026-07-02T09:33:07Z'
 approved-skills-index-fail-loud  '2026-07-02T09:35:58Z'
+approved-encoding-crash-migrate-fix  '2026-07-02T09:38:52Z'
 ```
 
 ## Batches
@@ -46,7 +47,8 @@ batches:
     start_sha: 22ff98245c2b4ead5d694464ba2002d0cec82189
     commit_sha: fe44a20a856895a4c9e94e37171675791f01c204
   - name: encoding-crash-migrate-fix
-    state: running
+    state: approved
     implementer_session: d7a5fe03-4cda-4835-b391-3c9dac4ce4c6
     start_sha: ad349320126cf63ed7ebd0daa32867160a666d21
+    commit_sha: f09993c9c725b061035431beb942cf0e291c093a
 ```
