@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: agent-mode-gaps
 branch: hanf/agent-mode-gaps
 plan: _mill/plan
@@ -20,4 +20,27 @@ discussed  '2026-07-02T09:41:19Z'
 planning  '2026-07-02T09:53:04Z'
 plan-fix-r1  '2026-07-02T09:58:01Z'
 planned  '2026-07-02T09:58:16Z'
+implementing  '2026-07-02T10:05:44Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: status-baseline-field
+    state: pending
+  - name: verify-gates-baseline-param
+    state: pending
+  - name: nits-only-carveout
+    state: pending
+  - name: receiving-review-reword
+    state: pending
+  - name: implement-baseline-stage
+    state: pending
+  - name: mill-go-agent-dispatch-fixes
+    state: pending
+  - name: merge-in-baseline-recompute
+    state: pending
+  - name: baseline-integration-test
+    state: pending
 ```
