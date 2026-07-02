@@ -32,6 +32,7 @@ Fixes #589: `millpy-skills-index.py`'s `_extract_frontmatter(text)` catches `yam
   - `plugins/mill/scripts/millpy-skills-index.py`
   - `plugins/mill/unit_tests/test-abandon.py`
   - `plugins/mill/unit_tests/_test_helpers.py`
+- **Edits:** none
 - **Creates:**
   - `plugins/mill/unit_tests/test-skills-index.py`
 - **Deletes:** none
