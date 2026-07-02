@@ -40,7 +40,9 @@ batches:
     start_sha: d50c521ad8b8065b97df46c4e752cd96729f0a30
     commit_sha: 28a39f77
   - name: nits-only-carveout
-    state: pending
+    state: running
+    implementer_session: c7d48356-e26d-4534-bd18-049923bf9152
+    start_sha: 4fe53ad2b01cb62dbdff5610cedcf7803fa64dd0
   - name: receiving-review-reword
     state: pending
   - name: implement-baseline-stage
