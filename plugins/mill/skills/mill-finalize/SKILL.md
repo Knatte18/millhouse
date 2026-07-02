@@ -93,16 +93,12 @@ git push origin "$CHILD_BRANCH"
 
 ### Step 5: Create PR
 
-Invoke `/git-pr <parent_branch>` with environment variable `MILL_FINALIZE_PR_CLEANUP=1`:
-
-```bash
-MILL_FINALIZE_PR_CLEANUP=1 /git-pr <parent_branch>
-```
+Invoke `/git-pr <parent_branch> --skip-task-branch-guard` directly.
 
 The skill generates title and body from commit history. Cleanup has already run
 in Step 3 (task_dir is either absent on the rm path or restored-to-base on the
-restore path), and `MILL_FINALIZE_PR_CLEANUP=1` tells git-pr's guard to skip
-its task-branch halt so PR creation proceeds in both cases. If `/git-pr` fails
+restore path), and the `--skip-task-branch-guard` flag tells git-pr's guard to
+skip its task-branch halt so PR creation proceeds in both cases. If `/git-pr` fails
 → halt and surface the error; do not roll back status.md or the cleanup commit
 (push already happened; operator can create the PR manually via GitHub UI or
 `gh pr create`).
