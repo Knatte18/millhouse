@@ -310,6 +310,10 @@ def main(argv=None) -> int:
     overview_frontmatter = _plan_dag._read_batch_frontmatter(overview_path)
     module_wide_verify_cmd = overview_frontmatter.get("verify") or None
 
+    # Cached task-scoped baseline read once here so both the finalize and
+    # full stages below pass the same value through to _run_verify_gates.
+    module_verify_baseline = _status.get_module_verify_baseline(status_path)
+
     if args.stage == "baseline":
         return _run_baseline_stage(project_root, git_root, status_path, module_wide_verify_cmd)
 
@@ -373,6 +377,7 @@ def main(argv=None) -> int:
             session_id=session_id,
             verify_cmd=verify_cmd,
             module_wide_verify_cmd=module_wide_verify_cmd,
+            module_verify_baseline=module_verify_baseline,
             card_count=card_count,
             task_dir=status_path.parent,
             parent_branch=parent_branch,
@@ -592,6 +597,7 @@ def main(argv=None) -> int:
         session_id=session_id,
         verify_cmd=verify_cmd,
         module_wide_verify_cmd=module_wide_verify_cmd,
+        module_verify_baseline=module_verify_baseline,
         card_count=card_count,
         task_dir=status_path.parent,
         parent_branch=parent_branch,
