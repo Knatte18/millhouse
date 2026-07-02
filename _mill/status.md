@@ -28,7 +28,9 @@ implementing  '2026-07-02T10:05:44Z'
 ```yaml
 batches:
   - name: status-baseline-field
-    state: pending
+    state: running
+    implementer_session: ef10ee26-7791-4bf3-9df0-6c67f9a7d2b7
+    start_sha: ce7a0f51332899f9108ba90c01e5257715fcc216
   - name: verify-gates-baseline-param
     state: pending
   - name: nits-only-carveout
