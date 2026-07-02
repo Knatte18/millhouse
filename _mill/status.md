@@ -52,7 +52,9 @@ batches:
     start_sha: 4731c6dcb277ea9a3c6b3e7c0f356a81203dc31e
     commit_sha: 3366a887
   - name: implement-baseline-stage
-    state: pending
+    state: running
+    implementer_session: a614735f-6b2b-46af-bc97-42f4cfe0ae2d
+    start_sha: a067f6043837821f2b06f6553c5e88e29d0ca4e8
   - name: mill-go-agent-dispatch-fixes
     state: pending
   - name: merge-in-baseline-recompute
