@@ -40,7 +40,9 @@ batches:
     start_sha: a17166842b08d1a91a7e0d11dd1d2dd8f4fe3729
     commit_sha: eb651ac9d0191ce511c1c3e6eba0c85299d8516b
   - name: skills-index-fail-loud
-    state: pending
+    state: running
+    implementer_session: 5cfc92b9-98a8-40e7-a0f2-bfe7ce4eae83
+    start_sha: 22ff98245c2b4ead5d694464ba2002d0cec82189
   - name: encoding-crash-migrate-fix
     state: pending
 ```
