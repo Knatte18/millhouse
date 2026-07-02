@@ -46,5 +46,7 @@ batches:
     start_sha: 22ff98245c2b4ead5d694464ba2002d0cec82189
     commit_sha: fe44a20a856895a4c9e94e37171675791f01c204
   - name: encoding-crash-migrate-fix
-    state: pending
+    state: running
+    implementer_session: d7a5fe03-4cda-4835-b391-3c9dac4ce4c6
+    start_sha: ad349320126cf63ed7ebd0daa32867160a666d21
 ```
