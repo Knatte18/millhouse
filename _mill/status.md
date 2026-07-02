@@ -58,7 +58,9 @@ batches:
     start_sha: a067f6043837821f2b06f6553c5e88e29d0ca4e8
     commit_sha: bbe1b412
   - name: mill-go-agent-dispatch-fixes
-    state: pending
+    state: running
+    implementer_session: da79d5a4-5135-4438-8dbb-ea6a29f043b1
+    start_sha: 208d15967b542153703b4937ceaa06b18da53c08
   - name: merge-in-baseline-recompute
     state: pending
   - name: baseline-integration-test
