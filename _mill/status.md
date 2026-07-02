@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-fixing
+phase: holistic-approved
 slug: agent-mode-gaps
 branch: hanf/agent-mode-gaps
 plan: _mill/plan
@@ -31,6 +31,8 @@ approved-merge-in-baseline-recompute  '2026-07-02T10:44:58Z'
 approved-baseline-integration-test  '2026-07-02T10:52:00Z'
 holistic-reviewing  '2026-07-02T10:52:20Z'
 holistic-fixing  '2026-07-02T10:56:34Z'
+nits-fixed-holistic  '2026-07-02T11:11:03Z'
+holistic-approved  '2026-07-02T11:11:10Z'
 ```
 
 ## Batches
