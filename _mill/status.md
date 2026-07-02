@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-mill-go-agent-dispatch-fixes
+phase: approved-merge-in-baseline-recompute
 slug: agent-mode-gaps
 branch: hanf/agent-mode-gaps
 plan: _mill/plan
@@ -27,6 +27,7 @@ approved-nits-only-carveout  '2026-07-02T10:22:18Z'
 approved-receiving-review-reword  '2026-07-02T10:25:37Z'
 approved-implement-baseline-stage  '2026-07-02T10:37:54Z'
 approved-mill-go-agent-dispatch-fixes  '2026-07-02T10:42:00Z'
+approved-merge-in-baseline-recompute  '2026-07-02T10:44:58Z'
 ```
 
 ## Batches
@@ -64,9 +65,10 @@ batches:
     start_sha: 208d15967b542153703b4937ceaa06b18da53c08
     commit_sha: ff4dccd7
   - name: merge-in-baseline-recompute
-    state: running
+    state: approved
     implementer_session: f369999a-bd87-451b-b51a-96e25b1e29d0
     start_sha: e61a8af978371e19ad07caf2e5f2d1fe8adc1483
+    commit_sha: a0cb3f0f
   - name: baseline-integration-test
     state: pending
 ```
