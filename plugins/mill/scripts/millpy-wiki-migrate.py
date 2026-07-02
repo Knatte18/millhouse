@@ -27,13 +27,26 @@ All print() output is ASCII only (no em-dashes, no Unicode arrows).
 from __future__ import annotations
 
 import argparse
-import re
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
 import _paths
+
+
+def _ensure_utf8_stdout() -> None:
+    """Reconfigure stdout to UTF-8 so non-ASCII wiki content cannot crash the console.
+
+    `_print_task_brief` below prints raw, externally-authored `title`/`brief`
+    strings pulled straight from Home.md and proposal files. Those strings can
+    legitimately contain non-ASCII characters (e.g. an em-dash or an arrow), and
+    Python's default stdout encoding on a Windows console is cp1252, which raises
+    `UnicodeEncodeError` on such characters -- the same bug class as #588. Calling
+    this before any printing guarantees the console accepts the full text instead
+    of crashing partway through a migration dry-run.
+    """
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 
 def _print_task_brief(task: dict) -> None:
@@ -61,6 +74,7 @@ def _print_task_brief(task: dict) -> None:
 
 def main() -> None:
     """Main entry point."""
+    _ensure_utf8_stdout()
     parser = argparse.ArgumentParser(
         description="Migrate Home.md and proposal files to V3 TinyDB-backed wiki."
     )
