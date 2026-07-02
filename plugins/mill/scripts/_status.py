@@ -32,6 +32,9 @@ Public API:
     set_batch_fields(status_path, name, fields) -> None
     read_batches(status_path) -> list[dict]
     read_status(status_path) -> dict
+    get_module_verify_baseline(status_path) -> str | None
+    set_module_verify_baseline(status_path, value) -> None
+    clear_module_verify_baseline(status_path) -> None
 """
 from __future__ import annotations
 
@@ -296,6 +299,116 @@ def set_blocked(status_path: Path, reason: str, *, timestamp: str) -> None:
     new_row = f"{phase_label}  {quote_scalar(timestamp)}\n"
     tl_lines.insert(t_end, new_row)
     status_path.write_text("".join(tl_lines), encoding="utf-8")
+
+
+_MODULE_VERIFY_BASELINE_STATES = {"clean", "pre-existing-failures"}
+
+
+def get_module_verify_baseline(status_path: Path) -> str | None:
+    """
+    Return the cached ``module_verify_baseline:`` value from the top yaml block.
+
+    This is the task-scoped cache the baseline-aware module-wide verify gate
+    reads: ``None`` means "not yet computed" (the key is absent, or present
+    as an explicit ``null``) -- the expected state before the task's first
+    baseline computation runs, not an error condition.
+
+    Args:
+        status_path: Absolute path to the status.md file.
+
+    Returns:
+        ``"clean"``, ``"pre-existing-failures"``, or ``None``.
+
+    Raises:
+        ValueError: the file lacks a yaml block, the block is
+            unterminated, or the block fails to parse as yaml.
+    """
+    data = read(status_path)
+    return data.get("module_verify_baseline")
+
+
+def set_module_verify_baseline(status_path: Path, value: str) -> None:
+    """
+    Write ``module_verify_baseline:`` in the top yaml block of ``status_path``.
+
+    Mirrors ``set_blocked``'s insert-in-place-or-append pattern for
+    ``blocked_reason:``: if a ``module_verify_baseline:`` row already exists
+    in the block it is rewritten in place; otherwise a new row is inserted
+    immediately after ``parent:`` -- that field's natural neighbor in the
+    template's field ordering, since the row does not exist in
+    ``status-discussing.md``'s template and must be inserted the first time
+    a baseline is computed.
+
+    Args:
+        status_path: Absolute path to the status.md file.
+        value: Must be the literal string ``"clean"`` or
+            ``"pre-existing-failures"``. Written through
+            ``_yaml_writer.quote_scalar`` for consistency with every other
+            string field in this module.
+
+    Raises:
+        ValueError: ``value`` is not one of the two allowed states, the
+            file lacks a yaml block, the block is unterminated, or the
+            block has no ``parent:`` row to insert after.
+    """
+    if value not in _MODULE_VERIFY_BASELINE_STATES:
+        raise ValueError(
+            f"Unknown module_verify_baseline value {value!r}; "
+            f"allowed: {sorted(_MODULE_VERIFY_BASELINE_STATES)}"
+        )
+    text = status_path.read_text(encoding="utf-8")
+    lines = text.splitlines(keepends=True)
+    start, end = _split_fences(text, _YAML_FENCE)
+
+    # Rewrite the existing row in place if one is already present.
+    for i in range(start, end):
+        stripped = lines[i].rstrip("\r\n")
+        if re.match(r"^module_verify_baseline:\s*", stripped):
+            eol = lines[i][len(stripped):]
+            lines[i] = f"module_verify_baseline: {quote_scalar(value)}{eol}"
+            status_path.write_text("".join(lines), encoding="utf-8")
+            return
+
+    # Absent: insert a new row immediately after parent:.
+    parent_idx: int | None = None
+    for i in range(start, end):
+        stripped = lines[i].rstrip("\r\n")
+        if re.match(r"^parent:\s*", stripped):
+            parent_idx = i
+            break
+    if parent_idx is None:
+        raise ValueError(f"parent: key missing from yaml block of {status_path}")
+    lines.insert(parent_idx + 1, f"module_verify_baseline: {quote_scalar(value)}\n")
+    status_path.write_text("".join(lines), encoding="utf-8")
+
+
+def clear_module_verify_baseline(status_path: Path) -> None:
+    """
+    Remove the ``module_verify_baseline:`` row from the top yaml block, if present.
+
+    A no-op (not an error) when the row is already absent, so this function
+    is safe to call unconditionally before every baseline recompute --
+    including the very first one, where the field has never been written.
+    Mirrors ``append_phase``'s ``blocked_reason:`` deletion mechanics.
+
+    Args:
+        status_path: Absolute path to the status.md file.
+
+    Raises:
+        ValueError: the file lacks a yaml block, or the block is
+            unterminated.
+    """
+    text = status_path.read_text(encoding="utf-8")
+    lines = text.splitlines(keepends=True)
+    start, end = _split_fences(text, _YAML_FENCE)
+
+    for i in range(start, end):
+        stripped = lines[i].rstrip("\r\n")
+        if re.match(r"^module_verify_baseline:\s*", stripped):
+            del lines[i]
+            status_path.write_text("".join(lines), encoding="utf-8")
+            return
+    # Row already absent: no-op, matches append_phase's tolerant style.
 
 
 def append_phase(status_path: Path, phase: str, timestamp: str) -> None:
