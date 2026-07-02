@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-encoding-crash-migrate-fix
+phase: holistic-reviewing
 slug: mill-infra-and-tooling-fixes
 branch: hanf/mill-infra-and-tooling-fixes
 plan: _mill/plan
@@ -25,6 +25,7 @@ approved-daemon-respawn-on-retry  '2026-07-02T09:30:53Z'
 approved-git-pr-explicit-flag  '2026-07-02T09:33:07Z'
 approved-skills-index-fail-loud  '2026-07-02T09:35:58Z'
 approved-encoding-crash-migrate-fix  '2026-07-02T09:38:52Z'
+holistic-reviewing  '2026-07-02T09:39:15Z'
 ```
 
 ## Batches
