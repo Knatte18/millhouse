@@ -28,7 +28,9 @@ implementing  '2026-07-02T09:27:42Z'
 ```yaml
 batches:
   - name: daemon-respawn-on-retry
-    state: pending
+    state: running
+    implementer_session: 7c4d8b57-512d-4fee-94e5-ebbb341241b3
+    start_sha: 04e0c147d93d4d9e596aada8ae30edcfe251e3a9
   - name: git-pr-explicit-flag
     state: pending
   - name: skills-index-fail-loud
