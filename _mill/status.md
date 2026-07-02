@@ -70,5 +70,7 @@ batches:
     start_sha: e61a8af978371e19ad07caf2e5f2d1fe8adc1483
     commit_sha: a0cb3f0f
   - name: baseline-integration-test
-    state: pending
+    state: running
+    implementer_session: d8153ad0-484b-4ad1-9cfb-b385af4606ef
+    start_sha: 8c7c5d0cf5ccf786aecb86ee642a9665df20c586
 ```
