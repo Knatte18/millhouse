@@ -122,7 +122,9 @@ _client.set_phase(wiki_path, '<slug>', 'pr-pending')
 
 Report to the user:
 
-> "PR created for `<slug>`. Home.md updated to [pr-pending]. Run `/mill-merge` after the PR merges on GitHub to complete teardown (archive tag, [done] flip, worktree cleanup)."
+> "PR created for `<slug>`. Home.md updated to [pr-pending].
+>
+> **This is an inspection PR — do NOT merge it on GitHub.** Review the diff, then close the PR on GitHub without using the Merge button. After closing, run `/mill-merge` here to complete the local squash-merge, archive tag, and [done] flip."
 
 ## Board discipline
 

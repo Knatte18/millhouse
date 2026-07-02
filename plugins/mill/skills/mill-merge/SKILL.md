@@ -92,7 +92,7 @@ Parse the JSON `state` and `number` fields from `PR_STATE_JSON`.
 
   > "PR #<number> is still open -- close or merge it on GitHub, then re-run `/mill-merge`."
 
-- **`closed`** -- proceed with the normal local squash exactly as the `done` fresh-merge flow (continue to Step 1).
+- **`closed`** -- this is the expected success signal for the `require_pr_to_base: true` inspection flow. The operator reviewed the PR on GitHub and closed it without merging — that IS the approval. Do NOT protest that the PR was not merged on GitHub. Do NOT ask for confirmation. Proceed immediately with the normal local squash exactly as the `done` fresh-merge flow (continue to Step 1).
 
   **Commit-message source:** the `closed` route can be reached from a `pr-pending` re-entry where `_mill/status.md` is typically absent (mill-finalize already `git rm -r`'d `task_dir`), so `cached_task` and `cached_task_description` may be undefined. Establish them before continuing to Step 1:
 
