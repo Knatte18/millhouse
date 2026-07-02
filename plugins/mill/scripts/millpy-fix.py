@@ -256,6 +256,20 @@ def main(argv=None) -> int:
             git_root=git_root,
         )
 
+    # Compute the fixer-brief carve-out clause once, from the already-parsed
+    # --nits-only flag. This is the single source of truth both brief templates
+    # render into their two zero-new-commit sentences, so the brief's wording can
+    # never drift from _implementer_common.py's actual nits_only runtime guard
+    # (which already allows a legitimate --nits-only no-op pass to report success
+    # with zero new commits). The value carries its own leading punctuation and
+    # terminal period so neither template branch needs to hardcode punctuation
+    # after the token.
+    nits_only_carveout = (
+        ", unless every finding was a legitimate --nits-only no-op requiring no code change."
+        if args.nits_only
+        else "."
+    )
+
     # Branch on scope (for prepare and full stages)
     if args.scope == "batch":
         # Per-batch fixer dispatch
@@ -333,6 +347,7 @@ def main(argv=None) -> int:
                 "LANGUAGE_SKILLS": _agent_dispatch.language_skills_directive(
                     batch_file
                 ),
+                "NITS_ONLY_CARVEOUT": nits_only_carveout,
             },
         )
 
@@ -394,6 +409,7 @@ def main(argv=None) -> int:
                 "ROUND": str(args.round),
                 "SELF_FIX_ROUNDS": str(self_fix_rounds),
                 "BATCH_FILES": batch_files_text,
+                "NITS_ONLY_CARVEOUT": nits_only_carveout,
             },
         )
 
