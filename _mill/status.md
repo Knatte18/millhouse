@@ -64,7 +64,9 @@ batches:
     start_sha: 208d15967b542153703b4937ceaa06b18da53c08
     commit_sha: ff4dccd7
   - name: merge-in-baseline-recompute
-    state: pending
+    state: running
+    implementer_session: f369999a-bd87-451b-b51a-96e25b1e29d0
+    start_sha: e61a8af978371e19ad07caf2e5f2d1fe8adc1483
   - name: baseline-integration-test
     state: pending
 ```
