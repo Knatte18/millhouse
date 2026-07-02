@@ -645,6 +645,7 @@ def _run_verify_gates(
     module_wide_verify_cmd: str | None,
     *,
     git_root: Path | None = None,
+    module_verify_baseline: str | None = None,
 ) -> dict | None:
     """
     Run the batch-level verify gate and, if it passes, the module-wide verify gate.
@@ -663,6 +664,19 @@ def _run_verify_gates(
     "[module-wide verify]" so the operator can distinguish it from a batch-level
     verify failure in the stuck report.
 
+    module_verify_baseline is a cached, task-scoped read-only signal for whether
+    the parent branch's own module-wide verify command was already failing before
+    this task started ("pre-existing-failures") or was clean ("clean"). This
+    function never computes or persists that value -- it only reads whatever the
+    caller hands it and short-circuits the module-wide gate accordingly:
+      - "pre-existing-failures": skip the module-wide gate entirely (do not run
+        module_wide_verify_cmd at all) and treat it as passed, same as when
+        module_wide_verify_cmd is None.
+      - "clean" or None (not yet computed): run the module-wide gate exactly as
+        it always has. None is the fail-safe-toward-strict default -- until a
+        baseline has actually been computed, the gate behaves as if the baseline
+        were "clean".
+
     Args:
         project_root: Path to the worktree root.
         verify_cmd: Batch-level verify command, or None to skip.
@@ -670,6 +684,10 @@ def _run_verify_gates(
             passes, or None to skip.
         git_root: Optional git root directory used as cwd for verify subprocesses.
             Threaded to both _run_verify_gate calls. When None, falls back to project_root.
+        module_verify_baseline: Cached "clean" | "pre-existing-failures" | None
+            baseline state for the module-wide gate. When "pre-existing-failures",
+            the module-wide gate is skipped entirely regardless of
+            module_wide_verify_cmd. Defaults to None (run strictly, as before).
 
     Returns:
         A stuck dict on the first gate that fails, or None when both pass (or are
@@ -682,6 +700,14 @@ def _run_verify_gates(
 
     # Batch gate passed (or was skipped); run the module-wide gate if configured.
     if module_wide_verify_cmd is None:
+        return None
+
+    # A cached "pre-existing-failures" baseline means the parent branch was
+    # already red before this task started -- skip the module-wide gate for
+    # the rest of the task rather than blocking on a failure this batch never
+    # caused. "clean" and the not-yet-computed None default both fall through
+    # to the strict, unchanged behavior below.
+    if module_verify_baseline == "pre-existing-failures":
         return None
 
     module_result = _run_verify_gate(
@@ -778,6 +804,7 @@ def finalize_from_output(
     session_id: str | None = None,
     verify_cmd: str | None = None,
     module_wide_verify_cmd: str | None = None,
+    module_verify_baseline: str | None = None,
     card_count: int | None = None,
     task_dir: Path | None = None,
     parent_branch: str | None = None,
@@ -799,6 +826,10 @@ def finalize_from_output(
         session_id: Session identifier threaded into the output envelope.
         verify_cmd: Batch-level verify command to run before emitting success.
         module_wide_verify_cmd: Module-wide verify command run after the batch gate passes.
+        module_verify_baseline: Cached "clean" | "pre-existing-failures" | None baseline
+            state for the module-wide gate, forwarded to _run_verify_gates. When
+            "pre-existing-failures", the module-wide gate is skipped entirely. Defaults
+            to None (run the module-wide gate strictly, as before this parameter existed).
         card_count: Number of Card headings in the batch; enables the completeness gate.
         task_dir: Worktree-relative path to the task directory (_mill/).
         parent_branch: Name of the parent branch for in-scope dirty-tree detection.
@@ -819,6 +850,7 @@ def finalize_from_output(
         session_id=session_id,
         verify_cmd=verify_cmd,
         module_wide_verify_cmd=module_wide_verify_cmd,
+        module_verify_baseline=module_verify_baseline,
         card_count=card_count,
         task_dir=task_dir,
         parent_branch=parent_branch,
@@ -869,6 +901,7 @@ def _forward_output(
     session_id: str | None = None,
     verify_cmd: str | None = None,
     module_wide_verify_cmd: str | None = None,
+    module_verify_baseline: str | None = None,
     card_count: int | None = None,
     task_dir: Path | None = None,
     parent_branch: str | None = None,
@@ -889,6 +922,11 @@ def _forward_output(
     (or is skipped); a module-wide failure also demotes to stuck/verify with a
     "[module-wide verify]" prefix in the reason. When module_wide_verify_cmd is None, behavior
     is unchanged (single gate, backward-compatible).
+    module_verify_baseline is forwarded to _run_verify_gates unchanged: a cached
+    "clean" | "pre-existing-failures" | None baseline for the module-wide gate.
+    When "pre-existing-failures", the module-wide gate is skipped entirely regardless
+    of module_wide_verify_cmd. "clean" and the default None both run the module-wide
+    gate exactly as before this parameter existed.
     When card_count is provided, the completeness gate checks that enough commits were made.
     When task_dir and parent_branch are provided, the dirty-tree gate checks in-scope cleanliness.
     When nits_only is True and status_path and nits_scope are not None, on the parsed-success
@@ -912,7 +950,11 @@ def _forward_output(
             _gate_session_id = session_id or parsed.get("session_id")
 
             gate_result = _run_verify_gates(
-                project_root, verify_cmd, module_wide_verify_cmd, git_root=git_root
+                project_root,
+                verify_cmd,
+                module_wide_verify_cmd,
+                git_root=git_root,
+                module_verify_baseline=module_verify_baseline,
             )
             if gate_result is not None:
                 # Reclassify a verify failure that is really a partial-batch stop
@@ -1099,6 +1141,7 @@ def _forward_output(
                                         verify_cmd,
                                         module_wide_verify_cmd,
                                         git_root=git_root,
+                                        module_verify_baseline=module_verify_baseline,
                                     )
                                     if gate_result is not None:
                                         gate_result = _reclassify_verify_failure(
@@ -1192,6 +1235,7 @@ def _forward_output(
                         verify_cmd,
                         module_wide_verify_cmd,
                         git_root=git_root,
+                        module_verify_baseline=module_verify_baseline,
                     )
                     if gate_result is not None:
                         gate_result = _reclassify_verify_failure(
@@ -1281,6 +1325,7 @@ def _forward_output(
                         verify_cmd,
                         module_wide_verify_cmd,
                         git_root=git_root,
+                        module_verify_baseline=module_verify_baseline,
                     )
                     if gate_result is not None:
                         gate_result = _reclassify_verify_failure(
