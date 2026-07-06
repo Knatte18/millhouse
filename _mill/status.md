@@ -40,5 +40,7 @@ batches:
     start_sha: b6684746b3e1b8b3ba836dcf6567076d6eb4a062
     commit_sha: 0a8ca10abdcbe80f29d3f5ee4a7bc3d12a2e437e
   - name: status-path-typeerror
-    state: pending
+    state: running
+    implementer_session: 1b335ea0-ae9a-44eb-910e-50efca3e292e
+    start_sha: c3c2b888e16a5d6d24467b9e4078849dc0e400c3
 ```
