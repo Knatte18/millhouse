@@ -38,7 +38,9 @@ batches:
     start_sha: 5271b4a5e3ba068aac4f68a0410014c2d5fd7fd1
     commit_sha: 529b8e127f13d2aafda250b4251bf353e8212628
   - name: brief-path-fix
-    state: pending
+    state: running
+    implementer_session: d044d6f3-bf03-4e5a-ab78-9bc7eb673123
+    start_sha: e98e1b56566b28d2e9cd9ab6ba630a46f61b8f4f
   - name: verify-cwd-foundation
     state: pending
   - name: implementer-verify-cwd
