@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-scope-violation-rebase
+phase: approved-brief-path-fix
 slug: nested-layout-fixes
 branch: hanf/nested-layout-fixes
 plan: _mill/plan
@@ -26,6 +26,7 @@ plan-fix-r3  '2026-07-06T18:02:38Z'
 planned  '2026-07-06T18:02:55Z'
 implementing  '2026-07-06T18:04:32Z'
 approved-scope-violation-rebase  '2026-07-06T18:14:43Z'
+approved-brief-path-fix  '2026-07-06T18:26:33Z'
 ```
 
 ## Batches
@@ -38,9 +39,10 @@ batches:
     start_sha: 5271b4a5e3ba068aac4f68a0410014c2d5fd7fd1
     commit_sha: 529b8e127f13d2aafda250b4251bf353e8212628
   - name: brief-path-fix
-    state: running
+    state: approved
     implementer_session: d044d6f3-bf03-4e5a-ab78-9bc7eb673123
     start_sha: e98e1b56566b28d2e9cd9ab6ba630a46f61b8f4f
+    commit_sha: 1dbf35f3b05dc4979ce9afe7fcce0963d99bf298
   - name: verify-cwd-foundation
     state: pending
   - name: implementer-verify-cwd
