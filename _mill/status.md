@@ -44,7 +44,9 @@ batches:
     start_sha: e98e1b56566b28d2e9cd9ab6ba630a46f61b8f4f
     commit_sha: 1dbf35f3b05dc4979ce9afe7fcce0963d99bf298
   - name: verify-cwd-foundation
-    state: pending
+    state: running
+    implementer_session: 0a54428c-d8f2-4d8f-8d22-c52edcdc181d
+    start_sha: 28371d8dea4e508fdb9edf7ed6b543ca97f67892
   - name: implementer-verify-cwd
     state: pending
   - name: plan-validate-verify-cwd
