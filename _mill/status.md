@@ -32,7 +32,9 @@ implementing  '2026-07-06T18:04:32Z'
 ```yaml
 batches:
   - name: scope-violation-rebase
-    state: pending
+    state: running
+    implementer_session: 6a93786f-e1fe-4aae-b7a6-44173379ceb4
+    start_sha: 5271b4a5e3ba068aac4f68a0410014c2d5fd7fd1
   - name: brief-path-fix
     state: pending
   - name: verify-cwd-foundation
