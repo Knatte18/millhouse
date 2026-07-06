@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-fix-r1
+phase: plan-fix-r2
 slug: nested-layout-fixes
 branch: hanf/nested-layout-fixes
 plan: _mill/plan
@@ -20,4 +20,6 @@ discussed  '2026-07-06T17:29:59Z'
 planning  '2026-07-06T17:37:30Z'
 plan-review-r1  '2026-07-06T17:46:00Z'
 plan-fix-r1  '2026-07-06T17:46:00Z'
+plan-review-r2  '2026-07-06T17:56:55Z'
+plan-fix-r2  '2026-07-06T17:56:55Z'
 ```
