@@ -50,7 +50,9 @@ batches:
     start_sha: 28371d8dea4e508fdb9edf7ed6b543ca97f67892
     commit_sha: 15b4bc3fbfe663bbffa73487b84bffeff1083035
   - name: implementer-verify-cwd
-    state: pending
+    state: running
+    implementer_session: 153539bb-43ab-4203-9265-d9c53e6f26d8
+    start_sha: c46217d06388cb8932adc1105de1ead2e6334dc4
   - name: plan-validate-verify-cwd
     state: pending
   - name: merge-in-verify-cwd
