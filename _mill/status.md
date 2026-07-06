@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-go-dispatch-and-skill-gaps
 branch: hanf/mill-go-dispatch-and-skill-gaps
 plan: _mill/plan
@@ -21,4 +21,15 @@ planning  '2026-07-06T17:14:50Z'
 plan-review-r1  '2026-07-06T17:19:19Z'
 plan-fix-r1  '2026-07-06T17:20:17Z'
 planned  '2026-07-06T17:20:41Z'
+implementing  '2026-07-06T17:22:50Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: html-unescape-agent-output
+    state: pending
+  - name: dispatch-and-skill-doc-fixes
+    state: pending
 ```
