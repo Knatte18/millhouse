@@ -1487,6 +1487,13 @@ def _check_verify_mixed_cwd(
         order = _plan_dag.topo_order(batches)
     except PlanDAGError:
         return []
+    except KeyError:
+        # topo_order indexes its adjacency map directly by depends-on name,
+        # so a depends-on entry naming an unknown batch raises KeyError
+        # rather than PlanDAGError. _check_depends_on_unknown already
+        # reports that dangling reference as its own finding; treat it as
+        # "nothing to check" here rather than crashing the whole validator.
+        return []
 
     file_by_name = {entry["name"]: entry.get("file") for entry in batches}
     stem_to_path = {bf.stem: bf for bf in batch_files}
