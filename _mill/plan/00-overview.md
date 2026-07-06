@@ -3,7 +3,7 @@
 ```yaml
 task: Fix mill-merge-in stale ref check, PowerShell 5.1 ConvertTo-Json, and _status str-path crash
 slug: mill-script-fixes
-approved: false
+approved: true
 started: 20260706-171827
 parent: main
 root: ""
