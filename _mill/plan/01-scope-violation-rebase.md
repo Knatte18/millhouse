@@ -5,7 +5,7 @@ task: Fix nested-hub-layout path resolution bugs across scope violations and rev
 batch: scope-violation-rebase
 number: 1
 cards: 5
-verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/test-cleanliness.py
+verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-cleanliness.py test-implementer-common.py
 depends-on: []
 ```
 
@@ -75,4 +75,4 @@ Fixes #603 and #608 (one underlying bug): `_cleanliness.compute_scope_violations
 
 ## Batch Tests
 
-`verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/test-cleanliness.py` runs the full `test-cleanliness.py` file, covering all 9 existing flat-layout CESV cases (updated call signature, unchanged assertions) plus the 3 new nested-layout cases added by Card 5.
+`verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-cleanliness.py test-implementer-common.py` runs `test-cleanliness.py` in full (covering all 6 CV-* and 9 CESV existing flat-layout cases with the updated call signatures, unchanged assertions, plus the new nested-layout cases added by Card 5), and additionally runs `test-implementer-common.py` as a regression gate on Card 3's call-site changes: `test-implementer-common.py` exercises the same `_forward_output`/finalize code paths that Card 3 touches (the four `compute_scope_violations` call sites), so a botched signature update is caught within this batch's own verify rather than only surfacing later in batch 4, which is the batch that actually modifies `test-implementer-common.py`'s content.

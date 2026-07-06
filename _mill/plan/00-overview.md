@@ -3,7 +3,7 @@
 ```yaml
 task: Fix nested-hub-layout path resolution bugs across scope violations and review CLIs
 slug: nested-layout-fixes
-approved: false
+approved: true
 started: 20260706-173348
 parent: main
 root: ""
@@ -18,7 +18,7 @@ batches:
     name: scope-violation-rebase
     file: 01-scope-violation-rebase.md
     depends-on: []
-    verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/test-cleanliness.py
+    verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-cleanliness.py test-implementer-common.py
   - number: 2
     name: brief-path-fix
     file: 02-brief-path-fix.md
