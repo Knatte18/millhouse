@@ -87,7 +87,13 @@ detail, not open items to re-derive).
   whether the orchestrator (an LLM following SKILL.md prose) transcribes
   the capture step perfectly every time. Using stdlib `html.unescape`
   (not a hand-rolled regex for `&lt;`/`&gt;`/`&amp;`) handles the full
-  HTML5 entity set correctly, including double-escaping edge cases.
+  HTML5 entity set correctly, including double-escaping edge cases. The
+  captured text at each read site is the notification payload's rendered
+  markdown (implementer/reviewer report), which the harness escapes
+  uniformly end-to-end before delivery — so a whole-text `html.unescape`
+  is the correct full inverse, not a partial one; there is no free-form,
+  independently-authored text mixed into that payload that could be
+  legitimately entity-encoded on purpose.
 - Rejected:
   - Manual entity substitution instructed in SKILL.md prose (relies on
     LLM discipline at write time; error-prone, unverifiable, the exact
@@ -234,12 +240,16 @@ detail, not open items to re-derive).
   `finalize_from_output`) should gain a case that feeds HTML-escaped
   text (e.g. `Q&amp;A`, `send &lt;guid&gt;`, `Cards 20 &amp; 21`)
   through the `--agent-output` file and asserts the parsed/forwarded
-  result contains the unescaped form. If per-CLI unit test files exist
-  for `millpy-review-code.py` / `millpy-review-discussion.py` /
-  `millpy-review-plan.py`'s finalize stage, add an equivalent case to
-  each covering their independent read sites. Use in-memory/tempfile
-  fixtures per `mill:testing` conventions — no real git/LLM needed, this
-  is pure text transformation.
+  result contains the unescaped form. `test-review-finalize.py` and the
+  per-CLI flow tests (`test-review-code-flow.py`,
+  `test-review-discussion-flow.py`, `test-review-plan-flow.py`) already
+  exist and cover each of `millpy-review-code.py` /
+  `millpy-review-discussion.py` / `millpy-review-plan.py`'s finalize
+  stage — add an equivalent HTML-escape case to each as required
+  coverage for all four read sites, not just
+  `test-implementer-common.py`. Use in-memory/tempfile fixtures per
+  `mill:testing` conventions — no real git/LLM needed, this is pure text
+  transformation.
 - The other four decisions (#606, #599, #598, #596) are SKILL.md
   prose/documentation edits with no executable surface — verified by
   reading the edited section back and confirming it accurately reflects

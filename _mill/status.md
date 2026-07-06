@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: discussion-fix-r2
 slug: mill-go-dispatch-and-skill-gaps
 branch: hanf/mill-go-dispatch-and-skill-gaps
 plan: null
@@ -15,4 +15,5 @@ task_description: |
 
 ```text
 discussing  '2026-07-06T16:57:25Z'
+discussion-fix-r2  '2026-07-06T17:09:35Z'
 ```
