@@ -366,9 +366,13 @@ def main(argv=None) -> int:
             project_root / "_mill" / f".cleanliness-snapshot-{_safe_batch}.txt"
         )
         session_id = batch_status.get("implementer_session")
-        # Resolve batch verify command from the batch file's frontmatter
+        # Resolve batch verify command from the batch file's frontmatter, routing
+        # through parse_verify_field so a `{cwd: hub|git_root, command: ...}`
+        # mapping resolves to the correct verify-subprocess cwd in nested layouts.
         batch_frontmatter = _plan_dag._read_batch_frontmatter(batch_file)
-        verify_cmd = batch_frontmatter.get("verify")
+        verify_cmd, cwd_override = _plan_dag.parse_verify_field(
+            batch_frontmatter, project_root, git_root
+        )
         return finalize_from_output(
             Path(args.agent_output),
             project_root,
@@ -382,6 +386,7 @@ def main(argv=None) -> int:
             task_dir=status_path.parent,
             parent_branch=parent_branch,
             git_root=git_root,
+            cwd_override=cwd_override,
         )
 
     # Stages: prepare and full (need pre-commit, render, and setup)
@@ -586,9 +591,13 @@ def main(argv=None) -> int:
         )
         print(error_reason, file=sys.stderr)
         return 1
-    # Resolve batch verify command from the batch file's frontmatter for full stage
+    # Resolve batch verify command from the batch file's frontmatter for full stage,
+    # routing through parse_verify_field so a `{cwd: hub|git_root, command: ...}`
+    # mapping resolves to the correct verify-subprocess cwd in nested layouts.
     batch_frontmatter = _plan_dag._read_batch_frontmatter(batch_file)
-    verify_cmd = batch_frontmatter.get("verify")
+    verify_cmd, cwd_override = _plan_dag.parse_verify_field(
+        batch_frontmatter, project_root, git_root
+    )
     return _forward_output(
         output,
         project_root,
@@ -602,6 +611,7 @@ def main(argv=None) -> int:
         task_dir=status_path.parent,
         parent_branch=parent_branch,
         git_root=git_root,
+        cwd_override=cwd_override,
     )
 
 
