@@ -28,7 +28,9 @@ implementing  '2026-07-06T17:26:47Z'
 ```yaml
 batches:
   - name: mill-merge-in-stale-ref
-    state: pending
+    state: running
+    implementer_session: 803801f1-235e-4559-9035-ca2ee52a251f
+    start_sha: d0b8ac2b43e19165e632628205382450ae78e145
   - name: worktree-asarray
     state: pending
   - name: status-path-typeerror
