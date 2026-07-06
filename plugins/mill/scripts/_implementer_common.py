@@ -1,5 +1,6 @@
 """Shared helpers for millpy-implement.py and millpy-fix.py."""
 
+import html
 import json
 import os
 import re
@@ -841,7 +842,11 @@ def finalize_from_output(
             layouts so the verify command runs from the repo root rather than the hub
             sub-directory, preventing spurious MSB1009 / path-not-found errors.
     """
-    output = Path(agent_output_path).read_text(encoding="utf-8")
+    # The harness HTML-escapes the <task-notification> payload uniformly before
+    # delivery, so the text captured to agent_output_path may contain entities
+    # like "&amp;" and "&lt;". Unescape here (at the read site) so downstream
+    # JSON parsing and status.md writes see the original, uncorrupted text.
+    output = html.unescape(Path(agent_output_path).read_text(encoding="utf-8"))
     return _forward_output(
         output,
         project_root,
