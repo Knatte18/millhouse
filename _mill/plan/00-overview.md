@@ -32,7 +32,7 @@ batches:
   - number: 4
     name: implementer-verify-cwd
     file: 04-implementer-verify-cwd.md
-    depends-on: [3]
+    depends-on: [1, 3]
     verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-implementer-common.py test-millpy-implement.py
   - number: 5
     name: fixer-verify-cwd

@@ -6,12 +6,12 @@ batch: implementer-verify-cwd
 number: 4
 cards: 6
 verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-implementer-common.py test-millpy-implement.py
-depends-on: [3]
+depends-on: [1, 3]
 ```
 
 ## Batch Scope
 
-Fixes #604 for the implementer path: threads a `cwd_override` (per-batch/module-wide verify subprocess) and `cwd_override_relative` (baseline temp-worktree verify subprocess) through `_implementer_common.py`'s verify-gate chain and `_verify_baseline.py`'s `compute_baseline`, then wires both into `millpy-implement.py`'s three `verify` frontmatter read sites via `parse_verify_field` (batch 3). `cwd_override` always takes precedence over the existing `git_root`/`project_root` fallback when set, and is `None` whenever `parse_verify_field` returns a `None` cwd (plain-string `verify:`, today's format) — this is what keeps the #554-pinned flat-layout test green with zero behavior change.
+Fixes #604 for the implementer path: threads a `cwd_override` (per-batch/module-wide verify subprocess) and `cwd_override_relative` (baseline temp-worktree verify subprocess) through `_implementer_common.py`'s verify-gate chain and `_verify_baseline.py`'s `compute_baseline`, then wires both into `millpy-implement.py`'s three `verify` frontmatter read sites via `parse_verify_field` (batch 3). `cwd_override` always takes precedence over the existing `git_root`/`project_root` fallback when set, and is `None` whenever `parse_verify_field` returns a `None` cwd (plain-string `verify:`, today's format) — this is what keeps the #554-pinned flat-layout test green with zero behavior change. Depends on batch 1 in addition to batch 3: both batches edit `plugins/mill/scripts/_implementer_common.py` (batch 1 at the `compute_scope_violations` call sites, this batch at the verify-gate chain) and are otherwise parallel-eligible, so the DAG serializes them to avoid two builders editing the same file concurrently.
 
 ## Cards
 
