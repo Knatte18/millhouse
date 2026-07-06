@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-html-unescape-agent-output
+phase: approved-dispatch-and-skill-doc-fixes
 slug: mill-go-dispatch-and-skill-gaps
 branch: hanf/mill-go-dispatch-and-skill-gaps
 plan: _mill/plan
@@ -23,6 +23,7 @@ plan-fix-r1  '2026-07-06T17:20:17Z'
 planned  '2026-07-06T17:20:41Z'
 implementing  '2026-07-06T17:22:50Z'
 approved-html-unescape-agent-output  '2026-07-06T17:36:08Z'
+approved-dispatch-and-skill-doc-fixes  '2026-07-06T17:39:13Z'
 ```
 
 ## Batches
@@ -35,7 +36,8 @@ batches:
     start_sha: f1edc733ef034a6a2e2eb87330d0456077fb8431
     commit_sha: f62a373ed5754ecd6f2dca8e0af33e9ce098a9bd
   - name: dispatch-and-skill-doc-fixes
-    state: running
+    state: approved
     implementer_session: 50a90afd-e4f7-48d0-ab6d-178ea046228e
     start_sha: 13892e26095a61fb6f0dc7ea19364a1a80aa499b
+    commit_sha: 7bdbe8c3b780181e80c90a508ab657d899c71f48
 ```
