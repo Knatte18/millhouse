@@ -542,6 +542,7 @@ def _run_verify_gate(
     verify_cmd: str | None,
     *,
     git_root: Path | None = None,
+    cwd_override: Path | None = None,
 ) -> dict | None:
     """
     Run a verify command and return a stuck dict on failure, None on success or when verify_cmd is None.
@@ -567,6 +568,11 @@ def _run_verify_gate(
         verify_cmd: Verify command to run (e.g., "pytest tests/ -q"), or None.
         git_root: Optional git root directory used as cwd for the verify subprocess.
             When None, falls back to project_root.
+        cwd_override: Explicit verify cwd resolved by parse_verify_field from a
+            `{cwd: hub|git_root, command: ...}` mapping. When set, it always wins
+            over both git_root and project_root -- it reflects an author's explicit
+            choice, whereas git_root/project_root are positional fallbacks for the
+            plain-string verify format.
 
     Returns:
         A stuck dict {"status": "stuck", "stuck_type": "verify", "reason": <tail>} on
@@ -575,9 +581,14 @@ def _run_verify_gate(
     if verify_cmd is None:
         return None
 
-    # Use git_root as the subprocess cwd when provided; fall back to project_root
-    # for flat layouts where the two paths are identical.
-    effective_cwd = git_root if git_root is not None else project_root
+    # cwd_override (an explicit verify: {cwd: ...} resolution) always wins. Absent
+    # that, fall back to git_root, and absent that, to project_root -- the original
+    # flat-layout behavior where the two paths are identical.
+    effective_cwd = (
+        cwd_override
+        if cwd_override is not None
+        else (git_root if git_root is not None else project_root)
+    )
 
     try:
         # Plan verify commands use POSIX syntax (e.g. the mandated "PYTHONPATH= "
@@ -646,6 +657,8 @@ def _run_verify_gates(
     *,
     git_root: Path | None = None,
     module_verify_baseline: str | None = None,
+    cwd_override: Path | None = None,
+    module_wide_cwd_override: Path | None = None,
 ) -> dict | None:
     """
     Run the batch-level verify gate and, if it passes, the module-wide verify gate.
@@ -688,13 +701,21 @@ def _run_verify_gates(
             baseline state for the module-wide gate. When "pre-existing-failures",
             the module-wide gate is skipped entirely regardless of
             module_wide_verify_cmd. Defaults to None (run strictly, as before).
+        cwd_override: Explicit verify cwd for the batch-level gate, resolved by
+            parse_verify_field. Takes precedence over git_root/project_root; see
+            _run_verify_gate.
+        module_wide_cwd_override: Explicit verify cwd for the module-wide gate,
+            resolved by parse_verify_field. Takes precedence over
+            git_root/project_root; see _run_verify_gate.
 
     Returns:
         A stuck dict on the first gate that fails, or None when both pass (or are
         skipped).
     """
     # Run the batch-level gate first; propagate any failure immediately.
-    batch_result = _run_verify_gate(project_root, verify_cmd, git_root=git_root)
+    batch_result = _run_verify_gate(
+        project_root, verify_cmd, git_root=git_root, cwd_override=cwd_override
+    )
     if batch_result is not None:
         return batch_result
 
@@ -711,7 +732,10 @@ def _run_verify_gates(
         return None
 
     module_result = _run_verify_gate(
-        project_root, module_wide_verify_cmd, git_root=git_root
+        project_root,
+        module_wide_verify_cmd,
+        git_root=git_root,
+        cwd_override=module_wide_cwd_override,
     )
     if module_result is not None:
         # Prefix the reason so the operator can identify the source of the failure.
@@ -812,6 +836,8 @@ def finalize_from_output(
     status_path: Path | None = None,
     nits_scope: str | None = None,
     git_root: Path | None = None,
+    cwd_override: Path | None = None,
+    module_wide_cwd_override: Path | None = None,
 ) -> int:
     """Read sub-agent output and finalize.
 
@@ -840,6 +866,12 @@ def finalize_from_output(
             When None, falls back to project_root. Pass the actual git root in nested
             layouts so the verify command runs from the repo root rather than the hub
             sub-directory, preventing spurious MSB1009 / path-not-found errors.
+        cwd_override: Explicit batch-level verify cwd resolved by parse_verify_field
+            from a `{cwd: hub|git_root, command: ...}` mapping. Takes precedence over
+            git_root/project_root; forwarded unchanged to _forward_output.
+        module_wide_cwd_override: Explicit module-wide verify cwd resolved by
+            parse_verify_field. Takes precedence over git_root/project_root;
+            forwarded unchanged to _forward_output.
     """
     output = Path(agent_output_path).read_text(encoding="utf-8")
     return _forward_output(
@@ -858,6 +890,8 @@ def finalize_from_output(
         status_path=status_path,
         nits_scope=nits_scope,
         git_root=git_root,
+        cwd_override=cwd_override,
+        module_wide_cwd_override=module_wide_cwd_override,
     )
 
 
@@ -909,6 +943,8 @@ def _forward_output(
     status_path: Path | None = None,
     nits_scope: str | None = None,
     git_root: Path | None = None,
+    cwd_override: Path | None = None,
+    module_wide_cwd_override: Path | None = None,
 ) -> int:
     """Extract the last JSON object containing a 'status' key from output.
 
@@ -938,6 +974,11 @@ def _forward_output(
     When git_root is not None, it is used as the cwd for verify subprocesses instead of
     project_root. This corrects verify behavior in nested layouts where the plan's verify
     command must run from the git root rather than the hub sub-directory.
+    cwd_override and module_wide_cwd_override are explicit verify cwds resolved by
+    parse_verify_field from a `{cwd: hub|git_root, command: ...}` mapping; each always
+    takes precedence over git_root/project_root for its respective gate (batch-level
+    and module-wide, respectively). Both default to None, which preserves the
+    git_root/project_root fallback behavior for today's plain-string verify format.
     """
     parsed = _extract_status_json(output)
     if parsed is not None:
@@ -955,6 +996,8 @@ def _forward_output(
                 module_wide_verify_cmd,
                 git_root=git_root,
                 module_verify_baseline=module_verify_baseline,
+                cwd_override=cwd_override,
+                module_wide_cwd_override=module_wide_cwd_override,
             )
             if gate_result is not None:
                 # Reclassify a verify failure that is really a partial-batch stop
@@ -1142,6 +1185,8 @@ def _forward_output(
                                         module_wide_verify_cmd,
                                         git_root=git_root,
                                         module_verify_baseline=module_verify_baseline,
+                                        cwd_override=cwd_override,
+                                        module_wide_cwd_override=module_wide_cwd_override,
                                     )
                                     if gate_result is not None:
                                         gate_result = _reclassify_verify_failure(
@@ -1236,6 +1281,8 @@ def _forward_output(
                         module_wide_verify_cmd,
                         git_root=git_root,
                         module_verify_baseline=module_verify_baseline,
+                        cwd_override=cwd_override,
+                        module_wide_cwd_override=module_wide_cwd_override,
                     )
                     if gate_result is not None:
                         gate_result = _reclassify_verify_failure(
@@ -1326,6 +1373,8 @@ def _forward_output(
                         module_wide_verify_cmd,
                         git_root=git_root,
                         module_verify_baseline=module_verify_baseline,
+                        cwd_override=cwd_override,
+                        module_wide_cwd_override=module_wide_cwd_override,
                     )
                     if gate_result is not None:
                         gate_result = _reclassify_verify_failure(
