@@ -35,5 +35,7 @@ batches:
     start_sha: f1edc733ef034a6a2e2eb87330d0456077fb8431
     commit_sha: f62a373ed5754ecd6f2dca8e0af33e9ce098a9bd
   - name: dispatch-and-skill-doc-fixes
-    state: pending
+    state: running
+    implementer_session: 50a90afd-e4f7-48d0-ab6d-178ea046228e
+    start_sha: 13892e26095a61fb6f0dc7ea19364a1a80aa499b
 ```
