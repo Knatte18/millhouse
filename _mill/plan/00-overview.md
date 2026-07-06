@@ -3,7 +3,7 @@
 ```yaml
 task: "Fix agent-mode dispatch gaps: HTML escaping, missing flags, timeouts, and stale skill content"
 slug: "mill-go-dispatch-and-skill-gaps"
-approved: false
+approved: true
 started: "20260706-171306"
 parent: "main"
 root: ""
