@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-approved
+phase: done
 slug: mill-go-dispatch-and-skill-gaps
 branch: hanf/mill-go-dispatch-and-skill-gaps
 plan: _mill/plan
@@ -26,6 +26,7 @@ approved-html-unescape-agent-output  '2026-07-06T17:36:08Z'
 approved-dispatch-and-skill-doc-fixes  '2026-07-06T17:39:13Z'
 holistic-reviewing  '2026-07-06T17:39:44Z'
 holistic-approved  '2026-07-06T17:42:38Z'
+done  '2026-07-06T17:43:09Z'
 ```
 
 ## Batches
