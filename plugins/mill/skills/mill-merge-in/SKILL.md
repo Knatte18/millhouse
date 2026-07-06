@@ -18,7 +18,14 @@ Merge the parent branch into the current branch. Creates a rollback checkpoint f
 ### 1. No-op check
 
 ```bash
-git log HEAD..<parent-branch> --oneline
+git fetch origin "<parent-branch>" 2>/dev/null
+if git rev-parse --verify --quiet "refs/remotes/origin/<parent-branch>" >/dev/null 2>&1 \
+   && git merge-base --is-ancestor "<parent-branch>" "origin/<parent-branch>"; then
+  MERGE_REF="origin/<parent-branch>"
+else
+  MERGE_REF="<parent-branch>"
+fi
+git log HEAD.."$MERGE_REF" --oneline
 ```
 
 If output is empty → report "Nothing to merge — already up to date." and exit 0 immediately. No checkpoint, no verify, no codeguide-update. This is the fast-path contract that lets `mill-merge` call this skill cheaply as a first step.
@@ -44,8 +51,17 @@ Record the checkpoint branch name. On any failure after this point, roll back vi
 ### 3. Merge parent into current
 
 ```bash
-git merge <parent-branch>
+git fetch origin "<parent-branch>" 2>/dev/null
+if git rev-parse --verify --quiet "refs/remotes/origin/<parent-branch>" >/dev/null 2>&1 \
+   && git merge-base --is-ancestor "<parent-branch>" "origin/<parent-branch>"; then
+  MERGE_REF="origin/<parent-branch>"
+else
+  MERGE_REF="<parent-branch>"
+fi
+git merge "$MERGE_REF"
 ```
+
+Re-running the resolution here (rather than reusing step 1's value) is required, not optional: each fenced bash block in this skill runs as a separate tool call, so no shell variable survives from step 1. Re-deriving from `refs/remotes/origin/<parent-branch>` is safe because that ref is durable on disk after step 1's fetch — exactly like the existing `$CHK` checkpoint ref — so it reproduces the identical `MERGE_REF` deterministically.
 
 **On conflicts** — iterate `git diff --name-only --diff-filter=U`:
 
@@ -131,4 +147,4 @@ Do **not** delete the checkpoint. Surface the failure to the caller. If called f
 
 ## No-op guarantee
 
-When step 1 returns empty, this skill touches nothing: no checkpoint, no verify, no codeguide-update, no output side effects. `mill-merge` depends on this — it calls `mill-merge-in` first every time, expecting a cheap exit when there is nothing to sync.
+When step 1 returns empty, this skill touches no task state: no checkpoint, no verify, no codeguide-update, no output side effects. Step 1 always performs a network fetch (`git fetch origin <parent-branch>`) even when the result is a no-op; this is a deliberate cost of correctly detecting a stale local ref and is the only exception to the "touches no task state" guarantee. `mill-merge` depends on this — it calls `mill-merge-in` first every time, expecting a cheap exit when there is nothing to sync.
