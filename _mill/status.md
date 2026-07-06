@@ -34,7 +34,9 @@ batches:
     start_sha: d0b8ac2b43e19165e632628205382450ae78e145
     commit_sha: 5fb274e6241ae97147c88f8d2db232b1a2cae062
   - name: worktree-asarray
-    state: pending
+    state: running
+    implementer_session: a64acd16-f4e1-40a9-bc86-94b101d35ae4
+    start_sha: b6684746b3e1b8b3ba836dcf6567076d6eb4a062
   - name: status-path-typeerror
     state: pending
 ```
