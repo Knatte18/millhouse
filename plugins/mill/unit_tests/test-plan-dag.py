@@ -18,6 +18,7 @@ from _plan_dag import (  # noqa: E402
     PlanDAGError,
     extract_batch_index,
     iter_batch_verifies,
+    parse_verify_field,
     topo_order,
     validate,
 )
@@ -143,6 +144,11 @@ def test_topo_order() -> None:
 def test_iter_batch_verifies() -> None:
     with tempfile.TemporaryDirectory() as td:
         plan_dir = Path(td)
+        # Flat layout fixture: hub_root == git_root == plan_dir's parent,
+        # matching the Shared Decision that flat-layout output must stay
+        # byte-identical after the verify-cwd mapping form was introduced.
+        hub_root = plan_dir.parent
+        git_root = plan_dir.parent
         (plan_dir / "00-overview.md").write_text(
             "```yaml\n"
             "batches:\n"
@@ -170,12 +176,76 @@ def test_iter_batch_verifies() -> None:
             "# Batch: c\n\n```yaml\nbatch: c\nverify: null\n```\n",
             encoding="utf-8",
         )
-        commands = iter_batch_verifies(plan_dir)
+        commands = iter_batch_verifies(plan_dir, hub_root, git_root)
         assert commands == [
-            ("a", "pytest tests/a -q"),
-            ("b", "pytest tests/b -q"),
+            ("a", "pytest tests/a -q", None),
+            ("b", "pytest tests/b -q", None),
         ], commands
-        print(f"PASS: iter_batch_verifies yields non-null verifies in DAG order -- {commands}")
+        print(
+            f"PASS: iter_batch_verifies yields non-null verifies in DAG order -- {commands}"
+        )
+
+
+def test_parse_verify_field() -> None:
+    hub_root = Path("/hub")
+    git_root = Path("/hub/nested/git")
+
+    # Plain-string form: no cwd opinion -- caller keeps its existing default.
+    command, cwd = parse_verify_field(
+        {"verify": "pytest tests/a -q"}, hub_root, git_root
+    )
+    assert (command, cwd) == ("pytest tests/a -q", None), (command, cwd)
+
+    # Mapping form with cwd: hub -- resolves to hub_root.
+    command, cwd = parse_verify_field(
+        {"verify": {"cwd": "hub", "command": "pytest tests/a -q"}}, hub_root, git_root
+    )
+    assert (command, cwd) == ("pytest tests/a -q", hub_root), (command, cwd)
+
+    # Mapping form with cwd: git_root -- resolves to git_root.
+    command, cwd = parse_verify_field(
+        {"verify": {"cwd": "git_root", "command": "pytest tests/a -q"}},
+        hub_root,
+        git_root,
+    )
+    assert (command, cwd) == ("pytest tests/a -q", git_root), (command, cwd)
+
+    # Unrecognized cwd value raises ValueError (fail loud, no silent default).
+    try:
+        parse_verify_field(
+            {"verify": {"cwd": "somewhere", "command": "pytest tests/a -q"}},
+            hub_root,
+            git_root,
+        )
+        raise AssertionError("unrecognized cwd was not rejected")
+    except ValueError as exc:
+        assert "cwd" in str(exc), str(exc)
+
+    # Missing cwd on the mapping form also raises -- mapping form has no
+    # implicit default, unlike the plain-string form.
+    try:
+        parse_verify_field(
+            {"verify": {"command": "pytest tests/a -q"}}, hub_root, git_root
+        )
+        raise AssertionError("missing cwd was not rejected")
+    except ValueError as exc:
+        assert "cwd" in str(exc), str(exc)
+
+    # Mapping missing `command:` raises ValueError.
+    try:
+        parse_verify_field({"verify": {"cwd": "hub"}}, hub_root, git_root)
+        raise AssertionError("missing command was not rejected")
+    except ValueError as exc:
+        assert "command" in str(exc), str(exc)
+
+    # Absent, None, and empty/whitespace-only verify all normalize to
+    # (None, None) -- "nothing to run".
+    assert parse_verify_field({}, hub_root, git_root) == (None, None)
+    assert parse_verify_field({"verify": None}, hub_root, git_root) == (None, None)
+    assert parse_verify_field({"verify": ""}, hub_root, git_root) == (None, None)
+    assert parse_verify_field({"verify": "   "}, hub_root, git_root) == (None, None)
+
+    print("PASS: parse_verify_field covers string, mapping, and error cases")
 
 
 def test_good_plan_with_numbers_accepted() -> None:
@@ -289,6 +359,7 @@ def main() -> int:
         test_missing_block_rejected()
         test_topo_order()
         test_iter_batch_verifies()
+        test_parse_verify_field()
         test_good_plan_with_numbers_accepted()
         test_number_dep_unknown_rejected()
         test_number_dep_duplicate_rejected()
