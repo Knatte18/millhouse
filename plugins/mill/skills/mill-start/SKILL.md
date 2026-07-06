@@ -42,6 +42,8 @@ Operator-driven entries keep the existing bare format (`- **Q:** … **A:** …`
 
 ## Entry
 
+**Step 0: Load `mill:conversation`.** Load the `mill:conversation` skill via the Skill tool, unconditionally, immediately — before any other Entry step or phase. Every operator-facing prompt in Phase: Discuss and Phase: Discussion Review depends on `mill:conversation`'s numbered-options rule (banning `AskUserQuestion`) being active, so it must be loaded before the first prompt can be built.
+
 1. Resolve the wiki path via `_paths.resolve_wiki_path(_paths.resolve_git_root())`.
    `signature: _paths.resolve_git_root(start: Path | None = None) -> Path`
    `signature: _paths.resolve_wiki_path(git_toplevel: Path) -> Path`
