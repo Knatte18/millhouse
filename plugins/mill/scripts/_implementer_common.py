@@ -1074,7 +1074,7 @@ def _forward_output(
         )
         if result.returncode == 0:
             parsed["commit_sha"] = result.stdout.strip()
-            violations = _cleanliness.compute_scope_violations(project_root)
+            violations = _cleanliness.compute_scope_violations(project_root, git_root)
             if violations:
                 parsed["scope_violations"] = violations
             print(json.dumps(parsed))
@@ -1173,7 +1173,7 @@ def _forward_output(
                                         return 0
                                     # Emit success
                                     violations = _cleanliness.compute_scope_violations(
-                                        project_root
+                                        project_root, git_root
                                     )
                                     if violations:
                                         print(
@@ -1261,7 +1261,7 @@ def _forward_output(
                         _attach_commit_sha(_comp, project_root)
                         print(json.dumps(_comp))
                         return 0
-                    violations = _cleanliness.compute_scope_violations(project_root)
+                    violations = _cleanliness.compute_scope_violations(project_root, git_root)
                     if violations:
                         print(
                             json.dumps(
@@ -1405,7 +1405,7 @@ def _forward_output(
             )
             return 0
     # No API error markers found; emit the default logic sentinel
-    violations = _cleanliness.compute_scope_violations(project_root)
+    violations = _cleanliness.compute_scope_violations(project_root, git_root)
     result = {
         "status": "stuck",
         "stuck_type": "logic",
