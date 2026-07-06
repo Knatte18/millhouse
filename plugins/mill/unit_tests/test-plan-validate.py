@@ -11,6 +11,9 @@ Check coverage:
   check 5 — parallel-modifies-overlap
   check 6 — reads-not-backtick-path (incl. none-exempt)
   check 8 — all-files-touched-mismatch
+  verify cwd mapping form — verify-not-isolated/verify-full-suite accept the
+                            {cwd, command} mapping and the overview-level
+                            verify:; verify-malformed-cwd; verify-mixed-cwd
   meta    — sorted output, missing overview
 """
 from __future__ import annotations
@@ -33,11 +36,16 @@ def _make_overview(
     batches: list[dict],
     *,
     all_files_touched: list[str] | None = None,
+    overview_verify: str | None = None,
 ) -> str:
     """Return 00-overview.md text.
 
     Each batch dict: {name, file, number (optional), depends-on (optional, default [])}.
     all_files_touched: optional list of path strings for the section.
+    overview_verify: optional module-wide verify: command string written into
+        the overview's own frontmatter block (first fenced-yaml block, above
+        the Batch Index). Omitted entirely when None, matching the plain
+        real-world overview shape where module-wide verify: is optional.
     """
     entries = []
     for b in batches:
@@ -54,10 +62,13 @@ def _make_overview(
             + "    verify: null"
         )
     batch_list = "\n".join(entries)
+    frontmatter = 'task: test\nslug: test-slug\nroot: ""\n'
+    if overview_verify is not None:
+        frontmatter += f"verify: {overview_verify}\n"
     text = (
         "# Overview\n\n"
         "```yaml\n"
-        'task: test\nslug: test-slug\nroot: ""\n'
+        f"{frontmatter}"
         "```\n\n"
         "## Batch Index\n\n"
         "```yaml\n"
@@ -2332,6 +2343,408 @@ def test_check_verify_full_suite_run_all_py_with_only_is_ok() -> int:
 
 
 # ---------------------------------------------------------------------------
+# verify cwd mapping form (Cards 23-25 / #604)
+# ---------------------------------------------------------------------------
+
+def test_check_verify_not_isolated_mapping_form_dirty() -> int:
+    """Dirty: verify authored as a {cwd, command} mapping, command missing PYTHONPATH= -> one verify-not-isolated error naming the extracted command (not the mapping)."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "pyproject.toml").write_text("[project]\n", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = (
+            "# Batch: alpha\n\n"
+            "```yaml\n"
+            "task: test\nbatch: alpha\ncards: 1\ndepends-on: []\n"
+            "verify:\n  cwd: hub\n  command: uv run test.py\n"
+            "```\n\n"
+            "## Cards\n\n"
+            "### Card 1: card 1\n\n"
+            "- **Context:** none\n"
+            "- **Edits:** none\n"
+            "- **Creates:** none\n"
+            "- **Deletes:** none\n"
+            "- **Moves:** none\n"
+            "- **Requirements:**\n  See scope.\n"
+            "- **Commit:** feat(alpha): card 1\n"
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        verify_errs = [e for e in result if e["check"] == "verify-not-isolated"]
+        try:
+            assert len(verify_errs) == 1, f"expected 1 error, got {len(verify_errs)}: {verify_errs}"
+            e = verify_errs[0]
+            assert e["batch"] == "01-alpha", f"wrong batch: {e['batch']!r}"
+            assert e["path"] == "uv run test.py", (
+                f"expected the extracted command string, got: {e['path']!r}"
+            )
+            print("PASS test_check_verify_not_isolated_mapping_form_dirty")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_check_verify_not_isolated_mapping_form_dirty: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_check_verify_not_isolated_mapping_form_clean() -> int:
+    """Clean: verify authored as a {cwd, command} mapping, command has PYTHONPATH= prefix -> no verify-not-isolated error."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "pyproject.toml").write_text("[project]\n", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = (
+            "# Batch: alpha\n\n"
+            "```yaml\n"
+            "task: test\nbatch: alpha\ncards: 1\ndepends-on: []\n"
+            "verify:\n  cwd: git_root\n  command: PYTHONPATH= uv run test.py\n"
+            "```\n\n"
+            "## Cards\n\n"
+            "### Card 1: card 1\n\n"
+            "- **Context:** none\n"
+            "- **Edits:** none\n"
+            "- **Creates:** none\n"
+            "- **Deletes:** none\n"
+            "- **Moves:** none\n"
+            "- **Requirements:**\n  See scope.\n"
+            "- **Commit:** feat(alpha): card 1\n"
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        verify_errs = [e for e in result if e["check"] == "verify-not-isolated"]
+        if verify_errs:
+            print(f"FAIL test_check_verify_not_isolated_mapping_form_clean: unexpected: {verify_errs}",
+                  file=sys.stderr)
+            return 1
+        print("PASS test_check_verify_not_isolated_mapping_form_clean")
+        return 0
+
+
+def test_check_verify_full_suite_mapping_form_dirty() -> int:
+    """Dirty: verify authored as a {cwd, command} mapping, command invokes run-all.py without a filter -> one verify-full-suite error naming the extracted command."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = (
+            "# Batch: alpha\n\n"
+            "```yaml\n"
+            "task: test\nbatch: alpha\ncards: 1\ndepends-on: []\n"
+            "verify:\n  cwd: git_root\n"
+            "  command: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py\n"
+            "```\n\n"
+            "## Cards\n\n"
+            "### Card 1: card 1\n\n"
+            "- **Context:** none\n"
+            "- **Edits:** none\n"
+            "- **Creates:** none\n"
+            "- **Deletes:** none\n"
+            "- **Moves:** none\n"
+            "- **Requirements:**\n  See scope.\n"
+            "- **Commit:** feat(alpha): card 1\n"
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_full_suite = [e for e in result if e["check"] == "verify-full-suite"]
+        try:
+            assert len(check_full_suite) == 1, f"expected 1 error, got {len(check_full_suite)}: {check_full_suite}"
+            e = check_full_suite[0]
+            assert e["batch"] == "01-alpha", f"wrong batch: {e['batch']!r}"
+            assert e["path"] == (
+                "PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py"
+            ), f"expected the extracted command string, got: {e['path']!r}"
+            print("PASS test_check_verify_full_suite_mapping_form_dirty")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_check_verify_full_suite_mapping_form_dirty: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_check_verify_not_isolated_overview_level_dirty() -> int:
+    """Dirty: overview's own module-wide verify: is missing PYTHONPATH= -> one verify-not-isolated error with batch=None (previously silently ignored)."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "pyproject.toml").write_text("[project]\n", encoding="utf-8")
+
+        overview = _make_overview(
+            [{"name": "alpha", "file": "01-alpha.md"}],
+            overview_verify="uv run --project plugins/mill python overview_test.py",
+        )
+        batch = _make_batch_file("alpha")  # per-batch verify: null, clean
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        verify_errs = [e for e in result if e["check"] == "verify-not-isolated"]
+        try:
+            assert len(verify_errs) == 1, f"expected 1 error, got {len(verify_errs)}: {verify_errs}"
+            e = verify_errs[0]
+            assert e["batch"] is None, f"overview-level finding should have batch=None, got: {e['batch']!r}"
+            assert e["path"] == "uv run --project plugins/mill python overview_test.py", (
+                f"wrong path: {e['path']!r}"
+            )
+            print("PASS test_check_verify_not_isolated_overview_level_dirty")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_check_verify_not_isolated_overview_level_dirty: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_check_verify_full_suite_overview_level_dirty() -> int:
+    """Dirty: overview's own module-wide verify: invokes run-all.py without a filter -> one verify-full-suite error with batch=None (previously silently ignored)."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        overview = _make_overview(
+            [{"name": "alpha", "file": "01-alpha.md"}],
+            overview_verify=(
+                "PYTHONPATH= uv run --project plugins/mill python "
+                "plugins/mill/unit_tests/run-all.py"
+            ),
+        )
+        batch = _make_batch_file("alpha")  # per-batch verify: null, clean
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_full_suite = [e for e in result if e["check"] == "verify-full-suite"]
+        try:
+            assert len(check_full_suite) == 1, f"expected 1 error, got {len(check_full_suite)}: {check_full_suite}"
+            assert check_full_suite[0]["batch"] is None, (
+                f"overview-level finding should have batch=None, got: {check_full_suite[0]['batch']!r}"
+            )
+            print("PASS test_check_verify_full_suite_overview_level_dirty")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_check_verify_full_suite_overview_level_dirty: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_check_verify_malformed_cwd_missing_command_dirty() -> int:
+    """Dirty: verify mapping missing `command:` -> one verify-malformed-cwd finding, no uncaught exception, and no duplicate verify-not-isolated/verify-full-suite finding for the same batch."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = (
+            "# Batch: alpha\n\n"
+            "```yaml\n"
+            "task: test\nbatch: alpha\ncards: 1\ndepends-on: []\n"
+            "verify:\n  cwd: hub\n"
+            "```\n\n"
+            "## Cards\n\n"
+            "### Card 1: card 1\n\n"
+            "- **Context:** none\n"
+            "- **Edits:** none\n"
+            "- **Creates:** none\n"
+            "- **Deletes:** none\n"
+            "- **Moves:** none\n"
+            "- **Requirements:**\n  See scope.\n"
+            "- **Commit:** feat(alpha): card 1\n"
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        # run() must not raise -- the ValueError parse_verify_field raises for
+        # a malformed mapping is caught and surfaced as a finding.
+        result = _plan_validate.run(plan_dir, project_root)
+        malformed = [e for e in result if e["check"] == "verify-malformed-cwd"]
+        duplicate = [e for e in result if e["check"] in ("verify-not-isolated", "verify-full-suite")]
+        try:
+            assert len(malformed) == 1, f"expected 1 verify-malformed-cwd finding, got {len(malformed)}: {malformed}"
+            e = malformed[0]
+            assert e["batch"] == "01-alpha", f"wrong batch: {e['batch']!r}"
+            assert "command" in e["message"], f"message should quote the ValueError text: {e['message']!r}"
+            assert len(duplicate) == 0, (
+                f"expected no duplicate verify-not-isolated/verify-full-suite finding, got: {duplicate}"
+            )
+            print("PASS test_check_verify_malformed_cwd_missing_command_dirty")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_check_verify_malformed_cwd_missing_command_dirty: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_check_verify_malformed_cwd_bad_cwd_value_dirty() -> int:
+    """Dirty: verify mapping has an unrecognized cwd value -> one verify-malformed-cwd finding quoting the bad value."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = (
+            "# Batch: alpha\n\n"
+            "```yaml\n"
+            "task: test\nbatch: alpha\ncards: 1\ndepends-on: []\n"
+            "verify:\n  cwd: nowhere\n  command: uv run test.py\n"
+            "```\n\n"
+            "## Cards\n\n"
+            "### Card 1: card 1\n\n"
+            "- **Context:** none\n"
+            "- **Edits:** none\n"
+            "- **Creates:** none\n"
+            "- **Deletes:** none\n"
+            "- **Moves:** none\n"
+            "- **Requirements:**\n  See scope.\n"
+            "- **Commit:** feat(alpha): card 1\n"
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        malformed = [e for e in result if e["check"] == "verify-malformed-cwd"]
+        try:
+            assert len(malformed) == 1, f"expected 1 verify-malformed-cwd finding, got {len(malformed)}: {malformed}"
+            e = malformed[0]
+            assert e["batch"] == "01-alpha", f"wrong batch: {e['batch']!r}"
+            assert "nowhere" in e["message"], f"message should quote the bad cwd value: {e['message']!r}"
+            print("PASS test_check_verify_malformed_cwd_bad_cwd_value_dirty")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_check_verify_malformed_cwd_bad_cwd_value_dirty: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_check_verify_mixed_cwd_dirty() -> int:
+    """Dirty: two batches resolve verify cwd to different roots (hub vs git_root) -> a verify-mixed-cwd finding naming both conflicting batches."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        git_root = tmp / "repo"
+        project_root = git_root / "hub"
+        plan_dir = tmp / "plan"
+        project_root.mkdir(parents=True)
+
+        overview = _make_overview([
+            {"name": "alpha", "file": "01-alpha.md", "depends-on": []},
+            {"name": "beta",  "file": "02-beta.md",  "depends-on": []},
+        ])
+        batch_a = (
+            "# Batch: alpha\n\n"
+            "```yaml\n"
+            "task: test\nbatch: alpha\ncards: 1\ndepends-on: []\n"
+            "verify:\n  cwd: hub\n  command: uv run test-a.py\n"
+            "```\n\n"
+            "## Cards\n\n"
+            "### Card 1: card 1\n\n"
+            "- **Context:** none\n"
+            "- **Edits:** none\n"
+            "- **Creates:** none\n"
+            "- **Deletes:** none\n"
+            "- **Moves:** none\n"
+            "- **Requirements:**\n  See scope.\n"
+            "- **Commit:** feat(alpha): card 1\n"
+        )
+        batch_b = (
+            "# Batch: beta\n\n"
+            "```yaml\n"
+            "task: test\nbatch: beta\ncards: 1\ndepends-on: []\n"
+            "verify:\n  cwd: git_root\n  command: uv run test-b.py\n"
+            "```\n\n"
+            "## Cards\n\n"
+            "### Card 1: card 1\n\n"
+            "- **Context:** none\n"
+            "- **Edits:** none\n"
+            "- **Creates:** none\n"
+            "- **Deletes:** none\n"
+            "- **Moves:** none\n"
+            "- **Requirements:**\n  See scope.\n"
+            "- **Commit:** feat(beta): card 1\n"
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_a), ("02-beta.md", batch_b)])
+
+        result = _plan_validate.run(plan_dir, project_root, git_root=git_root)
+        mixed = [e for e in result if e["check"] == "verify-mixed-cwd"]
+        try:
+            assert len(mixed) == 2, f"expected 2 verify-mixed-cwd findings, got {len(mixed)}: {mixed}"
+            batches = {e["batch"] for e in mixed}
+            assert batches == {"alpha", "beta"}, f"wrong batch names: {batches}"
+            for e in mixed:
+                assert "alpha" in e["message"] and "beta" in e["message"], (
+                    f"message should name both conflicting batches: {e['message']!r}"
+                )
+            print("PASS test_check_verify_mixed_cwd_dirty")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_check_verify_mixed_cwd_dirty: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_check_verify_mixed_cwd_single_cwd_clean() -> int:
+    """Clean: two batches both resolve verify cwd to the same root -> no verify-mixed-cwd finding."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        git_root = tmp / "repo"
+        project_root = git_root / "hub"
+        plan_dir = tmp / "plan"
+        project_root.mkdir(parents=True)
+
+        overview = _make_overview([
+            {"name": "alpha", "file": "01-alpha.md", "depends-on": []},
+            {"name": "beta",  "file": "02-beta.md",  "depends-on": []},
+        ])
+        batch_a = (
+            "# Batch: alpha\n\n"
+            "```yaml\n"
+            "task: test\nbatch: alpha\ncards: 1\ndepends-on: []\n"
+            "verify:\n  cwd: hub\n  command: uv run test-a.py\n"
+            "```\n\n"
+            "## Cards\n\n"
+            "### Card 1: card 1\n\n"
+            "- **Context:** none\n"
+            "- **Edits:** none\n"
+            "- **Creates:** none\n"
+            "- **Deletes:** none\n"
+            "- **Moves:** none\n"
+            "- **Requirements:**\n  See scope.\n"
+            "- **Commit:** feat(alpha): card 1\n"
+        )
+        batch_b = (
+            "# Batch: beta\n\n"
+            "```yaml\n"
+            "task: test\nbatch: beta\ncards: 1\ndepends-on: []\n"
+            "verify:\n  cwd: hub\n  command: uv run test-b.py\n"
+            "```\n\n"
+            "## Cards\n\n"
+            "### Card 1: card 1\n\n"
+            "- **Context:** none\n"
+            "- **Edits:** none\n"
+            "- **Creates:** none\n"
+            "- **Deletes:** none\n"
+            "- **Moves:** none\n"
+            "- **Requirements:**\n  See scope.\n"
+            "- **Commit:** feat(beta): card 1\n"
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_a), ("02-beta.md", batch_b)])
+
+        result = _plan_validate.run(plan_dir, project_root, git_root=git_root)
+        mixed = [e for e in result if e["check"] == "verify-mixed-cwd"]
+        if mixed:
+            print(f"FAIL test_check_verify_mixed_cwd_single_cwd_clean: unexpected: {mixed}", file=sys.stderr)
+            return 1
+        print("PASS test_check_verify_mixed_cwd_single_cwd_clean")
+        return 0
+
+
+# ---------------------------------------------------------------------------
 # git_root threading tests (Card 5)
 # ---------------------------------------------------------------------------
 
@@ -3126,6 +3539,16 @@ def main() -> int:
         test_check_verify_full_suite_run_all_py_without_filter_is_error,
         test_check_verify_full_suite_run_all_py_with_k_filter_is_ok,
         test_check_verify_full_suite_run_all_py_with_only_is_ok,
+        # verify cwd mapping form (Cards 23-25 / #604)
+        test_check_verify_not_isolated_mapping_form_dirty,
+        test_check_verify_not_isolated_mapping_form_clean,
+        test_check_verify_full_suite_mapping_form_dirty,
+        test_check_verify_not_isolated_overview_level_dirty,
+        test_check_verify_full_suite_overview_level_dirty,
+        test_check_verify_malformed_cwd_missing_command_dirty,
+        test_check_verify_malformed_cwd_bad_cwd_value_dirty,
+        test_check_verify_mixed_cwd_dirty,
+        test_check_verify_mixed_cwd_single_cwd_clean,
         # git_root threading (Card 5 / #471)
         test_git_root_threading_with_subfolder_cwd_clean,
         test_git_root_threading_without_git_root_default_none_documents_required,
