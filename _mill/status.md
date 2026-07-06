@@ -29,7 +29,9 @@ implementing  '2026-07-06T17:22:50Z'
 ```yaml
 batches:
   - name: html-unescape-agent-output
-    state: pending
+    state: running
+    implementer_session: 15c287e6-809b-47f7-bf78-267f8a14eadb
+    start_sha: f1edc733ef034a6a2e2eb87330d0456077fb8431
   - name: dispatch-and-skill-doc-fixes
     state: pending
 ```
