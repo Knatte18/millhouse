@@ -49,6 +49,30 @@ _TOKEN_RE = re.compile(r"<([A-Z][A-Z0-9_]*)>")
 _YAML_FENCE = "```yaml"
 _TIMELINE_FENCE = "```text"
 
+
+def _require_path(status_path, fn_name: str) -> None:
+    """Guard against callers passing a plain ``str`` instead of a ``Path``.
+
+    Every public function below reads ``status_path`` with
+    ``Path.read_text`` / ``Path.exists``; a plain ``str`` has neither
+    method, so without this guard the failure surfaces as a bare,
+    unexplained ``AttributeError`` deep inside this module (GitHub
+    #597). Raising a clear ``TypeError`` naming both the offending
+    function and the expected type lets a caller fix the bug at the
+    call site instead of debugging this module's internals.
+
+    Args:
+        status_path: The value passed by the caller in place of a
+            ``pathlib.Path``.
+        fn_name: The public function's own name, as a literal string,
+            used verbatim in the error message.
+    """
+    if not isinstance(status_path, Path):
+        raise TypeError(
+            f"{fn_name}: status_path must be a pathlib.Path, got {type(status_path).__name__}"
+        )
+
+
 _TEMPLATE_PATH = (
     Path(__file__).resolve().parent.parent
     / "templates"
@@ -169,6 +193,7 @@ def read(status_path: Path) -> dict:
         ValueError: the file is missing, the yaml block is
             unterminated, or yaml parsing fails.
     """
+    _require_path(status_path, "read")
     if not status_path.exists():
         raise ValueError(f"status file not found: {status_path}")
     text = status_path.read_text(encoding="utf-8")
@@ -207,6 +232,7 @@ def update_field(status_path: Path, key: str, value: str) -> None:
         ValueError: the file lacks a yaml block, the block is
             unterminated, or ``key`` is not present at a scalar row.
     """
+    _require_path(status_path, "update_field")
     text = status_path.read_text(encoding="utf-8")
     lines = text.splitlines(keepends=True)
     start, end = _split_fences(text, _YAML_FENCE)
@@ -254,6 +280,7 @@ def set_blocked(status_path: Path, reason: str, *, timestamp: str) -> None:
         ValueError: yaml block is missing / malformed, ``phase:`` key is
             absent from the yaml block, or the timeline block is absent.
     """
+    _require_path(status_path, "set_blocked")
     text = status_path.read_text(encoding="utf-8")
     lines = text.splitlines(keepends=True)
 
@@ -323,6 +350,7 @@ def get_module_verify_baseline(status_path: Path) -> str | None:
         ValueError: the file lacks a yaml block, the block is
             unterminated, or the block fails to parse as yaml.
     """
+    _require_path(status_path, "get_module_verify_baseline")
     data = read(status_path)
     return data.get("module_verify_baseline")
 
@@ -351,6 +379,7 @@ def set_module_verify_baseline(status_path: Path, value: str) -> None:
             file lacks a yaml block, the block is unterminated, or the
             block has no ``parent:`` row to insert after.
     """
+    _require_path(status_path, "set_module_verify_baseline")
     if value not in _MODULE_VERIFY_BASELINE_STATES:
         raise ValueError(
             f"Unknown module_verify_baseline value {value!r}; "
@@ -398,6 +427,7 @@ def clear_module_verify_baseline(status_path: Path) -> None:
         ValueError: the file lacks a yaml block, or the block is
             unterminated.
     """
+    _require_path(status_path, "clear_module_verify_baseline")
     text = status_path.read_text(encoding="utf-8")
     lines = text.splitlines(keepends=True)
     start, end = _split_fences(text, _YAML_FENCE)
@@ -444,6 +474,7 @@ def append_phase(status_path: Path, phase: str, timestamp: str) -> None:
         ValueError: yaml block is missing / malformed, ``phase:`` key is
             absent from the yaml block, or the timeline block is absent.
     """
+    _require_path(status_path, "append_phase")
     text = status_path.read_text(encoding="utf-8")
     lines = text.splitlines(keepends=True)
 
@@ -640,6 +671,7 @@ def read_batches(status_path: Path) -> list[dict]:
     malformed — that is a corruption we want to surface, not silently
     mask with an empty list.
     """
+    _require_path(status_path, "read_batches")
     text = status_path.read_text(encoding="utf-8")
     lines = text.splitlines()
     located = _find_batches_block(lines)
@@ -666,6 +698,7 @@ def read_status(status_path: Path) -> dict:
         ValueError: file missing, no yaml block, yaml parse error,
             missing ``phase:`` key, or ``read_batches`` raises ValueError.
     """
+    _require_path(status_path, "read_status")
     if not status_path.exists():
         raise ValueError(f"status file not found: {status_path}")
     text = status_path.read_text(encoding="utf-8")
@@ -740,6 +773,7 @@ def read_full(status_path: Path) -> dict:
         ValueError: file missing, yaml block missing/unterminated/malformed,
             or timeline block missing/unterminated.
     """
+    _require_path(status_path, "read_full")
     if not status_path.exists():
         raise ValueError(f"status file not found: {status_path}")
     text = status_path.read_text(encoding="utf-8")
@@ -784,6 +818,7 @@ def read_parent_branch(status_path: Path) -> str | None:
     Returns:
         The parent branch name string, or ``None`` on any parse failure.
     """
+    _require_path(status_path, "read_parent_branch")
     try:
         full = read_full(status_path)
         value = full["yaml"].get("parent")
@@ -817,6 +852,7 @@ def phase_entry_timestamp(
     Raises:
         ValueError: if the timeline block is malformed (unterminated).
     """
+    _require_path(status_path, "phase_entry_timestamp")
     try:
         full = read_full(status_path)
     except ValueError:
@@ -860,6 +896,7 @@ def read_slug(status_path: Path) -> str:
     Returns:
         The slug string.
     """
+    _require_path(status_path, "read_slug")
     try:
         full = read_full(status_path)
         value = full["yaml"].get("slug")
@@ -885,6 +922,7 @@ def read_branch(status_path: Path, *, cfg: dict, slug: str) -> str:
     Returns:
         The branch name string.
     """
+    _require_path(status_path, "read_branch")
     import sys as _sys
 
     try:
@@ -913,6 +951,7 @@ def init_batches(status_path: Path, names: list[str]) -> None:
     started. Callers resuming an existing run must not pass through
     this function.
     """
+    _require_path(status_path, "init_batches")
     batches = [{"name": n, "state": "pending"} for n in names]
     _write_batches(status_path, batches)
 
@@ -930,6 +969,7 @@ def set_batch_field(
     ``ValueError`` so typos fail loudly rather than silently writing a
     field no consumer reads.
     """
+    _require_path(status_path, "set_batch_field")
     if key not in _BATCH_ALLOWED_KEYS:
         raise ValueError(
             f"Unknown batch field {key!r}; allowed: {sorted(_BATCH_ALLOWED_KEYS)}"
@@ -961,6 +1001,7 @@ def set_batch_fields(
     ``read_batches → mutate all → _write_batches`` cycle ensures no
     partial write is possible.
     """
+    _require_path(status_path, "set_batch_fields")
     for key in fields:
         if key not in _BATCH_ALLOWED_KEYS:
             raise ValueError(

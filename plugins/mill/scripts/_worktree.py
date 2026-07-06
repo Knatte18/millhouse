@@ -365,7 +365,7 @@ def kill_stale_holders(
                         "-Command",
                         "Get-CimInstance Win32_Process | "
                         "Select-Object ProcessId, CommandLine | "
-                        "ConvertTo-Json -AsArray",
+                        "ConvertTo-Json",
                     ],
                 )
                 if result.returncode != 0:

@@ -138,6 +138,35 @@ def main() -> int:
             assert "discussed  '2026-04-22T15:00:00Z'" in contents, "timeline row not appended"
             print("PASS: append_phase updates phase yaml + appends timeline row")
 
+        # --- str-input-raises-TypeError regression tests (GitHub #597) ---
+        # A plain str passed where status_path (a pathlib.Path) is expected
+        # must raise a clear TypeError naming the offending function, not a
+        # bare AttributeError deep inside the module's read_text/exists calls.
+
+        try:
+            append_phase("some/str/path", "phase", "2026-01-01T00:00:00Z")
+            raise AssertionError("expected TypeError from append_phase with str status_path")
+        except TypeError as exc:
+            assert "append_phase" in str(exc), f"function name missing from message: {exc}"
+            assert "pathlib.Path" in str(exc), f"'pathlib.Path' missing from message: {exc}"
+        print("PASS: append_phase raises TypeError on str status_path")
+
+        try:
+            update_field("some/str/path", "key", "value")
+            raise AssertionError("expected TypeError from update_field with str status_path")
+        except TypeError as exc:
+            assert "update_field" in str(exc), f"function name missing from message: {exc}"
+            assert "pathlib.Path" in str(exc), f"'pathlib.Path' missing from message: {exc}"
+        print("PASS: update_field raises TypeError on str status_path")
+
+        try:
+            set_blocked("some/str/path", "reason", timestamp="2026-01-01T00:00:00Z")
+            raise AssertionError("expected TypeError from set_blocked with str status_path")
+        except TypeError as exc:
+            assert "set_blocked" in str(exc), f"function name missing from message: {exc}"
+            assert "pathlib.Path" in str(exc), f"'pathlib.Path' missing from message: {exc}"
+        print("PASS: set_blocked raises TypeError on str status_path")
+
         # Colon in phase round-trip — separate file to avoid contaminating shared sp.
         with tempfile.TemporaryDirectory() as tmp:
             sp_weird = Path(tmp) / "status.md"
