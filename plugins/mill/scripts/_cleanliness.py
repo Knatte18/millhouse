@@ -240,13 +240,15 @@ def _is_go_main_artifact(worktree: Path, path: str) -> bool:
     return False
 
 
-def clean_ephemeral_scope_violations(worktree: Path) -> tuple[list[str], list[str]]:
+def clean_ephemeral_scope_violations(hub_root: Path, git_root: Path) -> tuple[list[str], list[str]]:
     """
     Auto-clean ephemeral build artifacts from scope violations.
 
-    Calls compute_scope_violations to get untracked out-of-scope files, partitions
-    them by a conservative allowlist, removes allowlisted files from disk (swallowing
-    already-gone errors), and returns the removed and blocking paths.
+    Calls compute_scope_violations(hub_root, git_root) to get untracked
+    out-of-scope files (already rebased to hub-relative paths -- see that
+    function's docstring for the nested-hub-layout rebasing rule), partitions
+    them by a conservative allowlist, removes allowlisted files from disk
+    (swallowing already-gone errors), and returns the removed and blocking paths.
 
     Allowlist rules applied in order:
     1. Basename ends with '.exe': blanket Go compiled binary or test executable
@@ -264,7 +266,11 @@ def clean_ephemeral_scope_violations(worktree: Path) -> tuple[list[str], list[st
     Non-allowlisted violations are reported as blocking without touching disk.
 
     Args:
-        worktree: Path to the task worktree.
+        hub_root: Path to the mill hub root (the project root resolved via
+            _paths.resolve_hub_path()). Hub-relative violation paths returned by
+            compute_scope_violations are joined onto this root for disk removal.
+        git_root: Path to the git repository toplevel resolved via
+            _paths.resolve_git_root(). Equal to hub_root in a flat layout.
 
     Returns:
         A tuple of (removed_paths, blocking_paths) where:
@@ -273,7 +279,7 @@ def clean_ephemeral_scope_violations(worktree: Path) -> tuple[list[str], list[st
     """
     import os
 
-    violations = compute_scope_violations(worktree)
+    violations = compute_scope_violations(hub_root, git_root)
 
     removed_paths = []
     blocking_paths = []
@@ -286,7 +292,7 @@ def clean_ephemeral_scope_violations(worktree: Path) -> tuple[list[str], list[st
             is_allowlisted = True
         # Rule 2: extensionless name -- only allowlisted when a package-main source dir matches
         elif "." not in basename:
-            is_allowlisted = _is_go_main_artifact(worktree, violation)
+            is_allowlisted = _is_go_main_artifact(hub_root, violation)
         # Rule 3: fixed allowlist for other known extension-bearing build artifact types
         else:
             is_allowlisted = (
@@ -298,7 +304,7 @@ def clean_ephemeral_scope_violations(worktree: Path) -> tuple[list[str], list[st
 
         if is_allowlisted:
             # Try to remove the file from disk, swallowing errors for already-gone files
-            file_path = worktree / violation
+            file_path = hub_root / violation
             try:
                 os.remove(file_path)
                 removed_paths.append(violation)
