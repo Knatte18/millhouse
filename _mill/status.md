@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussion-fix-r5
+phase: discussed
 slug: nested-layout-fixes
 branch: hanf/nested-layout-fixes
 plan: null
@@ -16,4 +16,5 @@ task_description: |
 ```text
 discussing  '2026-07-06T16:55:44Z'
 discussion-fix-r5  '2026-07-06T17:29:44Z'
+discussed  '2026-07-06T17:29:59Z'
 ```
