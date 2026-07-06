@@ -444,6 +444,76 @@ def test_review_discussion_finalize_no_prepare() -> bool:
             return True
 
 
+def test_review_discussion_finalize_unescapes_html_entities() -> bool:
+    """
+    Test that review-discussion finalize unescapes HTML entities in raw_text (fixes #605).
+
+    Mirrors test_review_code_finalize_unescapes_html_entities: the comparison is
+    made as the function's return value -- not a bare assert inside a try/except
+    that swallows AssertionError -- so a mismatch genuinely surfaces as a failing
+    test rather than being absorbed by a broad exception handler.
+    """
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        output_file = project_root / "output.txt"
+        output_file.write_text("Q&amp;A send &lt;guid&gt;", encoding="utf-8")
+
+        mock_modules = {
+            "_agent_dispatch": unittest.mock.MagicMock(),
+            "_paths": unittest.mock.MagicMock(),
+            "_reviewers": unittest.mock.MagicMock(),
+            "_review_cli": unittest.mock.MagicMock(),
+            "_review_common": unittest.mock.MagicMock(),
+            "_review_discussion": unittest.mock.MagicMock(),
+        }
+
+        mock_modules["_paths"].resolve_git_root = unittest.mock.MagicMock(return_value=project_root)
+        mock_modules["_paths"].resolve_hub_path = unittest.mock.MagicMock(return_value=project_root)
+        mock_modules["_paths"].resolve_wiki_path = unittest.mock.MagicMock(return_value=project_root)
+        mock_modules["_paths"].resolve_task_path = unittest.mock.MagicMock(
+            return_value=project_root / "_mill/briefs"
+        )
+
+        mock_modules["_review_common"].load_config = unittest.mock.MagicMock(
+            return_value={"paths": {"reviews_dir": "_mill/reviews/"}}
+        )
+        mock_modules["_review_common"].find_active_slug = unittest.mock.MagicMock(return_value="test-slug")
+        mock_modules["_review_common"].resolve_path = unittest.mock.MagicMock(return_value="_mill/reviews/")
+
+        mock_modules["_reviewers"].load = unittest.mock.MagicMock(return_value={})
+        mock_modules["_reviewers"].validate_role_refs = unittest.mock.MagicMock()
+
+        mock_result = unittest.mock.MagicMock()
+        mock_result.to_dict = unittest.mock.MagicMock(
+            return_value={
+                "type": "discussion",
+                "round": 1,
+                "verdict": "APPROVE",
+                "blocking_count": 0,
+                "nit_count": 0,
+                "reviews": [],
+            }
+        )
+        mock_modules["_review_discussion"].finalize = unittest.mock.MagicMock(return_value=mock_result)
+
+        with unittest.mock.patch.dict(sys.modules, mock_modules):
+            spec_discussion = importlib.util.spec_from_file_location(
+                "millpy_review_discussion_test_unescape",
+                HUB / "plugins/mill/scripts/millpy-review-discussion.py",
+            )
+            millpy_review_discussion = importlib.util.module_from_spec(spec_discussion)
+            sys.modules["millpy_review_discussion_test_unescape"] = millpy_review_discussion
+            spec_discussion.loader.exec_module(millpy_review_discussion)
+
+            millpy_review_discussion.main(
+                ["--stage", "finalize", "--round", "1", "--agent-output", str(output_file)]
+            )
+
+        # raw_text is the third positional argument to finalize(cfg, slug, raw_text, round_n=..., ...).
+        # Read it outside any exception-swallowing block so a mismatch surfaces as False.
+        return mock_modules["_review_discussion"].finalize.call_args.args[2] == "Q&A send <guid>"
+
+
 def test_review_discussion_finalize_round_required() -> bool:
     """
     Test that review-discussion finalize auto-discovers the round when --round is absent.
@@ -588,6 +658,16 @@ def main() -> int:
             errors += 1
     except Exception as exc:
         print(f"FAIL: test 5 ({exc})", file=sys.stderr)
+        errors += 1
+
+    try:
+        if test_review_discussion_finalize_unescapes_html_entities():
+            print("PASS: review-discussion finalize unescapes HTML entities in raw_text (#605)")
+        else:
+            print("FAIL: review-discussion finalize did not unescape HTML entities", file=sys.stderr)
+            errors += 1
+    except Exception as exc:
+        print(f"FAIL: test 5b ({exc})", file=sys.stderr)
         errors += 1
 
     try:
