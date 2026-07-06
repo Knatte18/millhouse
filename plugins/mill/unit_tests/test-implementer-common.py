@@ -1699,6 +1699,41 @@ def main() -> int:
             print(f"FAIL: Test B ({exc})", file=sys.stderr)
             errors += 1
 
+    # Test B2: cwd_override takes precedence over both git_root and project_root (#604)
+    # A synthetic cwd_override Path must win as the verify subprocess's cwd even when
+    # both git_root and project_root are also supplied.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        hub_dir = Path(tmpdir) / "hub"
+        repo_dir = Path(tmpdir) / "repo"
+        override_dir = Path(tmpdir) / "override"
+        hub_dir.mkdir()
+        repo_dir.mkdir()
+        override_dir.mkdir()
+        try:
+            with unittest.mock.patch("_implementer_common.subprocess.run") as mock_run:
+                mock_result = unittest.mock.MagicMock()
+                mock_result.returncode = 0
+                mock_result.stdout = ""
+                mock_result.stderr = ""
+                mock_run.return_value = mock_result
+
+                # Both git_root and cwd_override supplied; cwd_override must win.
+                result = _run_verify_gate(
+                    hub_dir, "echo ok", git_root=repo_dir, cwd_override=override_dir
+                )
+                assert result is None, f"Test B2: expected None (pass), got {result}"
+                call_kwargs = mock_run.call_args[1]
+                assert call_kwargs.get("cwd") == override_dir, (
+                    f"Test B2: expected cwd=override_dir, got {call_kwargs.get('cwd')}"
+                )
+
+            print(
+                "PASS: Test B2 - cwd_override takes precedence over git_root and project_root (#604)"
+            )
+        except Exception as exc:
+            print(f"FAIL: Test B2 ({exc})", file=sys.stderr)
+            errors += 1
+
     # Test C: dotnet build-server shutdown fires regardless of verify exit code (#556)
     # Sub-case C1: verify exits 0 (success) -> cleanup still fires.
     # Sub-case C2: verify exits 1 (failure) -> cleanup still fires.
