@@ -72,6 +72,8 @@ def compute_baseline(
     git_root: Path,
     parent_branch: str,
     module_wide_verify_cmd: str,
+    *,
+    cwd_override_relative: Path | None = None,
 ) -> str:
     """
     Compute whether the parent branch's own module-wide verify already fails.
@@ -115,6 +117,16 @@ def compute_baseline(
         module_wide_verify_cmd: The module-wide verify command string to run,
             verbatim, in both the transient worktree and (for the control
             check) the task worktree.
+        cwd_override_relative: Hub-relative path fragment (not an absolute cwd)
+            resolved by `_plan_dag.parse_verify_field` when the overview's
+            `verify:` mapping resolves to `cwd: hub` in a nested-hub-layout
+            repo. When set, both the transient-worktree verify subprocess's
+            cwd and the dependency-junction targets are re-anchored to
+            `tmp_path / cwd_override_relative` -- the temp checkout's
+            equivalent of the real worktree's hub sub-directory -- instead of
+            `tmp_path` (which mirrors `git_root`, not `hub_root`). When None
+            (plain-string `verify:` or a `cwd: git_root` resolution), behavior
+            is unchanged: everything runs at `tmp_path` directly.
 
     Returns:
         The literal string "clean" or "pre-existing-failures".
@@ -146,18 +158,33 @@ def compute_baseline(
             f"{worktree_add_result.stderr.strip()}"
         )
 
+    # The temp checkout at tmp_path mirrors git_root, not hub_root. When the
+    # verify subprocess must run one or more levels below that (cwd: hub in a
+    # nested-hub-layout repo), both the subprocess cwd and the dependency
+    # junctions need to be re-anchored to the equivalent hub sub-directory
+    # inside the temp checkout. Flat-layout behavior (tmp_path directly) is
+    # unchanged when cwd_override_relative is None.
+    effective_tmp_path = (
+        tmp_path / cwd_override_relative if cwd_override_relative is not None else tmp_path
+    )
+
     try:
         for name in _DEPENDENCY_DIR_CANDIDATES:
             src = project_root / name
             if src.exists():
-                _junction.create(src, tmp_path / name)
+                _junction.create(
+                    src,
+                    (tmp_path / cwd_override_relative / name)
+                    if cwd_override_relative is not None
+                    else (tmp_path / name),
+                )
 
-        if _run_verify_in(module_wide_verify_cmd, tmp_path) == 0:
+        if _run_verify_in(module_wide_verify_cmd, effective_tmp_path) == 0:
             return "clean"
 
         # Flakiness-guard retry: a single transient-worktree failure is never
         # trusted on its own.
-        if _run_verify_in(module_wide_verify_cmd, tmp_path) == 0:
+        if _run_verify_in(module_wide_verify_cmd, effective_tmp_path) == 0:
             return "clean"
 
         # Second consecutive transient-worktree failure. Corroborate with a
