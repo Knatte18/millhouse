@@ -62,7 +62,9 @@ batches:
     start_sha: f78319c97d3a59414deef92f4f97391ec60cfba5
     commit_sha: b3760a168d5599290157a9ec32510ee8673d5205
   - name: merge-in-verify-cwd
-    state: pending
+    state: running
+    implementer_session: f9730952-e001-4a04-9fdf-049de845081d
+    start_sha: 3b67aa8e0c5ac22f0614bfbf7a67cd5848d599e2
   - name: mill-plan-authoring-update
     state: pending
   - name: fixer-verify-cwd
