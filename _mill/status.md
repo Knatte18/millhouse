@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-script-fixes
 branch: hanf/mill-script-fixes
 plan: _mill/plan
@@ -20,4 +20,17 @@ discussed  '2026-07-06T17:16:07Z'
 planning  '2026-07-06T17:20:14Z'
 plan-fix-r1  '2026-07-06T17:24:20Z'
 planned  '2026-07-06T17:24:38Z'
+implementing  '2026-07-06T17:26:47Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: mill-merge-in-stale-ref
+    state: pending
+  - name: worktree-asarray
+    state: pending
+  - name: status-path-typeerror
+    state: pending
 ```
