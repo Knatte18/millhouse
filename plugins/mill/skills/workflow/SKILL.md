@@ -39,6 +39,8 @@ Wiki mutations go through `_client` calls (`set_phase`, `upsert_task`, `merge_ta
 
 2. **Don't write wrapper scripts for orchestration loops the SKILL.md describes inline.** If the SKILL says "for each round N do X, Y, Z", execute X, Y, Z as separate tool calls per round. The user must be able to see and interrupt each round. A script that packages a *transactional* operation (e.g. one implementer-spawn step) is fine because the operation is a unit; a script that packages a *loop* is not, because the loop is the orchestrator's behavior. *Reason preserved from incident #19.*
 
+3. **Don't trust the Skill tool's served content for a SKILL.md this session already edited.** If any prior step in the current session edited a `SKILL.md` file (via `Edit`/`Write` on any `plugins/*/skills/**/SKILL.md`), do not trust the Skill tool's served content for that skill for the rest of the session — `Read` the file directly to get the current on-disk content before following its instructions. Concrete trigger: a batch inside a `mill-go` run edits a `SKILL.md` (e.g. `mill-finalize`, `git-pr`, `mill-merge`, `mill-cleanup`), and a later step in the *same* run invokes that skill via the Skill tool — the Skill tool can serve stale pre-edit content in that case. *Reason preserved from incident #596.*
+
 ---
 
 ## Language Detection
