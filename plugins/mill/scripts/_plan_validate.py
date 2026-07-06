@@ -28,7 +28,10 @@ Checks performed (check keys):
                                in backtick-only format (exempts bare 'none')
     all-files-touched-mismatch — (#10 check 8) Mismatch between overview's
                                All Files Touched section and cards' Edits:/Creates:/Moves: targets
-    verify-not-isolated      — per-batch frontmatter verify: command does not start with PYTHONPATH= reset prefix
+    verify-not-isolated      — per-batch or overview-level verify: command does not start with PYTHONPATH= reset prefix
+    verify-full-suite        — per-batch or overview-level verify: invokes run-all.py without a -k/--only filter
+    verify-malformed-cwd     — verify: mapping fails to parse via _plan_dag.parse_verify_field (bad cwd or missing command)
+    verify-mixed-cwd         — batches in the plan resolve the {cwd, command} mapping form to more than one distinct cwd
     wiki-config-mutation     — batch Edits:/Creates: contains mill-config.yaml (self-applying layout risk)
     move-format              — Moves: sub-bullet does not match the `src` -> `dst` grammar
     move-redundant           — a path is both a Move endpoint and in Creates:/Deletes: of the same batch
@@ -43,6 +46,7 @@ import re
 import yaml
 from pathlib import Path
 
+import _plan_dag
 from _plan_dag import PlanDAGError, extract_batch_index, resolve_deps_as_names
 from _review_common import (
     _load_root_from_overview,
@@ -1211,51 +1215,86 @@ def _check_all_files_touched_mismatch(
 # verify-not-isolated check
 # ---------------------------------------------------------------------------
 
-def _check_verify_not_isolated(batch_files: list[Path], project_root: Path) -> list[dict]:
+def _check_verify_not_isolated(
+    batch_files: list[Path],
+    project_root: Path,
+    overview_path: Path,
+) -> list[dict]:
+    """
+    Flag verify: commands that skip the PYTHONPATH= isolation reset.
+
+    Applies to every batch file's frontmatter plus the overview's own
+    module-wide ``verify:`` (previously batch-file-only, missing the
+    overview-level command entirely). ``verify:`` may be authored as a plain
+    string or as a ``{cwd, command}`` mapping; both forms are normalized via
+    ``_plan_dag.parse_verify_field`` (both roots passed as ``project_root``
+    because only the extracted command string is needed here, not the
+    resolved cwd). A malformed mapping raises ``ValueError`` from the
+    normalizer -- this function silently skips that batch/overview because
+    ``_check_verify_malformed_cwd`` is the sole reporter for that finding;
+    duplicating it here would double-report the same authoring bug.
+
+    Error dict shape: ``{check, batch, card, path, message}``. Overview-level
+    findings use ``batch=None``, matching the convention already used by
+    ``_check_all_files_touched_mismatch`` for overview-scoped errors.
+
+    Args:
+        batch_files: Sorted list of batch file paths to validate.
+        project_root: Root of the project; also doubles as the hub_root
+            argument to ``parse_verify_field`` since only the command string
+            is needed, not the resolved cwd.
+        overview_path: Path to the plan's ``00-overview.md``, whose own
+            frontmatter ``verify:`` is checked alongside the per-batch loop.
+
+    Returns:
+        List of error dicts, one per non-compliant verify command.
+    """
+    # Python-project detection is a one-time lookup shared across every
+    # batch and the overview -- markers live at the project root or in the
+    # plugins/mill/ subdirectory used by this repo's own dogfood layout.
+    is_python_project = (
+        (project_root / "pyproject.toml").exists()
+        or (project_root / "setup.py").exists()
+        or (project_root / "setup.cfg").exists()
+        or (project_root / "plugins" / "mill" / "pyproject.toml").exists()
+    )
+
+    def _check_frontmatter(frontmatter: dict, batch_label: str | None) -> dict | None:
+        try:
+            command, _cwd = _plan_dag.parse_verify_field(frontmatter, project_root, project_root)
+        except ValueError:
+            # _check_verify_malformed_cwd is the sole reporter for this.
+            return None
+        if command is None:
+            return None
+        # Only require the PYTHONPATH= prefix for Python projects; native
+        # test runners (go test, dotnet test, ...) have no such isolation
+        # concern.
+        if is_python_project and not command.startswith("PYTHONPATH="):
+            return {
+                "check": "verify-not-isolated",
+                "batch": batch_label,
+                "card": None,
+                "path": command,
+                "message": "verify command missing PYTHONPATH= prefix",
+            }
+        return None
+
     errors: list[dict] = []
     for batch_path in batch_files:
-        text = batch_path.read_text(encoding="utf-8")
-        lines = text.splitlines()
-        start_idx = None
-        end_idx = None
-        for i, line in enumerate(lines):
-            if line.strip() == "```yaml":
-                start_idx = i
-            elif start_idx is not None and line.strip() == "```":
-                end_idx = i
-                break
-        if start_idx is None or end_idx is None:
-            continue
-        yaml_text = "\n".join(lines[start_idx + 1:end_idx])
-        try:
-            parsed = yaml.safe_load(yaml_text) or {}
-        except Exception:
-            continue
-        verify = parsed.get("verify")
-        if verify is None or not isinstance(verify, str):
-            continue
-        verify_stripped = verify.strip()
-        if not verify_stripped:
-            continue
-
-        # Check if this is a Python project by looking for markers at the project root
-        # or in plugins/mill/ subdirectory.
-        is_python_project = (
-            (project_root / "pyproject.toml").exists()
-            or (project_root / "setup.py").exists()
-            or (project_root / "setup.cfg").exists()
-            or (project_root / "plugins" / "mill" / "pyproject.toml").exists()
+        finding = _check_frontmatter(
+            _plan_dag._read_batch_frontmatter(batch_path), batch_path.stem
         )
+        if finding is not None:
+            errors.append(finding)
 
-        # Only require PYTHONPATH= prefix for Python projects.
-        if is_python_project and not verify_stripped.startswith("PYTHONPATH="):
-            errors.append({
-                "check": "verify-not-isolated",
-                "batch": batch_path.stem,
-                "card": None,
-                "path": verify,
-                "message": "verify command missing PYTHONPATH= prefix",
-            })
+    if overview_path.exists():
+        finding = _check_frontmatter(
+            _plan_dag._read_batch_frontmatter(overview_path), None
+        )
+        if finding is not None:
+            errors.append(finding)
+
     return errors
 
 
@@ -1263,40 +1302,233 @@ def _check_verify_not_isolated(batch_files: list[Path], project_root: Path) -> l
 # verify-full-suite check
 # ---------------------------------------------------------------------------
 
-def _check_verify_full_suite(batch_files: list[Path]) -> list[dict]:
+def _check_verify_full_suite(
+    batch_files: list[Path],
+    project_root: Path,
+    overview_path: Path,
+) -> list[dict]:
+    """
+    Flag verify: commands that invoke run-all.py without a scoping filter.
+
+    Applies to every batch file's frontmatter plus the overview's own
+    module-wide ``verify:``, mirroring ``_check_verify_not_isolated``'s
+    string-vs-mapping handling and malformed-mapping silence (see that
+    function's docstring for the shared rationale).
+
+    Error dict shape: ``{check, batch, card, path, message}``. Overview-level
+    findings use ``batch=None``.
+
+    Args:
+        batch_files: Sorted list of batch file paths to validate.
+        project_root: Root of the project; also doubles as the hub_root
+            argument to ``parse_verify_field`` since only the command string
+            is needed, not the resolved cwd.
+        overview_path: Path to the plan's ``00-overview.md``, whose own
+            frontmatter ``verify:`` is checked alongside the per-batch loop.
+
+    Returns:
+        List of error dicts, one per unscoped run-all.py invocation.
+    """
+    def _check_frontmatter(frontmatter: dict, batch_label: str | None) -> dict | None:
+        try:
+            command, _cwd = _plan_dag.parse_verify_field(frontmatter, project_root, project_root)
+        except ValueError:
+            # _check_verify_malformed_cwd is the sole reporter for this.
+            return None
+        if command is None:
+            return None
+        if "run-all.py" in command and "-k " not in command and "--only " not in command:
+            return {
+                "check": "verify-full-suite",
+                "batch": batch_label,
+                "card": None,
+                "path": command,
+                "message": (
+                    "verify command invokes run-all.py without a filter (-k pattern); "
+                    "use '-k <pattern>' or '--only <files>' to scope the run"
+                ),
+            }
+        return None
+
     errors: list[dict] = []
     for batch_path in batch_files:
-        text = batch_path.read_text(encoding="utf-8")
-        lines = text.splitlines()
-        start_idx = None
-        end_idx = None
-        for i, line in enumerate(lines):
-            if line.strip() == "```yaml":
-                start_idx = i
-            elif start_idx is not None and line.strip() == "```":
-                end_idx = i
-                break
-        if start_idx is None or end_idx is None:
-            continue
-        yaml_text = "\n".join(lines[start_idx + 1:end_idx])
+        finding = _check_frontmatter(
+            _plan_dag._read_batch_frontmatter(batch_path), batch_path.stem
+        )
+        if finding is not None:
+            errors.append(finding)
+
+    if overview_path.exists():
+        finding = _check_frontmatter(
+            _plan_dag._read_batch_frontmatter(overview_path), None
+        )
+        if finding is not None:
+            errors.append(finding)
+
+    return errors
+
+
+# ---------------------------------------------------------------------------
+# verify-malformed-cwd check
+# ---------------------------------------------------------------------------
+
+def _check_verify_malformed_cwd(
+    batch_files: list[Path],
+    overview_path: Path,
+    project_root: Path,
+) -> list[dict]:
+    """
+    Flag verify: fields that fail to parse via _plan_dag.parse_verify_field.
+
+    The verify cwd field schema (Shared Decision, plan 00-overview.md) allows
+    ``verify:`` to be a plain string or a ``{cwd: hub|git_root, command: ...}``
+    mapping. ``parse_verify_field`` raises ``ValueError`` when the mapping is
+    missing ``command``, names an unrecognized ``cwd``, or ``verify`` is some
+    other type entirely -- a plan-authoring bug that must surface as a normal
+    finding rather than an uncaught exception crashing the validator.
+
+    This is the **sole** reporter for malformed-mapping findings:
+    ``_check_verify_not_isolated`` and ``_check_verify_full_suite`` catch the
+    same ``ValueError`` and silently skip the batch/overview, so one
+    malformed mapping produces exactly one finding here, never a duplicate.
+
+    Error dict shape: ``{check, batch, card, path, message}``. Overview-level
+    findings use ``batch=None`` and ``path`` set to the overview path.
+
+    Args:
+        batch_files: Sorted list of batch file paths to validate.
+        overview_path: Path to the plan's ``00-overview.md``, whose own
+            frontmatter ``verify:`` is checked alongside the per-batch loop.
+        project_root: Root of the project; also doubles as the hub_root
+            argument to ``parse_verify_field`` since only whether parsing
+            raises matters here, not the resolved cwd.
+
+    Returns:
+        List of error dicts, one per malformed verify: field.
+    """
+    errors: list[dict] = []
+
+    def _check_frontmatter(frontmatter: dict, batch_label: str | None, path: Path) -> None:
         try:
-            parsed = yaml.safe_load(yaml_text) or {}
-        except Exception:
-            continue
-        verify = parsed.get("verify")
-        if verify is None or not isinstance(verify, str):
-            continue
-        verify_stripped = verify.strip()
-        if not verify_stripped:
-            continue
-        if "run-all.py" in verify_stripped and "-k " not in verify_stripped and "--only " not in verify_stripped:
+            _plan_dag.parse_verify_field(frontmatter, project_root, project_root)
+        except ValueError as exc:
             errors.append({
-                "check": "verify-full-suite",
-                "batch": batch_path.stem,
+                "check": "verify-malformed-cwd",
+                "batch": batch_label,
                 "card": None,
-                "path": verify,
-                "message": "verify command invokes run-all.py without a filter (-k pattern); use '-k <pattern>' or '--only <files>' to scope the run",
+                "path": str(path),
+                "message": str(exc),
             })
+
+    for batch_path in batch_files:
+        _check_frontmatter(
+            _plan_dag._read_batch_frontmatter(batch_path), batch_path.stem, batch_path
+        )
+
+    if overview_path.exists():
+        _check_frontmatter(
+            _plan_dag._read_batch_frontmatter(overview_path), None, overview_path
+        )
+
+    return errors
+
+
+# ---------------------------------------------------------------------------
+# verify-mixed-cwd check
+# ---------------------------------------------------------------------------
+
+def _check_verify_mixed_cwd(
+    batch_files: list[Path],
+    overview_text: str,
+    project_root: Path,
+    git_root: Path,
+) -> list[dict]:
+    """
+    Flag a plan whose batches resolve the verify cwd mapping to more than one root.
+
+    Mirrors ``_plan_dag.iter_batch_verifies``'s DAG-order traversal: every
+    batch whose ``verify:`` is authored as a ``{cwd, command}`` mapping
+    resolves to either ``project_root`` (hub) or ``git_root``. Mixing the two
+    across batches in the same plan is the exact runtime conflict that a
+    holistic-scope verify replay must reject -- a merge-in or fixer stage
+    that concatenates commands from batches pinned to different roots would
+    run at least one of them in the wrong directory. Catching the conflict
+    here, at plan-review time, means a bad plan never reaches that runtime
+    check at all.
+
+    Batches whose ``verify:`` is the plain-string form (cwd ``None``, "use
+    the caller's default") do not participate in the conflict -- only
+    batches with an explicit, resolved cwd can disagree with each other.
+
+    Error dict shape: ``{check, batch, card, path, message}``, one finding
+    per conflicting batch so every offender is individually visible in
+    sorted output.
+
+    Args:
+        batch_files: Sorted list of batch file paths to validate.
+        overview_text: Full text of ``00-overview.md`` (source of the Batch
+            Index DAG used to enumerate batches in dependency order).
+        project_root: The mill project root (hub_root), passed through to
+            ``parse_verify_field`` for ``cwd: hub`` resolution.
+        git_root: The git repository toplevel, passed through to
+            ``parse_verify_field`` for ``cwd: git_root`` resolution.
+
+    Returns:
+        List of error dicts, one per batch participating in a mixed-cwd
+        conflict. Empty when zero or one distinct cwd value appears.
+    """
+    try:
+        batches = extract_batch_index(overview_text)
+    except PlanDAGError:
+        # batch-index-parse (Check 4's sibling) already recorded this failure.
+        return []
+
+    try:
+        order = _plan_dag.topo_order(batches)
+    except PlanDAGError:
+        return []
+
+    file_by_name = {entry["name"]: entry.get("file") for entry in batches}
+    stem_to_path = {bf.stem: bf for bf in batch_files}
+
+    # Resolve each batch's verify cwd. Batches with the plain-string form (or
+    # no verify: at all) resolve to cwd=None and do not participate in the
+    # conflict; a malformed mapping is reported solely by
+    # _check_verify_malformed_cwd, so it is silently skipped here too.
+    cwd_by_batch: dict[str, Path] = {}
+    for name in order:
+        file_ref = file_by_name.get(name)
+        if not file_ref:
+            continue
+        batch_path = stem_to_path.get(Path(file_ref).stem)
+        if batch_path is None:
+            continue
+        frontmatter = _plan_dag._read_batch_frontmatter(batch_path)
+        try:
+            _command, cwd = _plan_dag.parse_verify_field(frontmatter, project_root, git_root)
+        except ValueError:
+            continue
+        if cwd is not None:
+            cwd_by_batch[name] = cwd
+
+    distinct_cwds = set(cwd_by_batch.values())
+    if len(distinct_cwds) <= 1:
+        return []
+
+    conflicting_names = sorted(cwd_by_batch.keys())
+    errors: list[dict] = []
+    for name in conflicting_names:
+        errors.append({
+            "check": "verify-mixed-cwd",
+            "batch": name,
+            "card": None,
+            "path": None,
+            "message": (
+                f"batch '{name}' resolves verify cwd to {cwd_by_batch[name]}, "
+                f"conflicting with other batches in the plan resolving to a "
+                f"different cwd: {conflicting_names}"
+            ),
+        })
     return errors
 
 
@@ -1438,7 +1670,8 @@ def run(
     {check, batch, card, path, message}.
 
     Checks 1, 2, 3, 4, 5, 6, 8 from issue #10, plus wiki-config-mutation,
-    verify-not-isolated, out-of-worktree-target, batch-oversized, and five
+    verify-not-isolated, verify-full-suite, verify-malformed-cwd,
+    verify-mixed-cwd, out-of-worktree-target, batch-oversized, and five
     Move-specific checks (move-format, move-redundant, move-source-missing,
     move-target-collision, move-mechanic-missing).
 
@@ -1477,6 +1710,11 @@ def run(
     # Move sources behave like Deletes (disappear) and targets like Creates (appear).
     # Computed once here and threaded into the checks that need them.
     moves_sources, moves_targets = compute_moves_union(plan_dir)
+    # verify-mixed-cwd needs a concrete git_root to distinguish "cwd: hub" from
+    # "cwd: git_root" resolutions; in a flat layout (no git_root supplied) the
+    # two roots collapse to the same Path, which correctly reports zero
+    # conflicts since there is nothing to mix.
+    effective_git_root = git_root if git_root is not None else project_root
 
     errors: list[dict] = []
 
@@ -1491,8 +1729,10 @@ def run(
     errors.extend(_check_depends_on_batch_mismatch(batch_files, overview_text))
     errors.extend(_check_parallel_modifies_overlap(batch_files, overview_text))
     errors.extend(_check_ref_not_backtick_path(batch_files))
-    errors.extend(_check_verify_not_isolated(batch_files, project_root))
-    errors.extend(_check_verify_full_suite(batch_files))
+    errors.extend(_check_verify_not_isolated(batch_files, project_root, overview_path))
+    errors.extend(_check_verify_full_suite(batch_files, project_root, overview_path))
+    errors.extend(_check_verify_malformed_cwd(batch_files, overview_path, project_root))
+    errors.extend(_check_verify_mixed_cwd(batch_files, overview_text, project_root, effective_git_root))
     errors.extend(_check_wiki_config_mutation(batch_files))
     errors.extend(_check_all_files_touched_mismatch(overview_path, batch_files))
     errors.extend(_check_out_of_worktree_target(batch_files, project_root))
