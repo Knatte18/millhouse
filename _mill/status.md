@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: nits-fixed-holistic
+phase: done
 slug: mill-script-fixes
 branch: hanf/mill-script-fixes
 plan: _mill/plan
@@ -28,6 +28,7 @@ holistic-reviewing  '2026-07-06T17:40:20Z'
 holistic-approved  '2026-07-06T17:43:54Z'
 holistic-fixing  '2026-07-06T17:44:33Z'
 nits-fixed-holistic  '2026-07-06T17:47:28Z'
+done  '2026-07-06T17:48:12Z'
 ```
 
 ## Batches
