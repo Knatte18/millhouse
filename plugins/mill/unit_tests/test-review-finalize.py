@@ -89,6 +89,71 @@ def test_review_code_finalize_no_prepare() -> bool:
             return True
 
 
+def test_review_code_finalize_unescapes_html_entities() -> bool:
+    """
+    Test that review-code finalize unescapes HTML entities in raw_text (fixes #605).
+
+    The harness HTML-escapes the <task-notification> payload uniformly before
+    delivery, so the raw --agent-output file may contain entities like "&amp;"
+    and "&lt;". This verifies the read site unescapes before handing raw_text to
+    _review_code.finalize as its third positional argument.
+
+    The comparison is made as the function's return value -- not a bare assert
+    inside a try/except that swallows AssertionError -- so a mismatch genuinely
+    surfaces as a failing test.
+    """
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        output_file = project_root / "output.txt"
+        output_file.write_text("Q&amp;A send &lt;guid&gt;", encoding="utf-8")
+
+        mock_modules = {
+            "_agent_dispatch": unittest.mock.MagicMock(),
+            "_paths": unittest.mock.MagicMock(),
+            "_reviewers": unittest.mock.MagicMock(),
+            "_review_cli": unittest.mock.MagicMock(),
+            "_review_common": unittest.mock.MagicMock(),
+            "_review_code": unittest.mock.MagicMock(),
+        }
+
+        mock_modules["_paths"].resolve_git_root = unittest.mock.MagicMock(return_value=project_root)
+        mock_modules["_paths"].resolve_hub_path = unittest.mock.MagicMock(return_value=project_root)
+        mock_modules["_paths"].resolve_wiki_path = unittest.mock.MagicMock(return_value=project_root)
+        mock_modules["_paths"].resolve_task_path = unittest.mock.MagicMock(
+            return_value=project_root / "_mill/briefs"
+        )
+
+        mock_modules["_review_common"].load_config = unittest.mock.MagicMock(
+            return_value={"paths": {"reviews_dir": "_mill/reviews/"}}
+        )
+        mock_modules["_review_common"].find_active_slug = unittest.mock.MagicMock(return_value="test-slug")
+        mock_modules["_review_common"].resolve_path = unittest.mock.MagicMock(return_value="_mill/reviews/")
+
+        mock_modules["_reviewers"].load = unittest.mock.MagicMock(return_value={})
+        mock_modules["_reviewers"].validate_role_refs = unittest.mock.MagicMock()
+
+        mock_result = unittest.mock.MagicMock()
+        mock_result.to_dict = unittest.mock.MagicMock(return_value={"status": "success"})
+        mock_modules["_review_code"].finalize = unittest.mock.MagicMock(return_value=mock_result)
+
+        with unittest.mock.patch.dict(sys.modules, mock_modules):
+            spec_code = importlib.util.spec_from_file_location(
+                "millpy_review_code_test_unescape",
+                HUB / "plugins/mill/scripts/millpy-review-code.py",
+            )
+            millpy_review_code = importlib.util.module_from_spec(spec_code)
+            sys.modules["millpy_review_code_test_unescape"] = millpy_review_code
+            spec_code.loader.exec_module(millpy_review_code)
+
+            millpy_review_code.main(
+                ["--stage", "finalize", "--round", "1", "--agent-output", str(output_file)]
+            )
+
+        # raw_text is the third positional argument to finalize(cfg, slug, raw_text, ...).
+        # Read it outside any exception-swallowing block so a mismatch surfaces as False.
+        return mock_modules["_review_code"].finalize.call_args.args[2] == "Q&A send <guid>"
+
+
 def test_review_code_finalize_round_required() -> bool:
     """Test that review-code finalize requires --round."""
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -473,6 +538,16 @@ def main() -> int:
             errors += 1
     except Exception as exc:
         print(f"FAIL: test 1 ({exc})", file=sys.stderr)
+        errors += 1
+
+    try:
+        if test_review_code_finalize_unescapes_html_entities():
+            print("PASS: review-code finalize unescapes HTML entities in raw_text (#605)")
+        else:
+            print("FAIL: review-code finalize did not unescape HTML entities", file=sys.stderr)
+            errors += 1
+    except Exception as exc:
+        print(f"FAIL: test 1b ({exc})", file=sys.stderr)
         errors += 1
 
     try:
