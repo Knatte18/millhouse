@@ -25,7 +25,7 @@ detail, not open items to re-derive).
 - (#605) Unescape HTML entities (`&lt;`, `&gt;`, `&amp;`, etc.) from
   `<task-notification>` payload text before it is parsed as the agent's
   report, at every site that reads a `--agent-output` file back from
-  disk.
+  disk (four sites — see Decisions).
 - (#606) Document in mill-go's `## Agent-mode dispatch` step 6 that
   `millpy-fix.py --stage finalize`'s "same standard arguments" includes
   `--scope`, `--batch-name` (batch scope only), and `--review-file` —
@@ -75,6 +75,11 @@ detail, not open items to re-derive).
     `raw_text = agent_output_path.read_text(encoding="utf-8")`).
   - `plugins/mill/scripts/millpy-review-discussion.py` (around line 142:
     same pattern).
+  - `plugins/mill/scripts/millpy-review-plan.py` (around line 183:
+    `raw_text = agent_output_path.read_text(encoding="utf-8")`, feeding
+    `finalize(...)`) — dispatched via the same Agent-mode
+    prepare→Agent→finalize flow per `plugins/mill/skills/mill-plan/SKILL.md`
+    line 187, so it is equally exposed.
 - Rationale: The corruption happens because the `<task-notification>`
   payload arrives HTML-escaped and is captured verbatim into `.out.md`.
   Fixing it at the read site (in code) is mechanical and testable —
@@ -87,7 +92,7 @@ detail, not open items to re-derive).
   - Manual entity substitution instructed in SKILL.md prose (relies on
     LLM discipline at write time; error-prone, unverifiable, the exact
     failure mode that produced #605).
-  - A new shared helper module/function wrapping `html.unescape` — three
+  - A new shared helper module/function wrapping `html.unescape` — four
     call sites each doing one extra `html.unescape()` call is not enough
     duplication to justify a new abstraction (YAGNI).
   - Unescaping at write time (when the SKILL.md step 5 capture writes
@@ -203,9 +208,11 @@ detail, not open items to re-derive).
 - `finalize_from_output` in `plugins/mill/scripts/_implementer_common.py`
   is the single shared read site for both `millpy-implement.py` and
   `millpy-fix.py` — one fix there covers both implement and fix CLIs.
-  `millpy-review-code.py` and `millpy-review-discussion.py` each have
-  their own independent read site (they don't route through
-  `_implementer_common`), so the fix needs three edits total, not one.
+  `millpy-review-code.py`, `millpy-review-discussion.py`, and
+  `millpy-review-plan.py` each have their own independent read site
+  (they don't route through `_implementer_common`), so the fix needs
+  four edits total, not one: `_implementer_common.py` plus the three
+  standalone review CLIs.
 - `millpy-fix.py`'s argparse validates `--review-file is None` (line
   ~128) unconditionally, before any `--stage` branching — confirms
   #606's premise directly from the CLI source, no behavior change
@@ -228,10 +235,11 @@ detail, not open items to re-derive).
   text (e.g. `Q&amp;A`, `send &lt;guid&gt;`, `Cards 20 &amp; 21`)
   through the `--agent-output` file and asserts the parsed/forwarded
   result contains the unescaped form. If per-CLI unit test files exist
-  for `millpy-review-code.py` / `millpy-review-discussion.py`'s finalize
-  stage, add an equivalent case to each covering their independent read
-  sites. Use in-memory/tempfile fixtures per `mill:testing` conventions
-  — no real git/LLM needed, this is pure text transformation.
+  for `millpy-review-code.py` / `millpy-review-discussion.py` /
+  `millpy-review-plan.py`'s finalize stage, add an equivalent case to
+  each covering their independent read sites. Use in-memory/tempfile
+  fixtures per `mill:testing` conventions — no real git/LLM needed, this
+  is pure text transformation.
 - The other four decisions (#606, #599, #598, #596) are SKILL.md
   prose/documentation edits with no executable surface — verified by
   reading the edited section back and confirming it accurately reflects
