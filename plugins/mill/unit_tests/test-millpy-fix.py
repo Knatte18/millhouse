@@ -1239,6 +1239,239 @@ class TestMillpyFixBriefSizeGuard(unittest.TestCase):
         data = json.loads(out.strip().splitlines()[-1])
         self.assertEqual(data["status"], "success", f"expected success status, got {data}")
 
+    def test_batch_scope_nested_layout_cwd_hub_threads_cwd_override(self):
+        """Nested layout: batch verify: {cwd: hub, command: ...} resolves and threads cwd_override (Card 19)."""
+        nested_hub = self.tmp_path / "hub"
+        nested_hub.mkdir(parents=True, exist_ok=True)
+        _make_fixture(nested_hub)
+
+        batch_file = nested_hub / "_mill" / "plan" / "01-test-batch.md"
+        batch_file.write_text(
+            "```yaml\n"
+            "verify:\n"
+            "  cwd: hub\n"
+            "  command: exit 0\n"
+            "```\n\n"
+            "# Batch: test-batch\n",
+            encoding="utf-8",
+        )
+
+        captured_kwargs = {}
+
+        def mock_forward_output(output, project_root, **kwargs):
+            captured_kwargs.update(kwargs)
+            return 0
+
+        with (
+            unittest.mock.patch.object(
+                millpy_fix._paths, "resolve_hub_path", return_value=nested_hub
+            ),
+            unittest.mock.patch.object(
+                millpy_fix, "_forward_output", side_effect=mock_forward_output
+            ),
+            unittest.mock.patch.object(
+                millpy_fix._implementer_claude, "run",
+                return_value=(
+                    '{"status":"success","commit_sha":"abc","session_id":"fake"}\n',
+                    "fake",
+                ),
+            ),
+        ):
+            rc, out = self._run_main([
+                "--scope", "batch",
+                "--batch-name", "test-batch",
+                "--review-file", str(self.review_file),
+            ])
+
+        self.assertEqual(rc, 0)
+        self.assertEqual(captured_kwargs.get("verify_cmd"), "exit 0")
+        self.assertEqual(captured_kwargs.get("cwd_override"), nested_hub)
+
+    def test_holistic_scope_uniform_cwd_hub_threads_cwd_override(self):
+        """Holistic scope: batches all resolving to cwd: hub join and thread cwd_override (Card 20)."""
+        nested_hub = self.tmp_path / "hub"
+        nested_hub.mkdir(parents=True, exist_ok=True)
+        _make_fixture(nested_hub)
+
+        plan_dir = nested_hub / "_mill" / "plan"
+        overview_text = (
+            "# Plan: Test Task\n\n"
+            "```yaml\n"
+            "task: Test Task\n"
+            "slug: test-slug\n"
+            "approved: true\n"
+            "```\n\n"
+            "## Batch Index\n\n"
+            "```yaml\n"
+            "batches:\n"
+            "  - name: batch1\n"
+            "    file: 01-batch1.md\n"
+            "    depends-on: []\n"
+            "    verify: null\n"
+            "  - name: batch2\n"
+            "    file: 02-batch2.md\n"
+            "    depends-on: [1]\n"
+            "    verify: null\n"
+            "```\n"
+        )
+        (plan_dir / "00-overview.md").write_text(overview_text, encoding="utf-8")
+        (plan_dir / "01-batch1.md").write_text(
+            "```yaml\nverify:\n  cwd: hub\n  command: exit 0\n```\n\n# Batch: batch1\n",
+            encoding="utf-8",
+        )
+        (plan_dir / "02-batch2.md").write_text(
+            "```yaml\nverify:\n  cwd: hub\n  command: exit 0\n```\n\n# Batch: batch2\n",
+            encoding="utf-8",
+        )
+
+        captured_kwargs = {}
+
+        def mock_forward_output(output, project_root, **kwargs):
+            captured_kwargs.update(kwargs)
+            return 0
+
+        with (
+            unittest.mock.patch.object(
+                millpy_fix._paths, "resolve_hub_path", return_value=nested_hub
+            ),
+            unittest.mock.patch.object(
+                millpy_fix, "_forward_output", side_effect=mock_forward_output
+            ),
+            unittest.mock.patch.object(
+                millpy_fix._implementer_claude, "run",
+                return_value=(
+                    '{"status":"success","commit_sha":"abc","session_id":"fake"}\n',
+                    "fake",
+                ),
+            ),
+        ):
+            rc, out = self._run_main([
+                "--scope", "holistic",
+                "--review-file", str(self.review_file),
+            ])
+
+        self.assertEqual(rc, 0)
+        self.assertEqual(captured_kwargs.get("verify_cmd"), "exit 0 && exit 0")
+        self.assertEqual(captured_kwargs.get("cwd_override"), nested_hub)
+
+    def test_holistic_scope_mixed_cwd_raises_value_error_naming_batches(self):
+        """Holistic scope: batches resolving to mixed cwd values raise ValueError naming the conflict (Card 20)."""
+        nested_hub = self.tmp_path / "hub"
+        nested_hub.mkdir(parents=True, exist_ok=True)
+        _make_fixture(nested_hub)
+
+        plan_dir = nested_hub / "_mill" / "plan"
+        overview_text = (
+            "# Plan: Test Task\n\n"
+            "```yaml\n"
+            "task: Test Task\n"
+            "slug: test-slug\n"
+            "approved: true\n"
+            "```\n\n"
+            "## Batch Index\n\n"
+            "```yaml\n"
+            "batches:\n"
+            "  - name: batch1\n"
+            "    file: 01-batch1.md\n"
+            "    depends-on: []\n"
+            "    verify: null\n"
+            "  - name: batch2\n"
+            "    file: 02-batch2.md\n"
+            "    depends-on: [1]\n"
+            "    verify: null\n"
+            "```\n"
+        )
+        (plan_dir / "00-overview.md").write_text(overview_text, encoding="utf-8")
+        # batch1 pins its verify to the (nested) hub; batch2 pins its verify to the
+        # git root -- a single joined shell command cannot honor both cwds at once.
+        (plan_dir / "01-batch1.md").write_text(
+            "```yaml\nverify:\n  cwd: hub\n  command: exit 0\n```\n\n# Batch: batch1\n",
+            encoding="utf-8",
+        )
+        (plan_dir / "02-batch2.md").write_text(
+            "```yaml\nverify:\n  cwd: git_root\n  command: exit 0\n```\n\n# Batch: batch2\n",
+            encoding="utf-8",
+        )
+
+        with (
+            unittest.mock.patch.object(
+                millpy_fix._paths, "resolve_hub_path", return_value=nested_hub
+            ),
+            unittest.mock.patch.object(
+                millpy_fix._implementer_claude, "run",
+                return_value=(
+                    '{"status":"success","commit_sha":"abc","session_id":"fake"}\n',
+                    "fake",
+                ),
+            ),
+        ):
+            with self.assertRaises(ValueError) as ctx:
+                self._run_main([
+                    "--scope", "holistic",
+                    "--review-file", str(self.review_file),
+                ])
+
+        message = str(ctx.exception)
+        self.assertIn("batch1", message)
+        self.assertIn("batch2", message)
+
+    def test_finalize_stage_batch_not_found_cwd_override_stays_none(self):
+        """Finalize stage regression: batch_entry is None keeps cwd_override at pre-initialized None, not a NameError (Card 19)."""
+        agent_output_path = self.tmp_path / "agent-output.txt"
+        agent_output_path.write_text(
+            '{"status":"success","commit_sha":"xyz","session_id":"fake"}\n',
+            encoding="utf-8",
+        )
+
+        captured_kwargs = {}
+
+        def mock_finalize_from_output(agent_output_path_arg, project_root, **kwargs):
+            captured_kwargs.update(kwargs)
+            return 0
+
+        with unittest.mock.patch.object(
+            millpy_fix, "finalize_from_output", side_effect=mock_finalize_from_output
+        ):
+            rc, out = self._run_main([
+                "--scope", "batch",
+                "--batch-name", "nonexistent-batch",
+                "--review-file", str(self.review_file),
+                "--stage", "finalize",
+                "--agent-output", str(agent_output_path),
+            ])
+
+        self.assertEqual(rc, 0)
+        self.assertIsNone(captured_kwargs.get("verify_cmd"))
+        self.assertIsNone(captured_kwargs.get("cwd_override"))
+
+    def test_finalize_stage_holistic_empty_batch_verifies_cwd_override_stays_none(self):
+        """Finalize stage regression: holistic scope with empty batch_verifies keeps cwd_override at None (Card 19/20)."""
+        agent_output_path = self.tmp_path / "agent-output.txt"
+        agent_output_path.write_text(
+            '{"status":"success","commit_sha":"xyz","session_id":"fake"}\n',
+            encoding="utf-8",
+        )
+
+        captured_kwargs = {}
+
+        def mock_finalize_from_output(agent_output_path_arg, project_root, **kwargs):
+            captured_kwargs.update(kwargs)
+            return 0
+
+        with unittest.mock.patch.object(
+            millpy_fix, "finalize_from_output", side_effect=mock_finalize_from_output
+        ):
+            rc, out = self._run_main([
+                "--scope", "holistic",
+                "--review-file", str(self.review_file),
+                "--stage", "finalize",
+                "--agent-output", str(agent_output_path),
+            ])
+
+        self.assertEqual(rc, 0)
+        self.assertIsNone(captured_kwargs.get("verify_cmd"))
+        self.assertIsNone(captured_kwargs.get("cwd_override"))
+
     def test_brief_contains_unsatisfiable_demand_instruction(self):
         """Assert fixer briefs contain unsatisfiable-demand instruction."""
         # Read the brief templates

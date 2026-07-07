@@ -748,7 +748,7 @@ If the list is empty, proceed to scope violations cleanup.
 **Scope violations cleanup gate.** Clean up ephemeral build artifacts that may have been left by verify runs:
 
 ```python
-removed_paths, blocking_paths = _cleanliness.clean_ephemeral_scope_violations(worktree_root)
+removed_paths, blocking_paths = _cleanliness.clean_ephemeral_scope_violations(worktree_root, git_root)
 ```
 
 Log the removed artifacts (ASCII-only). If `blocking_paths` is non-empty, halt with:

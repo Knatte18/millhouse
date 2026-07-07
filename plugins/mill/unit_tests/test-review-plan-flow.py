@@ -167,6 +167,79 @@ def _seed_approve(n: int) -> None:
     stub.seed([(APPROVE_TEXT, f"sid-{i + 1}") for i in range(n)])
 
 
+def _make_nested_plan_fixture(
+    tmp_path: Path,
+    batch_specs: list[tuple[str, str, list[str], list[str]]],
+) -> tuple[Path, Path, Path, Path]:
+    """Build a nested-hub-layout plan-review fixture under tmp_path.
+
+    Unlike _make_plan_fixture, the git root and the mill hub_root are
+    different directories: hub_root lives one level under git_root
+    (git_root/hub), mirroring a repo where .millhouse/ sits in a
+    subdirectory of the git toplevel rather than at its root.
+
+    batch_specs = [(name, file, reads, creates)]. The plan is written
+    directly under hub_root/_mill/plan/ (the CLI's default plan_dir),
+    so no --stage prepare copy step is needed.
+
+    Returns (mill_dir, wiki_root, hub_root, git_root). Callers must
+    os.chdir(hub_root) before invoking the CLI so _paths.resolve_hub_path()
+    walks up from hub_root and finds .millhouse/config.local.yaml there,
+    while _paths.resolve_git_root() still resolves to git_root.
+
+    wiki_root deliberately uses the container-form sibling default
+    (<container>/wiki, resolved via _sibling.resolve_path) rather than a
+    paths.wiki override in hub_root's config.local.yaml: resolve_wiki_path
+    is called both with hub_root (CLI's own lookup) and with git_root
+    (inside _paths.resolve_active_worktree's marker check), and only
+    git_root's own .millhouse/ (absent here) or the sibling default is
+    consulted for the latter -- a hub_root-only override would make the
+    two calls disagree on the wiki location.
+    """
+    git_root = tmp_path / "container" / "wts" / SLUG
+    git_root.mkdir(parents=True)
+    repo = _test_helpers.init_minimal_git_repo(git_root, branch="main")
+    _test_helpers.checkout_new_branch(repo, f"hanf/{SLUG}")
+    (git_root / ".gitignore").write_text("\n", encoding="utf-8")
+
+    # hub_root nested one level under git_root -- the layout under test.
+    hub_root = git_root / "hub"
+    mill_dir = hub_root / ".millhouse"
+    mill_dir.mkdir(parents=True, exist_ok=True)
+    wiki_root = tmp_path / "container" / "wiki"
+    _test_helpers.init_wiki_repo(wiki_root)
+    seed_wiki_config(wiki_root)
+    (wiki_root / "Home.md").write_text(
+        f"## Test Task\n[{SLUG}] [active]\n\n_body_\n", encoding="utf-8"
+    )
+    wiki.upsert_task(wiki_root, SLUG, title="Test Task", status="active")
+    (mill_dir / "config.local.yaml").write_text(
+        # hub_relative_path declares hub_root's own offset from git_root --
+        # the real mill-claim convention for M2+sub (nested-hub) layouts,
+        # consumed by _paths.resolve_active_hub to rebase onto hub_root.
+        "hub_relative_path: hub\n"
+        "spawn:\n  branch_prefix: 'hanf/'\n", encoding="utf-8"
+    )
+
+    plan_dir = hub_root / "_mill" / "plan"
+    plan_dir.mkdir(parents=True)
+    (plan_dir / "00-overview.md").write_text(
+        _make_overview([(n, f) for n, f, _, _ in batch_specs]),
+        encoding="utf-8",
+    )
+    for name, file_, reads, creates in batch_specs:
+        (plan_dir / file_).write_text(
+            _make_batch_file(name, reads, creates), encoding="utf-8"
+        )
+        for rf in reads:
+            p = hub_root / rf
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text("# placeholder", encoding="utf-8")
+
+    _test_registry.write_to(wiki_root)
+    return mill_dir, wiki_root, hub_root, git_root
+
+
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
@@ -1524,6 +1597,63 @@ def main() -> int:
         except Exception as exc:
             errors += 1
             print(f"FAIL test27 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
+    # Test 28 — nested-hub-layout: prepare-stage brief_path resolves under
+    # the nested hub_root's _mill/briefs/, not under git_root's (#601).
+    # Regression test for the bug fixed by Card 6: millpy-review-plan.py
+    # used to write briefs under git_root instead of hub_root/project_root.
+    # ------------------------------------------------------------------
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        batch_specs = [("alpha", "01-alpha.md", ["src/a.py"], [])]
+        mill_dir, wiki_root, hub_root, git_root = _make_nested_plan_fixture(tmpdir, batch_specs)
+        orig_dir = os.getcwd()
+        os.chdir(hub_root)
+        try:
+            result = subprocess.run(
+                [
+                    "uv", "run",
+                    "--project", str(HUB / "plugins" / "mill"),
+                    "python", str(HUB / "plugins" / "mill" / "scripts" / "millpy-review-plan.py"),
+                    "--stage", "prepare",
+                    "--holistic-only",
+                ],
+                capture_output=True,
+                text=True,
+                cwd=str(hub_root),
+            )
+            assert result.returncode == 0, (
+                f"expected exit code 0 for clean nested-layout plan, got {result.returncode}; "
+                f"stdout={result.stdout!r}, stderr={result.stderr!r}"
+            )
+            json_output = json.loads(result.stdout)
+            assert json_output.get("stage") == "prepare", (
+                f"expected stage='prepare' in JSON output, got {json_output}"
+            )
+            assert "brief_path" in json_output, (
+                f"expected 'brief_path' key in JSON output, got {json_output}"
+            )
+            brief_path = Path(json_output["brief_path"])
+            expected_briefs_dir = hub_root / "_mill" / "briefs"
+            wrong_briefs_dir = git_root / "_mill" / "briefs"
+            assert str(brief_path).startswith(str(expected_briefs_dir)), (
+                f"brief_path must resolve under nested hub_root's _mill/briefs/, "
+                f"got {brief_path} (expected under {expected_briefs_dir})"
+            )
+            assert not str(brief_path).startswith(str(wrong_briefs_dir)), (
+                f"brief_path must NOT resolve under git_root's _mill/briefs/, "
+                f"got {brief_path} (git_root briefs dir: {wrong_briefs_dir})"
+            )
+            assert brief_path.exists(), f"expected brief file to exist at {brief_path}"
+            print("PASS test28: nested-hub-layout prepare-stage brief_path resolves under hub_root, not git_root (#601)")
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test28: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test28 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
         finally:
             os.chdir(orig_dir)
 

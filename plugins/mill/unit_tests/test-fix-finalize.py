@@ -369,6 +369,152 @@ def main() -> int:
             print(f"FAIL: test 4 ({exc}) captured={captured!r}", file=sys.stderr)
             errors += 1
 
+    # Test 5: nested-layout batch-scope verify cwd threads cwd_override at the
+    # finalize stage (Card 19), distinct from the prepare/full-stage coverage
+    # added by batch 5's Card 21.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        (project_root / "_mill").mkdir(parents=True)
+        (project_root / "_mill/plan").mkdir(parents=True)
+        review_file = project_root / "review.json"
+        review_file.write_text("{}", encoding="utf-8")
+        agent_output_file = project_root / "agent_output.txt"
+        agent_output_file.write_text("test output", encoding="utf-8")
+
+        overview_file = project_root / "_mill/plan/00-overview.md"
+        overview_file.write_text("```yaml\nbatches: []\n```", encoding="utf-8")
+
+        # Sentinel path standing in for the resolved nested-hub cwd that
+        # parse_verify_field would return for a `verify: {cwd: hub, ...}` batch.
+        nested_hub = project_root / "hub"
+
+        try:
+            import importlib.util
+
+            mock_modules = {
+                "_review_common": unittest.mock.MagicMock(),
+                "_marker": unittest.mock.MagicMock(),
+                "_status": unittest.mock.MagicMock(),
+                "_reviewers": unittest.mock.MagicMock(),
+                "_plan_dag": unittest.mock.MagicMock(),
+                "_subprocess_util": unittest.mock.MagicMock(),
+                "_paths": unittest.mock.MagicMock(),
+                "_agent_dispatch": unittest.mock.MagicMock(),
+                "_render": unittest.mock.MagicMock(),
+                "_timestamp": unittest.mock.MagicMock(),
+            }
+
+            mock_modules["_review_common"].load_config = unittest.mock.MagicMock(
+                return_value={
+                    "paths": {"reviews_dir": "_mill/reviews/", "status_md": "_mill/status.md", "plan_dir": "_mill/plan/"},
+                    "roles": {"fixer": {"model": "haiku"}, "implementer": {"self_fix_rounds": 2}},
+                }
+            )
+            mock_modules["_marker"].slug_from_branch = unittest.mock.MagicMock(return_value="test-slug")
+            mock_modules["_status"].read_full = unittest.mock.MagicMock(
+                return_value={"yaml": {"task": "Test", "branch": "test-branch"}, "timeline": []}
+            )
+            mock_modules["_status"].read_branch = unittest.mock.MagicMock(return_value="test-branch")
+            mock_modules["_reviewers"].load = unittest.mock.MagicMock(return_value={})
+            mock_modules["_reviewers"].resolve = unittest.mock.MagicMock(
+                return_value={"model": "claude-haiku-4-5-20251001"}
+            )
+            # A single batch named "test-batch" is present in the overview so the
+            # finalize-stage batch-scope lookup (`batch_entry is not None`) resolves.
+            mock_modules["_plan_dag"].extract_batch_index = unittest.mock.MagicMock(
+                return_value=[{"name": "test-batch", "file": "01-test-batch.md", "depends-on": []}]
+            )
+            mock_modules["_plan_dag"]._read_batch_frontmatter = unittest.mock.MagicMock(
+                return_value={"verify": {"cwd": "hub", "command": "exit 0"}}
+            )
+            # parse_verify_field is the single normalizer (batch 3) that
+            # millpy-fix.py's finalize-stage batch-scope site must route through;
+            # stub its resolution to the nested hub root, mirroring what it would
+            # return for a real `verify: {cwd: hub, command: exit 0}` mapping.
+            mock_modules["_plan_dag"].parse_verify_field = unittest.mock.MagicMock(
+                return_value=("exit 0", nested_hub)
+            )
+
+            def mock_subprocess_run(*args, **kwargs):
+                result = unittest.mock.MagicMock()
+                result.returncode = 0
+                if args and ("user.name" in str(args) or "user.email" in str(args)):
+                    result.stdout = "Test User" if "user.name" in str(args) else "test@example.com"
+                else:
+                    result.stdout = ""
+                result.stderr = ""
+                return result
+
+            def mock_resolve_task_path(project_root_arg, rel_path):
+                return project_root / rel_path.lstrip("/")
+
+            mock_modules["_subprocess_util"].run = unittest.mock.MagicMock(side_effect=mock_subprocess_run)
+            mock_modules["_paths"].status_path = unittest.mock.MagicMock(
+                return_value=project_root / "_mill/status.md"
+            )
+            mock_modules["_paths"].resolve_task_path = unittest.mock.MagicMock(
+                side_effect=mock_resolve_task_path
+            )
+            mock_modules["_paths"].resolve_git_root = unittest.mock.MagicMock(return_value=project_root)
+            mock_modules["_paths"].resolve_wiki_path = unittest.mock.MagicMock(return_value=project_root)
+
+            with unittest.mock.patch.dict(sys.modules, mock_modules):
+                spec = importlib.util.spec_from_file_location(
+                    "millpy_fix_test5",
+                    HUB / "plugins/mill/scripts/millpy-fix.py",
+                )
+                millpy_fix = importlib.util.module_from_spec(spec)
+
+                mock_finalize = unittest.mock.MagicMock(return_value=0)
+
+                sys.modules["millpy_fix_test5"] = millpy_fix
+                with unittest.mock.patch.object(
+                    millpy_fix, "finalize_from_output", mock_finalize, create=True
+                ):
+                    spec.loader.exec_module(millpy_fix)
+                    millpy_fix.finalize_from_output = mock_finalize
+
+                    millpy_fix.main(
+                        [
+                            "--scope",
+                            "batch",
+                            "--batch-name",
+                            "test-batch",
+                            "--review-file",
+                            str(review_file),
+                            "--round",
+                            "1",
+                            "--stage",
+                            "finalize",
+                            "--agent-output",
+                            str(agent_output_file),
+                            "--session-id",
+                            "sid-xyz",
+                        ]
+                    )
+
+                    if mock_finalize.called:
+                        call_args = mock_finalize.call_args
+                        if (
+                            call_args[1].get("verify_cmd") == "exit 0"
+                            and call_args[1].get("cwd_override") == nested_hub
+                        ):
+                            print(
+                                "PASS: nested-layout batch-scope verify threads cwd_override at finalize stage"
+                            )
+                        else:
+                            print(
+                                f"FAIL: cwd_override threading - call_args={call_args}",
+                                file=sys.stderr,
+                            )
+                            errors += 1
+                    else:
+                        print("FAIL: finalize_from_output not called", file=sys.stderr)
+                        errors += 1
+        except Exception as exc:
+            print(f"FAIL: test 5 ({exc})", file=sys.stderr)
+            errors += 1
+
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)
         return 1

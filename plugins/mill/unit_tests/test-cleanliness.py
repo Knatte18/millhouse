@@ -176,7 +176,7 @@ def main() -> int:
     try:
         with tempfile.TemporaryDirectory() as tmp:
             with unittest.mock.patch("_cleanliness._pygit2_util.status_porcelain", return_value=[]):
-                result = compute_scope_violations(Path(tmp))
+                result = compute_scope_violations(Path(tmp), Path(tmp))
             assert result == [], f"expected [], got {result!r}"
         print("PASS: compute_scope_violations: clean worktree -> []")
     except AssertionError as exc:
@@ -188,7 +188,7 @@ def main() -> int:
     try:
         with tempfile.TemporaryDirectory() as tmp:
             with unittest.mock.patch("_cleanliness._pygit2_util.status_porcelain", return_value=["?? plugins/mill/scripts/foo.py"]):
-                result = compute_scope_violations(Path(tmp))
+                result = compute_scope_violations(Path(tmp), Path(tmp))
             assert result == ["plugins/mill/scripts/foo.py"], f"expected ['plugins/mill/scripts/foo.py'], got {result!r}"
         print("PASS: compute_scope_violations: untracked at root -> path returned")
     except AssertionError as exc:
@@ -200,7 +200,7 @@ def main() -> int:
     try:
         with tempfile.TemporaryDirectory() as tmp:
             with unittest.mock.patch("_cleanliness._pygit2_util.status_porcelain", return_value=["?? _mill/some-scratch.txt"]):
-                result = compute_scope_violations(Path(tmp))
+                result = compute_scope_violations(Path(tmp), Path(tmp))
             assert result == [], f"expected [], got {result!r}"
         print("PASS: compute_scope_violations: untracked under _mill/ -> filtered")
     except AssertionError as exc:
@@ -212,7 +212,7 @@ def main() -> int:
     try:
         with tempfile.TemporaryDirectory() as tmp:
             with unittest.mock.patch("_cleanliness._pygit2_util.status_porcelain", return_value=["?? plugins/mill/scripts/new_file.py"]):
-                result = compute_scope_violations(Path(tmp))
+                result = compute_scope_violations(Path(tmp), Path(tmp))
             assert result == ["plugins/mill/scripts/new_file.py"], f"expected ['plugins/mill/scripts/new_file.py'], got {result!r}"
         print("PASS: compute_scope_violations: untracked in subdir -> path returned")
     except AssertionError as exc:
@@ -227,7 +227,7 @@ def main() -> int:
                 "_cleanliness._pygit2_util.status_porcelain",
                 return_value=["?? .wiki", "?? .portals", "?? .active", "?? .others", "?? bad_file.py"]
             ):
-                result = compute_scope_violations(Path(tmp))
+                result = compute_scope_violations(Path(tmp), Path(tmp))
             assert result == ["bad_file.py"], f"expected ['bad_file.py'], got {result!r}"
         print("PASS: compute_scope_violations: junctions filtered, genuine file returned")
     except AssertionError as exc:
@@ -242,13 +242,79 @@ def main() -> int:
                 "_cleanliness._pygit2_util.status_porcelain",
                 return_value=["?? .wiki/foo", "?? .portals/bar", "?? plugins/foo.py"]
             ):
-                result = compute_scope_violations(Path(tmp))
+                result = compute_scope_violations(Path(tmp), Path(tmp))
             assert result == ["plugins/foo.py"], f"expected ['plugins/foo.py'], got {result!r}"
         print("PASS: compute_scope_violations: files under junctions filtered")
     except AssertionError as exc:
         failures.append(f"FAIL: compute_scope_violations files under junctions: {exc}")
     except Exception as exc:
         failures.append(f"FAIL: compute_scope_violations files under junctions ({type(exc).__name__}): {exc}")
+
+    # CV-7. compute_scope_violations: nested hub layout rebases git-root-relative paths onto
+    # hub_root before applying the _mill/-prefix and junction-directory exclusions.
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            git_root = Path(tmp)
+            hub_root = git_root / "hub"
+            (hub_root / "_mill").mkdir(parents=True, exist_ok=True)
+            (hub_root / "_mill" / "foo").write_text("", encoding="utf-8")
+            (hub_root / ".active").mkdir(parents=True, exist_ok=True)
+            with unittest.mock.patch(
+                "_cleanliness._pygit2_util.status_porcelain",
+                return_value=["?? hub/_mill/foo", "?? hub/.active"],
+            ):
+                result = compute_scope_violations(hub_root, git_root)
+            assert result == [], f"expected [], got {result!r}"
+        print("PASS: compute_scope_violations: nested layout excludes _mill/ and junction dirs")
+    except AssertionError as exc:
+        failures.append(f"FAIL: compute_scope_violations nested layout exclusions: {exc}")
+    except Exception as exc:
+        failures.append(f"FAIL: compute_scope_violations nested layout exclusions ({type(exc).__name__}): {exc}")
+
+    # CV-8. compute_scope_violations: untracked file outside the hub subtree is dropped
+    # entirely -- it belongs to a different part of the git repo, not a scope violation.
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            git_root = Path(tmp)
+            hub_root = git_root / "hub"
+            hub_root.mkdir(parents=True, exist_ok=True)
+            (git_root / "othermodule").mkdir(parents=True, exist_ok=True)
+            (git_root / "othermodule" / "foo.txt").write_text("", encoding="utf-8")
+            with unittest.mock.patch(
+                "_cleanliness._pygit2_util.status_porcelain",
+                return_value=["?? othermodule/foo.txt"],
+            ):
+                result = compute_scope_violations(hub_root, git_root)
+            assert result == [], f"expected [] (dropped, not reported as a violation), got {result!r}"
+        print("PASS: compute_scope_violations: file outside hub subtree dropped, not a violation")
+    except AssertionError as exc:
+        failures.append(f"FAIL: compute_scope_violations outside-hub-subtree drop: {exc}")
+    except Exception as exc:
+        failures.append(f"FAIL: compute_scope_violations outside-hub-subtree drop ({type(exc).__name__}): {exc}")
+
+    # CV-9. compute_scope_violations: git_root=None mirrors the flat-layout (tmp_path, tmp_path)
+    # result rather than raising a TypeError, for callers that never resolved a git_root
+    # (e.g. test-millpy-implement.py's no-git_root call pattern).
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            with unittest.mock.patch(
+                "_cleanliness._pygit2_util.status_porcelain",
+                return_value=["?? plugins/mill/scripts/foo.py", "?? _mill/scratch.txt", "?? .wiki"],
+            ):
+                result_none = compute_scope_violations(tmp_path, None)
+                result_flat = compute_scope_violations(tmp_path, tmp_path)
+            assert result_none == result_flat, (
+                f"expected git_root=None to match flat-layout result {result_flat!r}, got {result_none!r}"
+            )
+            assert result_none == ["plugins/mill/scripts/foo.py"], (
+                f"expected ['plugins/mill/scripts/foo.py'], got {result_none!r}"
+            )
+        print("PASS: compute_scope_violations: git_root=None behaves like flat layout, not TypeError")
+    except AssertionError as exc:
+        failures.append(f"FAIL: compute_scope_violations git_root=None: {exc}")
+    except Exception as exc:
+        failures.append(f"FAIL: compute_scope_violations git_root=None ({type(exc).__name__}): {exc}")
 
     # TD-1. _filter_to_task_scope: in-scope file under task_dir is included
     try:
@@ -553,7 +619,7 @@ def main() -> int:
                 "_cleanliness.compute_scope_violations",
                 return_value=["coverage.out"]
             ):
-                removed, blocking = clean_ephemeral_scope_violations(tmp_path)
+                removed, blocking = clean_ephemeral_scope_violations(tmp_path, tmp_path)
             # coverage.out should be removed and reported
             assert removed == ["coverage.out"], f"expected ['coverage.out'] in removed, got {removed!r}"
             assert blocking == [], f"expected [] in blocking, got {blocking!r}"
@@ -581,7 +647,7 @@ def main() -> int:
                 "_cleanliness.compute_scope_violations",
                 return_value=["foo.test.exe"]
             ):
-                removed, blocking = clean_ephemeral_scope_violations(tmp_path)
+                removed, blocking = clean_ephemeral_scope_violations(tmp_path, tmp_path)
             assert removed == ["foo.test.exe"], f"expected ['foo.test.exe'] in removed, got {removed!r}"
             assert blocking == [], f"expected [] in blocking, got {blocking!r}"
             assert not test_file.exists(), "foo.test.exe should have been deleted"
@@ -607,7 +673,7 @@ def main() -> int:
                 "_cleanliness.compute_scope_violations",
                 return_value=["notes.txt"]
             ):
-                removed, blocking = clean_ephemeral_scope_violations(tmp_path)
+                removed, blocking = clean_ephemeral_scope_violations(tmp_path, tmp_path)
             assert removed == [], f"expected [] in removed, got {removed!r}"
             assert blocking == ["notes.txt"], f"expected ['notes.txt'] in blocking, got {blocking!r}"
             # File should NOT be deleted from disk
@@ -635,7 +701,7 @@ def main() -> int:
                 "_cleanliness.compute_scope_violations",
                 return_value=[]  # _mill/ files already filtered by compute_scope_violations
             ):
-                removed, blocking = clean_ephemeral_scope_violations(tmp_path)
+                removed, blocking = clean_ephemeral_scope_violations(tmp_path, tmp_path)
             assert removed == [], f"expected [] in removed, got {removed!r}"
             assert blocking == [], f"expected [] in blocking, got {blocking!r}"
         print("PASS: clean_ephemeral_scope_violations: in-scope _mill/ files neither removed nor reported")
@@ -658,7 +724,7 @@ def main() -> int:
                 "_cleanliness.compute_scope_violations",
                 return_value=["coverage.out"]  # File doesn't exist on disk
             ):
-                removed, blocking = clean_ephemeral_scope_violations(tmp_path)
+                removed, blocking = clean_ephemeral_scope_violations(tmp_path, tmp_path)
             # Should still be reported as removed (swallow FileNotFoundError)
             assert removed == ["coverage.out"], f"expected ['coverage.out'] in removed, got {removed!r}"
             assert blocking == [], f"expected [] in blocking, got {blocking!r}"
@@ -684,7 +750,7 @@ def main() -> int:
                 "_cleanliness.compute_scope_violations",
                 return_value=["app.exe"]
             ):
-                removed, blocking = clean_ephemeral_scope_violations(tmp_path)
+                removed, blocking = clean_ephemeral_scope_violations(tmp_path, tmp_path)
             assert removed == ["app.exe"], f"expected ['app.exe'] in removed, got {removed!r}"
             assert blocking == [], f"expected [] in blocking, got {blocking!r}"
             assert not exe_file.exists(), "app.exe should have been deleted from disk"
@@ -721,7 +787,7 @@ def main() -> int:
                 "_cleanliness.compute_scope_violations",
                 return_value=["sandbox"]
             ):
-                removed, blocking = clean_ephemeral_scope_violations(tmp_path)
+                removed, blocking = clean_ephemeral_scope_violations(tmp_path, tmp_path)
             assert removed == ["sandbox"], f"expected ['sandbox'] in removed, got {removed!r}"
             assert blocking == [], f"expected [] in blocking, got {blocking!r}"
             assert not sandbox_file.exists(), "sandbox binary should have been deleted from disk"
@@ -747,7 +813,7 @@ def main() -> int:
                 "_cleanliness.compute_scope_violations",
                 return_value=["notes"]
             ):
-                removed, blocking = clean_ephemeral_scope_violations(tmp_path)
+                removed, blocking = clean_ephemeral_scope_violations(tmp_path, tmp_path)
             assert removed == [], f"expected [] in removed, got {removed!r}"
             assert blocking == ["notes"], f"expected ['notes'] in blocking, got {blocking!r}"
             assert notes_file.exists(), "notes should NOT have been deleted from disk"
@@ -775,7 +841,7 @@ def main() -> int:
                 "_cleanliness.compute_scope_violations",
                 return_value=["coverage.out", "data.json"]
             ):
-                removed, blocking = clean_ephemeral_scope_violations(tmp_path)
+                removed, blocking = clean_ephemeral_scope_violations(tmp_path, tmp_path)
             assert removed == ["coverage.out"], f"expected ['coverage.out'] in removed, got {removed!r}"
             assert blocking == ["data.json"], f"expected ['data.json'] in blocking, got {blocking!r}"
             assert not coverage_file.exists(), "coverage.out should have been deleted"
@@ -785,6 +851,40 @@ def main() -> int:
         failures.append(f"FAIL: Regression coverage.out/data.json: {exc}")
     except Exception as exc:
         failures.append(f"FAIL: Regression coverage.out/data.json ({type(exc).__name__}): {exc}")
+
+    # CESV-10. clean_ephemeral_scope_violations: nested hub layout -- violation is detected via
+    # the real compute_scope_violations rebasing (status_porcelain mocked at the git-root-relative
+    # level, not compute_scope_violations itself) and removed at the hub_root-relative path, not
+    # some git_root-relative miscomputed path.
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            git_root = Path(tmp)
+            hub_root = git_root / "hub"
+            subprocess.run(
+                ["git", "init", str(git_root)],
+                check=True,
+                capture_output=True,
+            )
+            hub_root.mkdir(parents=True, exist_ok=True)
+            # Create an allowlisted coverage.out artifact nested under hub_root
+            coverage_file = hub_root / "coverage.out"
+            coverage_file.write_text("mode: set", encoding="utf-8")
+            # status_porcelain always reports git-root-relative paths, per _pygit2_util's contract
+            with unittest.mock.patch(
+                "_cleanliness._pygit2_util.status_porcelain",
+                return_value=["?? hub/coverage.out"],
+            ):
+                removed, blocking = clean_ephemeral_scope_violations(hub_root, git_root)
+            assert removed == ["coverage.out"], f"expected ['coverage.out'] in removed, got {removed!r}"
+            assert blocking == [], f"expected [] in blocking, got {blocking!r}"
+            assert not coverage_file.exists(), (
+                "coverage.out should have been deleted at the hub_root-relative path"
+            )
+        print("PASS: clean_ephemeral_scope_violations: nested layout detects and removes at hub_root")
+    except AssertionError as exc:
+        failures.append(f"FAIL: clean_ephemeral_scope_violations nested layout: {exc}")
+    except Exception as exc:
+        failures.append(f"FAIL: clean_ephemeral_scope_violations nested layout ({type(exc).__name__}): {exc}")
 
     # CRLF-1. capture_snapshot writes LF-only bytes (no \r\n) on disk
     # This is the regression test for the Windows text-mode CRLF translation bug:

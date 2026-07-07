@@ -282,8 +282,84 @@ def _read_batch_frontmatter(batch_path: Path) -> dict:
     return data if isinstance(data, dict) else {}
 
 
-def iter_batch_verifies(plan_dir: Path) -> list[tuple[str, str]]:
-    """Return ``(batch_name, verify_cmd)`` pairs in DAG execution order.
+def parse_verify_field(
+    frontmatter: dict, hub_root: Path, git_root: Path
+) -> tuple[str | None, Path | None]:
+    """Normalize a batch/overview frontmatter's ``verify:`` value.
+
+    ``verify:`` supports two shapes, per the "verify cwd field schema"
+    Shared Decision:
+
+    1. A plain string (today's format) — the command runs in whatever
+       cwd the caller already defaults to. Returned as
+       ``(command, None)``; the ``None`` cwd is the signal to the
+       caller "use your existing default", which preserves pre-#604
+       behavior byte-for-byte for every flat-layout plan.
+    2. A ``{cwd: hub|git_root, command: <string>}`` mapping — used by
+       nested-layout plans (``hub_root != git_root``) that need to pin
+       the verify command to a specific root. Unlike the string form,
+       the mapping form has no implicit default: ``cwd`` is required
+       and must be exactly ``"hub"`` or ``"git_root"``.
+
+    This is the single normalizer for the ``verify:`` field; every
+    other read site (implementer, fixer, baseline, merge-in,
+    plan-validate) must route through this function rather than
+    re-implementing the string-vs-mapping branch.
+
+    Args:
+        frontmatter: The parsed fenced-yaml frontmatter dict of a batch
+            file or the plan overview.
+        hub_root: The mill project root (``_paths.resolve_hub_path()``).
+            Used when the mapping form specifies ``cwd: hub``.
+        git_root: The git repository toplevel
+            (``_paths.resolve_git_root()``). Used when the mapping form
+            specifies ``cwd: git_root``.
+
+    Returns:
+        ``(command, cwd)``. ``command`` is ``None`` when ``verify`` is
+        absent, ``None``, or an empty/whitespace-only string — "nothing
+        to run". Otherwise ``command`` is the stripped command string.
+        ``cwd`` is ``None`` for the string form (caller's existing
+        default applies) or the resolved ``Path`` for the mapping form.
+
+    Raises:
+        ValueError: ``verify`` is a mapping without a non-empty
+            ``command``, a mapping with an unrecognized (or missing)
+            ``cwd``, or any type other than ``None``/string/mapping
+            (e.g. a list or int). This is a deliberate fail-loud policy:
+            a malformed ``verify:`` field is a plan-authoring bug and
+            must surface immediately rather than silently defaulting to
+            "no verify" or the wrong cwd.
+    """
+    verify = frontmatter.get("verify")
+    # Absent, explicit null, or blank string all mean "nothing to run" --
+    # the common case for pure-docs batches.
+    if verify is None:
+        return (None, None)
+    if isinstance(verify, str):
+        if not verify.strip():
+            return (None, None)
+        # Plain-string form: no cwd opinion, caller keeps its default.
+        return (verify.strip(), None)
+    if isinstance(verify, dict):
+        command = verify.get("command")
+        if not isinstance(command, str) or not command.strip():
+            raise ValueError("verify mapping missing a non-empty `command:` string")
+        cwd_key = verify.get("cwd")
+        if cwd_key == "hub":
+            return (command.strip(), hub_root)
+        if cwd_key == "git_root":
+            return (command.strip(), git_root)
+        # The mapping form always requires an explicit cwd -- unlike the
+        # string form, there is no implicit default to fall back to.
+        raise ValueError(f"verify mapping has unrecognized `cwd:` value: {cwd_key!r}")
+    raise ValueError(f"verify must be null, a string, or a mapping; got {verify!r}")
+
+
+def iter_batch_verifies(
+    plan_dir: Path, hub_root: Path, git_root: Path
+) -> list[tuple[str, str, Path | None]]:
+    """Return ``(batch_name, verify_cmd, cwd)`` triples in DAG order.
 
     mill-merge-in's Verify step replays exactly the checks that ran
     during implementation: each batch's ``verify:`` from its
@@ -291,6 +367,24 @@ def iter_batch_verifies(plan_dir: Path) -> list[tuple[str, str]]:
     (``topo_order``). Batches whose ``verify:`` is ``null`` or missing
     are skipped silently — pure-docs batches have no runnable surface
     and forcing a sentinel command there would be noise.
+
+    Each batch's raw ``verify:`` value is routed through
+    :func:`parse_verify_field` to resolve the plain-string vs.
+    ``{cwd, command}`` mapping forms; ``cwd`` in the returned triple is
+    ``None`` for the string form (caller uses its existing default) or
+    the resolved ``hub_root``/``git_root`` for the mapping form.
+
+    Args:
+        plan_dir: Directory containing ``00-overview.md`` and the batch
+            files it references.
+        hub_root: The mill project root, passed through to
+            ``parse_verify_field`` for ``cwd: hub`` resolution.
+        git_root: The git repository toplevel, passed through to
+            ``parse_verify_field`` for ``cwd: git_root`` resolution.
+
+    Returns:
+        A list of ``(batch_name, command, cwd)`` triples, one per batch
+        whose ``verify:`` resolves to a non-null command.
 
     If the plan overview is missing or malformed, returns ``[]`` and
     the caller falls back to "nothing to verify".
@@ -310,15 +404,15 @@ def iter_batch_verifies(plan_dir: Path) -> list[tuple[str, str]]:
 
     file_by_name = {entry["name"]: entry.get("file") for entry in batches}
 
-    commands: list[tuple[str, str]] = []
+    commands: list[tuple[str, str, Path | None]] = []
     for name in order:
         file_ref = file_by_name.get(name)
         if not file_ref:
             continue
         frontmatter = _read_batch_frontmatter(plan_dir / file_ref)
-        verify = frontmatter.get("verify")
-        if isinstance(verify, str) and verify.strip():
-            commands.append((name, verify.strip()))
+        command, cwd = parse_verify_field(frontmatter, hub_root, git_root)
+        if command is not None:
+            commands.append((name, command, cwd))
     return commands
 
 

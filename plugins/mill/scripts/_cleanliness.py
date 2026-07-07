@@ -56,24 +56,57 @@ def compute_new_dirt(worktree: Path, snapshot_path: Path) -> list[str]:
     return sorted(post_set - pre_set)
 
 
-def compute_scope_violations(worktree: Path) -> list[str]:
-    """Return untracked files outside _mill/ that appeared at batch end.
+def compute_scope_violations(hub_root: Path, git_root: Path | None) -> list[str]:
+    """Return untracked files outside _mill/ that appeared at batch end, hub-relative.
 
-    Uses _pygit2_util.status_porcelain with include_untracked=True so
-    gitignored files are excluded automatically. Excludes junction directories
-    (.active, .portals, .wiki, .others) even though they appear in status.
-    Returns bare path strings (no '?? ' prefix), sorted. Empty list means no violations.
+    _pygit2_util.status_porcelain always returns paths relative to the git
+    repository toplevel, regardless of which path is passed to it. In a nested
+    hub layout (hub_root is a subdirectory of git_root), those git-root-relative
+    paths must be rebased onto hub_root before the "_mill/"-prefix and junction
+    checks -- which assume hub-relative paths -- can be applied correctly.
+
+    When git_root is None, this call site is a flat-layout caller that never
+    resolved a git_root (e.g. one that flows through _forward_output's
+    git_root: Path | None = None default); treat that identically to
+    git_root == hub_root (flat layout), i.e. hub_prefix = "".
+
+    Otherwise hub_prefix = hub_root.relative_to(git_root).as_posix() (empty
+    string when hub_root == git_root, i.e. flat layout). For each untracked
+    ("?? ") status line: if hub_prefix is non-empty and the git-root-relative
+    path does not equal hub_prefix and does not start with hub_prefix + "/",
+    the path belongs to a different subtree entirely and is dropped -- it is
+    not a violation, just out of this hub's view. Otherwise the hub_prefix is
+    stripped to produce the hub-relative remainder (unchanged from path when
+    hub_prefix is empty). The existing _mill/-prefix and junction-directory
+    checks are then applied to that hub-relative remainder.
+
+    Returns bare hub-relative path strings (no '?? ' prefix), sorted. Empty
+    list means no violations.
     """
-    lines = _pygit2_util.status_porcelain(worktree, include_untracked=True)
+    if git_root is None:
+        hub_prefix = ""
+    else:
+        hub_prefix = hub_root.relative_to(git_root).as_posix()
+        if hub_prefix == ".":
+            hub_prefix = ""
+
+    lines = _pygit2_util.status_porcelain(hub_root, include_untracked=True)
     violations = []
     for line in lines:
         if line.startswith("?? "):
             path = line[3:]
-            if not path.startswith("_mill/"):
+            if hub_prefix:
+                if path != hub_prefix and not path.startswith(hub_prefix + "/"):
+                    # Belongs to a different subtree of the git root, not this hub.
+                    continue
+                remainder = path[len(hub_prefix) + 1 :] if path != hub_prefix else ""
+            else:
+                remainder = path
+            if not remainder.startswith("_mill/"):
                 # Extract the first path segment and check if it's a junction
-                first_segment = path.split("/")[0]
+                first_segment = remainder.split("/")[0]
                 if first_segment not in _JUNCTION_SKIP_SET:
-                    violations.append(path)
+                    violations.append(remainder)
     return sorted(violations)
 
 
@@ -207,13 +240,15 @@ def _is_go_main_artifact(worktree: Path, path: str) -> bool:
     return False
 
 
-def clean_ephemeral_scope_violations(worktree: Path) -> tuple[list[str], list[str]]:
+def clean_ephemeral_scope_violations(hub_root: Path, git_root: Path) -> tuple[list[str], list[str]]:
     """
     Auto-clean ephemeral build artifacts from scope violations.
 
-    Calls compute_scope_violations to get untracked out-of-scope files, partitions
-    them by a conservative allowlist, removes allowlisted files from disk (swallowing
-    already-gone errors), and returns the removed and blocking paths.
+    Calls compute_scope_violations(hub_root, git_root) to get untracked
+    out-of-scope files (already rebased to hub-relative paths -- see that
+    function's docstring for the nested-hub-layout rebasing rule), partitions
+    them by a conservative allowlist, removes allowlisted files from disk
+    (swallowing already-gone errors), and returns the removed and blocking paths.
 
     Allowlist rules applied in order:
     1. Basename ends with '.exe': blanket Go compiled binary or test executable
@@ -231,7 +266,11 @@ def clean_ephemeral_scope_violations(worktree: Path) -> tuple[list[str], list[st
     Non-allowlisted violations are reported as blocking without touching disk.
 
     Args:
-        worktree: Path to the task worktree.
+        hub_root: Path to the mill hub root (the project root resolved via
+            _paths.resolve_hub_path()). Hub-relative violation paths returned by
+            compute_scope_violations are joined onto this root for disk removal.
+        git_root: Path to the git repository toplevel resolved via
+            _paths.resolve_git_root(). Equal to hub_root in a flat layout.
 
     Returns:
         A tuple of (removed_paths, blocking_paths) where:
@@ -240,7 +279,7 @@ def clean_ephemeral_scope_violations(worktree: Path) -> tuple[list[str], list[st
     """
     import os
 
-    violations = compute_scope_violations(worktree)
+    violations = compute_scope_violations(hub_root, git_root)
 
     removed_paths = []
     blocking_paths = []
@@ -253,7 +292,7 @@ def clean_ephemeral_scope_violations(worktree: Path) -> tuple[list[str], list[st
             is_allowlisted = True
         # Rule 2: extensionless name -- only allowlisted when a package-main source dir matches
         elif "." not in basename:
-            is_allowlisted = _is_go_main_artifact(worktree, violation)
+            is_allowlisted = _is_go_main_artifact(hub_root, violation)
         # Rule 3: fixed allowlist for other known extension-bearing build artifact types
         else:
             is_allowlisted = (
@@ -265,7 +304,7 @@ def clean_ephemeral_scope_violations(worktree: Path) -> tuple[list[str], list[st
 
         if is_allowlisted:
             # Try to remove the file from disk, swallowing errors for already-gone files
-            file_path = worktree / violation
+            file_path = hub_root / violation
             try:
                 os.remove(file_path)
                 removed_paths.append(violation)

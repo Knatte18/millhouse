@@ -80,6 +80,7 @@ def _run_baseline_stage(
     git_root: Path,
     status_path: Path,
     module_wide_verify_cmd: str | None,
+    module_wide_cwd_override: Path | None,
 ) -> int:
     """
     Compute (idempotent, no-op-if-already-cached) the task-scoped
@@ -99,6 +100,12 @@ def _run_baseline_stage(
         status_path: Absolute path to the task's status.md file.
         module_wide_verify_cmd: The overview's module-wide verify command, or
             None when no module-wide verify is configured for this task.
+        module_wide_cwd_override: The overview's module-wide verify cwd resolved
+            by parse_verify_field -- one of project_root (hub_root), git_root, or
+            None (plain-string verify: or absent). Collapsed to a hub-relative
+            path fragment (cwd_override_relative) before being passed to
+            compute_baseline, so the transient-worktree verify run and its
+            dependency junctions are re-anchored to the correct sub-directory.
 
     Returns:
         Always 0 -- the baseline stage never signals a pre-launch error via
@@ -128,9 +135,22 @@ def _run_baseline_stage(
         print(json.dumps({"stage": "baseline", "result": "error", "reason": str(e)}))
         return 0
 
+    # module_wide_cwd_override can only ever resolve to project_root, git_root, or
+    # None per parse_verify_field's contract. A git_root-resolved cwd already
+    # matches compute_baseline's existing tmp_path default, so only the
+    # project_root (hub) case needs a relative fragment -- collapsing both the
+    # git_root case and the None case to None in a single expression.
+    cwd_override_relative = (
+        project_root.relative_to(git_root) if module_wide_cwd_override == project_root else None
+    )
+
     try:
         result = _verify_baseline.compute_baseline(
-            project_root, git_root, parent_branch, module_wide_verify_cmd
+            project_root,
+            git_root,
+            parent_branch,
+            module_wide_verify_cmd,
+            cwd_override_relative=cwd_override_relative,
         )
     except Exception as e:
         print(f"[millpy-implement] baseline computation failed: {e}", file=sys.stderr)
@@ -306,16 +326,22 @@ def main(argv=None) -> int:
     # A null or absent `verify:` passes None, which makes the module-wide gate a no-op.
     # Read here -- before the batches/batch_entry resolution below -- because the
     # task-scoped `--stage baseline` branch needs this value and never has a
-    # `batch_name` to resolve a batch_entry from.
+    # `batch_name` to resolve a batch_entry from. Routed through parse_verify_field
+    # so a `{cwd: hub|git_root, command: ...}` mapping resolves to the correct
+    # verify-subprocess cwd in nested layouts.
     overview_frontmatter = _plan_dag._read_batch_frontmatter(overview_path)
-    module_wide_verify_cmd = overview_frontmatter.get("verify") or None
+    module_wide_verify_cmd, module_wide_cwd_override = _plan_dag.parse_verify_field(
+        overview_frontmatter, project_root, git_root
+    )
 
     # Cached task-scoped baseline read once here so both the finalize and
     # full stages below pass the same value through to _run_verify_gates.
     module_verify_baseline = _status.get_module_verify_baseline(status_path)
 
     if args.stage == "baseline":
-        return _run_baseline_stage(project_root, git_root, status_path, module_wide_verify_cmd)
+        return _run_baseline_stage(
+            project_root, git_root, status_path, module_wide_verify_cmd, module_wide_cwd_override
+        )
 
     try:
         batches = _plan_dag.extract_batch_index(
@@ -366,9 +392,13 @@ def main(argv=None) -> int:
             project_root / "_mill" / f".cleanliness-snapshot-{_safe_batch}.txt"
         )
         session_id = batch_status.get("implementer_session")
-        # Resolve batch verify command from the batch file's frontmatter
+        # Resolve batch verify command from the batch file's frontmatter, routing
+        # through parse_verify_field so a `{cwd: hub|git_root, command: ...}`
+        # mapping resolves to the correct verify-subprocess cwd in nested layouts.
         batch_frontmatter = _plan_dag._read_batch_frontmatter(batch_file)
-        verify_cmd = batch_frontmatter.get("verify")
+        verify_cmd, cwd_override = _plan_dag.parse_verify_field(
+            batch_frontmatter, project_root, git_root
+        )
         return finalize_from_output(
             Path(args.agent_output),
             project_root,
@@ -382,6 +412,8 @@ def main(argv=None) -> int:
             task_dir=status_path.parent,
             parent_branch=parent_branch,
             git_root=git_root,
+            cwd_override=cwd_override,
+            module_wide_cwd_override=module_wide_cwd_override,
         )
 
     # Stages: prepare and full (need pre-commit, render, and setup)
@@ -586,9 +618,13 @@ def main(argv=None) -> int:
         )
         print(error_reason, file=sys.stderr)
         return 1
-    # Resolve batch verify command from the batch file's frontmatter for full stage
+    # Resolve batch verify command from the batch file's frontmatter for full stage,
+    # routing through parse_verify_field so a `{cwd: hub|git_root, command: ...}`
+    # mapping resolves to the correct verify-subprocess cwd in nested layouts.
     batch_frontmatter = _plan_dag._read_batch_frontmatter(batch_file)
-    verify_cmd = batch_frontmatter.get("verify")
+    verify_cmd, cwd_override = _plan_dag.parse_verify_field(
+        batch_frontmatter, project_root, git_root
+    )
     return _forward_output(
         output,
         project_root,
@@ -602,6 +638,8 @@ def main(argv=None) -> int:
         task_dir=status_path.parent,
         parent_branch=parent_branch,
         git_root=git_root,
+        cwd_override=cwd_override,
+        module_wide_cwd_override=module_wide_cwd_override,
     )
 
 

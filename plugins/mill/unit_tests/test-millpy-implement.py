@@ -22,6 +22,7 @@ sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
 import _implementer_common  # noqa: E402
 import _safe_rmtree  # noqa: E402
+import _verify_baseline  # noqa: E402
 
 _IMPLEMENT_PATH = HUB / "plugins" / "mill" / "scripts" / "millpy-implement.py"
 
@@ -809,6 +810,260 @@ class TestMillpyImplement(unittest.TestCase):
         # A null overview verify must produce None (not the string "null")
         self.assertIsNone(call_kwargs.get("module_wide_verify_cmd"))
 
+    def test_finalize_stage_batch_verify_cwd_hub_resolves_nested_project_root(self):
+        """Nested layout: batch verify: {cwd: hub, command: ...} resolves cwd_override to project_root."""
+        nested_hub = self.tmp_path / "hub"
+        nested_hub.mkdir(parents=True, exist_ok=True)
+        _make_fixture(nested_hub)
+
+        plan_dir = nested_hub / "task" / "plan"
+        batch_file = plan_dir / "01-test-batch.md"
+        batch_file.write_text(
+            "```yaml\n"
+            "task: Test Task\n"
+            "verify:\n"
+            "  cwd: hub\n"
+            "  command: exit 0\n"
+            "```\n\n"
+            "# Batch: test-batch\n",
+            encoding="utf-8"
+        )
+
+        agent_output_path = self.tmp_path / "agent-output.txt"
+        agent_output_path.write_text(
+            '{"status":"success","commit_sha":"xyz","session_id":"fake"}\n',
+            encoding="utf-8"
+        )
+
+        with (
+            unittest.mock.patch.object(
+                millpy_implement._paths, "resolve_hub_path", return_value=nested_hub
+            ),
+            unittest.mock.patch.object(
+                millpy_implement._paths, "resolve_git_root", return_value=self.tmp_path
+            ),
+            unittest.mock.patch.object(
+                millpy_implement, "finalize_from_output", return_value=0
+            ) as mock_finalize,
+        ):
+            rc, out = self._run_main([
+                "test-batch",
+                "--stage", "finalize",
+                "--agent-output", str(agent_output_path),
+            ])
+
+        self.assertEqual(rc, 0)
+        mock_finalize.assert_called_once()
+        call_kwargs = mock_finalize.call_args.kwargs
+        self.assertEqual(call_kwargs.get("verify_cmd"), "exit 0")
+        self.assertEqual(call_kwargs.get("cwd_override"), nested_hub)
+
+    def test_overview_verify_cwd_hub_resolves_module_wide_cwd_override(self):
+        """Nested layout: overview verify: {cwd: hub, command: ...} resolves module_wide_cwd_override to project_root."""
+        nested_hub = self.tmp_path / "hub"
+        nested_hub.mkdir(parents=True, exist_ok=True)
+        _make_fixture(nested_hub)
+
+        plan_dir = nested_hub / "task" / "plan"
+        overview_with_verify = (
+            "# Plan: Test Task\n\n"
+            "```yaml\n"
+            "task: Test Task\n"
+            "slug: test-slug\n"
+            "approved: true\n"
+            "verify:\n"
+            "  cwd: hub\n"
+            "  command: exit 0\n"
+            "```\n\n"
+            "## Batch Index\n\n"
+            "```yaml\n"
+            "batches:\n"
+            "  - name: test-batch\n"
+            "    file: 01-test-batch.md\n"
+            "    depends-on: []\n"
+            "    verify: null\n"
+            "```\n"
+        )
+        (plan_dir / "00-overview.md").write_text(overview_with_verify, encoding="utf-8")
+
+        agent_output_path = self.tmp_path / "agent-output.txt"
+        agent_output_path.write_text(
+            '{"status":"success","commit_sha":"xyz","session_id":"fake"}\n',
+            encoding="utf-8"
+        )
+
+        with (
+            unittest.mock.patch.object(
+                millpy_implement._paths, "resolve_hub_path", return_value=nested_hub
+            ),
+            unittest.mock.patch.object(
+                millpy_implement._paths, "resolve_git_root", return_value=self.tmp_path
+            ),
+            unittest.mock.patch.object(
+                millpy_implement, "finalize_from_output", return_value=0
+            ) as mock_finalize,
+        ):
+            rc, out = self._run_main([
+                "test-batch",
+                "--stage", "finalize",
+                "--agent-output", str(agent_output_path),
+            ])
+
+        self.assertEqual(rc, 0)
+        mock_finalize.assert_called_once()
+        call_kwargs = mock_finalize.call_args.kwargs
+        self.assertEqual(call_kwargs.get("module_wide_verify_cmd"), "exit 0")
+        self.assertEqual(call_kwargs.get("module_wide_cwd_override"), nested_hub)
+
+    def test_baseline_stage_cwd_hub_derives_relative_fragment_for_compute_baseline(self):
+        """Nested layout: overview verify: {cwd: hub, ...} makes _run_baseline_stage pass a hub-relative cwd_override_relative to compute_baseline."""
+        nested_hub = self.tmp_path / "hub"
+        nested_hub.mkdir(parents=True, exist_ok=True)
+        _make_fixture(nested_hub)
+
+        plan_dir = nested_hub / "task" / "plan"
+        overview_with_verify = (
+            "# Plan: Test Task\n\n"
+            "```yaml\n"
+            "task: Test Task\n"
+            "slug: test-slug\n"
+            "approved: true\n"
+            "verify:\n"
+            "  cwd: hub\n"
+            "  command: exit 0\n"
+            "```\n\n"
+            "## Batch Index\n\n"
+            "```yaml\n"
+            "batches:\n"
+            "  - name: test-batch\n"
+            "    file: 01-test-batch.md\n"
+            "    depends-on: []\n"
+            "    verify: null\n"
+            "```\n"
+        )
+        (plan_dir / "00-overview.md").write_text(overview_with_verify, encoding="utf-8")
+
+        with (
+            unittest.mock.patch.object(
+                millpy_implement._paths, "resolve_hub_path", return_value=nested_hub
+            ),
+            unittest.mock.patch.object(
+                millpy_implement._paths, "resolve_git_root", return_value=self.tmp_path
+            ),
+            unittest.mock.patch.object(
+                millpy_implement._status, "get_module_verify_baseline", return_value=None
+            ),
+            unittest.mock.patch.object(
+                millpy_implement._parent_branch, "resolve", return_value="main"
+            ),
+            unittest.mock.patch.object(
+                millpy_implement._verify_baseline, "compute_baseline", return_value="clean"
+            ) as mock_compute_baseline,
+        ):
+            rc, out = self._run_main(["--stage", "baseline"])
+
+        self.assertEqual(rc, 0)
+        mock_compute_baseline.assert_called_once()
+        call_args, call_kwargs = mock_compute_baseline.call_args
+        self.assertEqual(call_args[0], nested_hub)
+        self.assertEqual(call_args[1], self.tmp_path)
+        self.assertEqual(call_args[3], "exit 0")
+        self.assertEqual(call_kwargs.get("cwd_override_relative"), Path("hub"))
+
+    def test_baseline_stage_cwd_git_root_passes_none_relative_fragment(self):
+        """Nested layout: overview verify: {cwd: git_root, ...} makes _run_baseline_stage pass cwd_override_relative=None."""
+        nested_hub = self.tmp_path / "hub"
+        nested_hub.mkdir(parents=True, exist_ok=True)
+        _make_fixture(nested_hub)
+
+        plan_dir = nested_hub / "task" / "plan"
+        overview_with_verify = (
+            "# Plan: Test Task\n\n"
+            "```yaml\n"
+            "task: Test Task\n"
+            "slug: test-slug\n"
+            "approved: true\n"
+            "verify:\n"
+            "  cwd: git_root\n"
+            "  command: exit 0\n"
+            "```\n\n"
+            "## Batch Index\n\n"
+            "```yaml\n"
+            "batches:\n"
+            "  - name: test-batch\n"
+            "    file: 01-test-batch.md\n"
+            "    depends-on: []\n"
+            "    verify: null\n"
+            "```\n"
+        )
+        (plan_dir / "00-overview.md").write_text(overview_with_verify, encoding="utf-8")
+
+        with (
+            unittest.mock.patch.object(
+                millpy_implement._paths, "resolve_hub_path", return_value=nested_hub
+            ),
+            unittest.mock.patch.object(
+                millpy_implement._paths, "resolve_git_root", return_value=self.tmp_path
+            ),
+            unittest.mock.patch.object(
+                millpy_implement._status, "get_module_verify_baseline", return_value=None
+            ),
+            unittest.mock.patch.object(
+                millpy_implement._parent_branch, "resolve", return_value="main"
+            ),
+            unittest.mock.patch.object(
+                millpy_implement._verify_baseline, "compute_baseline", return_value="clean"
+            ) as mock_compute_baseline,
+        ):
+            rc, out = self._run_main(["--stage", "baseline"])
+
+        self.assertEqual(rc, 0)
+        mock_compute_baseline.assert_called_once()
+        _, call_kwargs = mock_compute_baseline.call_args
+        self.assertIsNone(call_kwargs.get("cwd_override_relative"))
+
+    def test_baseline_stage_plain_string_verify_passes_none_relative_fragment(self):
+        """Flat layout: plain-string overview verify: makes _run_baseline_stage pass cwd_override_relative=None."""
+        # Uses the default fixture (verify: null in the batch, flat layout hub == git_root),
+        # but with a non-null plain-string overview verify.
+        plan_dir = self.tmp_path / "task" / "plan"
+        overview_with_verify = (
+            "# Plan: Test Task\n\n"
+            "```yaml\n"
+            "task: Test Task\n"
+            "slug: test-slug\n"
+            "approved: true\n"
+            "verify: exit 0\n"
+            "```\n\n"
+            "## Batch Index\n\n"
+            "```yaml\n"
+            "batches:\n"
+            "  - name: test-batch\n"
+            "    file: 01-test-batch.md\n"
+            "    depends-on: []\n"
+            "    verify: null\n"
+            "```\n"
+        )
+        (plan_dir / "00-overview.md").write_text(overview_with_verify, encoding="utf-8")
+
+        with (
+            unittest.mock.patch.object(
+                millpy_implement._status, "get_module_verify_baseline", return_value=None
+            ),
+            unittest.mock.patch.object(
+                millpy_implement._parent_branch, "resolve", return_value="main"
+            ),
+            unittest.mock.patch.object(
+                millpy_implement._verify_baseline, "compute_baseline", return_value="clean"
+            ) as mock_compute_baseline,
+        ):
+            rc, out = self._run_main(["--stage", "baseline"])
+
+        self.assertEqual(rc, 0)
+        mock_compute_baseline.assert_called_once()
+        _, call_kwargs = mock_compute_baseline.call_args
+        self.assertIsNone(call_kwargs.get("cwd_override_relative"))
+
     def test_real_brief_renders_parent_branch_token(self):
         """Rendering the real implementer-brief.md substitutes <PARENT_BRANCH> with the parent value."""
         plugin_root = HUB / "plugins" / "mill"
@@ -1229,6 +1484,88 @@ class TestForwardOutput(unittest.TestCase):
                     )
         self.assertEqual(rc, 0)
         self.assertEqual(json.loads(buf.getvalue().strip())["commit_sha"], "abc1234")
+
+
+class TestVerifyBaselineCwdOverrideRelative(unittest.TestCase):
+    """_verify_baseline.compute_baseline's cwd_override_relative re-anchoring (#604).
+
+    Exercises compute_baseline directly (not through millpy-implement.py's CLI),
+    mocking git and subprocess so only the dependency-junction targets and the
+    verify subprocess's cwd are observed.
+    """
+
+    def setUp(self):
+        self.tmp_path = Path(tempfile.mkdtemp())
+        self.addCleanup(_safe_rmtree.safe_rmtree, self.tmp_path, allowed_root=self.tmp_path, ignore_errors=True)
+
+        self.project_root = self.tmp_path / "project"
+        self.git_root = self.tmp_path / "git"
+        self.project_root.mkdir(parents=True, exist_ok=True)
+        self.git_root.mkdir(parents=True, exist_ok=True)
+        # A single gitignored dependency dir to exercise the junction loop.
+        (self.project_root / ".venv").mkdir()
+
+        def _p(target, attr, **kwargs):
+            patcher = unittest.mock.patch.object(target, attr, **kwargs)
+            mock_obj = patcher.start()
+            self.addCleanup(patcher.stop)
+            return mock_obj
+
+        # git rev-parse / git worktree add both succeed with a fixed sha.
+        self.mock_subprocess_util_run = _p(
+            _verify_baseline._subprocess_util, "run",
+            return_value=subprocess.CompletedProcess(
+                args=[], returncode=0, stdout="deadbeef\n", stderr=""
+            ),
+        )
+        # Deterministic transient-worktree path: fix uuid4 so tmp_path is known.
+        fixed_uuid = uuid.UUID("00000000-0000-0000-0000-0000000000aa")
+        _p(_verify_baseline.uuid, "uuid4", return_value=fixed_uuid)
+        self.mock_junction_create = _p(_verify_baseline._junction, "create")
+        _p(_verify_baseline._worktree, "remove_safe")
+        self.expected_tmp_path = (
+            self.project_root / ".scratch" / f"verify-baseline-{fixed_uuid.hex}"
+        )
+
+    def test_junction_and_verify_cwd_reanchored_when_cwd_override_relative_set(self):
+        """cwd_override_relative set: junction target and verify cwd both re-anchor under it."""
+        with unittest.mock.patch.object(
+            _verify_baseline.subprocess, "run",
+            return_value=unittest.mock.MagicMock(returncode=0, stdout="", stderr=""),
+        ) as mock_verify_run:
+            result = _verify_baseline.compute_baseline(
+                self.project_root,
+                self.git_root,
+                "main",
+                "exit 0",
+                cwd_override_relative=Path("hub"),
+            )
+
+        self.assertEqual(result, "clean")
+        self.mock_junction_create.assert_called_once_with(
+            self.project_root / ".venv", self.expected_tmp_path / "hub" / ".venv"
+        )
+        self.assertEqual(
+            mock_verify_run.call_args.kwargs.get("cwd"), self.expected_tmp_path / "hub"
+        )
+
+    def test_junction_and_verify_cwd_unchanged_when_cwd_override_relative_none(self):
+        """cwd_override_relative=None: junction target and verify cwd stay at tmp_path directly (flat layout)."""
+        with unittest.mock.patch.object(
+            _verify_baseline.subprocess, "run",
+            return_value=unittest.mock.MagicMock(returncode=0, stdout="", stderr=""),
+        ) as mock_verify_run:
+            result = _verify_baseline.compute_baseline(
+                self.project_root, self.git_root, "main", "exit 0",
+            )
+
+        self.assertEqual(result, "clean")
+        self.mock_junction_create.assert_called_once_with(
+            self.project_root / ".venv", self.expected_tmp_path / ".venv"
+        )
+        self.assertEqual(
+            mock_verify_run.call_args.kwargs.get("cwd"), self.expected_tmp_path
+        )
 
 
 if __name__ == "__main__":
