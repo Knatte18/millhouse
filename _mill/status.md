@@ -74,5 +74,7 @@ batches:
     start_sha: 495e9dc4aac3ac6401b5ffbc200f0e7158b926fb
     commit_sha: f96768605eb6fc7679fa3c184909fab8d0f1ede1
   - name: fixer-verify-cwd
-    state: pending
+    state: running
+    implementer_session: 6895ca5c-60c9-4700-a766-420eaf49ee18
+    start_sha: 8e82aaf3f34ef82c7e68294e046432a9019a5910
 ```
