@@ -64,6 +64,62 @@ def _is_windows_lock_error(e: Exception) -> bool:
     return _has_windows_lock_error_signature(str(e))
 
 
+def _resolve_holistic_verify(
+    batch_verifies: list[tuple[str, str, Path | None]],
+) -> tuple[str, Path | None]:
+    """
+    Join a holistic scope's per-batch verify commands into one, enforcing a uniform cwd.
+
+    Holistic-scope fixing runs every contributing batch's verify command as a
+    single joined shell command (`" && ".join(...)`), and that joined command
+    executes with exactly one subprocess `cwd`. When the batches resolve to
+    more than one distinct non-None `cwd` (via the `verify: {cwd: hub|git_root,
+    ...}` mapping form introduced by `_plan_dag.parse_verify_field`), no single
+    subprocess `cwd` can satisfy all of them. That is a plan-authoring error --
+    mixing `cwd: hub` and `cwd: git_root` batches into one holistic join --
+    and must surface immediately rather than have the fixer silently pick one
+    batch's cwd over another's.
+
+    Args:
+        batch_verifies: `(batch_name, command, cwd)` triples in DAG order, as
+            returned by `_plan_dag.iter_batch_verifies`.
+
+    Returns:
+        `(joined_command, cwd_override)`. `joined_command` is every batch's
+        command joined with `" && "`, in the same order as `batch_verifies`.
+        `cwd_override` is the single distinct `cwd` shared by every batch that
+        specified one, or `None` when every batch's cwd was `None` (i.e. every
+        contributing batch used the plain-string `verify:` form).
+
+    Raises:
+        ValueError: More than one distinct non-None `cwd` value is present
+            across `batch_verifies`. The message names each conflicting batch
+            and the cwd it resolved to.
+    """
+    # Track each distinct non-None cwd in first-seen order, paired with the
+    # batch name that specified it, so a conflict error can name the
+    # disagreeing batches rather than just the cwd values.
+    cwd_to_batch_name: dict[Path, str] = {}
+    for batch_name, _command, cwd in batch_verifies:
+        if cwd is not None and cwd not in cwd_to_batch_name:
+            cwd_to_batch_name[cwd] = batch_name
+
+    if len(cwd_to_batch_name) > 1:
+        conflicts = ", ".join(
+            f"{batch_name!r} -> {cwd}" for cwd, batch_name in cwd_to_batch_name.items()
+        )
+        raise ValueError(
+            "holistic verify joining requires a single cwd across all contributing "
+            f"batches, but found mixed cwd values: {conflicts}"
+        )
+
+    joined_command = " && ".join(command for _, command, _ in batch_verifies)
+    # A single distinct cwd if any batch specified one, otherwise None (every
+    # batch used the plain-string verify form with no cwd opinion).
+    cwd_override = next(iter(cwd_to_batch_name), None)
+    return joined_command, cwd_override
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(
         description="Dispatch a fixer session for code review findings."
@@ -227,8 +283,14 @@ def main(argv=None) -> int:
             print("--agent-output is required when --stage finalize", file=sys.stderr)
             return 1
         fixer_snapshot_path = project_root / "_mill" / ".cleanliness-snapshot-fixer.txt"
-        # Resolve verify command for batch/holistic fixes
+        # Resolve verify command for batch/holistic fixes. cwd_override is
+        # pre-initialized to None here (before branching on args.scope) because
+        # the batch-scope read below is nested inside `if batch_entry is not
+        # None:` and the holistic-scope read inside `if batch_verifies:` --
+        # either guard can be false, leaving the pre-initialized None value,
+        # exactly matching pre-#604 behavior.
         verify_cmd = None
+        cwd_override = None
         if args.scope == "batch":
             batch_entry = next(
                 (b for b in batches if b["name"] == args.batch_name), None
@@ -236,12 +298,16 @@ def main(argv=None) -> int:
             if batch_entry is not None:
                 batch_file = plan_base / batch_entry["file"]
                 batch_frontmatter = _plan_dag._read_batch_frontmatter(batch_file)
-                verify_cmd = batch_frontmatter.get("verify")
+                verify_cmd, cwd_override = _plan_dag.parse_verify_field(
+                    batch_frontmatter, project_root, git_root
+                )
         elif args.scope == "holistic":
             # Derive concatenated verify_cmd from all batch verify commands in DAG order
-            batch_verifies = _plan_dag.iter_batch_verifies(plan_base)
+            batch_verifies = _plan_dag.iter_batch_verifies(
+                plan_base, project_root, git_root
+            )
             if batch_verifies:
-                verify_cmd = " && ".join(verify for _, verify in batch_verifies)
+                verify_cmd, cwd_override = _resolve_holistic_verify(batch_verifies)
         nits_scope = args.batch_name if args.scope == "batch" else "holistic"
         return finalize_from_output(
             Path(args.agent_output),
@@ -254,6 +320,7 @@ def main(argv=None) -> int:
             status_path=status_path,
             nits_scope=nits_scope,
             git_root=git_root,
+            cwd_override=cwd_override,
         )
 
     # Compute the fixer-brief carve-out clause once, from the already-parsed
@@ -281,7 +348,9 @@ def main(argv=None) -> int:
         batch_file = plan_base / batch_entry["file"]
         # Resolve batch verify command for batch-scope fixes
         batch_frontmatter = _plan_dag._read_batch_frontmatter(batch_file)
-        verify_cmd = batch_frontmatter.get("verify")
+        verify_cmd, cwd_override = _plan_dag.parse_verify_field(
+            batch_frontmatter, project_root, git_root
+        )
 
         _status.set_batch_fields(
             status_path,
@@ -354,11 +423,11 @@ def main(argv=None) -> int:
     else:  # args.scope == "holistic"
         # Holistic fixer dispatch
         # Derive concatenated verify_cmd from all batch verify commands in DAG order
-        batch_verifies = _plan_dag.iter_batch_verifies(plan_base)
-        verify_cmd = (
-            " && ".join(verify for _, verify in batch_verifies)
-            if batch_verifies
-            else None
+        batch_verifies = _plan_dag.iter_batch_verifies(
+            plan_base, project_root, git_root
+        )
+        verify_cmd, cwd_override = (
+            _resolve_holistic_verify(batch_verifies) if batch_verifies else (None, None)
         )
         batch_files_text = "\n".join(str(plan_base / b["file"]) for b in batches)
 
@@ -493,6 +562,7 @@ def main(argv=None) -> int:
         status_path=status_path,
         nits_scope=nits_scope,
         git_root=git_root,
+        cwd_override=cwd_override,
     )
 
 
