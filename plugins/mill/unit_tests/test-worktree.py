@@ -1,6 +1,7 @@
 """Unit tests for plugins/mill/scripts/_worktree.py."""
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 import tempfile
@@ -398,6 +399,53 @@ def main() -> int:
             except OSError:
                 raise AssertionError("kill_stale_holders must swallow taskkill exceptions")
             print("PASS: kill_stale_holders — taskkill exceptions swallowed")
+
+        # --- kill_stale_holders: real default enumerator command shape and single-dict JSON ---
+        if sys.platform == "win32":
+            with tempfile.TemporaryDirectory() as tmp:
+                worktree = Path(tmp) / "wt"
+                worktree.mkdir()
+
+                # Capture the argv passed to the default enumerator's subprocess call so we
+                # can assert on the exact PowerShell command shape, regressing #602 (the
+                # -AsArray flag is PowerShell-7-only and fails on the default PS 5.1 alias).
+                captured_argv = []
+
+                def _fake_run_capture_argv(argv, **kwargs):
+                    captured_argv.append(argv)
+                    return MagicMock(returncode=0, stdout="[]", stderr="")
+
+                with patch("_worktree._subprocess_util.run", side_effect=_fake_run_capture_argv):
+                    kill_stale_holders(worktree, enumerate_processes=None)
+
+                assert len(captured_argv) == 1, f"Expected 1 subprocess call, got {len(captured_argv)}"
+                command_text = " ".join(captured_argv[0])
+                assert "-AsArray" not in command_text, (
+                    f"Regression #602: -AsArray must not appear in the PowerShell command, got {command_text}"
+                )
+                print("PASS: kill_stale_holders — default enumerator omits PS7-only -AsArray flag")
+
+                # Re-invoke with the default enumerator returning a single JSON object (not a
+                # list), the exact shape PS 5.1's ConvertTo-Json produces for one process. The
+                # existing `data = [data] if data else []` normalization must still wrap it.
+                single_dict_json = json.dumps({"ProcessId": 999, "CommandLine": f"poll {worktree}/file"})
+                kill_calls = []
+
+                def _fake_run_single_dict(argv, **kwargs):
+                    if "taskkill" in argv:
+                        kill_calls.append(argv)
+                        return MagicMock(returncode=0, stdout="", stderr="")
+                    return MagicMock(returncode=0, stdout=single_dict_json, stderr="")
+
+                with patch("_worktree._subprocess_util.run", side_effect=_fake_run_single_dict):
+                    kill_stale_holders(worktree, enumerate_processes=None)
+
+                taskkill_calls = [c for c in kill_calls if "taskkill" in c]
+                assert len(taskkill_calls) == 1, f"Expected 1 taskkill call, got {len(taskkill_calls)}"
+                assert "999" in taskkill_calls[0], f"Expected pid 999 in taskkill call, got {taskkill_calls[0]}"
+                print("PASS: kill_stale_holders — single-dict JSON from default enumerator is normalized")
+        else:
+            print("SKIP: kill_stale_holders default enumerator test (Windows-only)")
 
         print("All _worktree unit tests passed.")
         return 0

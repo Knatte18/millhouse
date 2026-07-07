@@ -3128,6 +3128,54 @@ def main() -> int:
             print(f"FAIL: case 62 ({exc}) captured={captured!r}", file=sys.stderr)
             errors += 1
 
+    # Case 63: #605 regression -- finalize_from_output unescapes HTML entities in the
+    # agent-output file before delegating to _forward_output. The harness HTML-escapes
+    # the <task-notification> payload uniformly before delivery, so the raw file on disk
+    # may contain entities like "&amp;", "&lt;", "&gt;". Patch _forward_output to capture
+    # its first positional argument (the "output" string) so we can assert the captured
+    # text is the fully-unescaped original rather than exercising the real gate logic.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        base_sha = _setup_fixture(project_root)
+        snapshot_path = project_root / "_mill" / ".cleanliness-snapshot-test.txt"
+        _cleanliness.capture_snapshot(project_root, snapshot_path)
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "--allow-empty", "-m", "second"],
+            check=True,
+            capture_output=True,
+        )
+        agent_output_path = project_root / "_mill" / "agent-output.txt"
+        escaped_text = "Q&amp;A send &lt;guid&gt; Cards 20 &amp; 21"
+        agent_output_path.write_text(escaped_text, encoding="utf-8")
+        captured_args = {}
+
+        def _fake_forward_output(output, *args, **kwargs):
+            captured_args["output"] = output
+            return 0
+
+        try:
+            with unittest.mock.patch(
+                "_implementer_common._forward_output",
+                side_effect=_fake_forward_output,
+            ):
+                finalize_from_output(
+                    agent_output_path,
+                    project_root,
+                    start_sha=base_sha,
+                    snapshot_path=snapshot_path,
+                    session_id="test-session",
+                )
+            assert captured_args.get("output") == "Q&A send <guid> Cards 20 & 21", (
+                f"case 63: expected fully-unescaped text, got {captured_args.get('output')!r}"
+            )
+            print(
+                "PASS: case 63 - #605 finalize_from_output unescapes HTML entities"
+                " in agent-output read"
+            )
+        except Exception as exc:
+            print(f"FAIL: case 63 ({exc})", file=sys.stderr)
+            errors += 1
+
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)
         return 1

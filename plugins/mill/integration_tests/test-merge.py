@@ -207,6 +207,15 @@ def _setup_trio(container: Path) -> tuple[Path, Path, Path, str]:
     _run(["git", "-C", str(hub), "add", "README.md"], cwd=container)
     _run(["git", "-C", str(hub), "commit", "-m", "init"], cwd=container)
 
+    # Bare origin remote for the hub, mirroring the wiki's bare + push pattern
+    # above. Without this, the hub repo has no origin at all, and the
+    # mill-merge-in no-op check's `git fetch origin` can never exercise the
+    # fetch-succeeds branch of its MERGE_REF resolution.
+    hub_origin = container / "hub-origin.git"
+    _run(["git", "init", "--bare", str(hub_origin), "-b", "main"], cwd=container)
+    _run(["git", "-C", str(hub), "remote", "add", "origin", str(hub_origin)], cwd=container)
+    _run(["git", "-C", str(hub), "push", "origin", "main"], cwd=container)
+
     # .millhouse on hub with wiki junction; .scratch/ at cwd-root.
     millhouse = hub / ".millhouse"
     millhouse.mkdir()
@@ -546,14 +555,39 @@ def main() -> int:
         )
         _assert(lock_path.exists(), "merge.lock not written")
 
-        # --- mill-merge-in no-op check: parent has no new commits vs HEAD ---
+        # --- mill-merge-in no-op check: fetch + resolve MERGE_REF, then diff HEAD..MERGE_REF ---
+        # Replicates SKILL.md's step 1 sequence exactly: fetch origin, prefer
+        # origin/<parent-branch> when it exists and local <parent-branch> is
+        # not ahead of it, else fall back to the local <parent-branch>.
+        _run(["git", "-C", str(worktree), "fetch", "origin", parent], cwd=container, check=False)
+        rev_parse = _run(
+            ["git", "-C", str(worktree), "rev-parse", "--verify", "--quiet",
+             f"refs/remotes/origin/{parent}"],
+            cwd=container, check=False,
+        )
+        if rev_parse.returncode == 0:
+            ancestor_check = _run(
+                ["git", "-C", str(worktree), "merge-base", "--is-ancestor",
+                 parent, f"origin/{parent}"],
+                cwd=container, check=False,
+            )
+            merge_ref = f"origin/{parent}" if ancestor_check.returncode == 0 else parent
+        else:
+            merge_ref = parent
+        # The hub's origin remote is freshly pushed and local main has not
+        # advanced since (see _setup_trio), so this must resolve to
+        # origin/main -- proving the test exercises the fetch-succeeds
+        # branch of MERGE_REF resolution, not just the local-ref fallback.
+        _assert(merge_ref == "origin/main",
+                f"expected MERGE_REF to resolve to origin/main, got {merge_ref!r}")
         result = _run(
-            ["git", "-C", str(worktree), "log", f"HEAD..{parent}", "--oneline"],
+            ["git", "-C", str(worktree), "log", f"HEAD..{merge_ref}", "--oneline"],
             cwd=container, check=False,
         )
         _assert(result.returncode == 0 and not result.stdout.strip(),
                 f"expected empty no-op check, got {result.stdout!r}")
-        print("PASS: mill-merge-in no-op check empty (parent has no new commits)")
+        print(f"PASS: mill-merge-in no-op check empty (MERGE_REF={merge_ref!r}, "
+              f"parent has no new commits)")
 
         # --- direct squash-merge child -> parent ---
         _run(["git", "-C", str(hub), "merge", "--squash", child_branch], cwd=container)

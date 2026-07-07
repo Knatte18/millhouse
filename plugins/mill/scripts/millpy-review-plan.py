@@ -21,6 +21,7 @@ Exit codes:
 from __future__ import annotations
 
 import argparse
+import html
 import json
 import sys
 from pathlib import Path
@@ -178,7 +179,10 @@ def main(argv: list[str] | None = None) -> int:
             round_n = discover_round(reviews_dir, "plan", "holistic")
         try:
             agent_output_path = Path(args.agent_output)
-            raw_text = agent_output_path.read_text(encoding="utf-8")
+            # The harness HTML-escapes the <task-notification> payload uniformly
+            # before delivery; unescape at this read site so the reviewer sees the
+            # original, uncorrupted text (fixes #605).
+            raw_text = html.unescape(agent_output_path.read_text(encoding="utf-8"))
             review_entry = finalize(
                 cfg, slug, raw_text, scope=None, round_n=round_n,
                 reviews_dir=reviews_dir, mill_dir=mill_dir,
