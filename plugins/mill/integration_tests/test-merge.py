@@ -34,6 +34,18 @@ Flow under test (mirrors mill-merge SKILL.md step numbering):
 Asserts each side effect. Worktree, branch, and wiki active-dir remain
 intact — mill-cleanup's job. Exits 0 on PASS, 1 on any failure; scratch
 is preserved on failure for inspection.
+
+Two further scenarios run after the flat-hub flow above, both against
+nested-hub-layout fixtures (``hub_root != git_root``, see the plan's
+"nested-hub-layout terminology" Shared Decision):
+
+    - The `_setup_nested_hub_scenario` case (#497 bug 2) verifies the
+      parent's own `_mill/status.md` survives a squash-merge untouched.
+    - The `_setup_nested_verify_plan` case (#604) verifies
+      `_plan_dag.iter_batch_verifies` resolves a batch's
+      ``verify: {cwd: hub, command: ...}`` mapping to `hub_root`, and
+      that replaying the command at that resolved cwd — not a fixed
+      "worktree root" — is what makes it succeed.
 """
 from __future__ import annotations
 
@@ -410,6 +422,92 @@ def _setup_nested_hub_scenario(
     )
 
 
+def _setup_nested_verify_plan(container: Path) -> tuple[Path, Path, Path]:
+    """
+    Build a minimal nested-hub plan directory for the merge-in Verify-cwd case.
+
+    Creates a git repo at ``<container>/nested-verify-repo`` (the
+    ``git_root``) with a hub subdirectory at ``src/hub`` (the
+    ``hub_root``, a plain directory rather than its own git repo --
+    a nested-hub-layout is a hub living in a subdirectory of a single
+    git repo, per the "nested-hub-layout terminology" Shared Decision).
+    The hub directory carries a marker file that exists only there, not
+    at ``git_root``.
+
+    The plan directory (nested under the hub, mirroring where a real
+    task's ``_mill/plan/`` lives) declares one batch whose ``verify:``
+    is the mapping form ``{cwd: hub, command: ...}``. The command
+    checks for the hub-only marker file relative to its own cwd, so it
+    only exits zero when actually run from ``hub_root`` -- proving that
+    a merge-in replay honors the resolved cwd instead of always running
+    at a fixed "worktree root" (the #604 bug being regression-tested
+    here).
+
+    Returns ``(git_root, hub_root, plan_dir)``.
+    """
+    container.mkdir(parents=True, exist_ok=True)
+    git_root = container / "nested-verify-repo"
+    hub_root = git_root / "src" / "hub"
+    hub_root.mkdir(parents=True, exist_ok=True)
+
+    _run(["git", "init", str(git_root), "-b", "main"], cwd=container)
+    _run(["git", "-C", str(git_root), "config", "user.email", "test@example.com"], cwd=container)
+    _run(["git", "-C", str(git_root), "config", "user.name", "Test"], cwd=container)
+
+    # Hub-only marker: present at hub_root but absent at git_root, so
+    # the verify command below distinguishes the two roots by its exit
+    # code alone.
+    (hub_root / "hub-marker.txt").write_text("hub\n", encoding="utf-8")
+    _run(["git", "-C", str(git_root), "add", "src/hub/hub-marker.txt"], cwd=container)
+    _run(["git", "-C", str(git_root), "commit", "-m", "seed nested hub"], cwd=container)
+
+    plan_dir = hub_root / "_mill" / "plan"
+    plan_dir.mkdir(parents=True, exist_ok=True)
+    verify_command = (
+        'python -c "import pathlib,sys;'
+        "sys.exit(0 if pathlib.Path('hub-marker.txt').exists() else 1)\""
+    )
+    (plan_dir / "00-overview.md").write_text(
+        "# Plan: Nested verify-cwd\n"
+        "\n"
+        "```yaml\n"
+        "task: Nested verify-cwd\n"
+        "slug: nested-verify-cwd\n"
+        "approved: true\n"
+        "started: 20260706-120000\n"
+        "parent: main\n"
+        'root: ""\n'
+        "verify: null\n"
+        "```\n"
+        "\n"
+        "## Batch Index\n"
+        "\n"
+        "```yaml\n"
+        "batches:\n"
+        "  - name: only\n"
+        "    file: 01-only.md\n"
+        "    depends-on: []\n"
+        f"    verify:\n"
+        f"      cwd: hub\n"
+        f"      command: {verify_command}\n"
+        "```\n",
+        encoding="utf-8",
+    )
+    (plan_dir / "01-only.md").write_text(
+        "# Batch: only\n\n"
+        "```yaml\n"
+        "batch: only\n"
+        "cards: 1\n"
+        "depends-on: []\n"
+        "verify:\n"
+        "  cwd: hub\n"
+        f"  command: {verify_command}\n"
+        "```\n",
+        encoding="utf-8",
+    )
+    return git_root, hub_root, plan_dir
+
+
 def main() -> int:
     SCRATCH.mkdir(parents=True, exist_ok=True)
     container = SCRATCH / f"merge-test-{uuid.uuid4().hex[:8]}"
@@ -428,7 +526,12 @@ def main() -> int:
         print(f"PASS: _parent_branch.resolve -> {parent!r}")
 
         # --- batch verify iteration (all null in seed -> empty list) ---
-        verifies = _plan_dag.iter_batch_verifies(wiki_path / "active" / slug / "plan")
+        # Flat-layout fixture: hub_root == git_root == hub, matching the
+        # invariant established by the "nested-hub-layout terminology"
+        # Shared Decision. The all-null case is unaffected by the
+        # tuple-shape change (still an empty list either way), but the
+        # call must type-check against the batch-3 signature.
+        verifies = _plan_dag.iter_batch_verifies(wiki_path / "active" / slug / "plan", hub, hub)
         _assert(verifies == [], f"expected no verifies, got {verifies}")
         print("PASS: iter_batch_verifies returns [] when every batch has verify: null")
 
@@ -605,6 +708,63 @@ def main() -> int:
         print("PASS: archive tag resolves and preserves child cleanup state (no _mill)")
 
         print("PASS -- mill-merge nested-hub scenario (preserves parent _mill/status.md)")
+
+        # === Run nested verify-cwd scenario (new test for #604 merge-in replay) ===
+        print("\n[test-merge] nested verify-cwd scenario starting", file=sys.stderr)
+        container_verify = SCRATCH / f"merge-test-verify-{uuid.uuid4().hex[:8]}"
+        verify_git_root, verify_hub_root, verify_plan_dir = _setup_nested_verify_plan(
+            container_verify
+        )
+        print(f"[test-merge] nested verify-cwd container: {container_verify}", file=sys.stderr)
+
+        # --- iter_batch_verifies resolves the mapping-form cwd to hub_root ---
+        verify_triples = _plan_dag.iter_batch_verifies(
+            verify_plan_dir, verify_hub_root, verify_git_root
+        )
+        _assert(
+            len(verify_triples) == 1,
+            f"expected exactly one verify triple, got {verify_triples}",
+        )
+        _verify_name, verify_cmd, verify_cwd = verify_triples[0]
+        _assert(
+            verify_cwd == verify_hub_root,
+            f"expected mapping-form cwd to resolve to hub_root {verify_hub_root}, got {verify_cwd}",
+        )
+        print("PASS: iter_batch_verifies resolves {cwd: hub, command: ...} to hub_root")
+
+        # --- mirror mill-merge-in's Step 4 cwd resolution rule: hub_root
+        #     for cwd == hub_root, git_root for cwd == git_root, hub_root
+        #     for cwd is None (the string-form default) ---
+        if verify_cwd == verify_git_root:
+            resolved_cwd = verify_git_root
+        else:
+            resolved_cwd = verify_hub_root
+
+        # --- replaying the command at the resolved hub_root succeeds ---
+        replay_result = subprocess.run(
+            verify_cmd, shell=True, cwd=str(resolved_cwd), capture_output=True, text=True,
+        )
+        _assert(
+            replay_result.returncode == 0,
+            f"replayed verify command failed at resolved hub_root cwd "
+            f"(stdout={replay_result.stdout!r} stderr={replay_result.stderr!r})",
+        )
+        print("PASS: replayed verify command succeeds when run at resolved hub_root")
+
+        # --- the same command fails at git_root, confirming this fixture
+        #     actually distinguishes hub_root from git_root -- and that a
+        #     regression back to a fixed "worktree root" would be caught ---
+        wrong_cwd_result = subprocess.run(
+            verify_cmd, shell=True, cwd=str(verify_git_root), capture_output=True, text=True,
+        )
+        _assert(
+            wrong_cwd_result.returncode != 0,
+            "verify command unexpectedly succeeded at git_root -- fixture cannot "
+            "distinguish hub_root from git_root",
+        )
+        print("PASS: same command fails at git_root, confirming the fixture distinguishes cwd")
+
+        print("PASS -- mill-merge-in Verify step replays nested-layout batch at resolved hub_root")
         return 0
     except AssertionError as exc:
         print(f"FAIL: {exc}", file=sys.stderr)
@@ -621,12 +781,20 @@ def main() -> int:
             print(f"Scratch preserved: {container}", file=sys.stderr)
             if "container_nested" in locals():
                 print(f"Scratch preserved: {container_nested}", file=sys.stderr)
+            if "container_verify" in locals():
+                print(f"Scratch preserved: {container_verify}", file=sys.stderr)
         else:
             _safe_rmtree.safe_rmtree(container, allowed_root=container, ignore_errors=True)
             if "container_nested" in locals():
                 _safe_rmtree.safe_rmtree(
                     container_nested,
                     allowed_root=container_nested,
+                    ignore_errors=True,
+                )
+            if "container_verify" in locals():
+                _safe_rmtree.safe_rmtree(
+                    container_verify,
+                    allowed_root=container_verify,
                     ignore_errors=True,
                 )
 
