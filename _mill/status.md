@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-plan-validate-verify-cwd
+phase: approved-merge-in-verify-cwd
 slug: nested-layout-fixes
 branch: hanf/nested-layout-fixes
 plan: _mill/plan
@@ -30,6 +30,7 @@ approved-brief-path-fix  '2026-07-06T18:26:33Z'
 approved-verify-cwd-foundation  '2026-07-06T18:31:05Z'
 approved-implementer-verify-cwd  '2026-07-06T18:47:30Z'
 approved-plan-validate-verify-cwd  '2026-07-06T18:56:52Z'
+approved-merge-in-verify-cwd  '2026-07-07T06:31:20Z'
 ```
 
 ## Batches
@@ -62,9 +63,10 @@ batches:
     start_sha: f78319c97d3a59414deef92f4f97391ec60cfba5
     commit_sha: b3760a168d5599290157a9ec32510ee8673d5205
   - name: merge-in-verify-cwd
-    state: running
+    state: approved
     implementer_session: f9730952-e001-4a04-9fdf-049de845081d
     start_sha: 3b67aa8e0c5ac22f0614bfbf7a67cd5848d599e2
+    commit_sha: 8a3b58cd9a032a8149927ce78dbccdb2b1126208
   - name: mill-plan-authoring-update
     state: pending
   - name: fixer-verify-cwd
