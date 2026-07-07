@@ -17,6 +17,8 @@ Non-null verify: commands MUST start with "PYTHONPATH= " (empty value, single sp
 
 verify: scope MUST match what the batch touches — usually a single test file or a `--only` list (e.g. `verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-fold.py test-marker.py`). Unbounded `run-all.py` runs the entire suite (multiple minutes); use it only when the batch genuinely touches a cross-cutting helper and justify the scope choice in the ## Batch Tests section.
 
+verify: also accepts the `{cwd: hub|git_root, command: <string>}` mapping form as an alternative to the plain string above (normalized by `_plan_dag.parse_verify_field`). The plain string implies `cwd: git_root`. In a nested layout (`_paths.resolve_hub_path() != _paths.resolve_git_root()`), if this batch's verify command is naturally hub-relative, write it as the mapping form with `cwd: hub` instead of the plain-string form. If it is naturally git-root-relative, keep the plain-string form (or an explicit `cwd: git_root` mapping) — the field describes how the command is actually written, not a forced choice.
+
 Strip this HTML comment before writing.
 -->
 # Batch: <BATCH_NAME>

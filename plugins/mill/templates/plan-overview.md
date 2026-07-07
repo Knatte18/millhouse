@@ -30,6 +30,17 @@ A module-wide failure propagates a `stuck_type: verify` stuck dict with
 the reason prefixed to indicate module-wide scope so the operator can
 distinguish the two gates.
 
+Both the per-batch `verify:` and this module-wide `verify:` also accept
+the `{cwd: hub|git_root, command: <string>}` mapping form as an
+alternative to the plain string (normalized by
+`_plan_dag.parse_verify_field`). The plain string implies `cwd:
+git_root`. In a nested layout (`_paths.resolve_hub_path() !=
+_paths.resolve_git_root()`), if the command being authored is naturally
+hub-relative, write it as the mapping form with `cwd: hub` instead of
+the plain-string form. If it is naturally git-root-relative, keep the
+plain-string form (or an explicit `cwd: git_root` mapping) — the field
+describes how the command is actually written, not a forced choice.
+
 Strip this HTML comment before writing.
 -->
 # Plan: <TASK_TITLE>
