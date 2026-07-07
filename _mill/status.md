@@ -68,7 +68,9 @@ batches:
     start_sha: 3b67aa8e0c5ac22f0614bfbf7a67cd5848d599e2
     commit_sha: 8a3b58cd9a032a8149927ce78dbccdb2b1126208
   - name: mill-plan-authoring-update
-    state: pending
+    state: running
+    implementer_session: 3d6fde64-d11c-4adf-b13c-c972f01ea7d4
+    start_sha: 495e9dc4aac3ac6401b5ffbc200f0e7158b926fb
   - name: fixer-verify-cwd
     state: pending
 ```
