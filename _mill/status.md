@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-reviewing
+phase: holistic-approved
 slug: nested-layout-fixes
 branch: hanf/nested-layout-fixes
 plan: _mill/plan
@@ -34,6 +34,7 @@ approved-merge-in-verify-cwd  '2026-07-07T06:31:20Z'
 approved-mill-plan-authoring-update  '2026-07-07T06:47:06Z'
 approved-fixer-verify-cwd  '2026-07-07T06:58:19Z'
 holistic-reviewing  '2026-07-07T06:58:37Z'
+holistic-approved  '2026-07-07T07:02:37Z'
 ```
 
 ## Batches
