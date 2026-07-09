@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-fix-r2
+phase: planned
 slug: codeguide-scope-resolution-fixes
 branch: hanf/codeguide-scope-resolution-fixes
 plan: _mill/plan
@@ -21,4 +21,5 @@ planning  '2026-07-09T13:19:11Z'
 plan-review-r1  '2026-07-09T13:24:22Z'
 plan-fix-r1  '2026-07-09T13:24:22Z'
 plan-fix-r2  '2026-07-09T13:29:58Z'
+planned  '2026-07-09T13:30:16Z'
 ```
