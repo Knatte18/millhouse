@@ -30,7 +30,9 @@ implementing  '2026-07-09T15:01:33Z'
 ```yaml
 batches:
   - name: resolve-scope-core
-    state: pending
+    state: running
+    implementer_session: 51fcc3d7-4844-447b-9408-f9ceddfbf55b
+    start_sha: 4145969029ae3e7576a2d58d1b96c5433118a044
   - name: parent-branch-helper
     state: pending
   - name: wire-up-callers
