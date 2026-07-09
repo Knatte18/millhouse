@@ -1,10 +1,10 @@
 # Status
 
 ```yaml
-phase: discussed
+phase: planning
 slug: mill-go-nit-gate-and-dispatch-gaps
 branch: hanf/mill-go-nit-gate-and-dispatch-gaps
-plan: null
+plan: _mill/plan
 parent: main
 task: Fix nit-enforcement gate marker gaps, NIT-dispatch wording, implementer liveness probe, and Haiku false-completion
 task_description: |
@@ -17,4 +17,5 @@ task_description: |
 discussing  '2026-07-09T12:45:14Z'
 discussion-fix-r1  '2026-07-09T13:06:11Z'
 discussed  '2026-07-09T13:06:31Z'
+planning  '2026-07-09T13:17:36Z'
 ```
