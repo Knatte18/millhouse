@@ -3,8 +3,8 @@ Integration test for millpy-cleanup.py.
 
 Seeds a full hub+wiki fixture under .scratch/ with six slug scenarios
 (done, abandoned, live, orphan-worktree, orphan-active, malformed-status).
-Asserts dry-run plan output, then asserts --apply produces the correct
-artefact removals and one wiki commit.
+Asserts --dry-run plan output, then asserts the default (apply) run produces
+the correct artefact removals and one wiki commit.
 
 Run from hub root:
     python plugins/mill/integration_tests/test-cleanup.py
@@ -166,7 +166,7 @@ def main() -> int:
 
         # --- Test 1: dry-run ---
         result = _run(
-            ["uv", "run", "--project", str(PLUGIN_ROOT), str(SCRIPTS / "millpy-cleanup.py")],
+            ["uv", "run", "--project", str(PLUGIN_ROOT), str(SCRIPTS / "millpy-cleanup.py"), "--dry-run"],
             cwd=hub, check=False,
         )
         print(f"--- dry-run stdout ---\n{result.stdout}", file=sys.stderr)
@@ -185,14 +185,14 @@ def main() -> int:
         assert (worktrees_dir / "abandoned-slug").exists(), "dry-run must not remove abandoned-slug worktree"
         print("PASS dry-run: plan output contains correct REMOVE and REPORT lines")
 
-        # --- Test 2: --apply ---
+        # --- Test 2: apply (default) ---
         result = _run(
-            ["uv", "run", "--project", str(PLUGIN_ROOT), str(SCRIPTS / "millpy-cleanup.py"), "--apply"],
+            ["uv", "run", "--project", str(PLUGIN_ROOT), str(SCRIPTS / "millpy-cleanup.py")],
             cwd=hub, check=False,
         )
         print(f"--- apply stdout ---\n{result.stdout}", file=sys.stderr)
         print(f"--- apply stderr ---\n{result.stderr}", file=sys.stderr)
-        assert result.returncode == 0, f"--apply exit={result.returncode}\n{result.stdout}\n{result.stderr}"
+        assert result.returncode == 0, f"apply exit={result.returncode}\n{result.stdout}\n{result.stderr}"
 
         # Worktree assertions
         assert not (worktrees_dir / "done-slug").exists(), "done-slug worktree should be removed"
