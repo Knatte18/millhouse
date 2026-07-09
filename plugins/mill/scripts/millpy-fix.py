@@ -513,6 +513,7 @@ def main(argv=None) -> int:
             model_tier,
             session_id,
             start_sha=start_sha,
+            nits_only=args.nits_only,
         )
 
     # Stage: full (default)
