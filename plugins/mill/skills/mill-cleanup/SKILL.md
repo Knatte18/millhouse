@@ -17,12 +17,12 @@ Sweeps task artefacts: removes worktrees, branches, portals, and legacy wiki act
 | `[pr-pending]` | `pr-pending` | Poll `gh pr list`; if MERGED → create archive tag (if absent) + flip `[done]` + teardown; OPEN → skip; CLOSED → report for manual triage |
 | `[active]` / `[ready-to-merge]` / `[pr-pending]` with no active worktree | n/a | Report as orphan Home.md marker |
 
-Cleanup takes the wiki lock only when `--apply` is set. PR-reap also runs only under `--apply` — dry-run mode reports which `[pr-pending]` tasks WOULD be polled.
+Cleanup takes the wiki lock unless `--dry-run` is set. PR-reap also runs only when applying — dry-run mode reports which `[pr-pending]` tasks WOULD be polled.
 
 ## Run it
 
 ```bash
-PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-cleanup.py" [--apply]
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-cleanup.py" [--dry-run]
 ```
 
-Default is dry-run — pass `--apply` to execute removals. Must run from the hub, not from a worktree. Takes the wiki lock only when `--apply` is set.
+Default applies removals — pass `--dry-run` to report only. Must run from the hub, not from a worktree. Takes the wiki lock unless `--dry-run` is set.

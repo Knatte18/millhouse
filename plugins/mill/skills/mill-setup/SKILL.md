@@ -436,10 +436,10 @@ The hub is always coloured `#2d7d46` so the operator can spot it instantly. mill
 | Present with different colour | Back up to `.vscode/settings.json.bak`, then overwrite. |
 | Present but no `titleBar.activeBackground` key | Back up to `.vscode/settings.json.bak`, then overwrite. |
 
-Render and write via `_vscode.write_settings`:
+Render and write via `_vscode.write_settings`, then write `.vscode/tasks.json` (auto-opens a pwsh terminal on folder open) via `_vscode.write_tasks` — unconditionally, same idempotent-overwrite semantics as settings.json:
 
 ```bash
-PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "from pathlib import Path; import yaml; import _vscode; from _paths import resolve_short_name; cfg = yaml.safe_load(Path(r'<cwd>/mill-config.yaml').read_text(encoding='utf-8')); _vscode.write_settings(color_hex='#2d7d46', target=Path('.vscode/settings.json'), short_name=resolve_short_name(cfg, '<repo-name>'))"
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "from pathlib import Path; import yaml; import _vscode; from _paths import resolve_short_name; cfg = yaml.safe_load(Path(r'<cwd>/mill-config.yaml').read_text(encoding='utf-8')); _vscode.write_settings(color_hex='#2d7d46', target=Path('.vscode/settings.json'), short_name=resolve_short_name(cfg, '<repo-name>')); _vscode.write_tasks(target=Path('.vscode/tasks.json'))"
 ```
 
 ### Phase 8 — Verify + report
@@ -460,6 +460,7 @@ Check every invariant; halt with a specific error if any fails:
 - `.millhouse/config.local.yaml` exists
 - Wiki daemon starts successfully: `_client.list_tasks_brief(wiki_path)` returns without error and Home.md exists in the wiki clone.
 - `.vscode/settings.json` exists with `titleBar.activeBackground == "#2d7d46"`
+- `.vscode/tasks.json` exists with a `runOn: folderOpen` task
 
 On success, print a summary:
 
@@ -474,7 +475,7 @@ mill-setup complete.
   hub_relative_path: <hub_subpath>
   Tasks (Home):      <WIKI_PATH>/Home.md  (hardlinked as tasks.md)
   Sidebar:           <WIKI_PATH>/_Sidebar.md
-  VS Code:           .vscode/settings.json (titleBar = #2d7d46 green)
+  VS Code:           .vscode/settings.json (titleBar = #2d7d46 green), .vscode/tasks.json (auto pwsh terminal)
   Shortcut wrappers: N .cmd scripts under .millhouse/
   PYTHONPATH (User): <scripts>
   MILL_PYTHON:       <python-path>
