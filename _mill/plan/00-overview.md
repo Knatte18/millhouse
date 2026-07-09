@@ -3,7 +3,7 @@
 ```yaml
 task: Fix nit-enforcement gate marker gaps, NIT-dispatch wording, implementer liveness probe, and Haiku false-completion
 slug: mill-go-nit-gate-and-dispatch-gaps
-approved: false
+approved: true
 started: 20260709-131351
 parent: main
 root: ""

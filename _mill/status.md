@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-fix-r1
+phase: plan-fix-r2
 slug: mill-go-nit-gate-and-dispatch-gaps
 branch: hanf/mill-go-nit-gate-and-dispatch-gaps
 plan: _mill/plan
@@ -20,4 +20,6 @@ discussed  '2026-07-09T13:06:31Z'
 planning  '2026-07-09T13:17:36Z'
 plan-review-r1  '2026-07-09T13:25:24Z'
 plan-fix-r1  '2026-07-09T13:25:41Z'
+plan-review-r2  '2026-07-09T13:32:22Z'
+plan-fix-r2  '2026-07-09T13:32:44Z'
 ```

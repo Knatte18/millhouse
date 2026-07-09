@@ -103,9 +103,17 @@ Five prose edits to `plugins/mill/skills/mill-go/SKILL.md`, all in the shared or
 - **Creates:** none
 - **Deletes:** none
 - **Moves:** none
-- **Requirements:** Two edits in the `## Agent-mode dispatch` section, step 4.
+- **Requirements:** Three edits in the `## Agent-mode dispatch` section: one in step 3's summary sentence, two in step 4.
 
-  **Edit A — replace step 4(b) and its "Clean mid-work stop" paragraph.** The exact current text (from "**(b) Stopped/interrupted notification for an implementer dispatch..." through the paragraph ending "...finalize now reclassifies a partial-batch verify failure or no-JSON inference as `incomplete` rather than `transient`.") is:
+  **Edit A — fix the stale summary sentence in step 3.** Step 3 ("**Call Agent tool:**"), in its final paragraph, contains this sentence describing today's routing (exact current text):
+
+  > A background agent is a **detached worker** that can be stopped or interrupted independently of the orchestrator. If the `<task-notification>` indicates the subagent was stopped or interrupted (rather than completing normally), route it through step 4's recovery paths below — implementer notifications go through the existing clean-mid-work-stop / `incomplete` routing; reviewer and fixer notifications are checked with a one-shot liveness probe before being treated as terminal.
+
+  This sentence would become stale and self-contradicting once Edit B below adds a probe to the implementer's stopped/interrupted path — it currently reads as if only reviewer/fixer get probed. Replace it verbatim with:
+
+  > A background agent is a **detached worker** that can be stopped or interrupted independently of the orchestrator. If the `<task-notification>` indicates the subagent was stopped or interrupted (rather than completing normally), route it through step 4's recovery paths below — implementer, reviewer, and fixer notifications are all checked with a one-shot liveness probe before being treated as terminal (for implementer, the probe gates only the stopped/interrupted trigger; a clean turn-exhaustion stop still routes straight to Clean mid-work stop, unprobed — see step 4(b)).
+
+  **Edit B — replace step 4(b) and its "Clean mid-work stop" paragraph.** The exact current text (from "**(b) Stopped/interrupted notification for an implementer dispatch..." through the paragraph ending "...finalize now reclassifies a partial-batch verify failure or no-JSON inference as `incomplete` rather than `transient`.") is:
 
   > **(b) Stopped/interrupted notification for an implementer dispatch — unchanged, routes to Clean mid-work stop below, never through the liveness probe in (c).** This carve-out exists because `--stage finalize`'s own completeness recount already disambiguates partial-vs-dead for the implementer (it inspects the actual commit count against the batch's card count), making a liveness probe redundant there.
   >
@@ -132,7 +140,7 @@ Five prose edits to `plugins/mill/skills/mill-go/SKILL.md`, all in the shared or
 
   Do not modify **(a)** (the "Raw API/infrastructure errors — unchanged" paragraph, immediately above (b)) or **(c)** (the "Stopped/interrupted notification for a reviewer or fixer dispatch — NEW liveness probe" paragraph, immediately below the span replaced above) — both remain exactly as they are today.
 
-  **Edit B — update the two "Agent-mode properties" bullets that describe implementer stopped/interrupted handling**, in the bullet list immediately following step 7 (headed "**Agent-mode properties:**"). The exact current text of the two affected bullets is:
+  **Edit C — update the two "Agent-mode properties" bullets that describe implementer stopped/interrupted handling**, in the bullet list immediately following step 7 (headed "**Agent-mode properties:**"). The exact current text of the two affected bullets is:
 
   > - A background agent IS a detached worker and CAN be stopped or interrupted. A stopped/interrupted agent produces a notification indicating it did not complete normally — handle that per step 4's recovery paths below (implementer: existing clean-mid-work-stop / `incomplete` routing; reviewer/fixer: liveness-probe-then-one-retry-transient path).
 
@@ -150,7 +158,7 @@ Five prose edits to `plugins/mill/skills/mill-go/SKILL.md`, all in the shared or
 
   The two bullets bracket a third, unrelated bullet ("`transient` stuck errors can still be emitted by `finalize` as synthetic JSON...") — leave that middle bullet untouched.
 
-  After both edits, re-read the full `## Agent-mode dispatch` section once to confirm no other passage still describes the implementer's stopped/interrupted path as going "never through the liveness probe" — this exact self-contradiction was flagged in `_mill/discussion.md`'s review history and must not survive this card.
+  After all three edits, re-read the full `## Agent-mode dispatch` section once to confirm no other passage still describes the implementer's stopped/interrupted path as going "never through the liveness probe" — this exact self-contradiction was flagged in `_mill/discussion.md`'s and plan-review's review history and must not survive this card.
 - **Commit:** `fix(mill-go): extend liveness probe to implementer stopped/interrupted notifications (#610)`
 
 ## Batch Tests
