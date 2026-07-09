@@ -15,6 +15,11 @@ Public API:
         Return the parent branch name. Raises ParentBranchError when
         status.md is missing the ``parent:`` row and ``interactive`` is
         False (auto-merge path in mill-go).
+    resolve_for_codeguide(status_path) -> str | None
+        Non-interactive wrapper around resolve() that swallows
+        ParentBranchError and returns None instead of raising, for
+        callers (e.g. git-commit) that must never block on a missing
+        parent.
 
 The status.md yaml-block parser lives in ``_status`` but is internal;
 here we reuse the same ```yaml fence convention and hand-parse the
@@ -93,3 +98,19 @@ def resolve(status_path: Path, *, interactive: bool = True) -> str:
     if not response:
         raise ParentBranchError("Empty parent branch name")
     return response
+
+
+def resolve_for_codeguide(status_path: Path) -> str | None:
+    """Return the task's parent branch for codeguide-update, or None.
+
+    A non-interactive, exception-swallowing wrapper around ``resolve()``
+    for callers (e.g. ``git-commit``) that must degrade silently rather
+    than block a commit over a missing or unreadable parent branch.
+    Calls ``resolve(status_path, interactive=False)``; on
+    ``ParentBranchError`` (missing ``parent:`` row, unreadable
+    status.md) returns ``None`` instead of raising or prompting.
+    """
+    try:
+        return resolve(status_path, interactive=False)
+    except ParentBranchError:
+        return None
