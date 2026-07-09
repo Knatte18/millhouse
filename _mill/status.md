@@ -1,0 +1,18 @@
+# Status
+
+```yaml
+phase: discussing
+slug: codeguide-scope-resolution-fixes
+branch: hanf/codeguide-scope-resolution-fixes
+plan: null
+parent: main
+task: Fix codeguide-update scope resolution on stacked branches and resolve_scope.py branch-name parsing
+task_description: |
+  Fix codeguide-update scope resolution on stacked branches and resolve_scope.py branch-name parsing
+```
+
+## Timeline
+
+```text
+discussing  '2026-07-09T12:45:00Z'
+```
