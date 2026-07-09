@@ -95,6 +95,24 @@ def _dedup(paths: list[pathlib.Path]) -> list[pathlib.Path]:
     return result
 
 
+def _ref_resolves(toplevel: pathlib.Path, ref: str) -> bool:
+    """
+    Check whether a git reference resolves to a commit.
+
+    Uses `git rev-parse --verify --quiet <ref>^{commit}` to determine
+    if the ref can be resolved locally.
+
+    Args:
+        toplevel: The git repository root.
+        ref: The reference string to check (can include ranges, branch names, SHAs, etc.).
+
+    Returns:
+        True if the ref resolves to a commit, False otherwise.
+    """
+    rc, _ = _git(toplevel, "rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}")
+    return rc == 0
+
+
 def _detect_base_branch(toplevel: pathlib.Path) -> str | None:
     rc, out = _git(toplevel, "symbolic-ref", "--short", "refs/remotes/origin/HEAD")
     if rc == 0:
@@ -123,10 +141,8 @@ def _no_arg_scope(toplevel: pathlib.Path, parent: str | None = None) -> tuple[li
     # through to the origin/HEAD -> origin/main -> origin/master chain exactly
     # as if --parent had never been supplied.
     base_branch: str | None = None
-    if parent is not None:
-        rc, _ = _git(toplevel, "rev-parse", "--verify", "--quiet", f"{parent}^{{commit}}")
-        if rc == 0:
-            base_branch = parent
+    if parent is not None and _ref_resolves(toplevel, parent):
+        base_branch = parent
     if base_branch is None:
         base_branch = _detect_base_branch(toplevel)
 
@@ -218,8 +234,7 @@ def _resolve_ref_token(toplevel: pathlib.Path, token: str) -> str | None:
     """
     suffix = "..HEAD"
     candidate = token[: -len(suffix)] if token.endswith(suffix) else token
-    rc, _ = _git(toplevel, "rev-parse", "--verify", "--quiet", f"{candidate}^{{commit}}")
-    return candidate if rc == 0 else None
+    return candidate if _ref_resolves(toplevel, candidate) else None
 
 
 def enumerate_scope(
