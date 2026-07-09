@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-reviewing
+phase: holistic-fixing
 slug: codeguide-scope-resolution-fixes
 branch: hanf/codeguide-scope-resolution-fixes
 plan: _mill/plan
@@ -27,6 +27,7 @@ approved-resolve-scope-core  '2026-07-09T15:10:26Z'
 approved-parent-branch-helper  '2026-07-09T15:14:12Z'
 approved-wire-up-callers  '2026-07-09T15:17:29Z'
 holistic-reviewing  '2026-07-09T15:18:02Z'
+holistic-fixing  '2026-07-09T15:21:24Z'
 ```
 
 ## Batches
