@@ -31,7 +31,9 @@ implementing  '2026-07-09T15:01:22Z'
 ```yaml
 batches:
   - name: nits-only-envelope-threading
-    state: pending
+    state: running
+    implementer_session: d03eb0c2-7b9a-4bc1-91a7-b6c15887d505
+    start_sha: 02eb557869aada25cb5753d8e0c1bceeaa00c383
   - name: implementer-brief-and-config-hardening
     state: pending
   - name: mill-go-skill-prose-fixes
