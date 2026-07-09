@@ -46,5 +46,7 @@ batches:
     start_sha: 3c0ebe7bbdf4db8d741f864def5becf5cb0f77ef
     commit_sha: de17e607
   - name: goimports-halt
-    state: pending
+    state: running
+    implementer_session: 0d462817-becc-4968-8bc7-baa1453fc252
+    start_sha: 71a9743684eb71976eaa74d727469cef99530dff
 ```
