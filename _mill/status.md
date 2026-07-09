@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-wire-up-callers
+phase: holistic-reviewing
 slug: codeguide-scope-resolution-fixes
 branch: hanf/codeguide-scope-resolution-fixes
 plan: _mill/plan
@@ -26,6 +26,7 @@ implementing  '2026-07-09T15:01:33Z'
 approved-resolve-scope-core  '2026-07-09T15:10:26Z'
 approved-parent-branch-helper  '2026-07-09T15:14:12Z'
 approved-wire-up-callers  '2026-07-09T15:17:29Z'
+holistic-reviewing  '2026-07-09T15:18:02Z'
 ```
 
 ## Batches
