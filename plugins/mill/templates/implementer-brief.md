@@ -97,6 +97,8 @@ If `verify: null` in the frontmatter, there is nothing to run; skip straight to 
 
 **Pre-report self-check (mandatory before emitting success JSON):** Run `git -C <PROJECT_ROOT> status --porcelain --untracked-files=no`. If it shows ANY tracked in-scope modification, commit it via the `git-commit` skill (or report `stuck_type: logic`) -- never report `success` with an uncommitted tracked change. The finalize gate now mechanically rejects a success report when in-scope files are dirty, so an uncommitted change will demote your report to stuck regardless.
 
+**Card-count self-check (mandatory before writing your free-text turn summary):** Before stating anything about completion in your prose summary to the Builder/operator, count how many cards you actually committed versus how many the batch file declares. Determine the range start exactly as in "Resume-after-incomplete" above: use `<START_SHA>` when non-empty, else `git -C <PROJECT_ROOT> log --grep="^mill-go: start batch" -n 1 --format=%H`. Run `git -C <PROJECT_ROOT> log <range-start>..HEAD --oneline` and match commit subjects against the batch file's `## Cards` `Commit:` messages to get an exact count. Your free-text summary MUST state the real count honestly (e.g. "4 of 9 cards committed") — never write an unqualified "all complete"/"all done" claim without having actually verified the count this way. This applies regardless of which model is running this session: this check is what protects an operator who is only reading your chat summary from a false completion claim, independent of whatever the machine-readable JSON status line below says.
+
 Your last line of output (after all work and commits) MUST be a single JSON object:
 
 ```json

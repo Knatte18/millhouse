@@ -756,12 +756,21 @@ def emit_prepare(
     model_tier: str,
     session_id: str,
     start_sha: str | None = None,
+    nits_only: bool = False,
 ) -> int:
     """Write brief and emit prepare JSON envelope.
 
     Writes the brief to briefs_dir/<role>-<sanitized_scope>-r<round_n>.md
     (scope is sanitized for Windows filename safety) and prints one JSON line
     with the brief path and metadata. Returns 0.
+
+    Args:
+        start_sha: Git SHA recorded at batch start; included in the envelope
+            as "start_sha" when not None, omitted otherwise.
+        nits_only: When True, the envelope includes `"nits_only": true`,
+            signalling that any finalize call re-invoking this scope/round
+            must re-pass `--nits-only`. Omitted from the envelope (not
+            emitted as `false`) when this stays at its default.
     """
     brief_path = _agent_dispatch.write_brief(
         briefs_dir, role, scope, round_n, prompt_text
@@ -778,6 +787,8 @@ def emit_prepare(
     }
     if start_sha is not None:
         envelope["start_sha"] = start_sha
+    if nits_only:
+        envelope["nits_only"] = True
     print(json.dumps(envelope))
     return 0
 

@@ -10,5 +10,18 @@
         "**/.portals/**": true,
         "**/.wiki/**": true,
         "**/.active/**": true
-    }
+    },
+    "workbench.activityBar.location": "hidden",
+    "workbench.statusBar.visible": false,
+    "workbench.startupEditor": "none",
+    "editor.minimap.enabled": false,
+    "breadcrumbs.enabled": false,
+    "window.commandCenter": false,
+    "task.allowAutomaticTasks": "on",
+    "terminal.integrated.profiles.windows": {
+        "PowerShell 7": {
+            "path": "pwsh"
+        }
+    },
+    "terminal.integrated.defaultProfile.windows": "PowerShell 7"
 }

@@ -14,9 +14,14 @@ Build and test configuration for C#/.NET projects.
 Run these commands after completing a task to verify correctness:
 
 ```bash
-dotnet build
-dotnet test
+dotnet build --nologo -clp:ErrorsOnly
+dotnet test --nologo -clp:ErrorsOnly
 ```
+
+`-clp:ErrorsOnly` suppresses only MSBuild build-phase warnings (`CS8618`, `MSB3246`, `RZ10012`, etc.) — VSTest failure detail (failing test names, `Error Message:` blocks) and the run summary are untouched.
+
+- **Never pipe the gating invocation** (mill-go verify, git-commit lint, any pass/fail check) to `grep` or `tail`. `cmd | grep` returns the downstream tool's exit status, not dotnet's — a failing suite would exit 0 and silently pass the gate. The unpiped form above preserves dotnet's authoritative exit code. If a human-readable summary-only view is ever wanted (never for gating), guard it with `set -o pipefail`.
+- **Never `tail -N` a dotnet build/test.** Warnings can evict the `Passed!`/`Failed!` summary from the tail window.
 
 **Convention: Writing formatters (when used) run on changed files only, never on the whole project. This is precautionary since csharp-build today ships no formatter. Any future formatter must be scoped to changed files. Whole-project build and test stay whole-project.**
 

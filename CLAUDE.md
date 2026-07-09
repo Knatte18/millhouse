@@ -64,6 +64,7 @@ Exceptions: unit tests use `uv run --project plugins/mill`; mill-setup keeps the
 - `print()` / `_log()` output: ASCII only (`—` -> ` -- `, `->` -> ` -> `). Windows cp1252 crashes on non-ASCII stdout.
 - `mill-config.yaml` hub file and plugin template must stay in sync — template seeds new hubs.
 - `CLAUDE_PLUGIN_ROOT` always resolves to the plugin cache entry, never the dev tree. Use it for all intra-plugin paths.
+- Ad-hoc `dotnet build`/`dotnet test` (when `csharp-build` isn't loaded): pass `--nologo -clp:ErrorsOnly` and never pipe the gating invocation to `grep`/`tail` — it masks dotnet's exit code.
 
 ## Review terminology
 

@@ -1,7 +1,7 @@
 """
 mill-cleanup — sweeper: reconcile hub git worktrees, wiki active/<slug>/ dirs, and Home.md markers based on status.md phase.
 
-Runs from the hub. Pass --apply to execute removals; default is dry-run.
+Runs from the hub. Default applies removals; pass --dry-run to report only.
 """
 from __future__ import annotations
 
@@ -735,7 +735,7 @@ def apply_plan(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Sweep done/abandoned task artefacts.")
-    parser.add_argument("--apply", action="store_true", help="Execute removals (default: dry-run).")
+    parser.add_argument("--dry-run", action="store_true", help="Report only; do not execute removals (default: apply).")
     args = parser.parse_args()
 
     git_root = _paths.resolve_git_root()
@@ -766,8 +766,8 @@ def main() -> None:
     )
     _print_plan(plan)
 
-    if not args.apply:
-        print("\nDry-run. Pass --apply to execute.")
+    if args.dry_run:
+        print("\nDry-run. Omit --dry-run to execute.")
         sys.exit(0)
 
     apply_plan(plan, wiki_path, git_root, junctions_cfg, cfg=cfg)

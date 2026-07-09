@@ -149,8 +149,12 @@ def compute_baseline(
     scratch_dir.mkdir(parents=True, exist_ok=True)
     tmp_path = scratch_dir / f"verify-baseline-{uuid.uuid4().hex}"
 
+    # core.longpaths is scoped to this single invocation (via -c, not a
+    # persistent git config write) so deep-path Windows repos don't hit a
+    # transient "Filename too long" failure that would silently disable the
+    # baseline gate -- see the module docstring and #615/#620.
     worktree_add_result = _subprocess_util.run(
-        ["git", "-C", str(git_root), "worktree", "add", str(tmp_path), parent_sha],
+        ["git", "-C", str(git_root), "-c", "core.longpaths=true", "worktree", "add", str(tmp_path), parent_sha],
     )
     if worktree_add_result.returncode != 0:
         raise RuntimeError(

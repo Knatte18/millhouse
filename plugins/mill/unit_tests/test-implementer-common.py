@@ -3176,6 +3176,51 @@ def main() -> int:
             print(f"FAIL: case 63 ({exc})", file=sys.stderr)
             errors += 1
 
+    # Case 64: #619 - emit_prepare threads nits_only through the prepare envelope.
+    # nits_only=True must add "nits_only": true; the default (omitted) must leave
+    # the key entirely absent from the envelope, mirroring the start_sha pattern.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        briefs_dir = Path(tmpdir) / "briefs"
+        try:
+            rc, captured = _capture_stdout(
+                lambda: emit_prepare(
+                    briefs_dir,
+                    "fix",
+                    "test-batch",
+                    1,
+                    "prompt text",
+                    "haiku",
+                    "session-abc",
+                    nits_only=True,
+                )
+            )
+            assert rc == 0, f"expected rc=0, got {rc}"
+            data = json.loads(captured.strip())
+            assert data["nits_only"] is True, (
+                f"expected nits_only=True in envelope, got {data}"
+            )
+
+            rc, captured = _capture_stdout(
+                lambda: emit_prepare(
+                    briefs_dir,
+                    "fix",
+                    "test-batch",
+                    2,
+                    "prompt text",
+                    "haiku",
+                    "session-abc",
+                )
+            )
+            assert rc == 0, f"expected rc=0, got {rc}"
+            data = json.loads(captured.strip())
+            assert "nits_only" not in data, (
+                f"expected nits_only key absent when omitted, got {data}"
+            )
+            print("PASS: case 64 - emit_prepare threads nits_only through envelope")
+        except Exception as exc:
+            print(f"FAIL: case 64 ({exc}) captured={captured!r}", file=sys.stderr)
+            errors += 1
+
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)
         return 1

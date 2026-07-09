@@ -12,7 +12,7 @@ Run these before staging. Both are conditional — skip if the condition isn't m
 
 ### 1. Lint (language-specific)
 
-Detect the project language (see `@mill:workflow` Language Detection) and run the lint/format step from the matching `{lang}-build` skill on **changed files only**, never the whole solution/project. Skip if no source files changed or no language detected.
+Detect the project language (see `@mill:workflow` Language Detection) and run the lint/format step from the matching `{lang}-build` skill on **changed files only**, never the whole solution/project. Skip if no source files changed or no language detected. This step inherits the delegated `{lang}-build` skill's tool-availability checks: if a required formatter/linter (e.g. `goimports`) is not installed, follow that skill's documented halt-with-actionable-message behavior (e.g. golang-build's Tool Installation section, which reports "install with: ..." and stops) rather than silently skipping the lint/format step.
 
 ### 2. Codeguide sync (only if codeguide is initialized)
 
