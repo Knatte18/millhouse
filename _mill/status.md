@@ -37,7 +37,9 @@ batches:
     start_sha: 02eb557869aada25cb5753d8e0c1bceeaa00c383
     commit_sha: 444aca5b24542a5123eb522b7af58dd1e723db55
   - name: implementer-brief-and-config-hardening
-    state: pending
+    state: running
+    implementer_session: 8625bde4-c67d-413b-81be-b40aa2821627
+    start_sha: 7603c5e381b8b22952e997c160164291967192d8
   - name: mill-go-skill-prose-fixes
     state: pending
 ```
