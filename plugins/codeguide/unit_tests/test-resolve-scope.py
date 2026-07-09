@@ -166,6 +166,9 @@ def main() -> int:
             print("PASS: time arg 1h includes just-made commit's files")
 
         # Scenario 10: explicit paths (valid and nonexistent)
+        # This is the two-token explicit-path case, unaffected by the single-token
+        # ref-check broadened in Card 1 -- the len(args) == 1 guard in
+        # enumerate_scope means multi-token calls never reach _resolve_ref_token.
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp = Path(tmpdir)
             _make_repo(tmp, with_origin=False)
@@ -222,6 +225,77 @@ def main() -> int:
             assert summary["included_committed"] >= 1, f"expected included_committed>=1, got {summary['included_committed']}"
             assert summary["included_diff"] >= 1, f"expected included_diff>=1, got {summary['included_diff']}"
             print("PASS: file in both committed range and diff appears only once in deduped output")
+
+        # Scenario 14: single non-hex branch-name token with a literal ..HEAD suffix.
+        # Mirrors how a real `git branch -f "$CHK"` checkpoint works in mill-merge-in:
+        # the checkpoint branch is created (frozen) without checking it out, then main
+        # advances past it. "<base>..HEAD" must return what changed AFTER the
+        # checkpoint, never the checkpoint's own state -- same semantics as HEAD~3.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            _make_repo(tmp, with_origin=False)
+            _commit(tmp, {"base.py": "base"}, "base commit")
+            subprocess.run(["git", "-C", str(tmp), "branch", "mill-checkpoint-feature"], check=True, capture_output=True)
+            _commit(tmp, {"a.py": "a"}, "commit A")
+            _commit(tmp, {"b.py": "b"}, "commit B")
+            paths, summary = enumerate_scope(["mill-checkpoint-feature..HEAD"], cwd=tmp)
+            path_names = {p.name for p in paths}
+            assert summary["mode"] == "head-rev", f"expected mode=head-rev, got {summary['mode']}"
+            assert path_names == {"a.py", "b.py"}, f"expected {{a.py, b.py}}, got {path_names}"
+            print("PASS: <branch>..HEAD strips literal ..HEAD suffix and returns files after the checkpoint")
+
+        # Scenario 15: same branch name passed bare (no ..HEAD suffix) as a single token.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            _make_repo(tmp, with_origin=False)
+            _commit(tmp, {"base.py": "base"}, "base commit")
+            subprocess.run(["git", "-C", str(tmp), "branch", "mill-checkpoint-feature"], check=True, capture_output=True)
+            _commit(tmp, {"a.py": "a"}, "commit A")
+            _commit(tmp, {"b.py": "b"}, "commit B")
+            paths, summary = enumerate_scope(["mill-checkpoint-feature"], cwd=tmp)
+            path_names = {p.name for p in paths}
+            assert summary["mode"] == "head-rev", f"expected mode=head-rev, got {summary['mode']}"
+            assert path_names == {"a.py", "b.py"}, f"expected {{a.py, b.py}}, got {path_names}"
+            print("PASS: bare branch-name token routes through head-rev the same as the ..HEAD form")
+
+        # Scenario 16: --parent override via the parent= kwarg overrides git-native detection.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            _make_repo(tmp, with_origin=True)
+            _commit(tmp, {"init.py": "x"}, "init on main")
+            subprocess.run(["git", "-C", str(tmp), "checkout", "-b", "other-parent"], check=True, capture_output=True)
+            _commit(tmp, {"other.py": "x"}, "commit on other-parent")
+            subprocess.run(["git", "-C", str(tmp), "checkout", "-b", "feature"], check=True, capture_output=True)
+            _commit(tmp, {"a.py": "x"}, "commit on feature")
+            paths, summary = enumerate_scope([], cwd=tmp, parent="other-parent")
+            assert summary["parent"] == "other-parent", f"expected parent=other-parent, got {summary['parent']}"
+            assert summary["base_branch"] == "other-parent", \
+                f"expected base_branch=other-parent, got {summary['base_branch']}"
+            print("PASS: --parent override wins over git-native base-branch detection")
+
+        # Scenario 17: --parent naming a branch that does not resolve locally falls back
+        # to git-native detection instead of raising or producing a silent empty scope.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            _make_repo(tmp, with_origin=True)
+            _commit(tmp, {"init.py": "x"}, "init on main")
+            subprocess.run(["git", "-C", str(tmp), "checkout", "-b", "feature"], check=True, capture_output=True)
+            _commit(tmp, {"a.py": "x"}, "commit on feature")
+            paths, summary = enumerate_scope([], cwd=tmp, parent="nonexistent-deleted-branch")
+            assert summary["base_branch"] == "main", \
+                f"expected fallback base_branch=main, got {summary['base_branch']}"
+            print("PASS: unresolvable --parent falls back to git-native base-branch detection")
+
+        # Scenario 18: single-token explicit-path regression -- confirms the broadened
+        # ref-check in Card 1 does not misroute a genuine single-token path into
+        # _head_rev_scope() when no branch/tag/commit shares that name.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            _make_repo(tmp, with_origin=False)
+            _commit(tmp, {"a.py": "x"}, "init")
+            paths, summary = enumerate_scope(["a.py"], cwd=tmp)
+            assert summary["mode"] == "explicit", f"expected mode=explicit, got {summary['mode']}"
+            print("PASS: single-token path with no colliding ref name still routes to explicit mode")
 
         print("All resolve_scope unit tests passed.")
         return 0

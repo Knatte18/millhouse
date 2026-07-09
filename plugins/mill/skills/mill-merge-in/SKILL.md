@@ -107,7 +107,7 @@ If `iter_batch_verifies` returns `[]` (no plan, or every batch had null verify) 
 If `_codeguide/Overview.md` exists anywhere in the repo, invoke the `codeguide-update` skill scoped to the checkpoint diff:
 
 - Use the Skill tool with name `codeguide:codeguide-update` (namespace matches `plugins/codeguide/settings.json`).
-- Pass argument `git diff "$CHK"..HEAD` so the update sees everything the merge introduced, including your conflict resolutions.
+- Pass argument `"$CHK..HEAD"` so the update sees everything the merge introduced, including your conflict resolutions.
 
 If `_codeguide/Overview.md` is absent → skip silently. This is the documented convention in `plugins/mill/skills/git-commit/SKILL.md` step 2 and we follow it here for symmetry.
 

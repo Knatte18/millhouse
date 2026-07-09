@@ -8,7 +8,7 @@ from pathlib import Path
 HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
-from _parent_branch import ParentBranchError, resolve  # noqa: E402
+from _parent_branch import ParentBranchError, resolve, resolve_for_codeguide  # noqa: E402
 
 
 def main() -> int:
@@ -28,6 +28,13 @@ def main() -> int:
             assert resolve(sp, interactive=False) == "main"
             print("PASS: resolve reads parent from status.md")
 
+            assert resolve_for_codeguide(sp) == "main"
+            print("PASS: resolve_for_codeguide reads parent from status.md")
+
+            nonexistent = Path(tmp) / "nonexistent-status.md"
+            assert resolve_for_codeguide(nonexistent) is None
+            print("PASS: resolve_for_codeguide returns None for a missing status.md file")
+
             sp.write_text(
                 "# Status\n"
                 "\n"
@@ -44,6 +51,9 @@ def main() -> int:
                 print(f"PASS: resolve raises on missing parent non-interactive -- {exc}")
             else:
                 raise AssertionError("expected ParentBranchError")
+
+            assert resolve_for_codeguide(sp) is None
+            print("PASS: resolve_for_codeguide returns None on missing parent instead of raising")
 
         print("All _parent_branch unit tests passed.")
         return 0
