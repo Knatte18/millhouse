@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-start-and-baseline-tooling-gaps
 branch: hanf/mill-start-and-baseline-tooling-gaps
 plan: _mill/plan
@@ -20,4 +20,19 @@ discussed  '2026-07-09T13:09:16Z'
 planning  '2026-07-09T13:15:52Z'
 plan-fix-r1  '2026-07-09T13:19:49Z'
 planned  '2026-07-09T13:20:32Z'
+implementing  '2026-07-09T15:01:20Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: mill-skill-entry-and-note
+    state: pending
+  - name: baseline-longpath
+    state: pending
+  - name: dotnet-noise
+    state: pending
+  - name: goimports-halt
+    state: pending
 ```
