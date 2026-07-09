@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-approved
+phase: done
 slug: mill-start-and-baseline-tooling-gaps
 branch: hanf/mill-start-and-baseline-tooling-gaps
 plan: _mill/plan
@@ -29,6 +29,7 @@ holistic-reviewing  '2026-07-09T15:15:38Z'
 holistic-fixing  '2026-07-09T15:18:17Z'
 nits-fixed-holistic  '2026-07-09T15:20:23Z'
 holistic-approved  '2026-07-09T15:20:33Z'
+done  '2026-07-09T15:20:57Z'
 ```
 
 ## Batches
