@@ -28,7 +28,7 @@ batches:
     name: implementer-brief-and-config-hardening
     file: 03-implementer-brief-and-config-hardening.md
     depends-on: []
-    verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-config.py
+    verify: null
 ```
 
 ## Shared Decisions
@@ -51,12 +51,17 @@ batches:
 - **Rationale:** `<START_SHA>` renders as an empty string on a normal (non-resume) first-pass dispatch — the common case. A card-count self-check that assumes a non-empty start ref would break on every first-pass batch dispatch, which is most of them.
 - **Applies to:** batch 3 (implementer-brief.md card-count self-check).
 
+### Decision: no new regression test for the implementer model default (#616)
+
+- **Decision:** Do not add a new test asserting `roles.implementer.model` avoids a weak tier. Plan review round 1 found `test_implementer_model_default_is_sonnethigh` already exists in `plugins/mill/unit_tests/test-config.py:1201`, already registered in that file's `tests` list, and already asserts the exact value (`== "sonnethigh"`) against both the plugin template and the hub's own `mill-config.yaml` — stricter and already-live coverage that fully satisfies the regression-guard need this task originally scoped in.
+- **Rationale:** The task's own discussion phase inspected `git log` on the template and correctly found the default had flip-flopped historically, but did not discover that a regression test for it already exists and is already wired into the test runner. Adding a second, weaker allowlist-based test would be pure duplication with no coverage benefit.
+- **Applies to:** batch 3 (originally two cards, now one — see that batch's file for the pre-fix history).
+
 ## All Files Touched
 
 - `plugins/mill/scripts/_implementer_common.py`
 - `plugins/mill/scripts/millpy-fix.py`
 - `plugins/mill/skills/mill-go/SKILL.md`
 - `plugins/mill/templates/implementer-brief.md`
-- `plugins/mill/unit_tests/test-config.py`
 - `plugins/mill/unit_tests/test-implementer-common.py`
 - `plugins/mill/unit_tests/test-millpy-fix.py`
