@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-dotnet-noise
+phase: approved-goimports-halt
 slug: mill-start-and-baseline-tooling-gaps
 branch: hanf/mill-start-and-baseline-tooling-gaps
 plan: _mill/plan
@@ -24,6 +24,7 @@ implementing  '2026-07-09T15:01:20Z'
 approved-mill-skill-entry-and-note  '2026-07-09T15:06:27Z'
 approved-baseline-longpath  '2026-07-09T15:10:35Z'
 approved-dotnet-noise  '2026-07-09T15:13:01Z'
+approved-goimports-halt  '2026-07-09T15:15:15Z'
 ```
 
 ## Batches
@@ -46,7 +47,8 @@ batches:
     start_sha: 3c0ebe7bbdf4db8d741f864def5becf5cb0f77ef
     commit_sha: de17e607
   - name: goimports-halt
-    state: running
+    state: approved
     implementer_session: 0d462817-becc-4968-8bc7-baa1453fc252
     start_sha: 71a9743684eb71976eaa74d727469cef99530dff
+    commit_sha: 7770344b
 ```
