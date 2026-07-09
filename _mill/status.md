@@ -36,7 +36,9 @@ batches:
     start_sha: 4145969029ae3e7576a2d58d1b96c5433118a044
     commit_sha: 3fcd03fcfadd81b65d9db8f0b4590ecb7505ccee
   - name: parent-branch-helper
-    state: pending
+    state: running
+    implementer_session: 047eeae8-d619-4296-a1e6-25b4cab9a290
+    start_sha: a1b5de3736b5f67c3febbd990e81d1d8eac8a646
   - name: wire-up-callers
     state: pending
 ```
