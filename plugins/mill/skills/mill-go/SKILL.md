@@ -730,6 +730,8 @@ If `unfixed_nits` is non-empty, halt with:
 `BLOCKED: unfixed nits in scope(s): <scope-list> -- run the NIT-fix pass before completing`
 where `<scope-list>` is the joined list of scope names. Do NOT set `phase: done` when the gate fires; the task remains in its current phase so the operator can run the NIT-fix pass and re-run `/mill-go`.
 
+**Manual recovery note.** The gate above requires a `nits-fixed-<scope>` row in status.md's timeline for each scope that has any `[NIT]` findings in its final code-review file — it does not inspect commits directly. Under Agent-mode dispatch this marker is written automatically by the NIT-fix pass's `--stage finalize` call (see "## Agent-mode dispatch" step 6). If an operator instead completes or verifies a NIT-fix pass manually, outside this documented flow (e.g. recovering from an orphaned or crashed fixer session), the gate still requires the marker to be appended by hand: `_status.append_phase(status_path, f"nits-fixed-{scope}", _timestamp.now_utc_iso())`, where `scope` is the batch name or `"holistic"`.
+
 If the list is empty, proceed to terminal cleanliness gate.
 
 **Terminal cleanliness gate.** Resolve the parent branch and check for in-scope uncommitted changes:
