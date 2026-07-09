@@ -574,6 +574,47 @@ class TestMillpyFix(unittest.TestCase):
         self.assertEqual(data["role"], "fix")
         self.assertEqual(data["scope"], "test-batch")
 
+    def test_stage_prepare_batch_scope_with_nits_only(self):
+        """--stage prepare --nits-only: prepare envelope carries nits_only:true (#619)."""
+        with unittest.mock.patch.object(millpy_fix._render, "render", return_value="Brief text"):
+            with unittest.mock.patch.object(
+                millpy_fix._implementer_claude, "run"
+            ) as mock_run:
+                rc, out = self._run_main([
+                    "--scope", "batch",
+                    "--batch-name", "test-batch",
+                    "--review-file", str(self.review_file),
+                    "--stage", "prepare",
+                    "--nits-only",
+                ])
+
+        self.assertEqual(rc, 0)
+        # LLM should not be called in prepare stage
+        mock_run.assert_not_called()
+        # Output should be prepare JSON envelope with nits_only:true
+        data = json.loads(out.strip())
+        self.assertIs(data["nits_only"], True)
+
+    def test_stage_prepare_batch_scope_without_nits_only_omits_field(self):
+        """--stage prepare without --nits-only: prepare envelope omits nits_only entirely (#619)."""
+        with unittest.mock.patch.object(millpy_fix._render, "render", return_value="Brief text"):
+            with unittest.mock.patch.object(
+                millpy_fix._implementer_claude, "run"
+            ) as mock_run:
+                rc, out = self._run_main([
+                    "--scope", "batch",
+                    "--batch-name", "test-batch",
+                    "--review-file", str(self.review_file),
+                    "--stage", "prepare",
+                ])
+
+        self.assertEqual(rc, 0)
+        # LLM should not be called in prepare stage
+        mock_run.assert_not_called()
+        # Output should be prepare JSON envelope with no nits_only key at all
+        data = json.loads(out.strip())
+        self.assertNotIn("nits_only", data)
+
     def test_stage_prepare_holistic_scope(self):
         """--stage prepare holistic scope: renders brief, calls emit_prepare, no LLM call."""
         with unittest.mock.patch.object(millpy_fix._render, "render", return_value="Brief text"):
