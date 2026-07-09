@@ -3,7 +3,7 @@
 ```yaml
 task: Fix codeguide-update scope resolution on stacked branches and resolve_scope.py branch-name parsing
 slug: codeguide-scope-resolution-fixes
-approved: false
+approved: true
 started: 20260709-131637
 parent: main
 root: ""
