@@ -40,7 +40,9 @@ batches:
     start_sha: a079d1651e893ecd37e36276cd2a7c5f836647ab
     commit_sha: b2829142
   - name: dotnet-noise
-    state: pending
+    state: running
+    implementer_session: 8c3030bc-22e5-4255-80b5-708358ff39ac
+    start_sha: 3c0ebe7bbdf4db8d741f864def5becf5cb0f77ef
   - name: goimports-halt
     state: pending
 ```
