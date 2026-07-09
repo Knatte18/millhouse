@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-reviewing
+phase: holistic-fixing
 slug: mill-start-and-baseline-tooling-gaps
 branch: hanf/mill-start-and-baseline-tooling-gaps
 plan: _mill/plan
@@ -26,6 +26,7 @@ approved-baseline-longpath  '2026-07-09T15:10:35Z'
 approved-dotnet-noise  '2026-07-09T15:13:01Z'
 approved-goimports-halt  '2026-07-09T15:15:15Z'
 holistic-reviewing  '2026-07-09T15:15:38Z'
+holistic-fixing  '2026-07-09T15:18:17Z'
 ```
 
 ## Batches
