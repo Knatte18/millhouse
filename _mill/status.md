@@ -1,10 +1,10 @@
 # Status
 
 ```yaml
-phase: discussed
+phase: planning
 slug: mill-start-and-baseline-tooling-gaps
 branch: hanf/mill-start-and-baseline-tooling-gaps
-plan: null
+plan: _mill/plan
 parent: main
 task: Fix mill-start instruction gaps, baseline long-path on Windows, and language skill tooling reliability
 task_description: |
@@ -17,4 +17,5 @@ task_description: |
 discussing  '2026-07-09T12:47:08Z'
 discussion-fix-r2  '2026-07-09T13:08:34Z'
 discussed  '2026-07-09T13:09:16Z'
+planning  '2026-07-09T13:15:52Z'
 ```
