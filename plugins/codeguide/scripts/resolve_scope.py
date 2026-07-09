@@ -4,14 +4,17 @@ Scope-resolution for codeguide-update.
 Scope-resolution chain
 ----------------------
 1. **No-arg** (``args`` is empty): detect the parent branch via the
-   three-step fallback below, then emit the union of ``<parent>..HEAD``
-   (committed files) with the current diff (staged + unstaged).
+   three-step fallback below (optionally overridden by ``--parent``/``parent=``),
+   then emit the union of ``<parent>..HEAD`` (committed files) with the
+   current diff (staged + unstaged).
 2. **Time arg** (single token matching ``^\d+[hdw]$``, case-insensitive):
    use ``git log --since="N hour|day|week ago" --name-only --pretty=format:``
    and collect unique non-empty file paths.
-3. **HEAD-rev arg** (single token starting with ``HEAD~``, matching
-   ``^HEAD$``, or a 7–40 char hex SHA): use ``git diff --name-only
-   <rev>..HEAD``.
+3. **Single-token ref arg**: any single token that resolves as a git ref via
+   ``git rev-parse --verify --quiet <token>^{commit}`` (a literal trailing
+   ``..HEAD`` suffix is stripped before the check) uses ``git diff
+   --name-only <resolved>..HEAD``. This subsumes hex SHAs, ``HEAD``,
+   ``HEAD~N``, and branch/tag names.
 4. **Explicit paths** (anything else): treat each token as a path, resolve
    relative to git toplevel, emit deduped absolute paths. No git invocation.
 
@@ -25,17 +28,19 @@ Parent detection
 
 Public API
 ----------
-CLI: ``python resolve_scope.py [<args>]``
+CLI: ``python resolve_scope.py [--parent <ref>] [<args>]``
     stdout  — newline-separated absolute paths (empty output is valid)
     stderr  — last non-empty line is a JSON summary
               ``{"mode", "parent", "base_branch", "included_committed",
                 "included_diff"}``
     exit    — 0 unless not in a git repo
 
-Function: ``enumerate_scope(args, cwd=None) -> (list[Path], dict)``
-    ``args`` — the positional argument list (strings from ``$ARGUMENTS.split()``)
-    ``cwd``  — working directory override for tests (defaults to ``os.getcwd()``)
-    Returns  — ``(absolute_paths_deduped, summary_dict)``
+Function: ``enumerate_scope(args, cwd=None, parent=None) -> (list[Path], dict)``
+    ``args``   — the positional argument list (strings from ``$ARGUMENTS.split()``)
+    ``cwd``    — working directory override for tests (defaults to ``os.getcwd()``)
+    ``parent`` — optional base-branch override consulted only in no-arg mode;
+                 falls back to git-native detection when it doesn't resolve
+    Returns    — ``(absolute_paths_deduped, summary_dict)``
 """
 
 import argparse
@@ -47,7 +52,6 @@ import subprocess
 import sys
 
 _TIME_RE = re.compile(r"^(\d+)([hdw])$", re.IGNORECASE)
-_HEX_RE = re.compile(r"^[0-9a-f]{7,40}$", re.IGNORECASE)
 
 
 def _git(toplevel: pathlib.Path, *args: str) -> tuple[int, str]:
@@ -110,19 +114,30 @@ def _detect_base_branch(toplevel: pathlib.Path) -> str | None:
     return None
 
 
-def _no_arg_scope(toplevel: pathlib.Path) -> tuple[list[pathlib.Path], dict]:
+def _no_arg_scope(toplevel: pathlib.Path, parent: str | None = None) -> tuple[list[pathlib.Path], dict]:
     rc, out = _git(toplevel, "rev-parse", "--abbrev-ref", "HEAD")
     current_branch = out.strip() if rc == 0 else "HEAD"
 
-    base_branch = _detect_base_branch(toplevel)
-    parent: str | None = None
+    # An explicit --parent override takes precedence over git-native detection,
+    # but only when it actually resolves -- a stale/deleted parent ref falls
+    # through to the origin/HEAD -> origin/main -> origin/master chain exactly
+    # as if --parent had never been supplied.
+    base_branch: str | None = None
+    if parent is not None:
+        rc, _ = _git(toplevel, "rev-parse", "--verify", "--quiet", f"{parent}^{{commit}}")
+        if rc == 0:
+            base_branch = parent
+    if base_branch is None:
+        base_branch = _detect_base_branch(toplevel)
+
+    resolved_parent: str | None = None
     committed: list[pathlib.Path] = []
 
     if base_branch is not None and current_branch != base_branch and current_branch != "HEAD":
         rc, out = _git(toplevel, "diff", "--name-only", f"{base_branch}..HEAD")
         if rc == 0:
             committed = _parse_paths(out, toplevel)
-        parent = base_branch
+        resolved_parent = base_branch
 
     rc_u, out_u = _git(toplevel, "diff", "--name-only")
     unstaged = _parse_paths(out_u, toplevel) if rc_u == 0 else []
@@ -135,7 +150,7 @@ def _no_arg_scope(toplevel: pathlib.Path) -> tuple[list[pathlib.Path], dict]:
 
     summary = {
         "mode": "no-arg",
-        "parent": parent,
+        "parent": resolved_parent,
         "base_branch": base_branch,
         "included_committed": len(committed),
         "included_diff": len(diff_files),
@@ -186,7 +201,30 @@ def _explicit_scope(toplevel: pathlib.Path, tokens: list[str]) -> tuple[list[pat
     return paths, summary
 
 
-def enumerate_scope(args: list[str], cwd: pathlib.Path | None = None) -> tuple[list[pathlib.Path], dict]:
+def _resolve_ref_token(toplevel: pathlib.Path, token: str) -> str | None:
+    """
+    Determine whether a single scope-arg token names a git-resolvable ref.
+
+    Strips a literal trailing ``..HEAD`` suffix (the shape mill-merge-in's
+    checkpoint range produces) before checking, since git itself cannot
+    resolve ``<ref>..HEAD`` as a single commit-ish. Any other token
+    containing ``..`` (a genuine range) is passed through unstripped — it
+    will simply fail the rev-parse check below, per the "literal ..HEAD
+    suffix stripping only" design decision.
+
+    Returns:
+        The candidate ref string (with the ``..HEAD`` suffix already
+        stripped, if present) when it resolves to a commit, else None.
+    """
+    suffix = "..HEAD"
+    candidate = token[: -len(suffix)] if token.endswith(suffix) else token
+    rc, _ = _git(toplevel, "rev-parse", "--verify", "--quiet", f"{candidate}^{{commit}}")
+    return candidate if rc == 0 else None
+
+
+def enumerate_scope(
+    args: list[str], cwd: pathlib.Path | None = None, parent: str | None = None
+) -> tuple[list[pathlib.Path], dict]:
     """Return (absolute_paths_deduped, summary_dict) for the given argument list."""
     cwd_path = pathlib.Path(cwd or os.getcwd()).resolve()
     toplevel = _get_toplevel(cwd_path)
@@ -194,25 +232,33 @@ def enumerate_scope(args: list[str], cwd: pathlib.Path | None = None) -> tuple[l
         raise SystemExit("not in a git repository")
 
     if not args:
-        return _no_arg_scope(toplevel)
+        return _no_arg_scope(toplevel, parent=parent)
 
     if len(args) == 1:
         token = args[0]
+        # Time-form tokens (3d, 1h, ...) must never attempt ref resolution --
+        # a token like "1h" could theoretically collide with a branch name,
+        # so the time check stays first and short-circuits ref dispatch.
         if _TIME_RE.match(token):
             return _time_scope(toplevel, token)
-        if token.startswith("HEAD~") or token == "HEAD" or _HEX_RE.match(token):
-            return _head_rev_scope(toplevel, token)
+        # Any token that git itself can resolve as a commit-ish (hex SHA,
+        # HEAD, HEAD~N, or a plain branch/tag name, with an optional literal
+        # ..HEAD suffix stripped first) routes through the head-rev path.
+        resolved = _resolve_ref_token(toplevel, token)
+        if resolved is not None:
+            return _head_rev_scope(toplevel, resolved)
 
     return _explicit_scope(toplevel, args)
 
 
 def _cli(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="resolve_scope.py")
+    parser.add_argument("--parent", default=None)
     parser.add_argument("args", nargs="*")
     parsed = parser.parse_args(argv[1:])
 
     try:
-        paths, summary = enumerate_scope(parsed.args)
+        paths, summary = enumerate_scope(parsed.args, parent=parsed.parent)
     except SystemExit as exc:
         if exc.args:
             print(str(exc.args[0]), file=sys.stderr)
