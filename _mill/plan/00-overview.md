@@ -3,7 +3,7 @@
 ```yaml
 task: Fix mill-start instruction gaps, baseline long-path on Windows, and language skill tooling reliability
 slug: mill-start-and-baseline-tooling-gaps
-approved: false
+approved: true
 started: 20260709-131233
 parent: main
 root: ""

@@ -19,6 +19,7 @@ Two instruction-correctness fixes in the mill orchestration SKILLs. Card 1 (#618
 
 - **Context:**
   - `plugins/mill/scripts/_marker.py`
+  - `plugins/mill/scripts/_paths.py`
 - **Edits:**
   - `plugins/mill/skills/mill-start/SKILL.md`
   - `plugins/mill/skills/mill-plan/SKILL.md`
