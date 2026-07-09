@@ -23,6 +23,7 @@ Wires the two mill skills that call `resolve_scope.py`/`codeguide-update` into t
 
 - **Context:**
   - `plugins/mill/scripts/_paths.py`
+  - `plugins/mill/scripts/_config.py`
   - `plugins/mill/scripts/_parent_branch.py`
   - `plugins/codeguide/scripts/resolve_scope.py`
 - **Edits:**
@@ -31,7 +32,7 @@ Wires the two mill skills that call `resolve_scope.py`/`codeguide-update` into t
 - **Deletes:** none
 - **Moves:** none
 - **Requirements:**
-  - In the `### 2. Codeguide sync (only if codeguide is initialized)` section, before the existing "Run `PYTHONPATH="${CODEGUIDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CODEGUIDE_PLUGIN_ROOT}/scripts/resolve.py" --json`..." line, insert new prose instructing: (a) resolve `hub_root` via `_paths.resolve_hub_path()` and `status_path` via `_paths.resolve_task_path(hub_root, cfg['paths']['status_md'])` (the config-key pattern; do not hardcode a `_mill/status.md` literal); (b) invoke `_parent_branch.resolve_for_codeguide(status_path)` via the standard `PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "..."` cache-form invocation, printing the result (or an empty string / marker if `None`) so the calling shell/assistant can read it.
+  - In the `### 2. Codeguide sync (only if codeguide is initialized)` section, before the existing "Run `PYTHONPATH="${CODEGUIDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CODEGUIDE_PLUGIN_ROOT}/scripts/resolve.py" --json`..." line, insert new prose instructing: (a) resolve `git_root` via `_paths.resolve_git_root()` and `hub_root` via `_paths.resolve_hub_path()`, then load config via `cfg = _config.load_config(hub_root, git_root)` (signature: `load_config(hub_root: Path, worktree_root: Path) -> dict` — pass `git_root` as the `worktree_root` argument), then resolve `status_path` via `_paths.resolve_task_path(hub_root, cfg['paths']['status_md'])` (the config-key pattern; do not hardcode a `_mill/status.md` literal); (b) invoke `_parent_branch.resolve_for_codeguide(status_path)` via the standard `PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "..."` cache-form invocation, printing the result (or an empty string / marker if `None`) so the calling shell/assistant can read it.
   - Update the existing "Otherwise invoke `@codeguide:codeguide-update`" sentence: when the parent-hint step above returned a non-empty branch name, invoke `@codeguide:codeguide-update` with `--parent <branch>` as its argument; when it returned empty/`None` (no mill worktree, no recorded parent, or the helper errored resolving `hub_root`/`status_path`), invoke `@codeguide:codeguide-update` with no arguments exactly as today. State explicitly that this degrade-to-no-arg path must never error or prompt — `git-commit` is a general-purpose skill used outside mill task worktrees too (e.g. `--onmain` commits directly to the hub).
   - Do not change the Inline mode / Sibling mode bullets below this step, or any of the `## Rules` section — this card only touches the Step 2 codeguide-sync invocation prose.
 - **Commit:** `docs(mill): git-commit Step 2 passes --parent to codeguide-update on mill task branches`
