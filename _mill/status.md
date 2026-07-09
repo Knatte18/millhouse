@@ -42,5 +42,7 @@ batches:
     start_sha: a1b5de3736b5f67c3febbd990e81d1d8eac8a646
     commit_sha: d5c9863f4cac4661bb4bed0ec89a96a6858f6198
   - name: wire-up-callers
-    state: pending
+    state: running
+    implementer_session: be34051f-bb44-4a4a-9277-f0e3f0038460
+    start_sha: c998435d1ee2ca4197d46fa644e4655983c9dbf0
 ```
