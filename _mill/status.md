@@ -28,7 +28,9 @@ implementing  '2026-07-09T15:01:20Z'
 ```yaml
 batches:
   - name: mill-skill-entry-and-note
-    state: pending
+    state: running
+    implementer_session: 671b9c19-9d39-45ec-a417-3413c804f4df
+    start_sha: 9322c28741373fcbeb798a09c123e9e0690cc24c
   - name: baseline-longpath
     state: pending
   - name: dotnet-noise
