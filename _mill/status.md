@@ -43,5 +43,7 @@ batches:
     start_sha: 7603c5e381b8b22952e997c160164291967192d8
     commit_sha: 70e0e70d2894b72fe78c747179d0295df8a66606
   - name: mill-go-skill-prose-fixes
-    state: pending
+    state: running
+    implementer_session: 8c8ff1bb-d3d4-47b2-83ac-ff288e8f993a
+    start_sha: edd76a68c9b1a9c4b731591147c67ea94f93c72d
 ```
