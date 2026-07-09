@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-mill-go-skill-prose-fixes
+phase: holistic-reviewing
 slug: mill-go-nit-gate-and-dispatch-gaps
 branch: hanf/mill-go-nit-gate-and-dispatch-gaps
 plan: _mill/plan
@@ -27,6 +27,7 @@ implementing  '2026-07-09T15:01:22Z'
 approved-nits-only-envelope-threading  '2026-07-09T15:14:29Z'
 approved-implementer-brief-and-config-hardening  '2026-07-09T15:16:44Z'
 approved-mill-go-skill-prose-fixes  '2026-07-09T15:21:15Z'
+holistic-reviewing  '2026-07-09T15:21:43Z'
 ```
 
 ## Batches
