@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-nits-only-envelope-threading
+phase: approved-implementer-brief-and-config-hardening
 slug: mill-go-nit-gate-and-dispatch-gaps
 branch: hanf/mill-go-nit-gate-and-dispatch-gaps
 plan: _mill/plan
@@ -25,6 +25,7 @@ plan-fix-r2  '2026-07-09T13:32:44Z'
 planned  '2026-07-09T13:33:07Z'
 implementing  '2026-07-09T15:01:22Z'
 approved-nits-only-envelope-threading  '2026-07-09T15:14:29Z'
+approved-implementer-brief-and-config-hardening  '2026-07-09T15:16:44Z'
 ```
 
 ## Batches
@@ -37,9 +38,10 @@ batches:
     start_sha: 02eb557869aada25cb5753d8e0c1bceeaa00c383
     commit_sha: 444aca5b24542a5123eb522b7af58dd1e723db55
   - name: implementer-brief-and-config-hardening
-    state: running
+    state: approved
     implementer_session: 8625bde4-c67d-413b-81be-b40aa2821627
     start_sha: 7603c5e381b8b22952e997c160164291967192d8
+    commit_sha: 70e0e70d2894b72fe78c747179d0295df8a66606
   - name: mill-go-skill-prose-fixes
     state: pending
 ```
