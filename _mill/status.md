@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-go-nit-gate-and-dispatch-gaps
 branch: hanf/mill-go-nit-gate-and-dispatch-gaps
 plan: _mill/plan
@@ -23,4 +23,17 @@ plan-fix-r1  '2026-07-09T13:25:41Z'
 plan-review-r2  '2026-07-09T13:32:22Z'
 plan-fix-r2  '2026-07-09T13:32:44Z'
 planned  '2026-07-09T13:33:07Z'
+implementing  '2026-07-09T15:01:22Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: nits-only-envelope-threading
+    state: pending
+  - name: implementer-brief-and-config-hardening
+    state: pending
+  - name: mill-go-skill-prose-fixes
+    state: pending
 ```
