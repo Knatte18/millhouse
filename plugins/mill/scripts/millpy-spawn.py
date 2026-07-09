@@ -15,7 +15,8 @@ Flow:
     7. Recreate junctions from the wiki config's ``junctions:`` block
        inside the new worktree.
     8. Pick a non-green VS Code title-bar colour not in use by sibling
-       worktrees; write ``.vscode/settings.json`` via ``_vscode``.
+       worktrees; write ``.vscode/settings.json`` and ``.vscode/tasks.json``
+       via ``_vscode``.
     9. Write the initial ``_mill/status.md`` (phase=discussing) and commit+push.
    10. Print worktree-path, branch, and status path on stdout.
 
@@ -281,6 +282,13 @@ def main(argv: list[str] | None = None) -> int:
         # Rollback: delete the .vscode/settings.json written above.
         _cleanup_stack.append(
             lambda: vscode_settings_path.unlink(missing_ok=True)
+        )
+
+        vscode_tasks_path = dest_hub / ".vscode" / "tasks.json"
+        _vscode.write_tasks(target=vscode_tasks_path)
+        # Rollback: delete the .vscode/tasks.json written above.
+        _cleanup_stack.append(
+            lambda: vscode_tasks_path.unlink(missing_ok=True)
         )
 
         # When hub lives in a subfolder, write a bootstrap stub at worktree root so

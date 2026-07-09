@@ -13,7 +13,7 @@ from pathlib import Path
 HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
-from _vscode import render_settings, write_settings  # noqa: E402
+from _vscode import render_settings, write_settings, write_tasks  # noqa: E402
 from _vscode_processes import _path_matches_cmdline  # noqa: E402
 
 
@@ -66,6 +66,16 @@ def _test_render_settings(errors: list[int]) -> None:
         assert '"window.title": "Test Title"' in contents
         assert "#abcdef" in contents
         print("PASS: write_settings writes to target and creates parent dirs")
+
+    # write_tasks: writes to target, creates parent dirs, folderOpen task present
+    with tempfile.TemporaryDirectory() as tmpdir:
+        target = Path(tmpdir) / "nested" / "dir" / "tasks.json"
+        write_tasks(target=target)
+        assert target.exists()
+        contents = target.read_text(encoding="utf-8")
+        assert '"runOn": "folderOpen"' in contents, f"runOn missing FAIL: {contents}"
+        assert '"command": "pwsh"' in contents, f"pwsh command missing FAIL: {contents}"
+        print("PASS: write_tasks writes to target and creates parent dirs")
 
 
 def _test_path_matches_cmdline(errors: list[int]) -> None:

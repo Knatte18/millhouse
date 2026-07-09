@@ -223,6 +223,13 @@ def main() -> int:
             f"worktree got the hub-reserved green: {color}",
         )
 
+        # vscode tasks.json — auto-opening pwsh terminal on folder open.
+        tasks_path = worktree / ".vscode" / "tasks.json"
+        _assert(tasks_path.exists(), f"vscode tasks.json missing: {tasks_path}")
+        tasks = json.loads(tasks_path.read_text(encoding="utf-8"))
+        run_on = tasks.get("tasks", [{}])[0].get("runOptions", {}).get("runOn")
+        _assert(run_on == "folderOpen", f"tasks.json missing runOn=folderOpen: {tasks_path}")
+
         # Wiki junction in new worktree.
         wiki_junction = worktree / ".millhouse" / "wiki"
         _assert(
