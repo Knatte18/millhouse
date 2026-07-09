@@ -44,12 +44,14 @@ Operator-driven entries keep the existing bare format (`- **Q:** … **A:** …`
 
 **Step 0: Load `mill:conversation`.** Load the `mill:conversation` skill via the Skill tool, unconditionally, immediately — before any other Entry step or phase. Every operator-facing prompt in Phase: Discuss and Phase: Discussion Review depends on `mill:conversation`'s numbered-options rule (banning `AskUserQuestion`) being active, so it must be loaded before the first prompt can be built.
 
-1. Resolve the wiki path via `_paths.resolve_wiki_path(_paths.resolve_git_root())`.
+1. Resolve and bind the path variables:
+   - `git_root = _paths.resolve_git_root()`
+   - `wiki_path = _paths.resolve_wiki_path(git_root)`
    `signature: _paths.resolve_git_root(start: Path | None = None) -> Path`
    `signature: _paths.resolve_wiki_path(git_toplevel: Path) -> Path`
-2. Read the slug via `_marker.slug_from_branch(git_root, wiki_path, cfg)`. On `MarkerError`, halt and tell the user this worktree was not created by `mill-spawn`.
-3. Load config — deep-merge `<hub_root>/mill-config.yaml` (shared hub overlay) with `.millhouse/config.local.yaml` (gitignored worktree overlay). Read `roles.discussion-review.holistic.rounds` as `max_review_rounds`.
+2. Load config — deep-merge `<hub_root>/mill-config.yaml` (shared hub overlay) with `.millhouse/config.local.yaml` (gitignored worktree overlay). Read `roles.discussion-review.holistic.rounds` as `max_review_rounds`.
    `signature: _config.load_config(hub_root: Path, worktree_root: Path) -> dict`
+3. Read the slug via `_marker.slug_from_branch(git_root, wiki_path, cfg)`. On `MarkerError`, halt and tell the user this worktree was not created by `mill-spawn`.
 
 **Path Setup.** `cfg` is already loaded. Derive:
 - `git_root = _paths.resolve_git_root()`
