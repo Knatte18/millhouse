@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-parent-branch-helper
+phase: approved-wire-up-callers
 slug: codeguide-scope-resolution-fixes
 branch: hanf/codeguide-scope-resolution-fixes
 plan: _mill/plan
@@ -25,6 +25,7 @@ planned  '2026-07-09T13:30:16Z'
 implementing  '2026-07-09T15:01:33Z'
 approved-resolve-scope-core  '2026-07-09T15:10:26Z'
 approved-parent-branch-helper  '2026-07-09T15:14:12Z'
+approved-wire-up-callers  '2026-07-09T15:17:29Z'
 ```
 
 ## Batches
@@ -42,7 +43,8 @@ batches:
     start_sha: a1b5de3736b5f67c3febbd990e81d1d8eac8a646
     commit_sha: d5c9863f4cac4661bb4bed0ec89a96a6858f6198
   - name: wire-up-callers
-    state: running
+    state: approved
     implementer_session: be34051f-bb44-4a4a-9277-f0e3f0038460
     start_sha: c998435d1ee2ca4197d46fa644e4655983c9dbf0
+    commit_sha: 46dddff0f36a59b88a681a6374b7c2afb8527f2f
 ```
