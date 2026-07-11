@@ -35,6 +35,7 @@ GLOB_ENTRIES: list[str] = [
     "**/.active/",
     "**/_mill/*.active",
     "**/.portals/",
+    "**/.vscode/",
 ]
 
 

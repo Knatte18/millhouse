@@ -11,7 +11,6 @@
         "**/.wiki/**": true,
         "**/.active/**": true
     },
-    "workbench.activityBar.location": "hidden",
     "workbench.statusBar.visible": false,
     "workbench.startupEditor": "none",
     "editor.minimap.enabled": false,
@@ -23,5 +22,6 @@
             "path": "pwsh"
         }
     },
-    "terminal.integrated.defaultProfile.windows": "PowerShell 7"
+    "terminal.integrated.defaultProfile.windows": "PowerShell 7",
+    "terminal.integrated.defaultLocation": "editor"
 }
