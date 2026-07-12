@@ -36,7 +36,7 @@ batches:
   - number: 4
     name: orchestrator-skills
     file: 04-orchestrator-skills.md
-    depends-on: [2]
+    depends-on: [2, 3]
     verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-skill-helper-drift.py test-skills-index.py
   - number: 5
     name: output-contract-conformance

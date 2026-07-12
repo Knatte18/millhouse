@@ -74,10 +74,19 @@ not bounded by that list", and would go stale on the first follow-up task.
   **no** ack instruction. A `--stage full` reviewer has no brief and is granted at most
   `Read,Grep,Glob` (`_llm_claude.py:80`); instructing it to write a file it cannot write breaks the
   API-error fallback.
-  Also assert the **static** surfaces directly: no file under `plugins/mill/templates/` and no file
-  under `plugins/mill/agents/` states a tool permission or an output destination — those live only
-  in `build_tool_rule`'s two agent cells and `write_brief`'s footer (Shared Decision `all tool
-  statements live in build_tool_rule and nowhere else`).
+  Also assert the **static** surfaces directly — but note the two directories carry **different**
+  invariants, and conflating them produces an unsatisfiable test:
+  - **`plugins/mill/templates/`** — assert no review template states a tool permission or an output
+    destination. Those live only in `build_tool_rule`'s two agent cells and `write_brief`'s footer
+    (Shared Decision `all tool statements live in build_tool_rule and nowhere else`).
+  - **`plugins/mill/agents/`** — the same assertion **cannot** hold here and must not be written.
+    An agent definition's `tools:` frontmatter *is* the tool-grant mechanism, so it necessarily
+    states a permission: card 14 deliberately makes `mill-reviewer.md` name `Write` and describe its
+    report destination, and `mill-implementer.md` already lists `Read, Edit, Write, Bash, Grep,
+    Glob, Skill` — a file the reviewers-only Shared Decision forbids touching. Assert instead the
+    narrower invariant card 14 actually produces, scoped to `mill-reviewer.md`: it contains no
+    `<OUTPUT_FILE>` token, no claim that its sole output is its final message, and no blanket `Write`
+    prohibition — while still forbidding `Edit`, `Bash` and `NotebookEdit`.
   Plain `test_*` functions plus a `main()` runner; ASCII-only output.
 - **Commit:** `test(review): sweep rendered review prompts for output-contract conformance`
 

@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planning
+phase: plan-fix-r1
 slug: explore-fork-agent-opportunities
 branch: hanf/explore-fork-agent-opportunities
 plan: _mill/plan
@@ -17,4 +17,6 @@ task_description: |
 discussing  '2026-07-12T12:11:48Z'
 discussed  '2026-07-12T13:35:27Z'
 planning  '2026-07-12T13:49:48Z'
+plan-review-r1  '2026-07-12T13:58:30Z'
+plan-fix-r1  '2026-07-12T13:58:30Z'
 ```

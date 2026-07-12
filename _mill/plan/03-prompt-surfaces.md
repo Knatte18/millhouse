@@ -42,8 +42,13 @@ stated in exactly **two** agent-mode-only places: `build_tool_rule`'s two agent 
 - **Creates:** none
 - **Deletes:** none
 - **Moves:** none
-- **Requirements:** Three changes to `plugins/mill/agents/mill-reviewer.md`:
+- **Requirements:** Four changes to `plugins/mill/agents/mill-reviewer.md`:
   (a) Frontmatter `tools:` (`:4`) becomes `Read, Grep, Glob, Write`.
+  (a2) Frontmatter `description:` (`:3`) — currently *"Read-only sub-agent for code review —
+  validates findings without modifying files or running commands"* — goes stale the moment `Write`
+  is granted. This is the string the harness surfaces in the agent picker, so it must be corrected:
+  the reviewer still runs no commands and modifies no existing file, but it now **writes its report
+  to the file named in its brief** and makes no other change.
   (b) The body's tool inventory (`:11-16`) gains `Write`, and the `You MUST NOT use:` line (`:16`)
   drops `Write` while **keeping** `Edit`, `Bash`, and `NotebookEdit`.
   (c) **Delete** the sentence at `:18` — *"Your sole output is your final message. Do not create

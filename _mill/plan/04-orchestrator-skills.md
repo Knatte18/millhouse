@@ -6,7 +6,7 @@ batch: orchestrator-skills
 number: 4
 cards: 3
 verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-skill-helper-drift.py test-skills-index.py
-depends-on: [2]
+depends-on: [2, 3]
 ```
 
 ## Batch Scope
@@ -25,6 +25,13 @@ temporary and intentional, and the skill must say so.
 (`:131-141`, `:159-165`) are **implementer-only** and stay untouched — that is what the descope
 bought. Of the four `.out.md` mentions in the file, only `:149` and `:151` change; `:135` and `:163`
 are on implementer paths.
+
+**Why this batch depends on batch 3 as well as batch 2.** Card 18(c) stops the orchestrator from
+capturing the reviewer's notification to `.out.md`. That is only correct once the reviewer can
+actually write the file itself — which is card 14's `Write` grant, in batch 3. Landing batch 4 on
+top of batch 2 alone would produce a window where **nobody** writes `.out.md`: the orchestrator has
+stopped and the reviewer is not yet permitted to start, so every review round would find an absent
+file and return an `ERROR` envelope. Hence `depends-on: [2, 3]`.
 
 These are prose edits with no runnable surface of their own, so they are verified by inspection plus
 the two structural guards named in Batch Tests.

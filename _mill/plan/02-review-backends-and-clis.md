@@ -92,6 +92,7 @@ those, and this task must not move them.
   - `plugins/mill/scripts/_agent_dispatch.py`
   - `plugins/mill/scripts/_review_discussion.py`
   - `plugins/mill/scripts/_review_cli.py`
+  - `plugins/mill/scripts/_review_common.py`
 - **Edits:**
   - `plugins/mill/scripts/millpy-review-discussion.py`
 - **Creates:** none
@@ -122,6 +123,7 @@ those, and this task must not move them.
   - `plugins/mill/scripts/_agent_dispatch.py`
   - `plugins/mill/scripts/_review_plan.py`
   - `plugins/mill/scripts/_review_cli.py`
+  - `plugins/mill/scripts/_review_common.py`
 - **Edits:**
   - `plugins/mill/scripts/millpy-review-plan.py`
 - **Creates:** none
@@ -148,6 +150,7 @@ those, and this task must not move them.
   - `plugins/mill/scripts/_agent_dispatch.py`
   - `plugins/mill/scripts/_review_code.py`
   - `plugins/mill/scripts/_review_cli.py`
+  - `plugins/mill/scripts/_review_common.py`
 - **Edits:**
   - `plugins/mill/scripts/millpy-review-code.py`
 - **Creates:** none
@@ -173,6 +176,8 @@ those, and this task must not move them.
   - `plugins/mill/scripts/millpy-review-plan.py`
   - `plugins/mill/scripts/millpy-review-code.py`
   - `plugins/mill/scripts/_agent_dispatch.py`
+  - `plugins/mill/scripts/_review_common.py`
+  - `plugins/mill/scripts/_review_cli.py`
 - **Edits:**
   - `plugins/mill/unit_tests/test-review-finalize.py`
 - **Creates:** none
@@ -204,8 +209,21 @@ those, and this task must not move them.
   **not** report `APPROVE`. Without batch 1's unconditional truncation, a killed-then-retried
   reviewer's stale green verdict is silently reused, and reviewers have no git-state backstop to
   catch it. This test is the only thing that would.
-  Follow the file's existing style: mock the backend module and inspect
-  `finalize.call_args.args[2]` rather than standing up real git or LLM fixtures.
+  **Mocking discipline — the existing style does not work for (b) and (c), and copying it blindly
+  produces tests that pass while asserting nothing.** The file's current pattern (`:110-137`)
+  replaces `_review_common`, `_review_cli` and `_agent_dispatch` with bare `MagicMock`s. Under that
+  pattern: `print_error_envelope` is a mock, so **no `ERROR` envelope ever reaches stdout** and (b)
+  is unobservable; `except ReviewError` binds a `MagicMock` rather than an exception class, which
+  raises `TypeError` the moment anything does throw; and `write_brief` is a mock, so it unlinks
+  nothing and (c) proves nothing.
+  Therefore: for the **existing** round-trip tests in (a), keep the current style — it only inspects
+  `finalize.call_args.args[2]` and is sound. For the **new** tests in (b) and (c), use the **real**
+  `_agent_dispatch`, `_review_cli` and `_review_common` modules, and mock only `_paths`, `_reviewers`
+  and the review backend. Give the backend's `finalize` a `side_effect` that delegates to the real
+  `_review_common.parse_verdict`, so a genuine `ReviewError` propagates and the real
+  `print_error_envelope` writes a real `verdict: ERROR` envelope to stdout. Capture stdout
+  (`contextlib.redirect_stdout`) and assert on the parsed JSON plus the CLI's return code — never on
+  a mock's call args, which would re-introduce the same blind spot.
 - **Commit:** `test(review): invert unescape round-trip and add missing/empty/stale finalize cases`
 
 ### Card 13: prepare-envelope shape test, including both carve-outs
@@ -216,6 +234,7 @@ those, and this task must not move them.
   - `plugins/mill/scripts/millpy-review-code.py`
   - `plugins/mill/scripts/_agent_dispatch.py`
   - `plugins/mill/scripts/_review_cli.py`
+  - `plugins/mill/scripts/_review_common.py`
   - `plugins/mill/unit_tests/test-review-finalize.py`
 - **Edits:** none
 - **Creates:**
@@ -235,9 +254,16 @@ those, and this task must not move them.
   `print_error_envelope` from all three CLIs' `--stage prepare` branch must carry **no**
   `output_path` key. Both fire before any brief exists, so a plan that demanded `output_path`
   universally would be unsatisfiable.
-  Mock the backends and `_paths` the way `test-review-finalize.py` already does; import each CLI via
-  `importlib.util.spec_from_file_location` (the filenames contain hyphens and are not importable as
-  modules). Plain `test_*` functions plus a `main()` runner; ASCII-only output.
+  **Mocking discipline — `_agent_dispatch` must be the real module here.** If it is replaced by a
+  `MagicMock` (as `test-review-finalize.py:110-137` does), then `write_brief` and `output_path_for`
+  return `MagicMock`s, `str(output_path_for(...))` is junk, and the `.md` -> `.out.md` equality
+  assertion — the entire point of this card — cannot hold. Use the **real** `_agent_dispatch`,
+  `_review_cli` and `_review_common`, with `briefs_dir` pointed at a `tempfile` directory; mock only
+  `_paths`, `_reviewers` and the review backend (whose `prepare` returns a static dict carrying
+  `prompt_text`, `model`, `round` and `scope`). Capture stdout with `contextlib.redirect_stdout` and
+  assert on the parsed JSON envelope, never on a mock's call args.
+  Import each CLI via `importlib.util.spec_from_file_location` (the filenames contain hyphens and are
+  not importable as modules). Plain `test_*` functions plus a `main()` runner; ASCII-only output.
 - **Commit:** `test(review): assert output_path envelope shape and both carve-outs`
 
 ## Batch Tests

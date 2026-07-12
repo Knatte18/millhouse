@@ -75,6 +75,13 @@ deleting a stale one at brief-write time is a no-op for that path.
   report to that file; and instruct it to make its final chat message a single-line ack of the
   form `WROTE <that same absolute path>`. The footer must NOT contain any `<UPPERCASE>` token
   (see Shared Decision `no <OUTPUT_FILE> token anywhere`).
+  **The footer must resolve the ambiguity it would otherwise create.** The review templates keep
+  their instruction to *"Wrap your entire output in `MILL_REVIEW_BEGIN` / `MILL_REVIEW_END`"* — and
+  they must, because that is the format `finalize` parses. Read alongside the ack instruction, an
+  agent can satisfy **both** by writing the file *and* dumping the whole block into chat, which
+  forfeits exactly the context saving this task exists to win. The footer must therefore say
+  explicitly that the `MILL_REVIEW`-wrapped report is the **content of the file**, and that the chat
+  message is the ack **and nothing else**.
   **`write_brief`'s return shape is unchanged** — still the brief `Path`, never a tuple. Callers
   that need the output path call `output_path_for` themselves. Update the parameter list in the
   module docstring's `Exports` section. Do not touch `_implementer_common.py`; its call at `:775`
