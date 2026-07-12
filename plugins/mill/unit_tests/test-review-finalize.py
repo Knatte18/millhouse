@@ -1,6 +1,7 @@
 """Unit tests for millpy-review-{code,plan,discussion}.py finalize arg wiring."""
 from __future__ import annotations
 
+import json
 import sys
 import tempfile
 import unittest.mock
@@ -11,6 +12,15 @@ import io
 
 HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
+
+# Real modules used by the missing/empty/whitespace and stale-.out.md tests
+# below (part b/c of card 12). These are the genuine implementations, not
+# MagicMocks -- see the docstrings on _finalize_with_agent_output_content and
+# _stale_out_md_case for why: the ERROR result these tests assert on is
+# produced by the real backend's own `except ReviewError` handling, and a
+# mocked backend would make that assertion vacuous.
+import _agent_dispatch  # noqa: E402
+import _review_common  # noqa: E402
 
 
 def _capture_stderr(fn):
@@ -89,14 +99,18 @@ def test_review_code_finalize_no_prepare() -> bool:
             return True
 
 
-def test_review_code_finalize_unescapes_html_entities() -> bool:
+def test_review_code_finalize_receives_raw_text_byte_identical() -> bool:
     """
-    Test that review-code finalize unescapes HTML entities in raw_text (fixes #605).
+    Test that review-code finalize receives agent-output text byte-identical,
+    entities and all -- it must NOT be HTML-unescaped.
 
-    The harness HTML-escapes the <task-notification> payload uniformly before
-    delivery, so the raw --agent-output file may contain entities like "&amp;"
-    and "&lt;". This verifies the read site unescapes before handing raw_text to
-    _review_code.finalize as its third positional argument.
+    Agent-mode output is a file the reviewer wrote itself via Write; it is
+    never HTML-escaped the way the implementer's <task-notification> payload
+    is (that payload is unrelated and untouched -- see
+    _implementer_common.py:892). Unescaping this file's content would corrupt
+    any finding that legitimately quotes "&lt;", "&gt;", or "&amp;" from a
+    source snippet. This verifies the read site hands raw_text to
+    _review_code.finalize as its third positional argument unchanged.
 
     The comparison is made as the function's return value -- not a bare assert
     inside a try/except that swallows AssertionError -- so a mismatch genuinely
@@ -151,7 +165,7 @@ def test_review_code_finalize_unescapes_html_entities() -> bool:
 
         # raw_text is the third positional argument to finalize(cfg, slug, raw_text, ...).
         # Read it outside any exception-swallowing block so a mismatch surfaces as False.
-        return mock_modules["_review_code"].finalize.call_args.args[2] == "Q&A send <guid>"
+        return mock_modules["_review_code"].finalize.call_args.args[2] == "Q&amp;A send &lt;guid&gt;"
 
 
 def test_review_code_finalize_round_required() -> bool:
@@ -291,14 +305,16 @@ def test_review_plan_finalize_round_required() -> bool:
             return False
 
 
-def test_review_plan_finalize_unescapes_html_entities() -> bool:
+def test_review_plan_finalize_receives_raw_text_byte_identical() -> bool:
     """
-    Test that review-plan finalize unescapes HTML entities in raw_text (fixes #605).
+    Test that review-plan finalize receives agent-output text byte-identical,
+    entities and all -- it must NOT be HTML-unescaped.
 
-    Mirrors test_review_code_finalize_unescapes_html_entities: the comparison is
-    made as the function's return value -- not a bare assert inside a try/except
-    that swallows AssertionError -- so a mismatch genuinely surfaces as a failing
-    test rather than being absorbed by a broad exception handler.
+    Mirrors test_review_code_finalize_receives_raw_text_byte_identical: the
+    comparison is made as the function's return value -- not a bare assert
+    inside a try/except that swallows AssertionError -- so a mismatch genuinely
+    surfaces as a failing test rather than being absorbed by a broad exception
+    handler.
     """
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
@@ -355,7 +371,7 @@ def test_review_plan_finalize_unescapes_html_entities() -> bool:
 
         # raw_text is the third positional argument to finalize(cfg, slug, raw_text, scope=None, round_n=..., ...).
         # Read it outside any exception-swallowing block so a mismatch surfaces as False.
-        return mock_modules["_review_plan"].finalize.call_args.args[2] == "Q&A send <guid>"
+        return mock_modules["_review_plan"].finalize.call_args.args[2] == "Q&amp;A send &lt;guid&gt;"
 
 
 def test_review_plan_finalize_no_prepare() -> bool:
@@ -511,14 +527,16 @@ def test_review_discussion_finalize_no_prepare() -> bool:
             return True
 
 
-def test_review_discussion_finalize_unescapes_html_entities() -> bool:
+def test_review_discussion_finalize_receives_raw_text_byte_identical() -> bool:
     """
-    Test that review-discussion finalize unescapes HTML entities in raw_text (fixes #605).
+    Test that review-discussion finalize receives agent-output text
+    byte-identical, entities and all -- it must NOT be HTML-unescaped.
 
-    Mirrors test_review_code_finalize_unescapes_html_entities: the comparison is
-    made as the function's return value -- not a bare assert inside a try/except
-    that swallows AssertionError -- so a mismatch genuinely surfaces as a failing
-    test rather than being absorbed by a broad exception handler.
+    Mirrors test_review_code_finalize_receives_raw_text_byte_identical: the
+    comparison is made as the function's return value -- not a bare assert
+    inside a try/except that swallows AssertionError -- so a mismatch genuinely
+    surfaces as a failing test rather than being absorbed by a broad exception
+    handler.
     """
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
@@ -578,7 +596,7 @@ def test_review_discussion_finalize_unescapes_html_entities() -> bool:
 
         # raw_text is the third positional argument to finalize(cfg, slug, raw_text, round_n=..., ...).
         # Read it outside any exception-swallowing block so a mismatch surfaces as False.
-        return mock_modules["_review_discussion"].finalize.call_args.args[2] == "Q&A send <guid>"
+        return mock_modules["_review_discussion"].finalize.call_args.args[2] == "Q&amp;A send &lt;guid&gt;"
 
 
 def test_review_discussion_finalize_round_required() -> bool:
@@ -664,6 +682,275 @@ def test_review_discussion_finalize_round_required() -> bool:
             return False
 
 
+# ---------------------------------------------------------------------------
+# Missing / empty / whitespace agent-output cases (card 12, part b) and the
+# stale-.out.md regression guard (card 12, part c).
+#
+# The existing tests above replace _review_common, _review_cli, and
+# _agent_dispatch with bare MagicMocks. That style does not work here: under
+# it, print_error_envelope is a mock (so no ERROR envelope ever reaches
+# stdout), `except ReviewError` binds a MagicMock rather than an exception
+# class (raising TypeError the instant anything actually throws), and
+# write_brief is a mock (so it unlinks nothing and the stale-file guard
+# proves nothing). These tests instead use the REAL _agent_dispatch,
+# _review_cli, _review_common, and review backend modules -- the ERROR
+# result under test is exactly the backend's own behaviour, so stubbing it
+# out would assert nothing. Only _paths and _reviewers are mocked, and
+# --slug is passed explicitly so find_active_slug (which would otherwise
+# reach through to real git/branch detection) is never called.
+# ---------------------------------------------------------------------------
+
+
+def _mock_paths_and_reviewers(project_root: Path):
+    """Return (mock_paths, mock_reviewers) modules for sys.modules patching.
+
+    project_root stands in for git_root / hub_dir / wiki_root -- none of
+    these tests exercise multi-root wiki behaviour, so a single tempdir
+    plays all three roles.
+    """
+    mock_paths = unittest.mock.MagicMock()
+    mock_paths.resolve_git_root = unittest.mock.MagicMock(return_value=project_root)
+    mock_paths.resolve_hub_path = unittest.mock.MagicMock(return_value=project_root)
+    mock_paths.resolve_wiki_path = unittest.mock.MagicMock(return_value=project_root)
+
+    mock_reviewers = unittest.mock.MagicMock()
+    mock_reviewers.load = unittest.mock.MagicMock(return_value={})
+    mock_reviewers.validate_role_refs = unittest.mock.MagicMock()
+    return mock_paths, mock_reviewers
+
+
+def _run_finalize_stage(cli_relpath: str, unique_name: str, agent_output_path: Path, reviews_dir: Path, project_root: Path) -> tuple[int, str]:
+    """Run a review CLI's `--stage finalize` against a real backend.
+
+    Patches ``load_config`` and ``resolve_path`` directly on the real,
+    already-imported ``_review_common`` module (the CLI does
+    ``from _review_common import ...`` inside ``main()``, so attributes set
+    on the module before the call are the ones ``main()`` picks up), mocks
+    only ``_paths`` and ``_reviewers`` in ``sys.modules``, and leaves
+    ``_agent_dispatch``, ``_review_cli``, ``_review_common``, and the review
+    backend module genuinely real.
+
+    Returns (return_code, captured_stdout).
+    """
+    orig_load_config = _review_common.load_config
+    orig_resolve_path = _review_common.resolve_path
+    try:
+        _review_common.load_config = lambda *a, **kw: {
+            "paths": {"reviews_dir": "_mill/reviews/"}
+        }
+        _review_common.resolve_path = lambda *a, **kw: reviews_dir
+
+        mock_paths, mock_reviewers = _mock_paths_and_reviewers(project_root)
+        with unittest.mock.patch.dict(
+            sys.modules, {"_paths": mock_paths, "_reviewers": mock_reviewers}
+        ):
+            spec = importlib.util.spec_from_file_location(
+                unique_name, HUB / "plugins/mill/scripts" / cli_relpath
+            )
+            module = importlib.util.module_from_spec(spec)
+            sys.modules[unique_name] = module
+            spec.loader.exec_module(module)
+
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                rc = module.main(
+                    [
+                        "--slug", "test-slug",
+                        "--stage", "finalize",
+                        "--round", "1",
+                        "--agent-output", str(agent_output_path),
+                    ]
+                )
+            return rc, buf.getvalue().strip()
+    finally:
+        _review_common.load_config = orig_load_config
+        _review_common.resolve_path = orig_resolve_path
+
+
+def _finalize_with_agent_output_content(cli_relpath: str, unique_name: str, *, content: str, exists: bool) -> bool:
+    """Run --stage finalize against an agent-output file that is missing,
+    empty, or whitespace-only; assert the printed envelope carries
+    verdict: ERROR on a ZERO return code with no traceback escaping.
+
+    The missing case fails on pre-guard code with an uncaught
+    FileNotFoundError -- exactly the bug cards 9-11's guard fixes. The ERROR
+    envelope comes from the backend's own `except ReviewError` ->
+    `ReviewResult(verdict="ERROR")` path on a zero exit; print_error_envelope
+    is never reached, so this must NOT be asserted via a raising mock or an
+    exit-1 expectation.
+    """
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        reviews_dir = project_root / "_mill" / "reviews"
+        agent_output_path = project_root / "agent-output.out.md"
+        if exists:
+            agent_output_path.write_text(content, encoding="utf-8")
+
+        rc, stdout_text = _run_finalize_stage(
+            cli_relpath, unique_name, agent_output_path, reviews_dir, project_root
+        )
+        if rc != 0:
+            return False
+        try:
+            envelope = json.loads(stdout_text)
+        except json.JSONDecodeError:
+            return False
+        return envelope.get("verdict") == "ERROR"
+
+
+def _stale_out_md_case(cli_relpath: str, unique_name: str, role: str) -> bool:
+    """The stale-.out.md regression guard -- the single most important test
+    in this batch.
+
+    Simulates a killed-then-retried reviewer: round 1 writes a brief and
+    (in this synthetic setup) an agent actually produced a full, green
+    ".out.md" report. The orchestrator then retries the SAME role/scope/
+    round -- e.g. after a transient dispatch failure -- which calls
+    write_brief again. write_brief's unconditional unlink must clear that
+    stale ".out.md" before the retried attempt ever runs; without it, a
+    finalize call against the (never-rewritten, in this test) path would
+    silently reuse the old APPROVE verdict, and reviewers have no git-state
+    backstop to catch it. Asserts the stale file did not survive AND that
+    finalize -- via cards 9-11's missing-file guard -- reports ERROR rather
+    than replaying the stale APPROVE.
+    """
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        briefs_dir = project_root / "_mill" / "briefs"
+        reviews_dir = project_root / "_mill" / "reviews"
+
+        # Round 1, attempt 1: write the brief, then simulate the agent having
+        # actually written a full, green report to the corresponding .out.md.
+        brief_path = _agent_dispatch.write_brief(briefs_dir, role, "holistic", 1, "attempt-1 prompt")
+        out_path = _agent_dispatch.output_path_for(brief_path)
+        out_path.write_text(
+            "MILL_REVIEW_BEGIN\n```yaml\nverdict: APPROVE\n```\nMILL_REVIEW_END\n",
+            encoding="utf-8",
+        )
+        if not out_path.exists():
+            return False
+
+        # Round 1, attempt 2 (retry): write_brief is called again for the
+        # SAME role/scope/round. Its unconditional unlink must clear the
+        # stale APPROVE before this attempt's reviewer ever runs.
+        _agent_dispatch.write_brief(briefs_dir, role, "holistic", 1, "attempt-2 prompt")
+        if out_path.exists():
+            return False  # stale file survived -- the exact regression this test guards against
+
+        # finalize now reads from a path that no longer exists -- the
+        # missing-file guard collapses it to empty text, and the backend's
+        # own ERROR handling takes over.
+        rc, stdout_text = _run_finalize_stage(
+            cli_relpath, unique_name, out_path, reviews_dir, project_root
+        )
+        if rc != 0:
+            return False
+        try:
+            envelope = json.loads(stdout_text)
+        except json.JSONDecodeError:
+            return False
+        return envelope.get("verdict") == "ERROR"
+
+
+def test_review_discussion_finalize_missing_agent_output_returns_error() -> bool:
+    return _finalize_with_agent_output_content(
+        "millpy-review-discussion.py",
+        "millpy_review_discussion_test_missing",
+        content="",
+        exists=False,
+    )
+
+
+def test_review_discussion_finalize_empty_agent_output_returns_error() -> bool:
+    return _finalize_with_agent_output_content(
+        "millpy-review-discussion.py",
+        "millpy_review_discussion_test_empty",
+        content="",
+        exists=True,
+    )
+
+
+def test_review_discussion_finalize_whitespace_agent_output_returns_error() -> bool:
+    return _finalize_with_agent_output_content(
+        "millpy-review-discussion.py",
+        "millpy_review_discussion_test_whitespace",
+        content="   \n\t  \n",
+        exists=True,
+    )
+
+
+def test_review_plan_finalize_missing_agent_output_returns_error() -> bool:
+    return _finalize_with_agent_output_content(
+        "millpy-review-plan.py",
+        "millpy_review_plan_test_missing",
+        content="",
+        exists=False,
+    )
+
+
+def test_review_plan_finalize_empty_agent_output_returns_error() -> bool:
+    return _finalize_with_agent_output_content(
+        "millpy-review-plan.py",
+        "millpy_review_plan_test_empty",
+        content="",
+        exists=True,
+    )
+
+
+def test_review_plan_finalize_whitespace_agent_output_returns_error() -> bool:
+    return _finalize_with_agent_output_content(
+        "millpy-review-plan.py",
+        "millpy_review_plan_test_whitespace",
+        content="   \n\t  \n",
+        exists=True,
+    )
+
+
+def test_review_code_finalize_missing_agent_output_returns_error() -> bool:
+    return _finalize_with_agent_output_content(
+        "millpy-review-code.py",
+        "millpy_review_code_test_missing",
+        content="",
+        exists=False,
+    )
+
+
+def test_review_code_finalize_empty_agent_output_returns_error() -> bool:
+    return _finalize_with_agent_output_content(
+        "millpy-review-code.py",
+        "millpy_review_code_test_empty",
+        content="",
+        exists=True,
+    )
+
+
+def test_review_code_finalize_whitespace_agent_output_returns_error() -> bool:
+    return _finalize_with_agent_output_content(
+        "millpy-review-code.py",
+        "millpy_review_code_test_whitespace",
+        content="   \n\t  \n",
+        exists=True,
+    )
+
+
+def test_review_discussion_finalize_stale_out_md_does_not_survive_retry() -> bool:
+    return _stale_out_md_case(
+        "millpy-review-discussion.py", "millpy_review_discussion_test_stale", "review-discussion"
+    )
+
+
+def test_review_plan_finalize_stale_out_md_does_not_survive_retry() -> bool:
+    return _stale_out_md_case(
+        "millpy-review-plan.py", "millpy_review_plan_test_stale", "review-plan"
+    )
+
+
+def test_review_code_finalize_stale_out_md_does_not_survive_retry() -> bool:
+    return _stale_out_md_case(
+        "millpy-review-code.py", "millpy_review_code_test_stale", "review-code"
+    )
+
+
 def main() -> int:
     errors = 0
 
@@ -678,10 +965,10 @@ def main() -> int:
         errors += 1
 
     try:
-        if test_review_code_finalize_unescapes_html_entities():
-            print("PASS: review-code finalize unescapes HTML entities in raw_text (#605)")
+        if test_review_code_finalize_receives_raw_text_byte_identical():
+            print("PASS: review-code finalize receives raw_text byte-identical (no unescape)")
         else:
-            print("FAIL: review-code finalize did not unescape HTML entities", file=sys.stderr)
+            print("FAIL: review-code finalize altered raw_text (unescape regression)", file=sys.stderr)
             errors += 1
     except Exception as exc:
         print(f"FAIL: test 1b ({exc})", file=sys.stderr)
@@ -708,10 +995,10 @@ def main() -> int:
         errors += 1
 
     try:
-        if test_review_plan_finalize_unescapes_html_entities():
-            print("PASS: review-plan finalize unescapes HTML entities in raw_text (#605)")
+        if test_review_plan_finalize_receives_raw_text_byte_identical():
+            print("PASS: review-plan finalize receives raw_text byte-identical (no unescape)")
         else:
-            print("FAIL: review-plan finalize did not unescape HTML entities", file=sys.stderr)
+            print("FAIL: review-plan finalize altered raw_text (unescape regression)", file=sys.stderr)
             errors += 1
     except Exception as exc:
         print(f"FAIL: test 3b ({exc})", file=sys.stderr)
@@ -738,10 +1025,10 @@ def main() -> int:
         errors += 1
 
     try:
-        if test_review_discussion_finalize_unescapes_html_entities():
-            print("PASS: review-discussion finalize unescapes HTML entities in raw_text (#605)")
+        if test_review_discussion_finalize_receives_raw_text_byte_identical():
+            print("PASS: review-discussion finalize receives raw_text byte-identical (no unescape)")
         else:
-            print("FAIL: review-discussion finalize did not unescape HTML entities", file=sys.stderr)
+            print("FAIL: review-discussion finalize altered raw_text (unescape regression)", file=sys.stderr)
             errors += 1
     except Exception as exc:
         print(f"FAIL: test 5b ({exc})", file=sys.stderr)
@@ -756,6 +1043,55 @@ def main() -> int:
     except Exception as exc:
         print(f"FAIL: test 6 ({exc})", file=sys.stderr)
         errors += 1
+
+    missing_empty_whitespace_cases = [
+        ("discussion", "missing", test_review_discussion_finalize_missing_agent_output_returns_error),
+        ("discussion", "empty", test_review_discussion_finalize_empty_agent_output_returns_error),
+        ("discussion", "whitespace-only", test_review_discussion_finalize_whitespace_agent_output_returns_error),
+        ("plan", "missing", test_review_plan_finalize_missing_agent_output_returns_error),
+        ("plan", "empty", test_review_plan_finalize_empty_agent_output_returns_error),
+        ("plan", "whitespace-only", test_review_plan_finalize_whitespace_agent_output_returns_error),
+        ("code", "missing", test_review_code_finalize_missing_agent_output_returns_error),
+        ("code", "empty", test_review_code_finalize_empty_agent_output_returns_error),
+        ("code", "whitespace-only", test_review_code_finalize_whitespace_agent_output_returns_error),
+    ]
+    for review_type, case_label, test_fn in missing_empty_whitespace_cases:
+        try:
+            if test_fn():
+                print(
+                    f"PASS: review-{review_type} finalize with {case_label} agent-output "
+                    f"returns verdict: ERROR on exit 0"
+                )
+            else:
+                print(
+                    f"FAIL: review-{review_type} finalize with {case_label} agent-output "
+                    f"did not return verdict: ERROR on exit 0",
+                    file=sys.stderr,
+                )
+                errors += 1
+        except Exception as exc:
+            print(f"FAIL: review-{review_type} finalize {case_label} case ({exc})", file=sys.stderr)
+            errors += 1
+
+    stale_out_md_cases = [
+        ("discussion", test_review_discussion_finalize_stale_out_md_does_not_survive_retry),
+        ("plan", test_review_plan_finalize_stale_out_md_does_not_survive_retry),
+        ("code", test_review_code_finalize_stale_out_md_does_not_survive_retry),
+    ]
+    for review_type, test_fn in stale_out_md_cases:
+        try:
+            if test_fn():
+                print(f"PASS: review-{review_type} stale .out.md does not survive a write_brief retry")
+            else:
+                print(
+                    f"FAIL: review-{review_type} stale .out.md survived a write_brief retry "
+                    f"(stale-verdict regression)",
+                    file=sys.stderr,
+                )
+                errors += 1
+        except Exception as exc:
+            print(f"FAIL: review-{review_type} stale .out.md case ({exc})", file=sys.stderr)
+            errors += 1
 
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)
