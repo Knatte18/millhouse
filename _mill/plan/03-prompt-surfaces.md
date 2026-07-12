@@ -42,8 +42,14 @@ stated in exactly **two** agent-mode-only places: `build_tool_rule`'s two agent 
 - **Creates:** none
 - **Deletes:** none
 - **Moves:** none
-- **Requirements:** Four changes to `plugins/mill/agents/mill-reviewer.md`:
+- **Requirements:** Five changes to `plugins/mill/agents/mill-reviewer.md`:
   (a) Frontmatter `tools:` (`:4`) becomes `Read, Grep, Glob, Write`.
+  (a1) **Body line `:9`** — *"you MUST NOT modify any files or run commands that change state"* — is a
+  blanket file-write prohibition and directly contradicts the `Write` grant. Reword it: the reviewer
+  **modifies no existing file and runs no commands**; it writes **only** its own report. Do not skip
+  this line because it sits above the tool inventory — card 22's `agents/` assertions look for the
+  `<OUTPUT_FILE>` token, the sole-output claim and a blanket `Write` prohibition, and would not catch
+  this phrasing.
   (a2) Frontmatter `description:` (`:3`) — currently *"Read-only sub-agent for code review —
   validates findings without modifying files or running commands"* — goes stale the moment `Write`
   is granted. This is the string the harness surfaces in the agent picker, so it must be corrected:
@@ -90,14 +96,18 @@ stated in exactly **two** agent-mode-only places: `build_tool_rule`'s two agent 
   files or runs commands. You MUST NOT make git commits. Your sole output is the review file in the
   format below. If you find issues, REPORT them -- do NOT fix them."*
   In each of the five:
-  (a) **Delete the tool prohibitions** — the `MUST NOT call Edit, Write, Bash...` clause and the
-  `MUST NOT make git commits` clause. `build_tool_rule` now owns the entire read-only clause and
-  injects it, channel-aware, at the `<TOOL_RULE>` line that already sits a few lines below.
+  (a) **Delete the whole tool-prohibition header — including its opening sentence.** That means all
+  three of: the leading `You are a READ-ONLY reviewer.` sentence, the `MUST NOT call Edit, Write,
+  Bash...` clause, and the `MUST NOT make git commits` clause. `build_tool_rule` now owns the entire
+  read-only clause (card 3) and injects it, channel-aware, at the `<TOOL_RULE>` line a few lines
+  below. **The opening sentence is not optional to delete:** card 18(b) asserts that no template
+  contains `You are a READ-ONLY reviewer`, so leaving it in place fails that test — and the fix is to
+  delete the sentence, never to weaken the assertion.
   **One consequence to record in the plan, not to "fix" in the template.** Card 3 freezes
   `_TOOL_RULE_BULK` byte-identical, and it says only *"Do NOT request tool calls"* + *"Do NOT use
   Write"* — so once this header is deleted, a `--stage full` **bulk** reviewer is told nothing
   explicit about `Edit`, `Bash` or git commits. That is **safe by construction, not by prose**:
-  `_llm_claude.py:79`'s `_MODE_BY_ALLOWED_TOOLS` maps `bulk` to the **empty** allowed-tools string,
+  `_llm_claude.py:80`'s `_MODE_BY_ALLOWED_TOOLS` maps `bulk` to the **empty** allowed-tools string,
   so such a reviewer is granted **zero** tools and cannot call `Edit` or `Bash` even if it wanted to.
   Note this in a comment or in the batch's own record. Do **not** "restore" the prohibitions into the
   shared template to close the apparent gap — that is precisely the leak this batch exists to remove,

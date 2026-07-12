@@ -5,7 +5,7 @@ task: Explore and adopt Claude Code fork-agents in mill orchestration
 batch: review-backends-and-clis
 number: 2
 cards: 8
-verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-review-finalize.py test-review-prepare-envelope.py test-review-discussion-flow.py test-review-plan-flow.py test-review-code-flow.py test-review-cli-error-envelope.py test-review-plan-finalize-round.py
+verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-review-finalize.py test-review-prepare-envelope.py test-review-discussion-flow.py test-review-plan-flow.py test-review-code-flow.py test-review-cli-error-envelope.py test-review-plan-finalize-round.py test-review-cli.py
 depends-on: [1]
 ```
 
@@ -27,7 +27,7 @@ protects. The flag is a parameter, defaulted `False`, set `True` only by the CLI
 **`_review_plan` is the exception, and knowing it saves the implementer a hunt.** Its `run()`
 (`:594`) does **not** call `prepare()` — it re-renders the prompt inline and has its **own**
 `build_tool_rule` call at `:836`, and reaches batch scope through `_review_one_batch` (`:196`), which
-`run()` submits to a `ThreadPoolExecutor` (`:752`). So for plan review the two paths are genuinely
+`run()` submits to a `ThreadPoolExecutor` (`:749`). So for plan review the two paths are genuinely
 separate code, and the `--stage full` side is protected by leaving `:196` and `:836` alone rather
 than by a default.
 
@@ -87,7 +87,7 @@ those, and this task must not move them.
   inside `run()` (`:836`).** Both are `--stage full`-only. Note that `run()` is defined at `:594` and
   does **not** call `prepare()` at all — it renders inline, which is why `:836` exists as a separate
   `build_tool_rule` callsite; and `_review_one_batch` (whose call is at `:196`) is not an entry point,
-  it is submitted to a `ThreadPoolExecutor` from `run()` (`:752`). Both must keep the non-agent rule.
+  it is submitted to a `ThreadPoolExecutor` from `run()` (`:749`). Both must keep the non-agent rule.
   Note for the implementer: of the two calls you *do* change, only `:490` has a live agent-mode
   caller — `millpy-review-plan.py:148-151` hardcodes `scope=None` in its `--stage prepare` branch
   ("Agent mode uses holistic scope only"), so `:401` is currently dead on the agent path. Thread it
@@ -316,9 +316,16 @@ those, and this task must not move them.
 ## Batch Tests
 
 `verify:` covers the two test files this batch touches (`test-review-finalize.py`,
-`test-review-prepare-envelope.py`) plus the four existing suites that exercise the same CLIs and
-backends end-to-end and are the regression net for the `prepare()` signature change:
-`test-review-discussion-flow.py`, `test-review-plan-flow.py`, `test-review-code-flow.py`,
-`test-review-cli-error-envelope.py`, and `test-review-plan-finalize-round.py`. The scope is
-deliberately bounded to these — `build_tool_rule` and `write_brief` were already pinned by batch 1,
-and no other suite imports the three review CLIs.
+`test-review-prepare-envelope.py`) plus the existing suites that exercise the same CLIs and backends
+end-to-end and form the regression net for the `prepare()` signature change and the new envelope
+field: `test-review-discussion-flow.py`, `test-review-plan-flow.py`, `test-review-code-flow.py`,
+`test-review-cli-error-envelope.py`, `test-review-plan-finalize-round.py`, and **`test-review-cli.py`**.
+
+`test-review-cli.py` is load-bearing and was missing from an earlier draft of this list, which
+wrongly claimed "no other suite imports the three review CLIs". It does: it loads all three
+(`:112-114`, `:170-172`, `:252-254`) and drives their `--stage prepare` branch — the exact branch
+cards 9-11 modify. It should stay green (it mocks the backends and asserts only `brief_path`, which
+this task does not change), but that is a prediction, and the verify gate is what tests it.
+
+The scope is deliberately bounded to these eight rather than the full suite; `build_tool_rule` and
+`write_brief` were already pinned by batch 1.

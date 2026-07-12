@@ -3,7 +3,7 @@
 ```yaml
 task: Explore and adopt Claude Code fork-agents in mill orchestration
 slug: explore-fork-agent-opportunities
-approved: false
+approved: true
 started: 20260712-134424
 parent: main
 root: ""
@@ -22,12 +22,12 @@ batches:
     name: contract-helpers
     file: 01-contract-helpers.md
     depends-on: []
-    verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-agent-dispatch.py test-review-common.py test-agent-mode-dispatch.py
+    verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-agent-dispatch.py test-review-common.py test-agent-mode-dispatch.py test-implementer-common.py test-millpy-implement.py test-millpy-fix.py test-millpy-merge-in-subagent.py
   - number: 2
     name: review-backends-and-clis
     file: 02-review-backends-and-clis.md
     depends-on: [1]
-    verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-review-finalize.py test-review-prepare-envelope.py test-review-discussion-flow.py test-review-plan-flow.py test-review-code-flow.py test-review-cli-error-envelope.py test-review-plan-finalize-round.py
+    verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-review-finalize.py test-review-prepare-envelope.py test-review-discussion-flow.py test-review-plan-flow.py test-review-code-flow.py test-review-cli-error-envelope.py test-review-plan-finalize-round.py test-review-cli.py
   - number: 3
     name: prompt-surfaces
     file: 03-prompt-surfaces.md

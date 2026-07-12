@@ -22,7 +22,7 @@ wrote it. For implementer / fixer / merge-in dispatches, step 5 is unchanged. Th
 temporary and intentional, and the skill must say so.
 
 **The blast radius is smaller than it looks.** Steps 4(b), 6.5 and the Clean mid-work stop paragraph
-(`:131-141`, `:159-165`) are **implementer-only** and stay untouched — that is what the descope
+(`:131-141`, `:157-165`) are **implementer-only** and stay untouched — that is what the descope
 bought. Of the four `.out.md` mentions in the file, only `:149` and `:151` change; `:135` and `:163`
 are on implementer paths.
 
@@ -69,7 +69,7 @@ the two structural guards named in Batch Tests.
   does **not** write `.out.md`; the reviewer already did. For implementer / fixer / merge-in
   dispatches step 5 is unchanged. Explain in one line why: the old text made the orchestrator read
   the sub-agent's entire final message and **write that whole thing back out**, so a full reviewer
-  findings dump landed in the Builder's context twice — even though `:376` and `:820` forbid the
+  findings dump landed in the Builder's context twice — even though `:376` and `:816` forbid the
   Builder from acting on findings.
   (d) **Step 6 (`:151`)** — take `--agent-output` from the prepare envelope's new `output_path`
   field for review CLIs, rather than re-deriving `<brief_path>.out.md` by string munging. Keep the
@@ -92,7 +92,7 @@ the two structural guards named in Batch Tests.
   `_agent_dispatch.model_to_tier`. Cite the `roles.*.model` keys for the first mechanism and the
   reviewer-name-plus-registry path for the second; do **not** write `roles.discussion-review.model`,
   which does not exist. Fork breaks **both**, because it ignores the `model` argument either way.
-  **Do not touch** steps 4(b), 6.5, or the Clean mid-work stop paragraph (`:131-141`, `:159-165`),
+  **Do not touch** steps 4(b), 6.5, or the Clean mid-work stop paragraph (`:131-141`, `:157-165`),
   or the `.out.md` mentions at `:135` and `:163`. They are implementer-only.
 - **Commit:** `docs(mill-go): reviewer-skipped output capture, envelope output_path, why-not-fork note`
 

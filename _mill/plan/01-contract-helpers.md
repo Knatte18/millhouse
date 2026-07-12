@@ -5,7 +5,7 @@ task: Explore and adopt Claude Code fork-agents in mill orchestration
 batch: contract-helpers
 number: 1
 cards: 5
-verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-agent-dispatch.py test-review-common.py test-agent-mode-dispatch.py
+verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-agent-dispatch.py test-review-common.py test-agent-mode-dispatch.py test-implementer-common.py test-millpy-implement.py test-millpy-fix.py test-millpy-merge-in-subagent.py
 depends-on: []
 ```
 
@@ -185,9 +185,21 @@ deleting a stale one at brief-write time is a no-op for that path.
 
 ## Batch Tests
 
-`verify:` runs `test-agent-dispatch.py` (cards 1, 2, 4), `test-review-common.py` (cards 3, 5), and
-`test-agent-mode-dispatch.py`. The third file is included even though no card edits it: it calls
-`write_brief(...)` at `:370` and asserts the written brief equals `prompt_text`, so it is the
-independent witness that the `output_contract` default-off path stayed byte-identical. Scoping to
-these three files (rather than the whole 100-file suite) is deliberate; nothing else imports
-`build_tool_rule` or `write_brief` at this point in the DAG.
+`verify:` runs `test-agent-dispatch.py` (cards 1, 2, 4) and `test-review-common.py` (cards 3, 5),
+plus five suites that no card edits but that are this batch's real regression net:
+
+- **`test-agent-mode-dispatch.py`** calls `write_brief(...)` at `:370` and asserts the written brief
+  equals `prompt_text` — the independent witness that the `output_contract` default-off path stayed
+  byte-identical.
+- **`test-implementer-common.py`, `test-millpy-implement.py`, `test-millpy-fix.py`,
+  `test-millpy-merge-in-subagent.py`** exercise `_implementer_common.py:775`, the **only other**
+  `write_brief` caller. They matter because card 2's `.out.md` unlink is **unconditional** — it fires
+  for the implementer path too — so these are the only automated check that the descope's
+  "implementer comes out byte-identical" guarantee actually holds. They should stay green (the
+  implementer suites never populate a `<brief>.out.md`), but "should" is exactly what a verify gate is
+  for.
+
+The scope is deliberately bounded to these seven rather than the full ~100-file suite, and the
+overview sets no module-wide `verify:`. Note this is a **scoping** choice, not a claim that nothing
+else touches these helpers: an earlier draft of this paragraph asserted "nothing else imports
+`build_tool_rule` or `write_brief`", which is false.
