@@ -45,8 +45,10 @@ practice, so every mill task pays this cost on every dispatch.
   orchestrator's `Write` step is deleted; the sub-agent's final message shrinks to a
   one-line ack, which also becomes mill-go's completion discriminator.
 - **C. Grant `mill-reviewer` a `Write` capability**, guardrailed to `_mill/briefs/`, and
-  sweep every file whose current instructions contradict the new contract — see
-  **"Authoritative edit set"** in Technical context for the enumerated list (15 files).
+  sweep every file whose current instructions contradict the new contract — including the
+  `<TOOL_RULE>` block injected from `_review_common.py`, which is not a template. See
+  **"Authoritative edit set"** in Technical context for the enumerated list; that list is
+  the only file count in this document.
 - **D. Add `output_path` to every prepare envelope** and centralise the `.md` → `.out.md`
   rule in one helper owned by `write_brief`.
 - **E. Add a missing-file guard** at the four finalize read sites (a missing `.out.md`
@@ -63,8 +65,11 @@ practice, so every mill task pays this cost on every dispatch.
 - Forking `mill-self-report`. Considered and rejected — see Decisions.
 - Merging with the deferred `mill-orchestrator` task (id 0, Thread A/B split). It remains
   a separate, larger proposal. See Technical context for how the two relate.
-- Deleting the `subprocess` / `psmux` dispatch paths. They are dead in practice but
-  removing them is a separate cleanup.
+- Deleting the `subprocess` / `psmux` dispatch paths. They are dead as a *configured*
+  dispatch mode (`dispatch: agent` everywhere), but **`--stage full` is not dead**: it is
+  still the reviewer's fallback after two consecutive raw API errors
+  (`mill-go/SKILL.md:129`), so its prompt contract must keep working. See the
+  `output-contract-is-agent-mode-only` Decision. Removing these paths is a separate task.
 - Two unrelated bugs found while mapping (file these, don't fix here):
   `millpy-implement.py --stage prepare` never emits `start_sha` even though
   `mill-go/SKILL.md` step 6 says to thread `--start-sha` back into finalize; and
@@ -138,6 +143,36 @@ practice, so every mill task pays this cost on every dispatch.
 - **Rejected:** Forking it to protect against auto-compact destroying the session memory
   it needs. Real but speculative; revisit if it is ever observed.
 
+### output-contract-is-agent-mode-only
+
+- **Decision:** The write-your-own-`.out.md` contract applies **only to agent-mode
+  dispatch**. The `--stage full` LLM-provider path keeps today's behaviour verbatim: the
+  reviewer returns its review **as text** and the backend writes the file.
+- **Why this must be said out loud:** the `subprocess` path is **not entirely dead**, and
+  the earlier "subprocess/psmux are dead in practice" framing was too broad.
+  `mill-go/SKILL.md:129` explicitly **retains `--stage full` via `millpy-bg` as the reviewer's
+  fallback after two consecutive raw API errors**. The five review templates and the
+  `<TOOL_RULE>` block are **shared** between both channels, so a naively-global contract
+  change would tell a `--stage full` reviewer to `Write` a file it has no path for
+  (`<OUTPUT_FILE>` is never substituted on that path, since `--stage full` never calls
+  `write_brief`) and no permission to write (`_llm_claude.py:80` grants at most
+  `Read,Grep,Glob`, and a `tooluse: false` spec grants none).
+- **How the split is enforced, mechanically:**
+  - The **output-contract footer** (the `<OUTPUT_FILE>` path + the ack instruction) is
+    appended by `write_brief`, which is called **only** from `--stage prepare`. The
+    `--stage full` path builds `prompt_text` and hands it straight to the LLM provider
+    without ever calling `write_brief`. So the footer is agent-mode-only *by construction* —
+    no conditional needed.
+  - The **`<TOOL_RULE>` block is the problem**, because it lives in shared prompt text and
+    hardcodes the opposite rule (see below). `build_tool_rule` must therefore become
+    dispatch-aware: it takes the existing `mode` (`bulk` / `tool-use`) **plus** a flag for
+    agent-mode dispatch, and emits "Do NOT use Write. Return review as text." for
+    `--stage full`, versus "You MAY use Write, and **only** to write `<OUTPUT_FILE>`; do NOT
+    use Edit and do NOT run git or bash." for agent mode.
+- **Rejected:** Treating subprocess as fully dead and changing the shared prompt text
+  globally — it would silently break the one path that exists to rescue a reviewer when the
+  Agent API is failing, i.e. exactly when you least want a second failure.
+
 ### subagent-writes-its-own-out-md
 
 - **Decision:** Every agent-mode sub-agent writes its **own** `<brief>.out.md`. The
@@ -181,10 +216,17 @@ practice, so every mill task pays this cost on every dispatch.
     `finalize` (step 6), which decides `success` / `incomplete` / verify-stuck exactly as
     it does today;
   - payload contains **neither** → the agent died or exhausted its turn *before* writing
-    the file → the existing step-4(b) split applies unchanged (stopped/interrupted →
-    `TaskOutput` liveness probe; clean turn-exhaustion → Clean mid-work stop), and the
-    subsequent `finalize` call runs with **no** `.out.md`, which routes into the git-state
-    inference described in `missing-out-md-defers-to-git-state` below.
+    the file. Split by role, because step 4(b) is scoped to **implementer** dispatches only
+    (`mill-go/SKILL.md:131`):
+    - *implementer* → the existing step-4(b) split applies unchanged (stopped/interrupted →
+      `TaskOutput` liveness probe; clean turn-exhaustion → Clean mid-work stop);
+    - *reviewer / fixer* → these have no 4(b) branch (today step 5 simply captured whatever
+      text arrived, so the case was never named). They fall through to `finalize`, which
+      runs against a missing `.out.md`: reviewers emit the existing `ERROR` envelope, fixers
+      take the git-state inference. Step 4(c)'s stopped/interrupted liveness probe for
+      reviewer/fixer is unaffected and still runs first.
+    In all cases the subsequent `finalize` call runs with **no** `.out.md`, which routes
+    into `missing-out-md-defers-to-git-state` below.
 - **Rationale:** This is a **blocking prerequisite**, not a nicety. `mill-go/SKILL.md:132`
   currently defines clean turn-exhaustion as "the notification is a non-error, **non-JSON**
   message". A one-line `WROTE <path>` ack is *precisely* a non-error, non-JSON message — so
@@ -392,9 +434,10 @@ yaml verdict and the `## Findings` body, which `finalize` renders into `_mill/re
 **Only the delivery channel changes** — the report goes to the file instead of the chat, and
 the final message becomes the ack.
 
-**Authoritative edit set — 22 files (1 + 5 + 5 + 3 + 8).** This is the single enumerated
-list; the conformance test in Testing asserts against it. Every file in groups 1–3 currently
-tells the sub-agent that its final *message* is its output, contradicting the new contract.
+**Authoritative edit set — 26 files (1 + 5 + 5 + 3 + 9 + 3).** This is the **single**
+enumerated list, and the only file count in this document; the conformance test in Testing
+asserts against it. Every file in groups 1–3 currently tells the sub-agent that its final
+*message* is its output, contradicting the new contract.
 
 *Group 1 — agent definition (1 file):*
 
@@ -426,10 +469,19 @@ tells the sub-agent that its final *message* is its output, contradicting the ne
   fork guidance (item A); and the stale rationale at `:152` (see below).
 - `plugins/mill/skills/mill-plan/SKILL.md` — the stale rationale at `:111` (see below).
 
-*Group 5 — Python (8 files):*
+*Group 5 — Python (9 files):*
 
 - `_agent_dispatch.py` — `write_brief` owns `<OUTPUT_FILE>` substitution and the
   `.md` → `.out.md` helper.
+- **`_review_common.py`** — **the easiest file in this whole change to miss, because the
+  contradiction is injected from Python, not from a template.** `_TOOL_RULE_BULK` and
+  `_TOOL_RULE_TOOL_USE` (`:1216-1228`) hardcode
+  `**CRITICAL: Do NOT use Write. Return review as text.**`, and `build_tool_rule` (`:1231`)
+  feeds that into **every** review prompt — called from `_review_discussion.py:82`,
+  `_review_plan.py:196,401,490,836`, and `_review_code.py:335`. It must become
+  dispatch-aware per the `output-contract-is-agent-mode-only` Decision. Note its docstring
+  also asserts "Write, Edit, and shell access are forbidden in both modes — the backend owns
+  file writes and git", which stops being true for agent mode.
 - `_implementer_common.py` — `emit_prepare` gains `output_path`; read site `:892` gains the
   missing-file guard and loses `html.unescape`.
 - `millpy-review-discussion.py`, `millpy-review-plan.py`, `millpy-review-code.py` — prepare
@@ -437,6 +489,16 @@ tells the sub-agent that its final *message* is its output, contradicting the ne
   guard and lose `html.unescape`.
 - `millpy-implement.py`, `millpy-fix.py`, `millpy-merge-in-subagent.py` — forward the new
   `output_path` field.
+
+*Group 6 — existing tests that pin the old behaviour (3 files). These go red if untouched:*
+
+- `unit_tests/test-implementer-common.py:3131-3172` (case 63) — asserts
+  `finalize_from_output` **unescapes** HTML entities (#605). Deleted or inverted by the
+  `remove-html-unescape` Decision.
+- `unit_tests/test-review-finalize.py` — the three
+  `test_review_{code,plan,discussion}_finalize_unescapes_html_entities` tests. Same.
+- `unit_tests/test-agent-dispatch.py:86-164` — asserts `write_brief` returns a single
+  `Path`; it now returns the brief path **and** the output path.
 
 **Downstream rationale that goes stale.** `mill-start/SKILL.md:152` and
 `mill-plan/SKILL.md:111` both pre-emptively load the `mill-receiving-review` skill, and
@@ -518,11 +580,30 @@ except the SKILL.md edits, which are prose and are verified by inspection.
   `brief_path` with `.md` → `.out.md`, for every prepare-emitting CLI (the
   implementer/fixer/merge CLIs and the three review CLIs).
 - **Conflicting-instruction sweep — conformance test.** A cheap grep-style test asserting
-  that no file under `templates/` or `agents/` still tells the agent its *output*'s last
-  line must be the JSON, or that its sole output is its final message. This is exactly the
-  kind of thing that silently regresses when someone adds an eleventh template, and the
-  round-1 review of this very discussion caught the human version of the same miss. Assert
-  against the enumerated "Authoritative edit set" in Technical context.
+  that no *agent-mode* prompt still tells the agent its output's last line must be the JSON,
+  or that its sole output is its final message. **Search root must include `scripts/`, not
+  just `templates/` and `agents/`** — the `<TOOL_RULE>` contradiction is injected from
+  `_review_common.py`, so a doc-directories-only sweep provably cannot catch it (round 3 of
+  this discussion's own review caught exactly that miss). Better still, assert against the
+  **rendered `prompt_text`** for each of the nine dispatch sites, which catches
+  contradictions regardless of which file they came from. Assert against the enumerated
+  "Authoritative edit set" in Technical context.
+- **`build_tool_rule` dispatch-awareness — TDD candidate.** Assert the agent-mode rule
+  permits `Write` (to `<OUTPUT_FILE>` only) and still forbids `Edit`/git/bash, while the
+  `--stage full` rule is **unchanged** from today's text. This is the test that stops the
+  reviewer's API-error fallback from being collaterally broken.
+
+**Existing tests that must be deleted or inverted** (they pin the behaviour this change
+removes; verify goes red otherwise):
+
+- `test-implementer-common.py:3131-3172` (case 63) and the three
+  `test_review_{code,plan,discussion}_finalize_unescapes_html_entities` tests in
+  `test-review-finalize.py` — they assert `finalize` **unescapes** HTML entities. Under
+  `remove-html-unescape` the correct assertion inverts: the text must survive
+  **byte-identically**, entities and all. Rewrite them as the round-trip regression test
+  above rather than simply deleting them — the #605 concern was real, it just moves.
+- `test-agent-dispatch.py:86-164` — asserts `write_brief` returns a single `Path`; update
+  for the brief-path + output-path return.
 
 Not covered by unit tests, and accepted: the end-to-end behaviour that the orchestrator's
 context actually shrinks. Verify that manually on the first real mill-go run after this
@@ -543,7 +624,9 @@ direct test that `ack-is-the-completion-discriminator` landed correctly.
 - **Q:** Record the fork rejection durably? **A:** Yes — a short decision note in the repo. The three disqualifiers are non-obvious and the question will recur.
 - **Q:** Are the `subprocess` / `psmux` dispatch paths a constraint on this design? **A:** No — they are dead in practice; only agent dispatch is relevant in mill today. (Removing them is a separate cleanup, out of scope here.)
 - **Q:** What does `finalize` do when `.out.md` is missing or empty? **A:** Role-split, reusing existing machinery: implementer/fixer/merge-in defer to the git-state completeness recount (so `incomplete` still catches partial batches); review CLIs emit the existing `ERROR` envelope. An earlier draft said "blanket `transient`" — round-1 review caught that it would have reintroduced the #574 false-success bug.
-- **Q:** What goes in the `.out.md`, and which templates need sweeping? **A:** The agent's full report *including* its trailing status/verdict block — only the delivery channel changes. The sweep covers twelve files, not seven: the five non-review brief templates also mandate a trailing-JSON *output* contract.
+- **Q:** What goes in the `.out.md`, and which files need sweeping? **A:** The agent's full report *including* its trailing status/verdict block — only the delivery channel changes. The sweep is the "Authoritative edit set" in Technical context; it grew twice under review, most importantly to include `_review_common.py`, whose `<TOOL_RULE>` injects "Do NOT use Write" into every review prompt from Python rather than from a template.
+- **Q:** Does the new contract apply to the `--stage full` reviewer path too? **A:** No — agent-mode only. `--stage full` is *not* dead: it is the reviewer's fallback after two consecutive API errors (`mill-go/SKILL.md:129`), and it shares the review templates and `<TOOL_RULE>`. The `.out.md` footer is agent-mode-only by construction (`write_brief` is prepare-only), but `build_tool_rule` must be made dispatch-aware so the two channels don't get contradictory instructions.
+- **Q:** What happens to existing tests that pin the old behaviour? **A:** They are part of the edit set. The four `html.unescape` tests get **inverted** (byte-identical round-trip) rather than deleted — the #605 concern is real, it just moves — and `test-agent-dispatch.py`'s `write_brief` return-shape assertion is updated.
 - **Q:** How does mill-go tell a successful notification from a dead one once the payload is one line? **A:** The `WROTE <path>` ack becomes the positive completion discriminator. Without this, every successful implementer would match `:132`'s "non-error, non-JSON" turn-exhaustion trigger.
 - **Q:** Does the prepare envelope gain an `output_path` field? **A:** Yes, additive. The `.md` → `.out.md` rule then lives in one helper instead of four prose restatements.
 - **Q:** How should review gaps be resolved for the rest of this mill-start? **A:** Auto-pick the recommended option on every review round.
