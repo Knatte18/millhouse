@@ -45,7 +45,9 @@ batches:
     start_sha: 179fbaf07e5a90d179b9e5fbbf00e25998ee21fd
     commit_sha: 44d61064b6b39435ce37bb820d71219f7c18521a
   - name: prompt-surfaces
-    state: pending
+    state: running
+    implementer_session: 971cadd3-eeee-4fbf-befa-84f67e3f2f72
+    start_sha: 8dbaf15b99c4a6a6f93ff25025ed6ba51bb06ff0
   - name: orchestrator-skills
     state: pending
   - name: output-contract-conformance
