@@ -1,10 +1,10 @@
 # Status
 
 ```yaml
-phase: discussed
+phase: planning
 slug: explore-fork-agent-opportunities
 branch: hanf/explore-fork-agent-opportunities
-plan: null
+plan: _mill/plan
 parent: main
 task: Explore and adopt Claude Code fork-agents in mill orchestration
 task_description: |
@@ -16,4 +16,5 @@ task_description: |
 ```text
 discussing  '2026-07-12T12:11:48Z'
 discussed  '2026-07-12T13:35:27Z'
+planning  '2026-07-12T13:49:48Z'
 ```
