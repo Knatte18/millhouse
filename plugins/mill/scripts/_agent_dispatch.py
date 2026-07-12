@@ -13,11 +13,14 @@ model_to_tier(model: str) -> str
     claude-opus-* -> "opus", claude-haiku-* -> "haiku".
     Raises ValueError on unrecognized family.
 
-write_brief(briefs_dir: Path, role: str, scope: str, round_n: int, prompt_text: str) -> Path
+write_brief(briefs_dir: Path, role: str, scope: str, round_n: int, prompt_text: str, output_contract: bool = False) -> Path
     Write a brief file to briefs_dir/<role>-<sanitized_scope>-r<round_n>.md,
     creating parent directories. The scope component is sanitized for Windows
     filename safety (colons, slashes, etc. become hyphens). Returns the path
-    of the written file. Example role: "implement".
+    of the written file. Example role: "implement". Always unlinks a stale
+    ".out.md" next to the brief first. When output_contract is True (default
+    False), appends an output-contract footer naming the absolute ".out.md"
+    path and requiring a one-line "WROTE <path>" chat ack.
 
 output_path_for(brief_path: Path) -> Path
     Return the brief path with its trailing ".md" replaced by ".out.md" --
@@ -106,8 +109,25 @@ def write_brief(
     scope: str,
     round_n: int,
     prompt_text: str,
+    output_contract: bool = False,
 ) -> Path:
     """Write a brief file and return its path.
+
+    Two behaviours run on every call, regardless of ``output_contract``:
+    the brief is written to briefs_dir/<role>-<sanitized_scope>-r<round_n>.md,
+    and any stale ``.out.md`` left over from a prior dispatch to that same
+    path is unlinked first. The unlink matters because a transient-retry
+    re-dispatch reuses the same role/scope/round -- hence the same
+    ``.out.md`` path -- so without it an attempt-1 output file could be
+    misread as attempt-2's result (e.g. a stale ``APPROVE`` from a reviewer
+    that never actually ran this round).
+
+    When ``output_contract`` is True, an output-contract footer is appended
+    to ``prompt_text`` before writing: it names the absolute ``.out.md``
+    path (via ``output_path_for``) as the file the agent must write its full
+    report to, and instructs the agent's final chat message to be a one-line
+    ``WROTE <path>`` ack and nothing else. This flag defaults to False so
+    every pre-existing caller keeps writing ``prompt_text`` byte-for-byte.
 
     Args:
         briefs_dir: Parent directory for briefs.
@@ -115,15 +135,30 @@ def write_brief(
         scope: Scope name (e.g., "code-review"). Sanitized for filename safety.
         round_n: Round number (integer).
         prompt_text: Full prompt text to write (UTF-8).
+        output_contract: When True, append the output-contract footer
+            described above. Defaults to False (no footer, no behaviour
+            change from today).
 
     Returns:
-        Path to the written file.
+        Path to the written brief file (never a tuple -- callers that need
+        the output path call ``output_path_for`` themselves).
     """
     briefs_dir = Path(briefs_dir)
     briefs_dir.mkdir(parents=True, exist_ok=True)
     sanitized_scope = _paths.sanitize_filename_component(scope)
     brief_path = briefs_dir / f"{role}-{sanitized_scope}-r{round_n}.md"
-    brief_path.write_text(prompt_text, encoding="utf-8")
+
+    # Unconditionally clear any stale output from a prior dispatch to this
+    # same brief path. Runs for every role, agent-mode or not: without it, a
+    # transient-retry re-dispatch (same role/scope/round) could read back an
+    # attempt-1 output as attempt-2's result.
+    output_path_for(brief_path).unlink(missing_ok=True)
+
+    text_to_write = prompt_text
+    if output_contract:
+        text_to_write = prompt_text + _build_output_contract_footer(brief_path)
+
+    brief_path.write_text(text_to_write, encoding="utf-8")
     return brief_path
 
 
@@ -146,6 +181,37 @@ def output_path_for(brief_path: Path) -> Path:
         The same path with the trailing ".md" replaced by ".out.md".
     """
     return Path(brief_path).with_suffix(".out.md")
+
+
+def _build_output_contract_footer(brief_path: Path) -> str:
+    """Return the output-contract footer appended when ``output_contract=True``.
+
+    States the absolute ``.out.md`` path (as literal text, never an
+    ``<UPPERCASE>`` token) that the agent must write its full report to, and
+    disambiguates the interaction with the review templates' existing
+    ``MILL_REVIEW_BEGIN`` / ``MILL_REVIEW_END`` wrapping instruction: that
+    wrapped report is the *content of the file*, not something to also repeat
+    in chat. The chat reply is a one-line ack and nothing else, so the
+    orchestrator never has to read (or pay context for) the full report.
+
+    Args:
+        brief_path: Path to the brief this footer is appended to.
+
+    Returns:
+        Markdown footer text, including its own leading blank-line
+        separator from the preceding prompt body.
+    """
+    out_path = output_path_for(brief_path)
+    return (
+        "\n\n---\n\n"
+        "## Output contract\n\n"
+        f"Write your full report to this file: {out_path}\n\n"
+        "Any format the prompt above asks for (including a "
+        "`MILL_REVIEW_BEGIN` / `MILL_REVIEW_END` wrapped report) is the "
+        f"content of {out_path} -- write it there, not into chat.\n\n"
+        "Your final chat message must be exactly one line and nothing "
+        f"else: `WROTE {out_path}`\n"
+    )
 
 
 def language_skills_directive(batch_file: Path) -> str:
