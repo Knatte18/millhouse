@@ -178,3 +178,4 @@ _Cross-cutting decisions every batch inherits._
 - `plugins/mill/unit_tests/test-review-finalize.py`
 - `plugins/mill/unit_tests/test-review-output-contract.py`
 - `plugins/mill/unit_tests/test-review-prepare-envelope.py`
+- `plugins/mill/unit_tests/test-review-templates.py`

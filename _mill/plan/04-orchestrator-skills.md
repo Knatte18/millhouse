@@ -26,7 +26,7 @@ temporary and intentional, and the skill must say so.
 bought. Of the four `.out.md` mentions in the file, only `:149` and `:151` change; `:135` and `:163`
 are on implementer paths.
 
-**Why this batch depends on batch 3 as well as batch 2.** Card 18(c) stops the orchestrator from
+**Why this batch depends on batch 3 as well as batch 2.** Card 19(c) stops the orchestrator from
 capturing the reviewer's notification to `.out.md`. That is only correct once the reviewer can
 actually write the file itself — which is card 14's `Write` grant, in batch 3. Landing batch 4 on
 top of batch 2 alone would produce a window where **nobody** writes `.out.md`: the orchestrator has
@@ -38,7 +38,7 @@ the two structural guards named in Batch Tests.
 
 ## Cards
 
-### Card 18: `mill-go/SKILL.md` — reviewer-skipped capture, envelope-supplied output path, fork note
+### Card 19: `mill-go/SKILL.md` — reviewer-skipped capture, envelope-supplied output path, fork note
 
 - **Context:**
   - `plugins/mill/scripts/_agent_dispatch.py`
@@ -87,7 +87,7 @@ the two structural guards named in Batch Tests.
   or the `.out.md` mentions at `:135` and `:163`. They are implementer-only.
 - **Commit:** `docs(mill-go): reviewer-skipped output capture, envelope output_path, why-not-fork note`
 
-### Card 19: `mill-start/SKILL.md` — fork guidance in Explore, and the stale review rationale
+### Card 20: `mill-start/SKILL.md` — fork guidance in Explore, and the stale review rationale
 
 - **Context:**
   - `plugins/mill/skills/mill-go/SKILL.md`
@@ -107,7 +107,7 @@ the two structural guards named in Batch Tests.
   explore inline when the question is small.
   **This is guidance, not a mandate.** Say so explicitly. This is the one site in mill with no
   brief, no resume requirement, no per-role model tier and no tool restriction to lose — which is
-  exactly why none of the three fork disqualifiers (card 18(e)) apply here.
+  exactly why none of the three fork disqualifiers (card 19(e)) apply here.
   (b) **`:152`** — the pre-emptive `mill-receiving-review` load is justified by the claim that
   *"under Agent-mode dispatch a reviewer's findings arrive already embedded in the
   `<task-notification>` payload the orchestrator must read just to learn the round's verdict"*. That
@@ -117,7 +117,7 @@ the two structural guards named in Batch Tests.
   reader. Keep the load unconditional; change only the rationale.
 - **Commit:** `docs(mill-start): add fork guidance to Explore and fix the stale review-load rationale`
 
-### Card 20: `mill-plan/SKILL.md` — the same stale review rationale
+### Card 21: `mill-plan/SKILL.md` — the same stale review rationale
 
 - **Context:**
   - `plugins/mill/skills/mill-start/SKILL.md`
@@ -143,9 +143,9 @@ SKILL.md files:
 - **`test-skill-helper-drift.py`** scans every mill SKILL.md for helper references matching
   `_<module>.<fn>(` and asserts each resolves to a real shipped function in
   `plugins/mill/scripts`. It is the net for a prose edit that invents or misspells a helper name —
-  a live risk here, since card 18 references `_agent_dispatch` behaviour. It also holds a
+  a live risk here, since card 19 references `_agent_dispatch` behaviour. It also holds a
   regression lock on `mill-start/SKILL.md`'s `task['body']` / `task['brief']` guidance, which card
-  19 must not disturb.
+  20 must not disturb.
 - **`test-skills-index.py`** asserts the root `SKILLS.md` index stays consistent with the shipped
   skills. No skill is added or removed here, so it must stay green.
 

@@ -36,7 +36,7 @@ not bounded by that list", and would go stale on the first follow-up task.
 
 ## Cards
 
-### Card 21: rendered-prompt conformance sweep — both channels, both directions
+### Card 22: rendered-prompt conformance sweep — both channels, both directions
 
 - **Context:**
   - `plugins/mill/scripts/_review_common.py`
@@ -48,6 +48,7 @@ not bounded by that list", and would go stale on the first follow-up task.
   - `plugins/mill/templates/review-plan-batch.md`
   - `plugins/mill/templates/review-plan-holistic.md`
   - `plugins/mill/agents/mill-reviewer.md`
+  - `plugins/mill/agents/mill-implementer.md`
 - **Edits:** none
 - **Creates:**
   - `plugins/mill/unit_tests/test-review-output-contract.py`
@@ -90,33 +91,39 @@ not bounded by that list", and would go stale on the first follow-up task.
   Plain `test_*` functions plus a `main()` runner; ASCII-only output.
 - **Commit:** `test(review): sweep rendered review prompts for output-contract conformance`
 
-### Card 22: no-token regression — pin the `_render` constraint that killed the first design
+### Card 23: no-token regression — pin the `_render` constraint that killed the first design
 
 - **Context:**
   - `plugins/mill/scripts/_render.py`
   - `plugins/mill/scripts/_review_common.py`
   - `plugins/mill/agents/mill-reviewer.md`
   - `plugins/mill/agents/mill-implementer.md`
+  - `plugins/mill/templates/review-discussion.md`
+  - `plugins/mill/templates/review-code-batch.md`
+  - `plugins/mill/templates/review-code-holistic.md`
+  - `plugins/mill/templates/review-plan-batch.md`
+  - `plugins/mill/templates/review-plan-holistic.md`
 - **Edits:**
   - `plugins/mill/unit_tests/test-review-output-contract.py`
 - **Creates:** none
 - **Deletes:** none
 - **Moves:** none
-- **Requirements:** Add two tests to `plugins/mill/unit_tests/test-review-output-contract.py`,
-  registered in its `main()`:
-  (a) **No `<OUTPUT_FILE>` token anywhere.** Assert no file under `plugins/mill/templates/` and no
-  file under `plugins/mill/agents/` contains the literal string `<OUTPUT_FILE>`.
-  (b) **Every template still renders.** Assert `_render.render` succeeds on each of the five review
-  templates with its normal `values` dict — i.e. no card introduced an `<UPPERCASE>` token that no
-  caller supplies.
+- **Requirements:** Add a **no-`<OUTPUT_FILE>`-token** test to
+  `plugins/mill/unit_tests/test-review-output-contract.py`, registered in its `main()`: assert that
+  **no file under `plugins/mill/templates/` and no file under `plugins/mill/agents/`** contains the
+  literal string `<OUTPUT_FILE>`.
   This pins the constraint that made the first design of this task **unbuildable**: `_render.render`
   (`_render.py:35`) matches `<[A-Z][A-Z0-9_]*>` and raises `KeyError: Unresolved template tokens` for
   any such token missing from the caller's `values` dict. A literal `<OUTPUT_FILE>` in a template
   would hard-fail rendering **before** `write_brief` ever runs, and is unsuppliable on `--stage full`
   anyway; agent definitions are static text never passed through `_render`, so a token there would
-  reach the model raw. Test (a) is the guard against someone re-introducing the token design without
+  reach the model raw. This test is the guard against someone re-introducing the token design without
   reading the discussion.
-- **Commit:** `test(review): pin the no-OUTPUT_FILE-token constraint and template renderability`
+  **Renderability is deliberately not asserted here** — batch 3's card 18(a) already asserts that all
+  five templates render with their full token sets, at the batch that edits them, which is where a
+  broken template must be caught. This card's value over card 18(d) is that it also sweeps
+  `plugins/mill/agents/`, which no template test covers.
+- **Commit:** `test(review): pin the no-OUTPUT_FILE-token constraint across templates and agents`
 
 ## Batch Tests
 

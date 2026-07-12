@@ -19,10 +19,17 @@ envelope. On the read side, all three CLIs gain a missing-file guard and lose th
 `html.unescape` call.
 
 **The flag must not be set inside `prepare()` itself.** `build_tool_rule` is called *from within*
-`prepare()`, and `run()` — the `--stage full` fallback this task must not break — calls that
-**same `prepare()`**. A default-on flag there would poison the exact path Shared Decision
-`--stage full must keep working` protects. The flag is a parameter, defaulted `False`, set `True`
-only by the CLIs' prepare branches.
+`prepare()`, and for discussion and code review the `--stage full` fallback — the path this task must
+not break — reaches that **same `prepare()`** (`_review_discussion.py:215`, `_review_code.py:629`). A
+default-on flag there would poison the exact path Shared Decision `--stage full must keep working`
+protects. The flag is a parameter, defaulted `False`, set `True` only by the CLIs' prepare branches.
+
+**`_review_plan` is the exception, and knowing it saves the implementer a hunt.** Its `run()`
+(`:594`) does **not** call `prepare()` — it re-renders the prompt inline and has its **own**
+`build_tool_rule` call at `:836`, and reaches batch scope through `_review_one_batch` (`:196`), which
+`run()` submits to a `ThreadPoolExecutor` (`:752`). So for plan review the two paths are genuinely
+separate code, and the `--stage full` side is protected by leaving `:196` and `:836` alone rather
+than by a default.
 
 **External interface consumed by batch 4:** each review prepare envelope gains an additive
 `output_path` field (absolute, `.out.md`). `finalize`'s external contract — `--agent-output <path>`
@@ -76,9 +83,11 @@ those, and this task must not move them.
 - **Requirements:** Add a keyword-only parameter `agent_mode: bool = False` to `prepare` in
   `plugins/mill/scripts/_review_plan.py` (`:313`) and pass it to **both** `build_tool_rule` calls
   inside that function: the batch-scope call at `:401` and the holistic-scope call at `:490`.
-  **Do NOT thread the flag into `_review_one_batch` (`:196`) or into `run()` (`:836`).** Both are
-  `--stage full`-only: `_review_one_batch` is not an entry point, it is submitted to a
-  `ThreadPoolExecutor` from `run()` (`:752`). They must keep the non-agent rule.
+  **Do NOT thread the flag into `_review_one_batch`'s `build_tool_rule` call (`:196`) or into the one
+  inside `run()` (`:836`).** Both are `--stage full`-only. Note that `run()` is defined at `:594` and
+  does **not** call `prepare()` at all — it renders inline, which is why `:836` exists as a separate
+  `build_tool_rule` callsite; and `_review_one_batch` (whose call is at `:196`) is not an entry point,
+  it is submitted to a `ThreadPoolExecutor` from `run()` (`:752`). Both must keep the non-agent rule.
   Note for the implementer: of the two calls you *do* change, only `:490` has a live agent-mode
   caller — `millpy-review-plan.py:148-151` hardcodes `scope=None` in its `--stage prepare` branch
   ("Agent mode uses holistic scope only"), so `:401` is currently dead on the agent path. Thread it
@@ -108,9 +117,18 @@ those, and this task must not move them.
   when `agent_output_path` does not exist, use `""` as the raw text rather than calling
   `read_text`. Today that line raises an uncaught `FileNotFoundError` — the surrounding
   `except ReviewError` does not catch it — so an absent file exits with a traceback and prints no
-  envelope at all. An empty string flows into `parse_verdict`, which raises `ReviewError`, which
-  produces the **existing** `verdict: ERROR` envelope that mill-start's ERROR-only-aggregate retry
-  already handles. Do not invent a new envelope shape or a synthetic `stuck_type`.
+  envelope at all. The guard collapses *missing* into *empty*, after which **existing behaviour
+  takes over**.
+  **Be precise about what that existing behaviour is** — the obvious description is wrong, and
+  card 12 depends on getting it right. An empty `raw_text` does **not** escape as a `ReviewError`
+  and does **not** reach `print_error_envelope`. It flows into the backend's `finalize`, whose
+  `finalize_scope` call raises `ReviewError` **internally**; the backend **catches it itself**
+  (`_review_discussion.py:146-164`) and **returns** a `ReviewResult` with `verdict: "ERROR"`. The
+  CLI then prints that result via `result.to_dict()` and exits **0**. The `verdict: ERROR` envelope
+  that mill-start's ERROR-only-aggregate retry consumes is therefore produced by the **backend's own
+  ERROR result on a zero exit code** — not by the CLI's error path. Do not invent a new envelope
+  shape or a synthetic `stuck_type`; the guard's whole job is to stop the traceback so this existing
+  path can run.
   (d) Delete the `html.unescape(...)` call at `:146` and the now-unused `import html` at `:23`,
   along with the three-line `#605` comment above the read. Once the reviewer writes the file
   itself the content is never HTML-escaped, and unescaping it anyway **corrupts** any literal
@@ -135,7 +153,9 @@ those, and this task must not move them.
   `output_contract=True` to `write_brief(...)` (`:153-156`). Keep the hardcoded `scope=None`.
   (b) Add `"output_path": str(_agent_dispatch.output_path_for(brief_path))` to the prepare envelope
   (`:157-166`).
-  (c) Missing-file guard at the finalize read (`:185`), exactly as card 9.
+  (c) Missing-file guard at the finalize read (`:185`), exactly as card 9 — including its note on
+  what the existing ERROR behaviour actually is (the backend catches `ReviewError` at
+  `_review_plan.py:568-575` and returns an ERROR entry; exit code 0).
   (d) Delete `html.unescape` at `:185`, the `#605` comment, and `import html` at `:24`.
   **Carve-out — do not add `output_path` to the validator-failure envelope.** The `--stage prepare`
   branch also emits `{"errors": [...], "summary": ...}` at `:142-147` and exits 1 **before any
@@ -162,7 +182,9 @@ those, and this task must not move them.
   `output_contract=True` on `write_brief(...)` (`:152-155`).
   (b) Add `"output_path": str(_agent_dispatch.output_path_for(brief_path))` to the prepare envelope
   (`:156-165`).
-  (c) Missing-file guard at the finalize read (`:183`), exactly as card 9.
+  (c) Missing-file guard at the finalize read (`:183`), exactly as card 9 — including its note on
+  what the existing ERROR behaviour actually is (the backend catches `ReviewError` at
+  `_review_code.py:547-559` and returns an ERROR result; exit code 0).
   (d) Delete `html.unescape` at `:183`, the `#605` comment, and `import html` at `:26`.
   Code review is the only one of the three with a live batch scope (`--batch`), so both the batch
   and holistic prepare paths must carry `agent_mode=True` — they share the single `prepare(...)`
@@ -199,9 +221,15 @@ those, and this task must not move them.
   (b) **Add missing / empty / whitespace-only cases for each of the three CLIs** (nine tests, or
   three parameterised over the CLIs), registered in `main()`. For each: invoke the CLI's `main()`
   with `--stage finalize --agent-output <path>` where the path **does not exist**, is an **empty**
-  file, and is **whitespace-only**. Assert a `verdict: ERROR` envelope is produced and **no
-  traceback escapes** — the missing case fails on today's code with an uncaught
-  `FileNotFoundError`, which is precisely the bug card 9-11's guard fixes.
+  file, and is **whitespace-only**. Assert the printed JSON carries `verdict: "ERROR"`, that the CLI
+  returns **0**, and that **no traceback escapes** — the missing case fails on today's code with an
+  uncaught `FileNotFoundError`, which is precisely the bug cards 9-11's guard fixes.
+  **Assert exit 0, not exit 1, and do not force the error with a raising mock.** The ERROR envelope
+  is produced by the **backend's own** `except ReviewError` -> `return ReviewResult(verdict="ERROR")`
+  path (`_review_discussion.py:146-164`, `_review_code.py:547-559`, `_review_plan.py:568-575`),
+  which the CLI prints via `result.to_dict()` on a **zero** exit. `print_error_envelope` is never
+  reached. A test that stubs `finalize` with a `side_effect` raising `ReviewError`, or that asserts
+  a return code of 1, pins behaviour the real system does not have.
   (c) **Add the stale-`.out.md` regression guard** — the single most important test in this batch.
   Write an `.out.md` containing a valid `MILL_REVIEW` block with `verdict: APPROVE`; call
   `write_brief` for the **same role/scope/round**; then run `finalize` against that same
@@ -218,12 +246,22 @@ those, and this task must not move them.
   nothing and (c) proves nothing.
   Therefore: for the **existing** round-trip tests in (a), keep the current style — it only inspects
   `finalize.call_args.args[2]` and is sound. For the **new** tests in (b) and (c), use the **real**
-  `_agent_dispatch`, `_review_cli` and `_review_common` modules, and mock only `_paths`, `_reviewers`
-  and the review backend. Give the backend's `finalize` a `side_effect` that delegates to the real
-  `_review_common.parse_verdict`, so a genuine `ReviewError` propagates and the real
-  `print_error_envelope` writes a real `verdict: ERROR` envelope to stdout. Capture stdout
-  (`contextlib.redirect_stdout`) and assert on the parsed JSON plus the CLI's return code — never on
-  a mock's call args, which would re-introduce the same blind spot.
+  `_agent_dispatch`, `_review_cli`, `_review_common`, **and the real review backend** — the ERROR
+  result is exactly the backend behaviour under test, so stubbing it out would assert nothing.
+  **But "real `_review_common`" cannot mean "untouched `_review_common`".** Left alone, the CLI calls
+  `find_active_slug` (raises `ReviewError` in a tempdir with no marker or branch) and `resolve_path`,
+  which reaches through to the **real** `_paths.resolve_git_root()` / `resolve_active_hub`
+  (`_review_common.py:353-375`) — environment-dependent, and against the repo convention that unit
+  tests use no real git. Instead:
+  - pass `--slug <slug>` explicitly, so `find_active_slug` is never called;
+  - patch `load_config` and `resolve_path` **as attributes on the real `_review_common` module**
+    (pointing `reviews_dir` at a `tempfile` directory), leaving `ReviewError`, `parse_verdict` and
+    the backend's exception handling genuinely real;
+  - mock only `_paths` and `_reviewers`.
+  This works because each CLI performs its `from _review_common import ...` **inside `main()`**, so
+  attributes patched before the call are picked up.
+  Capture stdout with `contextlib.redirect_stdout` and assert on the parsed JSON envelope plus the
+  return code — never on a mock's call args, which would re-introduce the same blind spot.
 - **Commit:** `test(review): invert unescape round-trip and add missing/empty/stale finalize cases`
 
 ### Card 13: prepare-envelope shape test, including both carve-outs
@@ -258,10 +296,16 @@ those, and this task must not move them.
   `MagicMock` (as `test-review-finalize.py:110-137` does), then `write_brief` and `output_path_for`
   return `MagicMock`s, `str(output_path_for(...))` is junk, and the `.md` -> `.out.md` equality
   assertion — the entire point of this card — cannot hold. Use the **real** `_agent_dispatch`,
-  `_review_cli` and `_review_common`, with `briefs_dir` pointed at a `tempfile` directory; mock only
-  `_paths`, `_reviewers` and the review backend (whose `prepare` returns a static dict carrying
-  `prompt_text`, `model`, `round` and `scope`). Capture stdout with `contextlib.redirect_stdout` and
-  assert on the parsed JSON envelope, never on a mock's call args.
+  `_review_cli` and `_review_common`, with `briefs_dir` pointed at a `tempfile` directory (via the
+  mocked `_paths.resolve_task_path`); mock `_paths` and `_reviewers`, and mock the review **backend**
+  only — its `prepare` returns a static dict carrying `prompt_text`, `model` (a real model id such as
+  `claude-opus-4-8`, so the real `model_to_tier` resolves), `round` and `scope`. This keeps the real
+  `write_brief` and the real `output_path_for` in the path, which is what makes the `.md` -> `.out.md`
+  assertion meaningful.
+  Apply card 12's `--slug` rule here too: pass `--slug <slug>` and patch `load_config` /
+  `resolve_path` as attributes on the real `_review_common`, so no test touches real git.
+  Capture stdout with `contextlib.redirect_stdout` and assert on the parsed JSON envelope, never on a
+  mock's call args.
   Import each CLI via `importlib.util.spec_from_file_location` (the filenames contain hyphens and are
   not importable as modules). Plain `test_*` functions plus a `main()` runner; ASCII-only output.
 - **Commit:** `test(review): assert output_path envelope shape and both carve-outs`

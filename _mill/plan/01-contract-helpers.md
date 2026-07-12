@@ -50,6 +50,10 @@ deleting a stale one at brief-write time is a no-op for that path.
   module docstring's `Exports` section alongside the existing `write_brief` entry. This rule is
   currently restated as prose in four places across the SKILL.md files; this function becomes its
   only definition.
+  `_paths.py` is in `Context:` for one reason: `write_brief` already routes the brief filename
+  through `_paths.sanitize_filename_component` (`_agent_dispatch.py:117`), and `output_path_for`
+  must stay consistent with the filename that helper produces. `output_path_for` itself is pure
+  `pathlib` and adds no `_paths` dependency.
 - **Commit:** `feat(dispatch): add output_path_for helper for .md -> .out.md`
 
 ### Card 2: `write_brief` — output-contract footer and stale-`.out.md` truncation

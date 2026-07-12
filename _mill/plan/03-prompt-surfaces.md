@@ -4,8 +4,8 @@
 task: Explore and adopt Claude Code fork-agents in mill orchestration
 batch: prompt-surfaces
 number: 3
-cards: 4
-verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-agents-defs.py test-render.py
+cards: 5
+verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-agents-defs.py test-review-templates.py
 depends-on: [1]
 ```
 
@@ -157,15 +157,52 @@ stated in exactly **two** agent-mode-only places: `build_tool_rule`'s two agent 
   `test_implementer_agent_definition` must stay **untouched** — the implementer is out of scope.
 - **Commit:** `test(agents): re-pin mill-reviewer tool invariant with Write granted`
 
+### Card 18: template test — the five templates still render, and the deleted prose stays deleted
+
+- **Context:**
+  - `plugins/mill/scripts/_render.py`
+  - `plugins/mill/scripts/_review_common.py`
+  - `plugins/mill/templates/review-discussion.md`
+  - `plugins/mill/templates/review-code-batch.md`
+  - `plugins/mill/templates/review-code-holistic.md`
+  - `plugins/mill/templates/review-plan-batch.md`
+  - `plugins/mill/templates/review-plan-holistic.md`
+- **Edits:** none
+- **Creates:**
+  - `plugins/mill/unit_tests/test-review-templates.py`
+- **Deletes:** none
+- **Moves:** none
+- **Requirements:** Create `plugins/mill/unit_tests/test-review-templates.py`. **Without this card,
+  cards 15 and 16 ship with zero automated coverage** — `test-render.py` renders only `tempfile`
+  fixtures (`test-render.py:16-96`) and never opens `plugins/mill/templates/`, so it cannot see a
+  broken template. Assert, for each of the five review templates:
+  (a) **It still renders.** `_review_common.render_prompt(<name>, **tokens)` succeeds with the full
+  token set that template's backend supplies. This is the guard against an accidentally-introduced
+  `<UPPERCASE>` token: `_render.render` (`_render.py:35`) raises `KeyError: Unresolved template
+  tokens` for any token missing from the caller's `values` dict — a failure that surfaces at render
+  time, i.e. in production, not at edit time.
+  (b) **The deleted prose stays deleted** (cards 15, 16): the template source contains no
+  `You are a READ-ONLY reviewer` header, no `MUST NOT call Edit, Write, Bash`, no `MUST NOT make git
+  commits`, no `Your sole output is the review file`, and — for `review-discussion.md` — no
+  `You are in tool-use mode`.
+  (c) **The kept prose stays kept** (card 15(c), 15(d)): every template still contains
+  `MILL_REVIEW_BEGIN` and `MILL_REVIEW_END`, and still tells the reviewer to REPORT rather than fix.
+  (d) **No `<OUTPUT_FILE>` token** appears in any template.
+  Plain `test_*` functions plus a `main()` runner; ASCII-only output.
+- **Commit:** `test(templates): assert review templates render and the tool prohibitions are gone`
+
 ## Batch Tests
 
-`verify:` runs `test-agents-defs.py`, which is the batch's real gate: card 17 rewrites the reviewer
-tool invariant that card 14 changes, and it is the only automated assertion over the agent
-definitions. `test-render.py` is included as the regression net for the five template edits — it
-exercises `_render.render`'s token handling, so it catches an accidentally-introduced `<UPPERCASE>`
-token (which would raise `KeyError` at render time, not at edit time).
+`verify:` runs `test-agents-defs.py` and the new `test-review-templates.py` — together they are the
+batch's real gate. `test-agents-defs.py` (card 17) covers the agent definition that card 14 changes;
+`test-review-templates.py` (card 18) covers the five templates that cards 15 and 16 change.
 
-The prose deletions themselves are verified by inspection here and asserted properly in batch 5,
-which builds the **rendered** `prompt_text` for all three reviewer sites in both channels and sweeps
-it in both directions. That is deliberate: a `templates/`-and-`agents/`-only grep provably cannot see
-the `<TOOL_RULE>` text, because it is injected from `_review_common.py`, not from a template.
+**`test-render.py` is deliberately NOT in the verify set.** It would have looked like the natural
+regression net for the template edits, but it renders only `tempfile` fixtures and never reads
+`plugins/mill/templates/` — so it stays green on a template that no longer renders. Card 18 exists
+precisely because that gap would otherwise defer all detection of a broken template to batch 5.
+
+What card 18 cannot assert — that the **rendered prompt** is coherent across both dispatch channels
+once `<TOOL_RULE>` is injected — is asserted in batch 5. That split is deliberate: the `<TOOL_RULE>`
+text comes from `_review_common.py`, not from a template, so a template-only test provably cannot
+see it.
