@@ -166,8 +166,15 @@ practice, so every mill task pays this cost on every dispatch.
   - The **`<TOOL_RULE>` block is the problem**, because it lives in shared prompt text and
     hardcodes the opposite rule (see below). `build_tool_rule` must therefore become
     dispatch-aware: it takes the existing `mode` (`bulk` / `tool-use`) **plus** a flag for
-    agent-mode dispatch. **`<TOOL_RULE>` also becomes the sole owner of the read-only clause**,
-    since Group 2's static header surrenders it (see the edit set).
+    agent-mode dispatch, **defaulting to `False` (non-agent)** — mirroring `prepare()`.
+    The default is load-bearing, not cosmetic: `test-review-common.py` calls
+    `build_tool_rule` **positionally with one argument** at seven sites (`:615`, `:652`,
+    `:690`, `:691`, `:695`, `:2828`, `:2880`), so a *required* second parameter would raise
+    `TypeError` in all seven. With the `False` default they stay green, because the two
+    non-agent cells are specified as byte-identical to today's text. `test-review-common.py`
+    therefore does **not** belong in Group 6.
+    **`<TOOL_RULE>` also becomes the sole owner of the read-only clause**, since Group 2's
+    static header surrenders it (see the edit set).
 - **All four cells of the `build_tool_rule` matrix must be defined — the `bulk` × agent-mode
   cell is the trap.** `mode` derives from the reviewer spec's `tooluse` flag, which
   **defaults to `False`** (`_reviewers.py:386`), and the registry ships `*_bulk`
@@ -304,13 +311,18 @@ practice, so every mill task pays this cost on every dispatch.
 - **Decision:** Every prepare envelope **that dispatches an agent** gains an **additive**
   `output_path` field holding the absolute path to the `.out.md`. The `.md` → `.out.md` rule
   lives in exactly one helper in `_agent_dispatch.py`.
-- **Explicit carve-out — `dispatch_needed: false`:** `_implementer_common.emit_prepare_no_dispatch`
-  (`:796`) emits a prepare envelope with `dispatch_needed: false` for the merge-in
-  verify-fix pass case (`millpy-merge-in-subagent.py:396`), where verify already passes and
-  **no agent is dispatched at all**. No brief is written, so there is no `.out.md` to name.
-  These envelopes carry **no** `output_path`, and the shape test must exclude them —
-  otherwise the invariant is false as written and the test fails on
-  `millpy-merge-in-subagent.py --mode verify-fix`.
+- **Explicit carve-outs — three kinds of envelope carry no `output_path`,** because none of
+  them writes a brief. The invariant is "`output_path` is present on every **brief-emitting
+  success** envelope", and the shape test must be scoped to exactly that:
+  1. **`dispatch_needed: false`** — `_implementer_common.emit_prepare_no_dispatch` (`:796`),
+     emitted for the merge-in verify-fix pass case (`millpy-merge-in-subagent.py:396`) where
+     verify already passes and **no agent is dispatched at all**.
+  2. **The plan-validator failure envelope** — `millpy-review-plan.py:142-147` emits
+     `{"errors": [...], "summary": ...}` from its `--stage prepare` branch and exits 1
+     *before* any brief is rendered (consumed by `mill-plan/SKILL.md:158-159`).
+  3. **`print_error_envelope`** — all three review CLIs emit it from the `--stage prepare`
+     branch on `ReviewError`.
+  A blanket "always present" assertion fails on all three.
 - **Who substitutes what (this must be explicit, or the design is unbuildable):**
   `write_brief` is the **sole owner** of the output path. It already computes `brief_path`
   internally (`_agent_dispatch.py:96-120`) and writes the fully-rendered brief during
@@ -349,8 +361,9 @@ practice, so every mill task pays this cost on every dispatch.
 ### reviewer-write-grant-scoped-to-briefs
 
 - **Decision:** Add `Write` to `mill-reviewer`'s tool list. Restrict it to `_mill/briefs/`
-  by a **prompt guardrail** in the agent definition plus the explicit `<OUTPUT_FILE>` path
-  in the brief. The reviewer writes **only** its own `.out.md`.
+  by a **prompt guardrail** in the agent definition (naming the report file by description)
+  plus the explicit absolute path in `write_brief`'s footer. The reviewer writes **only** its
+  own `.out.md`.
 - **Rationale:** Narrowest grant that makes the new contract work. The reviewer does *not*
   need to write the review file — `finalize` still owns `_mill/reviews/` and renders it
   from `.out.md`. `mill-implementer` already has `Write`, so only `mill-reviewer`'s
@@ -541,8 +554,11 @@ asserts against it. Every file in groups 1–3 currently tells the sub-agent tha
   guardrail.
 - `plugins/mill/agents/mill-implementer.md:20` — "report structured status when done" names
   **no channel**, which under the new contract reads as "in your final message" — the same
-  ambiguity being swept out of the reviewer definition. Reword to name `<OUTPUT_FILE>`
-  explicitly. (Its tool list already has `Write`; no capability change.)
+  ambiguity being swept out of the reviewer definition. Reword to say the report is **written
+  to the report file named in the brief**, and the final message is the ack. **Do not write a
+  literal `<OUTPUT_FILE>` here:** agent definitions are static text and never pass through
+  `_render`, so the token would reach the model unsubstituted. Name the file *by description*
+  only. (Its tool list already has `Write`; no capability change.)
 
 *Group 2 — the five review templates (5 files):*
 
@@ -564,6 +580,13 @@ asserts against it. Every file in groups 1–3 currently tells the sub-agent tha
     is the *content format of the `.out.md` file*, which `finalize` parses. Only the sentence
     "Your sole output is the review file in the format below" changes, to say the report is
     **written to** the file named in the brief, and the final message is the ack.
+  - **Also sweep the "source-grounding" paragraph** (`review-discussion.md:21` and its
+    counterparts), which statically asserts *"You are in tool-use mode — … open it with
+    Read/Grep/Glob"*. That is a **tool statement outside `build_tool_rule`**, and it is
+    **already wrong today** for a `bulk` reviewer (which is told the opposite two paragraphs
+    earlier). Fold the mode-specific clause into `build_tool_rule` and leave the paragraph
+    with only its channel-neutral half ("Never fabricate file contents or code behaviour you
+    have not actually read"). This is a pre-existing bug the sweep fixes for free.
   - Note the earlier draft of this entry prescribed rewording "your last line of output MUST
     be a single JSON object" — **that sentence does not exist in any review template**; it
     belongs to Group 3. Do not go looking for it here.
@@ -592,8 +615,9 @@ asserts against it. Every file in groups 1–3 currently tells the sub-agent tha
 
 *Group 5 — Python (9 files):*
 
-- `_agent_dispatch.py` — `write_brief` owns `<OUTPUT_FILE>` substitution and the
-  `.md` → `.out.md` helper.
+- `_agent_dispatch.py` — `write_brief` owns the `.md` → `.out.md` helper, **appends** the
+  output-contract footer (literal absolute path, no token), **unlinks any stale `.out.md`**,
+  and returns both paths.
 - **`_review_discussion.py`, `_review_code.py`, `_review_plan.py`** — the three review
   backends. Each calls `build_tool_rule` and so must thread the new agent-mode flag through
   its `prepare()` signature (`_review_discussion.py:82`, `_review_code.py:335`,
@@ -697,6 +721,14 @@ Unit tests live in `plugins/mill/unit_tests/test-<name>.py`, run via `run-all.py
 in-memory/tempfile fixtures and no real git or LLM. That suits every part of this change
 except the SKILL.md edits, which are prose and are verified by inspection.
 
+**Scope note:** the 29-file "Authoritative edit set" enumerates contract-carrying files plus
+existing tests that **go red**. The *new* assertions below are **additive** and not bounded by
+that list — they extend existing suites where one fits (`build_tool_rule` cases →
+`test-review-common.py`; `write_brief` footer, truncation, and no-token cases →
+`test-agent-dispatch.py`; missing/empty/stale `finalize` cases → `test-implementer-common.py`
+and `test-review-finalize.py`) and add one new suite for the cross-cutting conformance sweep.
+The conformance test asserts against the edit set; it is not itself a member of it.
+
 - **`_agent_dispatch` output-path helper — TDD candidate.** The `.md` → `.out.md` rule is
   currently prose restated in four places; make it one function and test it directly,
   including the edge case of a brief path whose *directory* component contains `.md`, which
@@ -733,11 +765,11 @@ except the SKILL.md edits, which are prose and are verified by inspection.
   byte-identically into the review file. This test would **fail on today's code**, which is
   the point: it pins the correctness bug the removal fixes.
 - **Prepare-envelope shape.** Assert `output_path` is present, absolute, and equals
-  `brief_path` with `.md` → `.out.md`, for every prepare-emitting CLI (the
-  implementer/fixer/merge CLIs and the three review CLIs). **Assert the converse too:** a
-  `dispatch_needed: false` envelope (merge-in verify-fix pass case) carries **no**
-  `output_path` — a blanket "always present" assertion would fail there, which is precisely
-  the trap the `output-path-in-prepare-envelope` carve-out exists to avoid.
+  `brief_path` with `.md` → `.out.md`, on every **brief-emitting success** envelope (the
+  implementer/fixer/merge CLIs and the three review CLIs). **Assert the converse for all three
+  carve-outs:** `dispatch_needed: false`, the plan-validator `{"errors": …}` envelope, and
+  `print_error_envelope` each carry **no** `output_path`. A blanket "always present"
+  assertion fails on all three — precisely the trap the carve-out list exists to avoid.
 - **Conflicting-instruction sweep — conformance test.** A cheap grep-style test asserting
   that no *agent-mode* prompt still tells the agent its output's last line must be the JSON,
   or that its sole output is its final message. **Search root must include `scripts/`, not
@@ -797,5 +829,5 @@ direct test that `ack-is-the-completion-discriminator` landed correctly.
 - **Q:** How does mill-go tell a successful notification from a dead one once the payload is one line? **A:** The `WROTE <path>` ack becomes the positive completion discriminator. Without this, every successful implementer would match `:132`'s "non-error, non-JSON" turn-exhaustion trigger.
 - **Q:** Does the prepare envelope gain an `output_path` field? **A:** Yes, additive. The `.md` → `.out.md` rule then lives in one helper instead of four prose restatements.
 - **Q:** How should review gaps be resolved for the rest of this mill-start? **A:** Auto-pick the recommended option on every review round.
-- **Q:** Who substitutes the `<OUTPUT_FILE>` token into the brief? **A:** `write_brief`, which is the only thing that knows `brief_path` — it renders and writes the brief during `--stage prepare`, before the orchestrator ever sees the envelope. The envelope's `output_path` is a read-only echo. (An earlier draft said the orchestrator would inject the token, which is impossible: the brief is already on disk.)
+- **Q:** Who puts the report-file path into the brief? **A:** `write_brief`, the only thing that knows `brief_path`. It **appends a footer** carrying the literal absolute path after rendering — there is no token anywhere, in templates or agent definitions. The envelope's `output_path` is a read-only echo. (Two earlier drafts were wrong here: the orchestrator cannot inject a token into an already-written brief, and a `<OUTPUT_FILE>` token in a template would hard-fail `_render`.)
 - **Q:** Does the warm-`SendMessage` resume path need changing? **A:** Yes — `mill-go/SKILL.md:161` tells the resumed implementer to "emit the required JSON report as your final line", which would re-bloat the Builder and produce a payload the new ack classifier does not recognise. It is part of the edit set.
