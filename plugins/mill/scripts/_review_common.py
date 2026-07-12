@@ -25,7 +25,7 @@ Public API:
     build_deletes_section() — return a `## Intentionally deleted` markdown block listing deleted tokens
     parse_missing_context() — extract path strings from a `## Missing context` section in review text
     build_reattached_section() — return a `## Re-attached files` block with inlined file contents for NEED_CONTEXT retry
-    build_tool_rule()    — mode-specific <TOOL_RULE> block (bulk / tool-use)
+    build_tool_rule()    — dispatch-aware <TOOL_RULE> block (bulk / tool-use x non-agent / agent-mode)
     render_prompt()      — render a template from plugins/mill/templates/
     parse_verdict()      — extract APPROVE/REQUEST_CHANGES from fenced yaml block
     parse_blocking_count() — count "### [<severity>]" headings in review output
@@ -1227,19 +1227,78 @@ _TOOL_RULE_TOOL_USE = (
     "**CRITICAL: Do NOT read `reviews/`. Evaluate fresh each round.**"
 )
 
+# Agent-mode bulk: the trap cell. A reviewer's `mode` derives from the
+# `tooluse` spec flag, which defaults to False, so the plain "bulk" name is
+# reachable in agent mode too. Today's non-agent bulk text opens with a bare
+# "Do NOT request tool calls", which under agent mode would contradict the
+# Write instruction below it and yield no .out.md and an ERROR envelope every
+# round. This cell instead forbids tool calls only for *gathering content*
+# ("everything you need is in this prompt") and carves out exactly one Write
+# -- the report to the file named in the brief's output-contract footer.
+# Because the templates' static read-only header is removed in a later
+# batch, this cell (like its tool-use sibling below) is also the sole
+# remaining statement of the read-only posture, so it restates it in full.
+_TOOL_RULE_BULK_AGENT = (
+    "**CRITICAL: Do NOT use any tool to gather content -- everything you need "
+    "is in this prompt.**\n"
+    "**CRITICAL: The one exception is Write -- use it exactly once, to write "
+    "your full report to the file named in this brief's output-contract "
+    "footer.**\n"
+    "**CRITICAL: Do NOT use Edit, or run git/bash.**\n"
+    "**CRITICAL: Review-only. Do NOT suggest modifications. Findings only.**\n"
+    "**CRITICAL: Do NOT read `reviews/`. Evaluate fresh each round.**"
+)
 
-def build_tool_rule(mode: str) -> str:
-    """Return the <TOOL_RULE> block for a reviewer's MODE.
+# Agent-mode tool-use: keeps the Read/Grep/Glob verification grant and adds
+# the same single-Write carve-out as the bulk-agent cell above, for the same
+# reason -- the report now goes to a file, not into the chat response.
+_TOOL_RULE_TOOL_USE_AGENT = (
+    "**You MAY use Read, Grep, and Glob to verify claims against source files.**\n"
+    "**CRITICAL: The one exception beyond that is Write -- use it exactly "
+    "once, to write your full report to the file named in this brief's "
+    "output-contract footer.**\n"
+    "**CRITICAL: Do NOT use Edit, or run git/bash.**\n"
+    "**CRITICAL: Review-only. Do NOT suggest modifications. Findings only.**\n"
+    "**CRITICAL: Do NOT read `reviews/`. Evaluate fresh each round.**"
+)
 
-    Templates embed this as the top-of-prompt directive. In bulk mode the
-    reviewer is told all content is inline; in tool-use mode it is granted
-    Read/Grep/Glob. Write, Edit, and shell access are forbidden in both modes
-    — the backend owns file writes and git.
+
+def build_tool_rule(mode: str, agent_mode: bool = False) -> str:
+    """Return the <TOOL_RULE> block for a reviewer's MODE and dispatch channel.
+
+    Templates embed this as the top-of-prompt directive, and it is the only
+    channel-aware injection point in a review prompt -- the sole owner of
+    the read-only clause, the Write carve-out, and the report destination.
+    No template or agent definition may state a tool permission or output
+    destination of its own.
+
+    Four cells result from crossing `mode` with `agent_mode`:
+      - bulk x non-agent, tool-use x non-agent: byte-identical to the
+        pre-agent-mode strings. This is the `--stage full` fallback path
+        (raw LLM-provider call, at most Read/Grep/Glob, no Write, no brief
+        to name a report file in) and must keep working verbatim.
+      - bulk x agent, tool-use x agent: same tool grants as their non-agent
+        counterparts, plus exactly one Write permitted for the report (named
+        by description only -- the literal path lives in write_brief's
+        footer, never a template token). Still forbid Edit, git, and bash.
+
+    Args:
+        mode: "bulk" or "tool-use".
+        agent_mode: When True, return the agent-mode cell (adds the single
+            Write carve-out). Defaults to False, which returns today's
+            pre-existing text unchanged -- this is what keeps every
+            existing positional callsite green.
+
+    Returns:
+        The <TOOL_RULE> markdown block for the requested cell.
+
+    Raises:
+        ValueError: If mode is not "bulk" or "tool-use".
     """
     if mode == "bulk":
-        return _TOOL_RULE_BULK
+        return _TOOL_RULE_BULK_AGENT if agent_mode else _TOOL_RULE_BULK
     if mode == "tool-use":
-        return _TOOL_RULE_TOOL_USE
+        return _TOOL_RULE_TOOL_USE_AGENT if agent_mode else _TOOL_RULE_TOOL_USE
     raise ValueError(f"Unknown reviewer mode: {mode!r} (expected 'bulk' or 'tool-use')")
 
 
