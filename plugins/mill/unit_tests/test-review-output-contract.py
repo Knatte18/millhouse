@@ -219,6 +219,30 @@ def test_agent_reviewer_static_invariant() -> None:
     print("PASS test_agent_reviewer_static_invariant")
 
 
+def test_no_output_file_token_anywhere() -> None:
+    """Pin the constraint that made the first design of this task unbuildable.
+
+    _render.render (_render.py:35) matches `<[A-Z][A-Z0-9_]*>` and raises
+    KeyError: Unresolved template tokens for any such token missing from the
+    caller's values dict. A literal <OUTPUT_FILE> in a template would
+    hard-fail rendering before write_brief ever runs, and is unsuppliable on
+    --stage full anyway; agent definitions are static text never passed
+    through _render, so a token there would reach the model raw. Sweeps
+    every file under both plugins/mill/templates/ and plugins/mill/agents/
+    (not just the five review templates and mill-reviewer.md) so a stray
+    <OUTPUT_FILE> in any sibling file is caught too.
+    """
+    for directory in (TEMPLATES_DIR, AGENTS_DIR):
+        for path in sorted(directory.rglob("*")):
+            if not path.is_file():
+                continue
+            text = path.read_text(encoding="utf-8", errors="replace")
+            assert "<OUTPUT_FILE>" not in text, (
+                f"{path} contains an <OUTPUT_FILE> token"
+            )
+    print("PASS test_no_output_file_token_anywhere")
+
+
 def main() -> int:
     tests = [
         test_agent_mode_grants_exactly_one_write_and_forbids_edit_git_bash,
@@ -226,6 +250,7 @@ def main() -> int:
         test_stage_full_direction_grants_no_write_destination_or_ack,
         test_templates_state_no_tool_permission_or_destination,
         test_agent_reviewer_static_invariant,
+        test_no_output_file_token_anywhere,
     ]
     failures: list[str] = []
     for fn in tests:
