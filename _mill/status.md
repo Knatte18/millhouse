@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-review-backends-and-clis
+phase: approved-prompt-surfaces
 slug: explore-fork-agent-opportunities
 branch: hanf/explore-fork-agent-opportunities
 plan: _mill/plan
@@ -28,6 +28,7 @@ planned  '2026-07-12T14:25:05Z'
 implementing  '2026-07-12T14:41:58Z'
 approved-contract-helpers  '2026-07-12T15:10:25Z'
 approved-review-backends-and-clis  '2026-07-12T15:28:52Z'
+approved-prompt-surfaces  '2026-07-12T15:48:21Z'
 ```
 
 ## Batches
@@ -45,9 +46,10 @@ batches:
     start_sha: 179fbaf07e5a90d179b9e5fbbf00e25998ee21fd
     commit_sha: 44d61064b6b39435ce37bb820d71219f7c18521a
   - name: prompt-surfaces
-    state: running
+    state: approved
     implementer_session: 971cadd3-eeee-4fbf-befa-84f67e3f2f72
     start_sha: 8dbaf15b99c4a6a6f93ff25025ed6ba51bb06ff0
+    commit_sha: d70778a2a4eecc32fb750aa696e489bb7be92bac
   - name: orchestrator-skills
     state: pending
   - name: output-contract-conformance
