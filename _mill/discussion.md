@@ -167,8 +167,11 @@ practice, so every mill task pays this cost on every dispatch.
     hardcodes the opposite rule (see below). `build_tool_rule` must therefore become
     dispatch-aware: it takes the existing `mode` (`bulk` / `tool-use`) **plus** a flag for
     agent-mode dispatch, and emits "Do NOT use Write. Return review as text." for
-    `--stage full`, versus "You MAY use Write, and **only** to write `<OUTPUT_FILE>`; do NOT
-    use Edit and do NOT run git or bash." for agent mode.
+    `--stage full`, versus "You MAY use Write, and **only** to write the report file named
+    in this brief; do NOT use Edit and do NOT run git or bash." for agent mode. Note the
+    agent-mode wording refers to the file *by description*, not by a `<TOKEN>` — the actual
+    path arrives in `write_brief`'s footer (see the `<OUTPUT_FILE>` constraint under
+    `output-path-in-prepare-envelope`).
 - **Who sets that flag (the obvious answer is wrong, so state it):** **not** inside
   `prepare()`. `build_tool_rule` is called *from within* `prepare()` in
   `_review_discussion.py:82` and `_review_code.py:335` — and `run()` (the `--stage full`
@@ -245,6 +248,10 @@ practice, so every mill task pays this cost on every dispatch.
   misclassified as turn-exhausted**. The ack must be a *positive* success marker, not just
   a smaller payload.
 - **Affected edits in `mill-go/SKILL.md`:**
+  - **`:123`** — says "Read the subagent's final message from the notification payload —
+    that is the text used in steps 4 and 5 below". Step 5 is deleted, so this is stale and
+    still instructs reading the full message. Reword to "…used in step 4's classification
+    only".
   - **step 4(a)** (`:129`) — reworded to key **solely on the error marker**, with the ack
     test evaluated **first**. Its current heuristic ("roughly 0 tokens, no `MILL_REVIEW`
     block and no `status` JSON") becomes actively misleading post-change, because *every
@@ -284,12 +291,29 @@ practice, so every mill task pays this cost on every dispatch.
   `write_brief` is the **sole owner** of the output path. It already computes `brief_path`
   internally (`_agent_dispatch.py:96-120`) and writes the fully-rendered brief during
   `--stage prepare`, *before the orchestrator ever sees the envelope*. So `write_brief`
-  derives the `.out.md` path from the `brief_path` it just computed, substitutes the
-  `<OUTPUT_FILE>` token / appends the output-contract footer into the brief text, and
-  returns both paths. The envelope's `output_path` is a **read-only echo** of that same
-  helper's result, which the orchestrator forwards verbatim to `--agent-output`. The
-  orchestrator never injects a token and never derives a path — it *cannot*, since the brief
-  is already written by then.
+  derives the `.out.md` path from the `brief_path` it just computed, **appends the
+  output-contract footer** (carrying the literal absolute path) to the already-rendered
+  `prompt_text`, and returns both paths. The envelope's `output_path` is a **read-only echo**
+  of that same helper's result, which the orchestrator forwards verbatim to
+  `--agent-output`. The orchestrator never derives a path — it *cannot*, since the brief is
+  already written by then.
+- **No `<OUTPUT_FILE>` token in any template — this is a hard constraint, not a preference.**
+  `_render.render` (`_render.py:35`) matches `<[A-Z][A-Z0-9_]*>` and **raises
+  `KeyError: Unresolved template tokens`** for any such token missing from the caller's
+  `values` dict. Every brief and review prompt is rendered through it
+  (`millpy-implement.py:533`, `millpy-fix.py:402,468`, `millpy-merge-in-subagent.py:339,418`,
+  `_review_common.py:1359`). So a literal `<OUTPUT_FILE>` placed in a template would
+  hard-fail rendering **before** `write_brief` — the sole owner of the path — ever runs. It
+  is also unsuppliable on the `--stage full` path, which renders the same review templates
+  and has no brief path at all. Therefore:
+  - **Templates become channel-neutral.** Group 2 and Group 3 templates are reworded from
+    "your last line of **output** MUST be a single JSON object" to "your **report** must end
+    with a single JSON object as its last line" — a statement true on *both* channels.
+  - **The footer defines the channel, and only `write_brief` writes it.** It carries the
+    resolved absolute path as literal text (never `<TOKEN>` grammar): "Write your full report
+    to `<abs path>`. Your final message must be exactly `WROTE <abs path>`." Appended after
+    rendering, so `_render` never sees it; absent on `--stage full`, which never calls
+    `write_brief`.
 - **Rationale:** The rule is currently restated as prose in four separate places in
   `mill-go/SKILL.md` (`:135`, `:149`, `:151`, and the warm-`SendMessage` path at `:163`).
   Under the new contract a further party — the sub-agent itself — also needs the path. One
@@ -452,7 +476,7 @@ yaml verdict and the `## Findings` body, which `finalize` renders into `_mill/re
 **Only the delivery channel changes** — the report goes to the file instead of the chat, and
 the final message becomes the ack.
 
-**Authoritative edit set — 27 files (2 + 5 + 5 + 3 + 9 + 3).** This is the **single**
+**Authoritative edit set — 28 files (2 + 5 + 5 + 3 + 9 + 4).** This is the **single**
 enumerated list, and the only file count in this document; the conformance test in Testing
 asserts against it. Every file in groups 1–3 currently tells the sub-agent that its final
 *message* is its output, contradicting the new contract.
@@ -476,11 +500,13 @@ asserts against it. Every file in groups 1–3 currently tells the sub-agent tha
 - Each mandates "Your last line of **output** (after all work and commits) MUST be a single
   JSON object" and calls anything else a protocol violation: `implementer-brief.md:102,:127`,
   `fixer-batch-brief.md:70,:95`, `fixer-holistic-brief.md:76,:101`,
-  `merge-in-conflict-brief.md:56`, `merge-in-verify-brief.md:45`. Reword from "last line of
-  your *output*" to "last line of `<OUTPUT_FILE>`", and specify the final chat message as
-  exactly the ack. `implementer-brief.md:50` additionally defines a mid-batch turn end as a
-  protocol violation — that rule **stays**, but its "and the JSON report has been emitted"
-  clause becomes "written to `<OUTPUT_FILE>`".
+  `merge-in-conflict-brief.md:56`, `merge-in-verify-brief.md:45`. Reword to the
+  **channel-neutral** form — "your **report** must end with a single JSON object as its last
+  line" — which is true on both the agent-mode and `--stage full` channels. **Do not
+  introduce an `<OUTPUT_FILE>` token here**; the channel is named by `write_brief`'s footer.
+  `implementer-brief.md:50` additionally defines a mid-batch turn end as a protocol violation
+  — that rule **stays**, but its "and the JSON report has been emitted" clause becomes "and
+  the report has been written".
 
 *Group 4 — orchestrator skills (3 files):*
 
@@ -524,7 +550,15 @@ envelopes — they call `_implementer_common.emit_prepare` (`millpy-implement.py
 itself, so adding the field inside `emit_prepare` covers all three. Likewise the
 missing-file guard lives inside `finalize_from_output`, not at their call sites.
 
-*Group 6 — existing tests that pin the old behaviour (3 files). These go red if untouched:*
+*Group 6 — existing tests that pin the old behaviour (4 files). These go red if untouched:*
+
+- **`unit_tests/test-agents-defs.py:60-69`** — asserts `mill-reviewer`'s tools are
+  **exactly** `{Read, Grep, Glob}` and that none of `{Edit, Write, Bash, NotebookEdit}` is
+  present. Granting `Write` turns this red. **This test *is* the reviewer safety invariant,
+  not incidental scaffolding** — do not weaken it to a subset check. New assertion: exactly
+  `{Read, Grep, Glob, Write}`, with `Edit`, `Bash`, and `NotebookEdit` still forbidden. That
+  keeps the test doing its real job (the reviewer cannot commit, run commands, or modify
+  existing files) while admitting the one new capability.
 
 - `unit_tests/test-implementer-common.py:3131-3172` (case 63) — asserts
   `finalize_from_output` **unescapes** HTML entities (#605). Deleted or inverted by the
@@ -589,10 +623,14 @@ except the SKILL.md edits, which are prose and are verified by inspection.
   currently prose restated in four places; make it one function and test it directly,
   including the edge case of a brief path whose *directory* component contains `.md`, which
   naive string replacement would corrupt.
-- **`write_brief` output-contract footer.** Assert the rendered brief resolves
-  `<OUTPUT_FILE>` to the absolute `.out.md` path and instructs the agent to reply with the
-  one-line ack, for every `role` value used by the nine dispatch sites. This is the test
-  that proves the change is uniform rather than reviewer-only.
+- **`write_brief` output-contract footer.** Assert the written brief ends with a footer
+  naming the absolute `.out.md` path as literal text and instructing the one-line ack, for
+  every `role` value used by the nine dispatch sites. This is the test that proves the change
+  is uniform rather than reviewer-only.
+- **No-token regression test — TDD candidate.** Assert that **no** template under
+  `templates/` contains an `<OUTPUT_FILE>` token, and that `_render.render` succeeds on every
+  template with its normal `values` dict. This pins the `_render.py:35` constraint that made
+  the first token design unbuildable, so nobody reintroduces it.
 - **`finalize` on a missing / empty `.out.md` — the most important TDD candidate, and the
   one that guards a known bug.** Split by role, matching the
   `missing-out-md-defers-to-git-state` Decision:
@@ -657,12 +695,12 @@ direct test that `ack-is-the-completion-discriminator` landed correctly.
 - **Q:** How should mill-start's Explore phase use fork? **A:** Guidance, not a mandate — prefer fork for scoped sub-investigations that need the task context; keep cold `Explore` agents for broad mechanical sweeps.
 - **Q:** Which dispatch sites get the "sub-agent writes its own `.out.md`" contract? **A:** All of them. Nearly everything writes an `.out.md` today; fix the whole set uniformly.
 - **Q:** What is the sub-agent's final message once it writes its own `.out.md`? **A:** A one-line ack (`WROTE <path>`). The Builder needs nothing from it — `finalize` supplies the verdict.
-- **Q:** What if the sub-agent dies before writing `.out.md`? **A:** Add a missing-file guard at the four read sites (today an absent file raises an uncaught `FileNotFoundError`), then defer to role: implementer/fixer/merge-in fall into the existing git-state completeness recount (preserving `incomplete`); review CLIs emit the existing `ERROR` envelope. An earlier draft said "blanket `transient`" — review caught that it would have reintroduced the #574 false-success bug.
+- **Q:** What if the sub-agent dies before writing `.out.md`? **A:** Add a missing-file guard at the four read sites — today an absent file raises an uncaught `FileNotFoundError` — then defer to role: implementer/fixer/merge-in fall into the existing git-state completeness recount (preserving `incomplete`); review CLIs emit the existing `ERROR` envelope. An earlier draft said "blanket `transient`", which review caught would have reintroduced the #574 false-success bug.
 - **Q:** Record the fork rejection durably? **A:** Yes — a short decision note in the repo. The three disqualifiers are non-obvious and the question will recur.
-- **Q:** Are the `subprocess` / `psmux` dispatch paths a constraint on this design? **A:** No — they are dead in practice; only agent dispatch is relevant in mill today. (Removing them is a separate cleanup, out of scope here.)
-- **Q:** What does `finalize` do when `.out.md` is missing or empty? **A:** Role-split, reusing existing machinery: implementer/fixer/merge-in defer to the git-state completeness recount (so `incomplete` still catches partial batches); review CLIs emit the existing `ERROR` envelope. An earlier draft said "blanket `transient`" — round-1 review caught that it would have reintroduced the #574 false-success bug.
+- **Q:** Are the `subprocess` / `psmux` dispatch paths a constraint on this design? **A:** Partly — and the first answer here was too broad. They are dead as a *configured* dispatch mode, but **`--stage full` is not dead**: it is the reviewer's fallback after two consecutive raw API errors (`mill-go/SKILL.md:129`), it shares the review templates and `<TOOL_RULE>`, and it must keep working. Hence the `output-contract-is-agent-mode-only` Decision.
 - **Q:** What goes in the `.out.md`, and which files need sweeping? **A:** The agent's full report *including* its trailing status/verdict block — only the delivery channel changes. The sweep is the "Authoritative edit set" in Technical context; it grew twice under review, most importantly to include `_review_common.py`, whose `<TOOL_RULE>` injects "Do NOT use Write" into every review prompt from Python rather than from a template.
-- **Q:** Does the new contract apply to the `--stage full` reviewer path too? **A:** No — agent-mode only. `--stage full` is *not* dead: it is the reviewer's fallback after two consecutive API errors (`mill-go/SKILL.md:129`), and it shares the review templates and `<TOOL_RULE>`. The `.out.md` footer is agent-mode-only by construction (`write_brief` is prepare-only), but `build_tool_rule` must be made dispatch-aware so the two channels don't get contradictory instructions.
+- **Q:** Does the new contract apply to the `--stage full` reviewer path too? **A:** No — agent-mode only. The `.out.md` footer is agent-mode-only by construction (`write_brief` is prepare-only), but `build_tool_rule` must be made dispatch-aware so the two channels don't get contradictory instructions.
+- **Q:** Can the templates carry an `<OUTPUT_FILE>` token? **A:** **No.** `_render.render` (`_render.py:35`) raises `KeyError` on any unresolved `<UPPERCASE>` token, so a token in a template hard-fails rendering *before* `write_brief` runs, and is unsuppliable on `--stage full` anyway. Templates go channel-neutral ("your report must end with a single JSON object"); `write_brief` appends a footer carrying the literal absolute path.
 - **Q:** What happens to existing tests that pin the old behaviour? **A:** They are part of the edit set. The four `html.unescape` tests get **inverted** (byte-identical round-trip) rather than deleted — the #605 concern is real, it just moves — and `test-agent-dispatch.py`'s `write_brief` return-shape assertion is updated.
 - **Q:** Who sets the agent-mode flag that makes `build_tool_rule` dispatch-aware? **A:** The CLIs' `--stage prepare` branches, via a parameter on each backend's `prepare()` that defaults to non-agent. **Not** inside `prepare()` itself — `run()` (the `--stage full` fallback) calls the same `prepare()`, so a default-on flag there would poison the very path the carve-out protects. `_review_plan.py` is asymmetric and needs per-callsite attention.
 - **Q:** Does *every* prepare envelope carry `output_path`? **A:** No — `dispatch_needed: false` envelopes (merge-in verify-fix pass case) dispatch no agent and write no brief, so they carry none. The shape test asserts both directions.
