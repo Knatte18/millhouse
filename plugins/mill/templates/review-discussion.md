@@ -15,7 +15,7 @@ Constraints:
 
 ## Source-grounding rule
 
-Never fabricate file contents or code behaviour you have not actually read. You are in tool-use mode — if you need a file to verify a claim in the discussion, open it with Read/Grep/Glob. Do not infer from filenames or positions.
+Never fabricate file contents or code behaviour you have not actually read. Do not infer from filenames or positions.
 
 ## Criteria (apply briefly to each)
 
