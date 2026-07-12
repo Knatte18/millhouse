@@ -32,7 +32,7 @@ batches:
     name: prompt-surfaces
     file: 03-prompt-surfaces.md
     depends-on: [1]
-    verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-agents-defs.py test-render.py
+    verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-agents-defs.py test-review-templates.py
   - number: 4
     name: orchestrator-skills
     file: 04-orchestrator-skills.md

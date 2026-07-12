@@ -200,6 +200,9 @@ those, and this task must not move them.
   - `plugins/mill/scripts/_agent_dispatch.py`
   - `plugins/mill/scripts/_review_common.py`
   - `plugins/mill/scripts/_review_cli.py`
+  - `plugins/mill/scripts/_review_discussion.py`
+  - `plugins/mill/scripts/_review_code.py`
+  - `plugins/mill/scripts/_review_plan.py`
 - **Edits:**
   - `plugins/mill/unit_tests/test-review-finalize.py`
 - **Creates:** none

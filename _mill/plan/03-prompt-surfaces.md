@@ -93,6 +93,15 @@ stated in exactly **two** agent-mode-only places: `build_tool_rule`'s two agent 
   (a) **Delete the tool prohibitions** — the `MUST NOT call Edit, Write, Bash...` clause and the
   `MUST NOT make git commits` clause. `build_tool_rule` now owns the entire read-only clause and
   injects it, channel-aware, at the `<TOOL_RULE>` line that already sits a few lines below.
+  **One consequence to record in the plan, not to "fix" in the template.** Card 3 freezes
+  `_TOOL_RULE_BULK` byte-identical, and it says only *"Do NOT request tool calls"* + *"Do NOT use
+  Write"* — so once this header is deleted, a `--stage full` **bulk** reviewer is told nothing
+  explicit about `Edit`, `Bash` or git commits. That is **safe by construction, not by prose**:
+  `_llm_claude.py:79`'s `_MODE_BY_ALLOWED_TOOLS` maps `bulk` to the **empty** allowed-tools string,
+  so such a reviewer is granted **zero** tools and cannot call `Edit` or `Bash` even if it wanted to.
+  Note this in a comment or in the batch's own record. Do **not** "restore" the prohibitions into the
+  shared template to close the apparent gap — that is precisely the leak this batch exists to remove,
+  and card 22's `--stage full` assertions would not catch it.
   (b) **Delete the sentence "Your sole output is the review file in the format below."** Do **not**
   reword it — see the Batch Scope above for why rewording breaks `--stage full`.
   (c) **Keep** the channel-neutral half: the reviewer is independent, and it REPORTS issues rather

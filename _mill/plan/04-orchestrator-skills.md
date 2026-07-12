@@ -43,6 +43,7 @@ the two structural guards named in Batch Tests.
 - **Context:**
   - `plugins/mill/scripts/_agent_dispatch.py`
   - `plugins/mill/scripts/millpy-review-code.py`
+  - `plugins/mill/templates/mill-config.yaml`
 - **Edits:**
   - `plugins/mill/skills/mill-go/SKILL.md`
 - **Creates:** none
@@ -76,13 +77,21 @@ the two structural guards named in Batch Tests.
   field.
   (e) **Add a short "Why not fork?" subsection** at the end of `## Agent-mode dispatch` (~6 lines).
   A fork inherits the parent's context but: (1) always runs on the **parent's model** and **ignores
-  a `model` override**, which breaks the per-role `roles.*.model` tiers (`roles.fixer.model: haiku`,
-  `roles.implementer.model: sonnethigh`, discussion-review `opushigh`); (2) inherits the **parent's
+  a `model` override**, which breaks mill's per-role model assignment; (2) inherits the **parent's
   tools**, so a reviewer forked from mill-go would hold `Edit`, `Write` and `Bash` and lose its
   read-only guarantee; (3) has **no on-disk brief**, so a forked dispatch cannot be resumed after a
   crash. Fork is therefore used only in mill-start's Explore phase. Note also that fork's advertised
   "the child's tool output stays out of the parent" is **not** a differentiator — an ordinary fresh
   Agent call already behaves that way.
+  **Get the model-assignment examples right — mill has two different mechanisms and they are easy to
+  conflate.** Implementer-class roles carry a literal `model:` key (`roles.implementer.model:
+  sonnethigh`, `roles.fixer.model: haiku`, and merge-in's `model: haiku` — all in
+  `plugins/mill/templates/mill-config.yaml`). **Reviewer roles do not.** They name a *reviewer* from
+  `agents.yaml` (`roles.discussion-review.holistic.reviewer: sonnetmax` in the shipped template),
+  whose model is resolved from that registry and mapped to an Agent tier by
+  `_agent_dispatch.model_to_tier`. Cite the `roles.*.model` keys for the first mechanism and the
+  reviewer-name-plus-registry path for the second; do **not** write `roles.discussion-review.model`,
+  which does not exist. Fork breaks **both**, because it ignores the `model` argument either way.
   **Do not touch** steps 4(b), 6.5, or the Clean mid-work stop paragraph (`:131-141`, `:159-165`),
   or the `.out.md` mentions at `:135` and `:163`. They are implementer-only.
 - **Commit:** `docs(mill-go): reviewer-skipped output capture, envelope output_path, why-not-fork note`
@@ -128,10 +137,10 @@ the two structural guards named in Batch Tests.
 - **Moves:** none
 - **Requirements:** `plugins/mill/skills/mill-plan/SKILL.md:111` carries the **same** stale
   rationale as `mill-start/SKILL.md:152` (verified: the two paragraphs are identical). Apply the
-  same fix as card 19(b) — keep the unconditional `mill-receiving-review` load, rewrite the reason:
+  same fix as card 20(b) — keep the unconditional `mill-receiving-review` load, rewrite the reason:
   findings now arrive in the review file, not in the `<task-notification>` payload, and the skill
   must be active before the orchestrator reads that file. Change nothing else in this skill; the
-  fork guidance in card 19(a) is scoped to mill-start's Explore phase and has no counterpart here.
+  fork guidance in card 20(a) is scoped to mill-start's Explore phase and has no counterpart here.
 - **Commit:** `docs(mill-plan): fix the stale review-load rationale`
 
 ## Batch Tests
