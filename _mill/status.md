@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-output-contract-conformance
+phase: holistic-reviewing
 slug: explore-fork-agent-opportunities
 branch: hanf/explore-fork-agent-opportunities
 plan: _mill/plan
@@ -31,6 +31,7 @@ approved-review-backends-and-clis  '2026-07-12T15:28:52Z'
 approved-prompt-surfaces  '2026-07-12T15:48:21Z'
 approved-orchestrator-skills  '2026-07-12T15:54:26Z'
 approved-output-contract-conformance  '2026-07-12T16:01:03Z'
+holistic-reviewing  '2026-07-12T16:01:26Z'
 ```
 
 ## Batches
