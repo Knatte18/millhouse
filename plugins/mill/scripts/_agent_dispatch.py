@@ -19,6 +19,12 @@ write_brief(briefs_dir: Path, role: str, scope: str, round_n: int, prompt_text: 
     filename safety (colons, slashes, etc. become hyphens). Returns the path
     of the written file. Example role: "implement".
 
+output_path_for(brief_path: Path) -> Path
+    Return the brief path with its trailing ".md" replaced by ".out.md" --
+    the single home of the ".md" -> ".out.md" rule every agent-mode
+    dispatcher and reviewer relies on. Preserves the parent directory and
+    absoluteness of the input path.
+
 language_skills_directive(batch_file: Path) -> str
     Detect languages from a batch file's touched files (Edits/Creates only)
     and return a markdown block naming the required language skills plus code-quality.
@@ -37,6 +43,7 @@ __all__ = [
     "resolve_dispatch_mode",
     "model_to_tier",
     "write_brief",
+    "output_path_for",
     "language_skills_directive",
     "SUBAGENT_REVIEWER",
     "SUBAGENT_IMPLEMENTER",
@@ -118,6 +125,27 @@ def write_brief(
     brief_path = briefs_dir / f"{role}-{sanitized_scope}-r{round_n}.md"
     brief_path.write_text(prompt_text, encoding="utf-8")
     return brief_path
+
+
+def output_path_for(brief_path: Path) -> Path:
+    """Return the ``.out.md`` path a brief's agent-mode output is written to.
+
+    This is the single home of the ``.md`` -> ``.out.md`` rule: every
+    briefs/<role>-<scope>-r<round>.md file has a corresponding
+    briefs/<role>-<scope>-r<round>.out.md that an agent-mode dispatch writes
+    its full report to. Callers that need the output path (the dispatcher
+    itself, or a caller unlinking a stale prior output) compute it from the
+    brief path through this function rather than re-deriving the suffix swap
+    inline, so the rule has exactly one definition.
+
+    Args:
+        brief_path: Path to a brief file, ending in ".md". May be relative
+            or absolute; absoluteness is preserved in the result.
+
+    Returns:
+        The same path with the trailing ".md" replaced by ".out.md".
+    """
+    return Path(brief_path).with_suffix(".out.md")
 
 
 def language_skills_directive(batch_file: Path) -> str:
