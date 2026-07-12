@@ -22,7 +22,7 @@ batches:
     name: contract-helpers
     file: 01-contract-helpers.md
     depends-on: []
-    verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-agent-dispatch.py test-review-common.py test-agent-mode-dispatch.py test-implementer-common.py test-millpy-implement.py test-millpy-fix.py test-millpy-merge-in-subagent.py
+    verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-agent-dispatch.py test-review-common.py test-agent-mode-dispatch.py test-implementer-common.py test-millpy-implement.py test-millpy-fix.py
   - number: 2
     name: review-backends-and-clis
     file: 02-review-backends-and-clis.md

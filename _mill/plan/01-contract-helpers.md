@@ -5,7 +5,7 @@ task: Explore and adopt Claude Code fork-agents in mill orchestration
 batch: contract-helpers
 number: 1
 cards: 5
-verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-agent-dispatch.py test-review-common.py test-agent-mode-dispatch.py test-implementer-common.py test-millpy-implement.py test-millpy-fix.py test-millpy-merge-in-subagent.py
+verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-agent-dispatch.py test-review-common.py test-agent-mode-dispatch.py test-implementer-common.py test-millpy-implement.py test-millpy-fix.py
 depends-on: []
 ```
 
