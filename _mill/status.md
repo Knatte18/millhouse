@@ -51,7 +51,9 @@ batches:
     start_sha: 8dbaf15b99c4a6a6f93ff25025ed6ba51bb06ff0
     commit_sha: d70778a2a4eecc32fb750aa696e489bb7be92bac
   - name: orchestrator-skills
-    state: pending
+    state: running
+    implementer_session: cbafb0b1-5ea9-4782-ae49-56315aad4e39
+    start_sha: 94ce3b1d3673398bf76ba4545dbdff64f00c1eba
   - name: output-contract-conformance
     state: pending
 ```
