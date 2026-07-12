@@ -185,10 +185,16 @@ risk. Implementers/fixers can follow as a separate task once the pattern is prov
   - **`:123`** — "Read the subagent's final message from the notification payload — that is the
     text used in steps 4 and 5 below". For reviewers, step 5 is gone; reword so the payload
     feeds step 4's classification only.
-  - **step 4(a)** (`:129`) — reworded to key **solely on the error marker**, with the ack test
-    evaluated **first**. Its current heuristic ("roughly 0 tokens, no `MILL_REVIEW` block and
-    no `status` JSON") becomes misleading: a *successful* reviewer payload is now exactly ~0
-    tokens with no `MILL_REVIEW` block. Only the error-marker clause still discriminates.
+  - **step 4(a)** (`:129`) — reworded to key **solely on the error marker**. Its current
+    heuristic ("roughly 0 tokens, no `MILL_REVIEW` block and no `status` JSON") becomes
+    misleading: a *successful* reviewer payload is now exactly ~0 tokens with no `MILL_REVIEW`
+    block, so those negative signals no longer discriminate anything — only the error-marker
+    clause does. **There is deliberately no ack predicate.** An earlier draft said "evaluate the
+    ack test first", but that clause would have had no effect: ack and non-ack clean payloads
+    both fall through to `finalize`, which distinguishes them by the presence of the `.out.md`
+    file — a stronger signal than the chat text, and one the orchestrator gets for free. The ack
+    is for *humans reading the transcript*, not for branching. Do not add a `WROTE ` prefix-match
+    predicate to mill-go.
   - **step 4(c)** (`:143`) — the reviewer/fixer stopped-interrupted liveness probe is
     **unchanged** and still runs first.
   - **step 5** (`:149`) — becomes "skip for reviewer dispatches" (see `reviewers-only-scope`).
@@ -248,9 +254,12 @@ risk. Implementers/fixers can follow as a separate task once the pattern is prov
   `prepare()`**. A default-on flag there would poison the exact path this Decision protects.
   The flag is a **parameter on each backend's `prepare()`, defaulting to `False`**, set `True`
   **only** by the CLIs' `--stage prepare` branches. `_review_plan.py` is asymmetric:
-  - `prepare()` (`:401` batch-scope, `:490` holistic-scope) — **both carry the flag.**
-    `prepare()` takes `scope: str | None`, so batch-scope is reachable even though the hub
-    disables plan batch review today (`rounds: 0`).
+  - `prepare()` (`:401` batch-scope, `:490` holistic-scope) — **both carry the flag**, but only
+    `:490` has a live agent-mode caller: `millpy-review-plan.py:148-151` **hardcodes
+    `scope=None`** in its `--stage prepare` branch ("Agent mode uses holistic scope only"), so
+    `:401` is currently dead on the agent path. Thread the flag through both anyway — it is
+    harmless and correct if batch-scope prepare is ever wired up — but **do not write a test
+    against `:401`'s agent-mode behaviour**; there is no live path to exercise.
   - `run()` (`:836`) and `_review_one_batch` (`:196`) — **both keep the non-agent rule.**
     `_review_one_batch` is not a separate entry point; it is submitted to a `ThreadPoolExecutor`
     from `run()` (`:752`), so it is `--stage full`-only. **Do not thread the flag into it.**
@@ -306,6 +315,19 @@ risk. Implementers/fixers can follow as a separate task once the pattern is prov
   mill-plan a **green verdict that no live reviewer produced**. Unconditional truncation is
   harmless for implementers (the orchestrator overwrites `.out.md` before their finalize anyway),
   so there is no reason to make it role-conditional.
+- **Known residual window — accepted, and stated plainly because it is a real regression.**
+  Truncation closes "attempt 1 wrote, attempt 2 died". It does **not** close the converse: a
+  **zombie writer**. Step 4(a) re-dispatches on a raw API error *without* a liveness probe (it
+  says "there is no live agent to probe in this case"), and the retry reuses the same
+  role/scope/round — hence the same `.out.md`. If attempt 1 was not actually dead, it could
+  complete *after* the retry's `write_brief` truncation and overwrite attempt 2's file. This is
+  **impossible under today's orchestrator-writes contract**, so it is a new window, not a
+  pre-existing one. Accepted because: 4(a) fires only on a raw API/infrastructure error (~0
+  tokens, the agent never produced output), the incidents that motivated the 4(c) probe
+  (`#587`, `#595`) were *stopped/interrupted* notifications — which 4(c) already probes — and the
+  fix (an attempt-unique `.out.md` path) would break the single-helper `.md` → `.out.md` rule
+  this task exists to establish. **Revisit and make the retry path attempt-unique if a stale
+  verdict is ever observed in the wild.**
 - **Rejected:** An mtime freshness check (`.out.md` newer than the brief) — works, but is
   clock-dependent and fails silently on coarse filesystem timestamps; deterministic deletion is
   strictly better. Trusting the agent to always overwrite the file — that assumption is exactly
@@ -434,9 +456,15 @@ list, and the only file count in this document; the conformance test asserts aga
   - **Keep** the non-tool half: "You are an independent reviewer. REPORT issues; do NOT fix
     them."
   - **Keep the `MILL_REVIEW_BEGIN` … `MILL_REVIEW_END` wrapper and the review format** — that is
-    the *content format of the `.out.md` file*, which `finalize` parses. Only "Your sole output is
-    the review file in the format below" changes, to say the report is **written to** the file
-    named in the brief and the final message is the ack.
+    the *content format of the `.out.md` file*, which `finalize` parses.
+  - **DELETE the sentence "Your sole output is the review file in the format below" — do not
+    reword it.** Rewording it to point at "the file named in the brief" would leak agent-mode
+    prose onto the **shared** channel: a `--stage full` reviewer has no brief, is granted at most
+    `Read,Grep,Glob` (`_llm_claude.py:80`), and is told by its own `<TOOL_RULE>` to "return review
+    as text" — so it would be instructed to `Write` a file it cannot write. **The destination and
+    the ack are stated in exactly two agent-mode-only places: `build_tool_rule`'s two agent cells
+    and `write_brief`'s footer.** Nowhere else. This is the same "all tool statements live in
+    `build_tool_rule`" rule as the header prohibitions, and it applies to the *destination* too.
   - **Also sweep the "source-grounding" paragraph** (`review-discussion.md:21` and counterparts),
     which statically asserts *"You are in tool-use mode — … open it with Read/Grep/Glob"*. That is
     a tool statement outside `build_tool_rule`, and it is **already wrong today** for a `bulk`
@@ -584,12 +612,20 @@ it is not a member of it.
   `agents/` contains an `<OUTPUT_FILE>` token, and that `_render.render` succeeds on every template
   with its normal `values` dict. Pins the `_render.py:35` constraint that made the first token
   design unbuildable.
-- **Conflicting-instruction conformance sweep.** Assert no *agent-mode reviewer* prompt still says
-  its sole output is its final message, or forbids `Write`. **Search root must include `scripts/`,
-  not just `templates/` and `agents/`** — the `<TOOL_RULE>` contradiction is injected from
-  `_review_common.py`, so a doc-directories-only sweep provably cannot catch it. Better: assert
-  against the **rendered `prompt_text`** for each of the three reviewer sites, which catches
-  contradictions regardless of source file.
+- **Conflicting-instruction conformance sweep — assert BOTH directions.** Build the **rendered
+  `prompt_text`** for each of the three reviewer sites, in both channels, and assert:
+  - *agent-mode direction:* no prompt still says its sole output is its final message, or forbids
+    `Write`.
+  - *`--stage full` direction (the converse, and the one round 9 caught me missing):* the rendered
+    non-agent `prompt_text` contains **no** `Write` instruction, no `.out.md` destination, and no
+    ack instruction. Without this assertion, agent-mode prose can silently leak onto the shared
+    channel and break the reviewer's API-error fallback — which is the one thing that rescues a
+    review round when the Agent API is down.
+
+  Asserting against the *rendered* prompt (rather than grepping source directories) is what makes
+  both directions catchable regardless of which file the text came from — the `<TOOL_RULE>`
+  contradiction is injected from `_review_common.py`, so a `templates/`-and-`agents/`-only sweep
+  provably cannot see it.
 
 Not covered by unit tests, and accepted: that the orchestrator's context actually shrinks. Verify
 manually on the first real review round after this lands, by observing that the
