@@ -9,6 +9,7 @@ Covers:
   - Both agents: non-empty description
   - Both agents: no model field set (per-call override supplies tier)
 """
+
 from __future__ import annotations
 
 import sys

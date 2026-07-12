@@ -14,6 +14,7 @@ Covers:
   - No template names the report destination via an <OUTPUT_FILE> token
     (Shared Decision "no <OUTPUT_FILE> token anywhere").
 """
+
 from __future__ import annotations
 
 import sys
