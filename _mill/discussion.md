@@ -194,9 +194,16 @@ practice, so every mill task pays this cost on every dispatch.
   exact path this Decision exists to protect. Instead: the flag is a **parameter on each
   backend's `prepare()`, defaulting to `False` (non-agent)**, and it is set `True` **only**
   by the CLIs' `--stage prepare` branches. `_review_plan.py` is **asymmetric** and needs
-  individual attention: its `build_tool_rule` calls are spread across `_review_one_batch`
-  (`:196`), `prepare()` (`:401`, `:490`), and `run()` (`:836`) — the `run()`-side call must
-  keep the non-agent rule.
+  individual attention — its `build_tool_rule` calls are spread across four sites, and only
+  two of them are agent-reachable:
+  - `prepare()` (`:401` batch-scope, `:490` holistic-scope) — **both carry the flag.**
+    `prepare()` takes `scope: str | None`, so a batch-scope prepare is reachable even though
+    the hub config disables plan batch review today (`rounds: 0`); thread the flag through
+    both callsites rather than relying on config that could change.
+  - `run()` (`:836`) and `_review_one_batch` (`:196`) — **both keep the non-agent rule.**
+    `_review_one_batch` is *not* a separate entry point: it is submitted to a
+    `ThreadPoolExecutor` from `run()` (`_review_plan.py:752`), so it is reachable only on the
+    `--stage full` path. **Do not thread the agent-mode flag into it.**
 - **Rejected:** Treating subprocess as fully dead and changing the shared prompt text
   globally — it would silently break the one path that exists to rescue a reviewer when the
   Agent API is failing, i.e. exactly when you least want a second failure.
@@ -280,8 +287,11 @@ practice, so every mill task pays this cost on every dispatch.
     implementer to "emit the required JSON report as your final line", and `:163` tells the
     orchestrator to write that message to `.out.md`. Left alone, a warm-resumed implementer
     returns a full JSON report *in chat* and its payload matches no ack. New wording:
-    "Finish any remaining cards in this batch, run verify, rewrite `<OUTPUT_FILE>`, then
-    reply with the ack." The re-capture instruction at `:163` is deleted.
+    "Finish any remaining cards in this batch, run verify, rewrite your report file, then
+    reply with the ack." The re-capture instruction at `:163` is deleted. **This path
+    bypasses prepare**, so `write_brief` never runs and cannot truncate the stale `.out.md` —
+    the orchestrator must therefore delete `.out.md` itself (one `rm -f`) **before** sending
+    the resume message. See `write-brief-truncates-stale-out-md`.
   - **Clean mid-work stop** (`:135`) — today says "write the notification to the `.out.md`
     file as normal"; under the new contract there is nothing to write, and finalize runs
     against a missing file (see `missing-out-md-defers-to-git-state`).
@@ -360,6 +370,33 @@ practice, so every mill task pays this cost on every dispatch.
   not silently assume the guardrail is airtight.
 - **Rejected:** Granting `_mill/reviews/` too and making `finalize` a pure parser — more
   moving parts, wider grant, no benefit.
+
+### write-brief-truncates-stale-out-md
+
+- **Decision:** `write_brief` **deletes any pre-existing `.out.md`** (`unlink(missing_ok=True)`)
+  at brief-write time, and the warm-`SendMessage` resume path — which **bypasses prepare**, so
+  `write_brief` never runs — deletes it explicitly before sending the resume message. A dead
+  agent therefore always yields a genuinely **absent** file, never a stale one.
+- **Rationale — this is a hole the change itself opens.** Today the orchestrator rewrites
+  `<brief>.out.md` immediately before every `finalize` (`mill-go/SKILL.md:149`, `:163`), so the
+  file is **always fresh by construction**. Deleting that `Write` silently destroys that
+  invariant, and **nothing anywhere in `scripts/` unlinks or truncates `.out.md`** (verified).
+  Both recovery paths reuse the same role/scope/round — and therefore the **same `.out.md`
+  path**: step 4(a)'s transient retry ("re-dispatch once immediately using a fresh brief and
+  session") and step 6.5's warm resume. So if attempt 1 writes the file and attempt 2 dies
+  before writing, `finalize` reads **attempt 1's output as attempt 2's result**. The
+  missing-file guard does not save us: it covers *absent* and *empty*, not *stale*.
+- **Why this is severe for reviewers specifically:** the git-state completeness recount is a
+  genuine backstop for implementer/fixer/merge-in — a bogus report still gets reconciled
+  against actual commits. **Reviewers have no such backstop.** The review CLIs parse the
+  verdict straight out of the file text, so a killed-then-retried reviewer that had written
+  `APPROVE` before dying would hand mill-start or mill-plan a **green verdict that no live
+  reviewer produced**. That is precisely the false-success class this design guards against
+  everywhere else (#574).
+- **Rejected:** An mtime freshness check (`.out.md` newer than the brief) at the read sites —
+  it works, but it is clock-dependent and fails silently on coarse filesystem timestamps;
+  deterministic deletion is strictly better. Relying on the agent to always overwrite the file
+  — that assumption is exactly what fails when the agent dies.
 
 ### missing-out-md-defers-to-git-state
 
@@ -492,7 +529,7 @@ yaml verdict and the `## Findings` body, which `finalize` renders into `_mill/re
 **Only the delivery channel changes** — the report goes to the file instead of the chat, and
 the final message becomes the ack.
 
-**Authoritative edit set — 28 files (2 + 5 + 5 + 3 + 9 + 4).** This is the **single**
+**Authoritative edit set — 29 files (2 + 5 + 5 + 3 + 9 + 5).** This is the **single**
 enumerated list, and the only file count in this document; the conformance test in Testing
 asserts against it. Every file in groups 1–3 currently tells the sub-agent that its final
 *message* is its output, contradicting the new contract.
@@ -586,7 +623,7 @@ envelopes — they call `_implementer_common.emit_prepare` (`millpy-implement.py
 itself, so adding the field inside `emit_prepare` covers all three. Likewise the
 missing-file guard lives inside `finalize_from_output`, not at their call sites.
 
-*Group 6 — existing tests that pin the old behaviour (4 files). These go red if untouched:*
+*Group 6 — existing tests that pin the old behaviour (5 files). These go red if untouched:*
 
 - **`unit_tests/test-agents-defs.py:60-69`** — asserts `mill-reviewer`'s tools are
   **exactly** `{Read, Grep, Glob}` and that none of `{Edit, Write, Bash, NotebookEdit}` is
@@ -603,6 +640,11 @@ missing-file guard lives inside `finalize_from_output`, not at their call sites.
   `test_review_{code,plan,discussion}_finalize_unescapes_html_entities` tests. Same.
 - `unit_tests/test-agent-dispatch.py:86-164` — asserts `write_brief` returns a single
   `Path`; it now returns the brief path **and** the output path.
+- `unit_tests/test-agent-mode-dispatch.py:370-377` — calls `write_brief(...)` and then
+  asserts `brief_path.exists()` **and `brief_content == prepare_result["prompt_text"]`
+  exactly**. Both break: the return shape changes, *and* the appended output-contract footer
+  means the written brief is deliberately no longer byte-equal to `prompt_text`. Update the
+  equality assertion to "starts with `prompt_text`, then the footer".
 
 **Downstream rationale that goes stale.** `mill-start/SKILL.md:152` and
 `mill-plan/SKILL.md:111` both pre-emptively load the `mill-receiving-review` skill, and
@@ -680,6 +722,12 @@ except the SKILL.md edits, which are prose and are verified by inspection.
   - *review CLIs:* with the file absent / empty / whitespace-only, assert the `verdict:
     ERROR` envelope is emitted (not a synthetic `transient`), so the existing ERROR-only
     retry path picks it up.
+  - **A third case — *stale* — for both roles.** Write an `.out.md` (e.g. containing
+    `APPROVE`), then call `write_brief` for the same role/scope/round, then run `finalize`.
+    Assert the pre-existing file **did not survive**: the reviewer must NOT report `APPROVE`.
+    This is the regression guard for `write-brief-truncates-stale-out-md` — without the
+    truncation, a killed-then-retried reviewer's old green verdict is silently reused, and
+    this test is the only thing that would catch it.
 - **`html.unescape` removal — regression test.** A finding whose body quotes source code
   containing a literal `&lt;`, `&gt;`, and `&amp;` must round-trip through `finalize`
   byte-identically into the review file. This test would **fail on today's code**, which is
@@ -739,6 +787,7 @@ direct test that `ack-is-the-completion-discriminator` landed correctly.
 - **Q:** Are the `subprocess` / `psmux` dispatch paths a constraint on this design? **A:** Partly — and the first answer here was too broad. They are dead as a *configured* dispatch mode, but **`--stage full` is not dead**: it is the reviewer's fallback after two consecutive raw API errors (`mill-go/SKILL.md:129`), it shares the review templates and `<TOOL_RULE>`, and it must keep working. Hence the `output-contract-is-agent-mode-only` Decision.
 - **Q:** What goes in the `.out.md`, and which files need sweeping? **A:** The agent's full report *including* its trailing status/verdict block — only the delivery channel changes. The sweep is the "Authoritative edit set" in Technical context; it grew twice under review, most importantly to include `_review_common.py`, whose `<TOOL_RULE>` injects "Do NOT use Write" into every review prompt from Python rather than from a template.
 - **Q:** Does the new contract apply to the `--stage full` reviewer path too? **A:** No — agent-mode only. The `.out.md` footer is agent-mode-only by construction (`write_brief` is prepare-only), but `build_tool_rule` must be made dispatch-aware so the two channels don't get contradictory instructions.
+- **Q:** Deleting the orchestrator's `Write` also deletes the guarantee that `.out.md` is fresh. What replaces it? **A:** `write_brief` unlinks any pre-existing `.out.md` at brief-write time, and the warm-`SendMessage` path (which bypasses prepare) deletes it explicitly before resuming. Nothing in the codebase truncates `.out.md` today, and both recovery paths reuse the same file path — so without this, a killed-then-retried **reviewer** could hand back a stale `APPROVE` that no live reviewer produced. Rejected an mtime check as clock-dependent.
 - **Q:** The review templates open with a static "READ-ONLY reviewer / MUST NOT call Write" header. How is that reconciled? **A:** The tool prohibitions are **deleted from the header** and `build_tool_rule` becomes the sole owner of the read-only clause — it is the only channel-aware injection point, and a static template cannot be made dispatch-aware. The `MILL_REVIEW_BEGIN`/`END` wrapper stays: it is the content format of the `.out.md` file.
 - **Q:** What does `build_tool_rule` emit for a **bulk** reviewer under agent-mode dispatch? **A:** All four cells are enumerated in the Decision. The bulk×agent cell is the trap — `tooluse` defaults to `False`, so it is reachable — and its "Do NOT request tool calls" clause must be narrowed to "no tool calls **to gather content**, with the single exception of the one `Write` of your report", or the reviewer writes no file and returns `ERROR` every round.
 - **Q:** Can the templates carry an `<OUTPUT_FILE>` token? **A:** **No.** `_render.render` (`_render.py:35`) raises `KeyError` on any unresolved `<UPPERCASE>` token, so a token in a template hard-fails rendering *before* `write_brief` runs, and is unsuppliable on `--stage full` anyway. Templates go channel-neutral ("your report must end with a single JSON object"); `write_brief` appends a footer carrying the literal absolute path.
