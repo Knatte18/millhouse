@@ -166,12 +166,26 @@ practice, so every mill task pays this cost on every dispatch.
   - The **`<TOOL_RULE>` block is the problem**, because it lives in shared prompt text and
     hardcodes the opposite rule (see below). `build_tool_rule` must therefore become
     dispatch-aware: it takes the existing `mode` (`bulk` / `tool-use`) **plus** a flag for
-    agent-mode dispatch, and emits "Do NOT use Write. Return review as text." for
-    `--stage full`, versus "You MAY use Write, and **only** to write the report file named
-    in this brief; do NOT use Edit and do NOT run git or bash." for agent mode. Note the
-    agent-mode wording refers to the file *by description*, not by a `<TOKEN>` — the actual
-    path arrives in `write_brief`'s footer (see the `<OUTPUT_FILE>` constraint under
-    `output-path-in-prepare-envelope`).
+    agent-mode dispatch. **`<TOOL_RULE>` also becomes the sole owner of the read-only clause**,
+    since Group 2's static header surrenders it (see the edit set).
+- **All four cells of the `build_tool_rule` matrix must be defined — the `bulk` × agent-mode
+  cell is the trap.** `mode` derives from the reviewer spec's `tooluse` flag, which
+  **defaults to `False`** (`_reviewers.py:386`), and the registry ships `*_bulk`
+  (`tooluse: false`) variants selectable as any role's `reviewer` — so `bulk` × agent-mode is
+  reachable today, not hypothetical. `_TOOL_RULE_BULK` currently opens with *"Do NOT request
+  tool calls. All content you need is in this prompt."*, which under agent-mode dispatch
+  would coexist with "You MAY use Write" — a self-contradiction that would plausibly yield
+  **no `.out.md` and an `ERROR` envelope every round**. The four cells:
+
+  | | `--stage full` (non-agent) | agent-mode |
+  |---|---|---|
+  | **bulk** | Unchanged: "Do NOT request tool calls. All content is in this prompt. Do NOT use Write. Return review as text." | "Do NOT request tool calls **to gather content** — everything you need is in this prompt. **The single exception:** you MUST use `Write` exactly once, to write your report to the file named in this brief. Do NOT use `Edit`, and do NOT run git or bash." |
+  | **tool-use** | Unchanged: "You MAY use Read, Grep, Glob to verify claims. Do NOT use Write, Edit, or run git/bash. Return review as text." | "You MAY use Read, Grep, Glob to verify claims. You MAY use `Write` **only** to write your report to the file named in this brief. Do NOT use `Edit`, and do NOT run git or bash." |
+
+  Both agent-mode cells refer to the report file **by description, never by a `<TOKEN>`** —
+  the literal path arrives in `write_brief`'s footer (see the `<OUTPUT_FILE>` constraint under
+  `output-path-in-prepare-envelope`). Both agent-mode cells retain the existing "Review-only,
+  findings only" and "Do NOT read `reviews/`" clauses verbatim.
 - **Who sets that flag (the obvious answer is wrong, so state it):** **not** inside
   `prepare()`. `build_tool_rule` is called *from within* `prepare()` in
   `_review_discussion.py:82` and `_review_code.py:335` — and `run()` (the `--stage full`
@@ -397,7 +411,9 @@ practice, so every mill task pays this cost on every dispatch.
 
 - **Decision:** Delete the `html.unescape()` call at all four finalize read sites
   (`millpy-review-code.py:183`, `millpy-review-plan.py:185`,
-  `millpy-review-discussion.py:146`, `_implementer_common.py:892`).
+  `millpy-review-discussion.py:146`, `_implementer_common.py:892`). **Drop the now-unused
+  `import html` in each of the four files with it** — otherwise the change leaves four
+  lint-visible dead imports.
 - **Rationale:** Those calls exist because the harness HTML-escapes the
   `<task-notification>` payload before delivery (fix #605), and the orchestrator was
   writing that escaped payload to `.out.md`. Once the **agent** writes the file directly,
@@ -494,6 +510,26 @@ asserts against it. Every file in groups 1–3 currently tells the sub-agent tha
 *Group 2 — the five review templates (5 files):*
 
 - `plugins/mill/templates/review-{code-batch,code-holistic,discussion,plan-batch,plan-holistic}.md`.
+  **The contradiction here is the static READ-ONLY header, not a JSON clause.** All five open
+  with identical prose (`review-discussion.md:1-4` and the same at `review-code-batch.md:1-4`
+  et al.): *"You are a READ-ONLY reviewer. You MUST NOT call Edit, **Write**, Bash, or any
+  tool that modifies files or runs commands. You MUST NOT make git commits. **Your sole
+  output is the review file in the format below.**"* That directly contradicts the agent-mode
+  footer. It is **static template prose on a shared channel, so unlike `<TOOL_RULE>` it
+  cannot be made dispatch-aware.** Resolution:
+  - **Delete the tool prohibitions from the header** (the `Edit` / `Write` / `Bash` / no-git
+    clause) and let the **dispatch-aware `build_tool_rule` own the entire read-only clause** —
+    it is the only channel-aware injection point in the review prompt, so all tool
+    permissions must live there and nowhere else.
+  - **Keep** the non-tool half of the header: "You are an independent reviewer. REPORT
+    issues; do NOT fix them."
+  - **Keep the `MILL_REVIEW_BEGIN` … `MILL_REVIEW_END` wrapper and the review format** — that
+    is the *content format of the `.out.md` file*, which `finalize` parses. Only the sentence
+    "Your sole output is the review file in the format below" changes, to say the report is
+    **written to** the file named in the brief, and the final message is the ack.
+  - Note the earlier draft of this entry prescribed rewording "your last line of output MUST
+    be a single JSON object" — **that sentence does not exist in any review template**; it
+    belongs to Group 3. Do not go looking for it here.
 
 *Group 3 — the five non-review brief templates (5 files):*
 
@@ -663,10 +699,13 @@ except the SKILL.md edits, which are prose and are verified by inspection.
   **rendered `prompt_text`** for each of the nine dispatch sites, which catches
   contradictions regardless of which file they came from. Assert against the enumerated
   "Authoritative edit set" in Technical context.
-- **`build_tool_rule` dispatch-awareness — TDD candidate.** Assert the agent-mode rule
-  permits `Write` (to `<OUTPUT_FILE>` only) and still forbids `Edit`/git/bash, while the
-  `--stage full` rule is **unchanged** from today's text. This is the test that stops the
-  reviewer's API-error fallback from being collaterally broken.
+- **`build_tool_rule` — all four cells, TDD candidate.** Not two cases: assert **`bulk` ×
+  full**, **`bulk` × agent**, **`tool-use` × full**, **`tool-use` × agent**. The two
+  `--stage full` cells must be **byte-identical to today's text** (that is what stops the
+  reviewer's API-error fallback from being collaterally broken). The `bulk` × agent cell is
+  the one that matters most: assert it does **not** contain a bare "Do NOT request tool
+  calls" that would contradict the Write instruction, and that it *does* carve out the single
+  `Write`. Assert every agent-mode cell still forbids `Edit`, git, and bash.
 
 **Existing tests that must be deleted or inverted** (they pin the behaviour this change
 removes; verify goes red otherwise):
@@ -700,6 +739,8 @@ direct test that `ack-is-the-completion-discriminator` landed correctly.
 - **Q:** Are the `subprocess` / `psmux` dispatch paths a constraint on this design? **A:** Partly — and the first answer here was too broad. They are dead as a *configured* dispatch mode, but **`--stage full` is not dead**: it is the reviewer's fallback after two consecutive raw API errors (`mill-go/SKILL.md:129`), it shares the review templates and `<TOOL_RULE>`, and it must keep working. Hence the `output-contract-is-agent-mode-only` Decision.
 - **Q:** What goes in the `.out.md`, and which files need sweeping? **A:** The agent's full report *including* its trailing status/verdict block — only the delivery channel changes. The sweep is the "Authoritative edit set" in Technical context; it grew twice under review, most importantly to include `_review_common.py`, whose `<TOOL_RULE>` injects "Do NOT use Write" into every review prompt from Python rather than from a template.
 - **Q:** Does the new contract apply to the `--stage full` reviewer path too? **A:** No — agent-mode only. The `.out.md` footer is agent-mode-only by construction (`write_brief` is prepare-only), but `build_tool_rule` must be made dispatch-aware so the two channels don't get contradictory instructions.
+- **Q:** The review templates open with a static "READ-ONLY reviewer / MUST NOT call Write" header. How is that reconciled? **A:** The tool prohibitions are **deleted from the header** and `build_tool_rule` becomes the sole owner of the read-only clause — it is the only channel-aware injection point, and a static template cannot be made dispatch-aware. The `MILL_REVIEW_BEGIN`/`END` wrapper stays: it is the content format of the `.out.md` file.
+- **Q:** What does `build_tool_rule` emit for a **bulk** reviewer under agent-mode dispatch? **A:** All four cells are enumerated in the Decision. The bulk×agent cell is the trap — `tooluse` defaults to `False`, so it is reachable — and its "Do NOT request tool calls" clause must be narrowed to "no tool calls **to gather content**, with the single exception of the one `Write` of your report", or the reviewer writes no file and returns `ERROR` every round.
 - **Q:** Can the templates carry an `<OUTPUT_FILE>` token? **A:** **No.** `_render.render` (`_render.py:35`) raises `KeyError` on any unresolved `<UPPERCASE>` token, so a token in a template hard-fails rendering *before* `write_brief` runs, and is unsuppliable on `--stage full` anyway. Templates go channel-neutral ("your report must end with a single JSON object"); `write_brief` appends a footer carrying the literal absolute path.
 - **Q:** What happens to existing tests that pin the old behaviour? **A:** They are part of the edit set. The four `html.unescape` tests get **inverted** (byte-identical round-trip) rather than deleted — the #605 concern is real, it just moves — and `test-agent-dispatch.py`'s `write_brief` return-shape assertion is updated.
 - **Q:** Who sets the agent-mode flag that makes `build_tool_rule` dispatch-aware? **A:** The CLIs' `--stage prepare` branches, via a parameter on each backend's `prepare()` that defaults to non-agent. **Not** inside `prepare()` itself — `run()` (the `--stage full` fallback) calls the same `prepare()`, so a default-on flag there would poison the very path the carve-out protects. `_review_plan.py` is asymmetric and needs per-callsite attention.
