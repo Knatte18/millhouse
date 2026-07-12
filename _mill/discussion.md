@@ -169,6 +169,17 @@ practice, so every mill task pays this cost on every dispatch.
     agent-mode dispatch, and emits "Do NOT use Write. Return review as text." for
     `--stage full`, versus "You MAY use Write, and **only** to write `<OUTPUT_FILE>`; do NOT
     use Edit and do NOT run git or bash." for agent mode.
+- **Who sets that flag (the obvious answer is wrong, so state it):** **not** inside
+  `prepare()`. `build_tool_rule` is called *from within* `prepare()` in
+  `_review_discussion.py:82` and `_review_code.py:335` — and `run()` (the `--stage full`
+  fallback, `_review_discussion.py:181`, `_review_code.py:588`) calls **that same
+  `prepare()`**. Defaulting the flag to `True` inside `prepare()` would therefore poison the
+  exact path this Decision exists to protect. Instead: the flag is a **parameter on each
+  backend's `prepare()`, defaulting to `False` (non-agent)**, and it is set `True` **only**
+  by the CLIs' `--stage prepare` branches. `_review_plan.py` is **asymmetric** and needs
+  individual attention: its `build_tool_rule` calls are spread across `_review_one_batch`
+  (`:196`), `prepare()` (`:401`, `:490`), and `run()` (`:836`) — the `run()`-side call must
+  keep the non-agent rule.
 - **Rejected:** Treating subprocess as fully dead and changing the shared prompt text
   globally — it would silently break the one path that exists to rescue a reviewer when the
   Agent API is failing, i.e. exactly when you least want a second failure.
@@ -259,9 +270,16 @@ practice, so every mill task pays this cost on every dispatch.
 
 ### output-path-in-prepare-envelope
 
-- **Decision:** Yes — every `prepare` envelope gains an **additive** `output_path` field
-  holding the absolute path to the `.out.md`. The `.md` → `.out.md` rule lives in exactly
-  one helper in `_agent_dispatch.py`.
+- **Decision:** Every prepare envelope **that dispatches an agent** gains an **additive**
+  `output_path` field holding the absolute path to the `.out.md`. The `.md` → `.out.md` rule
+  lives in exactly one helper in `_agent_dispatch.py`.
+- **Explicit carve-out — `dispatch_needed: false`:** `_implementer_common.emit_prepare_no_dispatch`
+  (`:796`) emits a prepare envelope with `dispatch_needed: false` for the merge-in
+  verify-fix pass case (`millpy-merge-in-subagent.py:396`), where verify already passes and
+  **no agent is dispatched at all**. No brief is written, so there is no `.out.md` to name.
+  These envelopes carry **no** `output_path`, and the shape test must exclude them —
+  otherwise the invariant is false as written and the test fails on
+  `millpy-merge-in-subagent.py --mode verify-fix`.
 - **Who substitutes what (this must be explicit, or the design is unbuildable):**
   `write_brief` is the **sole owner** of the output path. It already computes `brief_path`
   internally (`_agent_dispatch.py:96-120`) and writes the fully-rendered brief during
@@ -434,16 +452,20 @@ yaml verdict and the `## Findings` body, which `finalize` renders into `_mill/re
 **Only the delivery channel changes** — the report goes to the file instead of the chat, and
 the final message becomes the ack.
 
-**Authoritative edit set — 26 files (1 + 5 + 5 + 3 + 9 + 3).** This is the **single**
+**Authoritative edit set — 27 files (2 + 5 + 5 + 3 + 9 + 3).** This is the **single**
 enumerated list, and the only file count in this document; the conformance test in Testing
 asserts against it. Every file in groups 1–3 currently tells the sub-agent that its final
 *message* is its output, contradicting the new contract.
 
-*Group 1 — agent definition (1 file):*
+*Group 1 — agent definitions (2 files):*
 
 - `plugins/mill/agents/mill-reviewer.md` — "Your sole output is your final message. Do not
   create intermediate files…" must go; tool list gains `Write`; add the `_mill/briefs/`
   guardrail.
+- `plugins/mill/agents/mill-implementer.md:20` — "report structured status when done" names
+  **no channel**, which under the new contract reads as "in your final message" — the same
+  ambiguity being swept out of the reviewer definition. Reword to name `<OUTPUT_FILE>`
+  explicitly. (Its tool list already has `Write`; no capability change.)
 
 *Group 2 — the five review templates (5 files):*
 
@@ -473,6 +495,11 @@ asserts against it. Every file in groups 1–3 currently tells the sub-agent tha
 
 - `_agent_dispatch.py` — `write_brief` owns `<OUTPUT_FILE>` substitution and the
   `.md` → `.out.md` helper.
+- **`_review_discussion.py`, `_review_code.py`, `_review_plan.py`** — the three review
+  backends. Each calls `build_tool_rule` and so must thread the new agent-mode flag through
+  its `prepare()` signature (`_review_discussion.py:82`, `_review_code.py:335`,
+  `_review_plan.py:196,401,490,836`). `_review_plan.py` is the asymmetric one — see the
+  `output-contract-is-agent-mode-only` Decision.
 - **`_review_common.py`** — **the easiest file in this whole change to miss, because the
   contradiction is injected from Python, not from a template.** `_TOOL_RULE_BULK` and
   `_TOOL_RULE_TOOL_USE` (`:1216-1228`) hardcode
@@ -484,11 +511,18 @@ asserts against it. Every file in groups 1–3 currently tells the sub-agent tha
   file writes and git", which stops being true for agent mode.
 - `_implementer_common.py` — `emit_prepare` gains `output_path`; read site `:892` gains the
   missing-file guard and loses `html.unescape`.
-- `millpy-review-discussion.py`, `millpy-review-plan.py`, `millpy-review-code.py` — prepare
-  envelopes gain `output_path`; read sites `:146` / `:185` / `:183` gain the missing-file
-  guard and lose `html.unescape`.
-- `millpy-implement.py`, `millpy-fix.py`, `millpy-merge-in-subagent.py` — forward the new
-  `output_path` field.
+- `millpy-review-discussion.py`, `millpy-review-plan.py`, `millpy-review-code.py` — build
+  their prepare envelopes inline, so each gains `output_path`; each sets the agent-mode flag
+  `True` in its `--stage prepare` branch **only**; and read sites `:146` / `:185` / `:183`
+  gain the missing-file guard and lose `html.unescape`.
+
+**Explicitly *not* in the edit set** (checked, and worth recording so the plan does not
+create empty batches): `millpy-implement.py`, `millpy-fix.py`, and
+`millpy-merge-in-subagent.py` need **no** changes for `output_path`. They do not construct
+envelopes — they call `_implementer_common.emit_prepare` (`millpy-implement.py:578`,
+`millpy-fix.py:507`, `millpy-merge-in-subagent.py:350,431`), which builds the envelope
+itself, so adding the field inside `emit_prepare` covers all three. Likewise the
+missing-file guard lives inside `finalize_from_output`, not at their call sites.
 
 *Group 6 — existing tests that pin the old behaviour (3 files). These go red if untouched:*
 
@@ -578,7 +612,10 @@ except the SKILL.md edits, which are prose and are verified by inspection.
   the point: it pins the correctness bug the removal fixes.
 - **Prepare-envelope shape.** Assert `output_path` is present, absolute, and equals
   `brief_path` with `.md` → `.out.md`, for every prepare-emitting CLI (the
-  implementer/fixer/merge CLIs and the three review CLIs).
+  implementer/fixer/merge CLIs and the three review CLIs). **Assert the converse too:** a
+  `dispatch_needed: false` envelope (merge-in verify-fix pass case) carries **no**
+  `output_path` — a blanket "always present" assertion would fail there, which is precisely
+  the trap the `output-path-in-prepare-envelope` carve-out exists to avoid.
 - **Conflicting-instruction sweep — conformance test.** A cheap grep-style test asserting
   that no *agent-mode* prompt still tells the agent its output's last line must be the JSON,
   or that its sole output is its final message. **Search root must include `scripts/`, not
@@ -627,6 +664,8 @@ direct test that `ack-is-the-completion-discriminator` landed correctly.
 - **Q:** What goes in the `.out.md`, and which files need sweeping? **A:** The agent's full report *including* its trailing status/verdict block — only the delivery channel changes. The sweep is the "Authoritative edit set" in Technical context; it grew twice under review, most importantly to include `_review_common.py`, whose `<TOOL_RULE>` injects "Do NOT use Write" into every review prompt from Python rather than from a template.
 - **Q:** Does the new contract apply to the `--stage full` reviewer path too? **A:** No — agent-mode only. `--stage full` is *not* dead: it is the reviewer's fallback after two consecutive API errors (`mill-go/SKILL.md:129`), and it shares the review templates and `<TOOL_RULE>`. The `.out.md` footer is agent-mode-only by construction (`write_brief` is prepare-only), but `build_tool_rule` must be made dispatch-aware so the two channels don't get contradictory instructions.
 - **Q:** What happens to existing tests that pin the old behaviour? **A:** They are part of the edit set. The four `html.unescape` tests get **inverted** (byte-identical round-trip) rather than deleted — the #605 concern is real, it just moves — and `test-agent-dispatch.py`'s `write_brief` return-shape assertion is updated.
+- **Q:** Who sets the agent-mode flag that makes `build_tool_rule` dispatch-aware? **A:** The CLIs' `--stage prepare` branches, via a parameter on each backend's `prepare()` that defaults to non-agent. **Not** inside `prepare()` itself — `run()` (the `--stage full` fallback) calls the same `prepare()`, so a default-on flag there would poison the very path the carve-out protects. `_review_plan.py` is asymmetric and needs per-callsite attention.
+- **Q:** Does *every* prepare envelope carry `output_path`? **A:** No — `dispatch_needed: false` envelopes (merge-in verify-fix pass case) dispatch no agent and write no brief, so they carry none. The shape test asserts both directions.
 - **Q:** How does mill-go tell a successful notification from a dead one once the payload is one line? **A:** The `WROTE <path>` ack becomes the positive completion discriminator. Without this, every successful implementer would match `:132`'s "non-error, non-JSON" turn-exhaustion trigger.
 - **Q:** Does the prepare envelope gain an `output_path` field? **A:** Yes, additive. The `.md` → `.out.md` rule then lives in one helper instead of four prose restatements.
 - **Q:** How should review gaps be resolved for the rest of this mill-start? **A:** Auto-pick the recommended option on every review round.
