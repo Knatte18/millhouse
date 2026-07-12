@@ -33,7 +33,9 @@ implementing  '2026-07-12T14:41:58Z'
 ```yaml
 batches:
   - name: contract-helpers
-    state: pending
+    state: running
+    implementer_session: a50219e8-7daa-402c-bb4d-2ba060b6a6c4
+    start_sha: 08bc393e2862ca9665e0c01897e9f508b5aeed3e
   - name: review-backends-and-clis
     state: pending
   - name: prompt-surfaces
