@@ -21,7 +21,6 @@ Exit codes:
 from __future__ import annotations
 
 import argparse
-import html
 import json
 import sys
 from pathlib import Path
@@ -147,16 +146,18 @@ def main(argv: list[str] | None = None) -> int:
                     return 1
             prepare_result = prepare(
                 cfg, slug, scope=None, mill_dir=mill_dir, project_root=project_root,
-                wiki_root=wiki_root, git_root=git_root
+                wiki_root=wiki_root, git_root=git_root, agent_mode=True,
             )
             briefs_dir = _paths.resolve_task_path(project_root, "_mill/briefs/")
             brief_path = _agent_dispatch.write_brief(
                 briefs_dir, "review-plan", prepare_result["scope"],
-                prepare_result["round"], prepare_result["prompt_text"]
+                prepare_result["round"], prepare_result["prompt_text"],
+                output_contract=True,
             )
             envelope = {
                 "stage": "prepare",
                 "brief_path": str(brief_path),
+                "output_path": str(_agent_dispatch.output_path_for(brief_path)),
                 "subagent_type": _agent_dispatch.SUBAGENT_REVIEWER,
                 "model": _agent_dispatch.model_to_tier(prepare_result["model"]),
                 "session_id": None,
@@ -179,10 +180,17 @@ def main(argv: list[str] | None = None) -> int:
             round_n = discover_round(reviews_dir, "plan", "holistic")
         try:
             agent_output_path = Path(args.agent_output)
-            # The harness HTML-escapes the <task-notification> payload uniformly
-            # before delivery; unescape at this read site so the reviewer sees the
-            # original, uncorrupted text (fixes #605).
-            raw_text = html.unescape(agent_output_path.read_text(encoding="utf-8"))
+            # Agent-mode output is a file the reviewer wrote itself via Write,
+            # never HTML-escaped -- unlike the implementer's <task-notification>
+            # payload, so no unescape happens here. Missing file (e.g. the
+            # reviewer never wrote it) collapses to empty text rather than
+            # raising FileNotFoundError; the backend's own finalize turns that
+            # into a verdict: ERROR result on a zero exit code.
+            raw_text = (
+                agent_output_path.read_text(encoding="utf-8")
+                if agent_output_path.exists()
+                else ""
+            )
             review_entry = finalize(
                 cfg, slug, raw_text, scope=None, round_n=round_n,
                 reviews_dir=reviews_dir, mill_dir=mill_dir,
