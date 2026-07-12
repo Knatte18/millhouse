@@ -3310,6 +3310,92 @@ def main() -> int:
             "PASS: parse_batch_refs does not return any token from a Moves: bullet (regression)"
         )
 
+    # ---------------------------------------------------------------------------
+    # build_tool_rule: four-cell dispatch matrix (bulk/tool-use x non-agent/agent)
+    # ---------------------------------------------------------------------------
+
+    # (a) Non-agent cells stay byte-identical to today's pre-agent-mode text.
+    # Pinned as literals so a future edit that collaterally changes these
+    # strings is caught here -- these are also what the reviewer's
+    # `--stage full` API-error fallback relies on staying verbatim.
+    _EXPECTED_BULK_NON_AGENT = (
+        "**CRITICAL: Do NOT request tool calls. All content you need is in this prompt.**\n"
+        "**CRITICAL: Review-only. Do NOT suggest modifications. Findings only.**\n"
+        "**CRITICAL: Do NOT read `reviews/`. Evaluate fresh each round.**\n"
+        "**CRITICAL: Do NOT use Write. Return review as text.**"
+    )
+    _EXPECTED_TOOL_USE_NON_AGENT = (
+        "**You MAY use Read, Grep, and Glob to verify claims against source files.**\n"
+        "**CRITICAL: Do NOT use Write, Edit, or run git/bash. Return review as text.**\n"
+        "**CRITICAL: Review-only. Do NOT suggest modifications. Findings only.**\n"
+        "**CRITICAL: Do NOT read `reviews/`. Evaluate fresh each round.**"
+    )
+    assert build_tool_rule("bulk", agent_mode=False) == _EXPECTED_BULK_NON_AGENT, (
+        f"bulk x non-agent must stay byte-identical to today's text: "
+        f"{build_tool_rule('bulk', agent_mode=False)!r}"
+    )
+    assert build_tool_rule("tool-use", agent_mode=False) == _EXPECTED_TOOL_USE_NON_AGENT, (
+        f"tool-use x non-agent must stay byte-identical to today's text: "
+        f"{build_tool_rule('tool-use', agent_mode=False)!r}"
+    )
+    print("PASS: build_tool_rule bulk/tool-use x non-agent byte-identical to pinned literals")
+
+    # (e) agent_mode defaults to False: a single positional argument must
+    # equal the non-agent cell. This pins the default that keeps the file's
+    # seven existing positional callsites green.
+    assert build_tool_rule("bulk") == _EXPECTED_BULK_NON_AGENT, (
+        "build_tool_rule('bulk') with one positional arg must default to non-agent"
+    )
+    assert build_tool_rule("tool-use") == _EXPECTED_TOOL_USE_NON_AGENT, (
+        "build_tool_rule('tool-use') with one positional arg must default to non-agent"
+    )
+    print("PASS: build_tool_rule agent_mode defaults to False (positional-callsite compatibility)")
+
+    # (b) bulk x agent: must NOT contain the bare "Do NOT request tool calls"
+    # clause (it would contradict the Write grant below), and must grant
+    # exactly one Write for the report.
+    bulk_agent = build_tool_rule("bulk", agent_mode=True)
+    assert "Do NOT request tool calls" not in bulk_agent, (
+        f"bulk x agent must not contain the bare non-agent tool-call ban: {bulk_agent!r}"
+    )
+    assert "Write" in bulk_agent, f"bulk x agent must grant a Write carve-out: {bulk_agent!r}"
+    assert bulk_agent.count("Write") == 1, (
+        f"bulk x agent must grant exactly one Write carve-out, found {bulk_agent.count('Write')}: {bulk_agent!r}"
+    )
+    print("PASS: build_tool_rule bulk x agent avoids bare tool-call ban and grants exactly one Write")
+
+    # (c) tool-use x agent: still grants Read/Grep/Glob, and grants Write for
+    # the report.
+    tool_use_agent = build_tool_rule("tool-use", agent_mode=True)
+    assert "MAY use Read, Grep, and Glob" in tool_use_agent, (
+        f"tool-use x agent must still grant Read/Grep/Glob: {tool_use_agent!r}"
+    )
+    assert "Write" in tool_use_agent, f"tool-use x agent must grant a Write carve-out: {tool_use_agent!r}"
+    print("PASS: build_tool_rule tool-use x agent still grants Read/Grep/Glob and a Write carve-out")
+
+    # (d) Both agent cells still forbid Edit, git, and bash.
+    for cell_name, cell_text in (("bulk x agent", bulk_agent), ("tool-use x agent", tool_use_agent)):
+        assert "Edit" in cell_text and "NOT use Edit" in cell_text, (
+            f"{cell_name} must still forbid Edit: {cell_text!r}"
+        )
+        assert "git" in cell_text.lower() and "bash" in cell_text.lower(), (
+            f"{cell_name} must still forbid git/bash: {cell_text!r}"
+        )
+    print("PASS: build_tool_rule both agent cells still forbid Edit, git, and bash")
+
+    # (f) Unknown mode still raises ValueError in both agent_mode states.
+    for agent_mode_value in (False, True):
+        try:
+            build_tool_rule("weird", agent_mode=agent_mode_value)
+            print(
+                f"FAIL: build_tool_rule: expected ValueError for unknown mode (agent_mode={agent_mode_value})",
+                file=sys.stderr,
+            )
+            errors += 1
+        except ValueError as e:
+            assert "weird" in str(e)
+    print("PASS: build_tool_rule unknown mode -> ValueError in both agent_mode states")
+
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)
         return 1
