@@ -4,6 +4,9 @@ Covers:
   - resolve_dispatch_mode: defaults to subprocess, validates enum values
   - model_to_tier: maps model families, raises on unknown
   - write_brief: writes files, creates parents, overwrites, returns path
+  - output_path_for: the ".md" -> ".out.md" mapping
+  - write_brief output_contract footer, default-off byte-identity, and
+    unconditional stale-".out.md" truncation
 """
 from __future__ import annotations
 
@@ -148,7 +151,7 @@ def test_write_brief_sanitizes_colon_in_scope() -> None:
         # File should exist and be readable
         assert path.exists(), f"File should exist at {path}"
         content = path.read_text(encoding="utf-8")
-        assert content == prompt, f"Content should match"
+        assert content == prompt, "Content should match"
     print("PASS write_brief -- sanitizes colon in scope")
 
 
@@ -167,8 +170,86 @@ def test_write_brief_sanitizes_slash_in_scope() -> None:
         # File should exist and be readable
         assert path.exists(), f"File should exist at {path}"
         content = path.read_text(encoding="utf-8")
-        assert content == prompt, f"Content should match"
+        assert content == prompt, "Content should match"
     print("PASS write_brief -- sanitizes slash in scope")
+
+
+def test_output_path_for_maps_md_to_out_md() -> None:
+    """output_path_for maps foo-r1.md -> foo-r1.out.md, preserving parent and absoluteness."""
+    with tempfile.TemporaryDirectory() as tmp:
+        # Path(tmp) is guaranteed absolute on both POSIX and Windows (unlike a
+        # hand-written "/abs/..." literal, which pathlib treats as relative --
+        # drive-less -- on Windows).
+        brief_path = Path(tmp) / "briefs" / "foo-r1.md"
+        out_path = _agent_dispatch.output_path_for(brief_path)
+
+        assert out_path.name == "foo-r1.out.md", f"Expected foo-r1.out.md, got {out_path.name!r}"
+        assert out_path.parent == brief_path.parent, (
+            f"Parent directory should be preserved: {out_path.parent} != {brief_path.parent}"
+        )
+        assert brief_path.is_absolute(), f"Test setup: brief_path must be absolute, got {brief_path}"
+        assert out_path.is_absolute(), f"Expected absolute path, got {out_path}"
+    print("PASS output_path_for -- maps .md to .out.md, preserves parent and absoluteness")
+
+
+def test_write_brief_footer_present_when_output_contract_true() -> None:
+    """write_brief appends a footer naming the .out.md path and a WROTE ack when output_contract=True."""
+    with tempfile.TemporaryDirectory() as tmp:
+        briefs_dir = Path(tmp) / "briefs"
+        prompt = "Test prompt content"
+        brief_path = _agent_dispatch.write_brief(
+            briefs_dir, "review-code", "holistic", 1, prompt, output_contract=True
+        )
+        content = brief_path.read_text(encoding="utf-8")
+        out_path = _agent_dispatch.output_path_for(brief_path)
+
+        assert content.startswith(prompt), "Written content must start with prompt_text"
+        assert str(out_path) in content, (
+            f"Footer must contain the literal absolute output path {out_path}: {content!r}"
+        )
+        assert "WROTE" in content, f"Footer must instruct a WROTE ack: {content!r}"
+    print("PASS write_brief -- footer present with literal path and WROTE ack when output_contract=True")
+
+
+def test_write_brief_default_off_is_byte_identical_to_prompt() -> None:
+    """write_brief without output_contract writes content exactly equal to prompt_text (the descope guarantee)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        briefs_dir = Path(tmp) / "briefs"
+        prompt = "Test prompt content, unchanged."
+        brief_path = _agent_dispatch.write_brief(briefs_dir, "review-code", "holistic", 1, prompt)
+        content = brief_path.read_text(encoding="utf-8")
+
+        assert content == prompt, (
+            f"Default-off write_brief must write prompt_text byte-for-byte, got {content!r}"
+        )
+    print("PASS write_brief -- default-off content is byte-identical to prompt_text")
+
+
+def test_write_brief_truncates_stale_out_md() -> None:
+    """write_brief unconditionally unlinks a stale .out.md, for both output_contract states."""
+    for output_contract in (True, False):
+        with tempfile.TemporaryDirectory() as tmp:
+            briefs_dir = Path(tmp) / "briefs"
+            role, scope, round_n = "review-code", "holistic", 1
+
+            # Pre-create the brief once to learn its path, then plant a stale
+            # .out.md next to it as if a prior round's reviewer had run.
+            first_brief_path = _agent_dispatch.write_brief(
+                briefs_dir, role, scope, round_n, "first prompt"
+            )
+            stale_out_path = _agent_dispatch.output_path_for(first_brief_path)
+            stale_out_path.write_text("verdict: APPROVE", encoding="utf-8")
+            assert stale_out_path.exists(), "Test setup: stale .out.md must exist before re-dispatch"
+
+            # Re-dispatch the same role/scope/round, as a transient-retry would.
+            _agent_dispatch.write_brief(
+                briefs_dir, role, scope, round_n, "second prompt", output_contract=output_contract
+            )
+
+            assert not stale_out_path.exists(), (
+                f"Stale .out.md must be unlinked (output_contract={output_contract}): {stale_out_path}"
+            )
+    print("PASS write_brief -- unconditionally truncates stale .out.md for both output_contract states")
 
 
 def main() -> int:
@@ -187,6 +268,10 @@ def main() -> int:
         test_subagent_constants,
         test_write_brief_sanitizes_colon_in_scope,
         test_write_brief_sanitizes_slash_in_scope,
+        test_output_path_for_maps_md_to_out_md,
+        test_write_brief_footer_present_when_output_contract_true,
+        test_write_brief_default_off_is_byte_identical_to_prompt,
+        test_write_brief_truncates_stale_out_md,
     ]
     failures: list[str] = []
     for fn in tests:
