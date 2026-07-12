@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-contract-helpers
 slug: explore-fork-agent-opportunities
 branch: hanf/explore-fork-agent-opportunities
 plan: _mill/plan
@@ -26,6 +26,7 @@ plan-fix-r3  '2026-07-12T14:16:20Z'
 plan-fix-r4  '2026-07-12T14:25:05Z'
 planned  '2026-07-12T14:25:05Z'
 implementing  '2026-07-12T14:41:58Z'
+approved-contract-helpers  '2026-07-12T15:10:25Z'
 ```
 
 ## Batches
@@ -33,9 +34,10 @@ implementing  '2026-07-12T14:41:58Z'
 ```yaml
 batches:
   - name: contract-helpers
-    state: running
+    state: approved
     implementer_session: a50219e8-7daa-402c-bb4d-2ba060b6a6c4
     start_sha: 08bc393e2862ca9665e0c01897e9f508b5aeed3e
+    commit_sha: 8e4eae4c28c34416786494e608285475efc8a78c
   - name: review-backends-and-clis
     state: pending
   - name: prompt-surfaces
