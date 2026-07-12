@@ -203,6 +203,7 @@ def prepare(
     extra_files: list[Path] | None = None,
     max_rounds: int | None = None,
     prior_notes: Path | None = None,
+    agent_mode: bool = False,
 ) -> dict:
     """Prepare a code review by rendering the prompt for a single scope.
 
@@ -211,6 +212,10 @@ def prepare(
         extra_files: Additional source files to include in the bulk.
         max_rounds: Override the configured round cap for this scope.
         prior_notes: Path to a file containing prior-round non-blocking findings digest.
+        agent_mode: When True, build_tool_rule returns the agent-mode cell
+            (adds the single Write carve-out for the .out.md report).
+            Defaults to False so run()'s `--stage full` fallback keeps
+            receiving today's non-agent rule unchanged.
 
     Returns:
         Dict with keys: prompt_text, model, round, reviews_dir, scope.
@@ -332,7 +337,7 @@ def prepare(
 
     template_name = "review-code-batch" if scope else "review-code-holistic"
     mode = "tool-use" if spec.get("tooluse") else "bulk"
-    tool_rule = build_tool_rule(mode)
+    tool_rule = build_tool_rule(mode, agent_mode)
     artefact_section = _build_artefact_section(
         mode, overview_path, batch_files, source_files, ancestors_on_disk,
         deletes_union,
