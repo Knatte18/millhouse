@@ -57,5 +57,7 @@ batches:
     start_sha: 94ce3b1d3673398bf76ba4545dbdff64f00c1eba
     commit_sha: 43f79a42cea5ba1af7dab879aa3e9e8e6d0b9291
   - name: output-contract-conformance
-    state: pending
+    state: running
+    implementer_session: 89e16f46-c836-4c1c-8131-1111ae5c7435
+    start_sha: 7fdd1a24b4f47d856552e11a1b4d83527df46fd0
 ```
