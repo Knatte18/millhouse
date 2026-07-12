@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: done
+phase: pr-pending
 slug: explore-fork-agent-opportunities
 branch: hanf/explore-fork-agent-opportunities
 plan: _mill/plan
@@ -34,6 +34,7 @@ approved-output-contract-conformance  '2026-07-12T16:01:03Z'
 holistic-reviewing  '2026-07-12T16:01:26Z'
 holistic-approved  '2026-07-12T16:06:05Z'
 done  '2026-07-12T16:06:34Z'
+pr-pending  '2026-07-12T16:07:18Z'
 ```
 
 ## Batches
