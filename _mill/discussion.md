@@ -45,14 +45,13 @@ practice, so every mill task pays this cost on every dispatch.
   orchestrator's `Write` step is deleted; the sub-agent's final message shrinks to a
   one-line ack, which also becomes mill-go's completion discriminator.
 - **C. Grant `mill-reviewer` a `Write` capability**, guardrailed to `_mill/briefs/`, and
-  sweep **all seven** files whose current instructions contradict the new contract: the
-  agent definition, `mill-go/SKILL.md`, the five review templates, **and** the five
-  non-review brief templates (`implementer-brief.md`, `fixer-batch-brief.md`,
-  `fixer-holistic-brief.md`, `merge-in-conflict-brief.md`, `merge-in-verify-brief.md`),
-  each of which currently mandates "your last line of output MUST be a single JSON object".
+  sweep every file whose current instructions contradict the new contract — see
+  **"Authoritative edit set"** in Technical context for the enumerated list (15 files).
 - **D. Add `output_path` to every prepare envelope** and centralise the `.md` → `.out.md`
-  rule in one helper.
-- **E. Remove the now-incorrect `html.unescape()` calls** at the four finalize read sites.
+  rule in one helper owned by `write_brief`.
+- **E. Add a missing-file guard** at the four finalize read sites (a missing `.out.md`
+  currently raises an uncaught `FileNotFoundError`), and **remove the now-incorrect
+  `html.unescape()` calls** at those same four sites.
 - **F. A durable decision note** in `mill-go/SKILL.md`'s "## Agent-mode dispatch" section
   recording why fork is rejected for the scripted dispatch sites, so this is not
   re-litigated.
@@ -192,9 +191,26 @@ practice, so every mill task pays this cost on every dispatch.
   without a new discriminator, **every successful implementer dispatch would be
   misclassified as turn-exhausted**. The ack must be a *positive* success marker, not just
   a smaller payload.
-- **Affected edits:** `mill-go/SKILL.md` steps 4(a), 4(b), 5 (deleted), 6, and the Clean
-  mid-work stop paragraph at `:135` (which today says "write the notification to the
-  `.out.md` file as normal" — under the new contract there is nothing to write).
+- **Affected edits in `mill-go/SKILL.md`:**
+  - **step 4(a)** (`:129`) — reworded to key **solely on the error marker**, with the ack
+    test evaluated **first**. Its current heuristic ("roughly 0 tokens, no `MILL_REVIEW`
+    block and no `status` JSON") becomes actively misleading post-change, because *every
+    successful* payload is now ~0 tokens with no review block and no JSON. Only the
+    error-marker clause still discriminates; the negative signals must go.
+  - **step 4(b)** (`:131-133`) — the clean-turn-exhaustion trigger is redefined as
+    "no ack **and** no error marker", instead of "non-error, non-JSON".
+  - **step 5** (`:149`) — deleted (the orchestrator no longer captures output).
+  - **step 6** (`:151`) — takes `--agent-output` from the envelope's `output_path`.
+  - **step 6.5, the warm-`SendMessage` resume** (`:161`, `:163`) — **easy to miss, and it
+    would silently re-bloat the Builder.** `:161`'s message literally tells the resumed
+    implementer to "emit the required JSON report as your final line", and `:163` tells the
+    orchestrator to write that message to `.out.md`. Left alone, a warm-resumed implementer
+    returns a full JSON report *in chat* and its payload matches no ack. New wording:
+    "Finish any remaining cards in this batch, run verify, rewrite `<OUTPUT_FILE>`, then
+    reply with the ack." The re-capture instruction at `:163` is deleted.
+  - **Clean mid-work stop** (`:135`) — today says "write the notification to the `.out.md`
+    file as normal"; under the new contract there is nothing to write, and finalize runs
+    against a missing file (see `missing-out-md-defers-to-git-state`).
 - **Rejected:** Making the ack a JSON object so the existing "non-JSON" test keeps working.
   It preserves the classifiers untouched, but re-admits a JSON channel the Builder is
   supposed to ignore and contradicts the one-line-ack decision.
@@ -202,16 +218,25 @@ practice, so every mill task pays this cost on every dispatch.
 ### output-path-in-prepare-envelope
 
 - **Decision:** Yes — every `prepare` envelope gains an **additive** `output_path` field
-  holding the absolute path to the `.out.md`. The orchestrator passes it verbatim to
-  `--agent-output` and to the brief's `<OUTPUT_FILE>` token, and never derives a path
-  itself. The `.md` → `.out.md` rule lives in exactly one helper in `_agent_dispatch.py`.
-- **Rationale:** The rule is currently restated as prose in three separate places in
-  `mill-go/SKILL.md` (`:135`, `:149`, `:151`, plus again in the warm-`SendMessage` path at
-  `:163`). Under the new contract a *third* party — the sub-agent itself — also needs the
-  path, which would make it a fourth restatement. One helper, one envelope field, zero
-  string-munging in prose. The field is additive, so the "finalize's external contract must
-  not change" constraint holds.
-- **Rejected:** Keeping the `.md` → `.out.md` munging rule as SKILL.md prose.
+  holding the absolute path to the `.out.md`. The `.md` → `.out.md` rule lives in exactly
+  one helper in `_agent_dispatch.py`.
+- **Who substitutes what (this must be explicit, or the design is unbuildable):**
+  `write_brief` is the **sole owner** of the output path. It already computes `brief_path`
+  internally (`_agent_dispatch.py:96-120`) and writes the fully-rendered brief during
+  `--stage prepare`, *before the orchestrator ever sees the envelope*. So `write_brief`
+  derives the `.out.md` path from the `brief_path` it just computed, substitutes the
+  `<OUTPUT_FILE>` token / appends the output-contract footer into the brief text, and
+  returns both paths. The envelope's `output_path` is a **read-only echo** of that same
+  helper's result, which the orchestrator forwards verbatim to `--agent-output`. The
+  orchestrator never injects a token and never derives a path — it *cannot*, since the brief
+  is already written by then.
+- **Rationale:** The rule is currently restated as prose in four separate places in
+  `mill-go/SKILL.md` (`:135`, `:149`, `:151`, and the warm-`SendMessage` path at `:163`).
+  Under the new contract a further party — the sub-agent itself — also needs the path. One
+  helper, one envelope field, zero string-munging in prose. The field is additive, so the
+  "finalize's external contract must not change" constraint holds.
+- **Rejected:** Keeping the `.md` → `.out.md` munging rule as SKILL.md prose; having the
+  orchestrator substitute `<OUTPUT_FILE>` (impossible — the brief is already on disk).
 
 ### reviewer-write-grant-scoped-to-briefs
 
@@ -240,20 +265,35 @@ practice, so every mill task pays this cost on every dispatch.
 
 ### missing-out-md-defers-to-git-state
 
-- **Decision:** A missing or empty `.out.md` is handled **per role**, and in both cases it
-  reuses machinery that already exists rather than inventing a classification:
-  - **implementer / fixer / merge-in finalize:** the missing file is treated as **empty
-    agent text** and flows into the **existing** no-JSON git-state inference
-    (`_implementer_common.py:999`, `_batch_completeness_stuck`). The completeness recount
-    runs as it does today, yielding `success` (all cards committed, tree clean),
-    `stuck_type: incomplete` (some-but-not-all cards committed), or `stuck_type: logic`
-    ("no structured report", when there is no commit evidence *and* no report). Nothing new
-    is added; empty text already flows down this path.
-  - **review CLIs (discussion / plan / code):** there is no git state to infer from, so a
-    missing or empty `.out.md` produces the **existing** `verdict: ERROR` envelope. That
-    already feeds mill-start's and mill-plan's ERROR-only-aggregate retry (their step 3.5)
-    and mill-go's reviewer fallback path — again, no new machinery.
-- **Rationale:** This corrects a **dangerous** earlier draft of this decision, which said
+- **Decision:** A missing or empty `.out.md` is handled **per role**. An *empty* file
+  already degrades correctly today; a *missing* one does **not** — it crashes. So this
+  change must add a **missing-file guard** at all four finalize read sites, which is what
+  makes the rest of the rule true:
+  - **New guard (in scope, must be built):** each of the four read sites —
+    `_implementer_common.py:892`, `millpy-review-discussion.py:146`,
+    `millpy-review-plan.py:185`, `millpy-review-code.py:183` — reads the file **defensively,
+    yielding `""` when it does not exist**. Today they all call
+    `Path(agent_output_path).read_text(...)` with **no existence guard**, so an absent file
+    raises an uncaught `FileNotFoundError`: `millpy-implement.py:402` calls
+    `finalize_from_output` with no `try`, and the three review CLIs wrap the read in
+    `except ReviewError` only — which `FileNotFoundError` does not satisfy. The CLI would
+    exit with a traceback and print no envelope at all. This guard collapses *missing* into
+    the *empty* case, after which:
+  - **implementer / fixer / merge-in finalize:** the (now-empty) text flows into the
+    **existing** no-JSON git-state inference (`_implementer_common.py:999`,
+    `_batch_completeness_stuck`). The completeness recount runs as it does today, yielding
+    `success` (all cards committed, tree clean), `stuck_type: incomplete`
+    (some-but-not-all cards committed), or `stuck_type: logic` ("no structured report",
+    when there is no commit evidence *and* no report).
+  - **review CLIs (discussion / plan / code):** there is no git state to infer from, so the
+    empty text fails `parse_verdict`, raising `ReviewError`, which produces the **existing**
+    `verdict: ERROR` envelope. That already feeds mill-start's and mill-plan's
+    ERROR-only-aggregate retry (their step 3.5) and mill-go's reviewer fallback path.
+- **Rationale (guard):** without it, the one failure mode the new contract *introduces* — a
+  dead agent leaving no file — is the one failure mode `finalize` cannot survive. "Reuse
+  existing machinery" is only true *downstream* of the guard; claiming the existing code
+  already covers a missing file was wrong.
+- **Rationale (classification):** This corrects a **dangerous** earlier draft of this decision, which said
   "missing/empty `.out.md` → `stuck_type: transient`" unconditionally. That would have been
   a regression, not a fix. `mill-go/SKILL.md:135` deliberately routes a turn-exhausted
   implementer *through* `finalize` precisely so the git-state inference can reclassify it
@@ -352,26 +392,51 @@ yaml verdict and the `## Findings` body, which `finalize` renders into `_mill/re
 **Only the delivery channel changes** — the report goes to the file instead of the chat, and
 the final message becomes the ack.
 
-**Conflicting instructions that must be swept — twelve files.** Every one of these currently
-tells the sub-agent that its final *message* is its output, which directly contradicts the
-new contract:
+**Authoritative edit set — 22 files (1 + 5 + 5 + 3 + 8).** This is the single enumerated
+list; the conformance test in Testing asserts against it. Every file in groups 1–3 currently
+tells the sub-agent that its final *message* is its output, contradicting the new contract.
+
+*Group 1 — agent definition (1 file):*
 
 - `plugins/mill/agents/mill-reviewer.md` — "Your sole output is your final message. Do not
-  create intermediate files…" (and its tool list must gain `Write`).
-- `plugins/mill/skills/mill-go/SKILL.md` — steps 4(a), 4(b), 5, 6; the Clean mid-work stop
-  paragraph at `:135` ("write the notification to the `.out.md` file as normal"); and the
-  warm-`SendMessage` resume path at `:163`, which restates the capture rule.
-- The five review templates
-  `review-{code-batch,code-holistic,discussion,plan-batch,plan-holistic}.md`.
-- **The five non-review brief templates**, each of which mandates "Your last line of
-  **output** (after all work and commits) MUST be a single JSON object" and calls anything
-  else a protocol violation: `implementer-brief.md:102,:127`, `fixer-batch-brief.md:70,:95`,
-  `fixer-holistic-brief.md:76,:101`, `merge-in-conflict-brief.md:56`,
-  `merge-in-verify-brief.md:45`. These must be reworded from "last line of your *output*" to
-  "last line of `<OUTPUT_FILE>`", with the final chat message specified as exactly the ack.
-  `implementer-brief.md:50` additionally defines a mid-batch turn end as a protocol
-  violation — that rule stays, but its "and the JSON report has been emitted" clause needs
-  to say "written to `<OUTPUT_FILE>`".
+  create intermediate files…" must go; tool list gains `Write`; add the `_mill/briefs/`
+  guardrail.
+
+*Group 2 — the five review templates (5 files):*
+
+- `plugins/mill/templates/review-{code-batch,code-holistic,discussion,plan-batch,plan-holistic}.md`.
+
+*Group 3 — the five non-review brief templates (5 files):*
+
+- Each mandates "Your last line of **output** (after all work and commits) MUST be a single
+  JSON object" and calls anything else a protocol violation: `implementer-brief.md:102,:127`,
+  `fixer-batch-brief.md:70,:95`, `fixer-holistic-brief.md:76,:101`,
+  `merge-in-conflict-brief.md:56`, `merge-in-verify-brief.md:45`. Reword from "last line of
+  your *output*" to "last line of `<OUTPUT_FILE>`", and specify the final chat message as
+  exactly the ack. `implementer-brief.md:50` additionally defines a mid-batch turn end as a
+  protocol violation — that rule **stays**, but its "and the JSON report has been emitted"
+  clause becomes "written to `<OUTPUT_FILE>`".
+
+*Group 4 — orchestrator skills (3 files):*
+
+- `plugins/mill/skills/mill-go/SKILL.md` — steps 4(a), 4(b), 5 (deleted), 6, 6.5 (`:161`,
+  `:163`), and the Clean mid-work stop paragraph at `:135`. Plus the new "Why not fork?"
+  subsection (Decision `decision-note-for-fork-rejection`).
+- `plugins/mill/skills/mill-start/SKILL.md` — Phase: Explore Step 3 (`:117-125`) gains the
+  fork guidance (item A); and the stale rationale at `:152` (see below).
+- `plugins/mill/skills/mill-plan/SKILL.md` — the stale rationale at `:111` (see below).
+
+*Group 5 — Python (8 files):*
+
+- `_agent_dispatch.py` — `write_brief` owns `<OUTPUT_FILE>` substitution and the
+  `.md` → `.out.md` helper.
+- `_implementer_common.py` — `emit_prepare` gains `output_path`; read site `:892` gains the
+  missing-file guard and loses `html.unescape`.
+- `millpy-review-discussion.py`, `millpy-review-plan.py`, `millpy-review-code.py` — prepare
+  envelopes gain `output_path`; read sites `:146` / `:185` / `:183` gain the missing-file
+  guard and lose `html.unescape`.
+- `millpy-implement.py`, `millpy-fix.py`, `millpy-merge-in-subagent.py` — forward the new
+  `output_path` field.
 
 **Downstream rationale that goes stale.** `mill-start/SKILL.md:152` and
 `mill-plan/SKILL.md:111` both pre-emptively load the `mill-receiving-review` skill, and
@@ -425,12 +490,13 @@ in-memory/tempfile fixtures and no real git or LLM. That suits every part of thi
 except the SKILL.md edits, which are prose and are verified by inspection.
 
 - **`_agent_dispatch` output-path helper — TDD candidate.** The `.md` → `.out.md` rule is
-  currently prose restated in three places; make it one function and test it directly,
-  including the edge case of a brief path that contains `.md` in a directory component.
-- **`write_brief` output-contract footer.** Assert the rendered brief instructs the agent
-  to write `<brief>.out.md` and to reply with the one-line ack, for every `role` value used
-  by the nine dispatch sites. This is the test that proves the change is uniform rather
-  than reviewer-only.
+  currently prose restated in four places; make it one function and test it directly,
+  including the edge case of a brief path whose *directory* component contains `.md`, which
+  naive string replacement would corrupt.
+- **`write_brief` output-contract footer.** Assert the rendered brief resolves
+  `<OUTPUT_FILE>` to the absolute `.out.md` path and instructs the agent to reply with the
+  one-line ack, for every `role` value used by the nine dispatch sites. This is the test
+  that proves the change is uniform rather than reviewer-only.
 - **`finalize` on a missing / empty `.out.md` — the most important TDD candidate, and the
   one that guards a known bug.** Split by role, matching the
   `missing-out-md-defers-to-git-state` Decision:
@@ -449,18 +515,14 @@ except the SKILL.md edits, which are prose and are verified by inspection.
   byte-identically into the review file. This test would **fail on today's code**, which is
   the point: it pins the correctness bug the removal fixes.
 - **Prepare-envelope shape.** Assert `output_path` is present, absolute, and equals
-  `brief_path` with `.md` → `.out.md`, for every prepare-emitting CLI (the four
+  `brief_path` with `.md` → `.out.md`, for every prepare-emitting CLI (the
   implementer/fixer/merge CLIs and the three review CLIs).
-- **The `.md` → `.out.md` helper — TDD candidate.** Test it directly, including a brief path
-  whose *directory* component contains `.md`, which naive string replacement would corrupt.
 - **Conflicting-instruction sweep — conformance test.** A cheap grep-style test asserting
   that no file under `templates/` or `agents/` still tells the agent its *output*'s last
   line must be the JSON, or that its sole output is its final message. This is exactly the
   kind of thing that silently regresses when someone adds an eleventh template, and the
-  round-1 review of this very discussion caught the human version of the same miss.
-- **Brief output-contract footer.** Assert the brief rendered by `write_brief` names the
-  `<OUTPUT_FILE>` path and the ack, for every `role` used by the nine dispatch sites — the
-  test that proves the change is uniform rather than reviewer-only.
+  round-1 review of this very discussion caught the human version of the same miss. Assert
+  against the enumerated "Authoritative edit set" in Technical context.
 
 Not covered by unit tests, and accepted: the end-to-end behaviour that the orchestrator's
 context actually shrinks. Verify that manually on the first real mill-go run after this
@@ -477,7 +539,7 @@ direct test that `ack-is-the-completion-discriminator` landed correctly.
 - **Q:** How should mill-start's Explore phase use fork? **A:** Guidance, not a mandate — prefer fork for scoped sub-investigations that need the task context; keep cold `Explore` agents for broad mechanical sweeps.
 - **Q:** Which dispatch sites get the "sub-agent writes its own `.out.md`" contract? **A:** All of them. Nearly everything writes an `.out.md` today; fix the whole set uniformly.
 - **Q:** What is the sub-agent's final message once it writes its own `.out.md`? **A:** A one-line ack (`WROTE <path>`). The Builder needs nothing from it — `finalize` supplies the verdict.
-- **Q:** What if the sub-agent dies before writing `.out.md`? **A:** `finalize` reports `stuck_type: transient`, which feeds mill-go's existing one-retry path. No new machinery.
+- **Q:** What if the sub-agent dies before writing `.out.md`? **A:** Add a missing-file guard at the four read sites (today an absent file raises an uncaught `FileNotFoundError`), then defer to role: implementer/fixer/merge-in fall into the existing git-state completeness recount (preserving `incomplete`); review CLIs emit the existing `ERROR` envelope. An earlier draft said "blanket `transient`" — review caught that it would have reintroduced the #574 false-success bug.
 - **Q:** Record the fork rejection durably? **A:** Yes — a short decision note in the repo. The three disqualifiers are non-obvious and the question will recur.
 - **Q:** Are the `subprocess` / `psmux` dispatch paths a constraint on this design? **A:** No — they are dead in practice; only agent dispatch is relevant in mill today. (Removing them is a separate cleanup, out of scope here.)
 - **Q:** What does `finalize` do when `.out.md` is missing or empty? **A:** Role-split, reusing existing machinery: implementer/fixer/merge-in defer to the git-state completeness recount (so `incomplete` still catches partial batches); review CLIs emit the existing `ERROR` envelope. An earlier draft said "blanket `transient`" — round-1 review caught that it would have reintroduced the #574 false-success bug.
@@ -485,3 +547,5 @@ direct test that `ack-is-the-completion-discriminator` landed correctly.
 - **Q:** How does mill-go tell a successful notification from a dead one once the payload is one line? **A:** The `WROTE <path>` ack becomes the positive completion discriminator. Without this, every successful implementer would match `:132`'s "non-error, non-JSON" turn-exhaustion trigger.
 - **Q:** Does the prepare envelope gain an `output_path` field? **A:** Yes, additive. The `.md` → `.out.md` rule then lives in one helper instead of four prose restatements.
 - **Q:** How should review gaps be resolved for the rest of this mill-start? **A:** Auto-pick the recommended option on every review round.
+- **Q:** Who substitutes the `<OUTPUT_FILE>` token into the brief? **A:** `write_brief`, which is the only thing that knows `brief_path` — it renders and writes the brief during `--stage prepare`, before the orchestrator ever sees the envelope. The envelope's `output_path` is a read-only echo. (An earlier draft said the orchestrator would inject the token, which is impossible: the brief is already on disk.)
+- **Q:** Does the warm-`SendMessage` resume path need changing? **A:** Yes — `mill-go/SKILL.md:161` tells the resumed implementer to "emit the required JSON report as your final line", which would re-bloat the Builder and produce a payload the new ack classifier does not recognise. It is part of the edit set.
