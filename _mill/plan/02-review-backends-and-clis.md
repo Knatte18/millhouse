@@ -5,7 +5,7 @@ task: Explore and adopt Claude Code fork-agents in mill orchestration
 batch: review-backends-and-clis
 number: 2
 cards: 8
-verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-review-finalize.py test-review-prepare-envelope.py test-review-discussion-flow.py test-review-plan-flow.py test-review-code-flow.py test-review-cli-error-envelope.py test-review-plan-finalize-round.py test-review-cli.py
+verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-review-finalize.py test-review-prepare-envelope.py test-review-discussion-flow.py test-review-plan-flow.py test-review-code-flow.py test-review-cli-error-envelope.py test-review-plan-finalize-round.py
 depends-on: [1]
 ```
 

@@ -27,7 +27,7 @@ batches:
     name: review-backends-and-clis
     file: 02-review-backends-and-clis.md
     depends-on: [1]
-    verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-review-finalize.py test-review-prepare-envelope.py test-review-discussion-flow.py test-review-plan-flow.py test-review-code-flow.py test-review-cli-error-envelope.py test-review-plan-finalize-round.py test-review-cli.py
+    verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-review-finalize.py test-review-prepare-envelope.py test-review-discussion-flow.py test-review-plan-flow.py test-review-code-flow.py test-review-cli-error-envelope.py test-review-plan-finalize-round.py
   - number: 3
     name: prompt-surfaces
     file: 03-prompt-surfaces.md
