@@ -39,7 +39,9 @@ batches:
     start_sha: 08bc393e2862ca9665e0c01897e9f508b5aeed3e
     commit_sha: 8e4eae4c28c34416786494e608285475efc8a78c
   - name: review-backends-and-clis
-    state: pending
+    state: running
+    implementer_session: 6f98275c-4550-40bb-9dec-a5c2fca91b50
+    start_sha: 179fbaf07e5a90d179b9e5fbbf00e25998ee21fd
   - name: prompt-surfaces
     state: pending
   - name: orchestrator-skills
