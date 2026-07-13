@@ -319,11 +319,19 @@ def prepare(
     project_root: Path,
     wiki_root: Path,
     git_root: Path,
+    agent_mode: bool = False,
 ) -> dict:
     """Prepare a plan review by rendering the prompt for a single scope.
 
     Args:
         scope: Batch name (e.g., "01-setup") or None for holistic.
+        agent_mode: When True, both the batch-scope and holistic-scope
+            build_tool_rule calls in this function return the agent-mode
+            cell (adds the single Write carve-out for the .out.md report).
+            Defaults to False. This does NOT propagate to
+            ``_review_one_batch``'s or ``run()``'s own build_tool_rule
+            calls -- those belong to the `--stage full` path, which is a
+            separate, non-prepare code path for plan review.
 
     Returns:
         Dict with keys: prompt_text, model, round, reviews_dir, scope.
@@ -398,7 +406,7 @@ def prepare(
         batch_spec = _reviewers.resolve(registry, batch_reviewer_name)
 
         mode = "tool-use" if batch_spec.get("tooluse") else "bulk"
-        tool_rule = build_tool_rule(mode)
+        tool_rule = build_tool_rule(mode, agent_mode)
 
         all_bulked = [overview_path, batch_path, *reads, *ancestors_on_disk, *moves_on_disk]
         manifest = build_manifest_section(all_bulked)
@@ -487,7 +495,7 @@ def prepare(
         holistic_moves_on_disk = [p for p in holistic_moves_on_disk if p not in holistic_already_included]
 
         holistic_mode = "tool-use" if holistic_spec.get("tooluse") else "bulk"
-        tool_rule = build_tool_rule(holistic_mode)
+        tool_rule = build_tool_rule(holistic_mode, agent_mode)
 
         manifest = build_manifest_section([overview_path, *batch_files, *all_reads, *all_creates_on_disk, *holistic_moves_on_disk])
 

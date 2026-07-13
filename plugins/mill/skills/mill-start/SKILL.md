@@ -124,6 +124,13 @@ After writing the digest, explore the relevant parts of the codebase.
 - Read `CONSTRAINTS.md` at the hub root if present (use `_constraints.read_if_exists()`).
 - Do not ask questions you can answer from the codebase or from the proposal.
 
+**Sub-investigation guidance (not a mandate).** The exploration above can also be delegated rather than done inline, and the right delegation mechanism depends on the shape of the question — this is guidance for picking between them, not a required step:
+- **Scoped sub-investigation that needs the task context already in the orchestrator's head** (e.g. "does this proposal's approach conflict with how module X already handles Y") — prefer `Agent(subagent_type: "fork")`. A fork inherits the current conversation, so it needs no brief to understand what it's looking for.
+- **Broad mechanical sweep** (e.g. "list every caller of this function across the repo") that does not benefit from the inherited conversation and would otherwise pay the parent's context prefix on every turn — use a cold `Explore` agent instead.
+- **Small question** answerable in one or two tool calls — just explore inline; delegating either way is overhead.
+
+This is the one site in mill with no brief, no resume requirement, no per-role model tier, and no tool restriction to lose, which is exactly why none of the three fork disqualifiers (see "Why not fork?" in `mill-go/SKILL.md`'s "## Agent-mode dispatch") apply here.
+
 ### Phase: Discuss
 
 Interview the user relentlessly about every aspect of the task. Ask questions in **focused batches**. Questions that don't depend on each other's answers can be asked together. For each question, provide your **recommended answer**. Prefer multiple-choice (A/B/C with trade-offs) when there are distinct options. Cap each batch at ≤5 questions; ask the rest in subsequent batches after the user answers.
@@ -149,7 +156,7 @@ Commit on the task branch: `git -C <worktree> add <discussion_path> && git commi
 
 **Status safeguard (applies to all `_status.append_phase` calls in this phase):** Before any `_status.append_phase` call, run `git -C <worktree> status --short -- _mill/status.md`. If the output contains `D` (a line beginning with ` D` for working-tree deleted, or `D ` for staged deletion), restore the file via `git -C <worktree> checkout HEAD -- _mill/status.md` before proceeding. Blank output means the file is present and unchanged — blank is NOT the deletion signal.
 
-Load the `mill-receiving-review` skill now, unconditionally, before round 1's dispatch below — this is what makes step 3's "before evaluating or acting on findings" rule structurally satisfiable under Agent-mode dispatch, where a reviewer's findings arrive already embedded in the `<task-notification>` payload the orchestrator must read just to learn the round's verdict; loading the skill this early means it is already active in context by the time those findings are evaluated or acted on, even though they were technically visible in the notification text a moment earlier.
+Load the `mill-receiving-review` skill now, unconditionally, before round 1's dispatch below — this is what makes step 3's "before evaluating or acting on findings" rule structurally satisfiable. Under Agent-mode dispatch the reviewer's findings arrive only in the review file it writes, not embedded in the `<task-notification>` payload (which now carries only a one-line ack); the orchestrator must read that review file to present gaps or NOTEs to the user, so the skill must already be active in context before that file is ever read. Loading it this early is still correct, it is just no longer motivated by the payload containing the findings.
 
 The new schema has two skip conditions: `rounds: 0` OR `reviewer: null` means "skip discussion review". If `max_review_rounds == 0` OR `roles.discussion-review.holistic.reviewer` is `None`: skip straight to Handoff.
 

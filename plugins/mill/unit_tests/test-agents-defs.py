@@ -1,12 +1,15 @@
 """Unit tests for sub-agent definitions (mill-reviewer and mill-implementer).
 
 Covers:
-  - mill-reviewer: tools list is exactly {Read, Grep, Glob} with no mutating tools
+  - mill-reviewer: tools list is exactly {Read, Grep, Glob, Write} -- the reviewer
+    may write, but only its own report; it still cannot edit an existing file,
+    run a command, or commit, so {Edit, Bash, NotebookEdit} remain forbidden.
   - mill-implementer: tools list includes {Read, Edit, Write, Bash, Grep, Glob, Skill}
   - Both agents: name matches filename stem
   - Both agents: non-empty description
   - Both agents: no model field set (per-call override supplies tier)
 """
+
 from __future__ import annotations
 
 import sys
@@ -34,7 +37,11 @@ def _extract_frontmatter(text: str) -> dict | None:
 
 
 def test_reviewer_agent_definition() -> None:
-    """mill-reviewer must be read-only: tools = {Read, Grep, Glob} only."""
+    """mill-reviewer may write only its own report: tools = {Read, Grep, Glob, Write}.
+
+    It still cannot edit an existing file, run a command, or commit, so
+    {Edit, Bash, NotebookEdit} remain forbidden.
+    """
     agent_file = HUB / "plugins" / "mill" / "agents" / "mill-reviewer.md"
     assert agent_file.exists(), f"Agent file not found: {agent_file}"
 
@@ -57,13 +64,15 @@ def test_reviewer_agent_definition() -> None:
 
     # Normalize tools: split on comma/whitespace, strip, deduplicate
     tools = {t.strip() for t in tools_raw.replace(",", " ").split() if t.strip()}
-    expected_tools = {"Read", "Grep", "Glob"}
+    expected_tools = {"Read", "Grep", "Glob", "Write"}
     assert tools == expected_tools, (
         f"mill-reviewer tools must be exactly {expected_tools}, got {tools}"
     )
 
-    # Verify NO mutating tools
-    mutating = {"Edit", "Write", "Bash", "NotebookEdit"}
+    # Verify NO mutating tools beyond the briefs-scoped Write grant above --
+    # Edit, Bash, and NotebookEdit would let the reviewer modify an existing
+    # file, run a command, or commit, none of which it is allowed to do.
+    mutating = {"Edit", "Bash", "NotebookEdit"}
     forbidden = tools & mutating
     assert not forbidden, (
         f"mill-reviewer must not have mutating tools; found {forbidden}"
