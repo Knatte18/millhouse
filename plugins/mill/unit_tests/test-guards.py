@@ -103,13 +103,21 @@ def _check_no_direct_rmtree() -> int:
 # Check 2: no_unicode_arrow                                                   #
 # --------------------------------------------------------------------------- #
 
+_ARROW_ALLOWED_FILES: set[str] = {
+    # Deliberately prints a literal arrow to verify a UTF-8 stdout guard
+    # survives non-ASCII output -- the arrow is the point of the test, not
+    # an accidental cp1252-unsafe print left in test code.
+    "test-wiki-migrate-print.py",
+}
+
+
 def _check_no_unicode_arrow() -> int:
     """Return 0 on PASS, 1 on FAIL."""
     here = Path(__file__).resolve().parent
     self_name = Path(__file__).name
     hits: list[str] = []
     for path in sorted(here.glob("test-*.py")):
-        if path.name == self_name:
+        if path.name == self_name or path.name in _ARROW_ALLOWED_FILES:
             continue
         text = path.read_text(encoding="utf-8")
         if "→" in text:

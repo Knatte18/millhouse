@@ -31,6 +31,14 @@ def _make_git_repo(tmp: Path) -> Path:
         ["git", "init", str(tmp)], check=True, capture_output=True,
     )
     subprocess.run(
+        ["git", "-C", str(tmp), "config", "user.email", "test@test.com"],
+        check=True, capture_output=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(tmp), "config", "user.name", "Test"],
+        check=True, capture_output=True,
+    )
+    subprocess.run(
         ["git", "-C", str(tmp), "commit", "--allow-empty", "-m", "init"],
         check=True, capture_output=True,
     )

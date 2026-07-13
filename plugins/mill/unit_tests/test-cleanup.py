@@ -73,6 +73,14 @@ def _make_git_repo(path: Path) -> None:
     """Initialise a minimal git repo."""
     subprocess.run(["git", "init", str(path)], check=True, capture_output=True)
     subprocess.run(
+        ["git", "-C", str(path), "config", "user.email", "test@test.com"],
+        check=True, capture_output=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(path), "config", "user.name", "Test"],
+        check=True, capture_output=True,
+    )
+    subprocess.run(
         ["git", "-C", str(path), "commit", "--allow-empty", "-m", "init"],
         check=True, capture_output=True,
     )
