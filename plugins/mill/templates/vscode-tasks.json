@@ -4,8 +4,16 @@
         {
             "label": "Claude ready terminal",
             "type": "shell",
-            "command": "pwsh",
             "isBackground": true,
+            "windows": {
+                "command": "pwsh"
+            },
+            "linux": {
+                "command": "${env:SHELL}"
+            },
+            "osx": {
+                "command": "${env:SHELL}"
+            },
             "presentation": {
                 "reveal": "always",
                 "panel": "dedicated",

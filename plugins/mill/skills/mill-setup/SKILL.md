@@ -27,7 +27,7 @@ Bootstrap the mill infrastructure from nothing. Produces a working `.millhouse/`
 
 - `cwd` is the hub directory inside a container (typically `<container>/wts/<repo>/`)
 - `git remote get-url origin` returns a valid URL
-- `uv` is installed (`uv --version` exits 0); install via `irm https://astral.sh/uv/install.ps1 | iex`
+- `uv` is installed (`uv --version` exits 0); install via `irm https://astral.sh/uv/install.ps1 | iex` (Windows/PowerShell) or `curl -LsSf https://astral.sh/uv/install.sh | sh` (POSIX)
 - `${CLAUDE_PLUGIN_ROOT}/scripts/` contains `_junction.py`, `_subprocess_util.py`, `_render.py`, `_setup.py`
 - `${CLAUDE_PLUGIN_ROOT}/templates/config.local.yaml`, `${CLAUDE_PLUGIN_ROOT}/templates/mill-config.yaml`, `${CLAUDE_PLUGIN_ROOT}/templates/mill-agents.yaml`, and `${CLAUDE_PLUGIN_ROOT}/templates/Home.md` exist
 
@@ -56,19 +56,27 @@ The form is decided by `_sibling.py wiki <HUB_PATH>` in Phase 3 — callers just
 
 ## How to invoke the helpers
 
-mill-setup is the bootstrapper that **creates** the global `PYTHONPATH` Windows user environment variable. That variable does not exist in the current process (or in any child process spawned during this session) until Phase 4.7 completes and a new shell is opened. The mill convention is to invoke the venv Python binary directly with an explicit `PYTHONPATH=` shell prefix on every call — this works whether the global env var is set or not:
+mill-setup is the bootstrapper that **creates** the global `PYTHONPATH` Windows user environment variable (Phase 4.7, Windows only — see that phase). That variable does not exist in the current process (or in any child process spawned during this session) on Windows until Phase 4.7 completes and a new shell is opened, and has no equivalent on POSIX at all. The mill convention is to invoke the venv Python binary directly with an explicit `PYTHONPATH=` shell prefix on every call — this works whether the global env var is set or not, and on every platform:
 
 ```bash
 # WRONG — invokes from source tree
 PYTHONPATH="plugins/mill/scripts" uv run --project plugins/mill python -c "..."
 
 # RIGHT — invokes from cache (mill-setup bootstrapper exception; all other skills use "$MILL_PYTHON")
-PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "..."
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "<VENV_PYTHON>" -c "..."
 ```
 
 This direct-binary form is used by mill-setup only (bootstrapper exception — Phase 4.8 writes `MILL_PYTHON` to `~/.claude/settings.json`; all other mill skills use `"$MILL_PYTHON"`). The source-tree form (`uv run --project plugins/mill ...`) remains the documented exception for cases where the cache path is unavailable — for example, running unit tests from the millhouse repo itself.
 
-Helpers used by this skill: `_setup` (Phase 4 — `create_hub_links`), `_gitignore` (Phase 4.5b), `_shortcuts` (Phase 4.7), `_vscode` (Phase 7), `_render` (transitively via `_vscode` and `_shortcuts`).
+**Compute `<VENV_PYTHON>` once, before Phase 1**, and reuse the same literal path for every command in every later phase (same treatment as `<container>`, `<hub-path>`, `<wiki-dir>` — a token substituted by whoever is executing the skill, not a persisted shell variable):
+
+```bash
+test -f "${CLAUDE_PLUGIN_ROOT}/.venv/bin/python" && echo "${CLAUDE_PLUGIN_ROOT}/.venv/bin/python" || echo "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe"
+```
+
+`uv sync` creates `.venv/bin/python` on POSIX (Linux/macOS) and `.venv/Scripts/python.exe` on Windows — checking which one exists is more reliable than branching on `uname`/`$OS`, since it reflects the venv actually on disk rather than the host running the check.
+
+Helpers used by this skill: `_setup` (Phase 4 — `create_hub_links`), `_gitignore` (Phase 4.5b), `_shortcuts` (Phase 4.7, Windows only), `_winenv` (Phase 4.7, Windows only), `_vscode` (Phase 7), `_render` (transitively via `_vscode` and `_shortcuts`).
 
 ## Phases
 
@@ -100,7 +108,7 @@ Optionally pre-load `.millhouse/config.local.yaml` now (if it exists) and read `
 
    If exit code is non-zero, halt with:
 
-   > uv is not installed. Install via PowerShell: `irm https://astral.sh/uv/install.ps1 | iex` — then re-run /mill-setup.
+   > uv is not installed. Install via PowerShell: `irm https://astral.sh/uv/install.ps1 | iex` (Windows) or `curl -LsSf https://astral.sh/uv/install.sh | sh` (POSIX) — then re-run /mill-setup.
 
 1. `git remote get-url origin` → `<origin-url>` (still computed; needed for the derived fallback and for Phase 7's `<repo-name>` resolution).
 2. Compute effective URL and branch via precedence:
@@ -128,7 +136,7 @@ Run `git ls-remote <wiki-url>`. If it fails (exit non-zero), halt with a conditi
 First compute `<wiki-dir>` using the sibling-path helper — this yields `<container>/wiki/` in container-form, otherwise `<container>/<repo>.wiki/`. Use the printed path as `<wiki-dir>` for the remainder of mill-setup:
 
 ```bash
-PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" "${CLAUDE_PLUGIN_ROOT}/scripts/_sibling.py" wiki "<hub-path>"
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "<VENV_PYTHON>" "${CLAUDE_PLUGIN_ROOT}/scripts/_sibling.py" wiki "<hub-path>"
 ```
 
 `<hub-path>` is derived via `git rev-parse --show-toplevel`. Users can override via `.millhouse/config.local.yaml`'s `wiki_path:` key.
@@ -136,7 +144,7 @@ PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/
 After `<wiki-dir>` is computed, call `_setup.clone_or_init`:
 
 ```bash
-PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "<VENV_PYTHON>" -c "
 from pathlib import Path
 import _setup, json
 result = _setup.clone_or_init(
@@ -159,13 +167,13 @@ If the helper raises `WikiPushError` (from the pull path — `git pull --ff-only
 1. If `<cwd>/mill-config.yaml` does not exist: copy `${CLAUDE_PLUGIN_ROOT}/templates/mill-config.yaml` → `<cwd>/mill-config.yaml` verbatim (no substitution — tokens are resolved at runtime by scripts, not at seed time). Then stage via `git add`:
 
    ```bash
-   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "from pathlib import Path; import shutil, _subprocess_util; shutil.copyfile(Path(r'${CLAUDE_PLUGIN_ROOT}/templates/mill-config.yaml').resolve(), Path(r'<cwd>/mill-config.yaml').resolve()); _subprocess_util.run(['git', '-C', r'<cwd>', 'add', 'mill-config.yaml']); print('mill-config.yaml staged at <cwd>/mill-config.yaml -- commit it on the main branch to land the migration')"
+   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "<VENV_PYTHON>" -c "from pathlib import Path; import shutil, _subprocess_util; shutil.copyfile(Path(r'${CLAUDE_PLUGIN_ROOT}/templates/mill-config.yaml').resolve(), Path(r'<cwd>/mill-config.yaml').resolve()); _subprocess_util.run(['git', '-C', r'<cwd>', 'add', 'mill-config.yaml']); print('mill-config.yaml staged at <cwd>/mill-config.yaml -- commit it on the main branch to land the migration')"
    ```
 
 2. If `<cwd>/mill-config.yaml` exists: run a block-level upsert:
 
    ```bash
-   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "
+   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "<VENV_PYTHON>" -c "
    from pathlib import Path
    import yaml
 
@@ -190,7 +198,7 @@ If the helper raises `WikiPushError` (from the pull path — `git pull --ff-only
    After running: if any blocks were upserted (i.e., `missing` was non-empty), stage and commit:
 
    ```bash
-   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "
+   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "<VENV_PYTHON>" -c "
    from pathlib import Path
    import _subprocess_util
    hub_root = Path(r'<cwd>').resolve()
@@ -208,7 +216,7 @@ If the helper raises `WikiPushError` (from the pull path — `git pull --ff-only
 Runs only when `<cli-from-url>` or `<cli-branch>` was explicitly supplied on the CLI in this run. When both came from config or derived defaults, this phase is a no-op.
 
 ```bash
-PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "<VENV_PYTHON>" -c "
 from pathlib import Path
 import _config
 changed = _config.set_local_wiki_overrides(
@@ -233,7 +241,7 @@ Idempotency: re-running mill-setup with the same flags (or no flags after a prio
 Create the `<container>/portals/` directory (if missing). Task portals are added per-task by `mill-spawn`/`mill-claim`; main worktree gets NO portal entry — adding one creates a deletion-cycle through `<container>/portals/<repo>` back to the hub when any task worktree is removed.
 
 ```bash
-PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "<VENV_PYTHON>" -c "
 from pathlib import Path
 container = Path(r'<container>').resolve()
 portals = container / 'portals'
@@ -249,7 +257,7 @@ print(f'ensured portals dir: {portals}')
 Call `_setup.create_hub_links` with the hub token set (no `<SLUG>` — that is mill-spawn's concern). The helper reads both the `junctions:` and `hardlinks:` blocks from `<wiki-dir>/config.yaml`, applies the token-scope filter (silently skipping entries whose templates reference `<SLUG>`), creates all hub-scope junctions, and creates all hardlinks idempotently:
 
 ```bash
-PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "<VENV_PYTHON>" -c "
 from pathlib import Path
 import json, _setup
 result = _setup.create_hub_links(
@@ -286,7 +294,7 @@ Compute `<hub-gitignore>` as `<hub-path>/.gitignore` (same path in both containe
 Call `_gitignore.upsert`:
 
 ```bash
-PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "<VENV_PYTHON>" -c "
 from pathlib import Path
 import _gitignore
 hub_gi = Path(r'<hub-gitignore>').resolve()
@@ -297,16 +305,17 @@ print('hub .gitignore:', 'updated' if changed else 'already up to date')
 
 Log the result.
 
-### Phase 4.7 — CMD shortcut wrappers
+### Phase 4.7 — CMD shortcut wrappers (Windows only)
 
-Creates `.millhouse/<script>.cmd` forwarders for every user-callable mill script. Each wrapper hardcodes the path of the currently-latest plugin cache entry and delegates to the real script via `uv run --active`.
+**Windows only — skip entirely on POSIX.** Both sub-steps below are terminal-convenience only: `.cmd` files have no meaning outside `cmd.exe`, and `_winenv.py` uses `winreg`, which does not exist on POSIX. Neither is required for mill itself to function — every mill skill already receives `PYTHONPATH=` inline per invocation (see "How to invoke the helpers"), never via a persistent global env var. On POSIX, log `Phase 4.7 skipped (Windows-only convenience wrappers, not needed on POSIX)` and move to Phase 4.8.
+
+On Windows, creates `.millhouse/<script>.cmd` forwarders for every user-callable mill script. Each wrapper hardcodes the path of the currently-latest plugin cache entry and delegates to the real script via `uv run --active`.
 
 ```bash
-PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "
-import os
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "<VENV_PYTHON>" -c "
 import _shortcuts
 from pathlib import Path
-cache = Path(os.environ['USERPROFILE']) / '.claude' / 'plugins' / 'cache' / 'millhouse' / 'mill'
+cache = Path.home() / '.claude' / 'plugins' / 'cache' / 'millhouse' / 'mill'
 latest_path = max((p for p in cache.iterdir() if p.is_dir()), key=lambda p: p.name)
 written = _shortcuts.write_all(Path('.millhouse'), latest_path)
 print(f'wrote {len(written)} wrappers' if written else 'wrappers up to date')
@@ -318,12 +327,11 @@ Log `wrote N wrappers` or `wrappers up to date` based on the returned list.
 Then set the `PYTHONPATH` Windows user environment variable to the scripts directory of the latest installed plugin version via Python `winreg`:
 
 ```bash
-PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "
-import os
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "<VENV_PYTHON>" -c "
 import _winenv
 from pathlib import Path
 
-cache = Path(os.environ['USERPROFILE']) / '.claude' / 'plugins' / 'cache' / 'millhouse' / 'mill'
+cache = Path.home() / '.claude' / 'plugins' / 'cache' / 'millhouse' / 'mill'
 latest_path = max((p for p in cache.iterdir() if p.is_dir()), key=lambda p: p.name)
 scripts = str(latest_path / 'scripts')
 changed = _winenv.set_user_env_var('PYTHONPATH', scripts)
@@ -341,11 +349,12 @@ Log: `Set PYTHONPATH (User) = <scripts> or PYTHONPATH (User) already correct: <s
 Sets the `MILL_PYTHON` environment variable in the global Claude Code settings so every other mill skill can reference `"$MILL_PYTHON"` instead of the full venv path. This phase is the bootstrapper exception: mill-setup cannot use `$MILL_PYTHON` in its own commands because the variable is not yet active in the current CC session (CC reads `settings.json` at startup). All other mill skills use `"$MILL_PYTHON"`.
 
 ```bash
-PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "<VENV_PYTHON>" -c "
 import json, os
 from pathlib import Path
 
-mill_python = str(Path(os.environ['CLAUDE_PLUGIN_ROOT']) / '.venv' / 'Scripts' / 'python.exe')
+venv = Path(os.environ['CLAUDE_PLUGIN_ROOT']) / '.venv'
+mill_python = str(venv / 'Scripts' / 'python.exe') if os.name == 'nt' else str(venv / 'bin' / 'python')
 settings_path = Path.home() / '.claude' / 'settings.json'
 
 data = json.loads(settings_path.read_text(encoding='utf-8')) if settings_path.exists() else {}
@@ -369,7 +378,7 @@ The `hub_relative_path` key tells mill-terminal and mill-vscode where the effect
 Compute the value:
 
 ```bash
-PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "<VENV_PYTHON>" -c "
 from pathlib import Path
 cwd = Path.cwd().resolve()
 git_toplevel = Path(r'<git-toplevel>').resolve()
@@ -387,7 +396,7 @@ print(rel)
 Write the value into `.millhouse/config.local.yaml`. If the file already exists and already contains `hub_relative_path:`, update it in-place; if missing or absent from the file, append/insert it before the first non-comment key:
 
 ```bash
-PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "<VENV_PYTHON>" -c "
 from pathlib import Path
 import yaml, re
 cfg_path = Path('.millhouse/config.local.yaml')
@@ -418,7 +427,7 @@ initial rendering of `Home.md` and `_Sidebar.md` from `tasks.json`. The daemon
 creates `tasks.json` if absent and auto-renders both derived files on first access.
 
 ```bash
-PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "<VENV_PYTHON>" -c "
 from pathlib import Path
 from wiki import _client
 _client.list_tasks_brief(Path(r'<wiki-dir>').resolve())
@@ -436,10 +445,10 @@ The hub is always coloured `#2d7d46` so the operator can spot it instantly. mill
 | Present with different colour | Back up to `.vscode/settings.json.bak`, then overwrite. |
 | Present but no `titleBar.activeBackground` key | Back up to `.vscode/settings.json.bak`, then overwrite. |
 
-Render and write via `_vscode.write_settings`, then write `.vscode/tasks.json` (auto-opens a pwsh terminal on folder open) via `_vscode.write_tasks` — unconditionally, same idempotent-overwrite semantics as settings.json:
+Render and write via `_vscode.write_settings`, then write `.vscode/tasks.json` (auto-opens a terminal on folder open — `pwsh` on Windows, `$SHELL` on POSIX, via VS Code's native per-OS `windows`/`linux`/`osx` task keys) via `_vscode.write_tasks` — unconditionally, same idempotent-overwrite semantics as settings.json:
 
 ```bash
-PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "from pathlib import Path; import yaml; import _vscode; from _paths import resolve_short_name; cfg = yaml.safe_load(Path(r'<cwd>/mill-config.yaml').read_text(encoding='utf-8')); _vscode.write_settings(color_hex='#2d7d46', target=Path('.vscode/settings.json'), short_name=resolve_short_name(cfg, '<repo-name>')); _vscode.write_tasks(target=Path('.vscode/tasks.json'))"
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "<VENV_PYTHON>" -c "from pathlib import Path; import yaml; import _vscode; from _paths import resolve_short_name; cfg = yaml.safe_load(Path(r'<cwd>/mill-config.yaml').read_text(encoding='utf-8')); _vscode.write_settings(color_hex='#2d7d46', target=Path('.vscode/settings.json'), short_name=resolve_short_name(cfg, '<repo-name>')); _vscode.write_tasks(target=Path('.vscode/tasks.json'))"
 ```
 
 ### Phase 8 — Verify + report
@@ -454,9 +463,9 @@ Check every invariant; halt with a specific error if any fails:
 - Every hub junction (entries without `<SLUG>` from `mill-config.yaml`) exists and resolves to its expected target
 - `.gitignore` contains the mill-managed marker block with glob entries
 - `hub_relative_path:` is set in `.millhouse/config.local.yaml`
-- Every script in `_shortcuts.SHORTCUT_SCRIPTS` has a wrapper at `.millhouse/<script>.cmd` (and no legacy `.millhouse/<script>.py` or `.millhouse/<script>.ps1` exists)
-- `PYTHONPATH` user env var contains `<CLAUDE_PLUGIN_ROOT>/scripts` (verify via `PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "import _winenv; v=_winenv.get_user_env_var('PYTHONPATH'); assert v and '${CLAUDE_PLUGIN_ROOT}/scripts' in v, f'PYTHONPATH missing or incorrect: {v}'; print(f'OK: PYTHONPATH={v}')")`)
-- `MILL_PYTHON` in `~/.claude/settings.json` equals `${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe` (i.e. the cache venv — `CLAUDE_PLUGIN_ROOT` always resolves to the plugin cache, never the dev tree); verify via: `PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" -c "import json, os; from pathlib import Path; expected=str(Path(os.environ['CLAUDE_PLUGIN_ROOT'])/'.venv'/'Scripts'/'python.exe'); d=json.loads((Path.home()/'.claude'/'settings.json').read_text(encoding='utf-8')); actual=d['env']['MILL_PYTHON']; assert actual==expected,f'MILL_PYTHON wrong: {actual!r} != {expected!r}'; print(f'OK: MILL_PYTHON={actual}')"`
+- **Windows only:** every script in `_shortcuts.SHORTCUT_SCRIPTS` has a wrapper at `.millhouse/<script>.cmd` (and no legacy `.millhouse/<script>.py` or `.millhouse/<script>.ps1` exists). Skip this check entirely on POSIX — Phase 4.7 never runs there.
+- **Windows only:** `PYTHONPATH` user env var contains `<CLAUDE_PLUGIN_ROOT>/scripts` (verify via `PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "<VENV_PYTHON>" -c "import _winenv; v=_winenv.get_user_env_var('PYTHONPATH'); assert v and '${CLAUDE_PLUGIN_ROOT}/scripts' in v, f'PYTHONPATH missing or incorrect: {v}'; print(f'OK: PYTHONPATH={v}')")`). Skip this check entirely on POSIX.
+- `MILL_PYTHON` in `~/.claude/settings.json` equals `<VENV_PYTHON>` (i.e. the cache venv — `CLAUDE_PLUGIN_ROOT` always resolves to the plugin cache, never the dev tree); verify via: `PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "<VENV_PYTHON>" -c "import json, os; from pathlib import Path; venv=Path(os.environ['CLAUDE_PLUGIN_ROOT'])/'.venv'; expected=str(venv/'Scripts'/'python.exe') if os.name=='nt' else str(venv/'bin'/'python'); d=json.loads((Path.home()/'.claude'/'settings.json').read_text(encoding='utf-8')); actual=d['env']['MILL_PYTHON']; assert actual==expected,f'MILL_PYTHON wrong: {actual!r} != {expected!r}'; print(f'OK: MILL_PYTHON={actual}')"` (runs and applies on both platforms)
 - `.millhouse/config.local.yaml` exists
 - Wiki daemon starts successfully: `_client.list_tasks_brief(wiki_path)` returns without error and Home.md exists in the wiki clone.
 - `.vscode/settings.json` exists with `titleBar.activeBackground == "#2d7d46"`
@@ -475,9 +484,9 @@ mill-setup complete.
   hub_relative_path: <hub_subpath>
   Tasks (Home):      <WIKI_PATH>/Home.md  (hardlinked as tasks.md)
   Sidebar:           <WIKI_PATH>/_Sidebar.md
-  VS Code:           .vscode/settings.json (titleBar = #2d7d46 green), .vscode/tasks.json (auto pwsh terminal)
-  Shortcut wrappers: N .cmd scripts under .millhouse/
-  PYTHONPATH (User): <scripts>
+  VS Code:           .vscode/settings.json (titleBar = #2d7d46 green), .vscode/tasks.json (auto terminal, per-OS)
+  Shortcut wrappers: N .cmd scripts under .millhouse/ (Windows only — omit this line on POSIX)
+  PYTHONPATH (User): <scripts> (Windows only — omit this line on POSIX)
   MILL_PYTHON:       <python-path>
 
 Junctions (from mill-config.yaml):
@@ -493,7 +502,7 @@ Next: /mill-add <slug> --title "..." [--summary "..."] [--proposal-body "..."] t
 
 | Condition | Action |
 |---|---|
-| `uv --version` fails | Halt with install instruction: `irm https://astral.sh/uv/install.ps1 | iex` |
+| `uv --version` fails | Halt with install instruction: `irm https://astral.sh/uv/install.ps1 | iex` (Windows) or `curl -LsSf https://astral.sh/uv/install.sh | sh` (POSIX) |
 | `git ls-remote <wiki-url>` fails | Halt with GitHub URL + instruction to create Home page |
 | `<wiki-dir>` exists but not a git repo | Halt — never overwrite user data |
 | `clone_or_init` raises `WikiSetupError` (dest is not a git repo / URL mismatch / branch mismatch / clone or init failure) | Halt with the exception message verbatim. The helper's message names the offending paths; instruct the user to fix manually. |
@@ -517,7 +526,7 @@ Every phase checks current state before acting. Re-running after a partial or co
 - `Home.md` non-empty (and v2-shape or user-custom) → skipped; only GitHub-default content is overwritten.
 - `_Sidebar.md` regenerated unconditionally; commit only if bytes changed.
 - `.vscode/settings.json` already green → skipped.
-- PYTHONPATH user env var re-set to the current latest plugin version on every run.
+- PYTHONPATH user env var re-set to the current latest plugin version on every run (Windows only; Phase 4.7 is a no-op on POSIX).
 - Phase 4.8 is idempotent: compares existing `.env.MILL_PYTHON` against computed value; writes only if they differ.
 
 A second `/mill-setup` run on a fully-set-up clone makes no changes and prints the same summary block.

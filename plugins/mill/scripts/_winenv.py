@@ -1,6 +1,11 @@
 """
 Windows registry utilities for environment variable operations.
 
+Windows-only: both functions raise RuntimeError on any other platform.
+mill-setup Phase 4.7 (the only caller) is gated to skip this module on
+POSIX, where every mill script receives PYTHONPATH inline per invocation
+instead of relying on a persistent user-level environment variable.
+
 Exports
 -------
 set_user_env_var(name: str, value: str) -> bool
@@ -13,7 +18,20 @@ get_user_env_var(name: str) -> str | None
 """
 from __future__ import annotations
 
-import winreg
+import sys
+
+try:
+    import winreg
+except ImportError:  # POSIX: module stays importable, calls raise instead.
+    winreg = None  # type: ignore[assignment]
+
+
+def _require_windows() -> None:
+    if winreg is None:
+        raise RuntimeError(
+            "_winenv is Windows-only (uses the registry via winreg); "
+            f"not available on {sys.platform}."
+        )
 
 
 def set_user_env_var(name: str, value: str) -> bool:
@@ -33,6 +51,7 @@ def set_user_env_var(name: str, value: str) -> bool:
     Returns:
         True if the value was written; False if it was already correct.
     """
+    _require_windows()
     key = winreg.CreateKeyEx(
         winreg.HKEY_CURRENT_USER,
         "Environment",
@@ -105,6 +124,7 @@ def get_user_env_var(name: str) -> str | None:
     Returns:
         The value string, or None if not set.
     """
+    _require_windows()
     key = winreg.CreateKeyEx(
         winreg.HKEY_CURRENT_USER,
         "Environment",
