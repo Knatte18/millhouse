@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: posix-cross-platform-port
 branch: hanf/posix-cross-platform-port
 plan: _mill/plan
@@ -24,4 +24,13 @@ plan-review-r2  '2026-07-13T08:46:57Z'
 plan-fix-r2  '2026-07-13T08:46:57Z'
 plan-fix-r3  '2026-07-13T09:14:02Z'
 planned  '2026-07-13T09:14:19Z'
+implementing  '2026-07-13T09:22:12Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: posix-portability-fixes
+    state: pending
 ```
