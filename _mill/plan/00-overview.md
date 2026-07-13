@@ -3,7 +3,7 @@
 ```yaml
 task: "Port mill to POSIX, not just Windows"
 slug: "posix-cross-platform-port"
-approved: false
+approved: true
 started: "20260713-083239"
 parent: "hanf/linux-port-more"
 root: ""
@@ -53,7 +53,8 @@ batches:
 ### Decision: bootstrap-test-port-dropped
 
 - **Decision:** Do NOT port `plugins/mill/integration_tests/test-bootstrap.ps1`
-  to a `.sh` counterpart. The discussion listed this as in-scope, but planning
+  to a `.sh` counterpart. **This decision consciously reverses the discussion's
+  Scope entry and Q&A auto-pick that added `test-bootstrap.sh`** — planning
   investigation found the premise obsolete: `test-bootstrap.ps1` is a Layer-01,
   pre-daemon test that drives a removed script (`millpy-list.py`), the removed
   `_sidebar.regenerate` seed step, and the old one-arg `_shortcuts.write_all`

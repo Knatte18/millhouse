@@ -49,7 +49,9 @@ change is safe.
   canonical dual-existence idiom documented in `mill-setup/SKILL.md:74`
   (`test -f ".../.venv/bin/python" && echo ... || echo ...`). Do not change the
   surrounding `uv sync` body, the echo strings, or the `HALT` messages. Keep the
-  two blocks identical to each other after the edit.
+  four replaced test lines identical in wording (indentation aside) -- the
+  per-batch block sits at column 0 and the holistic block is indented inside a
+  numbered list, so only the test wording must match, not the leading whitespace.
 - **Commit:** `fix(mill-go): make venv-existence check POSIX-aware`
 
 ### Card 2: Add venv-check regression guard to test-guards.py
