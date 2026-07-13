@@ -32,5 +32,7 @@ implementing  '2026-07-13T09:22:12Z'
 ```yaml
 batches:
   - name: posix-portability-fixes
-    state: pending
+    state: running
+    implementer_session: d8b17f51-36f2-4f04-b927-39b2b999fb09
+    start_sha: 9dc718883534d3e2770b9badf2f1573a649cf292
 ```
