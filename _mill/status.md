@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussion-fix-r1
+phase: discussed
 slug: posix-cross-platform-port
 branch: hanf/posix-cross-platform-port
 plan: null
@@ -16,4 +16,5 @@ task_description: |
 ```text
 discussing  '2026-07-13T08:13:32Z'
 discussion-fix-r1  '2026-07-13T08:28:20Z'
+discussed  '2026-07-13T08:28:36Z'
 ```
