@@ -79,8 +79,10 @@ change is safe.
   the discussion's Regression-guard decision; note that in a short comment above
   the function. Wire the new check into `main()` with
   `rc |= _check_no_windows_only_venv_check()` after the existing four. Add a
-  bullet for the new check to the module-level docstring's `Checks:` list.
-  Keep all added text ASCII-only (no unicode arrows). After this card,
+  bullet for the new check to the module-level docstring's `Checks:` list, AND
+  update the docstring header sentence "Four checks bundled into one test file"
+  (near line 3) to "Five checks bundled into one test file" so the count prose
+  matches. Keep all added text ASCII-only (no unicode arrows). After this card,
   `mill-setup/SKILL.md` and the Card-1-fixed `mill-go/SKILL.md` (both contain
   `.venv/bin/python`) must PASS.
 - **Commit:** `test(guards): guard against Windows-only venv-existence checks in skills`
@@ -122,7 +124,7 @@ change is safe.
   `write_tasks` behavior. Keep the text ASCII-only.
 - **Commit:** `docs(vscode): drop stale pwsh wording from _vscode.py comments`
 
-### Card 5: Note POSIX invocation in mill-wiki-push SKILL
+### Card 5: Correct wrapper reference in mill-wiki-push SKILL
 
 - **Context:**
   - `plugins/mill/scripts/_shortcuts.py`
@@ -132,15 +134,19 @@ change is safe.
 - **Deletes:** none
 - **Moves:** none
 - **Requirements:** `plugins/mill/skills/mill-wiki-push/SKILL.md:12` states the
-  script "can also be run manually from `.millhouse/millpy-wikipush.ps1`". That
-  `.ps1` shortcut is generated only by the Windows-only wrapper step
-  (`_shortcuts.py`, invoked by `mill-setup` Phase 4.7, which is skipped on
-  POSIX), so it does not exist on Linux/macOS. Add a short parenthetical to that
-  sentence noting that on POSIX there is no `.ps1` wrapper and the operator runs
-  `millpy-wikipush.py` directly (same inline `PYTHONPATH=`/`$MILL_PYTHON` form
-  shown in the `## Run it` block just below). Do not remove the Windows
-  `.ps1` mention. Keep the text ASCII-only.
-- **Commit:** `docs(wiki-push): note POSIX direct-invocation alongside the .ps1 wrapper`
+  script "can also be run manually from `.millhouse/millpy-wikipush.ps1`". This
+  is stale on two counts: `_shortcuts.py` renders `.cmd` wrappers and explicitly
+  `unlink`s any legacy `.ps1` (see its module docstring and the `.ps1` unlink at
+  the end of `write_all`), so a `.ps1` wrapper exists on no platform — the
+  Windows wrapper is `millpy-wikipush.cmd`; and those wrappers are generated only
+  by the Windows-only wrapper step (`mill-setup` Phase 4.7, skipped on POSIX), so
+  no wrapper exists on Linux/macOS at all. Reword the sentence so it names the
+  correct Windows wrapper `.millhouse/millpy-wikipush.cmd` (not `.ps1`) and adds
+  that on POSIX there is no wrapper — the operator runs `millpy-wikipush.py`
+  directly (the same inline `PYTHONPATH=`/`$MILL_PYTHON` form shown in the
+  `## Run it` block just below). Do NOT leave any `.ps1` reference in the
+  sentence. Keep the text ASCII-only.
+- **Commit:** `docs(wiki-push): fix stale .ps1 wrapper ref (now .cmd) and note POSIX invocation`
 
 ## Batch Tests
 

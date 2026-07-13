@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-fix-r1
+phase: plan-fix-r2
 slug: posix-cross-platform-port
 branch: hanf/posix-cross-platform-port
 plan: _mill/plan
@@ -20,4 +20,6 @@ discussed  '2026-07-13T08:28:36Z'
 planning  '2026-07-13T08:37:00Z'
 plan-review-r1  '2026-07-13T08:44:08Z'
 plan-fix-r1  '2026-07-13T08:44:08Z'
+plan-review-r2  '2026-07-13T08:46:57Z'
+plan-fix-r2  '2026-07-13T08:46:57Z'
 ```
