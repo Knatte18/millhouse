@@ -1,10 +1,10 @@
 # Status
 
 ```yaml
-phase: discussed
+phase: planning
 slug: posix-cross-platform-port
 branch: hanf/posix-cross-platform-port
-plan: null
+plan: _mill/plan
 parent: hanf/linux-port-more
 task: Port mill to POSIX, not just Windows
 task_description: |
@@ -17,4 +17,5 @@ task_description: |
 discussing  '2026-07-13T08:13:32Z'
 discussion-fix-r1  '2026-07-13T08:28:20Z'
 discussed  '2026-07-13T08:28:36Z'
+planning  '2026-07-13T08:37:00Z'
 ```
