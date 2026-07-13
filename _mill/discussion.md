@@ -52,7 +52,12 @@ supported skills.
   (mill-add produces a single commit touching `Home.md` + `_Sidebar.md`, sidebar
   contains the new task, mill-list prints it back) is runnable on Linux/macOS.
   Uses `.scratch/` for the throwaway wiki+hub pair, never `$env:TEMP`/`/tmp`
-  (per `conversation/SKILL.md`). Keep the `.ps1` for Windows.
+  (per `conversation/SKILL.md`). Keep the `.ps1` for Windows. **Preconditions:**
+  the `.sh` port drives real scripts via a real synced venv and real `git`, the
+  same preconditions as the `.ps1` — it assumes `uv`/venv and `git` are present
+  on the runner. It is a manual integration test (not in `run-all.py`); if a
+  prerequisite is missing it must **fail loudly** (nonzero exit with a clear
+  message naming the missing tool), never silently skip or report a false pass.
 - **Stale doc mentions.** `_vscode.py:27` and `_vscode.py:123` docstrings still
   say the tasks.json "auto-opens a pwsh terminal on folder open"; the template
   now uses per-OS `${env:SHELL}`. Correct the comments to be OS-neutral.
@@ -60,11 +65,20 @@ supported skills.
   manual invocation path — that wrapper is a Windows-only shortcut created by the
   Windows-only wrapper step (`_shortcuts.py`, skipped on POSIX). Add a
   parenthetical that on POSIX the operator runs `millpy-wikipush.py` directly.
-- **Regression guard (light).** Add a `test-guards.py` check that any SKILL.md
-  line referencing `.venv/Scripts/python.exe` must also reference
-  `.venv/bin/python` somewhere in the same file, so a future Windows-only venv
-  check cannot silently reintroduce the `mill-go` bug. `mill-setup` and the
-  fixed `mill-go` both satisfy this.
+- **Regression guard (light).** Add a `test-guards.py` check that flags any
+  SKILL.md venv-existence check (a shell `[ ! -f … .venv/Scripts/python.exe ]`
+  test, or the equivalent `test -f … Scripts/python.exe`) that is not paired
+  with a `.venv/bin/python` test in the same block, so a future Windows-only
+  venv check cannot silently reintroduce the `mill-go` bug. This is a **coarse
+  per-file tripwire**, not a per-block proof: it is scoped to the venv-existence
+  idiom specifically (matching on the `Scripts/python.exe` existence-test text)
+  rather than any mention of the string, so a doc that merely *names* the
+  Windows path in prose does not trip it. Accepted as sufficient for the two
+  known files (`mill-setup`, fixed `mill-go`); if the guard proves awkward to
+  scope to the idiom, the fallback is the simpler per-file rule (any line naming
+  `Scripts/python.exe` must also name `bin/python` in the same file) with a
+  comment stating its coarseness. `mill-setup` and the fixed `mill-go` both
+  satisfy either form.
 
 **Out:**
 
@@ -212,7 +226,10 @@ supported skills.
 - **`test-bootstrap.sh`:** the port *is* the test — run it on this Linux machine
   and confirm it passes (single commit, sidebar contains task, mill-list output).
   It is an integration test (`plugins/mill/integration_tests/`), run manually,
-  not part of `run-all.py`.
+  not part of `run-all.py`. Assumes a synced venv + `git` present (same
+  preconditions as the `.ps1`); on a missing prerequisite it exits nonzero with
+  a message rather than skipping — a silent skip that looks like a pass is the
+  failure mode to avoid.
 - **Doc fixes (`_vscode.py`, `mill-wiki-push/SKILL.md`):** no behavioral test;
   the guard suite (`test-guards.py`) must stay green after edits.
 - **Whole-suite gate:** `plugins/mill/unit_tests/run-all.py` must stay green
