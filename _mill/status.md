@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-reviewing
+phase: holistic-fixing
 slug: posix-cross-platform-port
 branch: hanf/posix-cross-platform-port
 plan: _mill/plan
@@ -27,6 +27,7 @@ planned  '2026-07-13T09:14:19Z'
 implementing  '2026-07-13T09:22:12Z'
 approved-posix-portability-fixes  '2026-07-13T09:29:56Z'
 holistic-reviewing  '2026-07-13T09:30:19Z'
+holistic-fixing  '2026-07-13T09:31:52Z'
 ```
 
 ## Batches
