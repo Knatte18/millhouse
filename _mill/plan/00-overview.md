@@ -23,11 +23,6 @@ batches:
     file: 01-posix-portability-fixes.md
     depends-on: []
     verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/test-guards.py
-  - number: 2
-    name: bootstrap-posix-test
-    file: 02-bootstrap-posix-test.md
-    depends-on: []
-    verify: PYTHONPATH= bash -n plugins/mill/integration_tests/test-bootstrap.sh
 ```
 
 ## Shared Decisions
@@ -55,13 +50,26 @@ batches:
 - **Rationale:** cross-platform stdout safety; also keeps the guard suite green.
 - **Applies to:** all batches
 
-### Decision: no-tmp-use-scratch
+### Decision: bootstrap-test-port-dropped
 
-- **Decision:** Ephemeral test fixtures go under `.scratch/` (gitignored), never
-  `/tmp`, `$env:TEMP`, or any system temp dir.
-- **Rationale:** `conversation/SKILL.md` File Writing rule; avoids Windows
-  permission prompts and matches the `.millhouse/` isolation model.
-- **Applies to:** bootstrap-posix-test
+- **Decision:** Do NOT port `plugins/mill/integration_tests/test-bootstrap.ps1`
+  to a `.sh` counterpart. The discussion listed this as in-scope, but planning
+  investigation found the premise obsolete: `test-bootstrap.ps1` is a Layer-01,
+  pre-daemon test that drives a removed script (`millpy-list.py`), the removed
+  `_sidebar.regenerate` seed step, and the old one-arg `_shortcuts.write_all`
+  signature asserting `.ps1` wrappers. The current wiki is daemon-based
+  (`millpy-add` goes through `wiki/_client`), and the equivalent
+  "mill-add against a throwaway wiki+hub" coverage already exists POSIX-natively
+  in `plugins/mill/integration_tests/test-wiki-e2e.py` (pure Python, uses
+  `.scratch/`, runs on Linux/macOS today), alongside `test-wiki-concurrency.py`
+  and `test-wiki-daemon-tinydb.py`. Porting the `.ps1` would resurrect an
+  architecturally-dead scenario as a redundant shell duplicate — not a
+  portability fix. This is flagged at handoff; the operator can re-add the port
+  as a separate integration-test-modernization task if a shell-level smoke is
+  genuinely wanted.
+- **Rationale:** YAGNI + "challenge the problem" — the portable coverage the
+  `.ps1` was meant to provide already exists and is not Windows-locked.
+- **Applies to:** whole task (scope exclusion)
 
 ### Decision: python-verify-isolation-prefix
 
@@ -77,7 +85,6 @@ batches:
 ## All Files Touched
 
 - `.claude/settings.json`
-- `plugins/mill/integration_tests/test-bootstrap.sh`
 - `plugins/mill/scripts/_vscode.py`
 - `plugins/mill/skills/mill-go/SKILL.md`
 - `plugins/mill/skills/mill-wiki-push/SKILL.md`
