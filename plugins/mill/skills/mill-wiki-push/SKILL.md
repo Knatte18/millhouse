@@ -9,7 +9,7 @@ description: commit and push manual wiki edits, resolving rebase conflicts on th
 
 Commits every local change in the wiki repo (config.yaml, proposal-*.md, Home.md, etc.) with an auto-generated message and pushes. If the push is rejected and the rebase produces a conflict, this skill resolves the conflict and continues.
 
-The underlying script (`millpy-wikipush.py`) can also be run manually from `.millhouse/millpy-wikipush.ps1`. In that path it aborts cleanly on conflict ("no harm done") and instructs the operator to invoke this skill — that's why the skill passes `--leave-conflicts`: the wiki is left mid-rebase so the LLM can resolve and continue.
+The underlying script (`millpy-wikipush.py`) can also be run manually from `.millhouse/millpy-wikipush.cmd` on Windows (that wrapper is generated only by mill-setup's Windows-only Phase 4.7 step); on POSIX (Linux/macOS) there is no wrapper — run `millpy-wikipush.py` directly, using the same inline `PYTHONPATH=`/`$MILL_PYTHON` form shown in the `## Run it` block below. Run manually, it aborts cleanly on conflict ("no harm done") and instructs the operator to invoke this skill — that's why the skill passes `--leave-conflicts`: the wiki is left mid-rebase so the LLM can resolve and continue.
 
 ## Run it
 
