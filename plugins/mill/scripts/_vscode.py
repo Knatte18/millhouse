@@ -24,9 +24,10 @@ Public API:
         directories as needed. Overwrites unconditionally — caller is
         responsible for any backup or skip decisions.
     write_tasks(target)
-        Copy the static tasks.json (auto-opening pwsh terminal on folder
-        open) to ``target``, creating parent directories as needed.
-        Overwrites unconditionally, same as write_settings.
+        Copy the static tasks.json (auto-opening a terminal, via the OS
+        default shell, on folder open) to ``target``, creating parent
+        directories as needed. Overwrites unconditionally, same as
+        write_settings.
 """
 from __future__ import annotations
 
@@ -120,8 +121,9 @@ def write_settings(
 
 def write_tasks(target: Path) -> None:
     """
-    Copy the static tasks.json (auto-opens a pwsh terminal on folder open)
-    to ``target``, creating parent directories as needed.
+    Copy the static tasks.json (auto-opens a terminal, via the OS default
+    shell, on folder open) to ``target``, creating parent directories as
+    needed.
 
     No token substitution — the task content is identical across the hub
     and every worktree. Overwrites unconditionally, same as write_settings.

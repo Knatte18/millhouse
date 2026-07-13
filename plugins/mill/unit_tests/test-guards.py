@@ -1,7 +1,7 @@
 """Source-tree guards: regressions against documented anti-patterns.
 
-Four checks bundled into one test file so we pay Python startup + import
-overhead once instead of four times. Each check scans `plugins/mill/` (and
+Five checks bundled into one test file so we pay Python startup + import
+overhead once instead of five times. Each check scans `plugins/mill/` (and
 `plugins/codeguide/` for the wiki-cwd check) for forbidden patterns and
 returns FAIL with line numbers on hit.
 
@@ -20,6 +20,12 @@ Checks:
   - anti_weakening_guardrail -- assert the anti-weakening guardrail is present
                           in both implementer-brief.md and mill-implementer.md
                           (#492).
+  - no_windows_only_venv_check -- no SKILL.md that probes only the Windows
+                          venv (`.venv/Scripts/python.exe`) without also
+                          containing the POSIX counterpart
+                          (`.venv/bin/python`) anywhere in the same file.
+                          POSIX-only worktrees must not HALT on a venv-check
+                          idiom that only recognizes Windows.
 
 Each previously lived in its own test-no-*.py file. Consolidated 2026-05-28
 to reduce suite startup overhead (#388).
@@ -235,6 +241,55 @@ def _check_anti_weakening_guardrail() -> int:
 
 
 # --------------------------------------------------------------------------- #
+# Check 5: no_windows_only_venv_check                                         #
+# --------------------------------------------------------------------------- #
+
+_WINDOWS_VENV_CHECK_PATTERN = re.compile(
+    r"(\[\s*!?\s*-f|test\s+-f)[^\n]*\.venv/Scripts/python\.exe"
+)
+
+_POSIX_VENV_SUBSTRING = ".venv/bin/python"
+
+
+def _check_no_windows_only_venv_check() -> int:
+    """
+    Return 0 on PASS, 1 on FAIL.
+
+    Coarse per-file tripwire, not a per-block proof (per the discussion's
+    Regression-guard decision): a file is flagged if it contains any
+    shell file-existence test against the Windows venv path but never
+    mentions the POSIX venv path anywhere else in the file. This does not
+    verify the two probes are paired within the same if-block -- it only
+    catches the file-level absence of a POSIX branch entirely.
+    """
+    findings: list[tuple[str, int, str]] = []
+
+    for file in sorted((MILL_DIR / "skills").rglob("SKILL.md")):
+        rel = file.relative_to(HUB).as_posix()
+        text = file.read_text(encoding="utf-8")
+        lines = text.split("\n")
+        matches = [
+            (lineno, line_text)
+            for lineno, line_text in enumerate(lines, start=1)
+            if _WINDOWS_VENV_CHECK_PATTERN.search(line_text)
+        ]
+        if not matches:
+            continue
+        if _POSIX_VENV_SUBSTRING in text:
+            continue
+        for lineno, line_text in matches:
+            findings.append((rel, lineno, line_text.strip()))
+
+    if findings:
+        for rel, lineno, line_text in findings:
+            print(f"FAIL: {rel}:{lineno}: Windows-only venv-existence check: {line_text}")
+        return 1
+
+    print("PASS: no Windows-only venv-existence checks in plugins/mill/skills/")
+    return 0
+
+
+# --------------------------------------------------------------------------- #
 # Entry                                                                       #
 # --------------------------------------------------------------------------- #
 
@@ -244,6 +299,7 @@ def main() -> int:
     rc |= _check_no_unicode_arrow()
     rc |= _check_no_wiki_cwd()
     rc |= _check_anti_weakening_guardrail()
+    rc |= _check_no_windows_only_venv_check()
     return rc
 
 
