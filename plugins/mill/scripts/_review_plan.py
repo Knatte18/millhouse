@@ -557,6 +557,7 @@ def finalize(
     project_root: Path,
     wiki_root: Path,
     git_root: Path,
+    actual_model: str | None = None,
 ) -> dict:
     """Finalize a plan review for a single scope; return a review entry dict.
 
@@ -565,6 +566,10 @@ def finalize(
         scope: Batch name or None for holistic.
         round_n: Round number.
         reviews_dir: Directory where review files are stored.
+        actual_model: The model that actually produced this review, used to
+            correct an unreliable self-reported ``reviewer_model:`` line
+            before verdict parsing or disk write; passed through to
+            ``finalize_scope`` on the success path only.
 
     Returns:
         Review entry dict for aggregation: {"scope", "round", "verdict", "blocking_count", "file", "session_id"}.
@@ -573,7 +578,7 @@ def finalize(
 
     try:
         review_entry = finalize_scope(
-            reviews_dir, "plan", round_n, raw_text, scope=scope
+            reviews_dir, "plan", round_n, raw_text, scope=scope, actual_model=actual_model
         )
     except ReviewError as exc:
         path = write_review_file(
