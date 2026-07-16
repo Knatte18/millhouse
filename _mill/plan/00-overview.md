@@ -3,7 +3,7 @@
 ```yaml
 task: "Miscellaneous small tooling and doc/template accuracy gaps"
 slug: mill-misc-tooling-and-docs-gaps
-approved: false
+approved: true
 started: "20260716-133957"
 parent: hanf/linux-port-more
 root: ""

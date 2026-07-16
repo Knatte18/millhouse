@@ -24,7 +24,8 @@ External interface for later batches: none.
 
 ### Card 10: correct the "All Files Touched" section's stated role
 
-- **Context:** none
+- **Context:**
+  - `plugins/mill/scripts/_plan_validate.py`
 - **Edits:**
   - `plugins/mill/templates/plan-overview.md`
 - **Creates:** none

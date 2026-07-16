@@ -42,10 +42,10 @@ self-contained and does not export anything another batch consumes.
   no defined ordering); otherwise resolves the model family by calling
   `_agent_dispatch.model_to_tier(spec["model"])` (import `_agent_dispatch` locally inside
   `tier_rank`, e.g. `import _agent_dispatch` as the function's first line — NOT a top-level
-  module import — this avoids closing an import cycle: `_reviewers -> _agent_dispatch ->
-  _review_common -> _reviewers`; `_review_common` only references `_reviewers` inside
-  function bodies today, so a top-level import here would be fragile against any future
-  top-level use in that cycle) inside a `try/except ValueError: return None` guard (an
+  module import — this avoids closing an already-live import cycle: `_review_common.py:66`
+  has a top-level `import _reviewers`, so `_agent_dispatch -> _review_common -> _reviewers`
+  already exists at import time; a top-level `import _agent_dispatch` added here would close
+  that cycle directly, not merely risk one) inside a `try/except ValueError: return None` guard (an
   unrecognized model family is also "not comparable"); on success,
   returns `(_TIER_RANK[family], _EFFORT_RANK.get(spec.get("effort"), 0))` — the `.get(...,
   0)` default means a spec with no `"effort"` key at all (e.g. the shipped `haiku`/
