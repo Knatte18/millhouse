@@ -1,10 +1,10 @@
 # Status
 
 ```yaml
-phase: discussed
+phase: planning
 slug: mill-go-agent-dispatch-reliability-gaps
 branch: hanf/mill-go-agent-dispatch-reliability-gaps
-plan: null
+plan: _mill/plan
 parent: hanf/linux-port-more
 task: 'Agent-mode dispatch: envelope fields and session/runtime state are unreliable'
 task_description: |
@@ -16,4 +16,5 @@ task_description: |
 ```text
 discussing  '2026-07-16T13:19:13Z'
 discussed  '2026-07-16T13:50:03Z'
+planning  '2026-07-16T13:57:34Z'
 ```
