@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-integration-test-coverage
+phase: holistic-reviewing
 slug: mill-merge-stacked-branch-status-corruption
 branch: hanf/mill-merge-stacked-branch-status-corruption
 plan: _mill/plan
@@ -26,6 +26,7 @@ approved-parent-branch-identity  '2026-07-16T11:29:33Z'
 approved-finalize-step3-restore  '2026-07-16T11:32:33Z'
 approved-merge-slug-check-and-pathspec  '2026-07-16T11:35:05Z'
 approved-integration-test-coverage  '2026-07-16T12:03:04Z'
+holistic-reviewing  '2026-07-16T12:03:32Z'
 ```
 
 ## Batches
