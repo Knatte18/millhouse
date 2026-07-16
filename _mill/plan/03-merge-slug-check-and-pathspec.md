@@ -54,10 +54,17 @@ behavior end-to-end.
   - In `## Entry`, step 5 ("Phase gate -- also the re-entry point for PR-path
     recovery"), the paragraph "Try `_mill/status.md` first. If `status_path.exists()`,
     read `phase:` from it and apply the table below." gets a slug check inserted between
-    confirming existence and reading `phase:`: after `status_path.exists()` is true, call
-    `_status.read_slug(status_path)` and compare its return value against `slug` (the
-    already-resolved `active_data['slug']` from Entry Step 1).
-  - If the slugs do NOT match: do not read `phase:` from the table below at all. Instead,
+    confirming existence and reading `phase:`: after `status_path.exists()` is true, read
+    the raw `slug:` field via `_status.read_full(status_path)["yaml"].get("slug")` --
+    NOT `_status.read_slug()`, which falls back to `status_path.parent.name` (always
+    literally `_mill` in this layout) when the field is absent, so it can never tell
+    "field absent" apart from "field present and different"; reading the raw field keeps
+    this check's absent-field semantics consistent with Card 1's `expected_slug` check in
+    `_parent_branch.py` (absent `slug:` row is a no-op there, not a mismatch). Compare the
+    result against `slug` (the already-resolved `active_data['slug']` from Entry Step 1)
+    ONLY when the raw field is not `None`.
+  - If the raw `slug:` field is present AND does not match `slug`: do not read `phase:`
+    from the table below at all. Instead,
     fall through to the exact branch this step already documents for "If `status_path` is
     absent": call `task = _client.get_task(wiki_path, slug)`, apply the existing `task is
     None` halt guard, and the existing `task["status"] == "pr-pending"` / else-halt

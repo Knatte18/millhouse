@@ -34,23 +34,33 @@ the behavior under test matches what is actually shipped by the time this batch 
   - In `main()`'s flat-hub scenario, `hub` and `worktree` (from `_setup_trio`) are
     genuinely separate directories -- this is the true worktree-mode layout #648 was
     reported against, unlike `_setup_nested_hub_scenario`'s same-directory
-    branch-switching. Between the existing `git -C str(hub) merge --squash child_branch`
-    call and the following `git -C str(hub) commit -m "Demo merge"` call (currently
-    back-to-back, with no restore step in between), insert two sub-steps:
+    branch-switching. `_setup_trio`'s `hub` has no `_mill/` at all on `main`, and a bare
+    `git checkout -- <pathspec>` fails with `pathspec '... did not match any file(s)
+    known to git` when the target ref has nothing there -- independent of the
+    worktree-mode bug this card targets -- so seed `hub`'s `main` branch with its own
+    trivial `_mill/status.md` (distinct placeholder content, e.g. `phase: done\ntask:
+    Unrelated hub task\n`) committed on `main` BEFORE the squash, so the restore
+    commands have something real to act on and to protect.
+  - Between the existing `git -C str(hub) merge --squash child_branch` call and the
+    following `git -C str(hub) commit -m "Demo merge"` call (currently back-to-back,
+    with no restore step in between), insert two sub-steps:
     1. **Repro the bug first:** run `git -C str(hub) reset -q HEAD --
+       str(worktree / "_mill")` and `git -C str(hub) checkout --
        str(worktree / "_mill")` (the OLD absolute, child-worktree-anchored form) and
-       assert its return code is non-zero and its combined stdout+stderr contains
+       assert BOTH return codes are non-zero and their combined stdout+stderr contains
        `"outside repository"` -- this proves the fixture actually reproduces #648's
-       failure before proving the fix resolves it. Since this command fails, it never
-       reaches the index/working tree, so no cleanup or reset of `hub`'s state is needed
-       before the next sub-step.
+       failure (an out-of-repo absolute pathspec is rejected before any pathspec-match
+       check runs, so this holds regardless of the seeded content) before proving the
+       fix resolves it. Since both commands fail, they never touch the index/working
+       tree, so no cleanup of `hub`'s state is needed before the next sub-step.
     2. **Prove the fix:** run `git -C str(hub) reset -q HEAD -- "_mill"` and `git -C
        str(hub) checkout -- "_mill"` (the corrected repo-relative form from Batch 3 Card
        8) and assert both exit 0.
-  - `_setup_trio`'s `hub` has no `_mill/` at all on `main`, so this restore step is
-    inherently a content no-op -- the assertion is purely that the corrected commands
-    succeed rather than failing "outside repository", which is the entirety of #648's
-    reported bug.
+  - After the fix sub-step and the subsequent `git -C str(hub) commit -m "Demo merge"`,
+    assert `hub`'s `_mill/status.md` on disk still exactly matches the placeholder
+    content seeded above (byte-identical) -- mirroring `_setup_nested_hub_scenario`'s
+    existing "parent's own status.md survives the squash" assertion, but this time in
+    the true separate-worktree layout that assertion never actually covered.
 - **Commit:** `test(mill): add true worktree-mode repro+fix coverage for #648`
 
 ### Card 11: Add phase-gate slug-mismatch fallback scenario
@@ -75,8 +85,13 @@ the behavior under test matches what is actually shipped by the time this batch 
   - Mirror mill-merge's corrected Entry Step 5 phase-gate logic directly as plain test
     code (this logic is orchestration prose in SKILL.md, not an importable function, so
     the test replicates the same two-call sequence Batch 3 Card 7 now documents): call
-    `_status.read_slug(worktree / "_mill" / "status.md")` and assert it does NOT equal
-    `slug` (`"demo-merge"`); then call `wiki.get_task(wiki_path, slug)` (reusing the
+    `_status.read_full(worktree / "_mill" / "status.md")["yaml"].get("slug")` and assert
+    the returned value is not `None` and does NOT equal `slug` (`"demo-merge"`) --
+    reading the raw field (not `_status.read_slug`, which falls back to the parent
+    directory name -- always literally `"_mill"` -- when the field is absent, so it can
+    never distinguish "absent" from "present and different" the way Card 1's
+    `expected_slug` check does; reading the raw field keeps this test's mirror faithful
+    to Card 7's corrected semantics). Then call `wiki.get_task(wiki_path, slug)` (reusing the
     already-registered `demo-merge` task from `_setup_trio`'s `wiki.upsert_task` call) and
     assert the returned dict's `status` field reflects `demo-merge`'s real state -- not
     the foreign task's `phase: discussing` -- proving the documented wiki-fallback path

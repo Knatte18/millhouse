@@ -3,7 +3,7 @@
 ```yaml
 task: "mill-finalize/mill-merge corrupt or mishandle _mill/status.md and task_dir on stacked branches"
 slug: mill-merge-stacked-branch-status-corruption
-approved: false
+approved: true
 started: "20260716-111113"
 parent: "hanf/linux-port-more"
 root: ""
