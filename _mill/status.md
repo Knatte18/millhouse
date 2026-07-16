@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-go-batch-verify-baseline-reliability
 branch: hanf/mill-go-batch-verify-baseline-reliability
 plan: _mill/plan
@@ -20,4 +20,23 @@ discussed  '2026-07-16T11:29:59Z'
 planning  '2026-07-16T11:40:37Z'
 plan-fix-r1  '2026-07-16T11:49:04Z'
 planned  '2026-07-16T11:49:14Z'
+implementing  '2026-07-16T12:02:28Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: completeness-recount-cards-done
+    state: pending
+  - name: batch-verify-list-validation
+    state: pending
+  - name: done-gate-baseline-preflight
+    state: pending
+  - name: windows-long-path-mitigation
+    state: pending
+  - name: go-build-tag-retiering-check
+    state: pending
+  - name: finalize-timeout-guidance-generalization
+    state: pending
 ```
