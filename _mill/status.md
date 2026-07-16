@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-psmux-cleanup-crash
+phase: approved-wiki-daemon-json-noise
 slug: mill-orchestration-crash-hardening
 branch: hanf/mill-orchestration-crash-hardening
 plan: _mill/plan
@@ -23,6 +23,7 @@ plan-fix-r1  '2026-07-16T11:15:21Z'
 planned  '2026-07-16T11:21:13Z'
 implementing  '2026-07-16T11:25:37Z'
 approved-psmux-cleanup-crash  '2026-07-16T11:31:20Z'
+approved-wiki-daemon-json-noise  '2026-07-16T11:34:45Z'
 ```
 
 ## Batches
@@ -35,7 +36,8 @@ batches:
     start_sha: ab83724e4148d84b554a0676a7310e44a8ea8cbd
     commit_sha: b8c52afb5144d9a3ef9696588730c3aa72a80e7b
   - name: wiki-daemon-json-noise
-    state: running
+    state: approved
     implementer_session: 36127d0b-5b1b-422f-b910-7753d8c7206f
     start_sha: ce0d0e1317f7ad5e698e967633d6ca8d44273185
+    commit_sha: eed505d9df0328d0b105485aa0c0585078848947
 ```
