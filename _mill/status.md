@@ -46,7 +46,9 @@ batches:
     start_sha: 22c5b106264155a59d258bd9d007552a215b6fa7
     commit_sha: 8e6aff8ed51e4ad26323e647c82a5507b7b55e13
   - name: effort-tier-review-cli
-    state: pending
+    state: running
+    implementer_session: 602dddef-e270-453f-bda6-1f08aba7369c
+    start_sha: 844784049cc79ac6d290863d7a6d04144a1c9229
   - name: reviewer-model-audit-trail-backend
     state: pending
   - name: reviewer-model-audit-trail-cli
