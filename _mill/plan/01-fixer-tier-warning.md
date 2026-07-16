@@ -64,7 +64,8 @@ self-contained and does not export anything another batch consumes.
 
 ### Card 2: wire the warning into `millpy-fix.py` at fixer dispatch time
 
-- **Context:** none
+- **Context:**
+  - `plugins/mill/scripts/_reviewers.py`
 - **Edits:**
   - `plugins/mill/scripts/millpy-fix.py`
 - **Creates:** none
@@ -134,6 +135,9 @@ self-contained and does not export anything another batch consumes.
   — an opus fixer spec vs. a haiku reviewer spec returns `None`;
   `test_fixer_weaker_than_reviewer_warning_silent_when_either_not_comparable` — one side
   non-Claude-provider or cluster-type returns `None` regardless of the other side's tier.
+  `main()` runs an explicit `tests = [...]` list (not auto-discovery) — append every one of
+  these 8 new test functions to that list, or `verify:` passes green with zero added
+  coverage.
 - **Commit:** `test(reviewers): cover tier_rank and fixer_weaker_than_reviewer_warning`
 
 ### Card 5: wiring test in `test-millpy-fix.py`
@@ -161,13 +165,19 @@ self-contained and does not export anything another batch consumes.
   `self.mock_reviewers_resolve.side_effect = lambda registry, name: {"type": "single",
   "provider": "claude", "model": "claude-opus-4-7", "effort": "high"} if name == "opushigh"
   else {"type": "single", "provider": "claude", "model": "claude-haiku-4-5-20251001"}`) so
-  the reviewer resolves strictly stronger than the haiku fixer. Run the CLI end-to-end via
-  `self._run_main([...])` capturing stderr (`unittest.mock.patch("sys.stderr", ...)`,
-  mirroring `_run_main`'s existing stdout-capture pattern for the new capture), and assert
-  the captured stderr contains `"[fixer-tier]"`. Add a second test using the default
-  `self.mock_load_config.return_value` (no `code-review` key, i.e. `setUp`'s unmodified
-  fixture) and the default `self.mock_reviewers_resolve.return_value` (both sides resolve
-  identically) and assert `"[fixer-tier]"` does NOT appear in captured stderr.
+  the reviewer resolves strictly stronger than the haiku fixer. The fixer-tier warning is
+  emitted during "Common setup", before the `--stage` branch, so dispatch with
+  `--stage prepare` (never reaches the LLM) rather than the default full-stage run — mirror
+  `test_stage_prepare_batch_scope`'s pattern of mocking `millpy_fix._render.render`
+  (`return_value="Brief text"`) and `millpy_fix._implementer_claude.run` (asserting
+  `mock_run.assert_not_called()`, matching that existing test's no-LLM-call assertion) around
+  the `self._run_main([...,  "--stage", "prepare"])` call. Wrap the call in
+  `unittest.mock.patch("sys.stderr", io.StringIO())` (this file already imports `io`) to
+  capture stderr, and assert the captured value contains `"[fixer-tier]"`. Add a second test
+  using the default `self.mock_load_config.return_value` (no `code-review` key, i.e.
+  `setUp`'s unmodified fixture) and the default `self.mock_reviewers_resolve.return_value`
+  (both sides resolve identically), same `--stage prepare` dispatch, and assert
+  `"[fixer-tier]"` does NOT appear in captured stderr.
 - **Commit:** `test(fix): cover fixer-tier warning wiring in millpy-fix.py`
 
 ## Batch Tests
