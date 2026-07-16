@@ -99,7 +99,12 @@ bundled into one task purely because each is too small to justify its own task b
   side is a cluster type or a non-Claude provider (e.g. Gemini), since cross-provider or
   cross-cluster "strength" has no defined ordering. Tier order for comparison: model family
   `haiku(0) < sonnet(1) < opus(2)` (primary key), then `effort` `low(0) < medium(1) <
-  high(2) < max(3)` as a tiebreaker within the same family. Warn (to stderr, non-fatal) when
+  high(2) < max(3)` as a tiebreaker within the same family. A resolved spec with no `effort`
+  key at all (e.g. the shipped `haiku`/`haiku_bulk` entries in `mill-agents.yaml`, which
+  carry no `effort:` field, so `spec.get("effort")` is `None`) ranks as `0` (same as `low`)
+  for the tiebreaker — the family rank already dominates the comparison in practice (haiku's
+  family rank is the lowest possible), so this default only matters for hypothetical future
+  effort-less entries and must not raise on a missing key. Warn (to stderr, non-fatal) when
   the reviewer's tier tuple is strictly greater than the fixer's tier tuple. Additionally,
   add a short comment next to the `fixer:` block in `plugins/mill/templates/mill-config.yaml`
   noting that `roles.fixer.model` and `roles.code-review.<scope>.reviewer` should generally
@@ -123,11 +128,17 @@ bundled into one task purely because each is too small to justify its own task b
 
 ### cleanliness-revert-hub-prefix-fix (#640)
 
-- Decision: Add a `git_root: Path` parameter to
+- Decision: Add a `git_root: Path | None = None` parameter to
   `_cleanliness.revert_out_of_scope_drift(worktree, task_dir, parent_branch)` (becoming
-  `revert_out_of_scope_drift(worktree, task_dir, parent_branch, git_root)` or equivalent
+  `revert_out_of_scope_drift(worktree, task_dir, parent_branch, git_root=None)` or equivalent
   keyword form — mill-plan's discretion on exact parameter order/name during Phase: Plan, as
-  long as it doesn't break the two other public functions' signatures). Inside the function,
+  long as it doesn't break the two other public functions' signatures). The parameter must
+  default to `None`, mirroring `compute_scope_violations`'s existing `git_root: Path | None`
+  signature and its "`git_root is None` → treat as flat layout, `hub_prefix = \"\"`" rule —
+  this keeps the existing three-positional-argument `ROOD-*` test call sites
+  (`revert_out_of_scope_drift(worktree, task_dir, parent_branch)`, no `git_root`) valid
+  without modification, satisfying this section's own "existing flat-layout `ROOD-*` tests
+  must continue passing unchanged" requirement (see Testing). Inside the function,
   compute `hub_prefix` from `worktree` (hub root) relative to `git_root`, exactly as
   `compute_scope_violations` already does (`hub_prefix = worktree.relative_to(git_root).as_posix()`,
   empty string when they're equal — flat layout). Rebase every git-root-relative porcelain
@@ -315,6 +326,6 @@ bundled into one task purely because each is too small to justify its own task b
 - **Q:** #632 — should the stale "All Files Touched" comment be corrected or should the claimed behavior be implemented? **A:** [auto-pick] Correct the comment to describe the section's real role (validator cross-check). **Why:** matches the issue's own expected framing; implementing the false claim would duplicate `parallel-modifies-overlap` for no benefit.
 - **Q:** #623 — textual guardrail or mechanical enforcement for the mill-plan source-edit near-miss? **A:** [auto-pick] One explicit guardrail sentence in Phase: Plan Review, applied before steps 4b/4c/4d. **Why:** matches the issue's own suggested fix; no evidence the textual guardrail alone is insufficient.
 - **Q:** should #651's warning compare fixer.model against every configured reviewer role/scope, or only code-review? **A:** [auto-pick] Code-review only (batch and holistic), fired from `millpy-fix.py` at fix-dispatch time. **Why:** `roles.fixer.model` is only ever consumed by the code-review fixer dispatch path — comparing against discussion-review/plan-review reviewers would be comparing against a code path that doesn't use this key at all.
-- **Q:** should these 5 fixes be one combined plan batch or five separate batches? **A:** [auto-pick] Five separate batches, with #651 and #640 marked sequential with each other (both touch `mill-go/SKILL.md` in unrelated sections) and the other three parallel with everything. **Why:** maximizes safe parallelism given how file-disjoint most fixes are; keeps review scoped per issue.
+- **Q:** should these 5 fixes be one combined plan batch or five separate batches? **A:** [auto-pick] Five separate batches, with #651 and #640 marked sequential with each other (both touch `mill-go/SKILL.md` in unrelated sections) and the other three parallel with everything. **Why:** maximizes safe parallelism given how file-disjoint most fixes are; keeps review scoped per issue. **[CORRECTED — see the two entries below: #651 does not touch `mill-go/SKILL.md`; all five batches are file-disjoint and fully parallel. This entry is superseded, kept for history only.]**
 - **Q:** (round 1 review GAP) does rebasing only the porcelain paths in `revert_out_of_scope_drift` fully fix #640, or does `owned_paths` need the same treatment? **A:** `owned_paths` (from `_parent_diff_names`) is git-root-relative for the same reason the porcelain lines are — it must be rebased the same way, or a genuine task-owned out-of-`task_dir` modification gets misclassified out-of-scope and silently reverted. **Why:** `_parent_diff_names` runs `git diff --name-only`, whose output convention matches `git status --porcelain` (always relative to git root, regardless of cwd) — confirmed by reading `_cleanliness.py` directly.
 - **Q:** (round 1 review GAP) does #651 actually touch `mill-go/SKILL.md`, justifying the sequential constraint with #640 in batch-structure? **A:** No — #651's own file-ownership list only names `millpy-fix.py`, `_reviewers.py`, `mill-config.yaml`, and tests. The claimed overlap was wrong; corrected to state all five batches are file-disjoint and fully parallel. **Why:** re-checked #651's Decision/Scope-In against the batch-structure section and found no `mill-go/SKILL.md` reference in the former.
