@@ -177,6 +177,9 @@ def main(argv: list[str] | None = None) -> int:
         except ReviewError as exc:
             print_error_envelope("plan", str(exc))
             return 1
+        except Exception as exc:
+            print_error_envelope("plan", f"unhandled review error: {exc}")
+            return 1
     elif args.stage == "finalize":
         if not args.agent_output:
             print_error_envelope("plan", "--agent-output required for finalize stage")
