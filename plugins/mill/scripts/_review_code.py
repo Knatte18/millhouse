@@ -523,6 +523,7 @@ def finalize(
     project_root: Path,
     wiki_root: Path,
     git_root: Path,
+    actual_model: str | None = None,
 ) -> ReviewResult:
     """Finalize a code review by parsing verdict and writing the review file.
 
@@ -538,6 +539,10 @@ def finalize(
         scope: Batch name or None for holistic.
         round_n: Round number.
         reviews_dir: Directory where review files are stored.
+        actual_model: The model that actually produced this review, used to
+            correct an unreliable self-reported ``reviewer_model:`` line
+            before verdict parsing or disk write; passed through to
+            ``finalize_scope`` on the success path only.
 
     Returns:
         ReviewResult with verdict, blocking count, and review entries.
@@ -552,7 +557,7 @@ def finalize(
 
     try:
         review_entry = finalize_scope(
-            reviews_dir, "code", round_n, raw_text, scope=scope
+            reviews_dir, "code", round_n, raw_text, scope=scope, actual_model=actual_model
         )
     except ReviewError as exc:
         path = write_review_file(
