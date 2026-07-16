@@ -1490,10 +1490,10 @@ def _forward_output(
         # own commit_sha injected here rather than the generic success-path commit_sha.
         if parsed.get("status") == "incomplete":
             # Count content commits for commits_made; fall back to the implementer's
-            # own cards_done field when git is unavailable.
+            # own cards_completed_count field when git is unavailable.
             _incomplete_commits = _content_commit_count(project_root, start_sha)
             if _incomplete_commits is None:
-                _incomplete_commits = parsed.get("cards_done")
+                _incomplete_commits = parsed.get("cards_completed_count")
             _incomplete_envelope: dict = {
                 "status": "stuck",
                 "stuck_type": "incomplete",

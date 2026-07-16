@@ -67,7 +67,7 @@ Read the batch file first, then the overview's Shared Decisions. Do not read oth
 4. If you are forced to stop before all cards are committed (e.g. approaching context limit or an unresolvable error), emit the following JSON as your very last output line and then stop — do not report `success`:
 
    ```json
-   {"status":"incomplete","cards_done":N,"cards_remaining":M,"session_id":"<SESSION_ID>"}
+   {"status":"incomplete","cards_completed_count":N,"cards_remaining":M,"session_id":"<SESSION_ID>"}
    ```
 
    Replace N with the count of card commits made and M with the remaining count. Finalize detection is authoritative; this line helps the orchestrator classify the partial stop correctly rather than treating it as a stuck/logic error.
