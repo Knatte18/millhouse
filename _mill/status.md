@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-misc-tooling-and-docs-gaps
 branch: hanf/mill-misc-tooling-and-docs-gaps
 plan: _mill/plan
@@ -24,4 +24,21 @@ plan-review-r2  '2026-07-16T13:54:30Z'
 plan-fix-r2  '2026-07-16T13:54:30Z'
 plan-fix-r3  '2026-07-16T13:59:24Z'
 planned  '2026-07-16T13:59:33Z'
+implementing  '2026-07-16T14:06:04Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: fixer-tier-warning
+    state: pending
+  - name: cleanliness-nested-hub-revert
+    state: pending
+  - name: golang-build-gopath-fallback
+    state: pending
+  - name: plan-overview-comment-fix
+    state: pending
+  - name: mill-plan-source-edit-guardrail
+    state: pending
 ```
