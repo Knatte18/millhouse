@@ -1038,7 +1038,11 @@ def _go_build_tag_retiering_stuck(
             elif len(removed) == 1 and len(added) == 0:
                 dir_str = _go_build_tag_dir(file_path)
                 tag = removed[0][len("//go:build "):].strip()
-                entry = removed_dirs.setdefault(dir_str, {"tag": tag, "files": []})
+                entry = removed_dirs.setdefault(dir_str, {"tag": tag, "files": [], "tag_mismatch": False})
+                if entry["tag"] != tag:
+                    # Multiple files in the same directory with different removed tags.
+                    # Mark this directory as conflicted and skip its compile check.
+                    entry["tag_mismatch"] = True
                 entry["files"].append(file_path)
             # else: value-only edit (or an otherwise-ambiguous delta) -- not a
             # membership transition, skip.
@@ -1054,6 +1058,13 @@ def _go_build_tag_retiering_stuck(
                 )
 
         for dir_str, entry in sorted(removed_dirs.items()):
+            if entry.get("tag_mismatch", False):
+                print(
+                    f"[go-build-tag-retiering] skip: {', '.join(entry['files'])}"
+                    f" removed different //go:build constraints in the same directory",
+                    file=sys.stderr,
+                )
+                continue
             tag = entry["tag"]
             if not _is_qualifying_custom_tag(tag):
                 print(
