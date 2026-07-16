@@ -52,7 +52,9 @@ batches:
     start_sha: 844784049cc79ac6d290863d7a6d04144a1c9229
     commit_sha: 540f7145738185f7ec6e8a73514544329f6540de
   - name: reviewer-model-audit-trail-backend
-    state: pending
+    state: running
+    implementer_session: 5f0bc455-d56b-4950-a607-5f0c3205d5ba
+    start_sha: 85b3babbd4ceeef09ee43208a8bc770a03ea492a
   - name: reviewer-model-audit-trail-cli
     state: pending
 ```
