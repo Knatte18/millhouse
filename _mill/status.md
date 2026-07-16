@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-fix-r1
+phase: planned
 slug: mill-go-batch-verify-baseline-reliability
 branch: hanf/mill-go-batch-verify-baseline-reliability
 plan: _mill/plan
@@ -19,4 +19,5 @@ discussion-fix-r5  '2026-07-16T11:29:51Z'
 discussed  '2026-07-16T11:29:59Z'
 planning  '2026-07-16T11:40:37Z'
 plan-fix-r1  '2026-07-16T11:49:04Z'
+planned  '2026-07-16T11:49:14Z'
 ```
