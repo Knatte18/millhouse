@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-orchestration-crash-hardening
 branch: hanf/mill-orchestration-crash-hardening
 plan: _mill/plan
@@ -21,4 +21,15 @@ planning  '2026-07-16T11:12:26Z'
 plan-review-r1  '2026-07-16T11:15:12Z'
 plan-fix-r1  '2026-07-16T11:15:21Z'
 planned  '2026-07-16T11:21:13Z'
+implementing  '2026-07-16T11:25:37Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: psmux-cleanup-crash
+    state: pending
+  - name: wiki-daemon-json-noise
+    state: pending
 ```
