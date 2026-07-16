@@ -35,8 +35,8 @@ batches:
     commit_sha: 621851fb7457dc82f7bc491336e46effbab66ef6
   - name: batch-verify-list-validation
     state: running
-    implementer_session: 31921dfc-f14f-43c3-8527-a63b952b1e2b
-    start_sha: b11337f71f3f13dc9a19b09d011ec3b221d35a77
+    implementer_session: a836af46-6c37-444f-9349-f347e39ba6f7
+    start_sha: a0cafe9857d54a2326c037c09ee7aad760129850
   - name: done-gate-baseline-preflight
     state: pending
   - name: windows-long-path-mitigation
