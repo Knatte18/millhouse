@@ -171,6 +171,8 @@ roles:
     model: sonnethigh
 
   fixer:
+    # roles.fixer.model and roles.code-review.<scope>.reviewer should generally be escalated
+    # together -- millpy-fix.py warns (stderr, non-blocking) when it detects this asymmetry.
     model: haiku
 
 # ---------------------------------------------------------------------------
