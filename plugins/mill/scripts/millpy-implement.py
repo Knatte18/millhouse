@@ -622,6 +622,7 @@ def main(argv=None) -> int:
             model_tier,
             session_id,
             start_sha=start_sha,
+            effort=impl_effort,
         )
 
     # Stage: full (default)

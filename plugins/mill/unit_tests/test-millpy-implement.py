@@ -1325,6 +1325,22 @@ class TestMillpyImplement(unittest.TestCase):
         # every call, including the fresh-mint branch's `git rev-parse HEAD` capture.
         self.assertEqual(data["start_sha"], "abc1234")
 
+    def test_prepare_stage_envelope_includes_effort_from_implementer_spec(self):
+        """--stage prepare envelope carries the resolved implementer spec's effort tier.
+
+        #628/#633: the effort-tier-implementer batch threads impl_effort (already
+        resolved from the implementer registry spec, here "sonnethigh" -> effort
+        "high" per setUp's mock_reviewers_resolve) into the same emit_prepare call
+        Card 2's start_sha fix already extended.
+        """
+        with unittest.mock.patch.object(millpy_implement._render, "render", return_value="Brief text"):
+            rc, out = self._run_main(["test-batch", "--stage", "prepare"])
+
+        self.assertEqual(rc, 0)
+        data = json.loads(out.strip())
+        self.assertEqual(data["stage"], "prepare")
+        self.assertEqual(data["effort"], "high")
+
     def test_prepare_stage_reuses_session_on_rerun_of_running_batch(self):
         """Second --stage prepare call against a batch already 'running' with a session reuses it.
 
