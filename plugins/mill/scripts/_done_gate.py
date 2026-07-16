@@ -72,10 +72,10 @@ def run_preflight(gate_cmd: str | None, git_root: Path) -> dict:
         result = subprocess.run(
             gate_cmd, cwd=git_root, shell=True, capture_output=True, text=True
         )
-    except OSError as exc:
-        # gate_cmd itself could not even be launched (e.g. missing binary).
-        # This still degrades to "blocked" rather than raising -- the
-        # never-raise contract applies to launch failures too.
+    except Exception as exc:
+        # Any unexpected failure during subprocess launch (e.g. missing binary,
+        # invalid cwd, or other OS/runtime errors) degrades to "blocked" rather
+        # than raising -- the never-raise contract applies to all failure modes.
         return {"result": "blocked", "reason": str(exc)}
 
     if result.returncode != 0:
