@@ -1807,6 +1807,7 @@ def run(
     skip_checks: frozenset[str] = frozenset(),
     max_cards_per_batch: int = 10,
     max_batch_context_tokens: int = 120000,
+    parent_branch: str | None = None,
 ) -> list[dict]:
     """Validate plan files in plan_dir.
 
@@ -1815,9 +1816,10 @@ def run(
 
     Checks 1, 2, 3, 4, 5, 6, 8 from issue #10, plus wiki-config-mutation,
     verify-not-isolated, verify-full-suite, verify-malformed-cwd,
-    verify-mixed-cwd, out-of-worktree-target, batch-oversized, and five
-    Move-specific checks (move-format, move-redundant, move-source-missing,
-    move-target-collision, move-mechanic-missing).
+    verify-mixed-cwd, verify-unrelated-test-file, out-of-worktree-target,
+    batch-oversized, and five Move-specific checks (move-format,
+    move-redundant, move-source-missing, move-target-collision,
+    move-mechanic-missing).
 
     Args:
         plan_dir: Directory containing the plan files (00-overview.md + batch files).
@@ -1831,6 +1833,10 @@ def run(
         skip_checks: Set of check names to skip (e.g. {"wiki-config-mutation"}).
         max_cards_per_batch: Maximum cards per batch before batch-oversized is raised.
         max_batch_context_tokens: Maximum context token estimate before batch-oversized is raised.
+        parent_branch: The task's resolved parent branch name, threaded to
+            verify-unrelated-test-file. ``None`` (the default) makes that
+            check a no-op -- callers that cannot resolve a parent branch
+            (e.g. the standalone millpy-validate-plan.py CLI) simply skip it.
     """
     overview_path = plan_dir / "00-overview.md"
     if not overview_path.exists():
@@ -1877,6 +1883,9 @@ def run(
     errors.extend(_check_verify_full_suite(batch_files, project_root, overview_path))
     errors.extend(_check_verify_malformed_cwd(batch_files, overview_path, project_root))
     errors.extend(_check_verify_mixed_cwd(batch_files, overview_text, project_root, effective_git_root))
+    errors.extend(_check_verify_unrelated_test_files(
+        batch_files, project_root, effective_git_root, parent_branch,
+    ))
     errors.extend(_check_wiki_config_mutation(batch_files))
     errors.extend(_check_all_files_touched_mismatch(overview_path, batch_files))
     errors.extend(_check_out_of_worktree_target(batch_files, project_root))

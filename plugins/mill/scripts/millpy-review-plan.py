@@ -91,6 +91,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     import _agent_dispatch
+    import _parent_branch
     import _paths
     import _reviewers
     from _paths import resolve_hub_path, resolve_wiki_path
@@ -128,6 +129,11 @@ def main(argv: list[str] | None = None) -> int:
                 from _plan_validate import run as validate_run
                 plan_dir = resolve_path(cfg["paths"]["plan_dir"], slug)
                 root = _load_root_from_overview(plan_dir / "00-overview.md")
+                status_path = _paths.require_status_path(project_root, cfg)
+                try:
+                    parent_branch = _parent_branch.resolve(status_path, interactive=False)
+                except Exception:
+                    parent_branch = None
                 errors = validate_run(
                     plan_dir,
                     project_root,
@@ -137,6 +143,7 @@ def main(argv: list[str] | None = None) -> int:
                     skip_checks=frozenset(args.skip_checks),
                     max_cards_per_batch=cfg.get("pipeline", {}).get("max_cards_per_batch", 10),
                     max_batch_context_tokens=cfg.get("pipeline", {}).get("max_batch_context_tokens", 120000),
+                    parent_branch=parent_branch,
                 )
                 if errors:
                     n = len(errors)
@@ -216,6 +223,11 @@ def main(argv: list[str] | None = None) -> int:
                 from _plan_validate import run as validate_run
                 plan_dir = resolve_path(cfg["paths"]["plan_dir"], slug)
                 root = _load_root_from_overview(plan_dir / "00-overview.md")
+                status_path = _paths.require_status_path(project_root, cfg)
+                try:
+                    parent_branch = _parent_branch.resolve(status_path, interactive=False)
+                except Exception:
+                    parent_branch = None
                 errors = validate_run(
                     plan_dir,
                     project_root,
@@ -225,6 +237,7 @@ def main(argv: list[str] | None = None) -> int:
                     skip_checks=frozenset(args.skip_checks),
                     max_cards_per_batch=cfg.get("pipeline", {}).get("max_cards_per_batch", 10),
                     max_batch_context_tokens=cfg.get("pipeline", {}).get("max_batch_context_tokens", 120000),
+                    parent_branch=parent_branch,
                 )
                 if errors:
                     n = len(errors)
